@@ -124,6 +124,16 @@ void BoundsCheckEliminationPass::detect_loops(const Function& func) {
     // Simple loop detection: look for PHI nodes at block headers
     // that have back-edges from later blocks
 
+    // Build a map from value ID to instruction for comparison analysis
+    std::unordered_map<ValueId, const InstructionData*> value_to_inst;
+    for (const auto& block : func.blocks) {
+        for (const auto& inst : block.instructions) {
+            if (inst.result != INVALID_VALUE) {
+                value_to_inst[inst.result] = &inst;
+            }
+        }
+    }
+
     for (size_t block_idx = 0; block_idx < func.blocks.size(); block_idx++) {
         const auto& block = func.blocks[block_idx];
 
@@ -134,49 +144,102 @@ void BoundsCheckEliminationPass::detect_loops(const Function& func) {
                 // - One incoming value is a binary add/sub of the PHI result (increment)
 
                 std::optional<int64_t> start_value;
-                // Note: step detection would require tracing back through instructions
                 uint32_t latch_block = 0;
 
                 for (const auto& [value, pred_block] : phi->incoming) {
                     // Check for constant start value
                     auto range = get_range(value.id);
                     if (range.is_constant()) {
-                        // This could be the initial value
                         if (!start_value) {
                             start_value = range.min;
                         }
                     }
 
-                    // Check for increment pattern: we'd need to trace back
-                    // For now, use a simple heuristic: if the predecessor
-                    // block is after the current block, it's likely a back-edge
+                    // If the predecessor block is after the current block, it's likely a back-edge
                     if (pred_block > static_cast<uint32_t>(block_idx)) {
                         latch_block = pred_block;
                     }
                 }
 
-                // For now, if we found what looks like an induction variable
-                // with a known start, record it with a default step of 1
                 if (start_value && latch_block > 0) {
                     LoopBoundsInfo loop_info;
                     loop_info.induction_var = inst.result;
                     loop_info.start_value = *start_value;
-                    loop_info.step = 1; // Default assumption
+                    loop_info.step = 1;
                     loop_info.is_inclusive = false;
                     loop_info.end_value = std::numeric_limits<int64_t>::max();
 
-                    // Mark blocks in the loop (simple: all blocks between header and latch)
+                    // Mark blocks in the loop
                     for (uint32_t i = static_cast<uint32_t>(block_idx); i <= latch_block; i++) {
                         loop_info.loop_blocks.insert(i);
                     }
 
-                    loops_.push_back(std::move(loop_info));
+                    // Try to find the loop bound by analyzing conditional branches
+                    // Look for pattern: if (iv >= N) break; or if (iv < N) continue;
+                    for (uint32_t loop_block : loop_info.loop_blocks) {
+                        if (loop_block >= func.blocks.size()) continue;
+                        const auto& lb = func.blocks[loop_block];
+                        if (!lb.terminator) continue;
+
+                        if (auto* cond_br = std::get_if<CondBranchTerm>(&*lb.terminator)) {
+                            // Find the comparison that produces the condition
+                            auto cond_it = value_to_inst.find(cond_br->condition.id);
+                            if (cond_it == value_to_inst.end()) continue;
+
+                            if (auto* cmp = std::get_if<BinaryInst>(&cond_it->second->inst)) {
+                                // Check for comparison operators
+                                bool is_lt = (cmp->op == BinOp::Lt);
+                                bool is_ge = (cmp->op == BinOp::Ge);
+                                bool is_le = (cmp->op == BinOp::Le);
+                                bool is_gt = (cmp->op == BinOp::Gt);
+
+                                if (is_lt || is_ge || is_le || is_gt) {
+                                    // Check if comparing the induction variable
+                                    bool iv_on_left = (cmp->left.id == inst.result);
+                                    bool iv_on_right = (cmp->right.id == inst.result);
+
+                                    if (iv_on_left || iv_on_right) {
+                                        ValueId bound_id = iv_on_left ? cmp->right.id : cmp->left.id;
+                                        auto bound_range = get_range(bound_id);
+
+                                        // Also check array_sizes_ for bounds
+                                        auto arr_it = array_sizes_.find(bound_id);
+                                        if (arr_it != array_sizes_.end()) {
+                                            bound_range = ValueRange::constant(arr_it->second);
+                                        }
+
+                                        if (bound_range.is_constant()) {
+                                            int64_t bound = bound_range.min;
+                                            // Adjust for operator type and which side IV is on
+                                            // iv < N -> range is [start, N-1]
+                                            // iv >= N (break) -> range is [start, N-1]
+                                            // iv <= N -> range is [start, N]
+                                            if ((iv_on_left && is_lt) || (iv_on_right && is_gt)) {
+                                                loop_info.end_value = bound;
+                                                loop_info.is_inclusive = false;
+                                            } else if ((iv_on_left && is_ge) || (iv_on_right && is_le)) {
+                                                // Break condition: iv >= N means loop runs while iv < N
+                                                loop_info.end_value = bound;
+                                                loop_info.is_inclusive = false;
+                                            } else if ((iv_on_left && is_le) || (iv_on_right && is_ge)) {
+                                                loop_info.end_value = bound + 1;
+                                                loop_info.is_inclusive = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    loops_.push_back(loop_info);
 
                     // Update the range for the induction variable
-                    // If we know start and step, the range is [start, infinity) for now
-                    if (loop_info.start_value >= 0) {
-                        value_ranges_[inst.result] =
-                            ValueRange::non_negative(loop_info.end_value - 1);
+                    if (loop_info.start_value >= 0 && loop_info.end_value < std::numeric_limits<int64_t>::max()) {
+                        int64_t max_val = loop_info.is_inclusive ? loop_info.end_value : loop_info.end_value - 1;
+                        value_ranges_[inst.result] = ValueRange{loop_info.start_value, max_val};
+                    } else if (loop_info.start_value >= 0) {
+                        value_ranges_[inst.result] = ValueRange::non_negative();
                     }
                 }
             }
@@ -201,9 +264,13 @@ void BoundsCheckEliminationPass::find_array_accesses(const Function& func) {
                     access.inst_index = inst_idx;
                     access.can_eliminate = false;
 
-                    // Try to get the array size
-                    auto size_opt = get_array_size(gep->base.id);
-                    access.array_size = size_opt.value_or(-1);
+                    // Use known_array_size from GEP if available, otherwise try lookup
+                    if (gep->known_array_size >= 0) {
+                        access.array_size = gep->known_array_size;
+                    } else {
+                        auto size_opt = get_array_size(gep->base.id);
+                        access.array_size = size_opt.value_or(-1);
+                    }
 
                     accesses_.push_back(access);
                     stats_.total_accesses++;
@@ -254,13 +321,12 @@ auto BoundsCheckEliminationPass::compute_constant_range(const ConstantInst& inst
     return std::visit(
         [](const auto& c) -> ValueRange {
             using T = std::decay_t<decltype(c)>;
-            if constexpr (std::is_same_v<T, int64_t>) {
-                return ValueRange::constant(c);
-            } else if constexpr (std::is_same_v<T, int32_t>) {
-                return ValueRange::constant(static_cast<int64_t>(c));
-            } else if constexpr (std::is_same_v<T, bool>) {
-                return ValueRange::constant(c ? 1 : 0);
+            if constexpr (std::is_same_v<T, ConstInt>) {
+                return ValueRange::constant(c.value);
+            } else if constexpr (std::is_same_v<T, ConstBool>) {
+                return ValueRange::constant(c.value ? 1 : 0);
             } else {
+                // ConstFloat, ConstString, ConstUnit - not useful for bounds analysis
                 return ValueRange::unbounded();
             }
         },
@@ -412,22 +478,23 @@ void BoundsCheckEliminationPass::mark_safe_accesses() {
 // ============================================================================
 
 auto BoundsCheckEliminationPass::apply_eliminations(Function& func) -> bool {
-    (void)func; // Will be used for actual transformation in full implementation
     bool changed = false;
 
-    // For now, we mark the accesses as safe by adding metadata
-    // The actual bounds check removal happens in codegen
-    // We'll add a flag to the GetElementPtrInst or emit a marker
-
+    // Mark safe accesses by setting needs_bounds_check = false on GEP instructions
     for (const auto& access : accesses_) {
         if (access.can_eliminate) {
-            // In a full implementation, we would:
-            // 1. Find the bounds check branch in codegen
-            // 2. Replace it with an unconditional branch to the success path
-            // 3. Or mark the GEP with a "no-bounds-check" flag
-
-            // For now, just track that we can eliminate
-            changed = true;
+            // Get the block and instruction
+            if (access.block_id < func.blocks.size()) {
+                auto& block = func.blocks[access.block_id];
+                if (access.inst_index < block.instructions.size()) {
+                    auto& inst = block.instructions[access.inst_index];
+                    if (auto* gep = std::get_if<GetElementPtrInst>(&inst.inst)) {
+                        // Mark as not needing bounds check
+                        gep->needs_bounds_check = false;
+                        changed = true;
+                    }
+                }
+            }
         }
     }
 

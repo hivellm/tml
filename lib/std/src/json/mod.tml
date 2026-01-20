@@ -1,0 +1,342 @@
+//! Native JSON Parsing and Building Module
+//!
+//! This module provides:
+//! - **Parsing**: Bindings to TML's native SIMD-optimized JSON parser
+//! - **Building**: Fluent API for constructing JSON strings
+//!
+//! # Parsing Example
+//!
+//! ```tml
+//! use std::json
+//!
+//! let handle = json::parse_fast("{\"name\": \"Alice\", \"age\": 30}")
+//! if handle >= 0 {
+//!     let name = json::get_string(json::object_get(handle, "name"))
+//!     println("Name: " + name)
+//!     json::free(handle)
+//! }
+//! ```
+//!
+//! # Building Example
+//!
+//! ```tml
+//! use std::json::{Builder, object}
+//!
+//! // Fluent builder
+//! let json = object()
+//!     .ks("name", "John")
+//!     .kn("age", 30)
+//!     .kb("active", true)
+//!     .k("tags").arr().s("a").s("b").end_arr()
+//!     .end_obj()
+//!     .build()
+//!
+//! // Result: {"name":"John","age":30,"active":true,"tags":["a","b"]}
+//! ```
+//!
+//! # Performance
+//!
+//! The fast parser uses V8-inspired optimizations:
+//! - SIMD (SSE2) for whitespace skipping
+//! - SIMD for string scanning
+//! - O(1) lookup tables for character classification
+//! - Single-pass parsing
+//!
+//! The builder uses Text internally for O(1) amortized string building.
+
+// Re-export builder types
+pub use builder::{Builder, object, array}
+
+// ============================================================================
+// JSON Value Types
+// ============================================================================
+
+/// JSON value type codes returned by `get_type()`
+pub const JSON_NULL: I32 = 0
+pub const JSON_BOOL: I32 = 1
+pub const JSON_NUMBER: I32 = 2
+pub const JSON_STRING: I32 = 3
+pub const JSON_ARRAY: I32 = 4
+pub const JSON_OBJECT: I32 = 5
+pub const JSON_INVALID: I32 = -1
+
+/// A handle to a JSON value in the native parser.
+/// Use -1 to indicate an invalid/error handle.
+pub type I64 = I64
+
+// ============================================================================
+// External Function Declarations - Native JSON Parser
+// ============================================================================
+
+/// Parse a JSON string using the fast SIMD-optimized parser.
+///
+/// Returns a handle to the parsed JSON value, or -1 on parse error.
+///
+/// **IMPORTANT**: You must call `free()` on the returned handle when done.
+@extern("tml_json_parse_fast")
+pub func parse_fast(json_str: Str) -> I64
+
+/// Parse a JSON string using the standard parser.
+///
+/// Returns a handle to the parsed JSON value, or -1 on parse error.
+///
+/// **IMPORTANT**: You must call `free()` on the returned handle when done.
+@extern("tml_json_parse")
+pub func parse(json_str: Str) -> I64
+
+/// Parse a JSON string with explicit length (for non-null-terminated strings).
+@extern("tml_json_parse_len")
+pub func parse_len(json_str: Str, len: I64) -> I64
+
+// ============================================================================
+// Type Checking
+// ============================================================================
+
+/// Get the type of a JSON value.
+///
+/// Returns one of: JSON_NULL, JSON_BOOL, JSON_NUMBER, JSON_STRING, JSON_ARRAY, JSON_OBJECT
+/// Returns JSON_INVALID (-1) if the handle is invalid.
+@extern("tml_json_get_type")
+pub func get_type(handle: I64) -> I32
+
+/// Check if the JSON value is null.
+@extern("tml_json_is_null")
+pub func is_null(handle: I64) -> I32
+
+/// Check if the JSON value is a boolean.
+@extern("tml_json_is_bool")
+pub func is_bool(handle: I64) -> I32
+
+/// Check if the JSON value is a number.
+@extern("tml_json_is_number")
+pub func is_number(handle: I64) -> I32
+
+/// Check if the JSON value is a string.
+@extern("tml_json_is_string")
+pub func is_string(handle: I64) -> I32
+
+/// Check if the JSON value is an array.
+@extern("tml_json_is_array")
+pub func is_array(handle: I64) -> I32
+
+/// Check if the JSON value is an object.
+@extern("tml_json_is_object")
+pub func is_object(handle: I64) -> I32
+
+// ============================================================================
+// Value Extraction
+// ============================================================================
+
+/// Get boolean value.
+///
+/// Returns 1 for true, 0 for false, -1 if not a boolean.
+@extern("tml_json_get_bool")
+pub func get_bool(handle: I64) -> I32
+
+/// Get boolean value as TML Bool.
+@extern("tml_json_as_bool")
+pub func as_bool(handle: I64) -> I32
+
+/// Get integer value from a JSON number.
+///
+/// Returns the integer value, or 0 if not a number.
+@extern("tml_json_as_i64")
+pub func as_i64(handle: I64) -> I64
+
+/// Get floating point value from a JSON number.
+///
+/// Returns the F64 value, or 0.0 if not a number.
+@extern("tml_json_as_f64")
+pub func as_f64(handle: I64) -> F64
+
+/// Get string value.
+///
+/// Returns the string, or empty string if not a string type.
+@extern("tml_json_get_string")
+pub func get_string(handle: I64) -> Str
+
+/// Get string length.
+///
+/// Returns the length of the string, or -1 if not a string.
+@extern("tml_json_get_string_len")
+pub func get_string_len(handle: I64) -> I64
+
+// ============================================================================
+// Array Operations
+// ============================================================================
+
+/// Get the length of a JSON array.
+///
+/// Returns the number of elements, or -1 if not an array.
+@extern("tml_json_array_len")
+pub func array_len(handle: I64) -> I64
+
+/// Get an element from a JSON array by index.
+///
+/// Returns a handle to the element, or -1 if out of bounds.
+///
+/// **IMPORTANT**: You must call `free()` on the returned handle when done.
+@extern("tml_json_array_get")
+pub func array_get(handle: I64, index: I64) -> I64
+
+// ============================================================================
+// Object Operations
+// ============================================================================
+
+/// Get the number of fields in a JSON object.
+///
+/// Returns the number of fields, or -1 if not an object.
+@extern("tml_json_object_len")
+pub func object_len(handle: I64) -> I64
+
+/// Get a field from a JSON object by key.
+///
+/// Returns a handle to the field value, or -1 if not found.
+///
+/// **IMPORTANT**: You must call `free()` on the returned handle when done.
+@extern("tml_json_object_get")
+pub func object_get(handle: I64, key: Str) -> I64
+
+/// Check if a JSON object has a specific field.
+///
+/// Returns 1 if field exists, 0 otherwise.
+@extern("tml_json_object_has")
+pub func object_has(handle: I64, key: Str) -> I32
+
+// ============================================================================
+// Serialization
+// ============================================================================
+
+/// Serialize a JSON value to a string.
+///
+/// Returns the JSON string representation.
+@extern("tml_json_to_string")
+pub func to_string(handle: I64) -> Str
+
+// ============================================================================
+// Memory Management
+// ============================================================================
+
+/// Free a JSON value handle.
+///
+/// **IMPORTANT**: Always call this when done with a JSON handle to prevent memory leaks.
+@extern("tml_json_free")
+pub func free(handle: I64)
+
+/// Free all JSON value handles (cleanup).
+///
+/// Use this at the end of a program or test to ensure all memory is freed.
+@extern("tml_json_free_all")
+pub func free_all()
+
+// ============================================================================
+// Benchmark Helpers
+// ============================================================================
+
+/// Parse JSON and immediately free (for benchmarking parse speed only).
+///
+/// Returns 1 on success, 0 on failure.
+@extern("tml_json_parse_fast_bench")
+pub func parse_fast_bench(json_str: Str) -> I32
+
+/// Parse JSON with standard parser (for benchmarking).
+///
+/// Returns 1 on success, 0 on failure.
+@extern("tml_json_parse_bench")
+pub func parse_bench(json_str: Str) -> I32
+
+// ============================================================================
+// FFI Profiling
+// ============================================================================
+
+/// Enable FFI profiling to measure JSON parsing overhead.
+@extern("tml_json_profile_enable")
+pub func profile_enable()
+
+/// Disable FFI profiling.
+@extern("tml_json_profile_disable")
+pub func profile_disable()
+
+/// Reset profiling statistics.
+@extern("tml_json_profile_reset")
+pub func profile_reset()
+
+/// Get parse operation count.
+@extern("tml_json_profile_parse_count")
+pub func profile_parse_count() -> I64
+
+/// Get total parse time in nanoseconds.
+@extern("tml_json_profile_parse_time_ns")
+pub func profile_parse_time_ns() -> I64
+
+/// Get handle allocation count.
+@extern("tml_json_profile_alloc_count")
+pub func profile_alloc_count() -> I64
+
+/// Get total handle allocation time in nanoseconds.
+@extern("tml_json_profile_alloc_time_ns")
+pub func profile_alloc_time_ns() -> I64
+
+/// Get clone operation count (from array_get/object_get).
+@extern("tml_json_profile_clone_count")
+pub func profile_clone_count() -> I64
+
+/// Get total clone time in nanoseconds.
+@extern("tml_json_profile_clone_time_ns")
+pub func profile_clone_time_ns() -> I64
+
+/// Get field access count (object_get lookups).
+@extern("tml_json_profile_field_access_count")
+pub func profile_field_access_count() -> I64
+
+/// Get total field access time in nanoseconds.
+@extern("tml_json_profile_field_access_time_ns")
+pub func profile_field_access_time_ns() -> I64
+
+/// Print profiling summary to stdout.
+@extern("tml_json_profile_print")
+pub func profile_print()
+
+// ============================================================================
+// Zero-Copy Direct Access (avoids clone overhead)
+// ============================================================================
+
+/// Get integer from array element directly (no clone).
+@extern("tml_json_array_get_i64")
+pub func array_get_i64(handle: I64, index: I64) -> I64
+
+/// Get float from array element directly (no clone).
+@extern("tml_json_array_get_f64")
+pub func array_get_f64(handle: I64, index: I64) -> F64
+
+/// Get boolean from array element directly (no clone).
+@extern("tml_json_array_get_bool")
+pub func array_get_bool(handle: I64, index: I64) -> I32
+
+/// Get string from array element directly (no clone).
+@extern("tml_json_array_get_string")
+pub func array_get_string(handle: I64, index: I64) -> Str
+
+/// Get type of array element (no clone).
+@extern("tml_json_array_get_type")
+pub func array_get_type(handle: I64, index: I64) -> I32
+
+/// Get integer from object field directly (no clone).
+@extern("tml_json_object_get_i64")
+pub func object_get_i64(handle: I64, key: Str) -> I64
+
+/// Get float from object field directly (no clone).
+@extern("tml_json_object_get_f64")
+pub func object_get_f64(handle: I64, key: Str) -> F64
+
+/// Get boolean from object field directly (no clone).
+@extern("tml_json_object_get_bool")
+pub func object_get_bool(handle: I64, key: Str) -> I32
+
+/// Get string from object field directly (no clone).
+@extern("tml_json_object_get_string")
+pub func object_get_string(handle: I64, key: Str) -> Str
+
+/// Get type of object field (no clone).
+@extern("tml_json_object_get_type")
+pub func object_get_type(handle: I64, key: Str) -> I32

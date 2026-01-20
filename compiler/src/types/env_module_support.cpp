@@ -1380,8 +1380,13 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         for (const auto& decl : decls) {
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
+                // Check for functions with bodies
                 if (func.vis == parser::Visibility::Public && !func.is_unsafe &&
                     func.body.has_value()) {
+                    mod.has_pure_tml_functions = true;
+                }
+                // Also check for extern functions - they need declarations emitted
+                if (func.vis == parser::Visibility::Public && func.extern_abi.has_value()) {
                     mod.has_pure_tml_functions = true;
                 }
             }

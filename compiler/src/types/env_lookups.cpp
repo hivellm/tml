@@ -159,10 +159,27 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
                 }
             }
 
+            // Try to match module_name as a short alias for a loaded module
+            // E.g., "json" matches "std::json", "collections" matches "std::collections"
+            const auto& all_modules = module_registry_->get_all_modules();
+            for (const auto& [mod_path, mod] : all_modules) {
+                // Check if module_name matches the last segment of the module path
+                // e.g., "json" matches "std::json", "thread" matches "std::thread"
+                auto last_sep = mod_path.rfind("::");
+                std::string short_name =
+                    (last_sep != std::string::npos) ? mod_path.substr(last_sep + 2) : mod_path;
+                if (short_name == module_name) {
+                    // Found a matching module - look up the function in it
+                    auto func_it = mod.functions.find(func_name);
+                    if (func_it != mod.functions.end()) {
+                        return func_it->second;
+                    }
+                }
+            }
+
             // Final fallback: search all modules for "Type::method" pattern
             // This handles cases where we're inside module code generation
             // and need to find methods on types defined in the same or other modules
-            const auto& all_modules = module_registry_->get_all_modules();
             for (const auto& [mod_path, mod] : all_modules) {
                 auto func_it = mod.functions.find(name);
                 if (func_it != mod.functions.end()) {

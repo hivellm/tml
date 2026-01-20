@@ -1,0 +1,366 @@
+//! One-time initialization primitives.
+//!
+//! This module provides [`Once`] and [`OnceLock[T]`] for one-time initialization:
+//!
+//! - [`Once`]: A primitive for running initialization code exactly once
+//! - [`OnceLock[T]`]: A cell that can be written to only once (lazy init)
+//!
+//! # Overview
+//!
+//! These types are useful for lazy initialization of global data that needs
+//! to be computed at runtime but should only be initialized once.
+//!
+//! # Examples
+//!
+//! ## Using Once
+//!
+//! ```tml
+//! use sync::Once
+//!
+//! let init = Once::new()
+//!
+//! // Only the first call executes the closure
+//! init.call_once(do() {
+//!     println("This runs only once!")
+//! })
+//!
+//! // Subsequent calls are no-ops
+//! init.call_once(do() {
+//!     println("This never runs")
+//! })
+//! ```
+//!
+//! ## Using OnceLock for Lazy Statics
+//!
+//! ```tml
+//! use sync::OnceLock
+//!
+//! let config: OnceLock[Config] = OnceLock::new()
+//!
+//! func get_config() -> ref Config {
+//!     return config.get_or_init(do() {
+//!         return load_config_from_file()
+//!     })
+//! }
+//! ```
+
+use sync::atomic::{AtomicU32, Ordering}
+use sync::mutex::Mutex
+
+// ============================================================================
+// Once
+// ============================================================================
+
+// State values for Once
+let ONCE_INCOMPLETE: U32 = 0
+let ONCE_RUNNING: U32 = 1
+let ONCE_COMPLETE: U32 = 2
+
+/// A synchronization primitive which can be used to run a one-time
+/// initialization. Useful for one-time initialization for FFI or related
+/// functionality.
+///
+/// This type only provides a single method, [`call_once`][Once::call_once],
+/// which will ensure that only one closure is ever executed.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::Once
+///
+/// let start = Once::new()
+///
+/// start.call_once(do() {
+///     // Run initialization here
+/// })
+/// ```
+pub type Once {
+    state: AtomicU32,
+}
+
+impl Once {
+    /// Creates a new `Once` value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::Once
+    ///
+    /// let once = Once::new()
+    /// ```
+    pub func new() -> Once {
+        return Once { state: AtomicU32::new(ONCE_INCOMPLETE) }
+    }
+
+    /// Performs an initialization routine once and only once.
+    ///
+    /// If the given closure has not been executed before, it will be executed
+    /// exactly once. If another thread is currently executing the closure,
+    /// the calling thread will block until completion.
+    ///
+    /// # Panics
+    ///
+    /// If the closure panics, the `Once` will be "poisoned" and subsequent
+    /// calls will panic.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::Once
+    ///
+    /// let init = Once::new()
+    ///
+    /// init.call_once(do() {
+    ///     println("Hello!")
+    /// })
+    ///
+    /// // This will not print anything
+    /// init.call_once(do() {
+    ///     println("World!")
+    /// })
+    /// ```
+    pub func call_once(mut self, f: do()) {
+        // Fast path: already complete
+        if self.state.load(Ordering::Acquire) == ONCE_COMPLETE {
+            return
+        }
+
+        // Slow path: try to be the one to initialize
+        let current = self.state.compare_exchange(
+            ONCE_INCOMPLETE,
+            ONCE_RUNNING,
+            Ordering::AcqRel,
+            Ordering::Acquire
+        )
+
+        when current {
+            Ok(_) => {
+                // We won the race - run the initialization
+                f()
+                self.state.store(ONCE_COMPLETE, Ordering::Release)
+            },
+            Err(state) => {
+                // Someone else is initializing or already complete
+                if state == ONCE_COMPLETE {
+                    return
+                }
+                // Spin wait until complete
+                loop self.state.load(Ordering::Acquire) != ONCE_COMPLETE {
+                    sync::atomic::spin_loop_hint()
+                }
+            }
+        }
+    }
+
+    /// Returns `true` if some `call_once` call has completed successfully.
+    ///
+    /// This function may be called concurrently with [`call_once`][Once::call_once].
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::Once
+    ///
+    /// let init = Once::new()
+    ///
+    /// assert(not init.is_completed())
+    ///
+    /// init.call_once(do() {})
+    ///
+    /// assert(init.is_completed())
+    /// ```
+    pub func is_completed(self) -> Bool {
+        return self.state.load(Ordering::Acquire) == ONCE_COMPLETE
+    }
+}
+
+// ============================================================================
+// OnceLock[T]
+// ============================================================================
+
+/// A cell which can be written to only once.
+///
+/// This allows obtaining a reference to the data stored in the cell without
+/// requiring the cell to be `mut`.
+///
+/// `OnceLock` is particularly useful for initializing global statics.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::OnceLock
+///
+/// let cell: OnceLock[Str] = OnceLock::new()
+/// assert(cell.get().is_nothing())
+///
+/// let value = cell.get_or_init(do() {
+///     return "Hello, World!"
+/// })
+/// assert_eq(*value, "Hello, World!")
+/// assert(cell.get().is_just())
+/// ```
+pub type OnceLock[T] {
+    once: Once,
+    value: Maybe[T],
+}
+
+impl[T] OnceLock[T] {
+    /// Creates a new empty cell.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::OnceLock
+    ///
+    /// let cell: OnceLock[Str] = OnceLock::new()
+    /// ```
+    pub func new() -> OnceLock[T] {
+        return OnceLock {
+            once: Once::new(),
+            value: Nothing,
+        }
+    }
+
+    /// Gets the reference to the underlying value.
+    ///
+    /// Returns `Nothing` if the cell is empty, or `Just(ref T)` if the cell
+    /// has been initialized.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::OnceLock
+    ///
+    /// let cell: OnceLock[Str] = OnceLock::new()
+    /// assert(cell.get().is_nothing())
+    ///
+    /// cell.set("Hello")
+    /// assert(cell.get().is_just())
+    /// ```
+    pub func get(self) -> Maybe[ref T] {
+        if not self.once.is_completed() {
+            return Nothing
+        }
+        when self.value {
+            Just(ref v) => return Just(ref v),
+            Nothing => return Nothing
+        }
+    }
+
+    /// Sets the contents of this cell to `value`.
+    ///
+    /// Returns `Ok(())` if the cell was empty and `Err(value)` if the cell
+    /// was already initialized.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::OnceLock
+    ///
+    /// let cell: OnceLock[I32] = OnceLock::new()
+    /// assert(cell.set(42).is_ok())
+    /// assert(cell.set(100).is_err())
+    /// assert_eq(*cell.get().unwrap(), 42)
+    /// ```
+    pub func set(mut self, value: T) -> Outcome[Unit, T] {
+        // Try to be the one to set
+        let current = self.once.state.compare_exchange(
+            ONCE_INCOMPLETE,
+            ONCE_RUNNING,
+            Ordering::AcqRel,
+            Ordering::Acquire
+        )
+
+        when current {
+            Ok(_) => {
+                self.value = Just(value)
+                self.once.state.store(ONCE_COMPLETE, Ordering::Release)
+                return Ok(())
+            },
+            Err(_) => {
+                return Err(value)
+            }
+        }
+    }
+
+    /// Gets the contents of the cell, initializing it with `f` if the cell
+    /// was empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::OnceLock
+    ///
+    /// let cell: OnceLock[Str] = OnceLock::new()
+    ///
+    /// let value = cell.get_or_init(do() {
+    ///     return "Hello!"
+    /// })
+    /// assert_eq(*value, "Hello!")
+    /// ```
+    pub func get_or_init(mut self, f: do() -> T) -> ref T {
+        // Fast path
+        when self.get() {
+            Just(ref v) => return v,
+            Nothing => {}
+        }
+
+        // Slow path - initialize
+        self.once.call_once(do() {
+            self.value = Just(f())
+        })
+
+        // Now we're guaranteed to have a value
+        when self.value {
+            Just(ref v) => return v,
+            Nothing => panic("OnceLock: value should be set after call_once")
+        }
+    }
+
+    /// Takes the value out of the cell, moving it back to an uninitialized state.
+    ///
+    /// Returns `Nothing` if the cell was empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::OnceLock
+    ///
+    /// let cell: OnceLock[Str] = OnceLock::new()
+    /// cell.set("Hello")
+    ///
+    /// let value = cell.take()
+    /// assert(value.is_just())
+    /// assert(cell.get().is_nothing())
+    /// ```
+    pub func take(mut self) -> Maybe[T] {
+        if not self.once.is_completed() {
+            return Nothing
+        }
+
+        // Reset the state
+        self.once.state.store(ONCE_INCOMPLETE, Ordering::Release)
+        let result = self.value
+        self.value = Nothing
+        return result
+    }
+
+    /// Consumes the cell, returning the wrapped value.
+    ///
+    /// Returns `Nothing` if the cell was empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::OnceLock
+    ///
+    /// let cell: OnceLock[Str] = OnceLock::new()
+    /// cell.set("Hello")
+    ///
+    /// let value = cell.into_inner()
+    /// assert_eq(value.unwrap(), "Hello")
+    /// ```
+    pub func into_inner(self) -> Maybe[T] {
+        return self.value
+    }
+}

@@ -1,0 +1,336 @@
+//! Condition variables for thread synchronization.
+//!
+//! This module provides [`Condvar`], a condition variable primitive useful for
+//! blocking a thread while waiting for an event to occur.
+//!
+//! # Overview
+//!
+//! Condition variables are typically used together with a [`Mutex`] to allow
+//! threads to wait for some condition while releasing the lock, and then
+//! re-acquire the lock when they are signaled.
+//!
+//! # Use Cases
+//!
+//! - Producer-consumer queues
+//! - Thread pools waiting for work
+//! - Signaling state changes between threads
+//!
+//! # Examples
+//!
+//! ## Basic Producer-Consumer
+//!
+//! ```tml
+//! use sync::{Mutex, Condvar, Sync}
+//!
+//! let pair = Sync::new((Mutex::new(false), Condvar::new()))
+//!
+//! // Consumer thread
+//! let pair2 = pair.clone()
+//! let handle = thread::spawn(do() {
+//!     let (lock, cvar) = ref *pair2
+//!     let mut started = lock.lock()
+//!
+//!     // Wait until the producer signals
+//!     loop not *started {
+//!         started = cvar.wait(started)
+//!     }
+//!
+//!     println("Consumer: received signal!")
+//! })
+//!
+//! // Producer thread
+//! {
+//!     let (lock, cvar) = ref *pair
+//!     let mut started = lock.lock()
+//!     *started = true
+//!     cvar.notify_one()
+//! }
+//!
+//! handle.join().unwrap()
+//! ```
+//!
+//! ## Waiting with Predicate
+//!
+//! ```tml
+//! use sync::{Mutex, Condvar}
+//!
+//! let mutex = Mutex::new(0)
+//! let cvar = Condvar::new()
+//!
+//! // Wait until value >= 10
+//! let guard = mutex.lock()
+//! let guard = cvar.wait_while(guard, do(val: ref I32) -> Bool {
+//!     return *val < 10
+//! })
+//!
+//! assert(*guard >= 10)
+//! ```
+//!
+//! ## Timeout Waiting
+//!
+//! ```tml
+//! use sync::{Mutex, Condvar}
+//!
+//! let mutex = Mutex::new(false)
+//! let cvar = Condvar::new()
+//!
+//! let guard = mutex.lock()
+//! let (guard, timed_out) = cvar.wait_timeout_ms(guard, 100)
+//!
+//! if timed_out {
+//!     println("Timed out waiting for signal")
+//! }
+//! ```
+
+use sync::mutex::{Mutex, MutexGuard}
+use sync::atomic::{AtomicU32, Ordering}
+
+// ============================================================================
+// Platform-specific raw condition variable
+// ============================================================================
+
+/// Raw platform condition variable handle.
+/// On Windows: CONDITION_VARIABLE (8 bytes)
+/// On Unix: pthread_cond_t (48 bytes depending on platform)
+@repr(C)
+type RawCondvar {
+    _data: [U8; 64]
+}
+
+@extern("tml_condvar_init")
+func raw_condvar_init(cvar: mut ref RawCondvar) -> I32
+
+@extern("tml_condvar_destroy")
+func raw_condvar_destroy(cvar: mut ref RawCondvar) -> I32
+
+@extern("tml_condvar_wait")
+func raw_condvar_wait(cvar: mut ref RawCondvar, mutex: mut ref RawMutex) -> I32
+
+@extern("tml_condvar_wait_timeout_ms")
+func raw_condvar_wait_timeout_ms(cvar: mut ref RawCondvar, mutex: mut ref RawMutex, timeout_ms: U64) -> I32
+
+@extern("tml_condvar_notify_one")
+func raw_condvar_notify_one(cvar: mut ref RawCondvar) -> I32
+
+@extern("tml_condvar_notify_all")
+func raw_condvar_notify_all(cvar: mut ref RawCondvar) -> I32
+
+// Import RawMutex from mutex module (needed for wait operations)
+use sync::mutex::RawMutex
+
+// ============================================================================
+// Condvar
+// ============================================================================
+
+/// A condition variable.
+///
+/// Condition variables represent the ability to block a thread such that it
+/// consumes no CPU time while waiting for an event to occur. Condition
+/// variables are typically associated with a boolean predicate (a condition)
+/// and a mutex. The predicate is always verified inside of the mutex before
+/// determining that a thread must block.
+///
+/// # Spurious Wakeups
+///
+/// Functions like [`wait`][Condvar::wait] are susceptible to spurious wakeups.
+/// Condition variables normally have a boolean predicate associated with them,
+/// and the predicate must always be checked each time `wait` returns.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::{Condvar, Mutex, Sync}
+/// use thread
+///
+/// let pair = Sync::new((Mutex::new(false), Condvar::new()))
+/// let pair2 = pair.clone()
+///
+/// // Inside another thread
+/// thread::spawn(do() {
+///     let (lock, cvar) = ref *pair2
+///     let mut started = lock.lock()
+///     *started = true
+///     // We notify the condvar that the value has changed
+///     cvar.notify_one()
+/// })
+///
+/// // Wait for the thread to start up
+/// let (lock, cvar) = ref *pair
+/// let mut started = lock.lock()
+/// loop not *started {
+///     started = cvar.wait(started)
+/// }
+/// ```
+pub type Condvar {
+    raw: RawCondvar,
+}
+
+impl Condvar {
+    /// Creates a new condition variable.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::Condvar
+    ///
+    /// let cvar = Condvar::new()
+    /// ```
+    pub func new() -> Condvar {
+        let mut cvar = Condvar {
+            raw: RawCondvar { _data: [0; 64] },
+        }
+        raw_condvar_init(ref cvar.raw)
+        return cvar
+    }
+
+    /// Blocks the current thread until this condition variable receives a
+    /// notification.
+    ///
+    /// This function will atomically unlock the mutex specified (represented
+    /// by `guard`) and block the current thread. This means that any calls to
+    /// `notify_one` or `notify_all` which happen logically after the mutex is
+    /// unlocked are candidates to wake this thread up.
+    ///
+    /// When this function returns, the lock will have been re-acquired.
+    ///
+    /// # Spurious Wakeups
+    ///
+    /// This function is subject to spurious wakeups. Condition variables
+    /// normally have a boolean predicate associated with them, and the
+    /// predicate must be checked each time this function returns to protect
+    /// against spurious wakeups.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::{Condvar, Mutex}
+    ///
+    /// let mutex = Mutex::new(false)
+    /// let cvar = Condvar::new()
+    ///
+    /// let mut guard = mutex.lock()
+    /// loop not *guard {
+    ///     guard = cvar.wait(guard)
+    /// }
+    /// ```
+    pub func wait[T](mut self, guard: MutexGuard[T]) -> MutexGuard[T] {
+        raw_condvar_wait(ref self.raw, ref guard.mutex.raw)
+        return guard
+    }
+
+    /// Waits on this condition variable for a notification, timing out after
+    /// a specified duration.
+    ///
+    /// This function will atomically unlock the mutex and block the current
+    /// thread until either a notification is received or the timeout expires.
+    ///
+    /// Returns a tuple of `(guard, timed_out)` where `timed_out` is `true` if
+    /// the wait timed out.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::{Condvar, Mutex}
+    ///
+    /// let mutex = Mutex::new(false)
+    /// let cvar = Condvar::new()
+    ///
+    /// let guard = mutex.lock()
+    /// let (guard, timed_out) = cvar.wait_timeout_ms(guard, 1000)
+    ///
+    /// if timed_out {
+    ///     println("Timed out!")
+    /// }
+    /// ```
+    pub func wait_timeout_ms[T](mut self, guard: MutexGuard[T], timeout_ms: U64) -> (MutexGuard[T], Bool) {
+        let result = raw_condvar_wait_timeout_ms(ref self.raw, ref guard.mutex.raw, timeout_ms)
+        let timed_out = result != 0
+        return (guard, timed_out)
+    }
+
+    /// Blocks the current thread until this condition variable receives a
+    /// notification and the provided condition is false.
+    ///
+    /// This is a convenience method that handles spurious wakeups properly.
+    /// It will only return when `condition(data)` returns `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::{Condvar, Mutex}
+    ///
+    /// let mutex = Mutex::new(0)
+    /// let cvar = Condvar::new()
+    ///
+    /// let guard = mutex.lock()
+    /// // Wait until the value is >= 10
+    /// let guard = cvar.wait_while(guard, do(val: ref I32) -> Bool {
+    ///     return *val < 10
+    /// })
+    ///
+    /// assert(*guard >= 10)
+    /// ```
+    pub func wait_while[T](mut self, mut guard: MutexGuard[T], condition: do(ref T) -> Bool) -> MutexGuard[T] {
+        loop condition(guard.get()) {
+            guard = self.wait(guard)
+        }
+        return guard
+    }
+
+    /// Wakes up one blocked thread on this condvar.
+    ///
+    /// If there is a blocked thread on this condition variable, then it will
+    /// be woken up from its call to `wait` or `wait_timeout`. Notifications
+    /// are not buffered in any way, so if no threads are waiting at the time
+    /// of this call, the notification is effectively dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::{Condvar, Mutex}
+    ///
+    /// let mutex = Mutex::new(false)
+    /// let cvar = Condvar::new()
+    ///
+    /// // In producer thread:
+    /// {
+    ///     let mut guard = mutex.lock()
+    ///     *guard = true
+    ///     cvar.notify_one()
+    /// }
+    /// ```
+    pub func notify_one(mut self) {
+        raw_condvar_notify_one(ref self.raw)
+    }
+
+    /// Wakes up all blocked threads on this condvar.
+    ///
+    /// This method will wake up all threads currently waiting on the
+    /// condition variable. The threads will compete to acquire the mutex
+    /// when they wake up.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::{Condvar, Mutex}
+    ///
+    /// let mutex = Mutex::new(false)
+    /// let cvar = Condvar::new()
+    ///
+    /// // In producer thread:
+    /// {
+    ///     let mut guard = mutex.lock()
+    ///     *guard = true
+    ///     cvar.notify_all()  // Wake all waiting threads
+    /// }
+    /// ```
+    pub func notify_all(mut self) {
+        raw_condvar_notify_all(ref self.raw)
+    }
+}
+
+impl Drop for Condvar {
+    func drop(mut self) {
+        raw_condvar_destroy(ref self.raw)
+    }
+}

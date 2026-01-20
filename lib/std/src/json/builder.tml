@@ -1,0 +1,243 @@
+//! JSON Builder - Elegant JSON construction with fluent API
+//!
+//! Build JSON strings programmatically without manual string concatenation.
+
+use std::text::Text
+
+/// JSON Builder with fluent API for constructing JSON strings.
+///
+/// Uses Text internally for O(1) amortized string building.
+pub type Builder {
+    buffer: Text,
+    need_comma: Bool,
+    depth: I32
+}
+
+impl Builder {
+    // ========================================================================
+    // Constructor
+    // ========================================================================
+
+    /// Create a new JSON builder with default capacity
+    pub func new() -> Builder {
+        Builder {
+            buffer: Text::with_capacity(1024),
+            need_comma: false,
+            depth: 0
+        }
+    }
+
+    /// Create a new JSON builder with specified capacity
+    pub func with_capacity(cap: I64) -> Builder {
+        Builder {
+            buffer: Text::with_capacity(cap),
+            need_comma: false,
+            depth: 0
+        }
+    }
+
+    // ========================================================================
+    // Internal helpers
+    // ========================================================================
+
+    pub func maybe_comma(this) {
+        if this.need_comma {
+            this.buffer.push_str(",")
+        }
+    }
+
+    pub func escape_string(this, s: Str) {
+        // For now, just append directly
+        // TODO: proper JSON string escaping for special characters
+        this.buffer.push_str(s)
+    }
+
+    // ========================================================================
+    // Structure: Objects and Arrays (non-chaining)
+    // ========================================================================
+
+    /// Start an object `{`
+    pub func obj(this) {
+        this.maybe_comma()
+        this.buffer.push_str("{")
+        this.need_comma = false
+        this.depth = this.depth + 1
+    }
+
+    /// Start an array `[`
+    pub func arr(this) {
+        this.maybe_comma()
+        this.buffer.push_str("[")
+        this.need_comma = false
+        this.depth = this.depth + 1
+    }
+
+    /// End object `}`
+    pub func end_obj(this) {
+        this.buffer.push_str("}")
+        this.depth = this.depth - 1
+        this.need_comma = true
+    }
+
+    /// End array `]`
+    pub func end_arr(this) {
+        this.buffer.push_str("]")
+        this.depth = this.depth - 1
+        this.need_comma = true
+    }
+
+    // ========================================================================
+    // Keys (for objects)
+    // ========================================================================
+
+    /// Add a key to the current object
+    pub func k(this, key: Str) {
+        this.maybe_comma()
+        this.buffer.push_str("\"")
+        this.buffer.push_str(key)
+        this.buffer.push_str("\":")
+        this.need_comma = false
+    }
+
+    // ========================================================================
+    // Values
+    // ========================================================================
+
+    /// Add string value
+    pub func s(this, value: Str) {
+        this.maybe_comma()
+        this.buffer.push_str("\"")
+        this.escape_string(value)
+        this.buffer.push_str("\"")
+        this.need_comma = true
+    }
+
+    /// Add integer value
+    pub func n(this, value: I64) {
+        this.maybe_comma()
+        this.buffer.push_str(value.to_string())
+        this.need_comma = true
+    }
+
+    /// Add I32 integer value
+    pub func n32(this, value: I32) {
+        this.maybe_comma()
+        this.buffer.push_str(value.to_string())
+        this.need_comma = true
+    }
+
+    /// Add float value
+    pub func f(this, value: F64) {
+        this.maybe_comma()
+        this.buffer.push_str(value.to_string())
+        this.need_comma = true
+    }
+
+    /// Add boolean value
+    pub func b(this, value: Bool) {
+        this.maybe_comma()
+        var s: Str = "false"
+        if value {
+            s = "true"
+        }
+        this.buffer.push_str(s)
+        this.need_comma = true
+    }
+
+    /// Add null value
+    pub func nil(this) {
+        this.maybe_comma()
+        this.buffer.push_str("null")
+        this.need_comma = true
+    }
+
+    // ========================================================================
+    // Convenience: Key-Value pairs
+    // ========================================================================
+
+    /// Add key with string value
+    pub func ks(this, key: Str, value: Str) {
+        this.k(key)
+        this.s(value)
+    }
+
+    /// Add key with integer value
+    pub func kn(this, key: Str, value: I64) {
+        this.k(key)
+        this.n(value)
+    }
+
+    /// Add key with I32 value
+    pub func kn32(this, key: Str, value: I32) {
+        this.k(key)
+        this.n32(value)
+    }
+
+    /// Add key with float value
+    pub func kf(this, key: Str, value: F64) {
+        this.k(key)
+        this.f(value)
+    }
+
+    /// Add key with bool value
+    pub func kb(this, key: Str, value: Bool) {
+        this.k(key)
+        this.b(value)
+    }
+
+    /// Add key with null value
+    pub func knil(this, key: Str) {
+        this.k(key)
+        this.nil()
+    }
+
+    // ========================================================================
+    // Raw JSON (for pre-built JSON strings)
+    // ========================================================================
+
+    /// Add raw JSON string (no escaping, must be valid JSON)
+    pub func raw(this, json: Str) {
+        this.maybe_comma()
+        this.buffer.push_str(json)
+        this.need_comma = true
+    }
+
+    // ========================================================================
+    // Build
+    // ========================================================================
+
+    /// Build and return the JSON string
+    pub func build(this) -> Str {
+        return this.buffer.as_str()
+    }
+
+    /// Get current length of the built JSON
+    pub func len(this) -> I64 {
+        return this.buffer.len()
+    }
+
+    /// Free the builder's resources
+    pub func drop(this) {
+        this.buffer.drop()
+    }
+}
+
+// ============================================================================
+// Standalone builder functions for quick JSON construction
+// ============================================================================
+
+/// Create a JSON object builder (already has opening `{`)
+pub func object() -> Builder {
+    let b: Builder = Builder::new()
+    b.buffer.push_str("{")
+    b.depth = 1
+    return b
+}
+
+/// Create a JSON array builder (already has opening `[`)
+pub func array() -> Builder {
+    let b: Builder = Builder::new()
+    b.buffer.push_str("[")
+    b.depth = 1
+    return b
+}

@@ -17,6 +17,7 @@
 //! | [`file`] | File I/O operations |
 //! | [`iter`] | Iterator and Range |
 //! | [`net`] | Networking (TCP, UDP, HTTP) |
+//! | [`json`] | Native JSON parsing |
 
 pub mod traits
 pub mod interfaces
@@ -28,3 +29,4 @@ pub mod text
 pub mod file
 pub mod iter
 pub mod net
+pub mod json

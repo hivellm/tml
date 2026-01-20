@@ -239,11 +239,26 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
 
         // Generate the index
         std::string index_val = gen_expr(*idx.index);
+        std::string index_type = last_expr_type_;
 
-        // GEP to get element pointer
+        // Convert index to i64 if needed for GEP consistency
+        std::string index_i64 = index_val;
+        if (index_type != "i64") {
+            index_i64 = fresh_reg();
+            if (index_type == "i32") {
+                emit_line("  " + index_i64 + " = sext i32 " + index_val + " to i64");
+            } else if (index_type == "i8" || index_type == "i16") {
+                emit_line("  " + index_i64 + " = sext " + index_type + " " + index_val + " to i64");
+            } else {
+                // Assume unsigned, use zext
+                emit_line("  " + index_i64 + " = zext " + index_type + " " + index_val + " to i64");
+            }
+        }
+
+        // GEP to get element pointer (use i64 for index to match 64-bit systems)
         std::string elem_ptr = fresh_reg();
         emit_line("  " + elem_ptr + " = getelementptr " + array_llvm_type + ", ptr " + arr_ptr +
-                  ", i32 0, i32 " + index_val);
+                  ", i64 0, i64 " + index_i64);
 
         // Load and return the element
         std::string result = fresh_reg();
@@ -270,11 +285,23 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
 
             // Generate the index
             std::string index_val = gen_expr(*idx.index);
+            std::string idx_type = last_expr_type_;
 
-            // GEP to get element pointer
+            // Convert index to i64 if needed for GEP consistency
+            std::string index_i64 = index_val;
+            if (idx_type != "i64") {
+                index_i64 = fresh_reg();
+                if (idx_type == "i32") {
+                    emit_line("  " + index_i64 + " = sext i32 " + index_val + " to i64");
+                } else {
+                    emit_line("  " + index_i64 + " = zext " + idx_type + " " + index_val + " to i64");
+                }
+            }
+
+            // GEP to get element pointer (use i64 for index)
             std::string elem_ptr = fresh_reg();
             emit_line("  " + elem_ptr + " = getelementptr " + array_type + ", ptr " + arr_ptr +
-                      ", i32 0, i32 " + index_val);
+                      ", i64 0, i64 " + index_i64);
 
             // Load and return the element
             std::string result = fresh_reg();

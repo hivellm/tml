@@ -1,0 +1,136 @@
+//! Synchronization primitives for concurrent programming.
+//!
+//! This module provides thread-safe synchronization primitives including:
+//!
+//! - **Atomic types**: Lock-free primitives for simple concurrent data
+//! - **Memory ordering**: Control over how operations are observed across threads
+//! - **Mutex**: Mutual exclusion for protecting shared data
+//! - **RwLock**: Reader-writer lock for concurrent read access
+//!
+//! # Atomic Types
+//!
+//! Atomic types are the foundation of lock-free concurrent programming.
+//! They provide atomic load, store, and read-modify-write operations:
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`AtomicBool`] | Atomic boolean |
+//! | [`AtomicI32`] | 32-bit signed atomic |
+//! | [`AtomicI64`] | 64-bit signed atomic |
+//! | [`AtomicU32`] | 32-bit unsigned atomic |
+//! | [`AtomicU64`] | 64-bit unsigned atomic |
+//! | [`AtomicIsize`] | Pointer-sized signed atomic |
+//! | [`AtomicUsize`] | Pointer-sized unsigned atomic |
+//! | [`AtomicPtr[T]`] | Atomic raw pointer |
+//!
+//! See the [`atomic`] module for details and examples.
+//!
+//! # Locking Primitives
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Mutex[T]`] | Mutual exclusion lock for exclusive access |
+//! | [`MutexGuard[T]`] | RAII guard for Mutex |
+//! | [`RwLock[T]`] | Reader-writer lock (multiple readers or one writer) |
+//! | [`RwLockReadGuard[T]`] | RAII guard for RwLock read access |
+//! | [`RwLockWriteGuard[T]`] | RAII guard for RwLock write access |
+//!
+//! # Memory Ordering
+//!
+//! The [`Ordering`] enum specifies how atomic operations synchronize with
+//! other operations. See the [`ordering`] module for details.
+//!
+//! # Examples
+//!
+//! ## Atomic Counter
+//!
+//! ```tml
+//! use sync::{AtomicU64, Ordering}
+//!
+//! let counter = AtomicU64::new(0)
+//!
+//! // Thread-safe increment
+//! counter.fetch_add(1, Ordering::Relaxed)
+//! ```
+//!
+//! ## Mutex
+//!
+//! ```tml
+//! use sync::Mutex
+//!
+//! let data = Mutex::new(0)
+//!
+//! {
+//!     let mut guard = data.lock()
+//!     *guard = 42
+//! }  // lock released here
+//! ```
+//!
+//! ## RwLock
+//!
+//! ```tml
+//! use sync::RwLock
+//!
+//! let data = RwLock::new(5)
+//!
+//! // Multiple readers
+//! {
+//!     let r1 = data.read()
+//!     let r2 = data.read()
+//!     assert_eq(*r1, 5)
+//! }
+//!
+//! // Single writer
+//! {
+//!     let mut w = data.write()
+//!     *w = 6
+//! }
+//! ```
+//!
+//! ## Memory Fence
+//!
+//! ```tml
+//! use sync::{fence, Ordering}
+//!
+//! // Full memory barrier
+//! fence(Ordering::SeqCst)
+//! ```
+
+// Re-export submodules
+pub use sync::ordering
+pub use sync::atomic
+pub use sync::mutex
+pub use sync::rwlock
+pub use sync::condvar
+pub use sync::barrier
+pub use sync::once
+
+// Re-export commonly used types at sync level
+pub use sync::ordering::Ordering
+pub use sync::ordering::{fence, compiler_fence}
+
+pub use sync::atomic::{
+    AtomicBool,
+    AtomicI32,
+    AtomicI64,
+    AtomicU32,
+    AtomicU64,
+    AtomicIsize,
+    AtomicUsize,
+    AtomicPtr,
+    spin_loop_hint,
+}
+
+pub use sync::mutex::{Mutex, MutexGuard, Lock}
+
+pub use sync::rwlock::{
+    RwLock,
+    RwLockReadGuard,
+    RwLockWriteGuard,
+}
+
+pub use sync::condvar::Condvar
+
+pub use sync::barrier::{Barrier, BarrierWaitResult}
+
+pub use sync::once::{Once, OnceLock}

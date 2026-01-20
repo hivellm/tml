@@ -1,0 +1,81 @@
+// Overhead Test - Isolate where the slowdown comes from
+// Compares: loop overhead, time_ns overhead, @extern overhead
+
+use std::time
+
+// Minimal extern function for testing FFI overhead
+@extern("c")
+func noop_extern() -> I32
+
+// Test 1: Pure loop overhead (no extern calls)
+func test_pure_loop(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    let mut sum: I64 = 0
+    loop i in 0 to iterations {
+        sum = sum + 1
+    }
+    let end = time::now_ns()
+    return end - start
+}
+
+// Test 2: Loop with time_ns() calls inside
+func test_time_overhead(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    loop i in 0 to iterations {
+        let _ = time::now_ns()
+    }
+    let end = time::now_ns()
+    return end - start
+}
+
+// Test 3: Measure single time_ns() call
+func test_single_time_call() -> I64 {
+    let t1 = time::now_ns()
+    let t2 = time::now_ns()
+    let t3 = time::now_ns()
+    let t4 = time::now_ns()
+    let t5 = time::now_ns()
+    // Average of 4 deltas
+    return ((t2 - t1) + (t3 - t2) + (t4 - t3) + (t5 - t4)) / 4
+}
+
+func main() -> I32 {
+    print("=== TML Overhead Analysis ===\n\n")
+
+    // Test 1: Pure loop
+    print("Test 1: Pure loop (1M iterations)\n")
+    let loop_time = test_pure_loop(1000000)
+    let loop_ns_per_iter = loop_time / 1000000
+    print("  Total: ")
+    print_i64(loop_time / 1000)
+    print(" us\n")
+    print("  Per iteration: ")
+    print_i64(loop_ns_per_iter)
+    print(" ns\n\n")
+
+    // Test 2: time_ns() overhead
+    print("Test 2: time_ns() call overhead (10K iterations)\n")
+    let time_overhead = test_time_overhead(10000)
+    let time_ns_per_call = time_overhead / 10000
+    print("  Total: ")
+    print_i64(time_overhead / 1000)
+    print(" us\n")
+    print("  Per call: ")
+    print_i64(time_ns_per_call)
+    print(" ns\n\n")
+
+    // Test 3: Single time_ns() measurement
+    print("Test 3: Single time_ns() call (average of 4)\n")
+    let single_time = test_single_time_call()
+    print("  Per call: ")
+    print_i64(single_time)
+    print(" ns\n\n")
+
+    // Analysis
+    print("=== Analysis ===\n")
+    print("If time_ns() is slow (>100ns), it explains benchmark overhead.\n")
+    print("JSON parse of 200 bytes in C++ takes ~350ns.\n")
+    print("If time_ns() takes ~1000ns, that's 3x overhead per call.\n")
+
+    return 0
+}

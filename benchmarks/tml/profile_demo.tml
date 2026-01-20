@@ -1,0 +1,169 @@
+// ============================================================================
+// TML Profiler Demo
+// ============================================================================
+// Demonstrates the std::profiler module for generating .cpuprofile files.
+//
+// Usage:
+//   tml run benchmarks/tml/profile_demo.tml
+//
+// After running, open 'demo_profile.cpuprofile' in:
+// - Chrome DevTools (Performance tab > Load profile)
+// - VS Code (JavaScript Profiler extension)
+// ============================================================================
+
+use std::profiler
+use std::time
+
+// ============================================================================
+// Demo Functions
+// ============================================================================
+
+// Compute-heavy function - calculates sum of squares
+func compute_heavy(n: I64) -> I64 {
+    profiler::enter("compute_heavy", "profile_demo.tml", 20)
+
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= n then { break }
+        sum = sum + (i * i)
+        i = i + 1
+    }
+
+    profiler::exit()
+    return sum
+}
+
+// Nested function calls
+func outer_function() {
+    profiler::enter("outer_function", "profile_demo.tml", 35)
+
+    inner_function_a()
+    inner_function_b()
+    inner_function_a()
+
+    profiler::exit()
+}
+
+func inner_function_a() {
+    profiler::enter("inner_function_a", "profile_demo.tml", 45)
+
+    // Simulate work
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= 10000 then { break }
+        sum = sum + i
+        i = i + 1
+    }
+
+    profiler::exit()
+}
+
+func inner_function_b() {
+    profiler::enter("inner_function_b", "profile_demo.tml", 59)
+
+    // Simulate work
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= 5000 then { break }
+        sum = sum + (i * 2)
+        i = i + 1
+    }
+
+    profiler::exit()
+}
+
+// Recursive function
+func fibonacci(n: I64) -> I64 {
+    profiler::enter("fibonacci", "profile_demo.tml", 75)
+
+    var result: I64 = 0
+    if n <= 1 {
+        result = n
+    } else {
+        profiler::exit()
+        let a = fibonacci(n - 1)
+        profiler::enter("fibonacci", "profile_demo.tml", 75)
+        profiler::exit()
+        let b = fibonacci(n - 2)
+        profiler::enter("fibonacci", "profile_demo.tml", 75)
+        result = a + b
+    }
+
+    profiler::exit()
+    return result
+}
+
+// Main benchmark loop
+func run_benchmark() {
+    profiler::enter("run_benchmark", "profile_demo.tml", 94)
+
+    println("Running compute_heavy...")
+    var i: I32 = 0
+    loop {
+        if i >= 10 then { break }
+        let result = compute_heavy(100000)
+        if result < 0 { break }  // Prevent optimization
+        i = i + 1
+    }
+
+    println("Running nested functions...")
+    i = 0
+    loop {
+        if i >= 50 then { break }
+        outer_function()
+        i = i + 1
+    }
+
+    println("Running fibonacci...")
+    let fib_result = fibonacci(20)
+    println("  fib(20) = " + fib_result.to_string())
+
+    profiler::exit()
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+pub func main() -> I32 {
+    println("")
+    println("============================================")
+    println("   TML Profiler Demo")
+    println("============================================")
+    println("")
+
+    // Initialize profiler with output file
+    println("Initializing profiler...")
+    profiler::init("demo_profile.cpuprofile")
+
+    // Start profiling
+    println("Starting profiler...")
+    profiler::start()
+
+    // Run the benchmark
+    run_benchmark()
+
+    // Stop profiling and write output
+    println("")
+    println("Stopping profiler...")
+    profiler::stop()
+
+    println("")
+    println("============================================")
+    println("Profile saved to: demo_profile.cpuprofile")
+    println("")
+    println("To view the profile:")
+    println("  1. Open Chrome DevTools (F12)")
+    println("  2. Go to Performance tab")
+    println("  3. Click 'Load profile...'")
+    println("  4. Select demo_profile.cpuprofile")
+    println("")
+    println("Or use VS Code with JavaScript Profiler extension")
+    println("============================================")
+    println("")
+
+    return 0
+}

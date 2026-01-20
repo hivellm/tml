@@ -675,7 +675,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     }
 
     // Link std::text runtime if imported (Text type with SSO)
-    if (registry->has_module("std::text")) {
+    // Skip if using precompiled tml_runtime.lib which already includes text.c
+    if (registry->has_module("std::text") && !use_precompiled) {
         add_runtime(
             {
                 "compiler/runtime/text.c",
@@ -687,6 +688,133 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     }
 
     // Note: net.c is now included by default (see above), so no conditional linking needed
+
+    // Link std::json runtime if imported (pre-built C++ library)
+    if (registry->has_module("std::json")) {
+        // Find the JSON runtime library (built alongside tml.exe)
+        auto find_json_runtime = []() -> std::optional<fs::path> {
+#ifdef _WIN32
+            std::string lib_name = "tml_json_runtime.lib";
+#else
+            std::string lib_name = "libtml_json_runtime.a";
+#endif
+            // Search locations: prioritize release when optimizing, debug otherwise
+            std::vector<std::string> search_paths;
+            bool is_release = CompilerOptions::optimization_level >= 1;
+            if (is_release) {
+                // Release mode: prioritize optimized libraries
+                search_paths = {
+                    ".",
+                    "build/release",
+                    "build/debug",
+                    "../build/release",
+                    "../build/debug",
+                    "F:/Node/hivellm/tml/build/release",
+                    "F:/Node/hivellm/tml/build/debug",
+                };
+            } else {
+                // Debug mode: prioritize debug libraries
+                search_paths = {
+                    ".",
+                    "build/debug",
+                    "build/release",
+                    "../build/debug",
+                    "../build/release",
+                    "F:/Node/hivellm/tml/build/debug",
+                    "F:/Node/hivellm/tml/build/release",
+                };
+            }
+
+            for (const auto& search_path : search_paths) {
+                fs::path lib_path = fs::path(search_path) / lib_name;
+                if (fs::exists(lib_path)) {
+                    return fs::absolute(lib_path);
+                }
+            }
+            return std::nullopt;
+        };
+
+        if (auto json_lib = find_json_runtime()) {
+            objects.push_back(*json_lib);
+            if (verbose) {
+                std::cout << "Including JSON runtime library: " << json_lib->string() << "\n";
+            }
+
+            // Also need to link tml_json.lib which contains the actual JSON parser
+            // (tml_json_runtime.lib depends on it)
+            auto json_lib_dir = json_lib->parent_path();
+#ifdef _WIN32
+            auto tml_json_lib = json_lib_dir / "tml_json.lib";
+#else
+            auto tml_json_lib = json_lib_dir / "libtml_json.a";
+#endif
+            if (fs::exists(tml_json_lib)) {
+                objects.push_back(tml_json_lib);
+                if (verbose) {
+                    std::cout << "Including JSON parser library: " << tml_json_lib.string() << "\n";
+                }
+            } else if (verbose) {
+                std::cout << "Warning: tml_json library not found at " << tml_json_lib.string()
+                          << "\n";
+            }
+        } else if (verbose) {
+            std::cout << "Warning: std::json imported but tml_json_runtime library not found\n";
+        }
+    }
+
+    // Link std::profiler runtime if imported (pre-built C++ library)
+    if (registry->has_module("std::profiler")) {
+        // Find the profiler runtime library (built alongside tml.exe)
+        auto find_profiler_runtime = []() -> std::optional<fs::path> {
+#ifdef _WIN32
+            std::string lib_name = "tml_profiler.lib";
+#else
+            std::string lib_name = "libtml_profiler.a";
+#endif
+            // Search locations: prioritize release when optimizing, debug otherwise
+            std::vector<std::string> search_paths;
+            if (CompilerOptions::optimization_level >= 1) {
+                // Release mode: prioritize optimized libraries
+                search_paths = {
+                    ".",
+                    "build/release",
+                    "build/debug",
+                    "../build/release",
+                    "../build/debug",
+                    "F:/Node/hivellm/tml/build/release",
+                    "F:/Node/hivellm/tml/build/debug",
+                };
+            } else {
+                // Debug mode: prioritize debug libraries
+                search_paths = {
+                    ".",
+                    "build/debug",
+                    "build/release",
+                    "../build/debug",
+                    "../build/release",
+                    "F:/Node/hivellm/tml/build/debug",
+                    "F:/Node/hivellm/tml/build/release",
+                };
+            }
+
+            for (const auto& search_path : search_paths) {
+                fs::path lib_path = fs::path(search_path) / lib_name;
+                if (fs::exists(lib_path)) {
+                    return fs::absolute(lib_path);
+                }
+            }
+            return std::nullopt;
+        };
+
+        if (auto profiler_lib = find_profiler_runtime()) {
+            objects.push_back(*profiler_lib);
+            if (verbose) {
+                std::cout << "Including profiler runtime library: " << profiler_lib->string() << "\n";
+            }
+        } else if (verbose) {
+            std::cout << "Warning: std::profiler imported but tml_profiler library not found\n";
+        }
+    }
 
     return objects;
 }

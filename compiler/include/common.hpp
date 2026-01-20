@@ -130,6 +130,15 @@ struct CompilerOptions {
     /// built-in LLVM backend and LLD. Useful for debugging or when
     /// the self-contained tools are not available.
     static inline bool use_external_tools = false;
+
+    /// Enable runtime profiling instrumentation.
+    /// When enabled, the compiled program generates a .cpuprofile file
+    /// that can be loaded in Chrome DevTools or VS Code.
+    static inline bool profile = false;
+
+    /// Output path for the .cpuprofile file.
+    /// Default: "profile.cpuprofile"
+    static inline std::string profile_output = "profile.cpuprofile";
 };
 
 // ============================================================================

@@ -602,4 +602,22 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 #endif
 }
 
+/// Extended run with additional options (profiling, etc.)
+int run_run_ex(const std::string& path, const RunOptions& opts) {
+    // For now, delegate to standard run with profiling setup
+    // If profiling is enabled, we set up the profiler initialization
+
+    if (opts.profile) {
+        // Set global profiling flag - this will be used by codegen to inject profiler calls
+        CompilerOptions::profile = true;
+        CompilerOptions::profile_output = opts.profile_output;
+
+        std::cerr << "[TML] Runtime profiling enabled. Output: " << opts.profile_output << "\n";
+        std::cerr << "[TML] Note: Automatic instrumentation requires recompilation with --profile flag.\n";
+        std::cerr << "[TML] For manual profiling, use std::profiler module in your code.\n";
+    }
+
+    return run_run(path, opts.args, opts.verbose, opts.coverage, opts.no_cache);
+}
+
 } // namespace tml::cli

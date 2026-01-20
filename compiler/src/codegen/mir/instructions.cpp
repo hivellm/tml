@@ -70,6 +70,39 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string base = get_value_reg(i.base);
                 mir::MirTypePtr type_ptr = i.base_type ? i.base_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
+
+                // Emit bounds check if needed (for array indexing with known size)
+                if (i.needs_bounds_check && i.known_array_size >= 0 && !i.indices.empty()) {
+                    std::string idx_val = get_value_reg(i.indices[0]);
+                    std::string size_str = std::to_string(i.known_array_size);
+                    std::string label_id = std::to_string(temp_counter_++);
+
+                    // Check index < 0 (signed comparison)
+                    std::string below_zero = "%bc.below." + label_id;
+                    emitln("    " + below_zero + " = icmp slt i32 " + idx_val + ", 0");
+
+                    // Check index >= size
+                    std::string above_max = "%bc.above." + label_id;
+                    emitln("    " + above_max + " = icmp sge i32 " + idx_val + ", " + size_str);
+
+                    // Combine checks
+                    std::string oob = "%bc.oob." + label_id;
+                    emitln("    " + oob + " = or i1 " + below_zero + ", " + above_max);
+
+                    // Branch: out of bounds -> panic, in bounds -> continue
+                    std::string panic_label = "bc.panic." + label_id;
+                    std::string ok_label = "bc.ok." + label_id;
+                    emitln("    br i1 " + oob + ", label %" + panic_label + ", label %" + ok_label);
+
+                    // Panic block
+                    emitln(panic_label + ":");
+                    emitln("    call void @abort()");
+                    emitln("    unreachable");
+
+                    // OK block - continue with GEP
+                    emitln(ok_label + ":");
+                }
+
                 emit("    " + result_reg + " = getelementptr " + type_str + ", ptr " + base);
                 for (const auto& idx : i.indices) {
                     emit(", i32 " + get_value_reg(idx));
@@ -263,8 +296,9 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
         }
     } else {
         // Special case: string concatenation when adding two pointers (strings)
+        // Use str_concat_opt for O(1) amortized complexity
         if (type_str == "ptr" && i.op == mir::BinOp::Add) {
-            emitln("    " + result_reg + " = call ptr @str_concat(ptr " + left + ", ptr " + right +
+            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr " + left + ", ptr " + right +
                    ")");
             if (inst.result != mir::INVALID_VALUE) {
                 value_types_[inst.result] = "ptr";
@@ -576,6 +610,367 @@ void MirCodegen::emit_normal_call(const mir::CallInst& i, const std::string& fun
 
 void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::string& result_reg,
                                        const mir::InstructionData& inst) {
+    std::string recv_type = i.receiver_type.empty() ? "Unknown" : i.receiver_type;
+    std::string receiver = get_value_reg(i.receiver);
+
+    // V8-style optimization: Inline simple Text methods to avoid FFI overhead
+    // This is critical for performance - each FFI call has ~10ns overhead
+    // Uses select instruction for branchless code that LLVM can optimize well
+    if (recv_type == "Text") {
+        // Text struct layout (32 bytes total):
+        // Heap mode (flags & 1 == 0):
+        //   offset 0: ptr data
+        //   offset 8: i64 len
+        //   offset 16: i64 cap
+        //   offset 24: i8 flags
+        // SSO mode (flags & 1 == 1):
+        //   offset 0-22: [23 x i8] data
+        //   offset 23: i8 len
+        //   offset 24: i8 flags
+
+        if (i.method_name == "len" && !result_reg.empty()) {
+            // Inline Text::len() using branchless select
+            std::string id = std::to_string(temp_counter_++);
+
+            // Load flags and check SSO bit
+            emitln("    %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 24");
+            emitln("    %flags." + id + " = load i8, ptr %flags_ptr." + id);
+            emitln("    %is_sso." + id + " = trunc i8 %flags." + id + " to i1");
+
+            // Load SSO len (offset 23, i8 -> i64)
+            emitln("    %sso_len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 23");
+            emitln("    %sso_len_i8." + id + " = load i8, ptr %sso_len_ptr." + id);
+            emitln("    %sso_len." + id + " = zext i8 %sso_len_i8." + id + " to i64");
+
+            // Load heap len (offset 8, i64)
+            emitln("    %heap_len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+            emitln("    %heap_len." + id + " = load i64, ptr %heap_len_ptr." + id);
+
+            // Branchless select: is_sso ? sso_len : heap_len
+            emitln("    " + result_reg + " = select i1 %is_sso." + id + ", i64 %sso_len." + id +
+                   ", i64 %heap_len." + id);
+
+            if (inst.result != mir::INVALID_VALUE) {
+                value_types_[inst.result] = "i64";
+            }
+            return;
+        }
+
+        if (i.method_name == "clear") {
+            // Inline Text::clear() - branchless using conditional stores
+            // For simplicity, we store to both locations (one will be ignored based on mode)
+            // LLVM will optimize this if the mode is known
+            std::string id = std::to_string(temp_counter_++);
+
+            // Store 0 to SSO len location (offset 23)
+            emitln("    %sso_len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 23");
+            emitln("    store i8 0, ptr %sso_len_ptr." + id);
+
+            // Store 0 to heap len location (offset 8)
+            emitln("    %heap_len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+            emitln("    store i64 0, ptr %heap_len_ptr." + id);
+
+            return;
+        }
+
+        if (i.method_name == "is_empty" && !result_reg.empty()) {
+            // Inline Text::is_empty() using branchless select
+            std::string id = std::to_string(temp_counter_++);
+
+            // Load flags and check SSO bit
+            emitln("    %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 24");
+            emitln("    %flags." + id + " = load i8, ptr %flags_ptr." + id);
+            emitln("    %is_sso." + id + " = trunc i8 %flags." + id + " to i1");
+
+            // Check SSO empty (offset 23)
+            emitln("    %sso_len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 23");
+            emitln("    %sso_len." + id + " = load i8, ptr %sso_len_ptr." + id);
+            emitln("    %sso_empty." + id + " = icmp eq i8 %sso_len." + id + ", 0");
+
+            // Check heap empty (offset 8)
+            emitln("    %heap_len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+            emitln("    %heap_len." + id + " = load i64, ptr %heap_len_ptr." + id);
+            emitln("    %heap_empty." + id + " = icmp eq i64 %heap_len." + id + ", 0");
+
+            // Branchless select
+            emitln("    " + result_reg + " = select i1 %is_sso." + id + ", i1 %sso_empty." + id +
+                   ", i1 %heap_empty." + id);
+
+            if (inst.result != mir::INVALID_VALUE) {
+                value_types_[inst.result] = "i1";
+            }
+            return;
+        }
+
+        if (i.method_name == "capacity" && !result_reg.empty()) {
+            // Inline Text::capacity() using branchless select
+            std::string id = std::to_string(temp_counter_++);
+
+            // Load flags and check SSO bit
+            emitln("    %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 24");
+            emitln("    %flags." + id + " = load i8, ptr %flags_ptr." + id);
+            emitln("    %is_sso." + id + " = trunc i8 %flags." + id + " to i1");
+
+            // Load heap capacity (offset 16)
+            emitln("    %heap_cap_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 16");
+            emitln("    %heap_cap." + id + " = load i64, ptr %heap_cap_ptr." + id);
+
+            // Branchless select: is_sso ? 23 : heap_cap
+            emitln("    " + result_reg + " = select i1 %is_sso." + id + ", i64 23, i64 %heap_cap." +
+                   id);
+
+            if (inst.result != mir::INVALID_VALUE) {
+                value_types_[inst.result] = "i64";
+            }
+            return;
+        }
+
+        if (i.method_name == "push" && i.args.size() == 1) {
+            // Inline Text::push() with fast path for heap mode
+            // This is critical - push() is called millions of times in tight loops
+            // Fast path: heap mode with space available -> direct store
+            // Slow path: SSO mode or need realloc -> call FFI
+            std::string id = std::to_string(temp_counter_++);
+            std::string byte_val = get_value_reg(i.args[0]);
+
+            // Load flags and check if heap mode (flags == 0)
+            emitln("    %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 24");
+            emitln("    %flags." + id + " = load i8, ptr %flags_ptr." + id);
+            emitln("    %is_heap." + id + " = icmp eq i8 %flags." + id + ", 0");
+            emitln("    br i1 %is_heap." + id + ", label %push_heap." + id + ", label %push_slow." +
+                   id);
+
+            // Heap fast path: check capacity and store directly
+            emitln("  push_heap." + id + ":");
+            // Load data ptr, len, cap
+            emitln("    %data_ptr_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 0");
+            emitln("    %data_ptr." + id + " = load ptr, ptr %data_ptr_ptr." + id);
+            emitln("    %len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+            emitln("    %len." + id + " = load i64, ptr %len_ptr." + id);
+            emitln("    %cap_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 16");
+            emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
+            // Check if has space
+            emitln("    %has_space." + id + " = icmp ult i64 %len." + id + ", %cap." + id);
+            emitln("    br i1 %has_space." + id + ", label %push_fast." + id + ", label %push_slow." +
+                   id);
+
+            // Fast store path
+            emitln("  push_fast." + id + ":");
+            // Truncate i32 byte to i8
+            emitln("    %byte_i8." + id + " = trunc i32 " + byte_val + " to i8");
+            // Store byte at data[len]
+            emitln("    %store_ptr." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
+                   id);
+            emitln("    store i8 %byte_i8." + id + ", ptr %store_ptr." + id);
+            // Increment len
+            emitln("    %new_len." + id + " = add i64 %len." + id + ", 1");
+            emitln("    store i64 %new_len." + id + ", ptr %len_ptr." + id);
+            emitln("    br label %push_done." + id);
+
+            // Slow path: SSO mode or needs realloc - call FFI
+            emitln("  push_slow." + id + ":");
+            emitln("    call void @tml_text_push(ptr " + receiver + ", i32 " + byte_val + ")");
+            emitln("    br label %push_done." + id);
+
+            emitln("  push_done." + id + ":");
+            return;
+        }
+
+        if (i.method_name == "push_str" && i.args.size() == 1) {
+            // Inline Text::push_str() with fast path for heap mode
+            // push_str takes a Str argument, we need to:
+            // 1. Get string ptr and len
+            // 2. Check heap mode with sufficient capacity
+            // 3. memcpy and update len (fast path) or call FFI (slow path)
+            std::string id = std::to_string(temp_counter_++);
+            std::string str_arg = get_value_reg(i.args[0]);
+
+            // Check if argument is a constant string (compile-time length)
+            auto const_it = value_string_contents_.find(i.args[0].id);
+            if (const_it != value_string_contents_.end()) {
+                // Constant string - use compile-time length (no FFI call!)
+                size_t const_len = const_it->second.size();
+                emitln("    %str_len." + id + " = add i64 0, " + std::to_string(const_len));
+            } else {
+                // Non-constant string - call @str_len at runtime
+                emitln("    %str_len_i32." + id + " = call i32 @str_len(ptr " + str_arg + ")");
+                emitln("    %str_len." + id + " = zext i32 %str_len_i32." + id + " to i64");
+            }
+
+            // Load flags and check if heap mode (flags == 0)
+            emitln("    %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 24");
+            emitln("    %flags." + id + " = load i8, ptr %flags_ptr." + id);
+            emitln("    %is_heap." + id + " = icmp eq i8 %flags." + id + ", 0");
+            emitln("    br i1 %is_heap." + id + ", label %pstr_heap." + id + ", label %pstr_slow." +
+                   id);
+
+            // Heap path: check capacity
+            emitln("  pstr_heap." + id + ":");
+            emitln("    %data_ptr_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 0");
+            emitln("    %data_ptr." + id + " = load ptr, ptr %data_ptr_ptr." + id);
+            emitln("    %len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+            emitln("    %len." + id + " = load i64, ptr %len_ptr." + id);
+            emitln("    %cap_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 16");
+            emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
+
+            // Check if len + str_len <= cap
+            emitln("    %new_len." + id + " = add i64 %len." + id + ", %str_len." + id);
+            emitln("    %has_space." + id + " = icmp ule i64 %new_len." + id + ", %cap." + id);
+            emitln("    br i1 %has_space." + id + ", label %pstr_fast." + id + ", label %pstr_slow." +
+                   id);
+
+            // Fast memcpy path
+            emitln("  pstr_fast." + id + ":");
+            // dst = data + len
+            emitln("    %dst." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
+                   id);
+            // memcpy(dst, str, str_len)
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst." + id + ", ptr " + str_arg +
+                   ", i64 %str_len." + id + ", i1 false)");
+            // Update len
+            emitln("    store i64 %new_len." + id + ", ptr %len_ptr." + id);
+            emitln("    br label %pstr_done." + id);
+
+            // Slow path: SSO mode or needs realloc - call FFI
+            emitln("  pstr_slow." + id + ":");
+            emitln("    call void @tml_text_push_str_len(ptr " + receiver + ", ptr " + str_arg +
+                   ", i64 %str_len." + id + ")");
+            emitln("    br label %pstr_done." + id);
+
+            emitln("  pstr_done." + id + ":");
+            return;
+        }
+
+        if (i.method_name == "push_i64" && i.args.size() == 1) {
+            // Inline Text::push_i64() with fast path for heap mode
+            // Uses tml_text_push_i64_unsafe when we verify heap mode and have capacity
+            std::string id = std::to_string(temp_counter_++);
+            std::string int_val = get_value_reg(i.args[0]);
+
+            // Load flags and check if heap mode (flags == 0)
+            emitln("    %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 24");
+            emitln("    %flags." + id + " = load i8, ptr %flags_ptr." + id);
+            emitln("    %is_heap." + id + " = icmp eq i8 %flags." + id + ", 0");
+            emitln("    br i1 %is_heap." + id + ", label %pi64_heap." + id + ", label %pi64_slow." +
+                   id);
+
+            // Heap path: check if we have at least 20 bytes capacity for max i64
+            emitln("  pi64_heap." + id + ":");
+            emitln("    %len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+            emitln("    %len." + id + " = load i64, ptr %len_ptr." + id);
+            emitln("    %cap_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 16");
+            emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
+            // Need at most 20 bytes for i64 (including potential negative sign)
+            emitln("    %needed." + id + " = add i64 %len." + id + ", 20");
+            emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
+            emitln("    br i1 %has_space." + id + ", label %pi64_fast." + id + ", label %pi64_slow." +
+                   id);
+
+            // Fast path: use unsafe version (no null check, assumes heap mode)
+            emitln("  pi64_fast." + id + ":");
+            emitln("    %written." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
+                   ", i64 " + int_val + ")");
+            emitln("    br label %pi64_done." + id);
+
+            // Slow path: call regular FFI
+            emitln("  pi64_slow." + id + ":");
+            emitln("    call void @tml_text_push_i64(ptr " + receiver + ", i64 " + int_val + ")");
+            emitln("    br label %pi64_done." + id);
+
+            emitln("  pi64_done." + id + ":");
+            return;
+        }
+
+        if (i.method_name == "push_formatted" && i.args.size() == 3) {
+            // Inline Text::push_formatted(prefix, value, suffix) with fast path
+            // Pattern: prefix_str + int + suffix_str
+            std::string id = std::to_string(temp_counter_++);
+            std::string prefix = get_value_reg(i.args[0]);
+            std::string int_val = get_value_reg(i.args[1]);
+            std::string suffix = get_value_reg(i.args[2]);
+
+            // Check for constant strings (compile-time length - no FFI!)
+            auto prefix_const = value_string_contents_.find(i.args[0].id);
+            auto suffix_const = value_string_contents_.find(i.args[2].id);
+
+            if (prefix_const != value_string_contents_.end()) {
+                size_t len = prefix_const->second.size();
+                emitln("    %prefix_len." + id + " = add i64 0, " + std::to_string(len));
+            } else {
+                emitln("    %prefix_len_i32." + id + " = call i32 @str_len(ptr " + prefix + ")");
+                emitln("    %prefix_len." + id + " = zext i32 %prefix_len_i32." + id + " to i64");
+            }
+
+            if (suffix_const != value_string_contents_.end()) {
+                size_t len = suffix_const->second.size();
+                emitln("    %suffix_len." + id + " = add i64 0, " + std::to_string(len));
+            } else {
+                emitln("    %suffix_len_i32." + id + " = call i32 @str_len(ptr " + suffix + ")");
+                emitln("    %suffix_len." + id + " = zext i32 %suffix_len_i32." + id + " to i64");
+            }
+
+            // Load flags and check if heap mode (flags == 0)
+            emitln("    %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 24");
+            emitln("    %flags." + id + " = load i8, ptr %flags_ptr." + id);
+            emitln("    %is_heap." + id + " = icmp eq i8 %flags." + id + ", 0");
+            emitln("    br i1 %is_heap." + id + ", label %pfmt_heap." + id + ", label %pfmt_slow." +
+                   id);
+
+            // Heap path: check capacity for prefix + 20 (max int) + suffix
+            emitln("  pfmt_heap." + id + ":");
+            emitln("    %data_ptr_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 0");
+            emitln("    %data_ptr." + id + " = load ptr, ptr %data_ptr_ptr." + id);
+            emitln("    %len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+            emitln("    %len." + id + " = load i64, ptr %len_ptr." + id);
+            emitln("    %cap_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 16");
+            emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
+
+            // Calculate needed space: len + prefix_len + 20 + suffix_len
+            emitln("    %need1." + id + " = add i64 %len." + id + ", %prefix_len." + id);
+            emitln("    %need2." + id + " = add i64 %need1." + id + ", 20");
+            emitln("    %needed." + id + " = add i64 %need2." + id + ", %suffix_len." + id);
+            emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
+            emitln("    br i1 %has_space." + id + ", label %pfmt_fast." + id + ", label %pfmt_slow." +
+                   id);
+
+            // Fast path: memcpy prefix, push_i64_unsafe, memcpy suffix
+            emitln("  pfmt_fast." + id + ":");
+            // Copy prefix
+            emitln("    %dst1." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
+                   id);
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst1." + id + ", ptr " + prefix +
+                   ", i64 %prefix_len." + id + ", i1 false)");
+            // Update len after prefix
+            emitln("    %len2." + id + " = add i64 %len." + id + ", %prefix_len." + id);
+            emitln("    store i64 %len2." + id + ", ptr %len_ptr." + id);
+            // Push int (uses unsafe version since we already verified heap mode + capacity)
+            emitln("    %written." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
+                   ", i64 " + int_val + ")");
+            // Load updated len after int push
+            emitln("    %len3." + id + " = load i64, ptr %len_ptr." + id);
+            // Copy suffix
+            emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len3." +
+                   id);
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst2." + id + ", ptr " + suffix +
+                   ", i64 %suffix_len." + id + ", i1 false)");
+            // Update final len
+            emitln("    %len4." + id + " = add i64 %len3." + id + ", %suffix_len." + id);
+            emitln("    store i64 %len4." + id + ", ptr %len_ptr." + id);
+            emitln("    br label %pfmt_done." + id);
+
+            // Slow path: call FFI
+            emitln("  pfmt_slow." + id + ":");
+            emitln("    call void @tml_text_push_formatted(ptr " + receiver + ", ptr " + prefix +
+                   ", i64 %prefix_len." + id + ", i64 " + int_val + ", ptr " + suffix +
+                   ", i64 %suffix_len." + id + ")");
+            emitln("    br label %pfmt_done." + id);
+
+            emitln("  pfmt_done." + id + ":");
+            return;
+        }
+    }
+
+    // Normal method call path (non-inlined)
     mir::MirTypePtr ret_ptr = i.return_type;
     if (!ret_ptr && inst.result != mir::INVALID_VALUE) {
         ret_ptr = mir::make_ptr_type();
@@ -586,9 +981,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         ret_ptr = mir::make_ptr_type();
     }
     std::string ret_type = mir_type_to_llvm(ret_ptr);
-
-    std::string recv_type = i.receiver_type.empty() ? "Unknown" : i.receiver_type;
-    std::string receiver = get_value_reg(i.receiver);
     std::string receiver_actual_type;
     if (i.receiver.type) {
         receiver_actual_type = mir_type_to_llvm(i.receiver.type);
@@ -811,6 +1203,8 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                 }
                 if (inst.result != mir::INVALID_VALUE) {
                     value_types_[inst.result] = "ptr";
+                    // Store string content for compile-time length optimization
+                    value_string_contents_[inst.result] = c.value;
                 }
             } else if constexpr (std::is_same_v<C, mir::ConstUnit>) {
                 // Unit type - no value needed

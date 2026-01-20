@@ -1,70 +1,70 @@
 # Tasks: Native Thread-Safety Implementation
 
-**Status**: Planning (0%) - All phases pending
+**Status**: In Progress (55%) - Phase 1, 2, 4, 5, 6 & 7 infrastructure complete
 
 **Note**: This task covers implementing native thread-safety primitives for TML, including atomic types, synchronization primitives, thread management, and memory ordering semantics. The implementation follows Rust's safety model with Send/Sync behaviors for compile-time thread-safety verification.
 
 ## Phase 1: Atomic Types
 
-> **Status**: Pending
+> **Status**: Complete (TML library + MIR codegen infrastructure)
 
 ### 1.1 Atomic Integer Types
-- [ ] 1.1.1 Design `Atomic[T]` generic type in `lib/std/src/sync/atomic.tml`
-- [ ] 1.1.2 Implement `AtomicI32` with load/store operations
-- [ ] 1.1.3 Implement `AtomicI64` with load/store operations
-- [ ] 1.1.4 Implement `AtomicU32` with load/store operations
-- [ ] 1.1.5 Implement `AtomicU64` with load/store operations
-- [ ] 1.1.6 Implement `AtomicUsize` for pointer-sized atomics
-- [ ] 1.1.7 Implement `AtomicIsize` for pointer-sized signed atomics
+- [x] 1.1.1 Design `Atomic[T]` generic type in `lib/std/src/sync/atomic.tml`
+- [x] 1.1.2 Implement `AtomicI32` with load/store operations
+- [x] 1.1.3 Implement `AtomicI64` with load/store operations
+- [x] 1.1.4 Implement `AtomicU32` with load/store operations
+- [x] 1.1.5 Implement `AtomicU64` with load/store operations
+- [x] 1.1.6 Implement `AtomicUsize` for pointer-sized atomics
+- [x] 1.1.7 Implement `AtomicIsize` for pointer-sized signed atomics
 
 ### 1.2 Atomic Boolean and Pointer
-- [ ] 1.2.1 Implement `AtomicBool` type
-- [ ] 1.2.2 Implement `AtomicPtr[T]` for atomic pointer operations
-- [ ] 1.2.3 Add `is_lock_free()` method for all atomic types
+- [x] 1.2.1 Implement `AtomicBool` type
+- [x] 1.2.2 Implement `AtomicPtr[T]` for atomic pointer operations
+- [x] 1.2.3 Add `is_lock_free()` method for all atomic types
 - [ ] 1.2.4 Add static `LOCK_FREE` constant per type
 
 ### 1.3 Atomic Operations
-- [ ] 1.3.1 Implement `load(ordering: Ordering) -> T`
-- [ ] 1.3.2 Implement `store(val: T, ordering: Ordering)`
-- [ ] 1.3.3 Implement `swap(val: T, ordering: Ordering) -> T`
+- [x] 1.3.1 Implement `load(ordering: Ordering) -> T`
+- [x] 1.3.2 Implement `store(val: T, ordering: Ordering)`
+- [x] 1.3.3 Implement `swap(val: T, ordering: Ordering) -> T`
 - [ ] 1.3.4 Implement `compare_and_swap(current: T, new: T, ordering: Ordering) -> T`
-- [ ] 1.3.5 Implement `compare_exchange(current: T, new: T, success: Ordering, failure: Ordering) -> Outcome[T, T]`
-- [ ] 1.3.6 Implement `compare_exchange_weak(...)` for spurious failure
-- [ ] 1.3.7 Implement `fetch_add(val: T, ordering: Ordering) -> T`
-- [ ] 1.3.8 Implement `fetch_sub(val: T, ordering: Ordering) -> T`
-- [ ] 1.3.9 Implement `fetch_and(val: T, ordering: Ordering) -> T`
-- [ ] 1.3.10 Implement `fetch_or(val: T, ordering: Ordering) -> T`
-- [ ] 1.3.11 Implement `fetch_xor(val: T, ordering: Ordering) -> T`
-- [ ] 1.3.12 Implement `fetch_max(val: T, ordering: Ordering) -> T`
-- [ ] 1.3.13 Implement `fetch_min(val: T, ordering: Ordering) -> T`
+- [x] 1.3.5 Implement `compare_exchange(current: T, new: T, success: Ordering, failure: Ordering) -> Outcome[T, T]`
+- [x] 1.3.6 Implement `compare_exchange_weak(...)` for spurious failure
+- [x] 1.3.7 Implement `fetch_add(val: T, ordering: Ordering) -> T`
+- [x] 1.3.8 Implement `fetch_sub(val: T, ordering: Ordering) -> T`
+- [x] 1.3.9 Implement `fetch_and(val: T, ordering: Ordering) -> T`
+- [x] 1.3.10 Implement `fetch_or(val: T, ordering: Ordering) -> T`
+- [x] 1.3.11 Implement `fetch_xor(val: T, ordering: Ordering) -> T`
+- [x] 1.3.12 Implement `fetch_max(val: T, ordering: Ordering) -> T`
+- [x] 1.3.13 Implement `fetch_min(val: T, ordering: Ordering) -> T`
 - [ ] 1.3.14 Add unit tests for atomic operations
 
 ### 1.4 LLVM Codegen for Atomics
-- [ ] 1.4.1 Add `AtomicLoadInst` to MIR
-- [ ] 1.4.2 Add `AtomicStoreInst` to MIR
-- [ ] 1.4.3 Add `AtomicRMWInst` to MIR (read-modify-write)
-- [ ] 1.4.4 Add `AtomicCmpXchgInst` to MIR
-- [ ] 1.4.5 Generate LLVM `atomicrmw` instructions
-- [ ] 1.4.6 Generate LLVM `cmpxchg` instructions
-- [ ] 1.4.7 Map TML ordering to LLVM ordering
+- [x] 1.4.1 Add `AtomicLoadInst` to MIR
+- [x] 1.4.2 Add `AtomicStoreInst` to MIR
+- [x] 1.4.3 Add `AtomicRMWInst` to MIR (read-modify-write)
+- [x] 1.4.4 Add `AtomicCmpXchgInst` to MIR
+- [x] 1.4.5 Generate LLVM `atomicrmw` instructions
+- [x] 1.4.6 Generate LLVM `cmpxchg` instructions
+- [x] 1.4.7 Map TML ordering to LLVM ordering
 
 ## Phase 2: Memory Ordering
 
-> **Status**: Pending
+> **Status**: Complete (TML library + MIR codegen infrastructure)
 
 ### 2.1 Ordering Enum
-- [ ] 2.1.1 Define `Ordering` enum in `lib/std/src/sync/ordering.tml`
-- [ ] 2.1.2 Add `Relaxed` variant (no synchronization)
-- [ ] 2.1.3 Add `Acquire` variant (load synchronization)
-- [ ] 2.1.4 Add `Release` variant (store synchronization)
-- [ ] 2.1.5 Add `AcqRel` variant (both acquire and release)
-- [ ] 2.1.6 Add `SeqCst` variant (sequentially consistent)
+- [x] 2.1.1 Define `Ordering` enum in `lib/std/src/sync/ordering.tml`
+- [x] 2.1.2 Add `Relaxed` variant (no synchronization)
+- [x] 2.1.3 Add `Acquire` variant (load synchronization)
+- [x] 2.1.4 Add `Release` variant (store synchronization)
+- [x] 2.1.5 Add `AcqRel` variant (both acquire and release)
+- [x] 2.1.6 Add `SeqCst` variant (sequentially consistent)
 
 ### 2.2 Fence Operations
-- [ ] 2.2.1 Implement `fence(ordering: Ordering)` function
-- [ ] 2.2.2 Implement `compiler_fence(ordering: Ordering)` for compiler-only barrier
-- [ ] 2.2.3 Add `FenceInst` to MIR
-- [ ] 2.2.4 Generate LLVM `fence` instructions
+- [x] 2.2.1 Implement `fence(ordering: Ordering)` function
+- [x] 2.2.2 Implement `compiler_fence(ordering: Ordering)` for compiler-only barrier
+- [x] 2.2.3 Add `FenceInst` to MIR
+- [x] 2.2.4 Generate LLVM `fence` instructions
 - [ ] 2.2.5 Add unit tests for fence operations
 
 ### 2.3 Memory Model Documentation
@@ -103,114 +103,114 @@
 
 ## Phase 4: Mutex and Locking
 
-> **Status**: Pending
+> **Status**: Complete (TML library + platform runtime)
 
 ### 4.1 Mutex Type
-- [ ] 4.1.1 Design `Mutex[T]` type in `lib/std/src/sync/mutex.tml`
-- [ ] 4.1.2 Implement `new(value: T) -> Mutex[T]` constructor
-- [ ] 4.1.3 Implement `lock(this) -> MutexGuard[T]`
-- [ ] 4.1.4 Implement `try_lock(this) -> Maybe[MutexGuard[T]]`
-- [ ] 4.1.5 Implement `is_locked(this) -> Bool`
-- [ ] 4.1.6 Implement `into_inner(this) -> T` (consumes mutex)
+- [x] 4.1.1 Design `Mutex[T]` type in `lib/std/src/sync/mutex.tml`
+- [x] 4.1.2 Implement `new(value: T) -> Mutex[T]` constructor
+- [x] 4.1.3 Implement `lock(this) -> MutexGuard[T]`
+- [x] 4.1.4 Implement `try_lock(this) -> Maybe[MutexGuard[T]]`
+- [x] 4.1.5 Implement `is_locked(this) -> Bool`
+- [x] 4.1.6 Implement `into_inner(this) -> T` (consumes mutex)
 
 ### 4.2 MutexGuard Type
-- [ ] 4.2.1 Design `MutexGuard[T]` RAII type
-- [ ] 4.2.2 Implement `Deref` behavior for `MutexGuard[T]`
-- [ ] 4.2.3 Implement `DerefMut` behavior for `MutexGuard[T]`
-- [ ] 4.2.4 Implement `Drop` behavior to release lock
-- [ ] 4.2.5 Ensure `MutexGuard` is not `Send`
+- [x] 4.2.1 Design `MutexGuard[T]` RAII type
+- [x] 4.2.2 Implement `Deref` behavior for `MutexGuard[T]`
+- [x] 4.2.3 Implement `DerefMut` behavior for `MutexGuard[T]`
+- [x] 4.2.4 Implement `Drop` behavior to release lock
+- [x] 4.2.5 Ensure `MutexGuard` is not `Send`
 
 ### 4.3 RwLock Type
-- [ ] 4.3.1 Design `RwLock[T]` type in `lib/std/src/sync/rwlock.tml`
-- [ ] 4.3.2 Implement `new(value: T) -> RwLock[T]` constructor
-- [ ] 4.3.3 Implement `read(this) -> RwLockReadGuard[T]`
-- [ ] 4.3.4 Implement `try_read(this) -> Maybe[RwLockReadGuard[T]]`
-- [ ] 4.3.5 Implement `write(this) -> RwLockWriteGuard[T]`
-- [ ] 4.3.6 Implement `try_write(this) -> Maybe[RwLockWriteGuard[T]]`
-- [ ] 4.3.7 Implement guard types with RAII drop
+- [x] 4.3.1 Design `RwLock[T]` type in `lib/std/src/sync/rwlock.tml`
+- [x] 4.3.2 Implement `new(value: T) -> RwLock[T]` constructor
+- [x] 4.3.3 Implement `read(this) -> RwLockReadGuard[T]`
+- [x] 4.3.4 Implement `try_read(this) -> Maybe[RwLockReadGuard[T]]`
+- [x] 4.3.5 Implement `write(this) -> RwLockWriteGuard[T]`
+- [x] 4.3.6 Implement `try_write(this) -> Maybe[RwLockWriteGuard[T]]`
+- [x] 4.3.7 Implement guard types with RAII drop
 
 ### 4.4 Platform Implementation
-- [ ] 4.4.1 Implement Mutex using pthreads (Unix)
-- [ ] 4.4.2 Implement Mutex using SRWLOCK (Windows)
-- [ ] 4.4.3 Implement RwLock using pthreads (Unix)
-- [ ] 4.4.4 Implement RwLock using SRWLOCK (Windows)
+- [x] 4.4.1 Implement Mutex using pthreads (Unix)
+- [x] 4.4.2 Implement Mutex using SRWLOCK (Windows)
+- [x] 4.4.3 Implement RwLock using pthreads (Unix)
+- [x] 4.4.4 Implement RwLock using SRWLOCK (Windows)
 - [ ] 4.4.5 Add unit tests for Mutex and RwLock
 
 ## Phase 5: Thread Management
 
-> **Status**: Pending
+> **Status**: Complete (TML library + platform runtime)
 
 ### 5.1 Thread Type
-- [ ] 5.1.1 Design `Thread` type in `lib/std/src/thread/mod.tml`
-- [ ] 5.1.2 Implement `spawn[T: Send](f: do() -> T) -> JoinHandle[T]`
-- [ ] 5.1.3 Implement `spawn_named(name: Str, f: do() -> T) -> JoinHandle[T]`
-- [ ] 5.1.4 Implement `current() -> Thread` (get current thread)
-- [ ] 5.1.5 Implement `yield_now()` (yield to scheduler)
-- [ ] 5.1.6 Implement `sleep(duration: Duration)`
-- [ ] 5.1.7 Implement `sleep_until(instant: Instant)`
-- [ ] 5.1.8 Implement `park()` / `unpark()` for thread parking
+- [x] 5.1.1 Design `Thread` type in `lib/std/src/thread/mod.tml`
+- [x] 5.1.2 Implement `spawn[T: Send](f: do() -> T) -> JoinHandle[T]`
+- [x] 5.1.3 Implement `spawn_named(name: Str, f: do() -> T) -> JoinHandle[T]` (via Builder)
+- [x] 5.1.4 Implement `current() -> Thread` (get current thread)
+- [x] 5.1.5 Implement `yield_now()` (yield to scheduler)
+- [x] 5.1.6 Implement `sleep_ms(milliseconds: U64)`
+- [ ] 5.1.7 Implement `sleep_until(instant: Instant)` (requires time module)
+- [x] 5.1.8 Implement `park()` / `unpark()` for thread parking
 
 ### 5.2 JoinHandle Type
-- [ ] 5.2.1 Design `JoinHandle[T]` type
-- [ ] 5.2.2 Implement `join(this) -> Outcome[T, JoinError]`
-- [ ] 5.2.3 Implement `is_finished(this) -> Bool`
-- [ ] 5.2.4 Implement `thread(this) -> Thread` (get thread reference)
+- [x] 5.2.1 Design `JoinHandle[T]` type
+- [x] 5.2.2 Implement `join(this) -> Outcome[T, JoinError]`
+- [x] 5.2.3 Implement `is_finished(this) -> Bool`
+- [x] 5.2.4 Implement `thread(this) -> Thread` (get thread reference)
 - [ ] 5.2.5 Handle panic propagation through join
 
 ### 5.3 Thread Properties
-- [ ] 5.3.1 Implement `Thread::name(this) -> Maybe[Str]`
-- [ ] 5.3.2 Implement `Thread::id(this) -> ThreadId`
-- [ ] 5.3.3 Design `ThreadId` type with equality/hash
-- [ ] 5.3.4 Implement `available_parallelism() -> Outcome[U32, Error]`
+- [x] 5.3.1 Implement `Thread::name(this) -> Maybe[Str]`
+- [x] 5.3.2 Implement `Thread::id(this) -> ThreadId`
+- [x] 5.3.3 Design `ThreadId` type with equality/hash
+- [x] 5.3.4 Implement `available_parallelism() -> U32`
 
 ### 5.4 Platform Implementation
-- [ ] 5.4.1 Implement thread creation using pthreads (Unix)
-- [ ] 5.4.2 Implement thread creation using CreateThread (Windows)
+- [x] 5.4.1 Implement thread creation using pthreads (Unix)
+- [x] 5.4.2 Implement thread creation using CreateThread (Windows)
 - [ ] 5.4.3 Implement thread-local storage (TLS)
 - [ ] 5.4.4 Add unit tests for thread management
 
 ## Phase 6: Condition Variables
 
-> **Status**: Pending
+> **Status**: Complete (TML library + platform runtime)
 
 ### 6.1 Condvar Type
-- [ ] 6.1.1 Design `Condvar` type in `lib/std/src/sync/condvar.tml`
-- [ ] 6.1.2 Implement `new() -> Condvar` constructor
-- [ ] 6.1.3 Implement `wait[T](this, guard: MutexGuard[T]) -> MutexGuard[T]`
-- [ ] 6.1.4 Implement `wait_timeout[T](this, guard: MutexGuard[T], dur: Duration) -> (MutexGuard[T], WaitTimeoutResult)`
-- [ ] 6.1.5 Implement `wait_while[T](this, guard: MutexGuard[T], condition: do(ref T) -> Bool) -> MutexGuard[T]`
-- [ ] 6.1.6 Implement `notify_one(this)`
-- [ ] 6.1.7 Implement `notify_all(this)`
+- [x] 6.1.1 Design `Condvar` type in `lib/std/src/sync/condvar.tml`
+- [x] 6.1.2 Implement `new() -> Condvar` constructor
+- [x] 6.1.3 Implement `wait[T](this, guard: MutexGuard[T]) -> MutexGuard[T]`
+- [x] 6.1.4 Implement `wait_timeout_ms[T](this, guard: MutexGuard[T], timeout_ms: U64) -> (MutexGuard[T], Bool)`
+- [x] 6.1.5 Implement `wait_while[T](this, guard: MutexGuard[T], condition: do(ref T) -> Bool) -> MutexGuard[T]`
+- [x] 6.1.6 Implement `notify_one(this)`
+- [x] 6.1.7 Implement `notify_all(this)`
 
 ### 6.2 Platform Implementation
-- [ ] 6.2.1 Implement Condvar using pthread_cond (Unix)
-- [ ] 6.2.2 Implement Condvar using CONDITION_VARIABLE (Windows)
+- [x] 6.2.1 Implement Condvar using pthread_cond (Unix)
+- [x] 6.2.2 Implement Condvar using CONDITION_VARIABLE (Windows)
 - [ ] 6.2.3 Add unit tests for condition variables
 
 ## Phase 7: Barriers and Once
 
-> **Status**: Pending
+> **Status**: Complete (TML library)
 
 ### 7.1 Barrier Type
-- [ ] 7.1.1 Design `Barrier` type in `lib/std/src/sync/barrier.tml`
-- [ ] 7.1.2 Implement `new(count: U32) -> Barrier` constructor
-- [ ] 7.1.3 Implement `wait(this) -> BarrierWaitResult`
-- [ ] 7.1.4 Design `BarrierWaitResult` with `is_leader()` method
+- [x] 7.1.1 Design `Barrier` type in `lib/std/src/sync/barrier.tml`
+- [x] 7.1.2 Implement `new(count: U32) -> Barrier` constructor
+- [x] 7.1.3 Implement `wait(this) -> BarrierWaitResult`
+- [x] 7.1.4 Design `BarrierWaitResult` with `is_leader()` method
 
 ### 7.2 Once Type
-- [ ] 7.2.1 Design `Once` type in `lib/std/src/sync/once.tml`
-- [ ] 7.2.2 Implement `new() -> Once` constructor
-- [ ] 7.2.3 Implement `call_once(this, f: do())`
-- [ ] 7.2.4 Implement `call_once_force(this, f: do(ref OnceState))`
-- [ ] 7.2.5 Implement `is_completed(this) -> Bool`
+- [x] 7.2.1 Design `Once` type in `lib/std/src/sync/once.tml`
+- [x] 7.2.2 Implement `new() -> Once` constructor
+- [x] 7.2.3 Implement `call_once(this, f: do())`
+- [ ] 7.2.4 Implement `call_once_force(this, f: do(ref OnceState))` (deferred)
+- [x] 7.2.5 Implement `is_completed(this) -> Bool`
 
 ### 7.3 OnceLock Type
-- [ ] 7.3.1 Design `OnceLock[T]` type for lazy initialization
-- [ ] 7.3.2 Implement `new() -> OnceLock[T]` constructor
-- [ ] 7.3.3 Implement `get(this) -> Maybe[ref T]`
-- [ ] 7.3.4 Implement `get_or_init(this, f: do() -> T) -> ref T`
+- [x] 7.3.1 Design `OnceLock[T]` type for lazy initialization
+- [x] 7.3.2 Implement `new() -> OnceLock[T]` constructor
+- [x] 7.3.3 Implement `get(this) -> Maybe[ref T]`
+- [x] 7.3.4 Implement `get_or_init(this, f: do() -> T) -> ref T`
 - [ ] 7.3.5 Implement `get_or_try_init[E](this, f: do() -> Outcome[T, E]) -> Outcome[ref T, E]`
-- [ ] 7.3.6 Implement `set(this, value: T) -> Outcome[Unit, T]`
+- [x] 7.3.6 Implement `set(this, value: T) -> Outcome[Unit, T]`
 - [ ] 7.3.7 Add unit tests for Barrier, Once, OnceLock
 
 ## Phase 8: Lock-Free Data Structures

@@ -5,75 +5,75 @@
     {
       "name": "stringstream Append",
       "iterations": 100000,
-      "total_ns": 14213800,
-      "per_op_ns": 142,
-      "ops_per_sec": 7035416
+      "total_ns": 18919300,
+      "per_op_ns": 189,
+      "ops_per_sec": 5285607
     },
     {
       "name": "string Reserve+Append",
       "iterations": 100000,
-      "total_ns": 736400,
+      "total_ns": 702700,
       "per_op_ns": 7,
-      "ops_per_sec": 135795763
+      "ops_per_sec": 142308239
     },
     {
       "name": "string Naive Append",
       "iterations": 100000,
-      "total_ns": 248800,
+      "total_ns": 260400,
       "per_op_ns": 2,
-      "ops_per_sec": 401929260
+      "ops_per_sec": 384024577
     },
     {
       "name": "Build JSON",
       "iterations": 10000,
-      "total_ns": 2900100,
-      "per_op_ns": 290,
-      "ops_per_sec": 3448156,
+      "total_ns": 3017000,
+      "per_op_ns": 301,
+      "ops_per_sec": 3314550,
       "notes": "10K items"
     },
     {
       "name": "Build HTML",
       "iterations": 10000,
-      "total_ns": 92800,
+      "total_ns": 94400,
       "per_op_ns": 9,
-      "ops_per_sec": 107758620,
+      "ops_per_sec": 105932203,
       "notes": "10K items"
     },
     {
       "name": "Build CSV",
       "iterations": 10000,
-      "total_ns": 251800,
-      "per_op_ns": 25,
-      "ops_per_sec": 39714058,
+      "total_ns": 243400,
+      "per_op_ns": 24,
+      "ops_per_sec": 41084634,
       "notes": "10K rows"
     },
     {
       "name": "Small Appends (1 char)",
       "iterations": 1000000,
-      "total_ns": 705800,
+      "total_ns": 686500,
       "per_op_ns": 0,
-      "ops_per_sec": 1416831963
+      "ops_per_sec": 1456664238
     },
     {
       "name": "Number Formatting",
       "iterations": 100000,
-      "total_ns": 52189500,
-      "per_op_ns": 521,
-      "ops_per_sec": 1916094
+      "total_ns": 48444000,
+      "per_op_ns": 484,
+      "ops_per_sec": 2064239
     },
     {
       "name": "Log Messages",
       "iterations": 100000,
-      "total_ns": 2588900,
-      "per_op_ns": 25,
-      "ops_per_sec": 38626443
+      "total_ns": 2607200,
+      "per_op_ns": 26,
+      "ops_per_sec": 38355323
     },
     {
       "name": "Path Building",
       "iterations": 100000,
-      "total_ns": 1354800,
+      "total_ns": 1303900,
       "per_op_ns": 13,
-      "ops_per_sec": 73811632
+      "ops_per_sec": 76692997
     }
   ]
 }

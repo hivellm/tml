@@ -97,6 +97,9 @@ private:
     // String constants (value -> global name)
     std::unordered_map<std::string, std::string> string_constants_;
 
+    // ValueId -> string content (for compile-time constant string length optimization)
+    std::unordered_map<mir::ValueId, std::string> value_string_contents_;
+
     // sret function tracking (func_name -> original return type as LLVM string)
     std::unordered_map<std::string, std::string> sret_functions_;
 

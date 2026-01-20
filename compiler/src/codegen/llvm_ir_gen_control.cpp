@@ -437,11 +437,11 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     current_block_ = label_body;
     block_terminated_ = false;
 
-    // Save stack pointer at start of loop iteration for proper cleanup
-    // This allows us to reclaim stack space from allocas created in the loop body
-    std::string stack_save = fresh_reg();
-    emit_line("  " + stack_save + " = call ptr @llvm.stacksave()");
-    current_loop_stack_save_ = stack_save;
+    // TML doesn't support VLAs or runtime-sized allocas, so we don't need
+    // stacksave/stackrestore for stack frame cleanup. LLVM's mem2reg pass
+    // will optimize fixed-size allocas to registers, and lifetime markers
+    // handle proper cleanup.
+    current_loop_stack_save_ = "";
 
     // Push a lifetime scope for the loop body so allocas inside are tracked
     // and can have lifetime.end emitted at end of each iteration
@@ -452,8 +452,6 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     if (!block_terminated_) {
         // Emit lifetime.end for all allocas created in this iteration
         emit_scope_lifetime_ends();
-        // Restore stack to reclaim allocas from this iteration
-        emit_line("  call void @llvm.stackrestore(ptr " + stack_save + ")");
         emit_line("  br label %" + label_latch);
     }
 

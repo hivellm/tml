@@ -290,6 +290,25 @@ TML_EXPORT void tml_text_clear(TmlText* t) {
     }
 }
 
+// UNSAFE: Get raw data pointer (assumes heap mode)
+TML_EXPORT uint8_t* tml_text_data_ptr(TmlText* t) {
+    if (!t)
+        return NULL;
+    // For performance, assume heap mode (caller responsibility)
+    return t->heap.data;
+}
+
+// UNSAFE: Set length directly (no bounds checking)
+TML_EXPORT void tml_text_set_len(TmlText* t, uint64_t new_len) {
+    if (!t)
+        return;
+    // For performance, assume heap mode (caller responsibility)
+    t->heap.len = new_len;
+    // Null terminate
+    if (t->heap.data)
+        t->heap.data[new_len] = '\0';
+}
+
 TML_EXPORT void tml_text_push(TmlText* t, int32_t c) {
     if (!t)
         return;
@@ -464,6 +483,30 @@ TML_EXPORT void tml_text_push_log(TmlText* t, const char* s1, uint64_t s1_len, i
 }
 
 /**
+ * @brief Push path-style pattern: s1 + n1 + s2 + n2 + s3
+ * Combines 5 operations into 1 FFI call for efficiency.
+ * Common for file path building like: "/path/module" + 42 + "/file" + 123 + ".txt"
+ */
+TML_EXPORT void tml_text_push_path(TmlText* t, const char* s1, uint64_t s1_len, int64_t n1,
+                                   const char* s2, uint64_t s2_len, int64_t n2, const char* s3,
+                                   uint64_t s3_len) {
+    if (!t)
+        return;
+
+    // Reserve space for all parts (2 ints max 21 chars each)
+    text_ensure_heap(t, text_len(t) + s1_len + s2_len + s3_len + 42);
+
+    if (s1 && s1_len > 0)
+        text_push_bytes(t, (const uint8_t*)s1, s1_len);
+    tml_text_push_i64(t, n1);
+    if (s2 && s2_len > 0)
+        text_push_bytes(t, (const uint8_t*)s2, s2_len);
+    tml_text_push_i64(t, n2);
+    if (s3 && s3_len > 0)
+        text_push_bytes(t, (const uint8_t*)s3, s3_len);
+}
+
+/**
  * @brief Fill with N copies of the same character.
  * Much faster than calling push() N times due to reduced FFI overhead.
  */
@@ -483,6 +526,66 @@ TML_EXPORT void tml_text_fill_char(TmlText* t, int32_t c, uint64_t count) {
         t->heap.len = len + count;
         t->heap.data[len + count] = '\0';
     }
+}
+
+/**
+ * @brief UNSAFE push_i64 - assumes heap mode with sufficient capacity.
+ * Called from inline fast path where checks are already done.
+ * Returns the number of bytes written.
+ */
+TML_EXPORT int64_t tml_text_push_i64_unsafe(TmlText* t, int64_t n) {
+    // Direct access - no null check, assumes heap mode
+    uint8_t* data = t->heap.data;
+    uint64_t len = t->heap.len;
+
+    // Convert to temp buffer using fast algorithm
+    char buf[21]; // Max 20 digits + sign
+    char* end = buf + 21;
+    char* p = end;
+    int neg = 0;
+
+    if (n < 0) {
+        neg = 1;
+        // Handle INT64_MIN specially
+        if (n == (-9223372036854775807LL - 1)) {
+            memcpy(data + len, "-9223372036854775808", 20);
+            t->heap.len = len + 20;
+            return 20;
+        }
+        n = -n;
+    }
+
+    if (n == 0) {
+        data[len] = '0';
+        t->heap.len = len + 1;
+        return 1;
+    }
+
+    // Process 2 digits at a time
+    while (n >= 100) {
+        int idx = (int)((n % 100) * 2);
+        n /= 100;
+        *--p = text_digit_pairs[idx + 1];
+        *--p = text_digit_pairs[idx];
+    }
+
+    // Handle remaining 1-2 digits
+    if (n >= 10) {
+        int idx = (int)(n * 2);
+        *--p = text_digit_pairs[idx + 1];
+        *--p = text_digit_pairs[idx];
+    } else {
+        *--p = (char)('0' + n);
+    }
+
+    if (neg) {
+        *--p = '-';
+    }
+
+    uint64_t digits_len = (uint64_t)(end - p);
+    memcpy(data + len, p, digits_len);
+    t->heap.len = len + digits_len;
+    return (int64_t)digits_len;
 }
 
 // ============================================================================

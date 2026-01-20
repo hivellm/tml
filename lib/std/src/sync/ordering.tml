@@ -1,0 +1,300 @@
+//! Memory ordering semantics for atomic operations.
+//!
+//! This module defines the [`Ordering`] enum which specifies the memory
+//! ordering constraints for atomic operations. These orderings mirror
+//! the C++11/LLVM memory model.
+//!
+//! # Memory Ordering Basics
+//!
+//! Memory orderings control how operations on different memory locations
+//! can be reordered relative to atomic operations. Weaker orderings allow
+//! more reordering (better performance) but provide fewer guarantees.
+//!
+//! # Ordering Levels
+//!
+//! From weakest to strongest:
+//!
+//! - [`Relaxed`][Ordering::Relaxed]: No synchronization, only atomicity
+//! - [`Acquire`][Ordering::Acquire]: Prevents reordering of reads/writes before this load
+//! - [`Release`][Ordering::Release]: Prevents reordering of reads/writes after this store
+//! - [`AcqRel`][Ordering::AcqRel]: Both acquire and release semantics
+//! - [`SeqCst`][Ordering::SeqCst]: Full sequential consistency
+//!
+//! # Examples
+//!
+//! ## Simple Counter (Relaxed)
+//!
+//! ```tml
+//! use sync::atomic::{AtomicU64, Ordering}
+//!
+//! let counter = AtomicU64::new(0)
+//!
+//! // Multiple threads incrementing - order doesn't matter
+//! counter.fetch_add(1, Ordering::Relaxed)
+//! ```
+//!
+//! ## Flag Signaling (Acquire/Release)
+//!
+//! ```tml
+//! use sync::atomic::{AtomicBool, Ordering}
+//!
+//! let data_ready = AtomicBool::new(false)
+//! let data: I64 = 0
+//!
+//! // Producer thread:
+//! data = 42  // Write data
+//! data_ready.store(true, Ordering::Release)  // Signal data is ready
+//!
+//! // Consumer thread:
+//! loop {
+//!     if data_ready.load(Ordering::Acquire) {
+//!         // Can safely read `data` here - acquire synchronizes with release
+//!         println(data)
+//!         break
+//!     }
+//! }
+//! ```
+
+/// Atomic memory orderings.
+///
+/// Atomic memory orderings specify constraints on how atomic operations
+/// on one variable synchronize with operations on other variables.
+///
+/// # Portability
+///
+/// All orderings are portable across all platforms TML supports.
+/// However, the exact behavior may vary:
+///
+/// - On x86/x86_64, most orderings compile to simple loads/stores
+/// - On ARM/AArch64, acquire/release may require memory barriers
+///
+/// # See Also
+///
+/// - C++11 memory model: <https://en.cppreference.com/w/cpp/atomic/memory_order>
+/// - LLVM atomics: <https://llvm.org/docs/Atomics.html>
+pub enum Ordering {
+    /// No synchronization or ordering constraints, only atomicity.
+    ///
+    /// Corresponds to C++ `memory_order_relaxed` and LLVM `monotonic`.
+    ///
+    /// # Use Cases
+    ///
+    /// - Counters where you only need the final value
+    /// - Statistics gathering
+    /// - Sequence numbers when order doesn't matter
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicI32, Ordering}
+    ///
+    /// let counter = AtomicI32::new(0)
+    /// counter.fetch_add(1, Ordering::Relaxed)
+    /// let val = counter.load(Ordering::Relaxed)
+    /// ```
+    Relaxed,
+
+    /// When coupled with a load, if the loaded value was written by a
+    /// store operation with [`Release`][Self::Release] (or stronger)
+    /// ordering, then all subsequent operations become ordered after
+    /// that store.
+    ///
+    /// Corresponds to C++ `memory_order_acquire`.
+    ///
+    /// # Use Cases
+    ///
+    /// - Reading a flag that signals data is ready
+    /// - Lock acquisition
+    /// - Reading from a single-producer queue
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// if ready.load(Ordering::Acquire) {
+    ///     // All writes before the Release store are now visible
+    ///     process_data()
+    /// }
+    /// ```
+    Acquire,
+
+    /// When coupled with a store, all previous operations become
+    /// ordered before any load of this value with [`Acquire`][Self::Acquire]
+    /// (or stronger) ordering.
+    ///
+    /// Corresponds to C++ `memory_order_release`.
+    ///
+    /// # Use Cases
+    ///
+    /// - Setting a flag to signal data is ready
+    /// - Lock release
+    /// - Writing to a single-consumer queue
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// data = 42  // Write happens before
+    /// ready.store(true, Ordering::Release)
+    /// ```
+    Release,
+
+    /// Has the effects of both [`Acquire`][Self::Acquire] and
+    /// [`Release`][Self::Release] combined.
+    ///
+    /// Corresponds to C++ `memory_order_acq_rel`.
+    ///
+    /// # Use Cases
+    ///
+    /// - Read-modify-write operations that need to synchronize
+    /// - Compare-and-swap loops
+    /// - Lock-free data structure operations
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicI32, Ordering}
+    ///
+    /// // fetch_add both reads and writes, so it can use AcqRel
+    /// let old = counter.fetch_add(1, Ordering::AcqRel)
+    /// ```
+    AcqRel,
+
+    /// Like [`AcqRel`][Self::AcqRel] with the additional guarantee
+    /// that all threads observe all sequentially consistent operations
+    /// in the same order.
+    ///
+    /// Corresponds to C++ `memory_order_seq_cst`.
+    ///
+    /// # Performance
+    ///
+    /// This is the strongest (and often slowest) ordering. Use it only
+    /// when you need the total ordering guarantee.
+    ///
+    /// # Use Cases
+    ///
+    /// - When you need a total order visible to all threads
+    /// - Simple synchronization where performance isn't critical
+    /// - When unsure which ordering to use (safe default)
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// // SeqCst ensures all threads see operations in same order
+    /// flag.store(true, Ordering::SeqCst)
+    /// ```
+    SeqCst,
+}
+
+impl Ordering {
+    /// Returns `true` if this ordering provides acquire semantics.
+    ///
+    /// Acquire semantics mean that no reads or writes in the current thread
+    /// can be reordered before this operation.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::Ordering
+    ///
+    /// assert(Ordering::Acquire.has_acquire())
+    /// assert(Ordering::AcqRel.has_acquire())
+    /// assert(Ordering::SeqCst.has_acquire())
+    /// assert(not Ordering::Relaxed.has_acquire())
+    /// assert(not Ordering::Release.has_acquire())
+    /// ```
+    pub func has_acquire(self) -> Bool {
+        when self {
+            Ordering::Acquire => true,
+            Ordering::AcqRel => true,
+            Ordering::SeqCst => true,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if this ordering provides release semantics.
+    ///
+    /// Release semantics mean that no reads or writes in the current thread
+    /// can be reordered after this operation.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::Ordering
+    ///
+    /// assert(Ordering::Release.has_release())
+    /// assert(Ordering::AcqRel.has_release())
+    /// assert(Ordering::SeqCst.has_release())
+    /// assert(not Ordering::Relaxed.has_release())
+    /// assert(not Ordering::Acquire.has_release())
+    /// ```
+    pub func has_release(self) -> Bool {
+        when self {
+            Ordering::Release => true,
+            Ordering::AcqRel => true,
+            Ordering::SeqCst => true,
+            _ => false,
+        }
+    }
+}
+
+/// Issues a memory fence with the specified ordering.
+///
+/// A fence prevents reordering of memory operations across it according
+/// to the specified ordering. This is a full hardware fence.
+///
+/// # When to Use
+///
+/// Prefer using atomic operations with appropriate orderings instead of
+/// fences when possible. Fences are useful when you need to synchronize
+/// multiple atomic variables together.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::{fence, Ordering}
+///
+/// // Ensure all previous writes are visible before proceeding
+/// fence(Ordering::Release)
+///
+/// // Ensure all subsequent reads see the most recent writes
+/// fence(Ordering::Acquire)
+/// ```
+///
+/// # Panics
+///
+/// Panics if `order` is [`Relaxed`][Ordering::Relaxed].
+@intrinsic("llvm.fence")
+pub func fence(order: Ordering) -> Unit
+
+/// Issues a compiler fence with the specified ordering.
+///
+/// A compiler fence prevents the *compiler* from reordering memory
+/// operations across it, but does not emit any hardware instructions.
+/// This is useful for preventing optimizations that might reorder
+/// operations within a single thread.
+///
+/// # Use Cases
+///
+/// - Signal handlers (where you can't use atomics)
+/// - Preventing compiler reordering for benchmarking
+/// - Interacting with memory-mapped I/O
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::{compiler_fence, Ordering}
+///
+/// // Prevent compiler from moving reads/writes across this point
+/// compiler_fence(Ordering::SeqCst)
+/// ```
+///
+/// # Panics
+///
+/// Panics if `order` is [`Relaxed`][Ordering::Relaxed].
+@intrinsic("llvm.compiler_fence")
+pub func compiler_fence(order: Ordering) -> Unit

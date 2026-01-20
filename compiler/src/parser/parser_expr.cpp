@@ -30,6 +30,14 @@
 //!     or b
 //!     or c
 //! ```
+//!
+//! Method chaining can also continue across newlines with leading `.`:
+//! ```tml
+//! let json = object()
+//!     .ks("name", "John")
+//!     .kn("age", 30)
+//!     .build()
+//! ```
 
 #include "parser/parser.hpp"
 
@@ -73,10 +81,26 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
             next_kind == lexer::TokenKind::Dot || next_kind == lexer::TokenKind::Bang ||
             next_kind == lexer::TokenKind::PlusPlus || next_kind == lexer::TokenKind::MinusMinus;
 
-        // If we skipped newlines and hit a postfix operator, don't continue
-        if (saved_pos != pos_ && is_postfix) {
+        // Allow `.` to continue across newlines for method chaining:
+        //   object()
+        //       .method1()
+        //       .method2()
+        // But block other postfix operators like `(`, `[`, etc. after newlines
+        bool is_method_chain_continuation = (next_kind == lexer::TokenKind::Dot);
+
+        // If we skipped newlines and hit a postfix operator (except `.`), don't continue
+        if (saved_pos != pos_ && is_postfix && !is_method_chain_continuation) {
             pos_ = saved_pos;
             break;
+        }
+
+        // Handle postfix operators BEFORE precedence check (they have implicit high precedence)
+        // For method chain continuation (`.` after newline), this handles it correctly
+        if (is_postfix) {
+            left = parse_postfix_expr(std::move(unwrap(left)));
+            if (is_err(left))
+                return left;
+            continue;
         }
 
         // If we skipped newlines and it's not an infix operator, don't continue
@@ -89,14 +113,6 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
             // Not a continuation - restore position and break
             pos_ = saved_pos;
             break;
-        }
-
-        // Handle postfix operators first (only if we didn't skip newlines)
-        if (is_postfix) {
-            left = parse_postfix_expr(std::move(unwrap(left)));
-            if (is_err(left))
-                return left;
-            continue;
         }
 
         // Handle range expressions: x to y, x through y, x..y

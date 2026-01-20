@@ -71,13 +71,13 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
         return "0";
     }
 
-    // str_concat(a, b) -> Str
+    // str_concat(a, b) -> Str (uses str_concat_opt for O(1) amortized)
     if (fn_name == "str_concat") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_concat(ptr " + a + ", ptr " + b + ")");
+            emit_line("  " + result + " = call ptr @str_concat_opt(ptr " + a + ", ptr " + b + ")");
             last_expr_type_ = "ptr";
             return result;
         }

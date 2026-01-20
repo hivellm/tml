@@ -1,0 +1,334 @@
+//! Reader-writer lock for concurrent read access.
+//!
+//! This module provides [`RwLock[T]`], a reader-writer lock that allows
+//! multiple readers or a single writer at any time.
+//!
+//! # Overview
+//!
+//! A reader-writer lock allows:
+//! - Multiple readers simultaneously (shared access)
+//! - One writer at a time (exclusive access)
+//! - No readers while a writer holds the lock
+//!
+//! This is useful when data is read frequently but written rarely.
+//!
+//! # RwLock vs Mutex
+//!
+//! - Use [`RwLock`] when reads are much more common than writes
+//! - Use [`Mutex`][super::mutex::Mutex] when access patterns are mixed
+//! - `RwLock` has slightly higher overhead than `Mutex`
+//!
+//! # Examples
+//!
+//! ## Basic Usage
+//!
+//! ```tml
+//! use sync::rwlock::RwLock
+//!
+//! let lock = RwLock::new(5)
+//!
+//! // Multiple readers can access simultaneously
+//! {
+//!     let r1 = lock.read()
+//!     let r2 = lock.read()
+//!     assert_eq(*r1, 5)
+//!     assert_eq(*r2, 5)
+//! }  // read locks released
+//!
+//! // Only one writer at a time
+//! {
+//!     let mut w = lock.write()
+//!     *w = 6
+//! }  // write lock released
+//! ```
+
+use sync::atomic::{AtomicU32, Ordering}
+
+// ============================================================================
+// Platform-specific raw rwlock
+// ============================================================================
+
+/// Raw platform rwlock handle.
+@repr(C)
+type RawRwLock {
+    _data: [U8; 64]
+}
+
+@extern("tml_rwlock_init")
+func raw_rwlock_init(lock: mut ref RawRwLock) -> I32
+
+@extern("tml_rwlock_destroy")
+func raw_rwlock_destroy(lock: mut ref RawRwLock) -> I32
+
+@extern("tml_rwlock_read_lock")
+func raw_rwlock_read_lock(lock: mut ref RawRwLock) -> I32
+
+@extern("tml_rwlock_try_read_lock")
+func raw_rwlock_try_read_lock(lock: mut ref RawRwLock) -> I32
+
+@extern("tml_rwlock_read_unlock")
+func raw_rwlock_read_unlock(lock: mut ref RawRwLock) -> I32
+
+@extern("tml_rwlock_write_lock")
+func raw_rwlock_write_lock(lock: mut ref RawRwLock) -> I32
+
+@extern("tml_rwlock_try_write_lock")
+func raw_rwlock_try_write_lock(lock: mut ref RawRwLock) -> I32
+
+@extern("tml_rwlock_write_unlock")
+func raw_rwlock_write_unlock(lock: mut ref RawRwLock) -> I32
+
+// ============================================================================
+// RwLock[T]
+// ============================================================================
+
+/// A reader-writer lock.
+///
+/// This type of lock allows a number of readers or at most one writer at any
+/// point in time. The write portion of this lock typically allows modification
+/// of the underlying data (exclusive access) and the read portion of this lock
+/// typically allows for read-only access (shared access).
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::rwlock::RwLock
+///
+/// let lock = RwLock::new(5)
+///
+/// // many readers can hold the lock at once
+/// {
+///     let r1 = lock.read()
+///     let r2 = lock.read()
+///     assert_eq(*r1, 5)
+///     assert_eq(*r2, 5)
+/// }
+///
+/// // only one writer can hold the lock
+/// {
+///     let mut w = lock.write()
+///     *w += 1
+///     assert_eq(*w, 6)
+/// }
+/// ```
+pub type RwLock[T] {
+    data: T,
+    raw: RawRwLock,
+    // Track state: 0 = unlocked, >0 = reader count, U32::MAX = write locked
+    state: AtomicU32,
+}
+
+impl[T] RwLock[T] {
+    /// Creates a new instance of an `RwLock[T]` which is unlocked.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::rwlock::RwLock
+    ///
+    /// let lock = RwLock::new(5)
+    /// ```
+    pub func new(value: T) -> RwLock[T] {
+        let mut lock = RwLock {
+            data: value,
+            raw: RawRwLock { _data: [0; 64] },
+            state: AtomicU32::new(0),
+        }
+        raw_rwlock_init(ref lock.raw)
+        return lock
+    }
+
+    /// Locks this rwlock with shared read access, blocking the current thread
+    /// until it can be acquired.
+    ///
+    /// The calling thread will be blocked until there are no more writers which
+    /// hold the lock. There may be other readers currently inside the lock when
+    /// this method returns.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::rwlock::RwLock
+    ///
+    /// let lock = RwLock::new(1)
+    ///
+    /// let n = lock.read()
+    /// assert_eq(*n, 1)
+    /// ```
+    pub func read(mut self) -> RwLockReadGuard[T] {
+        raw_rwlock_read_lock(ref self.raw)
+        return RwLockReadGuard { lock: ref self }
+    }
+
+    /// Attempts to acquire this rwlock with shared read access.
+    ///
+    /// If the access could not be granted at this time, then `Nothing` is
+    /// returned. Otherwise, a guard is returned which will release the shared
+    /// access when it is dropped.
+    ///
+    /// This function does not block.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::rwlock::RwLock
+    ///
+    /// let lock = RwLock::new(1)
+    ///
+    /// when lock.try_read() {
+    ///     Just(n) => assert_eq(*n, 1),
+    ///     Nothing => unreachable()
+    /// }
+    /// ```
+    pub func try_read(mut self) -> Maybe[RwLockReadGuard[T]] {
+        if raw_rwlock_try_read_lock(ref self.raw) == 0 {
+            return Just(RwLockReadGuard { lock: ref self })
+        }
+        return Nothing
+    }
+
+    /// Locks this rwlock with exclusive write access, blocking the current
+    /// thread until it can be acquired.
+    ///
+    /// This function will not return while other writers or other readers
+    /// currently have access to the lock.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::rwlock::RwLock
+    ///
+    /// let lock = RwLock::new(1)
+    ///
+    /// let mut n = lock.write()
+    /// *n = 2
+    /// ```
+    pub func write(mut self) -> RwLockWriteGuard[T] {
+        raw_rwlock_write_lock(ref self.raw)
+        return RwLockWriteGuard { lock: ref self }
+    }
+
+    /// Attempts to lock this rwlock with exclusive write access.
+    ///
+    /// If the lock could not be acquired at this time, then `Nothing` is
+    /// returned. Otherwise, a guard is returned which will release the lock
+    /// when it is dropped.
+    ///
+    /// This function does not block.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::rwlock::RwLock
+    ///
+    /// let lock = RwLock::new(1)
+    ///
+    /// when lock.try_write() {
+    ///     Just(mut n) => *n = 2,
+    ///     Nothing => unreachable()
+    /// }
+    /// ```
+    pub func try_write(mut self) -> Maybe[RwLockWriteGuard[T]] {
+        if raw_rwlock_try_write_lock(ref self.raw) == 0 {
+            return Just(RwLockWriteGuard { lock: ref self })
+        }
+        return Nothing
+    }
+
+    /// Consumes this `RwLock`, returning the underlying data.
+    pub func into_inner(mut self) -> T {
+        raw_rwlock_destroy(ref self.raw)
+        return self.data
+    }
+
+    /// Returns a mutable reference to the underlying data.
+    ///
+    /// Since this call borrows the `RwLock` mutably, no actual locking needs
+    /// to take place - the mutable borrow statically guarantees no locks exist.
+    pub func get_mut(mut self) -> mut ref T {
+        return ref self.data
+    }
+}
+
+impl[T] Drop for RwLock[T] {
+    func drop(mut self) {
+        raw_rwlock_destroy(ref self.raw)
+    }
+}
+
+// ============================================================================
+// RwLockReadGuard[T]
+// ============================================================================
+
+/// RAII structure used to release the shared read access of a lock when dropped.
+///
+/// This structure is created by the [`read`][RwLock::read] and
+/// [`try_read`][RwLock::try_read] methods on [`RwLock`].
+pub type RwLockReadGuard[T] {
+    lock: mut ref RwLock[T]
+}
+
+impl[T] RwLockReadGuard[T] {
+    /// Returns a reference to the underlying data.
+    pub func get(self) -> ref T {
+        return ref self.lock.data
+    }
+}
+
+impl[T] Deref for RwLockReadGuard[T] {
+    type Target = T
+
+    func deref(self) -> ref T {
+        return ref self.lock.data
+    }
+}
+
+impl[T] Drop for RwLockReadGuard[T] {
+    func drop(mut self) {
+        raw_rwlock_read_unlock(ref self.lock.raw)
+    }
+}
+
+// ============================================================================
+// RwLockWriteGuard[T]
+// ============================================================================
+
+/// RAII structure used to release the exclusive write access of a lock when dropped.
+///
+/// This structure is created by the [`write`][RwLock::write] and
+/// [`try_write`][RwLock::try_write] methods on [`RwLock`].
+pub type RwLockWriteGuard[T] {
+    lock: mut ref RwLock[T]
+}
+
+impl[T] RwLockWriteGuard[T] {
+    /// Returns a reference to the underlying data.
+    pub func get(self) -> ref T {
+        return ref self.lock.data
+    }
+
+    /// Returns a mutable reference to the underlying data.
+    pub func get_mut(mut self) -> mut ref T {
+        return ref self.lock.data
+    }
+}
+
+impl[T] Deref for RwLockWriteGuard[T] {
+    type Target = T
+
+    func deref(self) -> ref T {
+        return ref self.lock.data
+    }
+}
+
+impl[T] DerefMut for RwLockWriteGuard[T] {
+    func deref_mut(mut self) -> mut ref T {
+        return ref self.lock.data
+    }
+}
+
+impl[T] Drop for RwLockWriteGuard[T] {
+    func drop(mut self) {
+        raw_rwlock_write_unlock(ref self.lock.raw)
+    }
+}

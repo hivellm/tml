@@ -66,6 +66,20 @@ struct BuildOptions {
     // PGO (Profile-Guided Optimization) options
     bool profile_generate = false; // Generate profile data during execution
     std::string profile_use;       // Use profile data from file (empty = disabled)
+
+    // Runtime profiling (generates .cpuprofile for Chrome DevTools)
+    bool profile = false;           // Enable runtime profiling instrumentation
+    std::string profile_output;     // Custom output path (default: profile.cpuprofile)
+};
+
+// Run options (for run command)
+struct RunOptions {
+    bool verbose = false;
+    bool coverage = false;
+    bool no_cache = false;
+    bool profile = false;           // Enable runtime profiling
+    std::string profile_output;     // Custom output path (default: profile.cpuprofile)
+    std::vector<std::string> args;  // Program arguments
 };
 
 // Build commands
@@ -78,6 +92,9 @@ int run_build_ex(const std::string& path, const BuildOptions& options);
 
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage = false, bool no_cache = false);
+
+// Run with extended options
+int run_run_ex(const std::string& path, const RunOptions& options);
 
 // Run with output capture (for test runner)
 // Returns exit code, stores stdout/stderr in output if provided

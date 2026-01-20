@@ -1,0 +1,117 @@
+// Minimal JSON Benchmark - Isolates overhead sources
+// Tests each component separately
+
+use std::json
+
+// Pre-defined small JSON - no string generation
+func get_json() -> Str {
+    return "{\"name\":\"John\",\"age\":30}"
+}
+
+pub func main() -> I32 {
+    println("")
+    println("=== TML JSON Minimal Benchmark ===")
+    println("")
+
+    let json_str: Str = get_json()
+    println("JSON: " + json_str)
+    println("")
+
+    // Test 1: Measure time_ns() overhead
+    println("--- TEST 1: time_ns() overhead ---")
+    let t1_start: I64 = time_ns()
+    var i: I64 = 0
+    loop {
+        if i >= 100000 then { break }
+        let _: I64 = time_ns()
+        i = i + 1
+    }
+    let t1_end: I64 = time_ns()
+    let t1_per: I64 = (t1_end - t1_start) / 100000
+    println("  time_ns() per call: " + t1_per.to_string() + " ns")
+    println("")
+
+    // Test 2: Empty loop overhead
+    println("--- TEST 2: Empty loop (100K iterations) ---")
+    let t2_start: I64 = time_ns()
+    i = 0
+    loop {
+        if i >= 100000 then { break }
+        i = i + 1
+    }
+    let t2_end: I64 = time_ns()
+    let t2_per: I64 = (t2_end - t2_start) / 100000
+    println("  Loop per iteration: " + t2_per.to_string() + " ns")
+    println("")
+
+    // Test 3: parse_fast_bench (no handle, just parse)
+    println("--- TEST 3: parse_fast_bench (10K iterations) ---")
+    let t3_start: I64 = time_ns()
+    i = 0
+    loop {
+        if i >= 10000 then { break }
+        let _: I32 = json::parse_fast_bench(json_str)
+        i = i + 1
+    }
+    let t3_end: I64 = time_ns()
+    let t3_per: I64 = (t3_end - t3_start) / 10000
+    println("  parse_fast_bench per call: " + t3_per.to_string() + " ns")
+    println("")
+
+    // Test 4: parse_fast (with handle allocation)
+    println("--- TEST 4: parse_fast + free (10K iterations) ---")
+    let t4_start: I64 = time_ns()
+    i = 0
+    loop {
+        if i >= 10000 then { break }
+        let h: I64 = json::parse_fast(json_str)
+        json::free(h)
+        i = i + 1
+    }
+    let t4_end: I64 = time_ns()
+    let t4_per: I64 = (t4_end - t4_start) / 10000
+    println("  parse_fast+free per call: " + t4_per.to_string() + " ns")
+    println("")
+
+    // Test 5: Just FFI call overhead (get_type on same handle)
+    println("--- TEST 5: FFI call overhead (100K get_type calls) ---")
+    let h5: I64 = json::parse_fast(json_str)
+    let t5_start: I64 = time_ns()
+    i = 0
+    loop {
+        if i >= 100000 then { break }
+        let _: I32 = json::get_type(h5)
+        i = i + 1
+    }
+    let t5_end: I64 = time_ns()
+    let t5_per: I64 = (t5_end - t5_start) / 100000
+    println("  get_type per call: " + t5_per.to_string() + " ns")
+    json::free(h5)
+    println("")
+
+    // Test 6: String parameter passing (parse with different strings)
+    println("--- TEST 6: String creation overhead ---")
+    let t6_start: I64 = time_ns()
+    i = 0
+    loop {
+        if i >= 10000 then { break }
+        let s: Str = get_json()  // Function call + return
+        let _: I32 = json::parse_fast_bench(s)
+        i = i + 1
+    }
+    let t6_end: I64 = time_ns()
+    let t6_per: I64 = (t6_end - t6_start) / 10000
+    println("  get_json+parse per call: " + t6_per.to_string() + " ns")
+    println("")
+
+    // Summary
+    println("=== SUMMARY ===")
+    println("  C++ raw parse: ~1000 ns")
+    println("  TML observed:  " + t4_per.to_string() + " ns")
+    let overhead: I64 = t4_per - 1000
+    println("  TML overhead:  ~" + overhead.to_string() + " ns")
+    println("")
+
+    json::free_all()
+    return 0
+}

@@ -422,15 +422,19 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @tml_text_data(ptr)");
     emit_line("declare i32 @tml_text_byte_at(ptr, i64)");
     emit_line("declare void @tml_text_clear(ptr)");
+    emit_line("declare ptr @tml_text_data_ptr(ptr)");
+    emit_line("declare void @tml_text_set_len(ptr, i64)");
     emit_line("declare void @tml_text_push(ptr, i32)");
     emit_line("declare void @tml_text_push_str(ptr, ptr)");
     emit_line("declare void @tml_text_push_str_len(ptr, ptr, i64)");
     emit_line("declare void @tml_text_push_i64(ptr, i64)");
+    emit_line("declare i64 @tml_text_push_i64_unsafe(ptr, i64)");
     emit_line("declare void @tml_text_push_formatted(ptr, ptr, i64, i64, ptr, i64)");
     emit_line("declare void @tml_text_push_log(ptr, ptr, i64, i64, ptr, i64, i64, ptr, i64, i64, "
               "ptr, i64)");
     emit_line("declare void @tml_text_reserve(ptr, i64)");
     emit_line("declare void @tml_text_fill_char(ptr, i32, i64)");
+    emit_line("declare void @tml_text_push_path(ptr, ptr, i64, i64, ptr, i64, i64, ptr, i64)");
     emit_line("declare i64 @tml_text_index_of(ptr, ptr)");
     emit_line("declare i64 @tml_text_last_index_of(ptr, ptr)");
     emit_line("declare i32 @tml_text_starts_with(ptr, ptr)");
@@ -476,6 +480,9 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["text_byte_at"] =
         FuncInfo{"@tml_text_byte_at", "i32 (ptr, i64)", "i32", {"ptr", "i64"}};
     functions_["text_clear"] = FuncInfo{"@tml_text_clear", "void (ptr)", "void", {"ptr"}};
+    functions_["text_data_ptr"] = FuncInfo{"@tml_text_data_ptr", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["text_set_len"] =
+        FuncInfo{"@tml_text_set_len", "void (ptr, i64)", "void", {"ptr", "i64"}};
     functions_["text_push"] = FuncInfo{"@tml_text_push", "void (ptr, i32)", "void", {"ptr", "i32"}};
     functions_["text_push_str"] =
         FuncInfo{"@tml_text_push_str", "void (ptr, ptr)", "void", {"ptr", "ptr"}};
@@ -496,6 +503,11 @@ void LLVMIRGen::emit_runtime_decls() {
         FuncInfo{"@tml_text_reserve", "void (ptr, i64)", "void", {"ptr", "i64"}};
     functions_["text_fill_char"] =
         FuncInfo{"@tml_text_fill_char", "void (ptr, i32, i64)", "void", {"ptr", "i32", "i64"}};
+    functions_["text_push_path"] = FuncInfo{
+        "@tml_text_push_path",
+        "void (ptr, ptr, i64, i64, ptr, i64, i64, ptr, i64)",
+        "void",
+        {"ptr", "ptr", "i64", "i64", "ptr", "i64", "i64", "ptr", "i64"}};
     functions_["text_index_of"] =
         FuncInfo{"@tml_text_index_of", "i64 (ptr, ptr)", "i64", {"ptr", "ptr"}};
     functions_["text_last_index_of"] =

@@ -142,6 +142,23 @@ func bench_small_appends_batch(iterations: I64) -> I64 {
     return len
 }
 
+// Small appends using raw pointer (C++ style - register-based loop)
+func bench_small_appends_raw(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations)
+    let data: *U8 = t.data_ptr()  // Get raw pointer once
+    var len: I64 = 0
+    loop {
+        if len >= iterations then { break }
+        // Store directly to memory - no FFI, no checks
+        lowlevel { store_byte(data, len, 120) }
+        len = len + 1
+    }
+    t.set_len(len)  // Update length once at end
+    let final_len: I64 = t.len()
+    t.drop()
+    return final_len
+}
+
 // Number formatting
 func bench_number_formatting(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations * 20)
@@ -177,6 +194,7 @@ func bench_log_messages(iterations: I64) -> I64 {
 }
 
 // Path building (reuses single Text to match C++ benchmark)
+// Optimized: uses push_path to reduce 5 FFI calls to 1 per iteration
 func bench_path_building(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(100)
     var last_len: I64 = 0
@@ -184,11 +202,8 @@ func bench_path_building(iterations: I64) -> I64 {
     loop {
         if i >= iterations then { break }
         t.clear()
-        t.push_str("/home/user/projects/app/src/module")
-        t.push_str((i % 100).to_string())
-        t.push_str("/file")
-        t.push_str(i.to_string())
-        t.push_str(".txt")
+        // Uses push_path: s1 + n1 + s2 + n2 + s3 in one FFI call
+        t.push_path("/home/user/projects/app/src/module", i % 100, "/file", i, ".txt")
         last_len = t.len()
         i = i + 1
     }
@@ -264,6 +279,12 @@ pub func main() -> I32 {
     let _sm3: I64 = bench_small_appends_batch(APPEND_ITER)
     end = time_ns()
     run_and_print("Small Appends fill_char() batch", APPEND_ITER, end - start)
+
+    // Small Appends (raw pointer - C++ style)
+    start = time_ns()
+    let _sm4: I64 = bench_small_appends_raw(APPEND_ITER)
+    end = time_ns()
+    run_and_print("Small Appends raw ptr", APPEND_ITER, end - start)
 
     // Number Formatting
     start = time_ns()

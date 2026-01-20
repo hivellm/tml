@@ -80,6 +80,7 @@
 
 // Parsing
 #include "json/json_parser.hpp"
+#include "json/json_fast_parser.hpp"
 
 // Building
 #include "json/json_builder.hpp"

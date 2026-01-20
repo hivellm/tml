@@ -1,0 +1,260 @@
+// JSON FFI Profiling Benchmark
+// Tests the profiling infrastructure and compares clone vs zero-copy access
+
+use std::json
+use std::text::Text
+
+// ============================================================================
+// Test Data
+// ============================================================================
+
+func small_json() -> Str {
+    return "{\"name\":\"John Doe\",\"age\":30,\"active\":true,\"email\":\"john@example.com\",\"scores\":[95,87,92,88,91],\"address\":{\"street\":\"123 Main St\",\"city\":\"New York\",\"zip\":\"10001\"}}"
+}
+
+func generate_array_json(size: I64) -> Str {
+    let t: Text = Text::with_capacity(size * 10)
+    t.push_str("[")
+    var i: I64 = 0
+    loop {
+        if i >= size then { break }
+        if i > 0 {
+            t.push_str(",")
+        }
+        t.push_str(i.to_string())
+        i = i + 1
+    }
+    t.push_str("]")
+    return t.as_str()
+}
+
+func generate_objects_json(size: I64) -> Str {
+    let t: Text = Text::with_capacity(size * 50)
+    t.push_str("{\"items\":[")
+    var i: I64 = 0
+    loop {
+        if i >= size then { break }
+        if i > 0 {
+            t.push_str(",")
+        }
+        t.push_str("{\"id\":")
+        t.push_str(i.to_string())
+        t.push_str(",\"value\":")
+        t.push_str((i * 2).to_string())
+        t.push_str("}")
+        i = i + 1
+    }
+    t.push_str("]}")
+    return t.as_str()
+}
+
+// ============================================================================
+// Benchmarks
+// ============================================================================
+
+pub func main() -> I32 {
+    println("")
+    println("============================================================")
+    println("       TML JSON FFI Profiling Benchmark")
+    println("============================================================")
+    println("")
+
+    // Generate test data
+    let small: Str = small_json()
+    let array_json: Str = generate_array_json(1000)
+    let objects_json: Str = generate_objects_json(1000)
+
+    println("Test Data:")
+    println("  Small JSON: ~200 bytes")
+    println("  Array JSON: ~3900 bytes")
+    println("  Objects JSON: ~22000 bytes")
+    println("")
+
+    // ========================================================================
+    // Test 1: Parse-only benchmark
+    // ========================================================================
+    println("------------------------------------------------------------")
+    println("TEST 1: Pure Parsing (no field access)")
+    println("------------------------------------------------------------")
+
+    json::profile_enable()
+
+    let iters1: I64 = 10000
+    let start1: I64 = time_ns()
+    var i: I64 = 0
+    loop {
+        if i >= iters1 then { break }
+        let h: I64 = json::parse_fast(small)
+        json::free(h)
+        i = i + 1
+    }
+    let end1: I64 = time_ns()
+
+    let per_op1: I64 = (end1 - start1) / iters1
+    println("  " + iters1.to_string() + " iterations: " + (per_op1 / 1000).to_string() + " us/op")
+    println("")
+
+    json::profile_print()
+    json::profile_reset()
+
+    // ========================================================================
+    // Test 2: Parse + Clone field access (old way)
+    // ========================================================================
+    println("")
+    println("------------------------------------------------------------")
+    println("TEST 2: Parse + Clone Field Access (object_get)")
+    println("------------------------------------------------------------")
+
+    let iters2: I64 = 10000
+    let start2: I64 = time_ns()
+    i = 0
+    loop {
+        if i >= iters2 then { break }
+        let h: I64 = json::parse_fast(small)
+        let name_h: I64 = json::object_get(h, "name")
+        let _name: Str = json::get_string(name_h)
+        let age_h: I64 = json::object_get(h, "age")
+        let _age: I64 = json::as_i64(age_h)
+        json::free(name_h)
+        json::free(age_h)
+        json::free(h)
+        i = i + 1
+    }
+    let end2: I64 = time_ns()
+
+    let per_op2: I64 = (end2 - start2) / iters2
+    println("  " + iters2.to_string() + " iterations: " + (per_op2 / 1000).to_string() + " us/op")
+    println("")
+
+    json::profile_print()
+    json::profile_reset()
+
+    // ========================================================================
+    // Test 3: Parse + Zero-copy direct access (new way)
+    // ========================================================================
+    println("")
+    println("------------------------------------------------------------")
+    println("TEST 3: Parse + Zero-Copy Direct Access")
+    println("------------------------------------------------------------")
+
+    let iters3: I64 = 10000
+    let start3: I64 = time_ns()
+    i = 0
+    loop {
+        if i >= iters3 then { break }
+        let h: I64 = json::parse_fast(small)
+        let _name: Str = json::object_get_string(h, "name")
+        let _age: I64 = json::object_get_i64(h, "age")
+        json::free(h)
+        i = i + 1
+    }
+    let end3: I64 = time_ns()
+
+    let per_op3: I64 = (end3 - start3) / iters3
+    println("  " + iters3.to_string() + " iterations: " + (per_op3 / 1000).to_string() + " us/op")
+    println("")
+
+    json::profile_print()
+    json::profile_reset()
+
+    // ========================================================================
+    // Test 4: Array iteration with clone (old way)
+    // ========================================================================
+    println("")
+    println("------------------------------------------------------------")
+    println("TEST 4: Array Iteration with Clone (array_get)")
+    println("------------------------------------------------------------")
+
+    let arr_h: I64 = json::parse_fast(array_json)
+    let arr_len: I64 = json::array_len(arr_h)
+
+    let iters4: I64 = 100
+    let start4: I64 = time_ns()
+    i = 0
+    loop {
+        if i >= iters4 then { break }
+        var sum: I64 = 0
+        var j: I64 = 0
+        loop {
+            if j >= arr_len then { break }
+            let elem_h: I64 = json::array_get(arr_h, j)
+            sum = sum + json::as_i64(elem_h)
+            json::free(elem_h)
+            j = j + 1
+        }
+        i = i + 1
+    }
+    let end4: I64 = time_ns()
+
+    let per_op4: I64 = (end4 - start4) / iters4
+    println("  " + iters4.to_string() + " iterations: " + (per_op4 / 1000).to_string() + " us/op")
+    println("  Items per iteration: " + arr_len.to_string())
+    println("")
+
+    json::profile_print()
+    json::profile_reset()
+
+    json::free(arr_h)
+
+    // ========================================================================
+    // Test 5: Array iteration zero-copy (new way)
+    // ========================================================================
+    println("")
+    println("------------------------------------------------------------")
+    println("TEST 5: Array Iteration Zero-Copy (array_get_i64)")
+    println("------------------------------------------------------------")
+
+    let arr_h2: I64 = json::parse_fast(array_json)
+    let arr_len2: I64 = json::array_len(arr_h2)
+
+    let iters5: I64 = 100
+    let start5: I64 = time_ns()
+    i = 0
+    loop {
+        if i >= iters5 then { break }
+        var sum: I64 = 0
+        var j: I64 = 0
+        loop {
+            if j >= arr_len2 then { break }
+            sum = sum + json::array_get_i64(arr_h2, j)
+            j = j + 1
+        }
+        i = i + 1
+    }
+    let end5: I64 = time_ns()
+
+    let per_op5: I64 = (end5 - start5) / iters5
+    println("  " + iters5.to_string() + " iterations: " + (per_op5 / 1000).to_string() + " us/op")
+    println("  Items per iteration: " + arr_len2.to_string())
+    println("")
+
+    json::profile_print()
+
+    json::free(arr_h2)
+
+    // ========================================================================
+    // Summary
+    // ========================================================================
+    println("")
+    println("============================================================")
+    println("                    SUMMARY")
+    println("============================================================")
+    println("")
+    println("Field Access (Clone vs Zero-Copy):")
+    println("  Clone (object_get):      " + (per_op2 / 1000).to_string() + " us/op")
+    println("  Zero-Copy (direct):      " + (per_op3 / 1000).to_string() + " us/op")
+    let speedup1: I64 = per_op2 / per_op3
+    println("  Speedup:                 " + speedup1.to_string() + "x")
+    println("")
+    println("Array Iteration (Clone vs Zero-Copy):")
+    println("  Clone (array_get):       " + (per_op4 / 1000).to_string() + " us/op")
+    println("  Zero-Copy (direct):      " + (per_op5 / 1000).to_string() + " us/op")
+    let speedup2: I64 = per_op4 / per_op5
+    println("  Speedup:                 " + speedup2.to_string() + "x")
+    println("")
+
+    json::profile_disable()
+    json::free_all()
+
+    return 0
+}

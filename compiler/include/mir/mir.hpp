@@ -323,6 +323,8 @@ struct GetElementPtrInst {
     std::vector<Value> indices;
     MirTypePtr base_type;   // Type of base pointer
     MirTypePtr result_type; // Type of result pointer
+    bool needs_bounds_check = true; // Whether bounds check is needed (false if proven safe)
+    int64_t known_array_size = -1;  // Array size for bounds check (-1 if unknown)
 };
 
 // Extract value from aggregate: result = aggregate.index

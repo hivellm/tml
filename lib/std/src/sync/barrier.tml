@@ -1,0 +1,224 @@
+//! Barrier synchronization primitive.
+//!
+//! This module provides [`Barrier`], a synchronization primitive that allows
+//! multiple threads to wait until all of them have reached a certain point.
+//!
+//! # Overview
+//!
+//! A barrier is initialized with a count N. Each thread that calls `wait()`
+//! will block until N threads have called `wait()`, at which point all threads
+//! are released simultaneously.
+//!
+//! # Use Cases
+//!
+//! - Synchronizing phases of parallel algorithms
+//! - Ensuring all threads complete setup before proceeding
+//! - Coordinating parallel tasks that must start together
+//!
+//! # Examples
+//!
+//! ## Basic Barrier Usage
+//!
+//! ```tml
+//! use sync::{Barrier, Sync}
+//! use thread
+//!
+//! let barrier = Sync::new(Barrier::new(3))
+//!
+//! let mut handles = []
+//! loop i in 0 to 3 {
+//!     let b = barrier.clone()
+//!     handles.push(thread::spawn(do() {
+//!         println("Thread " + i.to_string() + " before barrier")
+//!         b.wait()
+//!         println("Thread " + i.to_string() + " after barrier")
+//!     }))
+//! }
+//!
+//! for h in handles {
+//!     h.join().unwrap()
+//! }
+//! ```
+//!
+//! ## Detecting the Leader Thread
+//!
+//! ```tml
+//! use sync::{Barrier, Sync}
+//! use thread
+//!
+//! let barrier = Sync::new(Barrier::new(4))
+//!
+//! let mut handles = []
+//! loop i in 0 to 4 {
+//!     let b = barrier.clone()
+//!     handles.push(thread::spawn(do() {
+//!         let result = b.wait()
+//!         if result.is_leader() {
+//!             println("Thread " + i.to_string() + " is the leader!")
+//!         }
+//!     }))
+//! }
+//!
+//! for h in handles {
+//!     h.join().unwrap()
+//! }
+//! ```
+
+use sync::mutex::Mutex
+use sync::condvar::Condvar
+use sync::atomic::{AtomicU32, Ordering}
+
+// ============================================================================
+// Barrier
+// ============================================================================
+
+/// A barrier enables multiple threads to synchronize the beginning of some
+/// computation.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::Barrier
+///
+/// let barrier = Barrier::new(10)
+///
+/// // In each thread:
+/// barrier.wait()  // Blocks until all 10 threads reach here
+/// ```
+pub type Barrier {
+    mutex: Mutex[BarrierState],
+    cvar: Condvar,
+    num_threads: U32,
+}
+
+type BarrierState {
+    count: U32,
+    generation: U32,
+}
+
+impl Barrier {
+    /// Creates a new barrier that can block the given number of threads.
+    ///
+    /// A barrier will block `n` threads before unblocking them all at once.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` is 0.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::Barrier
+    ///
+    /// let barrier = Barrier::new(10)
+    /// ```
+    pub func new(n: U32) -> Barrier {
+        if n == 0 {
+            panic("Barrier count must be greater than 0")
+        }
+        return Barrier {
+            mutex: Mutex::new(BarrierState { count: 0, generation: 0 }),
+            cvar: Condvar::new(),
+            num_threads: n,
+        }
+    }
+
+    /// Blocks the current thread until all threads have rendezvoused here.
+    ///
+    /// Barriers are re-usable after all threads have rendezvoused once, and
+    /// can be used continuously.
+    ///
+    /// A single (arbitrary) thread will receive a [`BarrierWaitResult`] that
+    /// returns `true` from [`is_leader`][BarrierWaitResult::is_leader] when
+    /// returning from this function, and all other threads will receive a
+    /// result that returns `false` from `is_leader`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::{Barrier, Sync}
+    /// use thread
+    ///
+    /// let barrier = Sync::new(Barrier::new(3))
+    ///
+    /// let mut handles = []
+    /// loop _ in 0 to 3 {
+    ///     let b = barrier.clone()
+    ///     handles.push(thread::spawn(do() {
+    ///         println("before wait")
+    ///         b.wait()
+    ///         println("after wait")
+    ///     }))
+    /// }
+    ///
+    /// for h in handles {
+    ///     h.join().unwrap()
+    /// }
+    /// ```
+    pub func wait(mut self) -> BarrierWaitResult {
+        let mut guard = self.mutex.lock()
+        let generation = guard.generation
+
+        guard.count = guard.count + 1
+
+        if guard.count >= self.num_threads {
+            // Last thread to arrive - reset and wake everyone
+            guard.count = 0
+            guard.generation = guard.generation + 1
+            self.cvar.notify_all()
+            return BarrierWaitResult { is_leader: true }
+        }
+
+        // Wait for generation to change
+        loop guard.generation == generation {
+            guard = self.cvar.wait(guard)
+        }
+
+        return BarrierWaitResult { is_leader: false }
+    }
+}
+
+// ============================================================================
+// BarrierWaitResult
+// ============================================================================
+
+/// A `BarrierWaitResult` is returned by [`Barrier::wait()`] when all threads
+/// in the [`Barrier`] have rendezvoused.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::Barrier
+///
+/// let barrier = Barrier::new(1)
+///
+/// let result = barrier.wait()
+/// println("is_leader: " + result.is_leader().to_string())
+/// ```
+pub type BarrierWaitResult {
+    is_leader: Bool,
+}
+
+impl BarrierWaitResult {
+    /// Returns `true` if this thread is the "leader" for the call to
+    /// [`Barrier::wait()`].
+    ///
+    /// Only one thread will have this method return `true`, and all other
+    /// threads will have it return `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::Barrier
+    ///
+    /// let barrier = Barrier::new(1)
+    ///
+    /// let result = barrier.wait()
+    /// if result.is_leader() {
+    ///     println("I'm the leader!")
+    /// }
+    /// ```
+    pub func is_leader(self) -> Bool {
+        return self.is_leader
+    }
+}

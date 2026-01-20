@@ -1,0 +1,938 @@
+//! Atomic types for lock-free concurrent programming.
+//!
+//! This module provides atomic types that can be safely shared between threads.
+//! All operations on atomic types are guaranteed to be indivisible, meaning
+//! that no thread can observe a partial state.
+//!
+//! # Overview
+//!
+//! Atomic types are the foundation of lock-free concurrent programming.
+//! They provide:
+//!
+//! - **Atomicity**: Operations complete fully or not at all
+//! - **Memory ordering**: Control over how operations are observed across threads
+//! - **Lock-free guarantees**: Progress is guaranteed without locks
+//!
+//! # Available Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`AtomicBool`] | Atomic boolean |
+//! | [`AtomicI32`] | 32-bit signed atomic integer |
+//! | [`AtomicI64`] | 64-bit signed atomic integer |
+//! | [`AtomicU32`] | 32-bit unsigned atomic integer |
+//! | [`AtomicU64`] | 64-bit unsigned atomic integer |
+//! | [`AtomicIsize`] | Pointer-sized signed atomic integer |
+//! | [`AtomicUsize`] | Pointer-sized unsigned atomic integer |
+//! | [`AtomicPtr[T]`] | Atomic raw pointer |
+//!
+//! # Memory Ordering
+//!
+//! All atomic operations take an [`Ordering`] parameter that specifies
+//! the memory ordering constraints. See the [`ordering`][super::ordering]
+//! module for details.
+//!
+//! # Examples
+//!
+//! ## Simple Counter
+//!
+//! ```tml
+//! use sync::atomic::{AtomicU64, Ordering}
+//!
+//! let counter = AtomicU64::new(0)
+//!
+//! // Thread-safe increment
+//! counter.fetch_add(1, Ordering::Relaxed)
+//!
+//! // Read current value
+//! let value = counter.load(Ordering::Relaxed)
+//! ```
+//!
+//! ## Spin Lock
+//!
+//! ```tml
+//! use sync::atomic::{AtomicBool, Ordering, spin_loop_hint}
+//!
+//! type SpinLock {
+//!     locked: AtomicBool
+//! }
+//!
+//! impl SpinLock {
+//!     func new() -> SpinLock {
+//!         SpinLock { locked: AtomicBool::new(false) }
+//!     }
+//!
+//!     func lock(mut self) {
+//!         loop {
+//!             when self.locked.compare_exchange(
+//!                 false, true,
+//!                 Ordering::Acquire, Ordering::Relaxed
+//!             ) {
+//!                 Ok(_) => break,
+//!                 Err(_) => spin_loop_hint()
+//!             }
+//!         }
+//!     }
+//!
+//!     func unlock(mut self) {
+//!         self.locked.store(false, Ordering::Release)
+//!     }
+//! }
+//! ```
+//!
+//! ## Compare-and-Swap Loop
+//!
+//! ```tml
+//! use sync::atomic::{AtomicI32, Ordering}
+//!
+//! func fetch_update(a: mut ref AtomicI32, f: do(I32) -> I32) -> I32 {
+//!     let mut current = a.load(Ordering::Relaxed)
+//!     loop {
+//!         let new = f(current)
+//!         when a.compare_exchange_weak(
+//!             current, new,
+//!             Ordering::SeqCst, Ordering::Relaxed
+//!         ) {
+//!             Ok(x) => return x,
+//!             Err(x) => current = x
+//!         }
+//!     }
+//! }
+//! ```
+
+use sync::ordering::Ordering
+
+// ============================================================================
+// AtomicBool
+// ============================================================================
+
+/// A boolean value which can be safely shared between threads.
+///
+/// This type has the same size and alignment as a [`Bool`].
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::atomic::{AtomicBool, Ordering}
+///
+/// let flag = AtomicBool::new(false)
+///
+/// // Set the flag
+/// flag.store(true, Ordering::Release)
+///
+/// // Check and reset
+/// let was_set = flag.swap(false, Ordering::AcqRel)
+/// ```
+@repr(transparent)
+pub type AtomicBool {
+    value: Bool
+}
+
+impl AtomicBool {
+    /// Creates a new `AtomicBool` with the given initial value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::AtomicBool
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// ```
+    pub func new(v: Bool) -> AtomicBool {
+        return AtomicBool { value: v }
+    }
+
+    /// Loads a value from the atomic boolean.
+    ///
+    /// `load` takes an [`Ordering`] argument which describes the memory
+    /// ordering of this operation. Possible values are [`SeqCst`],
+    /// [`Acquire`] and [`Relaxed`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `order` is [`Release`] or [`AcqRel`].
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// assert(flag.load(Ordering::Relaxed))
+    /// ```
+    @intrinsic("atomic.load.bool")
+    pub func load(self, order: Ordering) -> Bool
+
+    /// Stores a value into the atomic boolean.
+    ///
+    /// `store` takes an [`Ordering`] argument which describes the memory
+    /// ordering of this operation. Possible values are [`SeqCst`],
+    /// [`Release`] and [`Relaxed`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `order` is [`Acquire`] or [`AcqRel`].
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    /// flag.store(true, Ordering::Release)
+    /// ```
+    @intrinsic("atomic.store.bool")
+    pub func store(mut self, val: Bool, order: Ordering) -> Unit
+
+    /// Stores a value into the atomic boolean, returning the previous value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// let old = flag.swap(false, Ordering::Relaxed)
+    /// assert(old)
+    /// assert(not flag.load(Ordering::Relaxed))
+    /// ```
+    @intrinsic("atomic.swap.bool")
+    pub func swap(mut self, val: Bool, order: Ordering) -> Bool
+
+    /// Stores a value into the atomic boolean if the current value is the same
+    /// as the `current` value.
+    ///
+    /// The return value is a result indicating whether the new value was
+    /// written and containing the previous value. On success this value is
+    /// guaranteed to be equal to `current`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    ///
+    /// when flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed) {
+    ///     Ok(_) => println("Successfully set to true"),
+    ///     Err(_) => println("Was already true")
+    /// }
+    /// ```
+    @intrinsic("atomic.cmpxchg.bool")
+    pub func compare_exchange(
+        mut self,
+        current: Bool,
+        new: Bool,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Bool, Bool]
+
+    /// Stores a value into the atomic boolean if the current value is the same
+    /// as the `current` value.
+    ///
+    /// Unlike [`compare_exchange`][Self::compare_exchange], this function is
+    /// allowed to spuriously fail even when the comparison succeeds. This can
+    /// be more efficient on some platforms.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    ///
+    /// let mut current = false
+    /// loop {
+    ///     when flag.compare_exchange_weak(current, true, Ordering::SeqCst, Ordering::Relaxed) {
+    ///         Ok(_) => break,
+    ///         Err(actual) => current = actual
+    ///     }
+    /// }
+    /// ```
+    @intrinsic("atomic.cmpxchg_weak.bool")
+    pub func compare_exchange_weak(
+        mut self,
+        current: Bool,
+        new: Bool,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Bool, Bool]
+
+    /// Logical "and" with a boolean value.
+    ///
+    /// Returns the previous value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// let old = flag.fetch_and(false, Ordering::Relaxed)
+    /// assert(old)
+    /// assert(not flag.load(Ordering::Relaxed))
+    /// ```
+    @intrinsic("atomic.and.bool")
+    pub func fetch_and(mut self, val: Bool, order: Ordering) -> Bool
+
+    /// Logical "or" with a boolean value.
+    ///
+    /// Returns the previous value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    /// let old = flag.fetch_or(true, Ordering::Relaxed)
+    /// assert(not old)
+    /// assert(flag.load(Ordering::Relaxed))
+    /// ```
+    @intrinsic("atomic.or.bool")
+    pub func fetch_or(mut self, val: Bool, order: Ordering) -> Bool
+
+    /// Logical "xor" with a boolean value.
+    ///
+    /// Returns the previous value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// let old = flag.fetch_xor(true, Ordering::Relaxed)
+    /// assert(old)
+    /// assert(not flag.load(Ordering::Relaxed))
+    /// ```
+    @intrinsic("atomic.xor.bool")
+    pub func fetch_xor(mut self, val: Bool, order: Ordering) -> Bool
+
+    /// Logical "nand" with a boolean value.
+    ///
+    /// Returns the previous value.
+    ///
+    /// `fetch_nand(true)` toggles the value.
+    /// `fetch_nand(false)` sets the value to `true`.
+    @intrinsic("atomic.nand.bool")
+    pub func fetch_nand(mut self, val: Bool, order: Ordering) -> Bool
+
+    /// Returns `true` if operations on this type are lock-free.
+    ///
+    /// Boolean atomics are always lock-free on all supported platforms.
+    pub func is_lock_free(self) -> Bool {
+        return true
+    }
+
+    /// Consumes the atomic and returns the contained value.
+    ///
+    /// This is safe because passing `self` by value guarantees that no other
+    /// threads are concurrently accessing the atomic data.
+    pub func into_inner(self) -> Bool {
+        return self.value
+    }
+}
+
+// ============================================================================
+// AtomicI32
+// ============================================================================
+
+/// A 32-bit signed integer which can be safely shared between threads.
+///
+/// This type has the same size and alignment as an [`I32`].
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::atomic::{AtomicI32, Ordering}
+///
+/// let counter = AtomicI32::new(0)
+/// counter.fetch_add(1, Ordering::SeqCst)
+/// ```
+@repr(transparent)
+pub type AtomicI32 {
+    value: I32
+}
+
+impl AtomicI32 {
+    /// Creates a new `AtomicI32` with the given initial value.
+    pub func new(v: I32) -> AtomicI32 {
+        return AtomicI32 { value: v }
+    }
+
+    /// Loads a value from the atomic integer.
+    @intrinsic("atomic.load.i32")
+    pub func load(self, order: Ordering) -> I32
+
+    /// Stores a value into the atomic integer.
+    @intrinsic("atomic.store.i32")
+    pub func store(mut self, val: I32, order: Ordering) -> Unit
+
+    /// Stores a value into the atomic integer, returning the previous value.
+    @intrinsic("atomic.swap.i32")
+    pub func swap(mut self, val: I32, order: Ordering) -> I32
+
+    /// Stores a value into the atomic integer if the current value equals `current`.
+    ///
+    /// Returns `Ok(current)` if the exchange succeeded, `Err(actual)` otherwise.
+    @intrinsic("atomic.cmpxchg.i32")
+    pub func compare_exchange(
+        mut self,
+        current: I32,
+        new: I32,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[I32, I32]
+
+    /// Stores a value into the atomic integer if the current value equals `current`.
+    ///
+    /// May spuriously fail even when comparison succeeds.
+    @intrinsic("atomic.cmpxchg_weak.i32")
+    pub func compare_exchange_weak(
+        mut self,
+        current: I32,
+        new: I32,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[I32, I32]
+
+    /// Adds to the current value, returning the previous value.
+    ///
+    /// This operation wraps around on overflow.
+    @intrinsic("atomic.add.i32")
+    pub func fetch_add(mut self, val: I32, order: Ordering) -> I32
+
+    /// Subtracts from the current value, returning the previous value.
+    ///
+    /// This operation wraps around on overflow.
+    @intrinsic("atomic.sub.i32")
+    pub func fetch_sub(mut self, val: I32, order: Ordering) -> I32
+
+    /// Bitwise "and" with the current value, returning the previous value.
+    @intrinsic("atomic.and.i32")
+    pub func fetch_and(mut self, val: I32, order: Ordering) -> I32
+
+    /// Bitwise "or" with the current value, returning the previous value.
+    @intrinsic("atomic.or.i32")
+    pub func fetch_or(mut self, val: I32, order: Ordering) -> I32
+
+    /// Bitwise "xor" with the current value, returning the previous value.
+    @intrinsic("atomic.xor.i32")
+    pub func fetch_xor(mut self, val: I32, order: Ordering) -> I32
+
+    /// Fetches the value, and applies a function to it that returns an optional
+    /// new value. Returns a `Result` of `Ok(previous_value)` if the function
+    /// returned `Some(_)`, else `Err(previous_value)`.
+    ///
+    /// Note: This may call the function multiple times if the value has been
+    /// changed from another thread in the meantime, as long as the function
+    /// returns `Some(_)`, but the function will have been applied only once
+    /// to the stored value.
+    pub func fetch_update(
+        mut self,
+        set_order: Ordering,
+        fetch_order: Ordering,
+        f: do(I32) -> Maybe[I32]
+    ) -> Outcome[I32, I32] {
+        let mut prev = self.load(fetch_order)
+        loop {
+            when f(prev) {
+                Just(next) => {
+                    when self.compare_exchange_weak(prev, next, set_order, fetch_order) {
+                        Ok(x) => return Ok(x),
+                        Err(next_prev) => prev = next_prev,
+                    }
+                },
+                Nothing => return Err(prev),
+            }
+        }
+    }
+
+    /// Maximum with the current value, returning the previous value.
+    @intrinsic("atomic.max.i32")
+    pub func fetch_max(mut self, val: I32, order: Ordering) -> I32
+
+    /// Minimum with the current value, returning the previous value.
+    @intrinsic("atomic.min.i32")
+    pub func fetch_min(mut self, val: I32, order: Ordering) -> I32
+
+    /// Returns `true` if operations on this type are lock-free.
+    pub func is_lock_free(self) -> Bool {
+        return true
+    }
+
+    /// Consumes the atomic and returns the contained value.
+    pub func into_inner(self) -> I32 {
+        return self.value
+    }
+}
+
+// ============================================================================
+// AtomicI64
+// ============================================================================
+
+/// A 64-bit signed integer which can be safely shared between threads.
+@repr(transparent)
+pub type AtomicI64 {
+    value: I64
+}
+
+impl AtomicI64 {
+    pub func new(v: I64) -> AtomicI64 {
+        return AtomicI64 { value: v }
+    }
+
+    @intrinsic("atomic.load.i64")
+    pub func load(self, order: Ordering) -> I64
+
+    @intrinsic("atomic.store.i64")
+    pub func store(mut self, val: I64, order: Ordering) -> Unit
+
+    @intrinsic("atomic.swap.i64")
+    pub func swap(mut self, val: I64, order: Ordering) -> I64
+
+    @intrinsic("atomic.cmpxchg.i64")
+    pub func compare_exchange(
+        mut self,
+        current: I64,
+        new: I64,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[I64, I64]
+
+    @intrinsic("atomic.cmpxchg_weak.i64")
+    pub func compare_exchange_weak(
+        mut self,
+        current: I64,
+        new: I64,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[I64, I64]
+
+    @intrinsic("atomic.add.i64")
+    pub func fetch_add(mut self, val: I64, order: Ordering) -> I64
+
+    @intrinsic("atomic.sub.i64")
+    pub func fetch_sub(mut self, val: I64, order: Ordering) -> I64
+
+    @intrinsic("atomic.and.i64")
+    pub func fetch_and(mut self, val: I64, order: Ordering) -> I64
+
+    @intrinsic("atomic.or.i64")
+    pub func fetch_or(mut self, val: I64, order: Ordering) -> I64
+
+    @intrinsic("atomic.xor.i64")
+    pub func fetch_xor(mut self, val: I64, order: Ordering) -> I64
+
+    @intrinsic("atomic.max.i64")
+    pub func fetch_max(mut self, val: I64, order: Ordering) -> I64
+
+    @intrinsic("atomic.min.i64")
+    pub func fetch_min(mut self, val: I64, order: Ordering) -> I64
+
+    pub func is_lock_free(self) -> Bool {
+        return true
+    }
+
+    pub func into_inner(self) -> I64 {
+        return self.value
+    }
+}
+
+// ============================================================================
+// AtomicU32
+// ============================================================================
+
+/// A 32-bit unsigned integer which can be safely shared between threads.
+@repr(transparent)
+pub type AtomicU32 {
+    value: U32
+}
+
+impl AtomicU32 {
+    pub func new(v: U32) -> AtomicU32 {
+        return AtomicU32 { value: v }
+    }
+
+    @intrinsic("atomic.load.u32")
+    pub func load(self, order: Ordering) -> U32
+
+    @intrinsic("atomic.store.u32")
+    pub func store(mut self, val: U32, order: Ordering) -> Unit
+
+    @intrinsic("atomic.swap.u32")
+    pub func swap(mut self, val: U32, order: Ordering) -> U32
+
+    @intrinsic("atomic.cmpxchg.u32")
+    pub func compare_exchange(
+        mut self,
+        current: U32,
+        new: U32,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[U32, U32]
+
+    @intrinsic("atomic.cmpxchg_weak.u32")
+    pub func compare_exchange_weak(
+        mut self,
+        current: U32,
+        new: U32,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[U32, U32]
+
+    @intrinsic("atomic.add.u32")
+    pub func fetch_add(mut self, val: U32, order: Ordering) -> U32
+
+    @intrinsic("atomic.sub.u32")
+    pub func fetch_sub(mut self, val: U32, order: Ordering) -> U32
+
+    @intrinsic("atomic.and.u32")
+    pub func fetch_and(mut self, val: U32, order: Ordering) -> U32
+
+    @intrinsic("atomic.or.u32")
+    pub func fetch_or(mut self, val: U32, order: Ordering) -> U32
+
+    @intrinsic("atomic.xor.u32")
+    pub func fetch_xor(mut self, val: U32, order: Ordering) -> U32
+
+    @intrinsic("atomic.umax.u32")
+    pub func fetch_max(mut self, val: U32, order: Ordering) -> U32
+
+    @intrinsic("atomic.umin.u32")
+    pub func fetch_min(mut self, val: U32, order: Ordering) -> U32
+
+    pub func is_lock_free(self) -> Bool {
+        return true
+    }
+
+    pub func into_inner(self) -> U32 {
+        return self.value
+    }
+}
+
+// ============================================================================
+// AtomicU64
+// ============================================================================
+
+/// A 64-bit unsigned integer which can be safely shared between threads.
+@repr(transparent)
+pub type AtomicU64 {
+    value: U64
+}
+
+impl AtomicU64 {
+    pub func new(v: U64) -> AtomicU64 {
+        return AtomicU64 { value: v }
+    }
+
+    @intrinsic("atomic.load.u64")
+    pub func load(self, order: Ordering) -> U64
+
+    @intrinsic("atomic.store.u64")
+    pub func store(mut self, val: U64, order: Ordering) -> Unit
+
+    @intrinsic("atomic.swap.u64")
+    pub func swap(mut self, val: U64, order: Ordering) -> U64
+
+    @intrinsic("atomic.cmpxchg.u64")
+    pub func compare_exchange(
+        mut self,
+        current: U64,
+        new: U64,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[U64, U64]
+
+    @intrinsic("atomic.cmpxchg_weak.u64")
+    pub func compare_exchange_weak(
+        mut self,
+        current: U64,
+        new: U64,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[U64, U64]
+
+    @intrinsic("atomic.add.u64")
+    pub func fetch_add(mut self, val: U64, order: Ordering) -> U64
+
+    @intrinsic("atomic.sub.u64")
+    pub func fetch_sub(mut self, val: U64, order: Ordering) -> U64
+
+    @intrinsic("atomic.and.u64")
+    pub func fetch_and(mut self, val: U64, order: Ordering) -> U64
+
+    @intrinsic("atomic.or.u64")
+    pub func fetch_or(mut self, val: U64, order: Ordering) -> U64
+
+    @intrinsic("atomic.xor.u64")
+    pub func fetch_xor(mut self, val: U64, order: Ordering) -> U64
+
+    @intrinsic("atomic.umax.u64")
+    pub func fetch_max(mut self, val: U64, order: Ordering) -> U64
+
+    @intrinsic("atomic.umin.u64")
+    pub func fetch_min(mut self, val: U64, order: Ordering) -> U64
+
+    pub func is_lock_free(self) -> Bool {
+        return true
+    }
+
+    pub func into_inner(self) -> U64 {
+        return self.value
+    }
+}
+
+// ============================================================================
+// AtomicUsize
+// ============================================================================
+
+/// A pointer-sized unsigned integer which can be safely shared between threads.
+///
+/// This type has the same size as `Usize`: 32 bits on 32-bit platforms,
+/// 64 bits on 64-bit platforms.
+@repr(transparent)
+pub type AtomicUsize {
+    value: Usize
+}
+
+impl AtomicUsize {
+    pub func new(v: Usize) -> AtomicUsize {
+        return AtomicUsize { value: v }
+    }
+
+    @intrinsic("atomic.load.usize")
+    pub func load(self, order: Ordering) -> Usize
+
+    @intrinsic("atomic.store.usize")
+    pub func store(mut self, val: Usize, order: Ordering) -> Unit
+
+    @intrinsic("atomic.swap.usize")
+    pub func swap(mut self, val: Usize, order: Ordering) -> Usize
+
+    @intrinsic("atomic.cmpxchg.usize")
+    pub func compare_exchange(
+        mut self,
+        current: Usize,
+        new: Usize,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Usize, Usize]
+
+    @intrinsic("atomic.cmpxchg_weak.usize")
+    pub func compare_exchange_weak(
+        mut self,
+        current: Usize,
+        new: Usize,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Usize, Usize]
+
+    @intrinsic("atomic.add.usize")
+    pub func fetch_add(mut self, val: Usize, order: Ordering) -> Usize
+
+    @intrinsic("atomic.sub.usize")
+    pub func fetch_sub(mut self, val: Usize, order: Ordering) -> Usize
+
+    @intrinsic("atomic.and.usize")
+    pub func fetch_and(mut self, val: Usize, order: Ordering) -> Usize
+
+    @intrinsic("atomic.or.usize")
+    pub func fetch_or(mut self, val: Usize, order: Ordering) -> Usize
+
+    @intrinsic("atomic.xor.usize")
+    pub func fetch_xor(mut self, val: Usize, order: Ordering) -> Usize
+
+    @intrinsic("atomic.umax.usize")
+    pub func fetch_max(mut self, val: Usize, order: Ordering) -> Usize
+
+    @intrinsic("atomic.umin.usize")
+    pub func fetch_min(mut self, val: Usize, order: Ordering) -> Usize
+
+    pub func is_lock_free(self) -> Bool {
+        return true
+    }
+
+    pub func into_inner(self) -> Usize {
+        return self.value
+    }
+}
+
+// ============================================================================
+// AtomicIsize
+// ============================================================================
+
+/// A pointer-sized signed integer which can be safely shared between threads.
+@repr(transparent)
+pub type AtomicIsize {
+    value: Isize
+}
+
+impl AtomicIsize {
+    pub func new(v: Isize) -> AtomicIsize {
+        return AtomicIsize { value: v }
+    }
+
+    @intrinsic("atomic.load.isize")
+    pub func load(self, order: Ordering) -> Isize
+
+    @intrinsic("atomic.store.isize")
+    pub func store(mut self, val: Isize, order: Ordering) -> Unit
+
+    @intrinsic("atomic.swap.isize")
+    pub func swap(mut self, val: Isize, order: Ordering) -> Isize
+
+    @intrinsic("atomic.cmpxchg.isize")
+    pub func compare_exchange(
+        mut self,
+        current: Isize,
+        new: Isize,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Isize, Isize]
+
+    @intrinsic("atomic.cmpxchg_weak.isize")
+    pub func compare_exchange_weak(
+        mut self,
+        current: Isize,
+        new: Isize,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Isize, Isize]
+
+    @intrinsic("atomic.add.isize")
+    pub func fetch_add(mut self, val: Isize, order: Ordering) -> Isize
+
+    @intrinsic("atomic.sub.isize")
+    pub func fetch_sub(mut self, val: Isize, order: Ordering) -> Isize
+
+    @intrinsic("atomic.and.isize")
+    pub func fetch_and(mut self, val: Isize, order: Ordering) -> Isize
+
+    @intrinsic("atomic.or.isize")
+    pub func fetch_or(mut self, val: Isize, order: Ordering) -> Isize
+
+    @intrinsic("atomic.xor.isize")
+    pub func fetch_xor(mut self, val: Isize, order: Ordering) -> Isize
+
+    @intrinsic("atomic.max.isize")
+    pub func fetch_max(mut self, val: Isize, order: Ordering) -> Isize
+
+    @intrinsic("atomic.min.isize")
+    pub func fetch_min(mut self, val: Isize, order: Ordering) -> Isize
+
+    pub func is_lock_free(self) -> Bool {
+        return true
+    }
+
+    pub func into_inner(self) -> Isize {
+        return self.value
+    }
+}
+
+// ============================================================================
+// AtomicPtr[T]
+// ============================================================================
+
+/// A raw pointer which can be safely shared between threads.
+///
+/// This type has the same size and alignment as a `raw T`.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::atomic::{AtomicPtr, Ordering}
+///
+/// let data = 42
+/// let ptr = AtomicPtr::new(raw data)
+///
+/// let loaded = ptr.load(Ordering::SeqCst)
+/// ```
+@repr(transparent)
+pub type AtomicPtr[T] {
+    ptr: raw T
+}
+
+impl[T] AtomicPtr[T] {
+    /// Creates a new `AtomicPtr` from a raw pointer.
+    pub func new(p: raw T) -> AtomicPtr[T] {
+        return AtomicPtr { ptr: p }
+    }
+
+    /// Creates a new null `AtomicPtr`.
+    pub func null() -> AtomicPtr[T] {
+        return AtomicPtr { ptr: null }
+    }
+
+    /// Loads a value from the atomic pointer.
+    @intrinsic("atomic.load.ptr")
+    pub func load(self, order: Ordering) -> raw T
+
+    /// Stores a value into the atomic pointer.
+    @intrinsic("atomic.store.ptr")
+    pub func store(mut self, val: raw T, order: Ordering) -> Unit
+
+    /// Stores a value into the atomic pointer, returning the previous value.
+    @intrinsic("atomic.swap.ptr")
+    pub func swap(mut self, val: raw T, order: Ordering) -> raw T
+
+    /// Stores a value into the atomic pointer if the current value equals `current`.
+    @intrinsic("atomic.cmpxchg.ptr")
+    pub func compare_exchange(
+        mut self,
+        current: raw T,
+        new: raw T,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[raw T, raw T]
+
+    /// Stores a value into the atomic pointer if the current value equals `current`.
+    ///
+    /// May spuriously fail.
+    @intrinsic("atomic.cmpxchg_weak.ptr")
+    pub func compare_exchange_weak(
+        mut self,
+        current: raw T,
+        new: raw T,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[raw T, raw T]
+
+    /// Returns `true` if operations on this type are lock-free.
+    pub func is_lock_free(self) -> Bool {
+        return true
+    }
+
+    /// Consumes the atomic and returns the contained pointer.
+    pub func into_inner(self) -> raw T {
+        return self.ptr
+    }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// A hint to the processor that it is running a busy-wait spin-loop.
+///
+/// This function is a hint, not a command. The processor is free to ignore it.
+/// This can prevent the CPU from wasting power or contending for resources.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::atomic::{AtomicBool, Ordering, spin_loop_hint}
+///
+/// let flag = AtomicBool::new(false)
+///
+/// // Busy-wait with hint
+/// loop {
+///     if flag.load(Ordering::Relaxed) {
+///         break
+///     }
+///     spin_loop_hint()
+/// }
+/// ```
+@intrinsic("llvm.pause")
+pub func spin_loop_hint() -> Unit

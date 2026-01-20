@@ -1,0 +1,486 @@
+// ============================================================================
+// TML Internal Overhead Profiler
+// ============================================================================
+// This benchmark isolates different sources of overhead to understand
+// why TML is slower than direct C++ calls despite using the same implementation.
+//
+// Components tested:
+// 1. Pure loop overhead
+// 2. time_ns() syscall overhead
+// 3. @extern FFI call overhead
+// 4. String parameter passing overhead
+// 5. Function call overhead (TML -> TML)
+// 6. Integer operations baseline
+// ============================================================================
+
+use std::time
+use std::json
+
+// ============================================================================
+// Minimal @extern functions for testing FFI overhead
+// ============================================================================
+
+// Noop function - measures pure FFI call overhead
+@extern("c")
+func profile_noop() -> I32
+
+// Function that takes an int and returns it - measures parameter passing
+@extern("c")
+func profile_echo_i32(x: I32) -> I32
+
+// Function that takes an i64 and returns it
+@extern("c")
+func profile_echo_i64(x: I64) -> I64
+
+// Function that takes a string - measures string parameter overhead
+@extern("c")
+func profile_echo_str(s: Str) -> I32
+
+// Function that does minimal work (add two ints)
+@extern("c")
+func profile_add(a: I32, b: I32) -> I32
+
+// ============================================================================
+// TML-native functions for comparison
+// ============================================================================
+
+func tml_noop() -> I32 {
+    return 0
+}
+
+func tml_echo_i32(x: I32) -> I32 {
+    return x
+}
+
+func tml_echo_i64(x: I64) -> I64 {
+    return x
+}
+
+func tml_add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+// ============================================================================
+// Test Functions
+// ============================================================================
+
+// Test 1: Baseline - empty loop
+func test_empty_loop(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        i = i + 1
+    }
+    let end = time::now_ns()
+    return end - start
+}
+
+// Test 2: Loop with integer addition (baseline compute)
+func test_integer_ops(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + i
+        i = i + 1
+    }
+    let end = time::now_ns()
+    // Use sum to prevent optimization
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 3: time_ns() call overhead
+func test_time_ns_overhead(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    var dummy: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        dummy = time::now_ns()
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if dummy < 0 then { return 0 }
+    return end - start
+}
+
+// Test 4: TML function call overhead
+func test_tml_call_overhead(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + tml_noop()
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 5: TML function with i32 parameter
+func test_tml_i32_param(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + tml_echo_i32(42)
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 6: TML add function
+func test_tml_add(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + tml_add(1, 2)
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 7: @extern noop call
+func test_extern_noop(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + profile_noop()
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 8: @extern with i32 parameter
+func test_extern_i32(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + profile_echo_i32(42)
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 9: @extern with i64 parameter
+func test_extern_i64(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + profile_echo_i64(42)
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 10: @extern add function
+func test_extern_add(iterations: I64) -> I64 {
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + profile_add(1, 2)
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 11: @extern with string parameter (small string)
+func test_extern_str_small(iterations: I64) -> I64 {
+    let s: Str = "hello"
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + profile_echo_str(s)
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 12: @extern with string parameter (medium string ~100 bytes)
+func test_extern_str_medium(iterations: I64) -> I64 {
+    let s: Str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore."
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + profile_echo_str(s)
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 13: JSON parse (the actual operation we're profiling)
+func test_json_parse_small(iterations: I64) -> I64 {
+    let json_str: Str = "{\"name\": \"John\", \"age\": 30}"
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + json::parse_fast_bench(json_str)
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// Test 14: JSON parse with handle allocation/deallocation
+func test_json_parse_with_handle(iterations: I64) -> I64 {
+    let json_str: Str = "{\"name\": \"John\", \"age\": 30}"
+    let start = time::now_ns()
+    var i: I64 = 0
+    var sum: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h = json::parse_fast(json_str)
+        if h >= 0 then {
+            sum = sum + 1
+            json::free(h)
+        }
+        i = i + 1
+    }
+    let end = time::now_ns()
+    if sum < 0 then { return 0 }
+    return end - start
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+func print_result(name: Str, total_ns: I64, iterations: I64) {
+    let per_op_ns = total_ns / iterations
+    print("  ")
+    print(name)
+    print(": ")
+    print_i64(per_op_ns)
+    print(" ns/op (")
+    print_i64(total_ns / 1000)
+    print(" us total)\n")
+}
+
+func print_comparison(name: Str, baseline_ns: I64, test_ns: I64, iterations: I64) {
+    let baseline_per = baseline_ns / iterations
+    let test_per = test_ns / iterations
+    let overhead = test_per - baseline_per
+    print("  ")
+    print(name)
+    print(": +")
+    print_i64(overhead)
+    print(" ns overhead per call\n")
+}
+
+func print_separator() {
+    print("------------------------------------------------------------\n")
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+pub func main() -> I32 {
+    print("\n")
+    print("============================================================\n")
+    print("       TML Internal Overhead Profiler\n")
+    print("============================================================\n")
+    print("\n")
+    print("This benchmark isolates different sources of overhead to\n")
+    print("understand the performance difference between TML and C++.\n")
+    print("\n")
+    print_separator()
+    print("\n")
+
+    // Use enough iterations to get stable measurements
+    let iters: I64 = 1000000
+    let small_iters: I64 = 100000
+
+    print("Iterations: ")
+    print_i64(iters)
+    print(" (large), ")
+    print_i64(small_iters)
+    print(" (small)\n\n")
+
+    // ========== BASELINE TESTS ==========
+    print("=== BASELINE MEASUREMENTS ===\n\n")
+
+    let t_empty = test_empty_loop(iters)
+    print_result("Empty loop", t_empty, iters)
+
+    let t_int_ops = test_integer_ops(iters)
+    print_result("Integer ops (sum += i)", t_int_ops, iters)
+
+    let t_time_ns = test_time_ns_overhead(small_iters)
+    print_result("time_ns() call", t_time_ns, small_iters)
+
+    print("\n")
+    print_separator()
+    print("\n")
+
+    // ========== TML FUNCTION CALLS ==========
+    print("=== TML FUNCTION CALL OVERHEAD ===\n\n")
+
+    let t_tml_noop = test_tml_call_overhead(iters)
+    print_result("TML noop()", t_tml_noop, iters)
+
+    let t_tml_i32 = test_tml_i32_param(iters)
+    print_result("TML echo_i32(42)", t_tml_i32, iters)
+
+    let t_tml_add = test_tml_add(iters)
+    print_result("TML add(1, 2)", t_tml_add, iters)
+
+    print("\n")
+    print_separator()
+    print("\n")
+
+    // ========== @EXTERN FFI CALLS ==========
+    print("=== @EXTERN FFI CALL OVERHEAD ===\n\n")
+
+    let t_extern_noop = test_extern_noop(iters)
+    print_result("@extern noop()", t_extern_noop, iters)
+
+    let t_extern_i32 = test_extern_i32(iters)
+    print_result("@extern echo_i32(42)", t_extern_i32, iters)
+
+    let t_extern_i64 = test_extern_i64(iters)
+    print_result("@extern echo_i64(42)", t_extern_i64, iters)
+
+    let t_extern_add = test_extern_add(iters)
+    print_result("@extern add(1, 2)", t_extern_add, iters)
+
+    print("\n")
+    print_separator()
+    print("\n")
+
+    // ========== STRING PARAMETER OVERHEAD ==========
+    print("=== STRING PARAMETER OVERHEAD ===\n\n")
+
+    let t_str_small = test_extern_str_small(iters)
+    print_result("@extern str (5 bytes)", t_str_small, iters)
+
+    let t_str_medium = test_extern_str_medium(iters)
+    print_result("@extern str (100 bytes)", t_str_medium, iters)
+
+    print("\n")
+    print_separator()
+    print("\n")
+
+    // ========== JSON PARSE TESTS ==========
+    print("=== JSON PARSE OVERHEAD ===\n\n")
+
+    let t_json_bench = test_json_parse_small(small_iters)
+    print_result("json::parse_fast_bench()", t_json_bench, small_iters)
+
+    let t_json_handle = test_json_parse_with_handle(small_iters)
+    print_result("json::parse_fast() + free()", t_json_handle, small_iters)
+
+    print("\n")
+    print_separator()
+    print("\n")
+
+    // ========== ANALYSIS ==========
+    print("=== OVERHEAD ANALYSIS ===\n\n")
+
+    let loop_overhead = t_empty / iters
+    let int_overhead = t_int_ops / iters
+    let time_overhead = t_time_ns / small_iters
+    let tml_call_overhead = t_tml_noop / iters
+    let extern_call_overhead = t_extern_noop / iters
+    let str_overhead_small = t_str_small / iters
+    let str_overhead_medium = t_str_medium / iters
+    let json_bench_overhead = t_json_bench / small_iters
+    let json_handle_overhead = t_json_handle / small_iters
+
+    print("Per-operation costs:\n")
+    print("  Loop iteration:    ")
+    print_i64(loop_overhead)
+    print(" ns\n")
+    print("  Integer addition:  ")
+    print_i64(int_overhead - loop_overhead)
+    print(" ns (above loop)\n")
+    print("  time_ns() syscall: ")
+    print_i64(time_overhead)
+    print(" ns\n")
+    print("  TML func call:     ")
+    print_i64(tml_call_overhead - loop_overhead)
+    print(" ns (above loop)\n")
+    print("  @extern FFI call:  ")
+    print_i64(extern_call_overhead - loop_overhead)
+    print(" ns (above loop)\n")
+    print("  String param (5B): ")
+    print_i64(str_overhead_small - extern_call_overhead)
+    print(" ns (above FFI)\n")
+    print("  String param (100B): ")
+    print_i64(str_overhead_medium - extern_call_overhead)
+    print(" ns (above FFI)\n")
+    print("\n")
+
+    print("JSON parse breakdown:\n")
+    print("  Total per parse:   ")
+    print_i64(json_bench_overhead)
+    print(" ns\n")
+    print("  - Loop overhead:   ")
+    print_i64(loop_overhead)
+    print(" ns\n")
+    print("  - String param:    ~")
+    print_i64(str_overhead_small - extern_call_overhead)
+    print(" ns\n")
+    print("  - FFI overhead:    ")
+    print_i64(extern_call_overhead - loop_overhead)
+    print(" ns\n")
+    print("  = Pure parse time: ~")
+    print_i64(json_bench_overhead - loop_overhead - (str_overhead_small - extern_call_overhead) - (extern_call_overhead - loop_overhead))
+    print(" ns\n")
+    print("\n")
+
+    print("Expected C++ direct: ~350 ns (from benchmark)\n")
+    print("TML measured:        ")
+    print_i64(json_bench_overhead)
+    print(" ns\n")
+    print("Overhead factor:     ")
+    print_i64(json_bench_overhead / 350)
+    print("x\n")
+    print("\n")
+
+    print_separator()
+    print("\n")
+    print("Profile complete.\n")
+    print("\n")
+
+    return 0
+}

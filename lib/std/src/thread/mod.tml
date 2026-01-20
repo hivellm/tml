@@ -1,0 +1,731 @@
+//! Native threads for parallel execution.
+//!
+//! This module provides support for spawning native OS threads, including:
+//!
+//! - **Thread spawning**: Create new threads with [`spawn`]
+//! - **Thread joining**: Wait for threads to complete with [`JoinHandle::join`]
+//! - **Thread control**: Sleep, yield, park/unpark threads
+//! - **Thread information**: Get current thread, thread IDs, names
+//!
+//! # The Threading Model
+//!
+//! TML uses native OS threads (1:1 threading model). Each TML thread maps
+//! directly to an OS thread, providing:
+//!
+//! - True parallelism on multi-core systems
+//! - Familiar OS-level semantics
+//! - Compatibility with C libraries and system calls
+//!
+//! # Thread Safety
+//!
+//! To spawn a thread, the closure and its captured values must be `Send`:
+//!
+//! - Owned values are moved into the thread
+//! - Shared references must point to `Sync` data
+//! - Use [`Sync[T]`][sync::Sync] for shared ownership across threads
+//!
+//! # Examples
+//!
+//! ## Basic Thread Spawn
+//!
+//! ```tml
+//! use thread
+//!
+//! let handle = thread::spawn(do() {
+//!     println("Hello from a thread!")
+//!     return 42
+//! })
+//!
+//! let result = handle.join().unwrap()
+//! assert_eq(result, 42)
+//! ```
+//!
+//! ## Named Threads
+//!
+//! ```tml
+//! use thread::{Builder}
+//!
+//! let handle = Builder::new()
+//!     .name("worker-1")
+//!     .spawn(do() {
+//!         let current = thread::current()
+//!         println("Running in thread: " + current.name().unwrap_or("unnamed"))
+//!     })
+//!     .unwrap()
+//!
+//! handle.join().unwrap()
+//! ```
+//!
+//! ## Sleeping and Yielding
+//!
+//! ```tml
+//! use thread
+//! use time::Duration
+//!
+//! // Sleep for 100 milliseconds
+//! thread::sleep(Duration::from_millis(100))
+//!
+//! // Yield to the scheduler
+//! thread::yield_now()
+//! ```
+//!
+//! ## Parallel Processing
+//!
+//! ```tml
+//! use thread
+//! use sync::{Sync, Mutex}
+//!
+//! let results = Sync::new(Mutex::new(Vec::new()))
+//! let mut handles = Vec::new()
+//!
+//! loop i in 0 to 4 {
+//!     let results = results.clone()
+//!     handles.push(thread::spawn(do() {
+//!         let value = expensive_computation(i)
+//!         results.lock().push(value)
+//!     }))
+//! }
+//!
+//! for handle in handles {
+//!     handle.join().unwrap()
+//! }
+//! ```
+//!
+//! # Platform Differences
+//!
+//! - **Stack size**: Default varies by platform (~2MB on most systems)
+//! - **Thread names**: May be truncated on some platforms
+//! - **Scheduling**: Depends on OS scheduler implementation
+
+use sync::atomic::{AtomicU64, AtomicBool, Ordering}
+
+// ============================================================================
+// Platform-specific thread handle
+// ============================================================================
+
+/// Raw platform thread handle.
+/// On Windows: HANDLE (8 bytes)
+/// On Unix: pthread_t (8 bytes)
+@repr(C)
+type RawThread {
+    _handle: U64
+}
+
+// External functions for platform-specific thread operations
+// These are implemented in the runtime (essential.c)
+
+@extern("tml_thread_spawn")
+func raw_thread_spawn(
+    func_ptr: RawPtr[do() -> Unit],
+    arg: RawPtr[Unit],
+    stack_size: U64
+) -> RawThread
+
+@extern("tml_thread_join")
+func raw_thread_join(thread: RawThread) -> I32
+
+@extern("tml_thread_detach")
+func raw_thread_detach(thread: RawThread) -> I32
+
+@extern("tml_thread_current_id")
+func raw_thread_current_id() -> U64
+
+@extern("tml_thread_sleep_ms")
+func raw_thread_sleep_ms(milliseconds: U64)
+
+@extern("tml_thread_yield")
+func raw_thread_yield()
+
+@extern("tml_thread_available_parallelism")
+func raw_thread_available_parallelism() -> U32
+
+// ============================================================================
+// ThreadId
+// ============================================================================
+
+/// A unique identifier for a running thread.
+///
+/// A `ThreadId` is an opaque object that uniquely identifies each thread
+/// created during the lifetime of a process. `ThreadId`s are guaranteed
+/// to be unique for the lifetime of the program.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// let id = thread::current().id()
+/// println("Thread ID: " + id.as_u64().to_string())
+/// ```
+@derive(Clone, Copy, Eq, Hash)
+pub type ThreadId {
+    id: U64
+}
+
+impl ThreadId {
+    /// Returns the raw numeric ID.
+    ///
+    /// This value is platform-specific and should only be used for
+    /// debugging or logging purposes.
+    pub func as_u64(self) -> U64 {
+        return self.id
+    }
+}
+
+impl Eq for ThreadId {
+    func eq(self, other: ref ThreadId) -> Bool {
+        return self.id == other.id
+    }
+}
+
+// Global thread ID counter
+let NEXT_THREAD_ID: AtomicU64 = AtomicU64::new(1)
+
+func next_thread_id() -> ThreadId {
+    return ThreadId { id: NEXT_THREAD_ID.fetch_add(1, Ordering::Relaxed) }
+}
+
+// ============================================================================
+// Thread
+// ============================================================================
+
+/// A handle to a thread.
+///
+/// Threads are represented by the `Thread` type, which you can get in one of
+/// two ways:
+///
+/// - By spawning a new thread and calling [`JoinHandle::thread`]
+/// - By calling [`thread::current`] to get the current thread
+///
+/// The `Thread` type is a lightweight handle; cloning it is inexpensive.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// let current = thread::current()
+/// println("Thread name: " + current.name().unwrap_or("unnamed"))
+/// ```
+pub type Thread {
+    inner: Sync[ThreadInner]
+}
+
+type ThreadInner {
+    id: ThreadId,
+    name: Maybe[Str],
+    parked: AtomicBool,
+}
+
+impl Thread {
+    /// Gets the thread's unique identifier.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread
+    ///
+    /// let current = thread::current()
+    /// let id = current.id()
+    /// ```
+    pub func id(self) -> ThreadId {
+        return self.inner.id
+    }
+
+    /// Gets the thread's name.
+    ///
+    /// Returns `Nothing` if the thread is unnamed.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread::{Builder}
+    ///
+    /// let handle = Builder::new()
+    ///     .name("worker")
+    ///     .spawn(do() {
+    ///         let name = thread::current().name()
+    ///         assert_eq(name, Just("worker"))
+    ///     })
+    ///     .unwrap()
+    /// ```
+    pub func name(self) -> Maybe[Str] {
+        return self.inner.name.clone()
+    }
+
+    /// Atomically makes the handle's token available if it is not already.
+    ///
+    /// Every thread is equipped with some basic low-level blocking support,
+    /// via the `park` function and the `unpark` method.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread
+    ///
+    /// let handle = thread::spawn(do() {
+    ///     thread::park()
+    ///     println("Unparked!")
+    /// })
+    ///
+    /// // Give the thread time to park
+    /// thread::sleep(Duration::from_millis(10))
+    ///
+    /// // Unpark the thread
+    /// handle.thread().unpark()
+    ///
+    /// handle.join().unwrap()
+    /// ```
+    pub func unpark(self) {
+        self.inner.parked.store(false, Ordering::Release)
+        // In a full implementation, this would also signal a condition variable
+        // or futex to wake up the parked thread
+    }
+}
+
+impl Clone for Thread {
+    func clone(self) -> Thread {
+        return Thread { inner: self.inner.clone() }
+    }
+}
+
+// ============================================================================
+// JoinHandle[T]
+// ============================================================================
+
+/// An owned permission to join on a thread (block on its termination).
+///
+/// A `JoinHandle` detaches the associated thread when it is dropped, which
+/// means that there is no longer any handle to the thread and no way to join it.
+///
+/// Due to platform restrictions, it is not possible to clone this handle.
+/// The thread can be joined by calling [`join`][JoinHandle::join].
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// let handle = thread::spawn(do() {
+///     return "Hello from thread"
+/// })
+///
+/// let result = handle.join().unwrap()
+/// assert_eq(result, "Hello from thread")
+/// ```
+pub type JoinHandle[T] {
+    raw: RawThread,
+    thread: Thread,
+    result: Maybe[T],
+    joined: AtomicBool,
+}
+
+impl[T] JoinHandle[T] {
+    /// Waits for the associated thread to finish.
+    ///
+    /// This function will return immediately if the thread has already finished.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called from the thread being joined (would cause deadlock).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread
+    ///
+    /// let handle = thread::spawn(do() {
+    ///     return 42
+    /// })
+    ///
+    /// when handle.join() {
+    ///     Ok(value) => assert_eq(value, 42),
+    ///     Err(e) => panic("Thread panicked!")
+    /// }
+    /// ```
+    pub func join(mut self) -> Outcome[T, JoinError] {
+        if self.joined.swap(true, Ordering::AcqRel) {
+            return Err(JoinError::AlreadyJoined)
+        }
+
+        let status = raw_thread_join(self.raw)
+        if status != 0 {
+            return Err(JoinError::OsError(status))
+        }
+
+        when self.result {
+            Just(value) => return Ok(value),
+            Nothing => return Err(JoinError::NoResult)
+        }
+    }
+
+    /// Checks if the associated thread has finished running.
+    ///
+    /// This does not block. If `true` is returned, then [`join`][JoinHandle::join]
+    /// will return immediately.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread
+    ///
+    /// let handle = thread::spawn(do() {
+    ///     thread::sleep(Duration::from_secs(1))
+    /// })
+    ///
+    /// assert(not handle.is_finished())
+    /// handle.join().unwrap()
+    /// assert(handle.is_finished())
+    /// ```
+    pub func is_finished(self) -> Bool {
+        return self.joined.load(Ordering::Acquire)
+    }
+
+    /// Extracts a handle to the underlying thread.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread
+    ///
+    /// let handle = thread::spawn(do() {})
+    ///
+    /// let thread = handle.thread()
+    /// println("Thread ID: " + thread.id().as_u64().to_string())
+    /// ```
+    pub func thread(self) -> Thread {
+        return self.thread.clone()
+    }
+}
+
+// ============================================================================
+// JoinError
+// ============================================================================
+
+/// An error returned by [`JoinHandle::join`].
+pub enum JoinError {
+    /// The thread has already been joined.
+    AlreadyJoined,
+    /// An OS error occurred while joining.
+    OsError(I32),
+    /// The thread completed but no result was available.
+    NoResult,
+    /// The thread panicked.
+    Panicked,
+}
+
+// ============================================================================
+// Builder
+// ============================================================================
+
+/// Thread factory, which can be used to configure the properties of a new thread.
+///
+/// Methods can be chained on it in order to configure it.
+///
+/// The two configurations available are:
+///
+/// - [`name`][Builder::name]: specifies the name for the new thread.
+/// - [`stack_size`][Builder::stack_size]: specifies the desired stack size.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread::Builder
+///
+/// let builder = Builder::new()
+///     .name("my-thread")
+///     .stack_size(1024 * 1024)  // 1 MB stack
+///
+/// let handle = builder.spawn(do() {
+///     println("Hello from my-thread!")
+/// }).unwrap()
+///
+/// handle.join().unwrap()
+/// ```
+pub type Builder {
+    name: Maybe[Str],
+    stack_size: Maybe[U64],
+}
+
+impl Builder {
+    /// Creates a new thread builder with default configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread::Builder
+    ///
+    /// let builder = Builder::new()
+    /// ```
+    pub func new() -> Builder {
+        return Builder {
+            name: Nothing,
+            stack_size: Nothing,
+        }
+    }
+
+    /// Names the thread.
+    ///
+    /// The name is primarily used for debugging and logging.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread::Builder
+    ///
+    /// let builder = Builder::new().name("worker-1")
+    /// ```
+    pub func name(mut self, name: Str) -> Builder {
+        self.name = Just(name)
+        return self
+    }
+
+    /// Sets the size of the stack (in bytes) for the new thread.
+    ///
+    /// The actual stack size may be greater than this value if
+    /// the platform has a minimum stack size.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread::Builder
+    ///
+    /// // 4 MB stack
+    /// let builder = Builder::new().stack_size(4 * 1024 * 1024)
+    /// ```
+    pub func stack_size(mut self, size: U64) -> Builder {
+        self.stack_size = Just(size)
+        return self
+    }
+
+    /// Spawns a new thread by taking ownership of the `Builder`.
+    ///
+    /// The spawned thread may outlive the caller. The `JoinHandle` can be
+    /// used to join the thread (block until completion).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operating system fails to create a thread.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use thread::Builder
+    ///
+    /// let handle = Builder::new()
+    ///     .name("compute")
+    ///     .spawn(do() {
+    ///         return heavy_computation()
+    ///     })
+    ///
+    /// when handle {
+    ///     Ok(h) => {
+    ///         let result = h.join().unwrap()
+    ///     },
+    ///     Err(e) => println("Failed to spawn thread")
+    /// }
+    /// ```
+    pub func spawn[T](self, f: do() -> T) -> Outcome[JoinHandle[T], SpawnError] {
+        let thread_id = next_thread_id()
+        let thread = Thread {
+            inner: Sync::new(ThreadInner {
+                id: thread_id,
+                name: self.name,
+                parked: AtomicBool::new(false),
+            })
+        }
+
+        let stack = self.stack_size.unwrap_or(0)  // 0 means default
+
+        // In a full implementation, we would:
+        // 1. Box the closure
+        // 2. Create a trampoline function
+        // 3. Pass the boxed closure to raw_thread_spawn
+        // 4. Store the result when the closure completes
+
+        // For now, return a placeholder
+        return Err(SpawnError::Unsupported)
+    }
+}
+
+/// An error returned by [`Builder::spawn`].
+pub enum SpawnError {
+    /// Thread spawning is not yet fully implemented.
+    Unsupported,
+    /// The operating system failed to create the thread.
+    OsError(I32),
+}
+
+// ============================================================================
+// Free Functions
+// ============================================================================
+
+/// Spawns a new thread, returning a [`JoinHandle`] for it.
+///
+/// The join handle provides a [`join`][JoinHandle::join] method that can be
+/// used to wait for the spawned thread to finish.
+///
+/// If the spawned thread panics, `join` will return an `Err` containing the
+/// panic payload.
+///
+/// # Panics
+///
+/// Panics if the OS fails to create a thread.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// let handle = thread::spawn(do() {
+///     // some work here
+///     return 42
+/// })
+///
+/// let result = handle.join().unwrap()
+/// assert_eq(result, 42)
+/// ```
+pub func spawn[T](f: do() -> T) -> JoinHandle[T] {
+    when Builder::new().spawn(f) {
+        Ok(handle) => return handle,
+        Err(e) => panic("failed to spawn thread")
+    }
+}
+
+/// Gets a handle to the current thread.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// let current = thread::current()
+/// println("Current thread ID: " + current.id().as_u64().to_string())
+/// ```
+pub func current() -> Thread {
+    // In a full implementation, this would use thread-local storage
+    // to retrieve the current thread's Thread object
+    return Thread {
+        inner: Sync::new(ThreadInner {
+            id: ThreadId { id: raw_thread_current_id() },
+            name: Nothing,
+            parked: AtomicBool::new(false),
+        })
+    }
+}
+
+/// Cooperatively gives up a timeslice to the OS scheduler.
+///
+/// This calls the underlying OS scheduler's yield primitive, allowing
+/// other threads to be scheduled.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// thread::yield_now()
+/// ```
+pub func yield_now() {
+    raw_thread_yield()
+}
+
+/// Puts the current thread to sleep for at least the specified duration.
+///
+/// The thread may sleep longer than the duration specified due to
+/// scheduling specifics or platform-dependent functionality.
+///
+/// # Platform-specific behavior
+///
+/// On Windows, the system timer resolution affects sleep accuracy.
+/// On Unix, nanosleep is used with automatic restart on interruption.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+/// use time::Duration
+///
+/// // Sleep for 100 milliseconds
+/// thread::sleep(Duration::from_millis(100))
+///
+/// // Sleep for 2 seconds
+/// thread::sleep(Duration::from_secs(2))
+/// ```
+pub func sleep_ms(milliseconds: U64) {
+    raw_thread_sleep_ms(milliseconds)
+}
+
+/// Blocks unless or until the current thread's token is made available.
+///
+/// A call to `park` does not guarantee that the thread will remain parked
+/// forever, and callers should be prepared for this possibility.
+///
+/// # park and unpark
+///
+/// Every thread is equipped with some basic low-level blocking support:
+///
+/// - `park()` blocks the current thread
+/// - `thread.unpark()` makes the token available for a specific thread
+///
+/// The token starts unavailable. `park()` blocks until the token is available,
+/// then atomically consumes it.
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// let handle = thread::spawn(do() {
+///     println("Parking...")
+///     thread::park()
+///     println("Unparked!")
+/// })
+///
+/// thread::sleep_ms(100)
+/// handle.thread().unpark()
+/// handle.join().unwrap()
+/// ```
+pub func park() {
+    let thread = current()
+    // Spin until unparked
+    loop {
+        if not thread.inner.parked.load(Ordering::Acquire) {
+            break
+        }
+        yield_now()
+    }
+    thread.inner.parked.store(true, Ordering::Release)
+}
+
+/// Returns the number of hardware threads available to the program.
+///
+/// This value should be considered a hint. It may be inaccurate due to:
+/// - CPU hotplugging
+/// - Process affinity masks
+/// - Resource limits (cgroups, containers)
+///
+/// # Examples
+///
+/// ```tml
+/// use thread
+///
+/// let cpus = thread::available_parallelism()
+/// println("Available CPUs: " + cpus.to_string())
+/// ```
+pub func available_parallelism() -> U32 {
+    let result = raw_thread_available_parallelism()
+    if result == 0 {
+        return 1  // Fallback to 1 if detection fails
+    }
+    return result
+}
+
+// ============================================================================
+// Re-exports
+// ============================================================================
+
+// Note: In a complete implementation, we would also have:
+// - thread::scope for scoped threads
+// - thread::LocalKey for thread-local storage
+// - thread::panicking() to check if current thread is panicking

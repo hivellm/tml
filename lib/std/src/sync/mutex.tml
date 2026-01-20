@@ -1,0 +1,357 @@
+//! Mutual exclusion primitives for thread synchronization.
+//!
+//! This module provides [`Mutex[T]`], a mutual exclusion primitive useful for
+//! protecting shared data from concurrent access.
+//!
+//! # Overview
+//!
+//! A mutex provides exclusive access to the data it guards. When a thread
+//! acquires the lock, no other thread can access the data until the lock
+//! is released. This ensures data races cannot occur.
+//!
+//! # Mutex vs RwLock
+//!
+//! - Use [`Mutex`] when you need exclusive access (read or write)
+//! - Use [`RwLock`][super::rwlock::RwLock] when you have many readers and few writers
+//!
+//! # Examples
+//!
+//! ## Basic Usage
+//!
+//! ```tml
+//! use sync::mutex::Mutex
+//!
+//! let counter = Mutex::new(0)
+//!
+//! // Lock and modify
+//! {
+//!     let mut guard = counter.lock()
+//!     *guard = *guard + 1
+//! }  // guard dropped, lock released
+//!
+//! // Read the value
+//! let value = *counter.lock()
+//! ```
+//!
+//! ## Sharing Between Threads
+//!
+//! ```tml
+//! use sync::{Mutex, Sync}
+//! use thread
+//!
+//! let data = Sync::new(Mutex::new(Vec::new()))
+//!
+//! let handles = []
+//! loop i in 0 to 10 {
+//!     let data_clone = data.clone()
+//!     handles.push(thread::spawn(do() {
+//!         let mut guard = data_clone.lock()
+//!         guard.push(i)
+//!     }))
+//! }
+//!
+//! for handle in handles {
+//!     handle.join()
+//! }
+//! ```
+//!
+//! ## Try Lock (Non-blocking)
+//!
+//! ```tml
+//! use sync::mutex::Mutex
+//!
+//! let mutex = Mutex::new(42)
+//!
+//! when mutex.try_lock() {
+//!     Just(guard) => println("Got lock: " + (*guard).to_string()),
+//!     Nothing => println("Lock was held by another thread"),
+//! }
+//! ```
+
+use sync::atomic::{AtomicBool, AtomicU32, Ordering}
+
+// ============================================================================
+// Platform-specific raw mutex (opaque handle)
+// ============================================================================
+
+/// Raw platform mutex handle.
+/// On Windows: SRWLOCK (8 bytes)
+/// On Unix: pthread_mutex_t (40-48 bytes depending on platform)
+/// We use a fixed-size buffer that's large enough for all platforms.
+@repr(C)
+type RawMutex {
+    // Opaque storage for platform mutex
+    // Size: 64 bytes to accommodate pthread_mutex_t on all platforms
+    _data: [U8; 64]
+}
+
+// External functions for platform-specific mutex operations
+// These are implemented in the runtime (essential.c)
+
+@extern("tml_mutex_init")
+func raw_mutex_init(mutex: mut ref RawMutex) -> I32
+
+@extern("tml_mutex_destroy")
+func raw_mutex_destroy(mutex: mut ref RawMutex) -> I32
+
+@extern("tml_mutex_lock")
+func raw_mutex_lock(mutex: mut ref RawMutex) -> I32
+
+@extern("tml_mutex_trylock")
+func raw_mutex_trylock(mutex: mut ref RawMutex) -> I32
+
+@extern("tml_mutex_unlock")
+func raw_mutex_unlock(mutex: mut ref RawMutex) -> I32
+
+// ============================================================================
+// Mutex[T]
+// ============================================================================
+
+/// A mutual exclusion primitive useful for protecting shared data.
+///
+/// This mutex will block threads waiting for the lock to become available.
+/// The mutex can be created via [`new`][Mutex::new] and the protected data
+/// can be accessed through the [`MutexGuard`] returned by [`lock`][Mutex::lock].
+///
+/// # Poisoning
+///
+/// Unlike Rust's Mutex, TML's Mutex does not support poisoning. If a thread
+/// panics while holding the lock, the mutex remains usable.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::mutex::Mutex
+///
+/// let m = Mutex::new(5)
+///
+/// {
+///     let mut guard = m.lock()
+///     *guard = 6
+/// }  // lock released here
+///
+/// assert_eq(*m.lock(), 6)
+/// ```
+pub type Mutex[T] {
+    /// The protected data
+    data: T,
+    /// Platform mutex handle
+    raw: RawMutex,
+    /// Lock state for fast path (0 = unlocked, 1 = locked)
+    state: AtomicU32,
+}
+
+impl[T] Mutex[T] {
+    /// Creates a new mutex in an unlocked state ready for use.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::mutex::Mutex
+    ///
+    /// let mutex = Mutex::new(0)
+    /// ```
+    pub func new(value: T) -> Mutex[T] {
+        let mut m = Mutex {
+            data: value,
+            raw: RawMutex { _data: [0; 64] },
+            state: AtomicU32::new(0),
+        }
+        raw_mutex_init(ref m.raw)
+        return m
+    }
+
+    /// Acquires the mutex, blocking the current thread until it is able to do so.
+    ///
+    /// This function will block the local thread until it is available to acquire
+    /// the mutex. Upon returning, the thread is the only thread with the lock
+    /// held. A RAII guard is returned to allow scoped unlock of the lock.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::mutex::Mutex
+    ///
+    /// let mutex = Mutex::new(0)
+    ///
+    /// let mut guard = mutex.lock()
+    /// *guard = 1
+    /// ```
+    pub func lock(mut self) -> MutexGuard[T] {
+        // Fast path: try to acquire with atomic
+        if self.state.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            return MutexGuard { mutex: ref self }
+        }
+
+        // Slow path: use platform mutex
+        raw_mutex_lock(ref self.raw)
+        self.state.store(1, Ordering::Relaxed)
+        return MutexGuard { mutex: ref self }
+    }
+
+    /// Attempts to acquire this lock.
+    ///
+    /// If the lock could not be acquired at this time, then [`Nothing`] is
+    /// returned. Otherwise, a RAII guard is returned. The lock will be
+    /// unlocked when the guard is dropped.
+    ///
+    /// This function does not block.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::mutex::Mutex
+    ///
+    /// let mutex = Mutex::new(0)
+    ///
+    /// when mutex.try_lock() {
+    ///     Just(guard) => {
+    ///         // acquired the lock
+    ///     },
+    ///     Nothing => {
+    ///         // lock was not available
+    ///     }
+    /// }
+    /// ```
+    pub func try_lock(mut self) -> Maybe[MutexGuard[T]] {
+        // Fast path: try to acquire with atomic
+        if self.state.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            return Just(MutexGuard { mutex: ref self })
+        }
+
+        // Slow path: try platform mutex
+        if raw_mutex_trylock(ref self.raw) == 0 {
+            self.state.store(1, Ordering::Relaxed)
+            return Just(MutexGuard { mutex: ref self })
+        }
+
+        return Nothing
+    }
+
+    /// Returns `true` if the mutex is currently locked.
+    ///
+    /// This method does not actually acquire the lock, so it's possible that
+    /// the mutex becomes locked or unlocked immediately after this method
+    /// returns.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::mutex::Mutex
+    ///
+    /// let mutex = Mutex::new(0)
+    /// assert(not mutex.is_locked())
+    ///
+    /// let guard = mutex.lock()
+    /// assert(mutex.is_locked())
+    /// ```
+    pub func is_locked(self) -> Bool {
+        return self.state.load(Ordering::Relaxed) != 0
+    }
+
+    /// Consumes this mutex, returning the underlying data.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::mutex::Mutex
+    ///
+    /// let mutex = Mutex::new(0)
+    /// let value = mutex.into_inner()
+    /// assert_eq(value, 0)
+    /// ```
+    pub func into_inner(mut self) -> T {
+        raw_mutex_destroy(ref self.raw)
+        return self.data
+    }
+
+    /// Returns a mutable reference to the underlying data.
+    ///
+    /// Since this call borrows the `Mutex` mutably, no actual locking needs
+    /// to take place - the mutable borrow statically guarantees no locks exist.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::mutex::Mutex
+    ///
+    /// let mut mutex = Mutex::new(0)
+    /// *mutex.get_mut() = 10
+    /// assert_eq(*mutex.lock(), 10)
+    /// ```
+    pub func get_mut(mut self) -> mut ref T {
+        return ref self.data
+    }
+
+    /// Internal: unlock the mutex (called by MutexGuard drop)
+    func unlock(mut self) {
+        self.state.store(0, Ordering::Release)
+        raw_mutex_unlock(ref self.raw)
+    }
+}
+
+impl[T] Drop for Mutex[T] {
+    func drop(mut self) {
+        raw_mutex_destroy(ref self.raw)
+    }
+}
+
+// ============================================================================
+// MutexGuard[T]
+// ============================================================================
+
+/// An RAII implementation of a "scoped lock" of a mutex.
+///
+/// When this structure is dropped (falls out of scope), the lock will be
+/// released.
+///
+/// The data protected by the mutex can be accessed through this guard via its
+/// [`Deref`] and [`DerefMut`] implementations.
+///
+/// This structure is created by the [`lock`][Mutex::lock] and
+/// [`try_lock`][Mutex::try_lock] methods on [`Mutex`].
+pub type MutexGuard[T] {
+    mutex: mut ref Mutex[T]
+}
+
+impl[T] MutexGuard[T] {
+    /// Returns a reference to the underlying data.
+    pub func get(self) -> ref T {
+        return ref self.mutex.data
+    }
+
+    /// Returns a mutable reference to the underlying data.
+    pub func get_mut(mut self) -> mut ref T {
+        return ref self.mutex.data
+    }
+}
+
+impl[T] Deref for MutexGuard[T] {
+    type Target = T
+
+    func deref(self) -> ref T {
+        return ref self.mutex.data
+    }
+}
+
+impl[T] DerefMut for MutexGuard[T] {
+    func deref_mut(mut self) -> mut ref T {
+        return ref self.mutex.data
+    }
+}
+
+impl[T] Drop for MutexGuard[T] {
+    func drop(mut self) {
+        self.mutex.unlock()
+    }
+}
+
+// MutexGuard is NOT Send - it must be unlocked on the same thread
+// impl[T] not Send for MutexGuard[T] {}
+
+// ============================================================================
+// Convenience type aliases
+// ============================================================================
+
+/// A type alias for `Mutex[T]` that emphasizes it's a lock.
+pub type Lock[T] = Mutex[T]

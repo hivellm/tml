@@ -373,34 +373,53 @@ int tml_main(int argc, char* argv[]) {
         if (argc < 3) {
             std::cerr
                 << "Usage: tml run <file.tml> [args...] [--verbose] [--no-cache] [--coverage] "
-                   "[--coverage-output=<file>]\n";
+                   "[--coverage-output=<file>] [--profile[=<file>]]\n";
+            std::cerr << "\nProfiling options:\n";
+            std::cerr << "  --profile           Enable runtime profiling (output: profile.cpuprofile)\n";
+            std::cerr << "  --profile=<file>    Enable profiling with custom output path\n";
+            std::cerr << "\nThe .cpuprofile file can be loaded in Chrome DevTools or VS Code.\n";
             return 1;
         }
-        std::vector<std::string> program_args;
-        bool no_cache = false;
-        bool coverage = false;
+        RunOptions opts;
+        opts.verbose = verbose;
         for (int i = 3; i < argc; ++i) {
             std::string arg = argv[i];
             if (arg == "--verbose" || arg == "-v") {
                 // Already handled
+            } else if (arg == "--release") {
+                // Enable release mode optimizations
+                CompilerOptions::optimization_level = 3;
+                CompilerOptions::check_leaks = false;
             } else if (arg == "--no-cache") {
-                no_cache = true;
+                opts.no_cache = true;
             } else if (arg == "--coverage") {
-                coverage = true;
+                opts.coverage = true;
             } else if (arg.starts_with("--coverage-output=")) {
                 CompilerOptions::coverage_output = arg.substr(18);
-                coverage = true; // Implicitly enable coverage
+                opts.coverage = true; // Implicitly enable coverage
+            } else if (arg == "--profile") {
+                opts.profile = true;
+                opts.profile_output = "profile.cpuprofile";
+            } else if (arg.starts_with("--profile=")) {
+                opts.profile = true;
+                opts.profile_output = arg.substr(10);
+                if (opts.profile_output.empty()) {
+                    opts.profile_output = "profile.cpuprofile";
+                }
             } else {
-                program_args.push_back(arg);
+                opts.args.push_back(arg);
             }
         }
         // Set default coverage output if not specified
-        if (coverage && CompilerOptions::coverage_output.empty()) {
+        if (opts.coverage && CompilerOptions::coverage_output.empty()) {
             CompilerOptions::coverage_output = "coverage.html";
         }
         // Set global coverage flag for runtime linking
-        CompilerOptions::coverage = coverage;
-        return run_run(argv[2], program_args, verbose, coverage, no_cache);
+        CompilerOptions::coverage = opts.coverage;
+        // Set global profiling flag
+        CompilerOptions::profile = opts.profile;
+        CompilerOptions::profile_output = opts.profile_output;
+        return run_run_ex(argv[2], opts);
     }
 
     if (command == "test") {

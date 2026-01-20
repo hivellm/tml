@@ -1,0 +1,109 @@
+// JSON Benchmark - PURE PARSING TEST (no string generation overhead)
+//
+// This benchmark uses pre-built JSON strings to measure pure parsing performance
+// without TML string concatenation overhead.
+
+use std::json
+use std::profiler
+
+// Pre-built JSON strings at compile time (no concatenation needed)
+func small_json() -> Str {
+    return "{\"name\": \"John Doe\", \"age\": 30, \"active\": true, \"email\": \"john@example.com\", \"scores\": [95, 87, 92, 88, 91], \"address\": {\"street\": \"123 Main St\", \"city\": \"New York\", \"zip\": \"10001\"}}"
+}
+
+// Benchmark: Pure parsing without string generation
+func bench_pure_parse_small(iterations: I32) -> I64 {
+    let json_str: Str = small_json()
+    let start: I64 = time_ns()
+    var i: I32 = 0
+    var success: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        success = success + json::parse_fast_bench(json_str)
+        i = i + 1
+    }
+    let end: I64 = time_ns()
+    return end - start
+}
+
+// Test the FFI call overhead by calling a minimal function many times
+func bench_ffi_overhead(iterations: I32) -> I64 {
+    let json_str: Str = "42"
+    let start: I64 = time_ns()
+    var i: I32 = 0
+    var total: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        // Parse a single number - minimal work
+        let handle: I64 = json::parse_fast(json_str)
+        if handle >= 0 {
+            total = total + json::as_i64(handle)
+            json::free(handle)
+        }
+        i = i + 1
+    }
+    let end: I64 = time_ns()
+    return end - start
+}
+
+// Utility functions
+func print_result(name: Str, total_ns: I64, iterations: I32) {
+    let per_op: I64 = total_ns / (iterations as I64)
+    var ops_per_sec: I64 = 0
+    if per_op > 0 {
+        ops_per_sec = 1000000000 / per_op
+    }
+    let us: I64 = per_op / 1000
+    println(name + ":")
+    println("     Time: " + us.to_string() + " us (" + per_op.to_string() + " ns)")
+    println("     Ops/sec: " + ops_per_sec.to_string())
+}
+
+pub func main() -> I32 {
+    // Initialize profiler
+    profiler::init("json_pure_parse_profile.cpuprofile")
+    profiler::start()
+    profiler::enter("main", "json_bench_prebuilt.tml", 60)
+
+    println("")
+    println("============================================")
+    println("   TML Pure JSON Parsing Benchmark")
+    println("   (No string generation overhead)")
+    println("============================================")
+    println("")
+
+    // 1. Pure small JSON parsing (100k iterations)
+    profiler::enter("bench_pure_parse_small", "json_bench_prebuilt.tml", 70)
+    let small_iters: I32 = 100000
+    let t1: I64 = bench_pure_parse_small(small_iters)
+    profiler::exit()
+    print_result("1. Pure Small JSON Parsing", t1, small_iters)
+    println("")
+
+    // 2. FFI overhead test (100k iterations)
+    profiler::enter("bench_ffi_overhead", "json_bench_prebuilt.tml", 78)
+    let t2: I64 = bench_ffi_overhead(small_iters)
+    profiler::exit()
+    print_result("2. FFI Overhead (parse '42')", t2, small_iters)
+    println("")
+
+    // 3. Calculate FFI overhead percentage
+    let json_per_op: I64 = t1 / (small_iters as I64)
+    let ffi_per_op: I64 = t2 / (small_iters as I64)
+    if json_per_op > 0 {
+        let ffi_percent: I64 = (ffi_per_op * 100) / json_per_op
+        println("FFI overhead is " + ffi_percent.to_string() + "% of total parsing time")
+    }
+    println("")
+
+    println("============================================")
+    println("   Benchmark Complete!")
+    println("============================================")
+
+    profiler::exit()
+    profiler::stop()
+    println("")
+    println("Profile saved to: json_pure_parse_profile.cpuprofile")
+
+    return 0
+}

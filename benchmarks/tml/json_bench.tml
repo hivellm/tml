@@ -1,0 +1,313 @@
+// JSON Benchmark - Testing Native JSON Parser Implementation
+//
+// This benchmark tests the ACTUAL native JSON parser from the TML compiler.
+// Uses Text for O(1) amortized string building instead of Str concatenation.
+
+use std::json
+use std::profiler
+use std::text::Text
+
+// ============================================================================
+// Helper to avoid void-returning if expression codegen bug
+// ============================================================================
+
+func push_bool(t: Text, value: Bool) {
+    var s: Str = "false"
+    if value {
+        s = "true"
+    }
+    t.push_str(s)
+}
+
+// ============================================================================
+// Test Data Generators - Using Text for O(1) amortized string building
+// ============================================================================
+
+func small_json() -> Str {
+    // Pre-built JSON for small tests (no generation overhead)
+    return "{\"name\":\"John Doe\",\"age\":30,\"active\":true,\"email\":\"john@example.com\",\"scores\":[95,87,92,88,91],\"address\":{\"street\":\"123 Main St\",\"city\":\"New York\",\"zip\":\"10001\"}}"
+}
+
+// Generate medium JSON (~87KB like C++ benchmark)
+// Format: {"items": [{id, name, price, active, tags}, ...]}
+func generate_medium_json(num_items: I32) -> Str {
+    profiler::enter("generate_medium_json", "json_bench.tml", 24)
+
+    let t: Text = Text::with_capacity((num_items as I64) * 100)
+    t.push_str("{\"items\":[")
+
+    var i: I32 = 0
+    loop {
+        if i >= num_items then { break }
+        if i > 0 {
+            t.push_str(",")
+        }
+        let price_int: I32 = (i * 15) / 10
+        t.push_str("{\"id\":")
+        t.push_str(i.to_string())
+        t.push_str(",\"name\":\"Item ")
+        t.push_str(i.to_string())
+        t.push_str("\",\"price\":")
+        t.push_str(price_int.to_string())
+        t.push_str(",\"active\":")
+        let active: Bool = i % 2 == 0
+        push_bool(t, active)
+        t.push_str(",\"tags\":[\"tag1\",\"tag2\",\"tag3\"]}")
+        i = i + 1
+    }
+
+    t.push_str("]}")
+    profiler::exit()
+    return t.as_str()
+}
+
+// Generate large JSON (~2.4MB like C++ benchmark)
+// Format: {"data": [{id, uuid, name, email, score, metadata, tags}, ...]}
+func generate_large_json(num_items: I32) -> Str {
+    profiler::enter("generate_large_json", "json_bench.tml", 46)
+
+    let t: Text = Text::with_capacity((num_items as I64) * 260)
+    t.push_str("{\"data\":[")
+
+    var i: I32 = 0
+    loop {
+        if i >= num_items then { break }
+        if i > 0 {
+            t.push_str(",")
+        }
+        let score_int: I32 = i / 10
+        let version: I32 = i % 10
+        let uuid_suffix: I32 = i % 1000
+
+        t.push_str("{\"id\":")
+        t.push_str(i.to_string())
+        t.push_str(",\"uuid\":\"550e8400-e29b-41d4-a716-446655440")
+        t.push_str(uuid_suffix.to_string())
+        t.push_str("\",\"name\":\"User ")
+        t.push_str(i.to_string())
+        t.push_str("\",\"email\":\"user")
+        t.push_str(i.to_string())
+        t.push_str("@example.com\",\"score\":")
+        t.push_str(score_int.to_string())
+        t.push_str(",\"metadata\":{\"created\":\"2024-01-01\",\"updated\":\"2024-01-02\",\"version\":")
+        t.push_str(version.to_string())
+        t.push_str("},\"tags\":[\"alpha\",\"beta\",\"gamma\",\"delta\"]}")
+        i = i + 1
+    }
+
+    t.push_str("]}")
+    profiler::exit()
+    return t.as_str()
+}
+
+// Generate string-heavy JSON (~135KB like C++ benchmark)
+// 1000 items with long Lorem ipsum strings
+func generate_stringy_json(num_items: I32) -> Str {
+    profiler::enter("generate_stringy_json", "json_bench.tml", 85)
+
+    let t: Text = Text::with_capacity((num_items as I64) * 350)
+    t.push_str("{\"documents\":[")
+
+    let lorem: Str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+
+    var i: I32 = 0
+    loop {
+        if i >= num_items then { break }
+        if i > 0 {
+            t.push_str(",")
+        }
+        t.push_str("{\"id\":")
+        t.push_str(i.to_string())
+        t.push_str(",\"title\":\"Document ")
+        t.push_str(i.to_string())
+        t.push_str("\",\"body\":\"")
+        t.push_str(lorem)
+        t.push_str("\",\"author\":\"Author ")
+        t.push_str(i.to_string())
+        t.push_str("\"}")
+        i = i + 1
+    }
+
+    t.push_str("]}")
+    profiler::exit()
+    return t.as_str()
+}
+
+// ============================================================================
+// Benchmark Functions
+// ============================================================================
+
+// Benchmark medium JSON generation only
+func bench_generate_medium(num_items: I32, iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    var i: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        let _: Str = generate_medium_json(num_items)
+        i = i + 1
+    }
+    let end: I64 = time_ns()
+    return end - start
+}
+
+// Benchmark JSON parsing with pre-generated JSON
+func bench_parse(json_str: Str, iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    var i: I32 = 0
+    var success: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        success = success + json::parse_fast_bench(json_str)
+        i = i + 1
+    }
+    let end: I64 = time_ns()
+    return end - start
+}
+
+// Benchmark both generation and parsing (medium JSON)
+func bench_generate_and_parse_medium(num_items: I32, iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    var i: I32 = 0
+    var success: I32 = 0
+    loop {
+        if i >= iterations then { break }
+        let json_str: Str = generate_medium_json(num_items)
+        success = success + json::parse_fast_bench(json_str)
+        i = i + 1
+    }
+    let end: I64 = time_ns()
+    return end - start
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+func print_result(name: Str, total_ns: I64, iterations: I32, size_kb: I64) {
+    let per_op: I64 = total_ns / (iterations as I64)
+    var throughput: I64 = 0
+    if per_op > 0 {
+        throughput = (size_kb * 1000000000) / per_op  // KB/s
+    }
+    let us: I64 = per_op / 1000
+    println(name + ":")
+    println("     Time: " + us.to_string() + " us (" + per_op.to_string() + " ns)")
+    println("     Throughput: " + throughput.to_string() + " KB/s")
+}
+
+func print_result_simple(name: Str, total_ns: I64, iterations: I32) {
+    let per_op: I64 = total_ns / (iterations as I64)
+    var ops_per_sec: I64 = 0
+    if per_op > 0 {
+        ops_per_sec = 1000000000 / per_op
+    }
+    let us: I64 = per_op / 1000
+    println(name + ":")
+    println("     Time: " + us.to_string() + " us (" + per_op.to_string() + " ns)")
+    println("     Ops/sec: " + ops_per_sec.to_string())
+}
+
+// ============================================================================
+// Main Benchmark
+// ============================================================================
+
+pub func main() -> I32 {
+    // Initialize profiler
+    profiler::init("json_bench_profile.cpuprofile")
+    profiler::start()
+    profiler::enter("main", "json_bench.tml", 193)
+
+    println("")
+    println("============================================")
+    println("   TML JSON Benchmark (Text-based)")
+    println("   Comparing with C++ baseline")
+    println("============================================")
+    println("")
+
+    // Configuration
+    let medium_items: I32 = 1000    // ~87KB
+    let large_items: I32 = 10000    // ~2.4MB
+    let stringy_items: I32 = 1000   // ~135KB
+
+    // Pre-generate JSON for parsing tests
+    profiler::enter("pre_generate", "json_bench.tml", 206)
+    let medium_json: Str = generate_medium_json(medium_items)
+    let large_json: Str = generate_large_json(large_items)
+    let stringy_json: Str = generate_stringy_json(stringy_items)
+    profiler::exit()
+
+    let medium_size: I64 = (medium_json.len() as I64) / 1024
+    let large_size: I64 = (large_json.len() as I64) / 1024
+    let stringy_size: I64 = (stringy_json.len() as I64) / 1024
+
+    println("Generated JSON sizes:")
+    println("  Medium: " + medium_size.to_string() + " KB")
+    println("  Large: " + large_size.to_string() + " KB")
+    println("  Stringy: " + stringy_size.to_string() + " KB")
+    println("")
+
+    // 1. Small JSON parsing (baseline, 100k iterations)
+    println("--------------------------------------------")
+    profiler::enter("bench_small", "json_bench.tml", 221)
+    let small_iters: I32 = 100000
+    let small: Str = small_json()
+    let t1: I64 = bench_parse(small, small_iters)
+    profiler::exit()
+    print_result_simple("1. Small JSON Parsing (100k)", t1, small_iters)
+    println("")
+
+    // 2. Medium JSON parsing (1k iterations)
+    println("--------------------------------------------")
+    profiler::enter("bench_medium_parse", "json_bench.tml", 228)
+    let medium_iters: I32 = 1000
+    let t2: I64 = bench_parse(medium_json, medium_iters)
+    profiler::exit()
+    print_result("2. Medium JSON Parsing (1k x " + medium_size.to_string() + "KB)", t2, medium_iters, medium_size)
+    println("")
+
+    // 3. Large JSON parsing (100 iterations)
+    println("--------------------------------------------")
+    profiler::enter("bench_large_parse", "json_bench.tml", 235)
+    let large_iters: I32 = 100
+    let t3: I64 = bench_parse(large_json, large_iters)
+    profiler::exit()
+    print_result("3. Large JSON Parsing (100 x " + large_size.to_string() + "KB)", t3, large_iters, large_size)
+    println("")
+
+    // 4. String-heavy JSON parsing (1k iterations)
+    println("--------------------------------------------")
+    profiler::enter("bench_stringy_parse", "json_bench.tml", 242)
+    let stringy_iters: I32 = 1000
+    let t4: I64 = bench_parse(stringy_json, stringy_iters)
+    profiler::exit()
+    print_result("4. String-heavy JSON Parsing (1k x " + stringy_size.to_string() + "KB)", t4, stringy_iters, stringy_size)
+    println("")
+
+    // 5. JSON Generation benchmark (100 iterations)
+    println("--------------------------------------------")
+    profiler::enter("bench_generate_medium", "json_bench.tml", 249)
+    let gen_iters: I32 = 100
+    let t5: I64 = bench_generate_medium(medium_items, gen_iters)
+    profiler::exit()
+    print_result("5. Medium JSON Generation (100x)", t5, gen_iters, medium_size)
+    println("")
+
+    // 6. Combined generate + parse
+    println("--------------------------------------------")
+    profiler::enter("bench_combined", "json_bench.tml", 256)
+    let t6: I64 = bench_generate_and_parse_medium(medium_items, gen_iters)
+    profiler::exit()
+    print_result("6. Generate + Parse Medium (100x)", t6, gen_iters, medium_size)
+    println("")
+
+    profiler::exit()
+    profiler::stop()
+
+    println("============================================")
+    println("   Benchmark Complete!")
+    println("============================================")
+    println("")
+    println("Profile saved to: json_bench_profile.cpuprofile")
+
+    return 0
+}

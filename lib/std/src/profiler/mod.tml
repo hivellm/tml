@@ -1,0 +1,204 @@
+// ============================================================================
+// std::profiler - TML Native Profiler Module
+// ============================================================================
+//
+// Provides profiling capabilities that export to .cpuprofile format,
+// compatible with Chrome DevTools and VS Code.
+//
+// Usage:
+//
+//   use std::profiler
+//
+//   func main() -> I32 {
+//       // Initialize and start profiling
+//       profiler::init("my_program.cpuprofile")
+//       profiler::start()
+//
+//       // Your code here...
+//       do_work()
+//
+//       // Stop and write profile
+//       profiler::stop()
+//       return 0
+//   }
+//
+//   func do_work() {
+//       // Manual function entry/exit (optional - automatic with --profile flag)
+//       profiler::enter("do_work", "main.tml", 15)
+//
+//       // ... work ...
+//
+//       profiler::exit()
+//   }
+//
+// Or use the @profile directive (planned):
+//
+//   @profile
+//   func heavy_computation() {
+//       // Automatically profiled
+//   }
+//
+// ============================================================================
+
+// ============================================================================
+// Initialization and Control
+// ============================================================================
+
+/// Initialize the profiler with an output file path.
+///
+/// Call this before start() to set the output file.
+/// Default output is "profile.cpuprofile" if not specified.
+///
+/// # Example
+/// ```
+/// profiler::init("my_app.cpuprofile")
+/// ```
+@extern("tml_profiler_init")
+pub func init(output_path: Str)
+
+/// Start profiling.
+///
+/// Call this at the beginning of the section you want to profile.
+/// Make sure to call init() first if you want a custom output path.
+///
+/// # Example
+/// ```
+/// profiler::start()
+/// // ... code to profile ...
+/// profiler::stop()
+/// ```
+@extern("tml_profiler_start")
+pub func start()
+
+/// Stop profiling and write the output file.
+///
+/// This writes the .cpuprofile file to the path specified in init().
+/// The profile can then be loaded in Chrome DevTools or VS Code.
+///
+/// # Example
+/// ```
+/// profiler::stop()
+/// // Profile written to disk
+/// ```
+@extern("tml_profiler_stop")
+pub func stop()
+
+/// Check if profiler is currently active.
+///
+/// Returns 1 if profiling is active, 0 otherwise.
+/// Use this for conditional profiling.
+///
+/// # Example
+/// ```
+/// if profiler::is_active() == 1 {
+///     // Do detailed logging
+/// }
+/// ```
+@extern("tml_profiler_is_active")
+pub func is_active() -> I32
+
+// ============================================================================
+// Manual Instrumentation
+// ============================================================================
+
+/// Record function entry.
+///
+/// Call this at the start of a function you want to profile.
+/// Must be paired with a corresponding exit() call.
+///
+/// # Parameters
+/// - `func_name`: Name of the function
+/// - `file_name`: Source file name
+/// - `line`: Line number
+///
+/// # Example
+/// ```
+/// func my_function() {
+///     profiler::enter("my_function", "myfile.tml", 42)
+///     // ... function body ...
+///     profiler::exit()
+/// }
+/// ```
+@extern("tml_profiler_enter")
+pub func enter(func_name: Str, file_name: Str, line: I32)
+
+/// Record function exit.
+///
+/// Call this at the end of a function (before return).
+/// Must be paired with a corresponding enter() call.
+@extern("tml_profiler_exit")
+pub func exit()
+
+/// Add a sample point at the current position.
+///
+/// Use this for sampling-based profiling without full instrumentation.
+/// Call periodically in hot loops to sample execution.
+///
+/// # Example
+/// ```
+/// loop i in 0 to 1000000 {
+///     do_work(i)
+///     if i % 1000 == 0 {
+///         profiler::sample()
+///     }
+/// }
+/// ```
+@extern("tml_profiler_sample")
+pub func sample()
+
+// ============================================================================
+// Convenience Functions (implemented in TML)
+// ============================================================================
+
+/// Start profiling with a custom output path.
+///
+/// Combines init() and start() into one call.
+///
+/// # Example
+/// ```
+/// profiler::begin("my_profile.cpuprofile")
+/// // ... code ...
+/// profiler::stop()
+/// ```
+pub func begin(output_path: Str) {
+    init(output_path)
+    start()
+}
+
+/// Start profiling with default output path (profile.cpuprofile).
+///
+/// # Example
+/// ```
+/// profiler::begin_default()
+/// // ... code ...
+/// profiler::stop()
+/// ```
+pub func begin_default() {
+    init("profile.cpuprofile")
+    start()
+}
+
+/// Profile a section with a label.
+///
+/// Use this to mark a section of code with a descriptive label.
+///
+/// # Example
+/// ```
+/// profiler::section("data_processing", "main.tml", 100)
+/// // ... processing code ...
+/// profiler::end_section()
+/// ```
+pub func section(name: Str, file: Str, line: I32) {
+    if is_active() == 1 {
+        enter(name, file, line)
+    }
+}
+
+/// End a profiled section.
+///
+/// Pair with section() to mark the end of a profiled code block.
+pub func end_section() {
+    if is_active() == 1 {
+        exit()
+    }
+}

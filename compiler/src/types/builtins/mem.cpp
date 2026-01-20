@@ -174,6 +174,19 @@ void TypeEnv::init_builtin_mem() {
     // size_of[T]() -> I64 - Get size of type (generic, resolved at compile time)
     // align_of[T]() -> I64 - Get alignment of type (generic, resolved at compile time)
     // These are handled specially by the type checker/codegen
+
+    // ============ Direct Memory Store (optimized for hot loops) ============
+
+    // store_byte(ptr: *U8, offset: I64, byte: I32) -> Unit
+    // Store a byte at ptr+offset - combines GEP and store for hot loops
+    functions_["store_byte"].push_back(
+        FuncSig{"store_byte",
+                {make_ptr(make_primitive(PrimitiveKind::U8)), make_primitive(PrimitiveKind::I64),
+                 make_primitive(PrimitiveKind::I32)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
 }
 
 } // namespace tml::types

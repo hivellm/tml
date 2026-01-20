@@ -8,6 +8,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Array Bounds Check Elimination** (2026-01-20) - Zero-cost safety for constant indices
+  - Added bounds checking for array indexing (catches out-of-bounds at runtime)
+  - Compiler eliminates bounds checks when index is provably safe (e.g., constant indices, loop induction variables)
+  - Uses value range analysis to track possible index values
+  - Constant indices within bounds generate no check (zero runtime overhead)
+  - Loop induction variable analysis: `for i in 0 to arr.len()` → eliminates all checks inside loop
+  - Detects loop conditions (`i < N`, `i >= N`) to infer induction variable bounds
+  - Runtime indices still get bounds checks for safety
+  - Files modified:
+    - `compiler/include/mir/mir.hpp` - Added `needs_bounds_check` and `known_array_size` to GetElementPtrInst
+    - `compiler/src/mir/builder/hir_expr.cpp` - Populate array size in GEP instructions
+    - `compiler/src/mir/passes/bounds_check_elimination.cpp` - Fixed constant type handling, enhanced loop detection
+    - `compiler/src/codegen/mir/instructions.cpp` - Generate bounds check when needed
+
+- **Performance Optimization: Compile-Time String Literal Concatenation** (2026-01-20) - 100x+ faster literal concatenation
+  - Compiler concatenates string literals at compile time: `"Hello" + " " + "World"` → `"Hello World"`
+  - Zero runtime cost for literal concatenation (emits static constant)
+  - Achieved C++ parity for literal string operations (~1ns per op)
+  - Files modified:
+    - `compiler/src/codegen/expr/binary.cpp` - Added compile-time literal concatenation detection
+
+- **Performance Optimization: Int-to-String Conversion** (2026-01-20) - 9.6x faster integer-to-string conversion
+  - Implemented lookup table algorithm for 2-digit conversion (00-99 digit pairs)
+  - New `fast_i64_to_str` function processes 2 digits at a time instead of division by 10
+  - Reduced int-to-string time from 134ns to 10ns per operation
+  - Now within 1.7x of C++ performance (target achieved: < 2x)
+  - Files modified:
+    - `compiler/runtime/string.c` - Added lookup table and optimized conversion functions
+
+- **Performance Optimization: String Concat Chain Fusion** (2026-01-20) - 2.9x faster multi-string concatenation
+  - Compiler detects chains like `a + b + c + d` and fuses into single allocation
+  - New runtime functions: `str_concat_3`, `str_concat_4`, `str_concat_n`
+  - Single allocation for multiple strings instead of O(n) intermediate allocations
+  - Reduced 4-string concat from 306ns to 105ns per operation
+  - Files added:
+    - `compiler/runtime/string.c` - Added `str_concat_3`, `str_concat_4`, `str_concat_n`
+    - `compiler/runtime/essential.h` - Function declarations
+  - Files modified:
+    - `compiler/src/codegen/expr/binary.cpp` - Concat chain detection and fusion
+    - `compiler/src/codegen/mir_codegen.cpp` - LLVM IR function declarations
+    - `compiler/src/codegen/core/runtime.cpp` - Runtime function declarations
+
+- **Performance Optimization: Text Builder push_i64** (2026-01-20) - 1.6x faster log building
+  - New `Text::push_i64()` method appends integers directly without intermediate string allocation
+  - Uses lookup table algorithm for fast integer-to-string conversion inline
+  - Improved log building from 4.7x slower to 3x slower vs C++
+  - Files modified:
+    - `compiler/runtime/text.c` - Added `tml_text_push_i64`, `tml_text_push_str_len`, `tml_text_push_formatted`
+    - `lib/std/src/text.tml` - Added `push_i64` and `push_formatted` methods
+    - `compiler/src/codegen/core/runtime.cpp` - Runtime function declarations
+
+- **Performance Optimization: Inline String Concat Codegen** (2026-01-20) - Avoids FFI call overhead
+  - Compiler generates inline LLVM IR for 2-4 string concatenation instead of calling runtime functions
+  - Uses `llvm.memcpy` intrinsic for efficient copying
+  - Computes literal string lengths at compile-time
+  - Eliminates function call overhead for common concat patterns
+  - Files modified:
+    - `compiler/src/codegen/expr/binary.cpp` - Added inline concat codegen
+    - `compiler/src/codegen/core/runtime.cpp` - Added strlen and llvm.memcpy declarations
+
 - **MIR Codegen Modularization** (2026-01-20) - Split `mir_codegen.cpp` (~1786 lines) into focused modules
   - `mir/helpers.cpp` - Value lookup, atomic helpers, binary operation helpers (~180 lines)
   - `mir/types.cpp` - MIR to LLVM type conversion (~100 lines)

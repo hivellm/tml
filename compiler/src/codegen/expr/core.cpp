@@ -458,7 +458,7 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
     std::string result = segment_strs[0];
     for (size_t i = 1; i < segment_strs.size(); ++i) {
         std::string new_result = fresh_reg();
-        emit_line("  " + new_result + " = call ptr @str_concat(ptr " + result + ", ptr " +
+        emit_line("  " + new_result + " = call ptr @str_concat_opt(ptr " + result + ", ptr " +
                   segment_strs[i] + ")");
         result = new_result;
     }

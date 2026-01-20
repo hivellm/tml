@@ -114,9 +114,9 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "unreachable", "assume", "likely", "unlikely", "llvm_add", "llvm_sub", "llvm_mul",
         "llvm_div", "llvm_and", "llvm_or", "llvm_xor", "llvm_shl", "llvm_shr", "transmute",
         "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id", "ptr_offset",
-        "ptr_read", "ptr_write", "ptr_copy", "volatile_read", "volatile_write", "atomic_load",
-        "atomic_store", "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub", "atomic_and",
-        "atomic_or", "atomic_xor", "fence", "black_box",
+        "ptr_read", "ptr_write", "ptr_copy", "store_byte", "volatile_read", "volatile_write",
+        "atomic_load", "atomic_store", "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub",
+        "atomic_and", "atomic_or", "atomic_xor", "fence", "black_box",
         // Math intrinsics
         "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc"};
 
@@ -500,6 +500,27 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string val = gen_expr(*call.args[1]);
             std::string val_type = last_expr_type_;
             emit_line("  store " + val_type + " " + val + ", ptr " + ptr);
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // store_byte(ptr: *U8, offset: I64, byte: I32) - store byte at ptr+offset
+    // Optimized for tight loops - combines GEP and store in one intrinsic
+    if (intrinsic_name == "store_byte") {
+        if (call.args.size() >= 3) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string offset = gen_expr(*call.args[1]);
+            std::string byte_val = gen_expr(*call.args[2]);
+            std::string gep_reg = fresh_reg();
+            std::string trunc_reg = fresh_reg();
+            // GEP to get offset pointer
+            emit_line("  " + gep_reg + " = getelementptr i8, ptr " + ptr + ", i64 " + offset);
+            // Truncate I32 to i8
+            emit_line("  " + trunc_reg + " = trunc i32 " + byte_val + " to i8");
+            // Store the byte
+            emit_line("  store i8 " + trunc_reg + ", ptr " + gep_reg);
             last_expr_type_ = "void";
             return "0";
         }

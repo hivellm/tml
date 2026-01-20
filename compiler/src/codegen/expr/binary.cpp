@@ -25,6 +25,7 @@
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"
+#include <functional>
 
 namespace tml::codegen {
 
@@ -389,6 +390,201 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         return "0";
     }
 
+    // =========================================================================
+    // String Concat Chain Optimization
+    // =========================================================================
+    // Detect patterns like "a" + "b" + "c" and optimize:
+    // 1. If ALL are literals -> concatenate at compile time (zero runtime cost!)
+    // 2. Otherwise -> fuse into single allocation (one call instead of N-1)
+    if (bin.op == parser::BinaryOp::Add) {
+        // Check if operands are strings (we infer types from left/right operands)
+        types::TypePtr left_type_check = infer_expr_type(*bin.left);
+        bool is_string_add = left_type_check && left_type_check->is<types::PrimitiveType>() &&
+            left_type_check->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str;
+
+        if (is_string_add) {
+            // Collect all strings in the concat chain using a helper lambda
+            std::vector<const parser::Expr*> strings;
+
+            // Helper function to collect strings recursively
+            std::function<void(const parser::Expr&)> collect_strings = [&](const parser::Expr& e) {
+                if (e.is<parser::BinaryExpr>()) {
+                    const auto& b = e.as<parser::BinaryExpr>();
+                    if (b.op == parser::BinaryOp::Add) {
+                        // Check if this binary op is also a string concat
+                        types::TypePtr t = infer_expr_type(e);
+                        if (t && t->is<types::PrimitiveType>() &&
+                            t->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                            // This is also a string concat - recurse
+                            collect_strings(*b.left);
+                            collect_strings(*b.right);
+                            return;
+                        }
+                    }
+                }
+                // Not a concat - this is a leaf string
+                strings.push_back(&e);
+            };
+
+            // Start collection from left and right operands
+            collect_strings(*bin.left);
+            collect_strings(*bin.right);
+
+            // =========================================================================
+            // COMPILE-TIME STRING LITERAL CONCATENATION
+            // =========================================================================
+            // If ALL strings are literals, concatenate at compile time!
+            // This makes "Hello" + " " + "World" + "!" essentially free.
+            bool all_literals = true;
+            std::string concatenated;
+            for (const auto* s : strings) {
+                if (s->is<parser::LiteralExpr>()) {
+                    const auto& lit = s->as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                        concatenated += std::string(lit.token.string_value().value);
+                        continue;
+                    }
+                }
+                all_literals = false;
+                break;
+            }
+
+            if (all_literals && strings.size() >= 2) {
+                // Emit the concatenated string as a constant - ZERO RUNTIME COST!
+                std::string const_name = add_string_literal(concatenated);
+                last_expr_type_ = "ptr";
+                return const_name;
+            }
+            // =========================================================================
+
+            // =========================================================================
+            // INLINE STRING CONCAT CODEGEN
+            // =========================================================================
+            // Generate inline LLVM IR for string concatenation to avoid FFI overhead.
+            // For each string:
+            //   - If literal: use known length (compile-time constant)
+            //   - If runtime: call strlen
+            // Then: malloc(total_len + 1), memcpy each string, null terminate
+            //
+            // This saves ~5-10ns per concat by avoiding the function call overhead.
+            if (strings.size() >= 2 && strings.size() <= 4) {
+                // Collect string values and their lengths
+                struct StringInfo {
+                    std::string value;     // LLVM register or constant
+                    std::string len;       // Length (constant or register)
+                    bool is_literal;       // True if compile-time known
+                    size_t literal_len;    // Length if literal
+                };
+                std::vector<StringInfo> infos;
+                infos.reserve(strings.size());
+
+                size_t total_literal_len = 0;
+                bool has_runtime_strings = false;
+
+                for (const auto* s : strings) {
+                    StringInfo info;
+                    if (s->is<parser::LiteralExpr>()) {
+                        const auto& lit = s->as<parser::LiteralExpr>();
+                        if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                            std::string str_val(lit.token.string_value().value);
+                            info.value = add_string_literal(str_val);
+                            info.literal_len = str_val.size();
+                            info.len = std::to_string(str_val.size());
+                            info.is_literal = true;
+                            total_literal_len += str_val.size();
+                            infos.push_back(info);
+                            continue;
+                        }
+                    }
+                    // Runtime string - need to call strlen
+                    info.value = gen_expr(*s);
+                    info.is_literal = false;
+                    info.literal_len = 0;
+                    has_runtime_strings = true;
+                    infos.push_back(info);
+                }
+
+                // Calculate lengths for runtime strings
+                std::string total_len_reg;
+                if (has_runtime_strings) {
+                    // Start with known literal length
+                    total_len_reg = fresh_reg();
+                    emit_line("  " + total_len_reg + " = add i64 0, " + std::to_string(total_literal_len));
+
+                    for (auto& info : infos) {
+                        if (!info.is_literal) {
+                            // Call strlen for runtime strings
+                            std::string len_reg = fresh_reg();
+                            emit_line("  " + len_reg + " = call i64 @strlen(ptr " + info.value + ")");
+                            info.len = len_reg;
+                            // Add to total
+                            std::string new_total = fresh_reg();
+                            emit_line("  " + new_total + " = add i64 " + total_len_reg + ", " + len_reg);
+                            total_len_reg = new_total;
+                        }
+                    }
+                } else {
+                    // All literals - total is known at compile time
+                    total_len_reg = std::to_string(total_literal_len);
+                }
+
+                // Allocate buffer: malloc(total_len + 1) for null terminator
+                std::string alloc_size = fresh_reg();
+                emit_line("  " + alloc_size + " = add i64 " + total_len_reg + ", 1");
+                std::string result_ptr = fresh_reg();
+                emit_line("  " + result_ptr + " = call ptr @malloc(i64 " + alloc_size + ")");
+
+                // Copy each string using memcpy
+                std::string offset = "0";
+                bool offset_is_const = true;  // Track if offset is a compile-time constant
+                size_t const_offset = 0;      // Numeric value if constant
+
+                for (size_t i = 0; i < infos.size(); ++i) {
+                    const auto& info = infos[i];
+                    // Calculate destination pointer
+                    std::string dest_ptr;
+                    if (offset == "0") {
+                        dest_ptr = result_ptr;
+                    } else {
+                        dest_ptr = fresh_reg();
+                        emit_line("  " + dest_ptr + " = getelementptr i8, ptr " + result_ptr + ", i64 " + offset);
+                    }
+
+                    // Copy the string (memcpy intrinsic)
+                    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr " + dest_ptr + ", ptr " + info.value +
+                              ", i64 " + info.len + ", i1 false)");
+
+                    // Update offset for next string
+                    if (i < infos.size() - 1) {
+                        if (offset_is_const && info.is_literal) {
+                            // Both offset and current length are constants - keep as constant
+                            const_offset += info.literal_len;
+                            offset = std::to_string(const_offset);
+                        } else {
+                            // Need runtime addition
+                            std::string new_offset = fresh_reg();
+                            emit_line("  " + new_offset + " = add i64 " + offset + ", " + info.len);
+                            offset = new_offset;
+                            offset_is_const = false;
+                        }
+                    }
+                }
+
+                // Null terminate
+                std::string end_ptr = fresh_reg();
+                emit_line("  " + end_ptr + " = getelementptr i8, ptr " + result_ptr + ", i64 " + total_len_reg);
+                emit_line("  store i8 0, ptr " + end_ptr);
+
+                last_expr_type_ = "ptr";
+                return result_ptr;
+            }
+            // =========================================================================
+
+            // For 5+ strings, fall through to default two-operand concatenation
+        }
+    }
+    // =========================================================================
+
     std::string left = gen_expr(*bin.left);
     std::string left_type = last_expr_type_;
     std::string right = gen_expr(*bin.right);
@@ -611,8 +807,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     switch (bin.op) {
     case parser::BinaryOp::Add:
         if (is_string) {
-            // String concatenation using str_concat
-            emit_line("  " + result + " = call ptr @str_concat(ptr " + left + ", ptr " + right +
+            // String concatenation using str_concat_opt (O(1) amortized)
+            emit_line("  " + result + " = call ptr @str_concat_opt(ptr " + left + ", ptr " + right +
                       ")");
             last_expr_type_ = "ptr";
         } else if (is_float) {

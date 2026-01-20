@@ -148,6 +148,34 @@ int32_t str_hash(const char* s);
 const char* str_concat(const char* a, const char* b);
 
 /**
+ * @brief Optimized string concatenation with O(1) amortized complexity.
+ * @param a Left string (may be modified in place if dynamic with capacity).
+ * @param b Right string to append.
+ * @return Concatenated string (may be same pointer as 'a' or new allocation).
+ */
+const char* str_concat_opt(const char* a, const char* b);
+
+/**
+ * @brief Concatenates 3 strings in a single allocation.
+ * Optimized version for the common case of "a" + "b" + "c".
+ */
+const char* str_concat_3(const char* a, const char* b, const char* c);
+
+/**
+ * @brief Concatenates 4 strings in a single allocation.
+ * Optimized version for "a" + "b" + "c" + "d".
+ */
+const char* str_concat_4(const char* a, const char* b, const char* c, const char* d);
+
+/**
+ * @brief Concatenates multiple strings in a single allocation.
+ * @param strings Array of string pointers.
+ * @param count Number of strings.
+ * @return Concatenated string (caller owns, uses dynamic string header).
+ */
+const char* str_concat_n(const char** strings, int64_t count);
+
+/**
  * @brief Extracts a substring.
  * @param s Source string.
  * @param start Starting index (0-based).

@@ -423,11 +423,79 @@ add_library(tml_json STATIC
     src/json/json_value.cpp
     src/json/json_serializer.cpp
     src/json/json_parser.cpp
+    src/json/json_fast_parser.cpp
     src/json/json_builder.cpp
     src/json/json_rpc.cpp
     src/json/json_schema.cpp
 )
 target_include_directories(tml_json PUBLIC include src)
+# Put JSON library in output directory (needed by TML programs using std::json)
+set_target_properties(tml_json PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR}
+)
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(tml_json PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR}
+    )
+endforeach()
+
+# JSON Runtime library (C linkage for TML programs)
+# This provides the native JSON parser functions that TML's std::json module calls
+add_library(tml_json_runtime STATIC
+    src/json/json_runtime.cpp
+)
+target_link_libraries(tml_json_runtime PUBLIC tml_json)
+target_include_directories(tml_json_runtime PUBLIC include src)
+if(MSVC)
+    target_compile_options(tml_json_runtime PRIVATE
+        /W3
+        $<$<CONFIG:Debug>:/Od>
+        $<$<NOT:$<CONFIG:Debug>>:/O2>
+    )
+else()
+    target_compile_options(tml_json_runtime PRIVATE
+        $<$<CONFIG:Debug>:-O0 -g>
+        $<$<NOT:$<CONFIG:Debug>>:-O3 -fomit-frame-pointer>
+    )
+endif()
+# Put JSON runtime library in output directory (alongside tml.exe)
+set_target_properties(tml_json_runtime PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR}
+)
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(tml_json_runtime PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR}
+    )
+endforeach()
+message(STATUS "TML JSON Runtime: Building static library (tml_json_runtime)")
+
+# Profiler library (runtime profiling with cpuprofile export)
+add_library(tml_profiler STATIC
+    src/profiler/profiler.cpp
+)
+target_include_directories(tml_profiler PUBLIC include src)
+if(MSVC)
+    target_compile_options(tml_profiler PRIVATE
+        /W3
+        $<$<CONFIG:Debug>:/Od>
+        $<$<NOT:$<CONFIG:Debug>>:/O2>
+    )
+else()
+    target_compile_options(tml_profiler PRIVATE
+        $<$<CONFIG:Debug>:-O0 -g>
+        $<$<NOT:$<CONFIG:Debug>>:-O3 -fomit-frame-pointer>
+    )
+endif()
+# Put profiler library in output directory (alongside tml.exe)
+set_target_properties(tml_profiler PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR}
+)
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(tml_profiler PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR}
+    )
+endforeach()
+message(STATUS "TML Profiler: Building static library (tml_profiler)")
 
 # Documentation library
 add_library(tml_doc STATIC

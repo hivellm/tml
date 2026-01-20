@@ -369,14 +369,29 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators,
 
     for (const auto& dec : decorators) {
         if (dec.name == "extern") {
-            // @extern("abi") or @extern("abi", name = "symbol")
+            // @extern("symbol") - single arg is the extern symbol name
+            // @extern("abi", name = "symbol") - explicit abi and symbol name
             if (!dec.args.empty() && dec.args[0]->is<LiteralExpr>()) {
                 const auto& lit = dec.args[0]->as<LiteralExpr>();
                 if (lit.token.kind == lexer::TokenKind::StringLiteral) {
-                    extern_abi = lit.token.string_value().value;
+                    std::string first_arg = lit.token.string_value().value;
+
+                    // Check if it's a known ABI name
+                    bool is_abi = (first_arg == "c" || first_arg == "c++" ||
+                                   first_arg == "stdcall" || first_arg == "fastcall" ||
+                                   first_arg == "thiscall" || first_arg == "system");
+
+                    if (is_abi || dec.args.size() > 1) {
+                        // @extern("c") or @extern("c", name = "...")
+                        extern_abi = first_arg;
+                    } else {
+                        // @extern("symbol_name") - single arg is the symbol name
+                        extern_abi = "c"; // Default to C ABI
+                        extern_name = first_arg;
+                    }
                 }
             }
-            // Check for name = "symbol" argument
+            // Check for name = "symbol" argument (for @extern("abi", name = "symbol"))
             for (size_t i = 1; i < dec.args.size(); ++i) {
                 if (dec.args[i]->is<BinaryExpr>()) {
                     const auto& bin = dec.args[i]->as<BinaryExpr>();
