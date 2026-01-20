@@ -144,9 +144,9 @@ void MirCodegen::emit_preamble() {
     emitln("declare void @println(ptr)");
     emitln("declare void @abort() noreturn");
     emitln("declare ptr @str_concat(ptr, ptr)");
-    emitln("declare ptr @str_concat_opt(ptr, ptr)");  // O(1) amortized concatenation
-    emitln("declare ptr @str_concat_3(ptr, ptr, ptr)");  // Fused 3-string concat
-    emitln("declare ptr @str_concat_4(ptr, ptr, ptr, ptr)");  // Fused 4-string concat
+    emitln("declare ptr @str_concat_opt(ptr, ptr)");         // O(1) amortized concatenation
+    emitln("declare ptr @str_concat_3(ptr, ptr, ptr)");      // Fused 3-string concat
+    emitln("declare ptr @str_concat_4(ptr, ptr, ptr, ptr)"); // Fused 4-string concat
     emitln("declare ptr @i32_to_string(i32)");
     emitln("declare ptr @i64_to_string(i64)");
     emitln("declare i64 @time_ns()");
@@ -161,6 +161,19 @@ void MirCodegen::emit_preamble() {
     emitln("@.str.bool.true = private constant [5 x i8] c\"true\\00\"");
     emitln("@.str.bool.false = private constant [6 x i8] c\"false\\00\"");
     emitln("@.str.assert = private constant [18 x i8] c\"assertion failed\\0A\\00\"");
+    emitln();
+
+    // Digit pairs lookup table for fast int-to-string conversion (00-99)
+    emitln("@.digit_pairs = private constant [200 x i8] c\"00010203040506070809"
+           "10111213141516171819"
+           "20212223242526272829"
+           "30313233343536373839"
+           "40414243444546474849"
+           "50515253545556575859"
+           "60616263646566676869"
+           "70717273747576777879"
+           "80818283848586878889"
+           "90919293949596979899\"");
     emitln();
 
     // Assert implementation

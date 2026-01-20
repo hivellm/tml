@@ -298,8 +298,8 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
         // Special case: string concatenation when adding two pointers (strings)
         // Use str_concat_opt for O(1) amortized complexity
         if (type_str == "ptr" && i.op == mir::BinOp::Add) {
-            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr " + left + ", ptr " + right +
-                   ")");
+            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr " + left + ", ptr " +
+                   right + ")");
             if (inst.result != mir::INVALID_VALUE) {
                 value_types_[inst.result] = "ptr";
             }
@@ -768,16 +768,16 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
             // Check if has space
             emitln("    %has_space." + id + " = icmp ult i64 %len." + id + ", %cap." + id);
-            emitln("    br i1 %has_space." + id + ", label %push_fast." + id + ", label %push_slow." +
-                   id);
+            emitln("    br i1 %has_space." + id + ", label %push_fast." + id +
+                   ", label %push_slow." + id);
 
             // Fast store path
             emitln("  push_fast." + id + ":");
             // Truncate i32 byte to i8
             emitln("    %byte_i8." + id + " = trunc i32 " + byte_val + " to i8");
             // Store byte at data[len]
-            emitln("    %store_ptr." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
-                   id);
+            emitln("    %store_ptr." + id + " = getelementptr i8, ptr %data_ptr." + id +
+                   ", i64 %len." + id);
             emitln("    store i8 %byte_i8." + id + ", ptr %store_ptr." + id);
             // Increment len
             emitln("    %new_len." + id + " = add i64 %len." + id + ", 1");
@@ -833,8 +833,8 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             // Check if len + str_len <= cap
             emitln("    %new_len." + id + " = add i64 %len." + id + ", %str_len." + id);
             emitln("    %has_space." + id + " = icmp ule i64 %new_len." + id + ", %cap." + id);
-            emitln("    br i1 %has_space." + id + ", label %pstr_fast." + id + ", label %pstr_slow." +
-                   id);
+            emitln("    br i1 %has_space." + id + ", label %pstr_fast." + id +
+                   ", label %pstr_slow." + id);
 
             // Fast memcpy path
             emitln("  pstr_fast." + id + ":");
@@ -859,8 +859,8 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         }
 
         if (i.method_name == "push_i64" && i.args.size() == 1) {
-            // Inline Text::push_i64() with fast path for heap mode
-            // Uses tml_text_push_i64_unsafe when we verify heap mode and have capacity
+            // Inline Text::push_i64() with fully inline fast path for small non-negative integers
+            // Uses lookup table for direct conversion, avoiding FFI for values 0-9999
             std::string id = std::to_string(temp_counter_++);
             std::string int_val = get_value_reg(i.args[0]);
 
@@ -871,25 +871,127 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    br i1 %is_heap." + id + ", label %pi64_heap." + id + ", label %pi64_slow." +
                    id);
 
-            // Heap path: check if we have at least 20 bytes capacity for max i64
+            // Heap path: check capacity and value range for inline conversion
             emitln("  pi64_heap." + id + ":");
             emitln("    %len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
             emitln("    %len." + id + " = load i64, ptr %len_ptr." + id);
             emitln("    %cap_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 16");
             emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
-            // Need at most 20 bytes for i64 (including potential negative sign)
-            emitln("    %needed." + id + " = add i64 %len." + id + ", 20");
+            emitln("    %data_ptr_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 0");
+            emitln("    %data_ptr." + id + " = load ptr, ptr %data_ptr_ptr." + id);
+            // Check if value is in range [0, 9999] for inline conversion
+            emitln("    %is_small." + id + " = icmp ult i64 " + int_val + ", 10000");
+            emitln("    %is_non_neg." + id + " = icmp sge i64 " + int_val + ", 0");
+            emitln("    %can_inline." + id + " = and i1 %is_small." + id + ", %is_non_neg." + id);
+            // Need at most 5 bytes for values 0-9999
+            emitln("    %needed." + id + " = add i64 %len." + id + ", 5");
             emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
-            emitln("    br i1 %has_space." + id + ", label %pi64_fast." + id + ", label %pi64_slow." +
+            emitln("    %do_inline." + id + " = and i1 %can_inline." + id + ", %has_space." + id);
+            emitln("    br i1 %do_inline." + id + ", label %pi64_inline." + id +
+                   ", label %pi64_ffi." + id);
+
+            // Inline fast path: direct conversion using lookup table
+            emitln("  pi64_inline." + id + ":");
+            // Get destination pointer
+            emitln("    %dst." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
+                   id);
+            // Truncate to i32 for easier arithmetic
+            emitln("    %n32." + id + " = trunc i64 " + int_val + " to i32");
+
+            // Check digit count and branch accordingly
+            emitln("    %lt10." + id + " = icmp ult i32 %n32." + id + ", 10");
+            emitln("    br i1 %lt10." + id + ", label %pi64_1d." + id + ", label %pi64_ge10." + id);
+
+            // 1 digit: n < 10
+            emitln("  pi64_1d." + id + ":");
+            emitln("    %d1." + id + " = add i32 %n32." + id + ", 48"); // '0' = 48
+            emitln("    %d1_8." + id + " = trunc i32 %d1." + id + " to i8");
+            emitln("    store i8 %d1_8." + id + ", ptr %dst." + id);
+            emitln("    %newlen1." + id + " = add i64 %len." + id + ", 1");
+            emitln("    store i64 %newlen1." + id + ", ptr %len_ptr." + id);
+            emitln("    br label %pi64_done." + id);
+
+            // >= 10: check if < 100
+            emitln("  pi64_ge10." + id + ":");
+            emitln("    %lt100." + id + " = icmp ult i32 %n32." + id + ", 100");
+            emitln("    br i1 %lt100." + id + ", label %pi64_2d." + id + ", label %pi64_ge100." +
                    id);
 
-            // Fast path: use unsafe version (no null check, assumes heap mode)
-            emitln("  pi64_fast." + id + ":");
+            // 2 digits: 10 <= n < 100, use lookup table
+            emitln("  pi64_2d." + id + ":");
+            emitln("    %idx2." + id + " = mul i32 %n32." + id + ", 2");
+            emitln("    %idx2_64." + id + " = zext i32 %idx2." + id + " to i64");
+            emitln("    %pair2_ptr." + id +
+                   " = getelementptr [200 x i8], ptr @.digit_pairs, i64 0, i64 %idx2_64." + id);
+            emitln("    %pair2." + id + " = load i16, ptr %pair2_ptr." + id);
+            emitln("    store i16 %pair2." + id + ", ptr %dst." + id);
+            emitln("    %newlen2." + id + " = add i64 %len." + id + ", 2");
+            emitln("    store i64 %newlen2." + id + ", ptr %len_ptr." + id);
+            emitln("    br label %pi64_done." + id);
+
+            // >= 100: check if < 1000
+            emitln("  pi64_ge100." + id + ":");
+            emitln("    %lt1000." + id + " = icmp ult i32 %n32." + id + ", 1000");
+            emitln("    br i1 %lt1000." + id + ", label %pi64_3d." + id + ", label %pi64_4d." + id);
+
+            // 3 digits: 100 <= n < 1000
+            emitln("  pi64_3d." + id + ":");
+            emitln("    %q3." + id + " = udiv i32 %n32." + id + ", 100"); // First digit
+            emitln("    %r3." + id + " = urem i32 %n32." + id + ", 100"); // Last 2 digits
+            // Write first digit
+            emitln("    %d3_first." + id + " = add i32 %q3." + id + ", 48");
+            emitln("    %d3_first_8." + id + " = trunc i32 %d3_first." + id + " to i8");
+            emitln("    store i8 %d3_first_8." + id + ", ptr %dst." + id);
+            // Write last 2 digits from lookup
+            emitln("    %idx3." + id + " = mul i32 %r3." + id + ", 2");
+            emitln("    %idx3_64." + id + " = zext i32 %idx3." + id + " to i64");
+            emitln("    %pair3_ptr." + id +
+                   " = getelementptr [200 x i8], ptr @.digit_pairs, i64 0, i64 %idx3_64." + id);
+            emitln("    %pair3." + id + " = load i16, ptr %pair3_ptr." + id);
+            emitln("    %dst3_1." + id + " = getelementptr i8, ptr %dst." + id + ", i64 1");
+            emitln("    store i16 %pair3." + id + ", ptr %dst3_1." + id);
+            emitln("    %newlen3." + id + " = add i64 %len." + id + ", 3");
+            emitln("    store i64 %newlen3." + id + ", ptr %len_ptr." + id);
+            emitln("    br label %pi64_done." + id);
+
+            // 4 digits: 1000 <= n < 10000
+            emitln("  pi64_4d." + id + ":");
+            emitln("    %q4." + id + " = udiv i32 %n32." + id + ", 100"); // First 2 digits
+            emitln("    %r4." + id + " = urem i32 %n32." + id + ", 100"); // Last 2 digits
+            // Write first 2 digits from lookup
+            emitln("    %idx4a." + id + " = mul i32 %q4." + id + ", 2");
+            emitln("    %idx4a_64." + id + " = zext i32 %idx4a." + id + " to i64");
+            emitln("    %pair4a_ptr." + id +
+                   " = getelementptr [200 x i8], ptr @.digit_pairs, i64 0, i64 %idx4a_64." + id);
+            emitln("    %pair4a." + id + " = load i16, ptr %pair4a_ptr." + id);
+            emitln("    store i16 %pair4a." + id + ", ptr %dst." + id);
+            // Write last 2 digits from lookup
+            emitln("    %idx4b." + id + " = mul i32 %r4." + id + ", 2");
+            emitln("    %idx4b_64." + id + " = zext i32 %idx4b." + id + " to i64");
+            emitln("    %pair4b_ptr." + id +
+                   " = getelementptr [200 x i8], ptr @.digit_pairs, i64 0, i64 %idx4b_64." + id);
+            emitln("    %pair4b." + id + " = load i16, ptr %pair4b_ptr." + id);
+            emitln("    %dst4_2." + id + " = getelementptr i8, ptr %dst." + id + ", i64 2");
+            emitln("    store i16 %pair4b." + id + ", ptr %dst4_2." + id);
+            emitln("    %newlen4." + id + " = add i64 %len." + id + ", 4");
+            emitln("    store i64 %newlen4." + id + ", ptr %len_ptr." + id);
+            emitln("    br label %pi64_done." + id);
+
+            // FFI path: call unsafe version for large/negative values
+            emitln("  pi64_ffi." + id + ":");
+            // Check if we have capacity for FFI path (need 20 bytes max)
+            emitln("    %needed_ffi." + id + " = add i64 %len." + id + ", 20");
+            emitln("    %has_space_ffi." + id + " = icmp ule i64 %needed_ffi." + id + ", %cap." +
+                   id);
+            emitln("    br i1 %has_space_ffi." + id + ", label %pi64_ffi_fast." + id +
+                   ", label %pi64_slow." + id);
+
+            emitln("  pi64_ffi_fast." + id + ":");
             emitln("    %written." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
                    ", i64 " + int_val + ")");
             emitln("    br label %pi64_done." + id);
 
-            // Slow path: call regular FFI
+            // Slow path: call regular FFI (handles reallocation)
             emitln("  pi64_slow." + id + ":");
             emitln("    call void @tml_text_push_i64(ptr " + receiver + ", i64 " + int_val + ")");
             emitln("    br label %pi64_done." + id);
@@ -947,10 +1049,10 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %need2." + id + " = add i64 %need1." + id + ", 20");
             emitln("    %needed." + id + " = add i64 %need2." + id + ", %suffix_len." + id);
             emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
-            emitln("    br i1 %has_space." + id + ", label %pfmt_fast." + id + ", label %pfmt_slow." +
-                   id);
+            emitln("    br i1 %has_space." + id + ", label %pfmt_fast." + id +
+                   ", label %pfmt_slow." + id);
 
-            // Fast path: memcpy prefix, push_i64_unsafe, memcpy suffix
+            // Fast path: memcpy prefix, inline int-to-string, memcpy suffix
             emitln("  pfmt_fast." + id + ":");
             // Copy prefix
             emitln("    %dst1." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
@@ -960,10 +1062,14 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             // Update len after prefix
             emitln("    %len2." + id + " = add i64 %len." + id + ", %prefix_len." + id);
             emitln("    store i64 %len2." + id + ", ptr %len_ptr." + id);
-            // Push int (uses unsafe version since we already verified heap mode + capacity)
-            emitln("    %written." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
-                   ", i64 " + int_val + ")");
-            // Load updated len after int push
+            // Inline int-to-string conversion (creates multiple blocks, ends at merge)
+            std::string int_id = id + ".i";
+            emit_inline_int_to_string(int_id, int_val, "%data_ptr." + id, "%len_ptr." + id,
+                                      "%len2." + id, receiver, "pfmt_suffix." + id);
+            emitln("    br label %pfmt_suffix." + id);
+            // Continue with suffix after int conversion
+            emitln("  pfmt_suffix." + id + ":");
+            // Load updated len after int conversion
             emitln("    %len3." + id + " = load i64, ptr %len_ptr." + id);
             // Copy suffix
             emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len3." +
@@ -1057,10 +1163,10 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %need4." + id + " = add i64 %need3." + id + ", %s4_len." + id);
             emitln("    %needed." + id + " = add i64 %need4." + id + ", 60");
             emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
-            emitln("    br i1 %has_space." + id + ", label %plog_fast." + id + ", label %plog_slow." +
-                   id);
+            emitln("    br i1 %has_space." + id + ", label %plog_fast." + id +
+                   ", label %plog_slow." + id);
 
-            // Fast path: inline all memcpy and push_i64_unsafe
+            // Fast path: inline all memcpy and int-to-string
             emitln("  plog_fast." + id + ":");
 
             // s1
@@ -1071,9 +1177,11 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %len1." + id + " = add i64 %len." + id + ", %s1_len." + id);
             emitln("    store i64 %len1." + id + ", ptr %len_ptr." + id);
 
-            // n1
-            emitln("    %w1." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
-                   ", i64 " + n1 + ")");
+            // n1 (inline int-to-string)
+            emit_inline_int_to_string(id + ".n1", n1, "%data_ptr." + id, "%len_ptr." + id,
+                                      "%len1." + id, receiver, "plog_s2." + id);
+            emitln("    br label %plog_s2." + id);
+            emitln("  plog_s2." + id + ":");
             emitln("    %len2." + id + " = load i64, ptr %len_ptr." + id);
 
             // s2
@@ -1084,9 +1192,11 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %len3." + id + " = add i64 %len2." + id + ", %s2_len." + id);
             emitln("    store i64 %len3." + id + ", ptr %len_ptr." + id);
 
-            // n2
-            emitln("    %w2." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
-                   ", i64 " + n2 + ")");
+            // n2 (inline int-to-string)
+            emit_inline_int_to_string(id + ".n2", n2, "%data_ptr." + id, "%len_ptr." + id,
+                                      "%len3." + id, receiver, "plog_s3." + id);
+            emitln("    br label %plog_s3." + id);
+            emitln("  plog_s3." + id + ":");
             emitln("    %len4." + id + " = load i64, ptr %len_ptr." + id);
 
             // s3
@@ -1097,9 +1207,11 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %len5." + id + " = add i64 %len4." + id + ", %s3_len." + id);
             emitln("    store i64 %len5." + id + ", ptr %len_ptr." + id);
 
-            // n3
-            emitln("    %w3." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
-                   ", i64 " + n3 + ")");
+            // n3 (inline int-to-string)
+            emit_inline_int_to_string(id + ".n3", n3, "%data_ptr." + id, "%len_ptr." + id,
+                                      "%len5." + id, receiver, "plog_s4." + id);
+            emitln("    br label %plog_s4." + id);
+            emitln("  plog_s4." + id + ":");
             emitln("    %len6." + id + " = load i64, ptr %len_ptr." + id);
 
             // s4
@@ -1187,7 +1299,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    br i1 %has_space." + id + ", label %ppath_fast." + id +
                    ", label %ppath_slow." + id);
 
-            // Fast path: inline all memcpy and push_i64_unsafe
+            // Fast path: inline all memcpy and int-to-string
             emitln("  ppath_fast." + id + ":");
 
             // s1
@@ -1198,9 +1310,11 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %len1." + id + " = add i64 %len." + id + ", %s1_len." + id);
             emitln("    store i64 %len1." + id + ", ptr %len_ptr." + id);
 
-            // n1
-            emitln("    %w1." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
-                   ", i64 " + n1 + ")");
+            // n1 (inline int-to-string)
+            emit_inline_int_to_string(id + ".n1", n1, "%data_ptr." + id, "%len_ptr." + id,
+                                      "%len1." + id, receiver, "ppath_s2." + id);
+            emitln("    br label %ppath_s2." + id);
+            emitln("  ppath_s2." + id + ":");
             emitln("    %len2." + id + " = load i64, ptr %len_ptr." + id);
 
             // s2
@@ -1211,9 +1325,11 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %len3." + id + " = add i64 %len2." + id + ", %s2_len." + id);
             emitln("    store i64 %len3." + id + ", ptr %len_ptr." + id);
 
-            // n2
-            emitln("    %w2." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
-                   ", i64 " + n2 + ")");
+            // n2 (inline int-to-string)
+            emit_inline_int_to_string(id + ".n2", n2, "%data_ptr." + id, "%len_ptr." + id,
+                                      "%len3." + id, receiver, "ppath_s3." + id);
+            emitln("    br label %ppath_s3." + id);
+            emitln("  ppath_s3." + id + ":");
             emitln("    %len4." + id + " = load i64, ptr %len_ptr." + id);
 
             // s3
@@ -1734,6 +1850,123 @@ void MirCodegen::emit_atomic_cmpxchg_inst(const mir::AtomicCmpXchgInst& i,
     if (inst.result != mir::INVALID_VALUE) {
         value_types_[inst.result] = type_str;
     }
+}
+
+// Helper: emit inline int-to-string conversion
+// Returns the LLVM register containing the new length after conversion
+// Only handles non-negative values < 10000, falls back to FFI for others
+auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::string& int_val,
+                                           const std::string& dst_ptr, const std::string& len_ptr,
+                                           const std::string& current_len,
+                                           const std::string& receiver,
+                                           [[maybe_unused]] const std::string& done_label)
+    -> std::string {
+    // Branch labels
+    std::string neg_check = "i2s.neg." + id;
+    std::string big_check = "i2s.big." + id;
+    std::string ffi_label = "i2s.ffi." + id;
+    std::string d1_label = "i2s.1d." + id;
+    std::string d2_label = "i2s.2d." + id;
+    std::string d3_label = "i2s.3d." + id;
+    std::string d4_label = "i2s.4d." + id;
+    std::string merge_label = "i2s.merge." + id;
+
+    // Check negative
+    emitln("    %is.neg." + id + " = icmp slt i64 " + int_val + ", 0");
+    emitln("    br i1 %is.neg." + id + ", label %" + ffi_label + ", label %" + big_check);
+
+    // Check >= 10000
+    emitln(big_check + ":");
+    emitln("    %is.big." + id + " = icmp sge i64 " + int_val + ", 10000");
+    emitln("    br i1 %is.big." + id + ", label %" + ffi_label + ", label %" + d1_label);
+
+    // Check 1 digit (0-9)
+    emitln(d1_label + ":");
+    emitln("    %is.1d." + id + " = icmp slt i64 " + int_val + ", 10");
+    emitln("    br i1 %is.1d." + id + ", label %do.1d." + id + ", label %" + d2_label);
+
+    // 1 digit: store single char '0' + val
+    emitln("do.1d." + id + ":");
+    emitln("    %d1.trunc." + id + " = trunc i64 " + int_val + " to i8");
+    emitln("    %d1.char." + id + " = add i8 %d1.trunc." + id + ", 48");
+    emitln("    %d1.dst." + id + " = getelementptr i8, ptr " + dst_ptr + ", i64 " + current_len);
+    emitln("    store i8 %d1.char." + id + ", ptr %d1.dst." + id);
+    emitln("    %d1.newlen." + id + " = add i64 " + current_len + ", 1");
+    emitln("    br label %" + merge_label);
+
+    // Check 2 digits (10-99)
+    emitln(d2_label + ":");
+    emitln("    %is.2d." + id + " = icmp slt i64 " + int_val + ", 100");
+    emitln("    br i1 %is.2d." + id + ", label %do.2d." + id + ", label %" + d3_label);
+
+    // 2 digits: lookup table
+    emitln("do.2d." + id + ":");
+    emitln("    %d2.idx." + id + " = shl i64 " + int_val + ", 1"); // *2 for pair offset
+    emitln("    %d2.ptr." + id + " = getelementptr i8, ptr @.digit_pairs, i64 %d2.idx." + id);
+    emitln("    %d2.pair." + id + " = load i16, ptr %d2.ptr." + id);
+    emitln("    %d2.dst." + id + " = getelementptr i8, ptr " + dst_ptr + ", i64 " + current_len);
+    emitln("    store i16 %d2.pair." + id + ", ptr %d2.dst." + id);
+    emitln("    %d2.newlen." + id + " = add i64 " + current_len + ", 2");
+    emitln("    br label %" + merge_label);
+
+    // Check 3 digits (100-999)
+    emitln(d3_label + ":");
+    emitln("    %is.3d." + id + " = icmp slt i64 " + int_val + ", 1000");
+    emitln("    br i1 %is.3d." + id + ", label %do.3d." + id + ", label %" + d4_label);
+
+    // 3 digits: first digit + lookup for last 2
+    emitln("do.3d." + id + ":");
+    emitln("    %d3.hi." + id + " = sdiv i64 " + int_val + ", 100"); // first digit
+    emitln("    %d3.lo." + id + " = srem i64 " + int_val + ", 100"); // last 2 digits
+    emitln("    %d3.hi8." + id + " = trunc i64 %d3.hi." + id + " to i8");
+    emitln("    %d3.char." + id + " = add i8 %d3.hi8." + id + ", 48");
+    emitln("    %d3.dst0." + id + " = getelementptr i8, ptr " + dst_ptr + ", i64 " + current_len);
+    emitln("    store i8 %d3.char." + id + ", ptr %d3.dst0." + id);
+    emitln("    %d3.off1." + id + " = add i64 " + current_len + ", 1");
+    emitln("    %d3.idx." + id + " = shl i64 %d3.lo." + id + ", 1");
+    emitln("    %d3.ptr." + id + " = getelementptr i8, ptr @.digit_pairs, i64 %d3.idx." + id);
+    emitln("    %d3.pair." + id + " = load i16, ptr %d3.ptr." + id);
+    emitln("    %d3.dst1." + id + " = getelementptr i8, ptr " + dst_ptr + ", i64 %d3.off1." + id);
+    emitln("    store i16 %d3.pair." + id + ", ptr %d3.dst1." + id);
+    emitln("    %d3.newlen." + id + " = add i64 " + current_len + ", 3");
+    emitln("    br label %" + merge_label);
+
+    // 4 digits (1000-9999): 2x lookup table
+    emitln(d4_label + ":");
+    emitln("    %d4.hi." + id + " = sdiv i64 " + int_val + ", 100"); // first 2 digits
+    emitln("    %d4.lo." + id + " = srem i64 " + int_val + ", 100"); // last 2 digits
+    emitln("    %d4.idx.hi." + id + " = shl i64 %d4.hi." + id + ", 1");
+    emitln("    %d4.ptr.hi." + id + " = getelementptr i8, ptr @.digit_pairs, i64 %d4.idx.hi." + id);
+    emitln("    %d4.pair.hi." + id + " = load i16, ptr %d4.ptr.hi." + id);
+    emitln("    %d4.dst0." + id + " = getelementptr i8, ptr " + dst_ptr + ", i64 " + current_len);
+    emitln("    store i16 %d4.pair.hi." + id + ", ptr %d4.dst0." + id);
+    emitln("    %d4.off2." + id + " = add i64 " + current_len + ", 2");
+    emitln("    %d4.idx.lo." + id + " = shl i64 %d4.lo." + id + ", 1");
+    emitln("    %d4.ptr.lo." + id + " = getelementptr i8, ptr @.digit_pairs, i64 %d4.idx.lo." + id);
+    emitln("    %d4.pair.lo." + id + " = load i16, ptr %d4.ptr.lo." + id);
+    emitln("    %d4.dst2." + id + " = getelementptr i8, ptr " + dst_ptr + ", i64 %d4.off2." + id);
+    emitln("    store i16 %d4.pair.lo." + id + ", ptr %d4.dst2." + id);
+    emitln("    %d4.newlen." + id + " = add i64 " + current_len + ", 4");
+    emitln("    br label %" + merge_label);
+
+    // FFI fallback for negative or large values
+    emitln(ffi_label + ":");
+    emitln("    call void @tml_text_push_i64_unsafe(ptr " + receiver + ", i64 " + int_val + ")");
+    emitln("    %ffi.len.ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+    emitln("    %ffi.newlen." + id + " = load i64, ptr %ffi.len.ptr." + id);
+    emitln("    br label %" + merge_label);
+
+    // Merge block with phi for new length
+    emitln(merge_label + ":");
+    emitln("    %newlen." + id + " = phi i64 [ %d1.newlen." + id + ", %do.1d." + id + " ], " +
+           "[ %d2.newlen." + id + ", %do.2d." + id + " ], " + "[ %d3.newlen." + id + ", %do.3d." +
+           id + " ], " + "[ %d4.newlen." + id + ", %" + d4_label + " ], " + "[ %ffi.newlen." + id +
+           ", %" + ffi_label + " ]");
+
+    // Store new length
+    emitln("    store i64 %newlen." + id + ", ptr " + len_ptr);
+
+    return "%newlen." + id;
 }
 
 } // namespace tml::codegen
