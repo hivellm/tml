@@ -483,12 +483,86 @@ struct ClosureInitInst {
     MirTypePtr result_type;                                    // Closure struct type
 };
 
+// ============================================================================
+// Atomic Instructions
+// ============================================================================
+
+/// Memory ordering for atomic operations.
+/// Maps directly to LLVM atomic orderings.
+enum class AtomicOrdering {
+    Monotonic, ///< Relaxed - no synchronization
+    Acquire,   ///< Acquire - prevents reordering after
+    Release,   ///< Release - prevents reordering before
+    AcqRel,    ///< Both acquire and release
+    SeqCst,    ///< Sequentially consistent
+};
+
+/// Atomic RMW (read-modify-write) operation types.
+enum class AtomicRMWOp {
+    Xchg, ///< Exchange (swap)
+    Add,  ///< Addition
+    Sub,  ///< Subtraction
+    And,  ///< Bitwise AND
+    Nand, ///< Bitwise NAND
+    Or,   ///< Bitwise OR
+    Xor,  ///< Bitwise XOR
+    Max,  ///< Signed maximum
+    Min,  ///< Signed minimum
+    UMax, ///< Unsigned maximum
+    UMin, ///< Unsigned minimum
+};
+
+/// Atomic load instruction: result = atomic_load(ptr, ordering)
+struct AtomicLoadInst {
+    Value ptr;               ///< Pointer to load from
+    AtomicOrdering ordering; ///< Memory ordering
+    MirTypePtr result_type;  ///< Type being loaded
+};
+
+/// Atomic store instruction: atomic_store(ptr, value, ordering)
+struct AtomicStoreInst {
+    Value ptr;               ///< Pointer to store to
+    Value value;             ///< Value to store
+    AtomicOrdering ordering; ///< Memory ordering
+    MirTypePtr value_type;   ///< Type being stored
+};
+
+/// Atomic read-modify-write instruction: result = atomicrmw op ptr, val, ordering
+struct AtomicRMWInst {
+    AtomicRMWOp op;          ///< RMW operation type
+    Value ptr;               ///< Pointer to operate on
+    Value value;             ///< Value operand
+    AtomicOrdering ordering; ///< Memory ordering
+    MirTypePtr value_type;   ///< Type of value
+};
+
+/// Atomic compare-and-exchange instruction:
+/// result = cmpxchg ptr, expected, desired, success_ordering, failure_ordering
+/// Returns a struct { T value; bool success; }
+struct AtomicCmpXchgInst {
+    Value ptr;                       ///< Pointer to operate on
+    Value expected;                  ///< Expected value
+    Value desired;                   ///< Desired new value
+    AtomicOrdering success_ordering; ///< Ordering on success
+    AtomicOrdering failure_ordering; ///< Ordering on failure
+    bool weak = false;               ///< If true, may spuriously fail
+    MirTypePtr value_type;           ///< Type of value
+};
+
+/// Memory fence instruction: fence ordering
+struct FenceInst {
+    AtomicOrdering ordering;    ///< Memory ordering
+    bool single_thread = false; ///< If true, compiler fence only (signal fence)
+};
+
 // All instruction types
 using Instruction =
     std::variant<BinaryInst, UnaryInst, LoadInst, StoreInst, AllocaInst, GetElementPtrInst,
                  ExtractValueInst, InsertValueInst, CallInst, MethodCallInst, CastInst, PhiInst,
                  ConstantInst, SelectInst, StructInitInst, EnumInitInst, TupleInitInst,
-                 ArrayInitInst, AwaitInst, ClosureInitInst>;
+                 ArrayInitInst, AwaitInst, ClosureInitInst,
+                 // Atomic instructions
+                 AtomicLoadInst, AtomicStoreInst, AtomicRMWInst, AtomicCmpXchgInst, FenceInst>;
 
 // Instruction with result
 struct InstructionData {

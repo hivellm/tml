@@ -576,6 +576,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                     std::cout << "Including net runtime: " << net_obj << "\n";
                 }
             }
+
+            // Include collections.c (needed by string.c for list_* functions)
+            fs::path collections_c = runtime_dir / "collections.c";
+            if (fs::exists(collections_c)) {
+                std::string collections_obj = ensure_c_compiled(
+                    to_forward_slashes(collections_c.string()), deps_cache, clang, verbose);
+                objects.push_back(fs::path(collections_obj));
+                if (verbose) {
+                    std::cout << "Including collections runtime: " << collections_obj << "\n";
+                }
+            }
         }
     }
 

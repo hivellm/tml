@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **MIR Codegen Modularization** (2026-01-20) - Split `mir_codegen.cpp` (~1786 lines) into focused modules
+  - `mir/helpers.cpp` - Value lookup, atomic helpers, binary operation helpers (~180 lines)
+  - `mir/types.cpp` - MIR to LLVM type conversion (~100 lines)
+  - `mir/terminators.cpp` - Return, Branch, Switch, Unreachable emission (~100 lines)
+  - `mir/instructions.cpp` - All instruction emission (~850 lines)
+  - Core `mir_codegen.cpp` reduced to ~413 lines (generation orchestration only)
+  - Files added:
+    - `compiler/src/codegen/mir/helpers.cpp`
+    - `compiler/src/codegen/mir/types.cpp`
+    - `compiler/src/codegen/mir/terminators.cpp`
+    - `compiler/src/codegen/mir/instructions.cpp`
+  - Files modified:
+    - `compiler/src/codegen/mir_codegen.cpp` - Kept core generation methods
+    - `compiler/include/codegen/mir_codegen.hpp` - Added helper method declarations
+    - `compiler/CMakeLists.txt` - Added new source files to tml_codegen
+
+- **Runtime Modularization** (2026-01-20) - Split `essential.c` into focused runtime modules
+  - `sync.c` - Synchronization primitives (mutex, rwlock, condvar, thread functions)
+  - `pool.c` - Object pool functions for `@pool` classes (global and thread-local pools)
+  - `collections.c` - Dynamic list functions (list_create, list_push, list_get, etc.)
+  - Reduces `essential.c` complexity and improves code organization
+  - Files added:
+    - `compiler/runtime/sync.c` - tml_mutex_*, tml_rwlock_*, tml_condvar_*, tml_thread_*
+    - `compiler/runtime/pool.c` - pool_init, pool_acquire, pool_release, tls_pool_*
+    - `compiler/runtime/collections.c` - list_create, list_push, list_pop, list_get, etc.
+  - Files modified:
+    - `compiler/runtime/essential.c` - Removed duplicated code
+    - `compiler/CMakeLists.txt` - Added new runtime source files
+    - `compiler/src/cli/builder/helpers.cpp` - Added collections.c to default runtime linking
+
 - **Self-Contained Compiler** (2026-01-19) - TML compiler now works without external tool dependencies
   - Built-in LLVM backend for IR-to-object compilation (no clang required)
   - Built-in LLD linker integration (no system linkers required)

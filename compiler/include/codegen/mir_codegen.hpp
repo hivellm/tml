@@ -110,22 +110,67 @@ private:
     void emit_instruction(const mir::InstructionData& inst);
     void emit_terminator(const mir::Terminator& term);
 
-    // Type conversion
+    // Type conversion (implemented in mir/types.cpp)
     auto mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string;
     auto mir_primitive_to_llvm(mir::PrimitiveType kind) -> std::string;
 
-    // Value lookup
+    // Value lookup (implemented in mir/helpers.cpp)
     auto get_value_reg(const mir::Value& val) -> std::string;
     auto new_temp() -> std::string;
 
-    // Binary operation helpers
+    // Binary operation helpers (implemented in mir/helpers.cpp)
     auto get_binop_name(mir::BinOp op, bool is_float, bool is_signed) -> std::string;
     auto get_cmp_predicate(mir::BinOp op, bool is_float, bool is_signed) -> std::string;
+
+    // Atomic operation helpers (implemented in mir/helpers.cpp)
+    auto atomic_ordering_to_llvm(mir::AtomicOrdering ordering) -> std::string;
+    auto atomic_rmw_op_to_llvm(mir::AtomicRMWOp op) -> std::string;
+    auto get_type_alignment(const mir::MirTypePtr& type) -> size_t;
 
     // Emit helpers
     void emit(const std::string& s);
     void emitln(const std::string& s = "");
     void emit_comment(const std::string& s);
+
+    // Instruction emission helpers (implemented in mir/instructions.cpp)
+    void emit_binary_inst(const mir::BinaryInst& i, const std::string& result_reg,
+                          const mir::MirTypePtr& result_type, const mir::InstructionData& inst);
+    void emit_unary_inst(const mir::UnaryInst& i, const std::string& result_reg);
+    void emit_extract_value_inst(const mir::ExtractValueInst& i, const std::string& result_reg,
+                                 const mir::InstructionData& inst);
+    void emit_insert_value_inst(const mir::InsertValueInst& i, const std::string& result_reg);
+    void emit_call_inst(const mir::CallInst& i, const std::string& result_reg,
+                        const mir::InstructionData& inst);
+    void emit_method_call_inst(const mir::MethodCallInst& i, const std::string& result_reg,
+                               const mir::InstructionData& inst);
+    void emit_cast_inst(const mir::CastInst& i, const std::string& result_reg,
+                        const mir::InstructionData& inst);
+    void emit_phi_inst(const mir::PhiInst& i, const std::string& result_reg,
+                       const mir::InstructionData& inst);
+    void emit_constant_inst(const mir::ConstantInst& i, const std::string& result_reg,
+                            const mir::InstructionData& inst);
+    void emit_struct_init_inst(const mir::StructInitInst& i, const std::string& result_reg,
+                               const mir::MirTypePtr& result_type,
+                               const mir::InstructionData& inst);
+    void emit_tuple_init_inst(const mir::TupleInitInst& i, const std::string& result_reg);
+    void emit_array_init_inst(const mir::ArrayInitInst& i, const std::string& result_reg);
+    void emit_atomic_load_inst(const mir::AtomicLoadInst& i, const std::string& result_reg,
+                               const mir::InstructionData& inst);
+    void emit_atomic_store_inst(const mir::AtomicStoreInst& i);
+    void emit_atomic_rmw_inst(const mir::AtomicRMWInst& i, const std::string& result_reg,
+                              const mir::InstructionData& inst);
+    void emit_atomic_cmpxchg_inst(const mir::AtomicCmpXchgInst& i, const std::string& result_reg,
+                                  const mir::InstructionData& inst);
+
+    // Call emission helpers (implemented in mir/instructions.cpp)
+    void emit_llvm_intrinsic_call(const mir::CallInst& i, const std::string& base_name,
+                                  const std::string& result_reg, const mir::InstructionData& inst);
+    void emit_sret_call(const std::string& func_name, const std::string& orig_ret_type,
+                        const std::vector<std::string>& processed_args,
+                        const std::string& result_reg, const mir::InstructionData& inst);
+    void emit_normal_call(const mir::CallInst& i, const std::string& func_name,
+                          const std::vector<std::string>& processed_args,
+                          const std::string& result_reg, const mir::InstructionData& inst);
 };
 
 } // namespace tml::codegen

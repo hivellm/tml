@@ -101,6 +101,9 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/math.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/thread.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/sync.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/pool.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections.c
 )
 
 # Create static library
@@ -394,6 +397,11 @@ add_library(tml_codegen STATIC
     src/codegen/builtins/assert.cpp
     src/codegen/builtins/async.cpp
     src/codegen/builtins/intrinsics.cpp
+    # MIR codegen modules (split from mir_codegen.cpp for maintainability)
+    src/codegen/mir/helpers.cpp
+    src/codegen/mir/types.cpp
+    src/codegen/mir/terminators.cpp
+    src/codegen/mir/instructions.cpp
 )
 target_link_libraries(tml_codegen PUBLIC tml_mir)
 target_include_directories(tml_codegen PUBLIC include src)
