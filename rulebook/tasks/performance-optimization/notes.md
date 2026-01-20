@@ -16,16 +16,16 @@
 
 | Benchmark | C++ ops/sec | TML ops/sec | Ratio | Status |
 |-----------|-------------|-------------|-------|--------|
-| Build JSON | 2.5M | 8.6M | **3.4x** | TML wins! |
-| Number Formatting | 1.6M | 12.8M | **8x** | TML wins! |
-| fill_char() batch | 1.2B | 43B | **36x** | TML wins! |
-| Small Appends push() | 1.2B | 1.64B | **1.4x** | TML wins! |
-| Small Appends push_str() | N/A | 70M | N/A | MIR Inlined |
-| Small Appends raw ptr | N/A | 43B | N/A | Optimized |
-| Build HTML | 65M | 20M | 0.30x | FFI overhead (str_len) |
-| Build CSV | 54M | 10M | 0.19x | FFI overhead (str_len) |
-| Log Messages | 31.5M | 8.3M | 0.26x | FFI overhead |
-| Path Building | 71.8M | 12M | 0.17x | FFI overhead |
+| Build JSON | 2.5M | 9.6M | **3.8x** | TML wins! |
+| Build HTML | 65M | 20.8M | 0.32x | FFI overhead (push_i64) |
+| Build CSV | 54M | 11.2M | 0.21x | FFI overhead (push_i64) |
+| Number Formatting | 1.6M | 13.3M | **8.3x** | TML wins! |
+| fill_char() batch | 1.2B | 28.4B | **24x** | TML wins! |
+| Small Appends push() | 1.2B | 1.63B | **1.4x** | TML wins! |
+| Small Appends push_str() | N/A | 74.7M | N/A | MIR Inlined |
+| Small Appends raw ptr | N/A | 25.8B | N/A | store_byte intrinsic |
+| Log Messages | 31.5M | 8.5M | 0.27x | FFI overhead (push_i64) |
+| Path Building | 71.8M | 12.8M | 0.18x | FFI overhead (push_i64) |
 
 ## MIR Inline Optimizations
 
@@ -35,15 +35,19 @@ Direct inline optimizations in MIR codegen for Text methods:
 - `is_empty()` - Branchless select
 - `capacity()` - Branchless select
 - `push()` - V8-style inline with heap mode fast path (1.7B ops/sec)
-- `push_str()` - Inline memcpy fast path + constant length (72M ops/sec)
+- `push_str()` - Inline memcpy fast path + constant length (73M ops/sec)
 - `push_i64()` - Fast path with push_i64_unsafe
 - `push_formatted()` - Inline memcpy + push_i64_unsafe + constant length
+- `push_log()` - Inline 4 memcpy + 3 push_i64_unsafe + constant lengths (8.1M ops/sec)
+- `push_path()` - Inline 3 memcpy + 2 push_i64_unsafe + constant lengths (12.4M ops/sec)
 
 ## Constant String Length Propagation
 
 Compile-time constant string length detection eliminates `str_len` FFI calls:
 - `push_str("hello")` -> uses length 5 directly (no FFI)
 - `push_formatted("prefix", n, "suffix")` -> prefix_len=6, suffix_len=6 directly
+- `push_log("[", n1, "] INFO: ...", n2, ...)` -> all 4 string lengths computed at compile-time
+- `push_path("/path/", n1, "/file", n2, ".txt")` -> all 3 string lengths computed at compile-time
 - Tracked via `value_string_contents_` map (ValueId -> string content)
 
 ## Legacy Codegen Inline Optimizations
@@ -90,4 +94,9 @@ Compile-time constant string length detection eliminates `str_len` FFI calls:
 - `push_formatted()`: Combines prefix + int + suffix in one FFI call
 - `push_log()`: Combines s1 + n1 + s2 + n2 + s3 + n3 + s4 in one FFI call
 - `push_path()`: Combines s1 + n1 + s2 + n2 + s3 in one FFI call
+- `store_byte()`: MIR intrinsic for direct memory write (GEP + store, no FFI)
 - Path Building: Reuse Text object instead of allocate/deallocate per iteration
+
+## Memory Intrinsics (MIR Codegen)
+
+- `store_byte(ptr, offset, byte)`: Direct byte store at ptr+offset without FFI (25.8B ops/sec)

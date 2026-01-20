@@ -463,6 +463,23 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         return;
     }
 
+    // Handle store_byte intrinsic: store_byte(ptr, offset, byte_val)
+    // Optimized for tight loops - combines GEP and store in one intrinsic
+    if (base_name == "store_byte" && i.args.size() >= 3) {
+        std::string id = std::to_string(temp_counter_++);
+        std::string ptr = get_value_reg(i.args[0]);
+        std::string offset = get_value_reg(i.args[1]);
+        std::string byte_val = get_value_reg(i.args[2]);
+
+        // GEP to compute ptr + offset
+        emitln("    %gep.sb." + id + " = getelementptr i8, ptr " + ptr + ", i64 " + offset);
+        // Truncate i32 to i8
+        emitln("    %trunc.sb." + id + " = trunc i32 " + byte_val + " to i8");
+        // Store the byte
+        emitln("    store i8 %trunc.sb." + id + ", ptr %gep.sb." + id);
+        return;
+    }
+
     // Sanitize function name: replace :: with __ for LLVM compatibility
     std::string func_name = i.func_name;
     size_t pos = 0;
@@ -966,6 +983,257 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    br label %pfmt_done." + id);
 
             emitln("  pfmt_done." + id + ":");
+            return;
+        }
+
+        if (i.method_name == "push_log" && i.args.size() == 7) {
+            // Inline Text::push_log(s1, n1, s2, n2, s3, n3, s4) with fast path
+            // Pattern: s1 + n1 + s2 + n2 + s3 + n3 + s4
+            std::string id = std::to_string(temp_counter_++);
+            std::string s1 = get_value_reg(i.args[0]);
+            std::string n1 = get_value_reg(i.args[1]);
+            std::string s2 = get_value_reg(i.args[2]);
+            std::string n2 = get_value_reg(i.args[3]);
+            std::string s3 = get_value_reg(i.args[4]);
+            std::string n3 = get_value_reg(i.args[5]);
+            std::string s4 = get_value_reg(i.args[6]);
+
+            // Check for constant strings (compile-time length - no FFI!)
+            auto s1_const = value_string_contents_.find(i.args[0].id);
+            auto s2_const = value_string_contents_.find(i.args[2].id);
+            auto s3_const = value_string_contents_.find(i.args[4].id);
+            auto s4_const = value_string_contents_.find(i.args[6].id);
+
+            // Get lengths for all 4 strings
+            if (s1_const != value_string_contents_.end()) {
+                emitln("    %s1_len." + id + " = add i64 0, " +
+                       std::to_string(s1_const->second.size()));
+            } else {
+                emitln("    %s1_len_i32." + id + " = call i32 @str_len(ptr " + s1 + ")");
+                emitln("    %s1_len." + id + " = zext i32 %s1_len_i32." + id + " to i64");
+            }
+            if (s2_const != value_string_contents_.end()) {
+                emitln("    %s2_len." + id + " = add i64 0, " +
+                       std::to_string(s2_const->second.size()));
+            } else {
+                emitln("    %s2_len_i32." + id + " = call i32 @str_len(ptr " + s2 + ")");
+                emitln("    %s2_len." + id + " = zext i32 %s2_len_i32." + id + " to i64");
+            }
+            if (s3_const != value_string_contents_.end()) {
+                emitln("    %s3_len." + id + " = add i64 0, " +
+                       std::to_string(s3_const->second.size()));
+            } else {
+                emitln("    %s3_len_i32." + id + " = call i32 @str_len(ptr " + s3 + ")");
+                emitln("    %s3_len." + id + " = zext i32 %s3_len_i32." + id + " to i64");
+            }
+            if (s4_const != value_string_contents_.end()) {
+                emitln("    %s4_len." + id + " = add i64 0, " +
+                       std::to_string(s4_const->second.size()));
+            } else {
+                emitln("    %s4_len_i32." + id + " = call i32 @str_len(ptr " + s4 + ")");
+                emitln("    %s4_len." + id + " = zext i32 %s4_len_i32." + id + " to i64");
+            }
+
+            // Load flags and check if heap mode (flags == 0)
+            emitln("    %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 24");
+            emitln("    %flags." + id + " = load i8, ptr %flags_ptr." + id);
+            emitln("    %is_heap." + id + " = icmp eq i8 %flags." + id + ", 0");
+            emitln("    br i1 %is_heap." + id + ", label %plog_heap." + id + ", label %plog_slow." +
+                   id);
+
+            // Heap path: check capacity for all strings + 60 (3 ints max 20 each)
+            emitln("  plog_heap." + id + ":");
+            emitln("    %data_ptr_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 0");
+            emitln("    %data_ptr." + id + " = load ptr, ptr %data_ptr_ptr." + id);
+            emitln("    %len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+            emitln("    %len." + id + " = load i64, ptr %len_ptr." + id);
+            emitln("    %cap_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 16");
+            emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
+
+            // Calculate needed: len + s1 + s2 + s3 + s4 + 60
+            emitln("    %need1." + id + " = add i64 %len." + id + ", %s1_len." + id);
+            emitln("    %need2." + id + " = add i64 %need1." + id + ", %s2_len." + id);
+            emitln("    %need3." + id + " = add i64 %need2." + id + ", %s3_len." + id);
+            emitln("    %need4." + id + " = add i64 %need3." + id + ", %s4_len." + id);
+            emitln("    %needed." + id + " = add i64 %need4." + id + ", 60");
+            emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
+            emitln("    br i1 %has_space." + id + ", label %plog_fast." + id + ", label %plog_slow." +
+                   id);
+
+            // Fast path: inline all memcpy and push_i64_unsafe
+            emitln("  plog_fast." + id + ":");
+
+            // s1
+            emitln("    %dst1." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
+                   id);
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst1." + id + ", ptr " + s1 +
+                   ", i64 %s1_len." + id + ", i1 false)");
+            emitln("    %len1." + id + " = add i64 %len." + id + ", %s1_len." + id);
+            emitln("    store i64 %len1." + id + ", ptr %len_ptr." + id);
+
+            // n1
+            emitln("    %w1." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
+                   ", i64 " + n1 + ")");
+            emitln("    %len2." + id + " = load i64, ptr %len_ptr." + id);
+
+            // s2
+            emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len2." +
+                   id);
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst2." + id + ", ptr " + s2 +
+                   ", i64 %s2_len." + id + ", i1 false)");
+            emitln("    %len3." + id + " = add i64 %len2." + id + ", %s2_len." + id);
+            emitln("    store i64 %len3." + id + ", ptr %len_ptr." + id);
+
+            // n2
+            emitln("    %w2." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
+                   ", i64 " + n2 + ")");
+            emitln("    %len4." + id + " = load i64, ptr %len_ptr." + id);
+
+            // s3
+            emitln("    %dst3." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len4." +
+                   id);
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst3." + id + ", ptr " + s3 +
+                   ", i64 %s3_len." + id + ", i1 false)");
+            emitln("    %len5." + id + " = add i64 %len4." + id + ", %s3_len." + id);
+            emitln("    store i64 %len5." + id + ", ptr %len_ptr." + id);
+
+            // n3
+            emitln("    %w3." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
+                   ", i64 " + n3 + ")");
+            emitln("    %len6." + id + " = load i64, ptr %len_ptr." + id);
+
+            // s4
+            emitln("    %dst4." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len6." +
+                   id);
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst4." + id + ", ptr " + s4 +
+                   ", i64 %s4_len." + id + ", i1 false)");
+            emitln("    %len7." + id + " = add i64 %len6." + id + ", %s4_len." + id);
+            emitln("    store i64 %len7." + id + ", ptr %len_ptr." + id);
+
+            emitln("    br label %plog_done." + id);
+
+            // Slow path: call FFI
+            emitln("  plog_slow." + id + ":");
+            emitln("    call void @tml_text_push_log(ptr " + receiver + ", ptr " + s1 +
+                   ", i64 %s1_len." + id + ", i64 " + n1 + ", ptr " + s2 + ", i64 %s2_len." + id +
+                   ", i64 " + n2 + ", ptr " + s3 + ", i64 %s3_len." + id + ", i64 " + n3 +
+                   ", ptr " + s4 + ", i64 %s4_len." + id + ")");
+            emitln("    br label %plog_done." + id);
+
+            emitln("  plog_done." + id + ":");
+            return;
+        }
+
+        if (i.method_name == "push_path" && i.args.size() == 5) {
+            // Inline Text::push_path(s1, n1, s2, n2, s3) with fast path
+            // Pattern: s1 + n1 + s2 + n2 + s3
+            std::string id = std::to_string(temp_counter_++);
+            std::string s1 = get_value_reg(i.args[0]);
+            std::string n1 = get_value_reg(i.args[1]);
+            std::string s2 = get_value_reg(i.args[2]);
+            std::string n2 = get_value_reg(i.args[3]);
+            std::string s3 = get_value_reg(i.args[4]);
+
+            // Check for constant strings (compile-time length - no FFI!)
+            auto s1_const = value_string_contents_.find(i.args[0].id);
+            auto s2_const = value_string_contents_.find(i.args[2].id);
+            auto s3_const = value_string_contents_.find(i.args[4].id);
+
+            // Get lengths for all 3 strings
+            if (s1_const != value_string_contents_.end()) {
+                emitln("    %s1_len." + id + " = add i64 0, " +
+                       std::to_string(s1_const->second.size()));
+            } else {
+                emitln("    %s1_len_i32." + id + " = call i32 @str_len(ptr " + s1 + ")");
+                emitln("    %s1_len." + id + " = zext i32 %s1_len_i32." + id + " to i64");
+            }
+            if (s2_const != value_string_contents_.end()) {
+                emitln("    %s2_len." + id + " = add i64 0, " +
+                       std::to_string(s2_const->second.size()));
+            } else {
+                emitln("    %s2_len_i32." + id + " = call i32 @str_len(ptr " + s2 + ")");
+                emitln("    %s2_len." + id + " = zext i32 %s2_len_i32." + id + " to i64");
+            }
+            if (s3_const != value_string_contents_.end()) {
+                emitln("    %s3_len." + id + " = add i64 0, " +
+                       std::to_string(s3_const->second.size()));
+            } else {
+                emitln("    %s3_len_i32." + id + " = call i32 @str_len(ptr " + s3 + ")");
+                emitln("    %s3_len." + id + " = zext i32 %s3_len_i32." + id + " to i64");
+            }
+
+            // Load flags and check if heap mode (flags == 0)
+            emitln("    %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 24");
+            emitln("    %flags." + id + " = load i8, ptr %flags_ptr." + id);
+            emitln("    %is_heap." + id + " = icmp eq i8 %flags." + id + ", 0");
+            emitln("    br i1 %is_heap." + id + ", label %ppath_heap." + id +
+                   ", label %ppath_slow." + id);
+
+            // Heap path: check capacity for all strings + 40 (2 ints max 20 each)
+            emitln("  ppath_heap." + id + ":");
+            emitln("    %data_ptr_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 0");
+            emitln("    %data_ptr." + id + " = load ptr, ptr %data_ptr_ptr." + id);
+            emitln("    %len_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
+            emitln("    %len." + id + " = load i64, ptr %len_ptr." + id);
+            emitln("    %cap_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 16");
+            emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
+
+            // Calculate needed: len + s1 + s2 + s3 + 40
+            emitln("    %need1." + id + " = add i64 %len." + id + ", %s1_len." + id);
+            emitln("    %need2." + id + " = add i64 %need1." + id + ", %s2_len." + id);
+            emitln("    %need3." + id + " = add i64 %need2." + id + ", %s3_len." + id);
+            emitln("    %needed." + id + " = add i64 %need3." + id + ", 40");
+            emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
+            emitln("    br i1 %has_space." + id + ", label %ppath_fast." + id +
+                   ", label %ppath_slow." + id);
+
+            // Fast path: inline all memcpy and push_i64_unsafe
+            emitln("  ppath_fast." + id + ":");
+
+            // s1
+            emitln("    %dst1." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
+                   id);
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst1." + id + ", ptr " + s1 +
+                   ", i64 %s1_len." + id + ", i1 false)");
+            emitln("    %len1." + id + " = add i64 %len." + id + ", %s1_len." + id);
+            emitln("    store i64 %len1." + id + ", ptr %len_ptr." + id);
+
+            // n1
+            emitln("    %w1." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
+                   ", i64 " + n1 + ")");
+            emitln("    %len2." + id + " = load i64, ptr %len_ptr." + id);
+
+            // s2
+            emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len2." +
+                   id);
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst2." + id + ", ptr " + s2 +
+                   ", i64 %s2_len." + id + ", i1 false)");
+            emitln("    %len3." + id + " = add i64 %len2." + id + ", %s2_len." + id);
+            emitln("    store i64 %len3." + id + ", ptr %len_ptr." + id);
+
+            // n2
+            emitln("    %w2." + id + " = call i64 @tml_text_push_i64_unsafe(ptr " + receiver +
+                   ", i64 " + n2 + ")");
+            emitln("    %len4." + id + " = load i64, ptr %len_ptr." + id);
+
+            // s3
+            emitln("    %dst3." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len4." +
+                   id);
+            emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst3." + id + ", ptr " + s3 +
+                   ", i64 %s3_len." + id + ", i1 false)");
+            emitln("    %len5." + id + " = add i64 %len4." + id + ", %s3_len." + id);
+            emitln("    store i64 %len5." + id + ", ptr %len_ptr." + id);
+
+            emitln("    br label %ppath_done." + id);
+
+            // Slow path: call FFI
+            emitln("  ppath_slow." + id + ":");
+            emitln("    call void @tml_text_push_path(ptr " + receiver + ", ptr " + s1 +
+                   ", i64 %s1_len." + id + ", i64 " + n1 + ", ptr " + s2 + ", i64 %s2_len." + id +
+                   ", i64 " + n2 + ", ptr " + s3 + ", i64 %s3_len." + id + ")");
+            emitln("    br label %ppath_done." + id);
+
+            emitln("  ppath_done." + id + ":");
             return;
         }
     }

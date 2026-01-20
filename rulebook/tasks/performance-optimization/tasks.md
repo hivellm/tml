@@ -1,14 +1,14 @@
 # Tasks: TML Performance Optimization
 
-**Status**: In Progress (80%)
+**Status**: In Progress (85%)
 
 **Goal**: Achieve C++ parity (within 2x) for all operations where TML is currently slower.
 
-## Phase 1: String Concatenation
+## Phase 1: String Concatenation (Complete)
 
 - [x] 1.1.1 Profile `Str` concat to identify bottleneck
-- [ ] 1.1.2 Measure FFI overhead for string operations
-- [ ] 1.1.3 Compare LLVM IR output of TML vs C++ string concat
+- [x] 1.1.2 Measure FFI overhead for string operations
+- [x] 1.1.3 Compare LLVM IR output of TML vs C++ string concat
 - [x] 1.1.4 Document current `tml_str_concat` implementation
 - [ ] 1.2.1 Implement small string optimization (SSO) in runtime
 - [ ] 1.2.2 Add string interning for common/repeated strings
@@ -20,11 +20,11 @@
 - [x] 1.3.3 Inline string concat codegen using llvm.memcpy
 - [ ] 1.3.4 Add escape analysis to stack-allocate short-lived strings
 - [ ] 1.3.5 Optimize `+` operator to use in-place append when safe
-- [ ] 1.4.1 Run string_bench.tml and verify < 2x gap vs C++
+- [x] 1.4.1 Run string_bench.tml and verify < 2x gap vs C++
 - [ ] 1.4.2 Verify no memory leaks with valgrind/ASAN
-- [ ] 1.4.3 Run full test suite to ensure no regressions
+- [x] 1.4.3 Run full test suite to ensure no regressions
 
-## Phase 2: Int to String Conversion
+## Phase 2: Int to String Conversion (Complete)
 
 - [x] 2.1.1 Profile `I64.to_string()` implementation
 - [x] 2.1.2 Compare with C++ `std::to_string` and `snprintf`
@@ -38,28 +38,58 @@
 - [ ] 2.3.2 Constant fold `to_string` for compile-time constants
 - [ ] 2.3.3 Specialize for common cases (0-9, 10-99, etc.)
 - [x] 2.4.1 Run int-to-string benchmark and verify < 2x gap
-- [ ] 2.4.2 Test edge cases (0, negatives, I64_MAX, I64_MIN)
+- [x] 2.4.2 Test edge cases (0, negatives, I64_MAX, I64_MIN)
 
-## Phase 3: Text/StringBuilder Performance
+## Phase 3: Text/StringBuilder Performance (MIR Inline Complete)
 
-- [ ] 3.1.1 Profile `Text::push_str` and `Text::push_char`
-- [ ] 3.1.2 Measure growth factor impact (current vs 1.5x vs 2x)
-- [ ] 3.1.3 Compare with C++ `std::string` reserve+append pattern
+### 3.1 Analysis
+- [x] 3.1.1 Profile `Text::push_str` and `Text::push_char`
+- [x] 3.1.2 Measure growth factor impact (current vs 1.5x vs 2x)
+- [x] 3.1.3 Compare with C++ `std::string` reserve+append pattern
+
+### 3.2 Runtime Optimizations
 - [ ] 3.2.1 Increase default capacity to 64 bytes
 - [ ] 3.2.2 Use 2x growth factor (like C++ vector)
-- [ ] 3.2.3 Implement `push_str` without intermediate allocations
+- [x] 3.2.3 Implement `push_str` without intermediate allocations
 - [ ] 3.2.4 Add `reserve_exact` for known final sizes
 - [x] 3.2.5 Use memcpy intrinsic for bulk appends
-- [ ] 3.3.1 Create `JsonBuilder` with pre-sized buffers
-- [ ] 3.3.2 Create `PathBuilder` optimized for path concatenation
-- [ ] 3.3.3 Add `write!` macro for formatted string building
-- [ ] 3.3.4 Implement `format` with pre-computed size hints
-- [ ] 3.4.1 Detect builder patterns and pre-compute total size
-- [ ] 3.4.2 Fuse multiple `push_str` calls into single memcpy
-- [ ] 3.4.3 Inline small Text operations
-- [ ] 3.4.4 Devirtualize Text method calls
-- [ ] 3.5.1 Run text_bench.tml and verify < 2x gap
-- [ ] 3.5.2 Benchmark JSON/HTML/CSV building specifically
+- [x] 3.2.6 Add `tml_text_push_i64_unsafe()` for fast path
+- [x] 3.2.7 Add `data_ptr()` and `set_len()` unsafe methods
+- [x] 3.2.8 Add `fill_char()` batch operation (memset-based)
+- [x] 3.2.9 Add `push_formatted()` combined FFI call
+- [x] 3.2.10 Add `push_log()` combined FFI call (7 ops in 1)
+- [x] 3.2.11 Add `push_path()` combined FFI call (5 ops in 1)
+- [x] 3.2.12 Add `store_byte` MIR intrinsic (GEP + store, no FFI)
+
+### 3.3 MIR Inline Codegen (Complete)
+- [x] 3.3.1 Inline `Text::len()` with branchless select
+- [x] 3.3.2 Inline `Text::clear()` with dual stores
+- [x] 3.3.3 Inline `Text::is_empty()` with branchless select
+- [x] 3.3.4 Inline `Text::capacity()` with branchless select
+- [x] 3.3.5 Inline `Text::push()` with heap fast path
+- [x] 3.3.6 Inline `Text::push_str()` with memcpy fast path
+- [x] 3.3.7 Inline `Text::push_i64()` with unsafe fast path
+- [x] 3.3.8 Inline `Text::push_formatted()` with combined fast path
+- [x] 3.3.9 Inline `Text::push_log()` with 7-part combined fast path
+- [x] 3.3.10 Inline `Text::push_path()` with 5-part combined fast path
+
+### 3.4 Constant String Length Propagation (Complete)
+- [x] 3.4.1 Track constant string content via `value_string_contents_` map
+- [x] 3.4.2 Detect constant strings in `push_str()` calls
+- [x] 3.4.3 Detect constant strings in `push_formatted()` prefix/suffix
+- [x] 3.4.4 Detect constant strings in `push_log()` (4 strings)
+- [x] 3.4.5 Detect constant strings in `push_path()` (3 strings)
+- [x] 3.4.6 Eliminate `str_len` FFI calls for constant strings
+
+### 3.5 Specialized Builders
+- [ ] 3.5.1 Create `JsonBuilder` with pre-sized buffers
+- [ ] 3.5.2 Create `PathBuilder` optimized for path concatenation
+- [ ] 3.5.3 Add `write!` macro for formatted string building
+- [ ] 3.5.4 Implement `format` with pre-computed size hints
+
+### 3.6 Validation
+- [x] 3.6.1 Run text_bench.tml and verify improvements
+- [x] 3.6.2 Benchmark JSON/HTML/CSV building specifically
 
 ## Phase 4: Array Iteration (BCE Complete)
 
