@@ -1854,7 +1854,7 @@ void MirCodegen::emit_atomic_cmpxchg_inst(const mir::AtomicCmpXchgInst& i,
 
 // Helper: emit inline int-to-string conversion
 // Returns the LLVM register containing the new length after conversion
-// Only handles non-negative values < 10000, falls back to FFI for others
+// Only handles non-negative values < 100000, falls back to FFI for others
 auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::string& int_val,
                                            const std::string& dst_ptr, const std::string& len_ptr,
                                            const std::string& current_len,
@@ -1862,22 +1862,22 @@ auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::str
                                            [[maybe_unused]] const std::string& done_label)
     -> std::string {
     // Branch labels
-    std::string neg_check = "i2s.neg." + id;
     std::string big_check = "i2s.big." + id;
     std::string ffi_label = "i2s.ffi." + id;
     std::string d1_label = "i2s.1d." + id;
     std::string d2_label = "i2s.2d." + id;
     std::string d3_label = "i2s.3d." + id;
     std::string d4_label = "i2s.4d." + id;
+    std::string d5_label = "i2s.5d." + id;
     std::string merge_label = "i2s.merge." + id;
 
     // Check negative
     emitln("    %is.neg." + id + " = icmp slt i64 " + int_val + ", 0");
     emitln("    br i1 %is.neg." + id + ", label %" + ffi_label + ", label %" + big_check);
 
-    // Check >= 10000
+    // Check >= 100000 (supports 5 digits now)
     emitln(big_check + ":");
-    emitln("    %is.big." + id + " = icmp sge i64 " + int_val + ", 10000");
+    emitln("    %is.big." + id + " = icmp sge i64 " + int_val + ", 100000");
     emitln("    br i1 %is.big." + id + ", label %" + ffi_label + ", label %" + d1_label);
 
     // Check 1 digit (0-9)
@@ -1931,8 +1931,13 @@ auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::str
     emitln("    %d3.newlen." + id + " = add i64 " + current_len + ", 3");
     emitln("    br label %" + merge_label);
 
-    // 4 digits (1000-9999): 2x lookup table
+    // Check 4 digits (1000-9999)
     emitln(d4_label + ":");
+    emitln("    %is.4d." + id + " = icmp slt i64 " + int_val + ", 10000");
+    emitln("    br i1 %is.4d." + id + ", label %do.4d." + id + ", label %" + d5_label);
+
+    // 4 digits (1000-9999): 2x lookup table
+    emitln("do.4d." + id + ":");
     emitln("    %d4.hi." + id + " = sdiv i64 " + int_val + ", 100"); // first 2 digits
     emitln("    %d4.lo." + id + " = srem i64 " + int_val + ", 100"); // last 2 digits
     emitln("    %d4.idx.hi." + id + " = shl i64 %d4.hi." + id + ", 1");
@@ -1949,7 +1954,34 @@ auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::str
     emitln("    %d4.newlen." + id + " = add i64 " + current_len + ", 4");
     emitln("    br label %" + merge_label);
 
-    // FFI fallback for negative or large values
+    // 5 digits (10000-99999): first digit + 2x lookup table
+    emitln(d5_label + ":");
+    emitln("    %d5.hi." + id + " = sdiv i64 " + int_val + ", 10000");   // first digit
+    emitln("    %d5.rest." + id + " = srem i64 " + int_val + ", 10000"); // last 4 digits
+    emitln("    %d5.hi8." + id + " = trunc i64 %d5.hi." + id + " to i8");
+    emitln("    %d5.char." + id + " = add i8 %d5.hi8." + id + ", 48");
+    emitln("    %d5.dst0." + id + " = getelementptr i8, ptr " + dst_ptr + ", i64 " + current_len);
+    emitln("    store i8 %d5.char." + id + ", ptr %d5.dst0." + id);
+    // Process remaining 4 digits using two lookups
+    emitln("    %d5.mid." + id + " = sdiv i64 %d5.rest." + id + ", 100"); // digits 2-3
+    emitln("    %d5.lo." + id + " = srem i64 %d5.rest." + id + ", 100");  // digits 4-5
+    emitln("    %d5.off1." + id + " = add i64 " + current_len + ", 1");
+    emitln("    %d5.idx.mid." + id + " = shl i64 %d5.mid." + id + ", 1");
+    emitln("    %d5.ptr.mid." + id + " = getelementptr i8, ptr @.digit_pairs, i64 %d5.idx.mid." +
+           id);
+    emitln("    %d5.pair.mid." + id + " = load i16, ptr %d5.ptr.mid." + id);
+    emitln("    %d5.dst1." + id + " = getelementptr i8, ptr " + dst_ptr + ", i64 %d5.off1." + id);
+    emitln("    store i16 %d5.pair.mid." + id + ", ptr %d5.dst1." + id);
+    emitln("    %d5.off3." + id + " = add i64 " + current_len + ", 3");
+    emitln("    %d5.idx.lo." + id + " = shl i64 %d5.lo." + id + ", 1");
+    emitln("    %d5.ptr.lo." + id + " = getelementptr i8, ptr @.digit_pairs, i64 %d5.idx.lo." + id);
+    emitln("    %d5.pair.lo." + id + " = load i16, ptr %d5.ptr.lo." + id);
+    emitln("    %d5.dst3." + id + " = getelementptr i8, ptr " + dst_ptr + ", i64 %d5.off3." + id);
+    emitln("    store i16 %d5.pair.lo." + id + ", ptr %d5.dst3." + id);
+    emitln("    %d5.newlen." + id + " = add i64 " + current_len + ", 5");
+    emitln("    br label %" + merge_label);
+
+    // FFI fallback for negative or values >= 100000
     emitln(ffi_label + ":");
     emitln("    call void @tml_text_push_i64_unsafe(ptr " + receiver + ", i64 " + int_val + ")");
     emitln("    %ffi.len.ptr." + id + " = getelementptr i8, ptr " + receiver + ", i64 8");
@@ -1960,8 +1992,8 @@ auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::str
     emitln(merge_label + ":");
     emitln("    %newlen." + id + " = phi i64 [ %d1.newlen." + id + ", %do.1d." + id + " ], " +
            "[ %d2.newlen." + id + ", %do.2d." + id + " ], " + "[ %d3.newlen." + id + ", %do.3d." +
-           id + " ], " + "[ %d4.newlen." + id + ", %" + d4_label + " ], " + "[ %ffi.newlen." + id +
-           ", %" + ffi_label + " ]");
+           id + " ], " + "[ %d4.newlen." + id + ", %do.4d." + id + " ], " + "[ %d5.newlen." + id +
+           ", %" + d5_label + " ], " + "[ %ffi.newlen." + id + ", %" + ffi_label + " ]");
 
     // Store new length
     emitln("    store i64 %newlen." + id + ", ptr " + len_ptr);
