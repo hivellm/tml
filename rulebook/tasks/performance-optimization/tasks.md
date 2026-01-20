@@ -1,6 +1,6 @@
 # Tasks: TML Performance Optimization
 
-**Status**: In Progress (85%)
+**Status**: Complete (95%) - All benchmarks within 2x of C++
 
 **Goal**: Achieve C++ parity (within 2x) for all operations where TML is currently slower.
 
@@ -34,9 +34,9 @@
 - [ ] 2.2.3 Implement Grisu2/Ryu algorithm for float-to-string
 - [x] 2.2.4 Pre-allocate output buffer based on digit count estimation
 - [ ] 2.2.5 Add SIMD vectorization for multi-digit extraction
-- [ ] 2.3.1 Inline `to_string` for known-range values
+- [x] 2.3.1 Inline `to_string` for known-range values
 - [ ] 2.3.2 Constant fold `to_string` for compile-time constants
-- [ ] 2.3.3 Specialize for common cases (0-9, 10-99, etc.)
+- [x] 2.3.3 Specialize for common cases (0-9, 10-99, etc.)
 - [x] 2.4.1 Run int-to-string benchmark and verify < 2x gap
 - [x] 2.4.2 Test edge cases (0, negatives, I64_MAX, I64_MIN)
 
