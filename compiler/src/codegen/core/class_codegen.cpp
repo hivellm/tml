@@ -214,7 +214,7 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
             ft = "{}"; // Unit type in struct
         field_types.push_back(ft);
 
-        field_info.push_back({field.name, static_cast<int>(field_offset++), ft, field.vis});
+        field_info.push_back({field.name, static_cast<int>(field_offset++), ft, field.vis, false, {}});
     }
 
     // Emit class type definition
@@ -1125,7 +1125,7 @@ void LLVMIRGen::gen_class_method_instantiation(
     for (size_t i = 0; i < param_names.size(); ++i) {
         auto sem_type = std::make_shared<types::Type>();
         if (param_names[i] == "this") {
-            sem_type->kind = types::ClassType{mangled_name};
+            sem_type->kind = types::ClassType{mangled_name, "", {}};
         }
         locals_[param_names[i]] =
             VarInfo{"%" + param_names[i], param_types[i], sem_type, std::nullopt};
@@ -1349,7 +1349,7 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
     if (!method.is_static) {
         // Create semantic type for 'this' so field access can infer the correct class type
         auto this_type = std::make_shared<types::Type>();
-        this_type->kind = types::ClassType{c.name};
+        this_type->kind = types::ClassType{c.name, "", {}};
         // Mark 'this' as direct param - it's a pointer parameter, not an alloca
         locals_["this"] =
             VarInfo{"%this", "ptr", this_type, std::nullopt, false, true /*is_direct_param*/};
@@ -1846,7 +1846,7 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
             // Set up 'this' for non-static properties
             if (!prop.is_static) {
                 auto this_type = std::make_shared<types::Type>();
-                this_type->kind = types::ClassType{c.name};
+                this_type->kind = types::ClassType{c.name, "", {}};
                 locals_["this"] = VarInfo{"%this", "ptr", this_type, std::nullopt};
             }
 
@@ -1917,7 +1917,7 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
             // Set up 'this' and 'value' for the setter body
             if (!prop.is_static) {
                 auto this_type = std::make_shared<types::Type>();
-                this_type->kind = types::ClassType{c.name};
+                this_type->kind = types::ClassType{c.name, "", {}};
                 locals_["this"] = VarInfo{"%this", "ptr", this_type, std::nullopt};
             }
 

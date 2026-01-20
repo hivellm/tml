@@ -1,0 +1,142 @@
+// Tests for explicit lifetime annotations (Phase 8 of memory-safety-parity)
+//
+// TML supports explicit lifetimes when automatic inference is ambiguous.
+// Syntax: func foo[life a](x: ref[a] T) -> ref[a] T
+//
+// The `life` keyword declares a lifetime parameter that can be used with `ref[name]`.
+
+use test
+
+// =============================================================================
+// Explicit Lifetime Tests - Task 8.4 Implementation
+// =============================================================================
+
+// Single lifetime parameter - explicit annotation
+func identity_with_lifetime[life a](x: ref[a] I32) -> ref[a] I32 {
+    return x
+}
+
+@test
+func test_single_lifetime_explicit() -> I32 {
+    let x: I32 = 42
+    let r: ref I32 = identity_with_lifetime(ref x)
+    assert_eq(*r, 42, "explicit single lifetime works")
+    return 0
+}
+
+// Multiple lifetime parameters - explicit annotations resolve ambiguity
+// Without explicit lifetimes, this would fail with E031 (ambiguous return lifetime)
+func choose_first[life a, life b](x: ref[a] I32, y: ref[b] I32) -> ref[a] I32 {
+    return x
+}
+
+@test
+func test_multi_lifetime_choose_first() -> I32 {
+    let x: I32 = 100
+    let y: I32 = 200
+    let r: ref I32 = choose_first(ref x, ref y)
+    assert_eq(*r, 100, "multi-lifetime chooses first")
+    return 0
+}
+
+// Return second parameter with explicit lifetime
+func choose_second[life a, life b](x: ref[a] I32, y: ref[b] I32) -> ref[b] I32 {
+    return y
+}
+
+@test
+func test_multi_lifetime_choose_second() -> I32 {
+    let x: I32 = 100
+    let y: I32 = 200
+    let r: ref I32 = choose_second(ref x, ref y)
+    assert_eq(*r, 200, "multi-lifetime chooses second")
+    return 0
+}
+
+// Same lifetime on multiple parameters
+func first_of_same[life a](x: ref[a] I32, y: ref[a] I32) -> ref[a] I32 {
+    return x
+}
+
+@test
+func test_same_lifetime_multiple_params() -> I32 {
+    let x: I32 = 50
+    let y: I32 = 60
+    let r: ref I32 = first_of_same(ref x, ref y)
+    assert_eq(*r, 50, "same lifetime on multiple params")
+    return 0
+}
+
+// =============================================================================
+// Elision Tests - Implicit lifetimes (no explicit annotations)
+// =============================================================================
+
+// Standard identity function using elision rules
+func identity_ref(x: ref I32) -> ref I32 {
+    return x
+}
+
+@test
+func test_identity_elision() -> I32 {
+    let x: I32 = 42
+    let r: ref I32 = identity_ref(ref x)
+    assert_eq(*r, 42, "identity ref with elision works")
+    return 0
+}
+
+// Multiple ref params returning non-ref - elision OK
+func add_via_refs(x: ref I32, y: ref I32) -> I32 {
+    return *x + *y
+}
+
+@test
+func test_multiple_ref_no_return_ref() -> I32 {
+    let x: I32 = 100
+    let y: I32 = 200
+    let sum: I32 = add_via_refs(ref x, ref y)
+    assert_eq(sum, 300, "multiple ref params, non-ref return")
+    return 0
+}
+
+// =============================================================================
+// Struct Method Tests - Method lifetime tied to `this`
+// =============================================================================
+
+type TwoFields {
+    a: I32,
+    b: I32,
+}
+
+impl TwoFields {
+    // Method uses this's lifetime automatically - elision Rule 3
+    pub func get_a(this) -> ref I32 {
+        return ref this.a
+    }
+
+    pub func get_b(this) -> ref I32 {
+        return ref this.b
+    }
+}
+
+@test
+func test_struct_methods() -> I32 {
+    let t: TwoFields = TwoFields { a: 10, b: 20 }
+    let ra: ref I32 = t.get_a()
+    let rb: ref I32 = t.get_b()
+    assert_eq(*ra + *rb, 30, "struct method refs work via this lifetime")
+    return 0
+}
+
+// =============================================================================
+// Summary
+// =============================================================================
+
+// Phase 8 implements (current progress):
+// - [x] 8.1 `life` keyword to declare lifetime parameters
+// - [x] 8.2 Parse `func foo[life a](x: ref[a] T) -> ref[a] T`
+// - [x] 8.3 `LifetimeParam` added to AST
+// - [x] 8.4 Track named lifetimes in borrow checker
+// - [ ] 8.5 Validate lifetime relationships
+// - [ ] 8.6 E032 error when lifetime is too short
+// - [x] 8.7 Documentation updated
+// - [x] 8.8 Tests added (this file)

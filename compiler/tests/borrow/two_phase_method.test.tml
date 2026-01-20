@@ -1,0 +1,55 @@
+// Test two-phase borrow for method calls
+// Pattern: v.push(v.len()) where push takes &mut self and len takes &self
+use test
+
+type Counter {
+    value: I32
+}
+
+impl Counter {
+    // Takes &self (shared borrow)
+    pub func get(this) -> I32 {
+        return this.value
+    }
+
+    // Takes &mut self (mutable borrow)
+    pub func add(mut this, n: I32) {
+        this.value = this.value + n
+    }
+
+    // Two-phase pattern: add(get()) - mutable receiver, shared in argument
+    pub func add_self(mut this) {
+        // This is the pattern: c.add(c.get())
+        // add needs &mut this, but get() also needs &this
+        // Two-phase borrowing should allow this
+        this.add(this.get())
+    }
+}
+
+@test
+func test_two_phase_method_call() -> I32 {
+    let mut c: Counter = Counter { value: 10 }
+
+    // Simple case: call methods sequentially
+    let v: I32 = c.get()
+    c.add(5)
+    assert_eq(c.get(), 15, "sequential calls work")
+
+    // Two-phase case: c.add(c.get())
+    // This requires two-phase borrowing:
+    // 1. c is prepared for mutable borrow (Reserved)
+    // 2. c.get() borrows c immutably
+    // 3. add executes (borrow becomes Active)
+    c.add(c.get())
+    assert_eq(c.get(), 30, "c.add(c.get()) should work with two-phase borrow")
+
+    return 0
+}
+
+@test
+func test_add_self() -> I32 {
+    let mut c: Counter = Counter { value: 7 }
+    c.add_self()  // Internally does: this.add(this.get())
+    assert_eq(c.get(), 14, "add_self doubles the value")
+    return 0
+}

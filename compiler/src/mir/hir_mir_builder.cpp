@@ -279,6 +279,7 @@ auto convert_type_impl(const types::TypePtr& type) -> MirTypePtr {
 
     // Interface types are also passed as pointers (trait objects)
     if (auto* iface_type = std::get_if<types::InterfaceType>(&type->kind)) {
+        (void)iface_type;
         return make_ptr_type();
     }
 

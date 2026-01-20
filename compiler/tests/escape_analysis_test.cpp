@@ -235,7 +235,7 @@ TEST_F(EscapeAnalysisIntegrationTest, EscapeAndPromotePass) {
     combined_pass.run(mir);
 
     auto escape_stats = combined_pass.get_escape_stats();
-    auto promo_stats = combined_pass.get_promotion_stats();
+    [[maybe_unused]] auto promo_stats = combined_pass.get_promotion_stats();
 
     // Should have analyzed some values
     EXPECT_GT(escape_stats.no_escape + escape_stats.arg_escape + escape_stats.return_escape, 0u);
@@ -342,7 +342,7 @@ TEST_F(EscapeAnalysisIntegrationTest, StackPromotionStats) {
     combined_pass.run(mir);
 
     auto escape_stats = combined_pass.get_escape_stats();
-    auto promo_stats = combined_pass.get_promotion_stats();
+    [[maybe_unused]] auto promo_stats = combined_pass.get_promotion_stats();
 
     // Should have tracked values
     EXPECT_GE(escape_stats.total_allocations + escape_stats.no_escape, 0u);

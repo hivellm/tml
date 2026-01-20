@@ -25,7 +25,7 @@ auto trim(const std::string& s) -> std::string {
 }
 
 /// Checks if a line starts with a tag.
-auto is_tag_line(const std::string& line) -> bool {
+[[maybe_unused]] auto is_tag_line(const std::string& line) -> bool {
     auto trimmed = trim(line);
     return !trimmed.empty() && trimmed[0] == '@';
 }

@@ -81,8 +81,7 @@ class DeadMethodEliminationPass : public MirPass {
 public:
     /// Creates a dead method elimination pass.
     /// @param env Reference to type environment for hierarchy info.
-    explicit DeadMethodEliminationPass(types::TypeEnv& env)
-        : env_(env) {}
+    explicit DeadMethodEliminationPass(types::TypeEnv& env) : env_(env) {}
 
     /// Returns the pass name for logging.
     [[nodiscard]] auto name() const -> std::string override {

@@ -135,6 +135,14 @@ auto BorrowError::mut_borrow_while_immut(const std::string& name, SourceSpan mut
     err.related_span = immut_span;
     err.related_message = "immutable borrow occurs here";
     err.notes.push_back("immutable borrow is still active when mutable borrow occurs");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "ensure the immutable borrow is no longer used before creating a mutable borrow",
+        .fix = std::nullopt,
+    });
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider using interior mutability types like `Cell[T]` or `Mutex[T]`",
+        .fix = std::nullopt,
+    });
     return err;
 }
 
@@ -161,6 +169,14 @@ auto BorrowError::immut_borrow_while_mut(const std::string& name, SourceSpan imm
     err.related_span = mut_span;
     err.related_message = "mutable borrow occurs here";
     err.notes.push_back("mutable borrow is still active when immutable borrow occurs");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "ensure the mutable borrow is no longer used before creating an immutable borrow",
+        .fix = std::nullopt,
+    });
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider restructuring your code to separate mutable and immutable access",
+        .fix = std::nullopt,
+    });
     return err;
 }
 
@@ -189,6 +205,158 @@ auto BorrowError::return_local_ref(const std::string& name, SourceSpan return_sp
     err.notes.push_back("returns a reference to data owned by the current function");
     err.suggestions.push_back(BorrowSuggestion{
         .message = "consider returning an owned value instead",
+        .fix = std::nullopt,
+    });
+    return err;
+}
+
+auto BorrowError::closure_captures_moved(const std::string& name, SourceSpan capture_span,
+                                         SourceSpan move_span) -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::ClosureCapturesMoved;
+    err.message = "closure captures moved value `" + name + "`";
+    err.span = capture_span;
+    err.related_span = move_span;
+    err.related_message = "`" + name + "` was moved here";
+    err.notes.push_back("value moved before closure is defined");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider using `.duplicate()` before the move to keep a copy",
+        .fix = std::nullopt,
+    });
+    return err;
+}
+
+auto BorrowError::closure_capture_conflict(const std::string& name, CaptureKind capture_kind,
+                                           SourceSpan capture_span, SourceSpan borrow_span)
+    -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::ClosureCaptureConflict;
+
+    std::string capture_desc;
+    switch (capture_kind) {
+    case CaptureKind::ByMutRef:
+        capture_desc = "mutably";
+        break;
+    case CaptureKind::ByMove:
+        capture_desc = "by move";
+        break;
+    default:
+        capture_desc = "by reference";
+        break;
+    }
+
+    err.message = "closure captures `" + name + "` " + capture_desc +
+                  " while it is already borrowed";
+    err.span = capture_span;
+    err.related_span = borrow_span;
+    err.related_message = "`" + name + "` is borrowed here";
+    err.notes.push_back("closure would invalidate the existing borrow");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider restructuring code to avoid overlapping borrows",
+        .fix = std::nullopt,
+    });
+    return err;
+}
+
+auto BorrowError::partially_moved_value(const std::string& name, const std::string& moved_field,
+                                        SourceSpan use_span, SourceSpan move_span) -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::PartiallyMovedValue;
+    err.message = "use of partially moved value `" + name + "`";
+    err.span = use_span;
+    err.related_span = move_span;
+    err.related_message = "field `" + moved_field + "` was moved here";
+    err.notes.push_back("partial move occurs because `" + name + "." + moved_field +
+                        "` has type that does not implement `Duplicate`");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider using a reference instead: `ref " + name + "." + moved_field + "`",
+        .fix = std::nullopt,
+    });
+    return err;
+}
+
+/// Creates a "reborrow outlives original borrow" error (B017).
+///
+/// This error fires when a reborrowed reference has a longer lifetime than
+/// the original reference it was derived from.
+///
+/// ## Example
+///
+/// ```tml
+/// func bad() -> ref I32 {
+///     let x = 42
+///     let r1 = ref x
+///     let r2 = ref *r1   // r2 is a reborrow from r1
+///     return r2          // ERROR: r2 outlives r1
+/// }
+/// ```
+auto BorrowError::reborrow_outlives_origin(const std::string& reborrow_name,
+                                           const std::string& origin_name,
+                                           SourceSpan reborrow_span,
+                                           SourceSpan origin_span) -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::ReborrowOutlivesOrigin;
+    err.message = "reborrow `" + reborrow_name + "` outlives the original borrow `" + origin_name + "`";
+    err.span = reborrow_span;
+    err.related_span = origin_span;
+    err.related_message = "original borrow created here";
+    err.notes.push_back("the reborrowed reference cannot outlive the reference it derives from");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider borrowing directly from the owned value instead of reborrowing",
+        .fix = std::nullopt,
+    });
+    return err;
+}
+
+/// Creates an "ambiguous return lifetime" error (E031).
+///
+/// This error fires when a function returns a reference but has multiple input
+/// reference parameters and no `this` parameter, so the compiler cannot
+/// determine which input lifetime the return should use.
+///
+/// ## TML Lifetime Elision Rules
+///
+/// 1. Each `ref T` parameter gets a separate lifetime
+/// 2. If there's a `this`/`mut this`, return has same lifetime as `this`
+/// 3. If there's exactly one ref parameter, return uses that lifetime
+///
+/// ## Example
+///
+/// ```tml
+/// // ERROR: ambiguous lifetime - which input does output reference?
+/// func longest(a: ref String, b: ref String) -> ref String {
+///     if a.len() > b.len() then a else b
+/// }
+///
+/// // FIX: return owned value instead
+/// func longest(a: ref String, b: ref String) -> String {
+///     if a.len() > b.len() then a.duplicate() else b.duplicate()
+/// }
+/// ```
+auto BorrowError::ambiguous_return_lifetime(const std::string& func_name,
+                                            const std::vector<std::string>& ref_params,
+                                            SourceSpan func_span) -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::AmbiguousReturnLifetime;
+
+    // Build parameter list for the message
+    std::string params_list;
+    for (size_t i = 0; i < ref_params.size(); ++i) {
+        if (i > 0) params_list += ", ";
+        params_list += "`" + ref_params[i] + "`";
+    }
+
+    err.message = "cannot determine lifetime of return reference in function `" + func_name + "`";
+    err.span = func_span;
+    err.notes.push_back("function has multiple reference parameters: " + params_list);
+    err.notes.push_back("without a `this` parameter, the compiler cannot infer which parameter's "
+                        "lifetime the return should use");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider returning an owned value instead of a reference",
+        .fix = std::nullopt,
+    });
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "if this is a method, add a `this` parameter to disambiguate",
         .fix = std::nullopt,
     });
     return err;
@@ -230,6 +398,7 @@ void BorrowChecker::create_borrow(PlaceId place, BorrowKind kind, Location loc) 
         .scope_depth = env_.scope_depth(),
         .lifetime = env_.next_lifetime_id(),
         .ref_place = 0, // Will be set when reference is stored in a variable
+        .reborrow_origin = std::nullopt,
     };
 
     state.active_borrows.push_back(borrow);
@@ -326,6 +495,14 @@ void BorrowChecker::move_value(PlaceId place, Location loc) {
                 err.span = loc.span;
                 err.related_span = borrow.start.span;
                 err.related_message = "borrow of `" + state.name + "` occurs here";
+                err.suggestions.push_back(BorrowSuggestion{
+                    .message = "consider cloning the value instead of moving it",
+                    .fix = state.name + ".duplicate()",
+                });
+                err.suggestions.push_back(BorrowSuggestion{
+                    .message = "ensure the borrow ends before moving the value",
+                    .fix = std::nullopt,
+                });
                 errors_.push_back(err);
                 return;
             }
@@ -369,6 +546,9 @@ void BorrowChecker::check_can_use(PlaceId place, Location loc) {
 /// 2. The variable must not have been moved
 /// 3. The variable must not be currently borrowed
 ///
+/// Exception: Interior mutable types (Cell, Mutex, Shared, Sync) can be
+/// mutated through shared references, with a W001 warning.
+///
 /// ## Example
 ///
 /// ```tml
@@ -381,14 +561,40 @@ void BorrowChecker::check_can_use(PlaceId place, Location loc) {
 /// let mut z = 5
 /// let r = ref z
 /// z = 10       // ERROR: z is borrowed
+///
+/// let c: Cell[I32] = Cell::new(5)
+/// let r: ref Cell[I32] = ref c
+/// r.set(10)    // OK (interior mutability) - W001 warning
 /// ```
 void BorrowChecker::check_can_mutate(PlaceId place, Location loc) {
     const auto& state = env_.get_state(place);
+
+    // Check for interior mutability - allows mutation through shared references
+    // This is used by types like Cell, Mutex, Shared, Sync
+    bool is_interior_mut = is_interior_mutable(state.type);
 
     if (!state.is_mutable) {
         // Allow assignment through mutable references (mut ref T)
         // Even if the variable itself isn't mutable, we can assign through it
         if (!state.is_mut_ref) {
+            // Also allow if the type has interior mutability
+            if (is_interior_mut) {
+                // Emit W001 warning: interior mutability bypasses borrow checking
+                BorrowError warning;
+                warning.code = BorrowErrorCode::InteriorMutWarning;
+                warning.message = "mutation through shared reference to interior mutable type `" +
+                                  state.name + "`";
+                warning.span = loc.span;
+                warning.related_span = state.definition.span;
+                warning.related_message = "interior mutable type declared here";
+                warning.suggestions.push_back(BorrowSuggestion{
+                    .message = "interior mutability bypasses normal borrow checking rules",
+                    .fix = "",
+                });
+                warnings_.push_back(warning);
+                return; // Allow the mutation
+            }
+
             BorrowError err;
             err.code = BorrowErrorCode::AssignNotMutable;
             err.message = "cannot assign to `" + state.name + "` because it is not mutable";
@@ -429,6 +635,14 @@ void BorrowChecker::check_can_mutate(PlaceId place, Location loc) {
                 err.span = loc.span;
                 err.related_span = borrow.start.span;
                 err.related_message = "immutable borrow occurs here";
+                err.suggestions.push_back(BorrowSuggestion{
+                    .message = "ensure the borrow is no longer used before assigning",
+                    .fix = std::nullopt,
+                });
+                err.suggestions.push_back(BorrowSuggestion{
+                    .message = "consider using `Cell[T]` or `Mutex[T]` for interior mutability",
+                    .fix = std::nullopt,
+                });
                 errors_.push_back(err);
                 return;
             }
@@ -448,6 +662,14 @@ void BorrowChecker::check_can_mutate(PlaceId place, Location loc) {
                 err.span = loc.span;
                 err.related_span = borrow.start.span;
                 err.related_message = "mutable borrow occurs here";
+                err.suggestions.push_back(BorrowSuggestion{
+                    .message = "ensure the mutable borrow is no longer used before assigning",
+                    .fix = std::nullopt,
+                });
+                err.suggestions.push_back(BorrowSuggestion{
+                    .message = "consider performing the assignment through the mutable reference",
+                    .fix = std::nullopt,
+                });
                 errors_.push_back(err);
                 return;
             }
@@ -485,6 +707,14 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
             err.related_span = state.move_location->span;
             err.related_message = "value moved here";
         }
+        err.suggestions.push_back(BorrowSuggestion{
+            .message = "consider borrowing before the move instead",
+            .fix = std::nullopt,
+        });
+        err.suggestions.push_back(BorrowSuggestion{
+            .message = "or clone the value if you need both ownership and a borrow",
+            .fix = state.name + ".duplicate()",
+        });
         errors_.push_back(err);
         return;
     }
@@ -535,7 +765,9 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
 
         // Allow two-phase borrows: during method calls, we can have a mutable borrow
         // that is temporarily shared while evaluating arguments
-        if (state.state == OwnershipState::MutBorrowed && !is_two_phase_borrow_active_) {
+        // Only allow if we're in Reserved state (borrow not yet active)
+        bool in_reservation = two_phase_info_.state == TwoPhaseState::Reserved;
+        if (state.state == OwnershipState::MutBorrowed && !in_reservation) {
             // Find the active mutable borrow for related span
             for (const auto& borrow : state.active_borrows) {
                 if (!borrow.end && borrow.kind == BorrowKind::Mutable) {
@@ -551,8 +783,10 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
     } else {
         // Shared borrow
         // Allow shared reborrow from mutable borrow (coercion &mut T -> &T)
+        // Also allow during two-phase borrow reservation
+        bool in_reservation = two_phase_info_.state == TwoPhaseState::Reserved;
         if (state.state == OwnershipState::MutBorrowed && !is_reborrow &&
-            !is_two_phase_borrow_active_) {
+            !in_reservation) {
             // Find the active mutable borrow for related span
             for (const auto& borrow : state.active_borrows) {
                 if (!borrow.end && borrow.kind == BorrowKind::Mutable) {
@@ -590,6 +824,19 @@ void BorrowChecker::create_reborrow(PlaceId source, PlaceId target, BorrowKind k
 
     // Create a borrow on the source
     create_borrow(source, kind, loc);
+
+    // Track the reborrow chain for lifetime validation
+    const auto& source_state = env_.get_state(source);
+
+    // Find the index of the origin borrow (the most recent active borrow on source)
+    size_t origin_borrow_index = 0;
+    if (!source_state.active_borrows.empty()) {
+        // Use the most recent borrow as the origin
+        origin_borrow_index = source_state.active_borrows.size() - 1;
+    }
+
+    // Register this reborrow for lifetime tracking
+    env_.create_reborrow(target, origin_borrow_index, kind, loc);
 }
 
 /// Begins a two-phase borrow context.
@@ -597,16 +844,60 @@ void BorrowChecker::create_reborrow(PlaceId source, PlaceId target, BorrowKind k
 /// Two-phase borrowing is needed for method calls where the receiver
 /// is mutably borrowed but arguments might need to read from it.
 ///
-/// During this phase, borrow conflicts are temporarily suppressed.
+/// This enters the Reserved state where shared borrows are temporarily allowed.
 void BorrowChecker::begin_two_phase_borrow() {
-    is_two_phase_borrow_active_ = true;
+    two_phase_info_.state = TwoPhaseState::Reserved;
 }
 
 /// Ends a two-phase borrow context.
 ///
 /// After this, normal borrow checking rules apply again.
 void BorrowChecker::end_two_phase_borrow() {
-    is_two_phase_borrow_active_ = false;
+    two_phase_info_.state = TwoPhaseState::None;
+    two_phase_info_.place = 0;
+    two_phase_info_.borrow_index = 0;
+}
+
+/// Reserves a two-phase borrow on a place.
+///
+/// Creates a mutable borrow in Reserved state. While reserved, shared
+/// borrows of the same place are allowed.
+void BorrowChecker::reserve_two_phase_borrow(PlaceId place, BorrowKind kind, Location loc) {
+    two_phase_info_.place = place;
+    two_phase_info_.state = TwoPhaseState::Reserved;
+    two_phase_info_.kind = kind;
+    two_phase_info_.start = loc;
+
+    // Create the actual borrow but mark it as reserved
+    // The borrow will be in the active_borrows but conflicts are suppressed
+    create_borrow(place, kind, loc);
+
+    // Store the borrow index (last added borrow)
+    const auto& state = env_.get_state(place);
+    if (!state.active_borrows.empty()) {
+        two_phase_info_.borrow_index = state.active_borrows.size() - 1;
+    }
+}
+
+/// Activates a reserved two-phase borrow.
+///
+/// Transitions from Reserved to Active state. After activation, normal
+/// borrow rules apply (no other borrows allowed).
+void BorrowChecker::activate_two_phase_borrow() {
+    if (two_phase_info_.state == TwoPhaseState::Reserved) {
+        two_phase_info_.state = TwoPhaseState::Active;
+    }
+}
+
+/// Checks if a place has a reserved (not active) two-phase borrow.
+auto BorrowChecker::is_reserved_borrow(PlaceId place) const -> bool {
+    return two_phase_info_.state == TwoPhaseState::Reserved &&
+           two_phase_info_.place == place;
+}
+
+/// Gets the current two-phase state.
+auto BorrowChecker::get_two_phase_state() const -> TwoPhaseState {
+    return two_phase_info_.state;
 }
 
 /// Drops all places in the current scope.
@@ -648,6 +939,8 @@ void BorrowChecker::error(const std::string& message, SourceSpan span) {
         .span = span,
         .notes = {},
         .related_span = std::nullopt,
+        .related_message = std::nullopt,
+        .suggestions = {},
     });
 }
 
@@ -659,6 +952,8 @@ void BorrowChecker::error_with_note(const std::string& message, SourceSpan span,
         .span = span,
         .notes = {note},
         .related_span = note_span,
+        .related_message = std::nullopt,
+        .suggestions = {},
     });
 }
 

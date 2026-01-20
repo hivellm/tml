@@ -1,0 +1,68 @@
+// Test two-phase borrow for index assignment patterns
+// Using method calls that simulate index-like operations
+use test
+
+type Store {
+    a: I32,
+    b: I32,
+    c: I32
+}
+
+impl Store {
+    // Takes &self (shared borrow)
+    pub func total(this) -> I32 {
+        return this.a + this.b + this.c
+    }
+
+    pub func get_a(this) -> I32 {
+        return this.a
+    }
+
+    pub func get_b(this) -> I32 {
+        return this.b
+    }
+
+    // Takes &mut self
+    pub func set_a(mut this, val: I32) {
+        this.a = val
+    }
+
+    pub func set_b(mut this, val: I32) {
+        this.b = val
+    }
+
+    pub func set_c(mut this, val: I32) {
+        this.c = val
+    }
+}
+
+@test
+func test_sequential_access() -> I32 {
+    let mut s: Store = Store { a: 0, b: 0, c: 0 }
+    s.set_a(10)
+    s.set_b(20)
+    let t: I32 = s.total()
+    assert_eq(t, 30, "sequential access works")
+    return 0
+}
+
+@test
+func test_two_phase_set_with_total() -> I32 {
+    let mut s: Store = Store { a: 5, b: 3, c: 0 }
+
+    // Two-phase pattern: s.set_c(s.total())
+    // set_c needs &mut s, total needs &s
+    s.set_c(s.total())
+    assert_eq(s.total(), 16, "s.set_c(s.total()) should work")
+    return 0
+}
+
+@test
+func test_two_phase_set_with_get() -> I32 {
+    let mut s: Store = Store { a: 100, b: 0, c: 0 }
+
+    // s.set_b(s.get_a())
+    s.set_b(s.get_a())
+    assert_eq(s.get_b(), 100, "s.set_b(s.get_a()) should work")
+    return 0
+}

@@ -777,6 +777,75 @@ bool TypeEnv::is_trivially_destructible(const TypePtr& type) const {
         type->kind);
 }
 
+// ============================================================================
+// Interior Mutability Checking
+// ============================================================================
+
+/// Set of built-in interior mutable type names.
+static const std::unordered_set<std::string> INTERIOR_MUTABLE_TYPES = {
+    "Cell",   // Single-threaded interior mutability
+    "Mutex",  // Thread-safe interior mutability with locking
+    "Shared", // Reference counted (Rc equivalent)
+    "Sync",   // Thread-safe reference counted (Arc equivalent)
+};
+
+bool TypeEnv::is_interior_mutable(const std::string& type_name) const {
+    // Check built-in interior mutable types (without generic args)
+    // E.g., "Cell" matches "Cell[T]", "Mutex" matches "Mutex[T]"
+    std::string base_name = type_name;
+    auto bracket_pos = type_name.find('[');
+    if (bracket_pos != std::string::npos) {
+        base_name = type_name.substr(0, bracket_pos);
+    }
+
+    if (INTERIOR_MUTABLE_TYPES.count(base_name) > 0) {
+        return true;
+    }
+
+    // Check if it's a struct with @interior_mutable decorator
+    auto struct_def = lookup_struct(type_name);
+    if (struct_def && struct_def->is_interior_mutable) {
+        return true;
+    }
+
+    // Also check without module path
+    if (type_name.find("::") != std::string::npos) {
+        auto last_sep = type_name.rfind("::");
+        std::string short_name = type_name.substr(last_sep + 2);
+        auto short_struct_def = lookup_struct(short_name);
+        if (short_struct_def && short_struct_def->is_interior_mutable) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TypeEnv::is_interior_mutable(const TypePtr& type) const {
+    if (!type)
+        return false;
+
+    return std::visit(
+        [this](const auto& t) -> bool {
+            using T = std::decay_t<decltype(t)>;
+            if constexpr (std::is_same_v<T, NamedType>) {
+                return is_interior_mutable(t.name);
+            } else if constexpr (std::is_same_v<T, RefType>) {
+                // A reference to an interior mutable type is itself interior mutable
+                return is_interior_mutable(t.inner);
+            } else if constexpr (std::is_same_v<T, PtrType>) {
+                // A pointer to an interior mutable type is itself interior mutable
+                return is_interior_mutable(t.inner);
+            } else if constexpr (std::is_same_v<T, ClassType>) {
+                return is_interior_mutable(t.name);
+            } else {
+                // Primitives, tuples, arrays, etc. are not interior mutable
+                return false;
+            }
+        },
+        type->kind);
+}
+
 bool TypeEnv::is_value_class_candidate(const std::string& class_name) const {
     auto class_def = lookup_class(class_name);
     if (!class_def) {

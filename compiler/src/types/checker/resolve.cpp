@@ -255,7 +255,7 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
     auto class_def = env_.lookup_class(name);
     if (class_def) {
         auto type = std::make_shared<Type>();
-        type->kind = ClassType{name};
+        type->kind = ClassType{name, "", {}};
         return type;
     }
 

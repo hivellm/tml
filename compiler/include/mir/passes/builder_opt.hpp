@@ -40,30 +40,30 @@ namespace tml::mir {
 
 /// Information about a self-returning method (builder method).
 struct BuilderMethodInfo {
-    std::string class_name;       ///< Class the method belongs to.
-    std::string method_name;      ///< Name of the method.
-    bool returns_self = false;    ///< True if method returns `self`.
-    bool is_terminal = false;     ///< True if method is terminal (build, finish).
-    bool modifies_state = false;  ///< True if method modifies object state.
+    std::string class_name;      ///< Class the method belongs to.
+    std::string method_name;     ///< Name of the method.
+    bool returns_self = false;   ///< True if method returns `self`.
+    bool is_terminal = false;    ///< True if method is terminal (build, finish).
+    bool modifies_state = false; ///< True if method modifies object state.
 };
 
 /// Information about a method chain in the code.
 struct MethodChain {
-    ValueId receiver;                   ///< Initial receiver object.
-    std::vector<ValueId> call_results;  ///< Results of each call in chain.
-    std::vector<std::string> methods;   ///< Method names in order.
-    bool has_terminal = false;          ///< True if chain ends with terminal.
+    ValueId receiver;                     ///< Initial receiver object.
+    std::vector<ValueId> call_results;    ///< Results of each call in chain.
+    std::vector<std::string> methods;     ///< Method names in order.
+    bool has_terminal = false;            ///< True if chain ends with terminal.
     ValueId final_result = INVALID_VALUE; ///< Result of terminal method.
 };
 
 /// Statistics for builder pattern optimization.
 struct BuilderOptStats {
-    size_t methods_analyzed = 0;        ///< Total methods examined.
-    size_t builder_methods_found = 0;   ///< Methods returning self.
-    size_t chains_detected = 0;         ///< Method chains found.
+    size_t methods_analyzed = 0;         ///< Total methods examined.
+    size_t builder_methods_found = 0;    ///< Methods returning self.
+    size_t chains_detected = 0;          ///< Method chains found.
     size_t intermediates_eliminated = 0; ///< Intermediate objects eliminated.
-    size_t copies_elided = 0;           ///< Copies avoided (RVO/NRVO).
-    size_t chains_fused = 0;            ///< Chains fused for optimization.
+    size_t copies_elided = 0;            ///< Copies avoided (RVO/NRVO).
+    size_t chains_fused = 0;             ///< Chains fused for optimization.
 };
 
 /// Builder pattern optimization pass.
@@ -99,13 +99,12 @@ private:
     BuilderOptStats stats_;
 
     // Builder method cache: class_name -> method_name -> info
-    mutable std::unordered_map<std::string,
-        std::unordered_map<std::string, BuilderMethodInfo>> builder_methods_;
+    mutable std::unordered_map<std::string, std::unordered_map<std::string, BuilderMethodInfo>>
+        builder_methods_;
 
     // Known terminal method names
-    std::unordered_set<std::string> terminal_methods_ = {
-        "build", "finish", "create", "done", "complete", "finalize", "make"
-    };
+    std::unordered_set<std::string> terminal_methods_ = {"build",    "finish",   "create", "done",
+                                                         "complete", "finalize", "make"};
 
     /// Analyzes a module to find builder methods.
     void analyze_builder_methods(const Module& module);

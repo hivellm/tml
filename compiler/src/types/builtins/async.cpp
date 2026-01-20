@@ -38,7 +38,7 @@ void TypeEnv::init_builtin_async() {
     // doesn't yet fully support generic builtins.
 
     // Helper lambda to create Poll[T] type
-    auto make_poll = [this](TypePtr inner) -> TypePtr {
+    auto make_poll = [](TypePtr inner) -> TypePtr {
         return std::make_shared<Type>(NamedType{"Poll", "", {inner}});
     };
 

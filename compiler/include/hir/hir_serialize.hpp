@@ -294,7 +294,9 @@ public:
     /// cache info files or validation.
     ///
     /// @return Content hash, or 0 if write_module() not called yet
-    [[nodiscard]] auto content_hash() const -> ContentHash { return content_hash_; }
+    [[nodiscard]] auto content_hash() const -> ContentHash {
+        return content_hash_;
+    }
 
 private:
     std::ostream& out_;
@@ -397,15 +399,21 @@ public:
     auto read_module() -> HirModule;
 
     /// Check if an error occurred during reading.
-    [[nodiscard]] auto has_error() const -> bool { return has_error_; }
+    [[nodiscard]] auto has_error() const -> bool {
+        return has_error_;
+    }
 
     /// Get the error message if any.
-    [[nodiscard]] auto error_message() const -> std::string { return error_; }
+    [[nodiscard]] auto error_message() const -> std::string {
+        return error_;
+    }
 
     /// Get the content hash from the file header.
     ///
     /// Available after read_module() completes header validation.
-    [[nodiscard]] auto content_hash() const -> ContentHash { return content_hash_; }
+    [[nodiscard]] auto content_hash() const -> ContentHash {
+        return content_hash_;
+    }
 
 private:
     std::istream& in_;
@@ -502,7 +510,7 @@ public:
 private:
     std::ostream& out_;
     HirSerializeOptions options_;
-    int indent_ = 0;  ///< Current indentation level
+    int indent_ = 0; ///< Current indentation level
 
     void write_indent();
     void write_line(const std::string& line);
@@ -532,8 +540,12 @@ public:
     explicit HirTextReader(std::istream& in);
 
     auto read_module() -> HirModule;
-    [[nodiscard]] auto has_error() const -> bool { return has_error_; }
-    [[nodiscard]] auto error_message() const -> std::string { return error_; }
+    [[nodiscard]] auto has_error() const -> bool {
+        return has_error_;
+    }
+    [[nodiscard]] auto error_message() const -> std::string {
+        return error_;
+    }
 
 private:
     std::istream& in_;
@@ -641,9 +653,9 @@ auto get_hir_cache_hash(const std::string& cache_path) -> ContentHash;
 /// If any dependency's hash differs from the recorded value, the
 /// dependent module must be recompiled.
 struct HirDependency {
-    std::string module_name;   ///< Imported module name (e.g., "std::io")
-    std::string source_path;   ///< Path to dependency's source file
-    ContentHash content_hash;  ///< Hash when this module was compiled
+    std::string module_name;  ///< Imported module name (e.g., "std::io")
+    std::string source_path;  ///< Path to dependency's source file
+    ContentHash content_hash; ///< Hash when this module was compiled
 };
 
 /// Cache metadata for incremental compilation.
@@ -665,12 +677,12 @@ struct HirDependency {
 ///   - mylib::utils: 22222222222222222222
 /// ```
 struct HirCacheInfo {
-    std::string module_name;           ///< Name of this module
-    std::string source_path;           ///< Original source file path
-    ContentHash source_hash;           ///< Hash of source at compile time
-    ContentHash hir_hash;              ///< Hash of compiled HIR
-    std::vector<HirDependency> deps;   ///< All module dependencies
-    uint64_t compile_timestamp;        ///< Unix timestamp of compilation
+    std::string module_name;         ///< Name of this module
+    std::string source_path;         ///< Original source file path
+    ContentHash source_hash;         ///< Hash of source at compile time
+    ContentHash hir_hash;            ///< Hash of compiled HIR
+    std::vector<HirDependency> deps; ///< All module dependencies
+    uint64_t compile_timestamp;      ///< Unix timestamp of compilation
 };
 
 /// Write cache info to a file.

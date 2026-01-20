@@ -134,7 +134,7 @@ void BoundsCheckEliminationPass::detect_loops(const Function& func) {
                 // - One incoming value is a binary add/sub of the PHI result (increment)
 
                 std::optional<int64_t> start_value;
-                std::optional<int64_t> step;
+                // Note: step detection would require tracing back through instructions
                 uint32_t latch_block = 0;
 
                 for (const auto& [value, pred_block] : phi->incoming) {

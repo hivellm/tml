@@ -1,0 +1,82 @@
+// Tests for closure capture analysis (Phase 1 of memory-safety-parity)
+//
+// These tests document the expected closure capture behavior.
+// Most tests are commented out as closure capture codegen is not yet implemented.
+// The borrow checker analysis infrastructure has been added in Phase 1.
+
+use test
+
+// =============================================================================
+// Basic Closure (No Capture) - This works
+// =============================================================================
+
+@test
+func closure_no_capture_works() -> I32 {
+    // Closures without captures work fine
+    let f: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    let result: I32 = f(21)
+    assert_eq(result, 42, "closure without capture should work")
+    return 0
+}
+
+// =============================================================================
+// Capture Tests (Documented - codegen not yet implemented)
+// =============================================================================
+
+// The following tests document expected behavior once capture codegen is added:
+
+// Test: capture_by_ref
+// Closures should capture variables by shared reference by default
+// @test
+// func capture_by_ref() -> I32 {
+//     let x: I32 = 42
+//     let f: func() -> I32 = do() -> I32 { x }
+//     let result: I32 = f()
+//     assert_eq(result, 42, "closure should capture x by ref")
+//     return 0
+// }
+
+// Test: capture_copy_type
+// Copy types should be captured by copy
+// @test
+// func capture_copy_type() -> I32 {
+//     let x: I32 = 10
+//     let f: func() -> I32 = do() -> I32 { x + 5 }
+//     let y: I32 = x + 1  // x should still be usable
+//     let result: I32 = f()
+//     assert_eq(result, 15, "closure should capture copy of x")
+//     return 0
+// }
+
+// Test: move_closure_basic
+// Move closures should force captures to be by move
+// @test
+// func move_closure_basic() -> I32 {
+//     let x: I32 = 42
+//     let f: func() -> I32 = move do() -> I32 { x }
+//     let result: I32 = f()
+//     assert_eq(result, 42, "move closure should work")
+//     return 0
+// }
+
+// =============================================================================
+// Error Cases (should fail to compile)
+// =============================================================================
+
+// ERROR B014: closure captures moved value
+// @test
+// func error_capture_moved_value() -> I32 {
+//     let s: Str = Str::from("hello")
+//     let _moved: Str = s  // s is moved here
+//     let f: func() -> I64 = do() -> I64 { s.len() }  // ERROR B014
+//     return 0
+// }
+
+// ERROR B015: closure captures mutable ref while outer scope borrows
+// @test
+// func error_capture_conflict() -> I32 {
+//     let mut x: I32 = 42
+//     let r: ref I32 = ref x  // shared borrow
+//     let f: func() = do() { x = 10 }  // ERROR B015
+//     return 0
+// }

@@ -521,7 +521,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                 // dyn_Error -> DynBehaviorType
                                 std::string behavior = inner_name.substr(4);
                                 auto dyn_t = std::make_shared<types::Type>();
-                                dyn_t->kind = types::DynBehaviorType{behavior, {}};
+                                dyn_t->kind = types::DynBehaviorType{behavior, {}, false};
                                 inner_type = dyn_t;
                             } else {
                                 // Regular named type
@@ -531,13 +531,15 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                             }
 
                             auto ref_t = std::make_shared<types::Type>();
-                            ref_t->kind = types::RefType{is_mut, inner_type};
+                            ref_t->kind = types::RefType{.is_mut = is_mut,
+                                                         .inner = inner_type,
+                                                         .lifetime = std::nullopt};
                             arg_type = ref_t;
                         } else if (arg.starts_with("dyn_")) {
                             // Dynamic trait type: dyn_Error -> DynBehaviorType
                             std::string behavior = arg.substr(4);
                             auto dyn_t = std::make_shared<types::Type>();
-                            dyn_t->kind = types::DynBehaviorType{behavior, {}};
+                            dyn_t->kind = types::DynBehaviorType{behavior, {}, false};
                             arg_type = dyn_t;
                         } else {
                             // Named type without generics
@@ -930,14 +932,16 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             // borrow returns ref T (Borrow behavior)
             if (call.method == "borrow") {
                 auto ref_type = std::make_shared<types::Type>();
-                ref_type->kind = types::RefType{false, receiver_type};
+                ref_type->kind =
+                    types::RefType{.is_mut = false, .inner = receiver_type, .lifetime = std::nullopt};
                 return ref_type;
             }
 
             // borrow_mut returns mut ref T (BorrowMut behavior)
             if (call.method == "borrow_mut") {
                 auto ref_type = std::make_shared<types::Type>();
-                ref_type->kind = types::RefType{true, receiver_type};
+                ref_type->kind =
+                    types::RefType{.is_mut = true, .inner = receiver_type, .lifetime = std::nullopt};
                 return ref_type;
             }
         }
@@ -960,7 +964,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             // get, first, last return Maybe[ref T]
             if (call.method == "get" || call.method == "first" || call.method == "last") {
                 auto ref_type = std::make_shared<types::Type>();
-                ref_type->kind = types::RefType{false, elem_type};
+                ref_type->kind =
+                    types::RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt};
                 std::vector<types::TypePtr> type_args = {ref_type};
                 auto result = std::make_shared<types::Type>();
                 result->kind = types::NamedType{"Maybe", "", std::move(type_args)};

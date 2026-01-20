@@ -132,7 +132,7 @@ auto EscapeAnalysisPass::run_on_function(Function& func) -> bool {
         for (const auto& inst : block.instructions) {
             if (inst.result != INVALID_VALUE) {
                 escape_info_[inst.result] =
-                    EscapeInfo{EscapeState::NoEscape, false, false, false, false, ""};
+                    EscapeInfo{EscapeState::NoEscape, false, false, false, false, "", false, false, {}};
             }
         }
     }
@@ -196,7 +196,7 @@ auto EscapeAnalysisPass::get_escape_info(ValueId value) const -> EscapeInfo {
     if (it != escape_info_.end()) {
         return it->second;
     }
-    return EscapeInfo{EscapeState::Unknown, false, false, false};
+    return EscapeInfo{EscapeState::Unknown, false, false, false, false, "", false, false, {}};
 }
 
 auto EscapeAnalysisPass::can_stack_promote(ValueId value) const -> bool {
@@ -453,7 +453,7 @@ void EscapeAnalysisPass::analyze_store(const StoreInst& store) {
         // If the stored value is a pointer, it may escape through the instance
         auto value_info = get_escape_info(store.value.id);
         if (value_info.may_alias_heap ||
-            store.value.type && std::holds_alternative<MirPointerType>(store.value.type->kind)) {
+            (store.value.type && std::holds_alternative<MirPointerType>(store.value.type->kind))) {
             stats_.field_store_escapes++;
             mark_escape(store.value.id, EscapeState::GlobalEscape);
         }

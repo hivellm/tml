@@ -148,6 +148,7 @@ auto InfiniteLoopCheckPass::is_condition_always_true(const Function& func, const
 
     // Check for unconditional branch back to self or loop body
     if (auto* branch = std::get_if<BranchTerm>(&*header.terminator)) {
+        (void)branch; // BranchTerm detected - check loop structure
         // Unconditional loop - check if it loops back
         for (uint32_t pred : header.predecessors) {
             if (pred == header.id || find_block(func, pred) != nullptr) {
@@ -249,6 +250,7 @@ auto InfiniteLoopCheckPass::loop_modifies_condition_vars(
 
             // Check for phi nodes (indicate SSA value changes across iterations)
             if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                (void)phi; // PhiInst detected
                 if (condition_deps.find(inst.result) != condition_deps.end()) {
                     return true; // Condition uses a phi, which changes each iteration
                 }

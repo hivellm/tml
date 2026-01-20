@@ -34,8 +34,11 @@
 //! ownership, leaving the source invalid.
 
 #include "borrow/checker.hpp"
+#include "types/env.hpp"
 
 #include <algorithm>
+#include <map>
+#include <set>
 
 namespace tml::borrow {
 
@@ -66,6 +69,20 @@ namespace tml::borrow {
 // ============================================================================
 
 BorrowChecker::BorrowChecker() = default;
+
+BorrowChecker::BorrowChecker(const types::TypeEnv& type_env) : type_env_(&type_env) {}
+
+/// Determines if a type has interior mutability.
+///
+/// Interior mutable types (Cell, Mutex, Shared, Sync) allow mutation through
+/// shared references. This is safe because they provide their own
+/// synchronization or single-threaded access patterns.
+auto BorrowChecker::is_interior_mutable(const types::TypePtr& type) const -> bool {
+    if (!type_env_) {
+        return false; // Cannot check without type environment
+    }
+    return type_env_->is_interior_mutable(type);
+}
 
 /// Checks an entire module for borrow violations.
 ///
@@ -174,8 +191,20 @@ auto BorrowChecker::is_copy_type(const types::TypePtr& type) const -> bool {
             } else if constexpr (std::is_same_v<T, types::ArrayType>) {
                 // Array is Copy if element type is Copy
                 return is_copy_type(t.element);
+            } else if constexpr (std::is_same_v<T, types::NamedType>) {
+                // Check if the named type implements the Copy behavior
+                if (type_env_ && type_env_->type_implements(t.name, "Copy")) {
+                    return true;
+                }
+                return false;
+            } else if constexpr (std::is_same_v<T, types::ClassType>) {
+                // Check if the class type implements the Copy behavior
+                if (type_env_ && type_env_->type_implements(t.name, "Copy")) {
+                    return true;
+                }
+                return false;
             } else {
-                // Named types, functions, etc. are not Copy by default
+                // Function types, etc. are not Copy
                 return false;
             }
         },
@@ -220,6 +249,38 @@ void BorrowChecker::check_func_decl(const parser::FuncDecl& func) {
     env_.push_scope();
     current_stmt_ = 0;
 
+    // ========================================================================
+    // Explicit Lifetime Parameters (Task 8.4)
+    // ========================================================================
+    // Extract named lifetime parameters from generics (e.g., `life a` in `[life a, T]`)
+    // These can be used to explicitly annotate reference lifetimes.
+
+    // Clear any previous function's lifetime context
+    lifetime_ctx_.clear();
+
+    std::set<std::string> lifetime_params;
+    for (const auto& generic : func.generics) {
+        if (generic.is_lifetime) {
+            lifetime_params.insert(generic.name);
+            lifetime_ctx_.lifetime_params.insert(generic.name);
+        }
+    }
+
+    // ========================================================================
+    // Lifetime Elision Analysis
+    // ========================================================================
+    // TML infers lifetimes automatically using these rules:
+    // 1. Each ref T parameter gets a separate lifetime
+    // 2. If there's a this/mut this, return has same lifetime as this
+    // 3. If there's exactly one ref parameter, return uses that lifetime
+    //
+    // If multiple ref parameters exist and no this, the return lifetime is
+    // ambiguous and we emit E031 - UNLESS explicit lifetimes are provided.
+
+    bool has_this_param = false;
+    std::vector<std::string> ref_param_names;
+    std::map<std::string, std::string> param_lifetimes; // param name -> lifetime name
+
     // Register parameters - FuncParam is a simple struct with pattern, type, span
     for (const auto& param : func.params) {
         bool is_mut = false;
@@ -230,18 +291,80 @@ void BorrowChecker::check_func_decl(const parser::FuncDecl& func) {
             const auto& ident = param.pattern->template as<parser::IdentPattern>();
             is_mut = ident.is_mut;
             name = ident.name;
+
+            // Check for this parameter (self in method)
+            if (name == "this") {
+                has_this_param = true;
+            }
         } else {
             name = "_param";
         }
 
-        // Check if the parameter type is a mutable reference (mut ref T)
+        // Check if the parameter type is a reference (ref T or mut ref T)
         if (param.type && param.type->template is<parser::RefType>()) {
-            is_mut_ref = param.type->template as<parser::RefType>().is_mut;
+            const auto& ref_type = param.type->template as<parser::RefType>();
+            is_mut_ref = ref_type.is_mut;
+            // Track reference parameters for lifetime elision
+            if (name != "this") {
+                ref_param_names.push_back(name);
+                // Track explicit lifetime annotation if present (Task 8.4)
+                if (ref_type.lifetime.has_value()) {
+                    param_lifetimes[name] = ref_type.lifetime.value();
+                    lifetime_ctx_.param_lifetimes[name] = ref_type.lifetime.value();
+                }
+            }
         }
 
         auto loc = current_location(func.span);
         // Note: We'd need the resolved type here - using nullptr for now
         env_.define(name, nullptr, is_mut, loc, is_mut_ref);
+    }
+
+    // Check if return type is a reference and extract its lifetime
+    bool returns_ref = false;
+    std::optional<std::string> return_lifetime;
+    if (func.return_type) {
+        const auto& ret_type = *func.return_type;
+        if (ret_type->template is<parser::RefType>()) {
+            returns_ref = true;
+            const auto& ref_type = ret_type->template as<parser::RefType>();
+            return_lifetime = ref_type.lifetime;
+            // Store in lifetime context for return validation (Task 8.5)
+            lifetime_ctx_.return_lifetime = return_lifetime;
+        }
+    }
+
+    // Apply lifetime elision rules
+    if (returns_ref) {
+        // Rule 2: If there's this/mut this, return uses this's lifetime - OK
+        // Rule 3: If exactly one ref parameter, return uses it - OK
+        // Otherwise: Ambiguous - emit E031 UNLESS explicit lifetimes resolve it
+
+        bool lifetime_resolved = false;
+
+        // Task 8.4: Check if explicit lifetimes resolve the ambiguity
+        if (return_lifetime.has_value()) {
+            const std::string& ret_lt = return_lifetime.value();
+            // Check if return lifetime is a declared lifetime parameter
+            if (lifetime_params.count(ret_lt) > 0) {
+                // Check if at least one input ref has the same lifetime
+                for (const auto& [param_name, param_lt] : param_lifetimes) {
+                    if (param_lt == ret_lt) {
+                        lifetime_resolved = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!lifetime_resolved && !has_this_param && ref_param_names.size() > 1) {
+            // Ambiguous: multiple ref params, no this, no explicit lifetime resolution
+            errors_.push_back(BorrowError::ambiguous_return_lifetime(
+                func.name, ref_param_names, func.span));
+        }
+        // Note: If no ref params at all and returns ref, the return must
+        // reference a static or the function body will error on returning
+        // a reference to a local. That's handled by check_return_borrows.
     }
 
     // Check function body - body is std::optional<BlockExpr>

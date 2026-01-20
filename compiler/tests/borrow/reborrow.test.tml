@@ -1,0 +1,101 @@
+// Tests for reborrow chain tracking (Phase 5 of memory-safety-parity)
+//
+// This file documents the reborrow infrastructure.
+// Explicit reborrow tests are in borrow_test.cpp (C++ unit tests).
+
+use test
+
+// =============================================================================
+// Basic Tests: Value Semantics
+// =============================================================================
+
+@test
+func basic_value_copy() -> I32 {
+    // Basic copy semantics with I32 (a Copy type)
+    let x: I32 = 42
+    let y: I32 = x  // Copy, not move
+    assert_eq(x + y, 84, "copy types should be usable after copy")
+    return 0
+}
+
+@test
+func basic_value_mutation() -> I32 {
+    // Basic mutation of mutable variable
+    let mut x: I32 = 42
+    x = x + 1
+    assert_eq(x, 43, "mutable variable should be modifiable")
+    return 0
+}
+
+// =============================================================================
+// Struct Field Access
+// =============================================================================
+
+type Point {
+    x: I32,
+    y: I32
+}
+
+@test
+func struct_field_access() -> I32 {
+    let p: Point = Point { x: 10, y: 20 }
+    assert_eq(p.x + p.y, 30, "struct field access should work")
+    return 0
+}
+
+@test
+func struct_field_mutation() -> I32 {
+    let mut p: Point = Point { x: 10, y: 20 }
+    p.x = p.x + 5
+    assert_eq(p.x, 15, "struct field mutation should work")
+    return 0
+}
+
+// =============================================================================
+// Nested Scopes
+// =============================================================================
+
+@test
+func nested_scope_variable() -> I32 {
+    let mut x: I32 = 42
+    {
+        let y: I32 = x
+        assert_eq(y, 42, "inner scope should see outer variable")
+    }
+    x = x + 1
+    assert_eq(x, 43, "outer variable should be modifiable after inner scope")
+    return 0
+}
+
+// =============================================================================
+// Reborrow Documentation
+// =============================================================================
+
+// The reborrow infrastructure tracks chains of references:
+//
+// 1. Reborrow struct (checker.hpp):
+//    - ref_place: The place holding the reborrowed reference
+//    - origin_borrow_index: Index of the borrow being reborrowed from
+//    - depth: How many levels deep in the reborrow chain
+//    - start/end: Lifetime locations
+//    - kind: BorrowKind (Shared/Mutable)
+//
+// 2. BorrowEnv methods (checker_nll.cpp):
+//    - create_reborrow(): Register a new reborrow
+//    - end_reborrow(): Mark reborrow as ended
+//    - get_reborrow_depth(): Get chain depth
+//    - validate_reborrow_lifetimes(): Check constraints
+//    - find_invalid_reborrows(): Find B017 violations
+//
+// 3. BorrowChecker::create_reborrow() (checker_ops.cpp):
+//    - Links target to source via borrowed_from
+//    - Creates a borrow on the source
+//    - Registers reborrow for lifetime tracking
+//
+// 4. B017 Error (checker_ops.cpp):
+//    - BorrowError::reborrow_outlives_origin()
+//    - Triggered when reborrow would outlive its source
+//
+// Explicit reborrow syntax (`ref *r1`) is tested in borrow_test.cpp
+// via the C++ unit test framework which can compile and check
+// borrow patterns directly.

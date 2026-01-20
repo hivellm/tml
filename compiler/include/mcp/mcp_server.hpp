@@ -38,10 +38,10 @@
 
 #pragma once
 
-#include "json/json_rpc.hpp"
-#include "json/json_value.hpp"
 #include "mcp/mcp_types.hpp"
 
+#include "json/json_rpc.hpp"
+#include "json/json_value.hpp"
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -88,7 +88,9 @@ public:
     void stop();
 
     /// Returns true if the server is running.
-    [[nodiscard]] bool is_running() const { return running_; }
+    [[nodiscard]] bool is_running() const {
+        return running_;
+    }
 
 private:
     // Server identity
@@ -107,18 +109,15 @@ private:
     // Request processing
     void process_request(const json::JsonRpcRequest& request);
     void send_response(const json::JsonRpcResponse& response);
-    void send_error(json::JsonValue id, json::JsonRpcErrorCode code,
-                    const std::string& message);
+    void send_error(json::JsonValue id, json::JsonRpcErrorCode code, const std::string& message);
     void log(const std::string& message);
 
     // Protocol handlers
-    auto handle_initialize(json::JsonValue params, json::JsonValue id)
-        -> json::JsonRpcResponse;
+    auto handle_initialize(json::JsonValue params, json::JsonValue id) -> json::JsonRpcResponse;
     void handle_initialized();
     auto handle_shutdown(json::JsonValue id) -> json::JsonRpcResponse;
     auto handle_tools_list(json::JsonValue id) -> json::JsonRpcResponse;
-    auto handle_tools_call(json::JsonValue params, json::JsonValue id)
-        -> json::JsonRpcResponse;
+    auto handle_tools_call(json::JsonValue params, json::JsonValue id) -> json::JsonRpcResponse;
 };
 
 } // namespace tml::mcp

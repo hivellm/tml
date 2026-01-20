@@ -98,7 +98,7 @@ protected:
 
 private:
     RvoStats stats_;
-    size_t sret_threshold_; ///< Size threshold for sret conversion (bytes)
+    [[maybe_unused]] size_t sret_threshold_; ///< Size threshold for sret conversion (bytes)
 
     /// Map from local variable to all instructions that assign to it
     std::unordered_map<ValueId, std::vector<size_t>> local_assignments_;
@@ -150,6 +150,35 @@ private:
 
     /// Track which functions return large structs
     std::unordered_set<std::string> sret_functions_;
+};
+
+/// Sret Conversion Pass - Runs AFTER all inlining
+///
+/// This pass converts functions returning large structs to use the sret
+/// calling convention. It must run after all inlining is complete to avoid
+/// breaking inlined code.
+class SretConversionPass : public FunctionPass {
+public:
+    [[nodiscard]] auto name() const -> std::string override {
+        return "SretConversion";
+    }
+
+    /// Get the number of functions converted
+    [[nodiscard]] auto conversions() const -> size_t {
+        return conversions_;
+    }
+
+protected:
+    auto run_on_function(Function& func) -> bool override;
+
+private:
+    size_t conversions_ = 0;
+
+    /// Check if the returned type is large enough to benefit from sret
+    auto should_use_sret(const Function& func) const -> bool;
+
+    /// Convert function to use sret parameter for large returns
+    auto convert_to_sret(Function& func) -> bool;
 };
 
 } // namespace tml::mir

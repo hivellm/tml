@@ -285,7 +285,7 @@ void IpcpPass::gather_constants(const Module& module) {
         for (const auto& block : func.blocks) {
             for (const auto& inst_data : block.instructions) {
                 if (auto* call = std::get_if<CallInst>(&inst_data.inst)) {
-                    // Track constant arguments
+                    (void)call; // TODO: Track constant arguments
                     // Would need value tracking to identify constants
                 }
             }

@@ -106,6 +106,9 @@ struct FuncSig {
     // Const generic parameters (at end to not break existing code using positional init)
     std::vector<ConstGenericParam> const_params = {}; ///< Const generic parameters.
 
+    // Lifetime bounds for type parameters (e.g., "T" -> "static" for [T: life static])
+    std::unordered_map<std::string, std::string> lifetime_bounds = {};
+
     // Helper methods
 
     /// Returns true if this is an external (FFI) function.
@@ -153,6 +156,16 @@ struct StructDef {
     std::vector<ConstGenericParam> const_params;         ///< Const generic parameters.
     std::vector<std::pair<std::string, TypePtr>> fields; ///< Field name-type pairs.
     SourceSpan span;                                     ///< Declaration location.
+
+    /// Whether this type has interior mutability.
+    ///
+    /// Interior mutable types (like Cell[T], Mutex[T]) allow mutation through
+    /// shared references. This bypasses normal borrow checking rules but is
+    /// safe because the type itself enforces thread-safety or single-threaded
+    /// access patterns.
+    ///
+    /// Types can be marked interior mutable with the `@interior_mutable` decorator.
+    bool is_interior_mutable = false;
 };
 
 /// Enum (algebraic data type) definition.
@@ -501,6 +514,20 @@ public:
 
     /// Returns true if the type is trivially destructible (TypePtr overload).
     [[nodiscard]] bool is_trivially_destructible(const TypePtr& type) const;
+
+    /// Returns true if the type has interior mutability.
+    ///
+    /// Interior mutable types allow mutation through shared references.
+    /// This includes:
+    /// - Types marked with `@interior_mutable` decorator
+    /// - Built-in types: Cell[T], Mutex[T], Shared[T], Sync[T]
+    ///
+    /// @param type_name The name of the type to check
+    /// @return true if the type has interior mutability
+    [[nodiscard]] bool is_interior_mutable(const std::string& type_name) const;
+
+    /// Returns true if the type has interior mutability (TypePtr overload).
+    [[nodiscard]] bool is_interior_mutable(const TypePtr& type) const;
 
     /// Returns true if a class can be treated as a value class (no vtable needed).
     ///

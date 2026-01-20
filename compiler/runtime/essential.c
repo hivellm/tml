@@ -290,7 +290,9 @@ typedef int32_t (*tml_test_entry_fn)(void);
 static int32_t tml_test_mode = 0;
 
 /** @brief Exit code from caught test failure. */
+#ifndef _WIN32
 static int32_t tml_test_exit_code = 0;
+#endif
 
 /**
  * @brief Enables test mode for better panic handling.
@@ -309,6 +311,8 @@ void tml_disable_test_mode(void) {
     tml_test_mode = 0;
 }
 
+// Unix signal handlers - not used on Windows (uses VEH instead)
+#ifndef _WIN32
 /** @brief Signal handler for catching crashes during tests. */
 static void tml_signal_handler(int sig) {
     const char* sig_name = "unknown signal";
@@ -322,11 +326,9 @@ static void tml_signal_handler(int sig) {
     case SIGILL:
         sig_name = "SIGILL (Illegal instruction)";
         break;
-#ifndef _WIN32
     case SIGBUS:
         sig_name = "SIGBUS (Bus error)";
         break;
-#endif
     case SIGABRT:
         sig_name = "SIGABRT (Abort)";
         break;
@@ -349,9 +351,7 @@ static void (*prev_sigsegv)(int) = NULL;
 static void (*prev_sigfpe)(int) = NULL;
 static void (*prev_sigill)(int) = NULL;
 static void (*prev_sigabrt)(int) = NULL;
-#ifndef _WIN32
 static void (*prev_sigbus)(int) = NULL;
-#endif
 
 /** @brief Install signal handlers for test crash catching. */
 static void tml_install_signal_handlers(void) {
@@ -359,9 +359,7 @@ static void tml_install_signal_handlers(void) {
     prev_sigfpe = signal(SIGFPE, tml_signal_handler);
     prev_sigill = signal(SIGILL, tml_signal_handler);
     prev_sigabrt = signal(SIGABRT, tml_signal_handler);
-#ifndef _WIN32
     prev_sigbus = signal(SIGBUS, tml_signal_handler);
-#endif
 }
 
 /** @brief Restore previous signal handlers after test. */
@@ -370,10 +368,9 @@ static void tml_restore_signal_handlers(void) {
     signal(SIGFPE, prev_sigfpe ? prev_sigfpe : SIG_DFL);
     signal(SIGILL, prev_sigill ? prev_sigill : SIG_DFL);
     signal(SIGABRT, prev_sigabrt ? prev_sigabrt : SIG_DFL);
-#ifndef _WIN32
     signal(SIGBUS, prev_sigbus ? prev_sigbus : SIG_DFL);
-#endif
 }
+#endif // _WIN32
 
 // ============================================================================
 // Windows Vectored Exception Handler (VEH)

@@ -359,7 +359,8 @@ auto Parser::parse_class_member([[maybe_unused]] const std::string& class_name)
             } else {
                 return ParseError{.message = "Expected 'get' or 'set' in property body",
                                   .span = peek().span,
-                                  .notes = {}};
+                                  .notes = {},
+                                  .fixes = {}};
             }
 
             skip_newlines();

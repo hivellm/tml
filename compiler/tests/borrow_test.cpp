@@ -47,6 +47,45 @@ protected:
             EXPECT_TRUE(found) << "Expected error containing: " << expected_msg;
         }
     }
+
+    // Check that error has suggestions (for error message quality)
+    void check_error_has_suggestions(const std::string& code, BorrowErrorCode expected_code) {
+        auto result = check(code);
+        EXPECT_TRUE(is_err(result)) << "Expected borrow error";
+        if (is_err(result)) {
+            const auto& errors = std::get<std::vector<BorrowError>>(result);
+            bool found = false;
+            for (const auto& e : errors) {
+                if (e.code == expected_code) {
+                    EXPECT_FALSE(e.suggestions.empty())
+                        << "Error code " << static_cast<int>(expected_code)
+                        << " should have suggestions";
+                    found = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(found) << "Expected error code not found";
+        }
+    }
+
+    // Check that any error in the result has suggestions
+    void check_any_error_has_suggestions(const std::string& code) {
+        auto result = check(code);
+        EXPECT_TRUE(is_err(result)) << "Expected borrow error";
+        if (is_err(result)) {
+            const auto& errors = std::get<std::vector<BorrowError>>(result);
+            EXPECT_FALSE(errors.empty()) << "Expected at least one error";
+            bool has_suggestions = false;
+            for (const auto& e : errors) {
+                if (!e.suggestions.empty()) {
+                    has_suggestions = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(has_suggestions)
+                << "At least one error should have suggestions";
+        }
+    }
 };
 
 // ============================================================================
@@ -480,4 +519,19 @@ TEST_F(BorrowCheckerTest, MoveToLocalVariable) {
             // c is now moved - but we don't use it again
         }
     )");
+}
+
+// ============================================================================
+// Error Message Quality Tests (Phase 10 of memory-safety-parity)
+// These tests verify that error messages include helpful suggestions.
+// ============================================================================
+
+TEST_F(BorrowCheckerTest, AssignNotMutableHasSuggestions) {
+    // B003: AssignNotMutable should have suggestions for "make it mutable"
+    check_error_has_suggestions(R"(
+        func test() {
+            let x: I32 = 42
+            x = 10  // Not mutable
+        }
+    )", BorrowErrorCode::AssignNotMutable);
 }

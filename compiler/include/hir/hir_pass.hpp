@@ -83,7 +83,9 @@ public:
 /// - String concatenation is not folded
 class ConstantFolding : public HirPass {
 public:
-    [[nodiscard]] auto name() const -> std::string override { return "constant-folding"; }
+    [[nodiscard]] auto name() const -> std::string override {
+        return "constant-folding";
+    }
     auto run(HirModule& module) -> bool override;
 
     /// Convenience method to run the pass directly.
@@ -130,7 +132,9 @@ private:
 /// they are clearly pure (literals, variable references, arithmetic).
 class DeadCodeElimination : public HirPass {
 public:
-    [[nodiscard]] auto name() const -> std::string override { return "dead-code-elimination"; }
+    [[nodiscard]] auto name() const -> std::string override {
+        return "dead-code-elimination";
+    }
     auto run(HirModule& module) -> bool override;
 
     static auto run_pass(HirModule& module) -> bool;
@@ -174,7 +178,9 @@ class Inlining : public HirPass {
 public:
     explicit Inlining(size_t max_statements = 5) : max_statements_(max_statements) {}
 
-    [[nodiscard]] auto name() const -> std::string override { return "inlining"; }
+    [[nodiscard]] auto name() const -> std::string override {
+        return "inlining";
+    }
     auto run(HirModule& module) -> bool override;
 
     static auto run_pass(HirModule& module, size_t max_statements = 5) -> bool;
@@ -209,7 +215,9 @@ private:
 /// references escape the closure's lifetime.
 class ClosureOptimization : public HirPass {
 public:
-    [[nodiscard]] auto name() const -> std::string override { return "closure-optimization"; }
+    [[nodiscard]] auto name() const -> std::string override {
+        return "closure-optimization";
+    }
     auto run(HirModule& module) -> bool override;
 
     static auto run_pass(HirModule& module) -> bool;

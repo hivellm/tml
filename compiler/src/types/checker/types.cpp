@@ -130,7 +130,7 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
 
         // Class type - return ClassType
         auto type = std::make_shared<Type>();
-        type->kind = ClassType{name};
+        type->kind = ClassType{name, "", {}};
         return type;
     }
 

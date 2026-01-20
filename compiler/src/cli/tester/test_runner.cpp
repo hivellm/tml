@@ -125,6 +125,10 @@ static LONG WINAPI crash_filter(EXCEPTION_POINTERS* info) {
 // SEH wrapper for calling test functions
 // Can't be in same function as C++ try/catch, so it's a separate function
 // Returns: function result, or -2 on crash
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wlanguage-extension-token"
+#endif
 static int call_test_with_seh(TestMainFunc func) {
     g_crash_occurred = false;
     g_crash_msg[0] = '\0';
@@ -137,6 +141,9 @@ static int call_test_with_seh(TestMainFunc func) {
     }
     return result;
 }
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 #endif
 
@@ -448,7 +455,7 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
     const auto& env = std::get<types::TypeEnv>(check_result);
 
     // Borrow check
-    borrow::BorrowChecker borrow_checker;
+    borrow::BorrowChecker borrow_checker(env);
     auto borrow_result = borrow_checker.check_module(module);
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
@@ -779,7 +786,7 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
     const auto& env = std::get<types::TypeEnv>(check_result);
 
     // Borrow check
-    borrow::BorrowChecker borrow_checker;
+    borrow::BorrowChecker borrow_checker(env);
     auto borrow_result = borrow_checker.check_module(module);
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
@@ -962,7 +969,7 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
 
     // Phase: Borrow check
     phase_start = Clock::now();
-    borrow::BorrowChecker borrow_checker;
+    borrow::BorrowChecker borrow_checker(env);
     auto borrow_result = borrow_checker.check_module(module);
     record_phase("borrow_check", phase_start);
 
@@ -1428,7 +1435,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     const auto& env = std::get<types::TypeEnv>(check_result);
 
                     // Borrow check
-                    borrow::BorrowChecker borrow_checker;
+                    borrow::BorrowChecker borrow_checker(env);
                     auto borrow_result = borrow_checker.check_module(module);
                     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
                         const auto& errors =

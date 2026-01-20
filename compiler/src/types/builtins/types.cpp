@@ -63,7 +63,7 @@ void TypeEnv::init_builtin_types() {
     // Maybe[T] enum (core::option)
     // Maybe[T] { Just(T), Nothing }
     {
-        auto T = std::make_shared<Type>(GenericType{"T"});
+        auto T = std::make_shared<Type>(GenericType{"T", {}});
         define_enum(EnumDef{.name = "Maybe",
                             .type_params = {"T"},
                             .const_params = {},
@@ -74,8 +74,8 @@ void TypeEnv::init_builtin_types() {
     // Outcome[T, E] enum (core::result)
     // Outcome[T, E] { Ok(T), Err(E) }
     {
-        auto T = std::make_shared<Type>(GenericType{"T"});
-        auto E = std::make_shared<Type>(GenericType{"E"});
+        auto T = std::make_shared<Type>(GenericType{"T", {}});
+        auto E = std::make_shared<Type>(GenericType{"E", {}});
         define_enum(EnumDef{.name = "Outcome",
                             .type_params = {"T", "E"},
                             .const_params = {},
@@ -86,7 +86,7 @@ void TypeEnv::init_builtin_types() {
     // Poll[T] enum (core::async)
     // Poll[T] { Ready(T), Pending }
     {
-        auto T = std::make_shared<Type>(GenericType{"T"});
+        auto T = std::make_shared<Type>(GenericType{"T", {}});
         define_enum(EnumDef{.name = "Poll",
                             .type_params = {"T"},
                             .const_params = {},
@@ -98,7 +98,7 @@ void TypeEnv::init_builtin_types() {
     // behavior Future { type Output; func poll(mut this, cx: mut ref Context) -> Poll[This.Output]
     // }
     {
-        auto Output = std::make_shared<Type>(GenericType{"Output"});
+        auto Output = std::make_shared<Type>(GenericType{"Output", {}});
         auto poll_output = std::make_shared<Type>(NamedType{"Poll", "", {Output}});
         define_behavior(BehaviorDef{
             .name = "Future",

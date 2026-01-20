@@ -111,7 +111,8 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
                 return ParseError{.message =
                                       "Expected literal after 'to'/'through' in range pattern",
                                   .span = peek().span,
-                                  .notes = {}};
+                                  .notes = {},
+                                  .fixes = {}};
             }
             auto end_token = advance();
 
@@ -202,7 +203,8 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
                 return ParseError{.message =
                                       "Parser error: infinite loop detected in tuple pattern",
                                   .span = peek().span,
-                                  .notes = {}};
+                                  .notes = {},
+                                  .fixes = {}};
             }
 
             skip_newlines();
@@ -309,7 +311,8 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
                         if (!check(lexer::TokenKind::RBrace)) {
                             return ParseError{.message = "Expected ',' or '}' in struct pattern",
                                               .span = peek().span,
-                                              .notes = {}};
+                                              .notes = {},
+                                              .fixes = {}};
                         }
                     }
                     skip_newlines();
@@ -341,7 +344,7 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
             .span = span});
     }
 
-    return ParseError{.message = "Expected pattern", .span = peek().span, .notes = {}};
+    return ParseError{.message = "Expected pattern", .span = peek().span, .notes = {}, .fixes = {}};
 }
 
 } // namespace tml::parser

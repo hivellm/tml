@@ -683,6 +683,12 @@ if(TML_BUILD_TESTS)
     )
     FetchContent_MakeAvailable(googletest)
 
+    # Disable -Werror for GoogleTest (it has warnings we can't control)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(gtest PRIVATE -Wno-error)
+        target_compile_options(gtest_main PRIVATE -Wno-error)
+    endif()
+
     # Test executable
     add_executable(tml_tests
         tests/lexer_test.cpp

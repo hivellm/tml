@@ -93,7 +93,7 @@ auto make_closure(std::vector<TypePtr> params, TypePtr ret, std::vector<Captured
 
 auto make_ref(TypePtr inner, bool is_mut) -> TypePtr {
     auto type = std::make_shared<Type>();
-    type->kind = RefType{is_mut, std::move(inner)};
+    type->kind = RefType{.is_mut = is_mut, .inner = std::move(inner), .lifetime = std::nullopt};
     type->id = next_type_id++;
     return type;
 }
@@ -481,7 +481,9 @@ auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, 
             // RefType: substitute inner type
             else if constexpr (std::is_same_v<T, RefType>) {
                 auto result = std::make_shared<Type>();
-                result->kind = RefType{t.is_mut, substitute_type(t.inner, subs)};
+                result->kind = RefType{.is_mut = t.is_mut,
+                                       .inner = substitute_type(t.inner, subs),
+                                       .lifetime = t.lifetime};
                 return result;
             }
             // PtrType: substitute inner type
@@ -742,7 +744,9 @@ auto substitute_type_with_consts(const TypePtr& type,
             else if constexpr (std::is_same_v<T, RefType>) {
                 auto result = std::make_shared<Type>();
                 result->kind =
-                    RefType{t.is_mut, substitute_type_with_consts(t.inner, type_subs, const_subs)};
+                    RefType{.is_mut = t.is_mut,
+                            .inner = substitute_type_with_consts(t.inner, type_subs, const_subs),
+                            .lifetime = t.lifetime};
                 return result;
             }
             // PtrType: substitute inner type

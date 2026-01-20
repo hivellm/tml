@@ -192,6 +192,20 @@ when weak.upgrade() {
 
 ## 6. Interior Mutability
 
+Interior mutability allows mutation through shared references for types that
+provide their own synchronization or single-threaded access patterns. This is
+safe because the type itself guarantees correct access.
+
+**Built-in interior mutable types:**
+
+| Type | Description | Thread-safe? |
+|------|-------------|--------------|
+| `Cell[T]` | Single-threaded mutation for Copy types | No |
+| `RefCell[T]` | Runtime borrow checking for any type | No |
+| `Mutex[T]` | Thread-safe with locking | Yes |
+| `Shared[T]` | Reference counted (Rc equivalent) | No |
+| `Sync[T]` | Thread-safe reference counted (Arc equivalent) | Yes |
+
 ### 6.1 Cell[T] — For Copy Types
 
 ```tml
@@ -230,6 +244,55 @@ let data: RefCell[List[I32]] = RefCell.new(List.of(1, 2, 3))
 
 // Panic if try borrow_mut while borrow exists
 ```
+
+### 6.3 Custom Interior Mutable Types
+
+You can mark custom types as interior mutable using the `@interior_mutable`
+decorator:
+
+```tml
+@interior_mutable
+type MySyncPrimitive {
+    data: I32,
+}
+
+extend MySyncPrimitive {
+    // This method can mutate through a shared reference
+    func set(this, value: I32) {
+        // Interior mutation through this (not mut ref this)
+        this.data = value  // W001 warning: bypasses borrow checking
+    }
+}
+```
+
+### 6.4 W001 Warning
+
+When mutating through a shared reference to an interior mutable type, the
+compiler emits warning W001 to alert that normal borrow checking rules are
+being bypassed:
+
+```tml
+let c: Cell[I32] = Cell::new(42)
+let r: ref Cell[I32] = ref c  // Shared reference
+r.set(100)  // W001: interior mutability bypasses borrow checking
+```
+
+This warning serves as a reminder that:
+- Multiple shared references may exist simultaneously
+- Mutation is allowed despite having only a shared reference
+- The type itself must ensure safe access patterns
+
+### 6.5 When to Use Interior Mutability
+
+Use interior mutability when:
+- You need shared mutable state with multiple owners
+- A type must appear immutable externally but mutate internally (e.g., caching)
+- Implementing synchronization primitives
+
+Avoid interior mutability when:
+- Regular mutable references (`mut ref T`) suffice
+- The mutation pattern is straightforward
+- Performance is critical (runtime checks have overhead)
 
 ## 7. Destruction
 
@@ -738,6 +801,101 @@ func builder_chain() {
         .build()
 
     print(result)  // "hello world"
+}
+```
+
+## 13. Explicit Lifetimes (Optional)
+
+TML normally infers lifetimes automatically. However, when the compiler cannot
+determine which input reference's lifetime should be used for the output, you
+can use explicit lifetime annotations.
+
+### 13.1 When Lifetimes Are Ambiguous
+
+When a function has multiple reference parameters and returns a reference,
+the compiler cannot determine which parameter's lifetime the return should use:
+
+```tml
+// ERROR E031: Cannot determine lifetime of return reference
+// Multiple ref params, no 'this' - ambiguous!
+func longest(a: ref Str, b: ref Str) -> ref Str {
+    if a.len() > b.len() { return a } else { return b }
+}
+```
+
+### 13.2 Explicit Lifetime Syntax
+
+Use the `life` keyword to declare lifetime parameters:
+
+```tml
+// Declare lifetime 'a' and use it to tie input and output lifetimes
+func longest[life a](x: ref[a] Str, y: ref[a] Str) -> ref[a] Str {
+    if x.len() > y.len() { return x } else { return y }
+}
+
+// Multiple lifetimes
+func choose_first[life a, life b](x: ref[a] Str, y: ref[b] Str) -> ref[a] Str {
+    return x
+}
+```
+
+### 13.3 The `static` Lifetime
+
+Use `life static` for references that live for the entire program duration:
+
+```tml
+// Returns a reference to a string literal (lives forever)
+func get_greeting[life static]() -> ref[static] Str {
+    return ref "Hello, world!"
+}
+```
+
+### 13.4 Lifetime Elision Rules
+
+TML automatically infers lifetimes when unambiguous:
+
+| Scenario | Rule |
+|----------|------|
+| Single ref param | Output uses that param's lifetime |
+| Method with `this` | Output uses `this`'s lifetime |
+| Multiple ref params, no `this` | **Ambiguous - E031 error** |
+
+```tml
+// Rule: single ref param → output uses its lifetime
+func identity(s: ref Str) -> ref Str { return s }  // OK, inferred
+
+// Rule: method with this → output uses this's lifetime
+extend Container {
+    func get_data(this) -> ref Data {
+        return ref this.data  // OK, uses this's lifetime
+    }
+}
+```
+
+### 13.5 Workarounds Without Explicit Lifetimes
+
+If you prefer not to use explicit lifetimes, you can restructure your code:
+
+```tml
+// Option 1: Return owned value instead of reference
+func longest(a: ref Str, b: ref Str) -> Str {
+    if a.len() > b.len() { return a.duplicate() } else { return b.duplicate() }
+}
+
+// Option 2: Use a method with 'this' to disambiguate
+type StringPair {
+    first: Str,
+    second: Str,
+}
+
+extend StringPair {
+    func longest(this) -> ref Str {
+        if this.first.len() > this.second.len() {
+            return ref this.first
+        } else {
+            return ref this.second
+        }
+    }
 }
 ```
 

@@ -245,4 +245,110 @@ auto ModuleRvoPass::run(Module& module) -> bool {
     return changed;
 }
 
+// ============================================================================
+// SretConversionPass - Post-inlining sret conversion
+// ============================================================================
+
+auto SretConversionPass::run_on_function(Function& func) -> bool {
+    // Only convert if beneficial and not already converted
+    if (!should_use_sret(func)) {
+        return false;
+    }
+
+    if (convert_to_sret(func)) {
+        conversions_++;
+        return true;
+    }
+
+    return false;
+}
+
+auto SretConversionPass::should_use_sret(const Function& func) const -> bool {
+    // Skip if already converted
+    if (func.uses_sret) {
+        return false;
+    }
+
+    // Skip if no return type or void
+    if (!func.return_type || func.return_type->is_unit()) {
+        return false;
+    }
+
+    // Skip main function - it must return I32 by convention
+    if (func.name == "main" || func.name == "tml_main") {
+        return false;
+    }
+
+    // Skip extern functions
+    if (func.blocks.empty()) {
+        return false;
+    }
+
+    // Check if the return type is a struct/tuple that would benefit from sret
+    if (auto* struct_type = std::get_if<MirStructType>(&func.return_type->kind)) {
+        // Named struct types should use sret
+        (void)struct_type;
+        return true;
+    }
+
+    if (auto* tuple_type = std::get_if<MirTupleType>(&func.return_type->kind)) {
+        // Tuple with more than 2 elements (> 16 bytes typically)
+        return tuple_type->elements.size() > 2;
+    }
+
+    return false;
+}
+
+auto SretConversionPass::convert_to_sret(Function& func) -> bool {
+    // Save original return type for codegen
+    func.original_return_type = func.return_type;
+
+    // Create sret parameter with a new value ID
+    ValueId sret_id = func.fresh_value();
+    func.sret_param_id = sret_id;
+
+    FunctionParam sret_param;
+    sret_param.name = "sret";
+    sret_param.type = make_pointer_type(func.return_type, true); // mutable pointer
+    sret_param.value_id = sret_id;
+
+    // Insert sret as first parameter
+    func.params.insert(func.params.begin(), sret_param);
+
+    // Transform all return statements:
+    // 1. Add store of return value to sret pointer before return
+    // 2. Change return to return void
+    for (auto& block : func.blocks) {
+        if (!block.terminator)
+            continue;
+
+        if (auto* ret = std::get_if<ReturnTerm>(&*block.terminator)) {
+            if (ret->value.has_value()) {
+                // Create store instruction: store return_value to sret pointer
+                StoreInst store;
+                store.ptr = Value{sret_id, sret_param.type};
+                store.value = *ret->value;
+                store.value_type = func.original_return_type;
+
+                InstructionData store_inst;
+                store_inst.result = INVALID_VALUE; // Store has no result
+                store_inst.type = nullptr;
+                store_inst.inst = store;
+                store_inst.span = {}; // No span for generated instructions
+
+                block.instructions.push_back(store_inst);
+
+                // Change return to void
+                ret->value = std::nullopt;
+            }
+        }
+    }
+
+    // Change function return type to void
+    func.return_type = make_unit_type();
+    func.uses_sret = true;
+
+    return true;
+}
+
 } // namespace tml::mir

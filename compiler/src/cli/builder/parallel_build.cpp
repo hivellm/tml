@@ -614,7 +614,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
         const auto& env = std::get<types::TypeEnv>(check_result);
 
         // Borrow checking
-        borrow::BorrowChecker borrow_checker;
+        borrow::BorrowChecker borrow_checker(env);
         auto borrow_result = borrow_checker.check_module(module);
 
         if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {

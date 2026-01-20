@@ -60,25 +60,25 @@ struct ConditionalEscape {
 /// Conditional allocation information for branch-dependent allocations.
 /// When allocations occur in different branches, they may share a stack slot.
 struct ConditionalAllocation {
-    ValueId phi_result;               ///< Result of the phi node merging allocations.
-    std::vector<ValueId> alloc_ids;   ///< Allocation value IDs in each branch.
+    ValueId phi_result;                ///< Result of the phi node merging allocations.
+    std::vector<ValueId> alloc_ids;    ///< Allocation value IDs in each branch.
     std::vector<uint32_t> from_blocks; ///< Block IDs containing each allocation.
-    size_t max_size = 0;              ///< Maximum size of all allocations.
-    bool can_share_slot = true;       ///< True if allocations can share stack slot.
-    std::string class_name;           ///< Class name if all are same class.
+    size_t max_size = 0;               ///< Maximum size of all allocations.
+    bool can_share_slot = true;        ///< True if allocations can share stack slot.
+    std::string class_name;            ///< Class name if all are same class.
 };
 
 /// Loop allocation information for allocations inside loops.
 /// Allocations that don't escape the loop iteration can be stack-promoted
 /// with the stack slot reused on each iteration.
 struct LoopAllocation {
-    ValueId alloc_id;              ///< The allocation value ID.
-    uint32_t loop_header;          ///< Block ID of the loop header.
-    uint32_t alloc_block;          ///< Block ID containing the allocation.
+    ValueId alloc_id;               ///< The allocation value ID.
+    uint32_t loop_header;           ///< Block ID of the loop header.
+    uint32_t alloc_block;           ///< Block ID containing the allocation.
     bool escapes_iteration = false; ///< True if value escapes current iteration.
     bool is_loop_invariant = false; ///< True if allocation can be hoisted.
-    size_t estimated_size = 0;     ///< Estimated allocation size.
-    std::string class_name;        ///< Class name if this is a class instance.
+    size_t estimated_size = 0;      ///< Estimated allocation size.
+    std::string class_name;         ///< Class name if this is a class instance.
 };
 
 /// Escape information for a single value.
@@ -162,8 +162,7 @@ public:
         -> const std::vector<ConditionalAllocation>&;
 
     /// Returns loop allocations identified in the function.
-    [[nodiscard]] auto get_loop_allocations() const
-        -> const std::vector<LoopAllocation>&;
+    [[nodiscard]] auto get_loop_allocations() const -> const std::vector<LoopAllocation>&;
 
     /// Statistics from the escape analysis.
     struct Stats {
@@ -187,18 +186,18 @@ public:
         size_t free_removals = 0;       ///< Free calls that can be removed.
 
         // Sealed class optimization statistics
-        size_t sealed_class_instances = 0;   ///< Sealed class instance allocations.
-        size_t sealed_class_promotable = 0;  ///< Sealed instances eligible for stack.
-        size_t sealed_method_noescapes = 0;  ///< Method calls that don't escape due to sealed.
+        size_t sealed_class_instances = 0;  ///< Sealed class instance allocations.
+        size_t sealed_class_promotable = 0; ///< Sealed instances eligible for stack.
+        size_t sealed_method_noescapes = 0; ///< Method calls that don't escape due to sealed.
 
         // Conditional allocation statistics
         size_t conditional_allocations_found = 0; ///< Phi nodes merging allocations.
         size_t conditional_allocs_shareable = 0;  ///< Allocations that can share slot.
 
         // Loop allocation statistics
-        size_t loop_allocations_found = 0;    ///< Allocations inside loops.
-        size_t loop_allocs_promotable = 0;    ///< Loop allocations promotable to stack.
-        size_t loop_allocs_hoistable = 0;     ///< Allocations that can be hoisted out.
+        size_t loop_allocations_found = 0; ///< Allocations inside loops.
+        size_t loop_allocs_promotable = 0; ///< Loop allocations promotable to stack.
+        size_t loop_allocs_hoistable = 0;  ///< Allocations that can be hoisted out.
     };
 
     /// Returns analysis statistics.
@@ -214,7 +213,7 @@ private:
     std::unordered_map<ValueId, EscapeInfo> escape_info_;
     std::vector<ConditionalAllocation> conditional_allocs_;
     std::vector<LoopAllocation> loop_allocs_;
-    std::unordered_set<uint32_t> loop_headers_; ///< Block IDs that are loop headers.
+    std::unordered_set<uint32_t> loop_headers_;            ///< Block IDs that are loop headers.
     std::unordered_map<uint32_t, uint32_t> block_to_loop_; ///< Maps block to its loop header.
     Stats stats_;
     const Module* module_ = nullptr; ///< Module reference for class metadata lookup.
@@ -281,11 +280,11 @@ public:
 
     /// Statistics from stack promotion.
     struct Stats {
-        size_t allocations_promoted = 0;        ///< Number of allocations converted.
-        size_t bytes_saved = 0;                 ///< Estimated bytes saved from heap.
-        size_t free_calls_removed = 0;          ///< Number of free/drop calls removed.
-        size_t destructors_inserted = 0;        ///< Number of destructor calls inserted at scope end.
-        size_t conditional_slots_shared = 0;    ///< Number of conditional allocs sharing a slot.
+        size_t allocations_promoted = 0;     ///< Number of allocations converted.
+        size_t bytes_saved = 0;              ///< Estimated bytes saved from heap.
+        size_t free_calls_removed = 0;       ///< Number of free/drop calls removed.
+        size_t destructors_inserted = 0;     ///< Number of destructor calls inserted at scope end.
+        size_t conditional_slots_shared = 0; ///< Number of conditional allocs sharing a slot.
         size_t conditional_allocs_promoted = 0; ///< Number of conditional allocations promoted.
         size_t loop_allocs_promoted = 0;        ///< Number of loop allocations promoted.
         size_t loop_allocs_hoisted = 0;         ///< Number of loop allocations hoisted out.

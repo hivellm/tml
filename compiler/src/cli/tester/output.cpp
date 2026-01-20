@@ -120,6 +120,8 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
             tests_failed += result.test_count;
         }
     }
+    (void)files_passed; // May be used for detailed file-level output later
+    (void)files_failed;
 
     // Print summary box
     std::cout << "\n";

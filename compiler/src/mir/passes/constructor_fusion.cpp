@@ -170,8 +170,8 @@ auto ConstructorFusionPass::fuse_stores(Function& func, BasicBlock& block, const
 
     // Create store of the initialized struct
     StoreInst struct_store;
-    struct_store.value = Value{init_inst.result};
-    struct_store.ptr = Value{seq.object_ptr};
+    struct_store.value = Value{init_inst.result, nullptr};
+    struct_store.ptr = Value{seq.object_ptr, nullptr};
 
     InstructionData store_inst;
     store_inst.result = 0; // Store has no result

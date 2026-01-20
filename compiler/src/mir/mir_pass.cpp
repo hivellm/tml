@@ -403,6 +403,10 @@ void PassManager::configure_standard_pipeline() {
 
         // Merge multiple returns into single exit
         add_pass(std::make_unique<MergeReturnsPass>());
+
+        // Sret conversion runs LAST, after all inlining is complete
+        // This converts functions returning large structs to use sret calling convention
+        add_pass(std::make_unique<SretConversionPass>());
     }
 }
 
@@ -613,6 +617,10 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
         add_pass(std::make_unique<DeadFunctionEliminationPass>());
         add_pass(std::make_unique<DeadArgEliminationPass>());
         add_pass(std::make_unique<MergeReturnsPass>());
+
+        // Sret conversion runs LAST, after all inlining is complete
+        // This converts functions returning large structs to use sret calling convention
+        add_pass(std::make_unique<SretConversionPass>());
     }
 }
 

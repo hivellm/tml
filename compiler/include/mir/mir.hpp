@@ -300,14 +300,14 @@ struct UnaryInst {
 // Load from memory: result = *ptr
 struct LoadInst {
     Value ptr;
-    MirTypePtr result_type; // Type being loaded
+    MirTypePtr result_type = nullptr; // Type being loaded
 };
 
 // Store to memory: *ptr = value (no result)
 struct StoreInst {
     Value ptr;
     Value value;
-    MirTypePtr value_type; // Type being stored
+    MirTypePtr value_type = nullptr; // Type being stored
 };
 
 // Allocate stack memory: result = alloca type
@@ -761,7 +761,7 @@ public:
     auto print_type(const MirTypePtr& type) -> std::string;
 
 private:
-    bool use_colors_;
+    [[maybe_unused]] bool use_colors_;
 };
 
 // Convenience free function for printing a module

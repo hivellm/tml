@@ -291,7 +291,7 @@ auto DestructorHoistPass::replace_with_reset(Function& func, const DestructorLoo
     // Create a reset call instruction
     CallInst reset_call;
     reset_call.func_name = alloc.class_name + "_reset";
-    reset_call.args.push_back(Value{alloc.alloc_value});
+    reset_call.args.push_back(Value{alloc.alloc_value, nullptr});
 
     InstructionData reset_inst;
     reset_inst.result = 0; // reset() typically returns void

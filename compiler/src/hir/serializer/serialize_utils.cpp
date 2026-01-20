@@ -126,7 +126,7 @@ void hash_type(Hasher& h, const HirType& type) {
     }
 }
 
-void hash_span(Hasher& h, const SourceSpan& span) {
+[[maybe_unused]] void hash_span(Hasher& h, const SourceSpan& span) {
     h.update(span.start.line);
     h.update(span.start.column);
     h.update(span.start.offset);
@@ -135,20 +135,20 @@ void hash_span(Hasher& h, const SourceSpan& span) {
     h.update(span.end.offset);
 }
 
-void hash_expr(Hasher& h, const HirExpr& expr);
+[[maybe_unused]] void hash_expr(Hasher& h, const HirExpr& expr);
 
-void hash_pattern(Hasher& h, const HirPattern& pattern) {
+[[maybe_unused]] void hash_pattern(Hasher& h, const HirPattern& pattern) {
     h.update(static_cast<uint8_t>(pattern.kind.index()));
     h.update(pattern.id());
     hash_type(h, pattern.type());
 }
 
-void hash_stmt(Hasher& h, const HirStmt& stmt) {
+[[maybe_unused]] void hash_stmt(Hasher& h, const HirStmt& stmt) {
     h.update(static_cast<uint8_t>(stmt.kind.index()));
     h.update(stmt.id());
 }
 
-void hash_expr(Hasher& h, const HirExpr& expr) {
+[[maybe_unused]] void hash_expr(Hasher& h, const HirExpr& expr) {
     h.update(static_cast<uint8_t>(expr.kind.index()));
     h.update(expr.id());
     hash_type(h, expr.type());

@@ -9,7 +9,7 @@
 | Indentation | Spaces (2 or 4); tabs prohibited |
 | BOM | Prohibited |
 
-## 2. Keywords (56 reserved words)
+## 2. Keywords (57 reserved words)
 
 ```
 // Declarations
@@ -28,7 +28,7 @@ and       or        not
 
 // Types and references
 this      This      as        dyn
-mut       ref       lowlevel
+mut       ref       lowlevel  life
 
 // Modules
 crate     super     with

@@ -349,7 +349,7 @@ auto DevirtualizationPass::process_block(BasicBlock& block) -> bool {
         // Try to devirtualize with effective type
         auto [direct_name, reason] = try_devirtualize(
             MethodCallInst{method_call.receiver, effective_type, method_call.method_name,
-                           method_call.args, method_call.arg_types, method_call.return_type});
+                           method_call.args, method_call.arg_types, method_call.return_type, std::nullopt});
 
         // Track narrowing-enabled devirtualization separately
         if (has_narrowing && reason != DevirtReason::NotDevirtualized) {

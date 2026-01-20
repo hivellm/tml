@@ -1,0 +1,72 @@
+// Tests for lifetime mismatch detection (Task 8.5/8.6)
+//
+// These tests verify that the borrow checker correctly detects when
+// a return value's lifetime doesn't match the declared return lifetime.
+
+use test
+
+// =============================================================================
+// ERROR CASE: Returning wrong lifetime
+// =============================================================================
+
+// This function declares it returns lifetime 'a but tries to return 'b
+// @expect_error("lifetime mismatch")
+// func wrong_lifetime[life a, life b](x: ref[a] I32, y: ref[b] I32) -> ref[a] I32 {
+//     return y  // ERROR: y has lifetime 'b, not 'a
+// }
+
+// =============================================================================
+// VALID CASE: Returning correct lifetime
+// =============================================================================
+
+// Return first parameter which has the correct lifetime 'a
+func correct_first[life a, life b](x: ref[a] I32, y: ref[b] I32) -> ref[a] I32 {
+    return x  // OK: x has lifetime 'a
+}
+
+@test
+func test_correct_first() -> I32 {
+    let a: I32 = 10
+    let b: I32 = 20
+    let r: ref I32 = correct_first(ref a, ref b)
+    assert_eq(*r, 10, "correct first lifetime")
+    return 0
+}
+
+// Return second parameter which has the correct lifetime 'b
+func correct_second[life a, life b](x: ref[a] I32, y: ref[b] I32) -> ref[b] I32 {
+    return y  // OK: y has lifetime 'b
+}
+
+@test
+func test_correct_second() -> I32 {
+    let a: I32 = 10
+    let b: I32 = 20
+    let r: ref I32 = correct_second(ref a, ref b)
+    assert_eq(*r, 20, "correct second lifetime")
+    return 0
+}
+
+// =============================================================================
+// Single lifetime applied to multiple params
+// =============================================================================
+
+// Both params have same lifetime - can return either
+func same_lifetime_first[life a](x: ref[a] I32, y: ref[a] I32) -> ref[a] I32 {
+    return x
+}
+
+func same_lifetime_second[life a](x: ref[a] I32, y: ref[a] I32) -> ref[a] I32 {
+    return y
+}
+
+@test
+func test_same_lifetime_variants() -> I32 {
+    let a: I32 = 100
+    let b: I32 = 200
+    let r1: ref I32 = same_lifetime_first(ref a, ref b)
+    let r2: ref I32 = same_lifetime_second(ref a, ref b)
+    assert_eq(*r1, 100, "same lifetime first")
+    assert_eq(*r2, 200, "same lifetime second")
+    return 0
+}

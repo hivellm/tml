@@ -1,0 +1,86 @@
+// Tests for lifetime bounds on type parameters (Phase 9 of memory-safety-parity)
+//
+// Lifetime bounds constrain type parameters to outlive a certain lifetime:
+// - `T: life static` means T contains no non-static references
+// - `T: life a` means T outlives lifetime 'a
+
+use test
+
+// =============================================================================
+// Static Lifetime Bound - Parser Tests
+// =============================================================================
+
+// Type T must outlive static lifetime
+func static_bound[T: life static](x: T) -> T {
+    return x
+}
+
+@test
+func test_static_bound_with_primitive() -> I32 {
+    // Primitives satisfy 'static bound
+    let x: I32 = static_bound[I32](42)
+    assert_eq(x, 42, "static bound with primitive")
+    return 0
+}
+
+@test
+func test_static_bound_with_bool() -> I32 {
+    // Bool is also 'static
+    let b: Bool = static_bound[Bool](true)
+    assert_eq(b, true, "static bound with bool")
+    return 0
+}
+
+// =============================================================================
+// Named Lifetime Bound - Parser Tests
+// =============================================================================
+
+// Type T must outlive lifetime 'a
+// Note: Generic type inference with lifetime bounds is a known limitation.
+// The parser correctly handles the syntax; full inference is tracked separately.
+func outlives[life a, T: life a](x: ref[a] T) -> ref[a] T {
+    return x
+}
+
+// Simpler test without generic return type inference issue
+func identity_lifetime[life a](x: ref[a] I32) -> ref[a] I32 {
+    return x
+}
+
+@test
+func test_named_lifetime_bound() -> I32 {
+    let x: I32 = 100
+    let r: ref I32 = identity_lifetime(ref x)
+    assert_eq(*r, 100, "named lifetime bound")
+    return 0
+}
+
+// =============================================================================
+// Combined Bounds - Parser Tests
+// =============================================================================
+
+// Multiple bounds: behavior + lifetime
+// Note: Clone behavior check is not implemented yet, so this just tests parsing
+func clone_and_static[T: life static](x: T) -> T {
+    return x
+}
+
+@test
+func test_combined_bounds() -> I32 {
+    let x: I32 = clone_and_static[I32](55)
+    assert_eq(x, 55, "combined bounds")
+    return 0
+}
+
+// =============================================================================
+// Summary
+// =============================================================================
+
+// Phase 9 implements (current progress):
+// - [x] 9.1 Parse `[T: life static]` syntax
+// - [x] 9.2 Parse `[T: life a]` for named lifetime bounds
+// - [x] 9.3 Add lifetime bounds to `TypeParam`
+// - [ ] 9.4 Validate type satisfies lifetime bound
+// - [ ] 9.5 Emit E033 error: type may not live long enough
+// - [x] 9.6 Support `life static` equivalent
+// - [x] 9.7 Tests added (this file)

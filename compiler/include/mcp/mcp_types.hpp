@@ -20,7 +20,6 @@
 #pragma once
 
 #include "json/json_value.hpp"
-
 #include <optional>
 #include <string>
 #include <vector>
@@ -47,8 +46,7 @@ struct ClientInfo {
     std::string name;    ///< Client name (e.g., "claude-code")
     std::string version; ///< Client version
 
-    [[nodiscard]] static auto from_json(const json::JsonValue& json)
-        -> std::optional<ClientInfo>;
+    [[nodiscard]] static auto from_json(const json::JsonValue& json) -> std::optional<ClientInfo>;
 };
 
 /// Tool parameter schema.
@@ -80,8 +78,8 @@ struct ToolParameter {
 /// };
 /// ```
 struct Tool {
-    std::string name;                    ///< Tool name (e.g., "compile")
-    std::string description;             ///< Human-readable description
+    std::string name;                      ///< Tool name (e.g., "compile")
+    std::string description;               ///< Human-readable description
     std::vector<ToolParameter> parameters; ///< Input parameters
 
     [[nodiscard]] auto to_json() const -> json::JsonValue;

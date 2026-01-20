@@ -99,7 +99,8 @@ auto Parser::expect(lexer::TokenKind kind, const std::string& message)
     return ParseError{.message = message + ", found '" +
                                  std::string(lexer::token_kind_to_string(peek().kind)) + "'",
                       .span = peek().span,
-                      .notes = {}};
+                      .notes = {},
+                      .fixes = {}};
 }
 
 void Parser::skip_newlines() {

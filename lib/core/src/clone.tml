@@ -244,6 +244,50 @@ impl Copy for F64 {}
 impl Copy for Bool {}
 
 // ============================================================================
+// Owned Marker Behavior
+// ============================================================================
+
+/// Types with ownership semantics (non-Copy types).
+///
+/// `Owned` is a marker behavior that indicates a type uses move semantics
+/// rather than copy semantics. When an `Owned` value is assigned or passed
+/// to a function, ownership is transferred and the original becomes invalid.
+///
+/// # When to Use Owned
+///
+/// The `Owned` marker is useful in generic contexts to constrain type
+/// parameters to non-Copy types:
+///
+/// ```tml
+/// // T must be an owned (non-Copy) type
+/// func take_ownership[T: Owned](value: T) {
+///     // value is now owned by this function
+/// }
+/// ```
+///
+/// # Relationship with Copy
+///
+/// `Owned` and `Copy` are mutually exclusive:
+/// - A type implementing `Copy` uses copy semantics
+/// - A type implementing `Owned` uses move semantics
+/// - A type should implement one or the other, not both
+///
+/// # Examples
+///
+/// Types like `String` and `Vec[T]` are `Owned` because they manage heap memory:
+///
+/// ```tml
+/// let s1: String = String::from("hello")
+/// let s2 = s1  // Move: s1 is now invalid
+/// // print(s1) // ERROR: use of moved value
+/// print(s2)    // OK
+/// ```
+pub behavior Owned {
+    // No methods - this is a marker behavior
+    // The compiler uses this to indicate move semantics
+}
+
+// ============================================================================
 // Duplicate for Maybe[T]
 // ============================================================================
 

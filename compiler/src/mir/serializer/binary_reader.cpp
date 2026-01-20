@@ -170,7 +170,7 @@ auto MirBinaryReader::read_type() -> MirTypePtr {
 }
 
 auto MirBinaryReader::read_value() -> Value {
-    return Value{read_u32()};
+    return Value{.id = read_u32(), .type = nullptr};
 }
 
 auto MirBinaryReader::read_instruction() -> InstructionData {

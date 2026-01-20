@@ -130,7 +130,7 @@ auto SROAPass::can_split_type(const MirTypePtr& type) -> bool {
     if (!type)
         return false;
 
-    if (auto* st = std::get_if<MirStructType>(&type->kind)) {
+    if (std::holds_alternative<MirStructType>(type->kind)) {
         // Can split structs
         return true;
     }

@@ -80,13 +80,14 @@ struct Decorator {
 // Generic Parameters and Constraints
 // ============================================================================
 
-/// A generic parameter: `T`, `T: Behavior`, `T: Behavior[U]`, or `const N: U64`.
+/// A generic parameter: `T`, `T: Behavior`, `T: Behavior[U]`, `const N: U64`, or `life a`.
 ///
 /// Generic parameters can be:
 /// - Type parameters: `T`
 /// - Bounded type parameters: `T: Clone + Debug`
 /// - Const parameters: `const N: U64`
 /// - Defaulted parameters: `T = I32`
+/// - Lifetime parameters: `life a`, `life static`
 ///
 /// # Examples
 ///
@@ -95,15 +96,20 @@ struct Decorator {
 /// func sort[T: Ord](items: mut ref [T])
 /// type Array[T, const N: U64] { ... }
 /// type Container[T = I32] { value: T }
+/// func longest[life a](x: ref[a] Str, y: ref[a] Str) -> ref[a] Str
+/// func static_only[T: life static](x: T) -> T  // Lifetime bound
 /// ```
 struct GenericParam {
     std::string name; ///< Parameter name.
     std::vector<TypePtr>
         bounds; ///< Behavior bounds (supports parameterized bounds like `Iterator[Item=T]`).
     bool is_const = false;               ///< True for const generic params.
+    bool is_lifetime = false;            ///< True for lifetime params (`life a`).
     std::optional<TypePtr> const_type;   ///< Type of const param (e.g., `U64`).
     std::optional<TypePtr> default_type; ///< Default type (e.g., `T = This`).
-    SourceSpan span;                     ///< Source location.
+    std::optional<std::string>
+        lifetime_bound; ///< Lifetime bound (e.g., "static" for `T: life static`).
+    SourceSpan span;    ///< Source location.
 };
 
 /// Where clause: `where T: Clone, U: Hash, T = U`.

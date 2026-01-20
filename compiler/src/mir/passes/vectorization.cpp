@@ -466,6 +466,7 @@ auto LoopVectorizationPass::detect_reductions(const Function& func, const LoopIn
                         update_val = val.id;
                     }
                 }
+                (void)init_pred; // May be used in future for preheader identification
 
                 if (init_val != INVALID_VALUE && update_val != INVALID_VALUE) {
                     // Find the instruction that produces update_val
@@ -547,7 +548,7 @@ auto LoopVectorizationPass::gen_horizontal_reduce(Function& /*func*/, BasicBlock
 
 auto LoopVectorizationPass::is_vectorizable_inst(const InstructionData& inst) const -> bool {
     return std::visit(
-        [this](const auto& i) -> bool {
+        [](const auto& i) -> bool {
             using T = std::decay_t<decltype(i)>;
 
             if constexpr (std::is_same_v<T, BinaryInst>) {

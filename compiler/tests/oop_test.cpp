@@ -327,7 +327,7 @@ sealed class GermanShepherd extends Dog {
 
 class OOPParserTest : public ::testing::Test {
 protected:
-    auto parse(const std::string& code) -> Result<Module, std::vector<ParseError>> {
+    auto parse(const std::string& code) -> Result<parser::Module, std::vector<ParseError>> {
         auto source = Source::from_string(code);
         Lexer lexer(source);
         auto tokens = lexer.tokenize();

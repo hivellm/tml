@@ -232,10 +232,12 @@ auto make_named_type(std::string name, SourceSpan span) -> TypePtr;
 /// - `is_mut`: True for mutable reference
 /// - `inner`: The referenced type
 /// - `span`: Source location
+/// - `lifetime`: Optional explicit lifetime annotation (e.g., "a", "static")
 ///
 /// # Returns
 /// An owned `TypePtr` containing a `RefType`
-auto make_ref_type(bool is_mut, TypePtr inner, SourceSpan span) -> TypePtr;
+auto make_ref_type(bool is_mut, TypePtr inner, SourceSpan span,
+                   std::optional<std::string> lifetime = std::nullopt) -> TypePtr;
 
 /// Creates an identifier pattern.
 ///

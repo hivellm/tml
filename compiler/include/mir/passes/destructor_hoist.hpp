@@ -105,15 +105,15 @@ private:
         -> std::optional<std::pair<size_t, size_t>>;
 
     /// Hoist allocation before loop
-    auto hoist_allocation(Function& func, const DestructorLoopAllocation& alloc, size_t preheader_block)
-        -> bool;
+    auto hoist_allocation(Function& func, const DestructorLoopAllocation& alloc,
+                          size_t preheader_block) -> bool;
 
     /// Replace allocation with reset() call in loop
     auto replace_with_reset(Function& func, const DestructorLoopAllocation& alloc) -> bool;
 
     /// Move drop after loop
-    auto move_drop_after_loop(Function& func, const DestructorLoopAllocation& alloc, size_t exit_block)
-        -> bool;
+    auto move_drop_after_loop(Function& func, const DestructorLoopAllocation& alloc,
+                              size_t exit_block) -> bool;
 };
 
 } // namespace tml::mir

@@ -52,13 +52,13 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Maybe[T] { Just(T), Nothing }
         auto maybe_decl = std::make_unique<parser::EnumDecl>();
         maybe_decl->name = "Maybe";
-        maybe_decl->generics.push_back(parser::GenericParam{"T"});
+        maybe_decl->generics.push_back(parser::GenericParam{"T", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
 
         // Just(T) variant
         parser::EnumVariant just_variant;
         just_variant.name = "Just";
         auto t_type = std::make_unique<parser::Type>();
-        t_type->kind = parser::NamedType{parser::TypePath{{"T"}}};
+        t_type->kind = parser::NamedType{parser::TypePath{{"T"}, {}}, std::nullopt, {}};
         std::vector<parser::TypePtr> just_fields;
         just_fields.push_back(std::move(t_type));
         just_variant.tuple_fields = std::move(just_fields);
@@ -77,14 +77,14 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Outcome[T, E] { Ok(T), Err(E) }
         auto outcome_decl = std::make_unique<parser::EnumDecl>();
         outcome_decl->name = "Outcome";
-        outcome_decl->generics.push_back(parser::GenericParam{"T"});
-        outcome_decl->generics.push_back(parser::GenericParam{"E"});
+        outcome_decl->generics.push_back(parser::GenericParam{"T", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
+        outcome_decl->generics.push_back(parser::GenericParam{"E", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
 
         // Ok(T) variant
         parser::EnumVariant ok_variant;
         ok_variant.name = "Ok";
         auto t_type = std::make_unique<parser::Type>();
-        t_type->kind = parser::NamedType{parser::TypePath{{"T"}}};
+        t_type->kind = parser::NamedType{parser::TypePath{{"T"}, {}}, std::nullopt, {}};
         std::vector<parser::TypePtr> ok_fields;
         ok_fields.push_back(std::move(t_type));
         ok_variant.tuple_fields = std::move(ok_fields);
@@ -94,7 +94,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
         parser::EnumVariant err_variant;
         err_variant.name = "Err";
         auto e_type = std::make_unique<parser::Type>();
-        e_type->kind = parser::NamedType{parser::TypePath{{"E"}}};
+        e_type->kind = parser::NamedType{parser::TypePath{{"E"}, {}}, std::nullopt, {}};
         std::vector<parser::TypePtr> err_fields;
         err_fields.push_back(std::move(e_type));
         err_variant.tuple_fields = std::move(err_fields);
@@ -108,13 +108,13 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Poll[T] { Ready(T), Pending }
         auto poll_decl = std::make_unique<parser::EnumDecl>();
         poll_decl->name = "Poll";
-        poll_decl->generics.push_back(parser::GenericParam{"T"});
+        poll_decl->generics.push_back(parser::GenericParam{"T", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
 
         // Ready(T) variant
         parser::EnumVariant ready_variant;
         ready_variant.name = "Ready";
         auto t_type = std::make_unique<parser::Type>();
-        t_type->kind = parser::NamedType{parser::TypePath{{"T"}}};
+        t_type->kind = parser::NamedType{parser::TypePath{{"T"}, {}}, std::nullopt, {}};
         std::vector<parser::TypePtr> ready_fields;
         ready_fields.push_back(std::move(t_type));
         ready_variant.tuple_fields = std::move(ready_fields);

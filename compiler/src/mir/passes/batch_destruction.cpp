@@ -153,7 +153,7 @@ auto BatchDestructionPass::replace_with_loop(Function& func, BasicBlock& block,
     // The runtime batch_drop function handles looping internally
     CallInst batch_drop;
     batch_drop.func_name = batch.element_type + "_batch_drop";
-    batch_drop.args.push_back(Value{batch.array_ptr});
+    batch_drop.args.push_back(Value{batch.array_ptr, nullptr});
 
     // Create a constant for element count
     ConstantInst count_const;
@@ -164,7 +164,7 @@ auto BatchDestructionPass::replace_with_loop(Function& func, BasicBlock& block,
     count_inst.type = nullptr;
     count_inst.inst = count_const;
 
-    batch_drop.args.push_back(Value{count_inst.result});
+    batch_drop.args.push_back(Value{count_inst.result, nullptr});
 
     InstructionData drop_inst;
     drop_inst.result = 0; // void return
@@ -205,7 +205,7 @@ auto BatchDestructionPass::vectorize_trivial(Function& func, BasicBlock& block,
 
     CallInst bulk_free;
     bulk_free.func_name = "batch_free_array";
-    bulk_free.args.push_back(Value{batch.array_ptr});
+    bulk_free.args.push_back(Value{batch.array_ptr, nullptr});
 
     // Create constant for element count
     ConstantInst count_const;
@@ -216,7 +216,7 @@ auto BatchDestructionPass::vectorize_trivial(Function& func, BasicBlock& block,
     count_inst.type = nullptr;
     count_inst.inst = count_const;
 
-    bulk_free.args.push_back(Value{count_inst.result});
+    bulk_free.args.push_back(Value{count_inst.result, nullptr});
 
     // Create constant for element size (simplified - use 8 bytes as default)
     ConstantInst size_const;
@@ -227,7 +227,7 @@ auto BatchDestructionPass::vectorize_trivial(Function& func, BasicBlock& block,
     size_inst.type = nullptr;
     size_inst.inst = size_const;
 
-    bulk_free.args.push_back(Value{size_inst.result});
+    bulk_free.args.push_back(Value{size_inst.result, nullptr});
 
     InstructionData free_inst;
     free_inst.result = 0; // void return

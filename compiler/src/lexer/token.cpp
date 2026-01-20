@@ -157,10 +157,14 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "mut";
     case TokenKind::KwRef:
         return "ref";
+    case TokenKind::KwLife:
+        return "life";
 
     // Keywords - closures
     case TokenKind::KwDo:
         return "do";
+    case TokenKind::KwMove:
+        return "move";
 
     // Keywords - other
     case TokenKind::KwAsync:

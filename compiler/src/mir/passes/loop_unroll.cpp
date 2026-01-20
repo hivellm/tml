@@ -75,6 +75,7 @@ auto LoopUnrollPass::run_on_function(Function& func) -> bool {
             if (header_block) {
                 for (const auto& inst : header_block->instructions) {
                     if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                        (void)phi; // PhiInst detected - checking uses
                         // Check if this phi result is used anywhere outside the loop
                         for (const auto& block : func.blocks) {
                             if (loop.body_blocks.count(block.id) > 0) {
@@ -489,8 +490,8 @@ auto LoopUnrollPass::fully_unroll(Function& func, const LoopInfo& loop) -> bool 
             if (old_block->terminator) {
                 new_block.terminator = *old_block->terminator;
                 std::visit(
-                    [&block_map, &value_map, iter, trip_count, exit_block_id, &next_block_id,
-                     &new_blocks](auto& term) {
+                    [&block_map, &value_map, iter](auto& term) {
+                        (void)iter; // May be used in future for iteration-specific logic
                         using T = std::decay_t<decltype(term)>;
                         if constexpr (std::is_same_v<T, BranchTerm>) {
                             if (block_map.count(term.target)) {
@@ -521,12 +522,10 @@ auto LoopUnrollPass::fully_unroll(Function& func, const LoopInfo& loop) -> bool 
         auto& block = new_blocks[i];
         if (block.terminator) {
             std::visit(
-                [exit_block_id, &new_blocks, i, trip_count](auto& term) {
-                    using T = std::decay_t<decltype(term)>;
-                    if constexpr (std::is_same_v<T, BranchTerm>) {
-                        // Check if this branches back to loop header (latch behavior)
-                        // If it's the last iteration, branch to exit instead
-                    }
+                []([[maybe_unused]] auto& term) {
+                    // TODO: Connect iterations - last block of iteration N
+                    // should jump to first block of iteration N+1
+                    // Last iteration jumps to exit block
                 },
                 *block.terminator);
         }

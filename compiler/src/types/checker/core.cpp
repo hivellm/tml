@@ -360,11 +360,21 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
     // Use qualified name for namespaced types
     std::string full_name = qualified_name(decl.name);
 
+    // Check for @interior_mutable decorator
+    bool is_interior_mutable = false;
+    for (const auto& decorator : decl.decorators) {
+        if (decorator.name == "interior_mutable") {
+            is_interior_mutable = true;
+            break;
+        }
+    }
+
     env_.define_struct(StructDef{.name = full_name,
                                  .type_params = std::move(type_params),
                                  .const_params = std::move(const_params),
                                  .fields = std::move(fields),
-                                 .span = decl.span});
+                                 .span = decl.span,
+                                 .is_interior_mutable = is_interior_mutable});
 }
 
 void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
@@ -693,11 +703,16 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         }
     }
 
-    // Extract type parameter names from generics (excluding const params)
+    // Extract type parameter names from generics (excluding const params and lifetimes)
     std::vector<std::string> func_type_params;
+    std::unordered_map<std::string, std::string> lifetime_bounds;
     for (const auto& param : func.generics) {
-        if (!param.is_const) {
+        if (!param.is_const && !param.is_lifetime) {
             func_type_params.push_back(param.name);
+            // Extract lifetime bound if present (e.g., T: life static)
+            if (param.lifetime_bound.has_value()) {
+                lifetime_bounds[param.name] = param.lifetime_bound.value();
+            }
         }
     }
 
@@ -725,7 +740,8 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
                              .extern_name = func.extern_name,
                              .link_libs = func.link_libs,
                              .ffi_module = ffi_module,
-                             .const_params = std::move(func_const_params)});
+                             .const_params = std::move(func_const_params),
+                             .lifetime_bounds = std::move(lifetime_bounds)});
 }
 
 void TypeChecker::check_func_body(const parser::FuncDecl& func) {
@@ -1229,7 +1245,7 @@ void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
                 if (!named->path.segments.empty() && named->path.segments.back() == decl.name) {
                     // Return type is the class itself - create ClassType directly
                     auto class_type = std::make_shared<Type>();
-                    class_type->kind = ClassType{decl.name};
+                    class_type->kind = ClassType{decl.name, "", {}};
                     sig.return_type = class_type;
                 } else {
                     sig.return_type = resolve_type(ret_type);
@@ -1814,7 +1830,7 @@ void TypeChecker::validate_interface_impl(const parser::ClassDecl& cls) {
 void TypeChecker::check_class_body(const parser::ClassDecl& cls) {
     // Set up self type for 'this' references
     auto class_type = std::make_shared<Type>();
-    class_type->kind = ClassType{cls.name};
+    class_type->kind = ClassType{cls.name, "", {}};
     current_self_type_ = class_type;
 
     // Check constructor bodies

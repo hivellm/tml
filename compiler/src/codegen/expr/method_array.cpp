@@ -79,7 +79,7 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
         // Create ref type for Maybe[ref T]
         auto ref_type = std::make_shared<types::Type>();
-        ref_type->kind = types::RefType{false, elem_type};
+        ref_type->kind = types::RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt};
         std::vector<types::TypePtr> maybe_type_args = {ref_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
         std::string maybe_type = "%struct." + maybe_mangled;
@@ -138,7 +138,7 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     if (method == "first") {
         // Create ref type for Maybe[ref T]
         auto ref_type = std::make_shared<types::Type>();
-        ref_type->kind = types::RefType{false, elem_type};
+        ref_type->kind = types::RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt};
         std::vector<types::TypePtr> maybe_type_args = {ref_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
         std::string maybe_type = "%struct." + maybe_mangled;
@@ -177,7 +177,7 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
     if (method == "last") {
         // Create ref type for Maybe[ref T]
         auto ref_type = std::make_shared<types::Type>();
-        ref_type->kind = types::RefType{false, elem_type};
+        ref_type->kind = types::RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt};
         std::vector<types::TypePtr> maybe_type_args = {ref_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
         std::string maybe_type = "%struct." + maybe_mangled;

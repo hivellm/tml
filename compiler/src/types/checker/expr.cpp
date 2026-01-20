@@ -167,8 +167,8 @@ auto TypeChecker::check_expr(const parser::Expr& expr, TypePtr expected_type) ->
                 return check_literal(e, expected_type);
             } else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
                 // For unary expressions like -5, propagate expected type to operand
-                if (e.op == parser::UnaryOp::Neg && e.operand->is<parser::LiteralExpr>()) {
-                    return check_literal(e.operand->as<parser::LiteralExpr>(), expected_type);
+                if (e.op == parser::UnaryOp::Neg && e.operand->template is<parser::LiteralExpr>()) {
+                    return check_literal(e.operand->template as<parser::LiteralExpr>(), expected_type);
                 }
                 return check_unary(e);
             } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
@@ -665,6 +665,21 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                     }
                 }
 
+                // Check lifetime bounds (e.g., T: life static)
+                for (const auto& [param_name, lifetime_bound] : func->lifetime_bounds) {
+                    auto it = substitutions.find(param_name);
+                    if (it != substitutions.end()) {
+                        TypePtr actual_type = it->second;
+                        if (!type_satisfies_lifetime_bound(actual_type, lifetime_bound)) {
+                            std::string type_name = type_to_string(actual_type);
+                            error("E033: type '" + type_name +
+                                      "' may not live long enough - does not satisfy `life " +
+                                      lifetime_bound + "` bound on type parameter " + param_name,
+                                  call.callee->span);
+                        }
+                    }
+                }
+
                 return substitute_type(func->return_type, substitutions);
             }
             return func->return_type;
@@ -787,7 +802,7 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                     }
                     // Return the class type
                     auto class_type = std::make_shared<Type>();
-                    class_type->kind = ClassType{type_name};
+                    class_type->kind = ClassType{type_name, "", {}};
                     return class_type;
                 }
 
@@ -1318,12 +1333,14 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
         // borrow() returns ref Self for all primitives (Borrow behavior)
         if (call.method == "borrow") {
-            return std::make_shared<Type>(RefType{false, receiver_type});
+            return std::make_shared<Type>(
+                RefType{.is_mut = false, .inner = receiver_type, .lifetime = std::nullopt});
         }
 
         // borrow_mut() returns mut ref Self for all primitives (BorrowMut behavior)
         if (call.method == "borrow_mut") {
-            return std::make_shared<Type>(RefType{true, receiver_type});
+            return std::make_shared<Type>(
+                RefType{.is_mut = true, .inner = receiver_type, .lifetime = std::nullopt});
         }
 
         // Str-specific methods
@@ -1340,7 +1357,8 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (call.method == "as_bytes") {
                 auto u8_type = make_primitive(PrimitiveKind::U8);
                 auto slice_type = std::make_shared<Type>(SliceType{u8_type});
-                return std::make_shared<Type>(RefType{false, slice_type});
+                return std::make_shared<Type>(
+                    RefType{.is_mut = false, .inner = slice_type, .lifetime = std::nullopt});
             }
         }
 
@@ -1592,14 +1610,16 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
         // get(index) returns Maybe[ref T]
         if (call.method == "get") {
-            auto ref_type = std::make_shared<Type>(RefType{false, elem_type});
+            auto ref_type = std::make_shared<Type>(
+                RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt});
             std::vector<TypePtr> type_args = {ref_type};
             return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
         }
 
         // first(), last() return Maybe[ref T]
         if (call.method == "first" || call.method == "last") {
-            auto ref_type = std::make_shared<Type>(RefType{false, elem_type});
+            auto ref_type = std::make_shared<Type>(
+                RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt});
             std::vector<TypePtr> type_args = {ref_type};
             return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
         }
@@ -1671,14 +1691,16 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
         // get(index) returns Maybe[ref T]
         if (call.method == "get") {
-            auto ref_type = std::make_shared<Type>(RefType{false, elem_type});
+            auto ref_type = std::make_shared<Type>(
+                RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt});
             std::vector<TypePtr> type_args = {ref_type};
             return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
         }
 
         // first(), last() return Maybe[ref T]
         if (call.method == "first" || call.method == "last") {
-            auto ref_type = std::make_shared<Type>(RefType{false, elem_type});
+            auto ref_type = std::make_shared<Type>(
+                RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt});
             std::vector<TypePtr> type_args = {ref_type};
             return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
         }
@@ -2136,8 +2158,124 @@ auto TypeChecker::check_new(const parser::NewExpr& new_expr) -> TypePtr {
 
     // Return the class type
     auto result = std::make_shared<Type>();
-    result->kind = ClassType{class_name};
+    result->kind = ClassType{class_name, "", {}};
     return result;
+}
+
+// ============================================================================
+// Lifetime Bound Validation (Phase 9: Higher-Kinded Lifetime Bounds)
+// ============================================================================
+
+bool TypeChecker::type_satisfies_lifetime_bound(TypePtr type, const std::string& lifetime_bound) {
+    if (!type) {
+        return true; // Null types trivially satisfy bounds (error already reported)
+    }
+
+    // For 'static lifetime bound, check that type contains no non-static references
+    if (lifetime_bound == "static") {
+        // Primitive types satisfy 'static
+        if (type->is<PrimitiveType>()) {
+            return true;
+        }
+
+        // References only satisfy 'static if they have explicit static lifetime
+        if (type->is<RefType>()) {
+            const auto& ref = type->as<RefType>();
+            if (ref.lifetime.has_value() && ref.lifetime.value() == "static") {
+                // ref[static] T satisfies 'static if inner type also satisfies 'static
+                return type_satisfies_lifetime_bound(ref.inner, "static");
+            }
+            // Non-static references don't satisfy 'static bound
+            return false;
+        }
+
+        // Pointer types satisfy 'static (raw pointers have no lifetime)
+        if (type->is<PtrType>()) {
+            return true;
+        }
+
+        // Tuple types satisfy 'static if all elements satisfy 'static
+        if (type->is<TupleType>()) {
+            const auto& tuple = type->as<TupleType>();
+            for (const auto& elem : tuple.elements) {
+                if (!type_satisfies_lifetime_bound(elem, "static")) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Array types satisfy 'static if element type satisfies 'static
+        if (type->is<ArrayType>()) {
+            const auto& arr = type->as<ArrayType>();
+            return type_satisfies_lifetime_bound(arr.element, "static");
+        }
+
+        // Function types satisfy 'static (function pointers have no captured state)
+        if (type->is<FuncType>()) {
+            return true;
+        }
+
+        // Named types (structs, enums): check if they contain references
+        if (type->is<NamedType>()) {
+            const auto& named = type->as<NamedType>();
+
+            // Built-in primitive-like types satisfy 'static
+            static const std::unordered_set<std::string> static_types = {
+                "I8",   "I16",  "I32",  "I64",   "I128", "U8",   "U16",
+                "U32",  "U64",  "U128", "F32",   "F64",  "Bool", "Char",
+                "Str",  "Unit", "Never"
+            };
+            if (static_types.count(named.name)) {
+                return true;
+            }
+
+            // Check struct definition if available
+            auto struct_def = env_.lookup_struct(named.name);
+            if (struct_def.has_value()) {
+                // Recursively check all fields (fields are pair<name, type>)
+                for (const auto& field : struct_def->fields) {
+                    if (!type_satisfies_lifetime_bound(field.second, "static")) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            // Check enum definition if available
+            auto enum_def = env_.lookup_enum(named.name);
+            if (enum_def.has_value()) {
+                // Check all variant payload types
+                for (const auto& [variant_name, payload_types] : enum_def->variants) {
+                    for (const auto& payload_type : payload_types) {
+                        if (!type_satisfies_lifetime_bound(payload_type, "static")) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
+            // Unknown named types - assume they satisfy 'static for now
+            // (could be a type parameter or external type)
+            return true;
+        }
+
+        // Generic types: need to check substitution
+        if (type->is<GenericType>()) {
+            // Generic type parameters may or may not satisfy 'static
+            // This should be handled by the caller who has the substitution map
+            return true;
+        }
+
+        // Default: assume types satisfy 'static unless proven otherwise
+        return true;
+    }
+
+    // For named lifetime bounds (e.g., 'a), we need more sophisticated analysis
+    // For now, assume all types satisfy named lifetime bounds
+    // Full implementation would track lifetime relationships
+    return true;
 }
 
 } // namespace tml::types

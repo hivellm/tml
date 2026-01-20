@@ -146,7 +146,7 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
 
         if (peek().kind != lexer::TokenKind::Identifier) {
             return ParseError{
-                .message = "Expected identifier after 'type'", .span = peek().span, .notes = {}};
+                .message = "Expected identifier after 'type'", .span = peek().span, .notes = {}, .fixes = {}};
         }
 
         advance(); // consume name
@@ -267,7 +267,7 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     case lexer::TokenKind::KwNamespace:
         return parse_namespace_decl();
     default:
-        return ParseError{.message = "Expected declaration", .span = peek().span, .notes = {}};
+        return ParseError{.message = "Expected declaration", .span = peek().span, .notes = {}, .fixes = {}};
     }
 }
 
@@ -1281,7 +1281,7 @@ auto Parser::parse_mod_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     // Parse module name
     if (!check(lexer::TokenKind::Identifier)) {
         return ParseError{
-            .message = "Expected module name after 'mod'", .span = peek().span, .notes = {}};
+            .message = "Expected module name after 'mod'", .span = peek().span, .notes = {}, .fixes = {}};
     }
     std::string name = std::string(advance().lexeme);
 
@@ -1312,20 +1312,34 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
     while (!check(lexer::TokenKind::RBracket) && !is_at_end()) {
         auto param_span = peek().span;
         bool is_const = false;
+        bool is_lifetime = false;
         std::optional<TypePtr> const_type = std::nullopt;
 
         // Check for const generic: const N: U64
         if (match(lexer::TokenKind::KwConst)) {
             is_const = true;
         }
+        // Check for lifetime parameter: life a, life static
+        else if (match(lexer::TokenKind::KwLife)) {
+            is_lifetime = true;
+        }
 
-        auto name_result = expect(lexer::TokenKind::Identifier, "Expected type parameter name");
-        if (is_err(name_result))
-            return unwrap_err(name_result);
-        auto name = std::string(unwrap(name_result).lexeme);
+        std::string name;
+        if (is_lifetime && check(lexer::TokenKind::KwStatic)) {
+            // Special case: life static
+            advance();
+            name = "static";
+        } else {
+            auto name_result = expect(lexer::TokenKind::Identifier, "Expected type parameter name");
+            if (is_err(name_result))
+                return unwrap_err(name_result);
+            name = std::string(unwrap(name_result).lexeme);
+        }
 
         std::vector<TypePtr> bounds;
         std::optional<TypePtr> default_type = std::nullopt;
+
+        std::optional<std::string> lifetime_bound = std::nullopt;
 
         if (match(lexer::TokenKind::Colon)) {
             if (is_const) {
@@ -1334,20 +1348,38 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
                 if (is_err(type_result))
                     return unwrap_err(type_result);
                 const_type = std::move(unwrap(type_result));
+            } else if (is_lifetime) {
+                // Lifetime bounds not yet supported - skip for now
+                // Future: life a: b (a outlives b)
             } else {
-                // Parse bounds: T: Trait + OtherTrait or T: Trait[U] + OtherTrait[V]
-                // Bounds are now TypePtr to support parameterized bounds like Container[I32]
+                // Parse bounds: T: Trait + OtherTrait or T: life static or T: Trait + life a
+                // Bounds can be behavior bounds (types) or lifetime bounds (life keyword)
                 do {
-                    auto bound = parse_type();
-                    if (is_err(bound))
-                        return unwrap_err(bound);
-                    bounds.push_back(std::move(unwrap(bound)));
+                    // Check for lifetime bound: T: life static or T: life a
+                    if (check(lexer::TokenKind::KwLife)) {
+                        advance(); // consume 'life'
+                        if (check(lexer::TokenKind::KwStatic)) {
+                            advance(); // consume 'static'
+                            lifetime_bound = "static";
+                        } else if (check(lexer::TokenKind::Identifier)) {
+                            lifetime_bound = std::string(peek().lexeme);
+                            advance(); // consume lifetime name
+                        } else {
+                            return ParseError{"Expected lifetime name after 'life'", peek().span, {}, {}};
+                        }
+                    } else {
+                        // Regular behavior bound
+                        auto bound = parse_type();
+                        if (is_err(bound))
+                            return unwrap_err(bound);
+                        bounds.push_back(std::move(unwrap(bound)));
+                    }
                 } while (match(lexer::TokenKind::Plus));
             }
         }
 
-        // Parse default type: T = DefaultType
-        if (!is_const && match(lexer::TokenKind::Assign)) {
+        // Parse default type: T = DefaultType (not for lifetimes)
+        if (!is_const && !is_lifetime && match(lexer::TokenKind::Assign)) {
             auto type_result = parse_type();
             if (is_err(type_result))
                 return unwrap_err(type_result);
@@ -1357,8 +1389,10 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
         params.push_back(GenericParam{.name = std::move(name),
                                       .bounds = std::move(bounds),
                                       .is_const = is_const,
+                                      .is_lifetime = is_lifetime,
                                       .const_type = std::move(const_type),
                                       .default_type = std::move(default_type),
+                                      .lifetime_bound = std::move(lifetime_bound),
                                       .span = param_span});
 
         if (!check(lexer::TokenKind::RBracket)) {
@@ -1424,7 +1458,7 @@ auto Parser::parse_where_clause() -> Result<std::optional<WhereClause>, ParseErr
             type_equalities.push_back({std::move(type_param), std::move(rhs_type)});
         } else {
             return ParseError{
-                "Expected ':' or '=' after type parameter in where clause", peek().span, {}};
+                "Expected ':' or '=' after type parameter in where clause", peek().span, {}, {}};
         }
 
         // Check for ',' to continue parsing constraints
@@ -1488,8 +1522,12 @@ auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
             // 'mut this' without type - use 'mut ref This' type implicitly
             auto this_named = make_box<Type>(
                 Type{.kind = NamedType{TypePath{{"This"}, span}, {}, span}, .span = span});
-            auto this_type = make_box<Type>(
-                Type{.kind = RefType{true, std::move(this_named), span}, .span = span});
+            auto this_type = make_box<Type>(Type{
+                .kind = RefType{.is_mut = true,
+                                .inner = std::move(this_named),
+                                .lifetime = std::nullopt,
+                                .span = span},
+                .span = span});
             return FuncParam{
                 .pattern = std::move(pattern), .type = std::move(this_type), .span = span};
         } else {

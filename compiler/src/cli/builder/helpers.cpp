@@ -321,6 +321,24 @@ void emit_borrow_error(DiagnosticEmitter& emitter, const borrow::BorrowError& er
     case borrow::BorrowErrorCode::UseWhileBorrowed:
         diag.code = "B013";
         break;
+    case borrow::BorrowErrorCode::ClosureCapturesMoved:
+        diag.code = "B014";
+        break;
+    case borrow::BorrowErrorCode::ClosureCaptureConflict:
+        diag.code = "B015";
+        break;
+    case borrow::BorrowErrorCode::PartiallyMovedValue:
+        diag.code = "B016";
+        break;
+    case borrow::BorrowErrorCode::ReborrowOutlivesOrigin:
+        diag.code = "B017";
+        break;
+    case borrow::BorrowErrorCode::AmbiguousReturnLifetime:
+        diag.code = "E031";
+        break;
+    case borrow::BorrowErrorCode::InteriorMutWarning:
+        diag.code = "W001";
+        break;
     default:
         diag.code = "B099";
         break;

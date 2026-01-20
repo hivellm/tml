@@ -93,8 +93,7 @@ auto MergeReturnsPass::create_unified_exit(Function& func, const std::vector<siz
     ReturnTerm exit_ret;
     if (has_return_value) {
         // Get the return type from the function's return_type
-        Value ret_val{return_value_id};
-        ret_val.type = func.return_type; // Use the function's declared return type
+        Value ret_val{return_value_id, func.return_type};
         exit_ret.value = ret_val;
     }
     exit_block.terminator = exit_ret;

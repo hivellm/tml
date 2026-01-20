@@ -180,21 +180,25 @@ struct GenericArgs {
 // Reference and Pointer Types
 // ============================================================================
 
-/// Reference type: `ref T` or `mut ref T`.
+/// Reference type: `ref T`, `mut ref T`, `ref[a] T`, or `mut ref[a] T`.
 ///
 /// TML uses keyword-based syntax instead of Rust's `&T` / `&mut T`.
-/// References are non-owning borrows of values.
+/// References are non-owning borrows of values. Optional explicit lifetime
+/// annotation can be provided using `ref[lifetime] T` syntax.
 ///
 /// # Examples
 ///
 /// ```tml
-/// func print(s: ref Str)              // Immutable reference
-/// func append(v: mut ref Vec[I32])    // Mutable reference
+/// func print(s: ref Str)              // Immutable reference (lifetime inferred)
+/// func append(v: mut ref Vec[I32])    // Mutable reference (lifetime inferred)
+/// func longest[life a](x: ref[a] Str, y: ref[a] Str) -> ref[a] Str  // Explicit lifetime
+/// func static_ref() -> ref[static] Str { ref "hello" }  // Static lifetime
 /// ```
 struct RefType {
-    bool is_mut;     ///< True for mutable reference (`mut ref T`).
-    TypePtr inner;   ///< The referenced type.
-    SourceSpan span; ///< Source location.
+    bool is_mut;                          ///< True for mutable reference (`mut ref T`).
+    TypePtr inner;                        ///< The referenced type.
+    std::optional<std::string> lifetime;  ///< Optional lifetime annotation (e.g., "a", "static").
+    SourceSpan span;                      ///< Source location.
 };
 
 /// Raw pointer type: `*const T` or `*mut T`.

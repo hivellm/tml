@@ -83,10 +83,11 @@ struct NamedType {
     std::vector<TypePtr> type_args; ///< Generic type arguments.
 };
 
-/// Reference type: `ref T` or `mut ref T`.
+/// Reference type: `ref T`, `mut ref T`, `ref[a] T`, or `mut ref[a] T`.
 struct RefType {
-    bool is_mut;   ///< True for mutable reference.
-    TypePtr inner; ///< Referenced type.
+    bool is_mut;                          ///< True for mutable reference.
+    TypePtr inner;                        ///< Referenced type.
+    std::optional<std::string> lifetime;  ///< Optional explicit lifetime annotation.
 };
 
 /// Raw pointer type: `*T` or `*mut T`.

@@ -110,7 +110,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
     // Run borrow checker (ownership and borrowing validation)
-    borrow::BorrowChecker borrow_checker;
+    borrow::BorrowChecker borrow_checker(env);
     auto borrow_result = borrow_checker.check_module(module);
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
@@ -394,7 +394,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     const auto& env = std::get<types::TypeEnv>(check_result);
 
     // Run borrow checker (ownership and borrowing validation)
-    borrow::BorrowChecker borrow_checker;
+    borrow::BorrowChecker borrow_checker(env);
     auto borrow_result = borrow_checker.check_module(module);
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {

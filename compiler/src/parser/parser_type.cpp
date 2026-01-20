@@ -41,24 +41,135 @@ namespace tml::parser {
 auto Parser::parse_type() -> Result<TypePtr, ParseError> {
     auto start_span = peek().span;
 
-    // TML Reference: ref T, mut ref T
+    // TML Reference: ref T, ref[a] T, mut ref T, mut ref[a] T
     if (match(lexer::TokenKind::KwMut)) {
         // Must be followed by 'ref'
         if (!match(lexer::TokenKind::KwRef)) {
-            return ParseError{"Expected 'ref' after 'mut' in type", peek().span, {}};
+            return ParseError{"Expected 'ref' after 'mut' in type", peek().span, {}, {}};
+        }
+        // Check for optional lifetime annotation: ref[a] or ref[static]
+        // Must distinguish from ref [T] (reference to slice)
+        std::optional<std::string> lifetime = std::nullopt;
+        if (check(lexer::TokenKind::LBracket)) {
+            // Lookahead to determine if this is lifetime annotation or slice type
+            bool is_lifetime_annotation = false;
+            size_t saved_pos = pos_;
+
+            advance(); // consume [
+            if (check(lexer::TokenKind::KwStatic)) {
+                advance();
+                if (check(lexer::TokenKind::RBracket)) {
+                    advance(); // consume ]
+                    if (check(lexer::TokenKind::Identifier) ||
+                        check(lexer::TokenKind::LParen) ||
+                        check(lexer::TokenKind::LBracket) ||
+                        check(lexer::TokenKind::KwFunc) ||
+                        check(lexer::TokenKind::KwDyn) ||
+                        check(lexer::TokenKind::KwImpl) ||
+                        check(lexer::TokenKind::Star) ||
+                        check(lexer::TokenKind::KwRef) ||
+                        check(lexer::TokenKind::KwMut)) {
+                        is_lifetime_annotation = true;
+                        lifetime = "static";
+                    }
+                }
+            } else if (check(lexer::TokenKind::Identifier)) {
+                std::string potential_lifetime(peek().lexeme);
+                advance();
+                if (check(lexer::TokenKind::RBracket)) {
+                    advance(); // consume ]
+                    if (check(lexer::TokenKind::Identifier) ||
+                        check(lexer::TokenKind::LParen) ||
+                        check(lexer::TokenKind::LBracket) ||
+                        check(lexer::TokenKind::KwFunc) ||
+                        check(lexer::TokenKind::KwDyn) ||
+                        check(lexer::TokenKind::KwImpl) ||
+                        check(lexer::TokenKind::Star) ||
+                        check(lexer::TokenKind::KwRef) ||
+                        check(lexer::TokenKind::KwMut)) {
+                        is_lifetime_annotation = true;
+                        lifetime = potential_lifetime;
+                    }
+                }
+            }
+
+            if (!is_lifetime_annotation) {
+                // Backtrack - the [ is part of a slice type
+                pos_ = saved_pos;
+            }
         }
         auto inner = parse_type();
         if (is_err(inner))
             return inner;
         return make_ref_type(true, std::move(unwrap(inner)),
-                             SourceSpan::merge(start_span, unwrap(inner)->span));
+                             SourceSpan::merge(start_span, unwrap(inner)->span),
+                             std::move(lifetime));
     }
     if (match(lexer::TokenKind::KwRef)) {
+        // Check for optional lifetime annotation: ref[a] or ref[static]
+        // Must distinguish from ref [T] (reference to slice)
+        // Lifetime syntax: ref[lifetime] Type - after ] there must be a type
+        // Slice syntax: ref [T] - the [T] IS the type
+        std::optional<std::string> lifetime = std::nullopt;
+        if (check(lexer::TokenKind::LBracket)) {
+            // Lookahead to determine if this is lifetime annotation or slice type
+            // For lifetime: ref[a] T - need [, identifier/static, ], then type-starting token
+            // For slice: ref [T] - the [ starts a slice type
+            bool is_lifetime_annotation = false;
+            size_t saved_pos = pos_;
+
+            advance(); // consume [
+            if (check(lexer::TokenKind::KwStatic)) {
+                // ref[static] - definitely a lifetime
+                advance();
+                if (check(lexer::TokenKind::RBracket)) {
+                    advance(); // consume ]
+                    // Check if there's a type following
+                    if (check(lexer::TokenKind::Identifier) ||
+                        check(lexer::TokenKind::LParen) ||
+                        check(lexer::TokenKind::LBracket) ||
+                        check(lexer::TokenKind::KwFunc) ||
+                        check(lexer::TokenKind::KwDyn) ||
+                        check(lexer::TokenKind::KwImpl) ||
+                        check(lexer::TokenKind::Star) ||
+                        check(lexer::TokenKind::KwRef) ||
+                        check(lexer::TokenKind::KwMut)) {
+                        is_lifetime_annotation = true;
+                        lifetime = "static";
+                    }
+                }
+            } else if (check(lexer::TokenKind::Identifier)) {
+                std::string potential_lifetime(peek().lexeme);
+                advance();
+                if (check(lexer::TokenKind::RBracket)) {
+                    advance(); // consume ]
+                    // Check if there's a type following (not ) , } etc.)
+                    if (check(lexer::TokenKind::Identifier) ||
+                        check(lexer::TokenKind::LParen) ||
+                        check(lexer::TokenKind::LBracket) ||
+                        check(lexer::TokenKind::KwFunc) ||
+                        check(lexer::TokenKind::KwDyn) ||
+                        check(lexer::TokenKind::KwImpl) ||
+                        check(lexer::TokenKind::Star) ||
+                        check(lexer::TokenKind::KwRef) ||
+                        check(lexer::TokenKind::KwMut)) {
+                        is_lifetime_annotation = true;
+                        lifetime = potential_lifetime;
+                    }
+                }
+            }
+
+            if (!is_lifetime_annotation) {
+                // Backtrack - the [ is part of a slice type
+                pos_ = saved_pos;
+            }
+        }
         auto inner = parse_type();
         if (is_err(inner))
             return inner;
         return make_ref_type(false, std::move(unwrap(inner)),
-                             SourceSpan::merge(start_span, unwrap(inner)->span));
+                             SourceSpan::merge(start_span, unwrap(inner)->span),
+                             std::move(lifetime));
     }
 
     // Legacy Reference: &T, &mut T

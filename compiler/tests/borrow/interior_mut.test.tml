@@ -1,0 +1,105 @@
+// Tests for interior mutability modeling (Phase 3 of memory-safety-parity)
+//
+// Interior mutability allows mutation through shared references for types
+// that provide their own synchronization or single-threaded access patterns.
+
+use test
+
+// =============================================================================
+// Basic Interior Mutable Types (Documented - codegen not fully implemented)
+// =============================================================================
+
+// Built-in interior mutable types:
+// - Cell[T]: Single-threaded interior mutability
+// - Mutex[T]: Thread-safe with locking
+// - Shared[T]: Reference counted (Rc equivalent)
+// - Sync[T]: Thread-safe reference counted (Arc equivalent)
+
+// @test
+// func cell_basic() -> I32 {
+//     // Cell allows mutation through shared reference
+//     let c: Cell[I32] = Cell::new(42)
+//     let r: ref Cell[I32] = ref c  // shared reference
+//     r.set(100)  // Mutation through shared ref (interior mutability)
+//     assert_eq(c.get(), 100, "Cell should allow mutation through shared ref")
+//     return 0
+// }
+
+// @test
+// func mutex_basic() -> I32 {
+//     // Mutex allows thread-safe mutation
+//     let m: Mutex[I32] = Mutex::new(42)
+//     let r: ref Mutex[I32] = ref m
+//     {
+//         let mut guard = r.lock()
+//         *guard = 100
+//     }
+//     assert_eq(m.lock().value, 100, "Mutex should allow mutation through shared ref")
+//     return 0
+// }
+
+// =============================================================================
+// Custom Interior Mutable Types
+// =============================================================================
+
+// Types marked with @interior_mutable allow mutation through shared refs
+
+// @interior_mutable
+// struct Counter {
+//     value: I32,
+// }
+//
+// impl Counter {
+//     func increment(ref this) {  // Note: ref this, not mut ref this
+//         // Interior mutability allows this even through shared ref
+//         this.value = this.value + 1
+//     }
+// }
+
+// =============================================================================
+// Working Tests (Copy Types)
+// =============================================================================
+
+@test
+func basic_copy_mutation() -> I32 {
+    // Regular copy types work as expected
+    let mut x: I32 = 42
+    x = 100
+    assert_eq(x, 100, "mutable variable should be modifiable")
+    return 0
+}
+
+@test
+func ref_read() -> I32 {
+    // Shared references allow reading
+    let x: I32 = 42
+    let r: ref I32 = ref x
+    assert_eq(*r, 42, "shared ref should allow reading")
+    return 0
+}
+
+// =============================================================================
+// Error Cases (Documented)
+// =============================================================================
+
+// ERROR: cannot mutate through shared reference (non-interior-mutable type)
+// @test
+// func error_mutate_through_shared_ref() -> I32 {
+//     let x: I32 = 42
+//     let r: ref I32 = ref x  // shared reference
+//     *r = 100  // ERROR: cannot assign through shared reference
+//     return 0
+// }
+
+// WARNING W001: interior mutability bypasses borrow checking
+// This warning is emitted when mutation occurs through a shared ref to
+// an interior mutable type.
+// @test
+// func warning_interior_mut_bypasses_borrow_check() -> I32 {
+//     let c: Cell[I32] = Cell::new(42)
+//     let r1: ref Cell[I32] = ref c
+//     let r2: ref Cell[I32] = ref c  // Multiple shared refs OK
+//     r1.set(100)  // WARNING W001: mutation through shared ref
+//     // This is allowed but the user should be aware it bypasses normal rules
+//     return 0
+// }

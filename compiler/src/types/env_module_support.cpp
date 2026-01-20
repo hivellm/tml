@@ -282,7 +282,7 @@ static ParseResult parse_tml_file(const std::string& file_path) {
     std::ifstream file(file_path);
     if (!file) {
         result.errors.push_back(parser::ParseError{
-            "Failed to open file: " + file_path, SourceSpan{}, {} // notes
+            "Failed to open file: " + file_path, SourceSpan{}, {}, {} // notes, fixes
         });
         return result;
     }
@@ -301,7 +301,7 @@ static ParseResult parse_tml_file(const std::string& file_path) {
         for (const auto& diag : pp_result.diagnostics) {
             if (diag.severity == preprocessor::DiagnosticSeverity::Error) {
                 result.errors.push_back(
-                    parser::ParseError{"Preprocessor error: " + diag.message, SourceSpan{}, {}});
+                    parser::ParseError{"Preprocessor error: " + diag.message, SourceSpan{}, {}, {}});
             }
         }
         return result;
@@ -562,7 +562,9 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         } else if (type.is<parser::RefType>()) {
             const auto& ref = type.as<parser::RefType>();
             auto inner = resolve_simple_type(*ref.inner);
-            return std::make_shared<Type>(Type{RefType{ref.is_mut, inner}});
+            return std::make_shared<Type>(Type{RefType{.is_mut = ref.is_mut,
+                                                       .inner = inner,
+                                                       .lifetime = ref.lifetime}});
         } else if (type.is<parser::FuncType>()) {
             const auto& func_type = type.as<parser::FuncType>();
             std::vector<TypePtr> param_types;

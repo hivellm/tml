@@ -688,6 +688,7 @@ auto InliningPass::inline_call(Function& caller, BasicBlock& block, size_t call_
             break;
         }
     }
+    (void)block_index; // May be used for debug or future block insertion logic
 
     // Create a continuation block for instructions after the call
     BasicBlock continuation_block;

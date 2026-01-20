@@ -393,7 +393,7 @@ auto LLVMIRGen::gen_class_safe_cast(const std::string& src_ptr, const std::strin
     // Downcast: need runtime type check, return Maybe[TargetType]
     // Create Maybe[TargetType] struct type
     auto target_semantic_type = std::make_shared<types::Type>();
-    target_semantic_type->kind = types::ClassType{target_name};
+    target_semantic_type->kind = types::ClassType{target_name, "", {}};
     std::vector<types::TypePtr> maybe_type_args = {target_semantic_type};
     std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
     std::string maybe_type = "%struct." + maybe_mangled;

@@ -447,7 +447,7 @@ void LLVMIRGen::gen_class_instantiation(const parser::ClassDecl& c,
             ft = "{}";
         field_types.push_back(ft);
 
-        field_info.push_back({field.name, static_cast<int>(field_offset++), ft, field.vis});
+        field_info.push_back({field.name, static_cast<int>(field_offset++), ft, field.vis, false, {}});
     }
 
     // Emit class type definition

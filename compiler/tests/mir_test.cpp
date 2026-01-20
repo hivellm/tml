@@ -582,7 +582,7 @@ TEST_F(MirTest, ConstantFoldingInteger) {
     ASSERT_FALSE(func.blocks.empty());
 
     // Look for a constant 5 in the instructions
-    bool found_five = false;
+    [[maybe_unused]] bool found_five = false;
     for (const auto& block : func.blocks) {
         for (const auto& inst : block.instructions) {
             if (auto* ci = std::get_if<tml::mir::ConstantInst>(&inst.inst)) {
@@ -1211,7 +1211,7 @@ TEST(EscapeAnalysisTest, ArgEscape) {
     tml::mir::Value arg_val{alloca_inst.result,
                             tml::mir::make_pointer_type(tml::mir::make_i32_type())};
     call_inst.inst =
-        tml::mir::CallInst{"some_func", {arg_val}, {arg_val.type}, tml::mir::make_unit_type()};
+        tml::mir::CallInst{"some_func", {arg_val}, {arg_val.type}, tml::mir::make_unit_type(), std::nullopt};
     entry.instructions.push_back(call_inst);
 
     entry.terminator = tml::mir::ReturnTerm{std::nullopt};
@@ -1254,7 +1254,7 @@ TEST(EscapeAnalysisTest, HeapAllocationTracking) {
 
     tml::mir::Value size_val{size_const.result, tml::mir::make_i64_type()};
     alloc_call.inst =
-        tml::mir::CallInst{"alloc", {size_val}, {size_val.type}, tml::mir::make_ptr_type()};
+        tml::mir::CallInst{"alloc", {size_val}, {size_val.type}, tml::mir::make_ptr_type(), std::nullopt};
     entry.instructions.push_back(alloc_call);
 
     // return 42 (allocation not returned, doesn't escape)
@@ -1399,7 +1399,7 @@ TEST(StackPromotionTest, PromoteHeapAllocation) {
     heap_alloc.type = tml::mir::make_ptr_type();
     tml::mir::Value size_val{size_const.result, tml::mir::make_i64_type()};
     heap_alloc.inst =
-        tml::mir::CallInst{"alloc", {size_val}, {size_val.type}, tml::mir::make_ptr_type()};
+        tml::mir::CallInst{"alloc", {size_val}, {size_val.type}, tml::mir::make_ptr_type(), std::nullopt};
     entry.instructions.push_back(heap_alloc);
 
     tml::mir::InstructionData ret_const;
@@ -1423,7 +1423,7 @@ TEST(StackPromotionTest, PromoteHeapAllocation) {
     bool changed = promo_pass.run(mir);
 
     // Check stats
-    auto stats = promo_pass.get_stats();
+    [[maybe_unused]] auto stats = promo_pass.get_stats();
     // Depending on implementation, allocation may or may not be promoted
     // The important thing is the pass runs without error
     EXPECT_TRUE(changed || !changed); // Pass should complete
@@ -1541,7 +1541,7 @@ TEST(InliningTest, SimpleInlining) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"small_func", {}, {}, tml::mir::make_i32_type()};
+    call_inst.inst = tml::mir::CallInst{"small_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1595,7 +1595,7 @@ TEST(InliningTest, InlineAttributeRespected) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"must_inline", {}, {}, tml::mir::make_i32_type()};
+    call_inst.inst = tml::mir::CallInst{"must_inline", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1648,7 +1648,7 @@ TEST(InliningTest, NoInlineAttributeRespected) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"never_inline_me", {}, {}, tml::mir::make_i32_type()};
+    call_inst.inst = tml::mir::CallInst{"never_inline_me", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1679,7 +1679,7 @@ TEST(InliningTest, GetDecisionNoDefinition) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"undefined_func", {}, {}, tml::mir::make_i32_type()};
+    call_inst.inst = tml::mir::CallInst{"undefined_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1733,7 +1733,7 @@ TEST(InliningTest, TooLargeFunction) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"large_func", {}, {}, tml::mir::make_i32_type()};
+    call_inst.inst = tml::mir::CallInst{"large_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -1788,7 +1788,7 @@ TEST(InliningTest, OptimizationLevelZero) {
     tml::mir::InstructionData call_inst;
     call_inst.result = caller.fresh_value();
     call_inst.type = tml::mir::make_i32_type();
-    call_inst.inst = tml::mir::CallInst{"small_func", {}, {}, tml::mir::make_i32_type()};
+    call_inst.inst = tml::mir::CallInst{"small_func", {}, {}, tml::mir::make_i32_type(), std::nullopt};
     caller_entry.instructions.push_back(call_inst);
 
     tml::mir::Value caller_ret{call_inst.result, tml::mir::make_i32_type()};
@@ -2152,7 +2152,7 @@ TEST(LoadStoreOptTest, RedundantLoad) {
     tml::mir::InstructionData alloca_inst;
     alloca_inst.result = func.fresh_value();
     alloca_inst.type = tml::mir::make_pointer_type(tml::mir::make_i32_type());
-    alloca_inst.inst = tml::mir::AllocaInst{tml::mir::make_i32_type()};
+    alloca_inst.inst = tml::mir::AllocaInst{tml::mir::make_i32_type(), ""};
     entry.instructions.push_back(alloca_inst);
 
     // Store 42

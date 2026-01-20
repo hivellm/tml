@@ -213,9 +213,35 @@ void BorrowChecker::check_unary(const parser::UnaryExpr& unary) {
             auto kind =
                 (unary.op == parser::UnaryOp::RefMut) ? BorrowKind::Mutable : BorrowKind::Shared;
 
+            // Check if this is a reborrow pattern: ref *r or mut ref *r
+            // where r is a reference - the place will have a Deref projection
+            bool is_reborrow = false;
+            [[maybe_unused]] PlaceId source_ref_place = 0;
+
+            if (!full_place->projections.empty() &&
+                full_place->projections.back().kind == ProjectionKind::Deref) {
+                // This is a reborrow: we're taking a reference to a dereferenced reference
+                // e.g., let r2 = ref *r1
+                // The source reference is the base place before the deref
+                const auto& base_state = env_.get_state(full_place->base);
+                if (base_state.borrowed_from.has_value() ||
+                    base_state.type) { // Check if base is a reference type
+                    is_reborrow = true;
+                    source_ref_place = full_place->base;
+                }
+            }
+
             // Use projection-aware borrow checking
             check_can_borrow_with_projection(full_place->base, *full_place, kind, loc);
-            create_borrow_with_projection(full_place->base, *full_place, kind, loc, 0);
+
+            if (is_reborrow) {
+                // This is a reborrow - use specialized tracking
+                // Note: create_reborrow will be called when the let binding assigns to a variable
+                // For now, just create the borrow with reborrow_origin tracking
+                create_borrow_with_projection(full_place->base, *full_place, kind, loc, 0);
+            } else {
+                create_borrow_with_projection(full_place->base, *full_place, kind, loc, 0);
+            }
         } else if (unary.operand->template is<parser::IdentExpr>()) {
             // Fallback for simple identifiers
             const auto& ident = unary.operand->template as<parser::IdentExpr>();
@@ -538,6 +564,12 @@ void BorrowChecker::check_struct_expr(const parser::StructExpr& struct_expr) {
 /// let g = do() { drop(x) }     // x is moved into g
 /// ```
 void BorrowChecker::check_closure(const parser::ClosureExpr& closure) {
+    // Analyze captures before entering closure scope
+    auto captures = analyze_captures(closure);
+
+    // Validate captures against current borrow state
+    validate_captures(captures, closure);
+
     env_.push_scope();
 
     // Register closure parameters - params is vector<pair<PatternPtr, optional<TypePtr>>>
@@ -561,6 +593,272 @@ void BorrowChecker::check_closure(const parser::ClosureExpr& closure) {
 
     drop_scope_places();
     env_.pop_scope();
+}
+
+// ============================================================================
+// Closure Capture Analysis
+// ============================================================================
+
+auto BorrowChecker::analyze_captures(const parser::ClosureExpr& closure)
+    -> std::vector<CaptureInfo> {
+    std::vector<CaptureInfo> result;
+
+    // Collect parameter names as local variables
+    std::unordered_set<std::string> local_vars;
+    for (const auto& [pattern, type] : closure.params) {
+        if (pattern->template is<parser::IdentPattern>()) {
+            const auto& ident = pattern->template as<parser::IdentPattern>();
+            local_vars.insert(ident.name);
+        }
+    }
+
+    // Collect free variables and their usage from the closure body
+    std::unordered_map<std::string, CaptureKind> captures;
+    std::unordered_map<std::string, SourceSpan> capture_spans;
+    collect_free_variables(*closure.body, local_vars, captures, capture_spans);
+
+    // Build CaptureInfo for each captured variable
+    for (const auto& [var_name, kind] : captures) {
+        auto place_id_opt = env_.lookup(var_name);
+        if (!place_id_opt) {
+            continue; // Variable not found in outer scope - might be global or function
+        }
+
+        CaptureKind final_kind = kind;
+
+        // If this is a move closure, force all captures to be by move
+        if (closure.is_move && kind != CaptureKind::ByCopy) {
+            final_kind = CaptureKind::ByMove;
+        }
+
+        result.push_back(CaptureInfo{
+            .name = var_name,
+            .place_id = *place_id_opt,
+            .kind = final_kind,
+            .capture_span = capture_spans[var_name],
+            .forced_move = closure.is_move,
+        });
+    }
+
+    return result;
+}
+
+void BorrowChecker::collect_free_variables(
+    const parser::Expr& expr, const std::unordered_set<std::string>& local_vars,
+    std::unordered_map<std::string, CaptureKind>& captures,
+    std::unordered_map<std::string, SourceSpan>& capture_spans) {
+
+    // Helper to update capture kind (most restrictive wins)
+    auto update_capture = [&](const std::string& name, CaptureKind kind, SourceSpan span) {
+        if (local_vars.count(name) > 0) {
+            return; // Not a capture - it's a local variable
+        }
+
+        auto it = captures.find(name);
+        if (it == captures.end()) {
+            captures[name] = kind;
+            capture_spans[name] = span;
+        } else {
+            // Most restrictive kind wins: ByMove > ByMutRef > ByRef > ByCopy
+            if (kind == CaptureKind::ByMove ||
+                (kind == CaptureKind::ByMutRef && it->second != CaptureKind::ByMove)) {
+                it->second = kind;
+            }
+        }
+    };
+
+    // Visit expression recursively
+    std::visit(
+        [&](const auto& e) {
+            using T = std::decay_t<decltype(e)>;
+
+            if constexpr (std::is_same_v<T, parser::IdentExpr>) {
+                // Simple identifier - captured by reference
+                update_capture(e.name, CaptureKind::ByRef, e.span);
+            } else if constexpr (std::is_same_v<T, parser::BinaryExpr>) {
+                // Check for assignment operators
+                if (e.op == parser::BinaryOp::Assign || e.op == parser::BinaryOp::AddAssign ||
+                    e.op == parser::BinaryOp::SubAssign || e.op == parser::BinaryOp::MulAssign ||
+                    e.op == parser::BinaryOp::DivAssign || e.op == parser::BinaryOp::ModAssign ||
+                    e.op == parser::BinaryOp::BitAndAssign ||
+                    e.op == parser::BinaryOp::BitOrAssign ||
+                    e.op == parser::BinaryOp::BitXorAssign ||
+                    e.op == parser::BinaryOp::ShlAssign || e.op == parser::BinaryOp::ShrAssign) {
+                    // Assignment target needs mutable capture
+                    if (e.left->template is<parser::IdentExpr>()) {
+                        const auto& ident = e.left->template as<parser::IdentExpr>();
+                        update_capture(ident.name, CaptureKind::ByMutRef, ident.span);
+                    }
+                }
+                collect_free_variables(*e.left, local_vars, captures, capture_spans);
+                collect_free_variables(*e.right, local_vars, captures, capture_spans);
+            } else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
+                // Check for mutable reference
+                if (e.op == parser::UnaryOp::RefMut &&
+                    e.operand->template is<parser::IdentExpr>()) {
+                    const auto& ident = e.operand->template as<parser::IdentExpr>();
+                    update_capture(ident.name, CaptureKind::ByMutRef, ident.span);
+                }
+                collect_free_variables(*e.operand, local_vars, captures, capture_spans);
+            } else if constexpr (std::is_same_v<T, parser::CallExpr>) {
+                collect_free_variables(*e.callee, local_vars, captures, capture_spans);
+                for (const auto& arg : e.args) {
+                    collect_free_variables(*arg, local_vars, captures, capture_spans);
+                }
+            } else if constexpr (std::is_same_v<T, parser::MethodCallExpr>) {
+                collect_free_variables(*e.receiver, local_vars, captures, capture_spans);
+                for (const auto& arg : e.args) {
+                    collect_free_variables(*arg, local_vars, captures, capture_spans);
+                }
+            } else if constexpr (std::is_same_v<T, parser::FieldExpr>) {
+                collect_free_variables(*e.object, local_vars, captures, capture_spans);
+            } else if constexpr (std::is_same_v<T, parser::IndexExpr>) {
+                collect_free_variables(*e.object, local_vars, captures, capture_spans);
+                collect_free_variables(*e.index, local_vars, captures, capture_spans);
+            } else if constexpr (std::is_same_v<T, parser::BlockExpr>) {
+                // Track new locals introduced in block
+                std::unordered_set<std::string> block_locals = local_vars;
+                for (const auto& stmt : e.stmts) {
+                    if (stmt->template is<parser::LetStmt>()) {
+                        const auto& let_stmt = stmt->template as<parser::LetStmt>();
+                        if (let_stmt.pattern->template is<parser::IdentPattern>()) {
+                            const auto& ident =
+                                let_stmt.pattern->template as<parser::IdentPattern>();
+                            block_locals.insert(ident.name);
+                        }
+                    }
+                    // Check statement expression
+                    if (stmt->template is<parser::ExprStmt>()) {
+                        const auto& expr_stmt = stmt->template as<parser::ExprStmt>();
+                        collect_free_variables(*expr_stmt.expr, block_locals, captures,
+                                               capture_spans);
+                    } else if (stmt->template is<parser::LetStmt>()) {
+                        const auto& let_stmt = stmt->template as<parser::LetStmt>();
+                        if (let_stmt.init) {
+                            collect_free_variables(**let_stmt.init, block_locals, captures,
+                                                   capture_spans);
+                        }
+                    }
+                }
+                if (e.expr) {
+                    collect_free_variables(**e.expr, block_locals, captures, capture_spans);
+                }
+            } else if constexpr (std::is_same_v<T, parser::IfExpr>) {
+                collect_free_variables(*e.condition, local_vars, captures, capture_spans);
+                collect_free_variables(*e.then_branch, local_vars, captures, capture_spans);
+                if (e.else_branch) {
+                    collect_free_variables(**e.else_branch, local_vars, captures, capture_spans);
+                }
+            } else if constexpr (std::is_same_v<T, parser::LoopExpr>) {
+                collect_free_variables(*e.body, local_vars, captures, capture_spans);
+            } else if constexpr (std::is_same_v<T, parser::ForExpr>) {
+                std::unordered_set<std::string> for_locals = local_vars;
+                if (e.pattern->template is<parser::IdentPattern>()) {
+                    const auto& ident = e.pattern->template as<parser::IdentPattern>();
+                    for_locals.insert(ident.name);
+                }
+                collect_free_variables(*e.iter, local_vars, captures, capture_spans);
+                collect_free_variables(*e.body, for_locals, captures, capture_spans);
+            } else if constexpr (std::is_same_v<T, parser::ClosureExpr>) {
+                // Nested closure - don't descend (it will have its own capture analysis)
+            } else if constexpr (std::is_same_v<T, parser::TupleExpr>) {
+                for (const auto& elem : e.elements) {
+                    collect_free_variables(*elem, local_vars, captures, capture_spans);
+                }
+            } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
+                std::visit(
+                    [&](auto&& arr_kind) {
+                        using K = std::decay_t<decltype(arr_kind)>;
+                        if constexpr (std::is_same_v<K, std::vector<parser::ExprPtr>>) {
+                            for (const auto& elem : arr_kind) {
+                                collect_free_variables(*elem, local_vars, captures, capture_spans);
+                            }
+                        } else if constexpr (std::is_same_v<K,
+                                                           std::pair<parser::ExprPtr, parser::ExprPtr>>) {
+                            collect_free_variables(*arr_kind.first, local_vars, captures,
+                                                   capture_spans);
+                            collect_free_variables(*arr_kind.second, local_vars, captures,
+                                                   capture_spans);
+                        }
+                    },
+                    e.kind);
+            } else if constexpr (std::is_same_v<T, parser::StructExpr>) {
+                for (const auto& field : e.fields) {
+                    collect_free_variables(*field.second, local_vars, captures, capture_spans);
+                }
+            } else if constexpr (std::is_same_v<T, parser::ReturnExpr>) {
+                if (e.value) {
+                    collect_free_variables(**e.value, local_vars, captures, capture_spans);
+                }
+            } else if constexpr (std::is_same_v<T, parser::WhenExpr>) {
+                collect_free_variables(*e.scrutinee, local_vars, captures, capture_spans);
+                for (const auto& arm : e.arms) {
+                    // TODO: Track pattern bindings as locals
+                    collect_free_variables(*arm.body, local_vars, captures, capture_spans);
+                }
+            } else if constexpr (std::is_same_v<T, parser::CastExpr>) {
+                collect_free_variables(*e.expr, local_vars, captures, capture_spans);
+            }
+            // Literals and other expressions don't capture anything
+        },
+        expr.kind);
+}
+
+auto BorrowChecker::determine_capture_kind([[maybe_unused]] const std::string& var_name,
+                                           PlaceId place_id, bool is_mutated,
+                                           bool is_moved) -> CaptureKind {
+    // Check if the type is Copy
+    const auto& state = env_.get_state(place_id);
+    if (state.type && is_copy_type(state.type)) {
+        return CaptureKind::ByCopy;
+    }
+
+    if (is_moved) {
+        return CaptureKind::ByMove;
+    }
+
+    if (is_mutated) {
+        return CaptureKind::ByMutRef;
+    }
+
+    return CaptureKind::ByRef;
+}
+
+void BorrowChecker::validate_captures(const std::vector<CaptureInfo>& captures,
+                                      const parser::ClosureExpr& closure) {
+    for (const auto& capture : captures) {
+        const auto& state = env_.get_state(capture.place_id);
+
+        // B014: Cannot capture a moved value
+        if (state.state == OwnershipState::Moved) {
+            SourceSpan move_span = state.move_location ? state.move_location->span : closure.span;
+            errors_.push_back(
+                BorrowError::closure_captures_moved(capture.name, capture.capture_span, move_span));
+            continue;
+        }
+
+        // B015: Cannot capture by mut ref or move while value is borrowed
+        if (capture.kind == CaptureKind::ByMutRef || capture.kind == CaptureKind::ByMove) {
+            // Check for existing borrows
+            if (!state.active_borrows.empty()) {
+                const auto& first_borrow = state.active_borrows.front();
+                errors_.push_back(BorrowError::closure_capture_conflict(
+                    capture.name, capture.kind, capture.capture_span, first_borrow.start.span));
+                continue;
+            }
+        }
+
+        // B015: Cannot capture by ref while value is mutably borrowed
+        if (capture.kind == CaptureKind::ByRef) {
+            for (const auto& borrow : state.active_borrows) {
+                if (borrow.kind == BorrowKind::Mutable) {
+                    errors_.push_back(BorrowError::closure_capture_conflict(
+                        capture.name, capture.kind, capture.capture_span, borrow.start.span));
+                    break;
+                }
+            }
+        }
+    }
 }
 
 } // namespace tml::borrow

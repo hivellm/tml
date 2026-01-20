@@ -44,6 +44,7 @@ auto LLVMIRGen::gen_slice_type_method(const parser::MethodCallExpr& call, const 
     if (!slice_type_ptr) {
         return std::nullopt;
     }
+    (void)is_reference; // May be used in future for different handling
 
     const auto& slice_type = *slice_type_ptr;
     types::TypePtr elem_type = slice_type.element;

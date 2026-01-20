@@ -142,13 +142,15 @@ enum class TokenKind : uint8_t {
     // ========================================================================
     // Keywords - Memory
     // ========================================================================
-    KwMut, ///< `mut` - mutable modifier
-    KwRef, ///< `ref` - reference/borrow
+    KwMut,  ///< `mut` - mutable modifier
+    KwRef,  ///< `ref` - reference/borrow
+    KwLife, ///< `life` - lifetime parameter (e.g., `func foo[life a](x: ref[a] T)`)
 
     // ========================================================================
     // Keywords - Closures
     // ========================================================================
-    KwDo, ///< `do` - closure syntax: `do(x) x + 1`
+    KwDo,   ///< `do` - closure syntax: `do(x) x + 1`
+    KwMove, ///< `move` - move closure: `move do(x) x + 1`
 
     // ========================================================================
     // Keywords - Other

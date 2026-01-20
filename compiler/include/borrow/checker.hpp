@@ -50,6 +50,12 @@
 //! | B008 | Double mutable borrow |
 //! | B009 | Immutable borrow while mutably borrowed |
 //! | B010 | Return reference to local |
+//! | B011 | Use of partially moved struct field |
+//! | B012 | Move out of partially moved struct |
+//! | B013 | Borrow conflict with partial move |
+//! | B014 | Closure captures moved value |
+//! | B015 | Closure captures mutable ref while outer scope borrows |
+//! | B016 | Use of partially moved value |
 
 #ifndef TML_BORROW_CHECKER_HPP
 #define TML_BORROW_CHECKER_HPP
@@ -58,11 +64,17 @@
 #include "parser/ast.hpp"
 #include "types/type.hpp"
 
+#include <map>
 #include <optional>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+// Forward declaration
+namespace tml::types {
+class TypeEnv;
+}
 
 namespace tml::borrow {
 
@@ -122,6 +134,30 @@ struct Projection {
 
     /// The field name (only valid when `kind == Field`).
     std::string field_name;
+
+    /// The index value (only valid when `kind == Index` and index is known).
+    std::optional<size_t> index_value;
+
+    /// Comparison operators for use in containers.
+    auto operator==(const Projection& other) const -> bool {
+        if (kind != other.kind)
+            return false;
+        if (kind == ProjectionKind::Field)
+            return field_name == other.field_name;
+        if (kind == ProjectionKind::Index)
+            return index_value == other.index_value;
+        return true; // Deref
+    }
+
+    auto operator<(const Projection& other) const -> bool {
+        if (kind != other.kind)
+            return static_cast<int>(kind) < static_cast<int>(other.kind);
+        if (kind == ProjectionKind::Field)
+            return field_name < other.field_name;
+        if (kind == ProjectionKind::Index)
+            return index_value < other.index_value;
+        return false; // Deref
+    }
 };
 
 /// A place represents a memory location that can be borrowed or moved.
@@ -241,6 +277,50 @@ struct Borrow {
 
     /// The place that holds this reference (for tracking reference chains).
     PlaceId ref_place;
+
+    /// If this is a reborrow, the ID of the original borrow.
+    /// Used for tracking reborrow chains.
+    std::optional<size_t> reborrow_origin;
+};
+
+/// Tracks a reborrow chain from an existing reference.
+///
+/// When a reference is re-borrowed (e.g., `let r2 = mut ref *r1`), we need to
+/// track that r2's lifetime cannot exceed r1's lifetime. This struct maintains
+/// the chain of reborrows for lifetime validation.
+///
+/// ## Example
+///
+/// ```tml
+/// let mut x = 42
+/// let r1 = mut ref x   // Original borrow
+/// let r2 = mut ref *r1 // Reborrow from r1 (depth 1)
+/// let r3 = mut ref *r2 // Reborrow from r2 (depth 2)
+/// ```
+///
+/// Each reborrow must end before its origin borrow ends.
+struct Reborrow {
+    /// The place holding this reborrowed reference.
+    PlaceId ref_place;
+
+    /// The origin borrow that this reborrow derives from.
+    /// This is an index into BorrowEnv's borrow list.
+    size_t origin_borrow_index;
+
+    /// The depth of this reborrow in the chain.
+    /// 0 = direct borrow from owned value
+    /// 1 = reborrow from a reference (one level of indirection)
+    /// 2+ = deeper reborrow chains
+    size_t depth;
+
+    /// Location where this reborrow was created.
+    Location start;
+
+    /// Location where this reborrow ends.
+    std::optional<Location> end;
+
+    /// The kind of reborrow (shared or mutable).
+    BorrowKind kind;
 };
 
 /// The ownership state of a place (variable or memory location).
@@ -274,25 +354,104 @@ enum class MoveSemantics {
     Move, ///< Type must be explicitly moved (ownership transfer)
 };
 
+/// State of a two-phase borrow.
+///
+/// Two-phase borrowing allows patterns like `vec.push(vec.len())` where:
+/// 1. The mutable borrow for `push` is created but enters Reserved state
+/// 2. During Reserved state, shared borrows of the same value are allowed
+/// 3. When the method actually executes, the borrow becomes Active
+/// 4. In Active state, normal borrow rules apply (no other borrows allowed)
+///
+/// This enables ergonomic patterns while maintaining safety.
+enum class TwoPhaseState {
+    None,     ///< Not in two-phase borrow mode
+    Reserved, ///< Borrow is reserved but not yet active (shared borrows allowed)
+    Active,   ///< Borrow is active (normal exclusivity rules apply)
+};
+
+/// Information about an active two-phase borrow.
+///
+/// Tracks which borrow is in two-phase mode and its current state.
+struct TwoPhaseInfo {
+    /// The place being borrowed.
+    PlaceId place = 0;
+
+    /// Current state of the two-phase borrow.
+    TwoPhaseState state = TwoPhaseState::None;
+
+    /// Index of the borrow in the active_borrows list.
+    size_t borrow_index = 0;
+
+    /// The kind of borrow (typically Mutable for method receivers).
+    BorrowKind kind = BorrowKind::Shared;
+
+    /// Location where the borrow was created.
+    Location start{0, SourceSpan{}};
+};
+
+/// The kind of capture used when a closure references an outer variable.
+///
+/// Closures can capture variables in different ways depending on how they
+/// are used inside the closure body. The borrow checker infers the appropriate
+/// capture kind based on usage:
+///
+/// - `ByRef`: Variable is only read → captured by shared reference
+/// - `ByMutRef`: Variable is mutated → captured by mutable reference
+/// - `ByMove`: Variable is consumed → ownership transferred into closure
+/// - `ByCopy`: Variable is Copy type → value is copied into closure
+enum class CaptureKind {
+    ByRef,    ///< Captured by shared reference (read-only)
+    ByMutRef, ///< Captured by mutable reference (allows mutation)
+    ByMove,   ///< Captured by move (ownership transfer)
+    ByCopy,   ///< Captured by copy (for Copy types)
+};
+
+/// Information about a single captured variable in a closure.
+///
+/// This tracks what variable is captured, how it's captured, and where
+/// the capture occurs for error reporting.
+struct CaptureInfo {
+    /// The name of the captured variable.
+    std::string name;
+
+    /// The PlaceId of the captured variable in the outer scope.
+    PlaceId place_id;
+
+    /// How the variable is captured.
+    CaptureKind kind;
+
+    /// Where the capture first occurs (first use in closure body).
+    SourceSpan capture_span;
+
+    /// Whether this was explicitly requested via `move` closure.
+    bool forced_move = false;
+};
+
 /// Error codes for categorizing borrow checker errors.
 ///
 /// Each error code corresponds to a specific violation of borrowing rules.
 /// Error codes are prefixed with 'B' in diagnostics (e.g., B001).
 enum class BorrowErrorCode {
-    UseAfterMove,        ///< B001: Use of moved value
-    MoveWhileBorrowed,   ///< B002: Cannot move because value is borrowed
-    AssignNotMutable,    ///< B003: Cannot assign to immutable variable
-    AssignWhileBorrowed, ///< B004: Cannot assign because value is borrowed
-    BorrowAfterMove,     ///< B005: Cannot borrow moved value
-    MutBorrowNotMutable, ///< B006: Cannot mutably borrow non-mutable variable
-    MutBorrowWhileImmut, ///< B007: Cannot mutably borrow while immutably borrowed
-    DoubleMutBorrow,     ///< B008: Cannot borrow mutably more than once
-    ImmutBorrowWhileMut, ///< B009: Cannot immutably borrow while mutably borrowed
-    ReturnLocalRef,      ///< B010: Cannot return reference to local
-    PartialMove,         ///< B011: Partial move detected
-    OverlappingBorrow,   ///< B012: Overlapping borrows conflict
-    UseWhileBorrowed,    ///< B013: Cannot use value while borrowed
-    Other,               ///< B099: Other borrow errors
+    UseAfterMove,            ///< B001: Use of moved value
+    MoveWhileBorrowed,       ///< B002: Cannot move because value is borrowed
+    AssignNotMutable,        ///< B003: Cannot assign to immutable variable
+    AssignWhileBorrowed,     ///< B004: Cannot assign because value is borrowed
+    BorrowAfterMove,         ///< B005: Cannot borrow moved value
+    MutBorrowNotMutable,     ///< B006: Cannot mutably borrow non-mutable variable
+    MutBorrowWhileImmut,     ///< B007: Cannot mutably borrow while immutably borrowed
+    DoubleMutBorrow,         ///< B008: Cannot borrow mutably more than once
+    ImmutBorrowWhileMut,     ///< B009: Cannot immutably borrow while mutably borrowed
+    ReturnLocalRef,          ///< B010: Cannot return reference to local
+    PartialMove,             ///< B011: Partial move detected
+    OverlappingBorrow,       ///< B012: Overlapping borrows conflict
+    UseWhileBorrowed,        ///< B013: Cannot use value while borrowed
+    ClosureCapturesMoved,    ///< B014: Closure captures moved value
+    ClosureCaptureConflict,  ///< B015: Closure captures ref while outer scope borrows
+    PartiallyMovedValue,     ///< B016: Use of partially moved value
+    ReborrowOutlivesOrigin,  ///< B017: Reborrow outlives original borrow
+    AmbiguousReturnLifetime, ///< E031: Cannot determine return reference lifetime
+    InteriorMutWarning,      ///< W001: Interior mutability bypasses borrow checking
+    Other,                   ///< B099: Other borrow errors
 };
 
 /// A suggestion for fixing a borrow error.
@@ -369,6 +528,32 @@ struct BorrowError {
     /// Creates a "return reference to local" error (B010).
     static auto return_local_ref(const std::string& name, SourceSpan return_span,
                                  SourceSpan def_span) -> BorrowError;
+
+    /// Creates a "closure captures moved value" error (B014).
+    static auto closure_captures_moved(const std::string& name, SourceSpan capture_span,
+                                       SourceSpan move_span) -> BorrowError;
+
+    /// Creates a "closure capture conflict" error (B015).
+    static auto closure_capture_conflict(const std::string& name, CaptureKind capture_kind,
+                                         SourceSpan capture_span, SourceSpan borrow_span)
+        -> BorrowError;
+
+    /// Creates a "use of partially moved value" error (B016).
+    static auto partially_moved_value(const std::string& name, const std::string& moved_field,
+                                      SourceSpan use_span, SourceSpan move_span) -> BorrowError;
+
+    /// Creates a "reborrow outlives original borrow" error (B017).
+    static auto reborrow_outlives_origin(const std::string& reborrow_name,
+                                         const std::string& origin_name, SourceSpan reborrow_span,
+                                         SourceSpan origin_span) -> BorrowError;
+
+    /// Creates an "ambiguous return lifetime" error (E031).
+    /// Emitted when a function returns a reference but has multiple input refs
+    /// and no self/this parameter, so the compiler can't determine which input
+    /// lifetime the return should have.
+    static auto ambiguous_return_lifetime(const std::string& func_name,
+                                          const std::vector<std::string>& ref_params,
+                                          SourceSpan func_span) -> BorrowError;
 };
 
 /// Tracks the complete state of a single place (variable or memory location).
@@ -407,8 +592,16 @@ struct PlaceState {
     /// The pair contains the borrowed place's ID and the kind of borrow.
     std::optional<std::pair<PlaceId, BorrowKind>> borrowed_from;
 
-    /// Set of field names that have been moved out (for partial move detection).
-    std::set<std::string> moved_fields;
+    /// Set of projection paths that have been moved out (for partial move detection).
+    ///
+    /// Each entry is a vector of projections representing a path like `a.b.c`.
+    /// For example, if `x.a.b` is moved, this would contain `{Field("a"), Field("b")}`.
+    ///
+    /// This supports:
+    /// - Nested struct field moves: `let y = x.a.b` moves path ["a", "b"]
+    /// - Tuple element moves: `let (a, _) = pair` moves path [Index(0)]
+    /// - Array element moves: `let y = arr[0]` moves path [Index(0)] when index is constant
+    std::set<std::vector<Projection>> moved_projections;
 
     /// Whether this place has been initialized.
     bool is_initialized = true;
@@ -518,14 +711,82 @@ public:
         return next_lifetime_id_++;
     }
 
-    /// Marks a field as moved for partial move tracking.
+    /// Marks a projection path as moved for partial move tracking.
+    ///
+    /// @param id The base place ID
+    /// @param projections The projection path that was moved (e.g., ["a", "b"] for `x.a.b`)
+    void mark_projection_moved(PlaceId id, const std::vector<Projection>& projections);
+
+    /// Legacy method: marks a single field as moved.
+    /// Wraps mark_projection_moved with a single Field projection.
     void mark_field_moved(PlaceId id, const std::string& field);
 
     /// Gets the move state of a place.
     auto get_move_state(PlaceId id) const -> MoveState;
 
-    /// Checks if a specific field has been moved.
+    /// Checks if a specific projection path has been moved.
+    ///
+    /// A path is considered moved if:
+    /// - It exactly matches a moved projection
+    /// - Any prefix of it has been moved (parent moved = children moved)
+    ///
+    /// @param id The base place ID
+    /// @param projections The projection path to check
+    /// @return true if the path or any of its parents has been moved
+    auto is_projection_moved(PlaceId id, const std::vector<Projection>& projections) const -> bool;
+
+    /// Legacy method: checks if a single field has been moved.
+    /// Wraps is_projection_moved with a single Field projection.
     auto is_field_moved(PlaceId id, const std::string& field) const -> bool;
+
+    /// Checks if any child of the given projection path has been moved.
+    ///
+    /// This is used to check if a parent place can be used when some of its
+    /// children have been moved (partial move detection).
+    ///
+    /// @param id The base place ID
+    /// @param projections The projection path to check (empty = check the base place)
+    /// @return true if any child projection has been moved
+    auto has_moved_children(PlaceId id, const std::vector<Projection>& projections) const -> bool;
+
+    // ========================================================================
+    // Reborrow Tracking (Phase 5)
+    // ========================================================================
+
+    /// Creates a reborrow from an existing borrow.
+    ///
+    /// When a reference is re-borrowed (e.g., `let r2 = mut ref *r1`), this
+    /// tracks that r2's lifetime is constrained by r1's lifetime.
+    ///
+    /// @param ref_place The place holding the new reborrowed reference
+    /// @param origin_borrow_index Index of the original borrow being reborrowed
+    /// @param kind The kind of reborrow (shared or mutable)
+    /// @param loc Location where the reborrow occurs
+    /// @return The index of the new reborrow in the reborrows list
+    auto create_reborrow(PlaceId ref_place, size_t origin_borrow_index, BorrowKind kind,
+                         Location loc) -> size_t;
+
+    /// Ends a reborrow at the given location.
+    void end_reborrow(size_t reborrow_index, Location loc);
+
+    /// Gets a reborrow by index.
+    auto get_reborrow(size_t index) const -> const Reborrow&;
+
+    /// Gets all reborrows for validation.
+    auto all_reborrows() const -> const std::vector<Reborrow>& {
+        return reborrows_;
+    }
+
+    /// Finds the reborrow depth for a given place.
+    /// Returns 0 if not a reborrow, 1+ for reborrow depth.
+    auto get_reborrow_depth(PlaceId place) const -> size_t;
+
+    /// Validates that all reborrows end before their origins.
+    /// Returns true if all reborrows are valid, false otherwise.
+    auto validate_reborrow_lifetimes() const -> bool;
+
+    /// Finds reborrows that outlive their origin borrow.
+    auto find_invalid_reborrows() const -> std::vector<std::pair<size_t, size_t>>;
 
 private:
     /// Maps variable names to their PlaceIds (supports shadowing via vector).
@@ -542,6 +803,12 @@ private:
 
     /// Next LifetimeId to allocate.
     LifetimeId next_lifetime_id_ = 0;
+
+    /// All reborrows tracked for lifetime validation.
+    std::vector<Reborrow> reborrows_;
+
+    /// Maps PlaceId to reborrow index for quick lookup.
+    std::unordered_map<PlaceId, size_t> place_to_reborrow_;
 };
 
 /// The main borrow checker that validates ownership and borrowing rules.
@@ -579,7 +846,13 @@ private:
 /// mutation actually occurs.
 class BorrowChecker {
 public:
+    /// Constructs a borrow checker without type environment.
+    /// Interior mutability checking will be disabled.
     BorrowChecker();
+
+    /// Constructs a borrow checker with access to type environment.
+    /// This enables interior mutability checking.
+    explicit BorrowChecker(const types::TypeEnv& type_env);
 
     /// Checks an entire module for borrow violations.
     ///
@@ -598,12 +871,23 @@ public:
         return !errors_.empty();
     }
 
+    /// Returns all accumulated warnings.
+    [[nodiscard]] auto warnings() const -> const std::vector<BorrowError>& {
+        return warnings_;
+    }
+
 private:
     /// The borrow checking environment.
     BorrowEnv env_;
 
+    /// Optional pointer to type environment (for interior mutability checking).
+    const types::TypeEnv* type_env_ = nullptr;
+
     /// Accumulated errors.
     std::vector<BorrowError> errors_;
+
+    /// Accumulated warnings (e.g., W001 for interior mutability).
+    std::vector<BorrowError> warnings_;
 
     /// Current statement index for location tracking.
     size_t current_stmt_ = 0;
@@ -611,8 +895,36 @@ private:
     /// Current loop nesting depth (for break/continue analysis).
     int loop_depth_ = 0;
 
-    /// Whether a two-phase borrow is currently active.
-    bool is_two_phase_borrow_active_ = false;
+    /// Information about the current two-phase borrow (if any).
+    TwoPhaseInfo two_phase_info_;
+
+    // ========================================================================
+    // Explicit Lifetime Context (Task 8.5)
+    // ========================================================================
+
+    /// Context for tracking explicit lifetimes in the current function.
+    /// Set when checking a function with explicit lifetime parameters.
+    struct LifetimeContext {
+        /// Named lifetime parameters declared in the function signature.
+        std::set<std::string> lifetime_params;
+
+        /// Maps parameter names to their declared lifetimes.
+        /// Only populated for ref parameters with explicit lifetime annotations.
+        std::map<std::string, std::string> param_lifetimes;
+
+        /// The declared return type lifetime (if the function returns a ref).
+        std::optional<std::string> return_lifetime;
+
+        /// Clear the context when leaving a function.
+        void clear() {
+            lifetime_params.clear();
+            param_lifetimes.clear();
+            return_lifetime = std::nullopt;
+        }
+    };
+
+    /// Current function's lifetime context.
+    LifetimeContext lifetime_ctx_;
 
     // ========================================================================
     // Type Analysis
@@ -623,6 +935,10 @@ private:
 
     /// Gets the move semantics for a type.
     auto get_move_semantics(const types::TypePtr& type) const -> MoveSemantics;
+
+    /// Determines if a type has interior mutability (Cell, Mutex, etc.).
+    /// Returns false if type_env_ is not available.
+    auto is_interior_mutable(const types::TypePtr& type) const -> bool;
 
     // ========================================================================
     // Declaration Checking
@@ -709,6 +1025,42 @@ private:
     void check_closure(const parser::ClosureExpr& closure);
 
     // ========================================================================
+    // Closure Capture Analysis
+    // ========================================================================
+
+    /// Analyzes what variables a closure captures and how.
+    ///
+    /// This method scans the closure body to determine which outer-scope
+    /// variables are referenced and what capture kind is appropriate for each.
+    auto analyze_captures(const parser::ClosureExpr& closure) -> std::vector<CaptureInfo>;
+
+    /// Collects all free variables used in an expression.
+    ///
+    /// Free variables are identifiers that reference outer-scope variables
+    /// rather than local parameters or bindings within the expression.
+    void collect_free_variables(const parser::Expr& expr,
+                                const std::unordered_set<std::string>& local_vars,
+                                std::unordered_map<std::string, CaptureKind>& captures,
+                                std::unordered_map<std::string, SourceSpan>& capture_spans);
+
+    /// Determines the capture kind based on how a variable is used.
+    ///
+    /// The capture kind is determined by the most restrictive usage:
+    /// - Read only → ByRef (or ByCopy for Copy types)
+    /// - Mutated → ByMutRef
+    /// - Moved/consumed → ByMove
+    auto determine_capture_kind(const std::string& var_name, PlaceId place_id, bool is_mutated,
+                                bool is_moved) -> CaptureKind;
+
+    /// Validates that captures don't conflict with existing borrows.
+    ///
+    /// Checks for errors like:
+    /// - Capturing a moved value (B014)
+    /// - Capturing a mutable ref while outer scope has borrows (B015)
+    void validate_captures(const std::vector<CaptureInfo>& captures,
+                           const parser::ClosureExpr& closure);
+
+    // ========================================================================
     // Borrow Operations
     // ========================================================================
 
@@ -725,13 +1077,30 @@ private:
     /// Moves a value out of a place.
     void move_value(PlaceId place, Location loc);
 
+    /// Moves a projection path out of a place (partial move).
+    ///
+    /// @param place The base place ID
+    /// @param projections The projection path being moved (e.g., ["a", "b"] for `x.a.b`)
+    /// @param loc The location of the move
+    void move_projection(PlaceId place, const std::vector<Projection>& projections, Location loc);
+
     /// Moves a single field out of a place (partial move).
+    /// Legacy wrapper around move_projection.
     void move_field(PlaceId place, const std::string& field, Location loc);
 
     /// Checks if a place can be used (read).
     void check_can_use(PlaceId place, Location loc);
 
+    /// Checks if a projection path can be used.
+    ///
+    /// @param place The base place ID
+    /// @param projections The projection path to check
+    /// @param loc The location of the use
+    void check_can_use_projection(PlaceId place, const std::vector<Projection>& projections,
+                                  Location loc);
+
     /// Checks if a field can be used.
+    /// Legacy wrapper around check_can_use_projection.
     void check_can_use_field(PlaceId place, const std::string& field, Location loc);
 
     /// Checks if a place can be mutated.
@@ -751,11 +1120,32 @@ private:
     // Two-Phase Borrows
     // ========================================================================
 
-    /// Begins a two-phase borrow region.
+    /// Begins a two-phase borrow region (enters reservation phase).
+    ///
+    /// The borrow is created but in Reserved state, allowing shared borrows
+    /// of the same place until the borrow activates.
     void begin_two_phase_borrow();
 
     /// Ends a two-phase borrow region.
     void end_two_phase_borrow();
+
+    /// Reserves a two-phase borrow on a place.
+    ///
+    /// Creates a mutable borrow in Reserved state. While reserved, shared
+    /// borrows of the same place are allowed.
+    void reserve_two_phase_borrow(PlaceId place, BorrowKind kind, Location loc);
+
+    /// Activates a reserved two-phase borrow.
+    ///
+    /// Transitions from Reserved to Active state. After activation, normal
+    /// borrow rules apply (no other borrows allowed).
+    void activate_two_phase_borrow();
+
+    /// Checks if a place has a reserved (not active) two-phase borrow.
+    auto is_reserved_borrow(PlaceId place) const -> bool;
+
+    /// Gets the current two-phase state.
+    auto get_two_phase_state() const -> TwoPhaseState;
 
     // ========================================================================
     // Scope and Lifetime Management

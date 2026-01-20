@@ -682,7 +682,9 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
             } else if constexpr (std::is_same_v<T, parser::RefType>) {
                 auto inner = resolve_parser_type_with_subs(*t.inner, subs);
                 auto result = std::make_shared<types::Type>();
-                result->kind = types::RefType{t.is_mut, inner};
+                result->kind = types::RefType{.is_mut = t.is_mut,
+                                              .inner = inner,
+                                              .lifetime = t.lifetime};
                 return result;
             } else if constexpr (std::is_same_v<T, parser::PtrType>) {
                 auto inner = resolve_parser_type_with_subs(*t.inner, subs);

@@ -217,6 +217,9 @@ private:
     bool stmt_has_return(const parser::Stmt& stmt);
     bool expr_has_return(const parser::Expr& expr);
 
+    // Lifetime bound validation (Phase 9: Higher-Kinded Lifetime Bounds)
+    bool type_satisfies_lifetime_bound(TypePtr type, const std::string& lifetime_bound);
+
     void error(const std::string& message, SourceSpan span);
 
     // Error message improvements

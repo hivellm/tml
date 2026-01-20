@@ -1,0 +1,121 @@
+// Tests for lifetime elision (Phase 7 of memory-safety-parity)
+//
+// TML automatically infers lifetimes using these rules:
+// 1. Each ref T parameter gets a separate lifetime
+// 2. If there's a this/mut this, return has same lifetime as this
+// 3. If there's exactly one ref parameter, return uses that lifetime
+//
+// When rules don't apply (multiple refs, no this), E031 error is emitted.
+
+use test
+
+// =============================================================================
+// Rule 3: Single Input Reference - Lifetime Unambiguous
+// =============================================================================
+
+// This works: only one ref parameter, so return must use its lifetime
+func get_first_char(s: ref Str) -> I32 {
+    // Return derived from s - lifetime is clear
+    return 0 // placeholder
+}
+
+// This works: only one ref parameter
+func identity_i32(x: ref I32) -> ref I32 {
+    return x
+}
+
+@test
+func test_single_ref_param() -> I32 {
+    let x: I32 = 42
+    let r: ref I32 = identity_i32(ref x)
+    assert_eq(*r, 42, "single ref param identity works")
+    return 0
+}
+
+// =============================================================================
+// Rule 2: Method with this - Lifetime Uses this
+// =============================================================================
+
+type Container {
+    value: I32
+}
+
+impl Container {
+    // This works: method with `this`, so return lifetime uses this's lifetime
+    pub func get_value(this) -> ref I32 {
+        return ref this.value
+    }
+
+    // This also works: mut this still disambiguates
+    pub func get_value_mut(mut this) -> ref I32 {
+        return ref this.value
+    }
+}
+
+@test
+func test_method_with_this() -> I32 {
+    let c: Container = Container { value: 100 }
+    let r: ref I32 = c.get_value()
+    assert_eq(*r, 100, "method with this works")
+    return 0
+}
+
+// =============================================================================
+// Working Patterns: No Return Reference
+// =============================================================================
+
+// No issue: doesn't return a reference
+func max_value(a: ref I32, b: ref I32) -> I32 {
+    if *a > *b {
+        return *a
+    } else {
+        return *b
+    }
+}
+
+@test
+func test_no_return_ref() -> I32 {
+    let x: I32 = 10
+    let y: I32 = 20
+    let m: I32 = max_value(ref x, ref y)
+    assert_eq(m, 20, "max of refs (returning value) works")
+    return 0
+}
+
+// =============================================================================
+// Documentation: Ambiguous Cases
+// =============================================================================
+
+// The following would produce E031 (commented out to allow test to compile):
+//
+// ERROR: Multiple ref params, no this, returns ref - ambiguous!
+// func longest(a: ref Str, b: ref Str) -> ref Str {
+//     if a.len() > b.len() { return a } else { return b }
+// }
+//
+// To fix, return an owned value:
+// func longest(a: ref Str, b: ref Str) -> Str {
+//     if a.len() > b.len() { return a.duplicate() } else { return b.duplicate() }
+// }
+//
+// Or use a method with this:
+// impl Strings {
+//     func longest(this, other: ref Str) -> ref Str {
+//         // Return lifetime tied to this
+//         if this.len() > other.len() { return ref this.data } else { return other }
+//     }
+// }
+
+// =============================================================================
+// Summary
+// =============================================================================
+
+// Phase 7 implements:
+// 1. Track input reference parameters in function signatures
+// 2. Detect when return type is a reference
+// 3. Apply elision rules to determine if lifetime is unambiguous
+// 4. Emit E031 error for ambiguous cases
+// 5. Provide helpful suggestions in error message
+//
+// The key insight: TML always infers lifetimes. When inference fails,
+// the user must restructure their code (e.g., return owned value).

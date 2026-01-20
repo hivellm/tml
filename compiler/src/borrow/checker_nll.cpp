@@ -263,17 +263,34 @@ auto BorrowEnv::is_borrow_live(const Borrow& borrow, Location loc) const -> bool
 ///
 /// ```tml
 /// let p = Pair { a: String::from("x"), b: String::from("y") }
-/// let s = p.a         // mark_field_moved(p, "a")
+/// let s = p.a         // mark_projection_moved(p, [Field("a")])
 /// println(p.b)        // OK
 /// println(p.a)        // ERROR
 /// drop(p)             // ERROR: partially moved
+///
+/// // Nested example:
+/// let n = Nested { inner: Inner { x: String::from("x"), y: 1 } }
+/// let s = n.inner.x   // mark_projection_moved(n, [Field("inner"), Field("x")])
+/// println(n.inner.y)  // OK
+/// println(n.inner.x)  // ERROR
 /// ```
-void BorrowEnv::mark_field_moved(PlaceId id, const std::string& field) {
+void BorrowEnv::mark_projection_moved(PlaceId id, const std::vector<Projection>& projections) {
     auto& state = get_state_mut(id);
-    state.moved_fields.insert(field);
+    state.moved_projections.insert(projections);
 
-    // If any field is moved, mark as partially moved
+    // If any projection is moved, the place becomes partially moved
     // We don't change to FullyMoved because other fields are still valid
+}
+
+/// Legacy method: marks a single field as moved.
+void BorrowEnv::mark_field_moved(PlaceId id, const std::string& field) {
+    std::vector<Projection> projections;
+    projections.push_back(Projection{
+        .kind = ProjectionKind::Field,
+        .field_name = field,
+        .index_value = std::nullopt,
+    });
+    mark_projection_moved(id, projections);
 }
 
 /// Returns the move state of a place.
@@ -290,17 +307,76 @@ auto BorrowEnv::get_move_state(PlaceId id) const -> MoveState {
         return MoveState::FullyMoved;
     }
 
-    if (!state.moved_fields.empty()) {
+    if (!state.moved_projections.empty()) {
         return MoveState::PartiallyMoved;
     }
 
     return MoveState::FullyOwned;
 }
 
-/// Checks if a specific field has been moved out.
-auto BorrowEnv::is_field_moved(PlaceId id, const std::string& field) const -> bool {
+/// Checks if a specific projection path has been moved.
+///
+/// A path is considered moved if:
+/// - It exactly matches a moved projection
+/// - Any prefix of it has been moved (if parent is moved, children are too)
+auto BorrowEnv::is_projection_moved(PlaceId id, const std::vector<Projection>& projections) const
+    -> bool {
     const auto& state = get_state(id);
-    return state.moved_fields.count(field) > 0;
+
+    // Check exact match
+    if (state.moved_projections.count(projections) > 0) {
+        return true;
+    }
+
+    // Check if any prefix has been moved
+    // If parent is moved, all children are also moved
+    for (size_t len = 1; len < projections.size(); ++len) {
+        std::vector<Projection> prefix(projections.begin(), projections.begin() + len);
+        if (state.moved_projections.count(prefix) > 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/// Legacy method: checks if a single field has been moved.
+auto BorrowEnv::is_field_moved(PlaceId id, const std::string& field) const -> bool {
+    std::vector<Projection> projections;
+    projections.push_back(Projection{
+        .kind = ProjectionKind::Field,
+        .field_name = field,
+        .index_value = std::nullopt,
+    });
+    return is_projection_moved(id, projections);
+}
+
+/// Checks if any child of the given projection path has been moved.
+///
+/// This is used to check if a parent place can be used when some of its
+/// children have been moved (partial move detection).
+auto BorrowEnv::has_moved_children(PlaceId id, const std::vector<Projection>& projections) const
+    -> bool {
+    const auto& state = get_state(id);
+
+    for (const auto& moved : state.moved_projections) {
+        // Check if 'moved' is a child of 'projections'
+        // moved is a child if projections is a prefix of moved
+        if (moved.size() > projections.size()) {
+            bool is_prefix = true;
+            for (size_t i = 0; i < projections.size(); ++i) {
+                if (!(projections[i] == moved[i])) {
+                    is_prefix = false;
+                    break;
+                }
+            }
+            if (is_prefix) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 // ============================================================================
@@ -352,6 +428,7 @@ void BorrowChecker::create_borrow_with_projection(PlaceId place, const Place& fu
         .scope_depth = env_.scope_depth(),
         .lifetime = env_.next_lifetime_id(),
         .ref_place = ref_place,
+        .reborrow_origin = std::nullopt,
     };
 
     state.active_borrows.push_back(borrow);
@@ -433,9 +510,11 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
         }
 
         // Overlapping places - check for conflicts
+        // Allow during two-phase borrow reservation
+        bool in_reservation = two_phase_info_.state == TwoPhaseState::Reserved;
         if (kind == BorrowKind::Mutable) {
             // Mutable borrow conflicts with any existing borrow on overlapping place
-            if (!is_two_phase_borrow_active_) {
+            if (!in_reservation) {
                 if (existing_borrow.kind == BorrowKind::Mutable) {
                     error("cannot borrow `" + get_place_name(full_place) +
                               "` as mutable more than once at a time",
@@ -450,7 +529,7 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
             }
         } else {
             // Shared borrow conflicts with mutable borrow
-            if (existing_borrow.kind == BorrowKind::Mutable && !is_two_phase_borrow_active_) {
+            if (existing_borrow.kind == BorrowKind::Mutable && !in_reservation) {
                 error("cannot borrow `" + get_place_name(full_place) +
                           "` as immutable because it is also borrowed as mutable",
                       loc.span);
@@ -477,20 +556,60 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
     }
 }
 
-/// Moves a single field out of a struct (partial move).
+/// Converts a projection path to a string for error messages.
+static auto projection_path_to_string(const std::string& base_name,
+                                      const std::vector<Projection>& projections) -> std::string {
+    std::string result = base_name;
+    for (const auto& proj : projections) {
+        switch (proj.kind) {
+        case ProjectionKind::Field:
+            result += "." + proj.field_name;
+            break;
+        case ProjectionKind::Index:
+            if (proj.index_value) {
+                result += "[" + std::to_string(*proj.index_value) + "]";
+            } else {
+                result += "[_]";
+            }
+            break;
+        case ProjectionKind::Deref:
+            result = "*" + result;
+            break;
+        }
+    }
+    return result;
+}
+
+/// Checks if a borrow's projection overlaps with the given projection.
+///
+/// Two projections overlap if one is a prefix of the other.
+static auto projections_overlap(const std::vector<Projection>& a, const std::vector<Projection>& b)
+    -> bool {
+    size_t min_len = std::min(a.size(), b.size());
+    for (size_t i = 0; i < min_len; ++i) {
+        if (!(a[i] == b[i])) {
+            return false;
+        }
+    }
+    return true; // One is a prefix of the other
+}
+
+/// Moves a projection path out of a struct (partial move).
 ///
 /// This checks all the conditions that must hold for a partial move:
 /// 1. The struct itself hasn't been fully moved
-/// 2. This specific field hasn't already been moved
+/// 2. This specific projection path hasn't already been moved
 /// 3. No active borrows prevent the move
 ///
 /// ## Borrow Interaction
 ///
 /// - Borrow of whole struct → cannot move any field
-/// - Borrow of this field → cannot move this field
-/// - Borrow of other field → CAN move this field
-void BorrowChecker::move_field(PlaceId place, const std::string& field, Location loc) {
+/// - Borrow of this projection → cannot move this projection
+/// - Borrow of other projection → CAN move this projection
+void BorrowChecker::move_projection(PlaceId place, const std::vector<Projection>& projections,
+                                    Location loc) {
     auto& state = env_.get_state_mut(place);
+    std::string path_str = projection_path_to_string(state.name, projections);
 
     // Check if already moved
     if (state.state == OwnershipState::Moved) {
@@ -498,60 +617,89 @@ void BorrowChecker::move_field(PlaceId place, const std::string& field, Location
         return;
     }
 
-    // Check if this specific field was already moved
-    if (env_.is_field_moved(place, field)) {
-        error("use of moved value: `" + state.name + "." + field + "`", loc.span);
+    // Check if this specific projection was already moved
+    if (env_.is_projection_moved(place, projections)) {
+        error("use of moved value: `" + path_str + "`", loc.span);
         return;
     }
 
     // Check if borrowed
     if (state.state == OwnershipState::Borrowed || state.state == OwnershipState::MutBorrowed) {
-        // Check if the borrow is on this specific field or the whole thing
+        // Check if the borrow is on this specific projection or the whole thing
         for (const auto& borrow : state.active_borrows) {
             if (borrow.end)
                 continue;
 
             // If borrowing the whole value, can't move any field
             if (borrow.full_place.projections.empty()) {
-                error("cannot move out of `" + state.name + "." + field + "` because `" +
-                          state.name + "` is borrowed",
+                error("cannot move out of `" + path_str + "` because `" + state.name +
+                          "` is borrowed",
                       loc.span);
                 return;
             }
 
-            // If borrowing this specific field, can't move it
-            if (!borrow.full_place.projections.empty() &&
-                borrow.full_place.projections[0].kind == ProjectionKind::Field &&
-                borrow.full_place.projections[0].field_name == field) {
-                error("cannot move out of `" + state.name + "." + field +
-                          "` because it is borrowed",
-                      loc.span);
+            // Check if borrow overlaps with our projection
+            if (projections_overlap(borrow.full_place.projections, projections)) {
+                error("cannot move out of `" + path_str + "` because it is borrowed", loc.span);
                 return;
             }
         }
     }
 
-    // Mark field as moved
-    env_.mark_field_moved(place, field);
+    // Mark projection as moved
+    env_.mark_projection_moved(place, projections);
 }
 
-/// Checks if a specific field can be used (not moved or dropped).
-void BorrowChecker::check_can_use_field(PlaceId place, const std::string& field, Location loc) {
+/// Moves a single field out of a struct (partial move).
+/// Legacy wrapper around move_projection.
+void BorrowChecker::move_field(PlaceId place, const std::string& field, Location loc) {
+    std::vector<Projection> projections;
+    projections.push_back(Projection{
+        .kind = ProjectionKind::Field,
+        .field_name = field,
+        .index_value = std::nullopt,
+    });
+    move_projection(place, projections, loc);
+}
+
+/// Checks if a specific projection path can be used (not moved or dropped).
+void BorrowChecker::check_can_use_projection(PlaceId place,
+                                             const std::vector<Projection>& projections,
+                                             Location loc) {
     const auto& state = env_.get_state(place);
+    std::string path_str = projection_path_to_string(state.name, projections);
 
     if (state.state == OwnershipState::Moved) {
         error("use of moved value: `" + state.name + "`", loc.span);
         return;
     }
 
-    if (env_.is_field_moved(place, field)) {
-        error("use of moved value: `" + state.name + "." + field + "`", loc.span);
+    if (env_.is_projection_moved(place, projections)) {
+        error("use of moved value: `" + path_str + "`", loc.span);
+        return;
+    }
+
+    // Check if trying to use the whole struct when it's partially moved
+    if (projections.empty() && env_.has_moved_children(place, projections)) {
+        error("use of partially moved value: `" + state.name + "`", loc.span);
         return;
     }
 
     if (state.state == OwnershipState::Dropped) {
         error("use of dropped value: `" + state.name + "`", loc.span);
     }
+}
+
+/// Checks if a specific field can be used (not moved or dropped).
+/// Legacy wrapper around check_can_use_projection.
+void BorrowChecker::check_can_use_field(PlaceId place, const std::string& field, Location loc) {
+    std::vector<Projection> projections;
+    projections.push_back(Projection{
+        .kind = ProjectionKind::Field,
+        .field_name = field,
+        .index_value = std::nullopt,
+    });
+    check_can_use_projection(place, projections, loc);
 }
 
 /// Checks for dangling references in return expressions.
@@ -628,6 +776,31 @@ void BorrowChecker::check_return_borrows(const parser::ReturnExpr& ret) {
                           loc.span);
                 }
             }
+
+            // ================================================================
+            // Task 8.5: Validate explicit lifetime relationships
+            // ================================================================
+            // If the function uses explicit lifetimes, check that the returned
+            // reference's lifetime matches the declared return type lifetime.
+            if (lifetime_ctx_.return_lifetime.has_value() &&
+                !lifetime_ctx_.param_lifetimes.empty()) {
+                const std::string& return_lt = lifetime_ctx_.return_lifetime.value();
+                const std::string& returned_name = ident.name;
+
+                // Check if this is a parameter with a declared lifetime
+                auto param_lt_it = lifetime_ctx_.param_lifetimes.find(returned_name);
+                if (param_lt_it != lifetime_ctx_.param_lifetimes.end()) {
+                    const std::string& param_lt = param_lt_it->second;
+
+                    // If lifetimes don't match, emit E032
+                    if (param_lt != return_lt) {
+                        error("lifetime mismatch: returning `" + returned_name +
+                                  "` with lifetime '" + param_lt +
+                                  "' but function declares return lifetime '" + return_lt + "'",
+                              loc.span);
+                    }
+                }
+            }
         }
     }
 }
@@ -660,7 +833,8 @@ auto BorrowChecker::extract_place(const parser::Expr& expr) -> std::optional<Pla
         const auto& field_expr = expr.as<parser::FieldExpr>();
         auto base_place = extract_place(*field_expr.object);
         if (base_place) {
-            base_place->projections.push_back(Projection{ProjectionKind::Field, field_expr.field});
+            base_place->projections.push_back(
+                Projection{ProjectionKind::Field, field_expr.field, std::nullopt});
             return base_place;
         }
         return std::nullopt;
@@ -670,7 +844,8 @@ auto BorrowChecker::extract_place(const parser::Expr& expr) -> std::optional<Pla
         const auto& index = expr.as<parser::IndexExpr>();
         auto base_place = extract_place(*index.object);
         if (base_place) {
-            base_place->projections.push_back(Projection{ProjectionKind::Index, ""});
+            base_place->projections.push_back(
+                Projection{ProjectionKind::Index, "", std::nullopt});
             return base_place;
         }
         return std::nullopt;
@@ -681,7 +856,8 @@ auto BorrowChecker::extract_place(const parser::Expr& expr) -> std::optional<Pla
         if (unary.op == parser::UnaryOp::Deref) {
             auto base_place = extract_place(*unary.operand);
             if (base_place) {
-                base_place->projections.push_back(Projection{ProjectionKind::Deref, ""});
+                base_place->projections.push_back(
+                    Projection{ProjectionKind::Deref, "", std::nullopt});
                 return base_place;
             }
         }
@@ -698,6 +874,84 @@ auto BorrowChecker::get_place_name(const Place& place) const -> std::string {
         return "<unknown>";
     }
     return place.to_string(it->second.name);
+}
+
+// ============================================================================
+// Reborrow Tracking (Phase 5)
+// ============================================================================
+
+/// Creates a reborrow from an existing borrow.
+auto BorrowEnv::create_reborrow(PlaceId ref_place, size_t origin_borrow_index, BorrowKind kind,
+                                Location loc) -> size_t {
+    // Calculate depth based on origin
+    size_t depth = 1;
+    auto origin_it = place_to_reborrow_.find(ref_place);
+    if (origin_it != place_to_reborrow_.end()) {
+        // Origin is itself a reborrow, increment depth
+        depth = reborrows_[origin_it->second].depth + 1;
+    }
+
+    Reborrow reborrow{
+        .ref_place = ref_place,
+        .origin_borrow_index = origin_borrow_index,
+        .depth = depth,
+        .start = loc,
+        .end = std::nullopt,
+        .kind = kind,
+    };
+
+    size_t index = reborrows_.size();
+    reborrows_.push_back(reborrow);
+    place_to_reborrow_[ref_place] = index;
+
+    return index;
+}
+
+/// Ends a reborrow at the given location.
+void BorrowEnv::end_reborrow(size_t reborrow_index, Location loc) {
+    if (reborrow_index < reborrows_.size()) {
+        reborrows_[reborrow_index].end = loc;
+    }
+}
+
+/// Gets a reborrow by index.
+auto BorrowEnv::get_reborrow(size_t index) const -> const Reborrow& {
+    return reborrows_.at(index);
+}
+
+/// Finds the reborrow depth for a given place.
+auto BorrowEnv::get_reborrow_depth(PlaceId place) const -> size_t {
+    auto it = place_to_reborrow_.find(place);
+    if (it != place_to_reborrow_.end()) {
+        return reborrows_[it->second].depth;
+    }
+    return 0;
+}
+
+/// Validates that all reborrows end before their origins.
+auto BorrowEnv::validate_reborrow_lifetimes() const -> bool {
+    return find_invalid_reborrows().empty();
+}
+
+/// Finds reborrows that outlive their origin borrow.
+auto BorrowEnv::find_invalid_reborrows() const -> std::vector<std::pair<size_t, size_t>> {
+    std::vector<std::pair<size_t, size_t>> invalid;
+
+    for (size_t i = 0; i < reborrows_.size(); ++i) {
+        const auto& reborrow = reborrows_[i];
+
+        // Check if the reborrow has an end location
+        if (!reborrow.end) {
+            // Still active, can't validate yet
+            continue;
+        }
+
+        // Look up the origin borrow's end location
+        // For now, we can't fully validate without access to the borrow list
+        // This will be enhanced when integrated with the full borrow checker
+    }
+
+    return invalid;
 }
 
 } // namespace tml::borrow

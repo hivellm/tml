@@ -129,7 +129,7 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
 
             // Expect ':'
             if (!check(lexer::TokenKind::Colon)) {
-                return ParseError{"Expected ':' in ternary expression", peek().span, {}};
+                return ParseError{"Expected ':' in ternary expression", peek().span, {}, {}};
             }
             advance(); // consume ':'
 
@@ -413,7 +413,8 @@ auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {
         if (!type_args.empty()) {
             return ParseError{.message = "Expected '(' after method type arguments",
                               .span = peek().span,
-                              .notes = {}};
+                              .notes = {},
+                              .fixes = {}};
         }
 
         auto span = SourceSpan::merge(start_span, previous().span);
@@ -453,7 +454,7 @@ auto Parser::parse_infix_expr(ExprPtr left, int precedence) -> Result<ExprPtr, P
     auto op = token_to_binary_op(op_token.kind);
     if (!op) {
         return ParseError{
-            .message = "Expected binary operator", .span = op_token.span, .notes = {}};
+            .message = "Expected binary operator", .span = op_token.span, .notes = {}, .fixes = {}};
     }
 
     auto right = parse_expr_with_precedence(precedence);
@@ -560,8 +561,8 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_continue_expr();
     }
 
-    // Closure: do(x) expr
-    if (check(lexer::TokenKind::KwDo)) {
+    // Closure: do(x) expr or move do(x) expr
+    if (check(lexer::TokenKind::KwDo) || check(lexer::TokenKind::KwMove)) {
         return parse_closure_expr();
     }
 
@@ -570,7 +571,7 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_lowlevel_expr();
     }
 
-    return ParseError{.message = "Expected expression", .span = peek().span, .notes = {}};
+    return ParseError{.message = "Expected expression", .span = peek().span, .notes = {}, .fixes = {}};
 }
 
 auto Parser::parse_literal_expr() -> Result<ExprPtr, ParseError> {
@@ -1161,6 +1162,12 @@ auto Parser::parse_continue_expr() -> Result<ExprPtr, ParseError> {
 auto Parser::parse_closure_expr() -> Result<ExprPtr, ParseError> {
     auto start_span = peek().span;
 
+    // Check for 'move' keyword (move closure)
+    bool is_move = false;
+    if (match(lexer::TokenKind::KwMove)) {
+        is_move = true;
+    }
+
     // Consume 'do' keyword
     auto do_tok = expect(lexer::TokenKind::KwDo, "Expected 'do'");
     if (is_err(do_tok))
@@ -1234,7 +1241,7 @@ auto Parser::parse_closure_expr() -> Result<ExprPtr, ParseError> {
         Expr{.kind = ClosureExpr{.params = std::move(params),
                                  .return_type = std::move(return_type),
                                  .body = std::move(body),
-                                 .is_move = false, // TML doesn't have move closures in this syntax
+                                 .is_move = is_move,
                                  .span = SourceSpan::merge(start_span, end_span),
                                  .captured_vars = {}},
              .span = SourceSpan::merge(start_span, end_span)});
@@ -1444,7 +1451,7 @@ auto Parser::parse_interp_string_expr() -> Result<ExprPtr, ParseError> {
     auto start_token = advance();
     if (!start_token.is(lexer::TokenKind::InterpStringStart)) {
         return ParseError{
-            .message = "Expected interpolated string start", .span = start_token.span, .notes = {}};
+            .message = "Expected interpolated string start", .span = start_token.span, .notes = {}, .fixes = {}};
     }
 
     // Add the initial text segment (may be empty)
@@ -1487,7 +1494,8 @@ auto Parser::parse_interp_string_expr() -> Result<ExprPtr, ParseError> {
                                          std::string(lexer::token_kind_to_string(peek().kind)) +
                                          ")",
                               .span = peek().span,
-                              .notes = {}};
+                              .notes = {},
+                              .fixes = {}};
         }
     }
 
@@ -1528,7 +1536,7 @@ auto Parser::parse_template_literal_expr() -> Result<ExprPtr, ParseError> {
     auto start_token = advance();
     if (!start_token.is(lexer::TokenKind::TemplateLiteralStart)) {
         return ParseError{
-            .message = "Expected template literal start", .span = start_token.span, .notes = {}};
+            .message = "Expected template literal start", .span = start_token.span, .notes = {}, .fixes = {}};
     }
 
     // Add the initial text segment (may be empty)
@@ -1571,7 +1579,8 @@ auto Parser::parse_template_literal_expr() -> Result<ExprPtr, ParseError> {
                                          std::string(lexer::token_kind_to_string(peek().kind)) +
                                          ")",
                               .span = peek().span,
-                              .notes = {}};
+                              .notes = {},
+                              .fixes = {}};
         }
     }
 

@@ -147,7 +147,7 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
 
     // Phase 4.5: Borrow Checking
     phase_start = Clock::now();
-    borrow::BorrowChecker borrow_checker;
+    borrow::BorrowChecker borrow_checker(env);
     auto borrow_result = borrow_checker.check_module(module);
     record_phase("borrow_check", phase_start);
 

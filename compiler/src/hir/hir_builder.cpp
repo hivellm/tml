@@ -522,7 +522,7 @@ auto HirBuilder::lower_class_to_impl(const parser::ClassDecl& class_decl) -> Hir
 
     // Create self type as ClassType
     auto self_type = std::make_shared<types::Type>();
-    self_type->kind = types::ClassType{class_decl.name};
+    self_type->kind = types::ClassType{class_decl.name, "", {}};
     hir_impl.self_type = self_type;
 
     // Set context for resolving 'This'/'Self' in methods
@@ -706,8 +706,9 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
 
             // Check if this is a class type
             if (auto class_def = type_env_.lookup_class(name)) {
+                (void)class_def;
                 auto result = std::make_shared<types::Type>();
-                result->kind = types::ClassType{name};
+                result->kind = types::ClassType{name, "", {}};
                 return result;
             }
 
@@ -801,10 +802,10 @@ auto HirBuilder::get_expr_type(const parser::Expr& expr) -> HirType {
             } else if constexpr (std::is_same_v<T, parser::CallExpr>) {
                 // Look up function return type
                 std::string func_name;
-                if (e.callee->is<parser::IdentExpr>()) {
-                    func_name = e.callee->as<parser::IdentExpr>().name;
-                } else if (e.callee->is<parser::PathExpr>()) {
-                    const auto& path = e.callee->as<parser::PathExpr>();
+                if (e.callee->template is<parser::IdentExpr>()) {
+                    func_name = e.callee->template as<parser::IdentExpr>().name;
+                } else if (e.callee->template is<parser::PathExpr>()) {
+                    const auto& path = e.callee->template as<parser::PathExpr>();
                     if (!path.path.segments.empty()) {
                         func_name = path.path.segments.back();
                     }
@@ -1069,16 +1070,16 @@ void collect_free_vars(const parser::Expr& expr, const std::set<std::string>& bo
                 // Create new scope for block
                 std::set<std::string> block_vars = bound_vars;
                 for (const auto& stmt : e.stmts) {
-                    if (stmt->is<parser::LetStmt>()) {
-                        const auto& let = stmt->as<parser::LetStmt>();
-                        if (let.pattern->is<parser::IdentPattern>()) {
-                            block_vars.insert(let.pattern->as<parser::IdentPattern>().name);
+                    if (stmt->template is<parser::LetStmt>()) {
+                        const auto& let = stmt->template as<parser::LetStmt>();
+                        if (let.pattern->template is<parser::IdentPattern>()) {
+                            block_vars.insert(let.pattern->template as<parser::IdentPattern>().name);
                         }
                         if (let.init) {
                             collect_free_vars(**let.init, block_vars, free_vars);
                         }
-                    } else if (stmt->is<parser::ExprStmt>()) {
-                        collect_free_vars(*stmt->as<parser::ExprStmt>().expr, block_vars,
+                    } else if (stmt->template is<parser::ExprStmt>()) {
+                        collect_free_vars(*stmt->template as<parser::ExprStmt>().expr, block_vars,
                                           free_vars);
                     }
                 }
@@ -1104,8 +1105,8 @@ void collect_free_vars(const parser::Expr& expr, const std::set<std::string>& bo
                 // Nested closure - parameters are bound within
                 std::set<std::string> closure_vars = bound_vars;
                 for (const auto& [pattern, _] : e.params) {
-                    if (pattern->is<parser::IdentPattern>()) {
-                        closure_vars.insert(pattern->as<parser::IdentPattern>().name);
+                    if (pattern->template is<parser::IdentPattern>()) {
+                        closure_vars.insert(pattern->template as<parser::IdentPattern>().name);
                     }
                 }
                 collect_free_vars(*e.body, closure_vars, free_vars);
@@ -1152,7 +1153,7 @@ auto HirBuilder::collect_captures(const parser::ClosureExpr& closure) -> std::ve
                     type = type_env_.resolve(v->type);
                 }
             }
-            captures.push_back(HirCapture{var, type, false}); // Assume immutable for now
+            captures.push_back(HirCapture{var, type, false, false}); // Assume immutable, by-ref for now
         }
     }
 
