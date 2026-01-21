@@ -12,8 +12,7 @@ pub func u8_to_binary_str(n: U8) -> Str {
     if n == 0 { return "0" }
     var result: Str = ""
     var val: U8 = n
-    loop {
-        if val == 0 { return result }
+    loop (val != 0) {
         if val % 2 == 1 {
             result = "1" + result
         } else {
@@ -21,6 +20,7 @@ pub func u8_to_binary_str(n: U8) -> Str {
         }
         val = val / 2
     }
+    return result
 }
 
 /// Converts a U16 to its binary string representation (without prefix).
@@ -28,8 +28,7 @@ pub func u16_to_binary_str(n: U16) -> Str {
     if n == 0 { return "0" }
     var result: Str = ""
     var val: U16 = n
-    loop {
-        if val == 0 { return result }
+    loop (val != 0) {
         if val % 2 == 1 {
             result = "1" + result
         } else {
@@ -37,6 +36,7 @@ pub func u16_to_binary_str(n: U16) -> Str {
         }
         val = val / 2
     }
+    return result
 }
 
 /// Converts a U32 to its binary string representation (without prefix).
@@ -44,8 +44,7 @@ pub func u32_to_binary_str(n: U32) -> Str {
     if n == 0 { return "0" }
     var result: Str = ""
     var val: U32 = n
-    loop {
-        if val == 0 { return result }
+    loop (val != 0) {
         if val % 2 == 1 {
             result = "1" + result
         } else {
@@ -53,6 +52,7 @@ pub func u32_to_binary_str(n: U32) -> Str {
         }
         val = val / 2
     }
+    return result
 }
 
 /// Converts a U64 to its binary string representation (without prefix).
@@ -60,8 +60,7 @@ pub func u64_to_binary_str(n: U64) -> Str {
     if n == 0 { return "0" }
     var result: Str = ""
     var val: U64 = n
-    loop {
-        if val == 0 { return result }
+    loop (val != 0) {
         if val % 2 == 1 {
             result = "1" + result
         } else {
@@ -69,6 +68,7 @@ pub func u64_to_binary_str(n: U64) -> Str {
         }
         val = val / 2
     }
+    return result
 }
 
 /// Converts an I8 to its binary string representation (two's complement).
@@ -100,12 +100,12 @@ pub func u64_to_octal_str(n: U64) -> Str {
     if n == 0 { return "0" }
     var result: Str = ""
     var val: U64 = n
-    loop {
-        if val == 0 { return result }
+    loop (val != 0) {
         let digit: U64 = val % 8
         result = digit_to_char(digit as I32) + result
         val = val / 8
     }
+    return result
 }
 
 // ============================================================================
@@ -118,12 +118,12 @@ pub func u64_to_hex_str(n: U64, upper: Bool) -> Str {
     if n == 0 { return "0" }
     var result: Str = ""
     var val: U64 = n
-    loop {
-        if val == 0 { return result }
+    loop (val != 0) {
         let digit: U64 = val % 16
         result = hex_digit(digit as I32, upper) + result
         val = val / 16
     }
+    return result
 }
 
 // ============================================================================
@@ -192,13 +192,11 @@ pub func repeat_string(s: Str, n: I64) -> Str {
     }
     var result: Str = ""
     var i: I64 = 0
-    loop {
-        if i >= n {
-            return result
-        }
+    loop (i < n) {
         result = result + s
         i = i + 1
     }
+    return result
 }
 
 /// Returns a slice of a string from start to end (exclusive).

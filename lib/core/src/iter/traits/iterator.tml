@@ -17,7 +17,7 @@ pub behavior Iterator {
     /// Consumes the iterator, counting the number of iterations.
     pub func count(mut this) -> I64 {
         let mut n: I64 = 0
-        loop {
+        loop (true) {
             when this.next() {
                 Just(_) => n = n + 1,
                 Nothing => return n
@@ -28,7 +28,7 @@ pub behavior Iterator {
     /// Consumes the iterator, returning the last element.
     pub func last(mut this) -> Maybe[This::Item] {
         let mut result: Maybe[This::Item] = Nothing
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => result = Just(x),
                 Nothing => return result
@@ -39,7 +39,7 @@ pub behavior Iterator {
     /// Returns the nth element of the iterator.
     pub func nth(mut this, n: I64) -> Maybe[This::Item] {
         let mut i: I64 = 0
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => {
                     if i == n {
@@ -54,7 +54,7 @@ pub behavior Iterator {
 
     /// Tests if every element of the iterator matches a predicate.
     pub func all(mut this, pred: func(This::Item) -> Bool) -> Bool {
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => {
                     if not pred(x) {
@@ -68,7 +68,7 @@ pub behavior Iterator {
 
     /// Tests if any element of the iterator matches a predicate.
     pub func any(mut this, pred: func(This::Item) -> Bool) -> Bool {
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => {
                     if pred(x) {
@@ -82,7 +82,7 @@ pub behavior Iterator {
 
     /// Searches for an element that satisfies a predicate.
     pub func find(mut this, pred: func(This::Item) -> Bool) -> Maybe[This::Item] {
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => {
                     if pred(x) {
@@ -97,7 +97,7 @@ pub behavior Iterator {
     /// Returns the position of the first element matching a predicate.
     pub func position(mut this, pred: func(This::Item) -> Bool) -> Maybe[I64] {
         let mut i: I64 = 0
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => {
                     if pred(x) {
@@ -112,7 +112,7 @@ pub behavior Iterator {
 
     /// Applies a function to each element of the iterator.
     pub func for_each(mut this, f: func(This::Item)) {
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => f(x),
                 Nothing => return
@@ -123,7 +123,7 @@ pub behavior Iterator {
     /// Folds every element into an accumulator by applying an operation.
     pub func fold[B](mut this, init: B, f: func(B, This::Item) -> B) -> B {
         let mut acc: B = init
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => acc = f(acc, x),
                 Nothing => return acc
@@ -139,15 +139,13 @@ pub behavior Iterator {
     /// Advances the iterator by `n` elements.
     pub func advance_by(mut this, n: I64) -> Outcome[Unit, I64] {
         let mut i: I64 = 0
-        loop {
-            if i >= n {
-                return Ok(())
-            }
+        loop (i < n) {
             when this.next() {
                 Just(_) => i = i + 1,
                 Nothing => return Err(n - i)
             }
         }
+        return Ok(())
     }
 
     /// Reduces the elements to a single one by repeatedly applying a reducing operation.
@@ -156,7 +154,7 @@ pub behavior Iterator {
             Nothing => return Nothing,
             Just(first) => {
                 let mut acc: This::Item = first
-                loop {
+                loop (true) {
                     when this.next() {
                         Just(x) => acc = f(acc, x),
                         Nothing => return Just(acc)
@@ -169,7 +167,7 @@ pub behavior Iterator {
     /// Folds with early termination on error.
     pub func try_fold[B, E](mut this, init: B, f: func(B, This::Item) -> Outcome[B, E]) -> Outcome[B, E] {
         let mut acc: B = init
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => {
                     when f(acc, x) {
@@ -184,7 +182,7 @@ pub behavior Iterator {
 
     /// Applies function to elements and returns first Some result.
     pub func find_map[B](mut this, f: func(This::Item) -> Maybe[B]) -> Maybe[B] {
-        loop {
+        loop (true) {
             when this.next() {
                 Just(x) => {
                     when f(x) {
@@ -203,7 +201,7 @@ pub behavior Iterator {
             Nothing => return Nothing,
             Just(first) => {
                 let mut max_val: This::Item = first
-                loop {
+                loop (true) {
                     when this.next() {
                         Just(x) => {
                             when compare(ref x, ref max_val) {
@@ -224,7 +222,7 @@ pub behavior Iterator {
             Nothing => return Nothing,
             Just(first) => {
                 let mut min_val: This::Item = first
-                loop {
+                loop (true) {
                     when this.next() {
                         Just(x) => {
                             when compare(ref x, ref min_val) {
@@ -241,7 +239,7 @@ pub behavior Iterator {
 
     /// Determines if the elements of this iterator are equal to those of another.
     pub func eq[I: Iterator](mut this, mut other: I) -> Bool where This::Item: PartialEq, I::Item = This::Item {
-        loop {
+        loop (true) {
             when this.next() {
                 Just(a) => {
                     when other.next() {
@@ -265,7 +263,7 @@ pub behavior Iterator {
 
     /// Lexicographically compares the elements of this iterator with those of another.
     pub func cmp[I: Iterator](mut this, mut other: I) -> Ordering where This::Item: Ord, I::Item = This::Item {
-        loop {
+        loop (true) {
             when this.next() {
                 Just(a) => {
                     when other.next() {

@@ -231,13 +231,13 @@ impl ByteStr {
     pub func is_ascii(this) -> Bool {
         var i: I64 = 0
         let len: I64 = this.bytes.len()
-        loop {
-            if i >= len { return true }
+        loop (i < len) {
             if this.bytes[i] > 127 {
                 return false
             }
             i = i + 1
         }
+        return true
     }
 
     /// Checks if this byte string starts with the given prefix.
@@ -254,13 +254,13 @@ impl ByteStr {
             return false
         }
         var i: I64 = 0
-        loop {
-            if i >= prefix_len { return true }
+        loop (i < prefix_len) {
             if this.bytes[i] != prefix[i] {
                 return false
             }
             i = i + 1
         }
+        return true
     }
 
     /// Checks if this byte string ends with the given suffix.
@@ -279,13 +279,13 @@ impl ByteStr {
         }
         let start: I64 = self_len - suffix_len
         var i: I64 = 0
-        loop {
-            if i >= suffix_len { return true }
+        loop (i < suffix_len) {
             if this.bytes[start + i] != suffix[i] {
                 return false
             }
             i = i + 1
         }
+        return true
     }
 
     /// Checks if this byte string contains the given needle.
@@ -324,14 +324,11 @@ impl ByteStr {
 
         let max_start: I64 = self_len - needle_len
         var i: I64 = 0
-        loop {
-            if i > max_start { return Nothing }
-
+        loop (i <= max_start) {
             // Check for match at position i
             var j: I64 = 0
             var matches: Bool = true
-            loop {
-                if j >= needle_len { break }
+            loop (j < needle_len) {
                 if this.bytes[i + j] != needle[j] {
                     matches = false
                     break
@@ -344,6 +341,7 @@ impl ByteStr {
             }
             i = i + 1
         }
+        return Nothing
     }
 
     /// Finds the last occurrence of the needle in this byte string.
@@ -362,14 +360,11 @@ impl ByteStr {
         }
 
         var i: I64 = self_len - needle_len
-        loop {
-            if i < 0 { return Nothing }
-
+        loop (i >= 0) {
             // Check for match at position i
             var j: I64 = 0
             var matches: Bool = true
-            loop {
-                if j >= needle_len { break }
+            loop (j < needle_len) {
                 if this.bytes[i + j] != needle[j] {
                     matches = false
                     break
@@ -382,6 +377,7 @@ impl ByteStr {
             }
             i = i - 1
         }
+        return Nothing
     }
 
     /// Returns a subslice of this byte string.
@@ -467,27 +463,27 @@ impl ByteStr {
     func find_non_ascii_whitespace_start(this) -> I64 {
         var i: I64 = 0
         let len: I64 = this.bytes.len()
-        loop {
-            if i >= len { return len }
+        loop (i < len) {
             let b: U8 = this.bytes[i]
             if not is_ascii_whitespace(b) {
                 return i
             }
             i = i + 1
         }
+        return len
     }
 
     // Helper: find last non-whitespace byte index + 1
     func find_non_ascii_whitespace_end(this) -> I64 {
         var i: I64 = this.bytes.len()
-        loop {
-            if i <= 0 { return 0 }
+        loop (i > 0) {
             i = i - 1
             let b: U8 = this.bytes[i]
             if not is_ascii_whitespace(b) {
                 return i + 1
             }
         }
+        return 0
     }
 
     /// Converts ASCII lowercase letters to uppercase in a new allocation.
@@ -497,8 +493,7 @@ impl ByteStr {
         let len: I64 = this.bytes.len()
         var result: [U8] = []
         var i: I64 = 0
-        loop {
-            if i >= len { break }
+        loop (i < len) {
             let b: U8 = this.bytes[i]
             if b >= 97 and b <= 122 {  // 'a' to 'z'
                 result.push(b - 32)
@@ -517,8 +512,7 @@ impl ByteStr {
         let len: I64 = this.bytes.len()
         var result: [U8] = []
         var i: I64 = 0
-        loop {
-            if i >= len { break }
+        loop (i < len) {
             let b: U8 = this.bytes[i]
             if b >= 65 and b <= 90 {  // 'A' to 'Z'
                 result.push(b + 32)
@@ -540,8 +534,7 @@ impl ByteStr {
         }
         var i: I64 = 0
         let len: I64 = this.bytes.len()
-        loop {
-            if i >= len { return true }
+        loop (i < len) {
             let a: U8 = this.bytes[i]
             let b: U8 = other.bytes[i]
             if to_ascii_lowercase_byte(a) != to_ascii_lowercase_byte(b) {
@@ -549,6 +542,7 @@ impl ByteStr {
             }
             i = i + 1
         }
+        return true
     }
 }
 
@@ -626,8 +620,7 @@ impl Iterator for ByteStrLines {
         var end: I64 = start
 
         // Find end of line
-        loop {
-            if end >= len { break }
+        loop (end < len) {
             let b: U8 = this.bytes[end]
             if b == 10 {  // '\n'
                 break
@@ -684,13 +677,13 @@ impl PartialEq for ByteStr {
         }
         var i: I64 = 0
         let len: I64 = this.bytes.len()
-        loop {
-            if i >= len { return true }
+        loop (i < len) {
             if this.bytes[i] != other.bytes[i] {
                 return false
             }
             i = i + 1
         }
+        return true
     }
 }
 
@@ -712,8 +705,7 @@ impl Ord for ByteStr {
         }
 
         var i: I64 = 0
-        loop {
-            if i >= min_len { break }
+        loop (i < min_len) {
             if this.bytes[i] < other.bytes[i] {
                 return Ordering::Less
             }
@@ -740,8 +732,7 @@ impl Hash for ByteStr {
         var h: I64 = -3750763034362895579  // FNV offset basis
         var i: I64 = 0
         let len: I64 = this.bytes.len()
-        loop {
-            if i >= len { break }
+        loop (i < len) {
             h = h ^ (this.bytes[i] as I64)
             h = h * 1099511628211  // FNV prime
             i = i + 1
@@ -765,8 +756,7 @@ impl Debug for ByteStr {
         var result: Str = "\""
         var i: I64 = 0
         let len: I64 = this.bytes.len()
-        loop {
-            if i >= len { break }
+        loop (i < len) {
             let b: U8 = this.bytes[i]
             if b >= 32 and b < 127 and b != 34 and b != 92 {
                 // Printable ASCII (except quote and backslash)

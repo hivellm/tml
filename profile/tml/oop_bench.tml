@@ -127,8 +127,7 @@ class Level4 {
 func bench_object_creation(iterations: I64) -> I64 {
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let p: Point = Point::with_coords(i as F64, (i + 1) as F64)
         sum = sum + p.distance_squared()
         i = i + 1
@@ -140,8 +139,7 @@ func bench_method_call(iterations: I64) -> I64 {
     let p: Point = Point::with_coords(3.0, 4.0)
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + p.distance_squared()
         i = i + 1
     }
@@ -151,8 +149,7 @@ func bench_method_call(iterations: I64) -> I64 {
 func bench_method_chaining(iterations: I64) -> I64 {
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let p: Point = Point::with_coords(1.0, 2.0)
         let result: Point = p.add(Point::with_coords(2.0, 3.0)).add(Point::with_coords(3.0, 4.0))
         sum = sum + result.distance_squared()
@@ -165,8 +162,7 @@ func bench_circle_dispatch(iterations: I64) -> I64 {
     let c: Circle = Circle::new(5.0)
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + c.area() + c.perimeter()
         i = i + 1
     }
@@ -177,8 +173,7 @@ func bench_rectangle_dispatch(iterations: I64) -> I64 {
     let r: Rectangle = Rectangle::new(3.0, 4.0)
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + r.area() + r.perimeter()
         i = i + 1
     }
@@ -189,8 +184,7 @@ func bench_deep_composition(iterations: I64) -> I64 {
     let obj: Level4 = Level4::new()
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + obj.compute(i % 100)
         i = i + 1
     }
@@ -200,8 +194,7 @@ func bench_deep_composition(iterations: I64) -> I64 {
 func bench_stack_allocation(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let p: Point = Point::with_coords(i as F64, i as F64)
         sum = sum + (p.x + p.y) as I64
         i = i + 1
@@ -216,8 +209,7 @@ func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64
 
     var best_ns: I64 = 9223372036854775807  // I64 max
     var run: I32 = 0
-    loop {
-        if run >= runs then { break }
+    loop (run < runs) {
         let start: I64 = time_ns()
         let _r: I64 = bench_fn(iterations)
         let end: I64 = time_ns()

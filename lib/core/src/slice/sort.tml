@@ -126,10 +126,7 @@ impl[T: Ord] MutSlice[T] {
         let pivot_ref: ref T = this.get(high).unwrap()
         let mut i: I64 = low - 1
         let mut j: I64 = low
-        loop {
-            if j >= high {
-                break
-            }
+        loop (j < high) {
             let current_ref: ref T = this.get(j).unwrap()
             if current_ref.le(pivot_ref) {
                 i = i + 1
@@ -204,10 +201,7 @@ impl[T] MutSlice[T] {
         let pivot_ref: ref T = this.get(high).unwrap()
         let mut i: I64 = low - 1
         let mut j: I64 = low
-        loop {
-            if j >= high {
-                break
-            }
+        loop (j < high) {
             let current_ref: ref T = this.get(j).unwrap()
             when compare(current_ref, pivot_ref) {
                 Less => {
@@ -287,10 +281,7 @@ impl[T: Ord] MutSlice[T] {
             return true
         }
         let mut i: I64 = 0
-        loop {
-            if i >= this.len - 1 {
-                break
-            }
+        loop (i < this.len - 1) {
             let a: ref T = this.get(i).unwrap()
             let b: ref T = this.get(i + 1).unwrap()
             if a.gt(b) {
@@ -316,10 +307,7 @@ impl[T] MutSlice[T] {
             return true
         }
         let mut i: I64 = 0
-        loop {
-            if i >= this.len - 1 {
-                break
-            }
+        loop (i < this.len - 1) {
             let a: ref T = this.get(i).unwrap()
             let b: ref T = this.get(i + 1).unwrap()
             when compare(a, b) {

@@ -85,7 +85,7 @@ func test_if_or_condition() -> I32 {
 @test
 func test_loop_with_immediate_break() -> I32 {
     let mut counter: I32 = 0
-    loop {
+    loop (true) {
         counter = counter + 1
         break
     }
@@ -96,9 +96,8 @@ func test_loop_with_immediate_break() -> I32 {
 @test
 func test_loop_counting() -> I32 {
     let mut counter: I32 = 0
-    loop {
+    loop (counter < 5) {
         counter = counter + 1
-        if counter >= 5 then break
     }
     assert_eq(counter, 5, "loop should count to 5")
     return 0
@@ -108,10 +107,9 @@ func test_loop_counting() -> I32 {
 func test_loop_sum() -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = 1
-    loop {
+    loop (i <= 10) {
         sum = sum + i
         i = i + 1
-        if i > 10 then break
     }
     // 1 + 2 + 3 + ... + 10 = 55
     assert_eq(sum, 55, "sum of 1 to 10 should be 55")
@@ -123,15 +121,13 @@ func test_nested_loops() -> I32 {
     let mut outer_count: I32 = 0
     let mut inner_count: I32 = 0
 
-    loop {
+    loop (outer_count < 2) {
         outer_count = outer_count + 1
         let mut j: I32 = 0
-        loop {
+        loop (j < 3) {
             j = j + 1
             inner_count = inner_count + 1
-            if j >= 3 then break
         }
-        if outer_count >= 2 then break
     }
     // outer runs 2 times, inner runs 3 times each = 6 total
     assert_eq(inner_count, 6, "nested loops should run 6 times total")
@@ -146,9 +142,8 @@ func test_nested_loops() -> I32 {
 func test_loop_with_continue() -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = 0
-    loop {
+    loop (i < 10) {
         i = i + 1
-        if i > 10 then break
         // Skip even numbers
         if i % 2 == 0 then continue
         sum = sum + i
@@ -162,9 +157,8 @@ func test_loop_with_continue() -> I32 {
 func test_loop_skip_multiples() -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = 0
-    loop {
+    loop (i < 15) {
         i = i + 1
-        if i > 15 then break
         // Skip multiples of 3
         if i % 3 == 0 then continue
         sum = sum + i
@@ -271,8 +265,7 @@ func fibonacci(n: I32) -> I32 {
     let mut a: I32 = 0
     let mut b: I32 = 1
     let mut i: I32 = 2
-    loop {
-        if i > n then break
+    loop (i <= n) {
         let temp: I32 = a + b
         a = b
         b = temp
@@ -308,8 +301,7 @@ func factorial(n: I32) -> I32 {
     }
     let mut result: I32 = 1
     let mut i: I32 = 2
-    loop {
-        if i > n then break
+    loop (i <= n) {
         result = result * i
         i = i + 1
     }
@@ -341,8 +333,7 @@ func is_prime(n: I32) -> Bool {
         return false
     }
     let mut i: I32 = 3
-    loop {
-        if i * i > n then break
+    loop (i * i <= n) {
         if n % i == 0 {
             return false
         }
@@ -379,11 +370,8 @@ func test_is_prime_larger() -> I32 {
 func test_break_in_nested_if() -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = 0
-    loop {
+    loop (i < 10) {
         i = i + 1
-        if i > 10 {
-            break
-        }
         sum = sum + i
     }
     assert_eq(sum, 55, "sum should be 55")
@@ -394,7 +382,7 @@ func test_break_in_nested_if() -> I32 {
 func test_multiple_breaks() -> I32 {
     let mut result: I32 = 0
     let mut i: I32 = 0
-    loop {
+    loop (true) {
         i = i + 1
         if i == 3 {
             result = 30

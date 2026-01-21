@@ -26,6 +26,7 @@
 
 #include <stack>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace tml::mir {
 
@@ -38,6 +39,7 @@ struct BuildContext {
     Function* current_func = nullptr;                 ///< Function being built.
     uint32_t current_block = 0;                       ///< Current basic block ID.
     std::unordered_map<std::string, Value> variables; ///< Variable -> SSA value.
+    std::unordered_set<std::string> volatile_vars;    ///< Set of volatile variable names.
 
     // Loop context for break/continue
     struct LoopContext {

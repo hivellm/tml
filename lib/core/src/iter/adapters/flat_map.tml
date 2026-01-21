@@ -33,7 +33,7 @@ impl[I: Iterator, F, U: Iterator] Iterator for FlatMap[I, F, U] where F = func(I
     type Item = U::Item
 
     pub func next(mut this) -> Maybe[U::Item] {
-        loop {
+        loop (true) {
             when this.current {
                 Just(inner) => {
                     when inner.next() {

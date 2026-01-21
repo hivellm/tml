@@ -400,7 +400,7 @@ TEST_F(FormatterTest, WhenWithGuard) {
 
 TEST_F(FormatterTest, LoopExpression) {
     std::string code = R"(func f() {
-    loop {
+    loop (true) {
         break
     }
 }
@@ -410,7 +410,7 @@ TEST_F(FormatterTest, LoopExpression) {
 
 TEST_F(FormatterTest, LoopWithContinue) {
     std::string code = R"(func f() {
-    loop {
+    loop (true) {
         continue
     }
 }
@@ -772,7 +772,7 @@ TEST_F(FormatterTest, RoundTripWithControlFlow) {
 
 TEST_F(FormatterTest, RoundTripWithLoop) {
     std::string code = R"(func count() {
-    loop {
+    loop (true) {
         break
     }
 }

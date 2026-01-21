@@ -38,8 +38,7 @@ func run_and_print(name: Str, iterations: I64, total_ns: I64) {
 func bench_parse_tiny(iterations: I64) -> I64 {
     let json_str: Str = get_tiny_json()
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h: I64 = json::parse_fast(json_str)
         json::free(h)
         i = i + 1
@@ -51,8 +50,7 @@ func bench_parse_tiny(iterations: I64) -> I64 {
 func bench_parse_small(iterations: I64) -> I64 {
     let json_str: Str = get_small_json()
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h: I64 = json::parse_fast(json_str)
         json::free(h)
         i = i + 1
@@ -64,8 +62,7 @@ func bench_parse_small(iterations: I64) -> I64 {
 func bench_parse_medium(iterations: I64) -> I64 {
     let json_str: Str = get_medium_json()
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h: I64 = json::parse_fast(json_str)
         json::free(h)
         i = i + 1
@@ -77,8 +74,7 @@ func bench_parse_medium(iterations: I64) -> I64 {
 func bench_parse_standard(iterations: I64) -> I64 {
     let json_str: Str = get_small_json()
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h: I64 = json::parse(json_str)
         json::free(h)
         i = i + 1
@@ -91,8 +87,7 @@ func bench_field_access(iterations: I64) -> I64 {
     let json_str: Str = get_small_json()
     var total_age: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h: I64 = json::parse_fast(json_str)
         let age: I64 = json::object_get_i64(h, "age")
         total_age = total_age + age
@@ -107,14 +102,12 @@ func bench_array_iterate(iterations: I64) -> I64 {
     let json_str: Str = get_small_json()
     var total: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h: I64 = json::parse_fast(json_str)
         let scores: I64 = json::object_get(h, "scores")
         let len: I64 = json::array_len(scores)
         var j: I64 = 0
-        loop {
-            if j >= len then { break }
+        loop (j < len) {
             let val: I64 = json::array_get_i64(scores, j)
             total = total + val
             j = j + 1
@@ -131,8 +124,7 @@ func bench_nested_access(iterations: I64) -> I64 {
     let json_str: Str = get_small_json()
     var count: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h: I64 = json::parse_fast(json_str)
         let addr: I64 = json::object_get(h, "address")
         let city: Str = json::object_get_string(addr, "city")
@@ -151,8 +143,7 @@ func bench_parse_validate(iterations: I64) -> I64 {
     let json_str: Str = get_small_json()
     var valid: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h: I64 = json::parse_fast(json_str)
         let t: I32 = json::get_type(h)
         if t == 6 then {  // Object type
@@ -187,8 +178,7 @@ func bench_object_traverse(iterations: I64) -> I64 {
     let json_str: Str = get_small_json()
     var keys: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h: I64 = json::parse_fast(json_str)
         let len: I64 = json::object_len(h)
         keys = keys + len
@@ -210,8 +200,7 @@ pub func main() -> I32 {
 
     // Warmup
     var warmup: I64 = 0
-    loop {
-        if warmup >= 100 then { break }
+    loop (warmup < 100) {
         let h: I64 = json::parse_fast(get_tiny_json())
         json::free(h)
         warmup = warmup + 1

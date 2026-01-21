@@ -117,8 +117,7 @@ func test_atomic_increment_pattern() -> I32 {
 
     // Increment 10 times
     let mut i: I32 = 0
-    loop {
-        if i >= 10 then break
+    loop (i < 10) {
         atomic_add(ptr, 1)
         i = i + 1
     }

@@ -78,8 +78,7 @@ func run_and_print(name: Str, iterations: I64, total_ns: I64) {
 func bench_stack_struct_small(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let s: SmallStruct = SmallStruct::create(i, i + 1)
         sum = sum + s.a + s.b
         i = i + 1
@@ -91,8 +90,7 @@ func bench_stack_struct_small(iterations: I64) -> I64 {
 func bench_stack_struct_medium(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let s: MediumStruct = MediumStruct::create(i, i + 1, i + 2, i + 3)
         sum = sum + s.a + s.d
         i = i + 1
@@ -104,16 +102,14 @@ func bench_stack_struct_medium(iterations: I64) -> I64 {
 func bench_sequential_access(iterations: I64) -> I64 {
     var data: [I64; 10000] = [0; 10000]
     var i: I64 = 0
-    loop {
-        if i >= 10000 then { break }
+    loop (i < 10000) {
         data[i as U64] = i
         i = i + 1
     }
 
     var sum: I64 = 0
     i = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let idx: U64 = (i % 10000) as U64
         sum = sum + data[idx]
         i = i + 1
@@ -127,8 +123,7 @@ func bench_random_access(iterations: I64) -> I64 {
     var indices: [I64; 10000] = [0; 10000]
 
     var i: I64 = 0
-    loop {
-        if i >= 10000 then { break }
+    loop (i < 10000) {
         data[i as U64] = i
         indices[i as U64] = (i * 7919 + 1) % 10000
         i = i + 1
@@ -136,8 +131,7 @@ func bench_random_access(iterations: I64) -> I64 {
 
     var sum: I64 = 0
     i = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let idx_pos: U64 = (i % 10000) as U64
         let idx: U64 = indices[idx_pos] as U64
         sum = sum + data[idx]
@@ -151,8 +145,7 @@ func bench_struct_field_access(iterations: I64) -> I64 {
     let s: MediumStruct = MediumStruct::create(1, 2, 3, 4)
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + s.a + s.b + s.c + s.d
         i = i + 1
     }
@@ -164,8 +157,7 @@ func bench_nested_struct_access(iterations: I64) -> F64 {
     let tri: Triangle = Triangle::create()
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + tri.ax + tri.by + tri.cx
         i = i + 1
     }
@@ -178,18 +170,15 @@ func bench_array_copy(iterations: I64) -> I64 {
     var dst: [I64; 1000] = [0; 1000]
 
     var i: I64 = 0
-    loop {
-        if i >= 1000 then { break }
+    loop (i < 1000) {
         src[i as U64] = i
         i = i + 1
     }
 
     var round: I64 = 0
-    loop {
-        if round >= iterations / 1000 then { break }
+    loop (round < iterations / 1000) {
         i = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 1000) {
             dst[i as U64] = src[i as U64]
             i = i + 1
         }
@@ -202,11 +191,9 @@ func bench_array_copy(iterations: I64) -> I64 {
 func bench_array_fill(iterations: I64) -> I64 {
     var arr: [I64; 1000] = [0; 1000]
     var round: I64 = 0
-    loop {
-        if round >= iterations / 1000 then { break }
+    loop (round < iterations / 1000) {
         var i: I64 = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 1000) {
             arr[i as U64] = round
             i = i + 1
         }
@@ -219,8 +206,7 @@ func bench_array_fill(iterations: I64) -> I64 {
 func bench_point_creation(iterations: I64) -> F64 {
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let p: Point = Point::create((i as F64), (i as F64) + 1.0)
         sum = sum + p.x + p.y
         i = i + 1
@@ -241,8 +227,7 @@ pub func main() -> I32 {
 
     // Warmup
     var warmup: I64 = 0
-    loop {
-        if warmup >= 100 then { break }
+    loop (warmup < 100) {
         let s: SmallStruct = SmallStruct::create(1, 2)
         let _: I64 = s.a + s.b
         warmup = warmup + 1

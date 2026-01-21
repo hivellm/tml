@@ -152,8 +152,7 @@ pub func short_circuit_or_true() -> Bool {
 func expensive_bool_computation() -> Bool {
     let mut sum: I32 = 0
     let mut i: I32 = 0
-    loop {
-        if i >= 1000 { break }
+    loop (i < 1000) {
         sum = sum + i
         i = i + 1
     }
@@ -242,8 +241,7 @@ pub func loop_invariant(n: I32) -> I32 {
     let constant: I32 = 10 * 20  // Should be computed once before loop
     let mut sum: I32 = 0
     let mut i: I32 = 0
-    loop {
-        if i >= n { break }
+    loop (i < n) {
         sum = sum + constant
         i = i + 1
     }
@@ -254,8 +252,7 @@ pub func loop_invariant(n: I32) -> I32 {
 pub func loop_with_dead_code(n: I32) -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = 0
-    loop {
-        if i >= n { break }
+    loop (i < n) {
         let unused: I32 = i * 1000  // Dead code in loop body
         sum = sum + i
         i = i + 1

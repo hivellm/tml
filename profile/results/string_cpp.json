@@ -5,24 +5,24 @@
     {
       "name": "Concat Small (3 strings)",
       "iterations": 1000000,
-      "total_ns": 974600,
+      "total_ns": 999900,
       "per_op_ns": 0,
-      "ops_per_sec": 1026061974
+      "ops_per_sec": 1000100010
     },
     {
       "name": "Concat Loop (with reserve)",
       "iterations": 100000,
-      "total_ns": 118800,
+      "total_ns": 115600,
       "per_op_ns": 1,
-      "ops_per_sec": 841750841,
+      "ops_per_sec": 865051903,
       "notes": "O(n) amortized"
     },
     {
       "name": "Concat Loop (naive)",
       "iterations": 100000,
-      "total_ns": 194600,
-      "per_op_ns": 1,
-      "ops_per_sec": 513874614,
+      "total_ns": 248800,
+      "per_op_ns": 2,
+      "ops_per_sec": 401929260,
       "notes": "O(n^2) worst case"
     },
     {
@@ -49,37 +49,37 @@
     {
       "name": "Int to String",
       "iterations": 1000000,
-      "total_ns": 5935700,
+      "total_ns": 5952900,
       "per_op_ns": 5,
-      "ops_per_sec": 168472126
+      "ops_per_sec": 167985351
     },
     {
       "name": "String Copy",
       "iterations": 1000000,
-      "total_ns": 743100,
+      "total_ns": 748100,
       "per_op_ns": 0,
-      "ops_per_sec": 1345713901
+      "ops_per_sec": 1336719689
     },
     {
       "name": "String Repeat (50 chars)",
       "iterations": 1000000,
-      "total_ns": 22284000,
+      "total_ns": 22269500,
       "per_op_ns": 22,
-      "ops_per_sec": 44875246
+      "ops_per_sec": 44904465
     },
     {
       "name": "Sprintf Formatting",
       "iterations": 1000000,
-      "total_ns": 79682700,
-      "per_op_ns": 79,
-      "ops_per_sec": 12549775
+      "total_ns": 80328200,
+      "per_op_ns": 80,
+      "ops_per_sec": 12448928
     },
     {
       "name": "Log Building",
       "iterations": 10000,
-      "total_ns": 66100,
-      "per_op_ns": 6,
-      "ops_per_sec": 151285930
+      "total_ns": 97400,
+      "per_op_ns": 9,
+      "ops_per_sec": 102669404
     }
   ]
 }

@@ -34,7 +34,7 @@ impl[I: Iterator, P] Iterator for SkipWhile[I, P] where P = func(ref I::Item) ->
             return this.iter.next()
         }
         // Still in skipping phase
-        loop {
+        loop (true) {
             when this.iter.next() {
                 Just(item) => {
                     if not this.pred(ref item) {

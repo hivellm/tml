@@ -225,7 +225,7 @@
         },
         {
           "name": "keyword.other.tml",
-          "match": "\\b(this|This|ref|mut|dyn|lowlevel|unsafe|async|await|with|quote|as|is)\\b"
+          "match": "\\b(this|This|ref|mut|volatile|dyn|lowlevel|unsafe|async|await|with|quote|as|is)\\b"
         },
         {
           "name": "keyword.control.range.tml",

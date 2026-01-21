@@ -66,6 +66,9 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
     if (is_err(let_tok))
         return unwrap_err(let_tok);
 
+    // Check for 'volatile' modifier
+    bool is_volatile = match(lexer::TokenKind::KwVolatile);
+
     auto pattern = parse_pattern();
     if (is_err(pattern))
         return unwrap_err(pattern);
@@ -99,7 +102,8 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
     auto let_stmt = LetStmt{.pattern = std::move(unwrap(pattern)),
                             .type_annotation = std::move(type_annotation),
                             .init = std::move(init),
-                            .span = SourceSpan::merge(start_span, end_span)};
+                            .span = SourceSpan::merge(start_span, end_span),
+                            .is_volatile = is_volatile};
 
     return make_box<Stmt>(
         Stmt{.kind = std::move(let_stmt), .span = SourceSpan::merge(start_span, end_span)});
@@ -112,6 +116,9 @@ auto Parser::parse_var_stmt() -> Result<StmtPtr, ParseError> {
     auto var_tok = expect(lexer::TokenKind::KwVar, "Expected 'var'");
     if (is_err(var_tok))
         return unwrap_err(var_tok);
+
+    // Check for 'volatile' modifier
+    bool is_volatile = match(lexer::TokenKind::KwVolatile);
 
     // Parse variable name (identifier pattern)
     auto name_tok = expect(lexer::TokenKind::Identifier, "Expected variable name after 'var'");
@@ -152,7 +159,8 @@ auto Parser::parse_var_stmt() -> Result<StmtPtr, ParseError> {
     auto let_stmt = LetStmt{.pattern = std::move(pattern),
                             .type_annotation = std::move(type_annotation),
                             .init = std::move(init),
-                            .span = SourceSpan::merge(start_span, end_span)};
+                            .span = SourceSpan::merge(start_span, end_span),
+                            .is_volatile = is_volatile};
 
     return make_box<Stmt>(
         Stmt{.kind = std::move(let_stmt), .span = SourceSpan::merge(start_span, end_span)});

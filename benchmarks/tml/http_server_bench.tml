@@ -256,8 +256,7 @@ pub class Router {
         let mut hash: I32 = 0 as I32
         let len: I64 = path.len()
         let mut i: I64 = 0
-        loop {
-            if i >= len { break }
+        loop (i < len) {
             hash = (hash * (31 as I32) + (1 as I32)) % (100 as I32)
             i = i + 1
         }
@@ -372,8 +371,7 @@ pub func bench_get_requests(n: I64) -> I64 {
     let mut successful: I64 = 0
     let mut i: I64 = 0
 
-    loop {
-        if i >= n { break }
+    loop (i < n) {
 
         let req: HttpRequest = HttpRequest::create(METHOD_GET, "/api/users", i)
         let resp: HttpResponse = handle_request(ref req, mut ref stats)
@@ -395,8 +393,7 @@ pub func bench_post_requests(n: I64) -> I64 {
     let body: Str = "{\"name\": \"TestUser\", \"email\": \"test@example.com\", \"age\": 25}"
     let mut i: I64 = 0
 
-    loop {
-        if i >= n { break }
+    loop (i < n) {
 
         let req: HttpRequest = HttpRequest::create_with_body(METHOD_POST, "/api/users", body, i)
         let resp: HttpResponse = handle_request(ref req, mut ref stats)
@@ -417,8 +414,7 @@ pub func bench_mixed_workload(n: I64) -> I64 {
     let post_body: Str = "{\"data\": \"payload\"}"
     let mut i: I64 = 0
 
-    loop {
-        if i >= n { break }
+    loop (i < n) {
 
         let request_type: I64 = i % 10
         let req: HttpRequest = if request_type < 7 {
@@ -443,8 +439,7 @@ pub func bench_with_context(n: I64) -> I64 {
     let mut completed: I64 = 0
     let mut i: I64 = 0
 
-    loop {
-        if i >= n { break }
+    loop (i < n) {
 
         let req: HttpRequest = HttpRequest::create(METHOD_GET, "/api/benchmark", i)
         let mut ctx: RequestContext = RequestContext::create(req)
@@ -467,8 +462,7 @@ pub func bench_object_creation(n: I64) -> I64 {
     let mut count: I64 = 0
     let mut i: I64 = 0
 
-    loop {
-        if i >= n { break }
+    loop (i < n) {
 
         let req: HttpRequest = HttpRequest::create_with_body(
             METHOD_POST,
@@ -501,8 +495,7 @@ pub func bench_routing(n: I64) -> I64 {
     let mut router: Router = Router::create()
 
     let mut r: I64 = 0
-    loop {
-        if r >= 10 { break }
+    loop (r < 10) {
         router.add_route()
         r = r + 1
     }
@@ -510,8 +503,7 @@ pub func bench_routing(n: I64) -> I64 {
     let mut matches: I64 = 0
     let mut i: I64 = 0
 
-    loop {
-        if i >= n { break }
+    loop (i < n) {
 
         let route_idx: I32 = router.match_route("/api/endpoint")
         if route_idx >= (0 as I32) and route_idx < (10 as I32) {

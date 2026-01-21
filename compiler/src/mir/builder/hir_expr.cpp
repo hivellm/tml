@@ -718,6 +718,23 @@ auto HirMirBuilder::build_block(const hir::HirBlockExpr& block) -> Value {
 // ============================================================================
 
 auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
+    // loop (condition) { body } - conditional loop, same semantics as while
+
+    // Handle loop variable declaration: loop (var i: I64 < N)
+    // The variable is initialized to 0 before the loop starts
+    if (loop.loop_var.has_value()) {
+        const auto& var_decl = *loop.loop_var;
+        MirTypePtr mir_type = convert_type(var_decl.type);
+
+        // Create constant 0 for initialization
+        // Determine bit width from the type (default to 64-bit signed)
+        int bit_width = (mir_type && mir_type->bit_width() > 0) ? mir_type->bit_width() : 64;
+        Value zero_val = const_int(0, bit_width, true);
+
+        // Set the variable to 0
+        set_variable(var_decl.name, zero_val);
+    }
+
     uint32_t entry_block = ctx_.current_block;
     uint32_t header_block = create_block("loop.header");
     uint32_t body_block = create_block("loop.body");
@@ -733,25 +750,27 @@ auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
     switch_to_block(header_block);
 
     // Create phi nodes for all variables that exist before the loop
-    // These will merge pre-loop values with values from the back-edge
-    std::unordered_map<std::string, ValueId> phi_map; // var name -> phi value id
+    std::unordered_map<std::string, ValueId> phi_map;
     for (const auto& [var_name, var_value] : pre_loop_vars) {
         if (var_value.id == INVALID_VALUE)
             continue;
 
         PhiInst phi;
-        phi.incoming = {{var_value, entry_block}}; // Initial value from before loop
+        phi.incoming = {{var_value, entry_block}};
         phi.result_type = var_value.type;
         Value phi_result = emit(phi, var_value.type);
         phi_map[var_name] = phi_result.id;
-        set_variable(var_name, phi_result); // Variable now points to phi
+        set_variable(var_name, phi_result);
     }
 
-    // Push loop context
+    // Save header variable values (for condition-false path to exit)
+    auto header_vars = ctx_.variables;
+
     ctx_.loop_stack.push({header_block, exit_block, std::nullopt, {}});
 
-    // Header branches to body
-    emit_branch(body_block);
+    // Header with condition - evaluate and branch conditionally
+    Value cond = build_expr(loop.condition);
+    emit_cond_branch(cond, body_block, exit_block);
 
     // Body
     switch_to_block(body_block);
@@ -768,10 +787,8 @@ auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
         if (header) {
             for (auto& inst : header->instructions) {
                 if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
-                    // Find which variable this phi is for
                     for (const auto& [var_name, phi_id] : phi_map) {
                         if (inst.result == phi_id) {
-                            // Add back-edge value (current value of the variable after body)
                             Value current_val = get_variable(var_name);
                             phi->incoming.push_back({current_val, body_end_block});
                             break;
@@ -786,40 +803,39 @@ auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
     // Get break sources before popping loop context
     auto break_sources = ctx_.loop_stack.top().break_sources;
 
-    // Exit block
+    // Exit
     switch_to_block(exit_block);
     ctx_.loop_stack.pop();
 
-    // Restore variable values at exit - loop can only exit via break
-    // If there are break sources, use their variable values
-    if (!break_sources.empty()) {
-        // Save the variables that existed before the loop (from loop header PHIs)
-        auto header_vars = ctx_.variables;
+    // After a loop, variables used after the loop need correct values.
+    // The exit block can be reached from:
+    // 1. Header (condition false) - variables have header_vars values
+    // 2. Break statements - variables have break_sources values
+    for (const auto& [var_name, header_val] : header_vars) {
+        if (header_val.id == INVALID_VALUE)
+            continue;
 
-        for (const auto& [var_name, header_val] : header_vars) {
-            if (header_val.id == INVALID_VALUE)
-                continue;
-
-            // Check if we need a PHI (multiple breaks with different values)
+        if (break_sources.empty()) {
+            // No breaks: the only path to exit is from header, use header values
+            set_variable(var_name, header_val);
+        } else {
+            // Check if any break source has a different value for this variable
             bool needs_phi = false;
-            ValueId first_break_val = INVALID_VALUE;
-
             for (const auto& [break_block, break_vars] : break_sources) {
                 auto it = break_vars.find(var_name);
-                if (it != break_vars.end()) {
-                    if (first_break_val == INVALID_VALUE) {
-                        first_break_val = it->second.id;
-                    } else if (it->second.id != first_break_val) {
-                        needs_phi = true;
-                        break;
-                    }
+                if (it != break_vars.end() && it->second.id != header_val.id) {
+                    needs_phi = true;
+                    break;
                 }
             }
 
             if (needs_phi) {
-                // Multiple breaks with different values - need a PHI
+                // Multiple paths with different values - need a PHI
                 PhiInst exit_phi;
                 exit_phi.result_type = header_val.type;
+
+                // Add header path (condition was false)
+                exit_phi.incoming.push_back({header_val, header_block});
 
                 for (const auto& [break_block, break_vars] : break_sources) {
                     auto it = break_vars.find(var_name);
@@ -832,18 +848,14 @@ auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
 
                 Value exit_val = emit(exit_phi, header_val.type);
                 set_variable(var_name, exit_val);
-            } else if (break_sources.size() == 1) {
-                // Single break - use its value directly
-                const auto& [break_block, break_vars] = break_sources[0];
-                auto it = break_vars.find(var_name);
-                if (it != break_vars.end()) {
-                    set_variable(var_name, it->second);
-                }
+            } else {
+                // All paths have same value or only header path exists
+                set_variable(var_name, header_val);
             }
         }
     }
 
-    // Loop returns unit unless broken with value
+    // Loop returns unit
     return const_unit();
 }
 
@@ -1587,6 +1599,20 @@ auto HirMirBuilder::build_assign(const hir::HirAssignExpr& assign) -> Value {
     // Get the target as pointer
     // For simple variable assignment, update the variable map
     if (auto* var = std::get_if<hir::HirVarExpr>(&assign.target->kind)) {
+        // Check if this is a volatile variable - need to emit volatile store
+        if (ctx_.volatile_vars.count(var->name) > 0) {
+            auto it = ctx_.variables.find(var->name);
+            if (it != ctx_.variables.end()) {
+                Value alloca_ptr = it->second;
+                StoreInst store;
+                store.ptr = alloca_ptr;
+                store.value = rhs;
+                store.value_type = rhs.type;
+                store.is_volatile = true;
+                emit_void(store);
+                return const_unit();
+            }
+        }
         set_variable(var->name, rhs);
         return const_unit();
     }
@@ -1621,6 +1647,20 @@ auto HirMirBuilder::build_compound_assign(const hir::HirCompoundAssignExpr& assi
 
     // Store back
     if (auto* var = std::get_if<hir::HirVarExpr>(&assign.target->kind)) {
+        // Check if this is a volatile variable - need to emit volatile store
+        if (ctx_.volatile_vars.count(var->name) > 0) {
+            auto it = ctx_.variables.find(var->name);
+            if (it != ctx_.variables.end()) {
+                Value alloca_ptr = it->second;
+                StoreInst store;
+                store.ptr = alloca_ptr;
+                store.value = result;
+                store.value_type = result.type;
+                store.is_volatile = true;
+                emit_void(store);
+                return const_unit();
+            }
+        }
         set_variable(var->name, result);
     }
 

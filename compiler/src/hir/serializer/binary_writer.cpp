@@ -568,6 +568,14 @@ void HirBinaryWriter::write_expr(const HirExpr& expr) {
                 if (e.label) {
                     write_string(*e.label);
                 }
+                // Optional loop variable declaration
+                write_bool(e.loop_var.has_value());
+                if (e.loop_var) {
+                    write_string(e.loop_var->name);
+                    write_type(e.loop_var->type);
+                    write_span(e.loop_var->span);
+                }
+                write_expr_ptr(e.condition);
                 write_expr_ptr(e.body);
                 write_type(e.type);
                 write_span(e.span);

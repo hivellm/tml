@@ -387,10 +387,7 @@ func test_async_factorial_10() {
 async func async_sum_loop(n: I64) -> I64 {
     let mut sum: I64 = 0
     let mut i: I64 = 1
-    loop {
-        if i > n {
-            break
-        }
+    loop (i <= n) {
         let current: I64 = await async_add(sum, i)
         sum = current
         i = i + 1

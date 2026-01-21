@@ -190,8 +190,7 @@ impl Buffer {
 
         // Copy bytes
         var i: I64 = 0
-        loop {
-            if i >= count { break }
+        loop (i < count) {
             lowlevel { (this.data as Ptr[U8])[this.len + i] = bytes[i] }
             i = i + 1
         }
@@ -217,8 +216,7 @@ impl Buffer {
 
         // Copy from view
         var i: I64 = 0
-        loop {
-            if i >= count { break }
+        loop (i < count) {
             let byte: U8 = view.get(i)
             lowlevel { (this.data as Ptr[U8])[this.len + i] = byte }
             i = i + 1
@@ -247,8 +245,7 @@ impl Buffer {
         let count: I64 = min_i64(available, dest.len())
 
         var i: I64 = 0
-        loop {
-            if i >= count { break }
+        loop (i < count) {
             dest[i] = lowlevel { (this.data as Ptr[U8])[offset + i] }
             i = i + 1
         }
@@ -282,8 +279,7 @@ impl Buffer {
     pub func reset(mut this) {
         if this.data != 0 and this.capacity > 0 {
             var i: I64 = 0
-            loop {
-                if i >= this.capacity { break }
+            loop (i < this.capacity) {
                 lowlevel { (this.data as Ptr[U8])[i] = 0 }
                 i = i + 1
             }
@@ -456,8 +452,7 @@ impl BufferView {
     pub func copy_to(this, dest: mut ref [U8]) -> I64 {
         let count: I64 = min_i64(this.len, dest.len())
         var i: I64 = 0
-        loop {
-            if i >= count { break }
+        loop (i < count) {
             dest[i] = lowlevel { (this.data as Ptr[U8])[i] }
             i = i + 1
         }
@@ -471,8 +466,7 @@ impl BufferView {
         }
 
         var i: I64 = 0
-        loop {
-            if i >= this.len { break }
+        loop (i < this.len) {
             if this.get(i) != other.get(i) {
                 return false
             }
@@ -484,8 +478,7 @@ impl BufferView {
     /// Finds the first occurrence of a byte.
     pub func find_byte(this, byte: U8) -> Maybe[I64] {
         var i: I64 = 0
-        loop {
-            if i >= this.len { break }
+        loop (i < this.len) {
             if this.get(i) == byte {
                 return Just(i)
             }
@@ -513,8 +506,7 @@ impl BufferView {
     /// Returns true if all bytes are ASCII.
     pub func is_ascii(this) -> Bool {
         var i: I64 = 0
-        loop {
-            if i >= this.len { break }
+        loop (i < this.len) {
             if this.get(i) > 127 {
                 return false
             }
@@ -660,9 +652,7 @@ impl BufferPool {
     pub func warm_up(mut this, count: I64) {
         let n: I64 = min_i64(count, this.max_buffers)
         var i: I64 = 0
-        loop {
-            if i >= n { break }
-            if this.buffers.len() >= this.max_buffers { break }
+        loop (i < n and this.buffers.len() < this.max_buffers) {
             this.buffers.push(Buffer::new(this.buffer_capacity))
             i = i + 1
         }
@@ -722,7 +712,7 @@ impl BufferPool {
 
     /// Clears all buffers from the pool.
     pub func clear(mut this) {
-        loop {
+        loop (true) {
             when this.buffers.pop() {
                 Just(mut buf) => buf.free()
                 Nothing => break
@@ -732,8 +722,7 @@ impl BufferPool {
 
     /// Shrinks the pool to the specified size.
     pub func shrink_to(mut this, size: I64) {
-        loop {
-            if this.buffers.len() <= size { break }
+        loop (this.buffers.len() > size) {
             when this.buffers.pop() {
                 Just(mut buf) => buf.free()
                 Nothing => break
@@ -824,8 +813,7 @@ func test_buffer_growth() {
 
     // Write more than initial capacity
     var i: I64 = 0
-    loop {
-        if i >= 200 { break }
+    loop (i < 200) {
         buf.write_byte((i and 0xFF) as U8)
         i = i + 1
     }

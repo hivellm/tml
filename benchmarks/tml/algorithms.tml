@@ -17,10 +17,7 @@ pub func factorial_iterative(n: I32) -> I32 {
     let mut result: I32 = 1
     let mut i: I32 = 2
 
-    loop {
-        if i > n {
-            break
-        }
+    loop (i <= n) {
         result = result * i
         i = i + 1
     }
@@ -43,10 +40,7 @@ pub func gcd_iterative(a: I32, b: I32) -> I32 {
     let mut x: I32 = a
     let mut y: I32 = b
 
-    loop {
-        if y == 0 {
-            break
-        }
+    loop (y != 0) {
         let temp: I32 = y
         y = x % y
         x = temp
@@ -63,10 +57,7 @@ pub func power_naive(x: I32, exp: I32) -> I32 {
     let mut result: I32 = 1
     let mut i: I32 = 0
 
-    loop {
-        if i >= exp {
-            break
-        }
+    loop (i < exp) {
         result = result * x
         i = i + 1
     }
@@ -106,10 +97,7 @@ pub func is_prime(n: I32) -> Bool {
     }
 
     let mut i: I32 = 5
-    loop {
-        if i * i > n {
-            break
-        }
+    loop (i * i <= n) {
         if n % i == 0 or n % (i + 2) == 0 {
             return false
         }
@@ -123,10 +111,7 @@ pub func count_primes(limit: I32) -> I32 {
     let mut count: I32 = 0
     let mut n: I32 = 2
 
-    loop {
-        if n > limit {
-            break
-        }
+    loop (n <= limit) {
         if is_prime(n) {
             count = count + 1
         }
@@ -144,10 +129,7 @@ pub func sum_range(start: I32, end: I32) -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = start
 
-    loop {
-        if i > end {
-            break
-        }
+    loop (i <= end) {
         sum = sum + i
         i = i + 1
     }
@@ -163,10 +145,7 @@ pub func collatz_steps(n: I32) -> I32 {
     let mut current: I32 = n
     let mut steps: I32 = 0
 
-    loop {
-        if current == 1 {
-            break
-        }
+    loop (current != 1) {
         if current % 2 == 0 {
             current = current / 2
         } else {
@@ -185,10 +164,7 @@ pub func collatz_steps(n: I32) -> I32 {
 func benchmark_factorial_recursive(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = factorial_recursive(10)
         i = i + 1
     }
@@ -198,10 +174,7 @@ func benchmark_factorial_recursive(iterations: I32) -> I64 {
 func benchmark_factorial_iterative(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = factorial_iterative(10)
         i = i + 1
     }
@@ -211,10 +184,7 @@ func benchmark_factorial_iterative(iterations: I32) -> I64 {
 func benchmark_gcd_recursive(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = gcd_recursive(48, 18)
         i = i + 1
     }
@@ -224,10 +194,7 @@ func benchmark_gcd_recursive(iterations: I32) -> I64 {
 func benchmark_gcd_iterative(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = gcd_iterative(48, 18)
         i = i + 1
     }
@@ -237,10 +204,7 @@ func benchmark_gcd_iterative(iterations: I32) -> I64 {
 func benchmark_power_naive(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = power_naive(2, 10)
         i = i + 1
     }
@@ -250,10 +214,7 @@ func benchmark_power_naive(iterations: I32) -> I64 {
 func benchmark_power_fast(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = power_fast(2, 10)
         i = i + 1
     }
@@ -263,10 +224,7 @@ func benchmark_power_fast(iterations: I32) -> I64 {
 func benchmark_count_primes_100(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = count_primes(100)
         i = i + 1
     }
@@ -276,10 +234,7 @@ func benchmark_count_primes_100(iterations: I32) -> I64 {
 func benchmark_count_primes_1000(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = count_primes(1000)
         i = i + 1
     }
@@ -289,10 +244,7 @@ func benchmark_count_primes_1000(iterations: I32) -> I64 {
 func benchmark_collatz(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = collatz_steps(27)
         i = i + 1
     }
@@ -302,10 +254,7 @@ func benchmark_collatz(iterations: I32) -> I64 {
 func benchmark_sum_range_100(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = sum_range(1, 100)
         i = i + 1
     }
@@ -315,10 +264,7 @@ func benchmark_sum_range_100(iterations: I32) -> I64 {
 func benchmark_sum_range_10000(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     let mut i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let _: I32 = sum_range(1, 10000)
         i = i + 1
     }

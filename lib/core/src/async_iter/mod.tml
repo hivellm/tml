@@ -73,8 +73,7 @@
 //! ```tml
 //! async gen func countdown(from: I64) -> I64 {
 //!     var i: I64 = from
-//!     loop {
-//!         if i <= 0 { break }
+//!     loop (i > 0) {
 //!         yield i
 //!         i = i - 1
 //!     }
@@ -209,7 +208,7 @@ pub behavior AsyncIterator {
 ///
 /// ```tml
 /// let mut iter = my_collection.into_async_iter()
-/// loop {
+/// loop (true) {
 ///     when iter.poll_next(cx) {
 ///         Poll::Ready(Just(item)) => { /* process item */ },
 ///         Poll::Ready(Nothing) => break,
@@ -603,7 +602,7 @@ pub behavior AsyncIteratorExt: AsyncIterator {
     /// ```
     // async func count(mut this) -> I64 {
     //     var n: I64 = 0
-    //     loop {
+    //     loop (true) {
     //         when this.next().await {
     //             Just(_) => n = n + 1,
     //             Nothing => return n

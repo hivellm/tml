@@ -29,7 +29,7 @@ impl[I: Iterator, F, B] Iterator for FilterMap[I, F] where F = func(I::Item) -> 
     type Item = B
 
     pub func next(mut this) -> Maybe[B] {
-        loop {
+        loop (true) {
             when this.iter.next() {
                 Just(item) => {
                     when this.f(item) {

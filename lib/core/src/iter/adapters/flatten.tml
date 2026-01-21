@@ -34,7 +34,7 @@ impl[I: Iterator, U: Iterator] Iterator for Flatten[I, U] where I::Item: IntoIte
     type Item = U::Item
 
     pub func next(mut this) -> Maybe[U::Item] {
-        loop {
+        loop (true) {
             when this.current {
                 Just(inner) => {
                     when inner.next() {

@@ -30,16 +30,14 @@ impl[I: Iterator] Iterator for Skip[I] {
     type Item = I::Item
 
     pub func next(mut this) -> Maybe[I::Item] {
-        loop {
-            if this.remaining <= 0 {
-                return this.iter.next()
-            }
+        loop (this.remaining > 0) {
             this.remaining = this.remaining - 1
             when this.iter.next() {
                 Just(_) => {},
                 Nothing => return Nothing
             }
         }
+        return this.iter.next()
     }
 
     pub func size_hint(this) -> (I64, Maybe[I64]) {

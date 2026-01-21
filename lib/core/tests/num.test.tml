@@ -27,8 +27,7 @@ impl I32 {
         let mut result: I32 = 1
         let mut b: I32 = this
         let mut e: I32 = exp
-        loop {
-            if e <= 0 { return result }
+        loop (e > 0) {
             if e % 2 == 1 { result = result * b }
             b = b * b
             e = e / 2

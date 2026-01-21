@@ -14,8 +14,7 @@ func test_time_ms_positive() -> I32 {
 func test_time_ms_increases() -> I32 {
     let t1: I32 = time_ms()
     let mut i: I32 = 0
-    loop {
-        if i >= 1000 then break
+    loop (i < 1000) {
         i = i + 1
     }
     let t2: I32 = time_ms()

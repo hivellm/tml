@@ -332,10 +332,7 @@ impl[T: Ord] Slice[T] {
     pub func binary_search(this, target: ref T) -> Outcome[I64, I64] {
         let mut left: I64 = 0
         let mut right: I64 = this.len
-        loop {
-            if left >= right {
-                break
-            }
+        loop (left < right) {
             let mid: I64 = left + (right - left) / 2
             let mid_ref: ref T = this.get(mid).unwrap()
             when mid_ref.cmp(target) {
@@ -371,10 +368,7 @@ impl[T] Slice[T] {
     pub func binary_search_by(this, compare: func(ref T) -> Ordering) -> Outcome[I64, I64] {
         let mut left: I64 = 0
         let mut right: I64 = this.len
-        loop {
-            if left >= right {
-                break
-            }
+        loop (left < right) {
             let mid: I64 = left + (right - left) / 2
             let mid_ref: ref T = this.get(mid).unwrap()
             when compare(mid_ref) {
@@ -551,10 +545,7 @@ impl[T] MutSlice[T] {
     pub func reverse(mut this) {
         let mut left: I64 = 0
         let mut right: I64 = this.len - 1
-        loop {
-            if left >= right {
-                break
-            }
+        loop (left < right) {
             this.swap(left, right)
             left = left + 1
             right = right - 1
@@ -617,10 +608,7 @@ impl[T] MutSlice[T] {
     func reverse_range(mut this, start: I64, end: I64) {
         let mut left: I64 = start
         let mut right: I64 = end
-        loop {
-            if left >= right {
-                break
-            }
+        loop (left < right) {
             this.swap(left, right)
             left = left + 1
             right = right - 1
@@ -638,10 +626,7 @@ impl[T] MutSlice[T] {
     /// ```
     pub func fill(mut this, value: T) where T: Copy {
         let mut i: I64 = 0
-        loop {
-            if i >= this.len {
-                break
-            }
+        loop (i < this.len) {
             lowlevel { slice_set(this.data, i, value) }
             i = i + 1
         }
@@ -678,10 +663,7 @@ impl[T: Copy] MutSlice[T] {
             panic("slice::copy_from_slice: slices must have same length")
         }
         let mut i: I64 = 0
-        loop {
-            if i >= this.len {
-                break
-            }
+        loop (i < this.len) {
             let val: T = *src.get(i).unwrap()
             lowlevel { slice_set(this.data, i, val) }
             i = i + 1

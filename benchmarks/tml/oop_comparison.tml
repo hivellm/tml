@@ -177,8 +177,7 @@ func bench_sealed_shape() {
     var total: F64 = 0.0
     var i: I32 = 0
 
-    loop {
-        if i >= ITERATIONS then { break }
+    loop (i < ITERATIONS) {
         total = total + circle.area()
         total = total + circle.perimeter()
         total = total + rect.area()
@@ -198,8 +197,7 @@ func bench_class_shape() {
     var total: F64 = 0.0
     var i: I32 = 0
 
-    loop {
-        if i >= ITERATIONS then { break }
+    loop (i < ITERATIONS) {
         total = total + circle.area()
         total = total + circle.perimeter()
         total = total + rect.area()
@@ -221,8 +219,7 @@ func bench_deep_inheritance() {
     var total: I64 = 0
     var i: I32 = 0
 
-    loop {
-        if i >= ITERATIONS then { break }
+    loop (i < ITERATIONS) {
         total = total + l0.compute()
         total = total + l1.compute()
         total = total + l2.compute()
@@ -240,8 +237,7 @@ func bench_sealed_creation() {
     var total: F64 = 0.0
     var i: I32 = 0
 
-    loop {
-        if i >= ITERATIONS then { break }
+    loop (i < ITERATIONS) {
         let circle: CircleSealed = CircleSealed::create(5.0)
         let rect: RectSealed = RectSealed::create(3.0, 4.0)
         total = total + circle.area() + rect.area()
@@ -257,8 +253,7 @@ func bench_class_creation() {
     var total: F64 = 0.0
     var i: I32 = 0
 
-    loop {
-        if i >= ITERATIONS then { break }
+    loop (i < ITERATIONS) {
         let circle: CircleClass = CircleClass::create(5.0)
         let rect: RectClass = RectClass::create(3.0, 4.0)
         total = total + circle.area() + rect.area()

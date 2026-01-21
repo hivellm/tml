@@ -20,10 +20,7 @@ pub func fib_iterative(n: I32) -> I32 {
     let mut b: I32 = 1
     let mut i: I32 = 2
 
-    loop {
-        if i > n {
-            break
-        }
+    loop (i <= n) {
         let temp: I32 = a + b
         a = b
         b = temp
@@ -38,10 +35,7 @@ pub func run_benchmark(iterations: I32) -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = 0
 
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         sum = sum + fib_iterative(20)
         i = i + 1
     }

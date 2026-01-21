@@ -63,7 +63,7 @@
 //!     }
 //!
 //!     func lock(mut self) {
-//!         loop {
+//!         loop (true) {
 //!             when self.locked.compare_exchange(
 //!                 false, true,
 //!                 Ordering::Acquire, Ordering::Relaxed
@@ -87,7 +87,7 @@
 //!
 //! func fetch_update(a: mut ref AtomicI32, f: do(I32) -> I32) -> I32 {
 //!     let mut current = a.load(Ordering::Relaxed)
-//!     loop {
+//!     loop (true) {
 //!         let new = f(current)
 //!         when a.compare_exchange_weak(
 //!             current, new,
@@ -242,7 +242,7 @@ impl AtomicBool {
     /// let flag = AtomicBool::new(false)
     ///
     /// let mut current = false
-    /// loop {
+    /// loop (true) {
     ///     when flag.compare_exchange_weak(current, true, Ordering::SeqCst, Ordering::Relaxed) {
     ///         Ok(_) => break,
     ///         Err(actual) => current = actual
@@ -436,7 +436,7 @@ impl AtomicI32 {
         f: do(I32) -> Maybe[I32]
     ) -> Outcome[I32, I32] {
         let mut prev = self.load(fetch_order)
-        loop {
+        loop (true) {
             when f(prev) {
                 Just(next) => {
                     when self.compare_exchange_weak(prev, next, set_order, fetch_order) {
@@ -927,7 +927,7 @@ impl[T] AtomicPtr[T] {
 /// let flag = AtomicBool::new(false)
 ///
 /// // Busy-wait with hint
-/// loop {
+/// loop (true) {
 ///     if flag.load(Ordering::Relaxed) {
 ///         break
 ///     }

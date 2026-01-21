@@ -568,6 +568,50 @@ auto SimplifyCfgPass::cleanup_phi_nodes(Function& func) -> bool {
                 all_replacements[block.instructions[i].result] = phi->incoming[0].first;
                 to_remove.push_back(i);
                 changed = true;
+            } else {
+                // Check for self-referential PHIs: phi [ %x, bb1 ], [ %phi, bb2 ]
+                // If all but one incoming value is the PHI result itself, simplify to the other value
+                ValueId phi_result = block.instructions[i].result;
+                Value non_self_value;
+                int non_self_count = 0;
+
+                for (const auto& [val, _] : phi->incoming) {
+                    if (val.id != phi_result) {
+                        non_self_value = val;
+                        non_self_count++;
+                    }
+                }
+
+                if (non_self_count == 1) {
+                    // All other incoming values are self-references - simplify
+                    all_replacements[phi_result] = non_self_value;
+                    to_remove.push_back(i);
+                    changed = true;
+                } else if (non_self_count > 1) {
+                    // Check if all non-self values are the same
+                    bool all_same = true;
+                    Value first_non_self;
+                    bool found_first = false;
+
+                    for (const auto& [val, _] : phi->incoming) {
+                        if (val.id != phi_result) {
+                            if (!found_first) {
+                                first_non_self = val;
+                                found_first = true;
+                            } else if (val.id != first_non_self.id) {
+                                all_same = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (all_same && found_first) {
+                        // All non-self values are the same - simplify
+                        all_replacements[phi_result] = first_non_self;
+                        to_remove.push_back(i);
+                        changed = true;
+                    }
+                }
             }
         }
 

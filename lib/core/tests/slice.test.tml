@@ -147,10 +147,7 @@ func test_mut_slice_basic() -> I32 {
 func sum_slice_manual(s: Slice[I32]) -> I64 {
     let mut total: I64 = 0
     let mut i: I64 = 0
-    loop {
-        if i >= s.len() {
-            return total
-        }
+    loop (i < s.len()) {
         // Access via raw pointer arithmetic
         let val: I32 = atomic_load(ptr_offset(s.data, (i * 4) as I32))
         total = total + (val as I64)
@@ -163,10 +160,7 @@ func sum_slice_manual(s: Slice[I32]) -> I64 {
 func count_nonzero(s: Slice[I32]) -> I64 {
     let mut count: I64 = 0
     let mut i: I64 = 0
-    loop {
-        if i >= s.len() {
-            return count
-        }
+    loop (i < s.len()) {
         let val: I32 = atomic_load(ptr_offset(s.data, (i * 4) as I32))
         if val != 0 {
             count = count + 1
@@ -365,10 +359,7 @@ func find_max(s: Slice[I32]) -> I32 {
 
     let mut max_val: I32 = atomic_load(s.data)
     let mut i: I64 = 1
-    loop {
-        if i >= s.len() {
-            return max_val
-        }
+    loop (i < s.len()) {
         let val: I32 = atomic_load(ptr_offset(s.data, (i * 4) as I32))
         if val > max_val {
             max_val = val
@@ -407,10 +398,7 @@ func find_min(s: Slice[I32]) -> I32 {
 
     let mut min_val: I32 = atomic_load(s.data)
     let mut i: I64 = 1
-    loop {
-        if i >= s.len() {
-            return min_val
-        }
+    loop (i < s.len()) {
         let val: I32 = atomic_load(ptr_offset(s.data, (i * 4) as I32))
         if val < min_val {
             min_val = val

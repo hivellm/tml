@@ -9,11 +9,8 @@ use test
 func count_ones_i32(value: I32) -> I32 {
     let mut v: U32 = value as U32
     var count: I32 = 0
-    loop {
-        let zero: U32 = 0 as U32
-        if v == zero {
-            return count
-        }
+    let zero: U32 = 0 as U32
+    loop (v != zero) {
         v = v & (v - (1 as U32))
         count = count + 1
     }
@@ -32,15 +29,12 @@ func leading_zeros_i32(value: I32) -> I32 {
     var count: I32 = 0
     let high_bit: U32 = 2147483648 as U32
     let zero: U32 = 0 as U32
-    loop {
-        if (v & high_bit) != zero {
-            return count
-        }
+    loop ((v & high_bit) == zero and count < 32) {
         v = v << (1 as U32)
         count = count + 1
-        if count >= 32 {
-            return 32
-        }
+    }
+    if count >= 32 {
+        return 32
     }
     return count
 }
@@ -53,15 +47,12 @@ func trailing_zeros_i32(value: I32) -> I32 {
     var count: I32 = 0
     let one: U32 = 1 as U32
     let zero: U32 = 0 as U32
-    loop {
-        if (v & one) != zero {
-            return count
-        }
+    loop ((v & one) == zero and count < 32) {
         v = v >> one
         count = count + 1
-        if count >= 32 {
-            return 32
-        }
+    }
+    if count >= 32 {
+        return 32
     }
     return count
 }
@@ -104,10 +95,7 @@ func reverse_bits_i32(value: I32) -> I32 {
     var result: U32 = 0 as U32
     var i: I32 = 0
     let one: U32 = 1 as U32
-    loop {
-        if i >= 32 {
-            return result as I32
-        }
+    loop (i < 32) {
         result = result << one
         result = result | (v & one)
         v = v >> one

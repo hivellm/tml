@@ -279,8 +279,7 @@ pub func swap_nonoverlapping[T](a: RawMutPtr[T], b: RawMutPtr[T], count: I64) {
         return
     }
     let mut i: I64 = 0
-    loop {
-        if i >= count then break
+    loop (i < count) {
         swap(a.add(i), b.add(i))
         i = i + 1
     }

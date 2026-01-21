@@ -313,7 +313,7 @@ func test_repeat_n_large_count() -> I32 {
 
     // Consume 100 elements
     let mut count: I32 = 0
-    loop {
+    loop (true) {
         when r.next() {
             Just(n) => {
                 assert_eq(n, 1, "each value should be 1")
@@ -325,8 +325,6 @@ func test_repeat_n_large_count() -> I32 {
             }
         }
     }
-
-    return 0
 }
 
 // ============================================================================

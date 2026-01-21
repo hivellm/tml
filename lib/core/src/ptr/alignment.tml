@@ -111,8 +111,7 @@ pub func checked_next_power_of_two(n: I64) -> Maybe[I64] {
         return Nothing  // Would overflow
     }
     let mut p: I64 = 1
-    loop {
-        if p >= n then break
+    loop (p < n) {
         p = p * 2
     }
     return Just(p)
@@ -136,8 +135,7 @@ pub func prev_power_of_two(n: I64) -> I64 {
         return 0
     }
     let mut p: I64 = 1
-    loop {
-        if p * 2 > n then break
+    loop (p * 2 <= n) {
         p = p * 2
     }
     return p
@@ -161,8 +159,7 @@ pub func log2(n: I64) -> Maybe[I64] {
     }
     let mut result: I64 = 0
     let mut value: I64 = n
-    loop {
-        if value <= 1 then break
+    loop (value > 1) {
         value = value / 2
         result = result + 1
     }

@@ -14,10 +14,7 @@ pub func isqrt(n: I32) -> I32 {
     let mut x: I32 = n
     let mut y: I32 = (x + 1) / 2
 
-    loop {
-        if y >= x {
-            break
-        }
+    loop (y < x) {
         x = y
         y = (x + n / x) / 2
     }
@@ -38,10 +35,7 @@ pub func mod_pow(x: I32, exp: I32, modulus: I32) -> I32 {
     let mut b: I32 = x % modulus
     let mut e: I32 = exp
 
-    loop {
-        if e <= 0 {
-            break
-        }
+    loop (e > 0) {
         if e % 2 == 1 {
             result = (result * b) % modulus
         }
@@ -90,10 +84,7 @@ pub func catalan(n: I32) -> I32 {
     let mut result: I32 = 0
     let mut i: I32 = 0
 
-    loop {
-        if i >= n {
-            break
-        }
+    loop (i < n) {
         result = result + catalan(i) * catalan(n - 1 - i)
         i = i + 1
     }
@@ -110,10 +101,7 @@ pub func pascal_row_sum(row: I32) -> I32 {
     let mut result: I32 = 1
     let mut i: I32 = 0
 
-    loop {
-        if i >= row {
-            break
-        }
+    loop (i < row) {
         result = result * 2
         i = i + 1
     }
@@ -137,10 +125,7 @@ pub func binomial(n: I32, k: I32) -> I32 {
     let mut denominator: I32 = 1
     let mut i: I32 = 0
 
-    loop {
-        if i >= k {
-            break
-        }
+    loop (i < k) {
         numerator = numerator * (n - i)
         denominator = denominator * (i + 1)
         i = i + 1
@@ -157,10 +142,7 @@ pub func sum_divisors(n: I32) -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = 1
 
-    loop {
-        if i > n {
-            break
-        }
+    loop (i <= n) {
         if n % i == 0 {
             sum = sum + i
         }
@@ -178,10 +160,7 @@ pub func euler_phi(n: I32) -> I32 {
     let mut result: I32 = 0
     let mut i: I32 = 1
 
-    loop {
-        if i > n {
-            break
-        }
+    loop (i <= n) {
         if extended_gcd_r(i, n) == 1 {
             result = result + 1
         }

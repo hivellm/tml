@@ -637,30 +637,52 @@ struct HirWhenExpr {
 };
 
 /// Loop expression: `loop { body }`
+/// Loop variable declaration for `loop (var i: I64 < N) { ... }` syntax.
+struct HirLoopVarDecl {
+    std::string name;    ///< Variable name.
+    HirType type;        ///< Variable type.
+    SourceSpan span;     ///< Source location.
+};
+
 ///
-/// Infinite loop that can only be exited via `break`. The loop's value
-/// is determined by the expression in `break`.
+/// Conditional loop: `loop (condition) { body }`
+///
+/// Loops while condition is true. Condition is evaluated BEFORE each iteration.
 ///
 /// ## Fields
 /// - `id`: Unique identifier for this expression node
 /// - `label`: Optional loop label for targeted break/continue
+/// - `loop_var`: Optional loop variable declaration
+/// - `condition`: Boolean condition checked before each iteration
 /// - `body`: Loop body expression
-/// - `type`: Result type (determined by break expressions)
+/// - `type`: Result type (unit since loop may execute zero times)
 /// - `span`: Source location
 ///
 /// ## Loop Labels
 ///
 /// Labels allow breaking out of nested loops:
 /// ```tml
-/// 'outer: loop {
-///     loop {
-///         break 'outer value
+/// 'outer: loop (running) {
+///     loop (inner_cond) {
+///         break 'outer
 ///     }
+/// }
+/// ```
+///
+/// ## Loop Variable Declaration
+///
+/// The loop variable can be declared inline:
+/// ```tml
+/// loop (var i: I64 < 100) {
+///     // i is initialized to 0 and accessible here
+///     i = i + 1
 /// }
 /// ```
 struct HirLoopExpr {
     HirId id;
     std::optional<std::string> label;
+    std::optional<HirLoopVarDecl> loop_var;
+    HirExprPtr condition;
     HirExprPtr body;
     HirType type;
     SourceSpan span;

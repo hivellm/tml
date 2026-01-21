@@ -1242,8 +1242,7 @@ func test_empty_replace() {
 func test_many_push_operations() {
     let t: Text = Text::new()
     let mut i: I32 = 0
-    loop {
-        if i >= 100 { break }
+    loop (i < 100) {
         t.push(65)  // 'A'
         i = i + 1
     }

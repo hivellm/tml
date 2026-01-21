@@ -1,0 +1,28 @@
+// Test volatile variable support
+
+@test
+func test_volatile_let() {
+    let volatile x: I32 = 42
+    assert_eq(x, 42)
+}
+
+@test
+func test_volatile_var() {
+    var volatile counter: I32 = 0
+    counter = counter + 1
+    counter = counter + 1
+    counter = counter + 1
+    assert_eq(counter, 3)
+}
+
+@test
+func test_volatile_in_loop() {
+    var volatile sum: I32 = 0
+    var i: I32 = 0
+    loop (i < 10) {
+        sum = sum + i
+        i = i + 1
+    }
+    // 0+1+2+3+4+5+6+7+8+9 = 45
+    assert_eq(sum, 45)
+}

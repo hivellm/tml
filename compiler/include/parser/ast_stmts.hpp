@@ -52,6 +52,7 @@ struct LetStmt {
     std::optional<TypePtr> type_annotation; ///< Optional type annotation.
     std::optional<ExprPtr> init;            ///< Initializer expression.
     SourceSpan span;                        ///< Source location.
+    bool is_volatile = false;               ///< Volatile modifier (prevents optimization).
 };
 
 /// Var statement: `var x = expr` (mutable binding).
@@ -73,6 +74,7 @@ struct VarStmt {
     std::optional<TypePtr> type_annotation; ///< Optional type annotation.
     ExprPtr init;                           ///< Initializer expression (required).
     SourceSpan span;                        ///< Source location.
+    bool is_volatile = false;               ///< Volatile modifier (prevents optimization).
 };
 
 // ============================================================================

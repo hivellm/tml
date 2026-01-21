@@ -36,7 +36,7 @@ func test_repeat_n_i64() -> I32 {
     var sum: I64 = 0
     var count: I64 = 0
 
-    loop {
+    loop (true) {
         when iter.next() {
             Just(x) => {
                 sum = sum + x

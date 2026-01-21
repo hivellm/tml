@@ -245,8 +245,7 @@ impl[T, N] SmallVec[T, N] {
 
             // Copy inline data to heap
             var i: I64 = 0
-            loop {
-                if i >= this.len { break }
+            loop (i < this.len) {
                 let src = (ref this.inline_storage) as I64 + (i * obj_size)
                 let dst = new_heap + (i * obj_size)
                 lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
@@ -267,8 +266,7 @@ impl[T, N] SmallVec[T, N] {
 
             // Copy old data to new buffer
             var i: I64 = 0
-            loop {
-                if i >= this.len { break }
+            loop (i < this.len) {
                 let src = this.heap_ptr + (i * obj_size)
                 let dst = new_heap + (i * obj_size)
                 lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
@@ -297,8 +295,7 @@ impl[T, N] SmallVec[T, N] {
         if this.len <= inline_capacity {
             // Move back to inline
             var i: I64 = 0
-            loop {
-                if i >= this.len { break }
+            loop (i < this.len) {
                 let src = this.heap_ptr + (i * obj_size)
                 let dst = (mut ref this.inline_storage) as I64 + (i * obj_size)
                 lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
@@ -315,8 +312,7 @@ impl[T, N] SmallVec[T, N] {
 
             if new_heap != 0 {
                 var i: I64 = 0
-                loop {
-                    if i >= this.len { break }
+                loop (i < this.len) {
                     let src = this.heap_ptr + (i * obj_size)
                     let dst = new_heap + (i * obj_size)
                     lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
@@ -404,8 +400,7 @@ impl SmallString {
 
             // Copy characters
             var i: I64 = 0
-            loop {
-                if i >= len { break }
+            loop (i < len) {
                 result.data[i] = s.as_bytes()[i]
                 i = i + 1
             }
@@ -424,8 +419,7 @@ impl SmallString {
 
             // Copy string data
             var i: I64 = 0
-            loop {
-                if i >= len { break }
+            loop (i < len) {
                 lowlevel { *((heap + i) as Ptr[U8]) = s.as_bytes()[i] }
                 i = i + 1
             }
@@ -514,8 +508,7 @@ impl SmallString {
 
             // Copy existing inline data
             var i: I64 = 0
-            loop {
-                if i >= len { break }
+            loop (i < len) {
                 lowlevel { *((heap + i) as Ptr[U8]) = this.data[i] }
                 i = i + 1
             }
@@ -545,8 +538,7 @@ impl SmallString {
 
                 // Copy data
                 var i: I64 = 0
-                loop {
-                    if i >= len { break }
+                loop (i < len) {
                     lowlevel { *((new_heap + i) as Ptr[U8]) = *((heap_ptr + i) as Ptr[U8]) }
                     i = i + 1
                 }
@@ -726,8 +718,7 @@ func test_small_vec_spill() {
 
     // Fill inline capacity
     var i: I64 = 0
-    loop {
-        if i >= 8 { break }
+    loop (i < 8) {
         vec.push(i)
         i = i + 1
     }
@@ -809,8 +800,7 @@ func test_small_vec_shrink() {
 
     // Spill to heap
     var i: I64 = 0
-    loop {
-        if i >= 20 { break }
+    loop (i < 20) {
         vec.push(i)
         i = i + 1
     }
@@ -818,8 +808,7 @@ func test_small_vec_shrink() {
     assert(vec.is_heap())
 
     // Remove most elements
-    loop {
-        if vec.len() <= 4 { break }
+    loop (vec.len() > 4) {
         vec.pop()
     }
 

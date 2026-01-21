@@ -7,13 +7,13 @@
 func run_and_print(name: Str, iterations: I64, total_ns: I64) {
     let per_op: I64 = total_ns / iterations
     let ops_sec: I64 = if total_ns > 0 then {
-        (iterations * 1000000000) / total_ns
+        (iterations * 100000000) / total_ns
     } else {
         0
     }
     println("  " + name + ":")
     println("    Iterations: " + iterations.to_string())
-    println("    Total time: " + (total_ns / 1000000).to_string() + " ms")
+    println("    Total time: " + (total_ns / 100000).to_string() + " ms")
     println("    Per op:     " + per_op.to_string() + " ns")
     println("    Ops/sec:    " + ops_sec.to_string())
     println("")
@@ -21,21 +21,18 @@ func run_and_print(name: Str, iterations: I64, total_ns: I64) {
 
 // Array sequential read
 func bench_array_sequential(iterations: I64) -> I64 {
-    var arr: [I64; 1000] = [0; 1000]
+    var arr: [I64; 100] = [0; 100]
     var i: I64 = 0
-    loop {
-        if i >= 1000 then { break }
+    loop (i < 100) {
         arr[i as U64] = i
         i = i + 1
     }
 
     var sum: I64 = 0
     var round: I64 = 0
-    loop {
-        if round >= iterations / 1000 then { break }
+    loop (round < iterations / 100) {
         i = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 100) {
             sum = sum + arr[i as U64]
             i = i + 1
         }
@@ -46,19 +43,17 @@ func bench_array_sequential(iterations: I64) -> I64 {
 
 // Array random access
 func bench_array_random(iterations: I64) -> I64 {
-    var arr: [I64; 1000] = [0; 1000]
+    var arr: [I64; 100] = [0; 100]
     var i: I64 = 0
-    loop {
-        if i >= 1000 then { break }
+    loop (i < 100) {
         arr[i as U64] = i
         i = i + 1
     }
 
     var sum: I64 = 0
     i = 0
-    loop {
-        if i >= iterations then { break }
-        let idx: I64 = (i * 7919 + 1) % 1000
+    loop (i < iterations) {
+        let idx: I64 = (i * 7919 + 1) % 100
         sum = sum + arr[idx as U64]
         i = i + 1
     }
@@ -67,11 +62,10 @@ func bench_array_random(iterations: I64) -> I64 {
 
 // Array write
 func bench_array_write(iterations: I64) -> I64 {
-    var arr: [I64; 1000] = [0; 1000]
+    var arr: [I64; 100] = [0; 100]
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
-        let idx: U64 = (i % 1000) as U64
+    loop (i < iterations) {
+        let idx: U64 = (i % 100) as U64
         arr[idx] = i
         i = i + 1
     }
@@ -82,9 +76,8 @@ func bench_array_write(iterations: I64) -> I64 {
 func bench_array_init(iterations: I64) -> I64 {
     var total: I64 = 0
     var round: I64 = 0
-    loop {
-        if round >= iterations / 1000 then { break }
-        var arr: [I64; 1000] = [0; 1000]
+    loop (round < iterations / 100) {
+        var arr: [I64; 100] = [0; 100]
         total = total + arr[0]
         round = round + 1
     }
@@ -93,22 +86,19 @@ func bench_array_init(iterations: I64) -> I64 {
 
 // Linear search
 func bench_linear_search(iterations: I64) -> I64 {
-    var arr: [I64; 1000] = [0; 1000]
+    var arr: [I64; 100] = [0; 100]
     var i: I64 = 0
-    loop {
-        if i >= 1000 then { break }
+    loop (i < 100) {
         arr[i as U64] = i * 2
         i = i + 1
     }
 
     var found: I64 = 0
     var round: I64 = 0
-    loop {
-        if round >= iterations / 100 then { break }
+    loop (round < iterations / 100) {
         let target: I64 = round % 2000
         i = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 100) {
             if arr[i as U64] == target then {
                 found = found + 1
                 break
@@ -122,22 +112,19 @@ func bench_linear_search(iterations: I64) -> I64 {
 
 // Accumulate sum
 func bench_accumulate(iterations: I64) -> I64 {
-    var arr: [I64; 1000] = [0; 1000]
+    var arr: [I64; 100] = [0; 100]
     var i: I64 = 0
-    loop {
-        if i >= 1000 then { break }
+    loop (i < 100) {
         arr[i as U64] = i
         i = i + 1
     }
 
     var total_sum: I64 = 0
     var round: I64 = 0
-    loop {
-        if round >= iterations / 1000 then { break }
+    loop (round < iterations / 100) {
         var sum: I64 = 0
         i = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 100) {
             sum = sum + arr[i as U64]
             i = i + 1
         }
@@ -156,51 +143,52 @@ pub func main() -> I32 {
     println("Note: Using fixed-size arrays for benchmarking.")
     println("")
 
-    let ITERATIONS: I64 = 1000000    // 1M operations
+    let ITERATIONS: I64 = 10000000    // 10M operations
 
     // Warmup
     var warmup: I64 = 0
-    loop {
-        if warmup >= 10 then { break }
-        let _: I64 = bench_array_sequential(10000)
+    loop (warmup < 10) {
+        let _: I64 = bench_array_sequential(1000)
         warmup = warmup + 1
     }
 
     // Array Sequential Read
     var start: I64 = time_ns()
-    let _seq: I64 = bench_array_sequential(ITERATIONS)
+    let seq: I64 = black_box_i64(bench_array_sequential(ITERATIONS))
     var end: I64 = time_ns()
     run_and_print("Array Sequential Read", ITERATIONS, end - start)
 
     // Array Random Access
     start = time_ns()
-    let _rand: I64 = bench_array_random(ITERATIONS)
+    let rand: I64 = black_box_i64(bench_array_random(ITERATIONS))
     end = time_ns()
     run_and_print("Array Random Access", ITERATIONS, end - start)
 
     // Array Write
     start = time_ns()
-    let _write: I64 = bench_array_write(ITERATIONS)
+    let write: I64 = black_box_i64(bench_array_write(ITERATIONS))
     end = time_ns()
     run_and_print("Array Write", ITERATIONS, end - start)
 
     // Array Initialization
     start = time_ns()
-    let _init: I64 = bench_array_init(ITERATIONS)
+    let init: I64 = black_box_i64(bench_array_init(ITERATIONS))
     end = time_ns()
     run_and_print("Array Initialization", ITERATIONS, end - start)
 
     // Linear Search
     start = time_ns()
-    let _search: I64 = bench_linear_search(ITERATIONS)
+    let search: I64 = black_box_i64(bench_linear_search(ITERATIONS))
     end = time_ns()
     run_and_print("Linear Search", ITERATIONS, end - start)
 
     // Accumulate
     start = time_ns()
-    let _acc: I64 = bench_accumulate(ITERATIONS)
+    let acc: I64 = black_box_i64(bench_accumulate(ITERATIONS))
     end = time_ns()
     run_and_print("Accumulate Sum", ITERATIONS, end - start)
 
-    return 0
+    // Use results to prevent any remaining DCE
+    let checksum: I64 = seq + rand + write + init + search + acc
+    return black_box_i64(checksum) as I32
 }

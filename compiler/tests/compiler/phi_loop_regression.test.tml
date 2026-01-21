@@ -47,9 +47,7 @@ func test_loop_with_if_else(iterations: I32) -> F64 {
     var total: F64 = 0.0
     var i: I32 = 0
 
-    loop {
-        if i >= iterations then { break }
-
+    loop (i < iterations) {
         let shape_idx: I32 = i % 3
 
         if shape_idx == 0 then {

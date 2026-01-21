@@ -238,8 +238,7 @@ class Counter {
 func main() -> I32 {
     // Create many instances (currently leaks, known issue)
     let mut i: I32 = 0
-    loop {
-        if i >= 100 then break
+    loop (i < 100) {
         let c: Counter = new Counter(i)
         c.increment()
         i = i + 1

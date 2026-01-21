@@ -22,8 +22,7 @@ func run_and_print(name: Str, iterations: I64, total_ns: I64) {
 func bench_if_else_chain(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let x: I64 = i % 100
         if x < 25 then {
             sum = sum + 1
@@ -43,8 +42,7 @@ func bench_if_else_chain(iterations: I64) -> I64 {
 func bench_nested_if(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let x: I64 = i % 16
         if (x & 1) != 0 then {
             if (x & 2) != 0 then {
@@ -72,8 +70,7 @@ func bench_nested_if(iterations: I64) -> I64 {
 func bench_when_dense(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let x: I64 = i % 10
         // Using if-else chain since when may not be fully optimized yet
         if x == 0 then { sum = sum + 0 }
@@ -96,8 +93,7 @@ func bench_when_dense(iterations: I64) -> I64 {
 func bench_when_sparse(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let x: I64 = (i * 100) % 1000
         if x == 0 then { sum = sum + 0 }
         else if x == 100 then { sum = sum + 1 }
@@ -119,8 +115,7 @@ func bench_when_sparse(iterations: I64) -> I64 {
 func bench_loop(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + i
         i = i + 1
     }
@@ -135,14 +130,11 @@ func bench_nested_loops(iterations: I64) -> I64 {
     if rounds < 1 then { rounds = 1 }
 
     var r: I64 = 0
-    loop {
-        if r >= rounds then { break }
+    loop (r < rounds) {
         var i: I64 = 0
-        loop {
-            if i >= n then { break }
+        loop (i < n) {
             var j: I64 = 0
-            loop {
-                if j >= n then { break }
+            loop (j < n) {
                 sum = sum + (i * n + j)
                 j = j + 1
             }
@@ -157,8 +149,7 @@ func bench_nested_loops(iterations: I64) -> I64 {
 func bench_loop_continue(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         if i % 2 == 0 then {
             i = i + 1
             continue
@@ -173,8 +164,7 @@ func bench_loop_continue(iterations: I64) -> I64 {
 func bench_ternary_chain(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let x: I64 = i % 100
         let val: I64 = if x < 25 then { 1 } else if x < 50 then { 2 } else if x < 75 then { 3 } else { 4 }
         sum = sum + val
@@ -187,8 +177,7 @@ func bench_ternary_chain(iterations: I64) -> I64 {
 func bench_short_circuit_and(iterations: I64) -> I64 {
     var count: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         if (i % 2 == 0) and (i % 3 == 0) and (i % 5 == 0) then {
             count = count + 1
         }
@@ -201,8 +190,7 @@ func bench_short_circuit_and(iterations: I64) -> I64 {
 func bench_short_circuit_or(iterations: I64) -> I64 {
     var count: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         if (i % 2 == 0) or (i % 3 == 0) or (i % 5 == 0) then {
             count = count + 1
         }
@@ -223,8 +211,7 @@ pub func main() -> I32 {
 
     // Warmup
     var warmup: I64 = 0
-    loop {
-        if warmup >= 10 then { break }
+    loop (warmup < 10) {
         let _: I64 = bench_if_else_chain(1000)
         warmup = warmup + 1
     }

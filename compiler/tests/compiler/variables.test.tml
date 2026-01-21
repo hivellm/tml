@@ -72,8 +72,7 @@ func test_mut_in_loop() -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = 1
 
-    loop {
-        if i > 5 then break
+    loop (i <= 5) {
         sum = sum + i
         i = i + 1
     }

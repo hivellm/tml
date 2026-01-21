@@ -1,0 +1,16 @@
+use test
+
+// Test only generic struct (no enum)
+
+type Pair[T] {
+    first: T,
+    second: T,
+}
+
+@test
+func test_generic_struct() -> I32 {
+    let p: Pair[I32] = Pair { first: 10, second: 20 }
+    assert_eq(p.first, 10, "Pair.first should be 10")
+    assert_eq(p.second, 20, "Pair.second should be 20")
+    return 0
+}

@@ -165,8 +165,7 @@ func test_time_ms_monotonic() -> I32 {
     // Do some work to ensure time passes
     let mut sum: I32 = 0
     let mut i: I32 = 0
-    loop {
-        if i >= 1000 then break
+    loop (i < 1000) {
         sum = sum + i
         i = i + 1
     }

@@ -620,12 +620,23 @@ auto HirBinaryReader::read_expr() -> HirExprPtr {
         if (has_label) {
             label = read_string();
         }
+        // Read optional loop variable declaration
+        bool has_loop_var = read_bool();
+        std::optional<HirLoopVarDecl> loop_var;
+        if (has_loop_var) {
+            HirLoopVarDecl decl;
+            decl.name = read_string();
+            decl.type = read_type();
+            decl.span = read_span();
+            loop_var = std::move(decl);
+        }
+        auto condition = read_expr();
         auto body = read_expr();
         HirType type = read_type();
         SourceSpan span = read_span();
 
         auto expr = std::make_unique<HirExpr>();
-        expr->kind = HirLoopExpr{id, label, std::move(body), type, span};
+        expr->kind = HirLoopExpr{id, label, loop_var, std::move(condition), std::move(body), type, span};
         return expr;
     }
 

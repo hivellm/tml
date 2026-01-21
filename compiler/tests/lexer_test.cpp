@@ -526,11 +526,8 @@ func loops_example() {
 
     // While-style loop
     var x: I64 = 0
-    loop {
+    loop (x < 10) {
         x = x + 1
-        if x >= 10 {
-            break
-        }
     }
 }
 )";

@@ -17,8 +17,7 @@ func bench_pure_parse_small(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     var i: I32 = 0
     var success: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         success = success + json::parse_fast_bench(json_str)
         i = i + 1
     }
@@ -32,8 +31,7 @@ func bench_ffi_overhead(iterations: I32) -> I64 {
     let start: I64 = time_ns()
     var i: I32 = 0
     var total: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         // Parse a single number - minimal work
         let handle: I64 = json::parse_fast(json_str)
         if handle >= 0 {

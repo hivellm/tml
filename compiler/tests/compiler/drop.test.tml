@@ -135,9 +135,7 @@ func test_loop_drop() -> I32 {
     let counter: *Unit = create_counter()
     let mut i: I32 = 0
 
-    loop {
-        if i >= 3 then break
-
+    loop (i < 3) {
         let res: DroppableResource = DroppableResource {
             id: i,
             counter_ptr: counter,

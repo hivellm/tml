@@ -69,6 +69,7 @@ void LLVMIRGen::emit_runtime_decls() {
     // LLVM intrinsics for optimized codegen
     emit_line("; LLVM intrinsics");
     emit_line("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
+    emit_line("declare void @llvm.assume(i1) nounwind");
     emit_line("");
 
     // TML runtime functions

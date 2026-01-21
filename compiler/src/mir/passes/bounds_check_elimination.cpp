@@ -37,18 +37,21 @@ auto BoundsCheckEliminationPass::run_on_function(Function& func) -> bool {
 // ============================================================================
 
 void BoundsCheckEliminationPass::analyze_function(const Function& func) {
-    // Detect loops first (we need loop info for induction variables)
+    // First, collect constants and array sizes (needed for loop bound detection)
+    collect_constants(func);
+
+    // Detect loops (uses constant ranges to find loop bounds)
     detect_loops(func);
 
-    // Compute value ranges
+    // Compute remaining value ranges (uses loop info for PHI nodes)
     compute_value_ranges(func);
 
     // Find all array accesses
     find_array_accesses(func);
 }
 
-void BoundsCheckEliminationPass::compute_value_ranges(const Function& func) {
-    // First pass: collect constants and array sizes
+void BoundsCheckEliminationPass::collect_constants(const Function& func) {
+    // Collect constants and array sizes before loop detection
     for (const auto& block : func.blocks) {
         for (const auto& inst : block.instructions) {
             // Handle constant instructions
@@ -58,8 +61,6 @@ void BoundsCheckEliminationPass::compute_value_ranges(const Function& func) {
             // Handle array literals - track their size
             else if (auto* arr_init = std::get_if<ArrayInitInst>(&inst.inst)) {
                 array_sizes_[inst.result] = static_cast<int64_t>(arr_init->elements.size());
-                // The array value itself has a bounded range (its address)
-                value_ranges_[inst.result] = ValueRange::unbounded();
             }
             // Handle alloca for arrays
             else if (auto* alloca_inst = std::get_if<AllocaInst>(&inst.inst)) {
@@ -67,10 +68,26 @@ void BoundsCheckEliminationPass::compute_value_ranges(const Function& func) {
                     array_sizes_[inst.result] = static_cast<int64_t>(arr_type->size);
                 }
             }
+            // Handle simple binary ops on constants (e.g., add i32 0, 100 -> 100)
+            else if (auto* bin = std::get_if<BinaryInst>(&inst.inst)) {
+                auto left_range = get_range(bin->left.id);
+                auto right_range = get_range(bin->right.id);
+                if (left_range.is_constant() && right_range.is_constant()) {
+                    auto new_range = compute_binary_range(bin->op, left_range, right_range);
+                    if (new_range.is_constant()) {
+                        value_ranges_[inst.result] = new_range;
+                    }
+                }
+            }
         }
     }
+}
 
-    // Second pass: propagate ranges through binary operations
+void BoundsCheckEliminationPass::compute_value_ranges(const Function& func) {
+    // Note: constants and array sizes are already collected by collect_constants()
+    // This function propagates ranges through operations and uses loop info for PHIs
+
+    // Propagate ranges through binary operations
     // Use a worklist algorithm for dataflow analysis
     bool changed = true;
     int iterations = 0;
@@ -491,6 +508,10 @@ auto BoundsCheckEliminationPass::apply_eliminations(Function& func) -> bool {
                     if (auto* gep = std::get_if<GetElementPtrInst>(&inst.inst)) {
                         // Mark as not needing bounds check
                         gep->needs_bounds_check = false;
+                        // Propagate array size for @llvm.assume generation in codegen
+                        if (access.array_size >= 0) {
+                            gep->known_array_size = access.array_size;
+                        }
                         changed = true;
                     }
                 }

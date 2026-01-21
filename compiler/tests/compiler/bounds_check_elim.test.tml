@@ -1,0 +1,26 @@
+// Test bounds check elimination for array indexing
+
+func sum_array() -> I32 {
+    // Create a fixed-size array
+    let arr: [I32; 100] = [0; 100]
+
+    // Sum the array - bounds checks should be eliminated
+    // because the loop index is proven to be in [0, 99]
+    var sum: I32 = 0
+    var i: I32 = 0
+    loop (i < 100) {
+        sum = sum + arr[i]
+        i = i + 1
+    }
+
+    // Also test constant index access
+    let first: I32 = arr[0]    // Should eliminate bounds check
+    let last: I32 = arr[99]    // Should eliminate bounds check
+
+    return sum + first + last
+}
+
+@test
+func test_basic() {
+    assert_eq(sum_array(), 0)
+}

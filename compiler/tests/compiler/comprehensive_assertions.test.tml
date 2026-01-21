@@ -133,9 +133,7 @@ func test_loop_invariants() -> I32 {
     let mut sum: I32 = 0
     let mut i: I32 = 1
 
-    loop {
-        if i > 10 then { break }
-
+    loop (i <= 10) {
         sum = sum + i
         // At this point, sum should equal i*(i+1)/2
         let expected: I32 = (i * (i + 1)) / 2

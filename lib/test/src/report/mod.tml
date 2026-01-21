@@ -224,11 +224,7 @@ pub func print_progress_bar(current: I32, total: I32, width: I32) {
     }
 
     let i: I32 = 0
-    loop {
-        if i >= width {
-            break
-        }
-
+    loop (i < width) {
         if i < filled {
             print("=")
         } else {

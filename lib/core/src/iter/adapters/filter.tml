@@ -34,7 +34,7 @@ impl[I: Iterator, P] Iterator for Filter[I, P] where P = func(ref I::Item) -> Bo
     type Item = I::Item
 
     pub func next(mut this) -> Maybe[I::Item] {
-        loop {
+        loop (true) {
             when this.iter.next() {
                 Just(item) => {
                     if this.pred(ref item) {

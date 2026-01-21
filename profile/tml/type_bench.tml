@@ -6,8 +6,7 @@
 func bench_int_widen(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let small: I32 = (i & 0x7FFFFFFF) as I32
         let big: I64 = small as I64
         sum = sum + big
@@ -20,8 +19,7 @@ func bench_int_widen(iterations: I64) -> I64 {
 func bench_int_narrow(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let big: I64 = i
         let small: I32 = big as I32
         sum = sum + (small as I64)
@@ -34,8 +32,7 @@ func bench_int_narrow(iterations: I64) -> I64 {
 func bench_unsigned_to_signed(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let u: U64 = i as U64
         let s: I64 = u as I64
         sum = sum + s
@@ -48,8 +45,7 @@ func bench_unsigned_to_signed(iterations: I64) -> I64 {
 func bench_signed_to_unsigned(iterations: I64) -> I64 {
     var sum: U64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let s: I64 = i
         let u: U64 = s as U64
         sum = sum + u
@@ -62,8 +58,7 @@ func bench_signed_to_unsigned(iterations: I64) -> I64 {
 func bench_int_to_float(iterations: I64) -> I64 {
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let f: F64 = i as F64
         sum = sum + f
         i = i + 1
@@ -75,8 +70,7 @@ func bench_int_to_float(iterations: I64) -> I64 {
 func bench_float_to_int(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let f: F64 = (i as F64) + 0.5
         let n: I64 = f as I64
         sum = sum + n
@@ -89,8 +83,7 @@ func bench_float_to_int(iterations: I64) -> I64 {
 func bench_float_widen(iterations: I64) -> I64 {
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let small: F32 = (i % 1000) as F32
         let big: F64 = small as F64
         sum = sum + big
@@ -103,8 +96,7 @@ func bench_float_widen(iterations: I64) -> I64 {
 func bench_float_narrow(iterations: I64) -> I64 {
     var sum: F32 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let big: F64 = (i % 1000) as F64
         let small: F32 = big as F32
         sum = sum + small
@@ -117,8 +109,7 @@ func bench_float_narrow(iterations: I64) -> I64 {
 func bench_byte_chain(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let b: I8 = (i & 0x7F) as I8
         let s: I16 = b as I16
         let m: I32 = s as I32
@@ -133,8 +124,7 @@ func bench_byte_chain(iterations: I64) -> I64 {
 func bench_mixed_arithmetic(iterations: I64) -> I64 {
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let a: I32 = (i % 100) as I32
         let b: F32 = (i % 50) as F32
         let c: I64 = i % 25
@@ -154,8 +144,7 @@ func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64
 
     var best_ns: I64 = 9223372036854775807  // I64 max
     var run: I32 = 0
-    loop {
-        if run >= runs then { break }
+    loop (run < runs) {
         let start: I64 = time_ns()
         let _r: I64 = bench_fn(iterations)
         let end: I64 = time_ns()

@@ -1,0 +1,190 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "LLVM IR",
+  "scopeName": "source.llvm",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#instructions" },
+    { "include": "#terminators" },
+    { "include": "#attributes" },
+    { "include": "#identifiers" },
+    { "include": "#labels" },
+    { "include": "#metadata" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.llvm",
+          "match": ";.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.llvm",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.llvm",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.llvm",
+          "begin": "c\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.llvm",
+              "match": "\\\\[0-9A-Fa-f]{2}"
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.llvm",
+          "match": "\\b0x[0-9A-Fa-f]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.llvm",
+          "match": "\\b-?[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.llvm",
+          "match": "\\b-?[0-9]+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.llvm",
+          "match": "\\b(define|declare|global|constant|private|internal|external|linkonce|linkonce_odr|weak|weak_odr|common|appending|extern_weak|available_externally|dllimport|dllexport|default|hidden|protected|unnamed_addr|local_unnamed_addr|thread_local|addrspace|section|comdat|align|gc|prefix|prologue|personality|module|source_filename|target|datalayout|triple)\\b"
+        },
+        {
+          "name": "keyword.other.llvm",
+          "match": "\\b(to|nuw|nsw|exact|inbounds|volatile|atomic|unordered|monotonic|acquire|release|acq_rel|seq_cst|singlethread|syncscope|tail|musttail|notail)\\b"
+        },
+        {
+          "name": "constant.language.llvm",
+          "match": "\\b(true|false|null|none|undef|poison|zeroinitializer)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.llvm",
+          "match": "\\b(void|i1|i8|i16|i32|i64|i128|half|bfloat|float|double|x86_fp80|fp128|ppc_fp128|x86_mmx|x86_amx|ptr|label|token|metadata|opaque)\\b"
+        },
+        {
+          "name": "storage.type.struct.llvm",
+          "match": "%struct\\.[A-Za-z_][A-Za-z0-9_.]*"
+        },
+        {
+          "name": "storage.type.llvm",
+          "match": "\\btype\\b"
+        }
+      ]
+    },
+    "instructions": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.llvm",
+          "match": "\\b(add|fadd|sub|fsub|mul|fmul|udiv|sdiv|fdiv|urem|srem|frem)\\b"
+        },
+        {
+          "name": "keyword.operator.bitwise.llvm",
+          "match": "\\b(shl|lshr|ashr|and|or|xor)\\b"
+        },
+        {
+          "name": "keyword.operator.memory.llvm",
+          "match": "\\b(alloca|load|store|fence|cmpxchg|atomicrmw|getelementptr)\\b"
+        },
+        {
+          "name": "keyword.operator.conversion.llvm",
+          "match": "\\b(trunc|zext|sext|fptrunc|fpext|fptoui|fptosi|uitofp|sitofp|ptrtoint|inttoptr|bitcast|addrspacecast)\\b"
+        },
+        {
+          "name": "keyword.operator.comparison.llvm",
+          "match": "\\b(icmp|fcmp)\\b"
+        },
+        {
+          "name": "keyword.operator.other.llvm",
+          "match": "\\b(phi|select|call|va_arg|landingpad|catchpad|cleanuppad|freeze|extractelement|insertelement|shufflevector|extractvalue|insertvalue)\\b"
+        }
+      ]
+    },
+    "terminators": {
+      "patterns": [
+        {
+          "name": "keyword.control.terminator.llvm",
+          "match": "\\b(ret|br|switch|indirectbr|invoke|callbr|resume|catchswitch|catchret|cleanupret|unreachable)\\b"
+        }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.llvm",
+          "match": "\\b(nounwind|readnone|readonly|writeonly|argmemonly|inaccessiblememonly|inaccessiblemem_or_argmemonly|noreturn|noinline|alwaysinline|inlinehint|optnone|optsize|minsize|nobuiltin|builtin|cold|hot|convergent|speculatable|willreturn|mustprogress|nofree|nosync|nocallback|nosanitize_coverage|noprofile|skipprofile|norecurse|nounwind|returns_twice|safestack|sanitize_address|sanitize_hwaddress|sanitize_memory|sanitize_memtag|sanitize_thread|shadowcallstack|stackprotect|stackprotectreq|stackprotectstrong|strictfp|uwtable|preallocated|inalloca|sret|byval|byref|nest|returned|swiftself|swifterror|swiftasync|immarg|noundef|nonnull|dereferenceable|dereferenceable_or_null|align|allocsize|allocator|allockind|noundef|signext|zeroext|inreg|noalias|nocapture|nofree|nonull|readnone|readonly|writeonly|ssp|sspreq|sspstrong)\\b"
+        },
+        {
+          "name": "entity.other.attribute-name.llvm",
+          "match": "#[0-9]+"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.global.llvm",
+          "match": "@[A-Za-z_\\.][A-Za-z0-9_\\.]*"
+        },
+        {
+          "name": "variable.other.global.llvm",
+          "match": "@\"[^\"]+\""
+        },
+        {
+          "name": "variable.other.local.llvm",
+          "match": "%[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "name": "variable.other.local.llvm",
+          "match": "%[0-9]+"
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.label.llvm",
+          "match": "^[A-Za-z_][A-Za-z0-9_.]*:"
+        }
+      ]
+    },
+    "metadata": {
+      "patterns": [
+        {
+          "name": "support.other.metadata.llvm",
+          "match": "![A-Za-z_][A-Za-z0-9_.]*"
+        },
+        {
+          "name": "support.other.metadata.llvm",
+          "match": "![0-9]+"
+        }
+      ]
+    }
+  }
+}

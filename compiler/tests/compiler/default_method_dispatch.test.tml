@@ -7,11 +7,11 @@ behavior Counter {
     // Default implementation with return value
     func count_to(mut this, n: I64) -> I64 {
         var count: I64 = 0
-        loop {
-            if count >= n { return count }
+        loop (count < n) {
             this.increment()
             count = count + 1
         }
+        return count
     }
 }
 

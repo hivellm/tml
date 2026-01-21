@@ -347,8 +347,7 @@ impl Arena {
         if ptr as I64 != 0 {
             // Copy string data
             var i: I64 = 0
-            loop {
-                if i >= len { break }
+            loop (i < len) {
                 lowlevel { ptr[i] = s.as_bytes()[i] }
                 i = i + 1
             }
@@ -377,8 +376,7 @@ impl Arena {
     pub func reset(mut this) {
         // Reset all chunks to beginning
         var i: I64 = 0
-        loop {
-            if i >= this.chunks.len() { break }
+        loop (i < this.chunks.len()) {
             this.chunks[i].reset()
             i = i + 1
         }
@@ -428,9 +426,9 @@ impl Arena {
     /// After clear, the arena is empty and all memory is returned to the system.
     pub func clear(mut this) {
         // Free all chunks
-        loop {
+        loop (true) {
             when this.chunks.pop() {
-                Just(mut chunk) => chunk.free()
+                Just(mut chunk) => chunk.free(),
                 Nothing => break
             }
         }
@@ -509,8 +507,7 @@ impl ScopedArena {
 
         // Reset chunks after saved_chunk
         var i = arena.chunks.len() - 1
-        loop {
-            if i <= this.saved_chunk { break }
+        loop (i > this.saved_chunk) {
             arena.chunks[i].reset()
             i = i - 1
         }

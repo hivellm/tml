@@ -108,11 +108,10 @@ pub func main() {
         count += 1
     }
 
-    // Infinite loop (with break)
+    // Loop with condition
     var n = 0
-    loop {
+    loop (n < 10) {
         n += 1
-        if n >= 10 then break
         if n % 2 == 0 then continue
         println("odd: " + n.to_string())
     }

@@ -1,22 +1,19 @@
-// Minimal nested while loop test for O3 issue
-func test_nested() -> I32 {
+use test
+
+// Minimal nested loop test for O3 issue
+
+@test
+func test_nested_loops() -> I32 {
     var total: I32 = 0
     var i: I32 = 0
-    while i < 3 {
+    loop (i < 3) {
         var j: I32 = 0
-        while j < 3 {
+        loop (j < 3) {
             total = total + 1
             j = j + 1
         }
         i = i + 1
     }
-    return total
-}
-
-func main() -> I32 {
-    let result: I32 = test_nested()
-    if result == 9 {
-        return 0
-    }
-    return 1
+    assert_eq(total, 9, "3x3 nested loop should count to 9")
+    return 0
 }

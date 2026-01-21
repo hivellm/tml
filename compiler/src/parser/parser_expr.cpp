@@ -1053,12 +1053,83 @@ auto Parser::parse_loop_expr() -> Result<ExprPtr, ParseError> {
     auto start_span = peek().span;
     advance(); // consume 'loop'
 
+    // Require '(' for condition
+    auto lparen = expect(lexer::TokenKind::LParen, "Expected '(' after 'loop' - syntax is: loop (condition) { body }");
+    if (is_err(lparen))
+        return unwrap_err(lparen);
+
+    std::optional<LoopVarDecl> loop_var = std::nullopt;
+    ExprPtr cond_expr;
+
+    // Check for loop variable syntax: loop (var i: I64 < N)
+    if (check(lexer::TokenKind::KwVar)) {
+        auto var_start = peek().span;
+        advance(); // consume 'var'
+
+        // Parse variable name
+        auto name_tok = expect(lexer::TokenKind::Identifier, "Expected variable name after 'var'");
+        if (is_err(name_tok))
+            return unwrap_err(name_tok);
+        std::string var_name = std::string(unwrap(name_tok).lexeme);
+
+        // Expect ':'
+        auto colon = expect(lexer::TokenKind::Colon, "Expected ':' after variable name in loop declaration");
+        if (is_err(colon))
+            return unwrap_err(colon);
+
+        // Parse type
+        auto var_type = parse_type();
+        if (is_err(var_type))
+            return unwrap_err(var_type);
+
+        auto var_end = previous().span;
+        loop_var = LoopVarDecl{
+            .name = var_name,
+            .type = std::move(unwrap(var_type)),
+            .span = SourceSpan::merge(var_start, var_end)
+        };
+
+        // Expect '<' comparison operator
+        if (!check(lexer::TokenKind::Lt)) {
+            return ParseError{
+                .message = "Expected '<' after type in loop variable declaration - syntax is: loop (var i: I64 < N)",
+                .span = peek().span
+            };
+        }
+        advance(); // consume '<'
+
+        // Parse the limit expression (right-hand side of comparison)
+        auto limit = parse_expr();
+        if (is_err(limit))
+            return limit;
+
+        // Build the condition: var_name < limit
+        auto var_ref = make_ident_expr(var_name, SourceSpan::merge(var_start, var_end));
+        auto limit_span = unwrap(limit)->span;
+        cond_expr = make_binary_expr(BinaryOp::Lt, std::move(var_ref), std::move(unwrap(limit)),
+                                     SourceSpan::merge(var_start, limit_span));
+    } else {
+        // Parse regular condition expression
+        auto cond = parse_expr();
+        if (is_err(cond))
+            return cond;
+        cond_expr = std::move(unwrap(cond));
+    }
+
+    // Require ')'
+    auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after loop condition");
+    if (is_err(rparen))
+        return unwrap_err(rparen);
+
+    // Parse body block
     auto body = parse_block_expr();
     if (is_err(body))
         return body;
 
     auto end_span = previous().span;
     return make_box<Expr>(Expr{.kind = LoopExpr{.label = std::nullopt,
+                                                .loop_var = std::move(loop_var),
+                                                .condition = std::move(cond_expr),
                                                 .body = std::move(unwrap(body)),
                                                 .span = SourceSpan::merge(start_span, end_span)},
                                .span = SourceSpan::merge(start_span, end_span)});

@@ -716,7 +716,7 @@ impl Debug for IoErrorKind {
 ///
 /// ```tml
 /// func retry_on_interrupt[T](f: func() -> Outcome[T, IoError]) -> Outcome[T, IoError] {
-///     loop {
+///     loop (true) {
 ///         when f() {
 ///             Ok(val) => return Ok(val),
 ///             Err(err) => {

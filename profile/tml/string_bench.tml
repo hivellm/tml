@@ -25,8 +25,7 @@ func run_and_print(name: Str, iterations: I64, total_ns: I64) {
 func bench_concat_small(iterations: I64) -> I64 {
     var count: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let result: Str = "Hello" + " " + "World" + "!"
         count = count + 1
         i = i + 1
@@ -38,8 +37,7 @@ func bench_concat_small(iterations: I64) -> I64 {
 func bench_concat_naive(iterations: I64) -> I64 {
     var result: Str = ""
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         result = result + "ab"
         i = i + 1
     }
@@ -50,8 +48,7 @@ func bench_concat_naive(iterations: I64) -> I64 {
 func bench_concat_text(iterations: I64) -> I64 {
     let result: Text = Text::with_capacity(iterations * 2)
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         result.push_str("ab")
         i = i + 1
     }
@@ -65,8 +62,7 @@ func bench_strlen(iterations: I64) -> I64 {
     let str: Str = "The quick brown fox jumps over the lazy dog"
     var total: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         total = total + (str.len() as I64)
         i = i + 1
     }
@@ -79,8 +75,7 @@ func bench_strcmp_equal(iterations: I64) -> I64 {
     let s2: Str = "Hello, World!"
     var matches: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         if s1 == s2 then {
             matches = matches + 1
         }
@@ -95,8 +90,7 @@ func bench_strcmp_different(iterations: I64) -> I64 {
     let s2: Str = "Hello, World?"
     var matches: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         if s1 == s2 then {
             matches = matches + 1
         }
@@ -109,8 +103,7 @@ func bench_strcmp_different(iterations: I64) -> I64 {
 func bench_int_to_str(iterations: I64) -> I64 {
     var total: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let s: Str = i.to_string()
         total = total + (s.len() as I64)
         i = i + 1
@@ -122,8 +115,7 @@ func bench_int_to_str(iterations: I64) -> I64 {
 func bench_log_naive(iterations: I64) -> I64 {
     var log: Str = ""
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         log = log + "[INFO] Message number " + i.to_string() + "\n"
         i = i + 1
     }
@@ -134,8 +126,7 @@ func bench_log_naive(iterations: I64) -> I64 {
 func bench_log_text(iterations: I64) -> I64 {
     let log: Text = Text::with_capacity(iterations * 32)
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         log.push_str("[INFO] Message number ")
         log.push_str(i.to_string())
         log.push_str("\n")
@@ -161,8 +152,7 @@ pub func main() -> I32 {
 
     // Warmup
     var warmup: I64 = 0
-    loop {
-        if warmup >= 10 then { break }
+    loop (warmup < 10) {
         let _: I64 = bench_concat_small(100)
         warmup = warmup + 1
     }

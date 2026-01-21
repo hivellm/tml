@@ -82,10 +82,7 @@ impl[T: Duplicate] Duplicate for List[T] {
     pub func duplicate(this) -> List[T] {
         let result: List[T] = List::new(this.capacity())
         let mut i: I64 = 0
-        loop {
-            if i >= this.len() {
-                break
-            }
+        loop (i < this.len()) {
             result.push(this.get(i).duplicate())
             i = i + 1
         }
@@ -107,10 +104,7 @@ impl[T: PartialEq] PartialEq for List[T] {
             return false
         }
         let mut i: I64 = 0
-        loop {
-            if i >= this.len() {
-                break
-            }
+        loop (i < this.len()) {
             if this.get(i).ne(ref other.get(i)) {
                 return false
             }
@@ -143,10 +137,7 @@ impl[T: PartialOrd] PartialOrd for List[T] {
     pub func partial_cmp(this, other: ref List[T]) -> Maybe[Ordering] {
         let min_len: I64 = if this.len() < other.len() then this.len() else other.len()
         let mut i: I64 = 0
-        loop {
-            if i >= min_len {
-                break
-            }
+        loop (i < min_len) {
             when this.get(i).partial_cmp(ref other.get(i)) {
                 Just(ord) => {
                     when ord {
@@ -174,10 +165,7 @@ impl[T: Ord] Ord for List[T] {
     pub func cmp(this, other: ref List[T]) -> Ordering {
         let min_len: I64 = if this.len() < other.len() then this.len() else other.len()
         let mut i: I64 = 0
-        loop {
-            if i >= min_len {
-                break
-            }
+        loop (i < min_len) {
             when this.get(i).cmp(ref other.get(i)) {
                 Less => return Less,
                 Greater => return Greater,
@@ -216,10 +204,7 @@ impl[T: Display] Display for List[T] {
     pub func to_string(this) -> Str {
         let mut result: Str = "["
         let mut i: I64 = 0
-        loop {
-            if i >= this.len() {
-                break
-            }
+        loop (i < this.len()) {
             if i > 0 {
                 result = result + ", "
             }
@@ -235,10 +220,7 @@ impl[T: Debug] Debug for List[T] {
     pub func debug_string(this) -> Str {
         let mut result: Str = "List["
         let mut i: I64 = 0
-        loop {
-            if i >= this.len() {
-                break
-            }
+        loop (i < this.len()) {
             if i > 0 {
                 result = result + ", "
             }
@@ -258,10 +240,7 @@ impl[T: Hash] Hash for List[T] {
     pub func hash(this) -> I64 {
         let mut h: I64 = 0
         let mut i: I64 = 0
-        loop {
-            if i >= this.len() {
-                break
-            }
+        loop (i < this.len()) {
             h = combine_hashes(h, this.get(i).hash())
             i = i + 1
         }
@@ -304,8 +283,8 @@ impl[T] IndexMut[I64] for List[T] {
 impl[T] FromIterator[T] for List[T] {
     pub func from_iter[I: Iterator](iter: I) -> List[T] where I::Item = T {
         let result: List[T] = List::new(8)
-        let mut it = iter
-        loop {
+        var it: I = iter
+        loop (true) {
             when it.next() {
                 Just(item) => result.push(item),
                 Nothing => break
@@ -322,8 +301,8 @@ impl[T] FromIterator[T] for List[T] {
 /// Extends the list with elements from an iterator.
 impl[T] Extend[T] for List[T] {
     pub func extend[I: Iterator](mut this, iter: I) where I::Item = T {
-        let mut it = iter
-        loop {
+        var it: I = iter
+        loop (true) {
             when it.next() {
                 Just(item) => this.push(item),
                 Nothing => break
@@ -423,7 +402,7 @@ impl[K: Duplicate + Hash, V: Duplicate] Duplicate for HashMap[K, V] {
 impl[K: Display, V: Display] Display for HashMap[K, V] {
     pub func to_string(this) -> Str {
         // Note: Without key iteration, we can only show size
-        return "{HashMap with " + this.len().to_string() + " entries}"
+        return "HashMap(" + this.len().to_string() + " entries)"
     }
 }
 

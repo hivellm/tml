@@ -83,8 +83,7 @@ func test_array_simulation() -> I32 {
 
     // Initialize array
     let mut i: I32 = 0
-    loop {
-        if i >= size then break
+    loop (i < size) {
         let ptr: *Unit = ptr_offset(arr, i)
         write_i32(ptr, i * 10)
         i = i + 1
@@ -93,8 +92,7 @@ func test_array_simulation() -> I32 {
     // Verify array contents
     let mut sum: I32 = 0
     let mut j: I32 = 0
-    loop {
-        if j >= size then break
+    loop (j < size) {
         let ptr: *Unit = ptr_offset(arr, j)
         let value: I32 = read_i32(ptr)
         sum = sum + value

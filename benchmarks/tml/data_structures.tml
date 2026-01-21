@@ -11,10 +11,7 @@ pub func stack_push_pop_cycle(n: I32) -> I32 {
     let mut max_depth: I32 = 0
     let mut i: I32 = 0
 
-    loop {
-        if i >= n {
-            break
-        }
+    loop (i < n) {
         // Push operation
         depth = depth + 1
         if depth > max_depth {
@@ -39,10 +36,7 @@ pub func binary_search_steps(target: I32, low: I32, high: I32) -> I32 {
     let mut hi: I32 = high
     let mut steps: I32 = 0
 
-    loop {
-        if lo > hi {
-            break
-        }
+    loop (lo <= hi) {
         let mid: I32 = lo + (hi - lo) / 2
         steps = steps + 1
 
@@ -66,15 +60,9 @@ pub func bubble_sort_comparisons(n: I32) -> I32 {
     let mut comparisons: I32 = 0
     let mut i: I32 = 0
 
-    loop {
-        if i >= n - 1 {
-            break
-        }
+    loop (i < n - 1) {
         let mut j: I32 = 0
-        loop {
-            if j >= n - i - 1 {
-                break
-            }
+        loop (j < n - i - 1) {
             comparisons = comparisons + 1
             j = j + 1
         }
@@ -93,20 +81,11 @@ pub func matrix_multiply_ops(n: I32) -> I32 {
     let mut ops: I32 = 0
     let mut i: I32 = 0
 
-    loop {
-        if i >= n {
-            break
-        }
+    loop (i < n) {
         let mut j: I32 = 0
-        loop {
-            if j >= n {
-                break
-            }
+        loop (j < n) {
             let mut k: I32 = 0
-            loop {
-                if k >= n {
-                    break
-                }
+            loop (k < n) {
                 ops = ops + 2  // multiply + add
                 k = k + 1
             }
@@ -126,10 +105,7 @@ pub func simple_hash(seed: I32, n: I32) -> I32 {
     let mut hash: I32 = seed
     let mut i: I32 = 0
 
-    loop {
-        if i >= n {
-            break
-        }
+    loop (i < n) {
         hash = ((hash * 31) + i) % 1000000007
         i = i + 1
     }
@@ -145,10 +121,7 @@ pub func list_traverse(length: I32) -> I32 {
     let mut visited: I32 = 0
     let mut current: I32 = 0
 
-    loop {
-        if current >= length {
-            break
-        }
+    loop (current < length) {
         visited = visited + 1
         current = current + 1
     }

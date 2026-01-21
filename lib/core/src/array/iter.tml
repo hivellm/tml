@@ -227,10 +227,7 @@ impl[T: Duplicate, const N: I64] Duplicate for ArrayIter[T, N] {
         // Clone the remaining elements
         let new_data: [T; N] = lowlevel { array_uninit() }
         let mut i: I64 = this.start
-        loop {
-            if i >= this.end {
-                break
-            }
+        loop (i < this.end) {
             let elem: T = lowlevel { array_get(this.data, i) }
             lowlevel { array_set(new_data, i, elem.duplicate()) }
             i = i + 1
@@ -247,10 +244,7 @@ impl[T: Debug, const N: I64] Debug for ArrayIter[T, N] {
     pub func debug_string(this) -> Str {
         let mut result: Str = "ArrayIter { remaining: ["
         let mut i: I64 = this.start
-        loop {
-            if i >= this.end {
-                break
-            }
+        loop (i < this.end) {
             if i > this.start {
                 result = result + ", "
             }

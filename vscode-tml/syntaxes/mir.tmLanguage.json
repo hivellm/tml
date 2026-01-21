@@ -1,0 +1,177 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "TML MIR",
+  "scopeName": "source.tml-mir",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#instructions" },
+    { "include": "#terminators" },
+    { "include": "#identifiers" },
+    { "include": "#labels" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.mir",
+          "match": ";.*$"
+        },
+        {
+          "name": "comment.line.double-slash.mir",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.mir",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.mir",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.mir",
+          "match": "\\b0x[0-9A-Fa-f]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.mir",
+          "match": "\\b-?[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.mir",
+          "match": "\\b-?[0-9]+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.declaration.mir",
+          "match": "\\b(func|struct|enum|type|const|static|extern|pub|mut|ref|lowlevel)\\b"
+        },
+        {
+          "name": "constant.language.mir",
+          "match": "\\b(true|false|null|Nothing|Just|Ok|Err)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.mir",
+          "match": "\\b(I8|I16|I32|I64|I128|U8|U16|U32|U64|U128|F32|F64|Bool|Char|Str|Unit|Never|ptr)\\b"
+        },
+        {
+          "name": "storage.type.generic.mir",
+          "match": "\\b(Maybe|Outcome|Array|Slice|Vec|List|HashMap|Text)\\b"
+        },
+        {
+          "name": "storage.type.mir",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "instructions": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.mir",
+          "match": "\\b(add|sub|mul|div|rem|neg)\\b"
+        },
+        {
+          "name": "keyword.operator.bitwise.mir",
+          "match": "\\b(and|or|xor|shl|shr|not)\\b"
+        },
+        {
+          "name": "keyword.operator.comparison.mir",
+          "match": "\\b(eq|ne|lt|le|gt|ge|cmp)\\b"
+        },
+        {
+          "name": "keyword.operator.memory.mir",
+          "match": "\\b(alloca|load|store|copy|move|drop|gep|offset|store_byte)\\b"
+        },
+        {
+          "name": "keyword.operator.conversion.mir",
+          "match": "\\b(cast|trunc|zext|sext|bitcast|int_to_ptr|ptr_to_int)\\b"
+        },
+        {
+          "name": "keyword.operator.aggregate.mir",
+          "match": "\\b(construct|extract|insert|extract_value|insert_value|aggregate)\\b"
+        },
+        {
+          "name": "keyword.operator.call.mir",
+          "match": "\\b(call|invoke|intrinsic|method_call|static_call|virtual_call)\\b"
+        },
+        {
+          "name": "keyword.operator.phi.mir",
+          "match": "\\b(phi|select)\\b"
+        },
+        {
+          "name": "keyword.operator.other.mir",
+          "match": "\\b(nop|unreachable|assert|assume|debug|print|memcpy|memset|memmove)\\b"
+        }
+      ]
+    },
+    "terminators": {
+      "patterns": [
+        {
+          "name": "keyword.control.terminator.mir",
+          "match": "\\b(return|ret|br|branch|cond_branch|switch|jump|goto|panic|abort)\\b"
+        },
+        {
+          "name": "keyword.control.mir",
+          "match": "\\b(if|then|else|loop|while|for|break|continue|when|match)\\b"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.global.mir",
+          "match": "@[A-Za-z_][A-Za-z0-9_\\.]*"
+        },
+        {
+          "name": "variable.other.local.mir",
+          "match": "%[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "name": "variable.other.local.mir",
+          "match": "%[0-9]+"
+        },
+        {
+          "name": "variable.other.temp.mir",
+          "match": "%t[0-9]+"
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.label.mir",
+          "match": "^\\s*bb[0-9]+:"
+        },
+        {
+          "name": "entity.name.label.mir",
+          "match": "^[A-Za-z_][A-Za-z0-9_.]*:"
+        },
+        {
+          "name": "entity.name.label.reference.mir",
+          "match": "\\bbb[0-9]+\\b"
+        }
+      ]
+    }
+  }
+}

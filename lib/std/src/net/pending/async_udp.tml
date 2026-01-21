@@ -89,7 +89,7 @@ impl AsyncUdpSocket {
 
     /// Sends data to the given address (async).
     pub async func send_to(this, buf: ref [U8], addr: SocketAddr) -> Outcome[I64, NetError] {
-        loop {
+        loop (true) {
             when this.poll_send_to(mut ref Context::new(Waker::noop()), buf, addr) {
                 Poll::Ready(result) => return result
                 Poll::Pending => {}
@@ -99,7 +99,7 @@ impl AsyncUdpSocket {
 
     /// Receives data and sender address (async).
     pub async func recv_from(this, buf: mut ref [U8]) -> Outcome[(I64, SocketAddr), NetError] {
-        loop {
+        loop (true) {
             when this.poll_recv_from(mut ref Context::new(Waker::noop()), buf) {
                 Poll::Ready(result) => return result
                 Poll::Pending => {}
@@ -143,7 +143,7 @@ impl AsyncUdpSocket {
 
     /// Sends data on connected socket (async).
     pub async func send(this, buf: ref [U8]) -> Outcome[I64, NetError] {
-        loop {
+        loop (true) {
             when this.poll_send(mut ref Context::new(Waker::noop()), buf) {
                 Poll::Ready(result) => return result
                 Poll::Pending => {}
@@ -153,7 +153,7 @@ impl AsyncUdpSocket {
 
     /// Receives data on connected socket (async).
     pub async func recv(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
-        loop {
+        loop (true) {
             when this.poll_recv(mut ref Context::new(Waker::noop()), buf) {
                 Poll::Ready(result) => return result
                 Poll::Pending => {}

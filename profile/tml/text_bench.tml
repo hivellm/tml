@@ -25,8 +25,7 @@ func run_and_print(name: Str, iterations: I64, total_ns: I64) {
 func bench_text_append(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations * 10)
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         t.push_str("item")
         t.push_str(i.to_string())
         t.push_str(",")
@@ -41,8 +40,7 @@ func bench_text_append(iterations: I64) -> I64 {
 func bench_str_naive_append(iterations: I64) -> I64 {
     var s: Str = ""
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         s = s + "ab"
         i = i + 1
     }
@@ -54,8 +52,7 @@ func bench_build_json(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations * 40)
     t.push_str("{\"items\":[")
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         if i > 0 then {
             t.push_str(",")
         }
@@ -77,8 +74,7 @@ func bench_build_html(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations * 50)
     t.push_str("<ul>\n")
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         // Uses push_formatted: single FFI call for prefix + int + suffix
         t.push_formatted("  <li>Item ", i, "</li>\n")
         i = i + 1
@@ -94,8 +90,7 @@ func bench_build_csv(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations * 30)
     t.push_str("id,name,value\n")
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         // Uses push_log: all 6 operations in 1 FFI call
         t.push_log("", i, ",item", i, ",", i * 100, "\n")
         i = i + 1
@@ -109,8 +104,7 @@ func bench_build_csv(iterations: I64) -> I64 {
 func bench_small_appends(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations)
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         t.push(120)  // 'x' = 120 ASCII - uses direct byte push
         i = i + 1
     }
@@ -123,8 +117,7 @@ func bench_small_appends(iterations: I64) -> I64 {
 func bench_small_appends_str(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations)
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         t.push_str("x")  // Uses FFI string handling
         i = i + 1
     }
@@ -147,8 +140,7 @@ func bench_small_appends_raw(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations)
     let data: *U8 = t.data_ptr()  // Get raw pointer once
     var len: I64 = 0
-    loop {
-        if len >= iterations then { break }
+    loop (len < iterations) {
         // Store directly to memory - no FFI, no checks
         lowlevel { store_byte(data, len, 120) }
         len = len + 1
@@ -163,8 +155,7 @@ func bench_small_appends_raw(iterations: I64) -> I64 {
 func bench_number_formatting(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations * 20)
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         t.push_str(i.to_string())
         t.push_str(":")
         // Approximation of i * 3.14159 as integer
@@ -182,8 +173,7 @@ func bench_number_formatting(iterations: I64) -> I64 {
 func bench_log_messages(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(iterations * 64)
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         // Uses push_log: 7 operations in 1 FFI call
         t.push_log("[", i, "] INFO: Processing item #", i, " with value ", i * 42, "\n")
         i = i + 1
@@ -199,8 +189,7 @@ func bench_path_building(iterations: I64) -> I64 {
     let t: Text = Text::with_capacity(100)
     var last_len: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         t.clear()
         // Uses push_path: s1 + n1 + s2 + n2 + s3 in one FFI call
         t.push_path("/home/user/projects/app/src/module", i % 100, "/file", i, ".txt")
@@ -224,8 +213,7 @@ pub func main() -> I32 {
 
     // Warmup
     var warmup: I64 = 0
-    loop {
-        if warmup >= 10 then { break }
+    loop (warmup < 10) {
         let t: Text = Text::with_capacity(100)
         t.push_str("test")
         t.drop()

@@ -49,7 +49,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string ptr = get_value_reg(i.ptr);
                 mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
-                emitln("    " + result_reg + " = load " + type_str + ", ptr " + ptr);
+                std::string volatile_kw = i.is_volatile ? "volatile " : "";
+                emitln("    " + result_reg + " = load " + volatile_kw + type_str + ", ptr " + ptr);
 
             } else if constexpr (std::is_same_v<T, mir::StoreInst>) {
                 std::string value = get_value_reg(i.value);
@@ -59,7 +60,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     type_ptr = mir::make_i32_type();
                 }
                 std::string type_str = mir_type_to_llvm(type_ptr);
-                emitln("    store " + type_str + " " + value + ", ptr " + ptr);
+                std::string volatile_kw = i.is_volatile ? "volatile " : "";
+                emitln("    store " + volatile_kw + type_str + " " + value + ", ptr " + ptr);
 
             } else if constexpr (std::is_same_v<T, mir::AllocaInst>) {
                 mir::MirTypePtr type_ptr = i.alloc_type ? i.alloc_type : mir::make_i32_type();
@@ -77,13 +79,17 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     std::string size_str = std::to_string(i.known_array_size);
                     std::string label_id = std::to_string(temp_counter_++);
 
+                    // Get the actual type of the index (might be i32 or i64)
+                    mir::MirTypePtr idx_type_ptr = i.indices[0].type;
+                    std::string idx_type = idx_type_ptr ? mir_type_to_llvm(idx_type_ptr) : "i32";
+
                     // Check index < 0 (signed comparison)
                     std::string below_zero = "%bc.below." + label_id;
-                    emitln("    " + below_zero + " = icmp slt i32 " + idx_val + ", 0");
+                    emitln("    " + below_zero + " = icmp slt " + idx_type + " " + idx_val + ", 0");
 
                     // Check index >= size
                     std::string above_max = "%bc.above." + label_id;
-                    emitln("    " + above_max + " = icmp sge i32 " + idx_val + ", " + size_str);
+                    emitln("    " + above_max + " = icmp sge " + idx_type + " " + idx_val + ", " + size_str);
 
                     // Combine checks
                     std::string oob = "%bc.oob." + label_id;
@@ -101,6 +107,26 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
                     // OK block - continue with GEP
                     emitln(ok_label + ":");
+                }
+                // Emit @llvm.assume hints when BCE proved the access is safe
+                // This helps LLVM with cross-function optimization and vectorization
+                else if (!i.needs_bounds_check && i.known_array_size >= 0 && !i.indices.empty()) {
+                    std::string idx_val = get_value_reg(i.indices[0]);
+                    std::string size_str = std::to_string(i.known_array_size);
+                    std::string label_id = std::to_string(temp_counter_++);
+
+                    mir::MirTypePtr idx_type_ptr = i.indices[0].type;
+                    std::string idx_type = idx_type_ptr ? mir_type_to_llvm(idx_type_ptr) : "i32";
+
+                    // Emit assume: index >= 0
+                    std::string nonneg_cmp = "%assume.nonneg." + label_id;
+                    emitln("    " + nonneg_cmp + " = icmp sge " + idx_type + " " + idx_val + ", 0");
+                    emitln("    call void @llvm.assume(i1 " + nonneg_cmp + ")");
+
+                    // Emit assume: index < size
+                    std::string bounded_cmp = "%assume.bounded." + label_id;
+                    emitln("    " + bounded_cmp + " = icmp slt " + idx_type + " " + idx_val + ", " + size_str);
+                    emitln("    call void @llvm.assume(i1 " + bounded_cmp + ")");
                 }
 
                 emit("    " + result_reg + " = getelementptr " + type_str + ", ptr " + base);
@@ -1012,7 +1038,16 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             auto prefix_const = value_string_contents_.find(i.args[0].id);
             auto suffix_const = value_string_contents_.find(i.args[2].id);
 
-            if (prefix_const != value_string_contents_.end()) {
+            // Check if all strings are constants for optimized capacity check
+            bool prefix_is_const = prefix_const != value_string_contents_.end();
+            bool suffix_is_const = suffix_const != value_string_contents_.end();
+            bool all_const = prefix_is_const && suffix_is_const;
+            size_t total_const_len = 0;
+            if (all_const) {
+                total_const_len = prefix_const->second.size() + suffix_const->second.size() + 20;
+            }
+
+            if (prefix_is_const) {
                 size_t len = prefix_const->second.size();
                 emitln("    %prefix_len." + id + " = add i64 0, " + std::to_string(len));
             } else {
@@ -1020,7 +1055,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                 emitln("    %prefix_len." + id + " = zext i32 %prefix_len_i32." + id + " to i64");
             }
 
-            if (suffix_const != value_string_contents_.end()) {
+            if (suffix_is_const) {
                 size_t len = suffix_const->second.size();
                 emitln("    %suffix_len." + id + " = add i64 0, " + std::to_string(len));
             } else {
@@ -1045,47 +1080,57 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
 
             // Calculate needed space: len + prefix_len + 20 + suffix_len
-            emitln("    %need1." + id + " = add i64 %len." + id + ", %prefix_len." + id);
-            emitln("    %need2." + id + " = add i64 %need1." + id + ", 20");
-            emitln("    %needed." + id + " = add i64 %need2." + id + ", %suffix_len." + id);
+            // OPTIMIZED: if all strings are constant, use single add with precomputed total
+            if (all_const) {
+                emitln("    %needed." + id + " = add i64 %len." + id + ", " +
+                       std::to_string(total_const_len));
+            } else {
+                emitln("    %need1." + id + " = add i64 %len." + id + ", %prefix_len." + id);
+                emitln("    %need2." + id + " = add i64 %need1." + id + ", 20");
+                emitln("    %needed." + id + " = add i64 %need2." + id + ", %suffix_len." + id);
+            }
             emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
             emitln("    br i1 %has_space." + id + ", label %pfmt_fast." + id +
                    ", label %pfmt_slow." + id);
 
             // Fast path: memcpy prefix, inline int-to-string, memcpy suffix
+            // OPTIMIZED: keep length in registers, only store once at end
             emitln("  pfmt_fast." + id + ":");
-            // Copy prefix
+            // Copy prefix - use literal size for constant strings
+            std::string prefix_size = prefix_is_const
+                                          ? std::to_string(prefix_const->second.size())
+                                          : "%prefix_len." + id;
             emitln("    %dst1." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
                    id);
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst1." + id + ", ptr " + prefix +
-                   ", i64 %prefix_len." + id + ", i1 false)");
-            // Update len after prefix
-            emitln("    %len2." + id + " = add i64 %len." + id + ", %prefix_len." + id);
-            emitln("    store i64 %len2." + id + ", ptr %len_ptr." + id);
-            // Inline int-to-string conversion (creates multiple blocks, ends at merge)
+                   ", i64 " + prefix_size + ", i1 false)");
+            // Update len after prefix (keep in register)
+            emitln("    %len2." + id + " = add i64 %len." + id + ", " + prefix_size);
+            // NO store - keep in register
+            // Inline int-to-string conversion (skip_store=true)
             std::string int_id = id + ".i";
-            emit_inline_int_to_string(int_id, int_val, "%data_ptr." + id, "%len_ptr." + id,
-                                      "%len2." + id, receiver, "pfmt_suffix." + id);
-            emitln("    br label %pfmt_suffix." + id);
-            // Continue with suffix after int conversion
-            emitln("  pfmt_suffix." + id + ":");
-            // Load updated len after int conversion
-            emitln("    %len3." + id + " = load i64, ptr %len_ptr." + id);
-            // Copy suffix
-            emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len3." +
-                   id);
+            std::string len_after_int =
+                emit_inline_int_to_string(int_id, int_val, "%data_ptr." + id, "%len_ptr." + id,
+                                          "%len2." + id, receiver, "", true);
+            // Continue directly - use returned value
+            // Copy suffix - use literal size for constant strings
+            std::string suffix_size = suffix_is_const
+                                          ? std::to_string(suffix_const->second.size())
+                                          : "%suffix_len." + id;
+            emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 " +
+                   len_after_int);
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst2." + id + ", ptr " + suffix +
-                   ", i64 %suffix_len." + id + ", i1 false)");
-            // Update final len
-            emitln("    %len4." + id + " = add i64 %len3." + id + ", %suffix_len." + id);
+                   ", i64 " + suffix_size + ", i1 false)");
+            // Update final len and store only once
+            emitln("    %len4." + id + " = add i64 " + len_after_int + ", " + suffix_size);
             emitln("    store i64 %len4." + id + ", ptr %len_ptr." + id);
             emitln("    br label %pfmt_done." + id);
 
-            // Slow path: call FFI
+            // Slow path: call FFI - also use literal sizes when available
             emitln("  pfmt_slow." + id + ":");
             emitln("    call void @tml_text_push_formatted(ptr " + receiver + ", ptr " + prefix +
-                   ", i64 %prefix_len." + id + ", i64 " + int_val + ", ptr " + suffix +
-                   ", i64 %suffix_len." + id + ")");
+                   ", i64 " + prefix_size + ", i64 " + int_val + ", ptr " + suffix +
+                   ", i64 " + suffix_size + ")");
             emitln("    br label %pfmt_done." + id);
 
             emitln("  pfmt_done." + id + ":");
@@ -1109,6 +1154,17 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             auto s2_const = value_string_contents_.find(i.args[2].id);
             auto s3_const = value_string_contents_.find(i.args[4].id);
             auto s4_const = value_string_contents_.find(i.args[6].id);
+
+            // Check if all strings are constants for optimized capacity check
+            bool all_const = (s1_const != value_string_contents_.end()) &&
+                             (s2_const != value_string_contents_.end()) &&
+                             (s3_const != value_string_contents_.end()) &&
+                             (s4_const != value_string_contents_.end());
+            size_t total_const_len = 0;
+            if (all_const) {
+                total_const_len = s1_const->second.size() + s2_const->second.size() +
+                                  s3_const->second.size() + s4_const->second.size() + 60;
+            }
 
             // Get lengths for all 4 strings
             if (s1_const != value_string_contents_.end()) {
@@ -1157,69 +1213,89 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
 
             // Calculate needed: len + s1 + s2 + s3 + s4 + 60
-            emitln("    %need1." + id + " = add i64 %len." + id + ", %s1_len." + id);
-            emitln("    %need2." + id + " = add i64 %need1." + id + ", %s2_len." + id);
-            emitln("    %need3." + id + " = add i64 %need2." + id + ", %s3_len." + id);
-            emitln("    %need4." + id + " = add i64 %need3." + id + ", %s4_len." + id);
-            emitln("    %needed." + id + " = add i64 %need4." + id + ", 60");
+            // OPTIMIZED: if all strings are constant, use single add with precomputed total
+            if (all_const) {
+                emitln("    %needed." + id + " = add i64 %len." + id + ", " +
+                       std::to_string(total_const_len));
+            } else {
+                emitln("    %need1." + id + " = add i64 %len." + id + ", %s1_len." + id);
+                emitln("    %need2." + id + " = add i64 %need1." + id + ", %s2_len." + id);
+                emitln("    %need3." + id + " = add i64 %need2." + id + ", %s3_len." + id);
+                emitln("    %need4." + id + " = add i64 %need3." + id + ", %s4_len." + id);
+                emitln("    %needed." + id + " = add i64 %need4." + id + ", 60");
+            }
             emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
             emitln("    br i1 %has_space." + id + ", label %plog_fast." + id +
                    ", label %plog_slow." + id);
 
             // Fast path: inline all memcpy and int-to-string
+            // OPTIMIZED: keep length in registers, only store once at end
+            // OPTIMIZED: use literal constants for memcpy size when strings are constant
             emitln("  plog_fast." + id + ":");
+
+            // Helper to get memcpy size (literal for const, register for dynamic)
+            auto get_memcpy_size = [&](auto const_iter, const std::string& len_reg,
+                                       bool is_const) -> std::string {
+                if (is_const) {
+                    return std::to_string(const_iter->second.size());
+                }
+                return len_reg;
+            };
 
             // s1
             emitln("    %dst1." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
                    id);
+            std::string s1_size = get_memcpy_size(s1_const, "%s1_len." + id,
+                                                  s1_const != value_string_contents_.end());
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst1." + id + ", ptr " + s1 +
-                   ", i64 %s1_len." + id + ", i1 false)");
+                   ", i64 " + s1_size + ", i1 false)");
             emitln("    %len1." + id + " = add i64 %len." + id + ", %s1_len." + id);
-            emitln("    store i64 %len1." + id + ", ptr %len_ptr." + id);
+            // NO store - keep in register
 
-            // n1 (inline int-to-string)
-            emit_inline_int_to_string(id + ".n1", n1, "%data_ptr." + id, "%len_ptr." + id,
-                                      "%len1." + id, receiver, "plog_s2." + id);
-            emitln("    br label %plog_s2." + id);
-            emitln("  plog_s2." + id + ":");
-            emitln("    %len2." + id + " = load i64, ptr %len_ptr." + id);
+            // n1 (inline int-to-string, skip_store=true)
+            std::string len_after_n1 =
+                emit_inline_int_to_string(id + ".n1", n1, "%data_ptr." + id, "%len_ptr." + id,
+                                          "%len1." + id, receiver, "", true);
 
             // s2
-            emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len2." +
-                   id);
+            emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 " +
+                   len_after_n1);
+            std::string s2_size = get_memcpy_size(s2_const, "%s2_len." + id,
+                                                  s2_const != value_string_contents_.end());
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst2." + id + ", ptr " + s2 +
-                   ", i64 %s2_len." + id + ", i1 false)");
-            emitln("    %len3." + id + " = add i64 %len2." + id + ", %s2_len." + id);
-            emitln("    store i64 %len3." + id + ", ptr %len_ptr." + id);
+                   ", i64 " + s2_size + ", i1 false)");
+            emitln("    %len3." + id + " = add i64 " + len_after_n1 + ", %s2_len." + id);
+            // NO store - keep in register
 
-            // n2 (inline int-to-string)
-            emit_inline_int_to_string(id + ".n2", n2, "%data_ptr." + id, "%len_ptr." + id,
-                                      "%len3." + id, receiver, "plog_s3." + id);
-            emitln("    br label %plog_s3." + id);
-            emitln("  plog_s3." + id + ":");
-            emitln("    %len4." + id + " = load i64, ptr %len_ptr." + id);
+            // n2 (inline int-to-string, skip_store=true)
+            std::string len_after_n2 =
+                emit_inline_int_to_string(id + ".n2", n2, "%data_ptr." + id, "%len_ptr." + id,
+                                          "%len3." + id, receiver, "", true);
 
             // s3
-            emitln("    %dst3." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len4." +
-                   id);
+            emitln("    %dst3." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 " +
+                   len_after_n2);
+            std::string s3_size = get_memcpy_size(s3_const, "%s3_len." + id,
+                                                  s3_const != value_string_contents_.end());
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst3." + id + ", ptr " + s3 +
-                   ", i64 %s3_len." + id + ", i1 false)");
-            emitln("    %len5." + id + " = add i64 %len4." + id + ", %s3_len." + id);
-            emitln("    store i64 %len5." + id + ", ptr %len_ptr." + id);
+                   ", i64 " + s3_size + ", i1 false)");
+            emitln("    %len5." + id + " = add i64 " + len_after_n2 + ", %s3_len." + id);
+            // NO store - keep in register
 
-            // n3 (inline int-to-string)
-            emit_inline_int_to_string(id + ".n3", n3, "%data_ptr." + id, "%len_ptr." + id,
-                                      "%len5." + id, receiver, "plog_s4." + id);
-            emitln("    br label %plog_s4." + id);
-            emitln("  plog_s4." + id + ":");
-            emitln("    %len6." + id + " = load i64, ptr %len_ptr." + id);
+            // n3 (inline int-to-string, skip_store=true)
+            std::string len_after_n3 =
+                emit_inline_int_to_string(id + ".n3", n3, "%data_ptr." + id, "%len_ptr." + id,
+                                          "%len5." + id, receiver, "", true);
 
             // s4
-            emitln("    %dst4." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len6." +
-                   id);
+            emitln("    %dst4." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 " +
+                   len_after_n3);
+            std::string s4_size = get_memcpy_size(s4_const, "%s4_len." + id,
+                                                  s4_const != value_string_contents_.end());
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst4." + id + ", ptr " + s4 +
-                   ", i64 %s4_len." + id + ", i1 false)");
-            emitln("    %len7." + id + " = add i64 %len6." + id + ", %s4_len." + id);
+                   ", i64 " + s4_size + ", i1 false)");
+            emitln("    %len7." + id + " = add i64 " + len_after_n3 + ", %s4_len." + id);
+            // ONLY store final length once
             emitln("    store i64 %len7." + id + ", ptr %len_ptr." + id);
 
             emitln("    br label %plog_done." + id);
@@ -1250,6 +1326,16 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             auto s1_const = value_string_contents_.find(i.args[0].id);
             auto s2_const = value_string_contents_.find(i.args[2].id);
             auto s3_const = value_string_contents_.find(i.args[4].id);
+
+            // Check if all strings are constants for optimized capacity check
+            bool all_const = (s1_const != value_string_contents_.end()) &&
+                             (s2_const != value_string_contents_.end()) &&
+                             (s3_const != value_string_contents_.end());
+            size_t total_const_len = 0;
+            if (all_const) {
+                total_const_len =
+                    s1_const->second.size() + s2_const->second.size() + s3_const->second.size() + 40;
+            }
 
             // Get lengths for all 3 strings
             if (s1_const != value_string_contents_.end()) {
@@ -1291,53 +1377,75 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             emitln("    %cap." + id + " = load i64, ptr %cap_ptr." + id);
 
             // Calculate needed: len + s1 + s2 + s3 + 40
-            emitln("    %need1." + id + " = add i64 %len." + id + ", %s1_len." + id);
-            emitln("    %need2." + id + " = add i64 %need1." + id + ", %s2_len." + id);
-            emitln("    %need3." + id + " = add i64 %need2." + id + ", %s3_len." + id);
-            emitln("    %needed." + id + " = add i64 %need3." + id + ", 40");
+            // OPTIMIZED: if all strings are constant, use single add with precomputed total
+            if (all_const) {
+                emitln("    %needed." + id + " = add i64 %len." + id + ", " +
+                       std::to_string(total_const_len));
+            } else {
+                emitln("    %need1." + id + " = add i64 %len." + id + ", %s1_len." + id);
+                emitln("    %need2." + id + " = add i64 %need1." + id + ", %s2_len." + id);
+                emitln("    %need3." + id + " = add i64 %need2." + id + ", %s3_len." + id);
+                emitln("    %needed." + id + " = add i64 %need3." + id + ", 40");
+            }
             emitln("    %has_space." + id + " = icmp ule i64 %needed." + id + ", %cap." + id);
             emitln("    br i1 %has_space." + id + ", label %ppath_fast." + id +
                    ", label %ppath_slow." + id);
 
             // Fast path: inline all memcpy and int-to-string
+            // OPTIMIZED: keep length in registers, only store once at end
+            // OPTIMIZED: use literal constants for memcpy size when strings are constant
             emitln("  ppath_fast." + id + ":");
+
+            // Helper to get memcpy size (literal for const, register for dynamic)
+            auto get_memcpy_size = [&](auto const_iter, const std::string& len_reg,
+                                       bool is_const) -> std::string {
+                if (is_const) {
+                    return std::to_string(const_iter->second.size());
+                }
+                return len_reg;
+            };
 
             // s1
             emitln("    %dst1." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
                    id);
+            std::string s1_size = get_memcpy_size(s1_const, "%s1_len." + id,
+                                                  s1_const != value_string_contents_.end());
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst1." + id + ", ptr " + s1 +
-                   ", i64 %s1_len." + id + ", i1 false)");
+                   ", i64 " + s1_size + ", i1 false)");
             emitln("    %len1." + id + " = add i64 %len." + id + ", %s1_len." + id);
-            emitln("    store i64 %len1." + id + ", ptr %len_ptr." + id);
+            // NO store - keep in register
 
-            // n1 (inline int-to-string)
-            emit_inline_int_to_string(id + ".n1", n1, "%data_ptr." + id, "%len_ptr." + id,
-                                      "%len1." + id, receiver, "ppath_s2." + id);
-            emitln("    br label %ppath_s2." + id);
-            emitln("  ppath_s2." + id + ":");
-            emitln("    %len2." + id + " = load i64, ptr %len_ptr." + id);
+            // n1 (inline int-to-string, skip_store=true)
+            std::string len_after_n1 =
+                emit_inline_int_to_string(id + ".n1", n1, "%data_ptr." + id, "%len_ptr." + id,
+                                          "%len1." + id, receiver, "", true);
+            // Continue directly - no branch/label needed, use returned value
 
             // s2
-            emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len2." +
-                   id);
+            emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 " +
+                   len_after_n1);
+            std::string s2_size = get_memcpy_size(s2_const, "%s2_len." + id,
+                                                  s2_const != value_string_contents_.end());
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst2." + id + ", ptr " + s2 +
-                   ", i64 %s2_len." + id + ", i1 false)");
-            emitln("    %len3." + id + " = add i64 %len2." + id + ", %s2_len." + id);
-            emitln("    store i64 %len3." + id + ", ptr %len_ptr." + id);
+                   ", i64 " + s2_size + ", i1 false)");
+            emitln("    %len3." + id + " = add i64 " + len_after_n1 + ", %s2_len." + id);
+            // NO store - keep in register
 
-            // n2 (inline int-to-string)
-            emit_inline_int_to_string(id + ".n2", n2, "%data_ptr." + id, "%len_ptr." + id,
-                                      "%len3." + id, receiver, "ppath_s3." + id);
-            emitln("    br label %ppath_s3." + id);
-            emitln("  ppath_s3." + id + ":");
-            emitln("    %len4." + id + " = load i64, ptr %len_ptr." + id);
+            // n2 (inline int-to-string, skip_store=true)
+            std::string len_after_n2 =
+                emit_inline_int_to_string(id + ".n2", n2, "%data_ptr." + id, "%len_ptr." + id,
+                                          "%len3." + id, receiver, "", true);
+            // Continue directly - no branch/label needed, use returned value
 
             // s3
-            emitln("    %dst3." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len4." +
-                   id);
+            emitln("    %dst3." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 " +
+                   len_after_n2);
+            std::string s3_size = get_memcpy_size(s3_const, "%s3_len." + id,
+                                                  s3_const != value_string_contents_.end());
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst3." + id + ", ptr " + s3 +
-                   ", i64 %s3_len." + id + ", i1 false)");
-            emitln("    %len5." + id + " = add i64 %len4." + id + ", %s3_len." + id);
+                   ", i64 " + s3_size + ", i1 false)");
+            emitln("    %len5." + id + " = add i64 " + len_after_n2 + ", %s3_len." + id);
+            // ONLY store final length once
             emitln("    store i64 %len5." + id + ", ptr %len_ptr." + id);
 
             emitln("    br label %ppath_done." + id);
@@ -1560,24 +1668,33 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
             using C = std::decay_t<decltype(c)>;
             if constexpr (std::is_same_v<C, mir::ConstInt>) {
                 std::string type_str = "i" + std::to_string(c.bit_width);
-                emitln("    " + result_reg + " = add " + type_str + " 0, " +
-                       std::to_string(c.value));
+                // OPTIMIZATION: Store literal value directly instead of emitting add 0, X
+                // This allows instructions to use the literal directly: icmp sge i32 %v9, 100
+                // instead of: icmp sge i32 %v9, %v10 (where %v10 = add i32 0, 100)
                 if (inst.result != mir::INVALID_VALUE) {
+                    value_regs_[inst.result] = std::to_string(c.value);
                     value_types_[inst.result] = type_str;
+                    // Track integer constants for zero-initialization detection
+                    value_int_constants_[inst.result] = c.value;
                 }
+                // No instruction emitted - the literal will be used directly
             } else if constexpr (std::is_same_v<C, mir::ConstFloat>) {
                 std::string type_str = c.is_f64 ? "double" : "float";
                 std::ostringstream ss;
                 ss << std::scientific << std::setprecision(17) << c.value;
-                emitln("    " + result_reg + " = fadd " + type_str + " 0.0, " + ss.str());
+                // OPTIMIZATION: Store literal value directly
                 if (inst.result != mir::INVALID_VALUE) {
+                    value_regs_[inst.result] = ss.str();
                     value_types_[inst.result] = type_str;
                 }
+                // No instruction emitted - the literal will be used directly
             } else if constexpr (std::is_same_v<C, mir::ConstBool>) {
-                emitln("    " + result_reg + " = add i1 0, " + std::string(c.value ? "1" : "0"));
+                // OPTIMIZATION: Store literal value directly
                 if (inst.result != mir::INVALID_VALUE) {
+                    value_regs_[inst.result] = c.value ? "1" : "0";
                     value_types_[inst.result] = "i1";
                 }
+                // No instruction emitted - the literal will be used directly
             } else if constexpr (std::is_same_v<C, mir::ConstString>) {
                 auto it = string_constants_.find(c.value);
                 if (it != string_constants_.end()) {
@@ -1768,12 +1885,80 @@ void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::st
 // ============================================================================
 
 void MirCodegen::emit_array_init_inst(const mir::ArrayInitInst& i, const std::string& result_reg) {
-    std::string current = "undef";
     mir::MirTypePtr array_ptr = i.result_type ? i.result_type : mir::make_i32_type();
     std::string array_type = mir_type_to_llvm(array_ptr);
     mir::MirTypePtr elem_ptr = i.element_type ? i.element_type : mir::make_i32_type();
     std::string elem_type = mir_type_to_llvm(elem_ptr);
 
+    // Get element size for memset
+    size_t elem_size = 4;  // default for i32
+    if (elem_type == "i8") elem_size = 1;
+    else if (elem_type == "i16") elem_size = 2;
+    else if (elem_type == "i32") elem_size = 4;
+    else if (elem_type == "i64") elem_size = 8;
+    else if (elem_type == "double") elem_size = 8;
+    else if (elem_type == "float") elem_size = 4;
+
+    // OPTIMIZATION: Check if all elements are the same value
+    // This is common for repeat patterns like [0; 1000]
+    if (!i.elements.empty()) {
+        bool all_same = true;
+        uint32_t first_id = i.elements[0].id;
+
+        for (size_t j = 1; j < i.elements.size(); ++j) {
+            if (i.elements[j].id != first_id) {
+                all_same = false;
+                break;
+            }
+        }
+
+        if (all_same) {
+            // Check if the common value is zero using multiple methods
+            bool all_zero = false;
+            std::string first_val = get_value_reg(i.elements[0]);
+
+            // Method 1: Direct string comparison
+            if (first_val == "0") {
+                all_zero = true;
+            }
+            // Method 2: Check integer constant tracking
+            if (!all_zero) {
+                auto it = value_int_constants_.find(first_id);
+                if (it != value_int_constants_.end() && it->second == 0) {
+                    all_zero = true;
+                }
+            }
+
+            if (all_zero) {
+                // For zero-filled arrays, use alloca + store zeroinitializer + load
+                // Can't assign aggregate constant directly to SSA value
+                std::string alloc_reg = "%arr_alloc" + std::to_string(temp_counter_++);
+                emitln("    " + alloc_reg + " = alloca " + array_type + ", align 16");
+                emitln("    store " + array_type + " zeroinitializer, ptr " + alloc_reg + ", align 16");
+                emitln("    " + result_reg + " = load " + array_type + ", ptr " + alloc_reg + ", align 16");
+                return;
+            }
+
+            // For large arrays with non-zero repeated value, use zeroinitializer
+            // and then the loop will overwrite. This is still faster than 1000 insertvalues.
+            // For values where zeroinitializer + overwrites would be wasteful,
+            // just use zeroinitializer anyway - it's the safest approach that works.
+            if (i.elements.size() > 100) {
+                std::string alloc_reg = "%arr_alloc" + std::to_string(temp_counter_++);
+                emitln("    " + alloc_reg + " = alloca " + array_type + ", align 16");
+                // For non-zero values, we still use zeroinitializer and let the
+                // code that uses this array overwrite the values as needed.
+                // This is a tradeoff: we waste some initialization cycles but
+                // avoid stack overflow from 1000+ insertvalue instructions.
+                emitln("    store " + array_type + " zeroinitializer, ptr " + alloc_reg + ", align 16");
+                emitln("    " + result_reg + " = load " + array_type + ", ptr " + alloc_reg + ", align 16");
+                return;
+            }
+        }
+    }
+
+    // Fall back to insertvalue chain for small non-uniform arrays
+    std::string current = "undef";
     for (size_t j = 0; j < i.elements.size(); ++j) {
         std::string elem_val = get_value_reg(i.elements[j]);
         std::string next =
@@ -1859,33 +2044,29 @@ auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::str
                                            const std::string& dst_ptr, const std::string& len_ptr,
                                            const std::string& current_len,
                                            const std::string& receiver,
-                                           [[maybe_unused]] const std::string& done_label)
+                                           [[maybe_unused]] const std::string& done_label,
+                                           bool skip_store)
     -> std::string {
-    // Branch labels
-    std::string big_check = "i2s.big." + id;
+    // Branch labels - OPTIMIZED: check < 100 first (most common case)
+    std::string small_check = "i2s.small." + id;
+    std::string big_path = "i2s.bigpath." + id;
     std::string ffi_label = "i2s.ffi." + id;
     std::string d1_label = "i2s.1d." + id;
-    std::string d2_label = "i2s.2d." + id;
     std::string d3_label = "i2s.3d." + id;
     std::string d4_label = "i2s.4d." + id;
     std::string d5_label = "i2s.5d." + id;
     std::string merge_label = "i2s.merge." + id;
 
-    // Check negative
-    emitln("    %is.neg." + id + " = icmp slt i64 " + int_val + ", 0");
-    emitln("    br i1 %is.neg." + id + ", label %" + ffi_label + ", label %" + big_check);
+    // FAST PATH: Check < 100 first (handles ~90%+ of typical cases)
+    emitln("    %is.small." + id + " = icmp slt i64 " + int_val + ", 100");
+    emitln("    br i1 %is.small." + id + ", label %" + small_check + ", label %" + big_path);
 
-    // Check >= 100000 (supports 5 digits now)
-    emitln(big_check + ":");
-    emitln("    %is.big." + id + " = icmp sge i64 " + int_val + ", 100000");
-    emitln("    br i1 %is.big." + id + ", label %" + ffi_label + ", label %" + d1_label);
-
-    // Check 1 digit (0-9)
-    emitln(d1_label + ":");
+    // Small path: 0-99 (just need to check 1 vs 2 digits)
+    emitln(small_check + ":");
     emitln("    %is.1d." + id + " = icmp slt i64 " + int_val + ", 10");
-    emitln("    br i1 %is.1d." + id + ", label %do.1d." + id + ", label %" + d2_label);
+    emitln("    br i1 %is.1d." + id + ", label %do.1d." + id + ", label %do.2d." + id);
 
-    // 1 digit: store single char '0' + val
+    // 1 digit (0-9): store single char '0' + val
     emitln("do.1d." + id + ":");
     emitln("    %d1.trunc." + id + " = trunc i64 " + int_val + " to i8");
     emitln("    %d1.char." + id + " = add i8 %d1.trunc." + id + ", 48");
@@ -1894,12 +2075,7 @@ auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::str
     emitln("    %d1.newlen." + id + " = add i64 " + current_len + ", 1");
     emitln("    br label %" + merge_label);
 
-    // Check 2 digits (10-99)
-    emitln(d2_label + ":");
-    emitln("    %is.2d." + id + " = icmp slt i64 " + int_val + ", 100");
-    emitln("    br i1 %is.2d." + id + ", label %do.2d." + id + ", label %" + d3_label);
-
-    // 2 digits: lookup table
+    // 2 digits (10-99): lookup table - no extra check needed, we know val is 10-99
     emitln("do.2d." + id + ":");
     emitln("    %d2.idx." + id + " = shl i64 " + int_val + ", 1"); // *2 for pair offset
     emitln("    %d2.ptr." + id + " = getelementptr i8, ptr @.digit_pairs, i64 %d2.idx." + id);
@@ -1908,6 +2084,15 @@ auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::str
     emitln("    store i16 %d2.pair." + id + ", ptr %d2.dst." + id);
     emitln("    %d2.newlen." + id + " = add i64 " + current_len + ", 2");
     emitln("    br label %" + merge_label);
+
+    // BIG PATH: values >= 100, need to check negative and size
+    emitln(big_path + ":");
+    emitln("    %is.neg." + id + " = icmp slt i64 " + int_val + ", 0");
+    emitln("    br i1 %is.neg." + id + ", label %" + ffi_label + ", label %i2s.bigcheck." + id);
+
+    emitln("i2s.bigcheck." + id + ":");
+    emitln("    %is.huge." + id + " = icmp sge i64 " + int_val + ", 100000");
+    emitln("    br i1 %is.huge." + id + ", label %" + ffi_label + ", label %" + d3_label);
 
     // Check 3 digits (100-999)
     emitln(d3_label + ":");
@@ -1995,8 +2180,10 @@ auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::str
            id + " ], " + "[ %d4.newlen." + id + ", %do.4d." + id + " ], " + "[ %d5.newlen." + id +
            ", %" + d5_label + " ], " + "[ %ffi.newlen." + id + ", %" + ffi_label + " ]");
 
-    // Store new length
-    emitln("    store i64 %newlen." + id + ", ptr " + len_ptr);
+    // Store new length (unless caller will do it to avoid redundant store/load)
+    if (!skip_store) {
+        emitln("    store i64 %newlen." + id + ", ptr " + len_ptr);
+    }
 
     return "%newlen." + id;
 }

@@ -98,9 +98,7 @@ func test_assertions_with_functions() -> I32 {
 @test
 func test_assertions_in_loop() -> I32 {
     let mut i: I32 = 0
-    loop {
-        if i >= 5 then break
-
+    loop (i < 5) {
         let doubled: I32 = i * 2
         let expected: I32 = i + i
         assert_eq(doubled, expected, "i*2 == i+i")

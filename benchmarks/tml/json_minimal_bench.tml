@@ -21,8 +21,7 @@ pub func main() -> I32 {
     println("--- TEST 1: time_ns() overhead ---")
     let t1_start: I64 = time_ns()
     var i: I64 = 0
-    loop {
-        if i >= 100000 then { break }
+    loop (i < 100000) {
         let _: I64 = time_ns()
         i = i + 1
     }
@@ -35,8 +34,7 @@ pub func main() -> I32 {
     println("--- TEST 2: Empty loop (100K iterations) ---")
     let t2_start: I64 = time_ns()
     i = 0
-    loop {
-        if i >= 100000 then { break }
+    loop (i < 100000) {
         i = i + 1
     }
     let t2_end: I64 = time_ns()
@@ -48,8 +46,7 @@ pub func main() -> I32 {
     println("--- TEST 3: parse_fast_bench (10K iterations) ---")
     let t3_start: I64 = time_ns()
     i = 0
-    loop {
-        if i >= 10000 then { break }
+    loop (i < 10000) {
         let _: I32 = json::parse_fast_bench(json_str)
         i = i + 1
     }
@@ -62,8 +59,7 @@ pub func main() -> I32 {
     println("--- TEST 4: parse_fast + free (10K iterations) ---")
     let t4_start: I64 = time_ns()
     i = 0
-    loop {
-        if i >= 10000 then { break }
+    loop (i < 10000) {
         let h: I64 = json::parse_fast(json_str)
         json::free(h)
         i = i + 1
@@ -78,8 +74,7 @@ pub func main() -> I32 {
     let h5: I64 = json::parse_fast(json_str)
     let t5_start: I64 = time_ns()
     i = 0
-    loop {
-        if i >= 100000 then { break }
+    loop (i < 100000) {
         let _: I32 = json::get_type(h5)
         i = i + 1
     }
@@ -93,8 +88,7 @@ pub func main() -> I32 {
     println("--- TEST 6: String creation overhead ---")
     let t6_start: I64 = time_ns()
     i = 0
-    loop {
-        if i >= 10000 then { break }
+    loop (i < 10000) {
         let s: Str = get_json()  // Function call + return
         let _: I32 = json::parse_fast_bench(s)
         i = i + 1

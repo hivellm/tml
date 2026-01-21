@@ -404,6 +404,23 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     // Canonical LLVM loop form for infinite loop:
     //   preheader -> header -> body -> latch -> header (backedge)
     //                               \-> exit (via break)
+
+    // Handle loop variable declaration: loop (var i: I64 < N)
+    // Initialize the variable to 0 before entering the loop
+    if (loop.loop_var) {
+        const auto& var_decl = *loop.loop_var;
+        types::TypePtr semantic_type = resolve_parser_type_with_subs(*var_decl.type, current_type_subs_);
+        std::string var_type = llvm_type_from_semantic(semantic_type);
+
+        // Allocate and initialize to 0
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + var_type);
+        emit_line("  store " + var_type + " 0, ptr " + alloca_reg);
+
+        // Register in locals_
+        locals_[var_decl.name] = VarInfo{alloca_reg, var_type, semantic_type, std::nullopt};
+    }
+
     std::string label_preheader = fresh_label("loop.preheader");
     std::string label_header = fresh_label("loop.header");
     std::string label_body = fresh_label("loop.body");
@@ -426,22 +443,28 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     emit_line(label_preheader + ":");
     emit_line("  br label %" + label_header);
 
-    // Header block - loop entry point
+    // Header block - condition evaluation (loop now requires condition)
     emit_line(label_header + ":");
     current_block_ = label_header;
     block_terminated_ = false;
-    emit_line("  br label %" + label_body);
+    current_loop_stack_save_ = ""; // No stack save for break/continue
+
+    // Evaluate the loop condition (mandatory in new syntax: loop (condition) { ... })
+    std::string cond = gen_expr(*loop.condition);
+
+    // If condition is not already i1 (bool), convert it
+    if (last_expr_type_ != "i1") {
+        std::string bool_cond = fresh_reg();
+        emit_line("  " + bool_cond + " = icmp ne i32 " + cond + ", 0");
+        cond = bool_cond;
+    }
+
+    emit_line("  br i1 " + cond + ", label %" + label_body + ", label %" + label_exit);
 
     // Body block
     emit_line(label_body + ":");
     current_block_ = label_body;
     block_terminated_ = false;
-
-    // TML doesn't support VLAs or runtime-sized allocas, so we don't need
-    // stacksave/stackrestore for stack frame cleanup. LLVM's mem2reg pass
-    // will optimize fixed-size allocas to registers, and lifetime markers
-    // handle proper cleanup.
-    current_loop_stack_save_ = "";
 
     // Push a lifetime scope for the loop body so allocas inside are tracked
     // and can have lifetime.end emitted at end of each iteration

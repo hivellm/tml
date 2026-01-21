@@ -62,8 +62,7 @@ func test_divmod() -> I32 {
 func gcd(a: I32, b: I32) -> I32 {
     let mut x: I32 = a
     let mut y: I32 = b
-    loop {
-        if y == 0 then { break }
+    loop (y != 0) {
         let t: I32 = y
         y = x % y
         x = t
@@ -99,8 +98,7 @@ func test_lcm() -> I32 {
 func factorial(n: I32) -> I32 {
     let mut result: I32 = 1
     let mut i: I32 = 2
-    loop {
-        if i > n then { break }
+    loop (i <= n) {
         result = result * i
         i = i + 1
     }
@@ -127,8 +125,7 @@ func fibonacci(n: I32) -> I32 {
     let mut a: I32 = 0
     let mut b: I32 = 1
     let mut i: I32 = 2
-    loop {
-        if i > n then { break }
+    loop (i <= n) {
         let t: I32 = a + b
         a = b
         b = t
@@ -158,8 +155,7 @@ func power(x: I32, exp: I32) -> I32 {
 
     let mut result: I32 = 1
     let mut i: I32 = 0
-    loop {
-        if i >= exp then { break }
+    loop (i < exp) {
         result = result * x
         i = i + 1
     }
@@ -184,8 +180,7 @@ func isqrt(n: I32) -> I32 {
 
     let mut x: I32 = n
     let mut y: I32 = (x + 1) / 2
-    loop {
-        if y >= x then { break }
+    loop (y < x) {
         x = y
         y = (x + n / x) / 2
     }

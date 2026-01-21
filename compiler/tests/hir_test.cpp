@@ -273,7 +273,7 @@ TEST_F(HirTest, WhenExpression) {
 TEST_F(HirTest, LoopExpression) {
     auto hir = build_hir(R"(
         func test() {
-            loop {
+            loop (true) {
                 break
             }
         }
@@ -606,7 +606,7 @@ TEST_F(HirTest, ReturnWithoutValue) {
 TEST_F(HirTest, ContinueAndBreak) {
     auto hir = build_hir(R"(
         func test() {
-            loop {
+            loop (true) {
                 if true {
                     continue
                 }

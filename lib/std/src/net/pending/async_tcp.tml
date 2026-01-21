@@ -24,7 +24,7 @@
 //!     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST, 8080)
 //!     let listener = AsyncTcpListener::bind(addr).await!
 //!
-//!     loop {
+//!     loop (true) {
 //!         let (stream, peer) = listener.accept().await!
 //!         spawn(handle_client(stream))
 //!     }
@@ -32,7 +32,7 @@
 //!
 //! async func handle_client(mut stream: AsyncTcpStream) {
 //!     var buf: [U8; 1024] = [0; 1024]
-//!     loop {
+//!     loop (true) {
 //!         let n = stream.read(mut ref buf).await!
 //!         if n == 0 { break }
 //!         stream.write_all(ref buf[0..n]).await!
@@ -123,7 +123,7 @@ impl Context {
 /// ```tml
 /// let listener = AsyncTcpListener::bind("127.0.0.1:8080".parse()?).await!
 ///
-/// loop {
+/// loop (true) {
 ///     let (stream, addr) = listener.accept().await!
 ///     spawn(handle_connection(stream))
 /// }
@@ -202,7 +202,7 @@ impl AsyncTcpListener {
         // 3. When woken, try again
 
         // For now, we spin-poll (not ideal but functional)
-        loop {
+        loop (true) {
             when this.poll_accept(mut ref Context::new(Waker::noop())) {
                 Poll::Ready(result) => return result
                 Poll::Pending => {
@@ -322,7 +322,7 @@ impl AsyncTcpStream {
 
     /// Reads data from the stream (async).
     pub async func read(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
-        loop {
+        loop (true) {
             when this.poll_read(mut ref Context::new(Waker::noop()), buf) {
                 Poll::Ready(result) => return result
                 Poll::Pending => {
@@ -337,7 +337,7 @@ impl AsyncTcpStream {
         var total: I64 = 0
         let len: I64 = buf.len()
 
-        loop {
+        loop (true) {
             if total >= len { break }
 
             var slice: mut ref [U8] = buf.slice_mut(total, len)
@@ -353,7 +353,7 @@ impl AsyncTcpStream {
 
     /// Writes data to the stream (async).
     pub async func write(this, buf: ref [U8]) -> Outcome[I64, NetError] {
-        loop {
+        loop (true) {
             when this.poll_write(mut ref Context::new(Waker::noop()), buf) {
                 Poll::Ready(result) => return result
                 Poll::Pending => {
@@ -368,7 +368,7 @@ impl AsyncTcpStream {
         var total: I64 = 0
         let len: I64 = buf.len()
 
-        loop {
+        loop (true) {
             if total >= len { break }
 
             let slice: ref [U8] = buf.slice(total, len)

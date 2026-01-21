@@ -355,8 +355,7 @@ impl SoaVec {
         }
 
         var i: I64 = 0
-        loop {
-            if i >= this.columns.len() { break }
+        loop (i < this.columns.len()) {
             let col = ref this.columns[i]
             // TODO: Compare strings
             // if col.name == col_name {
@@ -376,8 +375,7 @@ impl SoaVec {
         }
 
         var i: I64 = 0
-        loop {
-            if i >= this.columns.len() { break }
+        loop (i < this.columns.len()) {
             let col = ref this.columns[i]
             // TODO: Compare strings
             // if col.name == col_name {
@@ -392,8 +390,7 @@ impl SoaVec {
     /// Gets a raw pointer to column data for efficient iteration.
     pub func column_ptr(this, col_name: Str) -> I64 {
         var i: I64 = 0
-        loop {
-            if i >= this.columns.len() { break }
+        loop (i < this.columns.len()) {
             let col = ref this.columns[i]
             // TODO: Compare strings
             // if col.name == col_name {
@@ -414,8 +411,7 @@ impl SoaVec {
 
         // Grow each column
         var i: I64 = 0
-        loop {
-            if i >= this.columns.len() { break }
+        loop (i < this.columns.len()) {
             this.grow_column(i, new_capacity)
             i = i + 1
         }
@@ -435,8 +431,7 @@ impl SoaVec {
         // Copy existing data
         if col.data != 0 and this.row_count > 0 {
             var j: I64 = 0
-            loop {
-                if j >= this.row_count { break }
+            loop (j < this.row_count) {
                 let src = col.data + (j * col.elem_size)
                 let dst = new_data + (j * col.elem_size)
                 lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
@@ -457,8 +452,7 @@ impl SoaVec {
     /// Frees all memory.
     pub func destroy(mut this) {
         var i: I64 = 0
-        loop {
-            if i >= this.columns.len() { break }
+        loop (i < this.columns.len()) {
             let col = ref this.columns[i]
             if col.data != 0 {
                 lowlevel { free(col.data as Ptr[U8]) }

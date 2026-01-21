@@ -6,8 +6,7 @@ use test
 func test_basic_loop() -> I32 {
     // Count to 5
     let mut count: I32 = 0
-    loop {
-        if count >= 5 then break
+    loop (count < 5) {
         count = count + 1
     }
     assert_eq(count, 5, "loop should count to 5")
@@ -15,8 +14,7 @@ func test_basic_loop() -> I32 {
     // Sum 1 to 10
     let mut sum: I32 = 0
     let mut i: I32 = 1
-    loop {
-        if i > 10 then break
+    loop (i <= 10) {
         sum = sum + i
         i = i + 1
     }
@@ -32,11 +30,9 @@ func test_nested_loops() -> I32 {
     // Simple multiplication table counting
     let mut total: I32 = 0
     let mut i: I32 = 1
-    loop {
-        if i > 3 then break
+    loop (i <= 3) {
         let mut j: I32 = 1
-        loop {
-            if j > 3 then break
+        loop (j <= 3) {
             total = total + (i * j)
             j = j + 1
         }
@@ -55,9 +51,8 @@ func test_loop_continue() -> I32 {
     // Sum only even numbers 1-10
     let mut sum: I32 = 0
     let mut i: I32 = 0
-    loop {
+    loop (i < 10) {
         i = i + 1
-        if i > 10 then break
         if i % 2 != 0 then continue
         sum = sum + i
     }
@@ -74,7 +69,7 @@ func test_loop_early_break() -> I32 {
     // Find first number divisible by 7
     let mut i: I32 = 1
     let mut found: I32 = 0
-    loop {
+    loop (true) {
         if i > 100 then break
         if i % 7 == 0 then {
             found = i
@@ -94,8 +89,7 @@ func test_loop_factorial() -> I32 {
     // Calculate 5!
     let mut result: I32 = 1
     let mut i: I32 = 1
-    loop {
-        if i > 5 then break
+    loop (i <= 5) {
         result = result * i
         i = i + 1
     }
@@ -104,8 +98,7 @@ func test_loop_factorial() -> I32 {
     // Calculate 6!
     result = 1
     i = 1
-    loop {
-        if i > 6 then break
+    loop (i <= 6) {
         result = result * i
         i = i + 1
     }
@@ -122,8 +115,7 @@ func test_loop_fibonacci() -> I32 {
     let mut a: I32 = 0
     let mut b: I32 = 1
     let mut i: I32 = 0
-    loop {
-        if i >= 10 then break
+    loop (i < 10) {
         let temp: I32 = a + b
         a = b
         b = temp
@@ -141,7 +133,7 @@ func test_loop_multiple_conditions() -> I32 {
     // Find first number divisible by both 3 and 5
     let mut i: I32 = 1
     let mut found: I32 = 0
-    loop {
+    loop (true) {
         if i > 100 then break
         if i % 3 == 0 and i % 5 == 0 then {
             found = i
@@ -160,8 +152,7 @@ func test_loop_multiple_conditions() -> I32 {
 func test_countdown_loop() -> I32 {
     let mut count: I32 = 10
     let mut sum: I32 = 0
-    loop {
-        if count <= 0 then break
+    loop (count > 0) {
         sum = sum + count
         count = count - 1
     }
@@ -177,8 +168,7 @@ func test_loop_power() -> I32 {
     // Calculate 2^10
     let mut result: I32 = 1
     let mut i: I32 = 0
-    loop {
-        if i >= 10 then break
+    loop (i < 10) {
         result = result * 2
         i = i + 1
     }
@@ -187,8 +177,7 @@ func test_loop_power() -> I32 {
     // Calculate 3^4
     result = 1
     i = 0
-    loop {
-        if i >= 4 then break
+    loop (i < 4) {
         result = result * 3
         i = i + 1
     }
@@ -204,8 +193,7 @@ func test_loop_gcd() -> I32 {
     // GCD of 48 and 18
     let mut a: I32 = 48
     let mut b: I32 = 18
-    loop {
-        if b == 0 then break
+    loop (b != 0) {
         let temp: I32 = b
         b = a % b
         a = temp
@@ -215,8 +203,7 @@ func test_loop_gcd() -> I32 {
     // GCD of 100 and 35
     a = 100
     b = 35
-    loop {
-        if b == 0 then break
+    loop (b != 0) {
         let temp: I32 = b
         b = a % b
         a = temp

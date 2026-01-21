@@ -43,7 +43,41 @@ void HirMirBuilder::build_let_stmt(const hir::HirLetStmt& let) {
         init_value = const_unit();
     }
 
-    // Bind pattern to value
+    // For volatile variables, we need to allocate stack storage and use volatile loads/stores
+    if (let.is_volatile) {
+        if (auto* binding = std::get_if<hir::HirBindingPattern>(&let.pattern->kind)) {
+            // Create volatile alloca for the variable
+            AllocaInst alloca;
+            alloca.alloc_type = init_value.type;
+            alloca.name = binding->name;
+            alloca.is_volatile = true;
+
+            auto ptr_type = make_pointer_type(init_value.type, binding->is_mut);
+            auto alloca_val = emit(std::move(alloca), ptr_type);
+
+            // Store initial value (volatile store)
+            StoreInst store;
+            store.ptr = alloca_val;
+            store.value = init_value;
+            store.value_type = init_value.type;
+            store.is_volatile = true;
+            emit_void(std::move(store));
+
+            // Map variable to alloca (will be loaded with volatile load when accessed)
+            ctx_.variables[binding->name] = alloca_val;
+            ctx_.volatile_vars.insert(binding->name);
+
+            // Register for drop if needed
+            MirTypePtr var_type = init_value.type;
+            std::string type_name = get_type_name(var_type);
+            if (!type_name.empty() && !env_.is_trivially_destructible(type_name)) {
+                ctx_.register_for_drop(binding->name, alloca_val, type_name, var_type);
+            }
+            return;
+        }
+    }
+
+    // Bind pattern to value (non-volatile path)
     build_pattern_binding(let.pattern, init_value);
 
     // Register for drop if the type needs dropping (not trivially destructible)

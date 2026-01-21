@@ -221,9 +221,10 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     std::string llvm_ir;
     std::set<std::string> link_libs; // FFI libraries to link
 
-    // Use MIR-based codegen for O1+ optimizations, AST-based for O0
+    // Use MIR-based codegen for all optimization levels (including O0)
+    // This provides consistent behavior for features like volatile that are implemented in MIR
     int opt_level = tml::CompilerOptions::optimization_level;
-    if (opt_level > 0) { // Use MIR codegen for optimized builds
+    if (true) { // Always use MIR codegen for consistent feature support
         // Build MIR from HIR for optimized codegen
         auto env_copy = env;
         hir::HirBuilder hir_builder(env_copy);

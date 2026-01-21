@@ -752,11 +752,40 @@ auto HirBuilder::lower_when(const parser::WhenExpr& when) -> HirExprPtr {
 }
 
 auto HirBuilder::lower_loop(const parser::LoopExpr& loop) -> HirExprPtr {
+    HirType type = types::make_unit(); // Conditional loops return unit
+
+    // Handle loop variable declaration: loop (var i: I64 < N)
+    std::optional<HirLoopVarDecl> hir_loop_var;
+    if (loop.loop_var) {
+        // Push new scope for the loop variable
+        scopes_.emplace_back();
+        type_env_.push_scope();
+
+        HirType var_type = resolve_type(*loop.loop_var->type);
+        hir_loop_var = HirLoopVarDecl{
+            .name = loop.loop_var->name,
+            .type = var_type,
+            .span = loop.loop_var->span
+        };
+
+        // Register variable in scope
+        scopes_.back().insert(loop.loop_var->name);
+        if (auto scope = type_env_.current_scope()) {
+            scope->define(loop.loop_var->name, var_type, true /* mutable */, loop.loop_var->span);
+        }
+    }
+
+    auto condition = lower_expr(*loop.condition);
     auto body = lower_expr(*loop.body);
-    HirType type = types::make_unit(); // Infinite loops return unit (or break value)
+
+    if (loop.loop_var) {
+        // Pop the scope
+        type_env_.pop_scope();
+        scopes_.pop_back();
+    }
 
     auto expr = std::make_unique<HirExpr>();
-    expr->kind = HirLoopExpr{fresh_id(), loop.label, std::move(body), type, loop.span};
+    expr->kind = HirLoopExpr{fresh_id(), loop.label, std::move(hir_loop_var), std::move(condition), std::move(body), type, loop.span};
     return expr;
 }
 

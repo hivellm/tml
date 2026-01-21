@@ -89,8 +89,7 @@ func test_cell_counter_pattern() -> I32 {
     let counter: Cell[I32] = Cell::new(0)
 
     let mut i: I32 = 0
-    loop {
-        if i >= 5 then break
+    loop (i < 5) {
         counter.set(counter.get() + 1)
         i = i + 1
     }

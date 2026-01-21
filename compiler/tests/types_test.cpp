@@ -326,7 +326,7 @@ TEST_F(TypeCheckerTest, IfExpression) {
 TEST_F(TypeCheckerTest, LoopExpression) {
     check_ok(R"(
         func test() {
-            loop {
+            loop (true) {
                 break
             }
         }

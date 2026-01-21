@@ -8,15 +8,13 @@ pub behavior DoubleEndedIterator: Iterator {
     /// Advances the iterator from the back by `n` elements.
     pub func advance_back_by(mut this, n: I64) -> Outcome[Unit, I64] {
         let mut i: I64 = 0
-        loop {
-            if i >= n {
-                return Ok(())
-            }
+        loop (i < n) {
             when this.next_back() {
                 Just(_) => i = i + 1,
                 Nothing => return Err(n - i)
             }
         }
+        return Ok(())
     }
 
     /// Returns the nth element from the end of the iterator.
@@ -28,7 +26,7 @@ pub behavior DoubleEndedIterator: Iterator {
     /// Folds every element from the back into an accumulator.
     pub func rfold[B](mut this, init: B, f: func(B, This::Item) -> B) -> B {
         let mut acc: B = init
-        loop {
+        loop (true) {
             when this.next_back() {
                 Just(x) => acc = f(acc, x),
                 Nothing => return acc
@@ -38,7 +36,7 @@ pub behavior DoubleEndedIterator: Iterator {
 
     /// Searches from the back for an element matching a predicate.
     pub func rfind(mut this, pred: func(ref This::Item) -> Bool) -> Maybe[This::Item] {
-        loop {
+        loop (true) {
             when this.next_back() {
                 Just(x) => {
                     if pred(ref x) {

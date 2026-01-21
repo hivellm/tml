@@ -40,8 +40,7 @@ func test_time_ms_monotonic() {
     // Do some work
     let mut sum: I32 = 0
     let mut i: I32 = 0
-    loop {
-        if i >= 100 then break
+    loop (i < 100) {
         sum = sum + i
         i = i + 1
     }
@@ -59,8 +58,7 @@ func test_elapsed_time() {
     // Do some work
     let mut product: I32 = 1
     let mut i: I32 = 1
-    loop {
-        if i > 10 then break
+    loop (i <= 10) {
         product = product * i
         i = i + 1
     }

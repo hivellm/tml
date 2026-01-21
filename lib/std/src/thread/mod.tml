@@ -689,10 +689,7 @@ pub func sleep_ms(milliseconds: U64) {
 pub func park() {
     let thread = current()
     // Spin until unparked
-    loop {
-        if not thread.inner.parked.load(Ordering::Acquire) {
-            break
-        }
+    loop (thread.inner.parked.load(Ordering::Acquire)) {
         yield_now()
     }
     thread.inner.parked.store(true, Ordering::Release)

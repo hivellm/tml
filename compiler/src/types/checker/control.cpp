@@ -112,7 +112,25 @@ auto TypeChecker::check_when(const parser::WhenExpr& when) -> TypePtr {
 
 auto TypeChecker::check_loop(const parser::LoopExpr& loop) -> TypePtr {
     loop_depth_++;
+
+    // Handle loop variable declaration: loop (var i: I64 < N)
+    if (loop.loop_var.has_value()) {
+        env_.push_scope();
+        const auto& var_decl = *loop.loop_var;
+        TypePtr var_type = resolve_type(*var_decl.type);
+        env_.current_scope()->define(var_decl.name, var_type, true /* mutable */, var_decl.span);
+    }
+
+    // Check condition (required in new syntax)
+    check_expr(*loop.condition);
+
+    // Check body
     check_expr(*loop.body);
+
+    if (loop.loop_var.has_value()) {
+        env_.pop_scope();
+    }
+
     loop_depth_--;
     return make_unit();
 }

@@ -7,8 +7,7 @@ func test_simple_loop() -> I32 {
     let mut i: I32 = 0
     let mut sum: I32 = 0
 
-    loop {
-        if i >= 5 then { break }
+    loop (i < 5) {
         sum = sum + i
         i = i + 1
     }
@@ -24,8 +23,7 @@ func test_countdown() -> I32 {
     let mut n: I32 = 10
     let mut count: I32 = 0
 
-    loop {
-        if n <= 0 then { break }
+    loop (n > 0) {
         count = count + 1
         n = n - 1
     }
@@ -43,8 +41,7 @@ func test_skip_evens() -> I32 {
     let mut i: I32 = 0
     let mut sum: I32 = 0
 
-    loop {
-        if i >= 10 then { break }
+    loop (i < 10) {
         i = i + 1
         if i % 2 == 0 then { continue }
         sum = sum + i
@@ -63,7 +60,7 @@ func test_find_first() -> I32 {
     let mut i: I32 = 0
     let mut found: I32 = 0 - 1
 
-    loop {
+    loop (true) {
         if i >= 100 then { break }
         if i * i > 50 then {
             found = i
@@ -85,12 +82,9 @@ func test_nested_simple() -> I32 {
     let mut total: I32 = 0
     let mut i: I32 = 0
 
-    loop {
-        if i >= 3 then { break }
-
+    loop (i < 3) {
         let mut j: I32 = 0
-        loop {
-            if j >= 4 then { break }
+        loop (j < 4) {
             total = total + 1
             j = j + 1
         }
@@ -109,12 +103,9 @@ func test_nested_with_dependency() -> I32 {
     let mut i: I32 = 1
 
     // Sum of triangular numbers: 1 + (1+2) + (1+2+3) + (1+2+3+4)
-    loop {
-        if i > 4 then { break }
-
+    loop (i <= 4) {
         let mut j: I32 = 1
-        loop {
-            if j > i then { break }
+        loop (j <= i) {
             sum = sum + j
             j = j + 1
         }
@@ -135,8 +126,7 @@ func test_multiple_counters() -> I32 {
     let mut i: I32 = 0
     let mut j: I32 = 10
 
-    loop {
-        if i >= j then { break }
+    loop (i < j) {
         i = i + 1
         j = j - 1
     }
@@ -155,8 +145,7 @@ func test_factorial_loop() -> I32 {
     let mut n: I32 = 5
     let mut result: I32 = 1
 
-    loop {
-        if n <= 1 then { break }
+    loop (n > 1) {
         result = result * n
         n = n - 1
     }
@@ -173,8 +162,7 @@ func test_power_loop() -> I32 {
     let mut result: I32 = 1
     let mut i: I32 = 0
 
-    loop {
-        if i >= exp then { break }
+    loop (i < exp) {
         result = result * b
         i = i + 1
     }
@@ -191,8 +179,7 @@ func test_zero_iterations() -> I32 {
     let mut count: I32 = 0
     let mut i: I32 = 10
 
-    loop {
-        if i >= 10 then { break }  // Immediately exit
+    loop (i < 10) {  // Immediately exit
         count = count + 1
         i = i + 1
     }
@@ -207,8 +194,7 @@ func test_single_iteration() -> I32 {
     let mut count: I32 = 0
     let mut i: I32 = 0
 
-    loop {
-        if i >= 1 then { break }
+    loop (i < 1) {
         count = count + 1
         i = i + 1
     }
@@ -225,9 +211,7 @@ func test_conditional_increment() -> I32 {
     let mut i: I32 = 0
     let mut sum: I32 = 0
 
-    loop {
-        if i >= 20 then { break }
-
+    loop (i < 20) {
         if i % 3 == 0 then {
             sum = sum + i
         }
@@ -247,8 +231,7 @@ func collatz_steps(n: I32) -> I32 {
     let mut steps: I32 = 0
     let mut current: I32 = n
 
-    loop {
-        if current == 1 then { break }
+    loop (current != 1) {
         if current % 2 == 0 then {
             current = current / 2
         } else {

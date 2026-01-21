@@ -37,8 +37,7 @@ func generate_medium_json(num_items: I32) -> Str {
     t.push_str("{\"items\":[")
 
     var i: I32 = 0
-    loop {
-        if i >= num_items then { break }
+    loop (i < num_items) {
         if i > 0 {
             t.push_str(",")
         }
@@ -70,8 +69,7 @@ func generate_large_json(num_items: I32) -> Str {
     t.push_str("{\"data\":[")
 
     var i: I32 = 0
-    loop {
-        if i >= num_items then { break }
+    loop (i < num_items) {
         if i > 0 {
             t.push_str(",")
         }
@@ -111,8 +109,7 @@ func generate_stringy_json(num_items: I32) -> Str {
     let lorem: Str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
 
     var i: I32 = 0
-    loop {
-        if i >= num_items then { break }
+    loop (i < num_items) {
         if i > 0 {
             t.push_str(",")
         }
@@ -141,8 +138,7 @@ func generate_stringy_json(num_items: I32) -> Str {
 func bench_generate_medium(num_items: I32, iterations: I32) -> I64 {
     let start: I64 = time_ns()
     var i: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let _: Str = generate_medium_json(num_items)
         i = i + 1
     }
@@ -155,8 +151,7 @@ func bench_parse(json_str: Str, iterations: I32) -> I64 {
     let start: I64 = time_ns()
     var i: I32 = 0
     var success: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         success = success + json::parse_fast_bench(json_str)
         i = i + 1
     }
@@ -169,8 +164,7 @@ func bench_generate_and_parse_medium(num_items: I32, iterations: I32) -> I64 {
     let start: I64 = time_ns()
     var i: I32 = 0
     var success: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let json_str: Str = generate_medium_json(num_items)
         success = success + json::parse_fast_bench(json_str)
         i = i + 1

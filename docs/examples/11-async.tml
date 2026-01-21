@@ -75,7 +75,7 @@ async func fetch_with_timeout(id: U64) -> Outcome[User, Error] {
 
 // Select with multiple branches
 async func handle_events() {
-    loop {
+    loop (true) {
         select {
             msg = channel.recv() -> {
                 process_message(msg)
@@ -111,7 +111,7 @@ async func producer_consumer_example() {
     }
 
     // Consumer
-    loop {
+    loop (true) {
         when rx.recv() {
             Just(value) -> println("Received: " + value.to_string()),
             Nothing -> break,  // Channel closed
@@ -172,7 +172,7 @@ async func robust_fetch(id: U64) -> Outcome[User, Error] {
     var attempts = 0
     let max_attempts = 3
 
-    loop {
+    loop (attempts < max_attempts) {
         attempts += 1
 
         when await fetch_user(id) {
@@ -186,6 +186,7 @@ async func robust_fetch(id: U64) -> Outcome[User, Error] {
             },
         }
     }
+    return Err(Error.MaxRetries(Error.Unknown))
 }
 
 // ============================================

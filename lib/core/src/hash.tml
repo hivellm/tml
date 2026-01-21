@@ -392,8 +392,7 @@ impl Hasher for DefaultHasher {
     pub func write(mut this, bytes: ref [U8]) {
         var i: I64 = 0
         let len: I64 = bytes.len()
-        loop {
-            if i >= len { return }
+        loop (i < len) {
             this.state = this.state ^ (bytes[i] as U64)
             this.state = this.state * FNV_PRIME
             i = i + 1

@@ -5,59 +5,47 @@ use test
 func fold_array(arr: [I32; 5], init: I32, f: func(I32, I32) -> I32) -> I32 {
     var acc: I32 = init
     var i: I32 = 0
-    loop {
-        if i >= 5 {
-            return acc
-        }
+    loop (i < 5) {
         acc = f(acc, arr[i])
         i = i + 1
     }
-    return acc  // unreachable but required
+    return acc
 }
 
 // all helper that works with arrays
 func all_array(arr: [I32; 5], pred: func(I32) -> Bool) -> Bool {
     var i: I32 = 0
-    loop {
-        if i >= 5 {
-            return true
-        }
+    loop (i < 5) {
         if not pred(arr[i]) {
             return false
         }
         i = i + 1
     }
-    return true  // unreachable but required
+    return true
 }
 
 // any helper that works with arrays
 func any_array(arr: [I32; 5], pred: func(I32) -> Bool) -> Bool {
     var i: I32 = 0
-    loop {
-        if i >= 5 {
-            return false
-        }
+    loop (i < 5) {
         if pred(arr[i]) {
             return true
         }
         i = i + 1
     }
-    return false  // unreachable but required
+    return false
 }
 
 // find helper that works with arrays
 func find_array(arr: [I32; 5], pred: func(I32) -> Bool) -> Maybe[I32] {
     var i: I32 = 0
-    loop {
-        if i >= 5 {
-            return Nothing
-        }
+    loop (i < 5) {
         if pred(arr[i]) {
             return Just(arr[i])
         }
         i = i + 1
     }
-    return Nothing  // unreachable but required
+    return Nothing
 }
 
 @test

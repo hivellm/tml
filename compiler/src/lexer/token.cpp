@@ -159,6 +159,8 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "ref";
     case TokenKind::KwLife:
         return "life";
+    case TokenKind::KwVolatile:
+        return "volatile";
 
     // Keywords - closures
     case TokenKind::KwDo:

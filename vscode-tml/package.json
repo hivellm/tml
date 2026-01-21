@@ -2,7 +2,7 @@
   "name": "tml-language",
   "displayName": "TML Language Support",
   "description": "Syntax highlighting, autocompletion, and language support for TML (To Machine Language)",
-  "version": "0.13.0",
+  "version": "0.16.0",
   "publisher": "tml-lang",
   "engines": {
     "vscode": "^1.75.0"
@@ -39,6 +39,29 @@
           "light": "./icons/tml-icon.png",
           "dark": "./icons/tml-icon.png"
         }
+      },
+      {
+        "id": "llvm",
+        "aliases": [
+          "LLVM IR",
+          "LLVM",
+          "llvm"
+        ],
+        "extensions": [
+          ".ll"
+        ],
+        "configuration": "./language-configuration-llvm.json"
+      },
+      {
+        "id": "tml-mir",
+        "aliases": [
+          "TML MIR",
+          "MIR"
+        ],
+        "extensions": [
+          ".mir"
+        ],
+        "configuration": "./language-configuration-mir.json"
       }
     ],
     "grammars": [
@@ -56,6 +79,16 @@
         "embeddedLanguages": {
           "meta.embedded.block.tml": "tml"
         }
+      },
+      {
+        "language": "llvm",
+        "scopeName": "source.llvm",
+        "path": "./syntaxes/llvm.tmLanguage.json"
+      },
+      {
+        "language": "tml-mir",
+        "scopeName": "source.tml-mir",
+        "path": "./syntaxes/mir.tmLanguage.json"
       }
     ],
     "configuration": {

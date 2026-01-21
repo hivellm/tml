@@ -231,7 +231,7 @@ impl[T] Pool[T] {
     ///
     /// This operation is lock-free using compare-and-swap.
     pub func acquire(mut this) -> Maybe[Ptr[T]] {
-        loop {
+        loop (true) {
             // Load current head
             let head = atomic_load(ref this.free_list_head as ref I32) as I64
 
@@ -304,7 +304,7 @@ impl[T] Pool[T] {
 
         fence_release()
 
-        loop {
+        loop (true) {
             // Load current head
             let head = atomic_load(ref this.free_list_head as ref I32) as I64
 
@@ -355,16 +355,12 @@ impl[T] Pool[T] {
 
         // Add all objects to the free list
         var i = 0
-        loop {
-            if i >= count {
-                break
-            }
-
+        loop (i < count) {
             let node_addr = block + (i as I64 * this.object_size)
             let node_ptr = node_addr as Ptr[PoolNode]
 
             // Push onto free list
-            loop {
+            loop (true) {
                 let head = atomic_load(ref this.free_list_head as ref I32) as I64
                 lowlevel { (*node_ptr).next = head }
 
@@ -413,9 +409,9 @@ impl[T] Pool[T] {
     pub func clear(mut this) {
         // Free all allocated blocks
         spin_lock(mut ref this.blocks_lock)
-        loop {
+        loop (true) {
             when this.blocks.pop() {
-                Just(block) => lowlevel { free(block as Ptr[U8]) }
+                Just(block) => lowlevel { free(block as Ptr[U8]) },
                 Nothing => break
             }
         }
@@ -441,7 +437,7 @@ impl[T] Drop for Pool[T] {
 // ============================================================================
 
 func spin_lock(lock: mut ref I32) {
-    loop {
+    loop (true) {
         let old = atomic_cas_val(lock, 0, 1)
         if old == 0 {
             fence_acquire()
@@ -588,8 +584,7 @@ impl[T] ThreadLocalPool[T] {
 
         // Add all objects to the pool
         var i: I32 = 0
-        loop {
-            if i >= count { break }
+        loop (i < count) {
             let obj_addr = block + (i as I64 * this.object_size)
             this.objects.push(obj_addr as Ptr[T])
             i = i + 1
@@ -619,9 +614,9 @@ impl[T] ThreadLocalPool[T] {
 
     /// Clears the pool and frees all memory.
     pub func clear(mut this) {
-        loop {
+        loop (true) {
             when this.blocks.pop() {
-                Just(block) => lowlevel { free(block as Ptr[U8]) }
+                Just(block) => lowlevel { free(block as Ptr[U8]) },
                 Nothing => break
             }
         }
@@ -713,8 +708,7 @@ impl[T] ThreadLocalPoolRegistry[T] {
 
         // First, try to find existing slot (lock-free read)
         var i: I64 = 0
-        loop {
-            if i >= this.slot_count as I64 { break }
+        loop (i < this.slot_count as I64) {
             if this.slots[i].in_use and this.slots[i].thread_id == thread_id {
                 return mut ref this.slots[i].pool
             }
@@ -726,8 +720,7 @@ impl[T] ThreadLocalPoolRegistry[T] {
 
         // Double-check after acquiring lock
         i = 0
-        loop {
-            if i >= this.slot_count as I64 { break }
+        loop (i < this.slot_count as I64) {
             if this.slots[i].in_use and this.slots[i].thread_id == thread_id {
                 spin_unlock(mut ref this.alloc_lock)
                 return mut ref this.slots[i].pool
@@ -761,8 +754,7 @@ impl[T] ThreadLocalPoolRegistry[T] {
         spin_lock(mut ref this.alloc_lock)
 
         var i: I64 = 0
-        loop {
-            if i >= this.slot_count as I64 { break }
+        loop (i < this.slot_count as I64) {
             if this.slots[i].in_use and this.slots[i].thread_id == thread_id {
                 this.slots[i].pool.clear()
                 this.slots[i].in_use = false
@@ -779,8 +771,7 @@ impl[T] ThreadLocalPoolRegistry[T] {
         spin_lock(mut ref this.alloc_lock)
 
         var i: I64 = 0
-        loop {
-            if i >= this.slot_count as I64 { break }
+        loop (i < this.slot_count as I64) {
             if this.slots[i].in_use {
                 this.slots[i].pool.clear()
                 this.slots[i].in_use = false
@@ -797,8 +788,7 @@ impl[T] ThreadLocalPoolRegistry[T] {
         var total = PoolStats::new()
 
         var i: I64 = 0
-        loop {
-            if i >= this.slot_count as I64 { break }
+        loop (i < this.slot_count as I64) {
             if this.slots[i].in_use {
                 let s = this.slots[i].pool.stats()
                 total.available = total.available + s.available

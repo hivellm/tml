@@ -127,10 +127,7 @@ pub func pow_i32(x: I32, exp: I32) -> I32 {
     let mut result: I32 = 1
     let mut b: I32 = x
     let mut e: I32 = exp
-    loop {
-        if e <= 0 {
-            return result
-        }
+    loop (e > 0) {
         if e % 2 == 1 {
             result = result * b
         }
@@ -181,10 +178,7 @@ pub func pow_i64(x: I64, exp: I64) -> I64 {
     let mut result: I64 = one
     let mut b: I64 = x
     let mut e: I64 = exp
-    loop {
-        if e <= zero {
-            return result
-        }
+    loop (e > zero) {
         if e % two == one {
             result = result * b
         }
@@ -248,10 +242,7 @@ impl I32 {
         let mut result: I32 = 1
         let mut b: I32 = this
         let mut e: I32 = exp
-        loop {
-            if e <= 0 {
-                return result
-            }
+        loop (e > 0) {
             if e % 2 == 1 {
                 result = result * b
             }
@@ -367,11 +358,8 @@ pub func count_ones_i32(value: I32) -> I32 {
     // Use unsigned arithmetic to avoid sign extension issues
     let mut v: U32 = value as U32
     var count: I32 = 0
-    loop {
-        let zero: U32 = 0 as U32
-        if v == zero {
-            return count
-        }
+    let zero: U32 = 0 as U32
+    loop (v != zero) {
         // Clear the lowest set bit
         v = v & (v - (1 as U32))
         count = count + 1
@@ -402,15 +390,12 @@ pub func leading_zeros_i32(value: I32) -> I32 {
     // Check if high bit is set (negative number)
     let high_bit: U32 = 2147483648 as U32  // 0x80000000
     let zero: U32 = 0 as U32
-    loop {
-        if (v & high_bit) != zero {
-            return count
-        }
+    loop ((v & high_bit) == zero and count < 32) {
         v = v << (1 as U32)
         count = count + 1
-        if count >= 32 {
-            return 32
-        }
+    }
+    if count >= 32 {
+        return 32
     }
     return count
 }
@@ -432,15 +417,12 @@ pub func trailing_zeros_i32(value: I32) -> I32 {
     var count: I32 = 0
     let one: U32 = 1 as U32
     let zero: U32 = 0 as U32
-    loop {
-        if (v & one) != zero {
-            return count
-        }
+    loop ((v & one) == zero and count < 32) {
         v = v >> one
         count = count + 1
-        if count >= 32 {
-            return 32
-        }
+    }
+    if count >= 32 {
+        return 32
     }
     return count
 }
@@ -497,10 +479,7 @@ pub func reverse_bits_i32(value: I32) -> I32 {
     var result: U32 = 0 as U32
     var i: I32 = 0
     let one: U32 = 1 as U32
-    loop {
-        if i >= 32 {
-            return result as I32
-        }
+    loop (i < 32) {
         result = result << one
         result = result | (v & one)
         v = v >> one
@@ -545,10 +524,7 @@ pub func count_ones_i64(value: I64) -> I64 {
     var count: I64 = 0
     let zero_u64: U64 = 0 as U64
     let one_u64: U64 = 1 as U64
-    loop {
-        if v == zero_u64 {
-            return count
-        }
+    loop (v != zero_u64) {
         v = v & (v - one_u64)
         count = count + 1
     }
@@ -572,15 +548,12 @@ pub func leading_zeros_i64(value: I64) -> I64 {
     let high_bit: U64 = 9223372036854775808 as U64  // 0x8000000000000000
     let zero_u64: U64 = 0 as U64
     let one_u64: U64 = 1 as U64
-    loop {
-        if (v & high_bit) != zero_u64 {
-            return count
-        }
+    loop ((v & high_bit) == zero_u64 and count < 64) {
         v = v << one_u64
         count = count + 1
-        if count >= 64 {
-            return 64
-        }
+    }
+    if count >= 64 {
+        return 64
     }
     return count
 }
@@ -595,15 +568,12 @@ pub func trailing_zeros_i64(value: I64) -> I64 {
     var count: I64 = 0
     let one_u64: U64 = 1 as U64
     let zero_u64: U64 = 0 as U64
-    loop {
-        if (v & one_u64) != zero_u64 {
-            return count
-        }
+    loop ((v & one_u64) == zero_u64 and count < 64) {
         v = v >> one_u64
         count = count + 1
-        if count >= 64 {
-            return 64
-        }
+    }
+    if count >= 64 {
+        return 64
     }
     return count
 }
@@ -661,10 +631,7 @@ pub func reverse_bits_i64(value: I64) -> I64 {
     var result: U64 = 0 as U64
     var i: I32 = 0
     let one: U64 = 1 as U64
-    loop {
-        if i >= 64 {
-            return result as I64
-        }
+    loop (i < 64) {
         result = result << one
         result = result | (v & one)
         v = v >> one
@@ -703,10 +670,7 @@ pub func count_ones_u32(value: U32) -> U32 {
     var count: U32 = 0 as U32
     let zero: U32 = 0 as U32
     let one: U32 = 1 as U32
-    loop {
-        if v == zero {
-            return count
-        }
+    loop (v != zero) {
         v = v & (v - one)
         count = count + one
     }
@@ -729,15 +693,12 @@ pub func leading_zeros_u32(value: U32) -> U32 {
     var count: U32 = 0 as U32
     let high_bit: U32 = 2147483648 as U32
     let one: U32 = 1 as U32
-    loop {
-        if (v & high_bit) != zero {
-            return count
-        }
+    loop ((v & high_bit) == zero and count < (32 as U32)) {
         v = v << one
         count = count + one
-        if count >= (32 as U32) {
-            return 32 as U32
-        }
+    }
+    if count >= (32 as U32) {
+        return 32 as U32
     }
     return count
 }
@@ -751,15 +712,12 @@ pub func trailing_zeros_u32(value: U32) -> U32 {
     let mut v: U32 = value
     var count: U32 = 0 as U32
     let one: U32 = 1 as U32
-    loop {
-        if (v & one) != zero {
-            return count
-        }
+    loop ((v & one) == zero and count < (32 as U32)) {
         v = v >> one
         count = count + one
-        if count >= (32 as U32) {
-            return 32 as U32
-        }
+    }
+    if count >= (32 as U32) {
+        return 32 as U32
     }
     return count
 }
@@ -806,10 +764,7 @@ pub func reverse_bits_u32(value: U32) -> U32 {
     var result: U32 = 0 as U32
     var i: I32 = 0
     let one: U32 = 1 as U32
-    loop {
-        if i >= 32 {
-            return result
-        }
+    loop (i < 32) {
         result = result << one
         result = result | (v & one)
         v = v >> one
@@ -828,10 +783,7 @@ pub func count_ones_u64(value: U64) -> U64 {
     var count: U64 = 0 as U64
     let zero: U64 = 0 as U64
     let one: U64 = 1 as U64
-    loop {
-        if v == zero {
-            return count
-        }
+    loop (v != zero) {
         v = v & (v - one)
         count = count + one
     }
@@ -854,15 +806,12 @@ pub func leading_zeros_u64(value: U64) -> U64 {
     var count: U64 = 0 as U64
     let high_bit: U64 = 9223372036854775808 as U64
     let one: U64 = 1 as U64
-    loop {
-        if (v & high_bit) != zero {
-            return count
-        }
+    loop ((v & high_bit) == zero and count < (64 as U64)) {
         v = v << one
         count = count + one
-        if count >= (64 as U64) {
-            return 64 as U64
-        }
+    }
+    if count >= (64 as U64) {
+        return 64 as U64
     }
     return count
 }
@@ -876,15 +825,12 @@ pub func trailing_zeros_u64(value: U64) -> U64 {
     let mut v: U64 = value
     var count: U64 = 0 as U64
     let one: U64 = 1 as U64
-    loop {
-        if (v & one) != zero {
-            return count
-        }
+    loop ((v & one) == zero and count < (64 as U64)) {
         v = v >> one
         count = count + one
-        if count >= (64 as U64) {
-            return 64 as U64
-        }
+    }
+    if count >= (64 as U64) {
+        return 64 as U64
     }
     return count
 }
@@ -935,10 +881,7 @@ pub func reverse_bits_u64(value: U64) -> U64 {
     var result: U64 = 0 as U64
     var i: I32 = 0
     let one: U64 = 1 as U64
-    loop {
-        if i >= 64 {
-            return result
-        }
+    loop (i < 64) {
         result = result << one
         result = result | (v & one)
         v = v >> one

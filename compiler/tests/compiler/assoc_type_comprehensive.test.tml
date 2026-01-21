@@ -142,7 +142,7 @@ func test_repeat_n_i32() -> I32 {
     var iter: RepeatNI32 = repeat_n_i32(7, 3)
 
     var count: I32 = 0
-    loop {
+    loop (true) {
         when iter.next() {
             Just(v) => {
                 assert_eq(v, 7, "repeat should always return 7")
@@ -220,7 +220,7 @@ func test_iterator_consumption() -> I32 {
     var iter: RangeIterI64 = RangeIterI64 { current: 10, end: 15 }
 
     var sum: I64 = 0
-    loop {
+    loop (true) {
         when iter.next() {
             Just(v) => {
                 sum = sum + v

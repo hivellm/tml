@@ -165,7 +165,7 @@ pub interface IEnumerable[T] {
 ///
 /// ```tml
 /// let items = my_collection.get_enumerator()
-/// loop {
+/// loop (true) {
 ///     if not items.move_next() { break }
 ///     let item = items.current()
 ///     // process item

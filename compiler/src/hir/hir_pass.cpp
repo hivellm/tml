@@ -242,6 +242,7 @@ auto ConstantFolding::fold_expr(HirExprPtr& expr) -> bool {
                     fold_expr(payload);
                 }
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
+                fold_expr(e.condition);
                 fold_expr(e.body);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
                 fold_expr(e.condition);
@@ -600,6 +601,7 @@ auto DeadCodeElimination::eliminate_in_expr(HirExprPtr& expr) -> bool {
                 if (e.expr)
                     eliminate_in_expr(e.expr.value());
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
+                eliminate_in_expr(e.condition);
                 eliminate_in_expr(e.body);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
                 eliminate_in_expr(e.condition);
@@ -1114,6 +1116,8 @@ static auto clone_expr(const HirExpr& expr) -> HirExprPtr {
                 HirLoopExpr new_expr;
                 new_expr.id = e.id;
                 new_expr.label = e.label;
+                new_expr.loop_var = e.loop_var;
+                new_expr.condition = clone_expr(*e.condition);
                 new_expr.body = clone_expr(*e.body);
                 new_expr.type = e.type;
                 new_expr.span = e.span;
@@ -1433,6 +1437,7 @@ void Inlining::inline_calls_in_expr(
                     inline_calls_in_expr(arg, inlinable);
                 }
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
+                inline_calls_in_expr(e.condition, inlinable);
                 inline_calls_in_expr(e.body, inlinable);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
                 inline_calls_in_expr(e.condition, inlinable);
@@ -1590,6 +1595,7 @@ void ClosureOptimization::optimize_in_expr(HirExprPtr& expr) {
                 if (e.else_branch)
                     optimize_in_expr(e.else_branch.value());
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
+                optimize_in_expr(e.condition);
                 optimize_in_expr(e.body);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
                 optimize_in_expr(e.condition);
@@ -1780,7 +1786,7 @@ auto ClosureOptimization::check_var_usage(const HirExpr& expr, const std::string
             } else if constexpr (std::is_same_v<T, HirIndexExpr>) {
                 found = check_var_usage(*e.object, name) || check_var_usage(*e.index, name);
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
-                found = check_var_usage(*e.body, name);
+                found = check_var_usage(*e.condition, name) || check_var_usage(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
                 found = check_var_usage(*e.condition, name) || check_var_usage(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirForExpr>) {
@@ -1895,7 +1901,7 @@ auto ClosureOptimization::check_var_escapes(const HirExpr& expr, const std::stri
                     escapes = check_var_escapes(**e.else_branch, name);
                 }
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
-                escapes = check_var_escapes(*e.body, name);
+                escapes = check_var_escapes(*e.condition, name) || check_var_escapes(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
                 escapes = check_var_escapes(*e.condition, name) || check_var_escapes(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirForExpr>) {

@@ -27,7 +27,7 @@
 //!     let socket = UdpSocket::bind(addr)!
 //!
 //!     var buf: [U8; 1024] = [0; 1024]
-//!     loop {
+//!     loop (true) {
 //!         let (n, src) = socket.recv_from(mut ref buf)!
 //!         socket.send_to(ref buf[0..n], src)!
 //!     }

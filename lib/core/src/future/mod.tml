@@ -177,7 +177,7 @@ pub behavior Future {
 /// use core::future::FusedFuture
 ///
 /// func poll_multiple[F: FusedFuture](futures: List[F]) {
-///     loop {
+///     loop (true) {
 ///         for fut in futures.iter() {
 ///             if not fut.is_terminated() {
 ///                 when fut.poll(cx) {

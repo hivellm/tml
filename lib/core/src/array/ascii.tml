@@ -41,10 +41,7 @@ impl[const N: I64] Array[U8, N] {
     pub func as_ascii(this) -> Maybe[Array[Char, N]] {
         // First check if all bytes are valid ASCII
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let byte: U8 = lowlevel { array_get(this.data, i) }
             if byte > 127 {
                 return Nothing
@@ -55,10 +52,7 @@ impl[const N: I64] Array[U8, N] {
         // All bytes are valid, perform the conversion
         let result: Array[Char, N] = lowlevel { array_uninit() }
         i = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let byte: U8 = lowlevel { array_get(this.data, i) }
             lowlevel { array_set(result.data, i, Char::from_u8_unchecked(byte)) }
             i = i + 1
@@ -83,10 +77,7 @@ impl[const N: I64] Array[U8, N] {
     pub func as_ascii_unchecked(this) -> Array[Char, N] {
         let result: Array[Char, N] = lowlevel { array_uninit() }
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let byte: U8 = lowlevel { array_get(this.data, i) }
             lowlevel { array_set(result.data, i, Char::from_u8_unchecked(byte)) }
             i = i + 1
@@ -107,10 +98,7 @@ impl[const N: I64] Array[U8, N] {
     /// ```
     pub func is_ascii(this) -> Bool {
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let byte: U8 = lowlevel { array_get(this.data, i) }
             if byte > 127 {
                 return false
@@ -133,10 +121,7 @@ impl[const N: I64] Array[U8, N] {
     /// ```
     pub func make_ascii_lowercase(mut this) {
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let byte: U8 = lowlevel { array_get(this.data, i) }
             // A-Z (65-90) -> a-z (97-122)
             if byte >= 65 and byte <= 90 {
@@ -159,10 +144,7 @@ impl[const N: I64] Array[U8, N] {
     /// ```
     pub func make_ascii_uppercase(mut this) {
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let byte: U8 = lowlevel { array_get(this.data, i) }
             // a-z (97-122) -> A-Z (65-90)
             if byte >= 97 and byte <= 122 {
@@ -183,10 +165,7 @@ impl[const N: I64] Array[U8, N] {
     /// ```
     pub func eq_ignore_ascii_case(this, other: ref Array[U8, N]) -> Bool {
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let mut a: U8 = lowlevel { array_get(this.data, i) }
             let mut b: U8 = lowlevel { array_get(other.data, i) }
 
@@ -224,10 +203,7 @@ impl[const N: I64] Array[Char, N] {
     pub func as_bytes(this) -> Array[U8, N] {
         let result: Array[U8, N] = lowlevel { array_uninit() }
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let ch: Char = lowlevel { array_get(this.data, i) }
             lowlevel { array_set(result.data, i, ch.to_u8()) }
             i = i + 1
@@ -247,10 +223,7 @@ impl[const N: I64] Array[Char, N] {
     pub func to_ascii_lowercase(this) -> Array[Char, N] {
         let result: Array[Char, N] = lowlevel { array_uninit() }
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let ch: Char = lowlevel { array_get(this.data, i) }
             lowlevel { array_set(result.data, i, ch.to_lowercase()) }
             i = i + 1
@@ -270,10 +243,7 @@ impl[const N: I64] Array[Char, N] {
     pub func to_ascii_uppercase(this) -> Array[Char, N] {
         let result: Array[Char, N] = lowlevel { array_uninit() }
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let ch: Char = lowlevel { array_get(this.data, i) }
             lowlevel { array_set(result.data, i, ch.to_uppercase()) }
             i = i + 1
@@ -284,10 +254,7 @@ impl[const N: I64] Array[Char, N] {
     /// Converts all ASCII letters in the array to lowercase in place.
     pub func make_ascii_lowercase(mut this) {
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let ch: Char = lowlevel { array_get(this.data, i) }
             lowlevel { array_set(this.data, i, ch.to_lowercase()) }
             i = i + 1
@@ -297,10 +264,7 @@ impl[const N: I64] Array[Char, N] {
     /// Converts all ASCII letters in the array to uppercase in place.
     pub func make_ascii_uppercase(mut this) {
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let ch: Char = lowlevel { array_get(this.data, i) }
             lowlevel { array_set(this.data, i, ch.to_uppercase()) }
             i = i + 1
@@ -318,10 +282,7 @@ impl[const N: I64] Array[Char, N] {
     /// ```
     pub func eq_ignore_ascii_case(this, other: ref Array[Char, N]) -> Bool {
         let mut i: I64 = 0
-        loop {
-            if i >= N {
-                break
-            }
+        loop (i < N) {
             let a: Char = lowlevel { array_get(this.data, i) }
             let b: Char = lowlevel { array_get(other.data, i) }
             if a.to_lowercase().to_u8() != b.to_lowercase().to_u8() {

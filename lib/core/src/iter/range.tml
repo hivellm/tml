@@ -22,7 +22,7 @@
 //!
 //! // Iterate over a range
 //! var range: Range[I32] = Range { start: 0, end: 5 }
-//! loop {
+//! loop (true) {
 //!     when range.next() {
 //!         Just(n) => print(n),  // 0, 1, 2, 3, 4
 //!         Nothing => break

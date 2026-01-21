@@ -7,8 +7,7 @@
 func bench_int_add(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + i
         i = i + 1
     }
@@ -19,8 +18,7 @@ func bench_int_add(iterations: I64) -> I64 {
 func bench_int_mul(iterations: I64) -> I64 {
     var prod: I64 = 1
     var i: I64 = 1
-    loop {
-        if i > iterations then { break }
+    loop (i <= iterations) {
         prod = (prod * i) % 1000000007  // Prevent overflow with modulo
         i = i + 1
     }
@@ -31,8 +29,7 @@ func bench_int_mul(iterations: I64) -> I64 {
 func bench_float_add(iterations: I64) -> F64 {
     var sum: F64 = 0.0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + (i as F64) * 0.001
         i = i + 1
     }
@@ -43,8 +40,7 @@ func bench_float_add(iterations: I64) -> F64 {
 func bench_float_mul(iterations: I64) -> F64 {
     var prod: F64 = 1.0
     var i: I64 = 1
-    loop {
-        if i > iterations then { break }
+    loop (i <= iterations) {
         prod = prod * 1.0000001  // Small multiplier to avoid infinity
         i = i + 1
     }
@@ -60,8 +56,7 @@ func fib(n: I32) -> I64 {
 func bench_fib_recursive(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + fib(20)  // fib(20) = 6765
         i = i + 1
     }
@@ -74,8 +69,7 @@ func fib_iter(n: I32) -> I64 {
     var a: I64 = 0
     var b: I64 = 1
     var i: I32 = 2
-    loop {
-        if i > n then { break }
+    loop (i <= n) {
         let temp: I64 = a + b
         a = b
         b = temp
@@ -87,8 +81,7 @@ func fib_iter(n: I32) -> I64 {
 func bench_fib_iterative(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + fib_iter(50)
         i = i + 1
     }
@@ -99,8 +92,7 @@ func bench_fib_iterative(iterations: I64) -> I64 {
 func bench_empty_loop(iterations: I64) -> I64 {
     var counter: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         counter = i
         i = i + 1
     }
@@ -111,8 +103,7 @@ func bench_empty_loop(iterations: I64) -> I64 {
 func bench_int_div(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 1
-    loop {
-        if i > iterations then { break }
+    loop (i <= iterations) {
         sum = sum + (i * 1000000) / (i + 1)
         i = i + 1
     }
@@ -123,8 +114,7 @@ func bench_int_div(iterations: I64) -> I64 {
 func bench_int_mod(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 1
-    loop {
-        if i > iterations then { break }
+    loop (i <= iterations) {
         sum = sum + (i % 17)
         i = i + 1
     }
@@ -135,8 +125,7 @@ func bench_int_mod(iterations: I64) -> I64 {
 func bench_bitwise(iterations: I64) -> I64 {
     var result: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         result = (result ^ i) | (i & 255) | ((i << 3) >> 1)
         i = i + 1
     }
@@ -171,8 +160,7 @@ pub func main() -> I32 {
 
     // Warmup
     var warmup: I64 = 0
-    loop {
-        if warmup >= 10 then { break }
+    loop (warmup < 10) {
         let _: I64 = bench_int_add(1000)
         warmup = warmup + 1
     }

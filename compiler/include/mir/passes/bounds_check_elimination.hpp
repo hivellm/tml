@@ -159,6 +159,9 @@ private:
     /// Analyze the function to gather information
     void analyze_function(const Function& func);
 
+    /// Collect constants and array sizes before loop detection
+    void collect_constants(const Function& func);
+
     /// Compute value ranges for all values in the function
     void compute_value_ranges(const Function& func);
 

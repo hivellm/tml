@@ -393,22 +393,42 @@ struct WhenExpr {
 // Loops
 // ============================================================================
 
-/// Infinite loop: `loop { body }`.
+/// Loop variable declaration for `loop (var i: I64 < N) { ... }` syntax.
 ///
-/// Loops forever until explicitly broken with `break`.
+/// This allows declaring and initializing the loop variable inline.
+struct LoopVarDecl {
+    std::string name;    ///< Variable name.
+    TypePtr type;        ///< Variable type.
+    SourceSpan span;     ///< Source location.
+};
+
+/// Conditional loop: `loop (condition) { body }`.
 ///
-/// # Example
+/// Loops while condition is true. Condition is evaluated BEFORE each iteration.
 ///
+/// # Examples
+///
+/// Standard condition:
 /// ```tml
-/// loop {
-///     if should_stop() { break }
+/// loop (i < 100) {
 ///     do_work()
+///     i = i + 1
+/// }
+/// ```
+///
+/// With inline variable declaration:
+/// ```tml
+/// loop (var i: I64 < 100) {
+///     do_work()
+///     i = i + 1
 /// }
 /// ```
 struct LoopExpr {
-    std::optional<std::string> label; ///< Optional loop label (`'label: loop`).
-    ExprPtr body;                     ///< Loop body.
-    SourceSpan span;                  ///< Source location.
+    std::optional<std::string> label;      ///< Optional loop label (`'label: loop`).
+    std::optional<LoopVarDecl> loop_var;   ///< Optional loop variable declaration.
+    ExprPtr condition;                     ///< Loop condition (required, must be Bool).
+    ExprPtr body;                          ///< Loop body.
+    SourceSpan span;                       ///< Source location.
 };
 
 /// While loop: `while cond { body }`.

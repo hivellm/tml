@@ -101,6 +101,7 @@ struct HirLetStmt {
     HirType type;
     std::optional<HirExprPtr> init;
     SourceSpan span;
+    bool is_volatile = false; ///< Volatile modifier (prevents optimization).
 };
 
 /// Expression statement: `expr;`
@@ -200,6 +201,7 @@ struct HirStmt {
 /// @param type Type of the bound value
 /// @param init Optional initializer expression
 /// @param span Source location
+/// @param is_volatile Whether this variable is volatile (prevents optimization)
 /// @return Heap-allocated statement
 ///
 /// ## Example
@@ -209,7 +211,7 @@ struct HirStmt {
 /// auto stmt = make_hir_let(id, std::move(pattern), i32_type, std::move(init), span);
 /// ```
 auto make_hir_let(HirId id, HirPatternPtr pattern, HirType type, std::optional<HirExprPtr> init,
-                  SourceSpan span) -> HirStmtPtr;
+                  SourceSpan span, bool is_volatile = false) -> HirStmtPtr;
 
 /// Create an expression statement.
 ///

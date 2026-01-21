@@ -117,7 +117,8 @@ auto HirBuilder::lower_let(const parser::LetStmt& let_stmt) -> HirStmtPtr {
         init = lower_expr(**let_stmt.init);
     }
 
-    return make_hir_let(fresh_id(), std::move(pattern), type, std::move(init), let_stmt.span);
+    return make_hir_let(fresh_id(), std::move(pattern), type, std::move(init), let_stmt.span,
+                        let_stmt.is_volatile);
 }
 
 // ============================================================================
@@ -154,7 +155,8 @@ auto HirBuilder::lower_var(const parser::VarStmt& var_stmt) -> HirStmtPtr {
     // Lower initializer
     auto init = lower_expr(*var_stmt.init);
 
-    return make_hir_let(fresh_id(), std::move(pattern), type, std::move(init), var_stmt.span);
+    return make_hir_let(fresh_id(), std::move(pattern), type, std::move(init), var_stmt.span,
+                        var_stmt.is_volatile);
 }
 
 // ============================================================================

@@ -243,11 +243,8 @@ TEST_F(BorrowCheckerTest, LoopExpression) {
     check_ok(R"(
         func test() {
             let mut x: I32 = 0
-            loop {
+            loop (x <= 10) {
                 x = x + 1
-                if x > 10 {
-                    break
-                }
             }
         }
     )");

@@ -139,10 +139,7 @@ pub func simple_bench(name: Str, iterations: I32) -> BenchResult {
     // For demonstration, we'll just measure the timing overhead
     let total_time: I64 = 0
     let i: I32 = 0
-    loop {
-        if i >= iterations {
-            break
-        }
+    loop (i < iterations) {
         let iter_start: I64 = time_ns()
         let iter_end: I64 = time_ns()
         total_time = total_time + (iter_end - iter_start)

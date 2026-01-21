@@ -46,7 +46,7 @@
 //! data_ready.store(true, Ordering::Release)  // Signal data is ready
 //!
 //! // Consumer thread:
-//! loop {
+//! loop (true) {
 //!     if data_ready.load(Ordering::Acquire) {
 //!         // Can safely read `data` here - acquire synchronizes with release
 //!         println(data)

@@ -535,7 +535,21 @@ auto HirMirBuilder::const_unit() -> Value {
 auto HirMirBuilder::get_variable(const std::string& name) -> Value {
     auto it = ctx_.variables.find(name);
     if (it != ctx_.variables.end()) {
-        return it->second;
+        Value var_value = it->second;
+
+        // For volatile variables, emit a volatile load from the alloca
+        if (ctx_.volatile_vars.count(name) > 0) {
+            // var_value is a pointer to the alloca, load the actual value with volatile
+            if (auto* ptr = std::get_if<MirPointerType>(&var_value.type->kind)) {
+                LoadInst load;
+                load.ptr = var_value;
+                load.result_type = ptr->pointee;
+                load.is_volatile = true;
+                return emit(load, ptr->pointee);
+            }
+        }
+
+        return var_value;
     }
     // Variable not found - return invalid value
     return Value{INVALID_VALUE, make_unit_type()};

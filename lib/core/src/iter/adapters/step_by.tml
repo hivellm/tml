@@ -38,10 +38,7 @@ impl[I: Iterator] Iterator for StepBy[I] {
 
         // Skip (step - 1) elements
         var i: I64 = 1
-        loop {
-            if i >= this.step {
-                break
-            }
+        loop (i < this.step) {
             when this.iter.next() {
                 Just(_) => {},
                 Nothing => return Nothing

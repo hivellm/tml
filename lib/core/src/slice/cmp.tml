@@ -61,10 +61,7 @@ impl[T: PartialEq] Slice[T] {
     /// instead of *O*(*n*).
     pub func contains(this, value: ref T) -> Bool {
         let mut i: I64 = 0
-        loop {
-            if i >= this.len {
-                break
-            }
+        loop (i < this.len) {
             let elem: ref T = this.get(i).unwrap()
             if elem.eq(value) {
                 return true
@@ -96,10 +93,7 @@ impl[T: PartialEq] Slice[T] {
             return false
         }
         let mut i: I64 = 0
-        loop {
-            if i >= prefix.len {
-                break
-            }
+        loop (i < prefix.len) {
             let a: ref T = this.get(i).unwrap()
             let b: ref T = prefix.get(i).unwrap()
             if not a.eq(b) {
@@ -133,10 +127,7 @@ impl[T: PartialEq] Slice[T] {
         }
         let offset: I64 = this.len - suffix.len
         let mut i: I64 = 0
-        loop {
-            if i >= suffix.len {
-                break
-            }
+        loop (i < suffix.len) {
             let a: ref T = this.get(offset + i).unwrap()
             let b: ref T = suffix.get(i).unwrap()
             if not a.eq(b) {
@@ -161,10 +152,7 @@ impl[T: PartialEq] Slice[T] {
     /// ```
     pub func position(this, value: ref T) -> Maybe[I64] {
         let mut i: I64 = 0
-        loop {
-            if i >= this.len {
-                break
-            }
+        loop (i < this.len) {
             let elem: ref T = this.get(i).unwrap()
             if elem.eq(value) {
                 return Just(i)
@@ -188,10 +176,7 @@ impl[T: PartialEq] Slice[T] {
     /// ```
     pub func rposition(this, value: ref T) -> Maybe[I64] {
         let mut i: I64 = this.len - 1
-        loop {
-            if i < 0 {
-                break
-            }
+        loop (i >= 0) {
             let elem: ref T = this.get(i).unwrap()
             if elem.eq(value) {
                 return Just(i)
@@ -224,10 +209,7 @@ impl[T: PartialEq] PartialEq for Slice[T] {
             return false
         }
         let mut i: I64 = 0
-        loop {
-            if i >= this.len {
-                break
-            }
+        loop (i < this.len) {
             let a: ref T = this.get(i).unwrap()
             let b: ref T = other.get(i).unwrap()
             if not a.eq(b) {

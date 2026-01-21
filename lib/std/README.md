@@ -86,7 +86,7 @@ func main() -> I32 {
     // Object-oriented file handling
     let f: File = File.open_read("data.txt")
     if f.is_open() {
-        loop {
+        loop (true) {
             let line: Str = f.read_line()
             if str_len(line) == 0 then break
             print(line)

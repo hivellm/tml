@@ -408,13 +408,11 @@ func repeat_char(s: Str, n: I64) -> Str {
     }
     var result: Str = ""
     var i: I64 = 0
-    loop {
-        if i >= n {
-            return result
-        }
+    loop (i < n) {
         result = result + s
         i = i + 1
     }
+    return result
 }
 
 /// Returns a slice of a string from start to end (exclusive).

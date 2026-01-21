@@ -23,8 +23,7 @@ func bench_func_pointer(iterations: I64) -> I64 {
     let f: func(I64) -> I64 = double_it
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + f(i)
         i = i + 1
     }
@@ -35,8 +34,7 @@ func bench_func_pointer(iterations: I64) -> I64 {
 func bench_func_pointer_switch(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let f: func(I64) -> I64 = if (i % 2) == 0 then { double_it } else { triple_it }
         sum = sum + f(i)
         i = i + 1
@@ -48,8 +46,7 @@ func bench_func_pointer_switch(iterations: I64) -> I64 {
 func apply_n_times(f: func(I64) -> I64, x: I64, n: I64) -> I64 {
     var result: I64 = x
     var i: I64 = 0
-    loop {
-        if i >= n then { break }
+    loop (i < n) {
         result = f(result)
         i = i + 1
     }
@@ -59,8 +56,7 @@ func apply_n_times(f: func(I64) -> I64, x: I64, n: I64) -> I64 {
 func bench_higher_order(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + apply_n_times(add_ten, i % 100, 5)
         i = i + 1
     }
@@ -75,8 +71,7 @@ func compose_and_apply(f: func(I64) -> I64, g: func(I64) -> I64, x: I64) -> I64 
 func bench_composition(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + compose_and_apply(double_it, triple_it, i % 100)
         i = i + 1
     }
@@ -91,19 +86,16 @@ func bench_composition(iterations: I64) -> I64 {
 func bench_manual_loop(iterations: I64) -> I64 {
     var arr: [I64; 1000] = [0; 1000]
     var k: I64 = 0
-    loop {
-        if k >= 1000 then { break }
+    loop (k < 1000) {
         arr[k] = k
         k = k + 1
     }
 
     var total: I64 = 0
     var iter: I64 = 0
-    loop {
-        if iter >= iterations / 1000 then { break }
+    loop (iter < iterations / 1000) {
         var i: I64 = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 1000) {
             total = total + arr[i]
             i = i + 1
         }
@@ -116,25 +108,21 @@ func bench_manual_loop(iterations: I64) -> I64 {
 func bench_map_simulation(iterations: I64) -> I64 {
     var arr: [I64; 1000] = [0; 1000]
     var k: I64 = 0
-    loop {
-        if k >= 1000 then { break }
+    loop (k < 1000) {
         arr[k] = k
         k = k + 1
     }
 
     var iter: I64 = 0
-    loop {
-        if iter >= iterations / 1000 then { break }
+    loop (iter < iterations / 1000) {
         var i: I64 = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 1000) {
             arr[i] = arr[i] * 2
             i = i + 1
         }
         // Reset for next iteration
         i = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 1000) {
             arr[i] = i
             i = i + 1
         }
@@ -147,19 +135,16 @@ func bench_map_simulation(iterations: I64) -> I64 {
 func bench_filter_simulation(iterations: I64) -> I64 {
     var arr: [I64; 1000] = [0; 1000]
     var k: I64 = 0
-    loop {
-        if k >= 1000 then { break }
+    loop (k < 1000) {
         arr[k] = k
         k = k + 1
     }
 
     var total: I64 = 0
     var iter: I64 = 0
-    loop {
-        if iter >= iterations / 1000 then { break }
+    loop (iter < iterations / 1000) {
         var i: I64 = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 1000) {
             if (arr[i] % 2) == 0 then {
                 total = total + arr[i]
             }
@@ -174,20 +159,17 @@ func bench_filter_simulation(iterations: I64) -> I64 {
 func bench_fold_simulation(iterations: I64) -> I64 {
     var arr: [I64; 1000] = [0; 1000]
     var k: I64 = 0
-    loop {
-        if k >= 1000 then { break }
+    loop (k < 1000) {
         arr[k] = k
         k = k + 1
     }
 
     var total: I64 = 0
     var iter: I64 = 0
-    loop {
-        if iter >= iterations / 1000 then { break }
+    loop (iter < iterations / 1000) {
         var acc: I64 = 0
         var i: I64 = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 1000) {
             acc = acc + arr[i]
             i = i + 1
         }
@@ -201,19 +183,16 @@ func bench_fold_simulation(iterations: I64) -> I64 {
 func bench_chain_operations(iterations: I64) -> I64 {
     var arr: [I64; 1000] = [0; 1000]
     var k: I64 = 0
-    loop {
-        if k >= 1000 then { break }
+    loop (k < 1000) {
         arr[k] = k
         k = k + 1
     }
 
     var total: I64 = 0
     var iter: I64 = 0
-    loop {
-        if iter >= iterations / 1000 then { break }
+    loop (iter < iterations / 1000) {
         var i: I64 = 0
-        loop {
-            if i >= 1000 then { break }
+        loop (i < 1000) {
             // Filter even, map to double, accumulate
             if (arr[i] % 2) == 0 then {
                 total = total + (arr[i] * 2)
@@ -232,8 +211,7 @@ func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64
 
     var best_ns: I64 = 9223372036854775807  // I64 max
     var run: I32 = 0
-    loop {
-        if run >= runs then { break }
+    loop (run < runs) {
         let start: I64 = time_ns()
         let _r: I64 = bench_fn(iterations)
         let end: I64 = time_ns()

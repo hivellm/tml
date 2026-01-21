@@ -301,6 +301,7 @@ struct UnaryInst {
 struct LoadInst {
     Value ptr;
     MirTypePtr result_type = nullptr; // Type being loaded
+    bool is_volatile = false;         // Volatile load (prevents optimization)
 };
 
 // Store to memory: *ptr = value (no result)
@@ -308,6 +309,7 @@ struct StoreInst {
     Value ptr;
     Value value;
     MirTypePtr value_type = nullptr; // Type being stored
+    bool is_volatile = false;        // Volatile store (prevents optimization)
 };
 
 // Allocate stack memory: result = alloca type
@@ -315,6 +317,7 @@ struct AllocaInst {
     MirTypePtr alloc_type;
     std::string name;              // Original variable name (for debugging)
     bool is_stack_eligible = true; // Always stack-eligible since it's already alloca
+    bool is_volatile = false;      // Volatile variable (prevents optimization)
 };
 
 // Get element pointer: result = &aggregate[index]

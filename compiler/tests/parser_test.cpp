@@ -172,14 +172,14 @@ TEST_F(ParserTest, IfExpressionWithoutElse) {
 }
 
 TEST_F(ParserTest, LoopWithCondition) {
-    // TML uses 'loop' for all looping constructs
-    auto result = parse_expr("loop { body }");
+    // TML uses 'loop (condition)' for all looping constructs
+    auto result = parse_expr("loop (true) { body }");
     ASSERT_TRUE(is_ok(result));
     EXPECT_TRUE(unwrap(result)->is<LoopExpr>());
 }
 
 TEST_F(ParserTest, LoopExpressions) {
-    auto result = parse_expr("loop { body }");
+    auto result = parse_expr("loop (x < 10) { body }");
     ASSERT_TRUE(is_ok(result));
     EXPECT_TRUE(unwrap(result)->is<LoopExpr>());
 }

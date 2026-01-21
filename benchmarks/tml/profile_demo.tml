@@ -24,8 +24,7 @@ func compute_heavy(n: I64) -> I64 {
 
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= n then { break }
+    loop (i < n) {
         sum = sum + (i * i)
         i = i + 1
     }
@@ -51,8 +50,7 @@ func inner_function_a() {
     // Simulate work
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= 10000 then { break }
+    loop (i < 10000) {
         sum = sum + i
         i = i + 1
     }
@@ -66,8 +64,7 @@ func inner_function_b() {
     // Simulate work
     var sum: I64 = 0
     var i: I64 = 0
-    loop {
-        if i >= 5000 then { break }
+    loop (i < 5000) {
         sum = sum + (i * 2)
         i = i + 1
     }
@@ -102,8 +99,7 @@ func run_benchmark() {
 
     println("Running compute_heavy...")
     var i: I32 = 0
-    loop {
-        if i >= 10 then { break }
+    loop (i < 10) {
         let result = compute_heavy(100000)
         if result < 0 { break }  // Prevent optimization
         i = i + 1
@@ -111,8 +107,7 @@ func run_benchmark() {
 
     println("Running nested functions...")
     i = 0
-    loop {
-        if i >= 50 then { break }
+    loop (i < 50) {
         outer_function()
         i = i + 1
     }

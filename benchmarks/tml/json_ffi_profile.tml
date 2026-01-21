@@ -16,8 +16,7 @@ func generate_array_json(size: I64) -> Str {
     let t: Text = Text::with_capacity(size * 10)
     t.push_str("[")
     var i: I64 = 0
-    loop {
-        if i >= size then { break }
+    loop (i < size) {
         if i > 0 {
             t.push_str(",")
         }
@@ -32,8 +31,7 @@ func generate_objects_json(size: I64) -> Str {
     let t: Text = Text::with_capacity(size * 50)
     t.push_str("{\"items\":[")
     var i: I64 = 0
-    loop {
-        if i >= size then { break }
+    loop (i < size) {
         if i > 0 {
             t.push_str(",")
         }
@@ -82,8 +80,7 @@ pub func main() -> I32 {
     let iters1: I64 = 10000
     let start1: I64 = time_ns()
     var i: I64 = 0
-    loop {
-        if i >= iters1 then { break }
+    loop (i < iters1) {
         let h: I64 = json::parse_fast(small)
         json::free(h)
         i = i + 1
@@ -108,8 +105,7 @@ pub func main() -> I32 {
     let iters2: I64 = 10000
     let start2: I64 = time_ns()
     i = 0
-    loop {
-        if i >= iters2 then { break }
+    loop (i < iters2) {
         let h: I64 = json::parse_fast(small)
         let name_h: I64 = json::object_get(h, "name")
         let _name: Str = json::get_string(name_h)
@@ -140,8 +136,7 @@ pub func main() -> I32 {
     let iters3: I64 = 10000
     let start3: I64 = time_ns()
     i = 0
-    loop {
-        if i >= iters3 then { break }
+    loop (i < iters3) {
         let h: I64 = json::parse_fast(small)
         let _name: Str = json::object_get_string(h, "name")
         let _age: I64 = json::object_get_i64(h, "age")
@@ -171,12 +166,10 @@ pub func main() -> I32 {
     let iters4: I64 = 100
     let start4: I64 = time_ns()
     i = 0
-    loop {
-        if i >= iters4 then { break }
+    loop (i < iters4) {
         var sum: I64 = 0
         var j: I64 = 0
-        loop {
-            if j >= arr_len then { break }
+        loop (j < arr_len) {
             let elem_h: I64 = json::array_get(arr_h, j)
             sum = sum + json::as_i64(elem_h)
             json::free(elem_h)
@@ -210,12 +203,10 @@ pub func main() -> I32 {
     let iters5: I64 = 100
     let start5: I64 = time_ns()
     i = 0
-    loop {
-        if i >= iters5 then { break }
+    loop (i < iters5) {
         var sum: I64 = 0
         var j: I64 = 0
-        loop {
-            if j >= arr_len2 then { break }
+        loop (j < arr_len2) {
             sum = sum + json::array_get_i64(arr_h2, j)
             j = j + 1
         }

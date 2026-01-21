@@ -189,8 +189,7 @@ func bench_fibonacci() -> Unit {
     let mut a: I32 = 0
     let mut b: I32 = 1
     let mut i: I32 = 0
-    loop {
-        if i >= 20 then break
+    loop (i < 20) {
         let temp: I32 = a + b
         a = b
         b = temp

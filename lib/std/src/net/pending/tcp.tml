@@ -23,13 +23,13 @@
 //!     print("Listening on {}\n", listener.local_addr())
 //!
 //!     // Accept connections
-//!     loop {
+//!     loop (true) {
 //!         let (mut stream, peer) = listener.accept()!
 //!         print("Connection from {}\n", peer)
 //!
 //!         // Echo data back
 //!         var buf: [U8; 1024] = [0; 1024]
-//!         loop {
+//!         loop (true) {
 //!             let n = stream.read(mut ref buf)!
 //!             if n == 0 { break }
 //!             stream.write_all(ref buf[0..n])!
@@ -490,9 +490,7 @@ impl TcpStream {
         var total: I64 = 0
         let len: I64 = buf.len()
 
-        loop {
-            if total >= len { break }
-
+        loop (total < len) {
             let remaining: I64 = len - total
             var slice: mut ref [U8] = buf.slice_mut(total, len)
 
@@ -524,9 +522,7 @@ impl TcpStream {
         var total: I64 = 0
         let len: I64 = buf.len()
 
-        loop {
-            if total >= len { break }
-
+        loop (total < len) {
             let slice: ref [U8] = buf.slice(total, len)
 
             when this.socket.send(slice) {

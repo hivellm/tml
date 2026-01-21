@@ -81,6 +81,7 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     {"mut", TokenKind::KwMut},
     {"ref", TokenKind::KwRef},
     {"life", TokenKind::KwLife},
+    {"volatile", TokenKind::KwVolatile},
 
     // Closures
     {"do", TokenKind::KwDo},

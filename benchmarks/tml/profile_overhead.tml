@@ -68,8 +68,7 @@ func tml_add(a: I32, b: I32) -> I32 {
 func test_empty_loop(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         i = i + 1
     }
     let end = time::now_ns()
@@ -81,8 +80,7 @@ func test_integer_ops(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + i
         i = i + 1
     }
@@ -97,8 +95,7 @@ func test_time_ns_overhead(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var dummy: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         dummy = time::now_ns()
         i = i + 1
     }
@@ -112,8 +109,7 @@ func test_tml_call_overhead(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + tml_noop()
         i = i + 1
     }
@@ -127,8 +123,7 @@ func test_tml_i32_param(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + tml_echo_i32(42)
         i = i + 1
     }
@@ -142,8 +137,7 @@ func test_tml_add(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + tml_add(1, 2)
         i = i + 1
     }
@@ -157,8 +151,7 @@ func test_extern_noop(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + profile_noop()
         i = i + 1
     }
@@ -172,8 +165,7 @@ func test_extern_i32(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + profile_echo_i32(42)
         i = i + 1
     }
@@ -187,8 +179,7 @@ func test_extern_i64(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + profile_echo_i64(42)
         i = i + 1
     }
@@ -202,8 +193,7 @@ func test_extern_add(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + profile_add(1, 2)
         i = i + 1
     }
@@ -218,8 +208,7 @@ func test_extern_str_small(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + profile_echo_str(s)
         i = i + 1
     }
@@ -234,8 +223,7 @@ func test_extern_str_medium(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + profile_echo_str(s)
         i = i + 1
     }
@@ -250,8 +238,7 @@ func test_json_parse_small(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I32 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         sum = sum + json::parse_fast_bench(json_str)
         i = i + 1
     }
@@ -266,8 +253,7 @@ func test_json_parse_with_handle(iterations: I64) -> I64 {
     let start = time::now_ns()
     var i: I64 = 0
     var sum: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         let h = json::parse_fast(json_str)
         if h >= 0 then {
             sum = sum + 1

@@ -44,8 +44,7 @@ impl BenchResult {
 pub func run_bench(name: Str, category: Str, iterations: I64, warmup: I64, func: func() -> ()) -> BenchResult {
     // Warmup
     var w: I64 = 0
-    loop {
-        if w >= warmup then { break }
+    loop (w < warmup) {
         func()
         w = w + 1
     }
@@ -53,8 +52,7 @@ pub func run_bench(name: Str, category: Str, iterations: I64, warmup: I64, func:
     // Actual benchmark
     let start: I64 = time_ns()
     var i: I64 = 0
-    loop {
-        if i >= iterations then { break }
+    loop (i < iterations) {
         func()
         i = i + 1
     }
@@ -67,8 +65,7 @@ pub func run_bench(name: Str, category: Str, iterations: I64, warmup: I64, func:
 pub func run_bench_iter(name: Str, category: Str, iterations: I64, warmup: I64, func: func(I64) -> ()) -> BenchResult {
     // Warmup
     var w: I64 = 0
-    loop {
-        if w >= warmup then { break }
+    loop (w < warmup) {
         func(100)
         w = w + 1
     }
@@ -99,8 +96,7 @@ pub func results_to_json(results: ref Vec[BenchResult], category: Str) -> Str {
 
     var i: I64 = 0
     let len: I64 = results.len() as I64
-    loop {
-        if i >= len then { break }
+    loop (i < len) {
         let r: ref BenchResult = results.get(i as U64)
         json = json + "    {\n"
         json = json + "      \"name\": \"" + r.name + "\",\n"

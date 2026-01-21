@@ -90,7 +90,7 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
 
     /// Removes the first occurrence of an element.
     func remove(mut this, item: T) -> Bool {
-        let idx = this.index_of(item)
+        let idx: I64 = this.index_of(item)
         if idx >= 0 {
             this.remove_at(idx)
             return true
@@ -124,8 +124,7 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
     /// Returns the index of the item, or -1 if not found.
     func index_of(this, item: T) -> I64 {
         var i: I64 = 0
-        loop {
-            if i >= this.length { break }
+        loop (i < this.length) {
             // TODO: Proper equality check with IEquatable
             // if this.data[i] == item { return i }
             i = i + 1
@@ -141,9 +140,8 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
 
         // Shift elements right
         this.data.push(item) // Ensure capacity
-        var i = this.length
-        loop {
-            if i <= index { break }
+        var i: I64 = this.length
+        loop (i > index) {
             this.data[i] = this.data[i - 1]
             i = i - 1
         }
@@ -158,9 +156,8 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
         }
 
         // Shift elements left
-        var i = index
-        loop {
-            if i >= this.length - 1 { break }
+        var i: I64 = index
+        loop (i < this.length - 1) {
             this.data[i] = this.data[i + 1]
             i = i + 1
         }
@@ -172,8 +169,7 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
     /// Adds all elements from another list.
     func add_range(mut this, items: ref ArrayList[T]) {
         var i: I64 = 0
-        loop {
-            if i >= items.length { break }
+        loop (i < items.length) {
             this.add(items.get(i))
             i = i + 1
         }
@@ -182,10 +178,9 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
     /// Reverses the list in place.
     func reverse(mut this) {
         var left: I64 = 0
-        var right = this.length - 1
-        loop {
-            if left >= right { break }
-            let temp = this.data[left]
+        var right: I64 = this.length - 1
+        loop (left < right) {
+            let temp: T = this.data[left]
             this.data[left] = this.data[right]
             this.data[right] = temp
             left = left + 1
@@ -246,8 +241,7 @@ pub class HashSet[T] extends Object implements ICollection[T] {
         var buckets: List[List[T]] = []
 
         var i: I64 = 0
-        loop {
-            if i >= initial_buckets { break }
+        loop (i < initial_buckets) {
             buckets.push([])
             i = i + 1
         }
@@ -262,12 +256,11 @@ pub class HashSet[T] extends Object implements ICollection[T] {
 
     /// Creates a HashSet with specified initial capacity.
     static func with_capacity(capacity: I64) -> HashSet[T] {
-        let bucket_count = max_i64(16, capacity * 2)
+        let bucket_count: I64 = max_i64(16, capacity * 2)
         var buckets: List[List[T]] = []
 
         var i: I64 = 0
-        loop {
-            if i >= bucket_count { break }
+        loop (i < bucket_count) {
             buckets.push([])
             i = i + 1
         }
@@ -296,25 +289,24 @@ pub class HashSet[T] extends Object implements ICollection[T] {
         }
 
         // Check if rehash needed
-        let current_load = this.length as F64 / this.bucket_count as F64
+        let current_load: F64 = this.length as F64 / this.bucket_count as F64
         if current_load > this.load_factor {
             this.rehash()
         }
 
-        let hash = this.hash_item(item)
-        let bucket_idx = hash % this.bucket_count
+        let hash: I64 = this.hash_item(item)
+        let bucket_idx: I64 = hash % this.bucket_count
         this.buckets[bucket_idx].push(item)
         this.length = this.length + 1
     }
 
     func remove(mut this, item: T) -> Bool {
-        let hash = this.hash_item(item)
-        let bucket_idx = hash % this.bucket_count
-        let bucket = mut ref this.buckets[bucket_idx]
+        let hash: I64 = this.hash_item(item)
+        let bucket_idx: I64 = hash % this.bucket_count
+        let bucket: mut ref List[T] = mut ref this.buckets[bucket_idx]
 
         var i: I64 = 0
-        loop {
-            if i >= bucket.len() { break }
+        loop (i < bucket.len()) {
             // TODO: Proper equality check
             // if bucket[i] == item {
             //     bucket.remove_at(i)
@@ -328,8 +320,7 @@ pub class HashSet[T] extends Object implements ICollection[T] {
 
     func clear(mut this) {
         var i: I64 = 0
-        loop {
-            if i >= this.bucket_count { break }
+        loop (i < this.bucket_count) {
             this.buckets[i].clear()
             i = i + 1
         }
@@ -337,13 +328,12 @@ pub class HashSet[T] extends Object implements ICollection[T] {
     }
 
     func contains(this, item: T) -> Bool {
-        let hash = this.hash_item(item)
-        let bucket_idx = hash % this.bucket_count
-        let bucket = ref this.buckets[bucket_idx]
+        let hash: I64 = this.hash_item(item)
+        let bucket_idx: I64 = hash % this.bucket_count
+        let bucket: ref List[T] = ref this.buckets[bucket_idx]
 
         var i: I64 = 0
-        loop {
-            if i >= bucket.len() { break }
+        loop (i < bucket.len()) {
             // TODO: Proper equality check with IEquatable
             // if bucket[i] == item { return true }
             i = i + 1
@@ -362,27 +352,24 @@ pub class HashSet[T] extends Object implements ICollection[T] {
 
     /// Rehashes the table to a larger size.
     func rehash(mut this) {
-        let new_bucket_count = this.bucket_count * 2
+        let new_bucket_count: I64 = this.bucket_count * 2
         var new_buckets: List[List[T]] = []
 
         var i: I64 = 0
-        loop {
-            if i >= new_bucket_count { break }
+        loop (i < new_bucket_count) {
             new_buckets.push([])
             i = i + 1
         }
 
         // Rehash all existing items
         i = 0
-        loop {
-            if i >= this.bucket_count { break }
-            let bucket = ref this.buckets[i]
+        loop (i < this.bucket_count) {
+            let bucket: ref List[T] = ref this.buckets[i]
             var j: I64 = 0
-            loop {
-                if j >= bucket.len() { break }
-                let item = bucket[j]
-                let hash = this.hash_item(item)
-                let new_idx = hash % new_bucket_count
+            loop (j < bucket.len()) {
+                let item: T = bucket[j]
+                let hash: I64 = this.hash_item(item)
+                let new_idx: I64 = hash % new_bucket_count
                 new_buckets[new_idx].push(item)
                 j = j + 1
             }
@@ -395,15 +382,13 @@ pub class HashSet[T] extends Object implements ICollection[T] {
 
     /// Set union: returns a new set with all elements from both sets.
     func union(this, other: ref HashSet[T]) -> HashSet[T] {
-        var result = HashSet::create[T]()
+        var result: HashSet[T] = HashSet::create[T]()
 
         // Add all from this
         var i: I64 = 0
-        loop {
-            if i >= this.bucket_count { break }
+        loop (i < this.bucket_count) {
             var j: I64 = 0
-            loop {
-                if j >= this.buckets[i].len() { break }
+            loop (j < this.buckets[i].len()) {
                 result.add(this.buckets[i][j])
                 j = j + 1
             }
@@ -412,11 +397,9 @@ pub class HashSet[T] extends Object implements ICollection[T] {
 
         // Add all from other
         i = 0
-        loop {
-            if i >= other.bucket_count { break }
+        loop (i < other.bucket_count) {
             var j: I64 = 0
-            loop {
-                if j >= other.buckets[i].len() { break }
+            loop (j < other.buckets[i].len()) {
                 result.add(other.buckets[i][j])
                 j = j + 1
             }
@@ -518,8 +501,7 @@ pub class Queue[T] extends Object implements ICollection[T] {
     func contains(this, item: T) -> Bool {
         var i = this.head
         var count: I64 = 0
-        loop {
-            if count >= this.length { break }
+        loop (count < this.length) {
             let idx = i % this.capacity
             // TODO: Proper equality
             // if this.data[idx] == item { return true }
@@ -585,8 +567,7 @@ pub class Queue[T] extends Object implements ICollection[T] {
         // Copy elements in order
         var i = this.head
         var count: I64 = 0
-        loop {
-            if count >= this.length { break }
+        loop (count < this.length) {
             let idx = i % this.capacity
             new_data.push(this.data[idx])
             i = i + 1
@@ -669,8 +650,7 @@ pub class Stack[T] extends Object implements ICollection[T] {
 
     func contains(this, item: T) -> Bool {
         var i: I64 = 0
-        loop {
-            if i >= this.data.len() { break }
+        loop (i < this.data.len()) {
             // TODO: Proper equality
             // if this.data[i] == item { return true }
             i = i + 1
@@ -770,8 +750,7 @@ pub class LinkedList[T] extends Object implements ICollection[T] {
     func remove(mut this, item: T) -> Bool {
         // Find and remove the item
         var current = this.head
-        loop {
-            if current == 0 { break }
+        loop (current != 0) {
             let node = current as Ptr[LinkedListNode[T]]
             // TODO: Proper equality
             // if (*node).value == item {
@@ -786,8 +765,7 @@ pub class LinkedList[T] extends Object implements ICollection[T] {
     func clear(mut this) {
         // Free all nodes
         var current = this.head
-        loop {
-            if current == 0 { break }
+        loop (current != 0) {
             let node = current as Ptr[LinkedListNode[T]]
             let next = lowlevel { (*node).next }
             lowlevel { free(current as Ptr[U8]) }
@@ -800,8 +778,7 @@ pub class LinkedList[T] extends Object implements ICollection[T] {
 
     func contains(this, item: T) -> Bool {
         var current = this.head
-        loop {
-            if current == 0 { break }
+        loop (current != 0) {
             let node = current as Ptr[LinkedListNode[T]]
             // TODO: Proper equality
             // if (*node).value == item { return true }

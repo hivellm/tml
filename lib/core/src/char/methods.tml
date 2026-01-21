@@ -588,10 +588,7 @@ func to_hex_string(c: Char) -> Str {
     var result: Str = ""
     var value: U32 = c
 
-    loop {
-        if value == 0 {
-            break
-        }
+    loop (value > 0) {
         let digit: U8 = (value % 16) as U8
         let ch: Str = if digit < 10 {
             char_to_string((digit + 0x30) as Char)  // '0'

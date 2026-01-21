@@ -279,11 +279,7 @@ pub func format_args(pieces: ref [Str], args: ref [Argument]) -> Str {
     let piece_count: I64 = pieces.len()
     let arg_count: I64 = args.len()
 
-    loop {
-        if piece_idx >= piece_count {
-            break
-        }
-
+    loop (piece_idx < piece_count) {
         // Add the literal piece
         result = result + pieces[piece_idx]
         piece_idx = piece_idx + 1
@@ -309,10 +305,7 @@ pub func format_join(args: ref [Str], sep: Str) -> Str {
     var i: I64 = 1
     let len: I64 = args.len()
 
-    loop {
-        if i >= len {
-            break
-        }
+    loop (i < len) {
         result = result + sep + args[i]
         i = i + 1
     }
@@ -334,10 +327,7 @@ pub func debug_slice[T: Debug](slice: ref [T]) -> Str {
     var i: I64 = 0
     let len: I64 = slice.len()
 
-    loop {
-        if i >= len {
-            break
-        }
+    loop (i < len) {
         if i > 0 {
             result = result + ", "
         }
@@ -358,10 +348,7 @@ pub func display_slice[T: Display](slice: ref [T]) -> Str {
     var i: I64 = 0
     let len: I64 = slice.len()
 
-    loop {
-        if i >= len {
-            break
-        }
+    loop (i < len) {
         if i > 0 {
             result = result + ", "
         }
