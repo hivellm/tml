@@ -145,8 +145,10 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
         advance(); // consume 'type'
 
         if (peek().kind != lexer::TokenKind::Identifier) {
-            return ParseError{
-                .message = "Expected identifier after 'type'", .span = peek().span, .notes = {}, .fixes = {}};
+            return ParseError{.message = "Expected identifier after 'type'",
+                              .span = peek().span,
+                              .notes = {},
+                              .fixes = {}};
         }
 
         advance(); // consume name
@@ -267,7 +269,8 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     case lexer::TokenKind::KwNamespace:
         return parse_namespace_decl();
     default:
-        return ParseError{.message = "Expected declaration", .span = peek().span, .notes = {}, .fixes = {}};
+        return ParseError{
+            .message = "Expected declaration", .span = peek().span, .notes = {}, .fixes = {}};
     }
 }
 
@@ -1295,8 +1298,10 @@ auto Parser::parse_mod_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
 
     // Parse module name
     if (!check(lexer::TokenKind::Identifier)) {
-        return ParseError{
-            .message = "Expected module name after 'mod'", .span = peek().span, .notes = {}, .fixes = {}};
+        return ParseError{.message = "Expected module name after 'mod'",
+                          .span = peek().span,
+                          .notes = {},
+                          .fixes = {}};
     }
     std::string name = std::string(advance().lexeme);
 
@@ -1380,7 +1385,8 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
                             lifetime_bound = std::string(peek().lexeme);
                             advance(); // consume lifetime name
                         } else {
-                            return ParseError{"Expected lifetime name after 'life'", peek().span, {}, {}};
+                            return ParseError{
+                                "Expected lifetime name after 'life'", peek().span, {}, {}};
                         }
                     } else {
                         // Regular behavior bound
@@ -1537,12 +1543,11 @@ auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
             // 'mut this' without type - use 'mut ref This' type implicitly
             auto this_named = make_box<Type>(
                 Type{.kind = NamedType{TypePath{{"This"}, span}, {}, span}, .span = span});
-            auto this_type = make_box<Type>(Type{
-                .kind = RefType{.is_mut = true,
-                                .inner = std::move(this_named),
-                                .lifetime = std::nullopt,
-                                .span = span},
-                .span = span});
+            auto this_type = make_box<Type>(Type{.kind = RefType{.is_mut = true,
+                                                                 .inner = std::move(this_named),
+                                                                 .lifetime = std::nullopt,
+                                                                 .span = span},
+                                                 .span = span});
             return FuncParam{
                 .pattern = std::move(pattern), .type = std::move(this_type), .span = span};
         } else {

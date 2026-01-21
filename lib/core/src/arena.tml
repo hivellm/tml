@@ -22,14 +22,10 @@
 //! use core::arena::Arena
 //!
 //! // Create an arena with 64KB initial capacity
-//! let arena = Arena::new(65536)
+//! var arena: Arena = Arena::new(65536)
 //!
-//! // Allocate objects - extremely fast!
-//! let user = arena.alloc[User]()
-//! let request = arena.alloc[Request]()
-//! let items = arena.alloc_slice[Item](100)
-//!
-//! // Process request...
+//! // Allocate raw memory
+//! let ptr: I64 = arena.alloc_raw(64, 8)
 //!
 //! // Reset arena - all allocations freed instantly
 //! arena.reset()
@@ -38,11 +34,9 @@
 //! # Thread Safety
 //!
 //! Each arena should be used by a single thread. For multi-threaded scenarios,
-//! use one arena per thread or use ThreadLocalArena.
+//! use one arena per thread.
 
-use core::alloc::{Layout, AllocError}
-use core::sync::{atomic_load, atomic_store, atomic_cas_val, fence_acquire, fence_release}
-use core::mem::size_of
+use test
 
 // ============================================================================
 // Arena Statistics
@@ -58,9 +52,7 @@ pub type ArenaStats {
     pub allocation_count: I64,
     /// Number of times the arena was reset
     pub reset_count: I64,
-    /// Number of times the arena had to grow
-    pub grow_count: I64,
-    /// Total capacity across all chunks
+    /// Total capacity of the arena
     pub total_capacity: I64,
 }
 
@@ -72,84 +64,18 @@ impl ArenaStats {
             peak_bytes: 0,
             allocation_count: 0,
             reset_count: 0,
-            grow_count: 0,
             total_capacity: 0,
         }
     }
 
     /// Returns the memory utilization as a percentage (0-100).
     pub func utilization(this) -> F64 {
-        if this.total_capacity == 0 {
+        if this.total_capacity == (0 as I64) {
             return 0.0
         }
-        (this.bytes_allocated as F64 / this.total_capacity as F64) * 100.0
-    }
-}
-
-// ============================================================================
-// ArenaChunk - Internal memory block
-// ============================================================================
-
-/// Internal memory chunk in the arena.
-/// Each chunk contains a contiguous block of memory for allocations.
-type ArenaChunk {
-    /// Pointer to the start of the memory block
-    data: I64,
-    /// Size of this chunk in bytes
-    size: I64,
-    /// Current position (bump pointer) within the chunk
-    pos: I64,
-    /// Pointer to the next chunk (for chunk list)
-    next: I64,
-}
-
-impl ArenaChunk {
-    /// Creates a new chunk with the given capacity.
-    func new(capacity: I64) -> Maybe[ArenaChunk] {
-        let data = lowlevel { malloc(capacity) } as I64
-        if data == 0 {
-            return Nothing
-        }
-        Just(ArenaChunk {
-            data: data,
-            size: capacity,
-            pos: 0,
-            next: 0,
-        })
-    }
-
-    /// Returns remaining space in this chunk.
-    func remaining(this) -> I64 {
-        this.size - this.pos
-    }
-
-    /// Tries to allocate size bytes with given alignment.
-    /// Returns the pointer if successful, 0 if not enough space.
-    func try_alloc(mut this, size: I64, align: I64) -> I64 {
-        // Align the current position
-        let aligned_pos = align_up(this.data + this.pos, align) - this.data
-        let end_pos = aligned_pos + size
-
-        if end_pos > this.size {
-            return 0 // Not enough space
-        }
-
-        let ptr = this.data + aligned_pos
-        this.pos = end_pos
-        ptr
-    }
-
-    /// Resets this chunk to empty state.
-    func reset(mut this) {
-        this.pos = 0
-    }
-
-    /// Frees the memory of this chunk.
-    func free(mut this) {
-        if this.data != 0 {
-            lowlevel { free(this.data as Ptr[U8]) }
-            this.data = 0
-        }
+        let allocated: F64 = this.bytes_allocated as F64
+        let capacity: F64 = this.total_capacity as F64
+        return (allocated / capacity) * 100.0
     }
 }
 
@@ -163,114 +89,63 @@ impl ArenaChunk {
 /// extremely fast. Memory is freed all at once when the arena is reset
 /// or dropped.
 ///
-/// # Memory Layout
-///
-/// The arena maintains a list of memory chunks. When the current chunk
-/// is full, a new larger chunk is allocated. All chunks are freed
-/// together when the arena is reset or dropped.
+/// This implementation uses a single pre-allocated buffer.
+/// For applications needing dynamic growth, consider using multiple arenas.
 pub type Arena {
-    /// List of chunks (head is current chunk)
-    chunks: List[ArenaChunk],
-    /// Index of current chunk in the list
-    current_chunk: I64,
-    /// Default chunk size for growth
-    default_chunk_size: I64,
+    /// Base pointer of the memory buffer (stored as I64 for arithmetic)
+    buffer: I64,
+    /// Current bump position within the buffer
+    pos: I64,
+    /// Total capacity of the buffer
+    capacity: I64,
     /// Statistics
     stats: ArenaStats,
 }
 
 impl Arena {
-    /// Creates a new arena with the specified initial capacity.
+    /// Creates a new arena with the specified capacity.
     ///
     /// # Arguments
     ///
-    /// * `initial_capacity` - Initial size in bytes (default: 64KB)
+    /// * `capacity` - Size in bytes (minimum: 1024)
     ///
     /// # Example
     ///
     /// ```tml
-    /// let arena = Arena::new(65536)  // 64KB
+    /// var arena: Arena = Arena::new(65536)  // 64KB
     /// ```
-    pub func new(initial_capacity: I64) -> Arena {
-        let capacity = if initial_capacity < 1024 { 1024 } else { initial_capacity }
+    pub func new(capacity: I64) -> Arena {
+        let actual_cap: I64 = if capacity < 1024 { 1024 } else { capacity }
 
-        var arena = Arena {
-            chunks: [],
-            current_chunk: 0,
-            default_chunk_size: capacity,
-            stats: ArenaStats::new(),
+        let buf: *Unit = mem_alloc(actual_cap)
+        let buf_i64: I64 = buf as I64
+
+        var stats: ArenaStats = ArenaStats::new()
+        if buf_i64 != (0 as I64) {
+            stats.total_capacity = actual_cap
         }
 
-        // Allocate initial chunk
-        when ArenaChunk::new(capacity) {
-            Just(chunk) => {
-                arena.chunks.push(chunk)
-                arena.stats.total_capacity = capacity
-            }
-            Nothing => {
-                // Allocation failed - arena will grow on first alloc
-            }
+        Arena {
+            buffer: buf_i64,
+            pos: 0,
+            capacity: actual_cap,
+            stats: stats,
         }
-
-        arena
     }
 
-    /// Creates an arena with default 64KB initial capacity.
+    /// Creates an arena with default 64KB capacity.
     pub func default() -> Arena {
         Arena::new(65536)
     }
 
-    /// Creates a small arena with 4KB initial capacity.
+    /// Creates a small arena with 4KB capacity.
     pub func small() -> Arena {
         Arena::new(4096)
     }
 
-    /// Creates a large arena with 1MB initial capacity.
+    /// Creates a large arena with 1MB capacity.
     pub func large() -> Arena {
         Arena::new(1048576)
-    }
-
-    /// Allocates memory for a single object of type T.
-    ///
-    /// # Returns
-    ///
-    /// Pointer to uninitialized memory for type T.
-    ///
-    /// # Example
-    ///
-    /// ```tml
-    /// let user_ptr = arena.alloc[User]()
-    /// // Initialize the object
-    /// *user_ptr = User { name: "Alice", age: 30 }
-    /// ```
-    pub func alloc[T](mut this) -> Ptr[T] {
-        let size = 8  // Placeholder - should use size_of[T]()
-        let align = 8 // Default alignment
-        let ptr = this.alloc_raw(size, align)
-        ptr as Ptr[T]
-    }
-
-    /// Allocates memory for a slice of count objects of type T.
-    ///
-    /// # Arguments
-    ///
-    /// * `count` - Number of objects to allocate
-    ///
-    /// # Returns
-    ///
-    /// Pointer to uninitialized memory for count objects.
-    ///
-    /// # Example
-    ///
-    /// ```tml
-    /// let items = arena.alloc_slice[Item](100)
-    /// ```
-    pub func alloc_slice[T](mut this, count: I64) -> Ptr[T] {
-        let obj_size = 8  // Placeholder - should use size_of[T]()
-        let align = 8
-        let total_size = obj_size * count
-        let ptr = this.alloc_raw(total_size, align)
-        ptr as Ptr[T]
     }
 
     /// Allocates raw memory with specified size and alignment.
@@ -282,123 +157,41 @@ impl Arena {
     ///
     /// # Returns
     ///
-    /// Pointer to allocated memory, or null on failure.
+    /// Pointer to allocated memory, or 0 on failure.
     pub func alloc_raw(mut this, size: I64, align: I64) -> I64 {
-        if size <= 0 {
+        if size <= (0 as I64) or this.buffer == (0 as I64) {
             return 0
         }
 
-        // Try to allocate from current chunk
-        if this.chunks.len() > 0 {
-            let idx = this.current_chunk as I64
-            if idx < this.chunks.len() {
-                let ptr = this.chunks[idx].try_alloc(size, align)
-                if ptr != 0 {
-                    this.stats.bytes_allocated = this.stats.bytes_allocated + size
-                    this.stats.allocation_count = this.stats.allocation_count + 1
-                    if this.stats.bytes_allocated > this.stats.peak_bytes {
-                        this.stats.peak_bytes = this.stats.bytes_allocated
-                    }
-                    return ptr
-                }
-            }
+        // Align the current position
+        let current_addr: I64 = this.buffer + this.pos
+        let aligned_addr: I64 = align_up(current_addr, align)
+        let aligned_pos: I64 = aligned_addr - this.buffer
+        let end_pos: I64 = aligned_pos + size
+
+        if end_pos > this.capacity {
+            return 0 // Not enough space
         }
 
-        // Current chunk is full or doesn't exist, allocate new chunk
-        let new_chunk_size = max_i64(size + align, this.default_chunk_size * 2)
-        when ArenaChunk::new(new_chunk_size) {
-            Just(chunk) => {
-                this.chunks.push(chunk)
-                this.current_chunk = this.chunks.len() - 1
-                this.stats.total_capacity = this.stats.total_capacity + new_chunk_size
-                this.stats.grow_count = this.stats.grow_count + 1
-                this.default_chunk_size = new_chunk_size
-
-                // Allocate from the new chunk
-                let idx = this.current_chunk as I64
-                let ptr = this.chunks[idx].try_alloc(size, align)
-                if ptr != 0 {
-                    this.stats.bytes_allocated = this.stats.bytes_allocated + size
-                    this.stats.allocation_count = this.stats.allocation_count + 1
-                    if this.stats.bytes_allocated > this.stats.peak_bytes {
-                        this.stats.peak_bytes = this.stats.bytes_allocated
-                    }
-                }
-                return ptr
-            }
-            Nothing => {
-                return 0 // Allocation failed
-            }
+        this.pos = end_pos
+        this.stats.bytes_allocated = this.stats.bytes_allocated + size
+        this.stats.allocation_count = this.stats.allocation_count + 1
+        if this.stats.bytes_allocated > this.stats.peak_bytes {
+            this.stats.peak_bytes = this.stats.bytes_allocated
         }
+
+        aligned_addr
     }
 
-    /// Allocates and copies a string into the arena.
-    ///
-    /// # Arguments
-    ///
-    /// * `s` - String to copy
-    ///
-    /// # Returns
-    ///
-    /// Pointer to the copied string data.
-    pub func alloc_str(mut this, s: Str) -> Ptr[U8] {
-        let len = s.len()
-        let ptr = this.alloc_raw(len + 1, 1) as Ptr[U8]
-        if ptr as I64 != 0 {
-            // Copy string data
-            var i: I64 = 0
-            loop (i < len) {
-                lowlevel { ptr[i] = s.as_bytes()[i] }
-                i = i + 1
-            }
-            // Null terminator
-            lowlevel { ptr[len] = 0 }
-        }
-        ptr
-    }
-
-    /// Resets the arena, freeing all allocations instantly.
+    /// Resets the arena, allowing memory to be reused.
     ///
     /// After reset, the arena memory is reused for new allocations.
     /// All previously allocated pointers become invalid.
-    ///
-    /// # Example
-    ///
-    /// ```tml
-    /// // Allocate many objects
-    /// loop i in 0 to 1000 {
-    ///     arena.alloc[SomeType]()
-    /// }
-    ///
-    /// // Reset - all allocations freed instantly
-    /// arena.reset()
-    /// ```
     pub func reset(mut this) {
-        // Reset all chunks to beginning
-        var i: I64 = 0
-        loop (i < this.chunks.len()) {
-            this.chunks[i].reset()
-            i = i + 1
-        }
-
-        // Reset to first chunk
-        this.current_chunk = 0
+        this.pos = 0
         this.stats.bytes_allocated = 0
         this.stats.allocation_count = 0
         this.stats.reset_count = this.stats.reset_count + 1
-    }
-
-    /// Resets the arena and calls destructors on all allocated objects.
-    ///
-    /// Use this when allocated objects need cleanup (e.g., they hold resources).
-    /// This is slower than reset() but ensures proper cleanup.
-    ///
-    /// Note: Currently just calls reset(). Full destructor support requires
-    /// tracking allocated types.
-    pub func reset_with_destructors(mut this) {
-        // TODO: Track allocated objects and call their destructors
-        // For now, just reset
-        this.reset()
     }
 
     /// Returns current arena statistics.
@@ -421,163 +214,29 @@ impl Arena {
         this.stats.allocation_count
     }
 
+    /// Returns remaining space in the arena.
+    pub func remaining(this) -> I64 {
+        this.capacity - this.pos
+    }
+
     /// Clears the arena and frees all memory.
     ///
-    /// After clear, the arena is empty and all memory is returned to the system.
+    /// After clear, the arena is empty and cannot be used for allocations.
     pub func clear(mut this) {
-        // Free all chunks
-        loop (true) {
-            when this.chunks.pop() {
-                Just(mut chunk) => chunk.free(),
-                Nothing => break
-            }
+        if this.buffer != (0 as I64) {
+            let buf: *Unit = this.buffer as *Unit
+            mem_free(buf)
+            this.buffer = 0
         }
-
-        this.current_chunk = 0
+        this.pos = 0
+        this.capacity = 0
         this.stats = ArenaStats::new()
     }
 }
 
-// ============================================================================
-// Drop implementation
-// ============================================================================
-
 impl Drop for Arena {
     func drop(mut this) {
         this.clear()
-    }
-}
-
-// ============================================================================
-// ScopedArena - RAII wrapper for arena sections
-// ============================================================================
-
-/// A scoped section of an arena that automatically resets on drop.
-///
-/// Useful for temporary allocations within a function.
-///
-/// # Example
-///
-/// ```tml
-/// func process_data(arena: mut ref Arena) {
-///     // Create a scoped section
-///     let scope = ScopedArena::new(arena)
-///
-///     // Allocations here...
-///     let temp = scope.alloc[TempData]()
-///
-///     // When scope goes out of scope, arena resets to saved position
-/// }
-/// ```
-pub type ScopedArena {
-    /// Reference to parent arena
-    arena_ptr: I64,
-    /// Saved chunk index
-    saved_chunk: I64,
-    /// Saved position within chunk
-    saved_pos: I64,
-}
-
-impl ScopedArena {
-    /// Creates a new scoped arena section.
-    pub func new(arena: mut ref Arena) -> ScopedArena {
-        let chunk_idx = arena.current_chunk
-        let pos = if arena.chunks.len() > 0 and chunk_idx < arena.chunks.len() {
-            arena.chunks[chunk_idx].pos
-        } else {
-            0
-        }
-
-        ScopedArena {
-            arena_ptr: (ref arena) as I64,
-            saved_chunk: chunk_idx,
-            saved_pos: pos,
-        }
-    }
-
-    /// Allocates memory for a single object from the parent arena.
-    pub func alloc[T](mut this) -> Ptr[T] {
-        let arena = this.arena_ptr as mut ref Arena
-        arena.alloc[T]()
-    }
-
-    /// Restores the arena to the saved position.
-    pub func restore(mut this) {
-        let arena = this.arena_ptr as mut ref Arena
-
-        // Reset chunks after saved_chunk
-        var i = arena.chunks.len() - 1
-        loop (i > this.saved_chunk) {
-            arena.chunks[i].reset()
-            i = i - 1
-        }
-
-        // Reset current chunk to saved position
-        if this.saved_chunk < arena.chunks.len() {
-            arena.chunks[this.saved_chunk].pos = this.saved_pos
-        }
-
-        arena.current_chunk = this.saved_chunk
-    }
-}
-
-impl Drop for ScopedArena {
-    func drop(mut this) {
-        this.restore()
-    }
-}
-
-// ============================================================================
-// ThreadLocalArena - Per-thread arena storage
-// ============================================================================
-
-/// Thread-local arena for use in multi-threaded applications.
-///
-/// Each thread gets its own arena instance, avoiding synchronization overhead.
-///
-/// # Example
-///
-/// ```tml
-/// // Get the thread-local arena
-/// let arena = ThreadLocalArena::get()
-///
-/// // Use it for allocations
-/// let data = arena.alloc[RequestData]()
-///
-/// // Reset when done with the current request
-/// arena.reset()
-/// ```
-pub type ThreadLocalArena {
-    /// The underlying arena
-    arena: Arena,
-}
-
-impl ThreadLocalArena {
-    /// Creates a new thread-local arena.
-    pub func new() -> ThreadLocalArena {
-        ThreadLocalArena {
-            arena: Arena::new(65536),
-        }
-    }
-
-    /// Gets or creates the thread-local arena for the current thread.
-    /// Note: Full thread-local storage requires runtime support.
-    /// This is a placeholder that creates a new arena each call.
-    pub func get() -> mut ref Arena {
-        // TODO: Implement actual thread-local storage
-        // For now, this is a placeholder
-        static var global_arena: Arena = Arena::new(65536)
-        return mut ref global_arena
-    }
-
-    /// Allocates from the arena.
-    pub func alloc[T](mut this) -> Ptr[T] {
-        this.arena.alloc[T]()
-    }
-
-    /// Resets the arena.
-    pub func reset(mut this) {
-        this.arena.reset()
     }
 }
 
@@ -587,13 +246,8 @@ impl ThreadLocalArena {
 
 /// Aligns a value up to the specified alignment.
 func align_up(value: I64, align: I64) -> I64 {
-    let mask = align - 1
-    (value + mask) and (not mask)
-}
-
-/// Returns the maximum of two I64 values.
-func max_i64(a: I64, b: I64) -> I64 {
-    if a > b { a } else { b }
+    let mask: I64 = align - 1
+    (value + mask) & (~mask)
 }
 
 // ============================================================================
@@ -601,135 +255,132 @@ func max_i64(a: I64, b: I64) -> I64 {
 // ============================================================================
 
 @test
-func test_arena_basic_allocation() {
-    var arena = Arena::new(4096)
+func test_arena_basic_allocation() -> I32 {
+    var arena: Arena = Arena::new(4096)
 
     // Allocate some memory
-    let ptr1 = arena.alloc_raw(64, 8)
-    assert(ptr1 != 0)
+    let ptr1: I64 = arena.alloc_raw(64, 8)
+    assert(ptr1 != (0 as I64), "first allocation should succeed")
 
-    let ptr2 = arena.alloc_raw(128, 8)
-    assert(ptr2 != 0)
-    assert(ptr2 != ptr1)
+    let ptr2: I64 = arena.alloc_raw(128, 8)
+    assert(ptr2 != (0 as I64), "second allocation should succeed")
+    assert(ptr2 != ptr1, "allocations should be different")
 
     // Pointers should be sequential (bump allocation)
-    assert(ptr2 > ptr1)
+    assert(ptr2 > ptr1, "second pointer should be after first")
 
-    assert_eq(arena.allocation_count(), 2)
+    assert_eq(arena.allocation_count(), 2 as I64, "should have 2 allocations")
+    return 0
 }
 
 @test
-func test_arena_reset() {
-    var arena = Arena::new(4096)
+func test_arena_reset() -> I32 {
+    var arena: Arena = Arena::new(4096)
 
     // Allocate some memory
-    let ptr1 = arena.alloc_raw(64, 8)
-    let ptr2 = arena.alloc_raw(128, 8)
+    let ptr1: I64 = arena.alloc_raw(64, 8)
+    let ptr2: I64 = arena.alloc_raw(128, 8)
 
-    assert(arena.bytes_allocated() > 0)
+    assert(arena.bytes_allocated() > 0 as I64, "should have allocated bytes")
 
     // Reset the arena
     arena.reset()
 
-    assert_eq(arena.bytes_allocated(), 0)
-    assert_eq(arena.allocation_count(), 0)
-    assert_eq(arena.stats().reset_count, 1)
+    assert_eq(arena.bytes_allocated(), 0 as I64, "bytes should be 0 after reset")
+    assert_eq(arena.allocation_count(), 0 as I64, "count should be 0 after reset")
+    assert_eq(arena.stats().reset_count, 1 as I64, "reset count should be 1")
 
     // Can allocate again from the same memory
-    let ptr3 = arena.alloc_raw(64, 8)
-    assert(ptr3 != 0)
+    let ptr3: I64 = arena.alloc_raw(64, 8)
+    assert(ptr3 != (0 as I64), "allocation after reset should succeed")
+    return 0
 }
 
 @test
-func test_arena_growth() {
-    var arena = Arena::new(128) // Small initial size
-
-    // Allocate more than initial capacity
-    let ptr1 = arena.alloc_raw(64, 8)
-    let ptr2 = arena.alloc_raw(64, 8)
-    let ptr3 = arena.alloc_raw(64, 8) // Should trigger growth
-
-    assert(ptr1 != 0)
-    assert(ptr2 != 0)
-    assert(ptr3 != 0)
-
-    assert(arena.stats().grow_count > 0)
-}
-
-@test
-func test_arena_alignment() {
-    var arena = Arena::new(4096)
+func test_arena_alignment() -> I32 {
+    var arena: Arena = Arena::new(4096)
 
     // Allocate with 8-byte alignment
-    let ptr1 = arena.alloc_raw(1, 8)
-    assert((ptr1 and 7) == 0) // Aligned to 8 bytes
+    let ptr1: I64 = arena.alloc_raw(1, 8)
+    assert((ptr1 & (7 as I64)) == (0 as I64), "should be 8-byte aligned")
 
     // Allocate with 16-byte alignment
-    let ptr2 = arena.alloc_raw(1, 16)
-    assert((ptr2 and 15) == 0) // Aligned to 16 bytes
+    let ptr2: I64 = arena.alloc_raw(1, 16)
+    assert((ptr2 & (15 as I64)) == (0 as I64), "should be 16-byte aligned")
 
     // Allocate with 64-byte alignment
-    let ptr3 = arena.alloc_raw(1, 64)
-    assert((ptr3 and 63) == 0) // Aligned to 64 bytes
+    let ptr3: I64 = arena.alloc_raw(1, 64)
+    assert((ptr3 & (63 as I64)) == (0 as I64), "should be 64-byte aligned")
+    return 0
 }
 
 @test
-func test_arena_statistics() {
-    var arena = Arena::new(4096)
+func test_arena_statistics() -> I32 {
+    var arena: Arena = Arena::new(4096)
 
     arena.alloc_raw(100, 8)
     arena.alloc_raw(200, 8)
     arena.alloc_raw(300, 8)
 
-    let stats = arena.stats()
-    assert_eq(stats.allocation_count, 3)
-    assert(stats.bytes_allocated >= 600)
-    assert(stats.peak_bytes >= 600)
+    let stats: ArenaStats = arena.stats()
+    assert_eq(stats.allocation_count, 3 as I64, "should have 3 allocations")
+    assert(stats.bytes_allocated >= 600 as I64, "should have at least 600 bytes")
+    assert(stats.peak_bytes >= 600 as I64, "peak should be at least 600")
 
     arena.reset()
 
-    let stats2 = arena.stats()
-    assert_eq(stats2.bytes_allocated, 0)
-    assert_eq(stats2.reset_count, 1)
-    assert(stats2.peak_bytes >= 600) // Peak preserved
+    let stats2: ArenaStats = arena.stats()
+    assert_eq(stats2.bytes_allocated, 0 as I64, "bytes should be 0 after reset")
+    assert_eq(stats2.reset_count, 1 as I64, "reset count should be 1")
+    assert(stats2.peak_bytes >= 600 as I64, "peak should be preserved")
+    return 0
 }
 
 @test
-func test_scoped_arena() {
-    var arena = Arena::new(4096)
-
-    // Allocate before scope
-    let ptr1 = arena.alloc_raw(64, 8)
-    let before_count = arena.allocation_count()
-
-    // Create a scope
-    {
-        var scope = ScopedArena::new(mut ref arena)
-
-        // Allocate within scope
-        let ptr2 = arena.alloc_raw(128, 8)
-        let ptr3 = arena.alloc_raw(256, 8)
-
-        assert(arena.allocation_count() > before_count)
-    }
-    // Scope dropped, arena should be restored
-    // Note: In current implementation, this requires explicit restore() or drop
-
-    // The arena should still have ptr1 valid
-    assert(arena.allocation_count() >= before_count)
-}
-
-@test
-func test_arena_clear() {
-    var arena = Arena::new(4096)
+func test_arena_clear() -> I32 {
+    var arena: Arena = Arena::new(4096)
 
     arena.alloc_raw(1000, 8)
     arena.alloc_raw(2000, 8)
 
-    assert(arena.capacity() > 0)
+    assert(arena.capacity() > 0 as I64, "should have capacity before clear")
 
     arena.clear()
 
-    assert_eq(arena.capacity(), 0)
-    assert_eq(arena.bytes_allocated(), 0)
+    assert_eq(arena.capacity(), 0 as I64, "capacity should be 0 after clear")
+    assert_eq(arena.bytes_allocated(), 0 as I64, "bytes should be 0 after clear")
+    return 0
+}
+
+@test
+func test_arena_exhaustion() -> I32 {
+    var arena: Arena = Arena::new(128)
+
+    // Fill up the arena
+    let ptr1: I64 = arena.alloc_raw(64, 8)
+    let ptr2: I64 = arena.alloc_raw(64, 8)
+
+    assert(ptr1 != (0 as I64), "first alloc should succeed")
+
+    // This should fail - no more space
+    let ptr3: I64 = arena.alloc_raw(64, 8)
+    assert_eq(ptr3, 0 as I64, "should fail when arena is full")
+    return 0
+}
+
+@test
+func test_arena_remaining() -> I32 {
+    var arena: Arena = Arena::new(1024)
+
+    let initial: I64 = arena.remaining()
+    assert_eq(initial, 1024 as I64, "initial remaining should be capacity")
+
+    arena.alloc_raw(256, 8)
+    let after_alloc: I64 = arena.remaining()
+    assert(after_alloc < initial, "remaining should decrease after alloc")
+
+    arena.reset()
+    let after_reset: I64 = arena.remaining()
+    assert_eq(after_reset, 1024 as I64, "remaining should be restored after reset")
+    return 0
 }

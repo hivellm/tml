@@ -41,7 +41,7 @@
 //! ```
 
 pub mod convert   // from_u32, from_digit, CharTryFromError, ParseCharError
-// pub mod decode    // DecodeUtf16, DecodeUtf16Error, decode_utf16 - TODO: parser doesn't support Iterator[Item = T] constraints yet
+pub mod decode    // UTF-16 decoding utilities
 pub mod methods   // Character classification and manipulation methods
 
 // Re-export main types and functions
@@ -50,52 +50,36 @@ pub use convert::from_u32_unchecked
 pub use convert::from_digit
 pub use convert::CharTryFromError
 pub use convert::ParseCharError
-// pub use decode::decode_utf16  // TODO: disabled until parser supports associated type constraints
-// pub use decode::DecodeUtf16
-// pub use decode::DecodeUtf16Error
+pub use decode::DecodeUtf16Error
+pub use decode::is_high_surrogate
+pub use decode::is_low_surrogate
+pub use decode::is_surrogate
+pub use decode::decode_surrogate_pair
+pub use decode::decode_utf16_to_string
+pub use decode::is_valid_utf16
+pub use decode::count_chars_utf16
 pub use methods::*
-
-// ============================================================================
-// Type Alias
-// ============================================================================
-
-/// A Unicode scalar value.
-///
-/// A `Char` is a Unicode scalar value, which is any Unicode code point
-/// other than a surrogate code point. This has a fixed numerical definition:
-/// code points are in the range 0 to 0x10FFFF, inclusive, but the surrogate
-/// code points (0xD800 to 0xDFFF) cannot appear in Chars.
-///
-/// # Representation
-///
-/// `Char` is represented as a `U32` internally, but is guaranteed to hold
-/// only valid Unicode scalar values.
-///
-/// # Examples
-///
-/// ```tml
-/// let c: Char = 'A'
-/// let emoji: Char = '\u{1F600}'
-/// ```
-pub type Char = U32
 
 // ============================================================================
 // Constants
 // ============================================================================
 
+// Note: Char is a builtin type in TML representing Unicode scalar values.
+// It is distinct from U32 and requires explicit conversion.
+
 /// The lowest valid Unicode scalar value: U+0000 (NUL).
-pub const MIN: Char = 0x0000
+pub const MIN: Char = '\u{0}'
 
 /// The highest valid Unicode scalar value: U+10FFFF.
 ///
-/// Use `char::MAX.to_u32()` to get the numeric value.
-pub const MAX: Char = 0x10FFFF
+/// Use `char::MAX as U32` to get the numeric value.
+pub const MAX: Char = '\u{10FFFF}'
 
 /// The Unicode replacement character: U+FFFD.
 ///
 /// Used to replace invalid or unrepresentable characters during
 /// encoding or decoding operations.
-pub const REPLACEMENT_CHARACTER: Char = 0xFFFD
+pub const REPLACEMENT_CHARACTER: Char = '\u{FFFD}'
 
 /// Maximum number of bytes a `Char` can occupy when encoded as UTF-8.
 pub const MAX_LEN_UTF8: I64 = 4
@@ -106,4 +90,4 @@ pub const MAX_LEN_UTF16: I64 = 2
 /// The version of Unicode that this implementation is based on.
 ///
 /// Represented as (major, minor, patch).
-pub const UNICODE_VERSION: (U8, U8, U8) = (15, 1, 0)
+pub const UNICODE_VERSION: (U8, U8, U8) = (15 as U8, 1 as U8, 0 as U8)

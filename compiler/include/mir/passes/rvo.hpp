@@ -117,6 +117,9 @@ private:
     /// Check if a value is a local variable (not a parameter)
     auto is_local_variable(const Function& func, ValueId value) const -> bool;
 
+    /// Check if a value was created by a struct literal (StructInitInst)
+    auto is_struct_literal(const Function& func, ValueId value) const -> bool;
+
     /// Check if the returned type is large enough to benefit from sret
     auto should_use_sret(const Function& func) const -> bool;
 

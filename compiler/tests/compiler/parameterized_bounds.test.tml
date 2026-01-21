@@ -5,7 +5,7 @@ use test
 
 // A simple behavior with type parameter
 behavior Container[T] {
-    func get(this: ref This, index: I32) -> T
+    func get(this, index: I32) -> T
 }
 
 // Type implementing Container[I32]
@@ -14,7 +14,7 @@ type IntBox {
 }
 
 impl Container[I32] for IntBox {
-    func get(this: ref This, index: I32) -> I32 {
+    func get(this, index: I32) -> I32 {
         return this.value
     }
 }
@@ -37,13 +37,7 @@ func inline_bound[T, C: Container[T]](c: ref C) -> I32 {
     return 100
 }
 
-// NOTE: The tests below calling process_container and inline_bound crash in suite mode
-// with STATUS_BAD_STACK (0xC0000028). This appears to be a pre-existing issue with
-// generic functions that have two type parameters when compiled as DLLs.
-// The tests work fine when run with `tml run` or as standalone executables.
-// TODO: Investigate suite mode crash with two type parameters
-
-// @test - disabled due to suite mode crash
+@test
 func test_parameterized_bound_parses() {
     let box: IntBox = IntBox { value: 42 }
     // Call function with parameterized bound - validates parsing
@@ -51,7 +45,7 @@ func test_parameterized_bound_parses() {
     assert_eq(result, 42, "parameterized bound function should be callable")
 }
 
-// @test - disabled due to suite mode crash
+@test
 func test_inline_parameterized_bound_parses() {
     let box: IntBox = IntBox { value: 100 }
     // Call function with inline parameterized bound

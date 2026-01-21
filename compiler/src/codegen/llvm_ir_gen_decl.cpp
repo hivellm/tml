@@ -251,48 +251,83 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
     } else {
         // Complex enum with data - create tagged union
         // Find the largest variant
+
+        // Helper lambda to calculate size of an LLVM type (same as gen_enum_instantiation)
+        std::function<size_t(const std::string&)> calc_type_size;
+        calc_type_size = [this, &calc_type_size](const std::string& ty) -> size_t {
+            if (ty == "{}" || ty == "void")
+                return 0; // Unit type has zero size
+            if (ty == "i8")
+                return 1;
+            if (ty == "i16")
+                return 2;
+            if (ty == "i32" || ty == "float" || ty == "i1")
+                return 4;
+            if (ty == "i64" || ty == "double" || ty == "ptr")
+                return 8;
+            if (ty == "i128")
+                return 16;
+            // Check if it's an anonymous struct/tuple type like "{ %struct.Layout, i64 }"
+            if (ty.starts_with("{ ") && ty.ends_with(" }")) {
+                std::string inner = ty.substr(2, ty.size() - 4); // Remove "{ " and " }"
+                size_t tuple_size = 0;
+                size_t pos = 0;
+                while (pos < inner.size()) {
+                    // Find the next element (separated by ", ")
+                    size_t next_comma = inner.find(", ", pos);
+                    std::string elem = (next_comma == std::string::npos)
+                                           ? inner.substr(pos)
+                                           : inner.substr(pos, next_comma - pos);
+                    tuple_size += calc_type_size(elem);
+                    if (next_comma == std::string::npos)
+                        break;
+                    pos = next_comma + 2;
+                }
+                return tuple_size > 0 ? tuple_size : 8;
+            }
+            // Check if it's a struct type
+            if (ty.starts_with("%struct.")) {
+                std::string struct_name = ty.substr(8); // Remove "%struct."
+                auto it = struct_fields_.find(struct_name);
+                if (it != struct_fields_.end()) {
+                    size_t struct_size = 0;
+                    for (const auto& field : it->second) {
+                        struct_size += calc_type_size(field.llvm_type);
+                    }
+                    return struct_size > 0 ? struct_size : 8;
+                }
+            }
+            return 8; // Default size
+        };
+
         size_t max_size = 0;
         for (const auto& variant : e.variants) {
             size_t size = 0;
             if (variant.tuple_fields.has_value()) {
                 for (const auto& field_type : *variant.tuple_fields) {
-                    // Approximate size
                     std::string ty = llvm_type_ptr(field_type);
-                    if (ty == "i8")
-                        size += 1;
-                    else if (ty == "i16")
-                        size += 2;
-                    else if (ty == "i32" || ty == "float")
-                        size += 4;
-                    else if (ty == "i64" || ty == "double" || ty == "ptr")
-                        size += 8;
-                    else
-                        size += 8; // Default
+                    size += calc_type_size(ty);
                 }
             }
             if (variant.struct_fields.has_value()) {
                 for (const auto& field : *variant.struct_fields) {
                     std::string ty = llvm_type_ptr(field.type);
-                    if (ty == "i8")
-                        size += 1;
-                    else if (ty == "i16")
-                        size += 2;
-                    else if (ty == "i32" || ty == "float")
-                        size += 4;
-                    else if (ty == "i64" || ty == "double" || ty == "ptr")
-                        size += 8;
-                    else
-                        size += 8; // Default
+                    size += calc_type_size(ty);
                 }
             }
             max_size = std::max(max_size, size);
         }
 
+        // Ensure at least 8 bytes for data
+        if (max_size == 0)
+            max_size = 8;
+
         // Emit the enum type to type_defs_buffer_ (ensures types before functions)
         std::string type_name = "%struct." + e.name;
-        // { i32 tag, [N x i8] data }
-        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(max_size)
-                          << " x i8] }\n";
+        // Use [N x i64] for proper 8-byte alignment (same as gen_enum_instantiation)
+        size_t num_i64 = (max_size + 7) / 8;
+        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(num_i64)
+                          << " x i64] }\n";
         struct_types_[e.name] = type_name;
 
         // Register variant values

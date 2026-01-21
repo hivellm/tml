@@ -844,8 +844,7 @@ auto BorrowChecker::extract_place(const parser::Expr& expr) -> std::optional<Pla
         const auto& index = expr.as<parser::IndexExpr>();
         auto base_place = extract_place(*index.object);
         if (base_place) {
-            base_place->projections.push_back(
-                Projection{ProjectionKind::Index, "", std::nullopt});
+            base_place->projections.push_back(Projection{ProjectionKind::Index, "", std::nullopt});
             return base_place;
         }
         return std::nullopt;

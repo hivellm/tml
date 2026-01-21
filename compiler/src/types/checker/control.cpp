@@ -211,7 +211,8 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual);
 auto TypeChecker::check_return(const parser::ReturnExpr& ret) -> TypePtr {
     TypePtr value_type = make_unit();
     if (ret.value) {
-        value_type = check_expr(**ret.value);
+        // Pass expected return type so array literals can infer their size
+        value_type = check_expr(**ret.value, current_return_type_);
     }
 
     // Check return type matches function signature

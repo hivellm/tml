@@ -1,0 +1,691 @@
+//! JSON Value Types and Pattern Matching Support
+//!
+//! This module provides a high-level `Json` type that supports
+//! full method access to JSON values, backed by the native parser.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::json::types::{Json, parse}
+//!
+//! let json = parse("{\"name\": \"Alice\", \"age\": 30}").unwrap()
+//!
+//! if json.is_object() {
+//!     when json.get_string("name") {
+//!         Just(name) => println("Name: " + name),
+//!         Nothing => println("No name")
+//!     }
+//! }
+//! ```
+
+// ============================================================================
+// FFI Function Declarations (direct, no circular imports)
+// ============================================================================
+
+@extern("tml_json_parse_fast")
+func json_parse_fast(s: Str) -> I64
+
+@extern("tml_json_get_type")
+func json_get_type(h: I64) -> I32
+
+@extern("tml_json_is_null")
+func json_is_null(h: I64) -> I32
+
+@extern("tml_json_is_bool")
+func json_is_bool(h: I64) -> I32
+
+@extern("tml_json_is_number")
+func json_is_number(h: I64) -> I32
+
+@extern("tml_json_is_string")
+func json_is_string(h: I64) -> I32
+
+@extern("tml_json_is_array")
+func json_is_array(h: I64) -> I32
+
+@extern("tml_json_is_object")
+func json_is_object(h: I64) -> I32
+
+@extern("tml_json_get_bool")
+func json_get_bool(h: I64) -> I32
+
+@extern("tml_json_as_i64")
+func json_as_i64(h: I64) -> I64
+
+@extern("tml_json_as_f64")
+func json_as_f64(h: I64) -> F64
+
+@extern("tml_json_get_string")
+func json_get_string(h: I64) -> Str
+
+@extern("tml_json_array_len")
+func json_array_len(h: I64) -> I64
+
+@extern("tml_json_array_get")
+func json_array_get(h: I64, index: I64) -> I64
+
+@extern("tml_json_array_get_i64")
+func json_array_get_i64(h: I64, index: I64) -> I64
+
+@extern("tml_json_array_get_f64")
+func json_array_get_f64(h: I64, index: I64) -> F64
+
+@extern("tml_json_array_get_bool")
+func json_array_get_bool(h: I64, index: I64) -> I32
+
+@extern("tml_json_array_get_string")
+func json_array_get_string(h: I64, index: I64) -> Str
+
+@extern("tml_json_array_get_type")
+func json_array_get_type(h: I64, index: I64) -> I32
+
+@extern("tml_json_object_len")
+func json_object_len(h: I64) -> I64
+
+@extern("tml_json_object_get")
+func json_object_get(h: I64, key: Str) -> I64
+
+@extern("tml_json_object_has")
+func json_object_has(h: I64, key: Str) -> I32
+
+@extern("tml_json_object_get_i64")
+func json_object_get_i64(h: I64, key: Str) -> I64
+
+@extern("tml_json_object_get_f64")
+func json_object_get_f64(h: I64, key: Str) -> F64
+
+@extern("tml_json_object_get_bool")
+func json_object_get_bool(h: I64, key: Str) -> I32
+
+@extern("tml_json_object_get_string")
+func json_object_get_string(h: I64, key: Str) -> Str
+
+@extern("tml_json_object_get_type")
+func json_object_get_type(h: I64, key: Str) -> I32
+
+@extern("tml_json_to_string")
+func json_to_string(h: I64) -> Str
+
+@extern("tml_json_free")
+func json_free(h: I64)
+
+// Type constants
+const TYPE_NULL: I32 = 0
+const TYPE_BOOL: I32 = 1
+const TYPE_NUMBER: I32 = 2
+const TYPE_STRING: I32 = 3
+const TYPE_ARRAY: I32 = 4
+const TYPE_OBJECT: I32 = 5
+
+// ============================================================================
+// JSON Number Type
+// ============================================================================
+
+/// Represents a JSON number which can be an integer, unsigned integer, or float.
+pub type JsonNumber {
+    Int(I64),
+    Uint(U64),
+    Float(F64),
+}
+
+impl JsonNumber {
+    /// Convert to I64 (may truncate floats)
+    pub func to_i64(this) -> I64 {
+        when this {
+            JsonNumber::Int(n) => n,
+            JsonNumber::Uint(n) => n as I64,
+            JsonNumber::Float(n) => n as I64,
+        }
+    }
+
+    /// Convert to F64 (lossless for all types)
+    pub func to_f64(this) -> F64 {
+        when this {
+            JsonNumber::Int(n) => n as F64,
+            JsonNumber::Uint(n) => n as F64,
+            JsonNumber::Float(n) => n,
+        }
+    }
+
+    /// Check if this is an integer (no decimal part)
+    pub func is_integer(this) -> Bool {
+        when this {
+            JsonNumber::Int(_) => true,
+            JsonNumber::Uint(_) => true,
+            JsonNumber::Float(_) => false,
+        }
+    }
+
+    /// Convert to JSON string representation
+    pub func to_json_string(this) -> Str {
+        when this {
+            JsonNumber::Int(n) => n.to_string(),
+            JsonNumber::Uint(n) => n.to_string(),
+            JsonNumber::Float(n) => n.to_string(),
+        }
+    }
+}
+
+// ============================================================================
+// JSON Object Type (FFI-backed)
+// ============================================================================
+
+/// A JSON object backed by an FFI handle for efficient access.
+/// This provides O(1) field lookup and preserves insertion order.
+pub type JsonObject {
+    handle: I64,
+}
+
+impl JsonObject {
+    /// Create a new empty object
+    pub func new() -> JsonObject {
+        let h: I64 = json_parse_fast("{}")
+        return JsonObject { handle: h }
+    }
+
+    /// Create from an FFI handle (internal use)
+    pub func from_handle(h: I64) -> JsonObject {
+        return JsonObject { handle: h }
+    }
+
+    /// Get the number of fields in this object
+    pub func len(this) -> I64 {
+        return json_object_len(this.handle)
+    }
+
+    /// Check if the object is empty
+    pub func is_empty(this) -> Bool {
+        return json_object_len(this.handle) == 0
+    }
+
+    /// Check if the object contains a key
+    pub func has(this, key: Str) -> Bool {
+        return json_object_has(this.handle, key) == 1
+    }
+
+    /// Get a field value by key
+    pub func get(this, key: Str) -> Maybe[Json] {
+        let field_handle: I64 = json_object_get(this.handle, key)
+        if field_handle < 0 {
+            return Nothing
+        }
+        return Just(Json::from_handle(field_handle))
+    }
+
+    /// Get string value directly by key
+    pub func get_string(this, key: Str) -> Maybe[Str] {
+        let val_type: I32 = json_object_get_type(this.handle, key)
+        if val_type != TYPE_STRING {
+            return Nothing
+        }
+        return Just(json_object_get_string(this.handle, key))
+    }
+
+    /// Get integer value directly by key
+    pub func get_i64(this, key: Str) -> Maybe[I64] {
+        let val_type: I32 = json_object_get_type(this.handle, key)
+        if val_type != TYPE_NUMBER {
+            return Nothing
+        }
+        return Just(json_object_get_i64(this.handle, key))
+    }
+
+    /// Get float value directly by key
+    pub func get_f64(this, key: Str) -> Maybe[F64] {
+        let val_type: I32 = json_object_get_type(this.handle, key)
+        if val_type != TYPE_NUMBER {
+            return Nothing
+        }
+        return Just(json_object_get_f64(this.handle, key))
+    }
+
+    /// Get boolean value directly by key
+    pub func get_bool(this, key: Str) -> Maybe[Bool] {
+        let val_type: I32 = json_object_get_type(this.handle, key)
+        if val_type != TYPE_BOOL {
+            return Nothing
+        }
+        let result: I32 = json_object_get_bool(this.handle, key)
+        return Just(result == 1)
+    }
+
+    /// Serialize this object to a JSON string
+    pub func to_string(this) -> Str {
+        return json_to_string(this.handle)
+    }
+
+    /// Free the underlying handle
+    pub func drop(this) {
+        if this.handle >= 0 {
+            json_free(this.handle)
+        }
+    }
+}
+
+// ============================================================================
+// JSON Array Type (FFI-backed)
+// ============================================================================
+
+/// A JSON array backed by an FFI handle for efficient access.
+pub type JsonArray {
+    handle: I64,
+}
+
+impl JsonArray {
+    /// Create a new empty array
+    pub func new() -> JsonArray {
+        let h: I64 = json_parse_fast("[]")
+        return JsonArray { handle: h }
+    }
+
+    /// Create from an FFI handle (internal use)
+    pub func from_handle(h: I64) -> JsonArray {
+        return JsonArray { handle: h }
+    }
+
+    /// Get the number of elements in this array
+    pub func len(this) -> I64 {
+        return json_array_len(this.handle)
+    }
+
+    /// Check if the array is empty
+    pub func is_empty(this) -> Bool {
+        return json_array_len(this.handle) == 0
+    }
+
+    /// Get an element by index
+    pub func get(this, index: I64) -> Maybe[Json] {
+        if index < 0 or index >= this.len() {
+            return Nothing
+        }
+        let elem_handle: I64 = json_array_get(this.handle, index)
+        if elem_handle < 0 {
+            return Nothing
+        }
+        return Just(Json::from_handle(elem_handle))
+    }
+
+    /// Get string element directly by index
+    pub func get_string(this, index: I64) -> Maybe[Str] {
+        let val_type: I32 = json_array_get_type(this.handle, index)
+        if val_type != TYPE_STRING {
+            return Nothing
+        }
+        return Just(json_array_get_string(this.handle, index))
+    }
+
+    /// Get integer element directly by index
+    pub func get_i64(this, index: I64) -> Maybe[I64] {
+        let val_type: I32 = json_array_get_type(this.handle, index)
+        if val_type != TYPE_NUMBER {
+            return Nothing
+        }
+        return Just(json_array_get_i64(this.handle, index))
+    }
+
+    /// Get float element directly by index
+    pub func get_f64(this, index: I64) -> Maybe[F64] {
+        let val_type: I32 = json_array_get_type(this.handle, index)
+        if val_type != TYPE_NUMBER {
+            return Nothing
+        }
+        return Just(json_array_get_f64(this.handle, index))
+    }
+
+    /// Get boolean element directly by index
+    pub func get_bool(this, index: I64) -> Maybe[Bool] {
+        let val_type: I32 = json_array_get_type(this.handle, index)
+        if val_type != TYPE_BOOL {
+            return Nothing
+        }
+        let result: I32 = json_array_get_bool(this.handle, index)
+        return Just(result == 1)
+    }
+
+    /// Serialize this array to a JSON string
+    pub func to_string(this) -> Str {
+        return json_to_string(this.handle)
+    }
+
+    /// Free the underlying handle
+    pub func drop(this) {
+        if this.handle >= 0 {
+            json_free(this.handle)
+        }
+    }
+}
+
+// ============================================================================
+// JSON Value Type (FFI-backed)
+// ============================================================================
+
+/// Represents any JSON value with a unified interface.
+/// Backed by an FFI handle for efficient operations.
+pub type Json {
+    handle: I64,
+}
+
+impl Json {
+    // ------------------------------------------------------------------------
+    // Constructors
+    // ------------------------------------------------------------------------
+
+    /// Create from an FFI handle (internal use)
+    pub func from_handle(h: I64) -> Json {
+        return Json { handle: h }
+    }
+
+    /// Create a null JSON value
+    pub func new_null() -> Json {
+        let h: I64 = json_parse_fast("null")
+        return Json { handle: h }
+    }
+
+    /// Create a boolean JSON value
+    pub func new_bool(b: Bool) -> Json {
+        var h: I64 = 0
+        if b {
+            h = json_parse_fast("true")
+        } else {
+            h = json_parse_fast("false")
+        }
+        return Json { handle: h }
+    }
+
+    /// Create an integer JSON value
+    pub func int(n: I64) -> Json {
+        let h: I64 = json_parse_fast(n.to_string())
+        return Json { handle: h }
+    }
+
+    /// Create a float JSON value
+    pub func float(n: F64) -> Json {
+        let h: I64 = json_parse_fast(n.to_string())
+        return Json { handle: h }
+    }
+
+    /// Create a string JSON value
+    pub func string(s: Str) -> Json {
+        // Need to escape and quote the string
+        let escaped: Str = "\"" + s + "\""
+        let h: I64 = json_parse_fast(escaped)
+        return Json { handle: h }
+    }
+
+    /// Create an empty array JSON value
+    pub func array() -> Json {
+        let h: I64 = json_parse_fast("[]")
+        return Json { handle: h }
+    }
+
+    /// Create an empty object JSON value
+    pub func object() -> Json {
+        let h: I64 = json_parse_fast("{}")
+        return Json { handle: h }
+    }
+
+    // ------------------------------------------------------------------------
+    // Type Checks
+    // ------------------------------------------------------------------------
+
+    /// Check if this value is null
+    pub func is_null(this) -> Bool {
+        return json_is_null(this.handle) == 1
+    }
+
+    /// Check if this value is a boolean
+    pub func is_bool(this) -> Bool {
+        return json_is_bool(this.handle) == 1
+    }
+
+    /// Check if this value is a number
+    pub func is_number(this) -> Bool {
+        return json_is_number(this.handle) == 1
+    }
+
+    /// Check if this value is a string
+    pub func is_string(this) -> Bool {
+        return json_is_string(this.handle) == 1
+    }
+
+    /// Check if this value is an array
+    pub func is_array(this) -> Bool {
+        return json_is_array(this.handle) == 1
+    }
+
+    /// Check if this value is an object
+    pub func is_object(this) -> Bool {
+        return json_is_object(this.handle) == 1
+    }
+
+    /// Get the type code for this value
+    pub func get_type(this) -> I32 {
+        return json_get_type(this.handle)
+    }
+
+    // ------------------------------------------------------------------------
+    // Value Accessors (Safe)
+    // ------------------------------------------------------------------------
+
+    /// Get boolean value if this is a Bool
+    pub func as_bool(this) -> Maybe[Bool] {
+        if not this.is_bool() {
+            return Nothing
+        }
+        let result: I32 = json_get_bool(this.handle)
+        return Just(result == 1)
+    }
+
+    /// Get I64 value if this is a Number
+    pub func as_i64(this) -> Maybe[I64] {
+        if not this.is_number() {
+            return Nothing
+        }
+        return Just(json_as_i64(this.handle))
+    }
+
+    /// Get F64 value if this is a Number
+    pub func as_f64(this) -> Maybe[F64] {
+        if not this.is_number() {
+            return Nothing
+        }
+        return Just(json_as_f64(this.handle))
+    }
+
+    /// Get string value if this is a String
+    pub func as_str(this) -> Maybe[Str] {
+        if not this.is_string() {
+            return Nothing
+        }
+        return Just(json_get_string(this.handle))
+    }
+
+    /// Get this value as a JsonArray if it is an array
+    pub func as_array(this) -> Maybe[JsonArray] {
+        if not this.is_array() {
+            return Nothing
+        }
+        return Just(JsonArray::from_handle(this.handle))
+    }
+
+    /// Get this value as a JsonObject if it is an object
+    pub func as_object(this) -> Maybe[JsonObject] {
+        if not this.is_object() {
+            return Nothing
+        }
+        return Just(JsonObject::from_handle(this.handle))
+    }
+
+    // ------------------------------------------------------------------------
+    // Value Accessors (Panic on wrong type)
+    // ------------------------------------------------------------------------
+
+    /// Get boolean value, panics if not a Bool
+    pub func unwrap_bool(this) -> Bool {
+        if not this.is_bool() {
+            panic("JSON value is not a boolean")
+        }
+        return json_get_bool(this.handle) == 1
+    }
+
+    /// Get I64 value, panics if not a Number
+    pub func unwrap_i64(this) -> I64 {
+        if not this.is_number() {
+            panic("JSON value is not a number")
+        }
+        return json_as_i64(this.handle)
+    }
+
+    /// Get F64 value, panics if not a Number
+    pub func unwrap_f64(this) -> F64 {
+        if not this.is_number() {
+            panic("JSON value is not a number")
+        }
+        return json_as_f64(this.handle)
+    }
+
+    /// Get string value, panics if not a String
+    pub func unwrap_str(this) -> Str {
+        if not this.is_string() {
+            panic("JSON value is not a string")
+        }
+        return json_get_string(this.handle)
+    }
+
+    // ------------------------------------------------------------------------
+    // Object Field Access (convenience methods for when value is an object)
+    // ------------------------------------------------------------------------
+
+    /// Get a field from this object by key (returns Nothing if not an object)
+    pub func get(this, key: Str) -> Maybe[Json] {
+        if not this.is_object() {
+            return Nothing
+        }
+        let field_handle: I64 = json_object_get(this.handle, key)
+        if field_handle < 0 {
+            return Nothing
+        }
+        return Just(Json::from_handle(field_handle))
+    }
+
+    /// Get string field directly
+    pub func get_string(this, key: Str) -> Maybe[Str] {
+        if not this.is_object() {
+            return Nothing
+        }
+        let val_type: I32 = json_object_get_type(this.handle, key)
+        if val_type != TYPE_STRING {
+            return Nothing
+        }
+        return Just(json_object_get_string(this.handle, key))
+    }
+
+    /// Get integer field directly
+    pub func get_i64(this, key: Str) -> Maybe[I64] {
+        if not this.is_object() {
+            return Nothing
+        }
+        let val_type: I32 = json_object_get_type(this.handle, key)
+        if val_type != TYPE_NUMBER {
+            return Nothing
+        }
+        return Just(json_object_get_i64(this.handle, key))
+    }
+
+    /// Get a field with a default value
+    pub func get_or(this, key: Str, default_val: Json) -> Json {
+        when this.get(key) {
+            Just(v) => v,
+            Nothing => default_val,
+        }
+    }
+
+    /// Check if this object has a key (returns false if not an object)
+    pub func has(this, key: Str) -> Bool {
+        if not this.is_object() {
+            return false
+        }
+        return json_object_has(this.handle, key) == 1
+    }
+
+    // ------------------------------------------------------------------------
+    // Array Element Access (convenience methods for when value is an array)
+    // ------------------------------------------------------------------------
+
+    /// Get array length (returns 0 if not an array)
+    pub func len(this) -> I64 {
+        if this.is_array() {
+            return json_array_len(this.handle)
+        }
+        if this.is_object() {
+            return json_object_len(this.handle)
+        }
+        return 0
+    }
+
+    /// Get array element by index
+    pub func at(this, index: I64) -> Maybe[Json] {
+        if not this.is_array() {
+            return Nothing
+        }
+        if index < 0 or index >= json_array_len(this.handle) {
+            return Nothing
+        }
+        let elem_handle: I64 = json_array_get(this.handle, index)
+        if elem_handle < 0 {
+            return Nothing
+        }
+        return Just(Json::from_handle(elem_handle))
+    }
+
+    // ------------------------------------------------------------------------
+    // Serialization
+    // ------------------------------------------------------------------------
+
+    /// Serialize this JSON value to a string
+    pub func to_string(this) -> Str {
+        return json_to_string(this.handle)
+    }
+
+    // ------------------------------------------------------------------------
+    // Memory Management
+    // ------------------------------------------------------------------------
+
+    /// Free the underlying handle
+    pub func drop(this) {
+        if this.handle >= 0 {
+            json_free(this.handle)
+        }
+    }
+}
+
+// ============================================================================
+// Parsing Functions
+// ============================================================================
+
+/// Parse a JSON string into a Json value
+pub func parse(json_str: Str) -> Maybe[Json] {
+    let h: I64 = json_parse_fast(json_str)
+    if h < 0 {
+        return Nothing
+    }
+    return Just(Json::from_handle(h))
+}
+
+/// Parse a JSON string, returning an error message on failure
+pub func parse_result(json_str: Str) -> Outcome[Json, Str] {
+    let h: I64 = json_parse_fast(json_str)
+    if h < 0 {
+        return Err("Failed to parse JSON")
+    }
+    return Ok(Json::from_handle(h))
+}
+
+/// Parse a JSON string into a Json value, panic on error
+pub func parse_or_panic(json_str: Str) -> Json {
+    let h: I64 = json_parse_fast(json_str)
+    if h < 0 {
+        panic("Failed to parse JSON: invalid syntax")
+    }
+    return Json::from_handle(h)
+}

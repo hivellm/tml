@@ -359,8 +359,8 @@ void BorrowChecker::check_func_decl(const parser::FuncDecl& func) {
 
         if (!lifetime_resolved && !has_this_param && ref_param_names.size() > 1) {
             // Ambiguous: multiple ref params, no this, no explicit lifetime resolution
-            errors_.push_back(BorrowError::ambiguous_return_lifetime(
-                func.name, ref_param_names, func.span));
+            errors_.push_back(
+                BorrowError::ambiguous_return_lifetime(func.name, ref_param_names, func.span));
         }
         // Note: If no ref params at all and returns ref, the return must
         // reference a static or the function body will error on returning

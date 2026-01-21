@@ -4,8 +4,14 @@
 
 #include "mir/passes/devirtualization.hpp"
 
+#include "common.hpp"
+
+#include "json/json_parser.hpp"
+#include "json/json_value.hpp"
 #include <algorithm>
+#include <fstream>
 #include <queue>
+#include <sstream>
 
 namespace tml::mir {
 
@@ -347,9 +353,9 @@ auto DevirtualizationPass::process_block(BasicBlock& block) -> bool {
         }
 
         // Try to devirtualize with effective type
-        auto [direct_name, reason] = try_devirtualize(
-            MethodCallInst{method_call.receiver, effective_type, method_call.method_name,
-                           method_call.args, method_call.arg_types, method_call.return_type, std::nullopt});
+        auto [direct_name, reason] = try_devirtualize(MethodCallInst{
+            method_call.receiver, effective_type, method_call.method_name, method_call.args,
+            method_call.arg_types, method_call.return_type, std::nullopt});
 
         // Track narrowing-enabled devirtualization separately
         if (has_narrowing && reason != DevirtReason::NotDevirtualized) {
@@ -743,17 +749,116 @@ auto DevirtualizationPass::profile_guided_devirt(const std::string& call_site,
 // ============================================================================
 
 auto TypeProfileFile::load(const std::string& path) -> std::optional<TypeProfileFile> {
-    // Simplified implementation - in production, use proper JSON parsing
-    (void)path;
-    // TODO: Implement JSON parsing for profile data
-    return std::nullopt;
+    // Read file contents
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return std::nullopt;
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string json_str = buffer.str();
+
+    // Parse JSON using the parse_json free function
+    auto parse_result = json::parse_json(json_str);
+    if (!is_ok(parse_result)) {
+        return std::nullopt;
+    }
+
+    const auto& root = unwrap(parse_result);
+    if (!root.is_object()) {
+        return std::nullopt;
+    }
+
+    TypeProfileFile profile;
+
+    // Extract version
+    auto* version_ptr = root.get("version");
+    if (version_ptr != nullptr && version_ptr->is_string()) {
+        profile.version = version_ptr->as_string();
+    }
+
+    // Extract module_name
+    auto* module_ptr = root.get("module_name");
+    if (module_ptr != nullptr && module_ptr->is_string()) {
+        profile.module_name = module_ptr->as_string();
+    }
+
+    // Extract call_sites array
+    auto* call_sites_ptr = root.get("call_sites");
+    if (call_sites_ptr != nullptr && call_sites_ptr->is_array()) {
+        const auto& call_sites_arr = call_sites_ptr->as_array();
+        for (size_t i = 0; i < call_sites_arr.size(); ++i) {
+            const auto& site = call_sites_arr[i];
+            if (!site.is_object()) {
+                continue;
+            }
+
+            TypeProfileData data;
+
+            auto* cs = site.get("call_site");
+            if (cs != nullptr && cs->is_string()) {
+                data.call_site = cs->as_string();
+            }
+
+            auto* mn = site.get("method_name");
+            if (mn != nullptr && mn->is_string()) {
+                data.method_name = mn->as_string();
+            }
+
+            auto* tc = site.get("type_counts");
+            if (tc != nullptr && tc->is_object()) {
+                const auto& type_counts_obj = tc->as_object();
+                for (auto it = type_counts_obj.begin(); it != type_counts_obj.end(); ++it) {
+                    if (it->second.is_integer()) {
+                        data.type_counts[it->first] = static_cast<size_t>(it->second.as_i64());
+                    }
+                }
+            }
+
+            profile.call_sites.push_back(std::move(data));
+        }
+    }
+
+    return profile;
 }
 
 auto TypeProfileFile::save(const std::string& path) const -> bool {
-    // Simplified implementation - in production, use proper JSON serialization
-    (void)path;
-    // TODO: Implement JSON serialization for profile data
-    return false;
+    // Build JSON structure
+    json::JsonObject root;
+    root["version"] = json::JsonValue(version);
+    root["module_name"] = json::JsonValue(module_name);
+
+    // Build call_sites array
+    json::JsonArray sites_arr;
+    for (const auto& site : call_sites) {
+        json::JsonObject site_obj;
+        site_obj["call_site"] = json::JsonValue(site.call_site);
+        site_obj["method_name"] = json::JsonValue(site.method_name);
+
+        // Build type_counts object
+        json::JsonObject counts_obj;
+        for (const auto& [type_name, count] : site.type_counts) {
+            counts_obj[type_name] = json::JsonValue(static_cast<int64_t>(count));
+        }
+        site_obj["type_counts"] = json::JsonValue(std::move(counts_obj));
+
+        sites_arr.push_back(json::JsonValue(std::move(site_obj)));
+    }
+    root["call_sites"] = json::JsonValue(std::move(sites_arr));
+
+    // Serialize to JSON string
+    json::JsonValue root_val(std::move(root));
+    std::string json_str = root_val.to_string_pretty();
+
+    // Write to file
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    file << json_str;
+    return file.good();
 }
 
 } // namespace tml::mir

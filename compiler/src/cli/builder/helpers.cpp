@@ -690,7 +690,18 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     // Note: net.c is now included by default (see above), so no conditional linking needed
 
     // Link std::json runtime if imported (pre-built C++ library)
-    if (registry->has_module("std::json")) {
+    // Check for std::json or any submodule (std::json::types, std::json::builder, etc.)
+    auto uses_json_module = [&registry]() -> bool {
+        if (registry->has_module("std::json"))
+            return true;
+        for (const auto& [path, _] : registry->get_all_modules()) {
+            if (path.find("std::json::") == 0 || path == "std::json") {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (uses_json_module()) {
         // Find the JSON runtime library (built alongside tml.exe)
         auto find_json_runtime = []() -> std::optional<fs::path> {
 #ifdef _WIN32
@@ -809,7 +820,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
         if (auto profiler_lib = find_profiler_runtime()) {
             objects.push_back(*profiler_lib);
             if (verbose) {
-                std::cout << "Including profiler runtime library: " << profiler_lib->string() << "\n";
+                std::cout << "Including profiler runtime library: " << profiler_lib->string()
+                          << "\n";
             }
         } else if (verbose) {
             std::cout << "Warning: std::profiler imported but tml_profiler library not found\n";

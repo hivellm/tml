@@ -170,11 +170,19 @@ public:
     void clear() {
         accesses_.clear();
         dependences_.clear();
+        alloca_bases_.clear();
+        gep_bases_.clear();
     }
 
 private:
     std::vector<MemoryAccess> accesses_;
     std::vector<std::pair<size_t, DependenceDistance>> dependences_; // (access_idx, dep)
+
+    /// Map from pointer ValueId to its alloca base (if from local variable)
+    std::unordered_map<ValueId, ValueId> alloca_bases_;
+
+    /// Map from GEP result to its base pointer
+    std::unordered_map<ValueId, ValueId> gep_bases_;
 
     /// Check if two pointers may alias
     [[nodiscard]] auto may_alias(ValueId ptr1, ValueId ptr2) const -> bool;
@@ -182,22 +190,16 @@ private:
     /// Compute distance for array accesses
     [[nodiscard]] auto compute_distance(const MemoryAccess& a, const MemoryAccess& b,
                                         const LoopInfo& loop) const -> std::optional<int64_t>;
+
+    /// Get the ultimate base pointer for a value (following GEPs)
+    [[nodiscard]] auto get_base_pointer(ValueId ptr) const -> ValueId;
 };
 
 // ============================================================================
 // Reduction Detection
 // ============================================================================
 
-/// Supported reduction operations
-enum class ReductionOp {
-    Add, ///< Sum reduction
-    Mul, ///< Product reduction
-    Min, ///< Minimum reduction
-    Max, ///< Maximum reduction
-    And, ///< Bitwise AND reduction
-    Or,  ///< Bitwise OR reduction
-    Xor, ///< Bitwise XOR reduction
-};
+// ReductionOp is defined in mir/mir.hpp
 
 /// Reduction pattern descriptor
 struct ReductionInfo {
@@ -339,7 +341,8 @@ private:
 
     /// Check if instructions access consecutive memory locations
     [[nodiscard]] auto
-    are_consecutive_accesses(const std::vector<const InstructionData*>& loads) const -> bool;
+    are_consecutive_accesses(const Function& func,
+                             const std::vector<const InstructionData*>& loads) const -> bool;
 
     /// Vectorize an SLP group
     auto vectorize_group(Function& func, BasicBlock& block, const SLPGroup& group) -> bool;

@@ -119,11 +119,17 @@ struct MirFunctionType {
     MirTypePtr return_type;         ///< Return type.
 };
 
+/// SIMD vector type variant.
+struct MirVectorType {
+    MirTypePtr element; ///< Element type (must be primitive).
+    size_t width;       ///< Number of elements (e.g., 4 for <4 x i32>).
+};
+
 /// MIR type - a tagged union of all type variants.
 struct MirType {
     /// The type variant data.
     std::variant<MirPrimitiveType, MirPointerType, MirArrayType, MirSliceType, MirTupleType,
-                 MirStructType, MirEnumType, MirFunctionType>
+                 MirStructType, MirEnumType, MirFunctionType, MirVectorType>
         kind;
 
     /// Returns true if this is a primitive type.
@@ -172,6 +178,10 @@ struct MirType {
     [[nodiscard]] auto is_array() const -> bool {
         return std::holds_alternative<MirArrayType>(kind);
     }
+    /// Returns true if this is a SIMD vector type.
+    [[nodiscard]] auto is_vector() const -> bool {
+        return std::holds_alternative<MirVectorType>(kind);
+    }
     /// Returns true if this is an aggregate type (struct, enum, tuple, array).
     /// Aggregate types benefit from alloca+store+load instead of phi nodes.
     [[nodiscard]] auto is_aggregate() const -> bool {
@@ -196,6 +206,7 @@ auto make_tuple_type(std::vector<MirTypePtr> elements) -> MirTypePtr;
 auto make_struct_type(const std::string& name, std::vector<MirTypePtr> type_args = {})
     -> MirTypePtr;
 auto make_enum_type(const std::string& name, std::vector<MirTypePtr> type_args = {}) -> MirTypePtr;
+auto make_vector_type(MirTypePtr element, size_t width) -> MirTypePtr;
 
 // ============================================================================
 // MIR Values - SSA Values
@@ -324,8 +335,8 @@ struct AllocaInst {
 struct GetElementPtrInst {
     Value base;
     std::vector<Value> indices;
-    MirTypePtr base_type;   // Type of base pointer
-    MirTypePtr result_type; // Type of result pointer
+    MirTypePtr base_type;           // Type of base pointer
+    MirTypePtr result_type;         // Type of result pointer
     bool needs_bounds_check = true; // Whether bounds check is needed (false if proven safe)
     int64_t known_array_size = -1;  // Array size for bounds check (-1 if unknown)
 };
@@ -560,6 +571,84 @@ struct FenceInst {
     bool single_thread = false; ///< If true, compiler fence only (signal fence)
 };
 
+// ============================================================================
+// SIMD Vector Instructions
+// ============================================================================
+
+/// Vector load: result = vector_load(ptr, width)
+/// Loads 'width' consecutive elements starting at ptr into a vector.
+struct VectorLoadInst {
+    Value ptr;               ///< Base pointer
+    size_t width;            ///< Vector width (number of elements)
+    MirTypePtr element_type; ///< Scalar element type
+    MirTypePtr result_type;  ///< Vector type
+};
+
+/// Vector store: vector_store(ptr, vec_value, width)
+/// Stores vector elements to consecutive memory locations.
+struct VectorStoreInst {
+    Value ptr;               ///< Base pointer
+    Value value;             ///< Vector value to store
+    size_t width;            ///< Vector width
+    MirTypePtr element_type; ///< Scalar element type
+};
+
+/// Vector binary operation: result = vec_op(lhs, rhs)
+struct VectorBinaryInst {
+    BinOp op;                ///< Binary operation (Add, Sub, Mul, etc.)
+    Value left;              ///< Left operand (vector)
+    Value right;             ///< Right operand (vector)
+    size_t width;            ///< Vector width
+    MirTypePtr element_type; ///< Scalar element type
+    MirTypePtr result_type;  ///< Vector type
+};
+
+/// Horizontal reduction operation type.
+enum class ReductionOp {
+    Add, ///< Sum all elements
+    Mul, ///< Multiply all elements
+    Min, ///< Minimum element
+    Max, ///< Maximum element
+    And, ///< Bitwise AND all elements
+    Or,  ///< Bitwise OR all elements
+    Xor, ///< Bitwise XOR all elements
+};
+
+/// Vector reduction: result = reduce_op(vector)
+/// Reduces a vector to a scalar by applying an associative operation.
+struct VectorReductionInst {
+    ReductionOp op;          ///< Reduction operation
+    Value vector;            ///< Vector operand
+    size_t width;            ///< Vector width
+    MirTypePtr element_type; ///< Scalar element type (also result type)
+};
+
+/// Vector splat: result = splat(scalar, width)
+/// Creates a vector with all elements set to the scalar value.
+struct VectorSplatInst {
+    Value scalar;            ///< Scalar value to broadcast
+    size_t width;            ///< Vector width
+    MirTypePtr element_type; ///< Scalar element type
+    MirTypePtr result_type;  ///< Vector type
+};
+
+/// Vector extract: result = extract(vector, index)
+/// Extracts a single scalar element from a vector.
+struct VectorExtractInst {
+    Value vector;            ///< Vector operand
+    uint32_t index;          ///< Index to extract (constant)
+    MirTypePtr element_type; ///< Scalar element type (result type)
+};
+
+/// Vector insert: result = insert(vector, scalar, index)
+/// Inserts a scalar into a vector at the specified index.
+struct VectorInsertInst {
+    Value vector;           ///< Vector operand
+    Value scalar;           ///< Scalar to insert
+    uint32_t index;         ///< Index to insert at (constant)
+    MirTypePtr result_type; ///< Vector type
+};
+
 // All instruction types
 using Instruction =
     std::variant<BinaryInst, UnaryInst, LoadInst, StoreInst, AllocaInst, GetElementPtrInst,
@@ -567,7 +656,10 @@ using Instruction =
                  ConstantInst, SelectInst, StructInitInst, EnumInitInst, TupleInitInst,
                  ArrayInitInst, AwaitInst, ClosureInitInst,
                  // Atomic instructions
-                 AtomicLoadInst, AtomicStoreInst, AtomicRMWInst, AtomicCmpXchgInst, FenceInst>;
+                 AtomicLoadInst, AtomicStoreInst, AtomicRMWInst, AtomicCmpXchgInst, FenceInst,
+                 // SIMD vector instructions
+                 VectorLoadInst, VectorStoreInst, VectorBinaryInst, VectorReductionInst,
+                 VectorSplatInst, VectorExtractInst, VectorInsertInst>;
 
 // Instruction with result
 struct InstructionData {

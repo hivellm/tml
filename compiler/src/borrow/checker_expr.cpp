@@ -643,6 +643,48 @@ auto BorrowChecker::analyze_captures(const parser::ClosureExpr& closure)
     return result;
 }
 
+/// Helper to extract all variable bindings from a pattern.
+/// Used to track pattern-bound variables as locals in closure capture analysis.
+static void collect_pattern_bindings(const parser::Pattern& pattern,
+                                     std::unordered_set<std::string>& bindings) {
+    std::visit(
+        [&bindings](const auto& p) {
+            using T = std::decay_t<decltype(p)>;
+            if constexpr (std::is_same_v<T, parser::IdentPattern>) {
+                bindings.insert(p.name);
+            } else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
+                for (const auto& elem : p.elements) {
+                    collect_pattern_bindings(*elem, bindings);
+                }
+            } else if constexpr (std::is_same_v<T, parser::StructPattern>) {
+                for (const auto& [name, sub_pattern] : p.fields) {
+                    collect_pattern_bindings(*sub_pattern, bindings);
+                }
+            } else if constexpr (std::is_same_v<T, parser::EnumPattern>) {
+                if (p.payload) {
+                    for (const auto& sub_pattern : *p.payload) {
+                        collect_pattern_bindings(*sub_pattern, bindings);
+                    }
+                }
+            } else if constexpr (std::is_same_v<T, parser::OrPattern>) {
+                // Or-patterns must bind the same variables in each alternative
+                // Just collect from the first one (they should all be the same)
+                if (!p.patterns.empty()) {
+                    collect_pattern_bindings(*p.patterns[0], bindings);
+                }
+            } else if constexpr (std::is_same_v<T, parser::ArrayPattern>) {
+                for (const auto& elem : p.elements) {
+                    collect_pattern_bindings(*elem, bindings);
+                }
+                if (p.rest) {
+                    collect_pattern_bindings(**p.rest, bindings);
+                }
+            }
+            // WildcardPattern, LiteralPattern, RangePattern don't bind variables
+        },
+        pattern.kind);
+}
+
 void BorrowChecker::collect_free_variables(
     const parser::Expr& expr, const std::unordered_set<std::string>& local_vars,
     std::unordered_map<std::string, CaptureKind>& captures,
@@ -682,8 +724,8 @@ void BorrowChecker::collect_free_variables(
                     e.op == parser::BinaryOp::DivAssign || e.op == parser::BinaryOp::ModAssign ||
                     e.op == parser::BinaryOp::BitAndAssign ||
                     e.op == parser::BinaryOp::BitOrAssign ||
-                    e.op == parser::BinaryOp::BitXorAssign ||
-                    e.op == parser::BinaryOp::ShlAssign || e.op == parser::BinaryOp::ShrAssign) {
+                    e.op == parser::BinaryOp::BitXorAssign || e.op == parser::BinaryOp::ShlAssign ||
+                    e.op == parser::BinaryOp::ShrAssign) {
                     // Assignment target needs mutable capture
                     if (e.left->template is<parser::IdentExpr>()) {
                         const auto& ident = e.left->template as<parser::IdentExpr>();
@@ -773,8 +815,8 @@ void BorrowChecker::collect_free_variables(
                             for (const auto& elem : arr_kind) {
                                 collect_free_variables(*elem, local_vars, captures, capture_spans);
                             }
-                        } else if constexpr (std::is_same_v<K,
-                                                           std::pair<parser::ExprPtr, parser::ExprPtr>>) {
+                        } else if constexpr (std::is_same_v<
+                                                 K, std::pair<parser::ExprPtr, parser::ExprPtr>>) {
                             collect_free_variables(*arr_kind.first, local_vars, captures,
                                                    capture_spans);
                             collect_free_variables(*arr_kind.second, local_vars, captures,
@@ -793,8 +835,10 @@ void BorrowChecker::collect_free_variables(
             } else if constexpr (std::is_same_v<T, parser::WhenExpr>) {
                 collect_free_variables(*e.scrutinee, local_vars, captures, capture_spans);
                 for (const auto& arm : e.arms) {
-                    // TODO: Track pattern bindings as locals
-                    collect_free_variables(*arm.body, local_vars, captures, capture_spans);
+                    // Track pattern bindings as locals for this arm's scope
+                    std::unordered_set<std::string> arm_locals = local_vars;
+                    collect_pattern_bindings(*arm.pattern, arm_locals);
+                    collect_free_variables(*arm.body, arm_locals, captures, capture_spans);
                 }
             } else if constexpr (std::is_same_v<T, parser::CastExpr>) {
                 collect_free_variables(*e.expr, local_vars, captures, capture_spans);
@@ -805,8 +849,8 @@ void BorrowChecker::collect_free_variables(
 }
 
 auto BorrowChecker::determine_capture_kind([[maybe_unused]] const std::string& var_name,
-                                           PlaceId place_id, bool is_mutated,
-                                           bool is_moved) -> CaptureKind {
+                                           PlaceId place_id, bool is_mutated, bool is_moved)
+    -> CaptureKind {
     // Check if the type is Copy
     const auto& state = env_.get_state(place_id);
     if (state.type && is_copy_type(state.type)) {

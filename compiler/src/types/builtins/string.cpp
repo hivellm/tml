@@ -257,6 +257,38 @@ void TypeEnv::init_builtin_string() {
                                                    false,
                                                    builtin_span});
 
+    // utf8_2byte_to_string(b1: U8, b2: U8) -> Str
+    // Converts a 2-byte UTF-8 sequence to a string
+    functions_["utf8_2byte_to_string"].push_back(
+        FuncSig{"utf8_2byte_to_string",
+                {make_primitive(PrimitiveKind::U8), make_primitive(PrimitiveKind::U8)},
+                make_primitive(PrimitiveKind::Str),
+                {},
+                false,
+                builtin_span});
+
+    // utf8_3byte_to_string(b1: U8, b2: U8, b3: U8) -> Str
+    // Converts a 3-byte UTF-8 sequence to a string
+    functions_["utf8_3byte_to_string"].push_back(
+        FuncSig{"utf8_3byte_to_string",
+                {make_primitive(PrimitiveKind::U8), make_primitive(PrimitiveKind::U8),
+                 make_primitive(PrimitiveKind::U8)},
+                make_primitive(PrimitiveKind::Str),
+                {},
+                false,
+                builtin_span});
+
+    // utf8_4byte_to_string(b1: U8, b2: U8, b3: U8, b4: U8) -> Str
+    // Converts a 4-byte UTF-8 sequence to a string
+    functions_["utf8_4byte_to_string"].push_back(
+        FuncSig{"utf8_4byte_to_string",
+                {make_primitive(PrimitiveKind::U8), make_primitive(PrimitiveKind::U8),
+                 make_primitive(PrimitiveKind::U8), make_primitive(PrimitiveKind::U8)},
+                make_primitive(PrimitiveKind::Str),
+                {},
+                false,
+                builtin_span});
+
     // ========================================================================
     // StringBuilder Operations (Mutable String)
     // ========================================================================

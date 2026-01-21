@@ -25,6 +25,7 @@
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"
+
 #include <functional>
 
 namespace tml::codegen {
@@ -399,7 +400,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     if (bin.op == parser::BinaryOp::Add) {
         // Check if operands are strings (we infer types from left/right operands)
         types::TypePtr left_type_check = infer_expr_type(*bin.left);
-        bool is_string_add = left_type_check && left_type_check->is<types::PrimitiveType>() &&
+        bool is_string_add =
+            left_type_check && left_type_check->is<types::PrimitiveType>() &&
             left_type_check->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str;
 
         if (is_string_add) {
@@ -470,10 +472,10 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             if (strings.size() >= 2 && strings.size() <= 4) {
                 // Collect string values and their lengths
                 struct StringInfo {
-                    std::string value;     // LLVM register or constant
-                    std::string len;       // Length (constant or register)
-                    bool is_literal;       // True if compile-time known
-                    size_t literal_len;    // Length if literal
+                    std::string value;  // LLVM register or constant
+                    std::string len;    // Length (constant or register)
+                    bool is_literal;    // True if compile-time known
+                    size_t literal_len; // Length if literal
                 };
                 std::vector<StringInfo> infos;
                 infos.reserve(strings.size());
@@ -509,17 +511,20 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 if (has_runtime_strings) {
                     // Start with known literal length
                     total_len_reg = fresh_reg();
-                    emit_line("  " + total_len_reg + " = add i64 0, " + std::to_string(total_literal_len));
+                    emit_line("  " + total_len_reg + " = add i64 0, " +
+                              std::to_string(total_literal_len));
 
                     for (auto& info : infos) {
                         if (!info.is_literal) {
                             // Call strlen for runtime strings
                             std::string len_reg = fresh_reg();
-                            emit_line("  " + len_reg + " = call i64 @strlen(ptr " + info.value + ")");
+                            emit_line("  " + len_reg + " = call i64 @strlen(ptr " + info.value +
+                                      ")");
                             info.len = len_reg;
                             // Add to total
                             std::string new_total = fresh_reg();
-                            emit_line("  " + new_total + " = add i64 " + total_len_reg + ", " + len_reg);
+                            emit_line("  " + new_total + " = add i64 " + total_len_reg + ", " +
+                                      len_reg);
                             total_len_reg = new_total;
                         }
                     }
@@ -536,8 +541,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                 // Copy each string using memcpy
                 std::string offset = "0";
-                bool offset_is_const = true;  // Track if offset is a compile-time constant
-                size_t const_offset = 0;      // Numeric value if constant
+                bool offset_is_const = true; // Track if offset is a compile-time constant
+                size_t const_offset = 0;     // Numeric value if constant
 
                 for (size_t i = 0; i < infos.size(); ++i) {
                     const auto& info = infos[i];
@@ -547,12 +552,13 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                         dest_ptr = result_ptr;
                     } else {
                         dest_ptr = fresh_reg();
-                        emit_line("  " + dest_ptr + " = getelementptr i8, ptr " + result_ptr + ", i64 " + offset);
+                        emit_line("  " + dest_ptr + " = getelementptr i8, ptr " + result_ptr +
+                                  ", i64 " + offset);
                     }
 
                     // Copy the string (memcpy intrinsic)
-                    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr " + dest_ptr + ", ptr " + info.value +
-                              ", i64 " + info.len + ", i1 false)");
+                    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr " + dest_ptr + ", ptr " +
+                              info.value + ", i64 " + info.len + ", i1 false)");
 
                     // Update offset for next string
                     if (i < infos.size() - 1) {
@@ -572,7 +578,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                 // Null terminate
                 std::string end_ptr = fresh_reg();
-                emit_line("  " + end_ptr + " = getelementptr i8, ptr " + result_ptr + ", i64 " + total_len_reg);
+                emit_line("  " + end_ptr + " = getelementptr i8, ptr " + result_ptr + ", i64 " +
+                          total_len_reg);
                 emit_line("  store i8 0, ptr " + end_ptr);
 
                 last_expr_type_ = "ptr";

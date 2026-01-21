@@ -300,8 +300,8 @@ static ParseResult parse_tml_file(const std::string& file_path) {
     if (!pp_result.success()) {
         for (const auto& diag : pp_result.diagnostics) {
             if (diag.severity == preprocessor::DiagnosticSeverity::Error) {
-                result.errors.push_back(
-                    parser::ParseError{"Preprocessor error: " + diag.message, SourceSpan{}, {}, {}});
+                result.errors.push_back(parser::ParseError{
+                    "Preprocessor error: " + diag.message, SourceSpan{}, {}, {}});
             }
         }
         return result;
@@ -562,9 +562,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         } else if (type.is<parser::RefType>()) {
             const auto& ref = type.as<parser::RefType>();
             auto inner = resolve_simple_type(*ref.inner);
-            return std::make_shared<Type>(Type{RefType{.is_mut = ref.is_mut,
-                                                       .inner = inner,
-                                                       .lifetime = ref.lifetime}});
+            return std::make_shared<Type>(
+                Type{RefType{.is_mut = ref.is_mut, .inner = inner, .lifetime = ref.lifetime}});
         } else if (type.is<parser::FuncType>()) {
             const auto& func_type = type.as<parser::FuncType>();
             std::vector<TypePtr> param_types;
@@ -591,8 +590,15 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         } else if (type.is<parser::ArrayType>()) {
             const auto& arr = type.as<parser::ArrayType>();
             auto element = resolve_simple_type(*arr.element);
-            // Size needs const evaluation - use 0 as placeholder
-            return make_array(element, 0);
+            // Extract array size from literal expression
+            size_t arr_size = 0;
+            if (arr.size && arr.size->is<parser::LiteralExpr>()) {
+                const auto& lit = arr.size->as<parser::LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                    arr_size = static_cast<size_t>(lit.token.int_value().value);
+                }
+            }
+            return make_array(element, arr_size);
         } else if (type.is<parser::SliceType>()) {
             const auto& slice = type.as<parser::SliceType>();
             auto element = resolve_simple_type(*slice.element);
@@ -918,6 +924,14 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         mod.constants[const_decl.name] = value;
                         TML_DEBUG_LN("[MODULE] Registered module constant: "
                                      << const_decl.name << " = " << value << " in module "
+                                     << module_path);
+                    } else if (lit.token.kind == lexer::TokenKind::CharLiteral) {
+                        // Handle character literal constants (e.g., '\0', '\u{10FFFF}')
+                        std::string value =
+                            std::to_string(static_cast<uint32_t>(lit.token.char_value().value));
+                        mod.constants[const_decl.name] = value;
+                        TML_DEBUG_LN("[MODULE] Registered module constant: "
+                                     << const_decl.name << " = " << value << " (char) in module "
                                      << module_path);
                     }
                 } else if (const_decl.value && const_decl.value->is<parser::CastExpr>()) {

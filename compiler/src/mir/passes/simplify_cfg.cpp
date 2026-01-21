@@ -570,7 +570,8 @@ auto SimplifyCfgPass::cleanup_phi_nodes(Function& func) -> bool {
                 changed = true;
             } else {
                 // Check for self-referential PHIs: phi [ %x, bb1 ], [ %phi, bb2 ]
-                // If all but one incoming value is the PHI result itself, simplify to the other value
+                // If all but one incoming value is the PHI result itself, simplify to the other
+                // value
                 ValueId phi_result = block.instructions[i].result;
                 Value non_self_value;
                 int non_self_count = 0;

@@ -221,10 +221,23 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     std::string llvm_ir;
     std::set<std::string> link_libs; // FFI libraries to link
 
+    // Check if there are imported TML modules that need codegen
+    // MIR codegen doesn't support imported module functions yet, so we need to use AST codegen
+    bool has_tml_imports_needing_codegen = false;
+    if (env.module_registry()) {
+        for (const auto& [mod_name, mod] : env.module_registry()->get_all_modules()) {
+            if (mod.has_pure_tml_functions && !mod.source_code.empty()) {
+                has_tml_imports_needing_codegen = true;
+                break;
+            }
+        }
+    }
+
     // Use MIR-based codegen for all optimization levels (including O0)
     // This provides consistent behavior for features like volatile that are implemented in MIR
+    // But fall back to AST codegen when TML imports need codegen (MIR doesn't support this yet)
     int opt_level = tml::CompilerOptions::optimization_level;
-    if (true) { // Always use MIR codegen for consistent feature support
+    if (!has_tml_imports_needing_codegen) { // Use MIR when no TML imports need codegen
         // Build MIR from HIR for optimized codegen
         auto env_copy = env;
         hir::HirBuilder hir_builder(env_copy);

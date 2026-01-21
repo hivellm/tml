@@ -504,11 +504,11 @@ void LLVMIRGen::emit_runtime_decls() {
         FuncInfo{"@tml_text_reserve", "void (ptr, i64)", "void", {"ptr", "i64"}};
     functions_["text_fill_char"] =
         FuncInfo{"@tml_text_fill_char", "void (ptr, i32, i64)", "void", {"ptr", "i32", "i64"}};
-    functions_["text_push_path"] = FuncInfo{
-        "@tml_text_push_path",
-        "void (ptr, ptr, i64, i64, ptr, i64, i64, ptr, i64)",
-        "void",
-        {"ptr", "ptr", "i64", "i64", "ptr", "i64", "i64", "ptr", "i64"}};
+    functions_["text_push_path"] =
+        FuncInfo{"@tml_text_push_path",
+                 "void (ptr, ptr, i64, i64, ptr, i64, i64, ptr, i64)",
+                 "void",
+                 {"ptr", "ptr", "i64", "i64", "ptr", "i64", "i64", "ptr", "i64"}};
     functions_["text_index_of"] =
         FuncInfo{"@tml_text_index_of", "i64 (ptr, ptr)", "i64", {"ptr", "ptr"}};
     functions_["text_last_index_of"] =

@@ -1,0 +1,36 @@
+// Test struct field access
+use test
+
+type TestStats {
+    pub count: I64,
+    pub total: I64,
+}
+
+impl TestStats {
+    pub func new() -> TestStats {
+        return TestStats {
+            count: 0,
+            total: 0,
+        }
+    }
+
+    pub func utilization(this) -> F64 {
+        if this.total == 0 {
+            return 0.0
+        }
+        let c: F64 = this.count as F64
+        let t: F64 = this.total as F64
+        return (c / t) * 100.0
+    }
+}
+
+@test
+func test_stats_basic() -> I32 {
+    var stats: TestStats = TestStats::new()
+    stats.count = 50
+    stats.total = 100
+
+    let util: F64 = stats.utilization()
+    // util should be 50.0
+    return 0
+}

@@ -1,0 +1,205 @@
+//! JSON Serialization Behaviors
+//!
+//! This module provides `ToJson` and `FromJson` behaviors that allow
+//! any type to be serialized to and deserialized from JSON.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::json::{Json, ToJson, FromJson}
+//! use std::json::builder::object
+//!
+//! type Person {
+//!     name: Str,
+//!     age: I32,
+//! }
+//!
+//! impl Person with ToJson {
+//!     func to_json(this) -> Json {
+//!         let b = object()
+//!         b.ks("name", this.name)
+//!         b.kn32("age", this.age)
+//!         b.end_obj()
+//!         return Json::from_handle(json_parse_fast(b.build()))
+//!     }
+//! }
+//!
+//! impl Person with FromJson {
+//!     func from_json(json: Json) -> Outcome[Person, Str] {
+//!         if not json.is_object() {
+//!             return Err("Expected JSON object")
+//!         }
+//!
+//!         var name: Str = ""
+//!         var age: I32 = 0
+//!
+//!         when json.get_string("name") {
+//!             Just(n) => name = n,
+//!             Nothing => {}
+//!         }
+//!
+//!         when json.get_i64("age") {
+//!             Just(a) => age = a as I32,
+//!             Nothing => {}
+//!         }
+//!
+//!         return Ok(Person { name: name, age: age })
+//!     }
+//! }
+//! ```
+
+use std::json::types::Json
+
+// FFI function for creating JSON values
+@extern("tml_json_parse_fast")
+func json_parse_fast(s: Str) -> I64
+
+// ============================================================================
+// ToJson Behavior
+// ============================================================================
+
+/// Behavior for types that can be serialized to JSON.
+///
+/// Implement this behavior to enable JSON serialization for your types.
+pub behavior ToJson {
+    /// Convert this value to a Json representation
+    func to_json(this) -> Json
+}
+
+// ============================================================================
+// FromJson Behavior
+// ============================================================================
+
+/// Behavior for types that can be deserialized from JSON.
+///
+/// Implement this behavior to enable JSON deserialization for your types.
+pub behavior FromJson {
+    /// Attempt to create an instance from a Json value
+    func from_json(json: Json) -> Outcome[Self, Str]
+}
+
+// ============================================================================
+// ToJson Implementations for Primitive Types
+// ============================================================================
+
+impl ToJson for Bool {
+    func to_json(this) -> Json {
+        return Json::new_bool(this)
+    }
+}
+
+impl ToJson for I8 {
+    func to_json(this) -> Json {
+        return Json::int(this as I64)
+    }
+}
+
+impl ToJson for I16 {
+    func to_json(this) -> Json {
+        return Json::int(this as I64)
+    }
+}
+
+impl ToJson for I32 {
+    func to_json(this) -> Json {
+        return Json::int(this as I64)
+    }
+}
+
+impl ToJson for I64 {
+    func to_json(this) -> Json {
+        return Json::int(this)
+    }
+}
+
+impl ToJson for U8 {
+    func to_json(this) -> Json {
+        return Json::int(this as I64)
+    }
+}
+
+impl ToJson for U16 {
+    func to_json(this) -> Json {
+        return Json::int(this as I64)
+    }
+}
+
+impl ToJson for U32 {
+    func to_json(this) -> Json {
+        return Json::int(this as I64)
+    }
+}
+
+impl ToJson for U64 {
+    func to_json(this) -> Json {
+        // Note: Large U64 values may lose precision as JSON numbers
+        return Json::int(this as I64)
+    }
+}
+
+impl ToJson for F32 {
+    func to_json(this) -> Json {
+        return Json::float(this as F64)
+    }
+}
+
+impl ToJson for F64 {
+    func to_json(this) -> Json {
+        return Json::float(this)
+    }
+}
+
+impl ToJson for Str {
+    func to_json(this) -> Json {
+        return Json::string(this)
+    }
+}
+
+// ============================================================================
+// FromJson Implementations for Primitive Types
+// ============================================================================
+
+impl FromJson for Bool {
+    func from_json(json: Json) -> Outcome[Bool, Str] {
+        when json.as_bool() {
+            Just(b) => Ok(b),
+            Nothing => Err("Expected boolean"),
+        }
+    }
+}
+
+impl FromJson for I32 {
+    func from_json(json: Json) -> Outcome[I32, Str] {
+        when json.as_i64() {
+            Just(n) => Ok(n as I32),
+            Nothing => Err("Expected number"),
+        }
+    }
+}
+
+impl FromJson for I64 {
+    func from_json(json: Json) -> Outcome[I64, Str] {
+        when json.as_i64() {
+            Just(n) => Ok(n),
+            Nothing => Err("Expected number"),
+        }
+    }
+}
+
+impl FromJson for F64 {
+    func from_json(json: Json) -> Outcome[F64, Str] {
+        when json.as_f64() {
+            Just(n) => Ok(n),
+            Nothing => Err("Expected number"),
+        }
+    }
+}
+
+impl FromJson for Str {
+    func from_json(json: Json) -> Outcome[Str, Str] {
+        when json.as_str() {
+            Just(s) => Ok(s),
+            Nothing => Err("Expected string"),
+        }
+    }
+}

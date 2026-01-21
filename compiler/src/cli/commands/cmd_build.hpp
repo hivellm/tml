@@ -68,8 +68,8 @@ struct BuildOptions {
     std::string profile_use;       // Use profile data from file (empty = disabled)
 
     // Runtime profiling (generates .cpuprofile for Chrome DevTools)
-    bool profile = false;           // Enable runtime profiling instrumentation
-    std::string profile_output;     // Custom output path (default: profile.cpuprofile)
+    bool profile = false;       // Enable runtime profiling instrumentation
+    std::string profile_output; // Custom output path (default: profile.cpuprofile)
 };
 
 // Run options (for run command)
@@ -77,9 +77,9 @@ struct RunOptions {
     bool verbose = false;
     bool coverage = false;
     bool no_cache = false;
-    bool profile = false;           // Enable runtime profiling
-    std::string profile_output;     // Custom output path (default: profile.cpuprofile)
-    std::vector<std::string> args;  // Program arguments
+    bool profile = false;          // Enable runtime profiling
+    std::string profile_output;    // Custom output path (default: profile.cpuprofile)
+    std::vector<std::string> args; // Program arguments
 };
 
 // Build commands

@@ -216,11 +216,11 @@
           "match": "\\b(protected|private|static)\\b"
         },
         {
-          "name": "keyword.operator.logical.tml",
+          "name": "keyword.control.logical.tml",
           "match": "\\b(and|or|not)\\b"
         },
         {
-          "name": "keyword.operator.bitwise.word.tml",
+          "name": "keyword.control.bitwise.tml",
           "match": "\\b(shl|shr|xor)\\b"
         },
         {

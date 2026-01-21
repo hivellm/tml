@@ -52,7 +52,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Maybe[T] { Just(T), Nothing }
         auto maybe_decl = std::make_unique<parser::EnumDecl>();
         maybe_decl->name = "Maybe";
-        maybe_decl->generics.push_back(parser::GenericParam{"T", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
+        maybe_decl->generics.push_back(parser::GenericParam{
+            "T", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
 
         // Just(T) variant
         parser::EnumVariant just_variant;
@@ -77,8 +78,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Outcome[T, E] { Ok(T), Err(E) }
         auto outcome_decl = std::make_unique<parser::EnumDecl>();
         outcome_decl->name = "Outcome";
-        outcome_decl->generics.push_back(parser::GenericParam{"T", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
-        outcome_decl->generics.push_back(parser::GenericParam{"E", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
+        outcome_decl->generics.push_back(parser::GenericParam{
+            "T", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
+        outcome_decl->generics.push_back(parser::GenericParam{
+            "E", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
 
         // Ok(T) variant
         parser::EnumVariant ok_variant;
@@ -108,7 +111,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Poll[T] { Ready(T), Pending }
         auto poll_decl = std::make_unique<parser::EnumDecl>();
         poll_decl->name = "Poll";
-        poll_decl->generics.push_back(parser::GenericParam{"T", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
+        poll_decl->generics.push_back(parser::GenericParam{
+            "T", {}, false, false, std::nullopt, std::nullopt, std::nullopt, {}});
 
         // Ready(T) variant
         parser::EnumVariant ready_variant;
@@ -667,7 +671,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
     generic_func_output.str(output_.str());
     output_.str("");
 
-    // Now reassemble in correct order: headers + types + all functions
+    // Now reassemble in correct order: headers + types + generic funcs + non-generic funcs
     // 1. Headers
     output_ << saved_output.str();
 
@@ -679,11 +683,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
     }
     emit_line("");
 
-    // 3. Non-generic functions
-    output_ << func_output.str();
-
-    // 4. Generic functions (instantiated functions)
+    // 3. Generic functions (instantiated class constructors/methods) - MUST come before
+    //    non-generic functions that call them, to ensure correct forward reference handling
     output_ << generic_func_output.str();
+
+    // 4. Non-generic functions (including test functions that call generic class methods)
+    output_ << func_output.str();
 
     // Emit generated closure functions
     for (const auto& closure_func : module_functions_) {

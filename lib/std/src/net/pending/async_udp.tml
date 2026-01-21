@@ -176,8 +176,7 @@ impl AsyncUdpSocket {
 
     /// Sets broadcast mode.
     pub func set_broadcast(this, broadcast: Bool) -> Outcome[(), NetError] {
-        // TODO: Implement SO_BROADCAST
-        Ok(())
+        this.socket.set_broadcast(broadcast)
     }
 
     /// Returns whether connected.

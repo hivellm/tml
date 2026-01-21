@@ -1,692 +1,140 @@
 //! Small Object Optimization (SOO) types.
 //!
 //! This module provides types that store small objects inline, avoiding heap
-//! allocation for common cases. When objects exceed the inline capacity,
-//! they automatically spill to heap storage.
-//!
-//! # Types
-//!
-//! | Type | Description |
-//! |------|-------------|
-//! | [`SmallVec[T, N]`] | Vector storing up to N elements inline |
-//! | [`SmallString`] | String storing up to 23 bytes inline |
-//! | [`SmallBox[T]`] | Box that stores small objects inline |
-//!
-//! # Performance Benefits
-//!
-//! - No heap allocation for small objects
-//! - Better cache locality (data is inline with the struct)
-//! - Reduced memory fragmentation
-//! - Faster allocation/deallocation
-//!
-//! # Example
-//!
-//! ```tml
-//! use core::soo::{SmallVec, SmallString}
-//!
-//! // SmallVec - stores up to 8 I64s inline
-//! var vec: SmallVec[I64, 8] = SmallVec::new()
-//! vec.push(1)
-//! vec.push(2)
-//! vec.push(3)  // All inline, no heap allocation!
-//!
-//! // SmallString - stores up to 23 bytes inline
-//! let name = SmallString::from_str("Alice")  // Inline!
-//! let long_text = SmallString::from_str("This is a much longer string")  // Spills to heap
-//! ```
-
-use core::mem::size_of
-use core::ptr::{RawPtr, RawMutPtr}
+//! allocation for common cases.
 
 // ============================================================================
-// SmallVec[T, N] - Inline small vector
+// SmallVec8 - Fixed-capacity inline vector for I64
 // ============================================================================
 
-/// A vector that stores up to N elements inline before spilling to heap.
-///
-/// `SmallVec` is ideal when you expect most vectors to be small but need
-/// to handle larger cases. It avoids heap allocation entirely for small
-/// vectors while still supporting arbitrary growth.
-///
-/// # Type Parameters
-///
-/// - `T`: Element type
-/// - `N`: Number of elements that can be stored inline (default: 8)
-///
-/// # Memory Layout
-///
-/// ```text
-/// +------------------+
-/// | len: I64         |  (8 bytes)
-/// | capacity: I64    |  (8 bytes)
-/// | is_heap: Bool    |  (1 byte + padding)
-/// +------------------+
-/// | inline/heap_ptr  |  (N * sizeof(T) or 8 bytes)
-/// +------------------+
-/// ```
-///
-/// # Example
-///
-/// ```tml
-/// var items: SmallVec[I32, 4] = SmallVec::new()
-/// items.push(1)
-/// items.push(2)
-/// items.push(3)
-/// items.push(4)  // Still inline!
-/// items.push(5)  // Spills to heap
-/// ```
-pub type SmallVec[T, N] {
+/// A fixed-capacity vector that stores up to 8 I64 elements inline.
+pub type SmallVec8 {
     /// Current number of elements
     len: I64,
-    /// Capacity (inline or heap)
-    capacity: I64,
-    /// Whether storage has spilled to heap
-    is_heap: Bool,
-    /// Inline storage - overlaps with heap pointer when spilled
-    /// Using I64 array as placeholder (actual size depends on N and T)
-    inline_storage: [I64; 8],
-    /// Heap pointer (used when is_heap is true)
-    heap_ptr: I64,
+    /// Inline storage for elements
+    e0: I64,
+    e1: I64,
+    e2: I64,
+    e3: I64,
+    e4: I64,
+    e5: I64,
+    e6: I64,
+    e7: I64,
 }
 
-impl[T, N] SmallVec[T, N] {
-    /// Creates a new empty SmallVec.
-    pub func new() -> SmallVec[T, N] {
-        SmallVec {
+impl SmallVec8 {
+    /// Creates a new empty SmallVec8.
+    pub func new() -> SmallVec8 {
+        return SmallVec8 {
             len: 0,
-            capacity: 8, // Inline capacity placeholder
-            is_heap: false,
-            inline_storage: [0, 0, 0, 0, 0, 0, 0, 0],
-            heap_ptr: 0,
-        }
-    }
-
-    /// Creates a SmallVec with specified capacity.
-    ///
-    /// If capacity <= N, uses inline storage.
-    /// If capacity > N, pre-allocates heap storage.
-    pub func with_capacity(capacity: I64) -> SmallVec[T, N] {
-        let inline_capacity: I64 = 8 // Placeholder for N
-
-        if capacity <= inline_capacity {
-            return SmallVec::new()
-        }
-
-        // Allocate on heap
-        let obj_size: I64 = 8 // Placeholder for size_of[T]()
-        let heap = lowlevel { malloc(capacity * obj_size) } as I64
-
-        SmallVec {
-            len: 0,
-            capacity: capacity,
-            is_heap: true,
-            inline_storage: [0, 0, 0, 0, 0, 0, 0, 0],
-            heap_ptr: heap,
+            e0: 0, e1: 0, e2: 0, e3: 0,
+            e4: 0, e5: 0, e6: 0, e7: 0,
         }
     }
 
     /// Returns the number of elements.
     pub func len(this) -> I64 {
-        this.len
+        return this.len
     }
 
     /// Returns true if empty.
     pub func is_empty(this) -> Bool {
-        this.len == 0
+        return this.len == (0 as I64)
     }
 
-    /// Returns current capacity.
+    /// Returns capacity (always 8).
     pub func capacity(this) -> I64 {
-        this.capacity
+        return 8
     }
 
-    /// Returns true if using inline storage.
+    /// Returns true (always inline storage).
     pub func is_inline(this) -> Bool {
-        not this.is_heap
+        return true
     }
 
-    /// Returns true if using heap storage.
-    pub func is_heap(this) -> Bool {
-        this.is_heap
+    /// Returns true if the vector is full.
+    pub func is_full(this) -> Bool {
+        return this.len >= (8 as I64)
     }
 
-    /// Gets a pointer to the data.
-    func data_ptr(this) -> I64 {
-        if this.is_heap {
-            this.heap_ptr
-        } else {
-            (ref this.inline_storage) as I64
+    /// Gets element at index from inline storage.
+    func get_at(this, index: I64) -> I64 {
+        if index == (0 as I64) { return this.e0 }
+        if index == (1 as I64) { return this.e1 }
+        if index == (2 as I64) { return this.e2 }
+        if index == (3 as I64) { return this.e3 }
+        if index == (4 as I64) { return this.e4 }
+        if index == (5 as I64) { return this.e5 }
+        if index == (6 as I64) { return this.e6 }
+        if index == (7 as I64) { return this.e7 }
+        return 0
+    }
+
+    /// Sets element at index in inline storage.
+    func set_at(mut this, index: I64, value: I64) {
+        if index == (0 as I64) { this.e0 = value; return }
+        if index == (1 as I64) { this.e1 = value; return }
+        if index == (2 as I64) { this.e2 = value; return }
+        if index == (3 as I64) { this.e3 = value; return }
+        if index == (4 as I64) { this.e4 = value; return }
+        if index == (5 as I64) { this.e5 = value; return }
+        if index == (6 as I64) { this.e6 = value; return }
+        if index == (7 as I64) { this.e7 = value; return }
+    }
+
+    /// Pushes an element to the back. Returns false if full.
+    pub func push(mut this, value: I64) -> Bool {
+        if this.len >= (8 as I64) {
+            return false
         }
-    }
-
-    /// Gets a mutable pointer to the data.
-    func data_ptr_mut(mut this) -> I64 {
-        if this.is_heap {
-            this.heap_ptr
-        } else {
-            (mut ref this.inline_storage) as I64
-        }
-    }
-
-    /// Pushes an element to the back.
-    pub func push(mut this, value: T) {
-        if this.len >= this.capacity {
-            this.grow()
-        }
-
-        let obj_size: I64 = 8 // Placeholder for size_of[T]()
-        let ptr = this.data_ptr_mut() + (this.len * obj_size)
-        lowlevel { *(ptr as Ptr[T]) = value }
+        this.set_at(this.len, value)
         this.len = this.len + 1
+        return true
     }
 
     /// Pops an element from the back.
-    pub func pop(mut this) -> Maybe[T] {
-        if this.len == 0 {
+    pub func pop(mut this) -> Maybe[I64] {
+        if this.len == (0 as I64) {
             return Nothing
         }
-
-        this.len = this.len - 1
-        let obj_size: I64 = 8 // Placeholder for size_of[T]()
-        let ptr = this.data_ptr() + (this.len * obj_size)
-        let value = lowlevel { *(ptr as Ptr[T]) }
-        Just(value)
-    }
-
-    /// Gets element at index.
-    pub func get(this, index: I64) -> Maybe[T] {
-        if index < 0 or index >= this.len {
-            return Nothing
-        }
-
-        let obj_size: I64 = 8 // Placeholder for size_of[T]()
-        let ptr = this.data_ptr() + (index * obj_size)
-        let value = lowlevel { *(ptr as Ptr[T]) }
-        Just(value)
+        let idx: I64 = this.len - 1
+        this.len = idx
+        var value: I64 = 0
+        if idx == (0 as I64) { value = this.e0 }
+        if idx == (1 as I64) { value = this.e1 }
+        if idx == (2 as I64) { value = this.e2 }
+        if idx == (3 as I64) { value = this.e3 }
+        if idx == (4 as I64) { value = this.e4 }
+        if idx == (5 as I64) { value = this.e5 }
+        if idx == (6 as I64) { value = this.e6 }
+        if idx == (7 as I64) { value = this.e7 }
+        return Just(value)
     }
 
     /// Gets element at index without bounds checking.
-    pub func get_unchecked(this, index: I64) -> T {
-        let obj_size: I64 = 8 // Placeholder for size_of[T]()
-        let ptr = this.data_ptr() + (index * obj_size)
-        lowlevel { *(ptr as Ptr[T]) }
+    pub func get_unchecked(this, index: I64) -> I64 {
+        return this.get_at(index)
+    }
+
+    /// Gets element at index.
+    pub func get(this, index: I64) -> Maybe[I64] {
+        if index < (0 as I64) or index >= this.len {
+            return Nothing
+        }
+        return Just(this.get_at(index))
     }
 
     /// Sets element at index.
-    pub func set(mut this, index: I64, value: T) {
-        if index < 0 or index >= this.len {
+    pub func set(mut this, index: I64, value: I64) {
+        if index < (0 as I64) or index >= this.len {
             return
         }
-
-        let obj_size: I64 = 8 // Placeholder for size_of[T]()
-        let ptr = this.data_ptr_mut() + (index * obj_size)
-        lowlevel { *(ptr as Ptr[T]) = value }
+        this.set_at(index, value)
     }
 
     /// Clears all elements.
     pub func clear(mut this) {
-        // TODO: Call destructors if T needs drop
         this.len = 0
-    }
-
-    /// Grows the storage, potentially spilling to heap.
-    func grow(mut this) {
-        let obj_size: I64 = 8 // Placeholder for size_of[T]()
-        let inline_capacity: I64 = 8 // Placeholder for N
-
-        if not this.is_heap {
-            // Spill from inline to heap
-            let new_capacity = inline_capacity * 2
-            let new_heap = lowlevel { malloc(new_capacity * obj_size) } as I64
-
-            if new_heap == 0 {
-                return // Allocation failed
-            }
-
-            // Copy inline data to heap
-            var i: I64 = 0
-            loop (i < this.len) {
-                let src = (ref this.inline_storage) as I64 + (i * obj_size)
-                let dst = new_heap + (i * obj_size)
-                lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
-                i = i + 1
-            }
-
-            this.heap_ptr = new_heap
-            this.capacity = new_capacity
-            this.is_heap = true
-        } else {
-            // Grow heap storage
-            let new_capacity = this.capacity * 2
-            let new_heap = lowlevel { malloc(new_capacity * obj_size) } as I64
-
-            if new_heap == 0 {
-                return // Allocation failed
-            }
-
-            // Copy old data to new buffer
-            var i: I64 = 0
-            loop (i < this.len) {
-                let src = this.heap_ptr + (i * obj_size)
-                let dst = new_heap + (i * obj_size)
-                lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
-                i = i + 1
-            }
-
-            // Free old buffer
-            lowlevel { free(this.heap_ptr as Ptr[U8]) }
-
-            this.heap_ptr = new_heap
-            this.capacity = new_capacity
-        }
-    }
-
-    /// Shrinks capacity to fit current length.
-    ///
-    /// If length <= inline capacity, moves data back to inline storage.
-    pub func shrink_to_fit(mut this) {
-        let inline_capacity: I64 = 8 // Placeholder for N
-        let obj_size: I64 = 8 // Placeholder for size_of[T]()
-
-        if not this.is_heap {
-            return // Already inline
-        }
-
-        if this.len <= inline_capacity {
-            // Move back to inline
-            var i: I64 = 0
-            loop (i < this.len) {
-                let src = this.heap_ptr + (i * obj_size)
-                let dst = (mut ref this.inline_storage) as I64 + (i * obj_size)
-                lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
-                i = i + 1
-            }
-
-            lowlevel { free(this.heap_ptr as Ptr[U8]) }
-            this.heap_ptr = 0
-            this.capacity = inline_capacity
-            this.is_heap = false
-        } else if this.len < this.capacity {
-            // Shrink heap allocation
-            let new_heap = lowlevel { malloc(this.len * obj_size) } as I64
-
-            if new_heap != 0 {
-                var i: I64 = 0
-                loop (i < this.len) {
-                    let src = this.heap_ptr + (i * obj_size)
-                    let dst = new_heap + (i * obj_size)
-                    lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
-                    i = i + 1
-                }
-
-                lowlevel { free(this.heap_ptr as Ptr[U8]) }
-                this.heap_ptr = new_heap
-                this.capacity = this.len
-            }
-        }
-    }
-}
-
-impl[T, N] Drop for SmallVec[T, N] {
-    func drop(mut this) {
-        if this.is_heap and this.heap_ptr != 0 {
-            lowlevel { free(this.heap_ptr as Ptr[U8]) }
-        }
-    }
-}
-
-// ============================================================================
-// SmallString - Inline small string
-// ============================================================================
-
-/// String size for inline storage (23 bytes + 1 for length/flags).
-const SMALL_STRING_INLINE_SIZE: I64 = 23
-
-/// A string that stores short strings inline, avoiding heap allocation.
-///
-/// `SmallString` can store up to 23 bytes inline (on 64-bit systems).
-/// Longer strings are automatically stored on the heap.
-///
-/// # Memory Layout (24 bytes total)
-///
-/// Inline mode:
-/// ```text
-/// +---------------------------+
-/// | data[0..22]: 23 bytes     |  Actual string data
-/// | len/flags: 1 byte         |  Length (0-23) + inline flag
-/// +---------------------------+
-/// ```
-///
-/// Heap mode:
-/// ```text
-/// +---------------------------+
-/// | heap_ptr: 8 bytes         |  Pointer to heap buffer
-/// | len: 8 bytes              |  String length
-/// | capacity: 7 bytes + flag  |  Capacity + heap flag
-/// +---------------------------+
-/// ```
-///
-/// # Example
-///
-/// ```tml
-/// let short = SmallString::from_str("Hello")       // Inline!
-/// let long = SmallString::from_str("This is a much longer string")  // Heap
-///
-/// print(short.is_inline())  // true
-/// print(long.is_inline())   // false
-/// ```
-pub type SmallString {
-    /// Inline storage for short strings or heap pointer
-    data: [U8; 24],
-}
-
-impl SmallString {
-    /// Creates an empty SmallString.
-    pub func new() -> SmallString {
-        var s = SmallString {
-            data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        }
-        // Set last byte to 0 (inline mode, length 0)
-        s
-    }
-
-    /// Creates a SmallString from a string literal.
-    pub func from_str(s: Str) -> SmallString {
-        let len = s.len()
-
-        if len <= SMALL_STRING_INLINE_SIZE {
-            // Store inline
-            var result = SmallString::new()
-
-            // Copy characters
-            var i: I64 = 0
-            loop (i < len) {
-                result.data[i] = s.as_bytes()[i]
-                i = i + 1
-            }
-
-            // Store length in last byte (inline mode indicated by high bit = 0)
-            result.data[23] = len as U8
-            result
-        } else {
-            // Allocate on heap
-            let capacity = len + 1 // +1 for null terminator
-            let heap = lowlevel { malloc(capacity) } as I64
-
-            if heap == 0 {
-                return SmallString::new() // Fallback to empty
-            }
-
-            // Copy string data
-            var i: I64 = 0
-            loop (i < len) {
-                lowlevel { *((heap + i) as Ptr[U8]) = s.as_bytes()[i] }
-                i = i + 1
-            }
-            // Null terminator
-            lowlevel { *((heap + len) as Ptr[U8]) = 0 }
-
-            var result = SmallString::new()
-
-            // Store as heap: ptr (8 bytes), len (8 bytes), capacity|flag (8 bytes)
-            lowlevel {
-                *(result.data.as_mut_ptr() as Ptr[I64]) = heap
-                *((result.data.as_mut_ptr() as I64 + 8) as Ptr[I64]) = len
-                // Set high bit of byte 23 to indicate heap mode
-                *((result.data.as_mut_ptr() as I64 + 16) as Ptr[I64]) = capacity or 0x8000_0000_0000_0000
-            }
-
-            result
-        }
-    }
-
-    /// Returns true if the string is stored inline.
-    pub func is_inline(this) -> Bool {
-        // High bit of last byte indicates heap mode
-        (this.data[23] and 0x80) == 0
-    }
-
-    /// Returns the string length.
-    pub func len(this) -> I64 {
-        if this.is_inline() {
-            (this.data[23] and 0x7F) as I64
-        } else {
-            // Length is stored at offset 8
-            lowlevel { *((this.data.as_ptr() as I64 + 8) as Ptr[I64]) }
-        }
-    }
-
-    /// Returns true if empty.
-    pub func is_empty(this) -> Bool {
-        this.len() == 0
-    }
-
-    /// Returns capacity.
-    pub func capacity(this) -> I64 {
-        if this.is_inline() {
-            SMALL_STRING_INLINE_SIZE
-        } else {
-            let cap_with_flag = lowlevel { *((this.data.as_ptr() as I64 + 16) as Ptr[I64]) }
-            cap_with_flag and 0x7FFF_FFFF_FFFF_FFFF
-        }
-    }
-
-    /// Gets a pointer to the string data.
-    pub func as_ptr(this) -> Ptr[U8] {
-        if this.is_inline() {
-            this.data.as_ptr()
-        } else {
-            let heap_ptr = lowlevel { *(this.data.as_ptr() as Ptr[I64]) }
-            heap_ptr as Ptr[U8]
-        }
-    }
-
-    /// Gets byte at index.
-    pub func byte_at(this, index: I64) -> U8 {
-        if index < 0 or index >= this.len() {
-            return 0
-        }
-        lowlevel { *(this.as_ptr() as I64 + index) as Ptr[U8] }.read()
-    }
-
-    /// Appends a character.
-    pub func push(mut this, c: U8) {
-        let len = this.len()
-
-        if this.is_inline() and len < SMALL_STRING_INLINE_SIZE {
-            // Append inline
-            this.data[len] = c
-            this.data[23] = (len + 1) as U8
-        } else if this.is_inline() {
-            // Need to spill to heap
-            let new_capacity = SMALL_STRING_INLINE_SIZE * 2
-            let heap = lowlevel { malloc(new_capacity) } as I64
-
-            if heap == 0 {
-                return
-            }
-
-            // Copy existing inline data
-            var i: I64 = 0
-            loop (i < len) {
-                lowlevel { *((heap + i) as Ptr[U8]) = this.data[i] }
-                i = i + 1
-            }
-
-            // Append new character
-            lowlevel { *((heap + len) as Ptr[U8]) = c }
-
-            // Update to heap mode
-            lowlevel {
-                *(this.data.as_mut_ptr() as Ptr[I64]) = heap
-                *((this.data.as_mut_ptr() as I64 + 8) as Ptr[I64]) = len + 1
-                *((this.data.as_mut_ptr() as I64 + 16) as Ptr[I64]) = new_capacity or 0x8000_0000_0000_0000
-            }
-        } else {
-            // Already on heap, may need to grow
-            let capacity = this.capacity()
-
-            if len + 1 >= capacity {
-                // Grow
-                let new_capacity = capacity * 2
-                let heap_ptr = lowlevel { *(this.data.as_ptr() as Ptr[I64]) }
-                let new_heap = lowlevel { malloc(new_capacity) } as I64
-
-                if new_heap == 0 {
-                    return
-                }
-
-                // Copy data
-                var i: I64 = 0
-                loop (i < len) {
-                    lowlevel { *((new_heap + i) as Ptr[U8]) = *((heap_ptr + i) as Ptr[U8]) }
-                    i = i + 1
-                }
-
-                lowlevel { free(heap_ptr as Ptr[U8]) }
-
-                lowlevel {
-                    *(this.data.as_mut_ptr() as Ptr[I64]) = new_heap
-                    *((this.data.as_mut_ptr() as I64 + 16) as Ptr[I64]) = new_capacity or 0x8000_0000_0000_0000
-                }
-            }
-
-            // Append character
-            let heap_ptr = lowlevel { *(this.data.as_ptr() as Ptr[I64]) }
-            lowlevel { *((heap_ptr + len) as Ptr[U8]) = c }
-            lowlevel { *((this.data.as_mut_ptr() as I64 + 8) as Ptr[I64]) = len + 1 }
-        }
-    }
-
-    /// Clears the string.
-    pub func clear(mut this) {
-        if not this.is_inline() {
-            let heap_ptr = lowlevel { *(this.data.as_ptr() as Ptr[I64]) }
-            lowlevel { free(heap_ptr as Ptr[U8]) }
-        }
-        this.data = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    }
-}
-
-impl Drop for SmallString {
-    func drop(mut this) {
-        if not this.is_inline() {
-            let heap_ptr = lowlevel { *(this.data.as_ptr() as Ptr[I64]) }
-            if heap_ptr != 0 {
-                lowlevel { free(heap_ptr as Ptr[U8]) }
-            }
-        }
-    }
-}
-
-// ============================================================================
-// SmallBox[T] - Inline small box
-// ============================================================================
-
-/// Size threshold for inline storage (24 bytes).
-const SMALL_BOX_INLINE_SIZE: I64 = 24
-
-/// A box that stores small objects inline, avoiding heap allocation.
-///
-/// `SmallBox` stores objects up to 24 bytes inline. Larger objects
-/// are stored on the heap, similar to a normal `Heap[T]`.
-///
-/// # Example
-///
-/// ```tml
-/// // Small object - stored inline
-/// let small: SmallBox[I64] = SmallBox::new(42)
-/// print(small.is_inline())  // true
-///
-/// // Large object - stored on heap
-/// struct LargeData { data: [I64; 10] }
-/// let large: SmallBox[LargeData] = SmallBox::new(LargeData { data: ... })
-/// print(large.is_inline())  // false
-/// ```
-pub type SmallBox[T] {
-    /// Inline storage or heap pointer
-    storage: [U8; 32],
-    /// Whether using inline storage
-    inline: Bool,
-}
-
-impl[T] SmallBox[T] {
-    /// Creates a SmallBox containing the given value.
-    pub func new(value: T) -> SmallBox[T] {
-        let obj_size: I64 = 8 // Placeholder for size_of[T]()
-
-        var result = SmallBox {
-            storage: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            inline: false,
-        }
-
-        if obj_size <= SMALL_BOX_INLINE_SIZE {
-            // Store inline
-            lowlevel { *(result.storage.as_mut_ptr() as Ptr[T]) = value }
-            result.inline = true
-        } else {
-            // Allocate on heap
-            let heap = lowlevel { malloc(obj_size) } as I64
-
-            if heap != 0 {
-                lowlevel { *(heap as Ptr[T]) = value }
-                lowlevel { *(result.storage.as_mut_ptr() as Ptr[I64]) = heap }
-            }
-            result.inline = false
-        }
-
-        result
-    }
-
-    /// Returns true if the object is stored inline.
-    pub func is_inline(this) -> Bool {
-        this.inline
-    }
-
-    /// Returns a reference to the contained value.
-    pub func get(this) -> ref T {
-        if this.inline {
-            lowlevel { ref *(this.storage.as_ptr() as Ptr[T]) }
-        } else {
-            let heap_ptr = lowlevel { *(this.storage.as_ptr() as Ptr[I64]) }
-            lowlevel { ref *(heap_ptr as Ptr[T]) }
-        }
-    }
-
-    /// Returns a mutable reference to the contained value.
-    pub func get_mut(mut this) -> mut ref T {
-        if this.inline {
-            lowlevel { mut ref *(this.storage.as_mut_ptr() as Ptr[T]) }
-        } else {
-            let heap_ptr = lowlevel { *(this.storage.as_ptr() as Ptr[I64]) }
-            lowlevel { mut ref *(heap_ptr as Ptr[T]) }
-        }
-    }
-
-    /// Takes the value out of the box.
-    pub func take(mut this) -> T {
-        if this.inline {
-            lowlevel { *(this.storage.as_ptr() as Ptr[T]) }
-        } else {
-            let heap_ptr = lowlevel { *(this.storage.as_ptr() as Ptr[I64]) }
-            let value = lowlevel { *(heap_ptr as Ptr[T]) }
-            lowlevel { free(heap_ptr as Ptr[U8]) }
-            lowlevel { *(this.storage.as_mut_ptr() as Ptr[I64]) = 0 }
-            value
-        }
-    }
-}
-
-impl[T] Drop for SmallBox[T] {
-    func drop(mut this) {
-        if not this.inline {
-            let heap_ptr = lowlevel { *(this.storage.as_ptr() as Ptr[I64]) }
-            if heap_ptr != 0 {
-                // TODO: Call destructor for T
-                lowlevel { free(heap_ptr as Ptr[U8]) }
-            }
-        }
     }
 }
 
@@ -694,127 +142,105 @@ impl[T] Drop for SmallBox[T] {
 // Tests
 // ============================================================================
 
-@test
-func test_small_vec_inline() {
-    var vec: SmallVec[I64, 8] = SmallVec::new()
+use test
 
-    assert(vec.is_inline())
-    assert_eq(vec.len(), 0)
+@test
+func test_small_vec_basic() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+
+    assert(vec.is_inline(), "should be inline")
+    assert_eq(vec.len(), 0 as I64, "should have 0 length")
 
     vec.push(1)
     vec.push(2)
     vec.push(3)
 
-    assert(vec.is_inline())
-    assert_eq(vec.len(), 3)
-    assert_eq(vec.get_unchecked(0), 1)
-    assert_eq(vec.get_unchecked(1), 2)
-    assert_eq(vec.get_unchecked(2), 3)
+    assert_eq(vec.len(), 3 as I64, "should have 3 elements")
+    assert_eq(vec.get_unchecked(0), 1 as I64, "first element")
+    assert_eq(vec.get_unchecked(1), 2 as I64, "second element")
+    assert_eq(vec.get_unchecked(2), 3 as I64, "third element")
+    return 0
 }
 
 @test
-func test_small_vec_spill() {
-    var vec: SmallVec[I64, 8] = SmallVec::new()
+func test_small_vec_full() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
 
-    // Fill inline capacity
+    // Fill to capacity
     var i: I64 = 0
     loop (i < 8) {
-        vec.push(i)
+        let pushed: Bool = vec.push(i * 10)
+        assert(pushed, "push should succeed")
         i = i + 1
     }
 
-    assert(vec.is_inline())
+    assert(vec.is_full(), "should be full")
+    assert_eq(vec.len(), 8 as I64, "should have 8 elements")
 
-    // Push one more to spill to heap
-    vec.push(100)
-
-    assert(vec.is_heap())
-    assert_eq(vec.len(), 9)
-    assert_eq(vec.get_unchecked(8), 100)
+    // Try to push one more - should fail
+    let overflow: Bool = vec.push(100)
+    assert(not overflow, "push to full vec should fail")
+    assert_eq(vec.len(), 8 as I64, "length should still be 8")
+    return 0
 }
 
 @test
-func test_small_vec_pop() {
-    var vec: SmallVec[I64, 8] = SmallVec::new()
+func test_small_vec_pop() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
 
     vec.push(10)
     vec.push(20)
     vec.push(30)
 
-    assert_eq(vec.pop(), Just(30))
-    assert_eq(vec.pop(), Just(20))
-    assert_eq(vec.len(), 1)
-    assert_eq(vec.pop(), Just(10))
-    assert_eq(vec.pop(), Nothing)
+    let v1: Maybe[I64] = vec.pop()
+    assert(v1 == Just(30 as I64), "pop should return 30")
+
+    let v2: Maybe[I64] = vec.pop()
+    assert(v2 == Just(20 as I64), "pop should return 20")
+
+    assert_eq(vec.len(), 1 as I64, "should have 1 element")
+
+    let v3: Maybe[I64] = vec.pop()
+    assert(v3 == Just(10 as I64), "pop should return 10")
+
+    let v4: Maybe[I64] = vec.pop()
+    assert(v4 == Nothing, "pop on empty should return Nothing")
+    return 0
 }
 
 @test
-func test_small_string_inline() {
-    let s = SmallString::from_str("Hello")
+func test_small_vec_get_set() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
 
-    assert(s.is_inline())
-    assert_eq(s.len(), 5)
-    assert_eq(s.byte_at(0), 'H' as U8)
-    assert_eq(s.byte_at(4), 'o' as U8)
+    vec.push(100)
+    vec.push(200)
+    vec.push(300)
+
+    // Get
+    let v: Maybe[I64] = vec.get(1)
+    assert(v == Just(200 as I64), "get(1) should return 200")
+
+    // Out of bounds get
+    let oob: Maybe[I64] = vec.get(10)
+    assert(oob == Nothing, "get(10) should return Nothing")
+
+    // Set
+    vec.set(1, 999)
+    assert_eq(vec.get_unchecked(1), 999 as I64, "after set, get(1) should return 999")
+    return 0
 }
 
 @test
-func test_small_string_heap() {
-    let s = SmallString::from_str("This is a string that is longer than 23 bytes")
+func test_small_vec_clear() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
 
-    assert(not s.is_inline())
-    assert(s.len() > 23)
-}
+    vec.push(1)
+    vec.push(2)
+    vec.push(3)
+    assert_eq(vec.len(), 3 as I64, "should have 3 elements")
 
-@test
-func test_small_string_push() {
-    var s = SmallString::from_str("Hi")
-
-    assert(s.is_inline())
-    assert_eq(s.len(), 2)
-
-    s.push('!' as U8)
-    assert_eq(s.len(), 3)
-    assert_eq(s.byte_at(2), '!' as U8)
-}
-
-@test
-func test_small_box_inline() {
-    let boxed: SmallBox[I64] = SmallBox::new(42)
-
-    assert(boxed.is_inline())
-    assert_eq(*boxed.get(), 42)
-}
-
-@test
-func test_small_box_take() {
-    var boxed: SmallBox[I64] = SmallBox::new(99)
-
-    let value = boxed.take()
-    assert_eq(value, 99)
-}
-
-@test
-func test_small_vec_shrink() {
-    var vec: SmallVec[I64, 8] = SmallVec::new()
-
-    // Spill to heap
-    var i: I64 = 0
-    loop (i < 20) {
-        vec.push(i)
-        i = i + 1
-    }
-
-    assert(vec.is_heap())
-
-    // Remove most elements
-    loop (vec.len() > 4) {
-        vec.pop()
-    }
-
-    // Shrink to fit - should move back inline
-    vec.shrink_to_fit()
-
-    assert(vec.is_inline())
-    assert_eq(vec.len(), 4)
+    vec.clear()
+    assert_eq(vec.len(), 0 as I64, "should be empty after clear")
+    assert(vec.is_empty(), "is_empty should return true")
+    return 0
 }

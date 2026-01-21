@@ -377,6 +377,9 @@ auto LoopUnrollPass::fully_unroll(Function& func, const LoopInfo& loop) -> bool 
     std::vector<BasicBlock> new_blocks;
     uint32_t first_unrolled_block = next_block_id;
 
+    // Track the mapped header ID for each iteration (used for connecting iterations)
+    std::vector<uint32_t> iteration_header_ids;
+
     for (int64_t iter = 0; iter < trip_count; ++iter) {
         int64_t iter_value = loop.start_value + iter * loop.step;
 
@@ -397,6 +400,9 @@ auto LoopUnrollPass::fully_unroll(Function& func, const LoopInfo& loop) -> bool 
         block_map[loop.header_id] = next_block_id++;
         block_map[loop.latch_id] =
             block_map.count(loop.latch_id) > 0 ? block_map[loop.latch_id] : next_block_id++;
+
+        // Track the mapped header for this iteration (for connecting iterations later)
+        iteration_header_ids.push_back(block_map[loop.header_id]);
 
         // Create block for iteration constant
         BasicBlock const_block;
@@ -516,18 +522,50 @@ auto LoopUnrollPass::fully_unroll(Function& func, const LoopInfo& loop) -> bool 
         }
     }
 
-    // Connect iterations: last block of iteration N jumps to first block of iteration N+1
-    // Last iteration jumps to exit block
-    for (size_t i = 0; i < new_blocks.size(); ++i) {
-        auto& block = new_blocks[i];
-        if (block.terminator) {
-            std::visit(
-                []([[maybe_unused]] auto& term) {
-                    // TODO: Connect iterations - last block of iteration N
-                    // should jump to first block of iteration N+1
-                    // Last iteration jumps to exit block
-                },
-                *block.terminator);
+    // Connect iterations: back edges (branches to this iteration's header) should go to next
+    // iteration For each iteration, find branches to the mapped header and redirect them
+    for (size_t iter = 0; iter < static_cast<size_t>(trip_count); ++iter) {
+        uint32_t this_iter_header = iteration_header_ids[iter];
+
+        // Target for back edges: next iteration's const_block, or exit for last iteration
+        // The const_block for iteration N is at index N * blocks_per_iter
+        size_t blocks_per_iter = 1 + body_block_ids.size();
+        uint32_t next_target;
+        if (iter + 1 < static_cast<size_t>(trip_count)) {
+            // Next iteration's const_block
+            size_t next_iter_start = (iter + 1) * blocks_per_iter;
+            next_target = new_blocks[next_iter_start].id;
+        } else {
+            // Last iteration - exit the loop
+            next_target = exit_block_id;
+        }
+
+        // Scan all blocks in this iteration and redirect back edges
+        size_t iter_start = iter * blocks_per_iter;
+        size_t iter_end = iter_start + blocks_per_iter;
+        for (size_t i = iter_start; i < iter_end && i < new_blocks.size(); ++i) {
+            auto& block = new_blocks[i];
+            if (block.terminator) {
+                std::visit(
+                    [this_iter_header, next_target](auto& term) {
+                        using T = std::decay_t<decltype(term)>;
+                        if constexpr (std::is_same_v<T, BranchTerm>) {
+                            // Redirect unconditional branches to header -> next iteration
+                            if (term.target == this_iter_header) {
+                                term.target = next_target;
+                            }
+                        } else if constexpr (std::is_same_v<T, CondBranchTerm>) {
+                            // Redirect conditional branches targeting header
+                            if (term.true_block == this_iter_header) {
+                                term.true_block = next_target;
+                            }
+                            if (term.false_block == this_iter_header) {
+                                term.false_block = next_target;
+                            }
+                        }
+                    },
+                    *block.terminator);
+            }
         }
     }
 

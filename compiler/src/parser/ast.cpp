@@ -71,8 +71,8 @@ auto make_named_type(std::string name, SourceSpan span) -> TypePtr {
              .span = span});
 }
 
-auto make_ref_type(bool is_mut, TypePtr inner, SourceSpan span,
-                   std::optional<std::string> lifetime) -> TypePtr {
+auto make_ref_type(bool is_mut, TypePtr inner, SourceSpan span, std::optional<std::string> lifetime)
+    -> TypePtr {
     return make_box<Type>(Type{.kind = RefType{.is_mut = is_mut,
                                                .inner = std::move(inner),
                                                .lifetime = std::move(lifetime),

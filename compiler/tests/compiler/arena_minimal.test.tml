@@ -1,0 +1,54 @@
+// Minimal arena test - testing I64 pointer operations
+use test
+
+@test
+func test_i64_ptr_via_i32() -> I32 {
+    // Use two I32 pointers to simulate I64 read/write
+    let mut lo: I32 = 0
+    let mut hi: I32 = 0
+
+    lowlevel {
+        let plo: *I32 = &lo
+        let phi: *I32 = &hi
+        plo.write(42)
+        phi.write(0)
+    }
+
+    assert_eq(lo, 42, "low should be 42")
+    return 0
+}
+
+@test
+func test_mem_alloc_basic() -> I32 {
+    let ptr: *Unit = mem_alloc(64)
+    mem_free(ptr)
+    return 0
+}
+
+@test
+func test_simple_bump_alloc() -> I32 {
+    // Allocate a buffer
+    let buffer: *Unit = mem_alloc(256)
+    let buffer_i64: I64 = buffer as I64
+
+    if buffer_i64 == 0 {
+        return 1 // Allocation failed
+    }
+
+    // Simple bump position
+    var pos: I64 = 0
+
+    // "Allocate" 64 bytes
+    let ptr1: I64 = buffer_i64 + pos
+    pos = pos + 64
+
+    // "Allocate" 32 bytes
+    let ptr2: I64 = buffer_i64 + pos
+    pos = pos + 32
+
+    assert(ptr2 > ptr1, "ptr2 should be after ptr1")
+    assert(pos == 96, "pos should be 96")
+
+    mem_free(buffer)
+    return 0
+}

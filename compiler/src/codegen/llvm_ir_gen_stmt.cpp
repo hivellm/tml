@@ -564,6 +564,18 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
     // For pointer variables, allocate space and store the pointer value
     if (is_ptr && let.init.has_value()) {
+        // Set expected type for generic class constructors BEFORE evaluating initializer
+        if (let.type_annotation) {
+            auto sem_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+            if (sem_type && sem_type->is<types::ClassType>()) {
+                const auto& class_type = sem_type->as<types::ClassType>();
+                if (!class_type.type_args.empty()) {
+                    // This is a generic class like Box[I32]
+                    std::string mangled = mangle_struct_name(class_type.name, class_type.type_args);
+                    expected_enum_type_ = "%class." + mangled;
+                }
+            }
+        }
         std::string ptr_val = gen_expr(*let.init.value());
         std::string expr_type = last_expr_type_;
 

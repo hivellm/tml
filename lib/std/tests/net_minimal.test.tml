@@ -1,6 +1,6 @@
 //! Minimal Network Tests - Just IP addresses
 use test::{assert, assert_eq}
-use std::net::{Ipv4Addr}
+use std::net::{Ipv4Addr, IpAddr}
 
 @test
 func test_ipv4_localhost() {

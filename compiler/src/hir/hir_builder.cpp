@@ -1073,7 +1073,8 @@ void collect_free_vars(const parser::Expr& expr, const std::set<std::string>& bo
                     if (stmt->template is<parser::LetStmt>()) {
                         const auto& let = stmt->template as<parser::LetStmt>();
                         if (let.pattern->template is<parser::IdentPattern>()) {
-                            block_vars.insert(let.pattern->template as<parser::IdentPattern>().name);
+                            block_vars.insert(
+                                let.pattern->template as<parser::IdentPattern>().name);
                         }
                         if (let.init) {
                             collect_free_vars(**let.init, block_vars, free_vars);
@@ -1153,7 +1154,8 @@ auto HirBuilder::collect_captures(const parser::ClosureExpr& closure) -> std::ve
                     type = type_env_.resolve(v->type);
                 }
             }
-            captures.push_back(HirCapture{var, type, false, false}); // Assume immutable, by-ref for now
+            captures.push_back(
+                HirCapture{var, type, false, false}); // Assume immutable, by-ref for now
         }
     }
 

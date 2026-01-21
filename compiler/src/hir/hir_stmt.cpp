@@ -60,7 +60,8 @@ auto HirStmt::span() const -> SourceSpan {
 auto make_hir_let(HirId id, HirPatternPtr pattern, HirType type, std::optional<HirExprPtr> init,
                   SourceSpan span, bool is_volatile) -> HirStmtPtr {
     auto stmt = std::make_unique<HirStmt>();
-    stmt->kind = HirLetStmt{id, std::move(pattern), std::move(type), std::move(init), span, is_volatile};
+    stmt->kind =
+        HirLetStmt{id, std::move(pattern), std::move(type), std::move(init), span, is_volatile};
     return stmt;
 }
 

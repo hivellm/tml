@@ -531,9 +531,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                             }
 
                             auto ref_t = std::make_shared<types::Type>();
-                            ref_t->kind = types::RefType{.is_mut = is_mut,
-                                                         .inner = inner_type,
-                                                         .lifetime = std::nullopt};
+                            ref_t->kind = types::RefType{
+                                .is_mut = is_mut, .inner = inner_type, .lifetime = std::nullopt};
                             arg_type = ref_t;
                         } else if (arg.starts_with("dyn_")) {
                             // Dynamic trait type: dyn_Error -> DynBehaviorType
@@ -932,16 +931,16 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             // borrow returns ref T (Borrow behavior)
             if (call.method == "borrow") {
                 auto ref_type = std::make_shared<types::Type>();
-                ref_type->kind =
-                    types::RefType{.is_mut = false, .inner = receiver_type, .lifetime = std::nullopt};
+                ref_type->kind = types::RefType{
+                    .is_mut = false, .inner = receiver_type, .lifetime = std::nullopt};
                 return ref_type;
             }
 
             // borrow_mut returns mut ref T (BorrowMut behavior)
             if (call.method == "borrow_mut") {
                 auto ref_type = std::make_shared<types::Type>();
-                ref_type->kind =
-                    types::RefType{.is_mut = true, .inner = receiver_type, .lifetime = std::nullopt};
+                ref_type->kind = types::RefType{
+                    .is_mut = true, .inner = receiver_type, .lifetime = std::nullopt};
                 return ref_type;
             }
         }

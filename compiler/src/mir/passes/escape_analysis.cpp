@@ -131,8 +131,8 @@ auto EscapeAnalysisPass::run_on_function(Function& func) -> bool {
     for (const auto& block : func.blocks) {
         for (const auto& inst : block.instructions) {
             if (inst.result != INVALID_VALUE) {
-                escape_info_[inst.result] =
-                    EscapeInfo{EscapeState::NoEscape, false, false, false, false, "", false, false, {}};
+                escape_info_[inst.result] = EscapeInfo{
+                    EscapeState::NoEscape, false, false, false, false, "", false, false, {}};
             }
         }
     }

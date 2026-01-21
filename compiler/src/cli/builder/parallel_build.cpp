@@ -43,6 +43,7 @@
 #include "cli/commands/cmd_build.hpp"
 #include "cli/utils.hpp"
 #include "codegen/llvm_ir_gen.hpp"
+#include "codegen/mir_codegen.hpp"
 #include "common.hpp"
 #include "hir/hir.hpp"
 #include "hir/hir_builder.hpp"
@@ -631,39 +632,46 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
             return false;
         }
 
-        // Optional HIR pipeline: AST → HIR → MIR
+        // Code generation: either MIR-based (if use_hir) or AST-based
+        std::string llvm_ir;
+
         if (options.use_hir) {
+            // MIR pipeline: AST → HIR → MIR → LLVM IR
             auto env_copy = env;
             hir::HirBuilder hir_builder(env_copy);
             auto hir_module = hir_builder.lower_module(module);
 
             mir::HirMirBuilder hir_mir_builder(env);
             auto mir_module = hir_mir_builder.build(hir_module);
-            // TODO: Use MIR for code generation when MIR→LLVM backend is ready
-            // For now, HIR is just validated but codegen still uses AST
-        }
 
-        // Code generation (from AST for now, MIR backend planned)
-        codegen::LLVMGenOptions gen_options;
-        gen_options.emit_comments = verbose;
-        codegen::LLVMIRGen llvm_gen(env, gen_options);
+            // Use MIR codegen for LLVM IR generation
+            codegen::MirCodegenOptions mir_options;
+            mir_options.emit_comments = verbose;
+            codegen::MirCodegen mir_codegen(mir_options);
+            llvm_ir = mir_codegen.generate(mir_module);
+        } else {
+            // AST pipeline: AST → LLVM IR (traditional path)
+            codegen::LLVMGenOptions gen_options;
+            gen_options.emit_comments = verbose;
+            codegen::LLVMIRGen llvm_gen(env, gen_options);
 
-        auto gen_result = llvm_gen.generate(module);
-        if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
-            std::ostringstream err;
-            const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
-            for (const auto& error : errors) {
-                err << job->source_file.string() << ":" << error.span.start.line << ":"
-                    << error.span.start.column << ": codegen error: " << error.message << "\n";
+            auto gen_result = llvm_gen.generate(module);
+            if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
+                std::ostringstream err;
+                const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
+                for (const auto& error : errors) {
+                    err << job->source_file.string() << ":" << error.span.start.line << ":"
+                        << error.span.start.column << ": codegen error: " << error.message << "\n";
+                }
+                job->error_message = err.str();
+                if (verbose) {
+                    std::cerr << job->error_message;
+                }
+                return false;
             }
-            job->error_message = err.str();
-            if (verbose) {
-                std::cerr << job->error_message;
-            }
-            return false;
-        }
 
-        const auto& llvm_ir = std::get<std::string>(gen_result);
+            llvm_ir = std::get<std::string>(gen_result);
+        }
 
         // Write LLVM IR to temporary file with unique thread ID suffix to avoid race conditions
         std::ostringstream tid_suffix;

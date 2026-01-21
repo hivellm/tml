@@ -870,7 +870,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                     // Look up the constructor in functions_ map to get mangled name and return type
                     std::string ctor_name;
-                    std::string ctor_ret_type = class_type + "*"; // Default: pointer return
+                    std::string ctor_ret_type = "ptr"; // Default: pointer return (opaque ptr)
                     auto func_it = functions_.find(ctor_key);
                     if (func_it != functions_.end()) {
                         ctor_name = func_it->second.llvm_name;
@@ -887,8 +887,34 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                 ctor_ret_type = default_it->second.ret_type;
                             }
                         } else {
-                            // Last resort: generate basic name
+                            // Last resort: generate name with parameter type suffixes
+                            // (must match gen_class_constructor_instantiation naming)
                             ctor_name = "@tml_" + get_suite_prefix() + class_name + "_new";
+                            if (!arg_types.empty()) {
+                                for (const auto& at : arg_types) {
+                                    std::string type_suffix = at;
+                                    if (type_suffix == "i8")
+                                        type_suffix = "I8";
+                                    else if (type_suffix == "i16")
+                                        type_suffix = "I16";
+                                    else if (type_suffix == "i32")
+                                        type_suffix = "I32";
+                                    else if (type_suffix == "i64")
+                                        type_suffix = "I64";
+                                    else if (type_suffix == "i128")
+                                        type_suffix = "I128";
+                                    else if (type_suffix == "float")
+                                        type_suffix = "F32";
+                                    else if (type_suffix == "double")
+                                        type_suffix = "F64";
+                                    else if (type_suffix == "i1")
+                                        type_suffix = "Bool";
+                                    else if (type_suffix.find("ptr") != std::string::npos ||
+                                             type_suffix.find("%") != std::string::npos)
+                                        type_suffix = "ptr";
+                                    ctor_name += "_" + type_suffix;
+                                }
+                            }
                         }
                     }
 
@@ -1333,7 +1359,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         emit_line("  %flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i32 24");
         emit_line("  %flags." + id + " = load i8, ptr %flags_ptr." + id);
         emit_line("  %is_heap." + id + " = icmp eq i8 %flags." + id + ", 0");
-        emit_line("  br i1 %is_heap." + id + ", label %push_heap." + id + ", label %push_slow." + id);
+        emit_line("  br i1 %is_heap." + id + ", label %push_heap." + id + ", label %push_slow." +
+                  id);
 
         // Heap fast path
         emit_line("push_heap." + id + ":");
@@ -1350,8 +1377,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         // Fast store path
         emit_line("push_fast." + id + ":");
         emit_line("  %byte_i8." + id + " = trunc i32 " + byte_val + " to i8");
-        emit_line("  %store_ptr." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
-                  id);
+        emit_line("  %store_ptr." + id + " = getelementptr i8, ptr %data_ptr." + id +
+                  ", i64 %len." + id);
         emit_line("  store i8 %byte_i8." + id + ", ptr %store_ptr." + id);
         emit_line("  %new_len." + id + " = add i64 %len." + id + ", 1");
         emit_line("  store i64 %new_len." + id + ", ptr %len_ptr." + id);
@@ -1370,9 +1397,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // V8-style inline optimization for text_push_str_len
     // This is the hot path for all string building operations
     if (mangled == "@tml_text_push_str_len" && arg_vals.size() == 3) {
-        std::string receiver = arg_vals[0].first;  // ptr to Text
-        std::string str_ptr = arg_vals[1].first;   // ptr to string data
-        std::string str_len = arg_vals[2].first;   // i64 length
+        std::string receiver = arg_vals[0].first; // ptr to Text
+        std::string str_ptr = arg_vals[1].first;  // ptr to string data
+        std::string str_len = arg_vals[2].first;  // i64 length
 
         std::string id = std::to_string(temp_counter_++);
 
@@ -1380,8 +1407,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         emit_line("  %psl_flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i32 24");
         emit_line("  %psl_flags." + id + " = load i8, ptr %psl_flags_ptr." + id);
         emit_line("  %psl_is_heap." + id + " = icmp eq i8 %psl_flags." + id + ", 0");
-        emit_line(
-            "  br i1 %psl_is_heap." + id + ", label %psl_heap." + id + ", label %psl_slow." + id);
+        emit_line("  br i1 %psl_is_heap." + id + ", label %psl_heap." + id + ", label %psl_slow." +
+                  id);
 
         // Heap mode - check capacity
         emit_line("psl_heap." + id + ":");
@@ -1390,9 +1417,10 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         emit_line("  %psl_cap_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i32 16");
         emit_line("  %psl_cap." + id + " = load i64, ptr %psl_cap_ptr." + id);
         emit_line("  %psl_new_len." + id + " = add i64 %psl_len." + id + ", " + str_len);
-        emit_line("  %psl_has_space." + id + " = icmp ule i64 %psl_new_len." + id + ", %psl_cap." + id);
-        emit_line(
-            "  br i1 %psl_has_space." + id + ", label %psl_fast." + id + ", label %psl_slow." + id);
+        emit_line("  %psl_has_space." + id + " = icmp ule i64 %psl_new_len." + id + ", %psl_cap." +
+                  id);
+        emit_line("  br i1 %psl_has_space." + id + ", label %psl_fast." + id +
+                  ", label %psl_slow." + id);
 
         // Fast path - direct memcpy
         emit_line("psl_fast." + id + ":");
@@ -1424,12 +1452,12 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // V8-style inline optimization for text_push_formatted
     // Combines prefix + int + suffix in one optimized sequence
     if (mangled == "@tml_text_push_formatted" && arg_vals.size() == 6) {
-        std::string receiver = arg_vals[0].first;     // ptr to Text
-        std::string prefix = arg_vals[1].first;       // ptr to prefix string
-        std::string prefix_len = arg_vals[2].first;   // i64 prefix length
-        std::string int_val = arg_vals[3].first;      // i64 integer value
-        std::string suffix = arg_vals[4].first;       // ptr to suffix string
-        std::string suffix_len = arg_vals[5].first;   // i64 suffix length
+        std::string receiver = arg_vals[0].first;   // ptr to Text
+        std::string prefix = arg_vals[1].first;     // ptr to prefix string
+        std::string prefix_len = arg_vals[2].first; // i64 prefix length
+        std::string int_val = arg_vals[3].first;    // i64 integer value
+        std::string suffix = arg_vals[4].first;     // ptr to suffix string
+        std::string suffix_len = arg_vals[5].first; // i64 suffix length
 
         std::string id = std::to_string(temp_counter_++);
 
@@ -1437,8 +1465,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         emit_line("  %pf_flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i32 24");
         emit_line("  %pf_flags." + id + " = load i8, ptr %pf_flags_ptr." + id);
         emit_line("  %pf_is_heap." + id + " = icmp eq i8 %pf_flags." + id + ", 0");
-        emit_line(
-            "  br i1 %pf_is_heap." + id + ", label %pf_heap." + id + ", label %pf_slow." + id);
+        emit_line("  br i1 %pf_is_heap." + id + ", label %pf_heap." + id + ", label %pf_slow." +
+                  id);
 
         // Heap mode - check capacity (need prefix_len + 21 + suffix_len)
         emit_line("pf_heap." + id + ":");
@@ -1450,9 +1478,10 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         emit_line("  %pf_need1." + id + " = add i64 " + prefix_len + ", 21");
         emit_line("  %pf_need2." + id + " = add i64 %pf_need1." + id + ", " + suffix_len);
         emit_line("  %pf_new_max." + id + " = add i64 %pf_len." + id + ", %pf_need2." + id);
-        emit_line("  %pf_has_space." + id + " = icmp ule i64 %pf_new_max." + id + ", %pf_cap." + id);
-        emit_line(
-            "  br i1 %pf_has_space." + id + ", label %pf_fast." + id + ", label %pf_slow." + id);
+        emit_line("  %pf_has_space." + id + " = icmp ule i64 %pf_new_max." + id + ", %pf_cap." +
+                  id);
+        emit_line("  br i1 %pf_has_space." + id + ", label %pf_fast." + id + ", label %pf_slow." +
+                  id);
 
         // Fast path - inline prefix, call push_i64_unsafe, inline suffix
         emit_line("pf_fast." + id + ":");
@@ -1522,8 +1551,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         emit_line("  %pl_flags_ptr." + id + " = getelementptr i8, ptr " + receiver + ", i32 24");
         emit_line("  %pl_flags." + id + " = load i8, ptr %pl_flags_ptr." + id);
         emit_line("  %pl_is_heap." + id + " = icmp eq i8 %pl_flags." + id + ", 0");
-        emit_line(
-            "  br i1 %pl_is_heap." + id + ", label %pl_heap." + id + ", label %pl_slow." + id);
+        emit_line("  br i1 %pl_is_heap." + id + ", label %pl_heap." + id + ", label %pl_slow." +
+                  id);
 
         // Check capacity
         emit_line("pl_heap." + id + ":");
@@ -1537,17 +1566,18 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         emit_line("  %pl_str_total3." + id + " = add i64 %pl_str_total2." + id + ", " + s4_len);
         emit_line("  %pl_need." + id + " = add i64 %pl_str_total3." + id + ", 63");
         emit_line("  %pl_new_max." + id + " = add i64 %pl_len." + id + ", %pl_need." + id);
-        emit_line("  %pl_has_space." + id + " = icmp ule i64 %pl_new_max." + id + ", %pl_cap." + id);
-        emit_line(
-            "  br i1 %pl_has_space." + id + ", label %pl_fast." + id + ", label %pl_slow." + id);
+        emit_line("  %pl_has_space." + id + " = icmp ule i64 %pl_new_max." + id + ", %pl_cap." +
+                  id);
+        emit_line("  br i1 %pl_has_space." + id + ", label %pl_fast." + id + ", label %pl_slow." +
+                  id);
 
         // Fast path
         emit_line("pl_fast." + id + ":");
         emit_line("  %pl_data." + id + " = load ptr, ptr " + receiver);
 
         // s1
-        emit_line("  %pl_dst1." + id + " = getelementptr i8, ptr %pl_data." + id + ", i64 %pl_len." +
-                  id);
+        emit_line("  %pl_dst1." + id + " = getelementptr i8, ptr %pl_data." + id +
+                  ", i64 %pl_len." + id);
         emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr %pl_dst1." + id + ", ptr " + s1 +
                   ", i64 " + s1_len + ", i1 false)");
         emit_line("  %pl_len1." + id + " = add i64 %pl_len." + id + ", " + s1_len);

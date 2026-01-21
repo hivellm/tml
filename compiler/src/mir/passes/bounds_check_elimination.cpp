@@ -194,14 +194,17 @@ void BoundsCheckEliminationPass::detect_loops(const Function& func) {
                     // Try to find the loop bound by analyzing conditional branches
                     // Look for pattern: if (iv >= N) break; or if (iv < N) continue;
                     for (uint32_t loop_block : loop_info.loop_blocks) {
-                        if (loop_block >= func.blocks.size()) continue;
+                        if (loop_block >= func.blocks.size())
+                            continue;
                         const auto& lb = func.blocks[loop_block];
-                        if (!lb.terminator) continue;
+                        if (!lb.terminator)
+                            continue;
 
                         if (auto* cond_br = std::get_if<CondBranchTerm>(&*lb.terminator)) {
                             // Find the comparison that produces the condition
                             auto cond_it = value_to_inst.find(cond_br->condition.id);
-                            if (cond_it == value_to_inst.end()) continue;
+                            if (cond_it == value_to_inst.end())
+                                continue;
 
                             if (auto* cmp = std::get_if<BinaryInst>(&cond_it->second->inst)) {
                                 // Check for comparison operators
@@ -216,7 +219,8 @@ void BoundsCheckEliminationPass::detect_loops(const Function& func) {
                                     bool iv_on_right = (cmp->right.id == inst.result);
 
                                     if (iv_on_left || iv_on_right) {
-                                        ValueId bound_id = iv_on_left ? cmp->right.id : cmp->left.id;
+                                        ValueId bound_id =
+                                            iv_on_left ? cmp->right.id : cmp->left.id;
                                         auto bound_range = get_range(bound_id);
 
                                         // Also check array_sizes_ for bounds
@@ -234,11 +238,14 @@ void BoundsCheckEliminationPass::detect_loops(const Function& func) {
                                             if ((iv_on_left && is_lt) || (iv_on_right && is_gt)) {
                                                 loop_info.end_value = bound;
                                                 loop_info.is_inclusive = false;
-                                            } else if ((iv_on_left && is_ge) || (iv_on_right && is_le)) {
-                                                // Break condition: iv >= N means loop runs while iv < N
+                                            } else if ((iv_on_left && is_ge) ||
+                                                       (iv_on_right && is_le)) {
+                                                // Break condition: iv >= N means loop runs while iv
+                                                // < N
                                                 loop_info.end_value = bound;
                                                 loop_info.is_inclusive = false;
-                                            } else if ((iv_on_left && is_le) || (iv_on_right && is_ge)) {
+                                            } else if ((iv_on_left && is_le) ||
+                                                       (iv_on_right && is_ge)) {
                                                 loop_info.end_value = bound + 1;
                                                 loop_info.is_inclusive = true;
                                             }
@@ -252,8 +259,10 @@ void BoundsCheckEliminationPass::detect_loops(const Function& func) {
                     loops_.push_back(loop_info);
 
                     // Update the range for the induction variable
-                    if (loop_info.start_value >= 0 && loop_info.end_value < std::numeric_limits<int64_t>::max()) {
-                        int64_t max_val = loop_info.is_inclusive ? loop_info.end_value : loop_info.end_value - 1;
+                    if (loop_info.start_value >= 0 &&
+                        loop_info.end_value < std::numeric_limits<int64_t>::max()) {
+                        int64_t max_val =
+                            loop_info.is_inclusive ? loop_info.end_value : loop_info.end_value - 1;
                         value_ranges_[inst.result] = ValueRange{loop_info.start_value, max_val};
                     } else if (loop_info.start_value >= 0) {
                         value_ranges_[inst.result] = ValueRange::non_negative();

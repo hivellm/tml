@@ -971,41 +971,36 @@ func test_template_method_pdf() -> I32 {
 }
 
 // ============================================================================
-// Generic Class Tests (TODO: Pending full generic class support)
+// Generic Class Tests
 // ============================================================================
 
-// Generic classes require additional work in the instantiation pipeline.
-// The infrastructure is in place (pending_generic_classes_, require_class_instantiation,
-// gen_class_instantiation), but the type flow from let statements to constructor calls
-// needs more integration work.
+/// Generic container class
+class Box[T] {
+    value: T
 
-// /// Generic container class
-// class Box[T] {
-//     value: T
-//
-//     new(value: T) {
-//         this.value = value
-//     }
-//
-//     func get(this) -> T {
-//         return this.value
-//     }
-//
-//     func set(mut this, value: T) {
-//         this.value = value
-//     }
-// }
-//
-// @test
-// func test_generic_class_i32() -> I32 {
-//     let b: Box[I32] = Box::new(42)
-//     assert_eq(b.get(), 42, "Box[I32] should hold 42")
-//     return 0
-// }
-//
-// @test
-// func test_generic_class_i64() -> I32 {
-//     let b: Box[I64] = Box::new(999999)
-//     assert_eq(b.get() as I32, 999999, "Box[I64] should hold 999999")
-//     return 0
-// }
+    new(value: T) {
+        this.value = value
+    }
+
+    func get(this) -> T {
+        return this.value
+    }
+
+    func set(mut this, value: T) {
+        this.value = value
+    }
+}
+
+@test
+func test_generic_class_i32() -> I32 {
+    let b: Box[I32] = Box::new(42)
+    assert_eq(b.get(), 42, "Box[I32] should hold 42")
+    return 0
+}
+
+@test
+func test_generic_class_i64() -> I32 {
+    let b: Box[I64] = Box::new(999999 as I64)
+    assert_eq(b.get() as I32, 999999, "Box[I64] should hold 999999")
+    return 0
+}

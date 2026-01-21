@@ -194,4 +194,10 @@ auto make_enum_type(const std::string& name, std::vector<MirTypePtr> type_args) 
     return type;
 }
 
+auto make_vector_type(MirTypePtr element, size_t width) -> MirTypePtr {
+    auto type = std::make_shared<MirType>();
+    type->kind = MirVectorType{std::move(element), width};
+    return type;
+}
+
 } // namespace tml::mir

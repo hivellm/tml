@@ -94,7 +94,7 @@ void Profiler::start() {
 
     // Initialize call stack with program node
     call_stack_.clear();
-    call_stack_.push_back({2, data_.start_time});  // Start in (program)
+    call_stack_.push_back({2, data_.start_time}); // Start in (program)
 
     active_.store(true, std::memory_order_release);
 
@@ -132,8 +132,8 @@ void Profiler::stop() {
     export_cpuprofile(output_path_);
 
     std::cerr << "[TML Profiler] Stopped. Profile written to: " << output_path_ << "\n";
-    std::cerr << "[TML Profiler] Total time: "
-              << (data_.end_time - data_.start_time) / 1000.0 << " ms\n";
+    std::cerr << "[TML Profiler] Total time: " << (data_.end_time - data_.start_time) / 1000.0
+              << " ms\n";
     std::cerr << "[TML Profiler] Nodes: " << data_.nodes.size() << "\n";
     std::cerr << "[TML Profiler] Samples: " << data_.samples.size() << "\n";
 }
@@ -151,11 +151,8 @@ void Profiler::enter_function(const char* func_name, const char* file_name, uint
     uint32_t parent_id = call_stack_.empty() ? 2 : call_stack_.back().node_id;
 
     // Get or create node for this call
-    uint32_t node_id = get_or_create_node(
-        func_name ? func_name : "(unknown)",
-        file_name ? file_name : "(unknown)",
-        line,
-        parent_id);
+    uint32_t node_id = get_or_create_node(func_name ? func_name : "(unknown)",
+                                          file_name ? file_name : "(unknown)", line, parent_id);
 
     // Push onto call stack
     call_stack_.push_back({node_id, now});
@@ -168,8 +165,7 @@ void Profiler::enter_function(const char* func_name, const char* file_name, uint
         sample.timestamp_us = now - data_.start_time;
 
         if (!data_.samples.empty()) {
-            data_.time_deltas.push_back(sample.timestamp_us -
-                                         data_.samples.back().timestamp_us);
+            data_.time_deltas.push_back(sample.timestamp_us - data_.samples.back().timestamp_us);
         }
         data_.samples.push_back(sample);
 
@@ -215,8 +211,7 @@ void Profiler::add_sample() {
     sample.timestamp_us = now - data_.start_time;
 
     if (!data_.samples.empty()) {
-        data_.time_deltas.push_back(sample.timestamp_us -
-                                     data_.samples.back().timestamp_us);
+        data_.time_deltas.push_back(sample.timestamp_us - data_.samples.back().timestamp_us);
     }
     data_.samples.push_back(sample);
 }
@@ -225,17 +220,14 @@ void Profiler::add_sample() {
 // Node Management
 // ============================================================================
 
-auto Profiler::register_function(const std::string& func_name,
-                                  const std::string& file_name,
-                                  uint32_t line) -> uint32_t {
+auto Profiler::register_function(const std::string& func_name, const std::string& file_name,
+                                 uint32_t line) -> uint32_t {
     // Pre-register with parent 2 (program)
     return get_or_create_node(func_name, file_name, line, 2);
 }
 
-auto Profiler::get_or_create_node(const std::string& func_name,
-                                   const std::string& file_name,
-                                   uint32_t line,
-                                   uint32_t parent_id) -> uint32_t {
+auto Profiler::get_or_create_node(const std::string& func_name, const std::string& file_name,
+                                  uint32_t line, uint32_t parent_id) -> uint32_t {
     std::string key = make_node_key(parent_id, func_name, file_name, line);
 
     std::lock_guard<std::mutex> lock(mutex_);
@@ -268,10 +260,8 @@ auto Profiler::get_or_create_node(const std::string& func_name,
     return node.id;
 }
 
-auto Profiler::make_node_key(uint32_t parent_id,
-                              const std::string& func_name,
-                              const std::string& file_name,
-                              uint32_t line) -> std::string {
+auto Profiler::make_node_key(uint32_t parent_id, const std::string& func_name,
+                             const std::string& file_name, uint32_t line) -> std::string {
     std::ostringstream ss;
     ss << parent_id << ":" << func_name << ":" << file_name << ":" << line;
     return ss.str();
@@ -328,7 +318,8 @@ auto Profiler::to_cpuprofile_json() const -> std::string {
         // Children array
         ss << "      \"children\": [";
         for (size_t j = 0; j < node.children.size(); ++j) {
-            if (j > 0) ss << ", ";
+            if (j > 0)
+                ss << ", ";
             ss << node.children[j];
         }
         ss << "]";
@@ -339,7 +330,8 @@ auto Profiler::to_cpuprofile_json() const -> std::string {
         }
 
         ss << "\n    }";
-        if (i < data_.nodes.size() - 1) ss << ",";
+        if (i < data_.nodes.size() - 1)
+            ss << ",";
         ss << "\n";
     }
     ss << "  ],\n";
@@ -353,7 +345,8 @@ auto Profiler::to_cpuprofile_json() const -> std::string {
     // Samples array
     ss << "  \"samples\": [";
     for (size_t i = 0; i < data_.samples.size(); ++i) {
-        if (i > 0) ss << ", ";
+        if (i > 0)
+            ss << ", ";
         ss << data_.samples[i].node_id;
     }
     ss << "],\n";
@@ -408,6 +401,6 @@ void tml_profiler_sample(void) {
     Profiler::instance().add_sample();
 }
 
-}  // extern "C"
+} // extern "C"
 
-}  // namespace tml::profiler
+} // namespace tml::profiler

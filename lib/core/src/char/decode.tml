@@ -1,0 +1,225 @@
+//! UTF-16 decoding utilities.
+//!
+//! This module provides functions for decoding UTF-16 encoded data
+//! into Unicode scalar values (characters).
+//!
+//! # UTF-16 Encoding
+//!
+//! UTF-16 uses 16-bit code units. Characters in the Basic Multilingual Plane
+//! (U+0000 to U+FFFF) are represented as a single code unit. Characters
+//! outside this range (U+10000 to U+10FFFF) are represented as a surrogate
+//! pair: a high surrogate (0xD800-0xDBFF) followed by a low surrogate
+//! (0xDC00-0xDFFF).
+
+use core::option::Maybe
+use core::slice::Slice
+
+// ============================================================================
+// Error Type
+// ============================================================================
+
+/// An error that can occur when decoding a UTF-16 encoded sequence.
+///
+/// This error occurs when an unpaired surrogate is encountered.
+pub type DecodeUtf16Error {
+    /// The unpaired surrogate code unit.
+    code: U16
+}
+
+impl DecodeUtf16Error {
+    /// Returns the unpaired surrogate code unit that caused this error.
+    pub func unpaired_surrogate(this) -> U16 {
+        return this.code
+    }
+}
+
+impl Display for DecodeUtf16Error {
+    func to_string(this) -> Str {
+        return "unpaired surrogate in UTF-16 sequence"
+    }
+}
+
+impl Debug for DecodeUtf16Error {
+    func debug_string(this) -> Str {
+        return "DecodeUtf16Error"
+    }
+}
+
+// ============================================================================
+// Surrogate Checking Functions
+// ============================================================================
+
+/// Returns true if the code unit is a high surrogate (0xD800-0xDBFF).
+pub func is_high_surrogate(code: U16) -> Bool {
+    return code >= 0xD800 and code <= 0xDBFF
+}
+
+/// Returns true if the code unit is a low surrogate (0xDC00-0xDFFF).
+pub func is_low_surrogate(code: U16) -> Bool {
+    return code >= 0xDC00 and code <= 0xDFFF
+}
+
+/// Returns true if the code unit is any surrogate (0xD800-0xDFFF).
+pub func is_surrogate(code: U16) -> Bool {
+    return code >= 0xD800 and code <= 0xDFFF
+}
+
+/// Decodes a surrogate pair into a character.
+///
+/// # Arguments
+///
+/// * `high` - The high surrogate (0xD800-0xDBFF)
+/// * `low` - The low surrogate (0xDC00-0xDFFF)
+///
+/// # Returns
+///
+/// The decoded character (U+10000 to U+10FFFF).
+pub func decode_surrogate_pair(high: U16, low: U16) -> Char {
+    let high_bits: U32 = ((high as U32) - 0xD800) << 10
+    let low_bits: U32 = (low as U32) - 0xDC00
+    let codepoint: U32 = high_bits + low_bits + 0x10000
+    return codepoint as Char
+}
+
+// ============================================================================
+// Decoding Functions
+// ============================================================================
+
+/// Decodes a UTF-16 slice into a string.
+///
+/// Invalid sequences (unpaired surrogates) are replaced with the
+/// Unicode replacement character (U+FFFD).
+pub func decode_utf16_to_string(data: Slice[U16]) -> Str {
+    var result: Str = ""
+    var i: I64 = 0
+    let len: I64 = data.len()
+
+    loop (i < len) {
+        // data.get() returns Maybe[ref U16], unwrap and dereference
+        let code: U16 = *data.get(i).unwrap()
+
+        if is_high_surrogate(code) {
+            // High surrogate - check for low surrogate
+            if i + 1 < len {
+                let next: U16 = *data.get(i + 1).unwrap()
+                if is_low_surrogate(next) {
+                    // Valid pair
+                    let c: Char = decode_surrogate_pair(code, next)
+                    result = result + char_to_str(c)
+                    i = i + 2
+                } else {
+                    // High surrogate not followed by low
+                    result = result + "\u{FFFD}"
+                    i = i + 1
+                }
+            } else {
+                // High surrogate at end
+                result = result + "\u{FFFD}"
+                i = i + 1
+            }
+        } else if is_low_surrogate(code) {
+            // Low surrogate without high
+            result = result + "\u{FFFD}"
+            i = i + 1
+        } else {
+            // BMP character
+            result = result + char_to_str(code as Char)
+            i = i + 1
+        }
+    }
+
+    return result
+}
+
+/// Checks if a UTF-16 slice is valid (contains no unpaired surrogates).
+pub func is_valid_utf16(data: Slice[U16]) -> Bool {
+    var i: I64 = 0
+    let len: I64 = data.len()
+
+    loop (i < len) {
+        let code: U16 = *data.get(i).unwrap()
+
+        if is_high_surrogate(code) {
+            // Must be followed by low surrogate
+            if i + 1 >= len {
+                return false
+            }
+            let next: U16 = *data.get(i + 1).unwrap()
+            if not is_low_surrogate(next) {
+                return false
+            }
+            i = i + 2
+        } else if is_low_surrogate(code) {
+            // Low surrogate without high
+            return false
+        } else {
+            i = i + 1
+        }
+    }
+
+    return true
+}
+
+/// Counts the number of characters in a UTF-16 slice.
+///
+/// Surrogate pairs count as one character.
+/// Invalid sequences (unpaired surrogates) also count as one character each.
+pub func count_chars_utf16(data: Slice[U16]) -> I64 {
+    var count: I64 = 0
+    var i: I64 = 0
+    let len: I64 = data.len()
+
+    loop (i < len) {
+        let code: U16 = *data.get(i).unwrap()
+
+        if is_high_surrogate(code) {
+            if i + 1 < len {
+                let next: U16 = *data.get(i + 1).unwrap()
+                if is_low_surrogate(next) {
+                    i = i + 2
+                } else {
+                    i = i + 1
+                }
+            } else {
+                i = i + 1
+            }
+        } else {
+            i = i + 1
+        }
+        count = count + 1
+    }
+
+    return count
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Converts a character to a string.
+func char_to_str(c: Char) -> Str {
+    let code: U32 = c as U32
+    if code < 128 {
+        let byte: U8 = code as U8
+        return lowlevel { char_to_string(byte) }
+    }
+
+    if code < 0x800 {
+        let b1: U8 = (0xC0 | ((code >> 6) & 0x1F)) as U8
+        let b2: U8 = (0x80 | (code & 0x3F)) as U8
+        return lowlevel { utf8_2byte_to_string(b1, b2) }
+    }
+
+    if code < 0x10000 {
+        let b1: U8 = (0xE0 | ((code >> 12) & 0x0F)) as U8
+        let b2: U8 = (0x80 | ((code >> 6) & 0x3F)) as U8
+        let b3: U8 = (0x80 | (code & 0x3F)) as U8
+        return lowlevel { utf8_3byte_to_string(b1, b2, b3) }
+    }
+
+    let b1: U8 = (0xF0 | ((code >> 18) & 0x07)) as U8
+    let b2: U8 = (0x80 | ((code >> 12) & 0x3F)) as U8
+    let b3: U8 = (0x80 | ((code >> 6) & 0x3F)) as U8
+    let b4: U8 = (0x80 | (code & 0x3F)) as U8
+    return lowlevel { utf8_4byte_to_string(b1, b2, b3, b4) }
+}

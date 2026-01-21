@@ -1767,25 +1767,138 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     if (effective_receiver_type && effective_receiver_type->is<types::ClassType>()) {
         const auto& class_type = effective_receiver_type->as<types::ClassType>();
         auto class_def = env_.lookup_class(class_type.name);
-        if (class_def.has_value()) {
-            // Search for the method in this class and its parents
-            std::string current_class = class_type.name;
-            while (!current_class.empty()) {
-                auto current_def = env_.lookup_class(current_class);
-                if (!current_def.has_value())
-                    break;
 
-                for (const auto& m : current_def->methods) {
+        // Check if this is a generic class that needs mangling
+        bool is_generic_class =
+            !class_type.type_args.empty() ||
+            pending_generic_classes_.find(class_type.name) != pending_generic_classes_.end();
+
+        // For generic classes, compute the mangled name for function calls
+        std::string mangled_class_name = class_type.name;
+        if (!class_type.type_args.empty()) {
+            mangled_class_name = mangle_struct_name(class_type.name, class_type.type_args);
+        }
+
+        if (class_def.has_value() || is_generic_class) {
+            // Use base name for class definition lookup, mangled name for function calls
+            std::string current_class = class_type.name;
+            std::string current_mangled = mangled_class_name;
+            while (!current_class.empty()) {
+                // Try to find the class - either from pending generics or environment
+                const parser::ClassDecl* parser_class = nullptr;
+                std::optional<types::ClassDef> typed_class_opt;
+
+                auto pending_it = pending_generic_classes_.find(current_class);
+                if (pending_it != pending_generic_classes_.end()) {
+                    parser_class = pending_it->second;
+                } else {
+                    typed_class_opt = env_.lookup_class(current_class);
+                    if (!typed_class_opt.has_value())
+                        break;
+                }
+
+                // Search for method in parser::ClassDecl (for generic classes)
+                if (parser_class) {
+                    for (const auto& m : parser_class->methods) {
+                        if (m.name == method && !m.is_static) {
+                            // Generate call to instance method using mangled name
+                            std::string func_name =
+                                "@tml_" + get_suite_prefix() + current_mangled + "_" + method;
+
+                            // Resolve return type with type substitutions for generic params
+                            std::string ret_type = "i32"; // Default fallback
+                            if (m.return_type) {
+                                // Build type substitution map from class type args
+                                std::unordered_map<std::string, types::TypePtr> type_subs;
+                                if (!class_type.type_args.empty() &&
+                                    !parser_class->generics.empty()) {
+                                    for (size_t i = 0; i < parser_class->generics.size() &&
+                                                       i < class_type.type_args.size();
+                                         ++i) {
+                                        type_subs[parser_class->generics[i].name] =
+                                            class_type.type_args[i];
+                                    }
+                                }
+                                auto resolved_ret =
+                                    resolve_parser_type_with_subs(**m.return_type, type_subs);
+                                ret_type = llvm_type_from_semantic(resolved_ret);
+                            }
+
+                            // Use registered function's return type if available
+                            std::string method_key = current_mangled + "_" + method;
+                            auto method_it = functions_.find(method_key);
+                            if (method_it != functions_.end() &&
+                                !method_it->second.ret_type.empty()) {
+                                ret_type = method_it->second.ret_type;
+                            }
+
+                            // Get receiver pointer (for 'this')
+                            std::string this_ptr = receiver;
+
+                            // For value classes, use the alloca pointer
+                            if (call.receiver->is<parser::IdentExpr>()) {
+                                const auto& ident_recv = call.receiver->as<parser::IdentExpr>();
+                                auto it = locals_.find(ident_recv.name);
+                                if (it != locals_.end()) {
+                                    bool is_value_class_struct =
+                                        it->second.type.starts_with("%class.") &&
+                                        !it->second.type.ends_with("*");
+                                    if (is_value_class_struct) {
+                                        this_ptr = it->second.reg;
+                                    }
+                                }
+                            }
+
+                            // Handle ref types
+                            if (receiver_type && receiver_type->is<types::RefType>()) {
+                                std::string loaded_this = fresh_reg();
+                                emit_line("  " + loaded_this + " = load ptr, ptr " + receiver);
+                                this_ptr = loaded_this;
+                            }
+
+                            // Generate arguments: this pointer + regular args
+                            std::string args_str = "ptr " + this_ptr;
+                            for (const auto& arg : call.args) {
+                                std::string arg_val = gen_expr(*arg);
+                                args_str += ", " + last_expr_type_ + " " + arg_val;
+                            }
+
+                            // Generate call
+                            if (ret_type == "void") {
+                                emit_line("  call void " + func_name + "(" + args_str + ")");
+                                last_expr_type_ = "void";
+                                return "void";
+                            } else {
+                                std::string result = fresh_reg();
+                                emit_line("  " + result + " = call " + ret_type + " " + func_name +
+                                          "(" + args_str + ")");
+                                last_expr_type_ = ret_type;
+                                return result;
+                            }
+                        }
+                    }
+                    // Move to parent class
+                    if (parser_class->extends) {
+                        current_class = parser_class->extends->segments.back();
+                        current_mangled = current_class;
+                    } else {
+                        current_class = "";
+                    }
+                    continue;
+                }
+
+                // Search for method in types::ClassDef (for regular classes)
+                const auto& typed_class = typed_class_opt.value();
+                for (const auto& m : typed_class.methods) {
                     if (m.sig.name == method && !m.is_static) {
                         // Generate call to instance method
-                        // For class methods, the receiver is a pointer to the class instance
                         std::string func_name =
-                            "@tml_" + get_suite_prefix() + current_class + "_" + method;
+                            "@tml_" + get_suite_prefix() + current_mangled + "_" + method;
                         std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
 
                         // Use registered function's return type if available (handles value class
                         // by-value returns)
-                        std::string method_key = current_class + "_" + method;
+                        std::string method_key = current_mangled + "_" + method;
                         auto method_it = functions_.find(method_key);
                         if (method_it != functions_.end() && !method_it->second.ret_type.empty()) {
                             ret_type = method_it->second.ret_type;
@@ -1888,8 +2001,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     }
                 }
 
-                // Move to parent class
-                current_class = current_def->base_class.value_or("");
+                // Move to parent class (for types::ClassDef)
+                current_class = typed_class.base_class.value_or("");
+                current_mangled = current_class; // Parent is not generic in this context
             }
         }
     }

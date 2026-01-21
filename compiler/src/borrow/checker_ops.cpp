@@ -170,7 +170,8 @@ auto BorrowError::immut_borrow_while_mut(const std::string& name, SourceSpan imm
     err.related_message = "mutable borrow occurs here";
     err.notes.push_back("mutable borrow is still active when immutable borrow occurs");
     err.suggestions.push_back(BorrowSuggestion{
-        .message = "ensure the mutable borrow is no longer used before creating an immutable borrow",
+        .message =
+            "ensure the mutable borrow is no longer used before creating an immutable borrow",
         .fix = std::nullopt,
     });
     err.suggestions.push_back(BorrowSuggestion{
@@ -245,8 +246,8 @@ auto BorrowError::closure_capture_conflict(const std::string& name, CaptureKind 
         break;
     }
 
-    err.message = "closure captures `" + name + "` " + capture_desc +
-                  " while it is already borrowed";
+    err.message =
+        "closure captures `" + name + "` " + capture_desc + " while it is already borrowed";
     err.span = capture_span;
     err.related_span = borrow_span;
     err.related_message = "`" + name + "` is borrowed here";
@@ -291,12 +292,12 @@ auto BorrowError::partially_moved_value(const std::string& name, const std::stri
 /// }
 /// ```
 auto BorrowError::reborrow_outlives_origin(const std::string& reborrow_name,
-                                           const std::string& origin_name,
-                                           SourceSpan reborrow_span,
+                                           const std::string& origin_name, SourceSpan reborrow_span,
                                            SourceSpan origin_span) -> BorrowError {
     BorrowError err;
     err.code = BorrowErrorCode::ReborrowOutlivesOrigin;
-    err.message = "reborrow `" + reborrow_name + "` outlives the original borrow `" + origin_name + "`";
+    err.message =
+        "reborrow `" + reborrow_name + "` outlives the original borrow `" + origin_name + "`";
     err.span = reborrow_span;
     err.related_span = origin_span;
     err.related_message = "original borrow created here";
@@ -342,7 +343,8 @@ auto BorrowError::ambiguous_return_lifetime(const std::string& func_name,
     // Build parameter list for the message
     std::string params_list;
     for (size_t i = 0; i < ref_params.size(); ++i) {
-        if (i > 0) params_list += ", ";
+        if (i > 0)
+            params_list += ", ";
         params_list += "`" + ref_params[i] + "`";
     }
 
@@ -785,8 +787,7 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
         // Allow shared reborrow from mutable borrow (coercion &mut T -> &T)
         // Also allow during two-phase borrow reservation
         bool in_reservation = two_phase_info_.state == TwoPhaseState::Reserved;
-        if (state.state == OwnershipState::MutBorrowed && !is_reborrow &&
-            !in_reservation) {
+        if (state.state == OwnershipState::MutBorrowed && !is_reborrow && !in_reservation) {
             // Find the active mutable borrow for related span
             for (const auto& borrow : state.active_borrows) {
                 if (!borrow.end && borrow.kind == BorrowKind::Mutable) {
@@ -891,8 +892,7 @@ void BorrowChecker::activate_two_phase_borrow() {
 
 /// Checks if a place has a reserved (not active) two-phase borrow.
 auto BorrowChecker::is_reserved_borrow(PlaceId place) const -> bool {
-    return two_phase_info_.state == TwoPhaseState::Reserved &&
-           two_phase_info_.place == place;
+    return two_phase_info_.state == TwoPhaseState::Reserved && two_phase_info_.place == place;
 }
 
 /// Gets the current two-phase state.

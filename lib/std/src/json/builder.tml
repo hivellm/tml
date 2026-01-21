@@ -47,9 +47,40 @@ impl Builder {
     }
 
     pub func escape_string(this, s: Str) {
-        // For now, just append directly
-        // TODO: proper JSON string escaping for special characters
-        this.buffer.push_str(s)
+        // Proper JSON string escaping for special characters
+        let text: Text = Text::from(s)
+        let len: I64 = text.len()
+        var i: I64 = 0
+        loop (i < len) {
+            let c: I32 = text.byte_at(i)
+            // Use early return pattern with helper that returns I32 (0)
+            let _: I32 = this.escape_char(c)
+            i = i + 1
+        }
+        text.drop()
+    }
+
+    // Escape a single character for JSON output (returns 0)
+    pub func escape_char(this, c: I32) -> I32 {
+        if c == 34 { this.buffer.push_str("\\\""); return 0 }
+        if c == 92 { this.buffer.push_str("\\\\"); return 0 }
+        if c == 10 { this.buffer.push_str("\\n"); return 0 }
+        if c == 13 { this.buffer.push_str("\\r"); return 0 }
+        if c == 9 { this.buffer.push_str("\\t"); return 0 }
+        if c == 8 { this.buffer.push_str("\\b"); return 0 }
+        if c == 12 { this.buffer.push_str("\\f"); return 0 }
+        if c < 32 {
+            // Control characters (0x00-0x1F) -> \u00XX
+            this.buffer.push_str("\\u00")
+            let hi: I32 = c / 16
+            let lo: I32 = c % 16
+            this.buffer.push(if hi < 10 { 48 + hi } else { 55 + hi })
+            this.buffer.push(if lo < 10 { 48 + lo } else { 55 + lo })
+            return 0
+        }
+        // Regular character, append as-is
+        this.buffer.push(c)
+        return 0
     }
 
     // ========================================================================

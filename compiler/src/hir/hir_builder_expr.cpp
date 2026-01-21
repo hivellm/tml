@@ -763,10 +763,7 @@ auto HirBuilder::lower_loop(const parser::LoopExpr& loop) -> HirExprPtr {
 
         HirType var_type = resolve_type(*loop.loop_var->type);
         hir_loop_var = HirLoopVarDecl{
-            .name = loop.loop_var->name,
-            .type = var_type,
-            .span = loop.loop_var->span
-        };
+            .name = loop.loop_var->name, .type = var_type, .span = loop.loop_var->span};
 
         // Register variable in scope
         scopes_.back().insert(loop.loop_var->name);
@@ -785,7 +782,9 @@ auto HirBuilder::lower_loop(const parser::LoopExpr& loop) -> HirExprPtr {
     }
 
     auto expr = std::make_unique<HirExpr>();
-    expr->kind = HirLoopExpr{fresh_id(), loop.label, std::move(hir_loop_var), std::move(condition), std::move(body), type, loop.span};
+    expr->kind = HirLoopExpr{
+        fresh_id(), loop.label, std::move(hir_loop_var), std::move(condition), std::move(body),
+        type,       loop.span};
     return expr;
 }
 

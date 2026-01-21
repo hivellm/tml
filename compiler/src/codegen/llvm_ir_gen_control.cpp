@@ -409,7 +409,8 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     // Initialize the variable to 0 before entering the loop
     if (loop.loop_var) {
         const auto& var_decl = *loop.loop_var;
-        types::TypePtr semantic_type = resolve_parser_type_with_subs(*var_decl.type, current_type_subs_);
+        types::TypePtr semantic_type =
+            resolve_parser_type_with_subs(*var_decl.type, current_type_subs_);
         std::string var_type = llvm_type_from_semantic(semantic_type);
 
         // Allocate and initialize to 0
@@ -924,9 +925,12 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
                 }
             }
 
-            // Handle value class return by value: if returning a ptr but expecting a struct type,
-            // load the struct from the pointer. This fixes dangling pointer bug for value classes.
-            if (val_type == "ptr" && current_ret_type_.starts_with("%class.")) {
+            // Handle value class/struct return by value: if returning a ptr but expecting a struct
+            // type, load the struct from the pointer. This fixes dangling pointer bug for value
+            // classes and runtime wrapper types like Text that are returned as ptr from FFI but
+            // expected as struct.
+            if (val_type == "ptr" && (current_ret_type_.starts_with("%class.") ||
+                                      current_ret_type_.starts_with("%struct."))) {
                 std::string loaded_struct = fresh_reg();
                 emit_line("  " + loaded_struct + " = load " + current_ret_type_ + ", ptr " + val);
                 emit_line("  ret " + current_ret_type_ + " " + loaded_struct);
@@ -1346,6 +1350,17 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                             if (variant_name == "Just") {
                                 payload_type = named.type_args[0];
                             }
+                        } else {
+                            // Look up the enum definition to get the payload type
+                            auto enum_def = env_.lookup_enum(named.name);
+                            if (enum_def.has_value()) {
+                                for (const auto& [var_name, var_payloads] : enum_def->variants) {
+                                    if (var_name == variant_name && !var_payloads.empty()) {
+                                        payload_type = var_payloads[0];
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -1433,6 +1448,18 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                         } else if (named.name == "Maybe" && !named.type_args.empty()) {
                             if (variant_name == "Just") {
                                 payload_type = named.type_args[0];
+                            }
+                        } else {
+                            // Look up the enum definition to get the payload type
+                            auto enum_def = env_.lookup_enum(named.name);
+                            if (enum_def.has_value()) {
+                                // Find the variant and get its payload type
+                                for (const auto& [var_name, var_payloads] : enum_def->variants) {
+                                    if (var_name == variant_name && !var_payloads.empty()) {
+                                        payload_type = var_payloads[0];
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }

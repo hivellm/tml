@@ -1,13 +1,12 @@
-//! OOP-style collection classes implementing standard interfaces.
+//! Collection types for common data structures.
 //!
-//! This module provides collection classes that implement the interfaces
-//! from `std::interfaces`, following C# patterns.
+//! This module provides collection types following standard patterns.
 //!
 //! # Types
 //!
 //! | Type | Description |
 //! |------|-------------|
-//! | [`ArrayList[T]`] | Class-based dynamic array |
+//! | [`ArrayList[T]`] | Dynamic array with indexed access |
 //! | [`HashSet[T]`] | Hash-based set for unique elements |
 //! | [`Queue[T]`] | FIFO queue |
 //! | [`Stack[T]`] | LIFO stack |
@@ -18,122 +17,85 @@
 //! ```tml
 //! use std::collections::class_collections::*
 //!
-//! // Use ArrayList with interface polymorphism
-//! let list: dyn IList[I32] = ArrayList::create[I32]()
+//! let list: ArrayList[I32] = ArrayList::create[I32]()
 //! list.add(1)
 //! list.add(2)
 //! list.add(3)
-//! print(list.count())  // 3
+//! print(list.count().to_string())  // 3
 //! ```
 
-use std::interfaces::*
-use std::object::Object
-
 // ============================================================================
-// ArrayList[T] - OOP-style dynamic array
+// ArrayList[T] - Dynamic array
 // ============================================================================
 
-/// A class-based dynamic array implementing IList and ICollection.
+/// A dynamic array with indexed access.
 ///
-/// `ArrayList[T]` provides a growable array with indexed access.
-///
-/// # Implements
-///
-/// - [`ICollection[T]`] - add, remove, clear, count, contains
-/// - [`IList[T]`] - get, set, insert, remove_at, index_of
+/// `ArrayList[T]` provides a growable array with O(1) indexed access.
 ///
 /// # Example
 ///
 /// ```tml
-/// let list = ArrayList::create[I64]()
+/// let list: ArrayList[I64] = ArrayList::create[I64]()
 /// list.add(10)
 /// list.add(20)
-/// print(list.get(0))  // 10
+/// print(list.get(0).to_string())  // 10
 /// ```
-pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
-    data: List[T]
+pub type ArrayList[T] {
+    data: [T],
     length: I64
+}
 
+impl[T] ArrayList[T] {
     /// Creates a new empty ArrayList.
-    static func create() -> ArrayList[T] {
-        ArrayList {
+    pub func create() -> ArrayList[T] {
+        return ArrayList {
             data: [],
             length: 0,
         }
     }
 
     /// Creates an ArrayList with specified initial capacity.
-    static func with_capacity(capacity: I64) -> ArrayList[T] {
-        ArrayList {
-            data: List::with_capacity(capacity),
+    pub func with_capacity(capacity: I64) -> ArrayList[T] {
+        return ArrayList {
+            data: [],
             length: 0,
         }
     }
 
-    // ICollection[T] implementation
-
     /// Returns the number of elements.
-    func count(this) -> I64 {
-        this.length
+    pub func count(this) -> I64 {
+        return this.length
     }
 
     /// Returns true if empty.
-    func is_empty(this) -> Bool {
-        this.length == 0
+    pub func is_empty(this) -> Bool {
+        return this.length == 0
     }
 
     /// Adds an element to the end.
-    func add(mut this, item: T) {
+    pub func add(mut this, item: T) {
         this.data.push(item)
         this.length = this.length + 1
     }
 
-    /// Removes the first occurrence of an element.
-    func remove(mut this, item: T) -> Bool {
-        let idx: I64 = this.index_of(item)
-        if idx >= 0 {
-            this.remove_at(idx)
-            return true
-        }
-        false
-    }
-
     /// Removes all elements.
-    func clear(mut this) {
+    pub func clear(mut this) {
         this.data.clear()
         this.length = 0
     }
 
-    /// Returns true if the list contains the element.
-    func contains(this, item: T) -> Bool {
-        this.index_of(item) >= 0
-    }
-
-    // IList[T] implementation
-
     /// Gets the element at the specified index.
-    func get(this, index: I64) -> T {
-        this.data[index]
+    pub func get(this, index: I64) -> T {
+        return this.data[index]
     }
 
     /// Sets the element at the specified index.
-    func set(mut this, index: I64, value: T) {
+    pub func set(mut this, index: I64, value: T) {
         this.data[index] = value
     }
 
-    /// Returns the index of the item, or -1 if not found.
-    func index_of(this, item: T) -> I64 {
-        var i: I64 = 0
-        loop (i < this.length) {
-            // TODO: Proper equality check with IEquatable
-            // if this.data[i] == item { return i }
-            i = i + 1
-        }
-        -1
-    }
-
     /// Inserts an item at the specified index.
-    func insert(mut this, index: I64, item: T) {
+    pub func insert(mut this, index: I64, item: T) {
         if index < 0 or index > this.length {
             return
         }
@@ -150,7 +112,7 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
     }
 
     /// Removes the element at the specified index.
-    func remove_at(mut this, index: I64) {
+    pub func remove_at(mut this, index: I64) {
         if index < 0 or index >= this.length {
             return
         }
@@ -164,10 +126,8 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
         this.length = this.length - 1
     }
 
-    // Additional methods
-
     /// Adds all elements from another list.
-    func add_range(mut this, items: ref ArrayList[T]) {
+    pub func add_range(mut this, items: ref ArrayList[T]) {
         var i: I64 = 0
         loop (i < items.length) {
             this.add(items.get(i))
@@ -176,7 +136,7 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
     }
 
     /// Reverses the list in place.
-    func reverse(mut this) {
+    pub func reverse(mut this) {
         var left: I64 = 0
         var right: I64 = this.length - 1
         loop (left < right) {
@@ -187,18 +147,46 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
             right = right - 1
         }
     }
+}
 
-    /// Returns the capacity.
-    func capacity(this) -> I64 {
-        this.data.capacity()
+/// Methods that require element equality comparison.
+impl[T: PartialEq] ArrayList[T] {
+    /// Removes the first occurrence of an element.
+    /// Returns true if the element was found and removed.
+    pub func remove(mut this, item: T) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if this.data[i] == item {
+                this.remove_at(i)
+                return true
+            }
+            i = i + 1
+        }
+        return false
     }
 
-    override func to_string(this) -> Str {
-        return "ArrayList[" + this.length.to_string() + " elements]"
+    /// Returns true if the list contains the element.
+    pub func contains(this, item: T) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if this.data[i] == item {
+                return true
+            }
+            i = i + 1
+        }
+        return false
     }
 
-    override func get_type(this) -> Str {
-        return "ArrayList"
+    /// Returns the index of the item, or -1 if not found.
+    pub func index_of(this, item: T) -> I64 {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if this.data[i] == item {
+                return i
+            }
+            i = i + 1
+        }
+        return -1
     }
 }
 
@@ -208,213 +196,99 @@ pub class ArrayList[T] extends Object implements ICollection[T], IList[T] {
 
 /// A hash-based set for storing unique elements.
 ///
-/// `HashSet[T]` stores elements with O(1) average lookup time.
-/// Duplicate elements are not allowed.
-///
-/// # Implements
-///
-/// - [`ICollection[T]`] - add, remove, clear, count, contains
+/// Note: This is a simplified implementation. For production use,
+/// consider using a proper hash map from the standard library.
 ///
 /// # Example
 ///
 /// ```tml
-/// let set = HashSet::create[Str]()
-/// set.add("apple")
-/// set.add("banana")
-/// set.add("apple")  // Ignored, already exists
-/// print(set.count())  // 2
-/// print(set.contains("apple"))  // true
+/// let set: HashSet[I64] = HashSet::create[I64]()
+/// set.add(10)
+/// set.add(20)
+/// print(set.count().to_string())  // 2
 /// ```
-pub class HashSet[T] extends Object implements ICollection[T] {
-    /// Buckets for hash table
-    buckets: List[List[T]]
-    /// Number of buckets
-    bucket_count: I64
+pub type HashSet[T] {
+    /// Flat storage of all elements
+    data: [T],
     /// Number of elements
     length: I64
-    /// Load factor threshold for rehashing
-    load_factor: F64
+}
 
+impl[T] HashSet[T] {
     /// Creates a new empty HashSet.
-    static func create() -> HashSet[T] {
-        let initial_buckets: I64 = 16
-        var buckets: List[List[T]] = []
-
-        var i: I64 = 0
-        loop (i < initial_buckets) {
-            buckets.push([])
-            i = i + 1
-        }
-
-        HashSet {
-            buckets: buckets,
-            bucket_count: initial_buckets,
+    pub func create() -> HashSet[T] {
+        return HashSet {
+            data: [],
             length: 0,
-            load_factor: 0.75,
         }
     }
 
     /// Creates a HashSet with specified initial capacity.
-    static func with_capacity(capacity: I64) -> HashSet[T] {
-        let bucket_count: I64 = max_i64(16, capacity * 2)
-        var buckets: List[List[T]] = []
-
-        var i: I64 = 0
-        loop (i < bucket_count) {
-            buckets.push([])
-            i = i + 1
-        }
-
-        HashSet {
-            buckets: buckets,
-            bucket_count: bucket_count,
+    pub func with_capacity(capacity: I64) -> HashSet[T] {
+        return HashSet {
+            data: [],
             length: 0,
-            load_factor: 0.75,
         }
     }
 
-    // ICollection[T] implementation
-
-    func count(this) -> I64 {
-        this.length
+    pub func count(this) -> I64 {
+        return this.length
     }
 
-    func is_empty(this) -> Bool {
-        this.length == 0
+    pub func is_empty(this) -> Bool {
+        return this.length == 0
     }
 
-    func add(mut this, item: T) {
-        if this.contains(item) {
-            return // Already exists
-        }
-
-        // Check if rehash needed
-        let current_load: F64 = this.length as F64 / this.bucket_count as F64
-        if current_load > this.load_factor {
-            this.rehash()
-        }
-
-        let hash: I64 = this.hash_item(item)
-        let bucket_idx: I64 = hash % this.bucket_count
-        this.buckets[bucket_idx].push(item)
-        this.length = this.length + 1
-    }
-
-    func remove(mut this, item: T) -> Bool {
-        let hash: I64 = this.hash_item(item)
-        let bucket_idx: I64 = hash % this.bucket_count
-        let bucket: mut ref List[T] = mut ref this.buckets[bucket_idx]
-
-        var i: I64 = 0
-        loop (i < bucket.len()) {
-            // TODO: Proper equality check
-            // if bucket[i] == item {
-            //     bucket.remove_at(i)
-            //     this.length = this.length - 1
-            //     return true
-            // }
-            i = i + 1
-        }
-        false
-    }
-
-    func clear(mut this) {
-        var i: I64 = 0
-        loop (i < this.bucket_count) {
-            this.buckets[i].clear()
-            i = i + 1
-        }
+    pub func clear(mut this) {
+        this.data.clear()
         this.length = 0
     }
+}
 
-    func contains(this, item: T) -> Bool {
-        let hash: I64 = this.hash_item(item)
-        let bucket_idx: I64 = hash % this.bucket_count
-        let bucket: ref List[T] = ref this.buckets[bucket_idx]
-
+/// Methods that require element equality comparison.
+impl[T: PartialEq] HashSet[T] {
+    /// Adds an element to the set if not already present.
+    /// Returns true if the element was added.
+    pub func add(mut this, item: T) -> Bool {
+        // Check if already present
         var i: I64 = 0
-        loop (i < bucket.len()) {
-            // TODO: Proper equality check with IEquatable
-            // if bucket[i] == item { return true }
-            i = i + 1
-        }
-        false
-    }
-
-    // Additional methods
-
-    /// Computes hash for an item.
-    func hash_item(this, item: T) -> I64 {
-        // Placeholder hash function
-        // Real implementation should use item's get_hash_code() if T implements IHashable
-        lowlevel { (ref item) as I64 }
-    }
-
-    /// Rehashes the table to a larger size.
-    func rehash(mut this) {
-        let new_bucket_count: I64 = this.bucket_count * 2
-        var new_buckets: List[List[T]] = []
-
-        var i: I64 = 0
-        loop (i < new_bucket_count) {
-            new_buckets.push([])
-            i = i + 1
-        }
-
-        // Rehash all existing items
-        i = 0
-        loop (i < this.bucket_count) {
-            let bucket: ref List[T] = ref this.buckets[i]
-            var j: I64 = 0
-            loop (j < bucket.len()) {
-                let item: T = bucket[j]
-                let hash: I64 = this.hash_item(item)
-                let new_idx: I64 = hash % new_bucket_count
-                new_buckets[new_idx].push(item)
-                j = j + 1
+        loop (i < this.length) {
+            if this.data[i] == item {
+                return false
             }
             i = i + 1
         }
-
-        this.buckets = new_buckets
-        this.bucket_count = new_bucket_count
+        this.data.push(item)
+        this.length = this.length + 1
+        return true
     }
 
-    /// Set union: returns a new set with all elements from both sets.
-    func union(this, other: ref HashSet[T]) -> HashSet[T] {
-        var result: HashSet[T] = HashSet::create[T]()
-
-        // Add all from this
+    /// Removes an element from the set.
+    /// Returns true if the element was found and removed.
+    pub func remove(mut this, item: T) -> Bool {
         var i: I64 = 0
-        loop (i < this.bucket_count) {
-            var j: I64 = 0
-            loop (j < this.buckets[i].len()) {
-                result.add(this.buckets[i][j])
-                j = j + 1
+        loop (i < this.length) {
+            if this.data[i] == item {
+                // Swap with last and remove
+                this.data[i] = this.data[this.length - 1]
+                this.length = this.length - 1
+                return true
             }
             i = i + 1
         }
+        return false
+    }
 
-        // Add all from other
-        i = 0
-        loop (i < other.bucket_count) {
-            var j: I64 = 0
-            loop (j < other.buckets[i].len()) {
-                result.add(other.buckets[i][j])
-                j = j + 1
+    /// Returns true if the set contains the element.
+    pub func contains(this, item: T) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if this.data[i] == item {
+                return true
             }
             i = i + 1
         }
-
-        result
-    }
-
-    override func to_string(this) -> Str {
-        return "HashSet[" + this.length.to_string() + " elements]"
-    }
-
-    override func get_type(this) -> Str {
-        return "HashSet"
+        return false
     }
 }
 
@@ -429,30 +303,31 @@ pub class HashSet[T] extends Object implements ICollection[T] {
 /// # Example
 ///
 /// ```tml
-/// let queue = Queue::create[Str]()
+/// let queue: Queue[Str] = Queue::create[Str]()
 /// queue.enqueue("first")
 /// queue.enqueue("second")
 /// queue.enqueue("third")
-/// print(queue.dequeue())  // "first"
-/// print(queue.dequeue())  // "second"
+/// print(queue.dequeue().unwrap())  // "first"
 /// ```
-pub class Queue[T] extends Object implements ICollection[T] {
+pub type Queue[T] {
     /// Internal storage
-    data: List[T]
+    data: [T],
     /// Head index (front of queue)
-    head: I64
+    head: I64,
     /// Tail index (back of queue)
-    tail: I64
+    tail: I64,
     /// Number of elements
-    length: I64
+    length: I64,
     /// Capacity
     capacity: I64
+}
 
+impl[T] Queue[T] {
     /// Creates a new empty Queue.
-    static func create() -> Queue[T] {
+    pub func create() -> Queue[T] {
         let initial_capacity: I64 = 16
-        Queue {
-            data: List::with_capacity(initial_capacity),
+        return Queue {
+            data: [],
             head: 0,
             tail: 0,
             length: 0,
@@ -461,82 +336,56 @@ pub class Queue[T] extends Object implements ICollection[T] {
     }
 
     /// Creates a Queue with specified initial capacity.
-    static func with_capacity(capacity: I64) -> Queue[T] {
-        Queue {
-            data: List::with_capacity(capacity),
+    pub func with_capacity(cap: I64) -> Queue[T] {
+        return Queue {
+            data: [],
             head: 0,
             tail: 0,
             length: 0,
-            capacity: capacity,
+            capacity: cap,
         }
     }
 
-    // ICollection[T] implementation
-
-    func count(this) -> I64 {
-        this.length
+    pub func count(this) -> I64 {
+        return this.length
     }
 
-    func is_empty(this) -> Bool {
-        this.length == 0
+    pub func is_empty(this) -> Bool {
+        return this.length == 0
     }
 
-    func add(mut this, item: T) {
+    pub func add(mut this, item: T) {
         this.enqueue(item)
     }
 
-    func remove(mut this, item: T) -> Bool {
-        // Removing arbitrary elements from a queue is not efficient
-        // This is a basic O(n) implementation
-        false
-    }
-
-    func clear(mut this) {
+    pub func clear(mut this) {
         this.data.clear()
         this.head = 0
         this.tail = 0
         this.length = 0
     }
 
-    func contains(this, item: T) -> Bool {
-        var i = this.head
-        var count: I64 = 0
-        loop (count < this.length) {
-            let idx = i % this.capacity
-            // TODO: Proper equality
-            // if this.data[idx] == item { return true }
-            i = i + 1
-            count = count + 1
-        }
-        false
-    }
-
-    // Queue-specific methods
-
     /// Adds an item to the back of the queue.
-    func enqueue(mut this, item: T) {
+    pub func enqueue(mut this, item: T) {
         if this.length >= this.capacity {
             this.grow()
         }
 
-        let idx = this.tail % this.capacity
-        if idx >= this.data.len() {
-            this.data.push(item)
-        } else {
-            this.data[idx] = item
-        }
+        let idx: I64 = this.tail % this.capacity
+        // Always push to grow the data array as needed
+        this.data.push(item)
         this.tail = this.tail + 1
         this.length = this.length + 1
     }
 
     /// Removes and returns the item at the front of the queue.
-    func dequeue(mut this) -> Maybe[T] {
+    pub func dequeue(mut this) -> Maybe[T] {
         if this.length == 0 {
             return Nothing
         }
 
-        let idx = this.head % this.capacity
-        let item = this.data[idx]
+        let idx: I64 = this.head % this.capacity
+        let item: T = this.data[idx]
         this.head = this.head + 1
         this.length = this.length - 1
 
@@ -546,32 +395,32 @@ pub class Queue[T] extends Object implements ICollection[T] {
             this.tail = 0
         }
 
-        Just(item)
+        return Just(item)
     }
 
     /// Returns the item at the front without removing it.
-    func peek(this) -> Maybe[T] {
+    pub func peek(this) -> Maybe[T] {
         if this.length == 0 {
             return Nothing
         }
 
-        let idx = this.head % this.capacity
-        Just(this.data[idx])
+        let idx: I64 = this.head % this.capacity
+        return Just(this.data[idx])
     }
 
     /// Grows the queue capacity.
     func grow(mut this) {
-        let new_capacity = this.capacity * 2
-        var new_data: List[T] = List::with_capacity(new_capacity)
+        let new_capacity: I64 = this.capacity * 2
+        var new_data: [T] = []
 
         // Copy elements in order
-        var i = this.head
-        var count: I64 = 0
-        loop (count < this.length) {
-            let idx = i % this.capacity
+        var i: I64 = this.head
+        var cnt: I64 = 0
+        loop (cnt < this.length) {
+            let idx: I64 = i % this.capacity
             new_data.push(this.data[idx])
             i = i + 1
-            count = count + 1
+            cnt = cnt + 1
         }
 
         this.data = new_data
@@ -579,13 +428,49 @@ pub class Queue[T] extends Object implements ICollection[T] {
         this.tail = this.length
         this.capacity = new_capacity
     }
+}
 
-    override func to_string(this) -> Str {
-        return "Queue[" + this.length.to_string() + " elements]"
+/// Methods that require element equality comparison.
+impl[T: PartialEq] Queue[T] {
+    /// Removes the first occurrence of an element.
+    /// Returns true if the element was found and removed.
+    pub func remove(mut this, item: T) -> Bool {
+        var i: I64 = this.head
+        var cnt: I64 = 0
+        loop (cnt < this.length) {
+            let idx: I64 = i % this.capacity
+            if this.data[idx] == item {
+                // Shift elements to fill the gap
+                var j: I64 = cnt
+                loop (j < this.length - 1) {
+                    let curr_idx: I64 = (this.head + j) % this.capacity
+                    let next_idx: I64 = (this.head + j + 1) % this.capacity
+                    this.data[curr_idx] = this.data[next_idx]
+                    j = j + 1
+                }
+                this.tail = this.tail - 1
+                this.length = this.length - 1
+                return true
+            }
+            i = i + 1
+            cnt = cnt + 1
+        }
+        return false
     }
 
-    override func get_type(this) -> Str {
-        return "Queue"
+    /// Returns true if the queue contains the element.
+    pub func contains(this, item: T) -> Bool {
+        var i: I64 = this.head
+        var cnt: I64 = 0
+        loop (cnt < this.length) {
+            let idx: I64 = i % this.capacity
+            if this.data[idx] == item {
+                return true
+            }
+            i = i + 1
+            cnt = cnt + 1
+        }
+        return false
     }
 }
 
@@ -600,90 +485,109 @@ pub class Queue[T] extends Object implements ICollection[T] {
 /// # Example
 ///
 /// ```tml
-/// let stack = Stack::create[I32]()
+/// let stack: Stack[I32] = Stack::create[I32]()
 /// stack.push(1)
 /// stack.push(2)
 /// stack.push(3)
-/// print(stack.pop())  // 3
-/// print(stack.pop())  // 2
+/// print(stack.pop().unwrap().to_string())  // 3
 /// ```
-pub class Stack[T] extends Object implements ICollection[T] {
+pub type Stack[T] {
     /// Internal storage
-    data: List[T]
+    data: [T],
+    /// Length
+    length: I64
+}
 
+impl[T] Stack[T] {
     /// Creates a new empty Stack.
-    static func create() -> Stack[T] {
-        Stack {
+    pub func create() -> Stack[T] {
+        return Stack {
             data: [],
+            length: 0,
         }
     }
 
     /// Creates a Stack with specified initial capacity.
-    static func with_capacity(capacity: I64) -> Stack[T] {
-        Stack {
-            data: List::with_capacity(capacity),
+    pub func with_capacity(capacity: I64) -> Stack[T] {
+        return Stack {
+            data: [],
+            length: 0,
         }
     }
 
-    // ICollection[T] implementation
-
-    func count(this) -> I64 {
-        this.data.len()
+    pub func count(this) -> I64 {
+        return this.length
     }
 
-    func is_empty(this) -> Bool {
-        this.data.len() == 0
+    pub func is_empty(this) -> Bool {
+        return this.length == 0
     }
 
-    func add(mut this, item: T) {
+    pub func add(mut this, item: T) {
         this.push(item)
     }
 
-    func remove(mut this, item: T) -> Bool {
-        // Removing arbitrary elements from a stack is not efficient
-        false
-    }
-
-    func clear(mut this) {
+    pub func clear(mut this) {
         this.data.clear()
+        this.length = 0
     }
-
-    func contains(this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.data.len()) {
-            // TODO: Proper equality
-            // if this.data[i] == item { return true }
-            i = i + 1
-        }
-        false
-    }
-
-    // Stack-specific methods
 
     /// Pushes an item onto the stack.
-    func push(mut this, item: T) {
+    pub func push(mut this, item: T) {
         this.data.push(item)
+        this.length = this.length + 1
     }
 
     /// Pops an item from the stack.
-    func pop(mut this) -> Maybe[T] {
-        this.data.pop()
+    pub func pop(mut this) -> Maybe[T] {
+        if this.length == 0 {
+            return Nothing
+        }
+        this.length = this.length - 1
+        return Just(this.data[this.length])
     }
 
     /// Returns the item at the top without removing it.
-    func peek(this) -> Maybe[T] {
-        if this.data.len() == 0 {
+    pub func peek(this) -> Maybe[T] {
+        if this.length == 0 {
             return Nothing
         }
-        Just(this.data[this.data.len() - 1])
+        return Just(this.data[this.length - 1])
+    }
+}
+
+/// Methods that require element equality comparison.
+impl[T: PartialEq] Stack[T] {
+    /// Removes the first occurrence of an element.
+    /// Returns true if the element was found and removed.
+    pub func remove(mut this, item: T) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if this.data[i] == item {
+                // Shift elements down
+                var j: I64 = i
+                loop (j < this.length - 1) {
+                    this.data[j] = this.data[j + 1]
+                    j = j + 1
+                }
+                this.length = this.length - 1
+                return true
+            }
+            i = i + 1
+        }
+        return false
     }
 
-    override func to_string(this) -> Str {
-        return "Stack[" + this.data.len().to_string() + " elements]"
-    }
-
-    override func get_type(this) -> Str {
-        return "Stack"
+    /// Returns true if the stack contains the element.
+    pub func contains(this, item: T) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            if this.data[i] == item {
+                return true
+            }
+            i = i + 1
+        }
+        return false
     }
 }
 
@@ -692,239 +596,226 @@ pub class Stack[T] extends Object implements ICollection[T] {
 // ============================================================================
 
 /// A node in a doubly-linked list.
-type LinkedListNode[T] {
+pub type LinkedListNode[T] {
     value: T,
-    prev: I64,  // Pointer to previous node
-    next: I64,  // Pointer to next node
+    prev: I64,  // Index to previous node
+    next: I64   // Index to next node
 }
 
 // ============================================================================
-// LinkedList[T] - Doubly-linked list
+// LinkedList[T] - Doubly-linked list (simplified array-based)
 // ============================================================================
 
 /// A doubly-linked list for efficient insertion and removal.
 ///
-/// `LinkedList[T]` provides O(1) insertion and removal at both ends.
+/// Note: This is a simplified implementation using indices into an array
+/// rather than raw pointers.
 ///
 /// # Example
 ///
 /// ```tml
-/// let list = LinkedList::create[I32]()
-/// list.add_first(1)
+/// let list: LinkedList[I32] = LinkedList::create[I32]()
+/// list.add_last(1)
 /// list.add_last(2)
 /// list.add_last(3)
 /// // List: 1 <-> 2 <-> 3
-/// print(list.remove_first())  // 1
+/// print(list.remove_first().unwrap().to_string())  // 1
 /// ```
-pub class LinkedList[T] extends Object implements ICollection[T] {
-    /// Head of the list
-    head: I64
-    /// Tail of the list
-    tail: I64
+pub type LinkedList[T] {
+    /// Nodes storage
+    nodes: [LinkedListNode[T]],
+    /// Number of nodes in storage
+    node_count: I64,
+    /// Head index (-1 for empty)
+    head: I64,
+    /// Tail index (-1 for empty)
+    tail: I64,
     /// Number of elements
     length: I64
+}
 
+impl[T] LinkedList[T] {
     /// Creates a new empty LinkedList.
-    static func create() -> LinkedList[T] {
-        LinkedList {
-            head: 0,
-            tail: 0,
+    pub func create() -> LinkedList[T] {
+        return LinkedList {
+            nodes: [],
+            node_count: 0,
+            head: -1,
+            tail: -1,
             length: 0,
         }
     }
 
-    // ICollection[T] implementation
-
-    func count(this) -> I64 {
-        this.length
+    pub func count(this) -> I64 {
+        return this.length
     }
 
-    func is_empty(this) -> Bool {
-        this.length == 0
+    pub func is_empty(this) -> Bool {
+        return this.length == 0
     }
 
-    func add(mut this, item: T) {
+    pub func add(mut this, item: T) {
         this.add_last(item)
     }
 
-    func remove(mut this, item: T) -> Bool {
-        // Find and remove the item
-        var current = this.head
-        loop (current != 0) {
-            let node = current as Ptr[LinkedListNode[T]]
-            // TODO: Proper equality
-            // if (*node).value == item {
-            //     this.remove_node(current)
-            //     return true
-            // }
-            current = lowlevel { (*node).next }
-        }
-        false
-    }
-
-    func clear(mut this) {
-        // Free all nodes
-        var current = this.head
-        loop (current != 0) {
-            let node = current as Ptr[LinkedListNode[T]]
-            let next = lowlevel { (*node).next }
-            lowlevel { free(current as Ptr[U8]) }
-            current = next
-        }
-        this.head = 0
-        this.tail = 0
+    pub func clear(mut this) {
+        this.nodes.clear()
+        this.node_count = 0
+        this.head = -1
+        this.tail = -1
         this.length = 0
     }
 
-    func contains(this, item: T) -> Bool {
-        var current = this.head
-        loop (current != 0) {
-            let node = current as Ptr[LinkedListNode[T]]
-            // TODO: Proper equality
-            // if (*node).value == item { return true }
-            current = lowlevel { (*node).next }
-        }
-        false
-    }
-
-    // LinkedList-specific methods
-
     /// Adds an item at the beginning of the list.
-    func add_first(mut this, item: T) {
-        let node_ptr = lowlevel { malloc(24) } as I64 // sizeof(LinkedListNode[T])
+    pub func add_first(mut this, item: T) {
+        let node_idx: I64 = this.node_count
+        let node: LinkedListNode[T] = LinkedListNode {
+            value: item,
+            prev: -1,
+            next: this.head,
+        }
+        this.nodes.push(node)
+        this.node_count = this.node_count + 1
 
-        if node_ptr == 0 {
-            return
+        if this.head >= 0 {
+            this.nodes[this.head].prev = node_idx
         }
 
-        let node = node_ptr as Ptr[LinkedListNode[T]]
-        lowlevel {
-            (*node).value = item
-            (*node).prev = 0
-            (*node).next = this.head
-        }
+        this.head = node_idx
 
-        if this.head != 0 {
-            let old_head = this.head as Ptr[LinkedListNode[T]]
-            lowlevel { (*old_head).prev = node_ptr }
-        }
-
-        this.head = node_ptr
-
-        if this.tail == 0 {
-            this.tail = node_ptr
+        if this.tail < 0 {
+            this.tail = node_idx
         }
 
         this.length = this.length + 1
     }
 
     /// Adds an item at the end of the list.
-    func add_last(mut this, item: T) {
-        let node_ptr = lowlevel { malloc(24) } as I64
+    pub func add_last(mut this, item: T) {
+        let node_idx: I64 = this.node_count
+        let node: LinkedListNode[T] = LinkedListNode {
+            value: item,
+            prev: this.tail,
+            next: -1,
+        }
+        this.nodes.push(node)
+        this.node_count = this.node_count + 1
 
-        if node_ptr == 0 {
-            return
+        if this.tail >= 0 {
+            this.nodes[this.tail].next = node_idx
         }
 
-        let node = node_ptr as Ptr[LinkedListNode[T]]
-        lowlevel {
-            (*node).value = item
-            (*node).prev = this.tail
-            (*node).next = 0
-        }
+        this.tail = node_idx
 
-        if this.tail != 0 {
-            let old_tail = this.tail as Ptr[LinkedListNode[T]]
-            lowlevel { (*old_tail).next = node_ptr }
-        }
-
-        this.tail = node_ptr
-
-        if this.head == 0 {
-            this.head = node_ptr
+        if this.head < 0 {
+            this.head = node_idx
         }
 
         this.length = this.length + 1
     }
 
     /// Removes and returns the first item.
-    func remove_first(mut this) -> Maybe[T] {
-        if this.head == 0 {
+    pub func remove_first(mut this) -> Maybe[T] {
+        if this.head < 0 {
             return Nothing
         }
 
-        let node = this.head as Ptr[LinkedListNode[T]]
-        let value = lowlevel { (*node).value }
-        let next = lowlevel { (*node).next }
+        let value: T = this.nodes[this.head].value
+        let next: I64 = this.nodes[this.head].next
 
-        if next != 0 {
-            let next_node = next as Ptr[LinkedListNode[T]]
-            lowlevel { (*next_node).prev = 0 }
+        if next >= 0 {
+            this.nodes[next].prev = -1
         } else {
-            this.tail = 0
+            this.tail = -1
         }
 
-        lowlevel { free(this.head as Ptr[U8]) }
         this.head = next
         this.length = this.length - 1
 
-        Just(value)
+        return Just(value)
     }
 
     /// Removes and returns the last item.
-    func remove_last(mut this) -> Maybe[T] {
-        if this.tail == 0 {
+    pub func remove_last(mut this) -> Maybe[T] {
+        if this.tail < 0 {
             return Nothing
         }
 
-        let node = this.tail as Ptr[LinkedListNode[T]]
-        let value = lowlevel { (*node).value }
-        let prev = lowlevel { (*node).prev }
+        let value: T = this.nodes[this.tail].value
+        let prev: I64 = this.nodes[this.tail].prev
 
-        if prev != 0 {
-            let prev_node = prev as Ptr[LinkedListNode[T]]
-            lowlevel { (*prev_node).next = 0 }
+        if prev >= 0 {
+            this.nodes[prev].next = -1
         } else {
-            this.head = 0
+            this.head = -1
         }
 
-        lowlevel { free(this.tail as Ptr[U8]) }
         this.tail = prev
         this.length = this.length - 1
 
-        Just(value)
+        return Just(value)
     }
 
     /// Returns the first item without removing it.
-    func first(this) -> Maybe[T] {
-        if this.head == 0 {
+    pub func first(this) -> Maybe[T] {
+        if this.head < 0 {
             return Nothing
         }
-        let node = this.head as Ptr[LinkedListNode[T]]
-        Just(lowlevel { (*node).value })
+        return Just(this.nodes[this.head].value)
     }
 
     /// Returns the last item without removing it.
-    func last(this) -> Maybe[T] {
-        if this.tail == 0 {
+    pub func last(this) -> Maybe[T] {
+        if this.tail < 0 {
             return Nothing
         }
-        let node = this.tail as Ptr[LinkedListNode[T]]
-        Just(lowlevel { (*node).value })
-    }
-
-    override func to_string(this) -> Str {
-        return "LinkedList[" + this.length.to_string() + " elements]"
-    }
-
-    override func get_type(this) -> Str {
-        return "LinkedList"
+        return Just(this.nodes[this.tail].value)
     }
 }
 
-impl[T] Drop for LinkedList[T] {
-    func drop(mut this) {
-        this.clear()
+/// Methods that require element equality comparison.
+impl[T: PartialEq] LinkedList[T] {
+    /// Removes the first occurrence of an element.
+    /// Returns true if the element was found and removed.
+    pub func remove(mut this, item: T) -> Bool {
+        var idx: I64 = this.head
+        loop (idx >= 0) {
+            if this.nodes[idx].value == item {
+                let prev_idx: I64 = this.nodes[idx].prev
+                let next_idx: I64 = this.nodes[idx].next
+
+                // Update previous node's next pointer
+                if prev_idx >= 0 {
+                    this.nodes[prev_idx].next = next_idx
+                } else {
+                    this.head = next_idx
+                }
+
+                // Update next node's prev pointer
+                if next_idx >= 0 {
+                    this.nodes[next_idx].prev = prev_idx
+                } else {
+                    this.tail = prev_idx
+                }
+
+                this.length = this.length - 1
+                return true
+            }
+            idx = this.nodes[idx].next
+        }
+        return false
+    }
+
+    /// Returns true if the list contains the element.
+    pub func contains(this, item: T) -> Bool {
+        var idx: I64 = this.head
+        loop (idx >= 0) {
+            if this.nodes[idx].value == item {
+                return true
+            }
+            idx = this.nodes[idx].next
+        }
+        return false
     }
 }
 
@@ -933,111 +824,151 @@ impl[T] Drop for LinkedList[T] {
 // ============================================================================
 
 func max_i64(a: I64, b: I64) -> I64 {
-    if a > b { a } else { b }
+    if a > b {
+        return a
+    } else {
+        return b
+    }
 }
 
 // ============================================================================
 // Tests
 // ============================================================================
 
+use test
+
 @test
-func test_array_list_basic() {
-    var list = ArrayList::create[I64]()
+func test_array_list_basic() -> I32 {
+    var list: ArrayList[I64] = ArrayList::create[I64]()
 
     list.add(10)
     list.add(20)
     list.add(30)
 
-    assert_eq(list.count(), 3)
-    assert_eq(list.get(0), 10)
-    assert_eq(list.get(1), 20)
-    assert_eq(list.get(2), 30)
+    assert_eq(list.count(), 3 as I64, "count should be 3")
+    assert_eq(list.get(0), 10 as I64, "first element")
+    assert_eq(list.get(1), 20 as I64, "second element")
+    assert_eq(list.get(2), 30 as I64, "third element")
 
     list.set(1, 25)
-    assert_eq(list.get(1), 25)
+    assert_eq(list.get(1), 25 as I64, "after set")
+    return 0
 }
 
 @test
-func test_array_list_insert_remove() {
-    var list = ArrayList::create[I64]()
+func test_array_list_insert_remove() -> I32 {
+    var list: ArrayList[I64] = ArrayList::create[I64]()
 
     list.add(1)
     list.add(3)
     list.insert(1, 2)  // Insert 2 at index 1
 
-    assert_eq(list.count(), 3)
-    assert_eq(list.get(0), 1)
-    assert_eq(list.get(1), 2)
-    assert_eq(list.get(2), 3)
+    assert_eq(list.count(), 3 as I64, "count after insert")
+    assert_eq(list.get(0), 1 as I64, "element 0")
+    assert_eq(list.get(1), 2 as I64, "element 1")
+    assert_eq(list.get(2), 3 as I64, "element 2")
 
     list.remove_at(1)  // Remove index 1
 
-    assert_eq(list.count(), 2)
-    assert_eq(list.get(0), 1)
-    assert_eq(list.get(1), 3)
+    assert_eq(list.count(), 2 as I64, "count after remove")
+    assert_eq(list.get(0), 1 as I64, "element 0 after remove")
+    assert_eq(list.get(1), 3 as I64, "element 1 after remove")
+    return 0
 }
 
 @test
-func test_queue_basic() {
-    var queue = Queue::create[Str]()
+func test_queue_basic() -> I32 {
+    var queue: Queue[I64] = Queue::create[I64]()
 
-    queue.enqueue("first")
-    queue.enqueue("second")
-    queue.enqueue("third")
+    queue.enqueue(1)
+    queue.enqueue(2)
+    queue.enqueue(3)
 
-    assert_eq(queue.count(), 3)
+    assert_eq(queue.count(), 3 as I64, "count should be 3")
 
-    assert_eq(queue.dequeue(), Just("first"))
-    assert_eq(queue.dequeue(), Just("second"))
-    assert_eq(queue.count(), 1)
-    assert_eq(queue.peek(), Just("third"))
-    assert_eq(queue.dequeue(), Just("third"))
-    assert_eq(queue.dequeue(), Nothing)
+    let v1: Maybe[I64] = queue.dequeue()
+    assert(v1 == Just(1 as I64), "dequeue should return 1")
+
+    let v2: Maybe[I64] = queue.dequeue()
+    assert(v2 == Just(2 as I64), "dequeue should return 2")
+
+    assert_eq(queue.count(), 1 as I64, "count should be 1")
+
+    let v3: Maybe[I64] = queue.peek()
+    assert(v3 == Just(3 as I64), "peek should return 3")
+
+    let v4: Maybe[I64] = queue.dequeue()
+    assert(v4 == Just(3 as I64), "dequeue should return 3")
+
+    let v5: Maybe[I64] = queue.dequeue()
+    assert(v5 == Nothing, "dequeue on empty should return Nothing")
+    return 0
 }
 
 @test
-func test_stack_basic() {
-    var stack = Stack::create[I32]()
+func test_stack_basic() -> I32 {
+    var stack: Stack[I64] = Stack::create[I64]()
 
     stack.push(1)
     stack.push(2)
     stack.push(3)
 
-    assert_eq(stack.count(), 3)
-    assert_eq(stack.peek(), Just(3))
-    assert_eq(stack.pop(), Just(3))
-    assert_eq(stack.pop(), Just(2))
-    assert_eq(stack.count(), 1)
-    assert_eq(stack.pop(), Just(1))
-    assert_eq(stack.pop(), Nothing)
+    assert_eq(stack.count(), 3 as I64, "count should be 3")
+
+    let p1: Maybe[I64] = stack.peek()
+    assert(p1 == Just(3 as I64), "peek should return 3")
+
+    let v1: Maybe[I64] = stack.pop()
+    assert(v1 == Just(3 as I64), "pop should return 3")
+
+    let v2: Maybe[I64] = stack.pop()
+    assert(v2 == Just(2 as I64), "pop should return 2")
+
+    assert_eq(stack.count(), 1 as I64, "count should be 1")
+
+    let v3: Maybe[I64] = stack.pop()
+    assert(v3 == Just(1 as I64), "pop should return 1")
+
+    let v4: Maybe[I64] = stack.pop()
+    assert(v4 == Nothing, "pop on empty should return Nothing")
+    return 0
 }
 
 @test
-func test_linked_list_basic() {
-    var list = LinkedList::create[I64]()
+func test_linked_list_basic() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create[I64]()
 
     list.add_first(2)
     list.add_first(1)
     list.add_last(3)
 
-    assert_eq(list.count(), 3)
-    assert_eq(list.first(), Just(1))
-    assert_eq(list.last(), Just(3))
+    assert_eq(list.count(), 3 as I64, "count should be 3")
 
-    assert_eq(list.remove_first(), Just(1))
-    assert_eq(list.remove_last(), Just(3))
-    assert_eq(list.count(), 1)
+    let f: Maybe[I64] = list.first()
+    assert(f == Just(1 as I64), "first should be 1")
+
+    let l: Maybe[I64] = list.last()
+    assert(l == Just(3 as I64), "last should be 3")
+
+    let r1: Maybe[I64] = list.remove_first()
+    assert(r1 == Just(1 as I64), "remove_first should return 1")
+
+    let r2: Maybe[I64] = list.remove_last()
+    assert(r2 == Just(3 as I64), "remove_last should return 3")
+
+    assert_eq(list.count(), 1 as I64, "count should be 1")
+    return 0
 }
 
 @test
-func test_hash_set_basic() {
-    var set = HashSet::create[I64]()
+func test_hash_set_basic() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
 
     set.add(10)
     set.add(20)
     set.add(10)  // Duplicate - should be ignored
 
     // Note: Due to placeholder hash function, count may not reflect true behavior
-    // Real implementation needs proper hash function
-    assert(set.count() >= 1)
+    assert(set.count() >= 1 as I64, "count should be at least 1")
+    return 0
 }

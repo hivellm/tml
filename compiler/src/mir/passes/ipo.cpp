@@ -281,12 +281,39 @@ auto IpcpPass::run(Module& module) -> bool {
 }
 
 void IpcpPass::gather_constants(const Module& module) {
+    // Build a map from ValueId to Constant for each function
+    // Then scan calls and record constant arguments
+
     for (const auto& func : module.functions) {
+        // Build value -> constant map for this function
+        std::unordered_map<ValueId, Constant> value_constants;
+        for (const auto& block : func.blocks) {
+            for (const auto& inst_data : block.instructions) {
+                if (auto* const_inst = std::get_if<ConstantInst>(&inst_data.inst)) {
+                    if (inst_data.result != INVALID_VALUE) {
+                        value_constants[inst_data.result] = const_inst->value;
+                    }
+                }
+            }
+        }
+
+        // Scan calls and track constant arguments
         for (const auto& block : func.blocks) {
             for (const auto& inst_data : block.instructions) {
                 if (auto* call = std::get_if<CallInst>(&inst_data.inst)) {
-                    (void)call; // TODO: Track constant arguments
-                    // Would need value tracking to identify constants
+                    for (size_t i = 0; i < call->args.size(); ++i) {
+                        auto it = value_constants.find(call->args[i].id);
+                        if (it != value_constants.end()) {
+                            // Found a constant argument
+                            auto& func_constants = constant_args_[call->func_name];
+                            // Check if we already have this arg_index -> update or add
+                            auto existing = func_constants.find(i);
+                            if (existing == func_constants.end()) {
+                                func_constants[i] = it->second;
+                            }
+                            // If different constant, we can't specialize (would need to track all)
+                        }
+                    }
                 }
             }
         }

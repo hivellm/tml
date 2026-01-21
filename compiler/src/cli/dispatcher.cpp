@@ -375,7 +375,8 @@ int tml_main(int argc, char* argv[]) {
                 << "Usage: tml run <file.tml> [args...] [--verbose] [--no-cache] [--coverage] "
                    "[--coverage-output=<file>] [--profile[=<file>]]\n";
             std::cerr << "\nProfiling options:\n";
-            std::cerr << "  --profile           Enable runtime profiling (output: profile.cpuprofile)\n";
+            std::cerr
+                << "  --profile           Enable runtime profiling (output: profile.cpuprofile)\n";
             std::cerr << "  --profile=<file>    Enable profiling with custom output path\n";
             std::cerr << "\nThe .cpuprofile file can be loaded in Chrome DevTools or VS Code.\n";
             return 1;

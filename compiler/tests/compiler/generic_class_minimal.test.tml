@@ -1,0 +1,21 @@
+// Minimal Generic Class Test
+use test
+
+class Box[T] {
+    value: T
+
+    new(value: T) {
+        this.value = value
+    }
+
+    func get(this) -> T {
+        return this.value
+    }
+}
+
+@test
+func test_box_i32() -> I32 {
+    let b: Box[I32] = Box::new(42)
+    assert_eq(b.get(), 42, "Box[I32] should hold 42")
+    return 0
+}

@@ -613,7 +613,8 @@ int run_run_ex(const std::string& path, const RunOptions& opts) {
         CompilerOptions::profile_output = opts.profile_output;
 
         std::cerr << "[TML] Runtime profiling enabled. Output: " << opts.profile_output << "\n";
-        std::cerr << "[TML] Note: Automatic instrumentation requires recompilation with --profile flag.\n";
+        std::cerr << "[TML] Note: Automatic instrumentation requires recompilation with --profile "
+                     "flag.\n";
         std::cerr << "[TML] For manual profiling, use std::profiler module in your code.\n";
     }
 

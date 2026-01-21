@@ -71,7 +71,7 @@ auto RvoPass::find_returns(const Function& func) -> std::vector<ReturnInfo> {
                 info.inst_index = block.instructions.size(); // Terminator is after all instructions
                 info.returned_value = ret->value.has_value() ? ret->value->id : INVALID_VALUE;
                 info.is_local_var = is_local_variable(func, info.returned_value);
-                info.is_struct_literal = false; // TODO: track struct literal returns
+                info.is_struct_literal = is_struct_literal(func, info.returned_value);
 
                 returns.push_back(info);
             }
@@ -124,6 +124,26 @@ auto RvoPass::is_local_variable(const Function& func, ValueId value) const -> bo
         for (const auto& inst : block.instructions) {
             if (inst.result == value) {
                 return std::holds_alternative<AllocaInst>(inst.inst);
+            }
+        }
+    }
+
+    return false;
+}
+
+auto RvoPass::is_struct_literal(const Function& func, ValueId value) const -> bool {
+    if (value == INVALID_VALUE) {
+        return false;
+    }
+
+    // Search all blocks for the instruction that defines this value
+    for (const auto& block : func.blocks) {
+        for (const auto& inst : block.instructions) {
+            if (inst.result == value) {
+                // Check if defined by StructInitInst, EnumInitInst, or TupleInitInst
+                return std::holds_alternative<StructInitInst>(inst.inst) ||
+                       std::holds_alternative<EnumInitInst>(inst.inst) ||
+                       std::holds_alternative<TupleInitInst>(inst.inst);
             }
         }
     }

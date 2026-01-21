@@ -60,14 +60,10 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
                 advance();
                 if (check(lexer::TokenKind::RBracket)) {
                     advance(); // consume ]
-                    if (check(lexer::TokenKind::Identifier) ||
-                        check(lexer::TokenKind::LParen) ||
-                        check(lexer::TokenKind::LBracket) ||
-                        check(lexer::TokenKind::KwFunc) ||
-                        check(lexer::TokenKind::KwDyn) ||
-                        check(lexer::TokenKind::KwImpl) ||
-                        check(lexer::TokenKind::Star) ||
-                        check(lexer::TokenKind::KwRef) ||
+                    if (check(lexer::TokenKind::Identifier) || check(lexer::TokenKind::LParen) ||
+                        check(lexer::TokenKind::LBracket) || check(lexer::TokenKind::KwFunc) ||
+                        check(lexer::TokenKind::KwDyn) || check(lexer::TokenKind::KwImpl) ||
+                        check(lexer::TokenKind::Star) || check(lexer::TokenKind::KwRef) ||
                         check(lexer::TokenKind::KwMut)) {
                         is_lifetime_annotation = true;
                         lifetime = "static";
@@ -78,14 +74,10 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
                 advance();
                 if (check(lexer::TokenKind::RBracket)) {
                     advance(); // consume ]
-                    if (check(lexer::TokenKind::Identifier) ||
-                        check(lexer::TokenKind::LParen) ||
-                        check(lexer::TokenKind::LBracket) ||
-                        check(lexer::TokenKind::KwFunc) ||
-                        check(lexer::TokenKind::KwDyn) ||
-                        check(lexer::TokenKind::KwImpl) ||
-                        check(lexer::TokenKind::Star) ||
-                        check(lexer::TokenKind::KwRef) ||
+                    if (check(lexer::TokenKind::Identifier) || check(lexer::TokenKind::LParen) ||
+                        check(lexer::TokenKind::LBracket) || check(lexer::TokenKind::KwFunc) ||
+                        check(lexer::TokenKind::KwDyn) || check(lexer::TokenKind::KwImpl) ||
+                        check(lexer::TokenKind::Star) || check(lexer::TokenKind::KwRef) ||
                         check(lexer::TokenKind::KwMut)) {
                         is_lifetime_annotation = true;
                         lifetime = potential_lifetime;
@@ -125,14 +117,10 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
                 if (check(lexer::TokenKind::RBracket)) {
                     advance(); // consume ]
                     // Check if there's a type following
-                    if (check(lexer::TokenKind::Identifier) ||
-                        check(lexer::TokenKind::LParen) ||
-                        check(lexer::TokenKind::LBracket) ||
-                        check(lexer::TokenKind::KwFunc) ||
-                        check(lexer::TokenKind::KwDyn) ||
-                        check(lexer::TokenKind::KwImpl) ||
-                        check(lexer::TokenKind::Star) ||
-                        check(lexer::TokenKind::KwRef) ||
+                    if (check(lexer::TokenKind::Identifier) || check(lexer::TokenKind::LParen) ||
+                        check(lexer::TokenKind::LBracket) || check(lexer::TokenKind::KwFunc) ||
+                        check(lexer::TokenKind::KwDyn) || check(lexer::TokenKind::KwImpl) ||
+                        check(lexer::TokenKind::Star) || check(lexer::TokenKind::KwRef) ||
                         check(lexer::TokenKind::KwMut)) {
                         is_lifetime_annotation = true;
                         lifetime = "static";
@@ -144,14 +132,10 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
                 if (check(lexer::TokenKind::RBracket)) {
                     advance(); // consume ]
                     // Check if there's a type following (not ) , } etc.)
-                    if (check(lexer::TokenKind::Identifier) ||
-                        check(lexer::TokenKind::LParen) ||
-                        check(lexer::TokenKind::LBracket) ||
-                        check(lexer::TokenKind::KwFunc) ||
-                        check(lexer::TokenKind::KwDyn) ||
-                        check(lexer::TokenKind::KwImpl) ||
-                        check(lexer::TokenKind::Star) ||
-                        check(lexer::TokenKind::KwRef) ||
+                    if (check(lexer::TokenKind::Identifier) || check(lexer::TokenKind::LParen) ||
+                        check(lexer::TokenKind::LBracket) || check(lexer::TokenKind::KwFunc) ||
+                        check(lexer::TokenKind::KwDyn) || check(lexer::TokenKind::KwImpl) ||
+                        check(lexer::TokenKind::Star) || check(lexer::TokenKind::KwRef) ||
                         check(lexer::TokenKind::KwMut)) {
                         is_lifetime_annotation = true;
                         lifetime = potential_lifetime;

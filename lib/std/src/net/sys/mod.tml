@@ -32,6 +32,7 @@ pub const IPPROTO_TCP_OPT: I32 = 6
 /// Socket options.
 pub const SO_REUSEADDR: I32 = 4
 pub const SO_KEEPALIVE: I32 = 8
+pub const SO_BROADCAST: I32 = 32  // Allow sending broadcast messages
 pub const TCP_NODELAY: I32 = 1
 
 // ============================================================================
@@ -225,6 +226,16 @@ impl RawSocket {
     pub func set_reuse_addr(this, reuse: Bool) -> Outcome[(), NetError] {
         let value: I32 = if reuse { 1 } else { 0 }
         let result: I32 = lowlevel { sys_setsockopt(this.handle, SOL_SOCKET, SO_REUSEADDR, value) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    /// Enables or disables SO_BROADCAST (for UDP sockets).
+    pub func set_broadcast(this, broadcast: Bool) -> Outcome[(), NetError] {
+        let value: I32 = if broadcast { 1 } else { 0 }
+        let result: I32 = lowlevel { sys_setsockopt(this.handle, SOL_SOCKET, SO_BROADCAST, value) }
         if result < 0 {
             return Err(NetError::new(NetErrorKind::Other()))
         }

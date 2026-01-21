@@ -381,14 +381,13 @@ void MirCodegen::emit_function(const mir::Function& func) {
 
     // Check if this is an iterator method that should always inline
     // Iterator methods are critical for zero-cost abstraction in for loops
-    bool is_iterator_method =
-        func.name.find("Iter__next") != std::string::npos ||
-        func.name.find("__into_iter") != std::string::npos ||
-        func.name.find("ArrayIter__") != std::string::npos ||
-        func.name.find("SliceIter__") != std::string::npos ||
-        func.name.find("Chunks__next") != std::string::npos ||
-        func.name.find("Windows__next") != std::string::npos ||
-        func.name.find("ChunksExact__next") != std::string::npos;
+    bool is_iterator_method = func.name.find("Iter__next") != std::string::npos ||
+                              func.name.find("__into_iter") != std::string::npos ||
+                              func.name.find("ArrayIter__") != std::string::npos ||
+                              func.name.find("SliceIter__") != std::string::npos ||
+                              func.name.find("Chunks__next") != std::string::npos ||
+                              func.name.find("Windows__next") != std::string::npos ||
+                              func.name.find("ChunksExact__next") != std::string::npos;
 
     // Small functions (<=10 instructions, single block) get inlinehint
     // drop_ functions and iterator methods get alwaysinline

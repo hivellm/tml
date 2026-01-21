@@ -4,11 +4,11 @@ use core::char::MIN
 
 @test
 func test_const_import() -> I32 {
-    // MAX should be 0x10FFFF = 1114111
-    assert(MAX == 1114111, "MAX should be 1114111")
-    
-    // MIN should be 0
-    assert(MIN == 0, "MIN should be 0")
-    
+    // MAX should be '\u{10FFFF}' = 1114111 as U32
+    assert((MAX as U32) == 1114111, "MAX should be 1114111")
+
+    // MIN should be '\0' = 0 as U32
+    assert((MIN as U32) == 0, "MIN should be 0")
+
     return 0
 }

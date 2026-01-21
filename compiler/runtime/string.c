@@ -55,19 +55,20 @@
 // We detect dynamic strings by checking if they were allocated by us,
 // using a magic marker in the high bits of capacity.
 
-#define TML_STRING_MAGIC 0x544D4C5000000000ULL  // "TML\x50" in hex
+#define TML_STRING_MAGIC 0x544D4C5000000000ULL // "TML\x50" in hex
 #define TML_STRING_MAGIC_MASK 0xFFFF000000000000ULL
 #define TML_STRING_CAPACITY_MASK 0x0000FFFFFFFFFFFFULL
 
 // Header for dynamic strings (16 bytes, placed BEFORE the string data)
 typedef struct {
-    uint64_t capacity_with_magic;  // High 16 bits: magic, Low 48 bits: capacity
+    uint64_t capacity_with_magic; // High 16 bits: magic, Low 48 bits: capacity
     uint64_t length;
 } TmlStringHeader;
 
 // Check if a string pointer is a dynamic TML string (has our header)
 static inline int is_dynamic_string(const char* s) {
-    if (!s) return 0;
+    if (!s)
+        return 0;
     const TmlStringHeader* header = (const TmlStringHeader*)(s - sizeof(TmlStringHeader));
     // Check for magic marker (with some address sanity checks)
     return (header->capacity_with_magic & TML_STRING_MAGIC_MASK) == TML_STRING_MAGIC;
@@ -93,11 +94,13 @@ static inline void set_string_length(char* s, uint64_t len) {
 
 // Allocate a new dynamic string with given capacity (minimum 32 bytes)
 static char* alloc_dynamic_string(uint64_t capacity) {
-    if (capacity < 32) capacity = 32;
+    if (capacity < 32)
+        capacity = 32;
 
     // Allocate header + data + null terminator
     void* mem = malloc(sizeof(TmlStringHeader) + capacity + 1);
-    if (!mem) return NULL;
+    if (!mem)
+        return NULL;
 
     TmlStringHeader* header = (TmlStringHeader*)mem;
     header->capacity_with_magic = TML_STRING_MAGIC | (capacity & TML_STRING_CAPACITY_MASK);
@@ -127,8 +130,10 @@ void str_free(const char* s) {
  * @return Concatenated string (may be same pointer as 'a' or new allocation)
  */
 const char* str_concat_opt(const char* a, const char* b) {
-    if (!a) a = "";
-    if (!b) b = "";
+    if (!a)
+        a = "";
+    if (!b)
+        b = "";
 
     size_t len_a = is_dynamic_string(a) ? get_string_length(a) : strlen(a);
     size_t len_b = strlen(b);
@@ -149,13 +154,15 @@ const char* str_concat_opt(const char* a, const char* b) {
 
     // Slow path: allocate new string with 2x capacity for future growth
     uint64_t new_capacity = total_len * 2;
-    if (new_capacity < 64) new_capacity = 64;
+    if (new_capacity < 64)
+        new_capacity = 64;
 
     char* result = alloc_dynamic_string(new_capacity);
     if (!result) {
         // Fallback to simple allocation
         result = (char*)malloc(total_len + 1);
-        if (!result) return "";
+        if (!result)
+            return "";
         memcpy(result, a, len_a);
         memcpy(result + len_a, b, len_b);
         result[total_len] = '\0';
@@ -197,13 +204,15 @@ const char* str_concat_n(const char** strings, int64_t count) {
 
     // Allocate with 2x capacity for potential future appends
     uint64_t capacity = total_len * 2;
-    if (capacity < 64) capacity = 64;
+    if (capacity < 64)
+        capacity = 64;
 
     char* result = alloc_dynamic_string(capacity);
     if (!result) {
         // Fallback
         result = (char*)malloc(total_len + 1);
-        if (!result) return "";
+        if (!result)
+            return "";
     }
 
     // Second pass: copy all strings
@@ -229,9 +238,12 @@ const char* str_concat_n(const char** strings, int64_t count) {
  * Optimized version for the common case of "a" + "b" + "c".
  */
 const char* str_concat_3(const char* a, const char* b, const char* c) {
-    if (!a) a = "";
-    if (!b) b = "";
-    if (!c) c = "";
+    if (!a)
+        a = "";
+    if (!b)
+        b = "";
+    if (!c)
+        c = "";
 
     size_t len_a = strlen(a);
     size_t len_b = strlen(b);
@@ -239,10 +251,12 @@ const char* str_concat_3(const char* a, const char* b, const char* c) {
     size_t total_len = len_a + len_b + len_c;
 
     uint64_t capacity = total_len * 2;
-    if (capacity < 64) capacity = 64;
+    if (capacity < 64)
+        capacity = 64;
 
     char* result = alloc_dynamic_string(capacity);
-    if (!result) return "";
+    if (!result)
+        return "";
 
     memcpy(result, a, len_a);
     memcpy(result + len_a, b, len_b);
@@ -257,10 +271,14 @@ const char* str_concat_3(const char* a, const char* b, const char* c) {
  * @brief Concatenate 4 strings in a single allocation.
  */
 const char* str_concat_4(const char* a, const char* b, const char* c, const char* d) {
-    if (!a) a = "";
-    if (!b) b = "";
-    if (!c) c = "";
-    if (!d) d = "";
+    if (!a)
+        a = "";
+    if (!b)
+        b = "";
+    if (!c)
+        c = "";
+    if (!d)
+        d = "";
 
     size_t len_a = strlen(a);
     size_t len_b = strlen(b);
@@ -269,15 +287,20 @@ const char* str_concat_4(const char* a, const char* b, const char* c, const char
     size_t total_len = len_a + len_b + len_c + len_d;
 
     uint64_t capacity = total_len * 2;
-    if (capacity < 64) capacity = 64;
+    if (capacity < 64)
+        capacity = 64;
 
     char* result = alloc_dynamic_string(capacity);
-    if (!result) return "";
+    if (!result)
+        return "";
 
     char* p = result;
-    memcpy(p, a, len_a); p += len_a;
-    memcpy(p, b, len_b); p += len_b;
-    memcpy(p, c, len_c); p += len_c;
+    memcpy(p, a, len_a);
+    p += len_a;
+    memcpy(p, b, len_b);
+    p += len_b;
+    memcpy(p, c, len_c);
+    p += len_c;
     memcpy(p, d, len_d);
     result[total_len] = '\0';
     set_string_length(result, total_len);
@@ -291,7 +314,7 @@ const char* str_concat_4(const char* a, const char* b, const char* c, const char
  * This is kept for backward compatibility with existing functions.
  * New code should use str_concat_opt which is O(1) amortized.
  */
-static char str_buffer[4 * 1024 * 1024];  // 4MB buffer
+static char str_buffer[4 * 1024 * 1024]; // 4MB buffer
 
 // str_len(s: Str) -> I32
 int32_t str_len(const char* s) {
@@ -670,17 +693,16 @@ const char* strbuilder_as_str(void* ptr) {
 // ============================================================================
 
 // Lookup table for fast 2-digit conversion (00-99)
-static const char digit_pairs[201] =
-    "00010203040506070809"
-    "10111213141516171819"
-    "20212223242526272829"
-    "30313233343536373839"
-    "40414243444546474849"
-    "50515253545556575859"
-    "60616263646566676869"
-    "70717273747576777879"
-    "80818283848586878889"
-    "90919293949596979899";
+static const char digit_pairs[201] = "00010203040506070809"
+                                     "10111213141516171819"
+                                     "20212223242526272829"
+                                     "30313233343536373839"
+                                     "40414243444546474849"
+                                     "50515253545556575859"
+                                     "60616263646566676869"
+                                     "70717273747576777879"
+                                     "80818283848586878889"
+                                     "90919293949596979899";
 
 // Fast integer to string conversion using lookup table
 // Processes 2 digits at a time, ~10-20x faster than snprintf

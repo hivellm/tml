@@ -294,7 +294,8 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
                 if (idx_type == "i32") {
                     emit_line("  " + index_i64 + " = sext i32 " + index_val + " to i64");
                 } else {
-                    emit_line("  " + index_i64 + " = zext " + idx_type + " " + index_val + " to i64");
+                    emit_line("  " + index_i64 + " = zext " + idx_type + " " + index_val +
+                              " to i64");
                 }
             }
 

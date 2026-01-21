@@ -7,14 +7,15 @@
  */
 
 #include "common.hpp"
+
 #include "json/json.hpp"
 #include "json/json_fast_parser.hpp"
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <string>
 #include <vector>
-#include <chrono>
-#include <atomic>
 
 // ============================================================================
 // FFI Profiling Infrastructure
@@ -50,6 +51,7 @@ class ScopedTimer {
     std::atomic<int64_t>& counter_;
     std::chrono::high_resolution_clock::time_point start_;
     bool enabled_;
+
 public:
     ScopedTimer(std::atomic<int64_t>& counter, bool enabled)
         : counter_(counter), enabled_(enabled) {
@@ -86,7 +88,8 @@ static size_t json_values_next_free = 0;
 // Allocate a new handle for a JsonValue
 static int64_t alloc_json_handle(tml::json::JsonValue&& value) {
     ScopedTimer timer(g_json_stats.handle_alloc_time_ns, g_json_stats.enabled);
-    if (g_json_stats.enabled) g_json_stats.handle_alloc_count++;
+    if (g_json_stats.enabled)
+        g_json_stats.handle_alloc_count++;
 
     // Find a free slot or expand
     for (size_t i = json_values_next_free; i < json_values_free.size(); ++i) {
@@ -127,9 +130,11 @@ static tml::json::JsonValue* get_json_value(int64_t handle) {
  * @return Handle to the parsed JsonValue, or -1 on error
  */
 TML_EXPORT int64_t tml_json_parse_fast(const char* json_str) {
-    if (!json_str) return -1;
+    if (!json_str)
+        return -1;
 
-    if (g_json_stats.enabled) g_json_stats.parse_count++;
+    if (g_json_stats.enabled)
+        g_json_stats.parse_count++;
     ScopedTimer timer(g_json_stats.parse_time_ns, g_json_stats.enabled);
 
     auto result = tml::json::fast::parse_json_fast(json_str);
@@ -146,7 +151,8 @@ TML_EXPORT int64_t tml_json_parse_fast(const char* json_str) {
  * @return Handle to the parsed JsonValue, or -1 on error
  */
 TML_EXPORT int64_t tml_json_parse(const char* json_str) {
-    if (!json_str) return -1;
+    if (!json_str)
+        return -1;
 
     auto result = tml::json::parse_json(json_str);
     if (tml::is_ok(result)) {
@@ -163,7 +169,8 @@ TML_EXPORT int64_t tml_json_parse(const char* json_str) {
  * @return Handle to the parsed JsonValue, or -1 on error
  */
 TML_EXPORT int64_t tml_json_parse_len(const char* json_str, int64_t len) {
-    if (!json_str || len < 0) return -1;
+    if (!json_str || len < 0)
+        return -1;
 
     std::string_view sv(json_str, static_cast<size_t>(len));
     auto result = tml::json::fast::parse_json_fast(sv);
@@ -185,14 +192,21 @@ TML_EXPORT int64_t tml_json_parse_len(const char* json_str, int64_t len) {
  */
 TML_EXPORT int32_t tml_json_get_type(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value) return -1;
+    if (!value)
+        return -1;
 
-    if (value->is_null()) return 0;
-    if (value->is_bool()) return 1;
-    if (value->is_number()) return 2;
-    if (value->is_string()) return 3;
-    if (value->is_array()) return 4;
-    if (value->is_object()) return 5;
+    if (value->is_null())
+        return 0;
+    if (value->is_bool())
+        return 1;
+    if (value->is_number())
+        return 2;
+    if (value->is_string())
+        return 3;
+    if (value->is_array())
+        return 4;
+    if (value->is_object())
+        return 5;
     return -1;
 }
 
@@ -235,7 +249,8 @@ TML_EXPORT int32_t tml_json_is_object(int64_t handle) {
  */
 TML_EXPORT int32_t tml_json_get_bool(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_bool()) return -1;
+    if (!value || !value->is_bool())
+        return -1;
     return value->as_bool() ? 1 : 0;
 }
 
@@ -247,7 +262,8 @@ TML_EXPORT int32_t tml_json_get_bool(int64_t handle) {
  */
 TML_EXPORT int32_t tml_json_as_bool(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_bool()) return 0;
+    if (!value || !value->is_bool())
+        return 0;
     return value->as_bool() ? 1 : 0;
 }
 
@@ -260,7 +276,8 @@ TML_EXPORT int32_t tml_json_as_bool(int64_t handle) {
  */
 TML_EXPORT int32_t tml_json_get_i64(int64_t handle, int64_t* out_value) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_number() || !out_value) return 0;
+    if (!value || !value->is_number() || !out_value)
+        return 0;
 
     const auto& num = value->as_number();
     if (num.is_integer()) {
@@ -281,7 +298,8 @@ TML_EXPORT int32_t tml_json_get_i64(int64_t handle, int64_t* out_value) {
  */
 TML_EXPORT int64_t tml_json_as_i64(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_number()) return 0;
+    if (!value || !value->is_number())
+        return 0;
 
     const auto& num = value->as_number();
     if (num.is_integer()) {
@@ -302,7 +320,8 @@ TML_EXPORT int64_t tml_json_as_i64(int64_t handle) {
  */
 TML_EXPORT int32_t tml_json_get_f64(int64_t handle, double* out_value) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_number() || !out_value) return 0;
+    if (!value || !value->is_number() || !out_value)
+        return 0;
 
     const auto& num = value->as_number();
     *out_value = num.as_f64();
@@ -317,7 +336,8 @@ TML_EXPORT int32_t tml_json_get_f64(int64_t handle, double* out_value) {
  */
 TML_EXPORT double tml_json_as_f64(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_number()) return 0.0;
+    if (!value || !value->is_number())
+        return 0.0;
 
     return value->as_number().as_f64();
 }
@@ -333,7 +353,8 @@ static char json_string_buffer[65536];
  */
 TML_EXPORT const char* tml_json_get_string(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_string()) return nullptr;
+    if (!value || !value->is_string())
+        return nullptr;
 
     const auto& str = value->as_string();
     if (str.length() >= sizeof(json_string_buffer)) {
@@ -353,7 +374,8 @@ TML_EXPORT const char* tml_json_get_string(int64_t handle) {
  */
 TML_EXPORT int64_t tml_json_get_string_len(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_string()) return -1;
+    if (!value || !value->is_string())
+        return -1;
     return static_cast<int64_t>(value->as_string().length());
 }
 
@@ -369,7 +391,8 @@ TML_EXPORT int64_t tml_json_get_string_len(int64_t handle) {
  */
 TML_EXPORT int64_t tml_json_array_len(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_array()) return -1;
+    if (!value || !value->is_array())
+        return -1;
     return static_cast<int64_t>(value->as_array().size());
 }
 
@@ -382,13 +405,16 @@ TML_EXPORT int64_t tml_json_array_len(int64_t handle) {
  */
 TML_EXPORT int64_t tml_json_array_get(int64_t handle, int64_t index) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_array()) return -1;
+    if (!value || !value->is_array())
+        return -1;
 
     const auto& arr = value->as_array();
-    if (index < 0 || static_cast<size_t>(index) >= arr.size()) return -1;
+    if (index < 0 || static_cast<size_t>(index) >= arr.size())
+        return -1;
 
     // Profile clone operation
-    if (g_json_stats.enabled) g_json_stats.clone_count++;
+    if (g_json_stats.enabled)
+        g_json_stats.clone_count++;
     ScopedTimer timer(g_json_stats.clone_time_ns, g_json_stats.enabled);
 
     // Clone the element to a new handle (JsonValue has deleted copy ctor)
@@ -407,7 +433,8 @@ TML_EXPORT int64_t tml_json_array_get(int64_t handle, int64_t index) {
  */
 TML_EXPORT int64_t tml_json_object_len(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_object()) return -1;
+    if (!value || !value->is_object())
+        return -1;
     return static_cast<int64_t>(value->as_object().size());
 }
 
@@ -420,16 +447,20 @@ TML_EXPORT int64_t tml_json_object_len(int64_t handle) {
  */
 TML_EXPORT int64_t tml_json_object_get(int64_t handle, const char* key) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_object() || !key) return -1;
+    if (!value || !value->is_object() || !key)
+        return -1;
 
-    if (g_json_stats.enabled) g_json_stats.field_access_count++;
+    if (g_json_stats.enabled)
+        g_json_stats.field_access_count++;
     ScopedTimer lookup_timer(g_json_stats.field_access_time_ns, g_json_stats.enabled);
 
     const auto* field = value->get(key);
-    if (!field) return -1;
+    if (!field)
+        return -1;
 
     // Profile clone operation
-    if (g_json_stats.enabled) g_json_stats.clone_count++;
+    if (g_json_stats.enabled)
+        g_json_stats.clone_count++;
     ScopedTimer clone_timer(g_json_stats.clone_time_ns, g_json_stats.enabled);
 
     // Clone the field value to a new handle (JsonValue has deleted copy ctor)
@@ -445,7 +476,8 @@ TML_EXPORT int64_t tml_json_object_get(int64_t handle, const char* key) {
  */
 TML_EXPORT int32_t tml_json_object_has(int64_t handle, const char* key) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_object() || !key) return 0;
+    if (!value || !value->is_object() || !key)
+        return 0;
     return value->get(key) != nullptr ? 1 : 0;
 }
 
@@ -459,7 +491,8 @@ TML_EXPORT int32_t tml_json_object_has(int64_t handle, const char* key) {
  * @param handle Handle to free
  */
 TML_EXPORT void tml_json_free(int64_t handle) {
-    if (handle < 0 || static_cast<size_t>(handle) >= json_values.size()) return;
+    if (handle < 0 || static_cast<size_t>(handle) >= json_values.size())
+        return;
 
     size_t idx = static_cast<size_t>(handle);
     if (!json_values_free[idx]) {
@@ -492,7 +525,8 @@ TML_EXPORT void tml_json_free_all() {
  */
 TML_EXPORT const char* tml_json_to_string(int64_t handle) {
     auto* value = get_json_value(handle);
-    if (!value) return nullptr;
+    if (!value)
+        return nullptr;
 
     std::string result = value->to_string();
     if (result.length() >= sizeof(json_string_buffer)) {
@@ -514,7 +548,8 @@ TML_EXPORT const char* tml_json_to_string(int64_t handle) {
  * @return 1 on success, 0 on failure
  */
 TML_EXPORT int32_t tml_json_parse_fast_bench(const char* json_str) {
-    if (!json_str) return 0;
+    if (!json_str)
+        return 0;
 
     auto result = tml::json::fast::parse_json_fast(json_str);
     return tml::is_ok(result) ? 1 : 0;
@@ -527,7 +562,8 @@ TML_EXPORT int32_t tml_json_parse_fast_bench(const char* json_str) {
  * @return 1 on success, 0 on failure
  */
 TML_EXPORT int32_t tml_json_parse_bench(const char* json_str) {
-    if (!json_str) return 0;
+    if (!json_str)
+        return 0;
 
     auto result = tml::json::parse_json(json_str);
     return tml::is_ok(result) ? 1 : 0;
@@ -687,13 +723,16 @@ TML_EXPORT void tml_json_profile_print() {
  */
 TML_EXPORT int64_t tml_json_array_get_i64(int64_t handle, int64_t index) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_array()) return 0;
+    if (!value || !value->is_array())
+        return 0;
 
     const auto& arr = value->as_array();
-    if (index < 0 || static_cast<size_t>(index) >= arr.size()) return 0;
+    if (index < 0 || static_cast<size_t>(index) >= arr.size())
+        return 0;
 
     const auto& elem = arr[static_cast<size_t>(index)];
-    if (!elem.is_number()) return 0;
+    if (!elem.is_number())
+        return 0;
 
     return elem.as_number().try_as_i64().value_or(0);
 }
@@ -703,13 +742,16 @@ TML_EXPORT int64_t tml_json_array_get_i64(int64_t handle, int64_t index) {
  */
 TML_EXPORT double tml_json_array_get_f64(int64_t handle, int64_t index) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_array()) return 0.0;
+    if (!value || !value->is_array())
+        return 0.0;
 
     const auto& arr = value->as_array();
-    if (index < 0 || static_cast<size_t>(index) >= arr.size()) return 0.0;
+    if (index < 0 || static_cast<size_t>(index) >= arr.size())
+        return 0.0;
 
     const auto& elem = arr[static_cast<size_t>(index)];
-    if (!elem.is_number()) return 0.0;
+    if (!elem.is_number())
+        return 0.0;
 
     return elem.as_number().as_f64();
 }
@@ -719,13 +761,16 @@ TML_EXPORT double tml_json_array_get_f64(int64_t handle, int64_t index) {
  */
 TML_EXPORT int32_t tml_json_array_get_bool(int64_t handle, int64_t index) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_array()) return 0;
+    if (!value || !value->is_array())
+        return 0;
 
     const auto& arr = value->as_array();
-    if (index < 0 || static_cast<size_t>(index) >= arr.size()) return 0;
+    if (index < 0 || static_cast<size_t>(index) >= arr.size())
+        return 0;
 
     const auto& elem = arr[static_cast<size_t>(index)];
-    if (!elem.is_bool()) return 0;
+    if (!elem.is_bool())
+        return 0;
 
     return elem.as_bool() ? 1 : 0;
 }
@@ -736,16 +781,20 @@ TML_EXPORT int32_t tml_json_array_get_bool(int64_t handle, int64_t index) {
  */
 TML_EXPORT const char* tml_json_array_get_string(int64_t handle, int64_t index) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_array()) return nullptr;
+    if (!value || !value->is_array())
+        return nullptr;
 
     const auto& arr = value->as_array();
-    if (index < 0 || static_cast<size_t>(index) >= arr.size()) return nullptr;
+    if (index < 0 || static_cast<size_t>(index) >= arr.size())
+        return nullptr;
 
     const auto& elem = arr[static_cast<size_t>(index)];
-    if (!elem.is_string()) return nullptr;
+    if (!elem.is_string())
+        return nullptr;
 
     const auto& str = elem.as_string();
-    if (str.length() >= sizeof(json_string_buffer)) return nullptr;
+    if (str.length() >= sizeof(json_string_buffer))
+        return nullptr;
 
     std::memcpy(json_string_buffer, str.data(), str.length());
     json_string_buffer[str.length()] = '\0';
@@ -757,18 +806,26 @@ TML_EXPORT const char* tml_json_array_get_string(int64_t handle, int64_t index) 
  */
 TML_EXPORT int32_t tml_json_array_get_type(int64_t handle, int64_t index) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_array()) return -1;
+    if (!value || !value->is_array())
+        return -1;
 
     const auto& arr = value->as_array();
-    if (index < 0 || static_cast<size_t>(index) >= arr.size()) return -1;
+    if (index < 0 || static_cast<size_t>(index) >= arr.size())
+        return -1;
 
     const auto& elem = arr[static_cast<size_t>(index)];
-    if (elem.is_null()) return 0;
-    if (elem.is_bool()) return 1;
-    if (elem.is_number()) return 2;
-    if (elem.is_string()) return 3;
-    if (elem.is_array()) return 4;
-    if (elem.is_object()) return 5;
+    if (elem.is_null())
+        return 0;
+    if (elem.is_bool())
+        return 1;
+    if (elem.is_number())
+        return 2;
+    if (elem.is_string())
+        return 3;
+    if (elem.is_array())
+        return 4;
+    if (elem.is_object())
+        return 5;
     return -1;
 }
 
@@ -777,10 +834,12 @@ TML_EXPORT int32_t tml_json_array_get_type(int64_t handle, int64_t index) {
  */
 TML_EXPORT int64_t tml_json_object_get_i64(int64_t handle, const char* key) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_object() || !key) return 0;
+    if (!value || !value->is_object() || !key)
+        return 0;
 
     const auto* field = value->get(key);
-    if (!field || !field->is_number()) return 0;
+    if (!field || !field->is_number())
+        return 0;
 
     return field->as_number().try_as_i64().value_or(0);
 }
@@ -790,10 +849,12 @@ TML_EXPORT int64_t tml_json_object_get_i64(int64_t handle, const char* key) {
  */
 TML_EXPORT double tml_json_object_get_f64(int64_t handle, const char* key) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_object() || !key) return 0.0;
+    if (!value || !value->is_object() || !key)
+        return 0.0;
 
     const auto* field = value->get(key);
-    if (!field || !field->is_number()) return 0.0;
+    if (!field || !field->is_number())
+        return 0.0;
 
     return field->as_number().as_f64();
 }
@@ -803,10 +864,12 @@ TML_EXPORT double tml_json_object_get_f64(int64_t handle, const char* key) {
  */
 TML_EXPORT int32_t tml_json_object_get_bool(int64_t handle, const char* key) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_object() || !key) return 0;
+    if (!value || !value->is_object() || !key)
+        return 0;
 
     const auto* field = value->get(key);
-    if (!field || !field->is_bool()) return 0;
+    if (!field || !field->is_bool())
+        return 0;
 
     return field->as_bool() ? 1 : 0;
 }
@@ -817,13 +880,16 @@ TML_EXPORT int32_t tml_json_object_get_bool(int64_t handle, const char* key) {
  */
 TML_EXPORT const char* tml_json_object_get_string(int64_t handle, const char* key) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_object() || !key) return nullptr;
+    if (!value || !value->is_object() || !key)
+        return nullptr;
 
     const auto* field = value->get(key);
-    if (!field || !field->is_string()) return nullptr;
+    if (!field || !field->is_string())
+        return nullptr;
 
     const auto& str = field->as_string();
-    if (str.length() >= sizeof(json_string_buffer)) return nullptr;
+    if (str.length() >= sizeof(json_string_buffer))
+        return nullptr;
 
     std::memcpy(json_string_buffer, str.data(), str.length());
     json_string_buffer[str.length()] = '\0';
@@ -835,16 +901,24 @@ TML_EXPORT const char* tml_json_object_get_string(int64_t handle, const char* ke
  */
 TML_EXPORT int32_t tml_json_object_get_type(int64_t handle, const char* key) {
     auto* value = get_json_value(handle);
-    if (!value || !value->is_object() || !key) return -1;
+    if (!value || !value->is_object() || !key)
+        return -1;
 
     const auto* field = value->get(key);
-    if (!field) return -1;
+    if (!field)
+        return -1;
 
-    if (field->is_null()) return 0;
-    if (field->is_bool()) return 1;
-    if (field->is_number()) return 2;
-    if (field->is_string()) return 3;
-    if (field->is_array()) return 4;
-    if (field->is_object()) return 5;
+    if (field->is_null())
+        return 0;
+    if (field->is_bool())
+        return 1;
+    if (field->is_number())
+        return 2;
+    if (field->is_string())
+        return 3;
+    if (field->is_array())
+        return 4;
+    if (field->is_object())
+        return 5;
     return -1;
 }

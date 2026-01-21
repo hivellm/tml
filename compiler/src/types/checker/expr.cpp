@@ -168,7 +168,8 @@ auto TypeChecker::check_expr(const parser::Expr& expr, TypePtr expected_type) ->
             } else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
                 // For unary expressions like -5, propagate expected type to operand
                 if (e.op == parser::UnaryOp::Neg && e.operand->template is<parser::LiteralExpr>()) {
-                    return check_literal(e.operand->template as<parser::LiteralExpr>(), expected_type);
+                    return check_literal(e.operand->template as<parser::LiteralExpr>(),
+                                         expected_type);
                 }
                 return check_unary(e);
             } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
@@ -431,12 +432,40 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     };
 
     switch (binary.op) {
-    case parser::BinaryOp::Add:
-    case parser::BinaryOp::Sub:
+    case parser::BinaryOp::Add: {
+        // Pointer arithmetic: ptr + int = ptr
+        TypePtr resolved_left = env_.resolve(left);
+        TypePtr resolved_right = env_.resolve(right);
+        if (resolved_left && resolved_left->is<PtrType>()) {
+            // ptr + int is valid pointer arithmetic
+            if (is_integer_type(resolved_right)) {
+                return left; // Result is the same pointer type
+            }
+        }
+        check_binary_types("+");
+        return left;
+    }
+    case parser::BinaryOp::Sub: {
+        // Pointer arithmetic: ptr - int = ptr, ptr - ptr = int
+        TypePtr resolved_left = env_.resolve(left);
+        TypePtr resolved_right = env_.resolve(right);
+        if (resolved_left && resolved_left->is<PtrType>()) {
+            if (is_integer_type(resolved_right)) {
+                // ptr - int = ptr
+                return left;
+            }
+            if (resolved_right && resolved_right->is<PtrType>()) {
+                // ptr - ptr = I64 (pointer difference)
+                return make_i64();
+            }
+        }
+        check_binary_types("-");
+        return left;
+    }
     case parser::BinaryOp::Mul:
     case parser::BinaryOp::Div:
     case parser::BinaryOp::Mod:
-        check_binary_types("+");
+        check_binary_types("*");
         return left;
     case parser::BinaryOp::Lt:
     case parser::BinaryOp::Le:
@@ -1590,6 +1619,117 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 return std::make_shared<Type>(NamedType{"OutcomeIter", "", type_args});
             }
         }
+
+        // Handle List[T] methods (NamedType with name "List")
+        if (named.name == "List" && !named.type_args.empty()) {
+            TypePtr elem_type = named.type_args[0];
+
+            // len() returns I64
+            if (call.method == "len") {
+                return make_primitive(PrimitiveKind::I64);
+            }
+
+            // is_empty() returns Bool
+            if (call.method == "is_empty") {
+                return make_primitive(PrimitiveKind::Bool);
+            }
+
+            // get(index) returns Maybe[ref T]
+            if (call.method == "get") {
+                auto ref_type = std::make_shared<Type>(
+                    RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt});
+                std::vector<TypePtr> type_args = {ref_type};
+                return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+            }
+
+            // first(), last() return Maybe[ref T]
+            if (call.method == "first" || call.method == "last") {
+                auto ref_type = std::make_shared<Type>(
+                    RefType{.is_mut = false, .inner = elem_type, .lifetime = std::nullopt});
+                std::vector<TypePtr> type_args = {ref_type};
+                return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+            }
+
+            // push(elem) returns unit
+            if (call.method == "push") {
+                return make_unit();
+            }
+
+            // push_str(s) returns unit (for List[U8] / Text)
+            if (call.method == "push_str") {
+                return make_unit();
+            }
+
+            // pop() returns Maybe[T]
+            if (call.method == "pop") {
+                std::vector<TypePtr> type_args = {elem_type};
+                return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+            }
+
+            // clear() returns unit
+            if (call.method == "clear") {
+                return make_unit();
+            }
+
+            // iter() returns ListIter[T]
+            if (call.method == "iter" || call.method == "into_iter") {
+                std::vector<TypePtr> type_args = {elem_type};
+                return std::make_shared<Type>(NamedType{"ListIter", "", type_args});
+            }
+
+            // contains(value) returns Bool
+            if (call.method == "contains") {
+                return make_primitive(PrimitiveKind::Bool);
+            }
+
+            // reverse() returns unit (in-place)
+            if (call.method == "reverse") {
+                return make_unit();
+            }
+
+            // sort() returns unit (in-place)
+            if (call.method == "sort") {
+                return make_unit();
+            }
+
+            // duplicate() returns List[T]
+            if (call.method == "duplicate") {
+                return receiver_type;
+            }
+
+            // to_string(), debug_string() return Str
+            if (call.method == "to_string" || call.method == "debug_string") {
+                return make_primitive(PrimitiveKind::Str);
+            }
+
+            // slice(start, end) returns List[T]
+            if (call.method == "slice") {
+                return receiver_type;
+            }
+
+            // extend(other) returns unit
+            if (call.method == "extend") {
+                return make_unit();
+            }
+
+            // insert(index, elem) returns unit
+            if (call.method == "insert") {
+                return make_unit();
+            }
+
+            // remove(index) returns T
+            if (call.method == "remove") {
+                return elem_type;
+            }
+
+            // swap(i, j) returns unit
+            if (call.method == "swap") {
+                return make_unit();
+            }
+
+            // Index operator [] returns T (or ref T)
+            // This is handled via __index__ method lookup
+        }
     }
 
     // Handle ArrayType methods (e.g., [I32; 3].len(), [I32; 3].get(0), etc.)
@@ -1919,7 +2059,8 @@ auto TypeChecker::check_block(const parser::BlockExpr& block) -> TypePtr {
 
     if (block.expr) {
         TML_DEBUG_LN("[check_block] Checking trailing expression");
-        result = check_expr(**block.expr);
+        // Pass expected return type for implicit returns (array literal inference)
+        result = check_expr(**block.expr, current_return_type_);
     }
 
     env_.pop_scope();
@@ -2222,10 +2363,8 @@ bool TypeChecker::type_satisfies_lifetime_bound(TypePtr type, const std::string&
 
             // Built-in primitive-like types satisfy 'static
             static const std::unordered_set<std::string> static_types = {
-                "I8",   "I16",  "I32",  "I64",   "I128", "U8",   "U16",
-                "U32",  "U64",  "U128", "F32",   "F64",  "Bool", "Char",
-                "Str",  "Unit", "Never"
-            };
+                "I8",   "I16", "I32", "I64",  "I128", "U8",  "U16",  "U32",  "U64",
+                "U128", "F32", "F64", "Bool", "Char", "Str", "Unit", "Never"};
             if (static_types.count(named.name)) {
                 return true;
             }

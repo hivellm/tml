@@ -299,6 +299,22 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
             return "ptr";
         }
 
+        // Runtime-managed wrapper types - these are small structs containing handles
+        // to runtime-allocated data. Return their struct type to match function definitions.
+        // This ensures consistency between function definitions (using llvm_type) and
+        // call instructions (using llvm_type_from_semantic).
+        if (named.name == "Text") {
+            return "%struct.Text";
+        }
+        if (named.name == "Buffer") {
+            return "%struct.Buffer";
+        }
+        // List/HashMap are generic types that get instantiated - skip here
+        // Channel/Mutex/WaitGroup are pure runtime handles (opaque pointers)
+        if (named.name == "Channel" || named.name == "Mutex" || named.name == "WaitGroup") {
+            return "ptr";
+        }
+
         // If it has type arguments, need to use mangled name and ensure instantiation
         if (!named.type_args.empty()) {
             // Check if it's a generic enum (like Maybe, Outcome)
@@ -647,11 +663,29 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                     return types::make_primitive(prim_it->second);
                 }
 
-                // Check if it's a class type
+                // Check if it's a class type (non-generic)
                 auto class_def = env_.lookup_class(name);
                 if (class_def.has_value()) {
                     auto result = std::make_shared<types::Type>();
                     // Process generic arguments for generic classes
+                    std::vector<types::TypePtr> class_type_args;
+                    if (t.generics.has_value()) {
+                        for (const auto& arg : t.generics->args) {
+                            if (arg.is_type()) {
+                                class_type_args.push_back(
+                                    resolve_parser_type_with_subs(*arg.as_type(), subs));
+                            }
+                        }
+                    }
+                    result->kind = types::ClassType{name, "", std::move(class_type_args)};
+                    return result;
+                }
+
+                // Check if it's a pending generic class (e.g., Box[T] before instantiation)
+                auto pending_it = pending_generic_classes_.find(name);
+                if (pending_it != pending_generic_classes_.end()) {
+                    auto result = std::make_shared<types::Type>();
+                    // Process generic arguments
                     std::vector<types::TypePtr> class_type_args;
                     if (t.generics.has_value()) {
                         for (const auto& arg : t.generics->args) {
@@ -682,9 +716,8 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
             } else if constexpr (std::is_same_v<T, parser::RefType>) {
                 auto inner = resolve_parser_type_with_subs(*t.inner, subs);
                 auto result = std::make_shared<types::Type>();
-                result->kind = types::RefType{.is_mut = t.is_mut,
-                                              .inner = inner,
-                                              .lifetime = t.lifetime};
+                result->kind =
+                    types::RefType{.is_mut = t.is_mut, .inner = inner, .lifetime = t.lifetime};
                 return result;
             } else if constexpr (std::is_same_v<T, parser::PtrType>) {
                 auto inner = resolve_parser_type_with_subs(*t.inner, subs);

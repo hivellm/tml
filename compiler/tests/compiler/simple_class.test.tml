@@ -1,0 +1,21 @@
+// Simple Class Test (non-generic)
+use test
+
+class SimpleBox {
+    value: I32
+
+    new(value: I32) {
+        this.value = value
+    }
+
+    func get(this) -> I32 {
+        return this.value
+    }
+}
+
+@test
+func test_simple_box() -> I32 {
+    let b: SimpleBox = SimpleBox::new(42)
+    assert_eq(b.get(), 42, "SimpleBox should hold 42")
+    return 0
+}

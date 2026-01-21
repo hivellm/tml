@@ -89,7 +89,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
                     // Check index >= size
                     std::string above_max = "%bc.above." + label_id;
-                    emitln("    " + above_max + " = icmp sge " + idx_type + " " + idx_val + ", " + size_str);
+                    emitln("    " + above_max + " = icmp sge " + idx_type + " " + idx_val + ", " +
+                           size_str);
 
                     // Combine checks
                     std::string oob = "%bc.oob." + label_id;
@@ -125,7 +126,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
                     // Emit assume: index < size
                     std::string bounded_cmp = "%assume.bounded." + label_id;
-                    emitln("    " + bounded_cmp + " = icmp slt " + idx_type + " " + idx_val + ", " + size_str);
+                    emitln("    " + bounded_cmp + " = icmp slt " + idx_type + " " + idx_val + ", " +
+                           size_str);
                     emitln("    call void @llvm.assume(i1 " + bounded_cmp + ")");
                 }
 
@@ -1097,9 +1099,8 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             // OPTIMIZED: keep length in registers, only store once at end
             emitln("  pfmt_fast." + id + ":");
             // Copy prefix - use literal size for constant strings
-            std::string prefix_size = prefix_is_const
-                                          ? std::to_string(prefix_const->second.size())
-                                          : "%prefix_len." + id;
+            std::string prefix_size =
+                prefix_is_const ? std::to_string(prefix_const->second.size()) : "%prefix_len." + id;
             emitln("    %dst1." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 %len." +
                    id);
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst1." + id + ", ptr " + prefix +
@@ -1114,9 +1115,8 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                                           "%len2." + id, receiver, "", true);
             // Continue directly - use returned value
             // Copy suffix - use literal size for constant strings
-            std::string suffix_size = suffix_is_const
-                                          ? std::to_string(suffix_const->second.size())
-                                          : "%suffix_len." + id;
+            std::string suffix_size =
+                suffix_is_const ? std::to_string(suffix_const->second.size()) : "%suffix_len." + id;
             emitln("    %dst2." + id + " = getelementptr i8, ptr %data_ptr." + id + ", i64 " +
                    len_after_int);
             emitln("    call void @llvm.memcpy.p0.p0.i64(ptr %dst2." + id + ", ptr " + suffix +
@@ -1129,8 +1129,8 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             // Slow path: call FFI - also use literal sizes when available
             emitln("  pfmt_slow." + id + ":");
             emitln("    call void @tml_text_push_formatted(ptr " + receiver + ", ptr " + prefix +
-                   ", i64 " + prefix_size + ", i64 " + int_val + ", ptr " + suffix +
-                   ", i64 " + suffix_size + ")");
+                   ", i64 " + prefix_size + ", i64 " + int_val + ", ptr " + suffix + ", i64 " +
+                   suffix_size + ")");
             emitln("    br label %pfmt_done." + id);
 
             emitln("  pfmt_done." + id + ":");
@@ -1333,8 +1333,8 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                              (s3_const != value_string_contents_.end());
             size_t total_const_len = 0;
             if (all_const) {
-                total_const_len =
-                    s1_const->second.size() + s2_const->second.size() + s3_const->second.size() + 40;
+                total_const_len = s1_const->second.size() + s2_const->second.size() +
+                                  s3_const->second.size() + 40;
             }
 
             // Get lengths for all 3 strings
@@ -1891,13 +1891,19 @@ void MirCodegen::emit_array_init_inst(const mir::ArrayInitInst& i, const std::st
     std::string elem_type = mir_type_to_llvm(elem_ptr);
 
     // Get element size for memset
-    size_t elem_size = 4;  // default for i32
-    if (elem_type == "i8") elem_size = 1;
-    else if (elem_type == "i16") elem_size = 2;
-    else if (elem_type == "i32") elem_size = 4;
-    else if (elem_type == "i64") elem_size = 8;
-    else if (elem_type == "double") elem_size = 8;
-    else if (elem_type == "float") elem_size = 4;
+    size_t elem_size = 4; // default for i32
+    if (elem_type == "i8")
+        elem_size = 1;
+    else if (elem_type == "i16")
+        elem_size = 2;
+    else if (elem_type == "i32")
+        elem_size = 4;
+    else if (elem_type == "i64")
+        elem_size = 8;
+    else if (elem_type == "double")
+        elem_size = 8;
+    else if (elem_type == "float")
+        elem_size = 4;
 
     // OPTIMIZATION: Check if all elements are the same value
     // This is common for repeat patterns like [0; 1000]
@@ -1934,8 +1940,10 @@ void MirCodegen::emit_array_init_inst(const mir::ArrayInitInst& i, const std::st
                 // Can't assign aggregate constant directly to SSA value
                 std::string alloc_reg = "%arr_alloc" + std::to_string(temp_counter_++);
                 emitln("    " + alloc_reg + " = alloca " + array_type + ", align 16");
-                emitln("    store " + array_type + " zeroinitializer, ptr " + alloc_reg + ", align 16");
-                emitln("    " + result_reg + " = load " + array_type + ", ptr " + alloc_reg + ", align 16");
+                emitln("    store " + array_type + " zeroinitializer, ptr " + alloc_reg +
+                       ", align 16");
+                emitln("    " + result_reg + " = load " + array_type + ", ptr " + alloc_reg +
+                       ", align 16");
                 return;
             }
 
@@ -1950,8 +1958,10 @@ void MirCodegen::emit_array_init_inst(const mir::ArrayInitInst& i, const std::st
                 // code that uses this array overwrite the values as needed.
                 // This is a tradeoff: we waste some initialization cycles but
                 // avoid stack overflow from 1000+ insertvalue instructions.
-                emitln("    store " + array_type + " zeroinitializer, ptr " + alloc_reg + ", align 16");
-                emitln("    " + result_reg + " = load " + array_type + ", ptr " + alloc_reg + ", align 16");
+                emitln("    store " + array_type + " zeroinitializer, ptr " + alloc_reg +
+                       ", align 16");
+                emitln("    " + result_reg + " = load " + array_type + ", ptr " + alloc_reg +
+                       ", align 16");
                 return;
             }
         }
@@ -2045,8 +2055,7 @@ auto MirCodegen::emit_inline_int_to_string(const std::string& id, const std::str
                                            const std::string& current_len,
                                            const std::string& receiver,
                                            [[maybe_unused]] const std::string& done_label,
-                                           bool skip_store)
-    -> std::string {
+                                           bool skip_store) -> std::string {
     // Branch labels - OPTIMIZED: check < 100 first (most common case)
     std::string small_check = "i2s.small." + id;
     std::string big_path = "i2s.bigpath." + id;

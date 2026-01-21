@@ -3,8 +3,59 @@
 //! This module provides:
 //! - **Parsing**: Bindings to TML's native SIMD-optimized JSON parser
 //! - **Building**: Fluent API for constructing JSON strings
+//! - **High-Level Types**: Json, JsonObject, JsonArray with full method support
+//! - **Serialization**: ToJson/FromJson behaviors for struct serialization (like C#/Rust)
 //!
-//! # Parsing Example
+//! # High-Level API Example
+//!
+//! ```tml
+//! use std::json::types::{Json, JsonObject, parse}
+//!
+//! let json = parse("{\"name\": \"Alice\", \"age\": 30}").unwrap()
+//!
+//! if json.is_object() {
+//!     when json.get_string("name") {
+//!         Just(name) => println("Name: " + name),
+//!         Nothing => println("No name")
+//!     }
+//!
+//!     when json.get_i64("age") {
+//!         Just(age) => println("Age: " + age.to_string()),
+//!         Nothing => println("No age")
+//!     }
+//! }
+//!
+//! // Serialize back to JSON string
+//! let json_str = json.to_string()
+//! ```
+//!
+//! # Struct Serialization Example (like C#)
+//!
+//! ```tml
+//! use std::json::{Json, ToJson, FromJson}
+//! use std::json::builder::object
+//!
+//! type Person {
+//!     name: Str,
+//!     age: I32,
+//! }
+//!
+//! impl Person with ToJson {
+//!     func to_json(this) -> Json {
+//!         let b = object()
+//!         b.ks("name", this.name)
+//!         b.kn32("age", this.age)
+//!         b.end_obj()
+//!         return Json::from_handle(ffi::parse_fast(b.build()))
+//!     }
+//! }
+//!
+//! // Usage
+//! let person = Person { name: "Alice", age: 30 }
+//! let json_str = person.to_json().to_string()  // {"name":"Alice","age":30}
+//! ```
+//!
+//! # Low-Level FFI Parsing Example
 //!
 //! ```tml
 //! use std::json
@@ -20,16 +71,20 @@
 //! # Building Example
 //!
 //! ```tml
-//! use std::json::{Builder, object}
+//! use std::json::builder::{Builder, object}
 //!
 //! // Fluent builder
-//! let json = object()
-//!     .ks("name", "John")
-//!     .kn("age", 30)
-//!     .kb("active", true)
-//!     .k("tags").arr().s("a").s("b").end_arr()
-//!     .end_obj()
-//!     .build()
+//! let b = object()
+//! b.ks("name", "John")
+//! b.kn("age", 30)
+//! b.kb("active", true)
+//! b.k("tags")
+//! b.arr()
+//! b.s("a")
+//! b.s("b")
+//! b.end_arr()
+//! b.end_obj()
+//! let json = b.build()
 //!
 //! // Result: {"name":"John","age":30,"active":true,"tags":["a","b"]}
 //! ```
@@ -47,6 +102,12 @@
 // Re-export builder types
 pub use builder::{Builder, object, array}
 
+// Re-export high-level JSON types
+pub use types::{Json, JsonNumber, JsonObject, JsonArray, parse, parse_result, parse_or_panic}
+
+// Re-export serialization behaviors
+pub use serialize::{ToJson, FromJson}
+
 // ============================================================================
 // JSON Value Types
 // ============================================================================
@@ -60,9 +121,8 @@ pub const JSON_ARRAY: I32 = 4
 pub const JSON_OBJECT: I32 = 5
 pub const JSON_INVALID: I32 = -1
 
-/// A handle to a JSON value in the native parser.
+/// JSON handles are I64 values from the native parser.
 /// Use -1 to indicate an invalid/error handle.
-pub type I64 = I64
 
 // ============================================================================
 // External Function Declarations - Native JSON Parser
@@ -82,7 +142,7 @@ pub func parse_fast(json_str: Str) -> I64
 ///
 /// **IMPORTANT**: You must call `free()` on the returned handle when done.
 @extern("tml_json_parse")
-pub func parse(json_str: Str) -> I64
+pub func parse_ffi(json_str: Str) -> I64
 
 /// Parse a JSON string with explicit length (for non-null-terminated strings).
 @extern("tml_json_parse_len")

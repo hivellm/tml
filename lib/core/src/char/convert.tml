@@ -8,7 +8,7 @@ use core::result::Outcome
 // Display, Debug are builtins - no import needed
 // Note: Formatter and FormatResult would need real imports if used
 use core::error::Error
-use core::char::Char
+// Note: Char is a builtin type, no import needed
 
 // ============================================================================
 // Conversion Functions
@@ -31,7 +31,7 @@ use core::char::Char
 /// ```
 pub func from_u32(value: U32) -> Maybe[Char] {
     if is_valid_char(value) {
-        return Just(value)
+        return Just(value as Char)
     }
     return Nothing
 }
@@ -56,7 +56,7 @@ pub func from_u32(value: U32) -> Maybe[Char] {
 /// ```
 pub func from_u32_unchecked(value: U32) -> Char {
     // In lowlevel context, we trust the caller
-    return value
+    return value as Char
 }
 
 /// Converts a digit in the given radix to a character.
@@ -94,9 +94,9 @@ pub func from_digit(num: U32, radix: U32) -> Maybe[Char] {
     }
 
     let digit: Char = if num < 10 {
-        num + 0x30  // '0' = 0x30
+        (num + 0x30) as Char  // '0' = 0x30
     } else {
-        num - 10 + 0x61  // 'a' = 0x61
+        (num - 10 + 0x61) as Char  // 'a' = 0x61
     }
 
     return Just(digit)
@@ -117,7 +117,7 @@ pub func from_digit(num: U32, radix: U32) -> Maybe[Char] {
 /// ```
 pub func try_from_u32(value: U32) -> Outcome[Char, CharTryFromError] {
     if is_valid_char(value) {
-        return Ok(value)
+        return Ok(value as Char)
     }
     return Err(CharTryFromError { value: value })
 }
@@ -160,17 +160,17 @@ impl CharTryFromError {
 }
 
 impl Display for CharTryFromError {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
+    func to_string(this) -> Str {
         if this.value >= 0xD800 and this.value <= 0xDFFF {
-            return f.write_str("converted integer is a surrogate code point")
+            return "converted integer is a surrogate code point"
         }
-        return f.write_str("converted integer out of range for char")
+        return "converted integer out of range for char"
     }
 }
 
 impl Debug for CharTryFromError {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        return f.write_str("CharTryFromError { value: ").and_then(do(_) f.write_u32(this.value)).and_then(do(_) f.write_str(" }"))
+    func debug_string(this) -> Str {
+        return "CharTryFromError { value: " + this.value.to_string() + " }"
     }
 }
 
@@ -205,21 +205,21 @@ impl ParseCharError {
 }
 
 impl Display for ParseCharError {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
+    func to_string(this) -> Str {
         when this.kind {
-            EmptyString => return f.write_str("cannot parse char from empty string"),
-            TooManyChars => return f.write_str("too many characters in string")
+            EmptyString => return "cannot parse char from empty string",
+            TooManyChars => return "too many characters in string"
         }
     }
 }
 
 impl Debug for ParseCharError {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
+    func debug_string(this) -> Str {
         let kind_str: Str = when this.kind {
             EmptyString => "EmptyString",
             TooManyChars => "TooManyChars"
         }
-        return f.write_str("ParseCharError { kind: ").and_then(do(_) f.write_str(kind_str)).and_then(do(_) f.write_str(" }"))
+        return "ParseCharError { kind: " + kind_str + " }"
     }
 }
 
@@ -253,14 +253,14 @@ impl TryFromCharError {
 }
 
 impl Display for TryFromCharError {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        return f.write_str("char value too large for target type")
+    func to_string(this) -> Str {
+        return "char value too large for target type"
     }
 }
 
 impl Debug for TryFromCharError {
-    func fmt(this, f: mut ref Formatter) -> FormatResult {
-        return f.write_str("TryFromCharError { value: U+").and_then(do(_) f.write_u32_hex(this.value)).and_then(do(_) f.write_str(" }"))
+    func debug_string(this) -> Str {
+        return "TryFromCharError { value: " + (this.value as U32).to_string() + " }"
     }
 }
 
@@ -278,7 +278,7 @@ impl Error for TryFromCharError {
 ///
 /// This is always valid since Char is represented as U32.
 pub func to_u32(c: Char) -> U32 {
-    return c
+    return c as U32
 }
 
 /// Converts a `Char` to `U64`.
@@ -295,7 +295,7 @@ pub func to_u128(c: Char) -> U128 {
 ///
 /// Returns `Err` if the character's code point is greater than 255.
 pub func try_to_u8(c: Char) -> Outcome[U8, TryFromCharError] {
-    if c <= 0xFF {
+    if (c as U32) <= 0xFF {
         return Ok(c as U8)
     }
     return Err(TryFromCharError { value: c })
@@ -305,7 +305,7 @@ pub func try_to_u8(c: Char) -> Outcome[U8, TryFromCharError] {
 ///
 /// Returns `Err` if the character's code point is greater than 65535.
 pub func try_to_u16(c: Char) -> Outcome[U16, TryFromCharError] {
-    if c <= 0xFFFF {
+    if (c as U32) <= 0xFFFF {
         return Ok(c as U16)
     }
     return Err(TryFromCharError { value: c })
@@ -319,5 +319,5 @@ pub func try_to_u16(c: Char) -> Outcome[U16, TryFromCharError] {
 ///
 /// This is always valid since all U8 values are valid Unicode scalar values.
 pub func from_u8(value: U8) -> Char {
-    return value as U32
+    return value as Char
 }

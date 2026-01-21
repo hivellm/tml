@@ -1380,59 +1380,66 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
                 bool use_cached = !no_cache && fs::exists(obj_output);
 
+                // ALWAYS lex/parse/typecheck to populate the shared_registry with imports
+                // This ensures get_runtime_objects can find all required modules (e.g., JSON)
+                // even when using cached object files.
+
+                // Lex (use preprocessed source)
+                auto source = lexer::Source::from_string(preprocessed_source, test.file_path);
+                lexer::Lexer lex(source);
+                auto tokens = lex.tokenize();
+                if (lex.has_errors()) {
+                    std::ostringstream oss;
+                    oss << "Lexer errors in " << test.file_path << ":\n";
+                    for (const auto& err : lex.errors()) {
+                        oss << "  " << err.span.start.line << ":" << err.span.start.column << ": "
+                            << err.message << "\n";
+                    }
+                    result.error_message = oss.str();
+                    result.failed_test = test.file_path;
+                    return result;
+                }
+
+                // Parse
+                parser::Parser parser(std::move(tokens));
+                auto module_name = fs::path(test.file_path).stem().string();
+                auto parse_result = parser.parse_module(module_name);
+                if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+                    const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
+                    std::ostringstream oss;
+                    oss << "Parser errors in " << test.file_path << ":\n";
+                    for (const auto& err : errors) {
+                        oss << "  " << err.span.start.line << ":" << err.span.start.column << ": "
+                            << err.message << "\n";
+                    }
+                    result.error_message = oss.str();
+                    result.failed_test = test.file_path;
+                    return result;
+                }
+                const auto& module = std::get<parser::Module>(parse_result);
+
+                // Type check - use shared registry to avoid re-parsing modules for each test
+                // This populates the registry with imported modules for later use by
+                // get_runtime_objects
+                types::TypeChecker checker;
+                checker.set_module_registry(shared_registry);
+                auto check_result = checker.check_module(module);
+                if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
+                    const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
+                    std::ostringstream oss;
+                    oss << "Type errors in " << test.file_path << ":\n";
+                    for (const auto& err : errors) {
+                        oss << "  " << err.span.start.line << ":" << err.span.start.column << ": "
+                            << err.message << "\n";
+                    }
+                    result.error_message = oss.str();
+                    result.failed_test = test.file_path;
+                    return result;
+                }
+                const auto& env = std::get<types::TypeEnv>(check_result);
+
+                // Only do codegen and object compilation if not cached
                 if (!use_cached) {
-                    // Lex (use preprocessed source)
-                    auto source = lexer::Source::from_string(preprocessed_source, test.file_path);
-                    lexer::Lexer lex(source);
-                    auto tokens = lex.tokenize();
-                    if (lex.has_errors()) {
-                        std::ostringstream oss;
-                        oss << "Lexer errors in " << test.file_path << ":\n";
-                        for (const auto& err : lex.errors()) {
-                            oss << "  " << err.span.start.line << ":" << err.span.start.column
-                                << ": " << err.message << "\n";
-                        }
-                        result.error_message = oss.str();
-                        result.failed_test = test.file_path;
-                        return result;
-                    }
-
-                    // Parse
-                    parser::Parser parser(std::move(tokens));
-                    auto module_name = fs::path(test.file_path).stem().string();
-                    auto parse_result = parser.parse_module(module_name);
-                    if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-                        const auto& errors =
-                            std::get<std::vector<parser::ParseError>>(parse_result);
-                        std::ostringstream oss;
-                        oss << "Parser errors in " << test.file_path << ":\n";
-                        for (const auto& err : errors) {
-                            oss << "  " << err.span.start.line << ":" << err.span.start.column
-                                << ": " << err.message << "\n";
-                        }
-                        result.error_message = oss.str();
-                        result.failed_test = test.file_path;
-                        return result;
-                    }
-                    const auto& module = std::get<parser::Module>(parse_result);
-
-                    // Type check - use shared registry to avoid re-parsing modules for each test
-                    types::TypeChecker checker;
-                    checker.set_module_registry(shared_registry);
-                    auto check_result = checker.check_module(module);
-                    if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
-                        const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
-                        std::ostringstream oss;
-                        oss << "Type errors in " << test.file_path << ":\n";
-                        for (const auto& err : errors) {
-                            oss << "  " << err.span.start.line << ":" << err.span.start.column
-                                << ": " << err.message << "\n";
-                        }
-                        result.error_message = oss.str();
-                        result.failed_test = test.file_path;
-                        return result;
-                    }
-                    const auto& env = std::get<types::TypeEnv>(check_result);
 
                     // Borrow check
                     borrow::BorrowChecker borrow_checker(env);
@@ -1547,6 +1554,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         const auto& module = std::get<parser::Module>(parse_result);
 
         std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
+
         auto runtime_objects =
             get_runtime_objects(shared_registry, module, deps_cache, clang, verbose);
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());

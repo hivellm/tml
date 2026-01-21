@@ -94,6 +94,16 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
             break;
         }
 
+        // If we skipped newlines and see `*`, don't continue - it's almost always a dereference
+        // at the start of a new statement, not multiplication continuing from previous line.
+        // Example:
+        //   let ptr: *U16 = alloc(8) as *U16
+        //   *ptr = 42  // This is dereference assignment, not multiplication
+        if (saved_pos != pos_ && next_kind == lexer::TokenKind::Star) {
+            pos_ = saved_pos;
+            break;
+        }
+
         // Handle postfix operators BEFORE precedence check (they have implicit high precedence)
         // For method chain continuation (`.` after newline), this handles it correctly
         if (is_postfix) {
@@ -587,7 +597,8 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_lowlevel_expr();
     }
 
-    return ParseError{.message = "Expected expression", .span = peek().span, .notes = {}, .fixes = {}};
+    return ParseError{
+        .message = "Expected expression", .span = peek().span, .notes = {}, .fixes = {}};
 }
 
 auto Parser::parse_literal_expr() -> Result<ExprPtr, ParseError> {
@@ -1054,7 +1065,8 @@ auto Parser::parse_loop_expr() -> Result<ExprPtr, ParseError> {
     advance(); // consume 'loop'
 
     // Require '(' for condition
-    auto lparen = expect(lexer::TokenKind::LParen, "Expected '(' after 'loop' - syntax is: loop (condition) { body }");
+    auto lparen = expect(lexer::TokenKind::LParen,
+                         "Expected '(' after 'loop' - syntax is: loop (condition) { body }");
     if (is_err(lparen))
         return unwrap_err(lparen);
 
@@ -1073,7 +1085,8 @@ auto Parser::parse_loop_expr() -> Result<ExprPtr, ParseError> {
         std::string var_name = std::string(unwrap(name_tok).lexeme);
 
         // Expect ':'
-        auto colon = expect(lexer::TokenKind::Colon, "Expected ':' after variable name in loop declaration");
+        auto colon =
+            expect(lexer::TokenKind::Colon, "Expected ':' after variable name in loop declaration");
         if (is_err(colon))
             return unwrap_err(colon);
 
@@ -1083,18 +1096,15 @@ auto Parser::parse_loop_expr() -> Result<ExprPtr, ParseError> {
             return unwrap_err(var_type);
 
         auto var_end = previous().span;
-        loop_var = LoopVarDecl{
-            .name = var_name,
-            .type = std::move(unwrap(var_type)),
-            .span = SourceSpan::merge(var_start, var_end)
-        };
+        loop_var = LoopVarDecl{.name = var_name,
+                               .type = std::move(unwrap(var_type)),
+                               .span = SourceSpan::merge(var_start, var_end)};
 
         // Expect '<' comparison operator
         if (!check(lexer::TokenKind::Lt)) {
-            return ParseError{
-                .message = "Expected '<' after type in loop variable declaration - syntax is: loop (var i: I64 < N)",
-                .span = peek().span
-            };
+            return ParseError{.message = "Expected '<' after type in loop variable declaration - "
+                                         "syntax is: loop (var i: I64 < N)",
+                              .span = peek().span};
         }
         advance(); // consume '<'
 
@@ -1324,14 +1334,13 @@ auto Parser::parse_closure_expr() -> Result<ExprPtr, ParseError> {
 
     auto end_span = previous().span;
 
-    return make_box<Expr>(
-        Expr{.kind = ClosureExpr{.params = std::move(params),
-                                 .return_type = std::move(return_type),
-                                 .body = std::move(body),
-                                 .is_move = is_move,
-                                 .span = SourceSpan::merge(start_span, end_span),
-                                 .captured_vars = {}},
-             .span = SourceSpan::merge(start_span, end_span)});
+    return make_box<Expr>(Expr{.kind = ClosureExpr{.params = std::move(params),
+                                                   .return_type = std::move(return_type),
+                                                   .body = std::move(body),
+                                                   .is_move = is_move,
+                                                   .span = SourceSpan::merge(start_span, end_span),
+                                                   .captured_vars = {}},
+                               .span = SourceSpan::merge(start_span, end_span)});
 }
 
 auto Parser::parse_struct_expr(TypePath path, std::optional<GenericArgs> generics)
@@ -1537,8 +1546,10 @@ auto Parser::parse_interp_string_expr() -> Result<ExprPtr, ParseError> {
     // First token is InterpStringStart (contains text before first {)
     auto start_token = advance();
     if (!start_token.is(lexer::TokenKind::InterpStringStart)) {
-        return ParseError{
-            .message = "Expected interpolated string start", .span = start_token.span, .notes = {}, .fixes = {}};
+        return ParseError{.message = "Expected interpolated string start",
+                          .span = start_token.span,
+                          .notes = {},
+                          .fixes = {}};
     }
 
     // Add the initial text segment (may be empty)
@@ -1622,8 +1633,10 @@ auto Parser::parse_template_literal_expr() -> Result<ExprPtr, ParseError> {
     // First token is TemplateLiteralStart (contains text before first {)
     auto start_token = advance();
     if (!start_token.is(lexer::TokenKind::TemplateLiteralStart)) {
-        return ParseError{
-            .message = "Expected template literal start", .span = start_token.span, .notes = {}, .fixes = {}};
+        return ParseError{.message = "Expected template literal start",
+                          .span = start_token.span,
+                          .notes = {},
+                          .fixes = {}};
     }
 
     // Add the initial text segment (may be empty)

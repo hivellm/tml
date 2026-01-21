@@ -120,6 +120,19 @@ impl Ipv4Addr {
     /// Returns the fourth octet.
     pub func octet3(this) -> U8 { this.o3 }
 
+    /// Returns all four octets as an array.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let addr: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    /// let octets: [U8; 4] = addr.octets()
+    /// assert_eq(octets[0], 192)
+    /// ```
+    pub func octets(this) -> [U8; 4] {
+        [this.o0, this.o1, this.o2, this.o3]
+    }
+
     /// Returns the address as a 32-bit integer in network byte order (big-endian).
     pub func to_bits(this) -> U32 {
         ((this.o0 as U32) shl 24)
@@ -295,50 +308,304 @@ impl Debug for Ipv4Addr {
 }
 
 // =============================================================================
-// IpAddr - IPv4 wrapper (IPv6 temporarily disabled due to codegen issues)
+// Ipv6Addr - IPv6 Address (128 bits)
 // =============================================================================
 
-/// An IP address (currently IPv4 only).
+/// An IPv6 address.
+///
+/// IPv6 addresses are 128-bit integers, stored as 8 16-bit segments.
+///
+/// # Examples
+///
+/// ```tml
+/// let localhost: Ipv6Addr = Ipv6Addr::LOCALHOST()
+/// let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1)
+///
+/// assert(localhost.is_loopback())
+/// ```
+pub type Ipv6Addr {
+    s0: U16,
+    s1: U16,
+    s2: U16,
+    s3: U16,
+    s4: U16,
+    s5: U16,
+    s6: U16,
+    s7: U16,
+}
+
+impl Ipv6Addr {
+    // =========================================================================
+    // Constants (as static functions)
+    // =========================================================================
+
+    /// An IPv6 address representing localhost: `::1`
+    pub func LOCALHOST() -> Ipv6Addr {
+        Ipv6Addr { s0: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, s6: 0, s7: 1 }
+    }
+
+    /// An IPv6 address representing the unspecified address: `::`
+    pub func UNSPECIFIED() -> Ipv6Addr {
+        Ipv6Addr { s0: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, s6: 0, s7: 0 }
+    }
+
+    // =========================================================================
+    // Constructors
+    // =========================================================================
+
+    /// Creates a new IPv6 address from eight 16-bit segments.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1)
+    /// ```
+    pub func new(a: U16, b: U16, c: U16, d: U16, e: U16, f: U16, g: U16, h: U16) -> Ipv6Addr {
+        Ipv6Addr { s0: a, s1: b, s2: c, s3: d, s4: e, s5: f, s6: g, s7: h }
+    }
+
+    /// Creates an IPv6 address from a high and low 64-bit values.
+    /// The `high` parameter contains segments s0-s3, `low` contains s4-s7.
+    pub func from_parts(high: U64, low: U64) -> Ipv6Addr {
+        let mask: U64 = 0xFFFF as U64
+        Ipv6Addr {
+            s0: ((high shr 48) & mask) as U16,
+            s1: ((high shr 32) & mask) as U16,
+            s2: ((high shr 16) & mask) as U16,
+            s3: (high & mask) as U16,
+            s4: ((low shr 48) & mask) as U16,
+            s5: ((low shr 32) & mask) as U16,
+            s6: ((low shr 16) & mask) as U16,
+            s7: (low & mask) as U16,
+        }
+    }
+
+    // =========================================================================
+    // Accessors
+    // =========================================================================
+
+    /// Returns all eight segments as an array.
+    pub func segments(this) -> [U16; 8] {
+        [this.s0, this.s1, this.s2, this.s3, this.s4, this.s5, this.s6, this.s7]
+    }
+
+    /// Returns the high 64 bits (segments s0-s3) as a U64.
+    pub func to_bits_high(this) -> U64 {
+        ((this.s0 as U64) shl 48)
+            | ((this.s1 as U64) shl 32)
+            | ((this.s2 as U64) shl 16)
+            | (this.s3 as U64)
+    }
+
+    /// Returns the low 64 bits (segments s4-s7) as a U64.
+    pub func to_bits_low(this) -> U64 {
+        ((this.s4 as U64) shl 48)
+            | ((this.s5 as U64) shl 32)
+            | ((this.s6 as U64) shl 16)
+            | (this.s7 as U64)
+    }
+
+    // =========================================================================
+    // Classification Methods
+    // =========================================================================
+
+    /// Returns `true` if this is the unspecified address (`::`).
+    pub func is_unspecified(this) -> Bool {
+        this.s0 == 0 and this.s1 == 0 and this.s2 == 0 and this.s3 == 0 and
+        this.s4 == 0 and this.s5 == 0 and this.s6 == 0 and this.s7 == 0
+    }
+
+    /// Returns `true` if this is a loopback address (`::1`).
+    pub func is_loopback(this) -> Bool {
+        this.s0 == 0 and this.s1 == 0 and this.s2 == 0 and this.s3 == 0 and
+        this.s4 == 0 and this.s5 == 0 and this.s6 == 0 and this.s7 == 1
+    }
+
+    /// Returns `true` if this is a multicast address (`ff00::/8`).
+    pub func is_multicast(this) -> Bool {
+        (this.s0 & 0xFF00) == 0xFF00
+    }
+
+    /// Returns `true` if this is a unicast link-local address (`fe80::/10`).
+    pub func is_unicast_link_local(this) -> Bool {
+        (this.s0 & 0xFFC0) == 0xFE80
+    }
+
+    /// Returns `true` if this is a unique local address (`fc00::/7`).
+    pub func is_unique_local(this) -> Bool {
+        (this.s0 & 0xFE00) == 0xFC00
+    }
+
+    /// Returns `true` if this is an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`).
+    pub func is_ipv4_mapped(this) -> Bool {
+        this.s0 == 0 and this.s1 == 0 and this.s2 == 0 and this.s3 == 0 and
+        this.s4 == 0 and this.s5 == 0xFFFF
+    }
+
+    /// Converts an IPv4-mapped IPv6 address to IPv4, or returns Nothing if not mapped.
+    pub func to_ipv4(this) -> Maybe[Ipv4Addr] {
+        if this.is_ipv4_mapped() {
+            Just(Ipv4Addr::new(
+                (this.s6 shr 8) as U8,
+                (this.s6 & 0xFF) as U8,
+                (this.s7 shr 8) as U8,
+                (this.s7 & 0xFF) as U8
+            ))
+        } else {
+            Nothing
+        }
+    }
+}
+
+// Behavior implementations for Ipv6Addr
+impl Copy for Ipv6Addr {}
+impl Duplicate for Ipv6Addr {
+    func duplicate(this) -> Ipv6Addr {
+        Ipv6Addr {
+            s0: this.s0, s1: this.s1, s2: this.s2, s3: this.s3,
+            s4: this.s4, s5: this.s5, s6: this.s6, s7: this.s7
+        }
+    }
+}
+
+impl PartialEq for Ipv6Addr {
+    func eq(this, other: ref Ipv6Addr) -> Bool {
+        this.s0 == other.s0 and this.s1 == other.s1 and this.s2 == other.s2 and this.s3 == other.s3 and
+        this.s4 == other.s4 and this.s5 == other.s5 and this.s6 == other.s6 and this.s7 == other.s7
+    }
+}
+
+impl Eq for Ipv6Addr {}
+
+impl PartialOrd for Ipv6Addr {
+    func partial_cmp(this, other: ref Ipv6Addr) -> Maybe[Ordering] {
+        Just(this.cmp(other))
+    }
+}
+
+impl Ord for Ipv6Addr {
+    func cmp(this, other: ref Ipv6Addr) -> Ordering {
+        // Compare high bits first
+        let a_high: U64 = this.to_bits_high()
+        let b_high: U64 = other.to_bits_high()
+        if a_high < b_high { return Ordering::Less }
+        if a_high > b_high { return Ordering::Greater }
+        // High bits equal, compare low bits
+        let a_low: U64 = this.to_bits_low()
+        let b_low: U64 = other.to_bits_low()
+        if a_low < b_low { Ordering::Less }
+        else if a_low > b_low { Ordering::Greater }
+        else { Ordering::Equal }
+    }
+}
+
+impl Hash for Ipv6Addr {
+    func hash(this, hasher: mut ref Hasher) {
+        hasher.write_u64(this.to_bits_high())
+        hasher.write_u64(this.to_bits_low())
+    }
+}
+
+impl Default for Ipv6Addr {
+    func default() -> Ipv6Addr {
+        Ipv6Addr::UNSPECIFIED()
+    }
+}
+
+impl Display for Ipv6Addr {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        // Simplified format - full colon notation
+        f.write_str(this.s0.to_string())
+        f.write_str(":")
+        f.write_str(this.s1.to_string())
+        f.write_str(":")
+        f.write_str(this.s2.to_string())
+        f.write_str(":")
+        f.write_str(this.s3.to_string())
+        f.write_str(":")
+        f.write_str(this.s4.to_string())
+        f.write_str(":")
+        f.write_str(this.s5.to_string())
+        f.write_str(":")
+        f.write_str(this.s6.to_string())
+        f.write_str(":")
+        f.write_str(this.s7.to_string())
+    }
+}
+
+impl Debug for Ipv6Addr {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        Display::fmt(this, f)
+    }
+}
+
+// Ipv4Addr conversion to IPv6
+impl Ipv4Addr {
+    /// Converts this IPv4 address to an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`).
+    pub func to_ipv6_mapped(this) -> Ipv6Addr {
+        Ipv6Addr {
+            s0: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0xFFFF,
+            s6: ((this.o0 as U16) shl 8) | (this.o1 as U16),
+            s7: ((this.o2 as U16) shl 8) | (this.o3 as U16),
+        }
+    }
+}
+
+// =============================================================================
+// IpAddr - IP Address Enum (supports both V4 and V6)
+// =============================================================================
+
+/// An IP address that can be either IPv4 or IPv6.
 ///
 /// # Examples
 ///
 /// ```tml
 /// let v4: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+/// let v6: IpAddr = IpAddr::V6(Ipv6Addr::LOCALHOST())
 /// assert(v4.is_loopback())
+/// assert(v6.is_loopback())
 /// ```
-pub type IpAddr {
-    inner: Ipv4Addr,
-}
+pub type IpAddr = V4(Ipv4Addr) | V6(Ipv6Addr)
 
 impl IpAddr {
-    /// Creates an IpAddr from an Ipv4Addr.
-    pub func V4(addr: Ipv4Addr) -> IpAddr {
-        IpAddr { inner: addr }
-    }
-
     /// Returns `true` if this is an IPv4 address.
     pub func is_ipv4(this) -> Bool {
-        true
+        when this {
+            V4(_) => true,
+            V6(_) => false,
+        }
     }
 
     /// Returns `true` if this is an IPv6 address.
     pub func is_ipv6(this) -> Bool {
-        false
+        when this {
+            V4(_) => false,
+            V6(_) => true,
+        }
     }
 
     /// Returns `true` if this is the unspecified address.
     pub func is_unspecified(this) -> Bool {
-        this.inner.is_unspecified()
+        when this {
+            V4(addr) => addr.is_unspecified(),
+            V6(addr) => addr.is_unspecified(),
+        }
     }
 
     /// Returns `true` if this is a loopback address.
     pub func is_loopback(this) -> Bool {
-        this.inner.is_loopback()
+        when this {
+            V4(addr) => addr.is_loopback(),
+            V6(addr) => addr.is_loopback(),
+        }
     }
 
     /// Returns `true` if this is a multicast address.
     pub func is_multicast(this) -> Bool {
-        this.inner.is_multicast()
+        when this {
+            V4(addr) => addr.is_multicast(),
+            V6(addr) => addr.is_multicast(),
+        }
     }
 
     /// Returns the port number (always 0 for IpAddr).
@@ -351,13 +618,31 @@ impl IpAddr {
 impl Copy for IpAddr {}
 impl Duplicate for IpAddr {
     func duplicate(this) -> IpAddr {
-        IpAddr { inner: this.inner.duplicate() }
+        when this {
+            V4(addr) => IpAddr::V4(addr.duplicate()),
+            V6(addr) => IpAddr::V6(addr.duplicate()),
+        }
     }
 }
 
 impl PartialEq for IpAddr {
     func eq(this, other: ref IpAddr) -> Bool {
-        this.inner == other.inner
+        // Check if both are same variant and compare
+        let this_v4: Bool = this.is_ipv4()
+        let other_v4: Bool = other.is_ipv4()
+        if this_v4 != other_v4 {
+            return false
+        }
+        when this {
+            V4(a) => when *other {
+                V4(b) => a == b,
+                V6(_) => false,
+            },
+            V6(a) => when *other {
+                V4(_) => false,
+                V6(b) => a == b,
+            },
+        }
     }
 }
 
@@ -365,14 +650,25 @@ impl Eq for IpAddr {}
 
 impl Hash for IpAddr {
     func hash(this, hasher: mut ref Hasher) {
-        hasher.write_u8(4)
-        this.inner.hash(hasher)
+        when this {
+            V4(addr) => {
+                hasher.write_u8(4)
+                addr.hash(hasher)
+            },
+            V6(addr) => {
+                hasher.write_u8(6)
+                addr.hash(hasher)
+            },
+        }
     }
 }
 
 impl Display for IpAddr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
-        this.inner.fmt(f)
+        when this {
+            V4(addr) => addr.fmt(f),
+            V6(addr) => addr.fmt(f),
+        }
     }
 }
 

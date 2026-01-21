@@ -22,6 +22,8 @@
 #include "preprocessor/preprocessor.hpp"
 #include "types/checker.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -264,6 +266,13 @@ static auto parse_and_check(const std::string& source, const std::string& filena
 }
 
 // ============================================================================
+// Forward declarations (defined later in file)
+// ============================================================================
+
+static auto execute_command(const std::string& cmd) -> std::pair<std::string, int>;
+static auto get_tml_executable() -> std::string;
+
+// ============================================================================
 // Tool Handlers
 // ============================================================================
 
@@ -280,61 +289,67 @@ auto handle_compile(const json::JsonValue& params) -> ToolResult {
         return ToolResult::error("File not found: " + file_path);
     }
 
-    // Read source
-    auto source_opt = read_source_file(file_path);
-    if (!source_opt.has_value()) {
-        return ToolResult::error("Failed to read file: " + file_path);
+    // Build command - use the TML executable for full compilation
+    std::string tml_exe = get_tml_executable();
+    std::stringstream cmd;
+    cmd << "\"" << tml_exe << "\" build \"" << file_path << "\"";
+
+    // Add output if specified
+    auto* output_param = params.get("output");
+    if (output_param != nullptr && output_param->is_string()) {
+        cmd << " -o \"" << output_param->as_string() << "\"";
     }
 
-    // Parse and type check
-    auto ctx_result = parse_and_check(*source_opt, file_path);
-    if (std::holds_alternative<CompileError>(ctx_result)) {
-        return ToolResult::error(std::get<CompileError>(ctx_result).message);
-    }
-
-    auto& ctx = std::get<CompileContext>(ctx_result);
-
-    // Get optimization level
-    std::string opt_level = "O0";
+    // Add optimization level if specified
     auto* optimize_param = params.get("optimize");
     if (optimize_param != nullptr && optimize_param->is_string()) {
-        opt_level = optimize_param->as_string();
-    }
-
-    // Check for release mode
-    auto* release_param = params.get("release");
-    bool release =
-        (release_param != nullptr && release_param->is_bool() && release_param->as_bool());
-    if (release && opt_level == "O0") {
-        opt_level = "O2";
-    }
-
-    // Generate LLVM IR
-    codegen::LLVMGenOptions options;
-    options.emit_debug_info = !release;
-    codegen::LLVMIRGen gen(ctx.type_env, options);
-    auto ir_result = gen.generate(ctx.module);
-    if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(ir_result)) {
-        const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(ir_result);
-        std::string error_msg = "Codegen errors:";
-        for (const auto& err : errors) {
-            error_msg += "\n  " + err.message;
+        std::string opt = optimize_param->as_string();
+        if (opt == "O0" || opt == "O1" || opt == "O2" || opt == "O3") {
+            cmd << " -" << opt;
         }
-        return ToolResult::error(error_msg);
     }
 
-    // TODO: Actually invoke LLVM to compile to object file and link
-    // For now, just report success with IR generation
+    // Add release flag if specified
+    auto* release_param = params.get("release");
+    if (release_param != nullptr && release_param->is_bool() && release_param->as_bool()) {
+        cmd << " --release";
+    }
 
-    const auto& ir = std::get<std::string>(ir_result);
+    // Execute compilation
+    auto [output, exit_code] = execute_command(cmd.str());
 
-    std::stringstream output;
-    output << "Compilation successful!\n";
-    output << "File: " << file_path << "\n";
-    output << "Optimization: " << opt_level << "\n";
-    output << "IR size: " << ir.size() << " bytes\n";
+    std::stringstream result;
+    if (exit_code == 0) {
+        result << "Compilation successful!\n";
+        result << "File: " << file_path << "\n";
 
-    return ToolResult::text(output.str());
+        // Determine output file name
+        std::string output_file;
+        if (output_param != nullptr && output_param->is_string()) {
+            output_file = output_param->as_string();
+        } else {
+            // Default output is input file stem + .exe (Windows) or no extension (Unix)
+            fs::path input_path(file_path);
+#ifdef _WIN32
+            output_file = (input_path.parent_path() / input_path.stem()).string() + ".exe";
+#else
+            output_file = (input_path.parent_path() / input_path.stem()).string();
+#endif
+        }
+        result << "Output: " << output_file << "\n";
+    } else {
+        result << "Compilation failed (exit code " << exit_code << ")\n";
+    }
+
+    if (!output.empty()) {
+        result << "\n--- Compiler Output ---\n" << output;
+    }
+
+    if (exit_code != 0) {
+        return ToolResult::error(result.str());
+    }
+
+    return ToolResult::text(result.str());
 }
 
 auto handle_check(const json::JsonValue& params) -> ToolResult {
@@ -728,32 +743,48 @@ auto handle_emit_mir(const json::JsonValue& params) -> ToolResult {
 }
 
 auto handle_test(const json::JsonValue& params) -> ToolResult {
+    // Build command - use the TML executable for test execution
+    std::string tml_exe = get_tml_executable();
+    std::stringstream cmd;
+    cmd << "\"" << tml_exe << "\" test";
+
     // Get path parameter (optional)
-    std::string test_path = ".";
     auto* path_param = params.get("path");
     if (path_param != nullptr && path_param->is_string()) {
-        test_path = path_param->as_string();
+        cmd << " \"" << path_param->as_string() << "\"";
     }
 
     // Get filter parameter (optional)
-    std::string filter;
     auto* filter_param = params.get("filter");
     if (filter_param != nullptr && filter_param->is_string()) {
-        filter = filter_param->as_string();
+        cmd << " --filter \"" << filter_param->as_string() << "\"";
     }
 
-    // TODO: Integrate with test runner
-    // For now, return a placeholder
-
-    std::stringstream output;
-    output << "Test execution requested\n";
-    output << "Path: " << test_path << "\n";
-    if (!filter.empty()) {
-        output << "Filter: " << filter << "\n";
+    // Get release parameter (optional)
+    auto* release_param = params.get("release");
+    if (release_param != nullptr && release_param->is_bool() && release_param->as_bool()) {
+        cmd << " --release";
     }
-    output << "\n[Test runner integration pending]\n";
 
-    return ToolResult::text(output.str());
+    // Execute tests
+    auto [output, exit_code] = execute_command(cmd.str());
+
+    std::stringstream result;
+    if (exit_code == 0) {
+        result << "Tests passed!\n";
+    } else {
+        result << "Tests failed (exit code " << exit_code << ")\n";
+    }
+
+    if (!output.empty()) {
+        result << "\n--- Test Output ---\n" << output;
+    }
+
+    if (exit_code != 0) {
+        return ToolResult::error(result.str());
+    }
+
+    return ToolResult::text(result.str());
 }
 
 auto handle_format(const json::JsonValue& params) -> ToolResult {
@@ -845,6 +876,51 @@ auto handle_lint(const json::JsonValue& params) -> ToolResult {
     return ToolResult::text(result.str());
 }
 
+/// Helper to search for a query in a file and return matching lines with context.
+static auto search_file_for_query(const fs::path& file_path, const std::string& query,
+                                  int context_lines = 2)
+    -> std::vector<std::pair<int, std::string>> {
+    std::vector<std::pair<int, std::string>> results;
+    std::ifstream file(file_path);
+    if (!file.is_open()) {
+        return results;
+    }
+
+    // Convert query to lowercase for case-insensitive search
+    std::string query_lower = query;
+    std::transform(query_lower.begin(), query_lower.end(), query_lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(file, line)) {
+        lines.push_back(line);
+    }
+
+    for (size_t i = 0; i < lines.size(); ++i) {
+        std::string line_lower = lines[i];
+        std::transform(line_lower.begin(), line_lower.end(), line_lower.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+        if (line_lower.find(query_lower) != std::string::npos) {
+            // Build context snippet
+            std::stringstream snippet;
+            size_t start = (i >= static_cast<size_t>(context_lines)) ? i - context_lines : 0;
+            size_t end = std::min(i + context_lines + 1, lines.size());
+            for (size_t j = start; j < end; ++j) {
+                if (j == i) {
+                    snippet << ">>> ";
+                } else {
+                    snippet << "    ";
+                }
+                snippet << lines[j] << "\n";
+            }
+            results.push_back({static_cast<int>(i + 1), snippet.str()});
+        }
+    }
+    return results;
+}
+
 auto handle_docs_search(const json::JsonValue& params) -> ToolResult {
     // Get query parameter
     auto* query_param = params.get("query");
@@ -860,19 +936,66 @@ auto handle_docs_search(const json::JsonValue& params) -> ToolResult {
         limit = limit_param->as_i64();
     }
 
-    // TODO: Integrate with documentation system
-    // For now, return a placeholder
-
     std::stringstream output;
-    output << "Documentation search for: \"" << query << "\"\n";
-    output << "Limit: " << limit << "\n";
-    output << "\n[Documentation system integration pending]\n";
-    output << "\nAvailable modules:\n";
-    output << "- core::slice - Slice operations\n";
-    output << "- core::iter - Iterator support\n";
-    output << "- core::str - String utilities\n";
-    output << "- std::collections - Data structures\n";
-    output << "- std::io - Input/Output\n";
+    output << "Documentation search for: \"" << query << "\"\n\n";
+
+    int results_found = 0;
+
+    // Search paths relative to the TML executable or common locations
+    std::vector<std::string> search_dirs = {
+        "docs",
+        "../docs",
+        "../../docs",
+        "F:/Node/hivellm/tml/docs",
+        "lib/core/src",
+        "lib/std/src",
+        "../lib/core/src",
+        "../lib/std/src",
+        "F:/Node/hivellm/tml/lib/core/src",
+        "F:/Node/hivellm/tml/lib/std/src",
+    };
+
+    for (const auto& dir : search_dirs) {
+        if (!fs::exists(dir) || !fs::is_directory(dir)) {
+            continue;
+        }
+
+        for (const auto& entry : fs::recursive_directory_iterator(dir)) {
+            if (results_found >= limit) {
+                break;
+            }
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+            auto ext = entry.path().extension().string();
+            if (ext != ".md" && ext != ".tml") {
+                continue;
+            }
+
+            auto matches = search_file_for_query(entry.path(), query);
+            for (const auto& [line_num, snippet] : matches) {
+                if (results_found >= limit) {
+                    break;
+                }
+                output << "--- " << entry.path().string() << ":" << line_num << " ---\n";
+                output << snippet << "\n";
+                results_found++;
+            }
+        }
+        if (results_found >= limit) {
+            break;
+        }
+    }
+
+    if (results_found == 0) {
+        output << "No results found.\n\n";
+        output << "Tip: Try searching for:\n";
+        output << "- Type names: Maybe, Outcome, Text, Str\n";
+        output << "- Keywords: func, struct, enum, behavior\n";
+        output << "- Module names: collections, iter, slice\n";
+    } else {
+        output << "\n(" << results_found << " result(s) found)\n";
+    }
 
     return ToolResult::text(output.str());
 }

@@ -214,7 +214,8 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
             ft = "{}"; // Unit type in struct
         field_types.push_back(ft);
 
-        field_info.push_back({field.name, static_cast<int>(field_offset++), ft, field.vis, false, {}});
+        field_info.push_back(
+            {field.name, static_cast<int>(field_offset++), ft, field.vis, false, {}});
     }
 
     // Emit class type definition
@@ -1018,8 +1019,8 @@ void LLVMIRGen::gen_class_constructor_instantiation(
     }
     functions_[ctor_key] = FuncInfo{func_name, "ptr", "ptr", param_types};
 
-    // Function signature
-    std::string sig = "define " + class_type + "* " + func_name + "(";
+    // Function signature - use ptr for opaque pointer mode
+    std::string sig = "define ptr " + func_name + "(";
     for (size_t i = 0; i < param_types.size(); ++i) {
         if (i > 0)
             sig += ", ";
@@ -1060,7 +1061,7 @@ void LLVMIRGen::gen_class_constructor_instantiation(
         locals_.erase("this");
     }
 
-    emit_line("  ret " + class_type + "* " + obj);
+    emit_line("  ret ptr " + obj);
     emit_line("}");
     emit_line("");
 
@@ -1121,14 +1122,23 @@ void LLVMIRGen::gen_class_method_instantiation(
     emit_line(sig + " {");
     emit_line("entry:");
 
-    // Set up locals
+    // Save and set current return type for gen_return() to use
+    std::string saved_ret_type = current_ret_type_;
+    current_ret_type_ = ret_type;
+    block_terminated_ = false;
+
+    // Set up locals - mark as direct parameters (not allocas)
     for (size_t i = 0; i < param_names.size(); ++i) {
         auto sem_type = std::make_shared<types::Type>();
         if (param_names[i] == "this") {
             sem_type->kind = types::ClassType{mangled_name, "", {}};
         }
-        locals_[param_names[i]] =
-            VarInfo{"%" + param_names[i], param_types[i], sem_type, std::nullopt};
+        VarInfo var_info;
+        var_info.reg = "%" + param_names[i];
+        var_info.type = param_types[i];
+        var_info.semantic_type = sem_type;
+        var_info.is_direct_param = true; // Mark as direct parameter
+        locals_[param_names[i]] = var_info;
     }
 
     // Generate body
@@ -1137,28 +1147,33 @@ void LLVMIRGen::gen_class_method_instantiation(
             gen_stmt(*stmt);
         }
 
-        if (method.body->expr.has_value()) {
+        // Handle trailing expression if not already terminated by a return statement
+        if (!block_terminated_ && method.body->expr.has_value()) {
             std::string result = gen_expr(*method.body->expr.value());
-            if (ret_type != "void") {
+            // Only emit return if gen_expr didn't already terminate the block
+            // (e.g., if the trailing expression was itself a return)
+            if (!block_terminated_ && ret_type != "void") {
                 emit_line("  ret " + ret_type + " " + result);
-            }
-        } else if (ret_type != "void") {
-            // Default return
-            if (ret_type == "i64" || ret_type == "i32" || ret_type == "i1") {
-                emit_line("  ret " + ret_type + " 0");
-            } else {
-                emit_line("  ret " + ret_type + " zeroinitializer");
+                block_terminated_ = true;
             }
         }
     }
 
-    if (ret_type == "void") {
-        emit_line("  ret void");
+    // Add implicit return if block wasn't terminated
+    if (!block_terminated_) {
+        if (ret_type == "void") {
+            emit_line("  ret void");
+        } else if (ret_type == "i64" || ret_type == "i32" || ret_type == "i1") {
+            emit_line("  ret " + ret_type + " 0");
+        } else {
+            emit_line("  ret " + ret_type + " zeroinitializer");
+        }
     }
     emit_line("}");
     emit_line("");
 
-    // Restore type substitutions
+    // Restore return type and type substitutions
+    current_ret_type_ = saved_ret_type;
     current_type_subs_ = saved_subs;
 
     // Clean up locals

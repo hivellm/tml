@@ -4,8 +4,8 @@
 
 #include "json/json_fast_parser.hpp"
 
-#include <cstring>
 #include <charconv>
+#include <cstring>
 
 namespace tml::json::fast {
 
@@ -16,20 +16,56 @@ namespace tml::json::fast {
 /// Character classification lookup table
 const uint8_t kCharFlags[256] = {
     // 0x00-0x0F (control characters)
-    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     CHAR_WHITESPACE, // 0x09 = '\t'
     CHAR_WHITESPACE, // 0x0A = '\n'
-    0, 0,
+    0,
+    0,
     CHAR_WHITESPACE, // 0x0D = '\r'
-    0, 0,
+    0,
+    0,
     // 0x10-0x1F (control characters)
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     // 0x20-0x2F
     CHAR_WHITESPACE, // 0x20 = ' '
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    CHAR_STRUCTURAL, // 0x2C = ','
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    CHAR_STRUCTURAL,   // 0x2C = ','
     CHAR_NUMBER_START, // 0x2D = '-'
-    0, 0,
+    0,
+    0,
     // 0x30-0x3F (digits and more)
     CHAR_DIGIT | CHAR_HEX | CHAR_NUMBER_START, // '0'
     CHAR_DIGIT | CHAR_HEX | CHAR_NUMBER_START, // '1'
@@ -41,8 +77,12 @@ const uint8_t kCharFlags[256] = {
     CHAR_DIGIT | CHAR_HEX | CHAR_NUMBER_START, // '7'
     CHAR_DIGIT | CHAR_HEX | CHAR_NUMBER_START, // '8'
     CHAR_DIGIT | CHAR_HEX | CHAR_NUMBER_START, // '9'
-    CHAR_STRUCTURAL, // 0x3A = ':'
-    0, 0, 0, 0, 0,
+    CHAR_STRUCTURAL,                           // 0x3A = ':'
+    0,
+    0,
+    0,
+    0,
+    0,
     // 0x40-0x4F
     0,
     CHAR_HEX, // 'A'
@@ -51,65 +91,453 @@ const uint8_t kCharFlags[256] = {
     CHAR_HEX, // 'D'
     CHAR_HEX, // 'E'
     CHAR_HEX, // 'F'
-    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     // 0x50-0x5F
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     CHAR_STRUCTURAL, // 0x5B = '['
     0,
     CHAR_STRUCTURAL, // 0x5D = ']'
-    0, 0,
+    0,
+    0,
     // 0x60-0x6F
     0,
-    CHAR_HEX, // 'a'
-    CHAR_HEX, // 'b'
-    CHAR_HEX, // 'c'
-    CHAR_HEX, // 'd'
-    CHAR_HEX, // 'e'
+    CHAR_HEX,                // 'a'
+    CHAR_HEX,                // 'b'
+    CHAR_HEX,                // 'c'
+    CHAR_HEX,                // 'd'
+    CHAR_HEX,                // 'e'
     CHAR_KEYWORD | CHAR_HEX, // 'f' (false)
-    0, 0, 0, 0, 0, 0, 0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     CHAR_KEYWORD, // 'n' (null)
     0,
     // 0x70-0x7F
-    0, 0, 0, 0,
+    0,
+    0,
+    0,
+    0,
     CHAR_KEYWORD, // 't' (true)
-    0, 0, 0, 0, 0, 0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     CHAR_STRUCTURAL, // 0x7B = '{'
     0,
     CHAR_STRUCTURAL, // 0x7D = '}'
-    0, 0,
+    0,
+    0,
     // 0x80-0xFF (high bytes, used in UTF-8)
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
 };
 
 /// Hex digit value lookup (255 = invalid)
 const uint8_t kHexValues[256] = {
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, // '0'-'9'
-    255, 255, 255, 255, 255, 255, 255,
-    10, 11, 12, 13, 14, 15, // 'A'-'F'
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255,
-    10, 11, 12, 13, 14, 15, // 'a'-'f'
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9, // '0'-'9'
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15, // 'A'-'F'
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15, // 'a'-'f'
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
     // Rest is 255 (invalid)
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
+    255,
 };
 
 // ============================================================================
@@ -181,8 +609,16 @@ auto FastJsonParser::parse_value() -> Result<JsonValue, JsonError> {
         return parse_keyword();
 
     case '-':
-    case '0': case '1': case '2': case '3': case '4':
-    case '5': case '6': case '7': case '8': case '9':
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
         return parse_number();
 
     default:
@@ -232,14 +668,30 @@ auto FastJsonParser::parse_string() -> Result<std::string, JsonError> {
             ++column_;
 
             switch (escaped) {
-            case '"':  string_buffer_ += '"'; break;
-            case '\\': string_buffer_ += '\\'; break;
-            case '/':  string_buffer_ += '/'; break;
-            case 'b':  string_buffer_ += '\b'; break;
-            case 'f':  string_buffer_ += '\f'; break;
-            case 'n':  string_buffer_ += '\n'; break;
-            case 'r':  string_buffer_ += '\r'; break;
-            case 't':  string_buffer_ += '\t'; break;
+            case '"':
+                string_buffer_ += '"';
+                break;
+            case '\\':
+                string_buffer_ += '\\';
+                break;
+            case '/':
+                string_buffer_ += '/';
+                break;
+            case 'b':
+                string_buffer_ += '\b';
+                break;
+            case 'f':
+                string_buffer_ += '\f';
+                break;
+            case 'n':
+                string_buffer_ += '\n';
+                break;
+            case 'r':
+                string_buffer_ += '\r';
+                break;
+            case 't':
+                string_buffer_ += '\t';
+                break;
             case 'u': {
                 // Use SWAR for fast hex parsing
                 if (pos_ + 4 > end_) {
@@ -384,13 +836,15 @@ auto FastJsonParser::parse_number() -> Result<JsonValue, JsonError> {
         // Large integer - try int64 first, then uint64, then double
         if (negative) {
             int64_t value;
-            auto [ptr, ec] = std::from_chars(num_str.data(), num_str.data() + num_str.size(), value);
+            auto [ptr, ec] =
+                std::from_chars(num_str.data(), num_str.data() + num_str.size(), value);
             if (ec == std::errc{}) {
                 return JsonValue(JsonNumber(value));
             }
         } else {
             uint64_t value;
-            auto [ptr, ec] = std::from_chars(num_str.data(), num_str.data() + num_str.size(), value);
+            auto [ptr, ec] =
+                std::from_chars(num_str.data(), num_str.data() + num_str.size(), value);
             if (ec == std::errc{}) {
                 if (value <= static_cast<uint64_t>(INT64_MAX)) {
                     return JsonValue(JsonNumber(static_cast<int64_t>(value)));

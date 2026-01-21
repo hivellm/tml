@@ -41,7 +41,8 @@ TML_EXPORT int64_t profile_echo_i64(int64_t x) {
  * Returns length of string
  */
 TML_EXPORT int32_t profile_echo_str(const char* s) {
-    if (!s) return 0;
+    if (!s)
+        return 0;
     return (int32_t)strlen(s);
 }
 

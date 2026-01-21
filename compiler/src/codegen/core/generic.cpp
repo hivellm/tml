@@ -368,7 +368,8 @@ auto LLVMIRGen::require_func_instantiation(const std::string& base_name,
 }
 
 // Request class instantiation - returns mangled name
-// Immediately generates the class type, vtable, and methods if not already generated
+// Records the instantiation request; actual generation is deferred to
+// generate_pending_instantiations
 auto LLVMIRGen::require_class_instantiation(const std::string& base_name,
                                             const std::vector<types::TypePtr>& type_args)
     -> std::string {
@@ -380,16 +381,11 @@ auto LLVMIRGen::require_class_instantiation(const std::string& base_name,
         return mangled;
     }
 
+    // Record instantiation request - generation is deferred to generate_pending_instantiations
     class_instantiations_[mangled] = GenericInstantiation{
         base_name, type_args, mangled,
-        true // Mark as generated since we'll generate it immediately
+        false // Mark as NOT generated - will be generated in generate_pending_instantiations
     };
-
-    // Find the generic class declaration and generate instantiation
-    auto decl_it = pending_generic_classes_.find(base_name);
-    if (decl_it != pending_generic_classes_.end()) {
-        gen_class_instantiation(*decl_it->second, type_args);
-    }
 
     return mangled;
 }
@@ -436,18 +432,16 @@ void LLVMIRGen::gen_class_instantiation(const parser::ClassDecl& c,
         if (field.is_static)
             continue;
 
-        // Resolve field type with generic substitution
-        std::string ft = llvm_type_ptr(field.type);
-        if (type_subs.count(ft) > 0 || ft.find('%') == std::string::npos) {
-            // Check if this is a generic type parameter
-            auto resolved = resolve_parser_type_with_subs(*field.type, type_subs);
-            ft = llvm_type_from_semantic(resolved);
-        }
+        // Resolve field type with generic substitution - always use substitution
+        // to handle generic type parameters like T -> I32
+        auto resolved = resolve_parser_type_with_subs(*field.type, type_subs);
+        std::string ft = llvm_type_from_semantic(resolved);
         if (ft == "void")
             ft = "{}";
         field_types.push_back(ft);
 
-        field_info.push_back({field.name, static_cast<int>(field_offset++), ft, field.vis, false, {}});
+        field_info.push_back(
+            {field.name, static_cast<int>(field_offset++), ft, field.vis, false, {}});
     }
 
     // Emit class type definition
@@ -458,7 +452,7 @@ void LLVMIRGen::gen_class_instantiation(const parser::ClassDecl& c,
         def += field_types[i];
     }
     def += " }";
-    emit_line(def);
+    type_defs_buffer_ << def << "\n";
 
     // Register class type and fields
     class_types_[mangled] = type_name;
@@ -490,7 +484,7 @@ void LLVMIRGen::gen_class_instantiation(const parser::ClassDecl& c,
             vtable_type += "ptr";
         }
         vtable_type += " }";
-        emit_line(vtable_type);
+        type_defs_buffer_ << vtable_type << "\n";
 
         // Generate vtable global
         std::string vtable_value = "{ ";
@@ -500,11 +494,13 @@ void LLVMIRGen::gen_class_instantiation(const parser::ClassDecl& c,
             vtable_value += "ptr " + vtable_func_names[i];
         }
         vtable_value += " }";
-        emit_line(vtable_name + " = internal constant " + vtable_type_name + " " + vtable_value);
+        type_defs_buffer_ << vtable_name << " = internal constant " << vtable_type_name << " "
+                          << vtable_value << "\n";
     } else {
         // Empty vtable - just emit a pointer placeholder
-        emit_line(vtable_type_name + " = type { ptr }");
-        emit_line(vtable_name + " = internal constant " + vtable_type_name + " { ptr null }");
+        type_defs_buffer_ << vtable_type_name << " = type { ptr }\n";
+        type_defs_buffer_ << vtable_name << " = internal constant " << vtable_type_name
+                          << " { ptr null }\n";
     }
 
     // Store vtable layout

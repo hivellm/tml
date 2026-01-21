@@ -636,7 +636,8 @@ auto HirBinaryReader::read_expr() -> HirExprPtr {
         SourceSpan span = read_span();
 
         auto expr = std::make_unique<HirExpr>();
-        expr->kind = HirLoopExpr{id, label, loop_var, std::move(condition), std::move(body), type, span};
+        expr->kind =
+            HirLoopExpr{id, label, loop_var, std::move(condition), std::move(body), type, span};
         return expr;
     }
 
