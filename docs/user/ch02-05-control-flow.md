@@ -218,19 +218,16 @@ func process_nested(data: Maybe[Outcome[String, Error]]) -> String {
 
 TML provides a unified `loop` construct with different patterns.
 
-### Infinite Loop
+### Conditional Loop
 
-The basic `loop` runs forever until you `break`:
+The `loop (condition)` runs while the condition is true:
 
 ```tml
 func main() {
     let mut count = 0
-    loop {
+    loop (count < 5) {
         println(count)
         count = count + 1
-        if count >= 5 {
-            break
-        }
     }
 }
 ```
@@ -244,9 +241,73 @@ Output:
 4
 ```
 
-### `while` Loop
+The condition is checked before each iteration. You can use `break` and `continue`:
 
-TML provides a traditional `while` loop that runs as long as a condition is true:
+```tml
+func main() {
+    let mut i = 0
+    loop (i < 10) {
+        i = i + 1
+        if i % 2 == 0 {
+            continue  // Skip even numbers
+        }
+        println(i)  // Only odd numbers
+    }
+}
+```
+
+### Loop with Variable Declaration
+
+TML supports declaring loop variables inline with automatic initialization:
+
+```tml
+func main() {
+    let mut sum = 0
+    loop (var i: I32 < 5) {
+        sum = sum + i
+        i = i + 1
+    }
+    println(sum)  // 10 (0 + 1 + 2 + 3 + 4)
+}
+```
+
+The `loop (var name: Type < limit)` syntax:
+- Declares a new variable `name` of type `Type`
+- Initializes it to `0`
+- Continues while `name < limit`
+- The variable must be manually incremented inside the loop
+
+This is useful for index-based iteration:
+
+```tml
+func main() {
+    loop (var i: I64 < 10) {
+        println(i)
+        i = i + 1
+    }
+}
+```
+
+### Infinite Loop
+
+For infinite loops, use `loop (true)`:
+
+```tml
+func main() {
+    let mut count = 0
+    loop (true) {
+        println(count)
+        count = count + 1
+        if count >= 5 {
+            break
+        }
+    }
+}
+```
+
+### `while` Loop (Alias)
+
+The `while` keyword is supported as an alias for `loop (condition)`:
 
 ```tml
 func main() {
@@ -258,29 +319,7 @@ func main() {
 }
 ```
 
-Output:
-```
-0
-1
-2
-3
-4
-```
-
-The `while` loop checks the condition before each iteration. You can also use `break` and `continue` inside while loops:
-
-```tml
-func main() {
-    let mut i = 0
-    while i < 10 {
-        i = i + 1
-        if i % 2 == 0 {
-            continue  // Skip even numbers
-        }
-        println(i)  // Only odd numbers
-    }
-}
-```
+This is equivalent to `loop (count < 5) { ... }`.
 
 ### `for` Loop with Ranges
 
@@ -380,16 +419,24 @@ You can nest loops and break out of them:
 
 ```tml
 func main() {
-    let mut i = 0
-    loop {
-        if i >= 3 {
-            break
+    loop (var i: I32 < 3) {
+        loop (var j: I32 < 3) {
+            println(i, ", ", j)
+            j = j + 1
         }
+        i = i + 1
+    }
+}
+```
+
+Or using conditional loops:
+
+```tml
+func main() {
+    let mut i = 0
+    loop (i < 3) {
         let mut j = 0
-        loop {
-            if j >= 3 {
-                break
-            }
+        loop (j < 3) {
             println(i, ", ", j)
             j = j + 1
         }

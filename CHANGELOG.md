@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Loop Variable Declaration Syntax** (2026-01-21) - Cleaner loop syntax with inline variable declaration
+  - New syntax: `loop (var i: I32 < N) { ... }` declares and initializes loop variable
+  - Variable is automatically initialized to `0` and scoped to the loop
+  - Condition `name < limit` is checked before each iteration
+  - Manual increment required: `i = i + 1`
+  - Works with all integer types: I32, I64, U32, U64, etc.
+  - Full support across all codegen paths (direct LLVM and MIR-based)
+  - Files modified:
+    - `compiler/src/parser/parser_expr.cpp` - Parse loop variable syntax
+    - `compiler/src/types/checker/control.cpp` - Type check and scope management
+    - `compiler/src/hir/hir_builder_expr.cpp` - HIR variable registration
+    - `compiler/src/mir/builder/hir_expr.cpp` - MIR variable initialization
+    - `compiler/src/codegen/llvm_ir_gen_control.cpp` - Direct LLVM codegen support
+
 - **Array Bounds Check Elimination** (2026-01-20) - Zero-cost safety for constant indices
   - Added bounds checking for array indexing (catches out-of-bounds at runtime)
   - Compiler eliminates bounds checks when index is provably safe (e.g., constant indices, loop induction variables)

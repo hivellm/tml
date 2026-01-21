@@ -702,36 +702,62 @@ let x: I32 = if condition then 10 else 20
 
 ### 5.5 Loop Expressions
 
-#### 5.5.1 Infinite Loop
+#### 5.5.1 Conditional Loop
 
 ```ebnf
-LoopExpr = 'loop' Block
+LoopExpr = 'loop' '(' LoopHeader ')' Block
+
+LoopHeader = LoopVarDecl           // loop (var i: I32 < N)
+           | Expr                  // loop (condition)
+
+LoopVarDecl = 'var' Ident ':' Type '<' Expr
 ```
+
+The `loop (var name: Type < limit)` syntax:
+- Declares a new variable in loop scope
+- Initializes the variable to `0`
+- Continues while `name < limit`
+- Variable must be manually incremented
 
 **Examples:**
 ```tml
+// Conditional loop
+loop (count < 10) {
+    print(count)
+    count = count + 1
+}
+
+// Loop with variable declaration (auto-initialized to 0)
+loop (var i: I32 < 5) {
+    println(i)
+    i = i + 1
+}
+
 // Infinite loop
-loop {
+loop (true) {
     if done then break
     work()
 }
 
-// Loop with labeled break
-loop {
-    if error then break
+// With break/continue
+loop (running) {
+    if should_exit then break
+    if should_skip then continue
     process()
 }
 ```
 
-#### 5.5.2 While Loop
+#### 5.5.2 While Loop (Alias)
 
 ```ebnf
 WhileExpr = 'while' Expr Block
 ```
 
+The `while` keyword is an alias for `loop (condition)`.
+
 **Examples:**
 ```tml
-// Traditional while loop
+// Traditional while loop (alias for loop (condition))
 while running {
     tick()
 }
@@ -739,13 +765,6 @@ while running {
 while count < 10 {
     print(count)
     count = count + 1
-}
-
-// With break/continue
-while true {
-    if should_exit then break
-    if should_skip then continue
-    process()
 }
 ```
 
