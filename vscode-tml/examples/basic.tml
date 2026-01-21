@@ -1,13 +1,13 @@
 // Basic TML example showcasing core syntax
 
-module examples.basic
+mod examples::basic
 
-import std.io
-import std.collections.{List, Map}
+use std::io
+use std::collections::{List, Map}
 
 /// Calculates the sum of two integers
 /// Returns the sum as I32
-public func add(a: I32, b: I32) -> I32 {
+pub func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
@@ -26,15 +26,20 @@ func count_to_ten() {
         println(i)
     }
 
-    // While loop
+    // Conditional loop
     var count: I32 = 0
-    while count < 10 {
+    loop (count < 10) {
         count = count + 1
     }
 
-    // Infinite loop with break
-    loop {
-        if count > 20 then break
+    // Loop with variable declaration
+    loop (var i: I32 < 20) {
+        println(i)
+        i = i + 1
+    }
+
+    // While loop (alias for loop (condition))
+    while count < 30 {
         count = count + 1
     }
 }
@@ -56,10 +61,10 @@ func max(a: I32, b: I32) -> I32 {
 /// Pattern matching with when expression
 func classify_number(n: I32) -> String {
     when n {
-        0 -> "zero",
-        1 -> "one",
-        2 -> "two",
-        _ -> "other",
+        0 => "zero",
+        1 => "one",
+        2 => "two",
+        _ => "other",
     }
 }
 

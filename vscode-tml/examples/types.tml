@@ -1,17 +1,17 @@
 // TML Types, Structs, and Enums example
 
-module examples.types
+mod examples::types
 
-import std.math.sqrt
+use std::math::sqrt
 
 // Struct definition
-public type Point {
+pub type Point {
     x: F64,
     y: F64,
 }
 
 // Enum with data
-public type Shape {
+pub type Shape {
     Circle(F64),              // radius
     Rectangle(F64, F64),      // width, height
     Triangle(Point, Point, Point),
@@ -40,24 +40,24 @@ type Maybe[T] {
 // Extend Point with methods
 extend Point {
     /// Create a new point
-    public func new(x: F64, y: F64) -> This {
+    pub func new(x: F64, y: F64) -> This {
         return This { x: x, y: y }
     }
 
     /// Origin point (0, 0)
-    public func origin() -> This {
+    pub func origin() -> This {
         return This.new(0.0, 0.0)
     }
 
     /// Calculate distance to another point
-    public func distance(this, other: Point) -> F64 {
+    pub func distance(this, other: Point) -> F64 {
         let dx: F64 = this.x - other.x
         let dy: F64 = this.y - other.y
         return sqrt(dx**2 + dy**2)
     }
 
     /// Manhattan distance
-    public func manhattan_distance(this, other: Point) -> F64 {
+    pub func manhattan_distance(this, other: Point) -> F64 {
         let dx: F64 = this.x - other.x
         let dy: F64 = this.y - other.y
         return dx + dy
@@ -65,7 +65,7 @@ extend Point {
 }
 
 // Behavior (trait) definition
-public behavior Drawable {
+pub behavior Drawable {
     func draw(this) -> String;
     func area(this) -> F64;
 }
@@ -74,17 +74,17 @@ public behavior Drawable {
 extend Shape with Drawable {
     func draw(this) -> String {
         when this {
-            Circle(r) -> "Circle with radius " + r.to_string(),
-            Rectangle(w, h) -> "Rectangle " + w.to_string() + "x" + h.to_string(),
-            Triangle(p1, p2, p3) -> "Triangle",
+            Circle(r) => "Circle with radius " + r.to_string(),
+            Rectangle(w, h) => "Rectangle " + w.to_string() + "x" + h.to_string(),
+            Triangle(p1, p2, p3) => "Triangle",
         }
     }
 
     func area(this) -> F64 {
         when this {
-            Circle(r) -> 3.14159 * r**2,
-            Rectangle(w, h) -> w * h,
-            Triangle(p1, p2, p3) -> calculate_triangle_area(p1, p2, p3),
+            Circle(r) => 3.14159 * r**2,
+            Rectangle(w, h) => w * h,
+            Triangle(p1, p2, p3) => calculate_triangle_area(p1, p2, p3),
         }
     }
 }
@@ -100,16 +100,16 @@ func calculate_triangle_area(p1: Point, p2: Point, p3: Point) -> F64 {
 /// Generic function working with Maybe
 func unwrap_or[T](maybe: Maybe[T], default: T) -> T {
     when maybe {
-        Just(value) -> value,
-        Nothing -> default,
+        Just(value) => value,
+        Nothing => default,
     }
 }
 
 /// Generic function working with Outcome
 func unwrap_or_else[T, E](result: Outcome[T, E], default: T) -> T {
     when result {
-        Ok(value) -> value,
-        Err(_) -> default,
+        Ok(value) => value,
+        Err(_) => default,
     }
 }
 

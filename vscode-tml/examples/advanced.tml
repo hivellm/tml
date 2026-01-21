@@ -1,9 +1,9 @@
 // Advanced TML features: directives, closures, effects, contracts
 
-module examples.advanced
+mod examples::advanced
 
-import std.io
-import std.collections.List
+use std::io
+use std::collections::List
 
 //! This module demonstrates advanced TML features
 //! including directives, closures, effects, and contracts
@@ -29,7 +29,7 @@ post(result): result.is_finite()
 
 /// File reading with effects declaration
 func read_file(path: String) -> Outcome[String, IoError]
-effects: [io.file.read]
+effects: [io::file::read]
 {
     let file: File = File.open(path)!
     return file.read_to_string()
@@ -37,7 +37,7 @@ effects: [io.file.read]
 
 /// Write file with effects
 func write_file(path: String, content: String) -> Outcome[Unit, IoError]
-effects: [io.file.write]
+effects: [io::file::write]
 {
     let file: File = File.create(path)!
     file.write(content)!
@@ -75,7 +75,7 @@ func test_negative_sqrt() {
     safe_sqrt(-1.0)
 }
 
-@benchmark
+@bench
 func bench_fibonacci() {
     fibonacci(20)
 }
@@ -202,7 +202,7 @@ func compound_assignments() {
 // Lowlevel (unsafe) code
 @lowlevel
 func pointer_operations() {
-    let ptr: ptr U8 = allocate(1024)
+    let ptr: Ptr[U8] = allocate(1024)
     let value: U8 = ptr.read()
     ptr.write(42)
     deallocate(ptr)
@@ -218,7 +218,7 @@ func error_propagation() -> Outcome[I32, String] {
     let port: U16 = env.get("PORT")!.parse[U16]()! else 8080
 
     // Using ! with error binding
-    let result: Data = risky_operation()! else |err| {
+    let result: Data = risky_operation()! else do(err) {
         log.error(err)
         return Err("Operation failed")
     }
