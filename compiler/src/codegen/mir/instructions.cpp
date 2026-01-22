@@ -491,6 +491,26 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         return;
     }
 
+    // Handle black_box intrinsics - prevent optimization
+    if (base_name == "black_box" && i.args.size() == 1) {
+        std::string arg = get_value_reg(i.args[0]);
+        emitln("    " + result_reg + " = call i32 @black_box_i32(i32 " + arg + ")");
+        value_regs_[inst.result] = result_reg;
+        return;
+    }
+    if (base_name == "black_box_i64" && i.args.size() == 1) {
+        std::string arg = get_value_reg(i.args[0]);
+        emitln("    " + result_reg + " = call i64 @black_box_i64(i64 " + arg + ")");
+        value_regs_[inst.result] = result_reg;
+        return;
+    }
+    if (base_name == "black_box_f64" && i.args.size() == 1) {
+        std::string arg = get_value_reg(i.args[0]);
+        emitln("    " + result_reg + " = call double @black_box_f64(double " + arg + ")");
+        value_regs_[inst.result] = result_reg;
+        return;
+    }
+
     // Handle store_byte intrinsic: store_byte(ptr, offset, byte_val)
     // Optimized for tight loops - combines GEP and store in one intrinsic
     if (base_name == "store_byte" && i.args.size() >= 3) {
@@ -506,6 +526,17 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         // Store the byte
         emitln("    store i8 %trunc.sb." + id + ", ptr %gep.sb." + id);
         return;
+    }
+
+    // Check if this is an indirect call (function pointer parameter)
+    auto param_it = param_info_.find(i.func_name);
+    if (param_it != param_info_.end()) {
+        auto& [value_id, param_type] = param_it->second;
+        // Check if the parameter is a function type
+        if (param_type && std::holds_alternative<mir::MirFunctionType>(param_type->kind)) {
+            emit_indirect_call(i, param_it->first, value_id, param_type, result_reg, inst);
+            return;
+        }
     }
 
     // Sanitize function name: replace :: with __ for LLVM compatibility
@@ -553,6 +584,48 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         emit_sret_call(func_name, sret_it->second, processed_args, result_reg, inst);
     } else {
         emit_normal_call(i, func_name, processed_args, result_reg, inst);
+    }
+}
+
+void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& param_name,
+                                    mir::ValueId value_id, const mir::MirTypePtr& func_type,
+                                    const std::string& result_reg,
+                                    const mir::InstructionData& inst) {
+    (void)value_id; // May be used for future enhancements
+
+    // Get the function pointer value (the parameter register)
+    std::string func_ptr = "%" + param_name;
+
+    // Extract function type info
+    const auto& mir_func_type = std::get<mir::MirFunctionType>(func_type->kind);
+
+    // Build parameter type list
+    std::vector<std::string> param_types;
+    for (const auto& pt : mir_func_type.params) {
+        param_types.push_back(mir_type_to_llvm(pt));
+    }
+
+    // Get return type
+    std::string ret_type = mir_func_type.return_type ? mir_type_to_llvm(mir_func_type.return_type)
+                                                     : "void";
+
+    // Build argument list
+    std::string args_str;
+    for (size_t j = 0; j < i.args.size(); ++j) {
+        if (j > 0) args_str += ", ";
+        std::string arg = get_value_reg(i.args[j]);
+        std::string arg_type = j < param_types.size() ? param_types[j] : "i64";
+        args_str += arg_type + " " + arg;
+    }
+
+    // Emit the indirect call
+    if (ret_type == "void") {
+        emitln("    call void " + func_ptr + "(" + args_str + ")");
+    } else {
+        emitln("    " + result_reg + " = call " + ret_type + " " + func_ptr + "(" + args_str + ")");
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = ret_type;
+        }
     }
 }
 
@@ -1709,6 +1782,17 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                 }
             } else if constexpr (std::is_same_v<C, mir::ConstUnit>) {
                 // Unit type - no value needed
+            } else if constexpr (std::is_same_v<C, mir::ConstFuncRef>) {
+                // Function reference - store pointer to the function
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_regs_[inst.result] = "@" + c.func_name;
+                    // Generate the function pointer type string
+                    if (c.func_type) {
+                        value_types_[inst.result] = mir_type_to_llvm(c.func_type) + "*";
+                    } else {
+                        value_types_[inst.result] = "ptr";
+                    }
+                }
             }
         },
         i.value);

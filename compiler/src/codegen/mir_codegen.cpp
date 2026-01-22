@@ -152,6 +152,12 @@ void MirCodegen::emit_preamble() {
     emitln("declare i64 @time_ns()");
     emitln();
 
+    // Black box functions (prevent optimization)
+    emitln("declare i32 @black_box_i32(i32)");
+    emitln("declare i64 @black_box_i64(i64)");
+    emitln("declare double @black_box_f64(double)");
+    emitln();
+
     // String format constants
     // %d\n\0 = 4 chars, %lld\n\0 = 6 chars, %f\n\0 = 4 chars, %s\n\0 = 4 chars
     emitln("@.str.int = private constant [4 x i8] c\"%d\\0A\\00\"");
@@ -357,12 +363,15 @@ void MirCodegen::emit_function(const mir::Function& func) {
         fallback_label_ = func.blocks.back().name;
     }
 
-    // Setup parameter registers
+    // Setup parameter registers and track parameter info for indirect calls
+    param_info_.clear();
     for (const auto& param : func.params) {
         value_regs_[param.value_id] = "%" + param.name;
         // Also store parameter types for correct type tracking
         if (param.type) {
             value_types_[param.value_id] = mir_type_to_llvm(param.type);
+            // Track parameter info for function pointer indirect calls
+            param_info_[param.name] = {param.value_id, param.type};
         }
     }
 

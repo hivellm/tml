@@ -145,6 +145,22 @@ auto HirMirBuilder::build_var(const hir::HirVarExpr& var) -> Value {
     if (!result.type || result.type->is_unit()) {
         result.type = convert_type(var.type);
     }
+
+    // If result is invalid and the type is a function type, this is a function reference
+    if (result.id == INVALID_VALUE && var.type) {
+        if (var.type->is<types::FuncType>()) {
+            // Create a function reference constant
+            MirTypePtr func_type = convert_type(var.type);
+            ConstFuncRef func_ref;
+            func_ref.func_name = var.name;
+            func_ref.func_type = func_type;
+
+            ConstantInst const_inst;
+            const_inst.value = func_ref;
+            return emit(const_inst, func_type);
+        }
+    }
+
     return result;
 }
 
@@ -789,8 +805,13 @@ auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
                 if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
                     for (const auto& [var_name, phi_id] : phi_map) {
                         if (inst.result == phi_id) {
-                            Value current_val = get_variable(var_name);
-                            phi->incoming.push_back({current_val, body_end_block});
+                            // For phi back-edges, access the variable directly without
+                            // emitting volatile loads. Volatile variables use allocas and
+                            // the phi should maintain the alloca pointer, not load from it.
+                            auto it = ctx_.variables.find(var_name);
+                            if (it != ctx_.variables.end()) {
+                                phi->incoming.push_back({it->second, body_end_block});
+                            }
                             break;
                         }
                     }
@@ -914,8 +935,13 @@ auto HirMirBuilder::build_while(const hir::HirWhileExpr& while_expr) -> Value {
                 if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
                     for (const auto& [var_name, phi_id] : phi_map) {
                         if (inst.result == phi_id) {
-                            Value current_val = get_variable(var_name);
-                            phi->incoming.push_back({current_val, body_end_block});
+                            // For phi back-edges, access the variable directly without
+                            // emitting volatile loads. Volatile variables use allocas and
+                            // the phi should maintain the alloca pointer, not load from it.
+                            auto it = ctx_.variables.find(var_name);
+                            if (it != ctx_.variables.end()) {
+                                phi->incoming.push_back({it->second, body_end_block});
+                            }
                             break;
                         }
                     }

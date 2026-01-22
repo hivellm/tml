@@ -251,7 +251,12 @@ struct ConstString {
 
 struct ConstUnit {};
 
-using Constant = std::variant<ConstInt, ConstFloat, ConstBool, ConstString, ConstUnit>;
+struct ConstFuncRef {
+    std::string func_name;  // Name of the function being referenced
+    MirTypePtr func_type;   // Type of the function (for call signature)
+};
+
+using Constant = std::variant<ConstInt, ConstFloat, ConstBool, ConstString, ConstUnit, ConstFuncRef>;
 
 // ============================================================================
 // MIR Instructions (SSA Form)

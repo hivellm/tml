@@ -216,6 +216,17 @@ auto HirBuilder::lower_ident(const parser::IdentExpr& ident) -> HirExprPtr {
             type = type_env_.resolve(var->type);
         }
     }
+
+    // If not found as a variable, check if it's a function reference
+    bool is_unit = !type || (type->is<types::PrimitiveType>() &&
+                             type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit);
+    if (is_unit) {
+        if (auto func_sig = type_env_.lookup_func(ident.name)) {
+            // Create a function type for the function reference
+            type = types::make_func(func_sig->params, func_sig->return_type);
+        }
+    }
+
     return make_hir_var(fresh_id(), ident.name, type, ident.span);
 }
 

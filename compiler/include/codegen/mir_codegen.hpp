@@ -106,6 +106,9 @@ private:
     // sret function tracking (func_name -> original return type as LLVM string)
     std::unordered_map<std::string, std::string> sret_functions_;
 
+    // Parameter name to (value_id, type) mapping for indirect calls
+    std::unordered_map<std::string, std::pair<mir::ValueId, mir::MirTypePtr>> param_info_;
+
     // Generate helpers
     void emit_preamble();
     void emit_type_defs(const mir::Module& module);
@@ -147,6 +150,9 @@ private:
     void emit_insert_value_inst(const mir::InsertValueInst& i, const std::string& result_reg);
     void emit_call_inst(const mir::CallInst& i, const std::string& result_reg,
                         const mir::InstructionData& inst);
+    void emit_indirect_call(const mir::CallInst& i, const std::string& param_name,
+                            mir::ValueId value_id, const mir::MirTypePtr& func_type,
+                            const std::string& result_reg, const mir::InstructionData& inst);
     void emit_method_call_inst(const mir::MethodCallInst& i, const std::string& result_reg,
                                const mir::InstructionData& inst);
     void emit_cast_inst(const mir::CastInst& i, const std::string& result_reg,

@@ -741,6 +741,14 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
             elements.push_back(resolve_type(*elem));
         }
         return types::make_tuple(std::move(elements));
+    } else if (type.is<parser::FuncType>()) {
+        const auto& func = type.as<parser::FuncType>();
+        std::vector<types::TypePtr> params;
+        for (const auto& param : func.params) {
+            params.push_back(resolve_type(*param));
+        }
+        types::TypePtr ret = func.return_type ? resolve_type(*func.return_type) : types::make_unit();
+        return types::make_func(std::move(params), ret);
     }
 
     return types::make_unit();

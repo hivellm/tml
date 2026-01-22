@@ -243,6 +243,8 @@ auto MirPrinter::print_instruction(const InstructionData& inst) -> std::string {
                             out << "const str \"" << c.value << "\"";
                         } else if constexpr (std::is_same_v<C, ConstUnit>) {
                             out << "const unit";
+                        } else if constexpr (std::is_same_v<C, ConstFuncRef>) {
+                            out << "const func_ref @" << c.func_name;
                         }
                     },
                     i.value);

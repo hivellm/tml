@@ -11,20 +11,20 @@ class Point {
     x: F64
     y: F64
 
-    pub func new() -> Point {
+    static func create() -> Point {
         return Point { x: 0.0, y: 0.0 }
     }
 
-    pub func with_coords(x: F64, y: F64) -> Point {
+    static func with_coords(x: F64, y: F64) -> Point {
         return Point { x: x, y: y }
     }
 
-    pub func distance_squared(self) -> F64 {
-        return self.x * self.x + self.y * self.y
+    func distance_squared(this) -> F64 {
+        return this.x * this.x + this.y * this.y
     }
 
-    pub func add(self, other: Point) -> Point {
-        return Point { x: self.x + other.x, y: self.y + other.y }
+    func add(this, other: Point) -> Point {
+        return Point { x: this.x + other.x, y: this.y + other.y }
     }
 }
 
@@ -35,16 +35,16 @@ class Point {
 class Circle {
     radius: F64
 
-    pub func new(r: F64) -> Circle {
+    static func create(r: F64) -> Circle {
         return Circle { radius: r }
     }
 
-    pub func area(self) -> F64 {
-        return 3.14159265359 * self.radius * self.radius
+    func area(this) -> F64 {
+        return 3.14159265359 * this.radius * this.radius
     }
 
-    pub func perimeter(self) -> F64 {
-        return 2.0 * 3.14159265359 * self.radius
+    func perimeter(this) -> F64 {
+        return 2.0 * 3.14159265359 * this.radius
     }
 }
 
@@ -52,16 +52,16 @@ class Rectangle {
     width: F64
     height: F64
 
-    pub func new(w: F64, h: F64) -> Rectangle {
+    static func create(w: F64, h: F64) -> Rectangle {
         return Rectangle { width: w, height: h }
     }
 
-    pub func area(self) -> F64 {
-        return self.width * self.height
+    func area(this) -> F64 {
+        return this.width * this.height
     }
 
-    pub func perimeter(self) -> F64 {
-        return 2.0 * (self.width + self.height)
+    func perimeter(this) -> F64 {
+        return 2.0 * (this.width + this.height)
     }
 }
 
@@ -72,12 +72,12 @@ class Rectangle {
 class Level1 {
     value: I64
 
-    pub func new() -> Level1 {
+    static func create() -> Level1 {
         return Level1 { value: 1 }
     }
 
-    pub func compute(self, x: I64) -> I64 {
-        return x + self.value
+    func compute(this, x: I64) -> I64 {
+        return x + this.value
     }
 }
 
@@ -85,12 +85,12 @@ class Level2 {
     level1: Level1
     value: I64
 
-    pub func new() -> Level2 {
-        return Level2 { level1: Level1::new(), value: 1 }
+    static func create() -> Level2 {
+        return Level2 { level1: Level1::create(), value: 1 }
     }
 
-    pub func compute(self, x: I64) -> I64 {
-        return self.level1.compute(x) + self.value
+    func compute(this, x: I64) -> I64 {
+        return this.level1.compute(x) + this.value
     }
 }
 
@@ -98,12 +98,12 @@ class Level3 {
     level2: Level2
     value: I64
 
-    pub func new() -> Level3 {
-        return Level3 { level2: Level2::new(), value: 1 }
+    static func create() -> Level3 {
+        return Level3 { level2: Level2::create(), value: 1 }
     }
 
-    pub func compute(self, x: I64) -> I64 {
-        return self.level2.compute(x) + self.value
+    func compute(this, x: I64) -> I64 {
+        return this.level2.compute(x) + this.value
     }
 }
 
@@ -111,12 +111,12 @@ class Level4 {
     level3: Level3
     value: I64
 
-    pub func new() -> Level4 {
-        return Level4 { level3: Level3::new(), value: 1 }
+    static func create() -> Level4 {
+        return Level4 { level3: Level3::create(), value: 1 }
     }
 
-    pub func compute(self, x: I64) -> I64 {
-        return self.level3.compute(x) + self.value
+    func compute(this, x: I64) -> I64 {
+        return this.level3.compute(x) + this.value
     }
 }
 
@@ -128,7 +128,9 @@ func bench_object_creation(iterations: I64) -> I64 {
     var sum: F64 = 0.0
     var i: I64 = 0
     loop (i < iterations) {
-        let p: Point = Point::with_coords(i as F64, (i + 1) as F64)
+        let ix: I64 = i % 100
+        let iy: I64 = (i + 1) % 100
+        let p: Point = Point::with_coords(ix as F64, iy as F64)
         sum = sum + p.distance_squared()
         i = i + 1
     }
@@ -159,7 +161,7 @@ func bench_method_chaining(iterations: I64) -> I64 {
 }
 
 func bench_circle_dispatch(iterations: I64) -> I64 {
-    let c: Circle = Circle::new(5.0)
+    let c: Circle = Circle::create(5.0)
     var sum: F64 = 0.0
     var i: I64 = 0
     loop (i < iterations) {
@@ -170,7 +172,7 @@ func bench_circle_dispatch(iterations: I64) -> I64 {
 }
 
 func bench_rectangle_dispatch(iterations: I64) -> I64 {
-    let r: Rectangle = Rectangle::new(3.0, 4.0)
+    let r: Rectangle = Rectangle::create(3.0, 4.0)
     var sum: F64 = 0.0
     var i: I64 = 0
     loop (i < iterations) {
@@ -181,7 +183,7 @@ func bench_rectangle_dispatch(iterations: I64) -> I64 {
 }
 
 func bench_deep_composition(iterations: I64) -> I64 {
-    let obj: Level4 = Level4::new()
+    let obj: Level4 = Level4::create()
     var sum: I64 = 0
     var i: I64 = 0
     loop (i < iterations) {
@@ -211,29 +213,36 @@ func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64
     var run: I32 = 0
     loop (run < runs) {
         let start: I64 = time_ns()
-        let _r: I64 = bench_fn(iterations)
+        let result: I64 = bench_fn(iterations)
         let end: I64 = time_ns()
         let elapsed: I64 = end - start
-        if elapsed < best_ns then {
+
+        // Debug: print timing info for first run
+        if run == 0 {
+            println("    [DEBUG] start=" + start.to_string() + " end=" + end.to_string() + " elapsed=" + elapsed.to_string() + " result=" + result.to_string())
+        }
+
+        if elapsed < best_ns {
             best_ns = elapsed
         }
         run = run + 1
     }
 
     let per_op: I64 = best_ns / iterations
-    let ops_sec: I64 = if best_ns > 0 then {
+    let ops_sec: I64 = if best_ns > 0 {
         (iterations * 1000000000) / best_ns
     } else {
         0
     }
 
     println("  " + name + ":")
+    println("    best_ns=" + best_ns.to_string())
     println("    " + per_op.to_string() + " ns/op")
     println("    " + ops_sec.to_string() + " ops/sec")
     println("")
 }
 
-pub func main() -> I32 {
+func main() -> I32 {
     println("")
     println("================================================================")
     println("  OOP Benchmarks (TML)")
