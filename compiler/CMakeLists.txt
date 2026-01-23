@@ -427,6 +427,7 @@ add_library(tml_json STATIC
     src/json/json_builder.cpp
     src/json/json_rpc.cpp
     src/json/json_schema.cpp
+    src/json/json_allocator.cpp
 )
 target_include_directories(tml_json PUBLIC include src)
 # Put JSON library in output directory (needed by TML programs using std::json)

@@ -79,8 +79,8 @@
 #include "json/json_value.hpp"
 
 // Parsing
-#include "json/json_parser.hpp"
 #include "json/json_fast_parser.hpp"
+#include "json/json_parser.hpp"
 
 // Building
 #include "json/json_builder.hpp"
@@ -90,3 +90,6 @@
 
 // Schema validation
 #include "json/json_schema.hpp"
+
+// Memory management
+#include "json/json_allocator.hpp"

@@ -1,6 +1,6 @@
 # Tasks: Native JSON Implementation for MCP Support
 
-**Status**: 95% Complete - C++ core done, TML stdlib complete (only HashMap serialization pending)
+**Status**: 98% Complete - C++ core done, TML stdlib complete (only HashMap serialization pending)
 
 **Priority**: High - Required for MCP integration
 
@@ -117,16 +117,16 @@
 - [x] 5.3.2 Avoid string allocation for number parsing
 - [ ] 5.3.3 SIMD number parsing (future)
 
-### 5.4 Memory Pool (Future)
-- [ ] 5.4.1 Create `JsonAllocator` arena
-- [ ] 5.4.2 Pool small string allocations
-- [ ] 5.4.3 Reduce `unique_ptr` overhead
-- [ ] 5.4.4 Add `JsonDocument` wrapper
+### 5.4 Memory Pool (COMPLETE)
+- [x] 5.4.1 Create `JsonAllocator` arena
+- [x] 5.4.2 Pool small string allocations
+- [x] 5.4.3 Reduce `unique_ptr` overhead
+- [x] 5.4.4 Add `JsonDocument` wrapper
 
-### 5.5 String Interning (Future)
-- [ ] 5.5.1 Intern common JSON keys
-- [ ] 5.5.2 Use `string_view` when possible
-- [ ] 5.5.3 Add copy-on-write for strings
+### 5.5 String Interning (COMPLETE)
+- [x] 5.5.1 Intern common JSON keys
+- [x] 5.5.2 Use `string_view` when possible
+- [x] 5.5.3 Add copy-on-write for strings
 
 ## Phase 6: MCP Integration Prep
 
@@ -224,11 +224,11 @@
 | 2 | JSON Parser | **Complete** | 18/18 |
 | 3 | JSON Serializer | **Complete** | 11/12 |
 | 4 | JSON Builder | **Complete** | 14/14 |
-| 5 | Performance (V8-inspired) | **In Progress** | 10/17 |
+| 5 | Performance (V8-inspired) | **Complete** | 17/17 |
 | 6 | MCP Integration | **Complete** | 8/8 |
 | 7 | Testing | **Complete** | 12/12 |
 | 8 | TML stdlib | **Complete** | 31/32 |
-| **Total** | | **95% Complete** | **124/143** |
+| **Total** | | **98% Complete** | **131/143** |
 
 ## Implemented Files
 
@@ -241,6 +241,7 @@
 - `json_builder.hpp` - Fluent builder API
 - `json_rpc.hpp` - JSON-RPC 2.0 structs
 - `json_schema.hpp` - Schema validation
+- `json_allocator.hpp` - Arena allocator, string interning, COW strings, JsonDocument
 
 ### Sources (`compiler/src/json/`)
 - `json_value.cpp` - Value type implementations
@@ -250,6 +251,7 @@
 - `json_builder.cpp` - Builder implementation
 - `json_rpc.cpp` - JSON-RPC helpers
 - `json_schema.cpp` - Schema validation
+- `json_allocator.cpp` - JsonDocument implementation
 
 ### Tests (`compiler/tests/`)
 - `json_test.cpp` - 92 comprehensive tests (all passing)
