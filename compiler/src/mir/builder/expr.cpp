@@ -93,7 +93,9 @@ auto MirBuilder::build_literal(const parser::LiteralExpr& lit) -> Value {
     switch (token.kind) {
     case lexer::TokenKind::IntLiteral: {
         int64_t value = token.int_value().value;
-        return const_int(value, 32, true);
+        // Use 64-bit by default for integer literals on 64-bit platforms
+        // This prevents type mismatches when assigning to I64 variables
+        return const_int(value, 64, true);
     }
     case lexer::TokenKind::FloatLiteral: {
         double value = token.float_value().value;

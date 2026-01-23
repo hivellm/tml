@@ -22,7 +22,7 @@ func add_many_params(a: I64, b: I64, c: I64, d: I64, e: I64, f: I64) -> I64 {
 
 // Recursive function
 func fib_recursive(n: I32) -> I64 {
-    if n <= 1 then {
+    if n <= 1 {
         return n as I64
     }
     return fib_recursive(n - 1) + fib_recursive(n - 2)
@@ -30,8 +30,8 @@ func fib_recursive(n: I32) -> I64 {
 
 // Tail recursive (optimizable)
 func fib_tail_helper(n: I32, a: I64, b: I64) -> I64 {
-    if n == 0 then { return a }
-    if n == 1 then { return b }
+    if n == 0 { return a }
+    if n == 1 { return b }
     return fib_tail_helper(n - 1, b, a + b)
 }
 
@@ -39,18 +39,15 @@ func fib_tail(n: I32) -> I64 {
     return fib_tail_helper(n, 0, 1)
 }
 
-// Mutual recursion
-func is_even(n: I64) -> I64
-func is_odd(n: I64) -> I64
-
-func is_even(n: I64) -> I64 {
-    if n == 0 then { return 1 }
-    return is_odd(n - 1)
+// Mutual recursion - is_odd defined first to avoid forward declaration
+func is_odd(n: I64) -> I64 {
+    if n == 0 { return 0 as I64 }
+    return is_even(n - 1)
 }
 
-func is_odd(n: I64) -> I64 {
-    if n == 0 then { return 0 }
-    return is_even(n - 1)
+func is_even(n: I64) -> I64 {
+    if n == 0 { return 1 as I64 }
+    return is_odd(n - 1)
 }
 
 // Benchmarks - return results to prevent dead code elimination
@@ -123,17 +120,23 @@ func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64
     var run: I32 = 0
     loop (run < runs) {
         let start: I64 = time_ns()
-        let _r: I64 = bench_fn(iterations)
+        let result: I64 = bench_fn(iterations)
         let end: I64 = time_ns()
         let elapsed: I64 = end - start
-        if elapsed < best_ns then {
+
+        // Debug: print timing info for first run
+        if run == 0 {
+            println("    [DEBUG] elapsed=" + elapsed.to_string() + " result=" + result.to_string())
+        }
+
+        if elapsed < best_ns {
             best_ns = elapsed
         }
         run = run + 1
     }
 
     let per_op: I64 = best_ns / iterations
-    let ops_sec: I64 = if best_ns > 0 then {
+    let ops_sec: I64 = if best_ns > 0 {
         (iterations * 1000000000) / best_ns
     } else {
         0
