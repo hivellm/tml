@@ -922,3 +922,67 @@ TML_EXPORT int32_t tml_json_object_get_type(int64_t handle, const char* key) {
         return 5;
     return -1;
 }
+
+// ============================================================================
+// Object Key Iteration
+// ============================================================================
+
+// Static buffer for returning keys
+static char json_key_buffer[4096];
+
+/**
+ * @brief Get object key at index.
+ *
+ * @param handle Handle to the JsonValue (object)
+ * @param index Key index (0-based)
+ * @return Pointer to the key string (static buffer), or NULL if out of bounds
+ */
+TML_EXPORT const char* tml_json_object_key_at(int64_t handle, int64_t index) {
+    auto* value = get_json_value(handle);
+    if (!value || !value->is_object())
+        return nullptr;
+
+    const auto& obj = value->as_object();
+    if (index < 0 || static_cast<size_t>(index) >= obj.size())
+        return nullptr;
+
+    // Iterate to the index (std::map is ordered)
+    auto it = obj.begin();
+    std::advance(it, static_cast<std::ptrdiff_t>(index));
+
+    // Copy key to buffer
+    const std::string& key = it->first;
+    if (key.length() >= sizeof(json_key_buffer))
+        return nullptr;
+    std::memcpy(json_key_buffer, key.data(), key.length());
+    json_key_buffer[key.length()] = '\0';
+    return json_key_buffer;
+}
+
+/**
+ * @brief Get object value at index (by key order).
+ *
+ * @param handle Handle to the JsonValue (object)
+ * @param index Value index (0-based)
+ * @return Handle to the value, or -1 if out of bounds
+ */
+TML_EXPORT int64_t tml_json_object_value_at(int64_t handle, int64_t index) {
+    auto* value = get_json_value(handle);
+    if (!value || !value->is_object())
+        return -1;
+
+    const auto& obj = value->as_object();
+    if (index < 0 || static_cast<size_t>(index) >= obj.size())
+        return -1;
+
+    // Iterate to the index
+    auto it = obj.begin();
+    std::advance(it, static_cast<std::ptrdiff_t>(index));
+
+    // Clone the value
+    if (g_json_stats.enabled)
+        g_json_stats.clone_count++;
+    ScopedTimer timer(g_json_stats.clone_time_ns, g_json_stats.enabled);
+
+    return alloc_json_handle(it->second.clone());
+}

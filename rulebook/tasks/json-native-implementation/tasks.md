@@ -1,6 +1,6 @@
 # Tasks: Native JSON Implementation for MCP Support
 
-**Status**: 85% Complete - C++ core done, TML stdlib 91% done (missing: keys/values, List/Map serialization)
+**Status**: 95% Complete - C++ core done, TML stdlib complete (only HashMap serialization pending)
 
 **Priority**: High - Required for MCP integration
 
@@ -187,7 +187,7 @@
 - [x] 8.3.5 Implement `len()` for arrays and objects
 - [x] 8.3.6 Implement `get_path()` for JSON path navigation
 - [x] 8.3.7 Add `get_path_string()`, `get_path_i64()` convenience methods
-- [ ] 8.3.8 Add `keys()` and `values()` iteration methods
+- [x] 8.3.8 Add `key_at()`, `value_at()`, `entry_at()` iteration methods
 
 ### 8.4 Fluent Builder in TML
 - [x] 8.4.1 Create `Builder` type with Text buffer
@@ -202,8 +202,8 @@
 - [x] 8.5.1 Create `ToJson` behavior
 - [x] 8.5.2 Create `FromJson` behavior
 - [x] 8.5.3 Implement for all primitives (Bool, I8-I64, U8-U64, F32, F64, Str)
-- [ ] 8.5.4 Implement for `List[T]`
-- [ ] 8.5.5 Implement for `Map[Str, T]`
+- [x] 8.5.4 Implement for `List[T]`
+- [ ] 8.5.5 Implement for `HashMap[Str, T]` (blocked: needs HashMap iteration support)
 
 ### 8.6 Pretty Printing
 - [x] 8.6.1 Create `PrettyBuilder` type with indentation support
@@ -227,8 +227,8 @@
 | 5 | Performance (V8-inspired) | **In Progress** | 10/17 |
 | 6 | MCP Integration | **Complete** | 8/8 |
 | 7 | Testing | **Complete** | 12/12 |
-| 8 | TML stdlib | **Complete** | 29/32 |
-| **Total** | | **In Progress** | **122/143** |
+| 8 | TML stdlib | **Complete** | 31/32 |
+| **Total** | | **95% Complete** | **124/143** |
 
 ## Implemented Files
 

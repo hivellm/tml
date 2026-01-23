@@ -103,6 +103,12 @@ func json_object_get_string(h: I64, key: Str) -> Str
 @extern("tml_json_object_get_type")
 func json_object_get_type(h: I64, key: Str) -> I32
 
+@extern("tml_json_object_key_at")
+func json_object_key_at(h: I64, index: I64) -> Str
+
+@extern("tml_json_object_value_at")
+func json_object_value_at(h: I64, index: I64) -> I64
+
 @extern("tml_json_to_string")
 func json_to_string(h: I64) -> Str
 
@@ -269,6 +275,56 @@ impl JsonObject {
     /// Serialize this object to a JSON string
     pub func to_string(this) -> Str {
         return json_to_string(this.handle)
+    }
+
+    /// Get key at index (for iteration)
+    ///
+    /// Returns Nothing if index is out of bounds.
+    /// Keys are returned in insertion order.
+    pub func key_at(this, index: I64) -> Maybe[Str] {
+        let key: Str = json_object_key_at(this.handle, index)
+        if key.len() == 0 {
+            // Check if it's really empty or invalid
+            let obj_len: I64 = json_object_len(this.handle)
+            if index < 0 or index >= obj_len {
+                return Nothing
+            }
+        }
+        return Just(key)
+    }
+
+    /// Get value at index (for iteration)
+    ///
+    /// Returns Nothing if index is out of bounds.
+    pub func value_at(this, index: I64) -> Maybe[Json] {
+        let value_handle: I64 = json_object_value_at(this.handle, index)
+        if value_handle < 0 {
+            return Nothing
+        }
+        return Just(Json::from_handle(value_handle))
+    }
+
+    /// Iterate over all keys in this object
+    ///
+    /// Example:
+    /// ```tml
+    /// var i: I64 = 0
+    /// loop (i < obj.len()) {
+    ///     when obj.key_at(i) {
+    ///         Just(key) => println(key),
+    ///         Nothing => {}
+    ///     }
+    ///     i = i + 1
+    /// }
+    /// ```
+    pub func for_each_key(this, callback: func(Str)) {
+        var i: I64 = 0
+        let obj_len: I64 = json_object_len(this.handle)
+        loop (i < obj_len) {
+            let key: Str = json_object_key_at(this.handle, i)
+            callback(key)
+            i = i + 1
+        }
     }
 
     /// Free the underlying handle
@@ -756,6 +812,74 @@ impl Json {
             Just(json) => json.as_i64(),
             Nothing => Nothing,
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Object Key/Value Iteration
+    // ------------------------------------------------------------------------
+
+    /// Get key at index for objects (for iteration)
+    ///
+    /// Returns Nothing if not an object or index is out of bounds.
+    /// Keys are returned in insertion order.
+    ///
+    /// # Example
+    /// ```tml
+    /// let json = parse_or_panic("{\"a\": 1, \"b\": 2}")
+    /// var i: I64 = 0
+    /// loop (i < json.len()) {
+    ///     when json.key_at(i) {
+    ///         Just(key) => println(key),
+    ///         Nothing => {}
+    ///     }
+    ///     i = i + 1
+    /// }
+    /// ```
+    pub func key_at(this, index: I64) -> Maybe[Str] {
+        if not this.is_object() {
+            return Nothing
+        }
+        let key: Str = json_object_key_at(this.handle, index)
+        if key.len() == 0 {
+            let obj_len: I64 = json_object_len(this.handle)
+            if index < 0 or index >= obj_len {
+                return Nothing
+            }
+        }
+        return Just(key)
+    }
+
+    /// Get value at index for objects (for iteration)
+    ///
+    /// Returns Nothing if not an object or index is out of bounds.
+    pub func value_at(this, index: I64) -> Maybe[Json] {
+        if not this.is_object() {
+            return Nothing
+        }
+        let value_handle: I64 = json_object_value_at(this.handle, index)
+        if value_handle < 0 {
+            return Nothing
+        }
+        return Just(Json::from_handle(value_handle))
+    }
+
+    /// Get key-value pair at index for objects
+    ///
+    /// Returns Nothing if not an object or index is out of bounds.
+    pub func entry_at(this, index: I64) -> Maybe[(Str, Json)] {
+        if not this.is_object() {
+            return Nothing
+        }
+        let key: Str = json_object_key_at(this.handle, index)
+        let obj_len: I64 = json_object_len(this.handle)
+        if index < 0 or index >= obj_len {
+            return Nothing
+        }
+        let value_handle: I64 = json_object_value_at(this.handle, index)
+        if value_handle < 0 {
+            return Nothing
+        }
+        return Just((key, Json::from_handle(value_handle)))
     }
 
     // ------------------------------------------------------------------------

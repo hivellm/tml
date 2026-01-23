@@ -203,3 +203,92 @@ impl FromJson for Str {
         }
     }
 }
+
+// ============================================================================
+// ToJson/FromJson for Collection Types
+// ============================================================================
+
+use std::collections::List
+
+/// ToJson implementation for List[T] where T implements ToJson.
+///
+/// Serializes a List to a JSON array.
+///
+/// # Example
+///
+/// ```tml
+/// let nums = List[I64]::new(8)
+/// nums.push(1)
+/// nums.push(2)
+/// nums.push(3)
+/// let json = nums.to_json()  // [1, 2, 3]
+/// ```
+impl[T: ToJson] ToJson for List[T] {
+    func to_json(this) -> Json {
+        use std::json::builder::{Builder, array}
+
+        let b: Builder = array()
+        var i: I64 = 0
+        let length: I64 = this.len()
+        loop (i < length) {
+            let elem: T = this.get(i)
+            let elem_json: Json = elem.to_json()
+            // Add the raw JSON string representation
+            b.raw(elem_json.to_string())
+            i = i + 1
+        }
+        b.end_arr()
+        let h: I64 = json_parse_fast(b.build())
+        b.drop()
+        return Json::from_handle(h)
+    }
+}
+
+/// FromJson implementation for List[T] where T implements FromJson.
+///
+/// Deserializes a JSON array to a List.
+///
+/// # Example
+///
+/// ```tml
+/// let json = parse_or_panic("[1, 2, 3]")
+/// when List[I64]::from_json(json) {
+///     Ok(nums) => {
+///         // nums contains [1, 2, 3]
+///     },
+///     Err(e) => panic(e),
+/// }
+/// ```
+impl[T: FromJson] FromJson for List[T] {
+    func from_json(json: Json) -> Outcome[List[T], Str] {
+        if not json.is_array() {
+            return Err("Expected JSON array")
+        }
+
+        let length: I64 = json.len()
+        let list: List[T] = List[T]::new(length)
+
+        var i: I64 = 0
+        loop (i < length) {
+            when json.at(i) {
+                Just(elem_json) => {
+                    when T::from_json(elem_json) {
+                        Ok(elem) => list.push(elem),
+                        Err(e) => return Err("Failed to deserialize element at index " + i.to_string() + ": " + e),
+                    }
+                },
+                Nothing => return Err("Failed to get element at index " + i.to_string()),
+            }
+            i = i + 1
+        }
+
+        return Ok(list)
+    }
+}
+
+// Note: HashMap[K, V] ToJson/FromJson requires iteration support.
+// HashMap currently lacks keys()/values() iteration methods.
+// Once those are added, implement:
+//
+// impl[V: ToJson] ToJson for HashMap[Str, V] { ... }
+// impl[V: FromJson] FromJson for HashMap[Str, V] { ... }

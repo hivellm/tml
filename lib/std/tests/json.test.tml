@@ -384,3 +384,102 @@ func test_pretty_builder_nested() -> I32 {
     assert(result.contains("\"value\": 42"), "Should have value field")
     return 0
 }
+
+// ============================================================================
+// Keys/Values Iteration Tests
+// ============================================================================
+
+@test
+func test_json_key_at() -> I32 {
+    let json: Json = parse_or_panic("{\"a\": 1, \"b\": 2, \"c\": 3}")
+
+    when json.key_at(0) {
+        Just(key) => assert(key == "a", "First key should be 'a'"),
+        Nothing => panic("key_at(0) should return a key"),
+    }
+
+    when json.key_at(1) {
+        Just(key) => assert(key == "b", "Second key should be 'b'"),
+        Nothing => panic("key_at(1) should return a key"),
+    }
+
+    when json.key_at(2) {
+        Just(key) => assert(key == "c", "Third key should be 'c'"),
+        Nothing => panic("key_at(2) should return a key"),
+    }
+
+    // Out of bounds
+    when json.key_at(3) {
+        Just(_) => panic("key_at(3) should return Nothing"),
+        Nothing => {},
+    }
+
+    return 0
+}
+
+@test
+func test_json_value_at() -> I32 {
+    let json: Json = parse_or_panic("{\"x\": 10, \"y\": 20}")
+
+    when json.value_at(0) {
+        Just(val) => assert(val.unwrap_i64() == 10, "First value should be 10"),
+        Nothing => panic("value_at(0) should return a value"),
+    }
+
+    when json.value_at(1) {
+        Just(val) => assert(val.unwrap_i64() == 20, "Second value should be 20"),
+        Nothing => panic("value_at(1) should return a value"),
+    }
+
+    // Out of bounds
+    when json.value_at(2) {
+        Just(_) => panic("value_at(2) should return Nothing"),
+        Nothing => {},
+    }
+
+    return 0
+}
+
+@test
+func test_json_object_iteration() -> I32 {
+    let json: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
+
+    // Iterate over all entries
+    var count: I64 = 0
+    var i: I64 = 0
+    loop (i < json.len()) {
+        when json.key_at(i) {
+            Just(key) => {
+                when json.value_at(i) {
+                    Just(_) => count = count + 1,
+                    Nothing => {},
+                }
+            },
+            Nothing => {},
+        }
+        i = i + 1
+    }
+
+    assert(count == 2, "Should iterate over 2 entries")
+    return 0
+}
+
+@test
+func test_json_object_key_at() -> I32 {
+    let json: Json = parse_or_panic("{\"first\": 1, \"second\": 2}")
+
+    when json.as_object() {
+        Just(obj) => {
+            when obj.key_at(0) {
+                Just(key) => assert(key == "first", "First key should be 'first'"),
+                Nothing => panic("key_at(0) should return a key"),
+            }
+            when obj.key_at(1) {
+                Just(key) => assert(key == "second", "Second key should be 'second'"),
+                Nothing => panic("key_at(1) should return a key"),
+            }
+        },
+        Nothing => panic("Expected object"),
+    }
+    return 0
+}
