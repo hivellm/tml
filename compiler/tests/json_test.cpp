@@ -921,3 +921,386 @@ TEST(JsonSchemaTest, ValidateAny) {
     EXPECT_TRUE(schema.validate(JsonValue(42)).valid);
     EXPECT_TRUE(schema.validate(JsonValue("hello")).valid);
 }
+
+// ============================================================================
+// ArenaBlock Tests
+// ============================================================================
+
+TEST(ArenaBlockTest, DefaultConstruction) {
+    ArenaBlock block;
+    EXPECT_EQ(block.size, ArenaBlock::DEFAULT_SIZE);
+    EXPECT_EQ(block.used, 0);
+    EXPECT_EQ(block.available(), ArenaBlock::DEFAULT_SIZE);
+}
+
+TEST(ArenaBlockTest, CustomSizeConstruction) {
+    ArenaBlock block(1024);
+    EXPECT_EQ(block.size, 1024);
+    EXPECT_EQ(block.used, 0);
+    EXPECT_EQ(block.available(), 1024);
+}
+
+TEST(ArenaBlockTest, BasicAllocation) {
+    ArenaBlock block(1024);
+    void* ptr = block.alloc(100);
+    EXPECT_NE(ptr, nullptr);
+    EXPECT_GE(block.used, 100);
+    EXPECT_LE(block.available(), 924);
+}
+
+TEST(ArenaBlockTest, AllocationAlignment) {
+    ArenaBlock block(1024);
+
+    // Allocate 1 byte
+    void* ptr1 = block.alloc(1, 1);
+    EXPECT_NE(ptr1, nullptr);
+
+    // Allocate with 8-byte alignment
+    void* ptr2 = block.alloc(8, 8);
+    EXPECT_NE(ptr2, nullptr);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(ptr2) % 8, 0);
+
+    // Allocate with 16-byte alignment
+    void* ptr3 = block.alloc(16, 16);
+    EXPECT_NE(ptr3, nullptr);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(ptr3) % 16, 0);
+}
+
+TEST(ArenaBlockTest, AllocationFailsWhenFull) {
+    ArenaBlock block(100);
+    void* ptr1 = block.alloc(80);
+    EXPECT_NE(ptr1, nullptr);
+
+    // This should fail - not enough space
+    void* ptr2 = block.alloc(50);
+    EXPECT_EQ(ptr2, nullptr);
+}
+
+TEST(ArenaBlockTest, Reset) {
+    ArenaBlock block(1024);
+    (void)block.alloc(500);
+    EXPECT_GE(block.used, 500);
+
+    block.reset();
+    EXPECT_EQ(block.used, 0);
+    EXPECT_EQ(block.available(), 1024);
+}
+
+// ============================================================================
+// StringInternTable Tests
+// ============================================================================
+
+TEST(StringInternTableTest, InternNewString) {
+    ArenaBlock arena(4096);
+    StringInternTable table;
+
+    auto* interned = table.intern("hello", arena);
+    EXPECT_NE(interned, nullptr);
+    EXPECT_EQ(interned->view(), "hello");
+    EXPECT_EQ(table.count(), 1);
+}
+
+TEST(StringInternTableTest, InternDuplicateString) {
+    ArenaBlock arena(4096);
+    StringInternTable table;
+
+    auto* first = table.intern("hello", arena);
+    auto* second = table.intern("hello", arena);
+
+    EXPECT_EQ(first, second); // Same pointer - deduplicated
+    EXPECT_EQ(table.count(), 1);
+}
+
+TEST(StringInternTableTest, InternMultipleStrings) {
+    ArenaBlock arena(4096);
+    StringInternTable table;
+
+    auto* str1 = table.intern("hello", arena);
+    auto* str2 = table.intern("world", arena);
+    auto* str3 = table.intern("test", arena);
+
+    EXPECT_NE(str1, str2);
+    EXPECT_NE(str2, str3);
+    EXPECT_EQ(table.count(), 3);
+}
+
+TEST(StringInternTableTest, TooLongString) {
+    ArenaBlock arena(4096);
+    StringInternTable table;
+
+    // Create a string longer than MAX_INTERN_LENGTH
+    std::string long_str(StringInternTable::MAX_INTERN_LENGTH + 10, 'x');
+    auto* result = table.intern(long_str, arena);
+
+    EXPECT_EQ(result, nullptr); // Too long to intern
+    EXPECT_EQ(table.count(), 0);
+}
+
+TEST(StringInternTableTest, InternCommonKeys) {
+    ArenaBlock arena(4096);
+    StringInternTable table;
+
+    table.intern_common_keys(arena);
+
+    // Common keys should be pre-interned
+    size_t common_count = sizeof(StringInternTable::COMMON_KEYS) / sizeof(const char*);
+    EXPECT_EQ(table.count(), common_count);
+
+    // Looking up a common key should return the same pointer
+    auto* type_ptr = table.intern("type", arena);
+    EXPECT_NE(type_ptr, nullptr);
+    EXPECT_EQ(type_ptr->view(), "type");
+}
+
+TEST(StringInternTableTest, Clear) {
+    ArenaBlock arena(4096);
+    StringInternTable table;
+
+    (void)table.intern("hello", arena);
+    (void)table.intern("world", arena);
+    EXPECT_EQ(table.count(), 2);
+
+    table.clear();
+    EXPECT_EQ(table.count(), 0);
+}
+
+// ============================================================================
+// JsonArena Tests
+// ============================================================================
+
+TEST(JsonArenaTest, DefaultConstruction) {
+    JsonArena arena;
+    EXPECT_EQ(arena.block_count(), 1);
+    EXPECT_GT(arena.total_capacity(), 0);
+    // Common keys should be pre-interned
+    EXPECT_GT(arena.interned_count(), 0);
+}
+
+TEST(JsonArenaTest, CustomSizeConstruction) {
+    JsonArena arena(1024);
+    EXPECT_EQ(arena.block_count(), 1);
+    EXPECT_GE(arena.total_capacity(), 1024);
+}
+
+TEST(JsonArenaTest, AllocRawBytes) {
+    JsonArena arena;
+    void* ptr = arena.alloc(100);
+    EXPECT_NE(ptr, nullptr);
+    EXPECT_GE(arena.total_used(), 100);
+}
+
+TEST(JsonArenaTest, AllocString) {
+    JsonArena arena;
+    auto str = arena.alloc_string("hello world");
+    EXPECT_EQ(str, "hello world");
+}
+
+TEST(JsonArenaTest, InternString) {
+    JsonArena arena;
+
+    auto str1 = arena.intern_string("custom_key");
+    auto str2 = arena.intern_string("custom_key");
+
+    // Should be the same pointer (interned)
+    EXPECT_EQ(str1.data(), str2.data());
+}
+
+TEST(JsonArenaTest, CommonKeysInterned) {
+    JsonArena arena;
+
+    // "type" is a common key - should be pre-interned
+    auto str1 = arena.intern_string("type");
+    auto str2 = arena.intern_string("type");
+
+    EXPECT_EQ(str1.data(), str2.data());
+    EXPECT_EQ(str1, "type");
+}
+
+TEST(JsonArenaTest, Reset) {
+    JsonArena arena;
+
+    // Use raw alloc to ensure we track usage (alloc_string may intern)
+    (void)arena.alloc(100);
+    (void)arena.alloc(200);
+    size_t used_before = arena.total_used();
+    EXPECT_GE(used_before, 300);
+
+    arena.reset();
+    EXPECT_EQ(arena.total_used(), 0);
+    // Common keys should be re-interned
+    EXPECT_GT(arena.interned_count(), 0);
+}
+
+TEST(JsonArenaTest, GrowsWithLargeAllocations) {
+    JsonArena arena(1024); // Small initial size
+
+    // Allocate more than one block can hold
+    (void)arena.alloc(500);
+    (void)arena.alloc(500);
+    (void)arena.alloc(500);
+
+    EXPECT_GT(arena.block_count(), 1);
+}
+
+// ============================================================================
+// JsonDocument Tests
+// ============================================================================
+
+TEST(JsonDocumentTest, ParseSimpleObject) {
+    auto doc = JsonDocument::parse(R"({"name": "Alice", "age": 30})");
+    ASSERT_TRUE(doc.has_value());
+
+    const auto& root = doc->root();
+    EXPECT_TRUE(root.is_object());
+    EXPECT_EQ(root.get("name")->as_string(), "Alice");
+    EXPECT_EQ(root.get("age")->as_i64(), 30);
+}
+
+TEST(JsonDocumentTest, ParseArray) {
+    auto doc = JsonDocument::parse("[1, 2, 3, 4, 5]");
+    ASSERT_TRUE(doc.has_value());
+
+    const auto& root = doc->root();
+    EXPECT_TRUE(root.is_array());
+    EXPECT_EQ(root.as_array().size(), 5);
+}
+
+TEST(JsonDocumentTest, ParseNestedStructure) {
+    auto doc = JsonDocument::parse(R"({
+        "users": [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": 25}
+        ],
+        "count": 2
+    })");
+    ASSERT_TRUE(doc.has_value());
+
+    const auto& root = doc->root();
+    EXPECT_TRUE(root.is_object());
+    EXPECT_EQ(root.get("count")->as_i64(), 2);
+}
+
+TEST(JsonDocumentTest, ParseInvalidJson) {
+    auto doc = JsonDocument::parse("not valid json");
+    EXPECT_FALSE(doc.has_value());
+}
+
+TEST(JsonDocumentTest, ParseWithCustomArenaSize) {
+    auto doc = JsonDocument::parse(R"({"key": "value"})", 1024);
+    ASSERT_TRUE(doc.has_value());
+    EXPECT_GE(doc->arena().total_capacity(), 1024);
+}
+
+TEST(JsonDocumentTest, ArenaIsAccessible) {
+    auto doc = JsonDocument::parse(R"({"key": "value"})");
+    ASSERT_TRUE(doc.has_value());
+
+    auto& arena = doc->arena();
+    EXPECT_GT(arena.interned_count(), 0);
+}
+
+// ============================================================================
+// CowString Tests
+// ============================================================================
+
+TEST(CowStringTest, DefaultConstruction) {
+    CowString s;
+    EXPECT_TRUE(s.empty());
+    EXPECT_EQ(s.length(), 0);
+    EXPECT_EQ(s.view(), "");
+}
+
+TEST(CowStringTest, ConstructFromShortString) {
+    CowString s("hello"); // Within SSO capacity
+    EXPECT_FALSE(s.empty());
+    EXPECT_EQ(s.length(), 5);
+    EXPECT_EQ(s.view(), "hello");
+    EXPECT_EQ(s.str(), "hello");
+}
+
+TEST(CowStringTest, ConstructFromLongString) {
+    std::string long_str(100, 'x'); // Exceeds SSO capacity
+    CowString s(long_str);
+    EXPECT_EQ(s.length(), 100);
+    EXPECT_EQ(s.view(), long_str);
+}
+
+TEST(CowStringTest, ViewConstruction) {
+    std::string original = "hello world";
+    CowString s = CowString::view(original);
+
+    EXPECT_EQ(s.view(), "hello world");
+    EXPECT_EQ(s.length(), 11);
+}
+
+TEST(CowStringTest, CopyShortString) {
+    CowString s1("hello");
+    CowString s2 = s1;
+
+    EXPECT_EQ(s1.view(), s2.view());
+    EXPECT_EQ(s1.length(), s2.length());
+}
+
+TEST(CowStringTest, CopyLongStringIsShared) {
+    std::string long_str(100, 'x');
+    CowString s1(long_str);
+    CowString s2 = s1;
+
+    EXPECT_EQ(s1.view(), s2.view());
+    EXPECT_TRUE(s1.is_shared());
+    EXPECT_TRUE(s2.is_shared());
+}
+
+TEST(CowStringTest, MoveConstruction) {
+    CowString s1("hello");
+    CowString s2 = std::move(s1);
+
+    EXPECT_EQ(s2.view(), "hello");
+}
+
+TEST(CowStringTest, MakeUniqueOnShared) {
+    std::string long_str(100, 'x');
+    CowString s1(long_str);
+    CowString s2 = s1;
+
+    EXPECT_TRUE(s1.is_shared());
+    s1.make_unique();
+    EXPECT_FALSE(s1.is_shared());
+    EXPECT_EQ(s1.view(), long_str);
+}
+
+TEST(CowStringTest, Equality) {
+    CowString s1("hello");
+    CowString s2("hello");
+    CowString s3("world");
+
+    EXPECT_EQ(s1, s2);
+    EXPECT_NE(s1, s3);
+}
+
+TEST(CowStringTest, Comparison) {
+    CowString s1("apple");
+    CowString s2("banana");
+
+    EXPECT_TRUE(s1 < s2);
+    EXPECT_FALSE(s2 < s1);
+}
+
+TEST(CowStringTest, CStr) {
+    CowString s("hello");
+    const char* cstr = s.c_str();
+    EXPECT_STREQ(cstr, "hello");
+}
+
+TEST(CowStringTest, SSOBoundary) {
+    // Test at exactly SSO capacity
+    std::string at_capacity(CowString::SSO_CAPACITY, 'x');
+    CowString s1(at_capacity);
+    EXPECT_EQ(s1.length(), CowString::SSO_CAPACITY);
+    EXPECT_FALSE(s1.is_shared()); // Should use SSO
+
+    // Test just over SSO capacity
+    std::string over_capacity(CowString::SSO_CAPACITY + 1, 'x');
+    CowString s2(over_capacity);
+    EXPECT_EQ(s2.length(), CowString::SSO_CAPACITY + 1);
+}
