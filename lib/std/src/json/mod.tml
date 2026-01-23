@@ -100,7 +100,7 @@
 //! The builder uses Text internally for O(1) amortized string building.
 
 // Re-export builder types
-pub use builder::{Builder, object, array}
+pub use builder::{Builder, object, array, PrettyBuilder, pretty_object, pretty_array}
 
 // Re-export high-level JSON types
 pub use types::{Json, JsonNumber, JsonObject, JsonArray, parse, parse_result, parse_or_panic}

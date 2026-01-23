@@ -1,7 +1,7 @@
 // Tests for std::json module
 use test
 use std::json::types::{Json, JsonObject, JsonArray, parse, parse_or_panic}
-use std::json::builder::{Builder, object, array}
+use std::json::builder::{Builder, object, array, PrettyBuilder, pretty_object}
 
 // ============================================================================
 // Parsing Tests
@@ -261,5 +261,126 @@ func test_complex_nested_json() -> I32 {
         },
         Nothing => panic("Expected users field"),
     }
+    return 0
+}
+
+// ============================================================================
+// Path Navigation Tests
+// ============================================================================
+
+@test
+func test_get_path_simple() -> I32 {
+    let json: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
+
+    when json.get_path("name") {
+        Just(name) => assert(name.unwrap_str() == "Alice", "Expected Alice"),
+        Nothing => panic("Path not found"),
+    }
+
+    when json.get_path("age") {
+        Just(age) => assert(age.unwrap_i64() == 30, "Expected 30"),
+        Nothing => panic("Path not found"),
+    }
+    return 0
+}
+
+@test
+func test_get_path_nested() -> I32 {
+    let json: Json = parse_or_panic("{\"user\": {\"name\": \"Bob\", \"address\": {\"city\": \"NYC\"}}}")
+
+    when json.get_path("user.name") {
+        Just(name) => assert(name.unwrap_str() == "Bob", "Expected Bob"),
+        Nothing => panic("Path not found"),
+    }
+
+    when json.get_path("user.address.city") {
+        Just(city) => assert(city.unwrap_str() == "NYC", "Expected NYC"),
+        Nothing => panic("Path not found"),
+    }
+    return 0
+}
+
+@test
+func test_get_path_array() -> I32 {
+    let json: Json = parse_or_panic("{\"items\": [10, 20, 30]}")
+
+    when json.get_path("items[0]") {
+        Just(item) => assert(item.unwrap_i64() == 10, "Expected 10"),
+        Nothing => panic("Path not found"),
+    }
+
+    when json.get_path("items[2]") {
+        Just(item) => assert(item.unwrap_i64() == 30, "Expected 30"),
+        Nothing => panic("Path not found"),
+    }
+    return 0
+}
+
+@test
+func test_get_path_mixed() -> I32 {
+    let json: Json = parse_or_panic("{\"users\": [{\"name\": \"Alice\"}, {\"name\": \"Bob\"}]}")
+
+    when json.get_path("users[0].name") {
+        Just(name) => assert(name.unwrap_str() == "Alice", "Expected Alice"),
+        Nothing => panic("Path not found"),
+    }
+
+    when json.get_path("users[1].name") {
+        Just(name) => assert(name.unwrap_str() == "Bob", "Expected Bob"),
+        Nothing => panic("Path not found"),
+    }
+    return 0
+}
+
+@test
+func test_get_path_not_found() -> I32 {
+    let json: Json = parse_or_panic("{\"a\": 1}")
+
+    when json.get_path("b") {
+        Just(_) => panic("Should not find path"),
+        Nothing => {},
+    }
+
+    when json.get_path("a.b") {
+        Just(_) => panic("Should not find nested path"),
+        Nothing => {},
+    }
+    return 0
+}
+
+// ============================================================================
+// Pretty Builder Tests
+// ============================================================================
+
+@test
+func test_pretty_builder_object() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.ks("name", "Alice")
+    b.kn("age", 30)
+    b.kb("active", true)
+    b.end_obj()
+    let result: Str = b.build()
+
+    // Result should have newlines and indentation
+    assert(result.contains("\n"), "Pretty output should have newlines")
+    assert(result.contains("  "), "Pretty output should have indentation")
+    assert(result.contains("\"name\": \"Alice\""), "Should have name field")
+    return 0
+}
+
+@test
+func test_pretty_builder_nested() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.ks("name", "Test")
+    b.k("data")
+    b.obj()
+    b.kn("value", 42)
+    b.end_obj()
+    b.end_obj()
+    let result: Str = b.build()
+
+    // Nested object should have deeper indentation
+    assert(result.contains("\"data\":"), "Should have data field")
+    assert(result.contains("\"value\": 42"), "Should have value field")
     return 0
 }

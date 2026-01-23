@@ -109,6 +109,20 @@ func json_to_string(h: I64) -> Str
 @extern("tml_json_free")
 func json_free(h: I64)
 
+// String helper functions for path navigation (using lowlevel intrinsics)
+func path_char_at(s: Str, index: I32) -> I32 {
+    return lowlevel { str_char_at(s, index) }
+}
+
+func path_slice(s: Str, start: I32, length: I32) -> Str {
+    return lowlevel { str_substring(s, start, length) }
+}
+
+func path_len(s: Str) -> I32 {
+    let len: I64 = lowlevel { str_len(s) }
+    return len as I32
+}
+
 // Type constants
 const TYPE_NULL: I32 = 0
 const TYPE_BOOL: I32 = 1
@@ -160,7 +174,10 @@ impl JsonNumber {
     pub func to_json_string(this) -> Str {
         when this {
             JsonNumber::Int(n) => n.to_string(),
-            JsonNumber::Uint(n) => n.to_string(),
+            JsonNumber::Uint(n) => {
+                let as_i64: I64 = n as I64
+                as_i64.to_string()
+            },
             JsonNumber::Float(n) => n.to_string(),
         }
     }
@@ -636,6 +653,109 @@ impl Json {
             return Nothing
         }
         return Just(Json::from_handle(elem_handle))
+    }
+
+    // ------------------------------------------------------------------------
+    // Path Navigation
+    // ------------------------------------------------------------------------
+
+    /// Navigate to a nested value using a path string.
+    ///
+    /// Path syntax:
+    /// - `.key` or `key` - access object field
+    /// - `[n]` - access array index
+    /// - Chain with dots: `users[0].name`, `data.items[2].value`
+    ///
+    /// Returns Nothing if any part of the path is invalid.
+    ///
+    /// # Example
+    /// ```tml
+    /// let json = parse_or_panic("{\"users\": [{\"name\": \"Alice\"}]}")
+    /// when json.get_path("users[0].name") {
+    ///     Just(name) => println(name.unwrap_str()),  // "Alice"
+    ///     Nothing => println("Not found"),
+    /// }
+    /// ```
+    pub func get_path(this, path: Str) -> Maybe[Json] {
+        // Use handle-based navigation to avoid struct copy issues
+        var current_handle: I64 = this.handle
+        var i: I32 = 0
+        let len: I32 = path_len(path)
+
+        loop (i < len) {
+            let c: I32 = path_char_at(path, i)
+
+            // Skip leading dot
+            if c == 46 {  // '.'
+                i = i + 1
+                continue
+            }
+
+            // Array index: [n]
+            if c == 91 {  // '['
+                i = i + 1
+                var index: I64 = 0
+                loop (i < len) {
+                    let digit: I32 = path_char_at(path, i)
+                    if digit == 93 {  // ']'
+                        i = i + 1
+                        break
+                    }
+                    if digit >= 48 and digit <= 57 {  // '0'-'9'
+                        index = index * 10 + (digit - 48) as I64
+                    }
+                    i = i + 1
+                }
+                // Check if current is an array
+                if json_is_array(current_handle) != 1 {
+                    return Nothing
+                }
+                let elem_handle: I64 = json_array_get(current_handle, index)
+                if elem_handle < 0 {
+                    return Nothing
+                }
+                current_handle = elem_handle
+                continue
+            }
+
+            // Object key: read until '.' or '[' or end
+            var key_start: I32 = i
+            loop (i < len) {
+                let kc: I32 = path_char_at(path, i)
+                if kc == 46 or kc == 91 {  // '.' or '['
+                    break
+                }
+                i = i + 1
+            }
+            let key: Str = path_slice(path, key_start, i - key_start)
+            // Check if current is an object
+            if json_is_object(current_handle) != 1 {
+                return Nothing
+            }
+            let field_handle: I64 = json_object_get(current_handle, key)
+            if field_handle < 0 {
+                return Nothing
+            }
+            current_handle = field_handle
+        }
+
+        return Just(Json::from_handle(current_handle))
+    }
+
+    /// Get string at path directly
+    pub func get_path_string(this, path: Str) -> Maybe[Str] {
+        when this.get_path(path) {
+            Just(json) => json.as_str(),
+            Nothing => Nothing,
+        }
+    }
+
+    /// Get integer at path directly
+    pub func get_path_i64(this, path: Str) -> Maybe[I64] {
+        when this.get_path(path) {
+            Just(json) => json.as_i64(),
+            Nothing => Nothing,
+        }
     }
 
     // ------------------------------------------------------------------------

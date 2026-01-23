@@ -272,3 +272,260 @@ pub func array() -> Builder {
     b.depth = 1
     return b
 }
+
+// ============================================================================
+// Pretty Builder - JSON with indentation and newlines
+// ============================================================================
+
+/// Pretty JSON Builder with indentation support.
+///
+/// Produces formatted JSON with newlines and configurable indentation.
+pub type PrettyBuilder {
+    buffer: Text,
+    need_comma: Bool,
+    depth: I32,
+    indent: Str,
+}
+
+impl PrettyBuilder {
+    /// Create a new pretty JSON builder with default 2-space indentation
+    pub func new() -> PrettyBuilder {
+        PrettyBuilder {
+            buffer: Text::with_capacity(2048),
+            need_comma: false,
+            depth: 0,
+            indent: "  ",  // 2 spaces default
+        }
+    }
+
+    /// Create a new pretty JSON builder with custom indentation
+    pub func with_indent(indent_str: Str) -> PrettyBuilder {
+        PrettyBuilder {
+            buffer: Text::with_capacity(2048),
+            need_comma: false,
+            depth: 0,
+            indent: indent_str,
+        }
+    }
+
+    // Internal: add newline and current indentation
+    pub func newline_indent(this) {
+        this.buffer.push_str("\n")
+        var i: I32 = 0
+        loop (i < this.depth) {
+            this.buffer.push_str(this.indent)
+            i = i + 1
+        }
+    }
+
+    pub func maybe_comma(this) {
+        if this.need_comma {
+            this.buffer.push_str(",")
+        }
+    }
+
+    pub func escape_string(this, s: Str) {
+        let text: Text = Text::from(s)
+        let len: I64 = text.len()
+        var i: I64 = 0
+        loop (i < len) {
+            let c: I32 = text.byte_at(i)
+            let _: I32 = this.escape_char(c)
+            i = i + 1
+        }
+        text.drop()
+    }
+
+    pub func escape_char(this, c: I32) -> I32 {
+        if c == 34 { this.buffer.push_str("\\\""); return 0 }
+        if c == 92 { this.buffer.push_str("\\\\"); return 0 }
+        if c == 10 { this.buffer.push_str("\\n"); return 0 }
+        if c == 13 { this.buffer.push_str("\\r"); return 0 }
+        if c == 9 { this.buffer.push_str("\\t"); return 0 }
+        if c == 8 { this.buffer.push_str("\\b"); return 0 }
+        if c == 12 { this.buffer.push_str("\\f"); return 0 }
+        if c < 32 {
+            this.buffer.push_str("\\u00")
+            let hi: I32 = c / 16
+            let lo: I32 = c % 16
+            this.buffer.push(if hi < 10 { 48 + hi } else { 55 + hi })
+            this.buffer.push(if lo < 10 { 48 + lo } else { 55 + lo })
+            return 0
+        }
+        this.buffer.push(c)
+        return 0
+    }
+
+    /// Start an object `{`
+    pub func obj(this) {
+        this.maybe_comma()
+        this.buffer.push_str("{")
+        this.depth = this.depth + 1
+        this.need_comma = false
+    }
+
+    /// Start an array `[`
+    pub func arr(this) {
+        this.maybe_comma()
+        this.buffer.push_str("[")
+        this.depth = this.depth + 1
+        this.need_comma = false
+    }
+
+    /// End object `}`
+    pub func end_obj(this) {
+        this.depth = this.depth - 1
+        this.newline_indent()
+        this.buffer.push_str("}")
+        this.need_comma = true
+    }
+
+    /// End array `]`
+    pub func end_arr(this) {
+        this.depth = this.depth - 1
+        this.newline_indent()
+        this.buffer.push_str("]")
+        this.need_comma = true
+    }
+
+    /// Add a key to the current object
+    pub func k(this, key: Str) {
+        this.maybe_comma()
+        this.newline_indent()
+        this.buffer.push_str("\"")
+        this.buffer.push_str(key)
+        this.buffer.push_str("\": ")
+        this.need_comma = false
+    }
+
+    /// Add string value
+    pub func s(this, value: Str) {
+        this.maybe_comma()
+        // Only add newline/indent for array items, not for values after keys
+        if not (this.depth > 0 and not this.need_comma) {
+            this.newline_indent()
+        }
+        this.buffer.push_str("\"")
+        this.escape_string(value)
+        this.buffer.push_str("\"")
+        this.need_comma = true
+    }
+
+    /// Add integer value
+    pub func n(this, value: I64) {
+        this.maybe_comma()
+        this.buffer.push_str(value.to_string())
+        this.need_comma = true
+    }
+
+    /// Add I32 integer value
+    pub func n32(this, value: I32) {
+        this.maybe_comma()
+        this.buffer.push_str(value.to_string())
+        this.need_comma = true
+    }
+
+    /// Add float value
+    pub func f(this, value: F64) {
+        this.maybe_comma()
+        this.buffer.push_str(value.to_string())
+        this.need_comma = true
+    }
+
+    /// Add boolean value
+    pub func b(this, value: Bool) {
+        this.maybe_comma()
+        var s: Str = "false"
+        if value {
+            s = "true"
+        }
+        this.buffer.push_str(s)
+        this.need_comma = true
+    }
+
+    /// Add null value
+    pub func nil(this) {
+        this.maybe_comma()
+        this.buffer.push_str("null")
+        this.need_comma = true
+    }
+
+    /// Add key with string value
+    pub func ks(this, key: Str, value: Str) {
+        this.k(key)
+        this.buffer.push_str("\"")
+        this.escape_string(value)
+        this.buffer.push_str("\"")
+        this.need_comma = true
+    }
+
+    /// Add key with integer value
+    pub func kn(this, key: Str, value: I64) {
+        this.k(key)
+        this.buffer.push_str(value.to_string())
+        this.need_comma = true
+    }
+
+    /// Add key with I32 value
+    pub func kn32(this, key: Str, value: I32) {
+        this.k(key)
+        this.buffer.push_str(value.to_string())
+        this.need_comma = true
+    }
+
+    /// Add key with float value
+    pub func kf(this, key: Str, value: F64) {
+        this.k(key)
+        this.buffer.push_str(value.to_string())
+        this.need_comma = true
+    }
+
+    /// Add key with bool value
+    pub func kb(this, key: Str, value: Bool) {
+        this.k(key)
+        var bool_str: Str = "false"
+        if value {
+            bool_str = "true"
+        }
+        this.buffer.push_str(bool_str)
+        this.need_comma = true
+    }
+
+    /// Add key with null value
+    pub func knil(this, key: Str) {
+        this.k(key)
+        this.buffer.push_str("null")
+        this.need_comma = true
+    }
+
+    /// Build and return the pretty JSON string
+    pub func build(this) -> Str {
+        return this.buffer.as_str()
+    }
+
+    /// Get current length
+    pub func len(this) -> I64 {
+        return this.buffer.len()
+    }
+
+    /// Free resources
+    pub func drop(this) {
+        this.buffer.drop()
+    }
+}
+
+/// Create a pretty JSON object builder
+pub func pretty_object() -> PrettyBuilder {
+    let b: PrettyBuilder = PrettyBuilder::new()
+    b.buffer.push_str("{")
+    b.depth = 1
+    return b
+}
+
+/// Create a pretty JSON array builder
+pub func pretty_array() -> PrettyBuilder {
+    let b: PrettyBuilder = PrettyBuilder::new()
+    b.buffer.push_str("[")
+    b.depth = 1
+    return b
+}
