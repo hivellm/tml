@@ -216,9 +216,53 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         enum_type = current_ret_type_;
                     }
                 }
+                // Try to use current type substitutions (e.g., when inside generic impl method)
+                // This handles cases like `Ready { value: Nothing }` inside Ready[I64]::exhausted()
+                else if (!current_type_subs_.empty() && !enum_decl->generics.empty()) {
+                    std::vector<types::TypePtr> type_args;
+                    bool all_resolved = true;
+                    for (const auto& gp : enum_decl->generics) {
+                        auto sub_it = current_type_subs_.find(gp.name);
+                        if (sub_it != current_type_subs_.end() && sub_it->second) {
+                            type_args.push_back(sub_it->second);
+                        } else {
+                            all_resolved = false;
+                            break;
+                        }
+                    }
+                    if (all_resolved && !type_args.empty()) {
+                        std::string mangled = require_enum_instantiation(enum_name, type_args);
+                        enum_type = "%struct." + mangled;
+                    }
+                }
 
-                // If we still don't have a type, we can't properly instantiate
-                // Default to I32 as the type parameter
+                // If we still don't have a type, try to extract from current_impl_type_
+                // e.g., inside Ready__I64 impl, use I64 as the type parameter
+                if (enum_type.empty() && !current_impl_type_.empty()) {
+                    // Look for __TypeName suffix in current_impl_type_
+                    auto sep_pos = current_impl_type_.find("__");
+                    if (sep_pos != std::string::npos) {
+                        std::string type_suffix = current_impl_type_.substr(sep_pos + 2);
+                        types::TypePtr type_arg = nullptr;
+
+                        // Map suffix to type
+                        if (type_suffix == "I32") type_arg = types::make_i32();
+                        else if (type_suffix == "I64") type_arg = types::make_i64();
+                        else if (type_suffix == "Bool") type_arg = types::make_bool();
+                        else if (type_suffix == "Str") type_arg = types::make_str();
+                        else if (type_suffix == "F32") type_arg = types::make_primitive(types::PrimitiveKind::F32);
+                        else if (type_suffix == "F64") type_arg = types::make_f64();
+                        else if (type_suffix == "Unit") type_arg = types::make_unit();
+
+                        if (type_arg) {
+                            std::vector<types::TypePtr> args = {type_arg};
+                            std::string mangled = require_enum_instantiation(enum_name, args);
+                            enum_type = "%struct." + mangled;
+                        }
+                    }
+                }
+
+                // Default to I32 as the type parameter if still no type
                 if (enum_type.empty()) {
                     std::vector<types::TypePtr> default_args = {types::make_i32()};
                     std::string mangled = require_enum_instantiation(enum_name, default_args);
@@ -269,6 +313,25 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         enum_type = current_ret_type_;
                     }
                 }
+                // Try to use current type substitutions (e.g., when inside generic impl method)
+                if (enum_type == "%struct." + enum_name && !enum_def.type_params.empty() &&
+                    !current_type_subs_.empty()) {
+                    std::vector<types::TypePtr> type_args;
+                    bool all_resolved = true;
+                    for (const auto& param_name : enum_def.type_params) {
+                        auto sub_it = current_type_subs_.find(param_name);
+                        if (sub_it != current_type_subs_.end() && sub_it->second) {
+                            type_args.push_back(sub_it->second);
+                        } else {
+                            all_resolved = false;
+                            break;
+                        }
+                    }
+                    if (all_resolved && !type_args.empty()) {
+                        std::string mangled = require_enum_instantiation(enum_name, type_args);
+                        enum_type = "%struct." + mangled;
+                    }
+                }
                 std::string result = fresh_reg();
                 std::string enum_val = fresh_reg();
 
@@ -311,6 +374,26 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         if (current_ret_type_.starts_with(prefix) ||
                             current_ret_type_.find(enum_name + "__") != std::string::npos) {
                             enum_type = current_ret_type_;
+                        }
+                    }
+                    // Try to use current type substitutions (e.g., when inside generic impl method)
+                    // This handles cases like `Ready { value: Nothing }` inside Ready[T]::exhausted()
+                    if (enum_type == "%struct." + enum_name && !enum_def.type_params.empty() &&
+                        !current_type_subs_.empty()) {
+                        std::vector<types::TypePtr> type_args;
+                        bool all_resolved = true;
+                        for (const auto& param_name : enum_def.type_params) {
+                            auto sub_it = current_type_subs_.find(param_name);
+                            if (sub_it != current_type_subs_.end() && sub_it->second) {
+                                type_args.push_back(sub_it->second);
+                            } else {
+                                all_resolved = false;
+                                break;
+                            }
+                        }
+                        if (all_resolved && !type_args.empty()) {
+                            std::string mangled = require_enum_instantiation(enum_name, type_args);
+                            enum_type = "%struct." + mangled;
                         }
                     }
                     std::string result = fresh_reg();

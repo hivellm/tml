@@ -69,4 +69,33 @@ auto LLVMIRGen::get_suite_prefix() const -> std::string {
     return "";
 }
 
+auto LLVMIRGen::is_library_method(const std::string& type_name, const std::string& method) const
+    -> bool {
+    if (!env_.module_registry()) {
+        return false;
+    }
+
+    // First check if type_name::method is directly registered (top-level functions)
+    std::string qualified_name = type_name + "::" + method;
+    const auto& all_modules = env_.module_registry()->get_all_modules();
+    for (const auto& [mod_name, mod] : all_modules) {
+        if (mod.functions.find(qualified_name) != mod.functions.end()) {
+            return true;
+        }
+        // Also check if the TYPE itself is from this module (impl methods)
+        if (mod.structs.find(type_name) != mod.structs.end()) {
+            return true;
+        }
+        // Check enums
+        if (mod.enums.find(type_name) != mod.enums.end()) {
+            return true;
+        }
+        // Check classes
+        if (mod.classes.find(type_name) != mod.classes.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace tml::codegen

@@ -210,3 +210,130 @@ for i in 0 to 100 {
 - Array Random Access: 50ms (197M ops/sec)
 - Array Write: 29ms (337M ops/sec)
 - Linear Search: 4ms (2.22B ops/sec)
+
+## Phase 8: OOP Performance (Value Classes) - 2026-01-22
+
+### Root Cause Analysis
+
+**Problem**: Sealed classes without virtual methods (like `Point`, `Builder`) are 69x slower than C++ because they're heap-allocated instead of stack-allocated.
+
+**Affected Benchmarks**:
+| Benchmark | C++ | TML | Gap |
+|-----------|-----|-----|-----|
+| Object Creation | 171 μs | 11,869 μs | **69x** |
+| Method Chaining | 0 μs | 11,773 μs | **∞** |
+
+### Root Cause in Code
+
+**File**: `compiler/src/codegen/core/types.cpp`
+
+**Issue 1** - Line 100-103 (`llvm_type_name`):
+```cpp
+auto class_def = env_.lookup_class(name);
+if (class_def.has_value()) {
+    return "ptr"; // <-- Always returns ptr, even for sealed classes!
+}
+```
+
+**Issue 2** - Line 314-318 (`llvm_type_from_semantic`):
+```cpp
+auto class_def = env_.lookup_class(named.name);
+if (class_def.has_value()) {
+    return "ptr"; // <-- Always returns ptr, even for sealed classes!
+}
+```
+
+### Fix Implementation
+
+**Fix for `llvm_type_name` (lines 100-103)**:
+```cpp
+auto class_def = env_.lookup_class(name);
+if (class_def.has_value()) {
+    // Value class candidates are stack-allocated and use struct type
+    if (env_.is_value_class_candidate(name)) {
+        return "%class." + name;
+    }
+    return "ptr"; // Regular classes use pointer type
+}
+```
+
+**Fix for `llvm_type_from_semantic` (lines 314-318)**:
+```cpp
+auto class_def = env_.lookup_class(named.name);
+if (class_def.has_value()) {
+    // Value class candidates are stack-allocated and use struct type
+    if (env_.is_value_class_candidate(named.name)) {
+        return "%class." + named.name;
+    }
+    return "ptr"; // Regular classes use pointer type
+}
+```
+
+### Criteria for Value Class Candidate
+
+From `is_value_class_candidate()` in `env_lookups.cpp`:
+1. Must be `sealed` (no subclasses)
+2. Must NOT be `abstract`
+3. Must NOT have virtual methods
+4. Base class (if any) must also be value class candidate
+
+### Expected Impact
+
+After fix:
+- `Point::create()` will use `alloca` instead of `malloc`
+- `Builder` method chaining will pass struct by value (copy elision by LLVM)
+- No vtable initialization for value classes
+
+### Testing
+
+1. Run `tml test` to ensure no regressions
+2. Run OOP benchmark: `benchmarks/results/bin/oop_bench.exe`
+3. Compare against C++: `benchmarks/results/bin/oop_bench_cpp.exe`
+
+### Potential Complications
+
+1. **Method signatures**: Instance methods may need to accept value classes by value instead of pointer
+2. **Return values**: Need to verify LLVM's RVO (Return Value Optimization) kicks in
+3. **Assignment semantics**: Value classes use copy semantics, not reference semantics
+4. **Field access**: GEP instructions need struct values, not pointers
+
+### Method Chaining Specific
+
+C++ achieves 0 μs for method chaining because:
+1. Builder is stack-allocated
+2. Each `with_*` method returns Builder by value
+3. LLVM's copy elision eliminates intermediate copies
+
+TML needs:
+1. Builder as value class (stack-allocated) ✓ FIXED
+2. Methods return `%class.Builder` not `ptr` ✓ FIXED
+3. LLVM RVO to eliminate copies ✓ AUTOMATIC
+
+## Value Class Optimization Implementation (2026-01-22)
+
+### Changes Made
+
+**1. Type System Fixes** (`compiler/src/codegen/core/types.cpp`):
+- `llvm_type_name()` now checks `is_value_class_candidate()` and returns `%class.Name` for value classes
+- `llvm_type_from_semantic()` same check added for consistent type resolution
+
+**2. Volatile Variable Phi Fix** (`compiler/src/mir/builder/hir_expr.cpp`):
+- Fixed loop phi back-edge bug for volatile variables
+- Previously, `get_variable()` emitted volatile loads when accessing volatile vars
+- For phi back-edges, we now directly access `ctx_.variables` to get the pointer without emitting loads
+- This prevents type mismatch: phi expects `ptr` but was receiving loaded value (double/i32)
+
+### Benchmark Results
+
+| Benchmark | C++ | TML Before | TML After | Improvement |
+|-----------|-----|------------|-----------|-------------|
+| Object Creation | 172 μs | 11,869 μs | 400 μs | **30x faster** |
+| Method Chaining | 0 μs | 11,773 μs | 518 μs | **23x faster** |
+| Game Loop | 1,060 μs | - | 2,004 μs | **Within 2x** |
+
+### Key Insight
+
+The volatile variable phi bug was exposed by the value class changes but existed independently.
+The bug was in `HirMirBuilder::get_variable()` which emits volatile loads when accessing volatile vars.
+When called during loop phi completion, this emitted loads and added loaded VALUES to phi incoming
+instead of POINTERS. The fix accesses `ctx_.variables` directly without emitting loads for phi back-edges.

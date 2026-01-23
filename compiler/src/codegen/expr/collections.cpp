@@ -436,8 +436,69 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
         }
 
         if (enum_def.has_value() && !enum_def->variants.empty()) {
-            // Register enum variants if not already done
-            // variants is vector of pairs: (variant_name, payload_types)
+            // Check if this is a generic enum that needs instantiation
+            if (!enum_def->type_params.empty()) {
+                // Generic enum - determine the correct instantiation
+                std::string mangled_name;
+
+                // Check expected_enum_type_ first (set by assignment target type)
+                if (!expected_enum_type_.empty() &&
+                    expected_enum_type_.find("%struct." + type_name + "__") != std::string::npos) {
+                    // Extract mangled name from expected type
+                    mangled_name = expected_enum_type_.substr(8); // Remove "%struct."
+                }
+                // Check current_type_subs_ (e.g., inside generic impl method)
+                else if (!current_type_subs_.empty()) {
+                    std::vector<types::TypePtr> type_args;
+                    bool all_resolved = true;
+                    for (const auto& param : enum_def->type_params) {
+                        auto sub_it = current_type_subs_.find(param);
+                        if (sub_it != current_type_subs_.end() && sub_it->second) {
+                            type_args.push_back(sub_it->second);
+                        } else {
+                            all_resolved = false;
+                            break;
+                        }
+                    }
+                    if (all_resolved && !type_args.empty()) {
+                        mangled_name = require_enum_instantiation(type_name, type_args);
+                    }
+                }
+
+                if (!mangled_name.empty()) {
+                    // Use the instantiated enum type
+                    // Find variant index
+                    int variant_idx = -1;
+                    for (size_t i = 0; i < enum_def->variants.size(); ++i) {
+                        if (enum_def->variants[i].first == variant_name) {
+                            variant_idx = static_cast<int>(i);
+                            break;
+                        }
+                    }
+
+                    if (variant_idx >= 0) {
+                        std::string struct_type = "%struct." + mangled_name;
+
+                        // Allocate and initialize the generic enum
+                        std::string alloca_reg = fresh_reg();
+                        emit_line("  " + alloca_reg + " = alloca " + struct_type + ", align 8");
+
+                        // Set the tag
+                        std::string tag_ptr = fresh_reg();
+                        emit_line("  " + tag_ptr + " = getelementptr inbounds " + struct_type +
+                                  ", ptr " + alloca_reg + ", i32 0, i32 0");
+                        emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
+
+                        // Load the value
+                        std::string result = fresh_reg();
+                        emit_line("  " + result + " = load " + struct_type + ", ptr " + alloca_reg);
+                        last_expr_type_ = struct_type;
+                        return result;
+                    }
+                }
+            }
+
+            // Non-generic enum: register variants if not already done
             std::string first_key = type_name + "::" + enum_def->variants[0].first;
             if (enum_variants_.find(first_key) == enum_variants_.end()) {
                 int tag = 0;
@@ -448,7 +509,9 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
                 // Also register the struct type if not done
                 if (struct_types_.find(type_name) == struct_types_.end()) {
                     std::string struct_type_name = "%struct." + type_name;
-                    emit_line(struct_type_name + " = type { i32 }");
+                    // Use type_defs_buffer_ for type definitions, not emit_line()
+                    // emit_line() would put the definition inside the current function
+                    type_defs_buffer_ << struct_type_name << " = type { i32 }\n";
                     struct_types_[type_name] = struct_type_name;
                 }
             }

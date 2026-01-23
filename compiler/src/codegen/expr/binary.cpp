@@ -33,7 +33,25 @@ namespace tml::codegen {
 auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // Handle assignment specially - don't evaluate left for deref assignments
     if (bin.op == parser::BinaryOp::Assign) {
+        // For field assignments, we need to set expected_enum_type_ BEFORE evaluating RHS
+        // This is needed for generic enum unit variants like 'Nothing' to get the correct type
+        std::string saved_expected_enum_type = expected_enum_type_;
+
+        if (bin.left->is<parser::FieldExpr>()) {
+            // Get the field type to use as expected enum type for RHS
+            types::TypePtr lhs_type = infer_expr_type(*bin.left);
+            if (lhs_type) {
+                std::string llvm_type = llvm_type_from_semantic(lhs_type);
+                if (llvm_type.starts_with("%struct.")) {
+                    expected_enum_type_ = llvm_type;
+                }
+            }
+        }
+
         std::string right = gen_expr(*bin.right);
+
+        // Restore expected_enum_type_
+        expected_enum_type_ = saved_expected_enum_type;
 
         if (bin.left->is<parser::IdentExpr>()) {
             auto it = locals_.find(bin.left->as<parser::IdentExpr>().name);
@@ -811,9 +829,39 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // Use unsigned operations if either operand is unsigned
     bool is_unsigned = left_unsigned || right_unsigned;
 
+    // Check for pointer arithmetic (ptr + int or int + ptr)
+    bool is_ptr_arith = (left_type == "ptr" && right_type != "ptr") ||
+                        (right_type == "ptr" && left_type != "ptr");
+    std::string ptr_operand, idx_operand;
+    types::TypePtr ptr_semantic_type = nullptr;
+    if (is_ptr_arith) {
+        if (left_type == "ptr") {
+            ptr_operand = left;
+            idx_operand = right;
+            ptr_semantic_type = left_semantic;
+        } else {
+            ptr_operand = right;
+            idx_operand = left;
+            ptr_semantic_type = right_semantic;
+        }
+    }
+
     switch (bin.op) {
     case parser::BinaryOp::Add:
-        if (is_string) {
+        if (is_ptr_arith) {
+            // Pointer arithmetic: ptr + int -> getelementptr
+            // Determine element type from semantic pointer type
+            std::string elem_type = "i8"; // default to byte-level arithmetic
+            if (ptr_semantic_type && ptr_semantic_type->is<types::PtrType>()) {
+                const auto& ptr = ptr_semantic_type->as<types::PtrType>();
+                if (ptr.inner) {
+                    elem_type = llvm_type_from_semantic(ptr.inner);
+                }
+            }
+            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + ptr_operand +
+                      ", i64 " + idx_operand);
+            last_expr_type_ = "ptr";
+        } else if (is_string) {
             // String concatenation using str_concat_opt (O(1) amortized)
             emit_line("  " + result + " = call ptr @str_concat_opt(ptr " + left + ", ptr " + right +
                       ")");

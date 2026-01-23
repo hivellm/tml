@@ -189,10 +189,16 @@ impl[T: PartialOrd] Range[T] {
     /// Returns `true` if the range contains no items.
     pub func is_empty(this) -> Bool {
         // Empty if start >= end
-        when this.start.partial_cmp(ref this.end) {
-            Just(Ordering::Less) => return false,
-            Just(Ordering::Equal) => return true,
-            Just(Ordering::Greater) => return true,
+        // Use two-level when to avoid nested enum pattern matching limitation
+        let maybe_ord: Maybe[Ordering] = this.start.partial_cmp(ref this.end)
+        when maybe_ord {
+            Just(ord) => {
+                when ord {
+                    Ordering::Less => return false,
+                    Ordering::Equal => return true,
+                    Ordering::Greater => return true
+                }
+            },
             Nothing => return true
         }
     }
@@ -200,18 +206,28 @@ impl[T: PartialOrd] Range[T] {
     /// Returns `true` if `item` is contained in the range.
     pub func contains(this, item: ref T) -> Bool {
         // item >= start
-        let ge_start: Bool = when item.partial_cmp(ref this.start) {
-            Just(Ordering::Greater) => true,
-            Just(Ordering::Equal) => true,
-            Just(Ordering::Less) => false,
+        let maybe_cmp_start: Maybe[Ordering] = item.partial_cmp(ref this.start)
+        let ge_start: Bool = when maybe_cmp_start {
+            Just(ord) => {
+                when ord {
+                    Ordering::Greater => true,
+                    Ordering::Equal => true,
+                    Ordering::Less => false
+                }
+            },
             Nothing => false
         }
 
         // item < end
-        let lt_end: Bool = when item.partial_cmp(ref this.end) {
-            Just(Ordering::Less) => true,
-            Just(Ordering::Equal) => false,
-            Just(Ordering::Greater) => false,
+        let maybe_cmp_end: Maybe[Ordering] = item.partial_cmp(ref this.end)
+        let lt_end: Bool = when maybe_cmp_end {
+            Just(ord) => {
+                when ord {
+                    Ordering::Less => true,
+                    Ordering::Equal => false,
+                    Ordering::Greater => false
+                }
+            },
             Nothing => false
         }
 
@@ -289,10 +305,16 @@ impl[T: PartialOrd] RangeInclusive[T] {
         if this.exhausted {
             return true
         }
-        when this.start.partial_cmp(ref this.end) {
-            Just(Ordering::Greater) => return true,
-            Just(Ordering::Equal) => return false,
-            Just(Ordering::Less) => return false,
+        // Use two-level when to avoid nested enum pattern matching limitation
+        let maybe_ord: Maybe[Ordering] = this.start.partial_cmp(ref this.end)
+        when maybe_ord {
+            Just(ord) => {
+                when ord {
+                    Ordering::Greater => return true,
+                    Ordering::Equal => return false,
+                    Ordering::Less => return false
+                }
+            },
             Nothing => return true
         }
     }
@@ -300,18 +322,28 @@ impl[T: PartialOrd] RangeInclusive[T] {
     /// Returns `true` if `item` is contained in the range.
     pub func contains(this, item: ref T) -> Bool {
         // item >= start
-        let ge_start: Bool = when item.partial_cmp(ref this.start) {
-            Just(Ordering::Greater) => true,
-            Just(Ordering::Equal) => true,
-            Just(Ordering::Less) => false,
+        let maybe_cmp_start: Maybe[Ordering] = item.partial_cmp(ref this.start)
+        let ge_start: Bool = when maybe_cmp_start {
+            Just(ord) => {
+                when ord {
+                    Ordering::Greater => true,
+                    Ordering::Equal => true,
+                    Ordering::Less => false
+                }
+            },
             Nothing => false
         }
 
         // item <= end
-        let le_end: Bool = when item.partial_cmp(ref this.end) {
-            Just(Ordering::Less) => true,
-            Just(Ordering::Equal) => true,
-            Just(Ordering::Greater) => false,
+        let maybe_cmp_end: Maybe[Ordering] = item.partial_cmp(ref this.end)
+        let le_end: Bool = when maybe_cmp_end {
+            Just(ord) => {
+                when ord {
+                    Ordering::Less => true,
+                    Ordering::Equal => true,
+                    Ordering::Greater => false
+                }
+            },
             Nothing => false
         }
 
@@ -363,10 +395,16 @@ impl[T] RangeFrom[T] {
 impl[T: PartialOrd] RangeFrom[T] {
     /// Returns `true` if `item` is contained in the range.
     pub func contains(this, item: ref T) -> Bool {
-        when item.partial_cmp(ref this.start) {
-            Just(Ordering::Greater) => return true,
-            Just(Ordering::Equal) => return true,
-            Just(Ordering::Less) => return false,
+        // Use two-level when to avoid nested enum pattern matching limitation
+        let maybe_ord: Maybe[Ordering] = item.partial_cmp(ref this.start)
+        when maybe_ord {
+            Just(ord) => {
+                when ord {
+                    Ordering::Greater => return true,
+                    Ordering::Equal => return true,
+                    Ordering::Less => return false
+                }
+            },
             Nothing => return false
         }
     }
@@ -416,10 +454,16 @@ impl[T] RangeTo[T] {
 impl[T: PartialOrd] RangeTo[T] {
     /// Returns `true` if `item` is contained in the range.
     pub func contains(this, item: ref T) -> Bool {
-        when item.partial_cmp(ref this.end) {
-            Just(Ordering::Less) => return true,
-            Just(Ordering::Equal) => return false,
-            Just(Ordering::Greater) => return false,
+        // Use two-level when to avoid nested enum pattern matching limitation
+        let maybe_ord: Maybe[Ordering] = item.partial_cmp(ref this.end)
+        when maybe_ord {
+            Just(ord) => {
+                when ord {
+                    Ordering::Less => return true,
+                    Ordering::Equal => return false,
+                    Ordering::Greater => return false
+                }
+            },
             Nothing => return false
         }
     }
@@ -468,10 +512,16 @@ impl[T] RangeToInclusive[T] {
 impl[T: PartialOrd] RangeToInclusive[T] {
     /// Returns `true` if `item` is contained in the range.
     pub func contains(this, item: ref T) -> Bool {
-        when item.partial_cmp(ref this.end) {
-            Just(Ordering::Less) => return true,
-            Just(Ordering::Equal) => return true,
-            Just(Ordering::Greater) => return false,
+        // Use two-level when to avoid nested enum pattern matching limitation
+        let maybe_ord: Maybe[Ordering] = item.partial_cmp(ref this.end)
+        when maybe_ord {
+            Just(ord) => {
+                when ord {
+                    Ordering::Less => return true,
+                    Ordering::Equal => return true,
+                    Ordering::Greater => return false
+                }
+            },
             Nothing => return false
         }
     }

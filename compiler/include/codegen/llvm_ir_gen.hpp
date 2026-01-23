@@ -736,6 +736,7 @@ private:
         std::unordered_map<std::string, types::TypePtr> type_subs;
         std::string base_type_name;     // Used to find the impl block
         std::string method_type_suffix; // For method-level generics like cast[U8] -> "U8"
+        bool is_library_type = false;   // True for library types (no suite prefix)
     };
     std::vector<PendingImplMethod> pending_impl_method_instantiations_;
 
@@ -854,6 +855,10 @@ private:
     /// Used to avoid symbol collisions when multiple test files are linked into one DLL.
     auto get_suite_prefix() const -> std::string;
 
+    /// Returns true if type_name::method is found in the module registry (library method).
+    /// Used to avoid adding suite prefix to library method calls.
+    auto is_library_method(const std::string& type_name, const std::string& method) const -> bool;
+
     // Type translation
     auto llvm_type(const parser::Type& type) -> std::string;
     auto llvm_type_ptr(const parser::TypePtr& type) -> std::string;
@@ -896,6 +901,11 @@ private:
                                        const std::unordered_map<std::string, types::TypePtr>& subs)
         -> types::TypePtr;
 
+    // Helper: apply type substitutions to a semantic type
+    auto apply_type_substitutions(const types::TypePtr& type,
+                                  const std::unordered_map<std::string, types::TypePtr>& subs)
+        -> types::TypePtr;
+
     // Helper: convert LLVM type string back to semantic type (for common primitives)
     auto semantic_type_from_llvm(const std::string& llvm_type) -> types::TypePtr;
 
@@ -928,7 +938,8 @@ private:
                                   const parser::FuncDecl& method,
                                   const std::unordered_map<std::string, types::TypePtr>& type_subs,
                                   const std::vector<parser::GenericParam>& impl_generics,
-                                  const std::string& method_type_suffix = "");
+                                  const std::string& method_type_suffix = "",
+                                  bool is_library_type = false);
     void gen_struct_decl(const parser::StructDecl& s);
     void gen_enum_decl(const parser::EnumDecl& e);
     void gen_namespace_decl(const parser::NamespaceDecl& ns);

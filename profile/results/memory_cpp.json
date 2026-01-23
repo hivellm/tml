@@ -1,0 +1,90 @@
+{
+  "category": "Memory",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "malloc/free (64 bytes)",
+      "iterations": 1000000,
+      "total_ns": 21043900,
+      "per_op_ns": 21,
+      "ops_per_sec": 47519708
+    },
+    {
+      "name": "new/delete Small (16 bytes)",
+      "iterations": 1000000,
+      "total_ns": 24806000,
+      "per_op_ns": 24,
+      "ops_per_sec": 40312827
+    },
+    {
+      "name": "new/delete Medium (64 bytes)",
+      "iterations": 1000000,
+      "total_ns": 22824200,
+      "per_op_ns": 22,
+      "ops_per_sec": 43813145
+    },
+    {
+      "name": "new/delete Large (192 bytes)",
+      "iterations": 1000000,
+      "total_ns": 23596300,
+      "per_op_ns": 23,
+      "ops_per_sec": 42379525
+    },
+    {
+      "name": "Stack Struct Creation",
+      "iterations": 10000000,
+      "total_ns": 0,
+      "per_op_ns": 0,
+      "ops_per_sec": 0
+    },
+    {
+      "name": "unique_ptr RAII",
+      "iterations": 1000000,
+      "total_ns": 22404200,
+      "per_op_ns": 22,
+      "ops_per_sec": 44634488
+    },
+    {
+      "name": "Struct Copy (64 bytes)",
+      "iterations": 1000000,
+      "total_ns": 752500,
+      "per_op_ns": 0,
+      "ops_per_sec": 1328903654
+    },
+    {
+      "name": "memcpy (1KB)",
+      "iterations": 1000000,
+      "total_ns": 6857000,
+      "per_op_ns": 6,
+      "ops_per_sec": 145836371
+    },
+    {
+      "name": "Array Alloc (1000 structs)",
+      "iterations": 10000,
+      "total_ns": 280300,
+      "per_op_ns": 28,
+      "ops_per_sec": 35676061
+    },
+    {
+      "name": "Sequential Access",
+      "iterations": 10000000,
+      "total_ns": 2979600,
+      "per_op_ns": 0,
+      "ops_per_sec": 3356155188
+    },
+    {
+      "name": "Random Access",
+      "iterations": 10000000,
+      "total_ns": 4745700,
+      "per_op_ns": 0,
+      "ops_per_sec": 2107170701
+    },
+    {
+      "name": "Pointer Indirection",
+      "iterations": 10000000,
+      "total_ns": 4068600,
+      "per_op_ns": 0,
+      "ops_per_sec": 2457847908
+    }
+  ]
+}

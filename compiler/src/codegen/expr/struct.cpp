@@ -52,8 +52,21 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         for (size_t i = 0; i < s.fields.size(); ++i) {
             const std::string& field_name = s.fields[i].first;
             int field_idx = get_field_index(struct_name_for_lookup, field_name);
-            std::string field_val = gen_expr(*s.fields[i].second);
+
+            // Get field type BEFORE generating value - needed for generic enum variant inference
             std::string field_type = get_field_type(struct_name_for_lookup, field_name);
+
+            // Set expected_enum_type_ if field is an enum type
+            std::string saved_expected_enum_type = expected_enum_type_;
+            if (!field_type.empty() && field_type.starts_with("%struct.")) {
+                expected_enum_type_ = field_type;
+            }
+
+            std::string field_val = gen_expr(*s.fields[i].second);
+
+            // Restore expected_enum_type_
+            expected_enum_type_ = saved_expected_enum_type;
+
             if (field_type.empty()) {
                 field_type = last_expr_type_;
             }
@@ -83,8 +96,21 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         for (size_t i = 0; i < s.fields.size(); ++i) {
             const std::string& field_name = s.fields[i].first;
             int field_idx = get_field_index(struct_name_for_lookup, field_name);
-            std::string field_val = gen_expr(*s.fields[i].second);
+
+            // Get field type BEFORE generating value - needed for generic enum variant inference
             std::string field_type = get_field_type(struct_name_for_lookup, field_name);
+
+            // Set expected_enum_type_ if field is an enum type
+            std::string saved_expected_enum_type = expected_enum_type_;
+            if (!field_type.empty() && field_type.starts_with("%struct.")) {
+                expected_enum_type_ = field_type;
+            }
+
+            std::string field_val = gen_expr(*s.fields[i].second);
+
+            // Restore expected_enum_type_
+            expected_enum_type_ = saved_expected_enum_type;
+
             if (field_type.empty()) {
                 field_type = last_expr_type_;
             }
@@ -102,42 +128,85 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
     // Check if this is a generic struct
     auto generic_it = pending_generic_structs_.find(base_name);
     if (generic_it != pending_generic_structs_.end() && !s.fields.empty()) {
-        // This is a generic struct - infer type arguments from field values
-        const parser::StructDecl* decl = generic_it->second;
+        // This is a generic struct - first check if we can use existing type context
 
-        // Build substitution map by matching field types
-        std::vector<types::TypePtr> type_args;
-        std::unordered_map<std::string, types::TypePtr> inferred_generics;
-
-        for (const auto& generic_param : decl->generics) {
-            inferred_generics[generic_param.name] = nullptr;
-        }
-
-        // Match fields to infer generic types
-        for (size_t fi = 0; fi < s.fields.size() && fi < decl->fields.size(); ++fi) {
-            const auto& field_decl = decl->fields[fi];
-            // Check if field type is a generic parameter
-            if (field_decl.type && field_decl.type->is<parser::NamedType>()) {
-                const auto& ftype = field_decl.type->as<parser::NamedType>();
-                std::string type_name =
-                    ftype.path.segments.empty() ? "" : ftype.path.segments.back();
-                auto gen_it = inferred_generics.find(type_name);
-                if (gen_it != inferred_generics.end() && !gen_it->second) {
-                    // This field's type is a generic parameter - infer from value
-                    gen_it->second = infer_expr_type(*s.fields[fi].second);
+        // If we're in an impl method for this same type, use its type args
+        // e.g., inside Ready[I64]::exhausted(), `return Ready { ... }` should be Ready[I64]
+        if (!current_impl_type_.empty() && current_impl_type_.starts_with(base_name + "__")) {
+            struct_type = "%struct." + current_impl_type_;
+            // Ensure struct fields are registered (may need to trigger instantiation)
+            if (struct_fields_.find(current_impl_type_) == struct_fields_.end()) {
+                // Parse type args from current_impl_type_ and instantiate
+                // e.g., "Ready__I64" -> base="Ready", type_args=[I64]
+                std::string type_args_str = current_impl_type_.substr(base_name.size() + 2);
+                std::vector<types::TypePtr> type_args;
+                // Simple single-arg case: type_args_str is just "I64", "I32", etc.
+                if (type_args_str == "I32") type_args.push_back(types::make_i32());
+                else if (type_args_str == "I64") type_args.push_back(types::make_i64());
+                else if (type_args_str == "Bool") type_args.push_back(types::make_bool());
+                else if (type_args_str == "Str") type_args.push_back(types::make_str());
+                else if (type_args_str == "F32") type_args.push_back(types::make_primitive(types::PrimitiveKind::F32));
+                else if (type_args_str == "F64") type_args.push_back(types::make_f64());
+                else if (type_args_str == "Unit") type_args.push_back(types::make_unit());
+                else {
+                    // Try as named type
+                    auto t = std::make_shared<types::Type>();
+                    t->kind = types::NamedType{type_args_str, "", {}};
+                    type_args.push_back(t);
                 }
+                require_struct_instantiation(base_name, type_args);
             }
         }
-
-        // Build type_args in order
-        for (const auto& generic_param : decl->generics) {
-            auto inferred = inferred_generics[generic_param.name];
-            type_args.push_back(inferred ? inferred : types::make_i32());
+        // Or check if return type provides the context
+        else if (!current_ret_type_.empty() && current_ret_type_.starts_with("%struct." + base_name + "__")) {
+            struct_type = current_ret_type_;
         }
+        // Otherwise infer type arguments from field values
+        else {
+            const parser::StructDecl* decl = generic_it->second;
 
-        // Get mangled name and ensure instantiation
-        std::string mangled = require_struct_instantiation(base_name, type_args);
-        struct_type = "%struct." + mangled;
+            // Build substitution map by matching field types
+            std::vector<types::TypePtr> type_args;
+            std::unordered_map<std::string, types::TypePtr> inferred_generics;
+
+            for (const auto& generic_param : decl->generics) {
+                inferred_generics[generic_param.name] = nullptr;
+            }
+
+            // First check if we have type substitutions from enclosing generic context
+            for (const auto& generic_param : decl->generics) {
+                auto sub_it = current_type_subs_.find(generic_param.name);
+                if (sub_it != current_type_subs_.end() && sub_it->second) {
+                    inferred_generics[generic_param.name] = sub_it->second;
+                }
+            }
+
+            // Match fields to infer generic types (for parameters not already substituted)
+            for (size_t fi = 0; fi < s.fields.size() && fi < decl->fields.size(); ++fi) {
+                const auto& field_decl = decl->fields[fi];
+                // Check if field type is a generic parameter
+                if (field_decl.type && field_decl.type->is<parser::NamedType>()) {
+                    const auto& ftype = field_decl.type->as<parser::NamedType>();
+                    std::string type_name =
+                        ftype.path.segments.empty() ? "" : ftype.path.segments.back();
+                    auto gen_it = inferred_generics.find(type_name);
+                    if (gen_it != inferred_generics.end() && !gen_it->second) {
+                        // This field's type is a generic parameter - infer from value
+                        gen_it->second = infer_expr_type(*s.fields[fi].second);
+                    }
+                }
+            }
+
+            // Build type_args in order
+            for (const auto& generic_param : decl->generics) {
+                auto inferred = inferred_generics[generic_param.name];
+                type_args.push_back(inferred ? inferred : types::make_i32());
+            }
+
+            // Get mangled name and ensure instantiation
+            std::string mangled = require_struct_instantiation(base_name, type_args);
+            struct_type = "%struct." + mangled;
+        }
     } else {
         // Check if it's a class type
         auto class_def = env_.lookup_class(base_name);
@@ -251,10 +320,9 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             // Get the actual field type from the struct definition
             std::string target_field_type = get_field_type(struct_name_for_lookup, field_name);
 
-            // Set expected type context for enum variants like Nothing
-            // This allows proper type inference for generic enums
-            if (target_field_type.find("%struct.Maybe__") == 0 ||
-                target_field_type.find("%struct.Outcome__") == 0) {
+            // Set expected_enum_type_ if field is a struct type (for generic enum variant inference)
+            std::string saved_expected_enum_type = expected_enum_type_;
+            if (!target_field_type.empty() && target_field_type.starts_with("%struct.")) {
                 expected_enum_type_ = target_field_type;
             }
 
@@ -294,7 +362,7 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             field_val = gen_expr(*s.fields[i].second);
             std::string actual_llvm_type =
                 last_expr_type_;         // Capture actual LLVM type from gen_expr
-            expected_enum_type_.clear(); // Clear after expression
+            expected_enum_type_ = saved_expected_enum_type; // Restore after expression
             expected_literal_type_.clear();
             expected_literal_is_unsigned_ = false;
 

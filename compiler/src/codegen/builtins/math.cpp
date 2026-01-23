@@ -57,6 +57,18 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
         return "0";
     }
 
+    // black_box_f64(value: F64) -> F64 - Prevent LLVM from optimizing away
+    if (fn_name == "black_box_f64") {
+        if (!call.args.empty()) {
+            std::string value = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call double @black_box_f64(double " + value + ")");
+            last_expr_type_ = "double";
+            return result;
+        }
+        return "0.0";
+    }
+
     // ============ SIMD OPERATIONS ============
 
     // simd_sum_i32(arr: ptr, len: I64) -> I64

@@ -1,0 +1,76 @@
+{
+  "category": "OOP",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "Object Creation (stack)",
+      "iterations": 10000000,
+      "total_ns": 6536900,
+      "per_op_ns": 0,
+      "ops_per_sec": 1529777111
+    },
+    {
+      "name": "Method Call (non-virtual)",
+      "iterations": 10000000,
+      "total_ns": 5623400,
+      "per_op_ns": 0,
+      "ops_per_sec": 1778283600
+    },
+    {
+      "name": "Method Chaining",
+      "iterations": 10000000,
+      "total_ns": 5611800,
+      "per_op_ns": 0,
+      "ops_per_sec": 1781959442
+    },
+    {
+      "name": "Virtual Dispatch (3 types)",
+      "iterations": 10000000,
+      "total_ns": 67761500,
+      "per_op_ns": 6,
+      "ops_per_sec": 147576426
+    },
+    {
+      "name": "Virtual Dispatch (single type)",
+      "iterations": 10000000,
+      "total_ns": 9424800,
+      "per_op_ns": 0,
+      "ops_per_sec": 1061030472
+    },
+    {
+      "name": "Deep Inheritance (4 levels)",
+      "iterations": 10000000,
+      "total_ns": 9389500,
+      "per_op_ns": 0,
+      "ops_per_sec": 1065019436
+    },
+    {
+      "name": "Multiple Inheritance",
+      "iterations": 10000000,
+      "total_ns": 22438200,
+      "per_op_ns": 2,
+      "ops_per_sec": 445668547
+    },
+    {
+      "name": "Stack Allocation",
+      "iterations": 10000000,
+      "total_ns": 8018900,
+      "per_op_ns": 0,
+      "ops_per_sec": 1247053835
+    },
+    {
+      "name": "Heap Allocation (unique_ptr)",
+      "iterations": 10000000,
+      "total_ns": 8010700,
+      "per_op_ns": 0,
+      "ops_per_sec": 1248330358
+    },
+    {
+      "name": "Shared Pointer (shared_ptr)",
+      "iterations": 10000000,
+      "total_ns": 246081700,
+      "per_op_ns": 24,
+      "ops_per_sec": 40636910
+    }
+  ]
+}

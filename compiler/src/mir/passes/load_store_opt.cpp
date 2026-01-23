@@ -30,6 +30,14 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
         auto& inst = block.instructions[i];
 
         if (auto* store = std::get_if<StoreInst>(&inst.inst)) {
+            // Skip volatile stores - they must not be optimized away
+            if (store->is_volatile) {
+                // Volatile store: invalidate any cached state for this pointer
+                // since external code may observe the store, but don't eliminate it
+                mem_state.erase(store->ptr.id);
+                continue;
+            }
+
             ValueId ptr = store->ptr.id;
             ValueId value = store->value.id;
 
@@ -54,6 +62,14 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
             // Update memory state for this pointer
             mem_state[ptr] = MemState{value, 0, true, false};
         } else if (auto* load = std::get_if<LoadInst>(&inst.inst)) {
+            // Skip volatile loads - they must always read from memory
+            if (load->is_volatile) {
+                // Volatile load: invalidate cached state for this pointer
+                // since we can't assume memory hasn't changed
+                mem_state.erase(load->ptr.id);
+                continue;
+            }
+
             ValueId ptr = load->ptr.id;
             ValueId result = inst.result;
 

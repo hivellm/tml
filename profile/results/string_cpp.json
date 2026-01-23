@@ -5,32 +5,32 @@
     {
       "name": "Concat Small (3 strings)",
       "iterations": 1000000,
-      "total_ns": 999900,
-      "per_op_ns": 0,
-      "ops_per_sec": 1000100010
+      "total_ns": 1424500,
+      "per_op_ns": 1,
+      "ops_per_sec": 702000702
     },
     {
       "name": "Concat Loop (with reserve)",
       "iterations": 100000,
-      "total_ns": 115600,
+      "total_ns": 114100,
       "per_op_ns": 1,
-      "ops_per_sec": 865051903,
+      "ops_per_sec": 876424189,
       "notes": "O(n) amortized"
     },
     {
       "name": "Concat Loop (naive)",
       "iterations": 100000,
-      "total_ns": 248800,
+      "total_ns": 201300,
       "per_op_ns": 2,
-      "ops_per_sec": 401929260,
+      "ops_per_sec": 496770988,
       "notes": "O(n^2) worst case"
     },
     {
       "name": "String Length",
       "iterations": 1000000,
-      "total_ns": 0,
+      "total_ns": 100,
       "per_op_ns": 0,
-      "ops_per_sec": 0
+      "ops_per_sec": 10000000000000
     },
     {
       "name": "String Compare (equal)",
@@ -49,37 +49,37 @@
     {
       "name": "Int to String",
       "iterations": 1000000,
-      "total_ns": 5952900,
+      "total_ns": 5863700,
       "per_op_ns": 5,
-      "ops_per_sec": 167985351
+      "ops_per_sec": 170540784
     },
     {
       "name": "String Copy",
       "iterations": 1000000,
-      "total_ns": 748100,
+      "total_ns": 735400,
       "per_op_ns": 0,
-      "ops_per_sec": 1336719689
+      "ops_per_sec": 1359804188
     },
     {
       "name": "String Repeat (50 chars)",
       "iterations": 1000000,
-      "total_ns": 22269500,
+      "total_ns": 22279600,
       "per_op_ns": 22,
-      "ops_per_sec": 44904465
+      "ops_per_sec": 44884109
     },
     {
       "name": "Sprintf Formatting",
       "iterations": 1000000,
-      "total_ns": 80328200,
-      "per_op_ns": 80,
-      "ops_per_sec": 12448928
+      "total_ns": 78113300,
+      "per_op_ns": 78,
+      "ops_per_sec": 12801917
     },
     {
       "name": "Log Building",
       "iterations": 10000,
-      "total_ns": 97400,
-      "per_op_ns": 9,
-      "ops_per_sec": 102669404
+      "total_ns": 67300,
+      "per_op_ns": 6,
+      "ops_per_sec": 148588410
     }
   ]
 }

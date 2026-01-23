@@ -89,8 +89,8 @@ func virtual_dispatch_bench(iterations: I32) -> F64 {
     let r: Rectangle = Rectangle::create(4.0, 6.0)
     let t: Triangle = Triangle::create(3.0, 4.0, 5.0, 5.0)
 
-    var volatile total: F64 = 0.0
-    var volatile i: I32 = 0
+    var total: F64 = 0.0
+    var i: I32 = 0
 
     loop (i < iterations) {
         // Alternate between shapes to prevent branch prediction
@@ -130,8 +130,8 @@ sealed class Point {
 }
 
 func object_creation_bench(iterations: I32) -> F64 {
-    var volatile total: F64 = 0.0
-    var volatile i: I32 = 0
+    var total: F64 = 0.0
+    var i: I32 = 0
 
     loop (i < iterations) {
         // Create two points and compute distance
@@ -211,8 +211,8 @@ func http_handler_bench(iterations: I32) -> I32 {
     let post_h: PostHandler = PostHandler::create(2, true)
     let del_h: DeleteHandler = DeleteHandler::create(3)
 
-    var volatile total: I32 = 0
-    var volatile i: I32 = 0
+    var total: I32 = 0
+    var i: I32 = 0
 
     loop (i < iterations) {
         // Simulate different request types
@@ -348,9 +348,9 @@ func game_loop_bench(iterations: I32) -> F64 {
     let enemy: Enemy = Enemy::create(100.0, 100.0, 3.0, 0.0, 0.0)
     let proj: Projectile = Projectile::create(0.0, 0.0, 10.0, 10.0)
 
-    var volatile total: F64 = 0.0
+    var total: F64 = 0.0
     let delta: F64 = 0.016  // ~60 FPS frame time
-    var volatile i: I32 = 0
+    var i: I32 = 0
 
     loop (i < iterations) {
         // Update all entities
@@ -435,8 +435,8 @@ func deep_inheritance_bench(iterations: I32) -> I32 {
     let d3: Derived3 = Derived3::create(10, 5, 3, 2)
     let d4: Derived4 = Derived4::create(10, 5, 3, 2, 1)
 
-    var volatile total: I32 = 0
-    var volatile i: I32 = 0
+    var total: I32 = 0
+    var i: I32 = 0
 
     loop (i < iterations) {
         // Call through different levels
@@ -489,8 +489,8 @@ sealed class Builder {
 }
 
 func method_chaining_bench(iterations: I32) -> I32 {
-    var volatile total: I32 = 0
-    var volatile i: I32 = 0
+    var total: I32 = 0
+    var i: I32 = 0
 
     loop (i < iterations) {
         // Method chaining like C++ - no intermediate variables needed
@@ -509,55 +509,55 @@ func method_chaining_bench(iterations: I32) -> I32 {
 
 func run_benchmark_1(iterations: I32) -> I64 {
     let warmup: I32 = iterations / 10
-    let _: F64 = virtual_dispatch_bench(warmup)
+    let _: F64 = black_box_f64(virtual_dispatch_bench(warmup))
 
     let start: I64 = time_ns()
-    let _result: F64 = virtual_dispatch_bench(iterations)
+    let _result: F64 = black_box_f64(virtual_dispatch_bench(iterations))
     return time_ns() - start
 }
 
 func run_benchmark_2(iterations: I32) -> I64 {
     let warmup: I32 = iterations / 10
-    let _: F64 = object_creation_bench(warmup)
+    let _: F64 = black_box_f64(object_creation_bench(warmup))
 
     let start: I64 = time_ns()
-    let _result: F64 = object_creation_bench(iterations)
+    let _result: F64 = black_box_f64(object_creation_bench(iterations))
     return time_ns() - start
 }
 
 func run_benchmark_3(iterations: I32) -> I64 {
     let warmup: I32 = iterations / 10
-    let _: I32 = http_handler_bench(warmup)
+    let _: I32 = black_box(http_handler_bench(warmup))
 
     let start: I64 = time_ns()
-    let _result: I32 = http_handler_bench(iterations)
+    let _result: I32 = black_box(http_handler_bench(iterations))
     return time_ns() - start
 }
 
 func run_benchmark_4(iterations: I32) -> I64 {
     let warmup: I32 = iterations / 10
-    let _: F64 = game_loop_bench(warmup)
+    let _: F64 = black_box_f64(game_loop_bench(warmup))
 
     let start: I64 = time_ns()
-    let _result: F64 = game_loop_bench(iterations)
+    let _result: F64 = black_box_f64(game_loop_bench(iterations))
     return time_ns() - start
 }
 
 func run_benchmark_5(iterations: I32) -> I64 {
     let warmup: I32 = iterations / 10
-    let _: I32 = deep_inheritance_bench(warmup)
+    let _: I32 = black_box(deep_inheritance_bench(warmup))
 
     let start: I64 = time_ns()
-    let _result: I32 = deep_inheritance_bench(iterations)
+    let _result: I32 = black_box(deep_inheritance_bench(iterations))
     return time_ns() - start
 }
 
 func run_benchmark_6(iterations: I32) -> I64 {
     let warmup: I32 = iterations / 10
-    let _: I32 = method_chaining_bench(warmup)
+    let _: I32 = black_box(method_chaining_bench(warmup))
 
     let start: I64 = time_ns()
-    let _result: I32 = method_chaining_bench(iterations)
+    let _result: I32 = black_box(method_chaining_bench(iterations))
     return time_ns() - start
 }
 

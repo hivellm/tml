@@ -30,6 +30,17 @@ namespace tml::codegen {
 auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
     // Handle ref operations specially - we need the address, not the value
     if (unary.op == parser::UnaryOp::Ref || unary.op == parser::UnaryOp::RefMut) {
+        // Handle ref *ptr - taking reference of dereferenced pointer returns the pointer
+        if (unary.operand->is<parser::UnaryExpr>()) {
+            const auto& inner_unary = unary.operand->as<parser::UnaryExpr>();
+            if (inner_unary.op == parser::UnaryOp::Deref) {
+                // ref *ptr == ptr
+                std::string ptr = gen_expr(*inner_unary.operand);
+                last_expr_type_ = "ptr";
+                return ptr;
+            }
+        }
+
         // Get pointer to the operand
         if (unary.operand->is<parser::IdentExpr>()) {
             const auto& ident = unary.operand->as<parser::IdentExpr>();

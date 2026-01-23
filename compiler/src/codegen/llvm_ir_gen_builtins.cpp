@@ -1142,15 +1142,19 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         }
                     }
 
+                    // Determine if this is an imported library type
+                    bool is_imported = !imported_type_params.empty();
+
                     if (func_sig) {
                         // Request impl method instantiation
                         std::string mangled_method = "tml_" + mangled_type_name + "_" + method;
                         if (generated_impl_methods_.find(mangled_method) ==
                             generated_impl_methods_.end()) {
-                            if (impl_it != pending_generic_impls_.end() ||
-                                !imported_type_params.empty()) {
+                            bool is_local = impl_it != pending_generic_impls_.end();
+                            if (is_local || is_imported) {
                                 pending_impl_method_instantiations_.push_back(PendingImplMethod{
-                                    mangled_type_name, method, type_subs, type_name, ""});
+                                    mangled_type_name, method, type_subs, type_name, "",
+                                    /*is_library_type=*/is_imported});
                                 generated_impl_methods_.insert(mangled_method);
                             }
                         }
@@ -1177,8 +1181,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         if (method_it != functions_.end()) {
                             fn_name_call = method_it->second.llvm_name;
                         } else {
-                            fn_name_call =
-                                "@tml_" + get_suite_prefix() + mangled_type_name + "_" + method;
+                            // Only use suite prefix for test-local functions, not library types
+                            std::string prefix = is_imported ? "" : get_suite_prefix();
+                            fn_name_call = "@tml_" + prefix + mangled_type_name + "_" + method;
                         }
 
                         std::string args_str;

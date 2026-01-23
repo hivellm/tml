@@ -5,86 +5,86 @@
     {
       "name": "Vec Push (grow)",
       "iterations": 1000000,
-      "total_ns": 4678700,
+      "total_ns": 4829600,
       "per_op_ns": 4,
-      "ops_per_sec": 213734584
+      "ops_per_sec": 207056485
     },
     {
       "name": "Vec Push (reserved)",
       "iterations": 1000000,
-      "total_ns": 1613200,
+      "total_ns": 1628700,
       "per_op_ns": 1,
-      "ops_per_sec": 619885940
+      "ops_per_sec": 613986615
     },
     {
       "name": "Vec Random Access",
       "iterations": 1000000,
-      "total_ns": 294600,
+      "total_ns": 304900,
       "per_op_ns": 0,
-      "ops_per_sec": 3394433129
+      "ops_per_sec": 3279763857
     },
     {
       "name": "Vec Iteration",
       "iterations": 1000000,
-      "total_ns": 48600,
+      "total_ns": 50400,
       "per_op_ns": 0,
-      "ops_per_sec": 20576131687
+      "ops_per_sec": 19841269841
     },
     {
       "name": "Vec Pop",
       "iterations": 1000000,
-      "total_ns": 1980100,
+      "total_ns": 1905100,
       "per_op_ns": 1,
-      "ops_per_sec": 505024998
+      "ops_per_sec": 524906829
     },
     {
       "name": "Vec Set",
       "iterations": 1000000,
-      "total_ns": 308300,
+      "total_ns": 315200,
       "per_op_ns": 0,
-      "ops_per_sec": 3243593902
+      "ops_per_sec": 3172588832
     },
     {
       "name": "HashMap Insert",
       "iterations": 100000,
-      "total_ns": 6854200,
-      "per_op_ns": 68,
-      "ops_per_sec": 14589594
+      "total_ns": 8170300,
+      "per_op_ns": 81,
+      "ops_per_sec": 12239452
     },
     {
       "name": "HashMap Insert (reserved)",
       "iterations": 100000,
-      "total_ns": 6210900,
-      "per_op_ns": 62,
-      "ops_per_sec": 16100726
+      "total_ns": 6638900,
+      "per_op_ns": 66,
+      "ops_per_sec": 15062736
     },
     {
       "name": "HashMap Lookup",
       "iterations": 1000000,
-      "total_ns": 2755900,
+      "total_ns": 2848200,
       "per_op_ns": 2,
-      "ops_per_sec": 362857868
+      "ops_per_sec": 351098939
     },
     {
       "name": "HashMap Contains",
       "iterations": 1000000,
-      "total_ns": 2361600,
+      "total_ns": 2475800,
       "per_op_ns": 2,
-      "ops_per_sec": 423441734
+      "ops_per_sec": 403909847
     },
     {
       "name": "HashMap Remove",
       "iterations": 100000,
-      "total_ns": 8325500,
-      "per_op_ns": 83,
-      "ops_per_sec": 12011290
+      "total_ns": 8472000,
+      "per_op_ns": 84,
+      "ops_per_sec": 11803588
     },
     {
       "name": "HashMap String Key",
       "iterations": 100000,
-      "total_ns": 14819700,
-      "per_op_ns": 148,
-      "ops_per_sec": 6747774
+      "total_ns": 15701100,
+      "per_op_ns": 157,
+      "ops_per_sec": 6368980
     }
   ]
 }

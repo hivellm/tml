@@ -186,7 +186,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                     for (const auto& m : impl.methods) {
                         if (m.name == pim.method_name) {
                             gen_impl_method_instantiation(pim.mangled_type_name, m, pim.type_subs,
-                                                          impl.generics, pim.method_type_suffix);
+                                                          impl.generics, pim.method_type_suffix,
+                                                          pim.is_library_type);
                             break;
                         }
                     }
@@ -282,7 +283,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 if (method_decl.name == pim.method_name) {
                                     gen_impl_method_instantiation(
                                         pim.mangled_type_name, method_decl, pim.type_subs,
-                                        impl_decl.generics, pim.method_type_suffix);
+                                        impl_decl.generics, pim.method_type_suffix,
+                                        pim.is_library_type);
                                     found = true;
                                     break;
                                 }
@@ -468,8 +470,9 @@ void LLVMIRGen::gen_class_instantiation(const parser::ClassDecl& c,
     size_t vtable_idx = 0;
     for (const auto& method : c.methods) {
         if (method.is_virtual || method.is_abstract) {
-            std::string method_func_name =
-                "@tml_" + get_suite_prefix() + mangled + "_" + method.name;
+            // Do NOT use suite prefix for generic class method instantiations
+            // These are library methods shared across all test files in a suite
+            std::string method_func_name = "@tml_" + mangled + "_" + method.name;
             vtable_func_names.push_back(method_func_name);
             vtable_methods.push_back({method.name, mangled, mangled, vtable_idx++});
         }

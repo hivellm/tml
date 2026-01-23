@@ -146,6 +146,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("; Black box (prevent optimization)");
     emit_line("declare i32 @black_box_i32(i32)");
     emit_line("declare i64 @black_box_i64(i64)");
+    emit_line("declare double @black_box_f64(double)");
     emit_line("; SIMD operations (auto-vectorized)");
     emit_line("declare i64 @simd_sum_i32(ptr, i64)");
     emit_line("declare i64 @simd_sum_i64(ptr, i64)");

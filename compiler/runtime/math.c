@@ -49,6 +49,9 @@ int32_t black_box_i32(int32_t value) {
 int64_t black_box_i64(int64_t value) {
     return value;
 }
+double black_box_f64(double value) {
+    return value;
+}
 #pragma optimize("", on)
 #else
 __attribute__((noinline)) int32_t black_box_i32(int32_t value) {
@@ -57,6 +60,10 @@ __attribute__((noinline)) int32_t black_box_i32(int32_t value) {
 }
 __attribute__((noinline)) int64_t black_box_i64(int64_t value) {
     __asm__ volatile("" : "+r"(value));
+    return value;
+}
+__attribute__((noinline)) double black_box_f64(double value) {
+    __asm__ volatile("" : "+x"(value));
     return value;
 }
 #endif

@@ -5,30 +5,30 @@
     {
       "name": "If-Else Chain (4 branches)",
       "iterations": 10000000,
-      "total_ns": 7655500,
+      "total_ns": 7359300,
       "per_op_ns": 0,
-      "ops_per_sec": 1306250408
+      "ops_per_sec": 1358824888
     },
     {
       "name": "Nested If (4 levels)",
       "iterations": 10000000,
-      "total_ns": 2905800,
+      "total_ns": 3214800,
       "per_op_ns": 0,
-      "ops_per_sec": 3441393075
+      "ops_per_sec": 3110613412
     },
     {
       "name": "Switch Dense (10 cases)",
       "iterations": 10000000,
-      "total_ns": 8339100,
+      "total_ns": 7959100,
       "per_op_ns": 0,
-      "ops_per_sec": 1199170174
+      "ops_per_sec": 1256423464
     },
     {
       "name": "Switch Sparse (10 cases)",
       "iterations": 10000000,
-      "total_ns": 7355200,
+      "total_ns": 7071900,
       "per_op_ns": 0,
-      "ops_per_sec": 1359582336
+      "ops_per_sec": 1414047144
     },
     {
       "name": "For Loop",
@@ -54,30 +54,30 @@
     {
       "name": "Loop + Continue",
       "iterations": 10000000,
-      "total_ns": 1589900,
+      "total_ns": 1516800,
       "per_op_ns": 0,
-      "ops_per_sec": 6289703754
+      "ops_per_sec": 6592827004
     },
     {
       "name": "Ternary Chain",
       "iterations": 10000000,
-      "total_ns": 7670400,
+      "total_ns": 7294800,
       "per_op_ns": 0,
-      "ops_per_sec": 1303712974
+      "ops_per_sec": 1370839502
     },
     {
       "name": "Short-Circuit AND",
       "iterations": 10000000,
-      "total_ns": 10202200,
-      "per_op_ns": 1,
-      "ops_per_sec": 980180745
+      "total_ns": 9896800,
+      "per_op_ns": 0,
+      "ops_per_sec": 1010427612
     },
     {
       "name": "Short-Circuit OR",
       "iterations": 10000000,
-      "total_ns": 10653800,
+      "total_ns": 10203000,
       "per_op_ns": 1,
-      "ops_per_sec": 938632225
+      "ops_per_sec": 980103891
     }
   ]
 }

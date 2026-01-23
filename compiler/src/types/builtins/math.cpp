@@ -99,6 +99,10 @@ void TypeEnv::init_builtin_math() {
     // black_box_i64(x: I64) -> I64 - Prevent optimization for I64
     functions_["black_box_i64"].push_back(
         FuncSig{"black_box_i64", {make_i64()}, make_i64(), {}, false, builtin_span});
+
+    // black_box_f64(x: F64) -> F64 - Prevent optimization for F64
+    functions_["black_box_f64"].push_back(
+        FuncSig{"black_box_f64", {make_f64()}, make_f64(), {}, false, builtin_span});
 }
 
 } // namespace tml::types

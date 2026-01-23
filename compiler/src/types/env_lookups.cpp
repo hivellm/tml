@@ -64,6 +64,16 @@ auto TypeEnv::lookup_enum(const std::string& name) const -> std::optional<EnumDe
                 return module_registry_->lookup_enum(module_path, symbol_name);
             }
         }
+        // Fallback: search all modules for the enum
+        // This is necessary when library code is re-parsed during codegen
+        // and the import context isn't available
+        const auto& all_modules = module_registry_->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto enum_it = mod.enums.find(name);
+            if (enum_it != mod.enums.end()) {
+                return enum_it->second;
+            }
+        }
     }
     return std::nullopt;
 }

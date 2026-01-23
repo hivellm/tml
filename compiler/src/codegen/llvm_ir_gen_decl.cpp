@@ -185,6 +185,49 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
         // Generate type definition immediately to type_defs_buffer_
         gen_struct_instantiation(*decl, type_args);
     }
+    // Handle imported generic structs from module registry
+    else if (env_.module_registry()) {
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto struct_it = mod.structs.find(base_name);
+            if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
+                // Found imported generic struct - use its semantic definition
+                const auto& struct_def = struct_it->second;
+
+                // Create substitution map from type params
+                std::unordered_map<std::string, types::TypePtr> subs;
+                for (size_t i = 0; i < struct_def.type_params.size() && i < type_args.size(); ++i) {
+                    subs[struct_def.type_params[i]] = type_args[i];
+                }
+
+                // Register field info using the semantic struct definition
+                std::vector<FieldInfo> fields;
+                std::vector<std::string> field_types_vec;
+                int field_idx = 0;
+                for (const auto& [field_name, field_type] : struct_def.fields) {
+                    // Apply type substitution to field type
+                    types::TypePtr resolved_type = apply_type_substitutions(field_type, subs);
+                    std::string ft = llvm_type_from_semantic(resolved_type, true);
+                    fields.push_back({field_name, field_idx++, ft});
+                    field_types_vec.push_back(ft);
+                }
+                struct_fields_[mangled] = fields;
+
+                // Emit struct type definition
+                std::string type_name = "%struct." + mangled;
+                std::string def = type_name + " = type { ";
+                for (size_t i = 0; i < field_types_vec.size(); ++i) {
+                    if (i > 0)
+                        def += ", ";
+                    def += field_types_vec[i];
+                }
+                def += " }";
+                type_defs_buffer_ << def << "\n";
+                struct_types_[mangled] = type_name;
+                break;
+            }
+        }
+    }
 
     return mangled;
 }
@@ -1224,8 +1267,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 void LLVMIRGen::gen_impl_method_instantiation(
     const std::string& mangled_type_name, const parser::FuncDecl& method,
     const std::unordered_map<std::string, types::TypePtr>& type_subs,
-    [[maybe_unused]] const std::vector<parser::GenericParam>& impl_generics,
-    const std::string& method_type_suffix) {
+    const std::vector<parser::GenericParam>& impl_generics,
+    const std::string& method_type_suffix, bool is_library_type) {
     // Save current context
     std::string saved_func = current_func_;
     std::string saved_ret_type = current_ret_type_;
@@ -1233,6 +1276,44 @@ void LLVMIRGen::gen_impl_method_instantiation(
     bool saved_terminated = block_terminated_;
     auto saved_locals = locals_;
     auto saved_type_subs = current_type_subs_;
+    auto saved_where_constraints = current_where_constraints_;
+
+    // Extract where constraints from impl-level generic bounds (e.g., T: PartialOrd)
+    current_where_constraints_.clear();
+    for (const auto& generic : impl_generics) {
+        if (!generic.bounds.empty()) {
+            types::WhereConstraint constraint;
+            constraint.type_param = generic.name;
+
+            for (const auto& bound : generic.bounds) {
+                if (bound->is<parser::NamedType>()) {
+                    const auto& named = bound->as<parser::NamedType>();
+                    std::string behavior_name;
+                    if (!named.path.segments.empty()) {
+                        behavior_name = named.path.segments.back();
+                    }
+
+                    if (!named.generics.has_value() || named.generics->args.empty()) {
+                        // Simple bound like T: PartialOrd
+                        constraint.required_behaviors.push_back(behavior_name);
+                    } else {
+                        // Parameterized bound like C: Container[T]
+                        types::BoundConstraint bc;
+                        bc.behavior_name = behavior_name;
+                        for (const auto& arg : named.generics->args) {
+                            if (arg.is_type()) {
+                                bc.type_args.push_back(
+                                    resolve_parser_type_with_subs(*arg.as_type(), type_subs));
+                            }
+                        }
+                        constraint.parameterized_bounds.push_back(bc);
+                    }
+                }
+            }
+
+            current_where_constraints_.push_back(constraint);
+        }
+    }
 
     // Build method name, including method-level type suffix if present
     std::string full_method_name = method.name;
@@ -1297,16 +1378,51 @@ void LLVMIRGen::gen_impl_method_instantiation(
         param_types += param_type;
     }
 
-    // Function signature - include suite prefix for test suite mode
+    // Function signature - only use suite prefix for test-local types
+    // Library types (from imported modules) don't use suite prefix since they're shared
+    std::string suite_prefix = "";
+    if (!is_library_type) {
+        // Test-local type - use suite prefix for isolation
+        suite_prefix = get_suite_prefix();
+    }
     std::string func_llvm_name =
-        "tml_" + get_suite_prefix() + mangled_type_name + "_" + full_method_name;
+        "tml_" + suite_prefix + mangled_type_name + "_" + full_method_name;
+
+    // Register the function in functions_ so call sites can find it
+    // This is crucial for suite mode where multiple test files may call this method
+    std::string func_type = ret_type + " (" + param_types + ")";
+    std::vector<std::string> param_types_vec;
+    if (is_instance_method) {
+        param_types_vec.push_back(this_type);
+    }
+    for (size_t i = param_start; i < method.params.size(); ++i) {
+        auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, type_subs);
+        param_types_vec.push_back(llvm_type_from_semantic(resolved_param));
+    }
+    functions_[method_name] = FuncInfo{"@" + func_llvm_name, func_type, ret_type, param_types_vec};
+
     emit_line("");
     emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
     emit_line("entry:");
 
-    // Register 'this' in locals
+    // Register 'this' in locals with proper semantic type for method resolution
     if (is_instance_method) {
-        locals_["this"] = VarInfo{"%this", this_type, nullptr, std::nullopt};
+        // Create semantic type for 'this' with correct module_path
+        // This is crucial for nested method calls in library code
+        std::string module_path = "";
+        if (env_.module_registry()) {
+            const auto& all_modules = env_.module_registry()->get_all_modules();
+            for (const auto& [mod_name, mod] : all_modules) {
+                if (mod.structs.find(mangled_type_name) != mod.structs.end() ||
+                    mod.enums.find(mangled_type_name) != mod.enums.end()) {
+                    module_path = mod_name;
+                    break;
+                }
+            }
+        }
+        auto this_semantic_type = std::make_shared<types::Type>();
+        this_semantic_type->kind = types::NamedType{mangled_type_name, module_path, {}};
+        locals_["this"] = VarInfo{"%this", this_type, this_semantic_type, std::nullopt};
     }
 
     // Register other parameters in locals by creating allocas
@@ -1381,6 +1497,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     current_ret_type_ = saved_ret_type;
     current_impl_type_ = saved_impl_type;
     current_type_subs_ = saved_type_subs;
+    current_where_constraints_ = saved_where_constraints;
     block_terminated_ = saved_terminated;
     locals_ = saved_locals;
     current_scope_id_ = 0;

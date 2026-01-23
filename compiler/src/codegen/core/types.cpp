@@ -95,11 +95,16 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
     if (name == "WaitGroup")
         return "ptr";
 
-    // Check if this is a class type - classes are reference types (heap allocated)
-    // Variables of class type store pointers to instances
+    // Check if this is a class type
     auto class_def = env_.lookup_class(name);
     if (class_def.has_value()) {
-        return "ptr"; // Class instances are pointers
+        // Value class candidates (sealed, no virtual methods) use struct type
+        // for stack allocation and value semantics
+        if (env_.is_value_class_candidate(name)) {
+            return "%class." + name;
+        }
+        // Regular classes are reference types (heap allocated)
+        return "ptr";
     }
 
     // User-defined type - return struct type
@@ -279,6 +284,24 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
     } else if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
 
+        // Handle primitive type names that may appear as NamedType after generic substitution
+        if (named.name == "I8") return "i8";
+        if (named.name == "I16") return "i16";
+        if (named.name == "I32") return "i32";
+        if (named.name == "I64") return "i64";
+        if (named.name == "I128") return "i128";
+        if (named.name == "U8") return "i8";
+        if (named.name == "U16") return "i16";
+        if (named.name == "U32") return "i32";
+        if (named.name == "U64") return "i64";
+        if (named.name == "U128") return "i128";
+        if (named.name == "F32") return "float";
+        if (named.name == "F64") return "double";
+        if (named.name == "Bool") return "i1";
+        if (named.name == "Char") return "i32";
+        if (named.name == "Str") return "ptr";
+        if (named.name == "Unit") return for_data ? "{}" : "void";
+
         // Never type (bottom type) - use void as it represents no value
         // Sometimes Never appears as NamedType instead of PrimitiveType
         if (named.name == "Never") {
@@ -295,7 +318,12 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // method return types are resolved before the class is fully registered)
         auto class_def = env_.lookup_class(named.name);
         if (class_def.has_value()) {
-            // Classes are reference types - variables store pointers
+            // Value class candidates (sealed, no virtual methods) use struct type
+            // for stack allocation and value semantics
+            if (env_.is_value_class_candidate(named.name)) {
+                return "%class." + named.name;
+            }
+            // Regular classes are reference types - variables store pointers
             return "ptr";
         }
 
@@ -710,8 +738,22 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                     }
                 }
 
+                // Look up module_path from registry - necessary for method resolution
+                // when library code is re-parsed during generic instantiation
+                std::string module_path = "";
+                if (env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        if (mod.structs.find(name) != mod.structs.end() ||
+                            mod.enums.find(name) != mod.enums.end()) {
+                            module_path = mod_name;
+                            break;
+                        }
+                    }
+                }
+
                 auto result = std::make_shared<types::Type>();
-                result->kind = types::NamedType{name, "", std::move(type_args)};
+                result->kind = types::NamedType{name, module_path, std::move(type_args)};
                 return result;
             } else if constexpr (std::is_same_v<T, parser::RefType>) {
                 auto inner = resolve_parser_type_with_subs(*t.inner, subs);
@@ -790,6 +832,83 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
             }
         },
         type.kind);
+}
+
+// ============ Semantic Type Substitution ============
+// Apply type substitutions to a semantic type
+
+auto LLVMIRGen::apply_type_substitutions(
+    const types::TypePtr& type, const std::unordered_map<std::string, types::TypePtr>& subs)
+    -> types::TypePtr {
+    if (!type)
+        return type;
+
+    // Check if it's a named type that might need substitution
+    if (type->is<types::NamedType>()) {
+        const auto& named = type->as<types::NamedType>();
+
+        // Check if the name itself is a substitution target (e.g., T -> I64)
+        auto it = subs.find(named.name);
+        if (it != subs.end() && it->second) {
+            return it->second;
+        }
+
+        // If it has type args, recursively apply substitutions to them
+        if (!named.type_args.empty()) {
+            std::vector<types::TypePtr> new_args;
+            bool changed = false;
+            for (const auto& arg : named.type_args) {
+                auto new_arg = apply_type_substitutions(arg, subs);
+                if (new_arg != arg)
+                    changed = true;
+                new_args.push_back(new_arg);
+            }
+            if (changed) {
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{named.name, named.module_path, std::move(new_args)};
+                return result;
+            }
+        }
+    } else if (type->is<types::RefType>()) {
+        const auto& ref = type->as<types::RefType>();
+        auto new_inner = apply_type_substitutions(ref.inner, subs);
+        if (new_inner != ref.inner) {
+            return types::make_ref(new_inner, ref.is_mut);
+        }
+    } else if (type->is<types::PtrType>()) {
+        const auto& ptr = type->as<types::PtrType>();
+        auto new_inner = apply_type_substitutions(ptr.inner, subs);
+        if (new_inner != ptr.inner) {
+            return types::make_ptr(new_inner, ptr.is_mut);
+        }
+    } else if (type->is<types::ArrayType>()) {
+        const auto& arr = type->as<types::ArrayType>();
+        auto new_elem = apply_type_substitutions(arr.element, subs);
+        if (new_elem != arr.element) {
+            return types::make_array(new_elem, arr.size);
+        }
+    } else if (type->is<types::SliceType>()) {
+        const auto& slice = type->as<types::SliceType>();
+        auto new_elem = apply_type_substitutions(slice.element, subs);
+        if (new_elem != slice.element) {
+            return types::make_slice(new_elem);
+        }
+    } else if (type->is<types::TupleType>()) {
+        const auto& tuple = type->as<types::TupleType>();
+        std::vector<types::TypePtr> new_elems;
+        bool changed = false;
+        for (const auto& elem : tuple.elements) {
+            auto new_elem = apply_type_substitutions(elem, subs);
+            if (new_elem != elem)
+                changed = true;
+            new_elems.push_back(new_elem);
+        }
+        if (changed) {
+            return types::make_tuple(std::move(new_elems));
+        }
+    }
+
+    return type;
 }
 
 // ============ Type Unification ============
