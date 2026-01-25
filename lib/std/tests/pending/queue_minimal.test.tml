@@ -1,0 +1,11 @@
+// Minimal test for queue patterns
+use std::sync::LockFreeQueue
+
+func main() {
+    let queue: LockFreeQueue[I32] = LockFreeQueue::new[I32]()
+    if queue.is_empty() {
+        print("PASS\n")
+    } else {
+        print("FAIL\n")
+    }
+}

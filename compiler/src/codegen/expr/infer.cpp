@@ -54,6 +54,14 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         // First check if there's a semantic type in locals (works for both 'this' and other vars)
         auto local_it = locals_.find(ident.name);
         if (local_it != locals_.end() && local_it->second.semantic_type) {
+            TML_DEBUG_LN("[INFER] IdentExpr '"
+                         << ident.name << "' found in locals, semantic_type="
+                         << types::type_to_string(local_it->second.semantic_type));
+            if (local_it->second.semantic_type->is<types::NamedType>()) {
+                const auto& nt = local_it->second.semantic_type->as<types::NamedType>();
+                TML_DEBUG_LN("[INFER]   NamedType: name=" << nt.name << " type_args.size="
+                                                          << nt.type_args.size());
+            }
             return local_it->second.semantic_type;
         }
 
@@ -303,7 +311,36 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
     }
     if (expr.is<parser::UnaryExpr>()) {
         const auto& unary = expr.as<parser::UnaryExpr>();
-        return infer_expr_type(*unary.operand);
+        auto operand_type = infer_expr_type(*unary.operand);
+
+        // For dereference operations, unwrap the pointer/reference type
+        if (unary.op == parser::UnaryOp::Deref && operand_type) {
+            TML_DEBUG_LN(
+                "[INFER] UnaryExpr Deref, operand_type=" << types::type_to_string(operand_type));
+            types::TypePtr inner_type;
+            if (operand_type->is<types::PtrType>()) {
+                inner_type = operand_type->as<types::PtrType>().inner;
+                TML_DEBUG_LN("[INFER]   PtrType inner="
+                             << (inner_type ? types::type_to_string(inner_type) : "null"));
+            } else if (operand_type->is<types::RefType>()) {
+                inner_type = operand_type->as<types::RefType>().inner;
+                TML_DEBUG_LN("[INFER]   RefType inner="
+                             << (inner_type ? types::type_to_string(inner_type) : "null"));
+            }
+
+            // Apply type substitutions for generic types inside the pointer
+            // E.g., Ptr[Node[T]] with T -> I32 becomes Node[I32]
+            if (inner_type && !current_type_subs_.empty()) {
+                inner_type = apply_type_substitutions(inner_type, current_type_subs_);
+                TML_DEBUG_LN("[INFER]   After substitution=" << types::type_to_string(inner_type));
+            }
+
+            if (inner_type) {
+                return inner_type;
+            }
+        }
+
+        return operand_type;
     }
     if (expr.is<parser::StructExpr>()) {
         const auto& s = expr.as<parser::StructExpr>();
@@ -429,6 +466,27 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 }
             }
 
+            // Also check pending_generic_structs_ for internal generic structs (like Node[T] in
+            // queue.tml)
+            if (!struct_def) {
+                auto pending_it = pending_generic_structs_.find(named.name);
+                if (pending_it != pending_generic_structs_.end()) {
+                    const parser::StructDecl* decl = pending_it->second;
+                    // Build a struct definition from the parser StructDecl
+                    types::StructDef temp_struct_def;
+                    temp_struct_def.name = decl->name;
+                    for (const auto& gp : decl->generics) {
+                        temp_struct_def.type_params.push_back(gp.name);
+                    }
+                    for (const auto& field_decl : decl->fields) {
+                        // Resolve the field type - use empty subs since we'll apply them later
+                        auto field_type = resolve_parser_type_with_subs(*field_decl.type, {});
+                        temp_struct_def.fields.push_back({field_decl.name, field_type});
+                    }
+                    struct_def = temp_struct_def;
+                }
+            }
+
             if (struct_def) {
                 TML_DEBUG_LN("[INFER] struct_def found, searching for field: " << field.field);
                 for (const auto& [field_name, field_type] : struct_def->fields) {
@@ -438,6 +496,9 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     if (field_name == field.field && field_type) {
                         TML_DEBUG_LN(
                             "[INFER] Returning field type: " << types::type_to_string(field_type));
+                        TML_DEBUG_LN("[INFER] named.type_args.size="
+                                     << named.type_args.size() << " struct_def->type_params.size="
+                                     << struct_def->type_params.size());
                         // If the struct is generic, substitute type arguments
                         if (!named.type_args.empty() && !struct_def->type_params.empty()) {
                             std::unordered_map<std::string, types::TypePtr> subs;
@@ -445,8 +506,14 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                  i < struct_def->type_params.size() && i < named.type_args.size();
                                  ++i) {
                                 subs[struct_def->type_params[i]] = named.type_args[i];
+                                TML_DEBUG_LN("[INFER] Substituting "
+                                             << struct_def->type_params[i] << " -> "
+                                             << types::type_to_string(named.type_args[i]));
                             }
-                            return types::substitute_type(field_type, subs);
+                            auto substituted = types::substitute_type(field_type, subs);
+                            TML_DEBUG_LN("[INFER] After substitution: "
+                                         << types::type_to_string(substituted));
+                            return substituted;
                         }
                         return field_type;
                     }
@@ -485,72 +552,133 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     std::string base_name = mangled.substr(0, sep_pos);
                     std::string type_args_str = mangled.substr(sep_pos + 2);
 
-                    // Split type args by __ and create nested types
-                    std::vector<types::TypePtr> type_args;
-                    size_t pos = 0;
-                    while (pos < type_args_str.size()) {
-                        auto next_sep = type_args_str.find("__", pos);
-                        std::string arg = (next_sep == std::string::npos)
-                                              ? type_args_str.substr(pos)
-                                              : type_args_str.substr(pos, next_sep - pos);
+                    // Look up the struct to determine how many type parameters it has
+                    // This is crucial for handling nested generics like AtomicPtr[Node[I32]]
+                    // which is mangled as AtomicPtr__Node__I32
+                    size_t expected_type_params = 0;
+                    if (env_.module_registry()) {
+                        const auto& all_modules = env_.module_registry()->get_all_modules();
+                        for (const auto& [mod_name, mod] : all_modules) {
+                            auto struct_it = mod.structs.find(base_name);
+                            if (struct_it != mod.structs.end()) {
+                                expected_type_params = struct_it->second.type_params.size();
+                                break;
+                            }
+                        }
+                    }
+                    // Also check pending_generic_structs_
+                    if (expected_type_params == 0) {
+                        auto pgs_it = pending_generic_structs_.find(base_name);
+                        if (pgs_it != pending_generic_structs_.end()) {
+                            expected_type_params = pgs_it->second->generics.size();
+                        }
+                    }
 
-                        // Create type for this arg
-                        types::TypePtr arg_type;
+                    // Helper function to parse a single mangled type argument (non-recursive)
+                    auto parse_simple_type_arg = [](const std::string& arg) -> types::TypePtr {
                         if (arg == "I32")
-                            arg_type = types::make_i32();
-                        else if (arg == "I64")
-                            arg_type = types::make_i64();
-                        else if (arg == "Bool")
-                            arg_type = types::make_bool();
-                        else if (arg == "Str")
-                            arg_type = types::make_str();
-                        else if (arg == "F32")
-                            arg_type = types::make_primitive(types::PrimitiveKind::F32);
-                        else if (arg == "F64")
-                            arg_type = types::make_f64();
-                        else if (arg == "Unit")
-                            arg_type = types::make_unit();
-                        else if (arg.starts_with("ref_") || arg.starts_with("mutref_")) {
+                            return types::make_i32();
+                        if (arg == "I64")
+                            return types::make_i64();
+                        if (arg == "Bool")
+                            return types::make_bool();
+                        if (arg == "Str")
+                            return types::make_str();
+                        if (arg == "F32")
+                            return types::make_primitive(types::PrimitiveKind::F32);
+                        if (arg == "F64")
+                            return types::make_f64();
+                        if (arg == "Unit")
+                            return types::make_unit();
+                        if (arg.starts_with("dyn_")) {
+                            std::string behavior = arg.substr(4);
+                            auto dyn_t = std::make_shared<types::Type>();
+                            dyn_t->kind = types::DynBehaviorType{behavior, {}, false};
+                            return dyn_t;
+                        }
+                        // Default: Named type without generics
+                        auto t = std::make_shared<types::Type>();
+                        t->kind = types::NamedType{arg, "", {}};
+                        return t;
+                    };
+
+                    // Helper to parse potentially nested types
+                    auto parse_type_arg =
+                        [&parse_simple_type_arg](const std::string& arg) -> types::TypePtr {
+                        if (arg.starts_with("ref_") || arg.starts_with("mutref_")) {
                             // Reference type: ref_X or mutref_X -> RefType
                             bool is_mut = arg.starts_with("mutref_");
                             std::string inner_name = is_mut ? arg.substr(7) : arg.substr(4);
-
-                            // Check if inner is a dyn type
                             types::TypePtr inner_type;
                             if (inner_name.starts_with("dyn_")) {
-                                // dyn_Error -> DynBehaviorType
                                 std::string behavior = inner_name.substr(4);
                                 auto dyn_t = std::make_shared<types::Type>();
                                 dyn_t->kind = types::DynBehaviorType{behavior, {}, false};
                                 inner_type = dyn_t;
                             } else {
-                                // Regular named type
                                 auto inner_t = std::make_shared<types::Type>();
                                 inner_t->kind = types::NamedType{inner_name, "", {}};
                                 inner_type = inner_t;
                             }
-
                             auto ref_t = std::make_shared<types::Type>();
                             ref_t->kind = types::RefType{
                                 .is_mut = is_mut, .inner = inner_type, .lifetime = std::nullopt};
-                            arg_type = ref_t;
-                        } else if (arg.starts_with("dyn_")) {
-                            // Dynamic trait type: dyn_Error -> DynBehaviorType
-                            std::string behavior = arg.substr(4);
-                            auto dyn_t = std::make_shared<types::Type>();
-                            dyn_t->kind = types::DynBehaviorType{behavior, {}, false};
-                            arg_type = dyn_t;
-                        } else {
-                            // Named type without generics
-                            auto t = std::make_shared<types::Type>();
-                            t->kind = types::NamedType{arg, "", {}};
-                            arg_type = t;
+                            return ref_t;
                         }
-                        type_args.push_back(arg_type);
+                        if (arg.starts_with("ptr_")) {
+                            // Pointer type: ptr_X -> PtrType
+                            std::string inner_name = arg.substr(4);
+                            types::TypePtr inner_type;
+                            // Check if inner is a nested generic like Node__I32
+                            auto inner_sep = inner_name.find("__");
+                            if (inner_sep != std::string::npos) {
+                                std::string inner_base = inner_name.substr(0, inner_sep);
+                                std::string inner_args = inner_name.substr(inner_sep + 2);
+                                auto inner_arg_type = parse_simple_type_arg(inner_args);
+                                auto inner_t = std::make_shared<types::Type>();
+                                inner_t->kind = types::NamedType{inner_base, "", {inner_arg_type}};
+                                inner_type = inner_t;
+                            } else {
+                                inner_type = parse_simple_type_arg(inner_name);
+                            }
+                            auto ptr_t = std::make_shared<types::Type>();
+                            ptr_t->kind = types::PtrType{false, inner_type};
+                            return ptr_t;
+                        }
+                        return parse_simple_type_arg(arg);
+                    };
 
-                        if (next_sep == std::string::npos)
-                            break;
-                        pos = next_sep + 2;
+                    // Parse type args respecting the expected number of type parameters
+                    // For structs with 1 type param (like AtomicPtr[T]), combine all remaining
+                    // args into a single nested type: AtomicPtr__Node__I32 -> AtomicPtr[Node[I32]]
+                    std::vector<types::TypePtr> type_args;
+                    if (expected_type_params == 1) {
+                        // Single type param - treat all of type_args_str as a single nested type
+                        // Check if it's a nested generic: Node__I32 -> Node[I32]
+                        auto nested_sep = type_args_str.find("__");
+                        if (nested_sep != std::string::npos) {
+                            std::string nested_base = type_args_str.substr(0, nested_sep);
+                            std::string nested_args = type_args_str.substr(nested_sep + 2);
+                            auto nested_arg_type = parse_type_arg(nested_args);
+                            auto t = std::make_shared<types::Type>();
+                            t->kind = types::NamedType{nested_base, "", {nested_arg_type}};
+                            type_args.push_back(t);
+                        } else {
+                            type_args.push_back(parse_type_arg(type_args_str));
+                        }
+                    } else {
+                        // Multiple type params - split by __ as before
+                        size_t pos = 0;
+                        while (pos < type_args_str.size()) {
+                            auto next_sep = type_args_str.find("__", pos);
+                            std::string arg = (next_sep == std::string::npos)
+                                                  ? type_args_str.substr(pos)
+                                                  : type_args_str.substr(pos, next_sep - pos);
+                            type_args.push_back(parse_type_arg(arg));
+                            if (next_sep == std::string::npos)
+                                break;
+                            pos = next_sep + 2;
+                        }
                     }
 
                     auto result = std::make_shared<types::Type>();
@@ -731,6 +859,23 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             auto ret_it = func_return_types_.find(callee_ident.name);
             if (ret_it != func_return_types_.end()) {
                 return ret_it->second;
+            }
+
+            // Fall back to looking up in TypeEnv (for library functions)
+            auto func_sig = env_.lookup_func(callee_ident.name);
+            if (func_sig.has_value()) {
+                return func_sig->return_type;
+            }
+
+            // Also check in module registry for qualified/aliased functions
+            if (env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    auto func_it = mod.functions.find(callee_ident.name);
+                    if (func_it != mod.functions.end()) {
+                        return func_it->second.return_type;
+                    }
+                }
             }
         }
     }
@@ -915,6 +1060,11 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
 
             // to_string returns Str (Display behavior)
             if (call.method == "to_string") {
+                return types::make_str();
+            }
+
+            // debug_string returns Str (Debug behavior)
+            if (call.method == "debug_string") {
                 return types::make_str();
             }
 
@@ -1118,6 +1268,22 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     }
                     // Move to parent class
                     current_class = cls->base_class.value_or("");
+                }
+            }
+
+            // Look up methods in pending_generic_impls_ for generic types
+            auto impl_it = pending_generic_impls_.find(named.name);
+            if (impl_it != pending_generic_impls_.end()) {
+                for (const auto& method : impl_it->second->methods) {
+                    if (method.name == call.method) {
+                        if (method.return_type.has_value()) {
+                            // Convert parser type to semantic type with substitution
+                            types::TypePtr ret_type = resolve_parser_type_with_subs(
+                                *method.return_type.value(), type_subs);
+                            return ret_type;
+                        }
+                        return types::make_unit();
+                    }
                 }
             }
         }

@@ -779,19 +779,25 @@ const char* f64_to_str(double n) {
 // ============================================================================
 
 // i32_to_string(n: I32) -> Str
-static char i32_to_string_buffer[16];
+// Returns a newly allocated string to avoid static buffer issues
 const char* i32_to_string(int32_t n) {
-    char* end = fast_i64_to_str((int64_t)n, i32_to_string_buffer);
+    char* buffer = (char*)malloc(16);
+    if (!buffer)
+        return "";
+    char* end = fast_i64_to_str((int64_t)n, buffer);
     *end = '\0';
-    return i32_to_string_buffer;
+    return buffer;
 }
 
 // i64_to_string(n: I64) -> Str
-static char i64_to_string_buffer[32];
+// Returns a newly allocated string to avoid static buffer issues
 const char* i64_to_string(int64_t n) {
-    char* end = fast_i64_to_str(n, i64_to_string_buffer);
+    char* buffer = (char*)malloc(32);
+    if (!buffer)
+        return "";
+    char* end = fast_i64_to_str(n, buffer);
     *end = '\0';
-    return i64_to_string_buffer;
+    return buffer;
 }
 
 // bool_to_string(b: Bool) -> Str
@@ -801,10 +807,14 @@ const char* bool_to_string(int b) {
 
 // char_to_string(c: U8) -> Str
 // Converts a single ASCII character (byte) to a 1-character string
-static char char_to_string_buffer[2] = {0, 0};
+// Returns a newly allocated string to avoid static buffer issues
 const char* char_to_string(uint8_t c) {
-    char_to_string_buffer[0] = (char)c;
-    return char_to_string_buffer;
+    char* buffer = (char*)malloc(2);
+    if (!buffer)
+        return "";
+    buffer[0] = (char)c;
+    buffer[1] = '\0';
+    return buffer;
 }
 
 // str_find(s: Str, pattern: Str) -> I64 (returns -1 if not found)
