@@ -1,0 +1,26 @@
+// Tests for AsyncIterator types
+// Note: Full async iterator testing requires async/await support and Poll types
+// which are still being implemented. The async_iter module depends on task::Waker
+// which uses function pointer fields that aren't fully supported yet.
+
+use test
+
+// The actual async_iter module can't be imported yet due to task::Waker
+// function pointer field call issues. These are placeholder tests.
+
+// ============ Placeholder Tests ============
+// The async_iter module tests are blocked by:
+// - Function pointer field calling not supported (vtable.wake_fn(data))
+// - These tests will be enabled once that feature is implemented
+
+@test
+func test_async_iter_placeholder() -> I32 {
+    // Placeholder test until async_iter module is usable
+    return 0
+}
+
+// ============ Note on Pending Features ============
+// Blocked on:
+// - core::task module needs function pointer field call support
+// - impl[T] AsyncIterator for Once[T] depends on Poll type
+// - impl[T: Duplicate] AsyncIterator for Repeat[T] depends on Poll type

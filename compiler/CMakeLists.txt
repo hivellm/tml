@@ -345,12 +345,19 @@ target_include_directories(tml_mir PUBLIC include src)
 
 # Codegen library (LLVM IR text generator + clang backend)
 add_library(tml_codegen STATIC
-    src/codegen/llvm_ir_gen_decl.cpp
     src/codegen/llvm_ir_gen_stmt.cpp
+    # Declaration codegen (split from llvm_ir_gen_decl.cpp for maintainability)
+    src/codegen/decl/struct.cpp
+    src/codegen/decl/enum.cpp
+    src/codegen/decl/func.cpp
+    src/codegen/decl/impl.cpp
     src/codegen/llvm_ir_gen_expr.cpp
-    src/codegen/llvm_ir_gen_builtins.cpp
-    src/codegen/llvm_ir_gen_control.cpp
     src/codegen/c_header_gen.cpp
+    # Control flow codegen (split from llvm_ir_gen_control.cpp for maintainability)
+    src/codegen/control/if.cpp
+    src/codegen/control/loop.cpp
+    src/codegen/control/return.cpp
+    src/codegen/control/when.cpp
     src/codegen/mir_codegen.cpp
     # Core codegen (split from llvm_ir_gen.cpp for maintainability)
     src/codegen/core/utils.cpp
@@ -366,6 +373,7 @@ add_library(tml_codegen STATIC
     src/codegen/core/optimization_passes.cpp
     # Expression codegen (split for maintainability)
     src/codegen/expr/core.cpp
+    src/codegen/expr/call.cpp
     src/codegen/expr/binary.cpp
     src/codegen/expr/unary.cpp
     src/codegen/expr/cast.cpp
@@ -383,6 +391,10 @@ add_library(tml_codegen STATIC
     src/codegen/expr/method_maybe.cpp
     src/codegen/expr/method_outcome.cpp
     src/codegen/expr/method_array.cpp
+    src/codegen/expr/method_impl.cpp
+    src/codegen/expr/method_dyn.cpp
+    src/codegen/expr/method_class.cpp
+    src/codegen/expr/method_prim_behavior.cpp
     src/codegen/expr/await.cpp
     src/codegen/expr/try.cpp
     # Builtin function codegen (split for maintainability)

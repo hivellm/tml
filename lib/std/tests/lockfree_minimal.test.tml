@@ -1,0 +1,11 @@
+// Minimal test for lock-free types
+use test::{assert, assert_eq}
+use std::sync::LockFreeStack
+
+@test
+func test_stack_push() -> I32 {
+    var stack: LockFreeStack[I32] = LockFreeStack::new[I32]()
+    stack.push(42)
+    assert(not stack.is_empty(), "stack should not be empty after push")
+    return 0
+}

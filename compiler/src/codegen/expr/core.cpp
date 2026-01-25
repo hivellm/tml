@@ -246,13 +246,20 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         types::TypePtr type_arg = nullptr;
 
                         // Map suffix to type
-                        if (type_suffix == "I32") type_arg = types::make_i32();
-                        else if (type_suffix == "I64") type_arg = types::make_i64();
-                        else if (type_suffix == "Bool") type_arg = types::make_bool();
-                        else if (type_suffix == "Str") type_arg = types::make_str();
-                        else if (type_suffix == "F32") type_arg = types::make_primitive(types::PrimitiveKind::F32);
-                        else if (type_suffix == "F64") type_arg = types::make_f64();
-                        else if (type_suffix == "Unit") type_arg = types::make_unit();
+                        if (type_suffix == "I32")
+                            type_arg = types::make_i32();
+                        else if (type_suffix == "I64")
+                            type_arg = types::make_i64();
+                        else if (type_suffix == "Bool")
+                            type_arg = types::make_bool();
+                        else if (type_suffix == "Str")
+                            type_arg = types::make_str();
+                        else if (type_suffix == "F32")
+                            type_arg = types::make_primitive(types::PrimitiveKind::F32);
+                        else if (type_suffix == "F64")
+                            type_arg = types::make_f64();
+                        else if (type_suffix == "Unit")
+                            type_arg = types::make_unit();
 
                         if (type_arg) {
                             std::vector<types::TypePtr> args = {type_arg};
@@ -377,7 +384,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         }
                     }
                     // Try to use current type substitutions (e.g., when inside generic impl method)
-                    // This handles cases like `Ready { value: Nothing }` inside Ready[T]::exhausted()
+                    // This handles cases like `Ready { value: Nothing }` inside
+                    // Ready[T]::exhausted()
                     if (enum_type == "%struct." + enum_name && !enum_def.type_params.empty() &&
                         !current_type_subs_.empty()) {
                         std::vector<types::TypePtr> type_args;

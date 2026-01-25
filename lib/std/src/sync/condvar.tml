@@ -92,8 +92,9 @@ use sync::atomic::{AtomicU32, Ordering}
 /// Raw platform condition variable handle.
 /// On Windows: CONDITION_VARIABLE (8 bytes)
 /// On Unix: pthread_cond_t (48 bytes depending on platform)
+/// Note: Made pub for struct type emission.
 @repr(C)
-type RawCondvar {
+pub type RawCondvar {
     _data: [U8; 64]
 }
 
@@ -176,7 +177,7 @@ impl Condvar {
     /// let cvar = Condvar::new()
     /// ```
     pub func new() -> Condvar {
-        let mut cvar = Condvar {
+        var cvar: Condvar = Condvar {
             raw: RawCondvar { _data: [0; 64] },
         }
         raw_condvar_init(ref cvar.raw)
@@ -213,8 +214,8 @@ impl Condvar {
     ///     guard = cvar.wait(guard)
     /// }
     /// ```
-    pub func wait[T](mut self, guard: MutexGuard[T]) -> MutexGuard[T] {
-        raw_condvar_wait(ref self.raw, ref guard.mutex.raw)
+    pub func wait[T](mut this, guard: MutexGuard[T]) -> MutexGuard[T] {
+        raw_condvar_wait(ref this.raw, ref guard.mutex.raw)
         return guard
     }
 
@@ -242,9 +243,9 @@ impl Condvar {
     ///     println("Timed out!")
     /// }
     /// ```
-    pub func wait_timeout_ms[T](mut self, guard: MutexGuard[T], timeout_ms: U64) -> (MutexGuard[T], Bool) {
-        let result = raw_condvar_wait_timeout_ms(ref self.raw, ref guard.mutex.raw, timeout_ms)
-        let timed_out = result != 0
+    pub func wait_timeout_ms[T](mut this, guard: MutexGuard[T], timeout_ms: U64) -> (MutexGuard[T], Bool) {
+        let result: I32 = raw_condvar_wait_timeout_ms(ref this.raw, ref guard.mutex.raw, timeout_ms)
+        let timed_out: Bool = result != 0
         return (guard, timed_out)
     }
 
@@ -270,9 +271,9 @@ impl Condvar {
     ///
     /// assert(*guard >= 10)
     /// ```
-    pub func wait_while[T](mut self, mut guard: MutexGuard[T], condition: do(ref T) -> Bool) -> MutexGuard[T] {
-        loop condition(guard.get()) {
-            guard = self.wait(guard)
+    pub func wait_while[T](mut this, mut guard: MutexGuard[T], condition: func(ref T) -> Bool) -> MutexGuard[T] {
+        loop (condition(guard.get())) {
+            guard = this.wait(guard)
         }
         return guard
     }
@@ -299,8 +300,8 @@ impl Condvar {
     ///     cvar.notify_one()
     /// }
     /// ```
-    pub func notify_one(mut self) {
-        raw_condvar_notify_one(ref self.raw)
+    pub func notify_one(mut this) {
+        raw_condvar_notify_one(ref this.raw)
     }
 
     /// Wakes up all blocked threads on this condvar.
@@ -324,13 +325,29 @@ impl Condvar {
     ///     cvar.notify_all()  // Wake all waiting threads
     /// }
     /// ```
-    pub func notify_all(mut self) {
-        raw_condvar_notify_all(ref self.raw)
+    pub func notify_all(mut this) {
+        raw_condvar_notify_all(ref this.raw)
     }
 }
 
 impl Drop for Condvar {
-    func drop(mut self) {
-        raw_condvar_destroy(ref self.raw)
+    func drop(mut this) {
+        raw_condvar_destroy(ref this.raw)
     }
 }
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// Condvar is Send.
+/// Condition variables can be safely transferred between threads.
+impl Send for Condvar {}
+
+/// Condvar is Sync.
+/// Condition variables are explicitly designed to be shared between threads
+/// for signaling purposes. Multiple threads can wait on or notify the same
+/// condition variable safely.
+impl Sync for Condvar {}

@@ -69,7 +69,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 if (m.sig.name == method && m.is_static) {
                     // Generate call to static method
                     // Only use suite prefix for test-local methods, not library methods
-                    std::string prefix = is_library_method(type_name, method) ? "" : get_suite_prefix();
+                    std::string prefix =
+                        is_library_method(type_name, method) ? "" : get_suite_prefix();
                     std::string func_name = "@tml_" + prefix + type_name + "_" + method;
                     std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
 
@@ -102,12 +103,20 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         // Check if this is a generic struct from:
         // 1. Local pending_generic_structs_ or pending_generic_impls_
         // 2. Imported structs from module registry with type_params
-        bool is_generic_struct = pending_generic_structs_.count(type_name) > 0 ||
-                                 pending_generic_impls_.count(type_name) > 0;
+        // 3. Method call has explicit type arguments (e.g., StackNode::new[T])
+        // NOTE: Exclude runtime-managed collection types (List, HashMap, Buffer, HashMapIter)
+        // as they have special handling in gen_static_method_call
+        bool is_runtime_collection = type_name == "List" || type_name == "HashMap" ||
+                                     type_name == "Buffer" || type_name == "HashMapIter";
+        bool is_generic_struct =
+            !is_runtime_collection &&
+            (pending_generic_structs_.count(type_name) > 0 ||
+             pending_generic_impls_.count(type_name) > 0 ||
+             !call.type_args.empty()); // Also treat calls with explicit type args as generic
 
-        // Also check for imported generic structs
+        // Also check for imported generic structs (except runtime collections)
         std::vector<std::string> imported_type_params;
-        if (!is_generic_struct && env_.module_registry()) {
+        if (!is_generic_struct && !is_runtime_collection && env_.module_registry()) {
             const auto& all_modules = env_.module_registry()->get_all_modules();
             for (const auto& [mod_name, mod] : all_modules) {
                 auto struct_it = mod.structs.find(type_name);
@@ -120,11 +129,17 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
 
         // For generic struct static methods (like Range::new), use expected_enum_type_ for type
-        // args
-        if (is_generic_struct && locals_.count(type_name) == 0) {
+        // args. Also handle calls with explicit type args even if struct definition wasn't found.
+        TML_DEBUG_LN("[STATIC_METHOD] type_name="
+                     << type_name << " method=" << method << " is_generic_struct="
+                     << is_generic_struct << " call.type_args.empty()=" << call.type_args.empty());
+        if ((is_generic_struct || !call.type_args.empty()) && locals_.count(type_name) == 0) {
             // Look up the impl method and generate the monomorphized call
             std::string qualified_name = type_name + "::" + method;
             auto func_sig = env_.lookup_func(qualified_name);
+            TML_DEBUG_LN("[STATIC_METHOD] qualified_name="
+                         << qualified_name
+                         << " func_sig=" << (func_sig.has_value() ? "found" : "null"));
 
             // If not found locally, search modules
             if (!func_sig && env_.module_registry()) {
@@ -138,17 +153,134 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 }
             }
 
-            if (func_sig) {
-                // Determine the type arguments from expected_enum_type_
-                std::string mangled_type_name = type_name;
-                std::unordered_map<std::string, types::TypePtr> type_subs;
+            // Determine the type arguments from explicit generics on PathExpr or
+            // expected_enum_type_ This is done regardless of func_sig so local generic structs also
+            // get type_subs
+            std::string mangled_type_name = type_name;
+            std::unordered_map<std::string, types::TypePtr> type_subs;
 
-                if (!expected_enum_type_.empty() &&
-                    expected_enum_type_.find("%struct." + type_name + "__") == 0) {
-                    // Extract type args from expected_enum_type_ like "%struct.Range__I64"
-                    mangled_type_name = expected_enum_type_.substr(8); // Remove "%struct."
+            // Helper to create primitive types
+            auto make_prim = [](types::PrimitiveKind kind) -> types::TypePtr {
+                auto t = std::make_shared<types::Type>();
+                t->kind = types::PrimitiveType{kind};
+                return t;
+            };
 
-                    // Build type substitutions - try local impls first, then imported type params
+            // Helper to convert type arg string to TypePtr
+            auto str_to_type = [&make_prim](const std::string& type_arg_str) -> types::TypePtr {
+                if (type_arg_str == "I64")
+                    return types::make_i64();
+                if (type_arg_str == "I32")
+                    return types::make_i32();
+                if (type_arg_str == "I8")
+                    return make_prim(types::PrimitiveKind::I8);
+                if (type_arg_str == "I16")
+                    return make_prim(types::PrimitiveKind::I16);
+                if (type_arg_str == "U8")
+                    return make_prim(types::PrimitiveKind::U8);
+                if (type_arg_str == "U16")
+                    return make_prim(types::PrimitiveKind::U16);
+                if (type_arg_str == "U32")
+                    return make_prim(types::PrimitiveKind::U32);
+                if (type_arg_str == "U64")
+                    return make_prim(types::PrimitiveKind::U64);
+                if (type_arg_str == "F32")
+                    return make_prim(types::PrimitiveKind::F32);
+                if (type_arg_str == "F64")
+                    return types::make_f64();
+                if (type_arg_str == "Bool")
+                    return types::make_bool();
+                if (type_arg_str == "Str")
+                    return types::make_str();
+                // Handle mangled pointer types: ptr_I32 -> PtrType{I32}
+                if (type_arg_str.starts_with("ptr_")) {
+                    std::string inner_str = type_arg_str.substr(4);
+                    // Recursively parse the inner type
+                    types::TypePtr inner = nullptr;
+                    // Check for primitives first
+                    if (inner_str == "I32")
+                        inner = types::make_i32();
+                    else if (inner_str == "I64")
+                        inner = types::make_i64();
+                    else if (inner_str == "I8")
+                        inner = make_prim(types::PrimitiveKind::I8);
+                    else if (inner_str == "I16")
+                        inner = make_prim(types::PrimitiveKind::I16);
+                    else if (inner_str == "U8")
+                        inner = make_prim(types::PrimitiveKind::U8);
+                    else if (inner_str == "U16")
+                        inner = make_prim(types::PrimitiveKind::U16);
+                    else if (inner_str == "U32")
+                        inner = make_prim(types::PrimitiveKind::U32);
+                    else if (inner_str == "U64")
+                        inner = make_prim(types::PrimitiveKind::U64);
+                    else if (inner_str == "F32")
+                        inner = make_prim(types::PrimitiveKind::F32);
+                    else if (inner_str == "F64")
+                        inner = types::make_f64();
+                    else if (inner_str == "Bool")
+                        inner = types::make_bool();
+                    else if (inner_str == "Str")
+                        inner = types::make_str();
+                    else {
+                        // For struct types as inner
+                        auto inner_t = std::make_shared<types::Type>();
+                        inner_t->kind = types::NamedType{inner_str, "", {}};
+                        inner = inner_t;
+                    }
+                    auto t = std::make_shared<types::Type>();
+                    t->kind = types::PtrType{false, inner};
+                    return t;
+                }
+                // Handle mangled mutable pointer types: mutptr_I32 -> PtrType{mut, I32}
+                if (type_arg_str.starts_with("mutptr_")) {
+                    std::string inner_str = type_arg_str.substr(7);
+                    types::TypePtr inner = nullptr;
+                    if (inner_str == "I32")
+                        inner = types::make_i32();
+                    else if (inner_str == "I64")
+                        inner = types::make_i64();
+                    else if (inner_str == "I8")
+                        inner = make_prim(types::PrimitiveKind::I8);
+                    else if (inner_str == "I16")
+                        inner = make_prim(types::PrimitiveKind::I16);
+                    else if (inner_str == "U8")
+                        inner = make_prim(types::PrimitiveKind::U8);
+                    else if (inner_str == "U16")
+                        inner = make_prim(types::PrimitiveKind::U16);
+                    else if (inner_str == "U32")
+                        inner = make_prim(types::PrimitiveKind::U32);
+                    else if (inner_str == "U64")
+                        inner = make_prim(types::PrimitiveKind::U64);
+                    else if (inner_str == "F32")
+                        inner = make_prim(types::PrimitiveKind::F32);
+                    else if (inner_str == "F64")
+                        inner = types::make_f64();
+                    else if (inner_str == "Bool")
+                        inner = types::make_bool();
+                    else if (inner_str == "Str")
+                        inner = types::make_str();
+                    else {
+                        auto inner_t = std::make_shared<types::Type>();
+                        inner_t->kind = types::NamedType{inner_str, "", {}};
+                        inner = inner_t;
+                    }
+                    auto t = std::make_shared<types::Type>();
+                    t->kind = types::PtrType{true, inner};
+                    return t;
+                }
+                // For struct types, create a NamedType
+                auto t = std::make_shared<types::Type>();
+                t->kind = types::NamedType{type_arg_str, "", {}};
+                return t;
+            };
+
+            // First, try to extract type args from explicit generics on the PathExpr (e.g.,
+            // List[I32].new())
+            if (call.receiver->is<parser::PathExpr>()) {
+                const auto& pe = call.receiver->as<parser::PathExpr>();
+                if (pe.generics.has_value() && !pe.generics->args.empty()) {
+                    // Build type substitutions from explicit type args
                     std::vector<std::string> generic_names;
                     auto impl_it = pending_generic_impls_.find(type_name);
                     if (impl_it != pending_generic_impls_.end()) {
@@ -159,70 +291,111 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         generic_names = imported_type_params;
                     }
 
-                    // For simple cases like Range__I64, extract the type arg
-                    std::string suffix = mangled_type_name.substr(type_name.length());
-                    if (suffix.starts_with("__") && generic_names.size() == 1) {
-                        std::string type_arg_str = suffix.substr(2);
-                        types::TypePtr type_arg = nullptr;
-
-                        // Helper to create primitive types
-                        auto make_prim = [](types::PrimitiveKind kind) -> types::TypePtr {
-                            auto t = std::make_shared<types::Type>();
-                            t->kind = types::PrimitiveType{kind};
-                            return t;
-                        };
-
-                        if (type_arg_str == "I64")
-                            type_arg = types::make_i64();
-                        else if (type_arg_str == "I32")
-                            type_arg = types::make_i32();
-                        else if (type_arg_str == "I8")
-                            type_arg = make_prim(types::PrimitiveKind::I8);
-                        else if (type_arg_str == "I16")
-                            type_arg = make_prim(types::PrimitiveKind::I16);
-                        else if (type_arg_str == "U8")
-                            type_arg = make_prim(types::PrimitiveKind::U8);
-                        else if (type_arg_str == "U16")
-                            type_arg = make_prim(types::PrimitiveKind::U16);
-                        else if (type_arg_str == "U32")
-                            type_arg = make_prim(types::PrimitiveKind::U32);
-                        else if (type_arg_str == "U64")
-                            type_arg = make_prim(types::PrimitiveKind::U64);
-                        else if (type_arg_str == "F32")
-                            type_arg = make_prim(types::PrimitiveKind::F32);
-                        else if (type_arg_str == "F64")
-                            type_arg = types::make_f64();
-                        else if (type_arg_str == "Bool")
-                            type_arg = types::make_bool();
-                        else if (type_arg_str == "Str")
-                            type_arg = types::make_str();
-                        else
-                            type_arg = types::make_i64(); // Default fallback
-
-                        if (type_arg && !generic_names.empty()) {
-                            type_subs[generic_names[0]] = type_arg;
+                    // Build mangled name and type_subs from explicit generics
+                    for (size_t i = 0; i < pe.generics->args.size(); ++i) {
+                        const auto& arg = pe.generics->args[i];
+                        if (arg.is_type()) {
+                            // Resolve type argument using current_type_subs_ (handles T -> I32)
+                            auto resolved =
+                                resolve_parser_type_with_subs(*arg.as_type(), current_type_subs_);
+                            if (resolved) {
+                                std::string type_arg_str = mangle_type(resolved);
+                                mangled_type_name += "__" + type_arg_str;
+                                if (i < generic_names.size()) {
+                                    type_subs[generic_names[i]] = resolved;
+                                }
+                            }
                         }
                     }
                 }
+            }
 
-                // Determine if this is an imported library type (for suite prefix decisions)
-                bool is_imported = !imported_type_params.empty();
-
-                // Request impl method instantiation if needed
-                std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method;
-                if (generated_impl_methods_.find(mangled_method_name) ==
-                    generated_impl_methods_.end()) {
-                    // For both local and imported generic impls, request instantiation
-                    auto impl_it = pending_generic_impls_.find(type_name);
-                    bool is_local = impl_it != pending_generic_impls_.end();
-                    if (is_local || is_imported) {
-                        pending_impl_method_instantiations_.push_back(
-                            PendingImplMethod{mangled_type_name, method, type_subs, type_name, "",
-                                              /*is_library_type=*/is_imported});
-                        generated_impl_methods_.insert(mangled_method_name);
+            // Handle method-level type arguments (e.g., StackNode::new[T])
+            // Resolve type parameters using current_type_subs_
+            if (!call.type_args.empty()) {
+                // Get generic parameter names for this method
+                std::vector<std::string> generic_names;
+                auto impl_it = pending_generic_impls_.find(type_name);
+                if (impl_it != pending_generic_impls_.end()) {
+                    for (const auto& g : impl_it->second->generics) {
+                        generic_names.push_back(g.name);
                     }
+                } else if (!imported_type_params.empty()) {
+                    generic_names = imported_type_params;
                 }
 
+                // Build mangled name and type_subs from method type args
+                for (size_t i = 0; i < call.type_args.size(); ++i) {
+                    // Resolve type argument using current_type_subs_ (handles T -> I32)
+                    auto resolved =
+                        resolve_parser_type_with_subs(*call.type_args[i], current_type_subs_);
+                    if (resolved) {
+                        std::string type_arg_str = mangle_type(resolved);
+                        mangled_type_name += "__" + type_arg_str;
+                        if (i < generic_names.size()) {
+                            type_subs[generic_names[i]] = resolved;
+                        } else {
+                            // For unknown generic names (internal types), use positional
+                            // placeholder This ensures type_subs is non-empty so the fallback code
+                            // path works
+                            type_subs["_T" + std::to_string(i)] = resolved;
+                        }
+                    }
+                }
+            }
+
+            // Fall back to expected_enum_type_ if no explicit generics found
+            if (type_subs.empty() && !expected_enum_type_.empty() &&
+                expected_enum_type_.find("%struct." + type_name + "__") == 0) {
+                // Extract type args from expected_enum_type_ like "%struct.Range__I64"
+                mangled_type_name = expected_enum_type_.substr(8); // Remove "%struct."
+
+                // Build type substitutions - try local impls first, then imported type params
+                std::vector<std::string> generic_names;
+                auto impl_it = pending_generic_impls_.find(type_name);
+                if (impl_it != pending_generic_impls_.end()) {
+                    for (const auto& g : impl_it->second->generics) {
+                        generic_names.push_back(g.name);
+                    }
+                } else if (!imported_type_params.empty()) {
+                    generic_names = imported_type_params;
+                }
+
+                // For simple cases like Range__I64, extract the type arg
+                std::string suffix = mangled_type_name.substr(type_name.length());
+                if (suffix.starts_with("__") && generic_names.size() == 1) {
+                    std::string type_arg_str = suffix.substr(2);
+                    types::TypePtr type_arg = str_to_type(type_arg_str);
+                    if (type_arg && !generic_names.empty()) {
+                        type_subs[generic_names[0]] = type_arg;
+                    }
+                }
+            }
+
+            // Determine if this is an imported library type (for suite prefix decisions)
+            bool is_imported = !imported_type_params.empty();
+
+            // Request impl method instantiation if needed
+            // This must be done regardless of func_sig to handle local generic structs
+            std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method;
+            if (generated_impl_methods_.find(mangled_method_name) ==
+                generated_impl_methods_.end()) {
+                // For both local and imported generic impls, request instantiation
+                auto impl_it = pending_generic_impls_.find(type_name);
+                bool is_local = impl_it != pending_generic_impls_.end();
+                if (is_local || is_imported) {
+                    pending_impl_method_instantiations_.push_back(
+                        PendingImplMethod{mangled_type_name, method, type_subs, type_name, "",
+                                          /*is_library_type=*/is_imported});
+                    generated_impl_methods_.insert(mangled_method_name);
+                }
+            }
+
+            TML_DEBUG_LN("[STATIC_METHOD] Before func_sig check: mangled_type_name="
+                         << mangled_type_name << " type_subs.size=" << type_subs.size()
+                         << " call.type_args.size=" << call.type_args.size());
+            if (func_sig) {
+                TML_DEBUG_LN("[STATIC_METHOD] Using func_sig path");
                 // Generate the static method call
                 // Look up in functions_ to get the correct LLVM name (handles suite prefix
                 // correctly)
@@ -276,6 +449,107 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     last_expr_type_ = ret_type;
                     return result;
                 }
+            } else {
+                // func_sig is null but we have a local generic struct
+                // Generate the call using inferred types from arguments
+                auto impl_it = pending_generic_impls_.find(type_name);
+                if (impl_it != pending_generic_impls_.end()) {
+                    // Find the method in the impl block to get return type
+                    for (const auto& m : impl_it->second->methods) {
+                        if (m.name == method) {
+                            // Get function name
+                            std::string fn_name;
+                            auto method_it = functions_.find(mangled_type_name + "_" + method);
+                            if (method_it != functions_.end()) {
+                                fn_name = method_it->second.llvm_name;
+                            } else {
+                                std::string prefix = is_imported ? "" : get_suite_prefix();
+                                fn_name = "@tml_" + prefix + mangled_type_name + "_" + method;
+                            }
+
+                            // Generate arguments using inferred types
+                            std::vector<std::pair<std::string, std::string>> typed_args;
+                            for (size_t i = 0; i < call.args.size(); ++i) {
+                                std::string val = gen_expr(*call.args[i]);
+                                std::string arg_type = last_expr_type_;
+                                // Apply type substitution to parameter type
+                                if (i < m.params.size()) {
+                                    auto param_type =
+                                        resolve_parser_type_with_subs(*m.params[i].type, type_subs);
+                                    arg_type = llvm_type_from_semantic(param_type);
+                                }
+                                typed_args.push_back({arg_type, val});
+                            }
+
+                            // Get return type with substitution
+                            std::string ret_type = "void";
+                            if (m.return_type.has_value()) {
+                                auto return_type =
+                                    resolve_parser_type_with_subs(**m.return_type, type_subs);
+                                ret_type = llvm_type_from_semantic(return_type);
+                            }
+
+                            std::string args_str;
+                            for (size_t i = 0; i < typed_args.size(); ++i) {
+                                if (i > 0)
+                                    args_str += ", ";
+                                args_str += typed_args[i].first + " " + typed_args[i].second;
+                            }
+
+                            std::string result = fresh_reg();
+                            if (ret_type == "void") {
+                                emit_line("  call void " + fn_name + "(" + args_str + ")");
+                                last_expr_type_ = "void";
+                                return "void";
+                            } else {
+                                emit_line("  " + result + " = call " + ret_type + " " + fn_name +
+                                          "(" + args_str + ")");
+                                last_expr_type_ = ret_type;
+                                return result;
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: If we have type_args but no func_sig or pending impl, still generate
+                // type-mangled call. This handles internal types like StackNode from imported
+                // modules.
+                TML_DEBUG_LN("[STATIC_METHOD] Fallback check: call.type_args.empty()="
+                             << call.type_args.empty()
+                             << " type_subs.empty()=" << type_subs.empty());
+                if (!call.type_args.empty() && !type_subs.empty()) {
+                    TML_DEBUG_LN("[STATIC_METHOD] Using fallback path for " << type_name
+                                                                            << "::" << method);
+                    // mangled_type_name should already include the type suffix from the type_args
+                    // handling above
+                    std::string fn_name = "@tml_" + mangled_type_name + "_" + method;
+
+                    // Generate arguments - infer types from expressions
+                    std::vector<std::pair<std::string, std::string>> typed_args;
+                    for (const auto& arg : call.args) {
+                        std::string val = gen_expr(*arg);
+                        std::string arg_type = last_expr_type_;
+                        typed_args.push_back({arg_type, val});
+                    }
+
+                    std::string args_str;
+                    for (size_t i = 0; i < typed_args.size(); ++i) {
+                        if (i > 0)
+                            args_str += ", ";
+                        args_str += typed_args[i].first + " " + typed_args[i].second;
+                    }
+
+                    // Assume ptr return type for constructor-like methods (new, etc.)
+                    // This is a heuristic but covers most cases for internal structs
+                    std::string ret_type = "ptr";
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" +
+                              args_str + ")");
+                    last_expr_type_ = ret_type;
+                    return result;
+                }
+                TML_DEBUG_LN("[STATIC_METHOD] Falling through after fallback for "
+                             << type_name << "::" << method);
             }
         }
 
@@ -330,7 +604,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     fn_name = method_it->second.llvm_name;
                 } else {
                     // Fallback - only use suite prefix for test-local methods
-                    std::string prefix = is_library_method(type_name, method) ? "" : get_suite_prefix();
+                    std::string prefix =
+                        is_library_method(type_name, method) ? "" : get_suite_prefix();
                     fn_name = "@tml_" + prefix + type_name + "_" + method;
                 }
 
@@ -422,6 +697,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
         // Generate the base object expression
         std::string base_ptr;
+        types::TypePtr base_type;
+
         if (field_expr.object->is<parser::IdentExpr>()) {
             const auto& ident = field_expr.object->as<parser::IdentExpr>();
             if (ident.name == "this") {
@@ -432,23 +709,46 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     base_ptr = it->second.reg;
                 }
             }
+            base_type = infer_expr_type(*field_expr.object);
+        } else if (field_expr.object->is<parser::UnaryExpr>()) {
+            // Handle dereferenced pointer field access: (*ptr).field
+            const auto& unary = field_expr.object->as<parser::UnaryExpr>();
+            if (unary.op == parser::UnaryOp::Deref) {
+                // Generate the pointer value - this becomes our base_ptr
+                base_ptr = gen_expr(*unary.operand);
+
+                // Infer the pointee type
+                types::TypePtr ptr_type = infer_expr_type(*unary.operand);
+                if (ptr_type) {
+                    if (ptr_type->is<types::PtrType>()) {
+                        base_type = ptr_type->as<types::PtrType>().inner;
+                    } else if (ptr_type->is<types::RefType>()) {
+                        base_type = ptr_type->as<types::RefType>().inner;
+                    }
+
+                    // Apply type substitutions for generic types
+                    if (base_type && !current_type_subs_.empty()) {
+                        base_type = apply_type_substitutions(base_type, current_type_subs_);
+                    }
+                }
+            }
         }
 
-        if (!base_ptr.empty()) {
-            // Infer the base object type
-            types::TypePtr base_type = infer_expr_type(*field_expr.object);
+        if (!base_ptr.empty() && base_type) {
             TML_DEBUG_LN("[FIELD_MUTATION] base_type exists: " << (base_type ? "yes" : "no"));
             if (base_type) {
                 TML_DEBUG_LN("[FIELD_MUTATION] base_type is NamedType: "
                              << (base_type->is<types::NamedType>() ? "yes" : "no"));
             }
-            if (base_type && base_type->is<types::NamedType>()) {
+            if (base_type->is<types::NamedType>()) {
                 const auto& base_named = base_type->as<types::NamedType>();
                 std::string base_type_name = base_named.name;
 
                 // Get the mangled struct type name if it has type args
                 std::string struct_type_name = base_type_name;
                 if (!base_named.type_args.empty()) {
+                    // Ensure generic struct is instantiated so fields are registered
+                    require_struct_instantiation(base_type_name, base_named.type_args);
                     struct_type_name = mangle_struct_name(base_type_name, base_named.type_args);
                 }
                 std::string llvm_struct_type = "%struct." + struct_type_name;
@@ -463,12 +763,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     emit_line("  " + field_ptr + " = getelementptr " + llvm_struct_type + ", ptr " +
                               base_ptr + ", i32 0, i32 " + std::to_string(field_idx));
 
-                    // For primitive types, load the value; for structs, keep the pointer
+                    // For primitive types and pointers, load the value; for structs, keep the
+                    // pointer
                     receiver_ptr = field_ptr;
                     if (field_type == "i8" || field_type == "i16" || field_type == "i32" ||
                         field_type == "i64" || field_type == "i128" || field_type == "i1" ||
-                        field_type == "float" || field_type == "double") {
-                        // Load primitive value for method calls like to_string()
+                        field_type == "float" || field_type == "double" || field_type == "ptr") {
+                        // Load primitive/pointer value for method calls
+                        // For ptr types: field stores a reference, load the pointer to pass to
+                        // method
                         std::string loaded = fresh_reg();
                         emit_line("  " + loaded + " = load " + field_type + ", ptr " + field_ptr);
                         receiver = loaded;
@@ -500,36 +803,134 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // =========================================================================
     types::TypePtr receiver_type = infer_expr_type(*call.receiver);
 
-    // If receiver type is a type parameter, substitute with actual type from current_type_subs_
-    if (receiver_type && receiver_type->is<types::NamedType>() && !current_type_subs_.empty()) {
-        const auto& named = receiver_type->as<types::NamedType>();
-        auto sub_it = current_type_subs_.find(named.name);
-        if (sub_it != current_type_subs_.end()) {
-            receiver_type = sub_it->second;
+    // For FieldExpr receivers in generic impl blocks, try to get field type from
+    // pending_generic_structs_ This handles cases where infer_expr_type returns an incorrect
+    // fallback type
+    if (call.receiver->is<parser::FieldExpr>()) {
+        const auto& field_expr = call.receiver->as<parser::FieldExpr>();
+        if (field_expr.object->is<parser::IdentExpr>()) {
+            const auto& ident = field_expr.object->as<parser::IdentExpr>();
+            if (ident.name == "this" && !current_impl_type_.empty()) {
+                // Parse the impl type to get base name and type args
+                std::string base_name = current_impl_type_;
+                std::vector<types::TypePtr> type_args;
+
+                auto sep_pos = current_impl_type_.find("__");
+                if (sep_pos != std::string::npos) {
+                    base_name = current_impl_type_.substr(0, sep_pos);
+
+                    // Parse type args from mangled suffix
+                    std::string args_str = current_impl_type_.substr(sep_pos + 2);
+                    size_t pos = 0;
+                    while (pos < args_str.size()) {
+                        auto next_sep = args_str.find("__", pos);
+                        std::string arg = (next_sep == std::string::npos)
+                                              ? args_str.substr(pos)
+                                              : args_str.substr(pos, next_sep - pos);
+
+                        types::TypePtr arg_type;
+                        if (arg == "I32")
+                            arg_type = types::make_i32();
+                        else if (arg == "I64")
+                            arg_type = types::make_i64();
+                        else if (arg == "U32")
+                            arg_type = types::make_primitive(types::PrimitiveKind::U32);
+                        else if (arg == "U64")
+                            arg_type = types::make_primitive(types::PrimitiveKind::U64);
+                        else if (arg == "Bool")
+                            arg_type = types::make_bool();
+                        else if (arg == "Str")
+                            arg_type = types::make_str();
+                        else {
+                            auto t = std::make_shared<types::Type>();
+                            t->kind = types::NamedType{arg, "", {}};
+                            arg_type = t;
+                        }
+                        type_args.push_back(arg_type);
+
+                        if (next_sep == std::string::npos)
+                            break;
+                        pos = next_sep + 2;
+                    }
+                }
+
+                // Look up the generic struct definition
+                auto generic_it = pending_generic_structs_.find(base_name);
+                if (generic_it != pending_generic_structs_.end()) {
+                    const parser::StructDecl* decl = generic_it->second;
+
+                    // Build type substitution map
+                    std::unordered_map<std::string, types::TypePtr> subs;
+                    for (size_t i = 0; i < decl->generics.size() && i < type_args.size(); ++i) {
+                        subs[decl->generics[i].name] = type_args[i];
+                    }
+
+                    // Find the field
+                    for (const auto& decl_field : decl->fields) {
+                        if (decl_field.name == field_expr.field && decl_field.type) {
+                            receiver_type = resolve_parser_type_with_subs(*decl_field.type, subs);
+                            break;
+                        }
+                    }
+                }
+
+                // Also try module registry for imported structs
+                // Check if receiver_type is valid (not a primitive fallback type like Str)
+                bool needs_registry_lookup =
+                    !receiver_type ||
+                    (receiver_type->is<types::PrimitiveType>() &&
+                     receiver_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str);
+                if (needs_registry_lookup && env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        auto struct_it = mod.structs.find(base_name);
+                        if (struct_it != mod.structs.end()) {
+                            const auto& struct_def = struct_it->second;
+
+                            // Build type substitution map
+                            std::unordered_map<std::string, types::TypePtr> subs;
+                            for (size_t i = 0;
+                                 i < struct_def.type_params.size() && i < type_args.size(); ++i) {
+                                subs[struct_def.type_params[i]] = type_args[i];
+                            }
+
+                            // Find the field
+                            for (const auto& [fname, ftype] : struct_def.fields) {
+                                if (fname == field_expr.field && ftype) {
+                                    if (!subs.empty()) {
+                                        receiver_type = types::substitute_type(ftype, subs);
+                                    } else {
+                                        receiver_type = ftype;
+                                    }
+                                    break;
+                                }
+                            }
+                            if (receiver_type)
+                                break;
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    // Apply type substitutions to the receiver type.
+    // This handles both simple type parameters (T -> I32) AND nested generic types
+    // like AtomicPtr[Node[T]] -> AtomicPtr[Node[I32]]
+    if (receiver_type && !current_type_subs_.empty()) {
+        receiver_type = apply_type_substitutions(receiver_type, current_type_subs_);
     }
 
     // If receiver type is a reference, unwrap it for method dispatch
     // Methods are dispatched on the inner type, not the reference type
     // Track whether we unwrapped a reference, as the receiver value will be a pointer
+    // Note: Type substitutions were already applied above, so inner is already concrete
     bool receiver_was_ref = false;
     if (receiver_type && receiver_type->is<types::RefType>()) {
         const auto& ref = receiver_type->as<types::RefType>();
         if (ref.inner) {
-            // If inner is a type parameter, substitute it
-            if (ref.inner->is<types::NamedType>() && !current_type_subs_.empty()) {
-                const auto& named = ref.inner->as<types::NamedType>();
-                auto sub_it = current_type_subs_.find(named.name);
-                if (sub_it != current_type_subs_.end()) {
-                    receiver_type = sub_it->second;
-                    receiver_was_ref = true;
-                }
-            } else {
-                // Inner is already a concrete type (e.g., PrimitiveType)
-                // Use the inner type for method dispatch
-                receiver_type = ref.inner;
-                receiver_was_ref = true;
-            }
+            receiver_type = ref.inner;
+            receiver_was_ref = true;
         }
     }
 
@@ -686,8 +1087,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                 // Generate the call to the concrete impl method
                                 // Only use suite prefix for test-local methods, not library methods
                                 std::string prefix = is_lib_type ? "" : get_suite_prefix();
-                                std::string fn_name = "@tml_" + prefix +
-                                                      concrete_type_name + "_" + method;
+                                std::string fn_name =
+                                    "@tml_" + prefix + concrete_type_name + "_" + method;
 
                                 // Build arguments
                                 std::vector<std::pair<std::string, std::string>> typed_args;
@@ -829,9 +1230,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         typed_args.push_back({arg_type, val});
                     }
 
-                    std::string ret_type =
-                        func_sig->return_type ? llvm_type_from_semantic(func_sig->return_type)
-                                              : "void";
+                    std::string ret_type = func_sig->return_type
+                                               ? llvm_type_from_semantic(func_sig->return_type)
+                                               : "void";
 
                     std::string args_str;
                     for (size_t i = 0; i < typed_args.size(); ++i) {
@@ -909,259 +1310,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     // =========================================================================
-    // 6b. Handle primitive type behavior methods (partial_cmp, cmp, debug_string, etc.)
+    // 6b. Handle primitive type behavior methods (see method_prim_behavior.cpp)
     // =========================================================================
-    TML_DEBUG_LN("[METHOD 6b] method=" << method << " receiver_type=" << (receiver_type ? "non-null" : "null")
-                 << " is_PrimitiveType=" << (receiver_type && receiver_type->is<types::PrimitiveType>())
-                 << " is_RefType=" << (receiver_type && receiver_type->is<types::RefType>())
-                 << " is_NamedType=" << (receiver_type && receiver_type->is<types::NamedType>())
-                 << " receiver_type_name=" << receiver_type_name);
-    if (receiver_type && receiver_type->is<types::RefType>()) {
-        const auto& ref = receiver_type->as<types::RefType>();
-        TML_DEBUG_LN("[METHOD 6b] RefType inner is_PrimitiveType=" << (ref.inner && ref.inner->is<types::PrimitiveType>())
-                     << " is_NamedType=" << (ref.inner && ref.inner->is<types::NamedType>()));
-    }
-    if (receiver_type && receiver_type->is<types::PrimitiveType>() && !receiver_type_name.empty()) {
-        const auto& prim = receiver_type->as<types::PrimitiveType>();
-        std::string llvm_ty = llvm_type_from_semantic(receiver_type);
-
-        // Handle partial_cmp inline for numeric types - returns Maybe[Ordering]
-        // For numeric types, partial_cmp always returns Just(cmp(self, other))
-        if (method == "partial_cmp") {
-            bool is_signed =
-                (prim.kind == types::PrimitiveKind::I8 || prim.kind == types::PrimitiveKind::I16 ||
-                 prim.kind == types::PrimitiveKind::I32 || prim.kind == types::PrimitiveKind::I64 ||
-                 prim.kind == types::PrimitiveKind::I128);
-            bool is_unsigned =
-                (prim.kind == types::PrimitiveKind::U8 || prim.kind == types::PrimitiveKind::U16 ||
-                 prim.kind == types::PrimitiveKind::U32 || prim.kind == types::PrimitiveKind::U64 ||
-                 prim.kind == types::PrimitiveKind::U128);
-            bool is_float =
-                (prim.kind == types::PrimitiveKind::F32 || prim.kind == types::PrimitiveKind::F64);
-
-            if ((is_signed || is_unsigned || is_float) && call.args.size() == 1) {
-                // Ensure Maybe[Ordering] struct type is defined
-                // Create an Ordering semantic type for the type argument
-                auto ordering_type = std::make_shared<types::Type>();
-                ordering_type->kind = types::NamedType{"Ordering", "", {}};
-                std::vector<types::TypePtr> maybe_type_args = {ordering_type};
-                std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
-                std::string maybe_type = "%struct." + maybe_mangled;
-
-                // Load other value from ref
-                std::string other_ref = gen_expr(*call.args[0]);
-                std::string other = fresh_reg();
-                emit_line("  " + other + " = load " + llvm_ty + ", ptr " + other_ref);
-
-                // If receiver was originally a reference, we need to load through the pointer
-                std::string receiver_val = receiver;
-                if (receiver_was_ref) {
-                    receiver_val = fresh_reg();
-                    emit_line("  " + receiver_val + " = load " + llvm_ty + ", ptr " + receiver);
-                }
-
-                // Compare and determine ordering
-                std::string cmp_lt = fresh_reg();
-                std::string cmp_gt = fresh_reg();
-                if (is_float) {
-                    emit_line("  " + cmp_lt + " = fcmp olt " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                    emit_line("  " + cmp_gt + " = fcmp ogt " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                } else if (is_signed) {
-                    emit_line("  " + cmp_lt + " = icmp slt " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                    emit_line("  " + cmp_gt + " = icmp sgt " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                } else {
-                    emit_line("  " + cmp_lt + " = icmp ult " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                    emit_line("  " + cmp_gt + " = icmp ugt " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                }
-
-                // Build Ordering value: Less=0, Equal=1, Greater=2
-                std::string tag_1 = fresh_reg();
-                std::string tag_2 = fresh_reg();
-                emit_line("  " + tag_1 + " = select i1 " + cmp_lt + ", i32 0, i32 1");
-                emit_line("  " + tag_2 + " = select i1 " + cmp_gt + ", i32 2, i32 " + tag_1);
-
-                // Build Ordering struct on stack
-                std::string ordering_alloca = fresh_reg();
-                emit_line("  " + ordering_alloca + " = alloca %struct.Ordering, align 4");
-                std::string ordering_tag_ptr = fresh_reg();
-                emit_line("  " + ordering_tag_ptr +
-                          " = getelementptr inbounds %struct.Ordering, ptr " + ordering_alloca +
-                          ", i32 0, i32 0");
-                emit_line("  store i32 " + tag_2 + ", ptr " + ordering_tag_ptr);
-
-                // Load Ordering value
-                std::string ordering = fresh_reg();
-                emit_line("  " + ordering + " = load %struct.Ordering, ptr " + ordering_alloca);
-
-                // Build Maybe[Ordering] = Just(ordering) using alloca/store pattern
-                // Tag 0 = Just, Tag 1 = Nothing
-                std::string enum_alloca = fresh_reg();
-                emit_line("  " + enum_alloca + " = alloca " + maybe_type + ", align 8");
-
-                // Set tag (field 0) to 0 (Just)
-                std::string tag_ptr = fresh_reg();
-                emit_line("  " + tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                          enum_alloca + ", i32 0, i32 0");
-                emit_line("  store i32 0, ptr " + tag_ptr);
-
-                // Set payload (field 1) - store Ordering into payload area
-                std::string payload_ptr = fresh_reg();
-                emit_line("  " + payload_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
-                          enum_alloca + ", i32 0, i32 1");
-                emit_line("  store %struct.Ordering " + ordering + ", ptr " + payload_ptr);
-
-                // Load the complete Maybe[Ordering] value
-                std::string maybe_final = fresh_reg();
-                emit_line("  " + maybe_final + " = load " + maybe_type + ", ptr " + enum_alloca);
-
-                last_expr_type_ = maybe_type;
-                return maybe_final;
-            }
-        }
-
-        // Handle cmp inline for numeric types - returns Ordering directly
-        if (method == "cmp") {
-            bool is_signed =
-                (prim.kind == types::PrimitiveKind::I8 || prim.kind == types::PrimitiveKind::I16 ||
-                 prim.kind == types::PrimitiveKind::I32 || prim.kind == types::PrimitiveKind::I64 ||
-                 prim.kind == types::PrimitiveKind::I128);
-            bool is_unsigned =
-                (prim.kind == types::PrimitiveKind::U8 || prim.kind == types::PrimitiveKind::U16 ||
-                 prim.kind == types::PrimitiveKind::U32 || prim.kind == types::PrimitiveKind::U64 ||
-                 prim.kind == types::PrimitiveKind::U128);
-
-            if ((is_signed || is_unsigned) && call.args.size() == 1) {
-                // Load other value from ref
-                std::string other_ref = gen_expr(*call.args[0]);
-                std::string other = fresh_reg();
-                emit_line("  " + other + " = load " + llvm_ty + ", ptr " + other_ref);
-
-                // If receiver was originally a reference, we need to load through the pointer
-                std::string receiver_val = receiver;
-                if (receiver_was_ref) {
-                    receiver_val = fresh_reg();
-                    emit_line("  " + receiver_val + " = load " + llvm_ty + ", ptr " + receiver);
-                }
-
-                // Compare and determine ordering
-                std::string cmp_lt = fresh_reg();
-                std::string cmp_gt = fresh_reg();
-                if (is_signed) {
-                    emit_line("  " + cmp_lt + " = icmp slt " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                    emit_line("  " + cmp_gt + " = icmp sgt " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                } else {
-                    emit_line("  " + cmp_lt + " = icmp ult " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                    emit_line("  " + cmp_gt + " = icmp ugt " + llvm_ty + " " + receiver_val + ", " +
-                              other);
-                }
-
-                // Build Ordering value: Less=0, Equal=1, Greater=2
-                std::string tag_1 = fresh_reg();
-                std::string tag_2 = fresh_reg();
-                emit_line("  " + tag_1 + " = select i1 " + cmp_lt + ", i32 0, i32 1");
-                emit_line("  " + tag_2 + " = select i1 " + cmp_gt + ", i32 2, i32 " + tag_1);
-
-                // Build Ordering struct
-                std::string ordering = fresh_reg();
-                emit_line("  " + ordering + " = insertvalue %struct.Ordering undef, i32 " + tag_2 +
-                          ", 0");
-
-                last_expr_type_ = "%struct.Ordering";
-                return ordering;
-            }
-        }
-
-        // Look for impl methods on primitive types (e.g., impl PartialOrd for I64)
-        std::string qualified_name = receiver_type_name + "::" + method;
-        types::FuncSig func_sig_value;
-        types::FuncSig* func_sig = nullptr;
-        bool is_from_library = false;
-
-        // Search module registry for the method
-        if (env_.module_registry()) {
-            const auto& all_modules = env_.module_registry()->get_all_modules();
-            for (const auto& [mod_name, mod] : all_modules) {
-                auto func_it = mod.functions.find(qualified_name);
-                if (func_it != mod.functions.end()) {
-                    func_sig_value = func_it->second;
-                    func_sig = &func_sig_value;
-                    is_from_library = true;
-                    break;
-                }
-            }
-        }
-
-        // Also try local lookup
-        if (!func_sig) {
-            auto local_sig = env_.lookup_func(qualified_name);
-            if (local_sig) {
-                func_sig_value = *local_sig;
-                func_sig = &func_sig_value;
-            }
-        }
-
-        if (func_sig) {
-            // Look up in functions_ to get the correct LLVM name
-            std::string method_lookup_key = receiver_type_name + "_" + method;
-            auto method_it = functions_.find(method_lookup_key);
-            std::string fn_name;
-            if (method_it != functions_.end()) {
-                fn_name = method_it->second.llvm_name;
-            } else {
-                // Only use suite prefix for test-local functions, not library methods
-                std::string prefix = is_from_library ? "" : get_suite_prefix();
-                fn_name = "@tml_" + prefix + receiver_type_name + "_" + method;
-            }
-            std::string recv_llvm_ty = llvm_type_from_semantic(receiver_type);
-
-            // Build arguments - this (by value for primitives), then args
-            std::vector<std::pair<std::string, std::string>> typed_args;
-            typed_args.push_back({recv_llvm_ty, receiver});
-
-            for (size_t i = 0; i < call.args.size(); ++i) {
-                std::string val = gen_expr(*call.args[i]);
-                std::string arg_type = "i32";
-                if (i + 1 < func_sig->params.size()) {
-                    arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
-                }
-                typed_args.push_back({arg_type, val});
-            }
-
-            // Use registered function's return type if available (handles value class by-value
-            // returns)
-            std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
-            if (method_it != functions_.end() && !method_it->second.ret_type.empty()) {
-                ret_type = method_it->second.ret_type;
-            }
-
-            std::string args_str;
-            for (size_t i = 0; i < typed_args.size(); ++i) {
-                if (i > 0)
-                    args_str += ", ";
-                args_str += typed_args[i].first + " " + typed_args[i].second;
-            }
-
-            std::string result = fresh_reg();
-            if (ret_type == "void") {
-                emit_line("  call void " + fn_name + "(" + args_str + ")");
-                last_expr_type_ = "void";
-                return "void";
-            } else {
-                emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str +
-                          ")");
-                last_expr_type_ = ret_type;
-                return result;
-            }
-        }
+    if (auto prim_behavior_result = try_gen_primitive_behavior_method(
+            call, receiver, receiver_type, receiver_type_name, receiver_was_ref)) {
+        return *prim_behavior_result;
     }
 
     // =========================================================================
@@ -1286,6 +1439,30 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
     }
 
+    // Special case: handle is_ok/is_err on compare_exchange results when type inference failed
+    // The receiver might be I32 due to fallback, but if the receiver is a compare_exchange call,
+    // we know it returns Outcome and should handle is_ok/is_err accordingly
+    if ((method == "is_ok" || method == "is_err") && call.receiver->is<parser::MethodCallExpr>()) {
+        const auto& inner_call = call.receiver->as<parser::MethodCallExpr>();
+        if (inner_call.method == "compare_exchange" ||
+            inner_call.method == "compare_exchange_weak") {
+            // The receiver is a compare_exchange call - assume Outcome type
+            // For is_ok/is_err, we just need to check the tag field
+            // Outcome is represented as { i32 tag, inner_type value }
+            // tag 0 = Ok, tag 1 = Err
+            std::string tag_val = fresh_reg();
+            emit_line("  " + tag_val + " = extractvalue { i32, i32 } " + receiver + ", 0");
+            std::string result = fresh_reg();
+            if (method == "is_ok") {
+                emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 0");
+            } else { // is_err
+                emit_line("  " + result + " = icmp ne i32 " + tag_val + ", 0");
+            }
+            last_expr_type_ = "i1";
+            return result;
+        }
+    }
+
     // =========================================================================
     // 8. Handle Slice/MutSlice methods
     // =========================================================================
@@ -1303,570 +1480,25 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     // =========================================================================
-    // 10. Check for user-defined impl methods
+    // 10. Check for user-defined impl methods (see method_impl.cpp)
     // =========================================================================
-    if (receiver_type && receiver_type->is<types::NamedType>()) {
-        const auto& named = receiver_type->as<types::NamedType>();
-        bool is_builtin_type =
-            (named.name == "List" || named.name == "HashMap" || named.name == "Buffer" ||
-             named.name == "File" || named.name == "Path");
-        bool is_slice_inlined = (named.name == "Slice" || named.name == "MutSlice") &&
-                                (method == "len" || method == "is_empty");
-
-        if (!is_builtin_type && !is_slice_inlined) {
-            std::string qualified_name = named.name + "::" + method;
-            auto func_sig = env_.lookup_func(qualified_name);
-            if (func_sig) {
-                std::string mangled_type_name = named.name;
-                std::unordered_map<std::string, types::TypePtr> type_subs;
-                std::string method_type_suffix; // For method generic type args like cast[U8]
-                bool is_imported = false; // Track if this is an imported library type
-
-                // Handle method-level generic type arguments (e.g., cast[U8])
-                // Use current_type_subs_ to resolve any type parameters (e.g., U -> U8)
-                // Method-level type params come AFTER impl-level type params in
-                // func_sig->type_params The impl-level params correspond to named.type_args (e.g.,
-                // RawPtr[I64] -> T=I64) So we skip the first named.type_args.size() params when
-                // mapping call.type_args
-                if (!call.type_args.empty() && !func_sig->type_params.empty()) {
-                    size_t impl_param_count = named.type_args.size();
-                    for (size_t i = 0; i < call.type_args.size(); ++i) {
-                        size_t param_idx = impl_param_count + i;
-                        if (param_idx < func_sig->type_params.size()) {
-                            // Convert parser type to semantic type, using current type subs
-                            auto semantic_type = resolve_parser_type_with_subs(*call.type_args[i],
-                                                                               current_type_subs_);
-                            if (semantic_type) {
-                                type_subs[func_sig->type_params[param_idx]] = semantic_type;
-                                // Build method type suffix for mangling
-                                if (!method_type_suffix.empty()) {
-                                    method_type_suffix += "_";
-                                }
-                                method_type_suffix += mangle_type(semantic_type);
-                            }
-                        }
-                    }
-                }
-
-                if (!named.type_args.empty()) {
-                    mangled_type_name = mangle_struct_name(named.name, named.type_args);
-                    // Build full method name including method-level type args
-                    std::string method_for_key = method;
-                    if (!method_type_suffix.empty()) {
-                        method_for_key += "__" + method_type_suffix;
-                    }
-                    std::string mangled_method_name =
-                        "tml_" + mangled_type_name + "_" + method_for_key;
-
-                    // Check locally defined impls first
-                    auto impl_it = pending_generic_impls_.find(named.name);
-                    if (impl_it != pending_generic_impls_.end()) {
-                        const auto& impl = *impl_it->second;
-                        for (size_t i = 0; i < impl.generics.size() && i < named.type_args.size();
-                             ++i) {
-                            type_subs[impl.generics[i].name] = named.type_args[i];
-                        }
-                    }
-
-                    // Also check imported structs for type params
-                    std::vector<std::string> imported_type_params;
-                    if (impl_it == pending_generic_impls_.end() && env_.module_registry()) {
-                        const auto& all_modules = env_.module_registry()->get_all_modules();
-                        for (const auto& [mod_name, mod] : all_modules) {
-                            auto struct_it = mod.structs.find(named.name);
-                            if (struct_it != mod.structs.end() &&
-                                !struct_it->second.type_params.empty()) {
-                                imported_type_params = struct_it->second.type_params;
-                                for (size_t i = 0;
-                                     i < imported_type_params.size() && i < named.type_args.size();
-                                     ++i) {
-                                    type_subs[imported_type_params[i]] = named.type_args[i];
-                                    // Also add associated type mappings (e.g., I::Item -> I64)
-                                    // Look up associated types for the concrete type argument
-                                    if (named.type_args[i] &&
-                                        named.type_args[i]->is<types::NamedType>()) {
-                                        const auto& arg_named =
-                                            named.type_args[i]->as<types::NamedType>();
-                                        auto item_type =
-                                            lookup_associated_type(arg_named.name, "Item");
-                                        if (item_type) {
-                                            // Add T::Item -> ConcreteType mapping
-                                            std::string assoc_key =
-                                                imported_type_params[i] + "::Item";
-                                            type_subs[assoc_key] = item_type;
-                                            // Also just "Item" for simpler lookups
-                                            type_subs["Item"] = item_type;
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    // Set is_imported if this type comes from a library module
-                    is_imported = !imported_type_params.empty();
-
-                    if (generated_impl_methods_.find(mangled_method_name) ==
-                        generated_impl_methods_.end()) {
-                        // Request instantiation for both local and imported generic impls
-                        bool is_local = impl_it != pending_generic_impls_.end();
-                        if (is_local || is_imported) {
-                            pending_impl_method_instantiations_.push_back(
-                                PendingImplMethod{mangled_type_name, method, type_subs, named.name,
-                                                  method_type_suffix, /*is_library_type=*/is_imported});
-                            generated_impl_methods_.insert(mangled_method_name);
-                        }
-                    }
-                }
-
-                // Look up in functions_ to get the correct LLVM name
-                // Include method type suffix for methods with their own generic params
-                std::string full_method_name = method;
-                if (!method_type_suffix.empty()) {
-                    full_method_name += "__" + method_type_suffix;
-                }
-                std::string method_lookup_key = mangled_type_name + "_" + full_method_name;
-                auto method_it = functions_.find(method_lookup_key);
-                std::string fn_name;
-                if (method_it != functions_.end()) {
-                    fn_name = method_it->second.llvm_name;
-                } else {
-                    // Only use suite prefix for test-local functions, not library types
-                    std::string prefix = is_imported ? "" : get_suite_prefix();
-                    fn_name = "@tml_" + prefix + mangled_type_name + "_" + full_method_name;
-                }
-                std::string impl_receiver_val;
-
-                // Determine the LLVM type for the receiver based on the impl type
-                std::string impl_llvm_type = llvm_type_name(named.name);
-                bool is_primitive_impl = (impl_llvm_type[0] != '%');
-
-                if (call.receiver->is<parser::IdentExpr>()) {
-                    const auto& ident = call.receiver->as<parser::IdentExpr>();
-                    auto it = locals_.find(ident.name);
-                    if (it != locals_.end()) {
-                        if (is_primitive_impl) {
-                            // For primitives, pass the value directly
-                            impl_receiver_val = receiver;
-                        } else {
-                            // For structs, pass the pointer
-                            impl_receiver_val =
-                                (it->second.type == "ptr") ? receiver : it->second.reg;
-                        }
-                    } else {
-                        impl_receiver_val = receiver;
-                    }
-                } else if (call.receiver->is<parser::FieldExpr>() && !receiver_ptr.empty()) {
-                    // For field expressions, use the field pointer directly
-                    // This ensures mutations happen in place (section 10)
-                    impl_receiver_val = receiver_ptr;
-                } else if (last_expr_type_.starts_with("%struct.")) {
-                    std::string tmp = fresh_reg();
-                    emit_line("  " + tmp + " = alloca " + last_expr_type_);
-                    emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
-                    impl_receiver_val = tmp;
-                } else {
-                    impl_receiver_val = receiver;
-                }
-
-                std::vector<std::pair<std::string, std::string>> typed_args;
-                // For primitive types, pass the value with the correct type
-                // For structs/enums, pass as pointer
-                std::string this_arg_type = is_primitive_impl ? impl_llvm_type : "ptr";
-                typed_args.push_back({this_arg_type, impl_receiver_val});
-
-                for (size_t i = 0; i < call.args.size(); ++i) {
-                    std::string val = gen_expr(*call.args[i]);
-                    std::string actual_type = last_expr_type_;
-                    std::string expected_type = "i32";
-                    if (func_sig && i + 1 < func_sig->params.size()) {
-                        auto param_type = func_sig->params[i + 1];
-                        if (!type_subs.empty()) {
-                            param_type = types::substitute_type(param_type, type_subs);
-                        }
-                        expected_type = llvm_type_from_semantic(param_type);
-                    }
-                    // Add type coercion if needed
-                    if (actual_type != expected_type) {
-                        // Integer width coercion
-                        bool is_int_actual = (actual_type[0] == 'i' && actual_type != "i1");
-                        bool is_int_expected = (expected_type[0] == 'i' && expected_type != "i1");
-                        if (is_int_actual && is_int_expected) {
-                            // Sign-extend or truncate
-                            int actual_bits = std::stoi(actual_type.substr(1));
-                            int expected_bits = std::stoi(expected_type.substr(1));
-                            std::string coerced = fresh_reg();
-                            if (expected_bits > actual_bits) {
-                                emit_line("  " + coerced + " = sext " + actual_type + " " + val +
-                                          " to " + expected_type);
-                            } else {
-                                emit_line("  " + coerced + " = trunc " + actual_type + " " + val +
-                                          " to " + expected_type);
-                            }
-                            val = coerced;
-                        }
-                    }
-                    typed_args.push_back({expected_type, val});
-                }
-
-                auto return_type = func_sig->return_type;
-                if (!type_subs.empty()) {
-                    return_type = types::substitute_type(return_type, type_subs);
-                }
-                std::string ret_type = llvm_type_from_semantic(return_type);
-
-                std::string args_str;
-                for (size_t i = 0; i < typed_args.size(); ++i) {
-                    if (i > 0)
-                        args_str += ", ";
-                    args_str += typed_args[i].first + " " + typed_args[i].second;
-                }
-
-                std::string result = fresh_reg();
-                if (ret_type == "void") {
-                    emit_line("  call void " + fn_name + "(" + args_str + ")");
-                    last_expr_type_ = "void";
-                    return "void";
-                } else {
-                    emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" +
-                              args_str + ")");
-                    last_expr_type_ = ret_type;
-                    return result;
-                }
-            }
-        }
+    if (auto impl_result = try_gen_impl_method_call(call, receiver, receiver_ptr, receiver_type)) {
+        return *impl_result;
     }
 
     // =========================================================================
-    // 11. Try module lookup for impl methods
+    // 11. Try module lookup for impl methods (see method_impl.cpp)
     // =========================================================================
-    if (receiver_type && receiver_type->is<types::NamedType>()) {
-        const auto& named2 = receiver_type->as<types::NamedType>();
-        bool is_builtin_type2 =
-            (named2.name == "List" || named2.name == "HashMap" || named2.name == "Buffer" ||
-             named2.name == "File" || named2.name == "Path");
-        if (!is_builtin_type2) {
-            std::string qualified_name = named2.name + "::" + method;
-            TML_DEBUG_LN("[METHOD] Looking for impl method: " << qualified_name);
-            auto func_sig = env_.lookup_func(qualified_name);
-            bool is_from_library = false;
-
-            if (!func_sig) {
-                std::string module_path = named2.module_path;
-                if (module_path.empty()) {
-                    auto import_path = env_.resolve_imported_symbol(named2.name);
-                    if (import_path) {
-                        auto pos = import_path->rfind("::");
-                        if (pos != std::string::npos) {
-                            module_path = import_path->substr(0, pos);
-                        }
-                    }
-                }
-                if (!module_path.empty()) {
-                    auto module = env_.get_module(module_path);
-                    if (module) {
-                        auto func_it = module->functions.find(qualified_name);
-                        if (func_it != module->functions.end()) {
-                            func_sig = func_it->second;
-                            is_from_library = true;
-                        }
-                    }
-                }
-                if (!func_sig && env_.module_registry()) {
-                    const auto& all_modules = env_.module_registry()->get_all_modules();
-                    for (const auto& [mod_name, mod] : all_modules) {
-                        auto func_it = mod.functions.find(qualified_name);
-                        if (func_it != mod.functions.end()) {
-                            func_sig = func_it->second;
-                            is_from_library = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (func_sig) {
-                // Look up in functions_ to get the correct LLVM name
-                std::string method_lookup_key = named2.name + "_" + method;
-                auto method_it = functions_.find(method_lookup_key);
-                std::string fn_name;
-                if (method_it != functions_.end()) {
-                    fn_name = method_it->second.llvm_name;
-                } else {
-                    // Only use suite prefix for test-local functions, not library methods
-                    std::string prefix = is_from_library ? "" : get_suite_prefix();
-                    fn_name = "@tml_" + prefix + named2.name + "_" + method;
-                }
-                std::string impl_receiver_val;
-
-                // Determine the LLVM type for the receiver based on the impl type
-                std::string impl_llvm_type = llvm_type_name(named2.name);
-                bool is_primitive_impl = (impl_llvm_type[0] != '%');
-
-                if (call.receiver->is<parser::IdentExpr>()) {
-                    const auto& ident = call.receiver->as<parser::IdentExpr>();
-                    auto it = locals_.find(ident.name);
-                    if (it != locals_.end()) {
-                        if (is_primitive_impl) {
-                            // For primitives, pass the value directly
-                            impl_receiver_val = receiver;
-                        } else {
-                            // For structs, pass the pointer
-                            impl_receiver_val =
-                                (it->second.type == "ptr") ? receiver : it->second.reg;
-                        }
-                    } else {
-                        impl_receiver_val = receiver;
-                    }
-                } else if (call.receiver->is<parser::FieldExpr>() && !receiver_ptr.empty()) {
-                    // For field expressions, use the field pointer directly
-                    // This ensures mutations happen in place (section 11)
-                    impl_receiver_val = receiver_ptr;
-                } else if (last_expr_type_.starts_with("%struct.")) {
-                    std::string tmp = fresh_reg();
-                    emit_line("  " + tmp + " = alloca " + last_expr_type_);
-                    emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
-                    impl_receiver_val = tmp;
-                } else {
-                    impl_receiver_val = receiver;
-                }
-
-                std::vector<std::pair<std::string, std::string>> typed_args;
-                // For primitive types, pass the value with the correct type
-                // For structs/enums, pass as pointer
-                std::string this_arg_type = is_primitive_impl ? impl_llvm_type : "ptr";
-                typed_args.push_back({this_arg_type, impl_receiver_val});
-
-                for (size_t i = 0; i < call.args.size(); ++i) {
-                    std::string val = gen_expr(*call.args[i]);
-                    std::string arg_type = "i32";
-                    if (func_sig && i + 1 < func_sig->params.size()) {
-                        arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
-                    }
-                    typed_args.push_back({arg_type, val});
-                }
-
-                std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
-                std::string args_str;
-                for (size_t i = 0; i < typed_args.size(); ++i) {
-                    if (i > 0)
-                        args_str += ", ";
-                    args_str += typed_args[i].first + " " + typed_args[i].second;
-                }
-
-                std::string result = fresh_reg();
-                if (ret_type == "void") {
-                    emit_line("  call void " + fn_name + "(" + args_str + ")");
-                    last_expr_type_ = "void";
-                    return "void";
-                } else {
-                    emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" +
-                              args_str + ")");
-                    last_expr_type_ = ret_type;
-                    return result;
-                }
-            }
-        }
+    if (auto module_impl_result =
+            try_gen_module_impl_method_call(call, receiver, receiver_ptr, receiver_type)) {
+        return *module_impl_result;
     }
 
     // =========================================================================
-    // 12. Handle dyn dispatch
+    // 12. Handle dyn dispatch (see method_dyn.cpp)
     // =========================================================================
-    if (call.receiver->is<parser::IdentExpr>()) {
-        const auto& ident = call.receiver->as<parser::IdentExpr>();
-        auto it = locals_.find(ident.name);
-
-        // Check for dyn dispatch - handles both:
-        // 1. Direct dyn type: LLVM type is %dyn.Error
-        // 2. Reference to dyn: LLVM type is ptr, semantic type is ref dyn Error
-        bool is_dyn_dispatch = false;
-        std::string behavior_name;
-        std::string dyn_type;
-        std::string dyn_ptr;
-
-        if (it != locals_.end()) {
-            if (it->second.type.starts_with("%dyn.")) {
-                // Direct dyn type: %dyn.Error
-                is_dyn_dispatch = true;
-                dyn_type = it->second.type;
-                behavior_name = dyn_type.substr(5);
-                dyn_ptr = it->second.reg;
-                // Ensure the dyn type is defined before use
-                emit_dyn_type(behavior_name);
-            } else if (it->second.semantic_type) {
-                // Check for ref dyn Error: semantic type is RefType with inner DynBehaviorType
-                auto sem_type = it->second.semantic_type;
-                if (sem_type->is<types::RefType>()) {
-                    auto inner = sem_type->as<types::RefType>().inner;
-                    if (inner && inner->is<types::DynBehaviorType>()) {
-                        is_dyn_dispatch = true;
-                        behavior_name = inner->as<types::DynBehaviorType>().behavior_name;
-                        dyn_type = "%dyn." + behavior_name;
-                        dyn_ptr = it->second.reg;
-                        // Ensure the dyn type is defined before use
-                        emit_dyn_type(behavior_name);
-                    }
-                }
-            }
-        }
-
-        if (is_dyn_dispatch) {
-            TML_DEBUG_LN("[DYN] Dyn dispatch detected for behavior: " << behavior_name
-                                                                      << " method: " << method);
-            auto behavior_methods_it = behavior_method_order_.find(behavior_name);
-
-            // If behavior not registered yet, try to look it up and register dynamically
-            // This handles behaviors defined in imported modules (like core::error::Error)
-            if (behavior_methods_it == behavior_method_order_.end()) {
-                auto behavior_def = env_.lookup_behavior(behavior_name);
-
-                // If not found, search all modules in the registry
-                if (!behavior_def && env_.module_registry()) {
-                    const auto& all_modules = env_.module_registry()->get_all_modules();
-                    for (const auto& [mod_name, mod] : all_modules) {
-                        auto mod_behavior_it = mod.behaviors.find(behavior_name);
-                        if (mod_behavior_it != mod.behaviors.end()) {
-                            behavior_def = mod_behavior_it->second;
-                            break;
-                        }
-                    }
-                }
-
-                if (behavior_def) {
-                    std::vector<std::string> methods;
-                    for (const auto& m : behavior_def->methods) {
-                        methods.push_back(m.name);
-                    }
-                    behavior_method_order_[behavior_name] = methods;
-                    behavior_methods_it = behavior_method_order_.find(behavior_name);
-                }
-            }
-
-            if (behavior_methods_it != behavior_method_order_.end()) {
-                const auto& methods = behavior_methods_it->second;
-                int method_idx = -1;
-                for (size_t i = 0; i < methods.size(); ++i) {
-                    if (methods[i] == method) {
-                        method_idx = static_cast<int>(i);
-                        break;
-                    }
-                }
-
-                if (method_idx >= 0) {
-                    std::string data_field = fresh_reg();
-                    emit_line("  " + data_field + " = getelementptr " + dyn_type + ", ptr " +
-                              dyn_ptr + ", i32 0, i32 0");
-                    std::string data_ptr = fresh_reg();
-                    emit_line("  " + data_ptr + " = load ptr, ptr " + data_field);
-
-                    std::string vtable_field = fresh_reg();
-                    emit_line("  " + vtable_field + " = getelementptr " + dyn_type + ", ptr " +
-                              dyn_ptr + ", i32 0, i32 1");
-                    std::string vtable_ptr = fresh_reg();
-                    emit_line("  " + vtable_ptr + " = load ptr, ptr " + vtable_field);
-
-                    // Build vtable struct type based on number of methods
-                    std::string vtable_type = "{ ";
-                    for (size_t i = 0; i < methods.size(); ++i) {
-                        if (i > 0)
-                            vtable_type += ", ";
-                        vtable_type += "ptr";
-                    }
-                    vtable_type += " }";
-
-                    std::string fn_ptr_loc = fresh_reg();
-                    emit_line("  " + fn_ptr_loc + " = getelementptr " + vtable_type + ", ptr " +
-                              vtable_ptr + ", i32 0, i32 " + std::to_string(method_idx));
-                    std::string fn_ptr = fresh_reg();
-                    emit_line("  " + fn_ptr + " = load ptr, ptr " + fn_ptr_loc);
-
-                    // Get method signature from behavior definition
-                    std::string return_llvm_type = "i32"; // default fallback
-                    auto behavior_def = env_.lookup_behavior(behavior_name);
-
-                    // If not found, search all modules in the registry
-                    // This handles behaviors defined in imported modules (like core::error::Error)
-                    if (!behavior_def && env_.module_registry()) {
-                        const auto& all_modules = env_.module_registry()->get_all_modules();
-                        for (const auto& [mod_name, mod] : all_modules) {
-                            auto mod_behavior_it = mod.behaviors.find(behavior_name);
-                            if (mod_behavior_it != mod.behaviors.end()) {
-                                behavior_def = mod_behavior_it->second;
-                                TML_DEBUG_LN("[DYN] Found behavior " << behavior_name
-                                                                     << " in module " << mod_name);
-                                break;
-                            }
-                        }
-                    }
-
-                    TML_DEBUG_LN("[DYN] Looking up behavior: " << behavior_name << " found: "
-                                                               << (behavior_def ? "yes" : "no"));
-                    if (behavior_def) {
-                        // Build substitution map from behavior's type params to dyn's type args
-                        std::unordered_map<std::string, types::TypePtr> type_subs;
-                        if (it->second.semantic_type) {
-                            // Handle both direct dyn and ref dyn
-                            types::TypePtr dyn_sem_type = nullptr;
-                            if (it->second.semantic_type->is<types::DynBehaviorType>()) {
-                                dyn_sem_type = it->second.semantic_type;
-                            } else if (it->second.semantic_type->is<types::RefType>()) {
-                                auto inner = it->second.semantic_type->as<types::RefType>().inner;
-                                if (inner && inner->is<types::DynBehaviorType>()) {
-                                    dyn_sem_type = inner;
-                                }
-                            }
-                            if (dyn_sem_type) {
-                                const auto& dyn_sem = dyn_sem_type->as<types::DynBehaviorType>();
-                                for (size_t i = 0; i < behavior_def->type_params.size() &&
-                                                   i < dyn_sem.type_args.size();
-                                     ++i) {
-                                    type_subs[behavior_def->type_params[i]] = dyn_sem.type_args[i];
-                                }
-                            }
-                        }
-
-                        for (const auto& m : behavior_def->methods) {
-                            if (m.name == method && m.return_type) {
-                                // Substitute type parameters before converting to LLVM type
-                                auto substituted_ret =
-                                    types::substitute_type(m.return_type, type_subs);
-                                return_llvm_type = llvm_type_from_semantic(substituted_ret);
-                                TML_DEBUG_LN("[DYN] Method "
-                                             << method << " return type: " << return_llvm_type);
-                                break;
-                            }
-                        }
-                        if (return_llvm_type == "i32") {
-                            TML_DEBUG_LN("[DYN] WARNING: Method "
-                                         << method << " in behavior " << behavior_name
-                                         << " has fallback return type i32");
-                        }
-                    }
-
-                    // Generate method arguments
-                    std::string args_str = "ptr " + data_ptr;
-                    std::string args_types = "ptr";
-                    for (const auto& arg : call.args) {
-                        std::string arg_val = gen_expr(*arg);
-                        std::string arg_type = last_expr_type_;
-                        args_str += ", " + arg_type + " " + arg_val;
-                        args_types += ", " + arg_type;
-                    }
-
-                    std::string result = fresh_reg();
-                    if (return_llvm_type == "void") {
-                        emit_line("  call void " + fn_ptr + "(" + args_str + ")");
-                        last_expr_type_ = "void";
-                        return "";
-                    } else {
-                        emit_line("  " + result + " = call " + return_llvm_type + " " + fn_ptr +
-                                  "(" + args_str + ")");
-                        last_expr_type_ = return_llvm_type;
-                        return result;
-                    }
-                }
-            }
-        }
+    if (auto dyn_result = try_gen_dyn_dispatch_call(call, receiver, receiver_type)) {
+        return *dyn_result;
     }
 
     // =========================================================================
@@ -2007,360 +1639,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     // =========================================================================
-    // 15. Handle class instance method calls
+    // 15-16. Handle class instance method calls (see method_class.cpp)
     // =========================================================================
-    // Unwrap RefType if present (e.g., ref Counter -> Counter)
-    types::TypePtr effective_receiver_type = receiver_type;
-    if (receiver_type && receiver_type->is<types::RefType>()) {
-        effective_receiver_type = receiver_type->as<types::RefType>().inner;
-    }
-    if (effective_receiver_type && effective_receiver_type->is<types::ClassType>()) {
-        const auto& class_type = effective_receiver_type->as<types::ClassType>();
-        auto class_def = env_.lookup_class(class_type.name);
-
-        // Check if this is a generic class that needs mangling
-        bool is_generic_class =
-            !class_type.type_args.empty() ||
-            pending_generic_classes_.find(class_type.name) != pending_generic_classes_.end();
-
-        // For generic classes, compute the mangled name for function calls
-        std::string mangled_class_name = class_type.name;
-        if (!class_type.type_args.empty()) {
-            mangled_class_name = mangle_struct_name(class_type.name, class_type.type_args);
-        }
-
-        if (class_def.has_value() || is_generic_class) {
-            // Use base name for class definition lookup, mangled name for function calls
-            std::string current_class = class_type.name;
-            std::string current_mangled = mangled_class_name;
-            while (!current_class.empty()) {
-                // Try to find the class - either from pending generics or environment
-                const parser::ClassDecl* parser_class = nullptr;
-                std::optional<types::ClassDef> typed_class_opt;
-
-                auto pending_it = pending_generic_classes_.find(current_class);
-                if (pending_it != pending_generic_classes_.end()) {
-                    parser_class = pending_it->second;
-                } else {
-                    typed_class_opt = env_.lookup_class(current_class);
-                    if (!typed_class_opt.has_value())
-                        break;
-                }
-
-                // Search for method in parser::ClassDecl (for generic classes)
-                if (parser_class) {
-                    for (const auto& m : parser_class->methods) {
-                        if (m.name == method && !m.is_static) {
-                            // Generate call to instance method using mangled name
-                            // Only use suite prefix for test-local methods
-                            std::string prefix = is_library_method(current_mangled, method) ? "" : get_suite_prefix();
-                            std::string func_name =
-                                "@tml_" + prefix + current_mangled + "_" + method;
-
-                            // Resolve return type with type substitutions for generic params
-                            std::string ret_type = "i32"; // Default fallback
-                            if (m.return_type) {
-                                // Build type substitution map from class type args
-                                std::unordered_map<std::string, types::TypePtr> type_subs;
-                                if (!class_type.type_args.empty() &&
-                                    !parser_class->generics.empty()) {
-                                    for (size_t i = 0; i < parser_class->generics.size() &&
-                                                       i < class_type.type_args.size();
-                                         ++i) {
-                                        type_subs[parser_class->generics[i].name] =
-                                            class_type.type_args[i];
-                                    }
-                                }
-                                auto resolved_ret =
-                                    resolve_parser_type_with_subs(**m.return_type, type_subs);
-                                ret_type = llvm_type_from_semantic(resolved_ret);
-                            }
-
-                            // Use registered function's return type if available
-                            std::string method_key = current_mangled + "_" + method;
-                            auto method_it = functions_.find(method_key);
-                            if (method_it != functions_.end() &&
-                                !method_it->second.ret_type.empty()) {
-                                ret_type = method_it->second.ret_type;
-                            }
-
-                            // Get receiver pointer (for 'this')
-                            std::string this_ptr = receiver;
-
-                            // For value classes, use the alloca pointer
-                            if (call.receiver->is<parser::IdentExpr>()) {
-                                const auto& ident_recv = call.receiver->as<parser::IdentExpr>();
-                                auto it = locals_.find(ident_recv.name);
-                                if (it != locals_.end()) {
-                                    bool is_value_class_struct =
-                                        it->second.type.starts_with("%class.") &&
-                                        !it->second.type.ends_with("*");
-                                    if (is_value_class_struct) {
-                                        this_ptr = it->second.reg;
-                                    }
-                                }
-                            }
-
-                            // Handle ref types
-                            if (receiver_type && receiver_type->is<types::RefType>()) {
-                                std::string loaded_this = fresh_reg();
-                                emit_line("  " + loaded_this + " = load ptr, ptr " + receiver);
-                                this_ptr = loaded_this;
-                            }
-
-                            // Generate arguments: this pointer + regular args
-                            std::string args_str = "ptr " + this_ptr;
-                            for (const auto& arg : call.args) {
-                                std::string arg_val = gen_expr(*arg);
-                                args_str += ", " + last_expr_type_ + " " + arg_val;
-                            }
-
-                            // Generate call
-                            if (ret_type == "void") {
-                                emit_line("  call void " + func_name + "(" + args_str + ")");
-                                last_expr_type_ = "void";
-                                return "void";
-                            } else {
-                                std::string result = fresh_reg();
-                                emit_line("  " + result + " = call " + ret_type + " " + func_name +
-                                          "(" + args_str + ")");
-                                last_expr_type_ = ret_type;
-                                return result;
-                            }
-                        }
-                    }
-                    // Move to parent class
-                    if (parser_class->extends) {
-                        current_class = parser_class->extends->segments.back();
-                        current_mangled = current_class;
-                    } else {
-                        current_class = "";
-                    }
-                    continue;
-                }
-
-                // Search for method in types::ClassDef (for regular classes)
-                const auto& typed_class = typed_class_opt.value();
-                for (const auto& m : typed_class.methods) {
-                    if (m.sig.name == method && !m.is_static) {
-                        // Generate call to instance method
-                        // Only use suite prefix for test-local methods
-                        std::string prefix = is_library_method(current_mangled, method) ? "" : get_suite_prefix();
-                        std::string func_name =
-                            "@tml_" + prefix + current_mangled + "_" + method;
-                        std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
-
-                        // Use registered function's return type if available (handles value class
-                        // by-value returns)
-                        std::string method_key = current_mangled + "_" + method;
-                        auto method_it = functions_.find(method_key);
-                        if (method_it != functions_.end() && !method_it->second.ret_type.empty()) {
-                            ret_type = method_it->second.ret_type;
-                        }
-
-                        // Get receiver pointer (for 'this')
-                        std::string this_ptr = receiver;
-
-                        // For value classes (stored as struct type), use the alloca pointer
-                        // For regular classes, gen_ident already loads the pointer value
-                        if (call.receiver->is<parser::IdentExpr>()) {
-                            const auto& ident_recv = call.receiver->as<parser::IdentExpr>();
-                            auto it = locals_.find(ident_recv.name);
-                            if (it != locals_.end()) {
-                                // Check if this is a value class (struct type, no asterisk)
-                                // Value class: type is "%class.Name" -> use the alloca directly
-                                // Regular class: type is "%class.Name*" -> receiver already has
-                                // loaded ptr
-                                bool is_value_class_struct =
-                                    it->second.type.starts_with("%class.") &&
-                                    !it->second.type.ends_with("*");
-                                if (is_value_class_struct) {
-                                    // Value class: use the alloca which is a ptr to struct
-                                    this_ptr = it->second.reg;
-                                }
-                                // For regular classes, gen_ident already loads the pointer
-                                // so 'receiver' is correct as-is
-                            }
-                        }
-                        // Handle method chaining on value classes: when receiver is a method call
-                        // that returns a struct by value, store it to a temp alloca
-                        else if (last_expr_type_.starts_with("%class.") &&
-                                 !last_expr_type_.ends_with("*")) {
-                            // Receiver returned a value class struct - need to store to temp alloca
-                            std::string temp_alloca = fresh_reg();
-                            emit_line("  " + temp_alloca + " = alloca " + last_expr_type_);
-                            emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " +
-                                      temp_alloca);
-                            this_ptr = temp_alloca;
-                        }
-
-                        // If receiver was 'ref ClassType', we have a pointer to the class variable
-                        // which itself holds a pointer. Need to load to get the actual class ptr.
-                        if (receiver_type && receiver_type->is<types::RefType>()) {
-                            std::string loaded_this = fresh_reg();
-                            emit_line("  " + loaded_this + " = load ptr, ptr " + receiver);
-                            this_ptr = loaded_this;
-                        }
-
-                        // Generate arguments: this pointer + regular args
-                        std::string args_str = "ptr " + this_ptr;
-                        for (size_t arg_idx = 0; arg_idx < call.args.size(); ++arg_idx) {
-                            const auto& arg = call.args[arg_idx];
-                            std::string arg_val;
-                            std::string arg_type;
-
-                            // Get expected parameter type from method signature
-                            std::string expected_param_type = "ptr"; // Default for class params
-                            if (arg_idx + 1 < m.sig.params.size()) {
-                                expected_param_type =
-                                    llvm_type_from_semantic(m.sig.params[arg_idx + 1]);
-                            }
-
-                            // For value class arguments (IdentExpr) where method expects ptr,
-                            // pass the alloca pointer instead of loading the value
-                            if (expected_param_type == "ptr" && arg->is<parser::IdentExpr>()) {
-                                const auto& ident_arg = arg->as<parser::IdentExpr>();
-                                auto local_it = locals_.find(ident_arg.name);
-                                if (local_it != locals_.end() &&
-                                    local_it->second.type.starts_with("%class.") &&
-                                    !local_it->second.type.ends_with("*")) {
-                                    // Value class stored as struct: pass alloca pointer
-                                    arg_val = local_it->second.reg;
-                                    arg_type = "ptr";
-                                } else {
-                                    // Not a value class struct: use normal expression generation
-                                    arg_val = gen_expr(*arg);
-                                    arg_type = last_expr_type_;
-                                }
-                            } else {
-                                arg_val = gen_expr(*arg);
-                                arg_type = last_expr_type_;
-                            }
-
-                            args_str += ", " + arg_type + " " + arg_val;
-                        }
-
-                        // Generate call
-                        if (ret_type == "void") {
-                            emit_line("  call void " + func_name + "(" + args_str + ")");
-                            last_expr_type_ = "void";
-                            return "void";
-                        } else {
-                            std::string result = fresh_reg();
-                            emit_line("  " + result + " = call " + ret_type + " " + func_name +
-                                      "(" + args_str + ")");
-                            last_expr_type_ = ret_type;
-                            return result;
-                        }
-                    }
-                }
-
-                // Move to parent class (for types::ClassDef)
-                current_class = typed_class.base_class.value_or("");
-                current_mangled = current_class; // Parent is not generic in this context
-            }
-        }
-    }
-
-    // =========================================================================
-    // 16. Handle NamedType that refers to a class (for method chaining on return values)
-    // =========================================================================
-    if (effective_receiver_type && effective_receiver_type->is<types::NamedType>()) {
-        const auto& named_type = effective_receiver_type->as<types::NamedType>();
-        auto class_def = env_.lookup_class(named_type.name);
-        if (class_def.has_value()) {
-            std::string current_class = named_type.name;
-            while (!current_class.empty()) {
-                auto current_def = env_.lookup_class(current_class);
-                if (!current_def.has_value())
-                    break;
-
-                for (const auto& m : current_def->methods) {
-                    if (m.sig.name == method && !m.is_static) {
-                        // Generate call to instance method
-                        // Only use suite prefix for test-local methods
-                        std::string prefix = is_library_method(current_class, method) ? "" : get_suite_prefix();
-                        std::string func_name =
-                            "@tml_" + prefix + current_class + "_" + method;
-                        std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
-
-                        // Use registered function's return type if available
-                        std::string method_key = current_class + "_" + method;
-                        auto method_it = functions_.find(method_key);
-                        if (method_it != functions_.end() && !method_it->second.ret_type.empty()) {
-                            ret_type = method_it->second.ret_type;
-                        }
-
-                        // For method chaining on value class returns, receiver is already a struct
-                        // value Need to store it to a temp alloca to get a pointer for 'this'
-                        std::string this_ptr = receiver;
-                        if (last_expr_type_.starts_with("%class.") &&
-                            !last_expr_type_.ends_with("*")) {
-                            // Value class struct - store to temp alloca
-                            std::string temp_alloca = fresh_reg();
-                            emit_line("  " + temp_alloca + " = alloca " + last_expr_type_);
-                            emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " +
-                                      temp_alloca);
-                            this_ptr = temp_alloca;
-                        }
-
-                        // Generate arguments: this pointer + regular args
-                        std::string args_str = "ptr " + this_ptr;
-                        for (size_t arg_idx = 0; arg_idx < call.args.size(); ++arg_idx) {
-                            const auto& arg = call.args[arg_idx];
-                            std::string arg_val;
-                            std::string arg_type;
-
-                            // Get expected parameter type from method signature
-                            std::string expected_param_type = "ptr"; // Default for class params
-                            if (arg_idx + 1 < m.sig.params.size()) {
-                                expected_param_type =
-                                    llvm_type_from_semantic(m.sig.params[arg_idx + 1]);
-                            }
-
-                            // For value class arguments (IdentExpr) where method expects ptr,
-                            // pass the alloca pointer instead of loading the value
-                            if (expected_param_type == "ptr" && arg->is<parser::IdentExpr>()) {
-                                const auto& ident_arg = arg->as<parser::IdentExpr>();
-                                auto local_it = locals_.find(ident_arg.name);
-                                if (local_it != locals_.end() &&
-                                    local_it->second.type.starts_with("%class.") &&
-                                    !local_it->second.type.ends_with("*")) {
-                                    // Value class stored as struct: pass alloca pointer
-                                    arg_val = local_it->second.reg;
-                                    arg_type = "ptr";
-                                } else {
-                                    // Not a value class struct: use normal expression generation
-                                    arg_val = gen_expr(*arg);
-                                    arg_type = last_expr_type_;
-                                }
-                            } else {
-                                arg_val = gen_expr(*arg);
-                                arg_type = last_expr_type_;
-                            }
-
-                            args_str += ", " + arg_type + " " + arg_val;
-                        }
-
-                        // Generate call
-                        if (ret_type == "void") {
-                            emit_line("  call void " + func_name + "(" + args_str + ")");
-                            last_expr_type_ = "void";
-                            return "void";
-                        } else {
-                            std::string result = fresh_reg();
-                            emit_line("  " + result + " = call " + ret_type + " " + func_name +
-                                      "(" + args_str + ")");
-                            last_expr_type_ = ret_type;
-                            return result;
-                        }
-                    }
-                }
-
-                // Move to parent class
-                current_class = current_def->base_class.value_or("");
-            }
-        }
+    if (auto class_result =
+            try_gen_class_instance_call(call, receiver, receiver_ptr, receiver_type)) {
+        return *class_result;
     }
 
     report_error("Unknown method: " + method, call.span);

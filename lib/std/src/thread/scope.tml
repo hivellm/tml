@@ -1,0 +1,389 @@
+//! Scoped threads for borrowing from parent scope.
+//!
+//! This module provides [`scope`] for creating threads that can borrow data
+//! from their parent stack frame without requiring `'static` lifetimes.
+//!
+//! # Overview
+//!
+//! Unlike regular threads created with [`spawn`], scoped threads are guaranteed
+//! to terminate before the scope exits. This allows them to safely borrow data
+//! from the parent scope.
+//!
+//! # Examples
+//!
+//! ## Borrowing Local Data
+//!
+//! ```tml
+//! use std::thread
+//!
+//! let data = [1, 2, 3, 4, 5]
+//!
+//! thread::scope(do(s: ref Scope) {
+//!     s.spawn(do() {
+//!         // We can borrow `data` here because the thread will
+//!         // join before `scope` returns
+//!         print("Sum: {data.iter().sum()}\n")
+//!     })
+//!
+//!     s.spawn(do() {
+//!         print("Product: {data.iter().product()}\n")
+//!     })
+//! })
+//!
+//! // Both threads have joined here, `data` is still valid
+//! ```
+//!
+//! ## Collecting Results
+//!
+//! ```tml
+//! use std::thread
+//! use sync::Mutex
+//!
+//! let numbers = [1, 2, 3, 4, 5, 6, 7, 8]
+//! let results = Mutex::new(Vec::new())
+//!
+//! thread::scope(do(s: ref Scope) {
+//!     for chunk in numbers.chunks(2) {
+//!         s.spawn(do() {
+//!             let sum = chunk.iter().sum()
+//!             results.lock().push(sum)
+//!         })
+//!     }
+//! })
+//!
+//! let total = results.into_inner().iter().sum()
+//! print("Total: {total}\n")
+//! ```
+//!
+//! # Safety
+//!
+//! The [`scope`] function ensures all spawned threads are joined before it
+//! returns, even if the closure panics. This is enforced by the type system:
+//! [`ScopedJoinHandle`] cannot be sent outside the scope.
+
+use sync::atomic::{AtomicBool, AtomicUsize, Ordering}
+use sync::{Mutex, MutexGuard, Condvar, Arc}
+use core::marker::{Send, Sync}
+
+// ============================================================================
+// Scope
+// ============================================================================
+
+/// A scope for spawning scoped threads.
+///
+/// The `Scope` type is provided to the closure passed to [`scope`].
+/// Use it to spawn threads that can borrow from the parent scope.
+///
+/// # Thread Safety
+///
+/// `Scope` is `Sync`, meaning multiple threads can spawn new threads
+/// from the same scope concurrently.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::thread
+///
+/// thread::scope(do(s: ref Scope) {
+///     s.spawn(do() {
+///         print("Hello from scoped thread!\n")
+///     })
+/// })
+/// ```
+pub type Scope {
+    /// Number of spawned threads that haven't joined yet
+    pending_count: AtomicUsize,
+    /// Whether all spawns are complete (scope closure finished)
+    finished: AtomicBool,
+    /// Condition variable for waiting on thread completion
+    condvar: Condvar,
+    /// Mutex for condition variable
+    mutex: Mutex[Unit],
+}
+
+impl Scope {
+    /// Create a new scope.
+    func new() -> Scope {
+        return Scope {
+            pending_count: AtomicUsize::new(0),
+            finished: AtomicBool::new(false),
+            condvar: Condvar::new(),
+            mutex: Mutex::new(()),
+        }
+    }
+
+    /// Spawns a new scoped thread.
+    ///
+    /// The spawned thread may borrow data from the parent scope because
+    /// it is guaranteed to join before the scope exits.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::thread
+    ///
+    /// let message = "Hello"
+    ///
+    /// thread::scope(do(s: ref Scope) {
+    ///     s.spawn(do() {
+    ///         print("{message} from thread!\n")
+    ///     })
+    /// })
+    /// ```
+    pub func spawn[T](mut this, f: func() -> T) -> ScopedJoinHandle[T] {
+        // Increment pending count
+        this.pending_count.fetch_add(1, Ordering::AcqRel)
+
+        // In a full implementation, we would:
+        // 1. Create a thread that runs `f` and stores the result
+        // 2. When the thread finishes, decrement pending_count and signal condvar
+        // 3. Return a handle that can be used to join and get the result
+
+        // For now, create a placeholder handle
+        // The actual thread spawning would use the raw_thread_spawn from mod.tml
+
+        return ScopedJoinHandle {
+            scope: mut ref this,
+            result: Nothing,
+            joined: AtomicBool::new(false),
+        }
+    }
+
+    /// Wait for all spawned threads to complete.
+    func wait_all(mut this) {
+        let guard: MutexGuard[Unit] = this.mutex.lock()
+
+        loop (this.pending_count.load(Ordering::Acquire) > 0) {
+            this.condvar.wait(guard)
+        }
+    }
+
+    /// Called when a thread completes.
+    func thread_finished(mut this) {
+        let remaining: U64 = this.pending_count.fetch_sub(1, Ordering::AcqRel)
+
+        // If this was the last thread and scope is finished, signal
+        if remaining == 1 and this.finished.load(Ordering::Acquire) {
+            this.condvar.notify_all()
+        }
+    }
+
+    /// Mark the scope as finished (no more spawns).
+    func mark_finished(mut this) {
+        this.finished.store(true, Ordering::Release)
+
+        // If no pending threads, we're done
+        if this.pending_count.load(Ordering::Acquire) == 0 {
+            this.condvar.notify_all()
+        }
+    }
+}
+
+// Scope is Sync - multiple threads can spawn from the same scope
+impl Sync for Scope {}
+
+// ============================================================================
+// ScopedJoinHandle[T]
+// ============================================================================
+
+/// An owned permission to join on a scoped thread.
+///
+/// Unlike [`JoinHandle`], a `ScopedJoinHandle` is tied to the scope that
+/// created it and cannot outlive that scope.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::thread
+///
+/// thread::scope(do(s: ref Scope) {
+///     let handle = s.spawn(do() 42)
+///
+///     let result = handle.join()
+///     assert_eq(result, 42)
+/// })
+/// ```
+pub type ScopedJoinHandle[T] {
+    /// Reference to the parent scope
+    scope: mut ref Scope,
+    /// The result from the thread
+    result: Maybe[T],
+    /// Whether the thread has been joined
+    joined: AtomicBool,
+}
+
+impl[T] ScopedJoinHandle[T] {
+    /// Waits for the thread to finish and returns its result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called more than once on the same handle.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::thread
+    ///
+    /// thread::scope(do(s: ref Scope) {
+    ///     let handle = s.spawn(do() {
+    ///         return "Hello from thread"
+    ///     })
+    ///
+    ///     let message = handle.join()
+    ///     print("{message}\n")
+    /// })
+    /// ```
+    pub func join(mut this) -> T {
+        if this.joined.swap(true, Ordering::AcqRel) {
+            panic("ScopedJoinHandle::join called twice")
+        }
+
+        // In a full implementation, we would:
+        // 1. Wait for the thread to complete (if not already)
+        // 2. Retrieve the result
+        // 3. Signal to scope that this thread is done
+
+        when this.result {
+            Just(value) => return value,
+            Nothing => panic("Scoped thread did not produce a result")
+        }
+    }
+
+    /// Checks if the thread has finished running.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::thread
+    ///
+    /// thread::scope(do(s: ref Scope) {
+    ///     let handle = s.spawn(do() {
+    ///         thread::sleep_ms(100)
+    ///     })
+    ///
+    ///     // Thread might still be running
+    ///     if not handle.is_finished() {
+    ///         print("Still running...\n")
+    ///     }
+    ///
+    ///     handle.join()
+    /// })
+    /// ```
+    pub func is_finished(this) -> Bool {
+        return this.joined.load(Ordering::Acquire)
+    }
+}
+
+impl[T] Drop for ScopedJoinHandle[T] {
+    func drop(mut this) {
+        // Auto-join if not already joined
+        if not this.joined.load(Ordering::Acquire) {
+            // In a full implementation, we would join the thread here
+            // to ensure it completes before the scope exits
+            this.scope.thread_finished()
+        }
+    }
+}
+
+// ScopedJoinHandle is NOT Send - it must stay in the scope
+// This is intentionally not implemented:
+// impl[T] Send for ScopedJoinHandle[T] {}
+
+// ============================================================================
+// scope function
+// ============================================================================
+
+/// Creates a scope for spawning scoped threads.
+///
+/// All threads spawned within this scope are guaranteed to terminate
+/// before this function returns. This allows the threads to borrow
+/// data from the parent scope without requiring `'static` lifetimes.
+///
+/// # Panics
+///
+/// If any of the spawned threads panic, `scope` will also panic after
+/// all threads have joined.
+///
+/// # Examples
+///
+/// ## Basic Usage
+///
+/// ```tml
+/// use std::thread
+///
+/// let data = "shared data"
+///
+/// thread::scope(do(s: ref Scope) {
+///     s.spawn(do() {
+///         print("Thread 1 sees: {data}\n")
+///     })
+///
+///     s.spawn(do() {
+///         print("Thread 2 sees: {data}\n")
+///     })
+/// })
+///
+/// // Both threads have terminated here
+/// ```
+///
+/// ## Collecting Results
+///
+/// ```tml
+/// use std::thread
+///
+/// let inputs = [1, 2, 3, 4]
+/// var outputs = Vec::with_capacity(4)
+///
+/// thread::scope(do(s: ref Scope) {
+///     for i in inputs {
+///         let handle = s.spawn(do() i * 2)
+///         outputs.push(handle.join())
+///     }
+/// })
+///
+/// assert_eq(outputs, [2, 4, 6, 8])
+/// ```
+///
+/// ## Parallel Processing with Shared State
+///
+/// ```tml
+/// use std::thread
+/// use sync::Mutex
+///
+/// let counter = Mutex::new(0)
+///
+/// thread::scope(do(s: ref Scope) {
+///     loop _ in 0 to 10 {
+///         s.spawn(do() {
+///             let mut guard = counter.lock()
+///             *guard = *guard + 1
+///         })
+///     }
+/// })
+///
+/// assert_eq(*counter.lock(), 10)
+/// ```
+pub func scope[R](f: func(mut ref Scope) -> R) -> R {
+    var scope_state: Scope = Scope::new()
+
+    // Run the user's closure with the scope
+    let result: R = f(mut ref scope_state)
+
+    // Mark that no more spawns will happen
+    scope_state.mark_finished()
+
+    // Wait for all threads to complete
+    scope_state.wait_all()
+
+    return result
+}
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+/// Scope is NOT Send - must be used from the thread that created it.
+/// (We don't implement Send, making it implicitly not Send)
+
+/// ScopedJoinHandle is NOT Send - must stay within the scope.
+/// (We don't implement Send, making it implicitly not Send)

@@ -123,8 +123,12 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 // Get the pointer (not the dereferenced value!)
                 std::string ptr = gen_expr(*unary.operand);
 
-                // Infer the inner type from the operand's type
-                types::TypePtr operand_type = infer_expr_type(*unary.operand);
+                // Use last_semantic_type_ from gen_expr if available (more reliable for method
+                // calls) Fall back to infer_expr_type if not set
+                types::TypePtr operand_type = last_semantic_type_;
+                if (!operand_type) {
+                    operand_type = infer_expr_type(*unary.operand);
+                }
                 std::string inner_llvm_type = "i32"; // default
 
                 if (operand_type) {
@@ -142,6 +146,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 }
 
                 emit_line("  store " + inner_llvm_type + " " + right + ", ptr " + ptr);
+                last_expr_type_ = inner_llvm_type; // Assignment returns the assigned value's type
             }
         } else if (bin.left->is<parser::FieldExpr>()) {
             // Field assignment: obj.field = value or this.field = value or ClassName.static = value
@@ -175,6 +180,39 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                         struct_type = "%struct." + current_impl_type_;
                         // 'this' is already a pointer parameter, not an alloca - use it directly
                         // struct_ptr is already "%this" which is the direct pointer
+                    }
+                }
+            } else if (field.object->is<parser::UnaryExpr>()) {
+                // Handle (*ptr).field = value pattern
+                const auto& unary = field.object->as<parser::UnaryExpr>();
+                if (unary.op == parser::UnaryOp::Deref) {
+                    // Get the pointer being dereferenced
+                    struct_ptr = gen_expr(*unary.operand);
+
+                    // Get the pointee (struct) type from the operand's type
+                    // IMPORTANT: Don't use last_semantic_type_ here - it's from the RHS!
+                    // We need to infer the type of the operand specifically.
+                    types::TypePtr operand_type = infer_expr_type(*unary.operand);
+
+                    if (operand_type) {
+                        if (operand_type->is<types::PtrType>()) {
+                            const auto& ptr = operand_type->as<types::PtrType>();
+                            if (ptr.inner) {
+                                struct_type = llvm_type_from_semantic(ptr.inner);
+                            }
+                        } else if (operand_type->is<types::RefType>()) {
+                            const auto& ref = operand_type->as<types::RefType>();
+                            if (ref.inner) {
+                                struct_type = llvm_type_from_semantic(ref.inner);
+                            }
+                        } else if (operand_type->is<types::NamedType>()) {
+                            // Handle Ptr[T] as NamedType with name "Ptr" and type_args
+                            const auto& named = operand_type->as<types::NamedType>();
+                            if (named.name == "Ptr" && !named.type_args.empty()) {
+                                // Get the inner type (first type arg)
+                                struct_type = llvm_type_from_semantic(named.type_args[0]);
+                            }
+                        }
                     }
                 }
             }
@@ -811,8 +849,61 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // Check if either operand is Bool (i1)
     bool is_bool = (left_type == "i1" || right_type == "i1");
 
-    // Check if BOTH operands are strings (ptr) - only then use str_eq
-    bool is_string = (left_type == "ptr" && right_type == "ptr");
+    // Helper to check if semantic type is a string (Str)
+    auto is_str_type = [](const types::TypePtr& t) -> bool {
+        if (!t)
+            return false;
+        // Check for Str primitive type
+        if (auto* prim = std::get_if<types::PrimitiveType>(&t->kind)) {
+            return prim->kind == types::PrimitiveKind::Str;
+        }
+        // Check for NamedType "Str"
+        if (auto* named = std::get_if<types::NamedType>(&t->kind)) {
+            return named->name == "Str";
+        }
+        return false;
+    };
+
+    // Helper to check if type is unknown (null or unit - meaning type couldn't be determined)
+    auto is_unknown_type = [](const types::TypePtr& t) -> bool {
+        if (!t)
+            return true;
+        // Check for unit type (void) - this happens when infer_expr_type fails
+        if (auto* prim = std::get_if<types::PrimitiveType>(&t->kind)) {
+            return prim->kind == types::PrimitiveKind::Unit;
+        }
+        return false;
+    };
+
+    // Check if BOTH operands are strings (Str type) - only then use str_eq/str_concat
+    // Important: Don't use str_eq for general pointer comparisons (like Ptr[Node[T]])
+    bool is_string = false;
+    if (left_type == "ptr" && right_type == "ptr") {
+        bool left_is_str = is_str_type(left_semantic);
+        bool right_is_str = is_str_type(right_semantic);
+
+        // If both are known Str, definitely string operation
+        if (left_is_str && right_is_str) {
+            is_string = true;
+        }
+        // For Add operation: if at least one is known Str, and the other is unknown
+        // (null or unit semantic type), treat as string concatenation.
+        // Reasoning: ptr + ptr as integer addition makes no sense.
+        else if (bin.op == parser::BinaryOp::Add) {
+            bool left_unknown = is_unknown_type(left_semantic);
+            bool right_unknown = is_unknown_type(right_semantic);
+
+            // If one is Str and other is unknown, it's probably string concat
+            if ((left_is_str && right_unknown) || (right_is_str && left_unknown)) {
+                is_string = true;
+            }
+            // If both are unknown but we're adding two ptrs, also assume string concat
+            // (since ptr + ptr is meaningless otherwise)
+            else if (left_unknown && right_unknown) {
+                is_string = true;
+            }
+        }
+    }
 
     // Determine the integer type to use (largest type wins)
     std::string int_type = "i32";
@@ -830,8 +921,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     bool is_unsigned = left_unsigned || right_unsigned;
 
     // Check for pointer arithmetic (ptr + int or int + ptr)
-    bool is_ptr_arith = (left_type == "ptr" && right_type != "ptr") ||
-                        (right_type == "ptr" && left_type != "ptr");
+    bool is_ptr_arith =
+        (left_type == "ptr" && right_type != "ptr") || (right_type == "ptr" && left_type != "ptr");
     std::string ptr_operand, idx_operand;
     types::TypePtr ptr_semantic_type = nullptr;
     if (is_ptr_arith) {
@@ -930,6 +1021,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             std::string eq_i32 = fresh_reg();
             emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + left + ", ptr " + right + ")");
             emit_line("  " + result + " = icmp ne i32 " + eq_i32 + ", 0");
+        } else if (left_type == "ptr" && right_type == "ptr") {
+            // Pointer equality comparison (non-string pointers)
+            emit_line("  " + result + " = icmp eq ptr " + left + ", " + right);
         } else {
             emit_line("  " + result + " = icmp eq " + int_type + " " + left + ", " + right);
         }
@@ -943,6 +1037,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             std::string eq_i32 = fresh_reg();
             emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + left + ", ptr " + right + ")");
             emit_line("  " + result + " = icmp eq i32 " + eq_i32 + ", 0");
+        } else if (left_type == "ptr" && right_type == "ptr") {
+            // Pointer inequality comparison (non-string pointers)
+            emit_line("  " + result + " = icmp ne ptr " + left + ", " + right);
         } else {
             emit_line("  " + result + " = icmp ne " + int_type + " " + left + ", " + right);
         }

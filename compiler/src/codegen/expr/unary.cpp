@@ -65,6 +65,208 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 if (local_it != locals_.end()) {
                     struct_ptr = local_it->second.reg;
                 }
+            } else if (field_expr.object->is<parser::UnaryExpr>()) {
+                // Handle (*ptr).field - dereferenced pointer field access
+                const auto& inner_unary = field_expr.object->as<parser::UnaryExpr>();
+                if (inner_unary.op == parser::UnaryOp::Deref) {
+                    // The struct pointer is the result of the dereference operand
+                    struct_ptr = gen_expr(*inner_unary.operand);
+                    // Infer the pointee type
+                    types::TypePtr ptr_type = infer_expr_type(*inner_unary.operand);
+                    if (ptr_type) {
+                        if (ptr_type->is<types::PtrType>()) {
+                            base_type = ptr_type->as<types::PtrType>().inner;
+                        } else if (ptr_type->is<types::RefType>()) {
+                            base_type = ptr_type->as<types::RefType>().inner;
+                        }
+                        // Apply type substitutions for generic types
+                        if (base_type && !current_type_subs_.empty()) {
+                            base_type = apply_type_substitutions(base_type, current_type_subs_);
+                        }
+                    }
+                }
+            } else if (field_expr.object->is<parser::FieldExpr>()) {
+                // Handle nested field access: ref this.inner.field
+                // We need to generate GEPs for each level of field access
+                const auto& nested_field = field_expr.object->as<parser::FieldExpr>();
+
+                // Get the outermost struct
+                if (nested_field.object->is<parser::IdentExpr>()) {
+                    const auto& ident = nested_field.object->as<parser::IdentExpr>();
+                    auto local_it = locals_.find(ident.name);
+                    if (local_it != locals_.end()) {
+                        std::string outer_ptr = local_it->second.reg;
+                        std::string outer_type = local_it->second.type;
+
+                        // Special handling for 'this' in impl methods
+                        if (ident.name == "this" && !current_impl_type_.empty()) {
+                            outer_type = "%struct." + current_impl_type_;
+                        }
+
+                        // Get outer struct type name
+                        std::string outer_name = outer_type;
+                        if (outer_name.starts_with("%struct.")) {
+                            outer_name = outer_name.substr(8);
+                        }
+
+                        // Get field index and type for the intermediate field
+                        int nested_idx = get_field_index(outer_name, nested_field.field);
+                        std::string nested_field_type =
+                            get_field_type(outer_name, nested_field.field);
+
+                        if (nested_idx >= 0) {
+                            // Generate GEP to get pointer to the nested struct field
+                            std::string nested_ptr = fresh_reg();
+                            emit_line("  " + nested_ptr + " = getelementptr " + outer_type +
+                                      ", ptr " + outer_ptr + ", i32 0, i32 " +
+                                      std::to_string(nested_idx));
+                            struct_ptr = nested_ptr;
+
+                            // If the nested field is a reference/pointer type, we need to load it
+                            // to get the actual struct pointer
+                            if (nested_field_type == "ptr") {
+                                std::string loaded_ptr = fresh_reg();
+                                emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                                struct_ptr = loaded_ptr;
+                            }
+
+                            // Get the semantic type of the nested field from struct definition
+                            // For generic instantiations like MutexGuard__I32, extract base name
+                            // MutexGuard
+                            std::string base_struct_name = outer_name;
+                            std::vector<types::TypePtr> outer_type_args;
+                            auto sep_pos = outer_name.find("__");
+                            if (sep_pos != std::string::npos) {
+                                base_struct_name = outer_name.substr(0, sep_pos);
+                                // Parse type args from mangled suffix (e.g., "BarrierState" from
+                                // "MutexGuard__BarrierState")
+                                std::string args_str = outer_name.substr(sep_pos + 2);
+                                size_t pos = 0;
+                                while (pos < args_str.size()) {
+                                    auto next_sep = args_str.find("__", pos);
+                                    std::string arg = (next_sep == std::string::npos)
+                                                          ? args_str.substr(pos)
+                                                          : args_str.substr(pos, next_sep - pos);
+                                    types::TypePtr arg_type;
+                                    if (arg == "I32")
+                                        arg_type = types::make_i32();
+                                    else if (arg == "I64")
+                                        arg_type = types::make_i64();
+                                    else if (arg == "U32")
+                                        arg_type = types::make_primitive(types::PrimitiveKind::U32);
+                                    else if (arg == "U64")
+                                        arg_type = types::make_primitive(types::PrimitiveKind::U64);
+                                    else if (arg == "Bool")
+                                        arg_type = types::make_bool();
+                                    else if (arg == "Str")
+                                        arg_type = types::make_str();
+                                    else if (arg == "F32")
+                                        arg_type = types::make_primitive(types::PrimitiveKind::F32);
+                                    else if (arg == "F64")
+                                        arg_type = types::make_primitive(types::PrimitiveKind::F64);
+                                    else {
+                                        auto t = std::make_shared<types::Type>();
+                                        t->kind = types::NamedType{arg, "", {}};
+                                        arg_type = t;
+                                    }
+                                    outer_type_args.push_back(arg_type);
+                                    if (next_sep == std::string::npos)
+                                        break;
+                                    pos = next_sep + 2;
+                                }
+                            }
+
+                            auto struct_def = env_.lookup_struct(base_struct_name);
+                            if (struct_def &&
+                                nested_idx < static_cast<int>(struct_def->fields.size())) {
+                                base_type = struct_def->fields[nested_idx].second;
+
+                                // Apply type substitution if we have type args from the outer
+                                // struct This substitutes T -> BarrierState in Mutex[T] to get
+                                // Mutex[BarrierState]
+                                if (!outer_type_args.empty() && !struct_def->type_params.empty()) {
+                                    std::unordered_map<std::string, types::TypePtr> substitutions;
+                                    for (size_t i = 0; i < struct_def->type_params.size() &&
+                                                       i < outer_type_args.size();
+                                         ++i) {
+                                        substitutions[struct_def->type_params[i]] =
+                                            outer_type_args[i];
+                                    }
+                                    base_type = types::substitute_type(base_type, substitutions);
+                                }
+
+                                // If it's a reference type, unwrap to get the pointee type
+                                if (base_type && base_type->is<types::RefType>()) {
+                                    base_type = base_type->as<types::RefType>().inner;
+                                }
+                            } else {
+                                // Fallback to infer_expr_type
+                                base_type = infer_expr_type(*field_expr.object);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // For generic structs, try to get base_type from pending_generic_structs_ if not
+            // resolved
+            if (!base_type && !current_impl_type_.empty() &&
+                field_expr.object->is<parser::IdentExpr>()) {
+                const auto& ident = field_expr.object->as<parser::IdentExpr>();
+                if (ident.name == "this") {
+                    // Parse impl type to get struct name and type args
+                    std::string base_name = current_impl_type_;
+                    std::vector<types::TypePtr> type_args_for_struct;
+
+                    auto sep_pos = current_impl_type_.find("__");
+                    if (sep_pos != std::string::npos) {
+                        base_name = current_impl_type_.substr(0, sep_pos);
+                        // Parse type args from mangled suffix
+                        std::string args_str = current_impl_type_.substr(sep_pos + 2);
+                        size_t pos = 0;
+                        while (pos < args_str.size()) {
+                            auto next_sep = args_str.find("__", pos);
+                            std::string arg = (next_sep == std::string::npos)
+                                                  ? args_str.substr(pos)
+                                                  : args_str.substr(pos, next_sep - pos);
+                            types::TypePtr arg_type;
+                            if (arg == "I32")
+                                arg_type = types::make_i32();
+                            else if (arg == "I64")
+                                arg_type = types::make_i64();
+                            else if (arg == "U32")
+                                arg_type = types::make_primitive(types::PrimitiveKind::U32);
+                            else if (arg == "U64")
+                                arg_type = types::make_primitive(types::PrimitiveKind::U64);
+                            else if (arg == "Bool")
+                                arg_type = types::make_bool();
+                            else if (arg == "Str")
+                                arg_type = types::make_str();
+                            else {
+                                auto t = std::make_shared<types::Type>();
+                                t->kind = types::NamedType{arg, "", {}};
+                                arg_type = t;
+                            }
+                            type_args_for_struct.push_back(arg_type);
+                            if (next_sep == std::string::npos)
+                                break;
+                            pos = next_sep + 2;
+                        }
+                    }
+
+                    // Create a named type for the struct
+                    auto named_type = std::make_shared<types::Type>();
+                    named_type->kind = types::NamedType{base_name, "", type_args_for_struct};
+                    base_type = named_type;
+                }
+            }
+
+            // Try to unwrap reference types
+            if (base_type && base_type->is<types::RefType>()) {
+                auto inner = base_type->as<types::RefType>().inner;
+                if (inner) {
+                    base_type = inner;
+                }
             }
 
             if (!struct_ptr.empty() && base_type) {
@@ -91,20 +293,48 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 if (!type_name.empty()) {
                     int field_idx = -1;
 
-                    // Try struct lookup first
-                    auto struct_def = env_.lookup_struct(type_name);
-                    if (struct_def) {
-                        for (size_t i = 0; i < struct_def->fields.size(); ++i) {
-                            if (struct_def->fields[i].first == field_expr.field) {
-                                field_idx = static_cast<int>(i);
+                    // For generic instantiations like Mutex__I32, extract base name Mutex
+                    std::string lookup_name = type_name;
+                    auto sep_pos = type_name.find("__");
+                    if (sep_pos != std::string::npos) {
+                        lookup_name = type_name.substr(0, sep_pos);
+                    }
+
+                    // If we have type_args, ensure struct is instantiated first
+                    // This registers fields in struct_fields_ so we can look them up
+                    std::string struct_type_name_for_lookup = lookup_name;
+                    if (!type_args.empty()) {
+                        require_struct_instantiation(type_name, type_args);
+                        struct_type_name_for_lookup = mangle_struct_name(type_name, type_args);
+                    }
+
+                    // First check struct_fields_ directly for instantiated generic structs
+                    auto sf_it = struct_fields_.find(struct_type_name_for_lookup);
+                    if (sf_it != struct_fields_.end()) {
+                        for (const auto& field : sf_it->second) {
+                            if (field.name == field_expr.field) {
+                                field_idx = field.index;
                                 break;
+                            }
+                        }
+                    }
+
+                    // If not found, try struct lookup
+                    if (field_idx < 0) {
+                        auto struct_def = env_.lookup_struct(lookup_name);
+                        if (struct_def) {
+                            for (size_t i = 0; i < struct_def->fields.size(); ++i) {
+                                if (struct_def->fields[i].first == field_expr.field) {
+                                    field_idx = static_cast<int>(i);
+                                    break;
+                                }
                             }
                         }
                     }
 
                     // Try class lookup if struct lookup failed
                     if (field_idx < 0) {
-                        auto class_def = env_.lookup_class(type_name);
+                        auto class_def = env_.lookup_class(lookup_name);
                         if (class_def) {
                             for (size_t i = 0; i < class_def->fields.size(); ++i) {
                                 if (class_def->fields[i].name == field_expr.field) {
@@ -115,10 +345,46 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                         }
                     }
 
+                    // Try pending_generic_structs_ for generic structs
+                    if (field_idx < 0) {
+                        auto generic_it = pending_generic_structs_.find(lookup_name);
+                        if (generic_it != pending_generic_structs_.end()) {
+                            const parser::StructDecl* decl = generic_it->second;
+                            for (size_t i = 0; i < decl->fields.size(); ++i) {
+                                if (decl->fields[i].name == field_expr.field) {
+                                    field_idx = static_cast<int>(i);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // Try module registry for imported structs
+                    if (field_idx < 0 && env_.module_registry()) {
+                        const auto& all_modules = env_.module_registry()->get_all_modules();
+                        for (const auto& [mod_name, mod] : all_modules) {
+                            auto struct_it = mod.structs.find(lookup_name);
+                            if (struct_it != mod.structs.end()) {
+                                const auto& imported_struct = struct_it->second;
+                                int idx = 0;
+                                for (const auto& [fname, ftype] : imported_struct.fields) {
+                                    if (fname == field_expr.field) {
+                                        field_idx = idx;
+                                        break;
+                                    }
+                                    idx++;
+                                }
+                                if (field_idx >= 0)
+                                    break;
+                            }
+                        }
+                    }
+
                     if (field_idx >= 0) {
                         std::string llvm_struct_type;
-                        bool is_class = env_.lookup_class(type_name).has_value();
+                        bool is_class = env_.lookup_class(lookup_name).has_value();
                         if (!type_args.empty()) {
+                            // Struct already instantiated above
                             llvm_struct_type =
                                 "%struct." + mangle_struct_name(type_name, type_args);
                         } else if (is_class) {
@@ -148,6 +414,17 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                     }
                 }
             }
+        }
+        // Debug: log what expression type we're trying to take reference of
+        std::cerr << "[DEBUG REF] Cannot take reference of expression kind index: "
+                  << unary.operand->kind.index() << std::endl;
+        if (unary.operand->is<parser::CallExpr>()) {
+            std::cerr << "[DEBUG REF]   It's a CallExpr" << std::endl;
+        } else if (unary.operand->is<parser::MethodCallExpr>()) {
+            const auto& method_call = unary.operand->as<parser::MethodCallExpr>();
+            std::cerr << "[DEBUG REF]   It's a MethodCallExpr: " << method_call.method << std::endl;
+        } else if (unary.operand->is<parser::IndexExpr>()) {
+            std::cerr << "[DEBUG REF]   It's an IndexExpr" << std::endl;
         }
         report_error("Can only take reference of variables", unary.span);
         last_expr_type_ = "ptr";

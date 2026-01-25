@@ -73,6 +73,11 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
         return "void";
     if (name == "Never")
         return "void"; // Never type (bottom type) - represents no value
+    // Platform-sized types (64-bit on 64-bit platforms)
+    if (name == "Usize")
+        return "i64";
+    if (name == "Isize")
+        return "i64";
 
     // Ptr[T] syntax in TML uses NamedType "Ptr" - it should be a pointer type
     if (name == "Ptr")
@@ -90,10 +95,10 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
         return "%struct.Text";
     if (name == "Channel")
         return "ptr";
-    if (name == "Mutex")
-        return "ptr";
     if (name == "WaitGroup")
         return "ptr";
+    // Note: Mutex[T] is a generic struct now, not a runtime handle.
+    // It will be handled via generic struct instantiation.
 
     // Check if this is a class type
     auto class_def = env_.lookup_class(name);
@@ -285,22 +290,43 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         const auto& named = type->as<types::NamedType>();
 
         // Handle primitive type names that may appear as NamedType after generic substitution
-        if (named.name == "I8") return "i8";
-        if (named.name == "I16") return "i16";
-        if (named.name == "I32") return "i32";
-        if (named.name == "I64") return "i64";
-        if (named.name == "I128") return "i128";
-        if (named.name == "U8") return "i8";
-        if (named.name == "U16") return "i16";
-        if (named.name == "U32") return "i32";
-        if (named.name == "U64") return "i64";
-        if (named.name == "U128") return "i128";
-        if (named.name == "F32") return "float";
-        if (named.name == "F64") return "double";
-        if (named.name == "Bool") return "i1";
-        if (named.name == "Char") return "i32";
-        if (named.name == "Str") return "ptr";
-        if (named.name == "Unit") return for_data ? "{}" : "void";
+        if (named.name == "I8")
+            return "i8";
+        if (named.name == "I16")
+            return "i16";
+        if (named.name == "I32")
+            return "i32";
+        if (named.name == "I64")
+            return "i64";
+        if (named.name == "I128")
+            return "i128";
+        if (named.name == "U8")
+            return "i8";
+        if (named.name == "U16")
+            return "i16";
+        if (named.name == "U32")
+            return "i32";
+        if (named.name == "U64")
+            return "i64";
+        if (named.name == "U128")
+            return "i128";
+        if (named.name == "F32")
+            return "float";
+        if (named.name == "F64")
+            return "double";
+        if (named.name == "Bool")
+            return "i1";
+        if (named.name == "Char")
+            return "i32";
+        if (named.name == "Str")
+            return "ptr";
+        if (named.name == "Unit")
+            return for_data ? "{}" : "void";
+        // Platform-sized types (64-bit on 64-bit platforms)
+        if (named.name == "Usize")
+            return "i64";
+        if (named.name == "Isize")
+            return "i64";
 
         // Never type (bottom type) - use void as it represents no value
         // Sometimes Never appears as NamedType instead of PrimitiveType
@@ -338,8 +364,9 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
             return "%struct.Buffer";
         }
         // List/HashMap are generic types that get instantiated - skip here
-        // Channel/Mutex/WaitGroup are pure runtime handles (opaque pointers)
-        if (named.name == "Channel" || named.name == "Mutex" || named.name == "WaitGroup") {
+        // Channel/WaitGroup are pure runtime handles (opaque pointers)
+        // Note: Mutex[T] is now a generic struct, handled via require_struct_instantiation
+        if (named.name == "Channel" || named.name == "WaitGroup") {
             return "ptr";
         }
 
@@ -359,6 +386,7 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // For non-generic structs, ensure the type is defined before use
         // This handles structs from imported modules
         if (struct_types_.find(named.name) == struct_types_.end()) {
+            bool found = false;
             // Try to find struct definition from module registry
             if (env_.module_registry()) {
                 const auto& all_modules = env_.module_registry()->get_all_modules();
@@ -385,10 +413,74 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                         for (size_t i = 0; i < struct_def.fields.size(); ++i) {
                             std::string ft =
                                 llvm_type_from_semantic(struct_def.fields[i].second, true);
-                            fields.push_back({struct_def.fields[i].first, static_cast<int>(i), ft});
+                            fields.push_back({struct_def.fields[i].first, static_cast<int>(i), ft,
+                                              struct_def.fields[i].second});
                         }
                         struct_fields_[named.name] = fields;
+                        found = true;
                         break;
+                    }
+                }
+
+                // If not found in public structs, try re-parsing module source to find
+                // private structs (needed for types like RawRwLock used as field types)
+                if (!found) {
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        if (mod.source_code.empty())
+                            continue;
+
+                        // Re-parse the module to find the struct
+                        auto source = lexer::Source::from_string(mod.source_code, mod.file_path);
+                        lexer::Lexer lex(source);
+                        auto tokens = lex.tokenize();
+                        if (lex.has_errors())
+                            continue;
+
+                        parser::Parser mod_parser(std::move(tokens));
+                        std::string module_name_stem = mod.name;
+                        if (auto pos = module_name_stem.rfind("::"); pos != std::string::npos) {
+                            module_name_stem = module_name_stem.substr(pos + 2);
+                        }
+                        auto parse_result = mod_parser.parse_module(module_name_stem);
+                        if (!std::holds_alternative<parser::Module>(parse_result))
+                            continue;
+
+                        const auto& parsed_mod = std::get<parser::Module>(parse_result);
+
+                        // Find the struct (including private ones)
+                        for (const auto& decl : parsed_mod.decls) {
+                            if (!decl->is<parser::StructDecl>())
+                                continue;
+                            const auto& struct_decl = decl->as<parser::StructDecl>();
+                            if (struct_decl.name != named.name)
+                                continue;
+
+                            // Found the struct - emit its type definition
+                            std::string type_name = "%struct." + named.name;
+                            std::string def = type_name + " = type { ";
+                            bool first = true;
+                            std::vector<FieldInfo> fields;
+                            int field_idx = 0;
+                            for (const auto& field : struct_decl.fields) {
+                                if (!first)
+                                    def += ", ";
+                                first = false;
+                                // Resolve field type
+                                types::TypePtr field_type =
+                                    resolve_parser_type_with_subs(*field.type, {});
+                                std::string ft = llvm_type_from_semantic(field_type, true);
+                                def += ft;
+                                fields.push_back({field.name, field_idx++, ft, field_type});
+                            }
+                            def += " }";
+                            type_defs_buffer_ << def << "\n";
+                            struct_types_[named.name] = type_name;
+                            struct_fields_[named.name] = fields;
+                            found = true;
+                            break;
+                        }
+                        if (found)
+                            break;
                     }
                 }
             }
@@ -462,7 +554,8 @@ void LLVMIRGen::ensure_type_defined(const parser::TypePtr& type) {
             base_name == "I128" || base_name == "U8" || base_name == "U16" || base_name == "U32" ||
             base_name == "U64" || base_name == "U128" || base_name == "F32" || base_name == "F64" ||
             base_name == "Bool" || base_name == "Char" || base_name == "Str" ||
-            base_name == "Unit" || base_name == "Never" || base_name == "Ptr") {
+            base_name == "Unit" || base_name == "Never" || base_name == "Ptr" ||
+            base_name == "Usize" || base_name == "Isize") {
             return;
         }
 
@@ -501,8 +594,8 @@ void LLVMIRGen::ensure_type_defined(const parser::TypePtr& type) {
                     for (size_t i = 0; i < struct_it->second.fields.size(); ++i) {
                         std::string ft =
                             llvm_type_from_semantic(struct_it->second.fields[i].second, true);
-                        fields.push_back(
-                            {struct_it->second.fields[i].first, static_cast<int>(i), ft});
+                        fields.push_back({struct_it->second.fields[i].first, static_cast<int>(i),
+                                          ft, struct_it->second.fields[i].second});
                     }
                     struct_fields_[base_name] = fields;
                     return;
@@ -551,6 +644,13 @@ auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
         return types::primitive_kind_to_string(kind);
     } else if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
+
+        // Handle Ptr[T] stored as NamedType - convert to ptr_ prefix for consistency
+        // This ensures consistent mangling whether Ptr comes as NamedType or PtrType
+        if (named.name == "Ptr" && !named.type_args.empty()) {
+            return "ptr_" + mangle_type_args(named.type_args);
+        }
+
         if (named.type_args.empty()) {
             return named.name;
         }
@@ -683,12 +783,22 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                     {"F32", types::PrimitiveKind::F32},   {"F64", types::PrimitiveKind::F64},
                     {"Bool", types::PrimitiveKind::Bool}, {"Char", types::PrimitiveKind::Char},
                     {"Str", types::PrimitiveKind::Str},   {"String", types::PrimitiveKind::Str},
-                    {"Unit", types::PrimitiveKind::Unit},
+                    {"Unit", types::PrimitiveKind::Unit}, {"Usize", types::PrimitiveKind::U64},
+                    {"Isize", types::PrimitiveKind::I64},
                 };
 
                 auto prim_it = primitives.find(name);
                 if (prim_it != primitives.end()) {
                     return types::make_primitive(prim_it->second);
+                }
+
+                // Handle Ptr[T] - convert to PtrType for proper dereference handling
+                if (name == "Ptr" && t.generics.has_value() && !t.generics->args.empty()) {
+                    auto inner =
+                        resolve_parser_type_with_subs(*t.generics->args[0].as_type(), subs);
+                    auto result = std::make_shared<types::Type>();
+                    result->kind = types::PtrType{false, inner};
+                    return result;
                 }
 
                 // Check if it's a class type (non-generic)
@@ -905,6 +1015,14 @@ auto LLVMIRGen::apply_type_substitutions(
         }
         if (changed) {
             return types::make_tuple(std::move(new_elems));
+        }
+    } else if (type->is<types::GenericType>()) {
+        // Handle uninstantiated generic type parameters (e.g., T in Mutex[T])
+        // Look up the substitution for this generic type parameter
+        const auto& generic = type->as<types::GenericType>();
+        auto it = subs.find(generic.name);
+        if (it != subs.end() && it->second) {
+            return it->second;
         }
     }
 

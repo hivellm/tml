@@ -129,7 +129,7 @@ impl[T] RwLock[T] {
     /// let lock = RwLock::new(5)
     /// ```
     pub func new(value: T) -> RwLock[T] {
-        let mut lock = RwLock {
+        var lock: RwLock[T] = RwLock {
             data: value,
             raw: RawRwLock { _data: [0; 64] },
             state: AtomicU32::new(0),
@@ -155,9 +155,9 @@ impl[T] RwLock[T] {
     /// let n = lock.read()
     /// assert_eq(*n, 1)
     /// ```
-    pub func read(mut self) -> RwLockReadGuard[T] {
-        raw_rwlock_read_lock(ref self.raw)
-        return RwLockReadGuard { lock: ref self }
+    pub func read(mut this) -> RwLockReadGuard[T] {
+        raw_rwlock_read_lock(ref this.raw)
+        return RwLockReadGuard { lock: ref this }
     }
 
     /// Attempts to acquire this rwlock with shared read access.
@@ -180,9 +180,9 @@ impl[T] RwLock[T] {
     ///     Nothing => unreachable()
     /// }
     /// ```
-    pub func try_read(mut self) -> Maybe[RwLockReadGuard[T]] {
-        if raw_rwlock_try_read_lock(ref self.raw) == 0 {
-            return Just(RwLockReadGuard { lock: ref self })
+    pub func try_read(mut this) -> Maybe[RwLockReadGuard[T]] {
+        if raw_rwlock_try_read_lock(ref this.raw) == 0 {
+            return Just(RwLockReadGuard { lock: ref this })
         }
         return Nothing
     }
@@ -203,9 +203,9 @@ impl[T] RwLock[T] {
     /// let mut n = lock.write()
     /// *n = 2
     /// ```
-    pub func write(mut self) -> RwLockWriteGuard[T] {
-        raw_rwlock_write_lock(ref self.raw)
-        return RwLockWriteGuard { lock: ref self }
+    pub func write(mut this) -> RwLockWriteGuard[T] {
+        raw_rwlock_write_lock(ref this.raw)
+        return RwLockWriteGuard { lock: ref this }
     }
 
     /// Attempts to lock this rwlock with exclusive write access.
@@ -228,31 +228,31 @@ impl[T] RwLock[T] {
     ///     Nothing => unreachable()
     /// }
     /// ```
-    pub func try_write(mut self) -> Maybe[RwLockWriteGuard[T]] {
-        if raw_rwlock_try_write_lock(ref self.raw) == 0 {
-            return Just(RwLockWriteGuard { lock: ref self })
+    pub func try_write(mut this) -> Maybe[RwLockWriteGuard[T]] {
+        if raw_rwlock_try_write_lock(ref this.raw) == 0 {
+            return Just(RwLockWriteGuard { lock: ref this })
         }
         return Nothing
     }
 
     /// Consumes this `RwLock`, returning the underlying data.
-    pub func into_inner(mut self) -> T {
-        raw_rwlock_destroy(ref self.raw)
-        return self.data
+    pub func into_inner(mut this) -> T {
+        raw_rwlock_destroy(ref this.raw)
+        return this.data
     }
 
     /// Returns a mutable reference to the underlying data.
     ///
     /// Since this call borrows the `RwLock` mutably, no actual locking needs
     /// to take place - the mutable borrow statically guarantees no locks exist.
-    pub func get_mut(mut self) -> mut ref T {
-        return ref self.data
+    pub func get_mut(mut this) -> mut ref T {
+        return ref this.data
     }
 }
 
 impl[T] Drop for RwLock[T] {
-    func drop(mut self) {
-        raw_rwlock_destroy(ref self.raw)
+    func drop(mut this) {
+        raw_rwlock_destroy(ref this.raw)
     }
 }
 
@@ -270,22 +270,22 @@ pub type RwLockReadGuard[T] {
 
 impl[T] RwLockReadGuard[T] {
     /// Returns a reference to the underlying data.
-    pub func get(self) -> ref T {
-        return ref self.lock.data
+    pub func get(this) -> ref T {
+        return ref this.lock.data
     }
 }
 
 impl[T] Deref for RwLockReadGuard[T] {
     type Target = T
 
-    func deref(self) -> ref T {
-        return ref self.lock.data
+    func deref(this) -> ref T {
+        return ref this.lock.data
     }
 }
 
 impl[T] Drop for RwLockReadGuard[T] {
-    func drop(mut self) {
-        raw_rwlock_read_unlock(ref self.lock.raw)
+    func drop(mut this) {
+        raw_rwlock_read_unlock(ref this.lock.raw)
     }
 }
 
@@ -303,32 +303,66 @@ pub type RwLockWriteGuard[T] {
 
 impl[T] RwLockWriteGuard[T] {
     /// Returns a reference to the underlying data.
-    pub func get(self) -> ref T {
-        return ref self.lock.data
+    pub func get(this) -> ref T {
+        return ref this.lock.data
     }
 
     /// Returns a mutable reference to the underlying data.
-    pub func get_mut(mut self) -> mut ref T {
-        return ref self.lock.data
+    pub func get_mut(mut this) -> mut ref T {
+        return ref this.lock.data
     }
 }
 
 impl[T] Deref for RwLockWriteGuard[T] {
     type Target = T
 
-    func deref(self) -> ref T {
-        return ref self.lock.data
+    func deref(this) -> ref T {
+        return ref this.lock.data
     }
 }
 
 impl[T] DerefMut for RwLockWriteGuard[T] {
-    func deref_mut(mut self) -> mut ref T {
-        return ref self.lock.data
+    func deref_mut(mut this) -> mut ref T {
+        return ref this.lock.data
     }
 }
 
 impl[T] Drop for RwLockWriteGuard[T] {
-    func drop(mut self) {
-        raw_rwlock_write_unlock(ref self.lock.raw)
+    func drop(mut this) {
+        raw_rwlock_write_unlock(ref this.lock.raw)
     }
 }
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// RwLock[T] is Send if T is Send.
+/// The lock can be transferred to another thread if its contents can be.
+impl[T: Send] Send for RwLock[T] {}
+
+/// RwLock[T] is Sync if T is Send + Sync.
+/// Unlike Mutex, RwLock allows multiple simultaneous readers, so T must be
+/// Sync to ensure safe shared access. T must also be Send because the lock
+/// itself might be used to transfer ownership when exclusively locked.
+impl[T: Send + Sync] Sync for RwLock[T] {}
+
+/// RwLockReadGuard is NOT Send.
+/// Guards must be released on the same thread that acquired them.
+// Note: In TML, types are not Send by default
+
+/// RwLockReadGuard[T] is Sync if T is Sync.
+/// While the guard can't be sent to another thread, references to it
+/// can be shared if the underlying data supports shared references.
+impl[T: Sync] Sync for RwLockReadGuard[T] {}
+
+/// RwLockWriteGuard is NOT Send.
+/// Guards must be released on the same thread that acquired them.
+// Note: In TML, types are not Send by default
+
+/// RwLockWriteGuard[T] is Sync if T is Sync.
+/// While the guard can't be sent to another thread, references to it
+/// can be shared if the underlying data supports shared references.
+impl[T: Sync] Sync for RwLockWriteGuard[T] {}

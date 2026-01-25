@@ -1,0 +1,406 @@
+//! Lock-free concurrent queue.
+//!
+//! This module provides [`LockFreeQueue[T]`], a thread-safe queue that uses
+//! atomic operations instead of locks for synchronization.
+//!
+//! # Overview
+//!
+//! The queue is based on the Michael-Scott lock-free queue algorithm,
+//! which provides wait-free `push` and lock-free `pop` operations.
+//!
+//! # When to Use
+//!
+//! Use `LockFreeQueue` when:
+//! - You need a thread-safe FIFO queue
+//! - Lock contention is high
+//! - You want to avoid blocking threads
+//!
+//! For lower contention scenarios, `Mutex[Queue]` may be simpler and equally fast.
+//!
+//! # Examples
+//!
+//! ## Basic Usage
+//!
+//! ```tml
+//! use std::sync::LockFreeQueue
+//!
+//! let queue = LockFreeQueue[I32]::new()
+//!
+//! queue.push(1)
+//! queue.push(2)
+//! queue.push(3)
+//!
+//! assert_eq(queue.pop(), Just(1))
+//! assert_eq(queue.pop(), Just(2))
+//! assert_eq(queue.pop(), Just(3))
+//! assert_eq(queue.pop(), Nothing)
+//! ```
+//!
+//! ## Multi-threaded Producer-Consumer
+//!
+//! ```tml
+//! use std::sync::{Arc, LockFreeQueue}
+//! use std::thread
+//!
+//! let queue = Arc::new(LockFreeQueue[I32]::new())
+//!
+//! // Producer thread
+//! let q1 = queue.clone()
+//! let producer = thread::spawn(do() {
+//!     loop i in 0 to 100 {
+//!         q1.push(i)
+//!     }
+//! })
+//!
+//! // Consumer thread
+//! let q2 = queue.clone()
+//! let consumer = thread::spawn(do() {
+//!     var count: I32 = 0
+//!     loop (count < 100) {
+//!         when q2.pop() {
+//!             Just(_) => count = count + 1,
+//!             Nothing => thread::yield_now()
+//!         }
+//!     }
+//! })
+//!
+//! producer.join()
+//! consumer.join()
+//! ```
+
+use sync::atomic::{AtomicPtr, AtomicUsize, Ordering}
+use core::alloc::{Layout, alloc_global, dealloc_global}
+use core::mem::{size_of, align_of}
+
+// ============================================================================
+// Node[T] - Internal queue node
+// ============================================================================
+
+/// Internal node structure for the lock-free queue.
+/// Each node contains a value and a pointer to the next node.
+@repr(C)
+type Node[T] {
+    /// The value stored in this node (Nothing for sentinel)
+    value: Maybe[T],
+    /// Atomic pointer to the next node
+    next: AtomicPtr[Node[T]],
+}
+
+impl[T] Node[T] {
+    /// Create a new node with a value
+    func new(value: T) -> Ptr[Node[T]] {
+        let size: I64 = size_of[Node[T]]()
+        let align: I64 = align_of[Node[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+
+        let ptr: Ptr[U8] = alloc_global(layout)
+        if ptr == null {
+            panic("LockFreeQueue: node allocation failed")
+        }
+
+        let node_ptr: Ptr[Node[T]] = ptr as Ptr[Node[T]]
+        lowlevel {
+            (*node_ptr).value = Just(value)
+            (*node_ptr).next = AtomicPtr::new(null)
+        }
+        return node_ptr
+    }
+
+    /// Create a sentinel node (no value)
+    func sentinel() -> Ptr[Node[T]] {
+        let size: I64 = size_of[Node[T]]()
+        let align: I64 = align_of[Node[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+
+        let ptr: Ptr[U8] = alloc_global(layout)
+        if ptr == null {
+            panic("LockFreeQueue: sentinel allocation failed")
+        }
+
+        let node_ptr: Ptr[Node[T]] = ptr as Ptr[Node[T]]
+        lowlevel {
+            (*node_ptr).value = Nothing
+            (*node_ptr).next = AtomicPtr::new(null)
+        }
+        return node_ptr
+    }
+
+    /// Deallocate a node
+    func free(ptr: Ptr[Node[T]]) {
+        let size: I64 = size_of[Node[T]]()
+        let align: I64 = align_of[Node[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+        dealloc_global(ptr as Ptr[U8], layout)
+    }
+}
+
+// ============================================================================
+// LockFreeQueue[T]
+// ============================================================================
+
+/// A lock-free concurrent queue.
+///
+/// This queue uses the Michael-Scott algorithm to provide thread-safe
+/// FIFO (first-in, first-out) operations without locks.
+///
+/// # Thread Safety
+///
+/// Multiple threads can safely call `push` and `pop` concurrently.
+/// The queue uses atomic compare-and-swap operations to ensure correctness.
+///
+/// # Memory Management
+///
+/// The queue internally manages memory for nodes. When items are popped,
+/// the nodes are deallocated. When the queue is dropped, all remaining
+/// nodes are freed.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::sync::LockFreeQueue
+///
+/// let queue = LockFreeQueue[Str]::new()
+/// queue.push("hello")
+/// queue.push("world")
+///
+/// assert_eq(queue.pop(), Just("hello"))
+/// assert_eq(queue.pop(), Just("world"))
+/// ```
+pub type LockFreeQueue[T] {
+    /// Head pointer (points to sentinel, first real item is head.next)
+    head: AtomicPtr[Node[T]],
+    /// Tail pointer (points to last node or sentinel if empty)
+    tail: AtomicPtr[Node[T]],
+    /// Number of elements in the queue (approximate)
+    len: AtomicUsize,
+}
+
+impl[T] LockFreeQueue[T] {
+    /// Creates a new empty lock-free queue.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeQueue
+    ///
+    /// let queue: LockFreeQueue[I32] = LockFreeQueue::new()
+    /// assert(queue.is_empty())
+    /// ```
+    pub func new() -> LockFreeQueue[T] {
+        // Create sentinel node
+        let sentinel: Ptr[Node[T]] = Node::sentinel[T]()
+
+        return LockFreeQueue {
+            head: AtomicPtr::new(sentinel),
+            tail: AtomicPtr::new(sentinel),
+            len: AtomicUsize::new(0),
+        }
+    }
+
+    /// Adds an element to the back of the queue.
+    ///
+    /// This operation is wait-free (always completes in a bounded number
+    /// of steps).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeQueue
+    ///
+    /// let queue = LockFreeQueue[I32]::new()
+    /// queue.push(1)
+    /// queue.push(2)
+    ///
+    /// assert_eq(queue.len(), 2)
+    /// ```
+    pub func push(mut this, value: T) {
+        let node: Ptr[Node[T]] = Node::new[T](value)
+
+        loop (true) {
+            let tail: Ptr[Node[T]] = this.tail.load(Ordering::Acquire)
+
+            lowlevel {
+                let next: Ptr[Node[T]] = (*tail).next.load(Ordering::Acquire)
+
+                // Check if tail is still the last node
+                if next == null {
+                    // Try to link the new node at the end
+                    let result: Outcome[Ptr[Node[T]], Ptr[Node[T]]] = (*tail).next.compare_exchange(
+                        null,
+                        node,
+                        Ordering::Release,
+                        Ordering::Relaxed
+                    )
+
+                    when result {
+                        Ok(_) => {
+                            // Successfully linked, try to update tail
+                            // (it's ok if this fails, another thread will help)
+                            this.tail.compare_exchange(
+                                tail,
+                                node,
+                                Ordering::Release,
+                                Ordering::Relaxed
+                            )
+                            this.len.fetch_add(1, Ordering::Relaxed)
+                            return
+                        },
+                        Err(_) => {
+                            // CAS failed, retry
+                        }
+                    }
+                } else {
+                    // Tail is behind, help move it forward
+                    this.tail.compare_exchange(
+                        tail,
+                        next,
+                        Ordering::Release,
+                        Ordering::Relaxed
+                    )
+                }
+            }
+        }
+    }
+
+    /// Removes and returns the element at the front of the queue.
+    ///
+    /// Returns `Nothing` if the queue is empty.
+    ///
+    /// This operation is lock-free (at least one thread makes progress).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeQueue
+    ///
+    /// let queue = LockFreeQueue[I32]::new()
+    /// queue.push(1)
+    /// queue.push(2)
+    ///
+    /// assert_eq(queue.pop(), Just(1))
+    /// assert_eq(queue.pop(), Just(2))
+    /// assert_eq(queue.pop(), Nothing)
+    /// ```
+    pub func pop(mut this) -> Maybe[T] {
+        loop (true) {
+            let head: Ptr[Node[T]] = this.head.load(Ordering::Acquire)
+            let tail: Ptr[Node[T]] = this.tail.load(Ordering::Acquire)
+
+            lowlevel {
+                let next: Ptr[Node[T]] = (*head).next.load(Ordering::Acquire)
+
+                // Is queue empty or tail falling behind?
+                if head == tail {
+                    if next == null {
+                        // Queue is empty
+                        return Nothing
+                    }
+                    // Tail is falling behind, help move it
+                    this.tail.compare_exchange(
+                        tail,
+                        next,
+                        Ordering::Release,
+                        Ordering::Relaxed
+                    )
+                } else {
+                    // Read value before CAS, otherwise another pop might free next
+                    let value: Maybe[T] = (*next).value
+
+                    // Try to swing head to next node
+                    let result: Outcome[Ptr[Node[T]], Ptr[Node[T]]] = this.head.compare_exchange(
+                        head,
+                        next,
+                        Ordering::Release,
+                        Ordering::Relaxed
+                    )
+
+                    when result {
+                        Ok(_) => {
+                            // Successfully dequeued, free old head (sentinel)
+                            Node::free[T](head)
+                            this.len.fetch_sub(1, Ordering::Relaxed)
+                            return value
+                        },
+                        Err(_) => {
+                            // CAS failed, retry
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Returns `true` if the queue contains no elements.
+    ///
+    /// Note: Due to concurrent operations, the result may be immediately
+    /// outdated.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeQueue
+    ///
+    /// let queue = LockFreeQueue[I32]::new()
+    /// assert(queue.is_empty())
+    ///
+    /// queue.push(1)
+    /// assert(not queue.is_empty())
+    /// ```
+    pub func is_empty(this) -> Bool {
+        let head: Ptr[Node[T]] = this.head.load(Ordering::Acquire)
+        let tail: Ptr[Node[T]] = this.tail.load(Ordering::Acquire)
+
+        lowlevel {
+            return head == tail and (*head).next.load(Ordering::Acquire) == null
+        }
+    }
+
+    /// Returns the approximate number of elements in the queue.
+    ///
+    /// Note: Due to concurrent operations, this is only an approximation.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeQueue
+    ///
+    /// let queue = LockFreeQueue[I32]::new()
+    /// queue.push(1)
+    /// queue.push(2)
+    ///
+    /// assert_eq(queue.len(), 2)
+    /// ```
+    pub func len(this) -> I64 {
+        return this.len.load(Ordering::Relaxed) as I64
+    }
+}
+
+impl[T] Drop for LockFreeQueue[T] {
+    func drop(mut this) {
+        // Pop all remaining elements to free nodes
+        loop (true) {
+            when this.pop() {
+                Just(_) => {},
+                Nothing => break
+            }
+        }
+
+        // Free the sentinel node
+        let head: Ptr[Node[T]] = this.head.load(Ordering::Relaxed)
+        Node::free[T](head)
+    }
+}
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// LockFreeQueue[T] is Send if T is Send.
+/// The queue can be transferred to another thread if its contents can be.
+impl[T: Send] Send for LockFreeQueue[T] {}
+
+/// LockFreeQueue[T] is Sync if T is Send.
+/// The queue provides synchronized access, so T only needs to be Send.
+impl[T: Send] Sync for LockFreeQueue[T] {}

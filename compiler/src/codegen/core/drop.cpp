@@ -54,6 +54,54 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
 
     if (!drop_scopes_.empty()) {
         drop_scopes_.back().push_back(DropInfo{var_name, var_reg, type_name, llvm_type});
+
+        // For generic imported types, request Drop method instantiation
+        // This handles types like MutexGuard__I32 from std::sync
+        auto sep_pos = type_name.find("__");
+        if (sep_pos != std::string::npos) {
+            std::string base_type = type_name.substr(0, sep_pos);
+
+            // Check if Drop impl method already generated
+            std::string drop_key = "tml_" + type_name + "_drop";
+            if (generated_impl_methods_.find(drop_key) == generated_impl_methods_.end()) {
+                // Build type_subs from mangled name
+                std::unordered_map<std::string, types::TypePtr> type_subs;
+                std::string remaining = type_name.substr(sep_pos + 2);
+
+                // Assume single type parameter T for now
+                types::TypePtr type_arg = nullptr;
+                if (remaining == "I32")
+                    type_arg = types::make_i32();
+                else if (remaining == "I64")
+                    type_arg = types::make_i64();
+                else if (remaining == "Bool")
+                    type_arg = types::make_bool();
+                else if (remaining == "F32")
+                    type_arg = types::make_primitive(types::PrimitiveKind::F32);
+                else if (remaining == "F64")
+                    type_arg = types::make_f64();
+                else {
+                    auto t = std::make_shared<types::Type>();
+                    t->kind = types::NamedType{remaining, "", {}};
+                    type_arg = t;
+                }
+
+                if (type_arg) {
+                    type_subs["T"] = type_arg;
+                    pending_impl_method_instantiations_.push_back(
+                        PendingImplMethod{type_name, "drop", type_subs, base_type, "",
+                                          /*is_library_type=*/true});
+                    generated_impl_methods_.insert(drop_key);
+
+                    // Pre-register in functions_ so emit_drop_call can find it
+                    // Library types don't use suite prefix
+                    std::string method_name = type_name + "_drop";
+                    std::string func_llvm_name = "tml_" + type_name + "_drop";
+                    functions_[method_name] =
+                        FuncInfo{"@" + func_llvm_name, "void (ptr)", "void", {"ptr"}};
+                }
+            }
+        }
     }
 }
 

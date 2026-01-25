@@ -207,8 +207,8 @@ impl Ordering {
     /// assert(not Ordering::Relaxed.has_acquire())
     /// assert(not Ordering::Release.has_acquire())
     /// ```
-    pub func has_acquire(self) -> Bool {
-        when self {
+    pub func has_acquire(this) -> Bool {
+        when this {
             Ordering::Acquire => true,
             Ordering::AcqRel => true,
             Ordering::SeqCst => true,
@@ -232,8 +232,8 @@ impl Ordering {
     /// assert(not Ordering::Relaxed.has_release())
     /// assert(not Ordering::Acquire.has_release())
     /// ```
-    pub func has_release(self) -> Bool {
-        when self {
+    pub func has_release(this) -> Bool {
+        when this {
             Ordering::Release => true,
             Ordering::AcqRel => true,
             Ordering::SeqCst => true,

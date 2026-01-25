@@ -147,7 +147,8 @@ private:
 
     // Track last expression type for type-aware codegen
     std::string last_expr_type_ = "i32";
-    bool last_expr_is_unsigned_ = false; // Track if last expression was unsigned type
+    bool last_expr_is_unsigned_ = false;          // Track if last expression was unsigned type
+    types::TypePtr last_semantic_type_ = nullptr; // Semantic type for deref assignments
 
     // Expected type context for enum constructors (used in gen_call_expr)
     // When set, enum constructors will use this type instead of inferring
@@ -217,6 +218,8 @@ private:
         std::string name;
         int index;
         std::string llvm_type;
+        types::TypePtr
+            semantic_type; // Semantic type for proper type inference (especially for ptr fields)
     };
     std::unordered_map<std::string, std::vector<FieldInfo>> struct_fields_; // struct_name -> fields
 
@@ -933,13 +936,12 @@ private:
     void gen_func_decl(const parser::FuncDecl& func);
     void pre_register_func(const parser::FuncDecl& func); // Pre-register without generating code
     void gen_impl_method(const std::string& type_name, const parser::FuncDecl& method);
-    void
-    gen_impl_method_instantiation(const std::string& mangled_type_name,
-                                  const parser::FuncDecl& method,
-                                  const std::unordered_map<std::string, types::TypePtr>& type_subs,
-                                  const std::vector<parser::GenericParam>& impl_generics,
-                                  const std::string& method_type_suffix = "",
-                                  bool is_library_type = false);
+    void gen_impl_method_instantiation(
+        const std::string& mangled_type_name, const parser::FuncDecl& method,
+        const std::unordered_map<std::string, types::TypePtr>& type_subs,
+        const std::vector<parser::GenericParam>& impl_generics,
+        const std::string& method_type_suffix = "", bool is_library_type = false,
+        const std::string& base_type_name = "");
     void gen_struct_decl(const parser::StructDecl& s);
     void gen_enum_decl(const parser::EnumDecl& e);
     void gen_namespace_decl(const parser::NamespaceDecl& ns);
@@ -1011,6 +1013,25 @@ private:
         -> std::optional<std::string>;
     auto gen_slice_type_method(const parser::MethodCallExpr& call, const std::string& method)
         -> std::optional<std::string>;
+
+    // Impl method helpers (extracted from gen_method_call)
+    auto try_gen_impl_method_call(const parser::MethodCallExpr& call, const std::string& receiver,
+                                  const std::string& receiver_ptr, types::TypePtr receiver_type)
+        -> std::optional<std::string>;
+    auto
+    try_gen_module_impl_method_call(const parser::MethodCallExpr& call, const std::string& receiver,
+                                    const std::string& receiver_ptr, types::TypePtr receiver_type)
+        -> std::optional<std::string>;
+    auto try_gen_dyn_dispatch_call(const parser::MethodCallExpr& call, const std::string& receiver,
+                                   types::TypePtr receiver_type) -> std::optional<std::string>;
+    auto try_gen_class_instance_call(const parser::MethodCallExpr& call,
+                                     const std::string& receiver, const std::string& receiver_ptr,
+                                     types::TypePtr receiver_type) -> std::optional<std::string>;
+    auto try_gen_primitive_behavior_method(const parser::MethodCallExpr& call,
+                                           const std::string& receiver,
+                                           types::TypePtr receiver_type,
+                                           const std::string& receiver_type_name,
+                                           bool receiver_was_ref) -> std::optional<std::string>;
 
     auto gen_closure(const parser::ClosureExpr& closure) -> std::string;
     auto gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string;

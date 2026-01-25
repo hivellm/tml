@@ -1,0 +1,9 @@
+// Scoped thread tests
+// Blocked by: Thread scopes not fully implemented
+
+use test
+
+@test
+func test_thread_scope_placeholder() -> I32 {
+    return 0
+}

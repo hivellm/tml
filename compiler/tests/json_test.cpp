@@ -1304,3 +1304,105 @@ TEST(CowStringTest, SSOBoundary) {
     CowString s2(over_capacity);
     EXPECT_EQ(s2.length(), CowString::SSO_CAPACITY + 1);
 }
+
+// ============================================================================
+// Buffer Size Hints Tests (estimated_size)
+// ============================================================================
+
+TEST(BufferSizeHintTest, NullEstimate) {
+    JsonValue v;
+    EXPECT_EQ(v.estimated_size(), 4); // "null"
+}
+
+TEST(BufferSizeHintTest, BoolEstimate) {
+    JsonValue t(true);
+    JsonValue f(false);
+    EXPECT_EQ(t.estimated_size(), 4); // "true"
+    EXPECT_EQ(f.estimated_size(), 5); // "false"
+}
+
+TEST(BufferSizeHintTest, NumberEstimate) {
+    JsonValue integer(int64_t(42));
+    JsonValue floating(3.14159);
+
+    // Integers get 20 bytes (max int64 digits + sign)
+    EXPECT_EQ(integer.estimated_size(), 20);
+    // Floats get 25 bytes (scientific notation)
+    EXPECT_EQ(floating.estimated_size(), 25);
+}
+
+TEST(BufferSizeHintTest, StringEstimate) {
+    JsonValue empty_str("");
+    JsonValue short_str("hello");
+    JsonValue long_str("The quick brown fox jumps over the lazy dog");
+
+    // String size = length + 2 (quotes) + 10% overhead
+    EXPECT_EQ(empty_str.estimated_size(), 2);         // "" + 0 overhead
+    EXPECT_EQ(short_str.estimated_size(), 5 + 2 + 0); // "hello" + quotes + 0 (5/10=0)
+    EXPECT_GE(long_str.estimated_size(), 44 + 2);     // >= actual size
+}
+
+TEST(BufferSizeHintTest, EmptyArrayEstimate) {
+    JsonValue arr(JsonArray{});
+    EXPECT_EQ(arr.estimated_size(), 2); // "[]"
+}
+
+TEST(BufferSizeHintTest, ArrayEstimate) {
+    JsonArray items;
+    items.push_back(JsonValue(int64_t(1)));
+    items.push_back(JsonValue(int64_t(2)));
+    items.push_back(JsonValue(int64_t(3)));
+    JsonValue arr(std::move(items));
+
+    // Each number gets 20 + 1 (comma), plus 2 for brackets
+    EXPECT_GE(arr.estimated_size(), 2 + 3 * 20);
+}
+
+TEST(BufferSizeHintTest, EmptyObjectEstimate) {
+    JsonValue obj(JsonObject{});
+    EXPECT_EQ(obj.estimated_size(), 2); // "{}"
+}
+
+TEST(BufferSizeHintTest, ObjectEstimate) {
+    JsonObject fields;
+    fields["name"] = JsonValue("Alice");
+    fields["age"] = JsonValue(int64_t(30));
+    JsonValue obj(std::move(fields));
+
+    // Should be >= actual serialized size
+    std::string actual = obj.to_string();
+    EXPECT_GE(obj.estimated_size(), actual.size() * 0.5); // Allow some margin
+}
+
+TEST(BufferSizeHintTest, NestedEstimate) {
+    // Create nested structure
+    JsonObject inner;
+    inner["x"] = JsonValue(int64_t(1));
+    inner["y"] = JsonValue(int64_t(2));
+
+    JsonObject outer;
+    outer["point"] = JsonValue(std::move(inner));
+    outer["label"] = JsonValue("test");
+
+    JsonValue obj(std::move(outer));
+
+    std::string actual = obj.to_string();
+    // Estimate should be reasonable (not wildly different from actual)
+    EXPECT_GE(obj.estimated_size(), actual.size() / 2);
+}
+
+TEST(BufferSizeHintTest, PreallocationWorks) {
+    // Verify that pre-allocation doesn't affect correctness
+    JsonObject data;
+    for (int i = 0; i < 100; ++i) {
+        data["key" + std::to_string(i)] = JsonValue(int64_t(i * i));
+    }
+    JsonValue obj(std::move(data));
+
+    // to_string() should use estimated_size() for pre-allocation
+    std::string result = obj.to_string();
+
+    // Parse back to verify correctness
+    auto parsed = parse_json(result);
+    EXPECT_TRUE(json_is_ok(parsed));
+}

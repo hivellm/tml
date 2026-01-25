@@ -1368,7 +1368,78 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             type_arg = types::make_bool();
                         else if (type_arg_str == "Str")
                             type_arg = types::make_str();
-                        else {
+                        // Handle mangled pointer types: ptr_I32 -> PtrType{I32}
+                        else if (type_arg_str.starts_with("ptr_")) {
+                            std::string inner_str = type_arg_str.substr(4);
+                            types::TypePtr inner = nullptr;
+                            if (inner_str == "I32")
+                                inner = types::make_i32();
+                            else if (inner_str == "I64")
+                                inner = types::make_i64();
+                            else if (inner_str == "I8")
+                                inner = make_prim(types::PrimitiveKind::I8);
+                            else if (inner_str == "I16")
+                                inner = make_prim(types::PrimitiveKind::I16);
+                            else if (inner_str == "U8")
+                                inner = make_prim(types::PrimitiveKind::U8);
+                            else if (inner_str == "U16")
+                                inner = make_prim(types::PrimitiveKind::U16);
+                            else if (inner_str == "U32")
+                                inner = make_prim(types::PrimitiveKind::U32);
+                            else if (inner_str == "U64")
+                                inner = make_prim(types::PrimitiveKind::U64);
+                            else if (inner_str == "F32")
+                                inner = make_prim(types::PrimitiveKind::F32);
+                            else if (inner_str == "F64")
+                                inner = types::make_f64();
+                            else if (inner_str == "Bool")
+                                inner = types::make_bool();
+                            else if (inner_str == "Str")
+                                inner = types::make_str();
+                            else {
+                                auto inner_t = std::make_shared<types::Type>();
+                                inner_t->kind = types::NamedType{inner_str, "", {}};
+                                inner = inner_t;
+                            }
+                            type_arg = std::make_shared<types::Type>();
+                            type_arg->kind = types::PtrType{false, inner};
+                        }
+                        // Handle mangled mutable pointer types: mutptr_I32 -> PtrType{mut, I32}
+                        else if (type_arg_str.starts_with("mutptr_")) {
+                            std::string inner_str = type_arg_str.substr(7);
+                            types::TypePtr inner = nullptr;
+                            if (inner_str == "I32")
+                                inner = types::make_i32();
+                            else if (inner_str == "I64")
+                                inner = types::make_i64();
+                            else if (inner_str == "I8")
+                                inner = make_prim(types::PrimitiveKind::I8);
+                            else if (inner_str == "I16")
+                                inner = make_prim(types::PrimitiveKind::I16);
+                            else if (inner_str == "U8")
+                                inner = make_prim(types::PrimitiveKind::U8);
+                            else if (inner_str == "U16")
+                                inner = make_prim(types::PrimitiveKind::U16);
+                            else if (inner_str == "U32")
+                                inner = make_prim(types::PrimitiveKind::U32);
+                            else if (inner_str == "U64")
+                                inner = make_prim(types::PrimitiveKind::U64);
+                            else if (inner_str == "F32")
+                                inner = make_prim(types::PrimitiveKind::F32);
+                            else if (inner_str == "F64")
+                                inner = types::make_f64();
+                            else if (inner_str == "Bool")
+                                inner = types::make_bool();
+                            else if (inner_str == "Str")
+                                inner = types::make_str();
+                            else {
+                                auto inner_t = std::make_shared<types::Type>();
+                                inner_t->kind = types::NamedType{inner_str, "", {}};
+                                inner = inner_t;
+                            }
+                            type_arg = std::make_shared<types::Type>();
+                            type_arg->kind = types::PtrType{true, inner};
+                        } else {
                             // For struct types (like BarrierState), create a NamedType
                             type_arg = std::make_shared<types::Type>();
                             type_arg->kind = types::NamedType{type_arg_str, "", {}};

@@ -1,0 +1,373 @@
+//! Lock-free concurrent stack.
+//!
+//! This module provides [`LockFreeStack[T]`], a thread-safe stack that uses
+//! atomic operations instead of locks for synchronization.
+//!
+//! # Overview
+//!
+//! The stack is based on the Treiber stack algorithm, which provides
+//! lock-free `push` and `pop` operations using compare-and-swap.
+//!
+//! # When to Use
+//!
+//! Use `LockFreeStack` when:
+//! - You need a thread-safe LIFO stack
+//! - Lock contention is high
+//! - You want to avoid blocking threads
+//!
+//! # Examples
+//!
+//! ## Basic Usage
+//!
+//! ```tml
+//! use std::sync::LockFreeStack
+//!
+//! let stack = LockFreeStack[I32]::new()
+//!
+//! stack.push(1)
+//! stack.push(2)
+//! stack.push(3)
+//!
+//! assert_eq(stack.pop(), Just(3))
+//! assert_eq(stack.pop(), Just(2))
+//! assert_eq(stack.pop(), Just(1))
+//! assert_eq(stack.pop(), Nothing)
+//! ```
+//!
+//! ## Multi-threaded Usage
+//!
+//! ```tml
+//! use std::sync::{Arc, LockFreeStack}
+//! use std::thread
+//!
+//! let stack = Arc::new(LockFreeStack[I32]::new())
+//!
+//! let mut handles = []
+//! loop i in 0 to 4 {
+//!     let s = stack.clone()
+//!     handles.push(thread::spawn(do() {
+//!         loop j in 0 to 100 {
+//!             s.push(i * 100 + j)
+//!         }
+//!     }))
+//! }
+//!
+//! for h in handles {
+//!     h.join()
+//! }
+//!
+//! assert_eq(stack.len(), 400)
+//! ```
+
+use sync::atomic::{AtomicPtr, AtomicUsize, Ordering}
+use core::alloc::{Layout, alloc_global, dealloc_global}
+use core::mem::{size_of, align_of}
+
+// ============================================================================
+// StackNode[T] - Internal stack node
+// ============================================================================
+
+/// Internal node structure for the lock-free stack.
+@repr(C)
+type StackNode[T] {
+    /// The value stored in this node
+    value: T,
+    /// Pointer to the next node (below in stack)
+    next: Ptr[StackNode[T]],
+}
+
+impl[T] StackNode[T] {
+    /// Create a new node with a value and next pointer
+    func new(value: T, next: Ptr[StackNode[T]]) -> Ptr[StackNode[T]] {
+        let size: I64 = size_of[StackNode[T]]()
+        let align: I64 = align_of[StackNode[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+
+        let ptr: Ptr[U8] = alloc_global(layout)
+        if ptr == null {
+            panic("LockFreeStack: node allocation failed")
+        }
+
+        let node_ptr: Ptr[StackNode[T]] = ptr as Ptr[StackNode[T]]
+        lowlevel {
+            (*node_ptr).value = value
+            (*node_ptr).next = next
+        }
+        return node_ptr
+    }
+
+    /// Deallocate a node
+    func free(ptr: Ptr[StackNode[T]]) {
+        let size: I64 = size_of[StackNode[T]]()
+        let align: I64 = align_of[StackNode[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+        dealloc_global(ptr as Ptr[U8], layout)
+    }
+}
+
+// ============================================================================
+// LockFreeStack[T]
+// ============================================================================
+
+/// A lock-free concurrent stack.
+///
+/// This stack uses the Treiber algorithm to provide thread-safe
+/// LIFO (last-in, first-out) operations without locks.
+///
+/// # Thread Safety
+///
+/// Multiple threads can safely call `push` and `pop` concurrently.
+/// The stack uses atomic compare-and-swap operations to ensure correctness.
+///
+/// # ABA Problem
+///
+/// Note: This basic implementation does not handle the ABA problem.
+/// For high-contention scenarios with memory reuse, consider using
+/// hazard pointers or epoch-based reclamation.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::sync::LockFreeStack
+///
+/// let stack = LockFreeStack[Str]::new()
+/// stack.push("first")
+/// stack.push("second")
+///
+/// assert_eq(stack.pop(), Just("second"))
+/// assert_eq(stack.pop(), Just("first"))
+/// ```
+pub type LockFreeStack[T] {
+    /// Top of the stack (null if empty)
+    top: AtomicPtr[StackNode[T]],
+    /// Number of elements (approximate)
+    len: AtomicUsize,
+}
+
+impl[T] LockFreeStack[T] {
+    /// Creates a new empty lock-free stack.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeStack
+    ///
+    /// let stack: LockFreeStack[I32] = LockFreeStack::new()
+    /// assert(stack.is_empty())
+    /// ```
+    pub func new() -> LockFreeStack[T] {
+        return LockFreeStack {
+            top: AtomicPtr::new(null),
+            len: AtomicUsize::new(0),
+        }
+    }
+
+    /// Pushes an element onto the top of the stack.
+    ///
+    /// This operation is lock-free.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeStack
+    ///
+    /// let stack = LockFreeStack[I32]::new()
+    /// stack.push(1)
+    /// stack.push(2)
+    ///
+    /// assert_eq(stack.len(), 2)
+    /// ```
+    pub func push(mut this, value: T) {
+        loop (true) {
+            let old_top: Ptr[StackNode[T]] = this.top.load(Ordering::Acquire)
+            let new_node: Ptr[StackNode[T]] = StackNode::new[T](value, old_top)
+
+            // Try to swap the top to point to our new node
+            let result: Outcome[Ptr[StackNode[T]], Ptr[StackNode[T]]] = this.top.compare_exchange(
+                old_top,
+                new_node,
+                Ordering::Release,
+                Ordering::Relaxed
+            )
+
+            when result {
+                Ok(_) => {
+                    this.len.fetch_add(1, Ordering::Relaxed)
+                    return
+                },
+                Err(_) => {
+                    // CAS failed, free the node and retry
+                    StackNode::free[T](new_node)
+                }
+            }
+        }
+    }
+
+    /// Removes and returns the element at the top of the stack.
+    ///
+    /// Returns `Nothing` if the stack is empty.
+    ///
+    /// This operation is lock-free.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeStack
+    ///
+    /// let stack = LockFreeStack[I32]::new()
+    /// stack.push(1)
+    /// stack.push(2)
+    ///
+    /// assert_eq(stack.pop(), Just(2))
+    /// assert_eq(stack.pop(), Just(1))
+    /// assert_eq(stack.pop(), Nothing)
+    /// ```
+    pub func pop(mut this) -> Maybe[T] {
+        loop (true) {
+            let old_top: Ptr[StackNode[T]] = this.top.load(Ordering::Acquire)
+
+            if old_top == null {
+                return Nothing
+            }
+
+            lowlevel {
+                let new_top: Ptr[StackNode[T]] = (*old_top).next
+
+                // Try to swap the top to point to the next node
+                let result: Outcome[Ptr[StackNode[T]], Ptr[StackNode[T]]] = this.top.compare_exchange(
+                    old_top,
+                    new_top,
+                    Ordering::Release,
+                    Ordering::Relaxed
+                )
+
+                when result {
+                    Ok(_) => {
+                        let value: T = (*old_top).value
+                        StackNode::free[T](old_top)
+                        this.len.fetch_sub(1, Ordering::Relaxed)
+                        return Just(value)
+                    },
+                    Err(_) => {
+                        // CAS failed, retry
+                    }
+                }
+            }
+        }
+    }
+
+    /// Returns a reference to the element at the top of the stack without
+    /// removing it.
+    ///
+    /// Returns `Nothing` if the stack is empty.
+    ///
+    /// # Safety
+    ///
+    /// The returned reference is only valid while no other thread pops
+    /// this element. Use with caution in concurrent scenarios.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeStack
+    ///
+    /// let stack = LockFreeStack[I32]::new()
+    /// stack.push(1)
+    ///
+    /// assert_eq(stack.peek(), Just(ref 1))
+    /// assert_eq(stack.pop(), Just(1))  // Still there
+    /// ```
+    pub func peek(this) -> Maybe[ref T] {
+        let top: Ptr[StackNode[T]] = this.top.load(Ordering::Acquire)
+
+        if top == null {
+            return Nothing
+        }
+
+        lowlevel {
+            return Just(ref (*top).value)
+        }
+    }
+
+    /// Returns `true` if the stack contains no elements.
+    ///
+    /// Note: Due to concurrent operations, the result may be immediately
+    /// outdated.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeStack
+    ///
+    /// let stack = LockFreeStack[I32]::new()
+    /// assert(stack.is_empty())
+    ///
+    /// stack.push(1)
+    /// assert(not stack.is_empty())
+    /// ```
+    pub func is_empty(this) -> Bool {
+        return this.top.load(Ordering::Acquire) == null
+    }
+
+    /// Returns the approximate number of elements in the stack.
+    ///
+    /// Note: Due to concurrent operations, this is only an approximation.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeStack
+    ///
+    /// let stack = LockFreeStack[I32]::new()
+    /// stack.push(1)
+    /// stack.push(2)
+    ///
+    /// assert_eq(stack.len(), 2)
+    /// ```
+    pub func len(this) -> I64 {
+        return this.len.load(Ordering::Relaxed) as I64
+    }
+
+    /// Removes all elements from the stack.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::LockFreeStack
+    ///
+    /// let stack = LockFreeStack[I32]::new()
+    /// stack.push(1)
+    /// stack.push(2)
+    ///
+    /// stack.clear()
+    /// assert(stack.is_empty())
+    /// ```
+    pub func clear(mut this) {
+        loop (true) {
+            when this.pop() {
+                Just(_) => {},
+                Nothing => break
+            }
+        }
+    }
+}
+
+impl[T] Drop for LockFreeStack[T] {
+    func drop(mut this) {
+        this.clear()
+    }
+}
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// LockFreeStack[T] is Send if T is Send.
+/// The stack can be transferred to another thread if its contents can be.
+impl[T: Send] Send for LockFreeStack[T] {}
+
+/// LockFreeStack[T] is Sync if T is Send.
+/// The stack provides synchronized access, so T only needs to be Send.
+impl[T: Send] Sync for LockFreeStack[T] {}

@@ -53,6 +53,9 @@ void LLVMIRGen::emit_runtime_decls() {
     // Core comparison type (core::cmp)
     // Ordering is a simple enum: Less=0, Equal=1, Greater=2
     emit_line("%struct.Ordering = type { i32 }");
+
+    // HashMapIter type for iterating over HashMap entries
+    emit_line("%struct.HashMapIter = type { ptr }");
     emit_line("");
 
     // External C functions
@@ -267,6 +270,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @list_clear(ptr)");
     emit_line("declare i32 @list_is_empty(ptr)");
     emit_line("declare void @list_remove(ptr, i64)");
+    emit_line("declare i64 @list_first(ptr)");
+    emit_line("declare i64 @list_last(ptr)");
     emit_line("");
 
     // HashMap runtime declarations
@@ -279,6 +284,12 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i1 @hashmap_remove(ptr, i64)");
     emit_line("declare i64 @hashmap_len(ptr)");
     emit_line("declare void @hashmap_clear(ptr)");
+    emit_line("declare ptr @hashmap_iter_create(ptr)");
+    emit_line("declare void @hashmap_iter_destroy(ptr)");
+    emit_line("declare i32 @hashmap_iter_has_next(ptr)");
+    emit_line("declare i64 @hashmap_iter_key(ptr)");
+    emit_line("declare i64 @hashmap_iter_value(ptr)");
+    emit_line("declare void @hashmap_iter_next(ptr)");
     emit_line("");
 
     // Buffer runtime declarations
@@ -761,18 +772,19 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         current_submodule_name_ = mod_name;
 
         // First pass: register struct/enum declarations (including generic ones)
+        // IMPORTANT: Register ALL structs/enums, not just public ones!
+        // Private types like StackNode[T] are still used internally and need to be
+        // instantiated when size_of[T]() or similar intrinsics are called.
         for (const auto& decl : parsed_module.decls) {
             if (decl->is<parser::StructDecl>()) {
                 const auto& s = decl->as<parser::StructDecl>();
-                if (s.vis == parser::Visibility::Public) {
-                    gen_struct_decl(
-                        s); // This registers generic structs in pending_generic_structs_
-                }
+                // Register all structs (public AND private) for generic instantiation
+                // Private types are needed for internal use (e.g., size_of[StackNode[T]])
+                gen_struct_decl(s);
             } else if (decl->is<parser::EnumDecl>()) {
                 const auto& e = decl->as<parser::EnumDecl>();
-                if (e.vis == parser::Visibility::Public) {
-                    gen_enum_decl(e); // This registers generic enums in pending_generic_enums_
-                }
+                // Register all enums (public AND private) for generic instantiation
+                gen_enum_decl(e);
             } else if (decl->is<parser::ConstDecl>()) {
                 // Register module-level constants for use in functions
                 const auto& const_decl = decl->as<parser::ConstDecl>();

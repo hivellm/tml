@@ -1643,6 +1643,115 @@ auto HirMirBuilder::build_assign(const hir::HirAssignExpr& assign) -> Value {
         return const_unit();
     }
 
+    // For field assignment on dereferenced pointer: (*ptr).field = value
+    // We need to GEP to the field address and store there
+    if (auto* field_expr = std::get_if<hir::HirFieldExpr>(&assign.target->kind)) {
+        // Check if the object is a deref expression: (*ptr).field
+        // Deref is represented as HirUnaryExpr with op == Deref
+        if (auto* unary_expr = std::get_if<hir::HirUnaryExpr>(&field_expr->object->kind)) {
+            if (unary_expr->op == hir::HirUnaryOp::Deref) {
+                // Get the pointer being dereferenced
+                Value ptr = build_expr(unary_expr->operand);
+
+                // Get the struct type from the deref result type (the type after dereferencing)
+                // The deref expression's type is the pointee (struct) type
+                MirTypePtr struct_type;
+                if (unary_expr->type) {
+                    struct_type = convert_type(unary_expr->type);
+                } else {
+                    // Fallback: get pointee from ptr's type
+                    if (ptr.type && std::holds_alternative<MirPointerType>(ptr.type->kind)) {
+                        struct_type = std::get<MirPointerType>(ptr.type->kind).pointee;
+                    }
+                }
+
+                // GEP to the field within the struct: ptr[0][field_index]
+                MirTypePtr field_ptr_type = make_pointer_type(rhs.type, false);
+                Value zero_idx = const_int(0, 32, false);
+                Value field_idx =
+                    const_int(static_cast<int64_t>(field_expr->field_index), 32, false);
+
+                GetElementPtrInst gep;
+                gep.base = ptr;
+                gep.base_type = struct_type; // Use struct type, not pointer type
+                gep.indices = {zero_idx, field_idx};
+                gep.result_type = field_ptr_type;
+
+                Value field_ptr = emit(gep, field_ptr_type, assign.span);
+
+                // Store to the field pointer
+                StoreInst store;
+                store.ptr = field_ptr;
+                store.value = rhs;
+                store.value_type = rhs.type;
+                emit_void(store);
+                return const_unit();
+            }
+        }
+
+        // Check if object is a direct pointer to struct (e.g., this.field where this is Ptr[T])
+        Value base = build_expr(field_expr->object);
+        MirTypePtr base_type = base.type;
+
+        // Get the struct type for the base
+        MirTypePtr struct_type;
+        bool is_ptr = false;
+        if (base_type) {
+            if (std::holds_alternative<MirPointerType>(base_type->kind)) {
+                const auto& ptr = std::get<MirPointerType>(base_type->kind);
+                struct_type = ptr.pointee;
+                is_ptr = true;
+            } else if (std::holds_alternative<MirPrimitiveType>(base_type->kind)) {
+                const auto& prim = std::get<MirPrimitiveType>(base_type->kind);
+                if (prim.kind == PrimitiveType::Ptr) {
+                    is_ptr = true;
+                    // Get struct type from the field object's type
+                    if (field_expr->object) {
+                        auto obj_type = field_expr->object->type();
+                        if (obj_type) {
+                            if (obj_type->is<types::NamedType>()) {
+                                const auto& named = obj_type->as<types::NamedType>();
+                                struct_type = make_struct_type(named.name);
+                            } else if (obj_type->is<types::PtrType>()) {
+                                const auto& ptr = obj_type->as<types::PtrType>();
+                                if (ptr.inner && ptr.inner->is<types::NamedType>()) {
+                                    const auto& inner_named = ptr.inner->as<types::NamedType>();
+                                    struct_type = make_struct_type(inner_named.name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (is_ptr) {
+            // GEP to the field within the struct
+            MirTypePtr field_ptr_type = make_pointer_type(rhs.type, false);
+
+            // Create constant indices for GEP: base[0][field_index]
+            // First index 0 dereferences the pointer, second is field index
+            Value zero_idx = const_int(0, 32, false);
+            Value field_idx = const_int(static_cast<int64_t>(field_expr->field_index), 32, false);
+
+            GetElementPtrInst gep;
+            gep.base = base;
+            gep.base_type = struct_type ? struct_type : base_type;
+            gep.indices = {zero_idx, field_idx};
+            gep.result_type = field_ptr_type;
+
+            Value field_ptr = emit(gep, field_ptr_type, assign.span);
+
+            // Store to the field pointer
+            StoreInst store;
+            store.ptr = field_ptr;
+            store.value = rhs;
+            store.value_type = rhs.type;
+            emit_void(store);
+            return const_unit();
+        }
+    }
+
     // For field/index assignment, need store instruction
     Value target_ptr = build_expr(assign.target); // Should return pointer
 

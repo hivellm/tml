@@ -44,7 +44,7 @@
 //! }
 //! ```
 
-use sync::atomic::{AtomicU32, Ordering}
+use sync::atomic::{AtomicU32, Ordering, spin_loop_hint}
 use sync::mutex::Mutex
 
 // ============================================================================
@@ -52,9 +52,9 @@ use sync::mutex::Mutex
 // ============================================================================
 
 // State values for Once
-let ONCE_INCOMPLETE: U32 = 0
-let ONCE_RUNNING: U32 = 1
-let ONCE_COMPLETE: U32 = 2
+const ONCE_INCOMPLETE: U32 = 0
+const ONCE_RUNNING: U32 = 1
+const ONCE_COMPLETE: U32 = 2
 
 /// A synchronization primitive which can be used to run a one-time
 /// initialization. Useful for one-time initialization for FFI or related
@@ -119,14 +119,14 @@ impl Once {
     ///     println("World!")
     /// })
     /// ```
-    pub func call_once(mut self, f: do()) {
+    pub func call_once(mut this, f: func()) {
         // Fast path: already complete
-        if self.state.load(Ordering::Acquire) == ONCE_COMPLETE {
+        if this.state.load(Ordering::Acquire) == ONCE_COMPLETE {
             return
         }
 
         // Slow path: try to be the one to initialize
-        let current = self.state.compare_exchange(
+        let current: Outcome[U32, U32] = this.state.compare_exchange(
             ONCE_INCOMPLETE,
             ONCE_RUNNING,
             Ordering::AcqRel,
@@ -137,7 +137,7 @@ impl Once {
             Ok(_) => {
                 // We won the race - run the initialization
                 f()
-                self.state.store(ONCE_COMPLETE, Ordering::Release)
+                this.state.store(ONCE_COMPLETE, Ordering::Release)
             },
             Err(state) => {
                 // Someone else is initializing or already complete
@@ -145,8 +145,8 @@ impl Once {
                     return
                 }
                 // Spin wait until complete
-                loop self.state.load(Ordering::Acquire) != ONCE_COMPLETE {
-                    sync::atomic::spin_loop_hint()
+                loop (this.state.load(Ordering::Acquire) != ONCE_COMPLETE) {
+                    spin_loop_hint()
                 }
             }
         }
@@ -169,8 +169,8 @@ impl Once {
     ///
     /// assert(init.is_completed())
     /// ```
-    pub func is_completed(self) -> Bool {
-        return self.state.load(Ordering::Acquire) == ONCE_COMPLETE
+    pub func is_completed(this) -> Bool {
+        return this.state.load(Ordering::Acquire) == ONCE_COMPLETE
     }
 }
 
@@ -237,14 +237,31 @@ impl[T] OnceLock[T] {
     /// cell.set("Hello")
     /// assert(cell.get().is_just())
     /// ```
-    pub func get(self) -> Maybe[ref T] {
-        if not self.once.is_completed() {
+    pub func get(this) -> Maybe[ref T] {
+        if not this.once.is_completed() {
             return Nothing
         }
-        when self.value {
-            Just(ref v) => return Just(ref v),
+        when this.value {
+            Just(v) => return Just(ref v),
             Nothing => return Nothing
         }
+    }
+
+    /// Returns `true` if the cell has been initialized.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::OnceLock
+    ///
+    /// let cell: OnceLock[I32] = OnceLock::new()
+    /// assert(not cell.is_initialized())
+    ///
+    /// cell.set(42)
+    /// assert(cell.is_initialized())
+    /// ```
+    pub func is_initialized(this) -> Bool {
+        return this.once.is_completed()
     }
 
     /// Sets the contents of this cell to `value`.
@@ -262,9 +279,9 @@ impl[T] OnceLock[T] {
     /// assert(cell.set(100).is_err())
     /// assert_eq(*cell.get().unwrap(), 42)
     /// ```
-    pub func set(mut self, value: T) -> Outcome[Unit, T] {
+    pub func set(mut this, value: T) -> Outcome[Unit, T] {
         // Try to be the one to set
-        let current = self.once.state.compare_exchange(
+        let current: Outcome[U32, U32] = this.once.state.compare_exchange(
             ONCE_INCOMPLETE,
             ONCE_RUNNING,
             Ordering::AcqRel,
@@ -273,8 +290,8 @@ impl[T] OnceLock[T] {
 
         when current {
             Ok(_) => {
-                self.value = Just(value)
-                self.once.state.store(ONCE_COMPLETE, Ordering::Release)
+                this.value = Just(value)
+                this.once.state.store(ONCE_COMPLETE, Ordering::Release)
                 return Ok(())
             },
             Err(_) => {
@@ -298,21 +315,21 @@ impl[T] OnceLock[T] {
     /// })
     /// assert_eq(*value, "Hello!")
     /// ```
-    pub func get_or_init(mut self, f: do() -> T) -> ref T {
+    pub func get_or_init(mut this, f: func() -> T) -> ref T {
         // Fast path
-        when self.get() {
-            Just(ref v) => return v,
+        when this.get() {
+            Just(v) => return v,
             Nothing => {}
         }
 
         // Slow path - initialize
-        self.once.call_once(do() {
-            self.value = Just(f())
+        this.once.call_once(do() {
+            this.value = Just(f())
         })
 
         // Now we're guaranteed to have a value
-        when self.value {
-            Just(ref v) => return v,
+        when this.value {
+            Just(v) => return ref v,
             Nothing => panic("OnceLock: value should be set after call_once")
         }
     }
@@ -333,15 +350,15 @@ impl[T] OnceLock[T] {
     /// assert(value.is_just())
     /// assert(cell.get().is_nothing())
     /// ```
-    pub func take(mut self) -> Maybe[T] {
-        if not self.once.is_completed() {
+    pub func take(mut this) -> Maybe[T] {
+        if not this.once.is_completed() {
             return Nothing
         }
 
         // Reset the state
-        self.once.state.store(ONCE_INCOMPLETE, Ordering::Release)
-        let result = self.value
-        self.value = Nothing
+        this.once.state.store(ONCE_INCOMPLETE, Ordering::Release)
+        let result: Maybe[T] = this.value
+        this.value = Nothing
         return result
     }
 
@@ -360,7 +377,32 @@ impl[T] OnceLock[T] {
     /// let value = cell.into_inner()
     /// assert_eq(value.unwrap(), "Hello")
     /// ```
-    pub func into_inner(self) -> Maybe[T] {
-        return self.value
+    pub func into_inner(this) -> Maybe[T] {
+        return this.value
     }
 }
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// Once is Send.
+/// Once can be safely transferred between threads.
+impl Send for Once {}
+
+/// Once is Sync.
+/// Once is explicitly designed to be shared between threads for
+/// one-time initialization. Multiple threads can call call_once safely.
+impl Sync for Once {}
+
+/// OnceLock[T] is Send if T is Send.
+/// The lock can be transferred to another thread if its contents can be.
+impl[T: Send] Send for OnceLock[T] {}
+
+/// OnceLock[T] is Sync if T is Send + Sync.
+/// OnceLock provides synchronized access for initialization, but once
+/// initialized, multiple threads may read the value simultaneously,
+/// so T needs to be Sync.
+impl[T: Send + Sync] Sync for OnceLock[T] {}

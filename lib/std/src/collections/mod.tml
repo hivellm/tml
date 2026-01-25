@@ -189,6 +189,77 @@ impl[K, V] HashMap[K, V] {
     pub func destroy(this) {
         lowlevel { hashmap_destroy(this.handle) }
     }
+
+    /// Create an iterator over the hashmap entries
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let map = HashMap[I64, I64]::new(16)
+    /// map.set(1, 100)
+    /// map.set(2, 200)
+    ///
+    /// let iter = map.iter()
+    /// loop (iter.has_next()) {
+    ///     let key = iter.key()
+    ///     let value = iter.value()
+    ///     print("key: " + key.to_string() + ", value: " + value.to_string())
+    ///     iter.next()
+    /// }
+    /// iter.destroy()
+    /// ```
+    pub func iter(this) -> HashMapIter[K, V] {
+        let h: *Unit = lowlevel { hashmap_iter_create(this.handle) }
+        HashMapIter[K, V] { handle: h }
+    }
+}
+
+/// An iterator over HashMap entries.
+///
+/// Created by calling `iter()` on a HashMap. The iterator provides access
+/// to keys and values through the `key()` and `value()` methods.
+///
+/// **Important**: The iterator must be destroyed after use to free memory.
+///
+/// # Example
+///
+/// ```tml
+/// let iter = map.iter()
+/// loop (iter.has_next()) {
+///     print(iter.key().to_string() + " => " + iter.value().to_string())
+///     iter.next()
+/// }
+/// iter.destroy()
+/// ```
+pub type HashMapIter[K, V] {
+    handle: *Unit
+}
+
+impl[K, V] HashMapIter[K, V] {
+    /// Check if there are more entries to iterate
+    pub func has_next(this) -> Bool {
+        lowlevel { hashmap_iter_has_next(this.handle) }
+    }
+
+    /// Advance to the next entry
+    pub func next(this) {
+        lowlevel { hashmap_iter_next(this.handle) }
+    }
+
+    /// Get the current entry's key
+    pub func key(this) -> K {
+        lowlevel { hashmap_iter_key(this.handle) }
+    }
+
+    /// Get the current entry's value
+    pub func value(this) -> V {
+        lowlevel { hashmap_iter_value(this.handle) }
+    }
+
+    /// Destroy the iterator and free memory
+    pub func destroy(this) {
+        lowlevel { hashmap_iter_destroy(this.handle) }
+    }
 }
 
 /// A byte buffer for reading and writing binary data.
@@ -283,5 +354,5 @@ impl Buffer {
     }
 }
 
-// Export OOP collection classes
-pub mod class_collections
+// OOP collection classes (ArrayList, HashSet, Queue, Stack, LinkedList)
+// are in pending/class_collections.tml - implementation incomplete

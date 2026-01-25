@@ -1,0 +1,334 @@
+// Arc and Weak tests - testing atomic counters as foundation
+use test::{assert, assert_eq}
+use std::sync::{AtomicI32, AtomicI64, AtomicBool, Ordering}
+
+// ============================================================================
+// AtomicBool Tests
+// ============================================================================
+
+@test
+func test_atomic_bool_new() -> I32 {
+    let flag: AtomicBool = AtomicBool::new(false)
+    assert(not flag.load(Ordering::Relaxed), "new bool should be false")
+    return 0
+}
+
+@test
+func test_atomic_bool_store_load() -> I32 {
+    var flag: AtomicBool = AtomicBool::new(false)
+    flag.store(true, Ordering::Relaxed)
+    assert(flag.load(Ordering::Relaxed), "loaded value should be true")
+    return 0
+}
+
+@test
+func test_atomic_bool_swap() -> I32 {
+    var flag: AtomicBool = AtomicBool::new(true)
+    let old: Bool = flag.swap(false, Ordering::Relaxed)
+    assert(old, "swap should return old value true")
+    assert(not flag.load(Ordering::Relaxed), "new value should be false")
+    return 0
+}
+
+@test
+func test_atomic_bool_compare_exchange_success() -> I32 {
+    var flag: AtomicBool = AtomicBool::new(false)
+    let result: Outcome[Bool, Bool] = flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert(not v, "Ok should contain old value false"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert(flag.load(Ordering::Relaxed), "value should now be true")
+    return 0
+}
+
+@test
+func test_atomic_bool_compare_exchange_fail() -> I32 {
+    var flag: AtomicBool = AtomicBool::new(true)
+    let result: Outcome[Bool, Bool] = flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(_) => assert(false, "compare_exchange should fail"),
+        Err(v) => assert(v, "Err should contain actual value true"),
+    }
+    return 0
+}
+
+@test
+func test_atomic_bool_fetch_and() -> I32 {
+    var flag: AtomicBool = AtomicBool::new(true)
+    let old: Bool = flag.fetch_and(false, Ordering::Relaxed)
+    assert(old, "fetch_and should return old value true")
+    assert(not flag.load(Ordering::Relaxed), "true AND false = false")
+    return 0
+}
+
+@test
+func test_atomic_bool_fetch_or() -> I32 {
+    var flag: AtomicBool = AtomicBool::new(false)
+    let old: Bool = flag.fetch_or(true, Ordering::Relaxed)
+    assert(not old, "fetch_or should return old value false")
+    assert(flag.load(Ordering::Relaxed), "false OR true = true")
+    return 0
+}
+
+@test
+func test_atomic_bool_fetch_xor() -> I32 {
+    var flag: AtomicBool = AtomicBool::new(true)
+    let old: Bool = flag.fetch_xor(true, Ordering::Relaxed)
+    assert(old, "fetch_xor should return old value true")
+    assert(not flag.load(Ordering::Relaxed), "true XOR true = false")
+    return 0
+}
+
+// ============================================================================
+// AtomicI32 Tests
+// ============================================================================
+
+@test
+func test_atomic_i32_new() -> I32 {
+    let counter: AtomicI32 = AtomicI32::new(42)
+    assert_eq(counter.load(Ordering::Relaxed), 42, "new i32 should be 42")
+    return 0
+}
+
+@test
+func test_atomic_i32_store_load() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(0)
+    counter.store(100, Ordering::Relaxed)
+    assert_eq(counter.load(Ordering::Relaxed), 100, "loaded value should be 100")
+    return 0
+}
+
+@test
+func test_atomic_i32_swap() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(10)
+    let old: I32 = counter.swap(20, Ordering::Relaxed)
+    assert_eq(old, 10, "swap should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 20, "new value should be 20")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_add() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(5)
+    let old: I32 = counter.fetch_add(3, Ordering::Relaxed)
+    assert_eq(old, 5, "fetch_add should return old value 5")
+    assert_eq(counter.load(Ordering::Relaxed), 8, "5 + 3 = 8")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_sub() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(10)
+    let old: I32 = counter.fetch_sub(3, Ordering::Relaxed)
+    assert_eq(old, 10, "fetch_sub should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 7, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_and() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(0b1111)
+    let old: I32 = counter.fetch_and(0b1010, Ordering::Relaxed)
+    assert_eq(old, 0b1111, "fetch_and should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 0b1010, "1111 & 1010 = 1010")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_or() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(0b1010)
+    let old: I32 = counter.fetch_or(0b0101, Ordering::Relaxed)
+    assert_eq(old, 0b1010, "fetch_or should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 0b1111, "1010 | 0101 = 1111")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_xor() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(0b1111)
+    let old: I32 = counter.fetch_xor(0b1010, Ordering::Relaxed)
+    assert_eq(old, 0b1111, "fetch_xor should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 0b0101, "1111 ^ 1010 = 0101")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_max() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(10)
+    let old1: I32 = counter.fetch_max(5, Ordering::Relaxed)
+    assert_eq(old1, 10, "fetch_max(10, 5) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 10, "max(10, 5) = 10")
+
+    let old2: I32 = counter.fetch_max(20, Ordering::Relaxed)
+    assert_eq(old2, 10, "fetch_max(10, 20) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 20, "max(10, 20) = 20")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_min() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(10)
+    let old1: I32 = counter.fetch_min(20, Ordering::Relaxed)
+    assert_eq(old1, 10, "fetch_min(10, 20) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 10, "min(10, 20) = 10")
+
+    let old2: I32 = counter.fetch_min(5, Ordering::Relaxed)
+    assert_eq(old2, 10, "fetch_min(10, 5) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 5, "min(10, 5) = 5")
+    return 0
+}
+
+@test
+func test_atomic_i32_compare_exchange_success() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(10)
+    let result: Outcome[I32, I32] = counter.compare_exchange(10, 20, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert_eq(v, 10, "Ok should contain old value"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 20, "value should now be 20")
+    return 0
+}
+
+@test
+func test_atomic_i32_compare_exchange_fail() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(10)
+    let result: Outcome[I32, I32] = counter.compare_exchange(5, 20, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(_) => assert(false, "compare_exchange should fail"),
+        Err(v) => assert_eq(v, 10, "Err should contain actual value"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 10, "value should still be 10")
+    return 0
+}
+
+@test
+func test_atomic_i32_into_inner() -> I32 {
+    let counter: AtomicI32 = AtomicI32::new(42)
+    let value: I32 = counter.into_inner()
+    assert_eq(value, 42, "into_inner should return 42")
+    return 0
+}
+
+@test
+func test_atomic_i32_is_lock_free() -> I32 {
+    let counter: AtomicI32 = AtomicI32::new(0)
+    assert(counter.is_lock_free(), "AtomicI32 should be lock-free")
+    return 0
+}
+
+// ============================================================================
+// AtomicI64 Tests
+// ============================================================================
+
+@test
+func test_atomic_i64_new() -> I32 {
+    let counter: AtomicI64 = AtomicI64::new(1000000000000 as I64)
+    assert_eq(counter.load(Ordering::Relaxed), 1000000000000 as I64, "new i64 should be 1T")
+    return 0
+}
+
+@test
+func test_atomic_i64_fetch_add() -> I32 {
+    var counter: AtomicI64 = AtomicI64::new(100 as I64)
+    let old: I64 = counter.fetch_add(50 as I64, Ordering::Relaxed)
+    assert_eq(old, 100 as I64, "fetch_add should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 150 as I64, "100 + 50 = 150")
+    return 0
+}
+
+@test
+func test_atomic_i64_fetch_sub() -> I32 {
+    var counter: AtomicI64 = AtomicI64::new(100 as I64)
+    let old: I64 = counter.fetch_sub(30 as I64, Ordering::Relaxed)
+    assert_eq(old, 100 as I64, "fetch_sub should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 70 as I64, "100 - 30 = 70")
+    return 0
+}
+
+@test
+func test_atomic_i64_swap() -> I32 {
+    var counter: AtomicI64 = AtomicI64::new(111 as I64)
+    let old: I64 = counter.swap(222 as I64, Ordering::Relaxed)
+    assert_eq(old, 111 as I64, "swap should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 222 as I64, "new value should be 222")
+    return 0
+}
+
+// ============================================================================
+// Ordering Tests (ensure different orderings work)
+// ============================================================================
+
+@test
+func test_ordering_values() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(0)
+
+    counter.store(1, Ordering::Relaxed)
+    counter.store(2, Ordering::Release)
+    counter.store(3, Ordering::SeqCst)
+
+    let v1: I32 = counter.load(Ordering::Relaxed)
+    let v2: I32 = counter.load(Ordering::Acquire)
+    let v3: I32 = counter.load(Ordering::SeqCst)
+
+    assert_eq(v1, 3, "all loads should see 3")
+    assert_eq(v2, 3, "all loads should see 3")
+    assert_eq(v3, 3, "all loads should see 3")
+    return 0
+}
+
+// ============================================================================
+// Counter Pattern Tests
+// ============================================================================
+
+@test
+func test_atomic_counter_increment() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(0)
+
+    var i: I32 = 0
+    loop (i < 10) {
+        counter.fetch_add(1, Ordering::Relaxed)
+        i = i + 1
+    }
+
+    assert_eq(counter.load(Ordering::Relaxed), 10, "counter should be 10")
+    return 0
+}
+
+@test
+func test_atomic_counter_decrement() -> I32 {
+    var counter: AtomicI32 = AtomicI32::new(10)
+
+    var i: I32 = 0
+    loop (i < 5) {
+        counter.fetch_sub(1, Ordering::Relaxed)
+        i = i + 1
+    }
+
+    assert_eq(counter.load(Ordering::Relaxed), 5, "counter should be 5")
+    return 0
+}
+
+// ============================================================================
+// Flag Pattern Tests
+// ============================================================================
+
+@test
+func test_atomic_flag_set_once() -> I32 {
+    var flag: AtomicBool = AtomicBool::new(false)
+
+    let result: Outcome[Bool, Bool] = flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
+
+    when result {
+        Ok(_) => {
+            let result2: Outcome[Bool, Bool] = flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
+            when result2 {
+                Ok(_) => assert(false, "second set should fail"),
+                Err(_) => assert(true, "second set correctly failed"),
+            }
+        },
+        Err(_) => assert(false, "first set should succeed"),
+    }
+    return 0
+}

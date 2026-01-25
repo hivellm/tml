@@ -35,6 +35,27 @@
 //! | [`RwLockReadGuard[T]`] | RAII guard for RwLock read access |
 //! | [`RwLockWriteGuard[T]`] | RAII guard for RwLock write access |
 //!
+//! # Shared Ownership
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Arc[T]`] | Atomically reference-counted pointer for thread-safe sharing |
+//! | [`Weak[T]`] | Weak reference to Arc (doesn't prevent deallocation) |
+//!
+//! # Lock-Free Data Structures
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`LockFreeQueue[T]`] | Lock-free FIFO queue (Michael-Scott algorithm) |
+//! | [`LockFreeStack[T]`] | Lock-free LIFO stack (Treiber algorithm) |
+//!
+//! # Channels
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Sender[T]`] | Sending half of MPSC channel (clonable) |
+//! | [`Receiver[T]`] | Receiving half of MPSC channel (single-consumer) |
+//!
 //! # Memory Ordering
 //!
 //! The [`Ordering`] enum specifies how atomic operations synchronize with
@@ -95,6 +116,23 @@
 //! // Full memory barrier
 //! fence(Ordering::SeqCst)
 //! ```
+//!
+//! ## Arc (Thread-safe Shared Ownership)
+//!
+//! ```tml
+//! use sync::{Arc, Mutex}
+//!
+//! // Share mutable data between threads
+//! let counter = Arc::new(Mutex::new(0))
+//!
+//! let counter2 = counter.clone()
+//! // counter and counter2 now share the same Mutex
+//!
+//! {
+//!     let mut guard = counter.lock()
+//!     *guard = *guard + 1
+//! }
+//! ```
 
 // Re-export submodules
 pub use sync::ordering
@@ -104,6 +142,10 @@ pub use sync::rwlock
 pub use sync::condvar
 pub use sync::barrier
 pub use sync::once
+pub use sync::arc
+pub use sync::queue
+pub use sync::stack
+pub use sync::mpsc
 
 // Re-export commonly used types at sync level
 pub use sync::ordering::Ordering
@@ -134,3 +176,11 @@ pub use sync::condvar::Condvar
 pub use sync::barrier::{Barrier, BarrierWaitResult}
 
 pub use sync::once::{Once, OnceLock}
+
+pub use sync::arc::{Arc, Weak}
+
+pub use sync::queue::LockFreeQueue
+
+pub use sync::stack::LockFreeStack
+
+pub use sync::mpsc::{Sender, Receiver, channel, SendError, RecvError, TryRecvError}

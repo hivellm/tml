@@ -78,8 +78,9 @@ use sync::atomic::{AtomicBool, AtomicU32, Ordering}
 /// On Windows: SRWLOCK (8 bytes)
 /// On Unix: pthread_mutex_t (40-48 bytes depending on platform)
 /// We use a fixed-size buffer that's large enough for all platforms.
+/// Note: Made pub for struct type emission.
 @repr(C)
-type RawMutex {
+pub type RawMutex {
     // Opaque storage for platform mutex
     // Size: 64 bytes to accommodate pthread_mutex_t on all platforms
     _data: [U8; 64]
@@ -152,7 +153,7 @@ impl[T] Mutex[T] {
     /// let mutex = Mutex::new(0)
     /// ```
     pub func new(value: T) -> Mutex[T] {
-        let mut m = Mutex {
+        var m: Mutex[T] = Mutex {
             data: value,
             raw: RawMutex { _data: [0; 64] },
             state: AtomicU32::new(0),
@@ -177,16 +178,12 @@ impl[T] Mutex[T] {
     /// let mut guard = mutex.lock()
     /// *guard = 1
     /// ```
-    pub func lock(mut self) -> MutexGuard[T] {
-        // Fast path: try to acquire with atomic
-        if self.state.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-            return MutexGuard { mutex: ref self }
-        }
-
-        // Slow path: use platform mutex
-        raw_mutex_lock(ref self.raw)
-        self.state.store(1, Ordering::Relaxed)
-        return MutexGuard { mutex: ref self }
+    pub func lock(mut this) -> MutexGuard[T] {
+        // Always use platform mutex for proper Condvar integration
+        // (SleepConditionVariableSRW requires the SRWLOCK to be held)
+        raw_mutex_lock(ref this.raw)
+        this.state.store(1, Ordering::Relaxed)
+        return MutexGuard { mutex: ref this }
     }
 
     /// Attempts to acquire this lock.
@@ -213,18 +210,12 @@ impl[T] Mutex[T] {
     ///     }
     /// }
     /// ```
-    pub func try_lock(mut self) -> Maybe[MutexGuard[T]] {
-        // Fast path: try to acquire with atomic
-        if self.state.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-            return Just(MutexGuard { mutex: ref self })
+    pub func try_lock(mut this) -> Maybe[MutexGuard[T]] {
+        // Use platform mutex for proper Condvar integration
+        if raw_mutex_trylock(ref this.raw) == 0 {
+            this.state.store(1, Ordering::Relaxed)
+            return Just(MutexGuard { mutex: ref this })
         }
-
-        // Slow path: try platform mutex
-        if raw_mutex_trylock(ref self.raw) == 0 {
-            self.state.store(1, Ordering::Relaxed)
-            return Just(MutexGuard { mutex: ref self })
-        }
-
         return Nothing
     }
 
@@ -245,8 +236,8 @@ impl[T] Mutex[T] {
     /// let guard = mutex.lock()
     /// assert(mutex.is_locked())
     /// ```
-    pub func is_locked(self) -> Bool {
-        return self.state.load(Ordering::Relaxed) != 0
+    pub func is_locked(this) -> Bool {
+        return this.state.load(Ordering::Relaxed) != 0
     }
 
     /// Consumes this mutex, returning the underlying data.
@@ -260,9 +251,9 @@ impl[T] Mutex[T] {
     /// let value = mutex.into_inner()
     /// assert_eq(value, 0)
     /// ```
-    pub func into_inner(mut self) -> T {
-        raw_mutex_destroy(ref self.raw)
-        return self.data
+    pub func into_inner(mut this) -> T {
+        raw_mutex_destroy(ref this.raw)
+        return this.data
     }
 
     /// Returns a mutable reference to the underlying data.
@@ -279,20 +270,20 @@ impl[T] Mutex[T] {
     /// *mutex.get_mut() = 10
     /// assert_eq(*mutex.lock(), 10)
     /// ```
-    pub func get_mut(mut self) -> mut ref T {
-        return ref self.data
+    pub func get_mut(mut this) -> mut ref T {
+        return ref this.data
     }
 
-    /// Internal: unlock the mutex (called by MutexGuard drop)
-    func unlock(mut self) {
-        self.state.store(0, Ordering::Release)
-        raw_mutex_unlock(ref self.raw)
+    /// Unlock the mutex (called by MutexGuard drop)
+    pub func unlock(mut this) {
+        this.state.store(0, Ordering::Release)
+        raw_mutex_unlock(ref this.raw)
     }
 }
 
 impl[T] Drop for Mutex[T] {
-    func drop(mut self) {
-        raw_mutex_destroy(ref self.raw)
+    func drop(mut this) {
+        raw_mutex_destroy(ref this.raw)
     }
 }
 
@@ -316,38 +307,61 @@ pub type MutexGuard[T] {
 
 impl[T] MutexGuard[T] {
     /// Returns a reference to the underlying data.
-    pub func get(self) -> ref T {
-        return ref self.mutex.data
+    pub func get(this) -> ref T {
+        return ref this.mutex.data
     }
 
     /// Returns a mutable reference to the underlying data.
-    pub func get_mut(mut self) -> mut ref T {
-        return ref self.mutex.data
+    pub func get_mut(mut this) -> mut ref T {
+        return ref this.mutex.data
     }
 }
 
 impl[T] Deref for MutexGuard[T] {
     type Target = T
 
-    func deref(self) -> ref T {
-        return ref self.mutex.data
+    func deref(this) -> ref T {
+        return ref this.mutex.data
     }
 }
 
 impl[T] DerefMut for MutexGuard[T] {
-    func deref_mut(mut self) -> mut ref T {
-        return ref self.mutex.data
+    func deref_mut(mut this) -> mut ref T {
+        return ref this.mutex.data
     }
 }
 
 impl[T] Drop for MutexGuard[T] {
-    func drop(mut self) {
-        self.mutex.unlock()
+    func drop(mut this) {
+        this.mutex.unlock()
     }
 }
 
-// MutexGuard is NOT Send - it must be unlocked on the same thread
-// impl[T] not Send for MutexGuard[T] {}
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// Mutex[T] is Send if T is Send.
+/// A mutex can be sent to another thread if its contents can be transferred.
+impl[T: Send] Send for Mutex[T] {}
+
+/// Mutex[T] is Sync if T is Send.
+/// A mutex can be safely shared between threads because it provides
+/// synchronized access to its contents. The contents only need to be
+/// Send (not Sync) because only one thread can access the data at a time.
+impl[T: Send] Sync for Mutex[T] {}
+
+/// MutexGuard is NOT Send.
+/// A guard must be unlocked on the same thread that locked it.
+/// This is because some platforms (like Windows SRWLOCK) require this.
+// Note: In TML, types are not Send by default, so we don't need explicit !Send
+
+/// MutexGuard[T] is Sync if T is Sync.
+/// While the guard can't be sent to another thread, it can be shared
+/// via references if the underlying data supports shared references.
+impl[T: Sync] Sync for MutexGuard[T] {}
 
 // ============================================================================
 // Convenience type aliases

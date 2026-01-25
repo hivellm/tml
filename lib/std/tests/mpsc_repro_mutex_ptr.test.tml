@@ -1,0 +1,20 @@
+// Minimal repro: Mutex[Ptr[T]] - testing if Mutex can hold a generic pointer
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+// Simple struct to point to
+type Data {
+    value: I32,
+}
+
+@test
+func test_mutex_ptr_i32() -> I32 {
+    // Test 1: Mutex holding a raw pointer to I32
+    var x: I32 = 42
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ref x as Ptr[I32])
+
+    let guard: MutexGuard[Ptr[I32]] = mutex.lock()
+    // Can we access the guard?
+
+    return 0
+}

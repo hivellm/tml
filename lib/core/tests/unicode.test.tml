@@ -1,0 +1,29 @@
+// Tests for core::unicode module
+// Note: The unicode module has issues:
+// - Missing unicode_data::UNICODE_VERSION constant
+// - Type mismatch issues (i16 vs i32 in char functions)
+
+use test
+
+// ============================================================================
+// Placeholder Tests
+// ============================================================================
+// Blocked on:
+// - unicode_data module missing exports
+// - Type mismatch in char_decode functions
+
+@test
+func test_unicode_placeholder() -> I32 {
+    // Placeholder until unicode module issues are fixed
+    return 0
+}
+
+// ============================================================================
+// Tests to enable once unicode module works:
+// ============================================================================
+// - test_is_valid_scalar
+// - test_is_alphabetic_ascii
+// - test_is_alphabetic_unicode
+// - test_is_numeric
+// - test_is_whitespace
+// - test_case_conversion

@@ -1,0 +1,9 @@
+// Sync primitives tests (Condvar, Barrier, Once)
+// Blocked by: Once naming collision
+
+use test
+
+@test
+func test_sync_primitives_placeholder() -> I32 {
+    return 0
+}

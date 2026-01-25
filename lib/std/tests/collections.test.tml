@@ -1,0 +1,476 @@
+// Tests for std::collections (runtime-backed collection types)
+use test::{assert, assert_eq}
+use std::collections::{List, HashMap, HashMapIter, Buffer}
+
+// ============================================================================
+// List[T] Tests
+// ============================================================================
+
+@test
+func test_list_new() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+    assert(list.is_empty(), "new list should be empty")
+    assert_eq(list.len(), 0 as I64, "new list len should be 0")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_push_and_get() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(10)
+    list.push(20)
+    list.push(30)
+
+    assert_eq(list.len(), 3 as I64, "len after 3 pushes")
+    assert(not list.is_empty(), "list should not be empty")
+
+    let v0: I64 = list.get(0)
+    assert_eq(v0, 10 as I64, "get index 0")
+
+    let v1: I64 = list.get(1)
+    assert_eq(v1, 20 as I64, "get index 1")
+
+    let v2: I64 = list.get(2)
+    assert_eq(v2, 30 as I64, "get index 2")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_set() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(1)
+    list.push(2)
+    list.push(3)
+
+    list.set(1, 42)
+
+    let v0: I64 = list.get(0)
+    assert_eq(v0, 1 as I64, "index 0 unchanged")
+
+    let v1: I64 = list.get(1)
+    assert_eq(v1, 42 as I64, "index 1 changed")
+
+    let v2: I64 = list.get(2)
+    assert_eq(v2, 3 as I64, "index 2 unchanged")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_pop() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(100)
+    list.push(200)
+    list.push(300)
+
+    let v1: I64 = list.pop()
+    assert_eq(v1, 300 as I64, "pop should return last")
+    assert_eq(list.len(), 2 as I64, "len after pop")
+
+    let v2: I64 = list.pop()
+    assert_eq(v2, 200 as I64, "pop should return 200")
+
+    let v3: I64 = list.pop()
+    assert_eq(v3, 100 as I64, "pop should return 100")
+
+    assert(list.is_empty(), "list should be empty after popping all")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_first_last() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(1)
+    list.push(2)
+    list.push(3)
+
+    let first: I64 = list.first()
+    assert_eq(first, 1 as I64, "first should be 1")
+
+    let last: I64 = list.last()
+    assert_eq(last, 3 as I64, "last should be 3")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_clear() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(1)
+    list.push(2)
+    list.push(3)
+
+    list.clear()
+
+    assert(list.is_empty(), "list should be empty after clear")
+    assert_eq(list.len(), 0 as I64, "len should be 0 after clear")
+
+    // Should be able to push again
+    list.push(42)
+    assert_eq(list.len(), 1 as I64, "can push after clear")
+
+    let val: I64 = list.get(0)
+    assert_eq(val, 42 as I64, "value correct after clear and push")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_capacity() -> I32 {
+    let list: List[I32] = List[I32].new(16)
+    let cap: I64 = list.capacity()
+    assert(cap >= (16 as I64), "capacity should be at least 16")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_i64() -> I32 {
+    let list: List[I64] = List[I64].new(4)
+
+    list.push(1000000000000 as I64)
+    list.push(2000000000000 as I64)
+
+    let v0: I64 = list.get(0)
+    assert_eq(v0, 1000000000000 as I64, "i64 value 1")
+
+    let v1: I64 = list.get(1)
+    assert_eq(v1, 2000000000000 as I64, "i64 value 2")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_default() -> I32 {
+    let list: List[I32] = List[I32].default()
+    assert(list.is_empty(), "default list should be empty")
+    let cap: I64 = list.capacity()
+    assert(cap >= (8 as I64), "default capacity should be at least 8")
+    list.push(42)
+    let val: I64 = list.get(0)
+    assert_eq(val, 42 as I64, "can use default list")
+    list.destroy()
+    return 0
+}
+
+// ============================================================================
+// HashMap[K, V] Tests
+// ============================================================================
+
+@test
+func test_hashmap_new() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    assert_eq(map.len(), 0 as I64, "new hashmap len should be 0")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_set_get() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 100 as I64)
+    map.set(2 as I64, 200 as I64)
+    map.set(3 as I64, 300 as I64)
+
+    assert_eq(map.len(), 3 as I64, "len after 3 sets")
+
+    let v1: I64 = map.get(1 as I64)
+    assert_eq(v1, 100 as I64, "get key 1")
+
+    let v2: I64 = map.get(2 as I64)
+    assert_eq(v2, 200 as I64, "get key 2")
+
+    let v3: I64 = map.get(3 as I64)
+    assert_eq(v3, 300 as I64, "get key 3")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_has() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(42 as I64, 999 as I64)
+
+    assert(map.has(42 as I64), "should have key 42")
+    assert(not map.has(99 as I64), "should not have key 99")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_remove() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 10 as I64)
+    map.set(2 as I64, 20 as I64)
+
+    assert_eq(map.len(), 2 as I64, "len before remove")
+
+    let removed: Bool = map.remove(1 as I64)
+    assert(removed, "remove should return true")
+    assert_eq(map.len(), 1 as I64, "len after remove")
+    assert(not map.has(1 as I64), "key 1 should be gone")
+    assert(map.has(2 as I64), "key 2 should still exist")
+
+    let not_removed: Bool = map.remove(999 as I64)
+    assert(not not_removed, "remove non-existent should return false")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_overwrite() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 100 as I64)
+    let v1: I64 = map.get(1 as I64)
+    assert_eq(v1, 100 as I64, "initial value")
+
+    map.set(1 as I64, 200 as I64)
+    let v2: I64 = map.get(1 as I64)
+    assert_eq(v2, 200 as I64, "overwritten value")
+    assert_eq(map.len(), 1 as I64, "len should still be 1")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_clear() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 10 as I64)
+    map.set(2 as I64, 20 as I64)
+    map.set(3 as I64, 30 as I64)
+
+    map.clear()
+
+    assert_eq(map.len(), 0 as I64, "len after clear")
+    assert(not map.has(1 as I64), "key 1 gone after clear")
+    assert(not map.has(2 as I64), "key 2 gone after clear")
+
+    // Can add again
+    map.set(5 as I64, 50 as I64)
+    let v: I64 = map.get(5 as I64)
+    assert_eq(v, 50 as I64, "value after clear and set")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_iter() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 100 as I64)
+    map.set(2 as I64, 200 as I64)
+    map.set(3 as I64, 300 as I64)
+
+    let iter: HashMapIter[I64, I64] = map.iter()
+    var count: I64 = 0
+    var sum: I64 = 0
+
+    loop (iter.has_next()) {
+        let k: I64 = iter.key()
+        let v: I64 = iter.value()
+        sum = sum + v
+        count = count + 1
+        iter.next()
+    }
+
+    assert_eq(count, 3 as I64, "should iterate 3 times")
+    assert_eq(sum, 600 as I64, "sum of values should be 600")
+
+    iter.destroy()
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_default() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].default()
+    assert_eq(map.len(), 0 as I64, "default map should be empty")
+    map.set(1 as I64, 42 as I64)
+    let val: I64 = map.get(1 as I64)
+    assert_eq(val, 42 as I64, "can use default map")
+    map.destroy()
+    return 0
+}
+
+// ============================================================================
+// Buffer Tests
+// ============================================================================
+
+@test
+func test_buffer_new() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+    assert_eq(buf.len(), 0 as I64, "new buffer len should be 0")
+    let cap: I64 = buf.capacity()
+    assert(cap >= (64 as I64), "capacity should be at least 64")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_byte() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+
+    buf.write_byte(0x41)  // 'A'
+    buf.write_byte(0x42)  // 'B'
+    buf.write_byte(0x43)  // 'C'
+
+    assert_eq(buf.len(), 3 as I64, "len after 3 writes")
+
+    buf.reset_read()
+
+    let b1: I32 = buf.read_byte()
+    assert_eq(b1, 0x41, "read byte 1")
+
+    let b2: I32 = buf.read_byte()
+    assert_eq(b2, 0x42, "read byte 2")
+
+    let b3: I32 = buf.read_byte()
+    assert_eq(b3, 0x43, "read byte 3")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_i32() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+
+    buf.write_i32(12345)
+    buf.write_i32(-9876)
+
+    buf.reset_read()
+
+    let v1: I32 = buf.read_i32()
+    assert_eq(v1, 12345, "read i32 1")
+
+    let v2: I32 = buf.read_i32()
+    assert_eq(v2, -9876, "read i32 2")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_i64() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+
+    buf.write_i64(1234567890123 as I64)
+    buf.write_i64(-9876543210 as I64)
+
+    buf.reset_read()
+
+    let v1: I64 = buf.read_i64()
+    assert_eq(v1, 1234567890123 as I64, "read i64 1")
+
+    let v2: I64 = buf.read_i64()
+    assert_eq(v2, -9876543210 as I64, "read i64 2")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_mixed_types() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+
+    buf.write_byte(0xFF)
+    buf.write_i32(42)
+    buf.write_i64(999999 as I64)
+    buf.write_byte(0x00)
+
+    buf.reset_read()
+
+    let b1: I32 = buf.read_byte()
+    assert_eq(b1, 0xFF, "byte 1")
+
+    let i32_val: I32 = buf.read_i32()
+    assert_eq(i32_val, 42, "i32")
+
+    let i64_val: I64 = buf.read_i64()
+    assert_eq(i64_val, 999999 as I64, "i64")
+
+    let b2: I32 = buf.read_byte()
+    assert_eq(b2, 0x00, "byte 2")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_remaining() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+
+    buf.write_i32(1)
+    buf.write_i32(2)
+    buf.write_i32(3)
+
+    buf.reset_read()
+
+    let r1: I64 = buf.remaining()
+    assert_eq(r1, 12 as I64, "remaining at start (3 i32 = 12 bytes)")
+
+    buf.read_i32()
+    let r2: I64 = buf.remaining()
+    assert_eq(r2, 8 as I64, "remaining after 1 read")
+
+    buf.read_i32()
+    buf.read_i32()
+    let r3: I64 = buf.remaining()
+    assert_eq(r3, 0 as I64, "remaining after all reads")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_clear() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+
+    buf.write_i32(1)
+    buf.write_i32(2)
+
+    buf.clear()
+
+    assert_eq(buf.len(), 0 as I64, "len after clear")
+
+    buf.write_i32(99)
+    buf.reset_read()
+    let val: I32 = buf.read_i32()
+    assert_eq(val, 99, "value after clear and write")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_default() -> I32 {
+    let buf: Buffer = Buffer.default()
+    let cap: I64 = buf.capacity()
+    assert(cap >= (64 as I64), "default capacity should be at least 64")
+    buf.destroy()
+    return 0
+}

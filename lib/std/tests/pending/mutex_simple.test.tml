@@ -1,0 +1,22 @@
+// Simple Mutex test - no println, just basic lock/unlock
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+@test
+func test_mutex_simple_lock() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        let val: I32 = *guard.get()
+        assert_eq(val, 42)
+    }  // guard should be dropped here
+
+    // Try to lock again - if Drop didn't unlock, this will deadlock
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 42)
+    }
+
+    return 0
+}

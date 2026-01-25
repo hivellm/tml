@@ -1508,6 +1508,56 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             }
         }
 
+        // Handle atomic type methods that return Outcome
+        // compare_exchange and compare_exchange_weak return Outcome[T, T]
+        if (call.method == "compare_exchange" || call.method == "compare_exchange_weak") {
+            TypePtr inner_type;
+            bool is_atomic = false;
+            if (named.name == "AtomicBool") {
+                inner_type = make_primitive(PrimitiveKind::Bool);
+                is_atomic = true;
+            } else if (named.name == "AtomicI8") {
+                inner_type = make_primitive(PrimitiveKind::I8);
+                is_atomic = true;
+            } else if (named.name == "AtomicI16") {
+                inner_type = make_primitive(PrimitiveKind::I16);
+                is_atomic = true;
+            } else if (named.name == "AtomicI32") {
+                inner_type = make_primitive(PrimitiveKind::I32);
+                is_atomic = true;
+            } else if (named.name == "AtomicI64") {
+                inner_type = make_primitive(PrimitiveKind::I64);
+                is_atomic = true;
+            } else if (named.name == "AtomicI128") {
+                inner_type = make_primitive(PrimitiveKind::I128);
+                is_atomic = true;
+            } else if (named.name == "AtomicU8") {
+                inner_type = make_primitive(PrimitiveKind::U8);
+                is_atomic = true;
+            } else if (named.name == "AtomicU16") {
+                inner_type = make_primitive(PrimitiveKind::U16);
+                is_atomic = true;
+            } else if (named.name == "AtomicU32") {
+                inner_type = make_primitive(PrimitiveKind::U32);
+                is_atomic = true;
+            } else if (named.name == "AtomicU64") {
+                inner_type = make_primitive(PrimitiveKind::U64);
+                is_atomic = true;
+            } else if (named.name == "AtomicU128") {
+                inner_type = make_primitive(PrimitiveKind::U128);
+                is_atomic = true;
+            } else if (named.name == "AtomicPtr" && !named.type_args.empty()) {
+                inner_type = make_ptr(named.type_args[0], false);
+                is_atomic = true;
+            }
+            if (is_atomic && inner_type) {
+                // Return Outcome[T, T] where T is the atomic's inner type
+                auto outcome_type = std::make_shared<Type>();
+                outcome_type->kind = NamedType{"Outcome", "", {inner_type, inner_type}};
+                return outcome_type;
+            }
+        }
+
         // Handle Outcome[T, E] methods
         if (named.name == "Outcome" && named.type_args.size() >= 2) {
             TypePtr ok_type = named.type_args[0];

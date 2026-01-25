@@ -729,6 +729,82 @@ pub func min_alloc_size() -> I64 {
 }
 
 // ============================================================================
+// Global Allocator Functions
+// ============================================================================
+
+/// Allocates memory using the global allocator.
+///
+/// This is the primary function for allocating raw memory. The returned pointer
+/// must eventually be freed with `dealloc_global`.
+///
+/// # Safety
+///
+/// The caller must ensure:
+/// - The layout has non-zero size
+/// - The returned pointer is eventually freed with `dealloc_global`
+pub func alloc_global(layout: Layout) -> Ptr[U8] {
+    return alloc(layout.size())
+}
+
+/// Allocates zeroed memory using the global allocator.
+///
+/// Like `alloc_global`, but the memory is initialized to zero.
+pub func alloc_global_zeroed(layout: Layout) -> Ptr[U8] {
+    let ptr: Ptr[U8] = alloc_global(layout)
+    if ptr != null {
+        mem_zero(ptr, layout.size())
+    }
+    return ptr
+}
+
+/// Deallocates memory previously allocated with `alloc_global`.
+///
+/// # Safety
+///
+/// - `ptr` must have been allocated by `alloc_global` or `alloc_global_zeroed`
+/// - `layout` must be the same layout used for allocation
+/// - The memory must not be accessed after this call
+pub func dealloc_global(ptr: Ptr[U8], layout: Layout) {
+    dealloc(ptr)
+}
+
+/// Reallocates memory previously allocated with `alloc_global`.
+///
+/// The contents of the returned memory will be unchanged up to the
+/// lesser of the new and old sizes.
+///
+/// # Safety
+///
+/// - `ptr` must have been allocated by `alloc_global`
+/// - `old_layout` must match the original allocation
+/// - `new_size` must be greater than zero
+pub func realloc_global(ptr: Ptr[U8], old_layout: Layout, new_size: I64) -> Ptr[U8] {
+    // Allocate new memory
+    let new_layout_result: Outcome[Layout, LayoutError] = Layout::from_size_align(new_size, old_layout.align())
+    when new_layout_result {
+        Err(_) => return null,
+        Ok(new_layout) => {
+            let new_ptr: Ptr[U8] = alloc_global(new_layout)
+            if new_ptr == null {
+                return null
+            }
+
+            // Copy old data to new memory
+            let copy_size: I64 = old_layout.size()
+            if new_size < copy_size {
+                copy_size = new_size
+            }
+            mem_copy(new_ptr, ptr, copy_size)
+
+            // Free old memory
+            dealloc_global(ptr, old_layout)
+
+            return new_ptr
+        },
+    }
+}
+
+// ============================================================================
 // Imports
 // ============================================================================
 

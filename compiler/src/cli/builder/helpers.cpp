@@ -587,6 +587,28 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                     std::cout << "Including collections runtime: " << collections_obj << "\n";
                 }
             }
+
+            // Include sync.c for Mutex, RwLock, Condvar runtime functions
+            fs::path sync_c = runtime_dir / "sync.c";
+            if (fs::exists(sync_c)) {
+                std::string sync_obj = ensure_c_compiled(to_forward_slashes(sync_c.string()),
+                                                         deps_cache, clang, verbose);
+                objects.push_back(fs::path(sync_obj));
+                if (verbose) {
+                    std::cout << "Including sync runtime: " << sync_obj << "\n";
+                }
+            }
+
+            // Include thread.c for thread management functions
+            fs::path thread_c = runtime_dir / "thread.c";
+            if (fs::exists(thread_c)) {
+                std::string thread_obj = ensure_c_compiled(to_forward_slashes(thread_c.string()),
+                                                           deps_cache, clang, verbose);
+                objects.push_back(fs::path(thread_obj));
+                if (verbose) {
+                    std::cout << "Including thread runtime: " << thread_obj << "\n";
+                }
+            }
         }
     }
 

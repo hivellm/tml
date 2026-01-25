@@ -475,7 +475,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 // Get semantic type for generic dyn dispatch (e.g., dyn Processor[I32])
                 types::TypePtr dyn_semantic = nullptr;
                 if (let.type_annotation) {
-                    dyn_semantic = resolve_parser_type_with_subs(**let.type_annotation, {});
+                    dyn_semantic =
+                        resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
                 }
 
                 locals_[var_name] = VarInfo{dyn_alloca, var_type, dyn_semantic, std::nullopt};
@@ -550,7 +551,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
                 // Resolve semantic type for FuncType - needed for Fn trait method dispatch
                 types::TypePtr semantic_type =
-                    resolve_parser_type_with_subs(**let.type_annotation, {});
+                    resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
                 VarInfo info{alloca_reg, "ptr", semantic_type, std::nullopt};
                 if (last_closure_captures_.has_value()) {
                     info.closure_captures = last_closure_captures_;
@@ -566,7 +567,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     if (is_ptr && let.init.has_value()) {
         // Set expected type for generic class constructors BEFORE evaluating initializer
         if (let.type_annotation) {
-            auto sem_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+            auto sem_type =
+                resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
             if (sem_type && sem_type->is<types::ClassType>()) {
                 const auto& class_type = sem_type->as<types::ClassType>();
                 if (!class_type.type_args.empty()) {
@@ -589,7 +591,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             // Store with struct type so field access uses correct GEP
             types::TypePtr semantic_type = nullptr;
             if (let.type_annotation) {
-                semantic_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+                semantic_type =
+                    resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
             }
             locals_[var_name] = VarInfo{alloca_reg, expr_type, semantic_type, std::nullopt};
             // Register for drop if type implements Drop
@@ -608,7 +611,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // Also store semantic type for pointer method dispatch
         types::TypePtr semantic_type = nullptr;
         if (let.type_annotation) {
-            semantic_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+            semantic_type =
+                resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
         }
         locals_[var_name] = VarInfo{alloca_reg, "ptr", semantic_type, std::nullopt};
         return;
@@ -626,7 +630,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // Also handle generic class types
         // If type annotation is a ClassType with type_args, compute mangled class name
         if (let.type_annotation) {
-            auto sem_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+            auto sem_type =
+                resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
             if (sem_type && sem_type->is<types::ClassType>()) {
                 const auto& class_type = sem_type->as<types::ClassType>();
                 if (!class_type.type_args.empty()) {
@@ -882,9 +887,10 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
     // Map variable name to alloca with type info
     // Also store semantic type if we have a type annotation (needed for ArrayType inference)
+    // Use current_type_subs_ for proper substitution in generic impl methods
     types::TypePtr semantic_type = nullptr;
     if (let.type_annotation) {
-        semantic_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+        semantic_type = resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
     }
     locals_[var_name] = VarInfo{alloca_reg, var_type, semantic_type, std::nullopt};
 

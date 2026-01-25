@@ -26,6 +26,17 @@
 //! | `hashmap_remove`  | `(*Unit, I32) -> Bool`        | Remove by key     |
 //! | `hashmap_contains`| `(*Unit, I32) -> Bool`        | Check key exists  |
 //!
+//! ## HashMap Iterator
+//!
+//! | Function               | Signature                  | Description       |
+//! |------------------------|----------------------------|-------------------|
+//! | `hashmap_iter_create`  | `(*Unit) -> *Unit`         | Create iterator   |
+//! | `hashmap_iter_destroy` | `(*Unit) -> Unit`          | Free iterator     |
+//! | `hashmap_iter_has_next`| `(*Unit) -> Bool`          | Check if more     |
+//! | `hashmap_iter_next`    | `(*Unit) -> Unit`          | Advance iterator  |
+//! | `hashmap_iter_key`     | `(*Unit) -> I64`           | Get current key   |
+//! | `hashmap_iter_value`   | `(*Unit) -> I64`           | Get current value |
+//!
 //! ## Buffer (Fixed-size)
 //!
 //! | Function        | Signature                     | Description        |
@@ -135,6 +146,36 @@ void TypeEnv::init_builtin_collections() {
     // hashmap_clear(map: Ptr[Unit]) -> Unit
     functions_["hashmap_clear"].push_back(
         FuncSig{"hashmap_clear", {make_ptr(make_unit())}, make_unit(), {}, false, builtin_span});
+
+    // ============ HashMap Iterator Functions ============
+
+    // hashmap_iter_create(map: Ptr[Unit]) -> Ptr[Unit]
+    functions_["hashmap_iter_create"].push_back(FuncSig{"hashmap_iter_create",
+                                                        {make_ptr(make_unit())},
+                                                        make_ptr(make_unit()),
+                                                        {},
+                                                        false,
+                                                        builtin_span});
+
+    // hashmap_iter_destroy(iter: Ptr[Unit]) -> Unit
+    functions_["hashmap_iter_destroy"].push_back(FuncSig{
+        "hashmap_iter_destroy", {make_ptr(make_unit())}, make_unit(), {}, false, builtin_span});
+
+    // hashmap_iter_has_next(iter: Ptr[Unit]) -> Bool
+    functions_["hashmap_iter_has_next"].push_back(FuncSig{
+        "hashmap_iter_has_next", {make_ptr(make_unit())}, make_bool(), {}, false, builtin_span});
+
+    // hashmap_iter_next(iter: Ptr[Unit]) -> Unit
+    functions_["hashmap_iter_next"].push_back(FuncSig{
+        "hashmap_iter_next", {make_ptr(make_unit())}, make_unit(), {}, false, builtin_span});
+
+    // hashmap_iter_key(iter: Ptr[Unit]) -> I64
+    functions_["hashmap_iter_key"].push_back(
+        FuncSig{"hashmap_iter_key", {make_ptr(make_unit())}, make_i64(), {}, false, builtin_span});
+
+    // hashmap_iter_value(iter: Ptr[Unit]) -> I64
+    functions_["hashmap_iter_value"].push_back(FuncSig{
+        "hashmap_iter_value", {make_ptr(make_unit())}, make_i64(), {}, false, builtin_span});
 
     // ============ Buffer Functions ============
 

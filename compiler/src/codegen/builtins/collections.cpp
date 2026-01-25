@@ -310,6 +310,73 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
         return "0";
     }
 
+    // ============ HASHMAP ITERATOR FUNCTIONS ============
+
+    // hashmap_iter_create(map) -> iter_ptr
+    if (fn_name == "hashmap_iter_create") {
+        if (!call.args.empty()) {
+            std::string map = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @hashmap_iter_create(ptr " + map + ")");
+            return result;
+        }
+        return "null";
+    }
+
+    // hashmap_iter_destroy(iter) -> Unit
+    if (fn_name == "hashmap_iter_destroy") {
+        if (!call.args.empty()) {
+            std::string iter = gen_expr(*call.args[0]);
+            emit_line("  call void @hashmap_iter_destroy(ptr " + iter + ")");
+        }
+        return "0";
+    }
+
+    // hashmap_iter_has_next(iter) -> Bool
+    if (fn_name == "hashmap_iter_has_next") {
+        if (!call.args.empty()) {
+            std::string iter = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i1 @hashmap_iter_has_next(ptr " + iter + ")");
+            last_expr_type_ = "i1";
+            return result;
+        }
+        return "0";
+    }
+
+    // hashmap_iter_next(iter) -> Unit
+    if (fn_name == "hashmap_iter_next") {
+        if (!call.args.empty()) {
+            std::string iter = gen_expr(*call.args[0]);
+            emit_line("  call void @hashmap_iter_next(ptr " + iter + ")");
+        }
+        return "0";
+    }
+
+    // hashmap_iter_key(iter) -> I64
+    if (fn_name == "hashmap_iter_key") {
+        if (!call.args.empty()) {
+            std::string iter = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @hashmap_iter_key(ptr " + iter + ")");
+            last_expr_type_ = "i64";
+            return result;
+        }
+        return "0";
+    }
+
+    // hashmap_iter_value(iter) -> I64
+    if (fn_name == "hashmap_iter_value") {
+        if (!call.args.empty()) {
+            std::string iter = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @hashmap_iter_value(ptr " + iter + ")");
+            last_expr_type_ = "i64";
+            return result;
+        }
+        return "0";
+    }
+
     // ============ BUFFER FUNCTIONS ============
 
     // buffer_create(capacity) -> buf_ptr

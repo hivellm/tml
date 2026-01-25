@@ -187,7 +187,7 @@ void LLVMIRGen::generate_pending_instantiations() {
                         if (m.name == pim.method_name) {
                             gen_impl_method_instantiation(pim.mangled_type_name, m, pim.type_subs,
                                                           impl.generics, pim.method_type_suffix,
-                                                          pim.is_library_type);
+                                                          pim.is_library_type, pim.base_type_name);
                             break;
                         }
                     }
@@ -202,9 +202,11 @@ void LLVMIRGen::generate_pending_instantiations() {
                         if (found)
                             break;
 
-                        // Check if this module has the struct
+                        // Check if this module has the struct (for exported types)
+                        // For library-internal types (pim.is_library_type), skip this check
+                        // and search the source code directly
                         auto struct_it = mod.structs.find(pim.base_type_name);
-                        if (struct_it == mod.structs.end())
+                        if (struct_it == mod.structs.end() && !pim.is_library_type)
                             continue;
 
                         // Re-parse the module source to get impl AST
@@ -284,7 +286,7 @@ void LLVMIRGen::generate_pending_instantiations() {
                                     gen_impl_method_instantiation(
                                         pim.mangled_type_name, method_decl, pim.type_subs,
                                         impl_decl.generics, pim.method_type_suffix,
-                                        pim.is_library_type);
+                                        pim.is_library_type, pim.base_type_name);
                                     found = true;
                                     break;
                                 }

@@ -533,6 +533,11 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 return make_primitive(PrimitiveKind::Str);
             if (name == "Unit")
                 return make_unit();
+            // Platform-sized types (map to 64-bit on 64-bit platforms)
+            if (name == "Usize")
+                return make_primitive(PrimitiveKind::U64); // Platform-sized unsigned
+            if (name == "Isize")
+                return make_primitive(PrimitiveKind::I64); // Platform-sized signed
 
             // Collection types
             if (name == "List")

@@ -487,7 +487,8 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
                         std::string tag_ptr = fresh_reg();
                         emit_line("  " + tag_ptr + " = getelementptr inbounds " + struct_type +
                                   ", ptr " + alloca_reg + ", i32 0, i32 0");
-                        emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
+                        emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " +
+                                  tag_ptr);
 
                         // Load the value
                         std::string result = fresh_reg();

@@ -18,6 +18,8 @@
 //! | [`iter`] | Iterator and Range |
 //! | [`net`] | Networking (TCP, UDP, HTTP) |
 //! | [`json`] | Native JSON parsing |
+//! | [`sync`] | Synchronization primitives (Mutex, Arc, atomics) |
+//! | [`thread`] | Threading utilities (scoped threads, thread-local) |
 
 pub mod traits
 pub mod interfaces
@@ -30,3 +32,5 @@ pub mod file
 pub mod iter
 pub mod net
 pub mod json
+pub mod sync
+pub mod thread

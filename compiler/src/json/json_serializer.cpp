@@ -517,12 +517,15 @@ void stream_pretty(const JsonValue& value, std::ostream& os, int indent, int dep
 
 auto JsonValue::to_string() const -> std::string {
     std::string result;
+    result.reserve(estimated_size()); // Pre-allocate based on size hint
     serialize_compact(*this, result);
     return result;
 }
 
 auto JsonValue::to_string_pretty(int indent) const -> std::string {
     std::string result;
+    // Pretty printing adds ~2x overhead for indentation and newlines
+    result.reserve(estimated_size() * 2);
     serialize_pretty(*this, result, indent, 0);
     return result;
 }
@@ -535,6 +538,59 @@ auto JsonValue::write_to(std::ostream& os) const -> std::ostream& {
 auto JsonValue::write_to_pretty(std::ostream& os, int indent) const -> std::ostream& {
     stream_pretty(*this, os, indent, 0);
     return os;
+}
+
+auto JsonValue::estimated_size() const -> size_t {
+    if (is_null()) {
+        return 4; // "null"
+    }
+
+    if (is_bool()) {
+        return as_bool() ? 4 : 5; // "true" or "false"
+    }
+
+    if (is_number()) {
+        // Estimate number size: up to 20 digits for integers, 25 for doubles
+        const auto& num = as_number();
+        if (num.is_integer()) {
+            return 20; // Max int64 is 19 digits + sign
+        }
+        return 25; // Scientific notation with precision
+    }
+
+    if (is_string()) {
+        // String length + quotes + estimate 10% overhead for escaping
+        return as_string().size() + 2 + (as_string().size() / 10);
+    }
+
+    if (is_array()) {
+        const auto& arr = as_array();
+        if (arr.empty()) {
+            return 2; // "[]"
+        }
+
+        size_t total = 2; // "[" and "]"
+        for (const auto& elem : arr) {
+            total += elem.estimated_size() + 1; // +1 for comma
+        }
+        return total;
+    }
+
+    if (is_object()) {
+        const auto& obj = as_object();
+        if (obj.empty()) {
+            return 2; // "{}"
+        }
+
+        size_t total = 2; // "{" and "}"
+        for (const auto& [key, val] : obj) {
+            // Key with quotes + colon + value + comma
+            total += key.size() + 4 + val.estimated_size();
+        }
+        return total;
+    }
+
+    return 0;
 }
 
 } // namespace tml::json

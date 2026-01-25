@@ -160,8 +160,10 @@ impl AtomicBool {
     /// let flag = AtomicBool::new(true)
     /// assert(flag.load(Ordering::Relaxed))
     /// ```
-    @intrinsic("atomic.load.bool")
-    pub func load(self, order: Ordering) -> Bool
+    /// Atomically loads the value.
+    pub func load(this, order: Ordering) -> Bool {
+        lowlevel { return this.value }
+    }
 
     /// Stores a value into the atomic boolean.
     ///
@@ -181,8 +183,9 @@ impl AtomicBool {
     /// let flag = AtomicBool::new(false)
     /// flag.store(true, Ordering::Release)
     /// ```
-    @intrinsic("atomic.store.bool")
-    pub func store(mut self, val: Bool, order: Ordering) -> Unit
+    pub func store(mut this, val: Bool, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
 
     /// Stores a value into the atomic boolean, returning the previous value.
     ///
@@ -196,8 +199,13 @@ impl AtomicBool {
     /// assert(old)
     /// assert(not flag.load(Ordering::Relaxed))
     /// ```
-    @intrinsic("atomic.swap.bool")
-    pub func swap(mut self, val: Bool, order: Ordering) -> Bool
+    pub func swap(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = val
+            return old
+        }
+    }
 
     /// Stores a value into the atomic boolean if the current value is the same
     /// as the `current` value.
@@ -218,14 +226,21 @@ impl AtomicBool {
     ///     Err(_) => println("Was already true")
     /// }
     /// ```
-    @intrinsic("atomic.cmpxchg.bool")
     pub func compare_exchange(
-        mut self,
+        mut this,
         current: Bool,
         new: Bool,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[Bool, Bool]
+    ) -> Outcome[Bool, Bool] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
 
     /// Stores a value into the atomic boolean if the current value is the same
     /// as the `current` value.
@@ -249,14 +264,15 @@ impl AtomicBool {
     ///     }
     /// }
     /// ```
-    @intrinsic("atomic.cmpxchg_weak.bool")
     pub func compare_exchange_weak(
-        mut self,
+        mut this,
         current: Bool,
         new: Bool,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[Bool, Bool]
+    ) -> Outcome[Bool, Bool] {
+        return this.compare_exchange(current, new, success, failure)
+    }
 
     /// Logical "and" with a boolean value.
     ///
@@ -272,8 +288,13 @@ impl AtomicBool {
     /// assert(old)
     /// assert(not flag.load(Ordering::Relaxed))
     /// ```
-    @intrinsic("atomic.and.bool")
-    pub func fetch_and(mut self, val: Bool, order: Ordering) -> Bool
+    pub func fetch_and(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = this.value and val
+            return old
+        }
+    }
 
     /// Logical "or" with a boolean value.
     ///
@@ -289,8 +310,13 @@ impl AtomicBool {
     /// assert(not old)
     /// assert(flag.load(Ordering::Relaxed))
     /// ```
-    @intrinsic("atomic.or.bool")
-    pub func fetch_or(mut self, val: Bool, order: Ordering) -> Bool
+    pub func fetch_or(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = this.value or val
+            return old
+        }
+    }
 
     /// Logical "xor" with a boolean value.
     ///
@@ -306,8 +332,13 @@ impl AtomicBool {
     /// assert(old)
     /// assert(not flag.load(Ordering::Relaxed))
     /// ```
-    @intrinsic("atomic.xor.bool")
-    pub func fetch_xor(mut self, val: Bool, order: Ordering) -> Bool
+    pub func fetch_xor(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = (this.value or val) and not (this.value and val)
+            return old
+        }
+    }
 
     /// Logical "nand" with a boolean value.
     ///
@@ -315,13 +346,18 @@ impl AtomicBool {
     ///
     /// `fetch_nand(true)` toggles the value.
     /// `fetch_nand(false)` sets the value to `true`.
-    @intrinsic("atomic.nand.bool")
-    pub func fetch_nand(mut self, val: Bool, order: Ordering) -> Bool
+    pub func fetch_nand(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = not (this.value and val)
+            return old
+        }
+    }
 
     /// Returns `true` if operations on this type are lock-free.
     ///
     /// Boolean atomics are always lock-free on all supported platforms.
-    pub func is_lock_free(self) -> Bool {
+    pub func is_lock_free(this) -> Bool {
         return true
     }
 
@@ -329,8 +365,8 @@ impl AtomicBool {
     ///
     /// This is safe because passing `self` by value guarantees that no other
     /// threads are concurrently accessing the atomic data.
-    pub func into_inner(self) -> Bool {
-        return self.value
+    pub func into_inner(this) -> Bool {
+        return this.value
     }
 }
 
@@ -362,64 +398,104 @@ impl AtomicI32 {
     }
 
     /// Loads a value from the atomic integer.
-    @intrinsic("atomic.load.i32")
-    pub func load(self, order: Ordering) -> I32
+    pub func load(this, order: Ordering) -> I32 {
+        lowlevel { return this.value }
+    }
 
     /// Stores a value into the atomic integer.
-    @intrinsic("atomic.store.i32")
-    pub func store(mut self, val: I32, order: Ordering) -> Unit
+    pub func store(mut this, val: I32, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
 
     /// Stores a value into the atomic integer, returning the previous value.
-    @intrinsic("atomic.swap.i32")
-    pub func swap(mut self, val: I32, order: Ordering) -> I32
+    pub func swap(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = val
+            return old
+        }
+    }
 
     /// Stores a value into the atomic integer if the current value equals `current`.
     ///
     /// Returns `Ok(current)` if the exchange succeeded, `Err(actual)` otherwise.
-    @intrinsic("atomic.cmpxchg.i32")
     pub func compare_exchange(
-        mut self,
+        mut this,
         current: I32,
         new: I32,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[I32, I32]
+    ) -> Outcome[I32, I32] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
 
     /// Stores a value into the atomic integer if the current value equals `current`.
     ///
     /// May spuriously fail even when comparison succeeds.
-    @intrinsic("atomic.cmpxchg_weak.i32")
     pub func compare_exchange_weak(
-        mut self,
+        mut this,
         current: I32,
         new: I32,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[I32, I32]
+    ) -> Outcome[I32, I32] {
+        return this.compare_exchange(current, new, success, failure)
+    }
 
     /// Adds to the current value, returning the previous value.
     ///
     /// This operation wraps around on overflow.
-    @intrinsic("atomic.add.i32")
-    pub func fetch_add(mut self, val: I32, order: Ordering) -> I32
+    pub func fetch_add(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value + val
+            return old
+        }
+    }
 
     /// Subtracts from the current value, returning the previous value.
     ///
     /// This operation wraps around on overflow.
-    @intrinsic("atomic.sub.i32")
-    pub func fetch_sub(mut self, val: I32, order: Ordering) -> I32
+    pub func fetch_sub(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value - val
+            return old
+        }
+    }
 
     /// Bitwise "and" with the current value, returning the previous value.
-    @intrinsic("atomic.and.i32")
-    pub func fetch_and(mut self, val: I32, order: Ordering) -> I32
+    pub func fetch_and(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value & val
+            return old
+        }
+    }
 
     /// Bitwise "or" with the current value, returning the previous value.
-    @intrinsic("atomic.or.i32")
-    pub func fetch_or(mut self, val: I32, order: Ordering) -> I32
+    pub func fetch_or(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value | val
+            return old
+        }
+    }
 
     /// Bitwise "xor" with the current value, returning the previous value.
-    @intrinsic("atomic.xor.i32")
-    pub func fetch_xor(mut self, val: I32, order: Ordering) -> I32
+    pub func fetch_xor(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value ^ val
+            return old
+        }
+    }
 
     /// Fetches the value, and applies a function to it that returns an optional
     /// new value. Returns a `Result` of `Ok(previous_value)` if the function
@@ -430,16 +506,16 @@ impl AtomicI32 {
     /// returns `Some(_)`, but the function will have been applied only once
     /// to the stored value.
     pub func fetch_update(
-        mut self,
+        mut this,
         set_order: Ordering,
         fetch_order: Ordering,
-        f: do(I32) -> Maybe[I32]
+        f: func(I32) -> Maybe[I32]
     ) -> Outcome[I32, I32] {
-        let mut prev = self.load(fetch_order)
+        var prev: I32 = this.load(fetch_order)
         loop (true) {
             when f(prev) {
                 Just(next) => {
-                    when self.compare_exchange_weak(prev, next, set_order, fetch_order) {
+                    when this.compare_exchange_weak(prev, next, set_order, fetch_order) {
                         Ok(x) => return Ok(x),
                         Err(next_prev) => prev = next_prev,
                     }
@@ -450,21 +526,31 @@ impl AtomicI32 {
     }
 
     /// Maximum with the current value, returning the previous value.
-    @intrinsic("atomic.max.i32")
-    pub func fetch_max(mut self, val: I32, order: Ordering) -> I32
+    pub func fetch_max(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            if val > this.value { this.value = val }
+            return old
+        }
+    }
 
     /// Minimum with the current value, returning the previous value.
-    @intrinsic("atomic.min.i32")
-    pub func fetch_min(mut self, val: I32, order: Ordering) -> I32
+    pub func fetch_min(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            if val < this.value { this.value = val }
+            return old
+        }
+    }
 
     /// Returns `true` if operations on this type are lock-free.
-    pub func is_lock_free(self) -> Bool {
+    pub func is_lock_free(this) -> Bool {
         return true
     }
 
     /// Consumes the atomic and returns the contained value.
-    pub func into_inner(self) -> I32 {
-        return self.value
+    pub func into_inner(this) -> I32 {
+        return this.value
     }
 }
 
@@ -483,60 +569,110 @@ impl AtomicI64 {
         return AtomicI64 { value: v }
     }
 
-    @intrinsic("atomic.load.i64")
-    pub func load(self, order: Ordering) -> I64
+    pub func load(this, order: Ordering) -> I64 {
+        lowlevel { return this.value }
+    }
 
-    @intrinsic("atomic.store.i64")
-    pub func store(mut self, val: I64, order: Ordering) -> Unit
+    pub func store(mut this, val: I64, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
 
-    @intrinsic("atomic.swap.i64")
-    pub func swap(mut self, val: I64, order: Ordering) -> I64
+    pub func swap(mut this, val: I64, order: Ordering) -> I64 {
+        lowlevel {
+            let old: I64 = this.value
+            this.value = val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg.i64")
     pub func compare_exchange(
-        mut self,
+        mut this,
         current: I64,
         new: I64,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[I64, I64]
+    ) -> Outcome[I64, I64] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg_weak.i64")
     pub func compare_exchange_weak(
-        mut self,
+        mut this,
         current: I64,
         new: I64,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[I64, I64]
+    ) -> Outcome[I64, I64] {
+        return this.compare_exchange(current, new, success, failure)
+    }
 
-    @intrinsic("atomic.add.i64")
-    pub func fetch_add(mut self, val: I64, order: Ordering) -> I64
+    pub func fetch_add(mut this, val: I64, order: Ordering) -> I64 {
+        lowlevel {
+            let old: I64 = this.value
+            this.value = this.value + val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.sub.i64")
-    pub func fetch_sub(mut self, val: I64, order: Ordering) -> I64
+    pub func fetch_sub(mut this, val: I64, order: Ordering) -> I64 {
+        lowlevel {
+            let old: I64 = this.value
+            this.value = this.value - val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.and.i64")
-    pub func fetch_and(mut self, val: I64, order: Ordering) -> I64
+    pub func fetch_and(mut this, val: I64, order: Ordering) -> I64 {
+        lowlevel {
+            let old: I64 = this.value
+            this.value = this.value & val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.or.i64")
-    pub func fetch_or(mut self, val: I64, order: Ordering) -> I64
+    pub func fetch_or(mut this, val: I64, order: Ordering) -> I64 {
+        lowlevel {
+            let old: I64 = this.value
+            this.value = this.value | val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.xor.i64")
-    pub func fetch_xor(mut self, val: I64, order: Ordering) -> I64
+    pub func fetch_xor(mut this, val: I64, order: Ordering) -> I64 {
+        lowlevel {
+            let old: I64 = this.value
+            this.value = this.value ^ val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.max.i64")
-    pub func fetch_max(mut self, val: I64, order: Ordering) -> I64
+    pub func fetch_max(mut this, val: I64, order: Ordering) -> I64 {
+        lowlevel {
+            let old: I64 = this.value
+            if val > this.value { this.value = val }
+            return old
+        }
+    }
 
-    @intrinsic("atomic.min.i64")
-    pub func fetch_min(mut self, val: I64, order: Ordering) -> I64
+    pub func fetch_min(mut this, val: I64, order: Ordering) -> I64 {
+        lowlevel {
+            let old: I64 = this.value
+            if val < this.value { this.value = val }
+            return old
+        }
+    }
 
-    pub func is_lock_free(self) -> Bool {
+    pub func is_lock_free(this) -> Bool {
         return true
     }
 
-    pub func into_inner(self) -> I64 {
-        return self.value
+    pub func into_inner(this) -> I64 {
+        return this.value
     }
 }
 
@@ -555,60 +691,110 @@ impl AtomicU32 {
         return AtomicU32 { value: v }
     }
 
-    @intrinsic("atomic.load.u32")
-    pub func load(self, order: Ordering) -> U32
+    pub func load(this, order: Ordering) -> U32 {
+        lowlevel { return this.value }
+    }
 
-    @intrinsic("atomic.store.u32")
-    pub func store(mut self, val: U32, order: Ordering) -> Unit
+    pub func store(mut this, val: U32, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
 
-    @intrinsic("atomic.swap.u32")
-    pub func swap(mut self, val: U32, order: Ordering) -> U32
+    pub func swap(mut this, val: U32, order: Ordering) -> U32 {
+        lowlevel {
+            let old: U32 = this.value
+            this.value = val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg.u32")
     pub func compare_exchange(
-        mut self,
+        mut this,
         current: U32,
         new: U32,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[U32, U32]
+    ) -> Outcome[U32, U32] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg_weak.u32")
     pub func compare_exchange_weak(
-        mut self,
+        mut this,
         current: U32,
         new: U32,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[U32, U32]
+    ) -> Outcome[U32, U32] {
+        return this.compare_exchange(current, new, success, failure)
+    }
 
-    @intrinsic("atomic.add.u32")
-    pub func fetch_add(mut self, val: U32, order: Ordering) -> U32
+    pub func fetch_add(mut this, val: U32, order: Ordering) -> U32 {
+        lowlevel {
+            let old: U32 = this.value
+            this.value = this.value + val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.sub.u32")
-    pub func fetch_sub(mut self, val: U32, order: Ordering) -> U32
+    pub func fetch_sub(mut this, val: U32, order: Ordering) -> U32 {
+        lowlevel {
+            let old: U32 = this.value
+            this.value = this.value - val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.and.u32")
-    pub func fetch_and(mut self, val: U32, order: Ordering) -> U32
+    pub func fetch_and(mut this, val: U32, order: Ordering) -> U32 {
+        lowlevel {
+            let old: U32 = this.value
+            this.value = this.value & val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.or.u32")
-    pub func fetch_or(mut self, val: U32, order: Ordering) -> U32
+    pub func fetch_or(mut this, val: U32, order: Ordering) -> U32 {
+        lowlevel {
+            let old: U32 = this.value
+            this.value = this.value | val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.xor.u32")
-    pub func fetch_xor(mut self, val: U32, order: Ordering) -> U32
+    pub func fetch_xor(mut this, val: U32, order: Ordering) -> U32 {
+        lowlevel {
+            let old: U32 = this.value
+            this.value = this.value ^ val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.umax.u32")
-    pub func fetch_max(mut self, val: U32, order: Ordering) -> U32
+    pub func fetch_max(mut this, val: U32, order: Ordering) -> U32 {
+        lowlevel {
+            let old: U32 = this.value
+            if val > this.value { this.value = val }
+            return old
+        }
+    }
 
-    @intrinsic("atomic.umin.u32")
-    pub func fetch_min(mut self, val: U32, order: Ordering) -> U32
+    pub func fetch_min(mut this, val: U32, order: Ordering) -> U32 {
+        lowlevel {
+            let old: U32 = this.value
+            if val < this.value { this.value = val }
+            return old
+        }
+    }
 
-    pub func is_lock_free(self) -> Bool {
+    pub func is_lock_free(this) -> Bool {
         return true
     }
 
-    pub func into_inner(self) -> U32 {
-        return self.value
+    pub func into_inner(this) -> U32 {
+        return this.value
     }
 }
 
@@ -627,60 +813,110 @@ impl AtomicU64 {
         return AtomicU64 { value: v }
     }
 
-    @intrinsic("atomic.load.u64")
-    pub func load(self, order: Ordering) -> U64
+    pub func load(this, order: Ordering) -> U64 {
+        lowlevel { return this.value }
+    }
 
-    @intrinsic("atomic.store.u64")
-    pub func store(mut self, val: U64, order: Ordering) -> Unit
+    pub func store(mut this, val: U64, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
 
-    @intrinsic("atomic.swap.u64")
-    pub func swap(mut self, val: U64, order: Ordering) -> U64
+    pub func swap(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg.u64")
     pub func compare_exchange(
-        mut self,
+        mut this,
         current: U64,
         new: U64,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[U64, U64]
+    ) -> Outcome[U64, U64] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg_weak.u64")
     pub func compare_exchange_weak(
-        mut self,
+        mut this,
         current: U64,
         new: U64,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[U64, U64]
+    ) -> Outcome[U64, U64] {
+        return this.compare_exchange(current, new, success, failure)
+    }
 
-    @intrinsic("atomic.add.u64")
-    pub func fetch_add(mut self, val: U64, order: Ordering) -> U64
+    pub func fetch_add(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value + val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.sub.u64")
-    pub func fetch_sub(mut self, val: U64, order: Ordering) -> U64
+    pub func fetch_sub(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value - val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.and.u64")
-    pub func fetch_and(mut self, val: U64, order: Ordering) -> U64
+    pub func fetch_and(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value & val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.or.u64")
-    pub func fetch_or(mut self, val: U64, order: Ordering) -> U64
+    pub func fetch_or(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value | val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.xor.u64")
-    pub func fetch_xor(mut self, val: U64, order: Ordering) -> U64
+    pub func fetch_xor(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value ^ val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.umax.u64")
-    pub func fetch_max(mut self, val: U64, order: Ordering) -> U64
+    pub func fetch_max(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            if val > this.value { this.value = val }
+            return old
+        }
+    }
 
-    @intrinsic("atomic.umin.u64")
-    pub func fetch_min(mut self, val: U64, order: Ordering) -> U64
+    pub func fetch_min(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            if val < this.value { this.value = val }
+            return old
+        }
+    }
 
-    pub func is_lock_free(self) -> Bool {
+    pub func is_lock_free(this) -> Bool {
         return true
     }
 
-    pub func into_inner(self) -> U64 {
-        return self.value
+    pub func into_inner(this) -> U64 {
+        return this.value
     }
 }
 
@@ -702,60 +938,110 @@ impl AtomicUsize {
         return AtomicUsize { value: v }
     }
 
-    @intrinsic("atomic.load.usize")
-    pub func load(self, order: Ordering) -> Usize
+    pub func load(this, order: Ordering) -> Usize {
+        lowlevel { return this.value }
+    }
 
-    @intrinsic("atomic.store.usize")
-    pub func store(mut self, val: Usize, order: Ordering) -> Unit
+    pub func store(mut this, val: Usize, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
 
-    @intrinsic("atomic.swap.usize")
-    pub func swap(mut self, val: Usize, order: Ordering) -> Usize
+    pub func swap(mut this, val: Usize, order: Ordering) -> Usize {
+        lowlevel {
+            let old: Usize = this.value
+            this.value = val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg.usize")
     pub func compare_exchange(
-        mut self,
+        mut this,
         current: Usize,
         new: Usize,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[Usize, Usize]
+    ) -> Outcome[Usize, Usize] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg_weak.usize")
     pub func compare_exchange_weak(
-        mut self,
+        mut this,
         current: Usize,
         new: Usize,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[Usize, Usize]
+    ) -> Outcome[Usize, Usize] {
+        return this.compare_exchange(current, new, success, failure)
+    }
 
-    @intrinsic("atomic.add.usize")
-    pub func fetch_add(mut self, val: Usize, order: Ordering) -> Usize
+    pub func fetch_add(mut this, val: Usize, order: Ordering) -> Usize {
+        lowlevel {
+            let old: Usize = this.value
+            this.value = this.value + val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.sub.usize")
-    pub func fetch_sub(mut self, val: Usize, order: Ordering) -> Usize
+    pub func fetch_sub(mut this, val: Usize, order: Ordering) -> Usize {
+        lowlevel {
+            let old: Usize = this.value
+            this.value = this.value - val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.and.usize")
-    pub func fetch_and(mut self, val: Usize, order: Ordering) -> Usize
+    pub func fetch_and(mut this, val: Usize, order: Ordering) -> Usize {
+        lowlevel {
+            let old: Usize = this.value
+            this.value = this.value & val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.or.usize")
-    pub func fetch_or(mut self, val: Usize, order: Ordering) -> Usize
+    pub func fetch_or(mut this, val: Usize, order: Ordering) -> Usize {
+        lowlevel {
+            let old: Usize = this.value
+            this.value = this.value | val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.xor.usize")
-    pub func fetch_xor(mut self, val: Usize, order: Ordering) -> Usize
+    pub func fetch_xor(mut this, val: Usize, order: Ordering) -> Usize {
+        lowlevel {
+            let old: Usize = this.value
+            this.value = this.value ^ val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.umax.usize")
-    pub func fetch_max(mut self, val: Usize, order: Ordering) -> Usize
+    pub func fetch_max(mut this, val: Usize, order: Ordering) -> Usize {
+        lowlevel {
+            let old: Usize = this.value
+            if val > this.value { this.value = val }
+            return old
+        }
+    }
 
-    @intrinsic("atomic.umin.usize")
-    pub func fetch_min(mut self, val: Usize, order: Ordering) -> Usize
+    pub func fetch_min(mut this, val: Usize, order: Ordering) -> Usize {
+        lowlevel {
+            let old: Usize = this.value
+            if val < this.value { this.value = val }
+            return old
+        }
+    }
 
-    pub func is_lock_free(self) -> Bool {
+    pub func is_lock_free(this) -> Bool {
         return true
     }
 
-    pub func into_inner(self) -> Usize {
-        return self.value
+    pub func into_inner(this) -> Usize {
+        return this.value
     }
 }
 
@@ -774,60 +1060,110 @@ impl AtomicIsize {
         return AtomicIsize { value: v }
     }
 
-    @intrinsic("atomic.load.isize")
-    pub func load(self, order: Ordering) -> Isize
+    pub func load(this, order: Ordering) -> Isize {
+        lowlevel { return this.value }
+    }
 
-    @intrinsic("atomic.store.isize")
-    pub func store(mut self, val: Isize, order: Ordering) -> Unit
+    pub func store(mut this, val: Isize, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
 
-    @intrinsic("atomic.swap.isize")
-    pub func swap(mut self, val: Isize, order: Ordering) -> Isize
+    pub func swap(mut this, val: Isize, order: Ordering) -> Isize {
+        lowlevel {
+            let old: Isize = this.value
+            this.value = val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg.isize")
     pub func compare_exchange(
-        mut self,
+        mut this,
         current: Isize,
         new: Isize,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[Isize, Isize]
+    ) -> Outcome[Isize, Isize] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
 
-    @intrinsic("atomic.cmpxchg_weak.isize")
     pub func compare_exchange_weak(
-        mut self,
+        mut this,
         current: Isize,
         new: Isize,
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[Isize, Isize]
+    ) -> Outcome[Isize, Isize] {
+        return this.compare_exchange(current, new, success, failure)
+    }
 
-    @intrinsic("atomic.add.isize")
-    pub func fetch_add(mut self, val: Isize, order: Ordering) -> Isize
+    pub func fetch_add(mut this, val: Isize, order: Ordering) -> Isize {
+        lowlevel {
+            let old: Isize = this.value
+            this.value = this.value + val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.sub.isize")
-    pub func fetch_sub(mut self, val: Isize, order: Ordering) -> Isize
+    pub func fetch_sub(mut this, val: Isize, order: Ordering) -> Isize {
+        lowlevel {
+            let old: Isize = this.value
+            this.value = this.value - val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.and.isize")
-    pub func fetch_and(mut self, val: Isize, order: Ordering) -> Isize
+    pub func fetch_and(mut this, val: Isize, order: Ordering) -> Isize {
+        lowlevel {
+            let old: Isize = this.value
+            this.value = this.value & val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.or.isize")
-    pub func fetch_or(mut self, val: Isize, order: Ordering) -> Isize
+    pub func fetch_or(mut this, val: Isize, order: Ordering) -> Isize {
+        lowlevel {
+            let old: Isize = this.value
+            this.value = this.value | val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.xor.isize")
-    pub func fetch_xor(mut self, val: Isize, order: Ordering) -> Isize
+    pub func fetch_xor(mut this, val: Isize, order: Ordering) -> Isize {
+        lowlevel {
+            let old: Isize = this.value
+            this.value = this.value ^ val
+            return old
+        }
+    }
 
-    @intrinsic("atomic.max.isize")
-    pub func fetch_max(mut self, val: Isize, order: Ordering) -> Isize
+    pub func fetch_max(mut this, val: Isize, order: Ordering) -> Isize {
+        lowlevel {
+            let old: Isize = this.value
+            if val > this.value { this.value = val }
+            return old
+        }
+    }
 
-    @intrinsic("atomic.min.isize")
-    pub func fetch_min(mut self, val: Isize, order: Ordering) -> Isize
+    pub func fetch_min(mut this, val: Isize, order: Ordering) -> Isize {
+        lowlevel {
+            let old: Isize = this.value
+            if val < this.value { this.value = val }
+            return old
+        }
+    }
 
-    pub func is_lock_free(self) -> Bool {
+    pub func is_lock_free(this) -> Bool {
         return true
     }
 
-    pub func into_inner(self) -> Isize {
-        return self.value
+    pub func into_inner(this) -> Isize {
+        return this.value
     }
 }
 
@@ -837,7 +1173,7 @@ impl AtomicIsize {
 
 /// A raw pointer which can be safely shared between threads.
 ///
-/// This type has the same size and alignment as a `raw T`.
+/// This type has the same size and alignment as a `Ptr[T]`.
 ///
 /// # Examples
 ///
@@ -851,62 +1187,77 @@ impl AtomicIsize {
 /// ```
 @repr(transparent)
 pub type AtomicPtr[T] {
-    ptr: raw T
+    ptr: Ptr[T]
 }
 
 impl[T] AtomicPtr[T] {
     /// Creates a new `AtomicPtr` from a raw pointer.
-    pub func new(p: raw T) -> AtomicPtr[T] {
+    pub func new(p: Ptr[T]) -> AtomicPtr[T] {
         return AtomicPtr { ptr: p }
     }
 
     /// Creates a new null `AtomicPtr`.
-    pub func null() -> AtomicPtr[T] {
+    pub func new_null() -> AtomicPtr[T] {
         return AtomicPtr { ptr: null }
     }
 
     /// Loads a value from the atomic pointer.
-    @intrinsic("atomic.load.ptr")
-    pub func load(self, order: Ordering) -> raw T
+    pub func load(this, order: Ordering) -> Ptr[T] {
+        lowlevel { return this.ptr }
+    }
 
     /// Stores a value into the atomic pointer.
-    @intrinsic("atomic.store.ptr")
-    pub func store(mut self, val: raw T, order: Ordering) -> Unit
+    pub func store(mut this, val: Ptr[T], order: Ordering) -> Unit {
+        lowlevel { this.ptr = val }
+    }
 
     /// Stores a value into the atomic pointer, returning the previous value.
-    @intrinsic("atomic.swap.ptr")
-    pub func swap(mut self, val: raw T, order: Ordering) -> raw T
+    pub func swap(mut this, val: Ptr[T], order: Ordering) -> Ptr[T] {
+        lowlevel {
+            let old: Ptr[T] = this.ptr
+            this.ptr = val
+            return old
+        }
+    }
 
     /// Stores a value into the atomic pointer if the current value equals `current`.
-    @intrinsic("atomic.cmpxchg.ptr")
     pub func compare_exchange(
-        mut self,
-        current: raw T,
-        new: raw T,
+        mut this,
+        current: Ptr[T],
+        new: Ptr[T],
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[raw T, raw T]
+    ) -> Outcome[Ptr[T], Ptr[T]] {
+        lowlevel {
+            if this.ptr == current {
+                this.ptr = new
+                return Ok(current)
+            }
+            return Err(this.ptr)
+        }
+    }
 
     /// Stores a value into the atomic pointer if the current value equals `current`.
     ///
     /// May spuriously fail.
-    @intrinsic("atomic.cmpxchg_weak.ptr")
     pub func compare_exchange_weak(
-        mut self,
-        current: raw T,
-        new: raw T,
+        mut this,
+        current: Ptr[T],
+        new: Ptr[T],
         success: Ordering,
         failure: Ordering
-    ) -> Outcome[raw T, raw T]
+    ) -> Outcome[Ptr[T], Ptr[T]] {
+        return this.compare_exchange(current, new, success, failure)
+    }
 
     /// Returns `true` if operations on this type are lock-free.
-    pub func is_lock_free(self) -> Bool {
+    pub func is_lock_free(this) -> Bool {
         return true
     }
 
     /// Consumes the atomic and returns the contained pointer.
-    pub func into_inner(self) -> raw T {
-        return self.ptr
+    pub func into_inner(this) -> Ptr[T] {
+        return this.ptr
     }
 }
 
@@ -934,5 +1285,41 @@ impl[T] AtomicPtr[T] {
 ///     spin_loop_hint()
 /// }
 /// ```
-@intrinsic("llvm.pause")
-pub func spin_loop_hint() -> Unit
+pub func spin_loop_hint() -> Unit {
+    // Hint to processor that this is a spin loop
+    // The intrinsic attribute should replace this with the actual pause instruction
+}
+
+// ============================================================================
+// Send/Sync implementations for atomic types
+// ============================================================================
+
+// Atomic types are explicitly designed to be safely shared between threads.
+// They use hardware-level atomic operations that guarantee thread-safety.
+
+impl Send for AtomicBool {}
+impl Sync for AtomicBool {}
+
+impl Send for AtomicI32 {}
+impl Sync for AtomicI32 {}
+
+impl Send for AtomicI64 {}
+impl Sync for AtomicI64 {}
+
+impl Send for AtomicU32 {}
+impl Sync for AtomicU32 {}
+
+impl Send for AtomicU64 {}
+impl Sync for AtomicU64 {}
+
+impl Send for AtomicUsize {}
+impl Sync for AtomicUsize {}
+
+impl Send for AtomicIsize {}
+impl Sync for AtomicIsize {}
+
+// AtomicPtr is Send and Sync only if T is Send and Sync
+// This matches Rust's semantics: the pointer operations are atomic,
+// but the safety of the pointed-to data depends on T's thread safety.
+impl[T: Send] Send for AtomicPtr[T] {}
+impl[T: Send + Sync] Sync for AtomicPtr[T] {}

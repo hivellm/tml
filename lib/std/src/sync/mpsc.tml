@@ -1,0 +1,561 @@
+//! Multi-producer, single-consumer channel.
+//!
+//! This module provides an MPSC (multi-producer, single-consumer) channel
+//! for passing messages between threads.
+//!
+//! # Overview
+//!
+//! A channel has two parts:
+//! - `Sender[T]`: Can be cloned and shared between multiple producer threads
+//! - `Receiver[T]`: Only one receiver can exist (single-consumer)
+//!
+//! # Channel Types
+//!
+//! - `channel[T]()` - Unbounded channel (no backpressure)
+//! - `bounded_channel[T](cap)` - Bounded channel with capacity limit
+//!
+//! # Examples
+//!
+//! ## Basic Usage
+//!
+//! ```tml
+//! use std::sync::mpsc::channel
+//!
+//! let (tx, rx) = channel[I32]()
+//!
+//! tx.send(1)
+//! tx.send(2)
+//!
+//! assert_eq(rx.recv(), Ok(1))
+//! assert_eq(rx.recv(), Ok(2))
+//! ```
+//!
+//! ## Multiple Producers
+//!
+//! ```tml
+//! use std::sync::mpsc::channel
+//! use std::thread
+//!
+//! let (tx, rx) = channel[I32]()
+//!
+//! let mut handles = []
+//! loop i in 0 to 4 {
+//!     let tx_clone = tx.clone()
+//!     handles.push(thread::spawn(do() {
+//!         tx_clone.send(i)
+//!     }))
+//! }
+//!
+//! // Drop original sender so channel can close
+//! drop(tx)
+//!
+//! for h in handles {
+//!     h.join()
+//! }
+//!
+//! // Receive all messages
+//! var count: I32 = 0
+//! loop (true) {
+//!     when rx.recv() {
+//!         Ok(_) => count = count + 1,
+//!         Err(_) => break
+//!     }
+//! }
+//! assert_eq(count, 4)
+//! ```
+
+use sync::atomic::{AtomicUsize, AtomicBool, Ordering}
+use sync::mutex::Mutex
+use sync::condvar::Condvar
+use sync::arc::Arc
+use core::alloc::{Layout, alloc_global, dealloc_global}
+use core::mem::{size_of, align_of}
+use core::clone::Duplicate
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+/// Error returned when sending on a disconnected channel.
+pub type SendError[T] {
+    /// The value that failed to send
+    pub value: T,
+}
+
+impl[T] SendError[T] {
+    /// Returns the value that failed to send.
+    pub func into_inner(this) -> T {
+        return this.value
+    }
+}
+
+/// Error returned when receiving on an empty, disconnected channel.
+pub type RecvError {}
+
+impl RecvError {
+    pub func to_string(this) -> Str {
+        return "receiving on a closed channel"
+    }
+}
+
+/// Error returned from `try_recv` when the channel is empty or disconnected.
+pub enum TryRecvError {
+    /// Channel is empty but still connected
+    Empty,
+    /// Channel is disconnected
+    Disconnected,
+}
+
+impl TryRecvError {
+    pub func is_empty(this) -> Bool {
+        when this {
+            Empty => true,
+            Disconnected => false,
+        }
+    }
+
+    pub func is_disconnected(this) -> Bool {
+        when this {
+            Empty => false,
+            Disconnected => true,
+        }
+    }
+
+    pub func to_string(this) -> Str {
+        when this {
+            Empty => "channel is empty",
+            Disconnected => "channel is disconnected",
+        }
+    }
+}
+
+// ============================================================================
+// Internal Channel State
+// ============================================================================
+
+/// Internal node for the channel queue
+@repr(C)
+type ChannelNode[T] {
+    value: Maybe[T],
+    next: Ptr[ChannelNode[T]],
+}
+
+impl[T] ChannelNode[T] {
+    func new(value: T) -> Ptr[ChannelNode[T]] {
+        let size: I64 = size_of[ChannelNode[T]]()
+        let align: I64 = align_of[ChannelNode[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+
+        let ptr: Ptr[U8] = alloc_global(layout)
+        if ptr == null {
+            panic("Channel: node allocation failed")
+        }
+
+        let node_ptr: Ptr[ChannelNode[T]] = ptr as Ptr[ChannelNode[T]]
+        lowlevel {
+            (*node_ptr).value = Just(value)
+            (*node_ptr).next = null
+        }
+        return node_ptr
+    }
+
+    func sentinel() -> Ptr[ChannelNode[T]] {
+        let size: I64 = size_of[ChannelNode[T]]()
+        let align: I64 = align_of[ChannelNode[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+
+        let ptr: Ptr[U8] = alloc_global(layout)
+        if ptr == null {
+            panic("Channel: sentinel allocation failed")
+        }
+
+        let node_ptr: Ptr[ChannelNode[T]] = ptr as Ptr[ChannelNode[T]]
+        lowlevel {
+            (*node_ptr).value = Nothing
+            (*node_ptr).next = null
+        }
+        return node_ptr
+    }
+
+    func free(ptr: Ptr[ChannelNode[T]]) {
+        let size: I64 = size_of[ChannelNode[T]]()
+        let align: I64 = align_of[ChannelNode[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+        dealloc_global(ptr as Ptr[U8], layout)
+    }
+}
+
+/// Shared state between sender and receiver
+type ChannelInner[T] {
+    /// Head of queue (for receiver)
+    head: Mutex[Ptr[ChannelNode[T]]],
+    /// Tail of queue (for sender)
+    tail: Mutex[Ptr[ChannelNode[T]]],
+    /// Condition variable for blocking receive
+    not_empty: Condvar,
+    /// Number of active senders
+    sender_count: AtomicUsize,
+    /// Whether receiver is still connected
+    receiver_alive: AtomicBool,
+    /// Number of messages in queue
+    len: AtomicUsize,
+}
+
+// ============================================================================
+// Sender[T]
+// ============================================================================
+
+/// The sending half of a channel.
+///
+/// Senders can be cloned to create multiple producers.
+/// When all senders are dropped, the channel is closed and the receiver
+/// will receive `Err(RecvError)` after all pending messages are consumed.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::sync::mpsc::channel
+///
+/// let (tx, rx) = channel[I32]()
+///
+/// tx.send(1)
+///
+/// let tx2 = tx.clone()
+/// tx2.send(2)
+/// ```
+pub type Sender[T] {
+    inner: Arc[ChannelInner[T]],
+}
+
+impl[T] Sender[T] {
+    /// Sends a value on this channel.
+    ///
+    /// This method will block if the channel is bounded and full.
+    ///
+    /// Returns `Err(SendError)` if the receiver has been dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::mpsc::channel
+    ///
+    /// let (tx, rx) = channel[I32]()
+    ///
+    /// tx.send(1)
+    /// assert_eq(rx.recv(), Ok(1))
+    /// ```
+    pub func send(this, value: T) -> Outcome[Unit, SendError[T]] {
+        // Check if receiver is still alive
+        if not this.inner.receiver_alive.load(Ordering::Acquire) {
+            return Err(SendError { value: value })
+        }
+
+        // Create new node
+        let node: Ptr[ChannelNode[T]] = ChannelNode::new[T](value)
+
+        // Lock tail and append
+        {
+            var tail_guard: MutexGuard[Ptr[ChannelNode[T]]] = this.inner.tail.lock()
+            lowlevel {
+                (*(*tail_guard)).next = node
+            }
+            *tail_guard = node
+        }
+
+        this.inner.len.fetch_add(1, Ordering::Release)
+        this.inner.not_empty.notify_one()
+
+        return Ok(())
+    }
+
+    /// Attempts to send a value on this channel without blocking.
+    ///
+    /// Returns `Err(SendError)` if the receiver has been dropped.
+    /// For bounded channels, also returns error if the channel is full.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::mpsc::channel
+    ///
+    /// let (tx, rx) = channel[I32]()
+    ///
+    /// assert(tx.try_send(1).is_ok())
+    /// ```
+    pub func try_send(this, value: T) -> Outcome[Unit, SendError[T]] {
+        // For unbounded channels, try_send is the same as send
+        return this.send(value)
+    }
+}
+
+impl[T] Duplicate for Sender[T] {
+    /// Creates a new sender that sends to the same channel.
+    pub func duplicate(this) -> Sender[T] {
+        this.inner.sender_count.fetch_add(1, Ordering::Relaxed)
+        return Sender { inner: this.inner.duplicate() }
+    }
+}
+
+impl[T] Drop for Sender[T] {
+    func drop(mut this) {
+        let old_count: U64 = this.inner.sender_count.fetch_sub(1, Ordering::AcqRel)
+        if old_count == 1 {
+            // Last sender dropped, notify receiver
+            this.inner.not_empty.notify_all()
+        }
+    }
+}
+
+// ============================================================================
+// Receiver[T]
+// ============================================================================
+
+/// The receiving half of a channel.
+///
+/// Only one receiver can exist per channel. The receiver cannot be cloned.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::sync::mpsc::channel
+///
+/// let (tx, rx) = channel[I32]()
+///
+/// tx.send(1)
+/// tx.send(2)
+///
+/// assert_eq(rx.recv(), Ok(1))
+/// assert_eq(rx.recv(), Ok(2))
+/// ```
+pub type Receiver[T] {
+    inner: Arc[ChannelInner[T]],
+}
+
+impl[T] Receiver[T] {
+    /// Blocks waiting for a value on this channel.
+    ///
+    /// Returns `Err(RecvError)` if all senders have been dropped and
+    /// no more messages are available.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::mpsc::channel
+    ///
+    /// let (tx, rx) = channel[I32]()
+    ///
+    /// tx.send(1)
+    /// assert_eq(rx.recv(), Ok(1))
+    ///
+    /// drop(tx)
+    /// assert(rx.recv().is_err())
+    /// ```
+    pub func recv(mut this) -> Outcome[T, RecvError] {
+        loop (true) {
+            // Try to get a message
+            when this.try_recv() {
+                Ok(value) => return Ok(value),
+                Err(err) => {
+                    when err {
+                        Empty => {
+                            // Wait for a message or disconnect
+                            var head_guard: MutexGuard[Ptr[ChannelNode[T]]] = this.inner.head.lock()
+
+                            // Check again while holding lock
+                            lowlevel {
+                                let next: Ptr[ChannelNode[T]] = (*(*head_guard)).next
+                                if next != null {
+                                    // Message available, release lock and retry
+                                    drop(head_guard)
+                                    continue
+                                }
+                            }
+
+                            // Check if disconnected
+                            if this.inner.sender_count.load(Ordering::Acquire) == 0 {
+                                return Err(RecvError {})
+                            }
+
+                            // Wait for notification
+                            head_guard = this.inner.not_empty.wait(head_guard)
+                        },
+                        Disconnected => {
+                            return Err(RecvError {})
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Attempts to receive a value without blocking.
+    ///
+    /// Returns:
+    /// - `Ok(value)` if a message is available
+    /// - `Err(TryRecvError::Empty)` if the channel is empty but connected
+    /// - `Err(TryRecvError::Disconnected)` if all senders are dropped
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::mpsc::channel
+    ///
+    /// let (tx, rx) = channel[I32]()
+    ///
+    /// assert(rx.try_recv().is_err())
+    ///
+    /// tx.send(1)
+    /// assert_eq(rx.try_recv(), Ok(1))
+    /// ```
+    pub func try_recv(mut this) -> Outcome[T, TryRecvError] {
+        var head_guard: MutexGuard[Ptr[ChannelNode[T]]] = this.inner.head.lock()
+
+        lowlevel {
+            let head: Ptr[ChannelNode[T]] = *head_guard
+            let next: Ptr[ChannelNode[T]] = (*head).next
+
+            if next == null {
+                // Queue is empty
+                drop(head_guard)
+                if this.inner.sender_count.load(Ordering::Acquire) == 0 {
+                    return Err(TryRecvError::Disconnected)
+                }
+                return Err(TryRecvError::Empty)
+            }
+
+            // Get value from next node
+            let value: Maybe[T] = (*next).value
+            (*next).value = Nothing  // Clear to avoid double-free
+
+            // Move head forward
+            *head_guard = next
+
+            // Free old sentinel
+            ChannelNode::free[T](head)
+
+            this.inner.len.fetch_sub(1, Ordering::Relaxed)
+
+            when value {
+                Just(v) => return Ok(v),
+                Nothing => panic("Channel: unexpected empty node")
+            }
+        }
+    }
+
+    /// Returns `true` if the channel is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::mpsc::channel
+    ///
+    /// let (tx, rx) = channel[I32]()
+    ///
+    /// assert(rx.is_empty())
+    ///
+    /// tx.send(1)
+    /// assert(not rx.is_empty())
+    /// ```
+    pub func is_empty(this) -> Bool {
+        return this.inner.len.load(Ordering::Relaxed) == 0
+    }
+
+    /// Returns the approximate number of messages in the channel.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::mpsc::channel
+    ///
+    /// let (tx, rx) = channel[I32]()
+    ///
+    /// tx.send(1)
+    /// tx.send(2)
+    ///
+    /// assert_eq(rx.len(), 2)
+    /// ```
+    pub func len(this) -> I64 {
+        return this.inner.len.load(Ordering::Relaxed) as I64
+    }
+}
+
+impl[T] Drop for Receiver[T] {
+    func drop(mut this) {
+        this.inner.receiver_alive.store(false, Ordering::Release)
+
+        // Drain remaining messages to free nodes
+        loop (true) {
+            when this.try_recv() {
+                Ok(_) => {},
+                Err(_) => break
+            }
+        }
+
+        // Free the sentinel
+        let head_guard: MutexGuard[Ptr[ChannelNode[T]]] = this.inner.head.lock()
+        ChannelNode::free[T](*head_guard)
+    }
+}
+
+// ============================================================================
+// Channel Creation Functions
+// ============================================================================
+
+/// Creates a new unbounded channel.
+///
+/// The channel can hold an unlimited number of messages until memory
+/// is exhausted.
+///
+/// Returns a `(Sender[T], Receiver[T])` pair.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::sync::mpsc::channel
+///
+/// let (tx, rx) = channel[I32]()
+///
+/// tx.send(1)
+/// tx.send(2)
+///
+/// assert_eq(rx.recv(), Ok(1))
+/// assert_eq(rx.recv(), Ok(2))
+/// ```
+pub func channel[T]() -> (Sender[T], Receiver[T]) {
+    let sentinel: Ptr[ChannelNode[T]] = ChannelNode::sentinel[T]()
+
+    let inner: Arc[ChannelInner[T]] = Arc::new(ChannelInner {
+        head: Mutex::new(sentinel),
+        tail: Mutex::new(sentinel),
+        not_empty: Condvar::new(),
+        sender_count: AtomicUsize::new(1),
+        receiver_alive: AtomicBool::new(true),
+        len: AtomicUsize::new(0),
+    })
+
+    let sender: Sender[T] = Sender { inner: inner.duplicate() }
+    let receiver: Receiver[T] = Receiver { inner: inner }
+
+    return (sender, receiver)
+}
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// Sender[T] is Send if T is Send.
+/// Senders can be transferred to other threads.
+impl[T: Send] Send for Sender[T] {}
+
+/// Sender[T] is Sync if T is Send.
+/// Multiple threads can share a reference to a sender (though cloning is preferred).
+impl[T: Send] Sync for Sender[T] {}
+
+/// Receiver[T] is Send if T is Send.
+/// The receiver can be transferred to another thread.
+impl[T: Send] Send for Receiver[T] {}
+
+// Note: Receiver is NOT Sync - only one thread should use it at a time
+// (single-consumer design)

@@ -379,6 +379,70 @@ void hashmap_clear(TmlHashMap* map) {
 }
 
 // ============================================================================
+// HashMap Iterator
+// ============================================================================
+
+// Helper: find next valid entry starting from given index
+static int64_t hashmap_find_next_valid(TmlHashMap* map, int64_t start_index) {
+    if (!map)
+        return -1;
+    for (int64_t i = start_index; i < map->capacity; i++) {
+        HashEntry* entry = &map->entries[i];
+        if (entry->occupied && !entry->deleted) {
+            return i;
+        }
+    }
+    return -1; // No more valid entries
+}
+
+TmlHashMapIter* hashmap_iter_create(TmlHashMap* map) {
+    if (!map)
+        return NULL;
+
+    TmlHashMapIter* iter = (TmlHashMapIter*)malloc(sizeof(TmlHashMapIter));
+    if (!iter)
+        return NULL;
+
+    iter->map = map;
+    iter->remaining = map->len;
+    // Find first valid entry
+    iter->index = hashmap_find_next_valid(map, 0);
+
+    return iter;
+}
+
+void hashmap_iter_destroy(TmlHashMapIter* iter) {
+    free(iter);
+}
+
+bool hashmap_iter_has_next(TmlHashMapIter* iter) {
+    if (!iter)
+        return false;
+    return iter->index >= 0 && iter->remaining > 0;
+}
+
+void hashmap_iter_next(TmlHashMapIter* iter) {
+    if (!iter || iter->index < 0)
+        return;
+
+    iter->remaining--;
+    // Find next valid entry
+    iter->index = hashmap_find_next_valid(iter->map, iter->index + 1);
+}
+
+int64_t hashmap_iter_key(TmlHashMapIter* iter) {
+    if (!iter || iter->index < 0)
+        return 0;
+    return iter->map->entries[iter->index].key;
+}
+
+int64_t hashmap_iter_value(TmlHashMapIter* iter) {
+    if (!iter || iter->index < 0)
+        return 0;
+    return iter->map->entries[iter->index].value;
+}
+
+// ============================================================================
 // Buffer - Byte buffer for binary data
 // ============================================================================
 

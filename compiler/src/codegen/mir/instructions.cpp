@@ -606,13 +606,14 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
     }
 
     // Get return type
-    std::string ret_type = mir_func_type.return_type ? mir_type_to_llvm(mir_func_type.return_type)
-                                                     : "void";
+    std::string ret_type =
+        mir_func_type.return_type ? mir_type_to_llvm(mir_func_type.return_type) : "void";
 
     // Build argument list
     std::string args_str;
     for (size_t j = 0; j < i.args.size(); ++j) {
-        if (j > 0) args_str += ", ";
+        if (j > 0)
+            args_str += ", ";
         std::string arg = get_value_reg(i.args[j]);
         std::string arg_type = j < param_types.size() ? param_types[j] : "i64";
         args_str += arg_type + " " + arg;

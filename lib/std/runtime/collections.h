@@ -61,6 +61,23 @@ int64_t hashmap_len(TmlHashMap* map);
 void hashmap_clear(TmlHashMap* map);
 
 // ============================================================================
+// HashMap Iterator
+// ============================================================================
+
+typedef struct {
+    TmlHashMap* map;
+    int64_t index;     // Current index in entries array
+    int64_t remaining; // Remaining entries to iterate
+} TmlHashMapIter;
+
+TmlHashMapIter* hashmap_iter_create(TmlHashMap* map);
+void hashmap_iter_destroy(TmlHashMapIter* iter);
+bool hashmap_iter_has_next(TmlHashMapIter* iter);
+void hashmap_iter_next(TmlHashMapIter* iter);
+int64_t hashmap_iter_key(TmlHashMapIter* iter);
+int64_t hashmap_iter_value(TmlHashMapIter* iter);
+
+// ============================================================================
 // Buffer - Byte buffer for binary data
 // ============================================================================
 

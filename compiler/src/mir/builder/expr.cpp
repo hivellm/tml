@@ -286,6 +286,17 @@ auto MirBuilder::build_call(const parser::CallExpr& call) -> Value {
     if (func_sig.has_value()) {
         return_type = convert_semantic_type(func_sig->return_type);
     }
+    // Fallback: look up in module registry for internal module functions
+    if (!func_sig.has_value() && env_.module_registry()) {
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto func_it = mod.functions.find(func_name);
+            if (func_it != mod.functions.end()) {
+                return_type = convert_semantic_type(func_it->second.return_type);
+                break;
+            }
+        }
+    }
 
     CallInst inst;
     inst.func_name = func_name;

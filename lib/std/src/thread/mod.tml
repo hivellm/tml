@@ -98,6 +98,7 @@
 //! - **Scheduling**: Depends on OS scheduler implementation
 
 use sync::atomic::{AtomicU64, AtomicBool, Ordering}
+use core::clone::Duplicate
 
 // ============================================================================
 // Platform-specific thread handle
@@ -116,7 +117,7 @@ type RawThread {
 
 @extern("tml_thread_spawn")
 func raw_thread_spawn(
-    func_ptr: RawPtr[do() -> Unit],
+    func_ptr: RawPtr[func() -> Unit],
     arg: RawPtr[Unit],
     stack_size: U64
 ) -> RawThread
@@ -167,19 +168,19 @@ impl ThreadId {
     ///
     /// This value is platform-specific and should only be used for
     /// debugging or logging purposes.
-    pub func as_u64(self) -> U64 {
-        return self.id
+    pub func as_u64(this) -> U64 {
+        return this.id
     }
 }
 
 impl Eq for ThreadId {
-    func eq(self, other: ref ThreadId) -> Bool {
-        return self.id == other.id
+    func eq(this, other: ref ThreadId) -> Bool {
+        return this.id == other.id
     }
 }
 
 // Global thread ID counter
-let NEXT_THREAD_ID: AtomicU64 = AtomicU64::new(1)
+const NEXT_THREAD_ID: AtomicU64 = AtomicU64::new(1)
 
 func next_thread_id() -> ThreadId {
     return ThreadId { id: NEXT_THREAD_ID.fetch_add(1, Ordering::Relaxed) }
@@ -228,8 +229,8 @@ impl Thread {
     /// let current = thread::current()
     /// let id = current.id()
     /// ```
-    pub func id(self) -> ThreadId {
-        return self.inner.id
+    pub func id(this) -> ThreadId {
+        return this.inner.id
     }
 
     /// Gets the thread's name.
@@ -249,8 +250,8 @@ impl Thread {
     ///     })
     ///     .unwrap()
     /// ```
-    pub func name(self) -> Maybe[Str] {
-        return self.inner.name.clone()
+    pub func name(this) -> Maybe[Str] {
+        return this.inner.name
     }
 
     /// Atomically makes the handle's token available if it is not already.
@@ -276,16 +277,16 @@ impl Thread {
     ///
     /// handle.join().unwrap()
     /// ```
-    pub func unpark(self) {
-        self.inner.parked.store(false, Ordering::Release)
+    pub func unpark(this) {
+        this.inner.parked.store(false, Ordering::Release)
         // In a full implementation, this would also signal a condition variable
         // or futex to wake up the parked thread
     }
 }
 
-impl Clone for Thread {
-    func clone(self) -> Thread {
-        return Thread { inner: self.inner.clone() }
+impl Duplicate for Thread {
+    pub func duplicate(this) -> Thread {
+        return Thread { inner: this.inner.duplicate() }
     }
 }
 
@@ -343,17 +344,17 @@ impl[T] JoinHandle[T] {
     ///     Err(e) => panic("Thread panicked!")
     /// }
     /// ```
-    pub func join(mut self) -> Outcome[T, JoinError] {
-        if self.joined.swap(true, Ordering::AcqRel) {
+    pub func join(mut this) -> Outcome[T, JoinError] {
+        if this.joined.swap(true, Ordering::AcqRel) {
             return Err(JoinError::AlreadyJoined)
         }
 
-        let status = raw_thread_join(self.raw)
+        let status: I32 = raw_thread_join(this.raw)
         if status != 0 {
             return Err(JoinError::OsError(status))
         }
 
-        when self.result {
+        when this.result {
             Just(value) => return Ok(value),
             Nothing => return Err(JoinError::NoResult)
         }
@@ -377,8 +378,8 @@ impl[T] JoinHandle[T] {
     /// handle.join().unwrap()
     /// assert(handle.is_finished())
     /// ```
-    pub func is_finished(self) -> Bool {
-        return self.joined.load(Ordering::Acquire)
+    pub func is_finished(this) -> Bool {
+        return this.joined.load(Ordering::Acquire)
     }
 
     /// Extracts a handle to the underlying thread.
@@ -393,8 +394,8 @@ impl[T] JoinHandle[T] {
     /// let thread = handle.thread()
     /// println("Thread ID: " + thread.id().as_u64().to_string())
     /// ```
-    pub func thread(self) -> Thread {
-        return self.thread.clone()
+    pub func thread(this) -> Thread {
+        return this.thread.duplicate()
     }
 }
 
@@ -475,9 +476,9 @@ impl Builder {
     ///
     /// let builder = Builder::new().name("worker-1")
     /// ```
-    pub func name(mut self, name: Str) -> Builder {
-        self.name = Just(name)
-        return self
+    pub func name(mut this, name: Str) -> Builder {
+        this.name = Just(name)
+        return this
     }
 
     /// Sets the size of the stack (in bytes) for the new thread.
@@ -493,9 +494,9 @@ impl Builder {
     /// // 4 MB stack
     /// let builder = Builder::new().stack_size(4 * 1024 * 1024)
     /// ```
-    pub func stack_size(mut self, size: U64) -> Builder {
-        self.stack_size = Just(size)
-        return self
+    pub func stack_size(mut this, size: U64) -> Builder {
+        this.stack_size = Just(size)
+        return this
     }
 
     /// Spawns a new thread by taking ownership of the `Builder`.
@@ -525,17 +526,17 @@ impl Builder {
     ///     Err(e) => println("Failed to spawn thread")
     /// }
     /// ```
-    pub func spawn[T](self, f: do() -> T) -> Outcome[JoinHandle[T], SpawnError] {
-        let thread_id = next_thread_id()
-        let thread = Thread {
+    pub func spawn[T](this, f: func() -> T) -> Outcome[JoinHandle[T], SpawnError] {
+        let thread_id: ThreadId = next_thread_id()
+        let thread: Thread = Thread {
             inner: Sync::new(ThreadInner {
                 id: thread_id,
-                name: self.name,
+                name: this.name,
                 parked: AtomicBool::new(false),
             })
         }
 
-        let stack = self.stack_size.unwrap_or(0)  // 0 means default
+        let stack: U64 = this.stack_size.unwrap_or(0)  // 0 means default
 
         // In a full implementation, we would:
         // 1. Box the closure
@@ -585,7 +586,7 @@ pub enum SpawnError {
 /// let result = handle.join().unwrap()
 /// assert_eq(result, 42)
 /// ```
-pub func spawn[T](f: do() -> T) -> JoinHandle[T] {
+pub func spawn[T](f: func() -> T) -> JoinHandle[T] {
     when Builder::new().spawn(f) {
         Ok(handle) => return handle,
         Err(e) => panic("failed to spawn thread")
@@ -687,7 +688,7 @@ pub func sleep_ms(milliseconds: U64) {
 /// handle.join().unwrap()
 /// ```
 pub func park() {
-    let thread = current()
+    let thread: Thread = current()
     // Spin until unparked
     loop (thread.inner.parked.load(Ordering::Acquire)) {
         yield_now()
@@ -711,7 +712,7 @@ pub func park() {
 /// println("Available CPUs: " + cpus.to_string())
 /// ```
 pub func available_parallelism() -> U32 {
-    let result = raw_thread_available_parallelism()
+    let result: U32 = raw_thread_available_parallelism()
     if result == 0 {
         return 1  // Fallback to 1 if detection fails
     }
@@ -719,10 +720,18 @@ pub func available_parallelism() -> U32 {
 }
 
 // ============================================================================
+// Submodules
+// ============================================================================
+
+pub use thread::local
+pub use thread::scope as scope_mod
+
+// ============================================================================
 // Re-exports
 // ============================================================================
 
+pub use thread::local::{LocalKey, local_const}
+pub use thread::scope_mod::{scope, Scope, ScopedJoinHandle}
+
 // Note: In a complete implementation, we would also have:
-// - thread::scope for scoped threads
-// - thread::LocalKey for thread-local storage
 // - thread::panicking() to check if current thread is panicking

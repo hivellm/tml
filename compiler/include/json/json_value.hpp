@@ -850,6 +850,26 @@ struct JsonValue {
     /// Reference to the output stream.
     auto write_to_pretty(std::ostream& os, int indent = 2) const -> std::ostream&;
 
+    /// Estimates the serialized size of this JSON value in bytes.
+    ///
+    /// This provides a hint for buffer pre-allocation when serializing.
+    /// The estimate is typically slightly larger than the actual size to
+    /// account for escaping and formatting overhead.
+    ///
+    /// # Returns
+    ///
+    /// Estimated size in bytes for the compact JSON representation.
+    ///
+    /// # Example
+    ///
+    /// ```cpp
+    /// JsonValue obj(JsonObject{{"name", JsonValue("Alice")}, {"age", JsonValue(30)}});
+    /// std::string buffer;
+    /// buffer.reserve(obj.estimated_size());  // Pre-allocate based on hint
+    /// buffer = obj.to_string();
+    /// ```
+    [[nodiscard]] auto estimated_size() const -> size_t;
+
     // ========================================================================
     // Merging
     // ========================================================================

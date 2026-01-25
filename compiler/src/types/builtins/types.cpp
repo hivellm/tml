@@ -28,6 +28,16 @@
 //! Registers that primitive types implement standard behaviors:
 //! - All primitives implement `Duplicate`, `Display`, `Hash`, etc.
 //! - Numeric types implement `Default`, `Eq`, `Ord`, `Numeric`
+//!
+//! ## Thread Safety Markers (core::marker)
+//!
+//! | Marker | Description                                      |
+//! |--------|--------------------------------------------------|
+//! | `Send` | Type can be safely transferred between threads   |
+//! | `Sync` | Type can be safely shared between threads (ref)  |
+//!
+//! Primitives are both Send and Sync. Composite types inherit Send/Sync
+//! from their fields - a struct is Send iff all fields are Send.
 
 #include "types/env.hpp"
 
@@ -137,6 +147,40 @@ void TypeEnv::init_builtin_types() {
                         .span = {}});
     }
 
+    // ========================================================================
+    // Thread Safety Marker Behaviors (core::marker)
+    // ========================================================================
+
+    // Send behavior - marker indicating type can be transferred between threads
+    // behavior Send {}
+    // Types that implement Send can have ownership moved to another thread.
+    // This is a marker behavior with no methods - it's a compile-time guarantee.
+    {
+        define_behavior(BehaviorDef{.name = "Send",
+                                    .type_params = {},
+                                    .const_params = {},
+                                    .associated_types = {},
+                                    .methods = {}, // Marker behavior - no methods
+                                    .super_behaviors = {},
+                                    .methods_with_defaults = {},
+                                    .span = {}});
+    }
+
+    // Sync behavior - marker indicating type can be shared between threads via reference
+    // behavior Sync {}
+    // Types that implement Sync can be safely referenced from multiple threads.
+    // A type T is Sync if &T is Send (i.e., sharing references is thread-safe).
+    {
+        define_behavior(BehaviorDef{.name = "Sync",
+                                    .type_params = {},
+                                    .const_params = {},
+                                    .associated_types = {},
+                                    .methods = {}, // Marker behavior - no methods
+                                    .super_behaviors = {},
+                                    .methods_with_defaults = {},
+                                    .span = {}});
+    }
+
     // Register builtin behavior implementations for integer types
     std::vector<std::string> integer_types = {"I8", "I16", "I32", "I64", "I128",
                                               "U8", "U16", "U32", "U64", "U128"};
@@ -182,6 +226,24 @@ void TypeEnv::init_builtin_types() {
     register_impl("Str", "Display");
     register_impl("Str", "Debug");
     register_impl("Str", "Duplicate");
+
+    // ========================================================================
+    // Thread Safety Implementations (Send/Sync)
+    // ========================================================================
+
+    // All primitive types are both Send and Sync
+    // They contain no interior mutability and no pointers to thread-local data
+    std::vector<std::string> all_primitives = {"I8",   "I16",  "I32", "I64",  "I128", "U8",
+                                               "U16",  "U32",  "U64", "U128", "F32",  "F64",
+                                               "Bool", "Char", "Str", "Unit"};
+    for (const auto& type : all_primitives) {
+        register_impl(type, "Send");
+        register_impl(type, "Sync");
+    }
+
+    // Register Send/Sync for Ordering enum (it's a simple enum with no data)
+    register_impl("Ordering", "Send");
+    register_impl("Ordering", "Sync");
 }
 
 } // namespace tml::types

@@ -71,7 +71,7 @@
 //! let value = map["key"]  // 42
 //! ```
 
-use std::collections::{List, HashMap}
+use std::collections::{List, HashMap, HashMapIter}
 
 // ============================================================================
 // List[T] - Duplicate (Clone)
@@ -378,15 +378,16 @@ impl[K, V] Default for HashMap[K, V] {
 // HashMap[K, V] - Duplicate (Clone)
 // ============================================================================
 
-/// Duplicates a hash map.
-///
-/// **Note**: Full implementation requires iterator support for HashMap, which
-/// is not yet available. Currently returns an empty map.
+/// Duplicates a hash map by iterating over all entries.
 impl[K: Duplicate + Hash, V: Duplicate] Duplicate for HashMap[K, V] {
     pub func duplicate(this) -> HashMap[K, V] {
-        let result: HashMap[K, V] = HashMap::new(16)
-        // Note: This requires HashMap to have an iterator, which it currently doesn't
-        // For now, we can't properly implement this without key iteration support
+        let result: HashMap[K, V] = HashMap::new(this.len() * 2)
+        let iter = this.iter()
+        loop (iter.has_next()) {
+            result.set(iter.key().duplicate(), iter.value().duplicate())
+            iter.next()
+        }
+        iter.destroy()
         return result
     }
 }
@@ -395,21 +396,41 @@ impl[K: Duplicate + Hash, V: Duplicate] Duplicate for HashMap[K, V] {
 // HashMap[K, V] - Display, Debug
 // ============================================================================
 
-/// Displays the map as `{HashMap with N entries}`.
-///
-/// **Note**: Full key/value display requires iterator support, which is not
-/// yet available.
+/// Displays the map as `{key1: value1, key2: value2, ...}`.
 impl[K: Display, V: Display] Display for HashMap[K, V] {
     pub func to_string(this) -> Str {
-        // Note: Without key iteration, we can only show size
-        return "HashMap(" + this.len().to_string() + " entries)"
+        let mut result: Str = "{"
+        let iter = this.iter()
+        let mut first: Bool = true
+        loop (iter.has_next()) {
+            if not first {
+                result = result + ", "
+            }
+            first = false
+            result = result + iter.key().to_string() + ": " + iter.value().to_string()
+            iter.next()
+        }
+        iter.destroy()
+        return result + "}"
     }
 }
 
-/// Displays debug info as `HashMap { len: N }`.
+/// Displays debug info as `HashMap{key1: value1, key2: value2, ...}`.
 impl[K: Debug, V: Debug] Debug for HashMap[K, V] {
     pub func debug_string(this) -> Str {
-        return "HashMap { len: " + this.len().to_string() + " }"
+        let mut result: Str = "HashMap{"
+        let iter = this.iter()
+        let mut first: Bool = true
+        loop (iter.has_next()) {
+            if not first {
+                result = result + ", "
+            }
+            first = false
+            result = result + iter.key().debug_string() + ": " + iter.value().debug_string()
+            iter.next()
+        }
+        iter.destroy()
+        return result + "}"
     }
 }
 

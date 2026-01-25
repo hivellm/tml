@@ -286,9 +286,101 @@ impl[T: FromJson] FromJson for List[T] {
     }
 }
 
-// Note: HashMap[K, V] ToJson/FromJson requires iteration support.
-// HashMap currently lacks keys()/values() iteration methods.
-// Once those are added, implement:
-//
-// impl[V: ToJson] ToJson for HashMap[Str, V] { ... }
-// impl[V: FromJson] FromJson for HashMap[Str, V] { ... }
+// ============================================================================
+// ToJson/FromJson for HashMap Types
+// ============================================================================
+
+use std::collections::{HashMap, HashMapIter}
+
+/// ToJson implementation for HashMap[I64, V] where V implements ToJson.
+///
+/// Serializes a HashMap to a JSON object with string keys (I64 converted to string).
+///
+/// # Example
+///
+/// ```tml
+/// let map = HashMap[I64, I64]::new(16)
+/// map.set(1, 100)
+/// map.set(2, 200)
+/// let json = map.to_json()  // {"1": 100, "2": 200}
+/// ```
+impl[V: ToJson] ToJson for HashMap[I64, V] {
+    func to_json(this) -> Json {
+        use std::json::builder::{Builder, object}
+
+        let b: Builder = object()
+        let iter = this.iter()
+        loop (iter.has_next()) {
+            let key: I64 = iter.key()
+            let value: V = iter.value()
+            let value_json: Json = value.to_json()
+            // Use key as string and value as raw JSON
+            b.k(key.to_string())
+            b.raw(value_json.to_string())
+            iter.next()
+        }
+        iter.destroy()
+        b.end_obj()
+        let h: I64 = json_parse_fast(b.build())
+        b.drop()
+        return Json::from_handle(h)
+    }
+}
+
+/// FromJson implementation for HashMap[I64, V] where V implements FromJson.
+///
+/// Deserializes a JSON object to a HashMap (string keys parsed as I64).
+///
+/// # Example
+///
+/// ```tml
+/// let json = parse_or_panic("{\"1\": 100, \"2\": 200}")
+/// when HashMap[I64, I64]::from_json(json) {
+///     Ok(map) => {
+///         // map contains {1: 100, 2: 200}
+///     },
+///     Err(e) => panic(e),
+/// }
+/// ```
+impl[V: FromJson] FromJson for HashMap[I64, V] {
+    func from_json(json: Json) -> Outcome[HashMap[I64, V], Str] {
+        if not json.is_object() {
+            return Err("Expected JSON object")
+        }
+
+        let length: I64 = json.len()
+        let map: HashMap[I64, V] = HashMap[I64, V]::new(length * 2)
+
+        var i: I64 = 0
+        loop (i < length) {
+            when json.key_at(i) {
+                Just(key_str) => {
+                    // Parse key as I64
+                    when I64::parse(key_str) {
+                        Just(key) => {
+                            when json.value_at(i) {
+                                Just(value_json) => {
+                                    when V::from_json(value_json) {
+                                        Ok(value) => map.set(key, value),
+                                        Err(e) => return Err("Failed to deserialize value for key " + key_str + ": " + e),
+                                    }
+                                },
+                                Nothing => return Err("Failed to get value at index " + i.to_string()),
+                            }
+                        },
+                        Nothing => return Err("Key is not a valid I64: " + key_str),
+                    }
+                },
+                Nothing => return Err("Failed to get key at index " + i.to_string()),
+            }
+            i = i + 1
+        }
+
+        return Ok(map)
+    }
+}
+
+// Note: HashMap[Str, V] serialization requires a runtime that stores
+// original string keys, not just their hashes. The current runtime
+// stores I64 keys only. Consider using the OOP-style StringMap class
+// from class_collections for string-keyed maps with full serialization.

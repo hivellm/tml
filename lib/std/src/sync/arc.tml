@@ -1,0 +1,665 @@
+//! Thread-safe reference-counted pointer.
+//!
+//! This module provides [`Arc[T]`], an atomically reference-counted pointer
+//! for sharing data safely between threads.
+//!
+//! # Overview
+//!
+//! `Arc` stands for "Atomically Reference Counted". It allows multiple owners
+//! of the same data by keeping track of how many owners exist. When the last
+//! owner is dropped, the data is deallocated.
+//!
+//! Unlike `Rc[T]` (which would be single-threaded), `Arc[T]` uses atomic
+//! operations for its reference counting, making it safe to share across
+//! threads.
+//!
+//! # When to Use Arc
+//!
+//! Use `Arc` when you need to share immutable data between threads. For
+//! mutable data, combine with `Mutex` or `RwLock`:
+//!
+//! ```tml
+//! use std::sync::{Arc, Mutex}
+//!
+//! let shared = Arc::new(Mutex::new(0))
+//!
+//! // Clone Arc to share with another thread
+//! let shared2 = shared.clone()
+//!
+//! // Each thread can lock and modify the data
+//! {
+//!     let mut guard = shared.lock()
+//!     *guard = *guard + 1
+//! }
+//! ```
+//!
+//! # Examples
+//!
+//! ## Basic Usage
+//!
+//! ```tml
+//! use std::sync::Arc
+//!
+//! let five = Arc::new(5)
+//!
+//! // Clone increases the reference count
+//! let also_five = five.clone()
+//!
+//! assert_eq(*five, 5)
+//! assert_eq(*also_five, 5)
+//! ```
+//!
+//! ## Sharing Between Threads
+//!
+//! ```tml
+//! use std::sync::Arc
+//! use std::thread
+//!
+//! let numbers = Arc::new([1, 2, 3, 4, 5])
+//!
+//! let mut handles = []
+//! loop i in 0 to 5 {
+//!     let numbers_clone = numbers.clone()
+//!     handles.push(thread::spawn(do() {
+//!         println("Thread sees: " + (*numbers_clone)[i].to_string())
+//!     }))
+//! }
+//!
+//! for h in handles {
+//!     h.join()
+//! }
+//! ```
+
+use sync::atomic::{AtomicUsize, Ordering}
+use core::alloc::{Layout, alloc_global, dealloc_global}
+use core::mem::{size_of, align_of}
+use core::clone::Duplicate
+
+// ============================================================================
+// ArcInner[T] - Internal structure with reference counts
+// ============================================================================
+
+/// Internal structure holding the reference counts and data.
+/// This is heap-allocated and shared between all Arc and Weak pointers.
+@repr(C)
+type ArcInner[T] {
+    /// Strong reference count (number of Arc pointers)
+    strong: AtomicUsize,
+    /// Weak reference count (number of Weak pointers + 1 if strong > 0)
+    weak: AtomicUsize,
+    /// The actual data
+    data: T,
+}
+
+// ============================================================================
+// Arc[T]
+// ============================================================================
+
+/// A thread-safe reference-counted pointer.
+///
+/// `Arc` provides shared ownership of a value of type `T`, allocated on the
+/// heap. Cloning an `Arc` produces a new pointer to the same allocation.
+/// The allocation is deallocated when the last `Arc` is dropped.
+///
+/// Shared references in TML don't allow mutation. For mutable access,
+/// use interior mutability patterns like `Arc[Mutex[T]]`.
+///
+/// # Thread Safety
+///
+/// Unlike `Rc`, `Arc` uses atomic operations for its reference counting,
+/// making it safe to share across threads. The type `T` must be `Send + Sync`
+/// to be shared between threads.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::sync::Arc
+///
+/// let five = Arc::new(5)
+/// let five2 = five.clone()
+///
+/// assert_eq(*five, 5)
+/// assert_eq(Arc::strong_count(ref five), 2)
+/// ```
+pub type Arc[T] {
+    /// Pointer to the heap-allocated ArcInner
+    ptr: Ptr[ArcInner[T]],
+}
+
+impl[T] Arc[T] {
+    /// Constructs a new `Arc[T]`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// ```
+    pub func new(value: T) -> Arc[T] {
+        // Calculate layout for ArcInner[T]
+        let inner_size: I64 = size_of[ArcInner[T]]()
+        let inner_align: I64 = align_of[ArcInner[T]]()
+
+        let layout_result: Outcome[Layout, LayoutError] = Layout::from_size_align(inner_size, inner_align)
+        let layout: Layout = when layout_result {
+            Ok(l) => l,
+            Err(_) => panic("Arc: invalid layout"),
+        }
+
+        // Allocate memory
+        let raw_ptr: Ptr[U8] = alloc_global(layout)
+        if raw_ptr == null {
+            panic("Arc: allocation failed")
+        }
+
+        // Cast to ArcInner pointer and initialize
+        let inner_ptr: Ptr[ArcInner[T]] = raw_ptr as Ptr[ArcInner[T]]
+
+        // Initialize the inner structure
+        lowlevel {
+            // Initialize strong count to 1
+            (*inner_ptr).strong = AtomicUsize::new(1)
+            // Initialize weak count to 1 (the implicit weak ref from strong refs)
+            (*inner_ptr).weak = AtomicUsize::new(1)
+            // Move the value into place
+            (*inner_ptr).data = value
+        }
+
+        return Arc { ptr: inner_ptr }
+    }
+
+    /// Gets the number of strong (`Arc`) pointers to this allocation.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// let _also_five = five.clone()
+    ///
+    /// assert_eq(Arc::strong_count(ref five), 2)
+    /// ```
+    pub func strong_count(this: ref Arc[T]) -> I64 {
+        let inner_ptr: Ptr[ArcInner[T]] = this.ptr
+        let strong: AtomicUsize = lowlevel { (*inner_ptr).strong }
+        return strong.load(Ordering::Acquire) as I64
+    }
+
+    /// Gets the number of weak (`Weak`) pointers to this allocation.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// let _weak_five = Arc::downgrade(ref five)
+    ///
+    /// assert_eq(Arc::weak_count(ref five), 1)
+    /// ```
+    pub func weak_count(this: ref Arc[T]) -> I64 {
+        lowlevel {
+            let weak: I64 = (*this.ptr).weak.load(Ordering::Acquire) as I64
+            let strong: I64 = (*this.ptr).strong.load(Ordering::Acquire) as I64
+            // Subtract the implicit weak reference from strong refs
+            if strong > 0 {
+                return weak - 1
+            }
+            return weak
+        }
+    }
+
+    /// Creates a new `Weak` pointer to this allocation.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// let weak_five = Arc::downgrade(ref five)
+    /// ```
+    pub func downgrade(this: ref Arc[T]) -> Weak[T] {
+        // Increment the weak count
+        lowlevel {
+            (*this.ptr).weak.fetch_add(1, Ordering::Relaxed)
+        }
+        return Weak { ptr: this.ptr }
+    }
+
+    /// Returns `true` if the two `Arc`s point to the same allocation.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// let same_five = five.clone()
+    /// let other_five = Arc::new(5)
+    ///
+    /// assert(Arc::ptr_eq(ref five, ref same_five))
+    /// assert(not Arc::ptr_eq(ref five, ref other_five))
+    /// ```
+    pub func ptr_eq(this: ref Arc[T], other: ref Arc[T]) -> Bool {
+        return this.ptr == other.ptr
+    }
+
+    /// Returns a reference to the inner value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// assert_eq(*five.get(), 5)
+    /// ```
+    pub func get(this) -> ref T {
+        lowlevel {
+            return ref (*this.ptr).data
+        }
+    }
+
+    /// Attempts to unwrap the `Arc`, returning the inner value if this
+    /// is the only strong reference.
+    ///
+    /// If there are other strong references, returns `Err(this)`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let x = Arc::new(3)
+    /// assert_eq(Arc::try_unwrap(x), Ok(3))
+    ///
+    /// let x = Arc::new(4)
+    /// let _y = x.clone()
+    /// assert(Arc::try_unwrap(x).is_err())
+    /// ```
+    pub func try_unwrap(this: Arc[T]) -> Outcome[T, Arc[T]] {
+        // Try to set strong count from 1 to 0
+        lowlevel {
+            let result: Outcome[U64, U64] = (*this.ptr).strong.compare_exchange(
+                1, 0,
+                Ordering::Acquire,
+                Ordering::Relaxed
+            )
+
+            when result {
+                Ok(_) => {
+                    // We're the only strong reference, extract the value
+                    let value: T = (*this.ptr).data
+
+                    // Decrement weak count (remove implicit weak ref)
+                    let old_weak: U64 = (*this.ptr).weak.fetch_sub(1, Ordering::Release)
+
+                    // If weak count is now 0, deallocate
+                    if old_weak == 1 {
+                        let inner_size: I64 = size_of[ArcInner[T]]()
+                        let inner_align: I64 = align_of[ArcInner[T]]()
+                        let layout: Layout = Layout::from_size_align_unchecked(inner_size, inner_align)
+                        dealloc_global(this.ptr as Ptr[U8], layout)
+                    }
+
+                    // Prevent destructor from running
+                    // (In TML, we'd need to use mem::forget or similar)
+
+                    return Ok(value)
+                },
+                Err(_) => {
+                    return Err(this)
+                }
+            }
+        }
+    }
+
+    /// Makes a mutable reference into the `Arc`.
+    ///
+    /// If there are other `Arc` or `Weak` pointers to the same allocation,
+    /// returns `Nothing`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let mut x = Arc::new(3)
+    /// when Arc::get_mut(ref mut x) {
+    ///     Just(m) => *m = 4,
+    ///     Nothing => unreachable()
+    /// }
+    /// assert_eq(*x, 4)
+    /// ```
+    pub func get_mut(this: mut ref Arc[T]) -> Maybe[mut ref T] {
+        // Check if we're the only reference (strong == 1, weak == 1)
+        lowlevel {
+            let strong: U64 = (*this.ptr).strong.load(Ordering::Acquire)
+            let weak: U64 = (*this.ptr).weak.load(Ordering::Acquire)
+
+            if strong == 1 and weak == 1 {
+                return Just(ref (*this.ptr).data)
+            }
+            return Nothing
+        }
+    }
+}
+
+impl[T] Duplicate for Arc[T] {
+    /// Creates a new `Arc` that points to the same allocation.
+    ///
+    /// This increments the strong reference count.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// let also_five = five.clone()
+    ///
+    /// assert(Arc::ptr_eq(ref five, ref also_five))
+    /// ```
+    pub func duplicate(this) -> Arc[T] {
+        // Increment strong count
+        lowlevel {
+            // Use Relaxed because we're just incrementing the count
+            // The data access will use proper synchronization
+            (*this.ptr).strong.fetch_add(1, Ordering::Relaxed)
+        }
+        return Arc { ptr: this.ptr }
+    }
+}
+
+impl[T] Deref for Arc[T] {
+    type Target = T
+
+    func deref(this) -> ref T {
+        lowlevel {
+            return ref (*this.ptr).data
+        }
+    }
+}
+
+impl[T] Drop for Arc[T] {
+    func drop(mut this) {
+        lowlevel {
+            // Decrement strong count
+            let old_strong: U64 = (*this.ptr).strong.fetch_sub(1, Ordering::Release)
+
+            if old_strong == 1 {
+                // We were the last strong reference
+                // Synchronize with other threads that may have dropped
+                fence(Ordering::Acquire)
+
+                // Drop the inner value
+                // (In TML, this would call T's destructor if it has one)
+                drop((*this.ptr).data)
+
+                // Decrement weak count (remove implicit weak ref)
+                let old_weak: U64 = (*this.ptr).weak.fetch_sub(1, Ordering::Release)
+
+                if old_weak == 1 {
+                    // No more weak references, deallocate
+                    fence(Ordering::Acquire)
+                    let inner_size: I64 = size_of[ArcInner[T]]()
+                    let inner_align: I64 = align_of[ArcInner[T]]()
+                    let layout: Layout = Layout::from_size_align_unchecked(inner_size, inner_align)
+                    dealloc_global(this.ptr as Ptr[U8], layout)
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Weak[T]
+// ============================================================================
+
+/// A weak reference to an `Arc[T]`.
+///
+/// Weak references don't keep the data alive. When all strong references
+/// are dropped, the data is dropped (even if weak references remain).
+///
+/// Use `Weak::upgrade` to try to get a strong reference. It returns
+/// `Nothing` if the data has already been dropped.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::sync::Arc
+///
+/// let five = Arc::new(5)
+/// let weak_five = Arc::downgrade(ref five)
+///
+/// when weak_five.upgrade() {
+///     Just(strong) => assert_eq(*strong, 5),
+///     Nothing => panic("dropped too soon"),
+/// }
+///
+/// drop(five)  // Drop the only strong reference
+///
+/// assert(weak_five.upgrade().is_nothing())
+/// ```
+pub type Weak[T] {
+    /// Pointer to the heap-allocated ArcInner
+    ptr: Ptr[ArcInner[T]],
+}
+
+impl[T] Weak[T] {
+    /// Creates a new `Weak` pointer that doesn't point to any allocation.
+    ///
+    /// Calling `upgrade` on the result will always return `Nothing`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Weak
+    ///
+    /// let empty: Weak[I32] = Weak::new()
+    /// assert(empty.upgrade().is_nothing())
+    /// ```
+    pub func new() -> Weak[T] {
+        return Weak { ptr: null }
+    }
+
+    /// Attempts to upgrade the `Weak` pointer to an `Arc`.
+    ///
+    /// Returns `Nothing` if the inner value has already been dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// let weak_five = Arc::downgrade(ref five)
+    ///
+    /// when weak_five.upgrade() {
+    ///     Just(strong_five) => {
+    ///         assert_eq(*strong_five, 5)
+    ///     },
+    ///     Nothing => unreachable()
+    /// }
+    /// ```
+    pub func upgrade(this) -> Maybe[Arc[T]] {
+        if this.ptr == null {
+            return Nothing
+        }
+
+        lowlevel {
+            loop (true) {
+                // Load current strong count
+                let strong: U64 = (*this.ptr).strong.load(Ordering::Relaxed)
+
+                if strong == 0 {
+                    // Data has been dropped
+                    return Nothing
+                }
+
+                // Try to increment strong count
+                let result: Outcome[U64, U64] = (*this.ptr).strong.compare_exchange_weak(
+                    strong,
+                    strong + 1,
+                    Ordering::Acquire,
+                    Ordering::Relaxed
+                )
+
+                when result {
+                    Ok(_) => {
+                        return Just(Arc { ptr: this.ptr })
+                    },
+                    Err(_) => {
+                        // CAS failed, retry
+                    }
+                }
+            }
+        }
+    }
+
+    /// Gets the number of strong (`Arc`) pointers to this allocation.
+    ///
+    /// Returns 0 if there are no remaining strong pointers or if this
+    /// `Weak` was created with `Weak::new()`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// let weak_five = Arc::downgrade(ref five)
+    ///
+    /// assert_eq(weak_five.strong_count(), 1)
+    ///
+    /// drop(five)
+    ///
+    /// assert_eq(weak_five.strong_count(), 0)
+    /// ```
+    pub func strong_count(this) -> I64 {
+        if this.ptr == null {
+            return 0
+        }
+        lowlevel {
+            return (*this.ptr).strong.load(Ordering::Acquire) as I64
+        }
+    }
+
+    /// Gets the number of weak (`Weak`) pointers to this allocation.
+    ///
+    /// Returns 0 if this `Weak` was created with `Weak::new()`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let five = Arc::new(5)
+    /// let weak_five = Arc::downgrade(ref five)
+    ///
+    /// assert_eq(weak_five.weak_count(), 1)
+    /// ```
+    pub func weak_count(this) -> I64 {
+        if this.ptr == null {
+            return 0
+        }
+        lowlevel {
+            let weak: I64 = (*this.ptr).weak.load(Ordering::Acquire) as I64
+            let strong: I64 = (*this.ptr).strong.load(Ordering::Acquire) as I64
+            // Subtract the implicit weak reference from strong refs
+            if strong > 0 {
+                return weak - 1
+            }
+            return weak
+        }
+    }
+
+    /// Returns `true` if two `Weak`s point to the same allocation.
+    ///
+    /// Two `Weak::new()` pointers are considered equal.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::Arc
+    ///
+    /// let first_rc = Arc::new(5)
+    /// let first = Arc::downgrade(ref first_rc)
+    /// let second = first.clone()
+    ///
+    /// assert(Weak::ptr_eq(ref first, ref second))
+    /// ```
+    pub func ptr_eq(this: ref Weak[T], other: ref Weak[T]) -> Bool {
+        return this.ptr == other.ptr
+    }
+}
+
+impl[T] Duplicate for Weak[T] {
+    /// Creates a new `Weak` pointer to the same allocation.
+    ///
+    /// This increments the weak reference count.
+    pub func duplicate(this) -> Weak[T] {
+        if this.ptr == null {
+            return Weak { ptr: null }
+        }
+
+        lowlevel {
+            (*this.ptr).weak.fetch_add(1, Ordering::Relaxed)
+        }
+        return Weak { ptr: this.ptr }
+    }
+}
+
+impl[T] Drop for Weak[T] {
+    func drop(mut this) {
+        if this.ptr == null {
+            return
+        }
+
+        lowlevel {
+            // Decrement weak count
+            let old_weak: U64 = (*this.ptr).weak.fetch_sub(1, Ordering::Release)
+
+            if old_weak == 1 {
+                // We were the last weak reference and no strong refs remain
+                // (strong refs would have kept weak count >= 1)
+                fence(Ordering::Acquire)
+                let inner_size: I64 = size_of[ArcInner[T]]()
+                let inner_align: I64 = align_of[ArcInner[T]]()
+                let layout: Layout = Layout::from_size_align_unchecked(inner_size, inner_align)
+                dealloc_global(this.ptr as Ptr[U8], layout)
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// Arc[T] is Send if T is Send + Sync.
+/// The Arc can be sent to another thread if the data it contains
+/// can be accessed from multiple threads safely.
+impl[T: Send + Sync] Send for Arc[T] {}
+
+/// Arc[T] is Sync if T is Send + Sync.
+/// Multiple threads can have references to the Arc if the data
+/// supports shared access across threads.
+impl[T: Send + Sync] Sync for Arc[T] {}
+
+/// Weak[T] is Send if T is Send + Sync.
+impl[T: Send + Sync] Send for Weak[T] {}
+
+/// Weak[T] is Sync if T is Send + Sync.
+impl[T: Send + Sync] Sync for Weak[T] {}
+
+// ============================================================================
+// Fence import for memory synchronization
+// ============================================================================
+
+use sync::ordering::fence

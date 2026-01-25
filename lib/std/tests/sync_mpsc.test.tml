@@ -1,0 +1,78 @@
+// MPSC channel tests - Multi-Producer Single-Consumer channel
+// Note: Full channel tests are blocked by generic enum instantiation issues
+// and TryRecvError.to_string() crashes due to codegen bugs.
+
+use test::{assert, assert_eq}
+use std::sync::mpsc::{SendError, RecvError, TryRecvError}
+
+// ============================================================================
+// RecvError Tests
+// ============================================================================
+
+@test
+func test_recv_error_to_string() -> I32 {
+    let err: RecvError = RecvError {}
+    let s: Str = err.to_string()
+
+    assert(s.len() > 0, "RecvError string should not be empty")
+
+    return 0
+}
+
+// ============================================================================
+// SendError Tests
+// ============================================================================
+
+@test
+func test_send_error_into_inner_i32() -> I32 {
+    let err: SendError[I32] = SendError { value: 42 }
+    let v: I32 = err.into_inner()
+
+    assert_eq(v, 42, "into_inner should return the value")
+
+    return 0
+}
+
+@test
+func test_send_error_into_inner_i64() -> I32 {
+    let err: SendError[I64] = SendError { value: 1000000000000 as I64 }
+    let v: I64 = err.into_inner()
+
+    assert_eq(v, 1000000000000 as I64, "into_inner should return I64 value")
+
+    return 0
+}
+
+@test
+func test_send_error_into_inner_bool() -> I32 {
+    let err: SendError[Bool] = SendError { value: true }
+    let v: Bool = err.into_inner()
+
+    assert(v, "into_inner should return true")
+
+    return 0
+}
+
+// ============================================================================
+// TryRecvError Tests
+// ============================================================================
+
+@test
+func test_try_recv_error_empty() -> I32 {
+    let err: TryRecvError = TryRecvError::Empty
+
+    assert(err.is_empty(), "Empty.is_empty() should be true")
+    assert(not err.is_disconnected(), "Empty.is_disconnected() should be false")
+
+    return 0
+}
+
+@test
+func test_try_recv_error_disconnected() -> I32 {
+    let err: TryRecvError = TryRecvError::Disconnected
+
+    assert(not err.is_empty(), "Disconnected.is_empty() should be false")
+    assert(err.is_disconnected(), "Disconnected.is_disconnected() should be true")
+
+    return 0
+}

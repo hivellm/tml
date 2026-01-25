@@ -126,8 +126,33 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
     }
 
     // Check if this is a generic struct
+    // IMPORTANT: We must verify that the struct being created matches the generic struct
+    // declaration. Multiple modules can have structs with the same base name (e.g.,
+    // std::sync::Once and core::iter::sources::Once[T]). If field names don't match,
+    // this is a different struct and should not be treated as generic.
     auto generic_it = pending_generic_structs_.find(base_name);
+    bool is_matching_generic = false;
     if (generic_it != pending_generic_structs_.end() && !s.fields.empty()) {
+        // Verify field names match the generic struct declaration
+        const parser::StructDecl* decl = generic_it->second;
+        if (s.fields.size() <= decl->fields.size()) {
+            is_matching_generic = true;
+            for (size_t i = 0; i < s.fields.size(); ++i) {
+                bool found = false;
+                for (const auto& decl_field : decl->fields) {
+                    if (decl_field.name == s.fields[i].first) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    is_matching_generic = false;
+                    break;
+                }
+            }
+        }
+    }
+    if (is_matching_generic) {
         // This is a generic struct - first check if we can use existing type context
 
         // If we're in an impl method for this same type, use its type args
@@ -141,13 +166,20 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 std::string type_args_str = current_impl_type_.substr(base_name.size() + 2);
                 std::vector<types::TypePtr> type_args;
                 // Simple single-arg case: type_args_str is just "I64", "I32", etc.
-                if (type_args_str == "I32") type_args.push_back(types::make_i32());
-                else if (type_args_str == "I64") type_args.push_back(types::make_i64());
-                else if (type_args_str == "Bool") type_args.push_back(types::make_bool());
-                else if (type_args_str == "Str") type_args.push_back(types::make_str());
-                else if (type_args_str == "F32") type_args.push_back(types::make_primitive(types::PrimitiveKind::F32));
-                else if (type_args_str == "F64") type_args.push_back(types::make_f64());
-                else if (type_args_str == "Unit") type_args.push_back(types::make_unit());
+                if (type_args_str == "I32")
+                    type_args.push_back(types::make_i32());
+                else if (type_args_str == "I64")
+                    type_args.push_back(types::make_i64());
+                else if (type_args_str == "Bool")
+                    type_args.push_back(types::make_bool());
+                else if (type_args_str == "Str")
+                    type_args.push_back(types::make_str());
+                else if (type_args_str == "F32")
+                    type_args.push_back(types::make_primitive(types::PrimitiveKind::F32));
+                else if (type_args_str == "F64")
+                    type_args.push_back(types::make_f64());
+                else if (type_args_str == "Unit")
+                    type_args.push_back(types::make_unit());
                 else {
                     // Try as named type
                     auto t = std::make_shared<types::Type>();
@@ -158,7 +190,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             }
         }
         // Or check if return type provides the context
-        else if (!current_ret_type_.empty() && current_ret_type_.starts_with("%struct." + base_name + "__")) {
+        else if (!current_ret_type_.empty() &&
+                 current_ret_type_.starts_with("%struct." + base_name + "__")) {
             struct_type = current_ret_type_;
         }
         // Otherwise infer type arguments from field values
@@ -320,7 +353,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             // Get the actual field type from the struct definition
             std::string target_field_type = get_field_type(struct_name_for_lookup, field_name);
 
-            // Set expected_enum_type_ if field is a struct type (for generic enum variant inference)
+            // Set expected_enum_type_ if field is a struct type (for generic enum variant
+            // inference)
             std::string saved_expected_enum_type = expected_enum_type_;
             if (!target_field_type.empty() && target_field_type.starts_with("%struct.")) {
                 expected_enum_type_ = target_field_type;
@@ -361,7 +395,7 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
 
             field_val = gen_expr(*s.fields[i].second);
             std::string actual_llvm_type =
-                last_expr_type_;         // Capture actual LLVM type from gen_expr
+                last_expr_type_; // Capture actual LLVM type from gen_expr
             expected_enum_type_ = saved_expected_enum_type; // Restore after expression
             expected_literal_type_.clear();
             expected_literal_is_unsigned_ = false;
@@ -464,8 +498,29 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
             struct_type = current_ret_type_;
         } else {
             // Check if this is a generic struct - same logic as gen_struct_expr_ptr
+            // IMPORTANT: Verify field names match to avoid collisions between modules
             auto generic_it = pending_generic_structs_.find(base_name);
+            bool is_matching_generic_expr = false;
             if (generic_it != pending_generic_structs_.end() && !s.fields.empty()) {
+                const parser::StructDecl* decl = generic_it->second;
+                if (s.fields.size() <= decl->fields.size()) {
+                    is_matching_generic_expr = true;
+                    for (size_t i = 0; i < s.fields.size(); ++i) {
+                        bool found = false;
+                        for (const auto& decl_field : decl->fields) {
+                            if (decl_field.name == s.fields[i].first) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            is_matching_generic_expr = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (is_matching_generic_expr) {
                 const parser::StructDecl* decl = generic_it->second;
                 std::vector<types::TypePtr> type_args;
                 std::unordered_map<std::string, types::TypePtr> inferred_generics;
@@ -682,6 +737,50 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                 struct_ptr = nested_ptr;
             }
         }
+    } else if (field.object->is<parser::UnaryExpr>()) {
+        // Handle dereferenced pointer field access (e.g., (*ptr).field)
+        const auto& unary = field.object->as<parser::UnaryExpr>();
+        if (unary.op == parser::UnaryOp::Deref) {
+            // Generate the pointer value
+            struct_ptr = gen_expr(*unary.operand);
+
+            // Infer the pointee type
+            types::TypePtr ptr_type = infer_expr_type(*unary.operand);
+            if (ptr_type) {
+                types::TypePtr inner_type;
+                if (ptr_type->is<types::PtrType>()) {
+                    inner_type = ptr_type->as<types::PtrType>().inner;
+                } else if (ptr_type->is<types::RefType>()) {
+                    inner_type = ptr_type->as<types::RefType>().inner;
+                }
+
+                // Apply type substitutions for generic types
+                // E.g., Ptr[Node[T]] with T -> I32 becomes Node[I32]
+                if (inner_type && !current_type_subs_.empty()) {
+                    inner_type = apply_type_substitutions(inner_type, current_type_subs_);
+                }
+
+                if (inner_type) {
+                    std::string type_name;
+                    if (inner_type->is<types::NamedType>()) {
+                        type_name = inner_type->as<types::NamedType>().name;
+                        // Check if it's a generic type and mangle accordingly
+                        const auto& named = inner_type->as<types::NamedType>();
+                        if (!named.type_args.empty()) {
+                            // Ensure generic struct is instantiated so fields are registered
+                            require_struct_instantiation(type_name, named.type_args);
+                            struct_type =
+                                "%struct." + mangle_struct_name(type_name, named.type_args);
+                        } else {
+                            struct_type = "%struct." + type_name;
+                        }
+                    } else if (inner_type->is<types::ClassType>()) {
+                        type_name = inner_type->as<types::ClassType>().name;
+                        struct_type = "%class." + type_name;
+                    }
+                }
+            }
+        }
     }
 
     if (struct_type.empty() || struct_ptr.empty()) {
@@ -692,12 +791,28 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     // If struct_type is ptr, infer the actual struct type from the expression
     if (struct_type == "ptr") {
         types::TypePtr semantic_type = infer_expr_type(*field.object);
+        TML_DEBUG_LN("[GEN_FIELD] struct_type is ptr, field="
+                     << field.field << ", semantic_type="
+                     << (semantic_type ? types::type_to_string(semantic_type) : "null"));
         if (semantic_type) {
             // If the semantic type is a reference or pointer, get the inner type
             // and load the pointer from the alloca first
             if (semantic_type->is<types::RefType>()) {
                 const auto& ref = semantic_type->as<types::RefType>();
-                struct_type = llvm_type_from_semantic(ref.inner);
+                // Apply type substitutions for generic impl methods
+                // e.g., if inner is Mutex[T] and current_type_subs_ = {T: I32},
+                // we need Mutex[I32] not Mutex[T]
+                types::TypePtr resolved_inner = ref.inner;
+                TML_DEBUG_LN("[GEN_FIELD] RefType inner=" << types::type_to_string(ref.inner)
+                                                          << ", current_type_subs_.size="
+                                                          << current_type_subs_.size());
+                if (!current_type_subs_.empty()) {
+                    resolved_inner = apply_type_substitutions(ref.inner, current_type_subs_);
+                    TML_DEBUG_LN("[GEN_FIELD] After substitution: "
+                                 << types::type_to_string(resolved_inner));
+                }
+                struct_type = llvm_type_from_semantic(resolved_inner);
+                TML_DEBUG_LN("[GEN_FIELD] struct_type set to: " << struct_type);
                 // struct_ptr points to an alloca containing a pointer to the struct
                 // We need to load the pointer first
                 std::string loaded_ptr = fresh_reg();
@@ -705,7 +820,12 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                 struct_ptr = loaded_ptr;
             } else if (semantic_type->is<types::PtrType>()) {
                 const auto& ptr = semantic_type->as<types::PtrType>();
-                struct_type = llvm_type_from_semantic(ptr.inner);
+                // Apply type substitutions for generic impl methods
+                types::TypePtr resolved_inner = ptr.inner;
+                if (!current_type_subs_.empty()) {
+                    resolved_inner = apply_type_substitutions(ptr.inner, current_type_subs_);
+                }
+                struct_type = llvm_type_from_semantic(resolved_inner);
                 // Same - load the pointer from the alloca
                 std::string loaded_ptr = fresh_reg();
                 emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);

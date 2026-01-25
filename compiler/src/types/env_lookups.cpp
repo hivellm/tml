@@ -375,20 +375,70 @@ static bool behavior_inherits_from(const TypeEnv& env, const std::string& behavi
 
 bool TypeEnv::type_implements(const std::string& type_name,
                               const std::string& behavior_name) const {
+    // First check explicit implementations
     auto it = behavior_impls_.find(type_name);
-    if (it == behavior_impls_.end())
-        return false;
-    const auto& behaviors = it->second;
-    if (std::find(behaviors.begin(), behaviors.end(), behavior_name) != behaviors.end()) {
-        return true;
+    if (it != behavior_impls_.end()) {
+        const auto& behaviors = it->second;
+        if (std::find(behaviors.begin(), behaviors.end(), behavior_name) != behaviors.end()) {
+            return true;
+        }
+
+        // Check if any of the implemented behaviors have this as a super behavior
+        // i.e., if type implements ChildBehavior and ChildBehavior: ParentBehavior,
+        // then type also implements ParentBehavior
+        for (const auto& impl_behavior : behaviors) {
+            std::unordered_set<std::string> visited;
+            if (behavior_inherits_from(*this, impl_behavior, behavior_name, visited)) {
+                return true;
+            }
+        }
     }
 
-    // Check if any of the implemented behaviors have this as a super behavior
-    // i.e., if type implements ChildBehavior and ChildBehavior: ParentBehavior,
-    // then type also implements ParentBehavior
-    for (const auto& impl_behavior : behaviors) {
-        std::unordered_set<std::string> visited;
-        if (behavior_inherits_from(*this, impl_behavior, behavior_name, visited)) {
+    // Auto-derive Send/Sync for composite types (structs, enums)
+    // A type is Send if all its fields are Send
+    // A type is Sync if all its fields are Sync
+    if (behavior_name == "Send" || behavior_name == "Sync") {
+        // Check if this is a struct
+        auto struct_def = lookup_struct(type_name);
+        if (struct_def) {
+            // Struct is Send/Sync if all fields are Send/Sync
+            for (const auto& [field_name, field_type] : struct_def->fields) {
+                if (!type_implements(field_type, behavior_name)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Check if this is an enum
+        auto enum_def = lookup_enum(type_name);
+        if (enum_def) {
+            // Enum is Send/Sync if all variant payloads are Send/Sync
+            for (const auto& [variant_name, payload_types] : enum_def->variants) {
+                for (const auto& payload_type : payload_types) {
+                    if (!type_implements(payload_type, behavior_name)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // Check if this is a class
+        auto class_def = lookup_class(type_name);
+        if (class_def) {
+            // Check base class
+            if (class_def->base_class) {
+                if (!type_implements(*class_def->base_class, behavior_name)) {
+                    return false;
+                }
+            }
+            // Check all fields
+            for (const auto& field : class_def->fields) {
+                if (!type_implements(field.type, behavior_name)) {
+                    return false;
+                }
+            }
             return true;
         }
     }
@@ -400,6 +450,82 @@ bool TypeEnv::type_implements(const TypePtr& type, const std::string& behavior_n
     if (!type) {
         return false;
     }
+
+    // ========================================================================
+    // Thread Safety Marker Handling (Send/Sync)
+    // ========================================================================
+
+    if (behavior_name == "Send" || behavior_name == "Sync") {
+        // Raw pointers are NOT Send or Sync by default
+        // They represent raw memory access without any safety guarantees
+        if (type->is<PtrType>()) {
+            return false;
+        }
+
+        // References: depends on mutability
+        if (type->is<RefType>()) {
+            const auto& ref_type = type->as<RefType>();
+            if (ref_type.is_mut) {
+                // Mutable references: mut ref T is Send if T is Send
+                // (exclusive access can be transferred)
+                if (behavior_name == "Send") {
+                    return type_implements(ref_type.inner, "Send");
+                }
+                // mut ref T is NOT Sync because we can't share mutable access
+                // (two threads with mut ref would violate exclusive access)
+                return false;
+            } else {
+                // Immutable references: ref T is Send if T is Sync
+                // (because sending a reference means sharing it across threads)
+                if (behavior_name == "Send") {
+                    return type_implements(ref_type.inner, "Sync");
+                }
+                // ref T is Sync if T is Sync
+                return type_implements(ref_type.inner, "Sync");
+            }
+        }
+
+        // Function pointers are Send and Sync (just code addresses)
+        if (type->is<FuncType>()) {
+            return true;
+        }
+
+        // Closures: Send if all captures are Send, Sync if all captures are Sync
+        // For now, we conservatively say closures are not Send/Sync
+        // unless explicitly marked (requires capture analysis)
+        if (type->is<ClosureType>()) {
+            // TODO: Analyze captured variables to determine Send/Sync
+            // For now, assume closures that only capture Send types are Send
+            return false;
+        }
+
+        // Tuples: Send/Sync if all elements are Send/Sync
+        if (type->is<TupleType>()) {
+            const auto& tuple = type->as<TupleType>();
+            for (const auto& elem : tuple.elements) {
+                if (!type_implements(elem, behavior_name)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Arrays: Send/Sync if element type is Send/Sync
+        if (type->is<ArrayType>()) {
+            const auto& arr = type->as<ArrayType>();
+            return type_implements(arr.element, behavior_name);
+        }
+
+        // Slices: Send/Sync if element type is Send/Sync
+        if (type->is<SliceType>()) {
+            const auto& slice = type->as<SliceType>();
+            return type_implements(slice.element, behavior_name);
+        }
+    }
+
+    // ========================================================================
+    // Standard Behavior Handling
+    // ========================================================================
 
     // Handle ClosureType - closures automatically implement Fn, FnMut, FnOnce
     if (type->is<ClosureType>()) {
@@ -437,6 +563,13 @@ bool TypeEnv::type_implements(const TypePtr& type, const std::string& behavior_n
     // For class types, check if the class implements the behavior (as an interface)
     if (type->is<ClassType>()) {
         return class_implements_interface(type->as<ClassType>().name, behavior_name);
+    }
+
+    // For generic types, we need to check if the type parameter has the bound
+    // This will be handled by where clause checking at call sites
+    if (type->is<GenericType>()) {
+        // Generic types are assumed NOT to implement behaviors unless bounded
+        return false;
     }
 
     return false;
@@ -655,6 +788,26 @@ bool TypeEnv::is_trivially_destructible(const std::string& type_name) const {
             return false;
         }
 
+        // Also check if there's a Drop impl in module source code
+        // This handles imported generic types like MutexGuard[T] that have Drop impls
+        if (module_registry_) {
+            const auto& all_modules = module_registry_->get_all_modules();
+            for (const auto& [mod_name, mod] : all_modules) {
+                // Check if module source has "impl... Drop for BaseType"
+                // This handles generic Drop impls like "impl[T] Drop for MutexGuard[T]"
+                if (!mod.source_code.empty()) {
+                    std::string pattern1 = "Drop for " + base_type + "[";
+                    std::string pattern2 = "Drop for " + base_type + " ";
+                    std::string pattern3 = "Drop for " + base_type + "{";
+                    if (mod.source_code.find(pattern1) != std::string::npos ||
+                        mod.source_code.find(pattern2) != std::string::npos ||
+                        mod.source_code.find(pattern3) != std::string::npos) {
+                        return false; // Has Drop impl, not trivially destructible
+                    }
+                }
+            }
+        }
+
         // Check if the base struct exists and doesn't implement Drop
         auto base_struct = lookup_struct(base_type);
         if (base_struct) {
@@ -708,7 +861,7 @@ bool TypeEnv::is_trivially_destructible(const std::string& type_name) const {
 
         // If we can't find the base struct/enum but the base type doesn't implement Drop,
         // it's from an imported module and is trivially destructible (otherwise it would
-        // have registered its Drop implementation)
+        // have registered its Drop implementation or have a drop function)
         return true;
     }
 

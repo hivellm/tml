@@ -1,0 +1,499 @@
+//! Thread-local storage.
+//!
+//! This module provides [`LocalKey[T]`], a key for accessing thread-local data.
+//! Each thread has its own copy of thread-local data.
+//!
+//! # Overview
+//!
+//! Thread-local storage (TLS) allows each thread to have its own isolated copy
+//! of data. This is useful for per-thread caches, random number generators,
+//! or any data that should not be shared between threads.
+//!
+//! # Examples
+//!
+//! ## Basic Usage with @thread_local
+//!
+//! ```tml
+//! use std::thread::{LocalKey, local_access}
+//!
+//! // Declare thread-local storage
+//! @thread_local
+//! let COUNTER: LocalKey[I32] = LocalKey::new(do() 0)
+//!
+//! // Access the thread-local value
+//! COUNTER.access(do(value: ref I32) {
+//!     print("Counter: {*value}\n")
+//! })
+//!
+//! // Modify the thread-local value
+//! COUNTER.access_mut(do(value: mut ref I32) {
+//!     *value = *value + 1
+//! })
+//! ```
+//!
+//! ## Per-Thread Data
+//!
+//! ```tml
+//! use std::thread::{LocalKey, spawn}
+//!
+//! @thread_local
+//! let THREAD_ID: LocalKey[U64] = LocalKey::new(do() 0)
+//!
+//! let handles = []
+//! loop i in 0 to 4 {
+//!     handles.push(spawn(do() {
+//!         THREAD_ID.access_mut(do(id: mut ref U64) {
+//!             *id = current().id().as_u64()
+//!         })
+//!         THREAD_ID.access(do(id: ref U64) {
+//!             print("Thread {*id} running\n")
+//!         })
+//!     }))
+//! }
+//!
+//! for h in handles {
+//!     h.join()
+//! }
+//! ```
+//!
+//! # Initialization
+//!
+//! Thread-local values are lazily initialized on first access in each thread.
+//! The initializer function is called once per thread that accesses the value.
+
+use sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering}
+use core::alloc::{Layout, alloc_global, dealloc_global}
+use core::mem::{size_of, align_of}
+
+// ============================================================================
+// TLS Slot - Per-thread storage slot
+// ============================================================================
+
+/// Internal storage for a single thread's value.
+@repr(C)
+type TlsSlot[T] {
+    /// The thread ID that owns this slot
+    thread_id: U64,
+    /// Whether this slot has been initialized
+    initialized: Bool,
+    /// The actual value
+    value: T,
+    /// Pointer to next slot (for linked list of all thread slots)
+    next: Ptr[TlsSlot[T]],
+}
+
+impl[T] TlsSlot[T] {
+    /// Allocate a new TLS slot
+    func alloc(thread_id: U64, value: T) -> Ptr[TlsSlot[T]] {
+        let size: I64 = size_of[TlsSlot[T]]()
+        let align: I64 = align_of[TlsSlot[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+
+        let ptr: Ptr[U8] = alloc_global(layout)
+        if ptr == null {
+            panic("TLS: slot allocation failed")
+        }
+
+        let slot_ptr: Ptr[TlsSlot[T]] = ptr as Ptr[TlsSlot[T]]
+        lowlevel {
+            (*slot_ptr).thread_id = thread_id
+            (*slot_ptr).initialized = true
+            (*slot_ptr).value = value
+            (*slot_ptr).next = null
+        }
+        return slot_ptr
+    }
+
+    /// Free a TLS slot
+    func free(ptr: Ptr[TlsSlot[T]]) {
+        let size: I64 = size_of[TlsSlot[T]]()
+        let align: I64 = align_of[TlsSlot[T]]()
+        let layout: Layout = Layout::from_size_align_unchecked(size, align)
+        dealloc_global(ptr as Ptr[U8], layout)
+    }
+}
+
+// ============================================================================
+// LocalKey[T] - Thread-local storage key
+// ============================================================================
+
+/// A key for accessing thread-local data.
+///
+/// Each thread has its own copy of the value, initialized lazily on first access.
+/// The initializer function is called once per thread.
+///
+/// # Thread Safety
+///
+/// `LocalKey[T]` itself is `Sync` because each thread accesses only its own data.
+/// The type `T` does not need to be `Send` or `Sync` since values are never
+/// shared between threads.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::thread::LocalKey
+///
+/// @thread_local
+/// let BUFFER: LocalKey[Vec[U8]] = LocalKey::new(do() Vec::new())
+///
+/// BUFFER.access_mut(do(buf: mut ref Vec[U8]) {
+///     buf.push(42)
+/// })
+/// ```
+pub type LocalKey[T] {
+    /// The initialization function
+    init: func() -> T,
+    /// Head of linked list of all thread slots
+    slots: AtomicPtr[TlsSlot[T]],
+}
+
+impl[T] LocalKey[T] {
+    /// Creates a new thread-local key with the given initializer.
+    ///
+    /// The initializer is called once per thread, on first access.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::thread::LocalKey
+    ///
+    /// @thread_local
+    /// let COUNTER: LocalKey[I32] = LocalKey::new(do() 0)
+    /// ```
+    pub func new(init: func() -> T) -> LocalKey[T] {
+        return LocalKey {
+            init: init,
+            slots: AtomicPtr::new(null),
+        }
+    }
+
+    /// Access the thread-local value immutably.
+    ///
+    /// The provided closure receives a reference to the value.
+    /// If this is the first access from this thread, the value is initialized.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// @thread_local
+    /// let COUNT: LocalKey[I32] = LocalKey::new(do() 0)
+    ///
+    /// COUNT.access(do(val: ref I32) {
+    ///     print("Count: {*val}\n")
+    /// })
+    /// ```
+    pub func access[R](mut this, f: func(ref T) -> R) -> R {
+        // Inline get_or_init to avoid method resolution issue
+        let thread_id: U64 = current_thread_id()
+
+        // First, try to find existing slot
+        var current: Ptr[TlsSlot[T]] = this.slots.load(Ordering::Acquire)
+        var slot: Ptr[TlsSlot[T]] = null
+
+        loop (current != null) {
+            lowlevel {
+                if (*current).thread_id == thread_id and (*current).initialized {
+                    slot = current
+                    break
+                }
+                current = (*current).next
+            }
+        }
+
+        // If not found, initialize new slot
+        if slot == null {
+            let value: T = (this.init)()
+            let new_slot: Ptr[TlsSlot[T]] = TlsSlot::alloc[T](thread_id, value)
+
+            // Add to linked list (lock-free)
+            loop (true) {
+                let head: Ptr[TlsSlot[T]] = this.slots.load(Ordering::Acquire)
+                lowlevel {
+                    (*new_slot).next = head
+                }
+
+                let result: Outcome[Ptr[TlsSlot[T]], Ptr[TlsSlot[T]]] = this.slots.compare_exchange(
+                    head,
+                    new_slot,
+                    Ordering::Release,
+                    Ordering::Relaxed
+                )
+
+                when result {
+                    Ok(_) => {
+                        slot = new_slot
+                        break
+                    },
+                    Err(_) => {
+                        // CAS failed, retry
+                    }
+                }
+            }
+        }
+
+        lowlevel {
+            return f(ref (*slot).value)
+        }
+    }
+
+    /// Access the thread-local value mutably.
+    ///
+    /// The provided closure receives a mutable reference to the value.
+    /// If this is the first access from this thread, the value is initialized.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// @thread_local
+    /// let COUNT: LocalKey[I32] = LocalKey::new(do() 0)
+    ///
+    /// COUNT.access_mut(do(val: mut ref I32) {
+    ///     *val = *val + 1
+    /// })
+    /// ```
+    pub func access_mut[R](mut this, f: func(mut ref T) -> R) -> R {
+        // Inline get_or_init to avoid method resolution issue
+        let thread_id: U64 = current_thread_id()
+
+        // First, try to find existing slot
+        var current: Ptr[TlsSlot[T]] = this.slots.load(Ordering::Acquire)
+        var slot: Ptr[TlsSlot[T]] = null
+
+        loop (current != null) {
+            lowlevel {
+                if (*current).thread_id == thread_id and (*current).initialized {
+                    slot = current
+                    break
+                }
+                current = (*current).next
+            }
+        }
+
+        // If not found, initialize new slot
+        if slot == null {
+            let value: T = (this.init)()
+            let new_slot: Ptr[TlsSlot[T]] = TlsSlot::alloc[T](thread_id, value)
+
+            // Add to linked list (lock-free)
+            loop (true) {
+                let head: Ptr[TlsSlot[T]] = this.slots.load(Ordering::Acquire)
+                lowlevel {
+                    (*new_slot).next = head
+                }
+
+                let result: Outcome[Ptr[TlsSlot[T]], Ptr[TlsSlot[T]]] = this.slots.compare_exchange(
+                    head,
+                    new_slot,
+                    Ordering::Release,
+                    Ordering::Relaxed
+                )
+
+                when result {
+                    Ok(_) => {
+                        slot = new_slot
+                        break
+                    },
+                    Err(_) => {
+                        // CAS failed, retry
+                    }
+                }
+            }
+        }
+
+        lowlevel {
+            return f(mut ref (*slot).value)
+        }
+    }
+
+    /// Try to access the thread-local value without initializing.
+    ///
+    /// Returns `Nothing` if the value has not been initialized for this thread.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// @thread_local
+    /// let DATA: LocalKey[I32] = LocalKey::new(do() 42)
+    ///
+    /// // Before first access
+    /// assert_eq(DATA.try_access(do(v: ref I32) *v), Nothing)
+    ///
+    /// // After first access
+    /// DATA.access(do(v: ref I32) {})
+    /// assert_eq(DATA.try_access(do(v: ref I32) *v), Just(42))
+    /// ```
+    pub func try_access[R](this, f: func(ref T) -> R) -> Maybe[R] {
+        // Inline find_slot to avoid method resolution issue
+        let thread_id: U64 = current_thread_id()
+        var current: Ptr[TlsSlot[T]] = this.slots.load(Ordering::Acquire)
+        var slot: Ptr[TlsSlot[T]] = null
+
+        loop (current != null) {
+            lowlevel {
+                if (*current).thread_id == thread_id and (*current).initialized {
+                    slot = current
+                    break
+                }
+                current = (*current).next
+            }
+        }
+
+        if slot == null {
+            return Nothing
+        }
+        lowlevel {
+            return Just(f(ref (*slot).value))
+        }
+    }
+
+    /// Check if the value has been initialized for the current thread.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// @thread_local
+    /// let DATA: LocalKey[I32] = LocalKey::new(do() 0)
+    ///
+    /// assert(not DATA.is_initialized())
+    /// DATA.access(do(_) {})
+    /// assert(DATA.is_initialized())
+    /// ```
+    pub func is_initialized(this) -> Bool {
+        // Inline find_slot to avoid method resolution issue
+        let thread_id: U64 = current_thread_id()
+        var current: Ptr[TlsSlot[T]] = this.slots.load(Ordering::Acquire)
+
+        loop (current != null) {
+            lowlevel {
+                if (*current).thread_id == thread_id and (*current).initialized {
+                    return true
+                }
+                current = (*current).next
+            }
+        }
+        return false
+    }
+
+    /// Get or initialize the slot for the current thread.
+    pub func get_or_init(mut this) -> Ptr[TlsSlot[T]] {
+        let thread_id: U64 = current_thread_id()
+
+        // First, try to find existing slot
+        let existing: Ptr[TlsSlot[T]] = this.find_slot_for(thread_id)
+        if existing != null {
+            return existing
+        }
+
+        // Initialize new slot
+        let value: T = (this.init)()
+        let new_slot: Ptr[TlsSlot[T]] = TlsSlot::alloc[T](thread_id, value)
+
+        // Add to linked list (lock-free)
+        loop (true) {
+            let head: Ptr[TlsSlot[T]] = this.slots.load(Ordering::Acquire)
+            lowlevel {
+                (*new_slot).next = head
+            }
+
+            let result: Outcome[Ptr[TlsSlot[T]], Ptr[TlsSlot[T]]] = this.slots.compare_exchange(
+                head,
+                new_slot,
+                Ordering::Release,
+                Ordering::Relaxed
+            )
+
+            when result {
+                Ok(_) => return new_slot,
+                Err(_) => {
+                    // CAS failed, retry
+                }
+            }
+        }
+    }
+
+    /// Find the slot for the current thread, if it exists.
+    pub func find_slot(this) -> Ptr[TlsSlot[T]] {
+        return this.find_slot_for(current_thread_id())
+    }
+
+    /// Find the slot for a specific thread ID.
+    pub func find_slot_for(this, thread_id: U64) -> Ptr[TlsSlot[T]] {
+        var current: Ptr[TlsSlot[T]] = this.slots.load(Ordering::Acquire)
+
+        loop (current != null) {
+            lowlevel {
+                if (*current).thread_id == thread_id and (*current).initialized {
+                    return current
+                }
+                current = (*current).next
+            }
+        }
+
+        return null
+    }
+}
+
+impl[T] Drop for LocalKey[T] {
+    func drop(mut this) {
+        // Free all slots
+        var current: Ptr[TlsSlot[T]] = this.slots.load(Ordering::Relaxed)
+        loop (current != null) {
+            lowlevel {
+                let next: Ptr[TlsSlot[T]] = (*current).next
+                TlsSlot::free[T](current)
+                current = next
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Get the current thread's ID.
+///
+/// This is an internal function used by LocalKey.
+func current_thread_id() -> U64 {
+    // This would be implemented as an intrinsic that gets the OS thread ID
+    // For now, we use a placeholder that gets the thread ID
+    return __intrinsic_current_thread_id()
+}
+
+/// Intrinsic to get the current thread ID.
+@extern("tml_current_thread_id")
+func __intrinsic_current_thread_id() -> U64
+
+// ============================================================================
+// Convenience Macros (implemented as functions)
+// ============================================================================
+
+/// Initialize a thread-local value with a constant.
+///
+/// This is a convenience function for creating a LocalKey with a constant value.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::thread::local_const
+///
+/// @thread_local
+/// let ZERO: LocalKey[I32] = local_const(0)
+/// ```
+pub func local_const[T](value: T) -> LocalKey[T] {
+    return LocalKey::new(do() value)
+}
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// LocalKey[T] is Send - the key itself can be transferred between threads.
+/// Note: The actual thread-local values are never shared.
+impl[T] Send for LocalKey[T] {}
+
+/// LocalKey[T] is Sync - multiple threads can safely access the key,
+/// but each thread only accesses its own value.
+impl[T] Sync for LocalKey[T] {}

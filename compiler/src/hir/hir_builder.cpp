@@ -747,7 +747,8 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
         for (const auto& param : func.params) {
             params.push_back(resolve_type(*param));
         }
-        types::TypePtr ret = func.return_type ? resolve_type(*func.return_type) : types::make_unit();
+        types::TypePtr ret =
+            func.return_type ? resolve_type(*func.return_type) : types::make_unit();
         return types::make_func(std::move(params), ret);
     }
 

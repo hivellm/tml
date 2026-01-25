@@ -91,7 +91,9 @@ pub type Barrier {
     num_threads: U32,
 }
 
-type BarrierState {
+/// Internal state for Barrier synchronization.
+/// Note: Made pub for struct type emission when used in Mutex[BarrierState].
+pub type BarrierState {
     count: U32,
     generation: U32,
 }
@@ -155,23 +157,23 @@ impl Barrier {
     ///     h.join().unwrap()
     /// }
     /// ```
-    pub func wait(mut self) -> BarrierWaitResult {
-        let mut guard = self.mutex.lock()
-        let generation = guard.generation
+    pub func wait(mut this) -> BarrierWaitResult {
+        var guard: MutexGuard[BarrierState] = this.mutex.lock()
+        let generation: I64 = guard.generation
 
         guard.count = guard.count + 1
 
-        if guard.count >= self.num_threads {
+        if guard.count >= this.num_threads {
             // Last thread to arrive - reset and wake everyone
             guard.count = 0
             guard.generation = guard.generation + 1
-            self.cvar.notify_all()
+            this.cvar.notify_all()
             return BarrierWaitResult { is_leader: true }
         }
 
         // Wait for generation to change
-        loop guard.generation == generation {
-            guard = self.cvar.wait(guard)
+        loop (guard.generation == generation) {
+            guard = this.cvar.wait(guard)
         }
 
         return BarrierWaitResult { is_leader: false }
@@ -218,7 +220,30 @@ impl BarrierWaitResult {
     ///     println("I'm the leader!")
     /// }
     /// ```
-    pub func is_leader(self) -> Bool {
-        return self.is_leader
+    pub func is_leader(this) -> Bool {
+        return this.is_leader
     }
 }
+
+// ============================================================================
+// Send/Sync implementations
+// ============================================================================
+
+use core::marker::{Send, Sync}
+
+/// Barrier is Send.
+/// Barriers can be safely transferred between threads.
+impl Send for Barrier {}
+
+/// Barrier is Sync.
+/// Barriers are explicitly designed to be shared between threads for
+/// synchronization purposes. Multiple threads can wait on the same barrier.
+impl Sync for Barrier {}
+
+/// BarrierWaitResult is Send.
+/// It contains only a Bool and can be safely transferred.
+impl Send for BarrierWaitResult {}
+
+/// BarrierWaitResult is Sync.
+/// It contains only a Bool and can be safely shared.
+impl Sync for BarrierWaitResult {}
