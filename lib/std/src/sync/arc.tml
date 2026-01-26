@@ -70,7 +70,7 @@
 //! }
 //! ```
 
-use sync::atomic::{AtomicUsize, Ordering}
+use std::sync::atomic::{AtomicUsize, Ordering}
 use core::alloc::{Layout, alloc_global, dealloc_global}
 use core::mem::{size_of, align_of}
 use core::clone::Duplicate
@@ -662,4 +662,4 @@ impl[T: Send + Sync] Sync for Weak[T] {}
 // Fence import for memory synchronization
 // ============================================================================
 
-use sync::ordering::fence
+use std::sync::ordering::fence

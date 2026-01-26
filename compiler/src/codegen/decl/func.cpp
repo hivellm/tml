@@ -195,6 +195,17 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         // Get the actual symbol name (extern_name or func.name)
         std::string symbol_name = func.extern_name.value_or(func.name);
 
+        // Skip if already declared (prevents duplicate declarations when module is imported
+        // multiple times)
+        if (declared_externals_.find(symbol_name) != declared_externals_.end()) {
+            // Still register the function mapping even if declaration was already emitted
+            std::string func_type = ret_type + " (" + param_types + ")";
+            functions_[func.name] =
+                FuncInfo{"@" + symbol_name, func_type, ret_type, param_types_vec};
+            return;
+        }
+        declared_externals_.insert(symbol_name);
+
         // Determine calling convention based on ABI
         std::string call_conv = "";
         const std::string& abi = *func.extern_abi;

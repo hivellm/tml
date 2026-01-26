@@ -64,10 +64,10 @@
 //! assert_eq(count, 4)
 //! ```
 
-use sync::atomic::{AtomicUsize, AtomicBool, Ordering}
-use sync::mutex::Mutex
-use sync::condvar::Condvar
-use sync::arc::Arc
+use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering}
+use std::sync::mutex::Mutex
+use std::sync::condvar::Condvar
+use std::sync::arc::Arc
 use core::alloc::{Layout, alloc_global, dealloc_global}
 use core::mem::{size_of, align_of}
 use core::clone::Duplicate

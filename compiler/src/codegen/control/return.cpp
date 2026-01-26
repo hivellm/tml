@@ -53,15 +53,23 @@ static std::vector<std::string> parse_tuple_types_for_coercion(const std::string
 }
 
 auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
+    // IMPORTANT: Generate return expression FIRST, before dropping
+    // This allows mark_var_consumed to be called for variables used in the return value
+    std::string val;
+    std::string val_type;
+    if (ret.value.has_value()) {
+        val = gen_expr(*ret.value.value());
+        val_type = last_expr_type_;
+    }
+
     // Emit lifetime.end for all allocas before returning
     emit_all_lifetime_ends();
 
     // Emit drops for all variables in all scopes before returning
+    // (consumed variables from return expression will be skipped)
     emit_all_drops();
 
     if (ret.value.has_value()) {
-        std::string val = gen_expr(*ret.value.value());
-        std::string val_type = last_expr_type_;
 
         // For async functions, wrap the return value in Poll.Ready
         if (current_func_is_async_ && !current_poll_type_.empty()) {

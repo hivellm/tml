@@ -1,0 +1,13 @@
+// Test basic Arc creation with a struct
+use test::{assert, assert_eq}
+use std::sync::Arc
+
+type SimpleData {
+    value: I32,
+}
+
+@test
+func test_arc_simple() -> I32 {
+    let arc: Arc[SimpleData] = Arc::new(SimpleData { value: 42 })
+    return 0
+}

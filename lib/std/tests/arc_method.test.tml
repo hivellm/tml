@@ -1,0 +1,11 @@
+// Test Arc method calls
+use test::{assert, assert_eq}
+use std::sync::Arc
+
+@test
+func test_arc_duplicate() -> I32 {
+    let arc: Arc[I32] = Arc::new(42)
+    // This should call Arc[I32].duplicate()
+    let arc2: Arc[I32] = arc.duplicate()
+    return 0
+}

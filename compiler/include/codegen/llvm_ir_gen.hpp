@@ -198,6 +198,13 @@ private:
     // Each scope level contains variables that need drop() called when scope exits
     std::vector<std::vector<DropInfo>> drop_scopes_;
 
+    // Track variables that have been consumed (moved into struct fields, function args, etc.)
+    // These should not be dropped when going out of scope
+    std::unordered_set<std::string> consumed_vars_;
+
+    // Mark a variable as consumed (moved)
+    void mark_var_consumed(const std::string& var_name);
+
     // Drop scope management
     void push_drop_scope();
     void pop_drop_scope();
@@ -1093,6 +1100,14 @@ private:
 
     // Type inference for generics instantiation
     auto infer_expr_type(const parser::Expr& expr) -> types::TypePtr;
+
+    // Deref coercion helpers - for auto-deref on field access
+    // Returns the Deref target type for smart pointers like Arc[T], Box[T], etc.
+    // Returns nullptr if the type doesn't implement Deref or is not a known smart pointer.
+    auto get_deref_target_type(const types::TypePtr& type) -> types::TypePtr;
+
+    // Checks if a struct has a specific field
+    auto struct_has_field(const std::string& struct_name, const std::string& field_name) -> bool;
 
     // String literal handling
     std::vector<std::pair<std::string, std::string>> string_literals_;

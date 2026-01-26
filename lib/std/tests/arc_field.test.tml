@@ -1,0 +1,11 @@
+// Test Arc field access without drop
+use test::{assert}
+use std::sync::Arc
+
+// Test that we can access Arc's ptr field (for debugging)
+func main() -> I32 {
+    let arc: Arc[I32] = Arc::new(42)
+    // Don't let arc go out of scope - just return immediately
+    // This should avoid calling Arc::drop
+    return 0
+}

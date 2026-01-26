@@ -724,6 +724,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         base_type = ptr_type->as<types::PtrType>().inner;
                     } else if (ptr_type->is<types::RefType>()) {
                         base_type = ptr_type->as<types::RefType>().inner;
+                    } else if (ptr_type->is<types::NamedType>()) {
+                        // Handle TML's Ptr[T] type (NamedType wrapper)
+                        const auto& named = ptr_type->as<types::NamedType>();
+                        if ((named.name == "Ptr" || named.name == "RawPtr") &&
+                            !named.type_args.empty()) {
+                            base_type = named.type_args[0];
+                            TML_DEBUG_LN("[FIELD_MUTATION] NamedType Ptr inner: "
+                                         << types::type_to_string(base_type));
+                        }
                     }
 
                     // Apply type substitutions for generic types
@@ -752,6 +761,79 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     struct_type_name = mangle_struct_name(base_type_name, base_named.type_args);
                 }
                 std::string llvm_struct_type = "%struct." + struct_type_name;
+
+                // Check for auto-deref: if field not found on base type but base type implements
+                // Deref
+                types::TypePtr deref_target = get_deref_target_type(base_type);
+                if (deref_target && !struct_has_field(struct_type_name, field_expr.field)) {
+                    TML_DEBUG_LN("[METHOD_CALL] Auto-deref for FieldExpr: "
+                                 << base_type_name << " -> "
+                                 << types::type_to_string(deref_target));
+
+                    // Generate deref code for Arc[T] or Box[T]
+                    auto sep_pos = base_type_name.find("__");
+                    std::string smart_ptr_name = (sep_pos != std::string::npos)
+                                                     ? base_type_name.substr(0, sep_pos)
+                                                     : base_type_name;
+
+                    if (smart_ptr_name == "Arc" || smart_ptr_name == "Shared" ||
+                        smart_ptr_name == "Rc") {
+                        // Arc layout: { ptr: Ptr[ArcInner[T]] }
+                        // ArcInner layout: { strong, weak, data }
+                        std::string arc_ptr_field = fresh_reg();
+                        emit_line("  " + arc_ptr_field + " = getelementptr " + llvm_struct_type +
+                                  ", ptr " + base_ptr + ", i32 0, i32 0");
+                        std::string inner_ptr = fresh_reg();
+                        emit_line("  " + inner_ptr + " = load ptr, ptr " + arc_ptr_field);
+
+                        // Get ArcInner type
+                        std::string arc_inner_mangled = mangle_struct_name(
+                            "ArcInner", std::vector<types::TypePtr>{deref_target});
+                        std::string arc_inner_type = "%struct." + arc_inner_mangled;
+
+                        // GEP to data field (index 2)
+                        std::string data_ptr = fresh_reg();
+                        emit_line("  " + data_ptr + " = getelementptr " + arc_inner_type +
+                                  ", ptr " + inner_ptr + ", i32 0, i32 2");
+
+                        // Update base_ptr and types to point to inner struct
+                        base_ptr = data_ptr;
+                        if (deref_target->is<types::NamedType>()) {
+                            const auto& inner_named = deref_target->as<types::NamedType>();
+                            if (!inner_named.type_args.empty()) {
+                                require_struct_instantiation(inner_named.name,
+                                                             inner_named.type_args);
+                                struct_type_name =
+                                    mangle_struct_name(inner_named.name, inner_named.type_args);
+                            } else {
+                                struct_type_name = inner_named.name;
+                            }
+                            llvm_struct_type = "%struct." + struct_type_name;
+                        }
+                    } else if (smart_ptr_name == "Box" || smart_ptr_name == "Heap") {
+                        // Box layout: { ptr: Ptr[T] }
+                        std::string box_ptr_field = fresh_reg();
+                        emit_line("  " + box_ptr_field + " = getelementptr " + llvm_struct_type +
+                                  ", ptr " + base_ptr + ", i32 0, i32 0");
+                        std::string inner_ptr = fresh_reg();
+                        emit_line("  " + inner_ptr + " = load ptr, ptr " + box_ptr_field);
+
+                        // Update base_ptr and types
+                        base_ptr = inner_ptr;
+                        if (deref_target->is<types::NamedType>()) {
+                            const auto& inner_named = deref_target->as<types::NamedType>();
+                            if (!inner_named.type_args.empty()) {
+                                require_struct_instantiation(inner_named.name,
+                                                             inner_named.type_args);
+                                struct_type_name =
+                                    mangle_struct_name(inner_named.name, inner_named.type_args);
+                            } else {
+                                struct_type_name = inner_named.name;
+                            }
+                            llvm_struct_type = "%struct." + struct_type_name;
+                        }
+                    }
+                }
 
                 // Get field index
                 int field_idx = get_field_index(struct_type_name, field_expr.field);

@@ -34,6 +34,10 @@
 
 namespace tml::codegen {
 
+void LLVMIRGen::mark_var_consumed(const std::string& var_name) {
+    consumed_vars_.insert(var_name);
+}
+
 void LLVMIRGen::push_drop_scope() {
     drop_scopes_.push_back({});
 }
@@ -145,18 +149,24 @@ void LLVMIRGen::emit_scope_drops() {
     }
 
     // Emit drops in reverse order (LIFO - last declared is dropped first)
+    // Skip variables that have been consumed (moved into struct fields, etc.)
     const auto& current_scope = drop_scopes_.back();
     for (auto it = current_scope.rbegin(); it != current_scope.rend(); ++it) {
-        emit_drop_call(*it);
+        if (consumed_vars_.find(it->var_name) == consumed_vars_.end()) {
+            emit_drop_call(*it);
+        }
     }
 }
 
 void LLVMIRGen::emit_all_drops() {
     // Emit drops for all scopes in reverse order (innermost to outermost)
+    // Skip variables that have been consumed (moved into struct fields, etc.)
     for (auto scope_it = drop_scopes_.rbegin(); scope_it != drop_scopes_.rend(); ++scope_it) {
         // Within each scope, drop in reverse declaration order
         for (auto it = scope_it->rbegin(); it != scope_it->rend(); ++it) {
-            emit_drop_call(*it);
+            if (consumed_vars_.find(it->var_name) == consumed_vars_.end()) {
+                emit_drop_call(*it);
+            }
         }
     }
 }

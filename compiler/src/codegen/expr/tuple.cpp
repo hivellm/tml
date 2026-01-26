@@ -37,6 +37,12 @@ auto LLVMIRGen::gen_tuple(const parser::TupleExpr& tuple) -> std::string {
         std::string val = gen_expr(*elem);
         element_values.push_back(val);
         element_types.push_back(last_expr_type_);
+
+        // Mark variable as consumed if element is an identifier (move semantics)
+        if (elem->is<parser::IdentExpr>()) {
+            const auto& ident = elem->as<parser::IdentExpr>();
+            mark_var_consumed(ident.name);
+        }
     }
 
     // Build the tuple type string: { i32, i64, ptr } etc.

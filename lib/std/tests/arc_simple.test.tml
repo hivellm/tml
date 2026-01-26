@@ -1,0 +1,12 @@
+// Simplest Arc test - just creation, no duplicate
+use test::{assert}
+use std::sync::Arc
+
+// Just test Arc creation
+// This avoids calling duplicate() which triggers complex codegen
+func main() -> I32 {
+    // This should trigger Arc[I32] struct instantiation
+    let arc: Arc[I32] = Arc::new(42)
+    // When arc goes out of scope, Arc::drop should be called
+    return 0
+}

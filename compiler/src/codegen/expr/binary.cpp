@@ -120,27 +120,92 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             const auto& unary = bin.left->as<parser::UnaryExpr>();
             if (unary.op == parser::UnaryOp::Deref) {
                 // Dereferenced pointer assignment: *ptr = value
+                // IMPORTANT: Don't use last_semantic_type_ here - it's from the RHS!
+                // We need to infer the type of the LHS operand specifically.
+                types::TypePtr operand_type = infer_expr_type(*unary.operand);
+                std::string inner_llvm_type = "i32"; // default
+                TML_DEBUG_LN("[DEREF_ASSIGN] operand_type="
+                             << (operand_type ? types::type_to_string(operand_type) : "null"));
+
+                // Check for smart pointer types that implement DerefMut (like MutexGuard)
+                if (operand_type && operand_type->is<types::NamedType>()) {
+                    const auto& named = operand_type->as<types::NamedType>();
+                    TML_DEBUG_LN("[DEREF_ASSIGN] operand is NamedType: " << named.name);
+
+                    // Handle MutexGuard[T] - deref_mut writes through mutex.data
+                    if (named.name == "MutexGuard" && !named.type_args.empty()) {
+                        TML_DEBUG_LN("[DEREF_ASSIGN] MutexGuard detected");
+
+                        // Get pointer to the MutexGuard (not the value)
+                        std::string guard_ptr;
+                        if (unary.operand->is<parser::IdentExpr>()) {
+                            const auto& ident = unary.operand->as<parser::IdentExpr>();
+                            auto it = locals_.find(ident.name);
+                            if (it != locals_.end()) {
+                                guard_ptr = it->second.reg;
+                            }
+                        }
+
+                        if (!guard_ptr.empty()) {
+                            // Apply type substitutions to get concrete type args
+                            types::TypePtr concrete_inner = named.type_args[0];
+                            if (!current_type_subs_.empty()) {
+                                concrete_inner =
+                                    apply_type_substitutions(concrete_inner, current_type_subs_);
+                            }
+
+                            // Get the mangled MutexGuard and Mutex type names
+                            std::string guard_mangled = mangle_struct_name(
+                                "MutexGuard", std::vector<types::TypePtr>{concrete_inner});
+                            std::string mutex_mangled = mangle_struct_name(
+                                "Mutex", std::vector<types::TypePtr>{concrete_inner});
+                            std::string guard_type = "%struct." + guard_mangled;
+                            std::string mutex_type = "%struct." + mutex_mangled;
+
+                            // GEP to get mutex field (field 0) of MutexGuard
+                            std::string mutex_field_ptr = fresh_reg();
+                            emit_line("  " + mutex_field_ptr + " = getelementptr " + guard_type +
+                                      ", ptr " + guard_ptr + ", i32 0, i32 0");
+
+                            // Load the mutex pointer
+                            std::string mutex_ptr = fresh_reg();
+                            emit_line("  " + mutex_ptr + " = load ptr, ptr " + mutex_field_ptr);
+
+                            // GEP to get data field (field 0) of Mutex
+                            std::string data_ptr = fresh_reg();
+                            emit_line("  " + data_ptr + " = getelementptr " + mutex_type +
+                                      ", ptr " + mutex_ptr + ", i32 0, i32 0");
+
+                            // Store the value
+                            inner_llvm_type = llvm_type_from_semantic(concrete_inner);
+                            emit_line("  store " + inner_llvm_type + " " + right + ", ptr " +
+                                      data_ptr);
+                            last_expr_type_ = inner_llvm_type;
+                            return right;
+                        }
+                    }
+                }
+
                 // Get the pointer (not the dereferenced value!)
                 std::string ptr = gen_expr(*unary.operand);
 
-                // Use last_semantic_type_ from gen_expr if available (more reliable for method
-                // calls) Fall back to infer_expr_type if not set
-                types::TypePtr operand_type = last_semantic_type_;
-                if (!operand_type) {
-                    operand_type = infer_expr_type(*unary.operand);
-                }
-                std::string inner_llvm_type = "i32"; // default
-
                 if (operand_type) {
-                    if (std::holds_alternative<types::RefType>(operand_type->kind)) {
-                        const auto& ref_type = std::get<types::RefType>(operand_type->kind);
+                    if (operand_type->is<types::RefType>()) {
+                        const auto& ref_type = operand_type->as<types::RefType>();
                         if (ref_type.inner) {
                             inner_llvm_type = llvm_type_from_semantic(ref_type.inner);
                         }
-                    } else if (std::holds_alternative<types::PtrType>(operand_type->kind)) {
-                        const auto& ptr_type = std::get<types::PtrType>(operand_type->kind);
+                    } else if (operand_type->is<types::PtrType>()) {
+                        const auto& ptr_type = operand_type->as<types::PtrType>();
                         if (ptr_type.inner) {
                             inner_llvm_type = llvm_type_from_semantic(ptr_type.inner);
+                        }
+                    } else if (operand_type->is<types::NamedType>()) {
+                        // Handle TML's Ptr[T] type
+                        const auto& named = operand_type->as<types::NamedType>();
+                        if ((named.name == "Ptr" || named.name == "RawPtr") &&
+                            !named.type_args.empty()) {
+                            inner_llvm_type = llvm_type_from_semantic(named.type_args[0]);
                         }
                     }
                 }

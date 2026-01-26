@@ -1,0 +1,11 @@
+// Test AtomicUsize method calls directly
+use test::{assert}
+use std::sync::atomic::{AtomicUsize, Ordering}
+
+// Test that we can call AtomicUsize::fetch_sub
+func main() -> I32 {
+    let atom: AtomicUsize = AtomicUsize::new(10)
+    let v: U64 = 1
+    let old: U64 = atom.fetch_sub(v, Ordering::SeqCst)
+    return 0
+}

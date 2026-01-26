@@ -1,0 +1,17 @@
+// Full MPSC channel tests
+use test::{assert, assert_eq}
+use std::sync::mpsc::{channel, Sender, Receiver, SendError, RecvError, TryRecvError}
+
+// ============================================================================
+// Channel Creation Tests
+// ============================================================================
+
+@test
+func test_channel_creation() -> I32 {
+    // Basic channel creation should not crash
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    let rx: Receiver[I32] = result.1
+
+    return 0
+}

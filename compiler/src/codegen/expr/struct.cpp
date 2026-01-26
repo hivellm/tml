@@ -64,6 +64,12 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
 
             std::string field_val = gen_expr(*s.fields[i].second);
 
+            // Mark variable as consumed if field value is an identifier (move semantics)
+            if (s.fields[i].second->is<parser::IdentExpr>()) {
+                const auto& ident = s.fields[i].second->as<parser::IdentExpr>();
+                mark_var_consumed(ident.name);
+            }
+
             // Restore expected_enum_type_
             expected_enum_type_ = saved_expected_enum_type;
 
@@ -107,6 +113,12 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             }
 
             std::string field_val = gen_expr(*s.fields[i].second);
+
+            // Mark variable as consumed if field value is an identifier (move semantics)
+            if (s.fields[i].second->is<parser::IdentExpr>()) {
+                const auto& ident = s.fields[i].second->as<parser::IdentExpr>();
+                mark_var_consumed(ident.name);
+            }
 
             // Restore expected_enum_type_
             expected_enum_type_ = saved_expected_enum_type;
@@ -394,6 +406,13 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             }
 
             field_val = gen_expr(*s.fields[i].second);
+
+            // Mark variable as consumed if field value is an identifier (move semantics)
+            if (s.fields[i].second->is<parser::IdentExpr>()) {
+                const auto& ident = s.fields[i].second->as<parser::IdentExpr>();
+                mark_var_consumed(ident.name);
+            }
+
             std::string actual_llvm_type =
                 last_expr_type_; // Capture actual LLVM type from gen_expr
             expected_enum_type_ = saved_expected_enum_type; // Restore after expression
@@ -697,6 +716,33 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                 struct_type = "%struct." + current_impl_type_;
                 // 'this' is already a pointer parameter, not an alloca - use it directly
                 // struct_ptr is already "%this" which is the direct pointer
+
+                // Ensure the generic struct is instantiated so its fields are registered
+                // Parse the mangled name to get base_name and type_args
+                // e.g., "Arc__I32" -> base="Arc", type_args=[I32]
+                auto sep_pos = current_impl_type_.find("__");
+                if (sep_pos != std::string::npos) {
+                    std::string base_name = current_impl_type_.substr(0, sep_pos);
+                    // Use semantic type from locals_ if available for proper type args
+                    if (it->second.semantic_type &&
+                        it->second.semantic_type->is<types::NamedType>()) {
+                        const auto& named = it->second.semantic_type->as<types::NamedType>();
+                        if (!named.type_args.empty()) {
+                            // Apply current type substitutions to get concrete types
+                            // e.g., Arc[T] with T=I32 becomes Arc[I32]
+                            std::vector<types::TypePtr> concrete_args;
+                            for (const auto& arg : named.type_args) {
+                                if (!current_type_subs_.empty()) {
+                                    concrete_args.push_back(
+                                        apply_type_substitutions(arg, current_type_subs_));
+                                } else {
+                                    concrete_args.push_back(arg);
+                                }
+                            }
+                            require_struct_instantiation(named.name, concrete_args);
+                        }
+                    }
+                }
             }
         }
     } else if (field.object->is<parser::FieldExpr>()) {
@@ -752,6 +798,13 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                     inner_type = ptr_type->as<types::PtrType>().inner;
                 } else if (ptr_type->is<types::RefType>()) {
                     inner_type = ptr_type->as<types::RefType>().inner;
+                } else if (ptr_type->is<types::NamedType>()) {
+                    // Handle TML's Ptr[T] type (NamedType with name="Ptr" or "RawPtr")
+                    const auto& named = ptr_type->as<types::NamedType>();
+                    if ((named.name == "Ptr" || named.name == "RawPtr") &&
+                        !named.type_args.empty()) {
+                        inner_type = named.type_args[0];
+                    }
                 }
 
                 // Apply type substitutions for generic types
@@ -891,6 +944,14 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             std::string result = fresh_reg();
             emit_line("  " + result + " = load " + elem_llvm_type + ", ptr " + elem_ptr);
             last_expr_type_ = elem_llvm_type;
+
+            // Mark the tuple variable as consumed when extracting elements (move semantics)
+            // This prevents double-free when tuple elements are moved to new bindings
+            if (field.object->is<parser::IdentExpr>()) {
+                const auto& ident = field.object->as<parser::IdentExpr>();
+                mark_var_consumed(ident.name);
+            }
+
             return result;
         }
     }
@@ -901,6 +962,93 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         type_name = type_name.substr(8);
     } else if (type_name.starts_with("%class.")) {
         type_name = type_name.substr(7);
+    }
+
+    // Check for auto-deref on smart pointer types (Arc, Box, etc.)
+    // If the field is not found on the smart pointer type, dereference to the inner type
+    types::TypePtr obj_type = infer_expr_type(*field.object);
+    types::TypePtr deref_target = get_deref_target_type(obj_type);
+    if (deref_target && !struct_has_field(type_name, field.field)) {
+        TML_DEBUG_LN("[GEN_FIELD] Auto-deref: " << type_name << " -> "
+                                                << types::type_to_string(deref_target));
+
+        // Generate deref code for Arc[T]:
+        // 1. Load arc.ptr (field 0) to get Ptr[ArcInner[T]]
+        // 2. GEP to get (*ptr).data (field 2) which is T
+        // 3. Then access field.field on T
+
+        std::string ptr_type = type_name;
+        // Extract base type name from mangled name (e.g., Arc__ChannelInner__I32 -> Arc)
+        auto sep_pos = ptr_type.find("__");
+        std::string base_type_name =
+            (sep_pos != std::string::npos) ? ptr_type.substr(0, sep_pos) : ptr_type;
+
+        if (base_type_name == "Arc" || base_type_name == "Shared" || base_type_name == "Rc") {
+            // Arc layout: { ptr: Ptr[ArcInner[T]] }
+            // ArcInner layout: { strong: AtomicUsize, weak: AtomicUsize, data: T }
+
+            // Load the inner ptr from Arc struct (field 0)
+            std::string arc_ptr_field = fresh_reg();
+            emit_line("  " + arc_ptr_field + " = getelementptr " + struct_type + ", ptr " +
+                      struct_ptr + ", i32 0, i32 0");
+            std::string inner_ptr = fresh_reg();
+            emit_line("  " + inner_ptr + " = load ptr, ptr " + arc_ptr_field);
+
+            // Get the ArcInner type - need to figure out its mangled name
+            // For Arc[ChannelInner[I32]], inner is ChannelInner[I32]
+            // ArcInner[ChannelInner[I32]] is the actual inner struct
+            std::string arc_inner_mangled = "ArcInner";
+            if (deref_target->is<types::NamedType>()) {
+                arc_inner_mangled =
+                    mangle_struct_name("ArcInner", std::vector<types::TypePtr>{deref_target});
+            }
+
+            // GEP to get data field of ArcInner (field index 2: strong=0, weak=1, data=2)
+            std::string arc_inner_type = "%struct." + arc_inner_mangled;
+            std::string data_ptr = fresh_reg();
+            emit_line("  " + data_ptr + " = getelementptr " + arc_inner_type + ", ptr " +
+                      inner_ptr + ", i32 0, i32 2");
+
+            // Now update struct_ptr to point to the data and struct_type to the inner type
+            struct_ptr = data_ptr;
+            if (deref_target->is<types::NamedType>()) {
+                const auto& inner_named = deref_target->as<types::NamedType>();
+                if (!inner_named.type_args.empty()) {
+                    struct_type =
+                        "%struct." + mangle_struct_name(inner_named.name, inner_named.type_args);
+                    type_name = mangle_struct_name(inner_named.name, inner_named.type_args);
+                } else {
+                    struct_type = "%struct." + inner_named.name;
+                    type_name = inner_named.name;
+                }
+            }
+            TML_DEBUG_LN("[GEN_FIELD] After auto-deref: struct_type="
+                         << struct_type << " type_name=" << type_name);
+        } else if (base_type_name == "Box" || base_type_name == "Heap") {
+            // Box/Heap layout: { ptr: Ptr[T] }
+            // Simply load the ptr and access the field on T
+
+            // Load the inner ptr from Box struct (field 0)
+            std::string box_ptr_field = fresh_reg();
+            emit_line("  " + box_ptr_field + " = getelementptr " + struct_type + ", ptr " +
+                      struct_ptr + ", i32 0, i32 0");
+            std::string inner_ptr = fresh_reg();
+            emit_line("  " + inner_ptr + " = load ptr, ptr " + box_ptr_field);
+
+            // Update struct_ptr and struct_type
+            struct_ptr = inner_ptr;
+            if (deref_target->is<types::NamedType>()) {
+                const auto& inner_named = deref_target->as<types::NamedType>();
+                if (!inner_named.type_args.empty()) {
+                    struct_type =
+                        "%struct." + mangle_struct_name(inner_named.name, inner_named.type_args);
+                    type_name = mangle_struct_name(inner_named.name, inner_named.type_args);
+                } else {
+                    struct_type = "%struct." + inner_named.name;
+                    type_name = inner_named.name;
+                }
+            }
+        }
     }
 
     // Check if this is a class property access (getter call)
