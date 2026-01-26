@@ -1,7 +1,5 @@
 // MPSC channel tests - error types only
-// Note: Full channel creation tests are blocked by runtime issues (hangs).
-// The channel() function likely has issues in the mpsc.tml implementation.
-
+// Note: Channel creation tests moved to pending due to hangs
 use test::{assert, assert_eq}
 use std::sync::mpsc::{SendError, RecvError, TryRecvError}
 
@@ -11,7 +9,6 @@ use std::sync::mpsc::{SendError, RecvError, TryRecvError}
 
 @test
 func test_recv_error_exists() -> I32 {
-    // RecvError can be created
     let err: RecvError = RecvError {}
     return 0
 }

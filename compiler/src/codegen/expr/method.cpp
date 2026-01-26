@@ -33,6 +33,85 @@
 
 namespace tml::codegen {
 
+// Static helper to parse mangled type strings like "Mutex__I32" into proper TypePtr
+// This is used for nested generic type inference and avoids expensive std::function lambdas
+static types::TypePtr parse_mangled_type_string(const std::string& s) {
+    // Primitives
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I8};
+        return t;
+    }
+    if (s == "I16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I16};
+        return t;
+    }
+    if (s == "U8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U8};
+        return t;
+    }
+    if (s == "U16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U16};
+        return t;
+    }
+    if (s == "U32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U32};
+        return t;
+    }
+    if (s == "U64") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "Usize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "Isize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I64};
+        return t;
+    }
+    if (s == "F32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::F32};
+        return t;
+    }
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+
+    // Check for nested generic (e.g., Mutex__I32)
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+        auto inner = parse_mangled_type_string(arg_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::NamedType{base, "", {inner}};
+            return t;
+        }
+    }
+
+    // Simple struct type
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::string {
     // Clear expected literal type context - it should only apply within explicit type annotations
     // (like "let x: F64 = 5") and not leak into method call arguments
@@ -117,13 +196,19 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         // Also check for imported generic structs (except runtime collections)
         std::vector<std::string> imported_type_params;
         if (!is_generic_struct && !is_runtime_collection && env_.module_registry()) {
+            TML_DEBUG_LN("[STATIC_METHOD] Looking for " << type_name << " in module registry");
             const auto& all_modules = env_.module_registry()->get_all_modules();
             for (const auto& [mod_name, mod] : all_modules) {
                 auto struct_it = mod.structs.find(type_name);
-                if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
-                    is_generic_struct = true;
-                    imported_type_params = struct_it->second.type_params;
-                    break;
+                if (struct_it != mod.structs.end()) {
+                    TML_DEBUG_LN("[STATIC_METHOD] Found " << type_name << " in " << mod_name
+                                                          << " with type_params.size="
+                                                          << struct_it->second.type_params.size());
+                    if (!struct_it->second.type_params.empty()) {
+                        is_generic_struct = true;
+                        imported_type_params = struct_it->second.type_params;
+                        break;
+                    }
                 }
             }
         }
@@ -269,6 +354,21 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     t->kind = types::PtrType{true, inner};
                     return t;
                 }
+                // Handle nested generic types like Mutex__I32 -> NamedType{name="Mutex",
+                // type_args=[I32]} Use static helper function for efficiency (avoids std::function
+                // overhead)
+                auto delim_pos = type_arg_str.find("__");
+                if (delim_pos != std::string::npos) {
+                    std::string base_name = type_arg_str.substr(0, delim_pos);
+                    std::string type_arg_suffix = type_arg_str.substr(delim_pos + 2);
+                    auto inner_type = parse_mangled_type_string(type_arg_suffix);
+                    if (inner_type) {
+                        auto t = std::make_shared<types::Type>();
+                        t->kind = types::NamedType{base_name, "", {inner_type}};
+                        return t;
+                    }
+                }
+
                 // For struct types, create a NamedType
                 auto t = std::make_shared<types::Type>();
                 t->kind = types::NamedType{type_arg_str, "", {}};
@@ -345,6 +445,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             }
 
             // Fall back to expected_enum_type_ if no explicit generics found
+            TML_DEBUG_LN("[STATIC_METHOD] expected_enum_type_ check: type_name="
+                         << type_name << " expected_enum_type_=" << expected_enum_type_
+                         << " type_subs.empty()=" << type_subs.empty());
             if (type_subs.empty() && !expected_enum_type_.empty() &&
                 expected_enum_type_.find("%struct." + type_name + "__") == 0) {
                 // Extract type args from expected_enum_type_ like "%struct.Range__I64"
@@ -368,6 +471,62 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     types::TypePtr type_arg = str_to_type(type_arg_str);
                     if (type_arg && !generic_names.empty()) {
                         type_subs[generic_names[0]] = type_arg;
+                    }
+                }
+            }
+
+            // Infer type arguments from actual arguments when type_subs is still empty
+            // This handles cases like Mutex::new(42) where T should be inferred from arg type
+            if (type_subs.empty() && func_sig && !call.args.empty()) {
+                // Get generic parameter names for this type
+                std::vector<std::string> generic_names;
+                auto impl_it = pending_generic_impls_.find(type_name);
+                if (impl_it != pending_generic_impls_.end()) {
+                    for (const auto& g : impl_it->second->generics) {
+                        generic_names.push_back(g.name);
+                    }
+                } else if (!imported_type_params.empty()) {
+                    generic_names = imported_type_params;
+                }
+
+                // Helper to check if a type is a generic parameter
+                auto is_generic_param = [&generic_names](const types::TypePtr& t) -> std::string {
+                    if (!t)
+                        return "";
+                    // Check for explicit GenericType
+                    if (t->is<types::GenericType>()) {
+                        return t->as<types::GenericType>().name;
+                    }
+                    // Check for NamedType with name matching a generic param
+                    // (generic params are often stored as NamedType with no type_args)
+                    if (t->is<types::NamedType>()) {
+                        const auto& named = t->as<types::NamedType>();
+                        if (named.type_args.empty()) {
+                            for (const auto& gname : generic_names) {
+                                if (named.name == gname) {
+                                    return gname;
+                                }
+                            }
+                        }
+                    }
+                    return "";
+                };
+
+                // For each argument, check if its corresponding parameter is a generic type
+                // If so, infer the type from the argument
+                for (size_t i = 0; i < call.args.size() && i < func_sig->params.size(); ++i) {
+                    auto param_type = func_sig->params[i];
+                    std::string param_name = is_generic_param(param_type);
+                    if (!param_name.empty() && type_subs.find(param_name) == type_subs.end()) {
+                        // Infer type from argument expression
+                        auto arg_type = infer_expr_type(*call.args[i]);
+                        if (arg_type) {
+                            type_subs[param_name] = arg_type;
+                            mangled_type_name += "__" + mangle_type(arg_type);
+                            TML_DEBUG_LN("[STATIC_METHOD] Inferred " << param_name << " = "
+                                                                     << mangle_type(arg_type)
+                                                                     << " from argument " << i);
+                        }
                     }
                 }
             }
@@ -413,7 +572,24 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 // Generate arguments (no receiver for static methods)
                 std::vector<std::pair<std::string, std::string>> typed_args;
                 for (size_t i = 0; i < call.args.size(); ++i) {
+                    // Set expected type context before generating argument
+                    // This helps with type inference for nested generic calls
+                    std::string saved_expected_enum = expected_enum_type_;
+                    if (func_sig && i < func_sig->params.size()) {
+                        auto param_type = func_sig->params[i];
+                        if (!type_subs.empty()) {
+                            param_type = types::substitute_type(param_type, type_subs);
+                        }
+                        std::string llvm_param_type = llvm_type_from_semantic(param_type);
+                        // Set expected type for generic struct arguments
+                        if (llvm_param_type.find("%struct.") == 0 &&
+                            llvm_param_type.find("__") != std::string::npos) {
+                            expected_enum_type_ = llvm_param_type;
+                        }
+                    }
+
                     std::string val = gen_expr(*call.args[i]);
+                    expected_enum_type_ = saved_expected_enum;
                     std::string arg_type = last_expr_type_;
                     if (func_sig && i < func_sig->params.size()) {
                         auto param_type = func_sig->params[i];
@@ -596,8 +772,37 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             if (func_sig) {
                 // Generate call to user-defined static method
+                // Check if we have expected type context that tells us the generic instantiation
+                std::string mangled_type_name = type_name;
+                std::unordered_map<std::string, types::TypePtr> type_subs_fallback;
+
+                // Use expected_enum_type_ to determine type substitutions for generic types
+                if (!expected_enum_type_.empty() &&
+                    expected_enum_type_.find("%struct." + type_name + "__") == 0) {
+                    // Extract mangled name and infer type params
+                    mangled_type_name = expected_enum_type_.substr(8); // Remove "%struct."
+                    std::string suffix = mangled_type_name.substr(type_name.length());
+                    if (suffix.starts_with("__")) {
+                        std::string type_arg_str = suffix.substr(2);
+                        // Use static helper function for efficiency (avoids std::function overhead)
+                        types::TypePtr type_arg = parse_mangled_type_string(type_arg_str);
+                        if (type_arg) {
+                            type_subs_fallback["T"] = type_arg;
+                            // Request impl method instantiation
+                            std::string method_key = "tml_" + mangled_type_name + "_" + method;
+                            if (generated_impl_methods_.find(method_key) ==
+                                generated_impl_methods_.end()) {
+                                pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                                    mangled_type_name, method, type_subs_fallback, type_name, "",
+                                    /*is_library_type=*/true});
+                                generated_impl_methods_.insert(method_key);
+                            }
+                        }
+                    }
+                }
+
                 // Look up in functions_ for the correct LLVM name
-                std::string method_lookup_key = type_name + "_" + method;
+                std::string method_lookup_key = mangled_type_name + "_" + method;
                 auto method_it = functions_.find(method_lookup_key);
                 std::string fn_name;
                 if (method_it != functions_.end()) {
@@ -606,16 +811,37 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     // Fallback - only use suite prefix for test-local methods
                     std::string prefix =
                         is_library_method(type_name, method) ? "" : get_suite_prefix();
-                    fn_name = "@tml_" + prefix + type_name + "_" + method;
+                    fn_name = "@tml_" + prefix + mangled_type_name + "_" + method;
                 }
 
                 std::vector<std::pair<std::string, std::string>> typed_args;
                 for (size_t i = 0; i < call.args.size(); ++i) {
+                    // Set expected type context before generating argument
+                    // This helps with type inference for nested generic calls
+                    std::string saved_expected_enum = expected_enum_type_;
+                    if (i < func_sig->params.size()) {
+                        auto param_type = func_sig->params[i];
+                        if (!type_subs_fallback.empty()) {
+                            param_type = types::substitute_type(param_type, type_subs_fallback);
+                        }
+                        std::string llvm_param_type = llvm_type_from_semantic(param_type);
+                        // Set expected type for generic struct arguments
+                        if (llvm_param_type.find("%struct.") == 0 &&
+                            llvm_param_type.find("__") != std::string::npos) {
+                            expected_enum_type_ = llvm_param_type;
+                        }
+                    }
+
                     std::string val = gen_expr(*call.args[i]);
+                    expected_enum_type_ = saved_expected_enum;
                     std::string arg_type = last_expr_type_;
                     std::string expected_type = arg_type;
                     if (i < func_sig->params.size()) {
-                        expected_type = llvm_type_from_semantic(func_sig->params[i]);
+                        auto param_type = func_sig->params[i];
+                        if (!type_subs_fallback.empty()) {
+                            param_type = types::substitute_type(param_type, type_subs_fallback);
+                        }
+                        expected_type = llvm_type_from_semantic(param_type);
                         // Type coercion if needed
                         if (arg_type != expected_type) {
                             bool is_int_actual = (arg_type[0] == 'i' && arg_type != "i1");
@@ -646,8 +872,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     args_str += typed_args[i].first + " " + typed_args[i].second;
                 }
 
-                std::string ret_type =
-                    func_sig->return_type ? llvm_type_from_semantic(func_sig->return_type) : "void";
+                auto return_type = func_sig->return_type;
+                if (!type_subs_fallback.empty()) {
+                    return_type = types::substitute_type(return_type, type_subs_fallback);
+                }
+                std::string ret_type = return_type ? llvm_type_from_semantic(return_type) : "void";
                 std::string result_reg = fresh_reg();
                 if (ret_type == "void") {
                     emit_line("  call void " + fn_name + "(" + args_str + ")");

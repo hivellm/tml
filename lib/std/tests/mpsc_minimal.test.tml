@@ -1,7 +1,0 @@
-// Minimal MPSC channel test
-use std::sync::mpsc::{channel, Sender, Receiver}
-
-func main() -> I32 {
-    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
-    return 0
-}

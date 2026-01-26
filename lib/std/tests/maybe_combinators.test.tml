@@ -1,6 +1,42 @@
-// Tests for Maybe[T] combinators: map, and_then, filter, or_else
+// Tests for Maybe[T] - basic operations and combinators
 use test
 use std::types
+
+// ============================================================================
+// Basic Maybe Tests
+// ============================================================================
+
+@test
+func test_maybe_just_unwrap_or() -> I32 {
+    let x: Maybe[I32] = Just(5)
+    assert(unwrap_or(x, 0) == 5, "Just(5).unwrap_or(0) should be 5")
+    return 0
+}
+
+@test
+func test_maybe_nothing_unwrap_or() -> I32 {
+    let n: Maybe[I32] = Nothing
+    assert(unwrap_or(n, 42) == 42, "Nothing.unwrap_or(42) should be 42")
+    return 0
+}
+
+@test
+func test_maybe_is_just() -> I32 {
+    let x: Maybe[I32] = Just(10)
+    assert(is_just(x), "Just(10).is_just() should be true")
+    return 0
+}
+
+@test
+func test_maybe_is_nothing() -> I32 {
+    let n: Maybe[I32] = Nothing
+    assert(is_nothing(n), "Nothing.is_nothing() should be true")
+    return 0
+}
+
+// ============================================================================
+// map combinator Tests
+// ============================================================================
 
 @test
 func test_map_just_doubles_value() -> I32 {

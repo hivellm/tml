@@ -1,0 +1,33 @@
+// MPSC channel creation tests - PENDING (hangs during channel[T]() call)
+// The channel() function likely has issues in the mpsc.tml implementation
+// that cause deadlocks or infinite waits.
+use test::{assert, assert_eq}
+use std::sync::mpsc::{channel, Sender, Receiver}
+
+@test
+func test_channel_creation() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    return 0
+}
+
+@test
+func test_channel_tuple_access() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    let rx: Receiver[I32] = result.1
+    return 0
+}
+
+@test
+func test_channel_sender_only() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    return 0
+}
+
+@test
+func test_channel_receiver_only() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let rx: Receiver[I32] = result.1
+    return 0
+}

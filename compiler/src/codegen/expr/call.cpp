@@ -27,6 +27,85 @@
 
 namespace tml::codegen {
 
+// Static helper to parse mangled type strings like "Mutex__I32" into proper TypePtr
+// This is used for nested generic type inference and avoids expensive std::function lambdas
+static types::TypePtr parse_mangled_type_string(const std::string& s) {
+    // Primitives
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I8};
+        return t;
+    }
+    if (s == "I16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I16};
+        return t;
+    }
+    if (s == "U8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U8};
+        return t;
+    }
+    if (s == "U16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U16};
+        return t;
+    }
+    if (s == "U32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U32};
+        return t;
+    }
+    if (s == "U64") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "Usize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "Isize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I64};
+        return t;
+    }
+    if (s == "F32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::F32};
+        return t;
+    }
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+
+    // Check for nested generic (e.g., Mutex__I32)
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+        auto inner = parse_mangled_type_string(arg_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::NamedType{base, "", {inner}};
+            return t;
+        }
+    }
+
+    // Simple struct type
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // Clear expected literal type context - it should only apply within explicit type annotations
     // (like "let x: F64 = 5") and not leak into function call arguments
@@ -1440,9 +1519,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             type_arg = std::make_shared<types::Type>();
                             type_arg->kind = types::PtrType{true, inner};
                         } else {
-                            // For struct types (like BarrierState), create a NamedType
-                            type_arg = std::make_shared<types::Type>();
-                            type_arg->kind = types::NamedType{type_arg_str, "", {}};
+                            // Handle nested generic types using static helper (avoids std::function
+                            // overhead)
+                            type_arg = parse_mangled_type_string(type_arg_str);
                         }
 
                         if (type_arg && !generic_names.empty()) {
@@ -1498,10 +1577,26 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             }
                         }
 
-                        // Generate arguments
+                        // Generate arguments with expected type context propagation
                         std::vector<std::pair<std::string, std::string>> typed_args;
                         for (size_t i = 0; i < call.args.size(); ++i) {
+                            // Set expected type context before generating argument
+                            // This helps nested generic calls infer their type arguments
+                            std::string saved_expected_enum = expected_enum_type_;
+                            if (i < func_sig->params.size()) {
+                                auto param_type =
+                                    types::substitute_type(func_sig->params[i], type_subs);
+                                std::string llvm_param_type = llvm_type_from_semantic(param_type);
+                                // Set expected type for generic struct arguments
+                                if (llvm_param_type.find("%struct.") == 0 &&
+                                    llvm_param_type.find("__") != std::string::npos) {
+                                    expected_enum_type_ = llvm_param_type;
+                                }
+                            }
+
                             std::string val = gen_expr(*call.args[i]);
+                            expected_enum_type_ = saved_expected_enum;
+
                             std::string arg_type = last_expr_type_;
                             if (i < func_sig->params.size()) {
                                 auto param_type =

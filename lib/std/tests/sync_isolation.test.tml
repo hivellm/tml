@@ -1,0 +1,200 @@
+// Isolation test to find which sync component causes hangs
+// Test each component separately to identify the problem
+
+use test::assert
+use test::assert_eq
+use std::sync::AtomicUsize
+use std::sync::AtomicBool
+use std::sync::Ordering
+use std::sync::Mutex
+use std::sync::MutexGuard
+use std::sync::condvar::Condvar
+use std::sync::Arc
+
+// ============================================================================
+// Test 1: AtomicUsize
+// ============================================================================
+
+@test
+func test_01_atomic_usize() -> I32 {
+    let counter: AtomicUsize = AtomicUsize::new(0)
+    assert_eq(counter.load(Ordering::Relaxed), 0)
+    return 0
+}
+
+// ============================================================================
+// Test 2: AtomicBool
+// ============================================================================
+
+@test
+func test_02_atomic_bool() -> I32 {
+    let flag: AtomicBool = AtomicBool::new(true)
+    assert(flag.load(Ordering::Relaxed))
+    return 0
+}
+
+// ============================================================================
+// Test 3: Mutex (simple I32)
+// ============================================================================
+
+@test
+func test_03_mutex_i32() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    let guard: MutexGuard[I32] = mutex.lock()
+    let val: I32 = *guard.get()
+    assert_eq(val, 42)
+    return 0
+}
+
+// ============================================================================
+// Test 4: Condvar (just creation)
+// ============================================================================
+
+@test
+func test_04_condvar_creation() -> I32 {
+    let cv: Condvar = Condvar::new()
+    return 0
+}
+
+// ============================================================================
+// Test 5: Arc (simple I32)
+// ============================================================================
+
+@test
+func test_05_arc_i32() -> I32 {
+    let a: Arc[I32] = Arc::new(123)
+    return 0
+}
+
+// ============================================================================
+// Test 6: Arc with AtomicUsize
+// ============================================================================
+
+@test
+func test_06_arc_with_atomic_usize() -> I32 {
+    let a: Arc[AtomicUsize] = Arc::new(AtomicUsize::new(1))
+    return 0
+}
+
+// ============================================================================
+// Test 7: Arc with Mutex (simple I32)
+// ============================================================================
+
+@test
+func test_07_arc_with_mutex() -> I32 {
+    let a: Arc[Mutex[I32]] = Arc::new(Mutex::new(42))
+    return 0
+}
+
+// ============================================================================
+// Test 8: Simple struct with atomics
+// ============================================================================
+
+type SimpleInner {
+    count: AtomicUsize,
+    alive: AtomicBool,
+}
+
+@test
+func test_08_simple_struct_atomics() -> I32 {
+    let inner: SimpleInner = SimpleInner {
+        count: AtomicUsize::new(5),
+        alive: AtomicBool::new(true),
+    }
+    assert_eq(inner.count.load(Ordering::Relaxed), 5)
+    assert(inner.alive.load(Ordering::Relaxed))
+    return 0
+}
+
+// ============================================================================
+// Test 9: Struct with one Mutex and Condvar
+// ============================================================================
+
+type MutexCondvarInner {
+    head: Mutex[I32],
+    cv: Condvar,
+    count: AtomicUsize,
+}
+
+@test
+func test_09_mutex_condvar_struct() -> I32 {
+    let inner: MutexCondvarInner = MutexCondvarInner {
+        head: Mutex::new(99),
+        cv: Condvar::new(),
+        count: AtomicUsize::new(1),
+    }
+    assert_eq(inner.count.load(Ordering::Relaxed), 1)
+    return 0
+}
+
+// ============================================================================
+// Test 10: Two mutexes in struct (like channel head/tail)
+// ============================================================================
+
+type DualMutexInner {
+    head: Mutex[I32],
+    tail: Mutex[I32],
+    cv: Condvar,
+    sender_count: AtomicUsize,
+    receiver_alive: AtomicBool,
+    len: AtomicUsize,
+}
+
+@test
+func test_10_dual_mutex_struct() -> I32 {
+    let inner: DualMutexInner = DualMutexInner {
+        head: Mutex::new(1),
+        tail: Mutex::new(2),
+        cv: Condvar::new(),
+        sender_count: AtomicUsize::new(1),
+        receiver_alive: AtomicBool::new(true),
+        len: AtomicUsize::new(0),
+    }
+    assert_eq(inner.sender_count.load(Ordering::Relaxed), 1)
+    assert(inner.receiver_alive.load(Ordering::Relaxed))
+    return 0
+}
+
+// ============================================================================
+// Test 11: Arc with struct containing atomics
+// ============================================================================
+
+@test
+func test_11_arc_struct_atomics() -> I32 {
+    let a: Arc[SimpleInner] = Arc::new(SimpleInner {
+        count: AtomicUsize::new(10),
+        alive: AtomicBool::new(false),
+    })
+    return 0
+}
+
+// ============================================================================
+// Test 12: Arc with mutex+condvar struct
+// ============================================================================
+
+@test
+func test_12_arc_mutex_condvar() -> I32 {
+    let a: Arc[MutexCondvarInner] = Arc::new(MutexCondvarInner {
+        head: Mutex::new(77),
+        cv: Condvar::new(),
+        count: AtomicUsize::new(2),
+    })
+    return 0
+}
+
+// ============================================================================
+// Test 13: Arc with dual mutex inner (closest to channel)
+// ============================================================================
+
+@test
+func test_13_arc_dual_mutex() -> I32 {
+    let a: Arc[DualMutexInner] = Arc::new(DualMutexInner {
+        head: Mutex::new(10),
+        tail: Mutex::new(20),
+        cv: Condvar::new(),
+        sender_count: AtomicUsize::new(1),
+        receiver_alive: AtomicBool::new(true),
+        len: AtomicUsize::new(0),
+    })
+    return 0
+}

@@ -374,3 +374,43 @@ func test_expr_closure_multiply() -> I32 {
     assert_eq(result, 21, "short form multiply")
     return 0
 }
+
+// ============================================================================
+// Generic Closure Tests
+// ============================================================================
+
+func apply_generic[T](x: T, f: func(T) -> T) -> T {
+    return f(x)
+}
+
+func apply_i32(x: I32, f: func(I32) -> I32) -> I32 {
+    return f(x)
+}
+
+@test
+func test_generic_apply_multiply() -> I32 {
+    let result: I32 = apply_generic(5, do(val: I32) val * 2)
+    assert_eq(result, 10, "apply_generic(5, *2) should be 10")
+    return 0
+}
+
+@test
+func test_generic_apply_add() -> I32 {
+    let result: I32 = apply_generic(7, do(val: I32) val + 3)
+    assert_eq(result, 10, "apply_generic(7, +3) should be 10")
+    return 0
+}
+
+@test
+func test_apply_i32_multiply() -> I32 {
+    let result: I32 = apply_i32(5, do(val: I32) val * 2)
+    assert_eq(result, 10, "apply_i32(5, *2) should be 10")
+    return 0
+}
+
+@test
+func test_apply_i32_add() -> I32 {
+    let result: I32 = apply_i32(10, do(val: I32) val + 3)
+    assert_eq(result, 13, "apply_i32(10, +3) should be 13")
+    return 0
+}

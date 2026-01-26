@@ -78,6 +78,13 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                             base_type = ptr_type->as<types::PtrType>().inner;
                         } else if (ptr_type->is<types::RefType>()) {
                             base_type = ptr_type->as<types::RefType>().inner;
+                        } else if (ptr_type->is<types::NamedType>()) {
+                            // Handle TML's Ptr[T] or RawPtr[T] wrapper types
+                            const auto& named = ptr_type->as<types::NamedType>();
+                            if ((named.name == "Ptr" || named.name == "RawPtr") &&
+                                !named.type_args.empty()) {
+                                base_type = named.type_args[0];
+                            }
                         }
                         // Apply type substitutions for generic types
                         if (base_type && !current_type_subs_.empty()) {

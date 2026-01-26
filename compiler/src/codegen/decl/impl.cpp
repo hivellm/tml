@@ -186,7 +186,89 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         if (prim) {
             impl_semantic_type->kind = std::get<types::PrimitiveType>(prim->kind);
         } else {
-            impl_semantic_type->kind = types::NamedType{current_impl_type_, "", {}};
+            // Parse mangled name like "Arc__I32" into NamedType{name="Arc", type_args=[I32]}
+            auto sep_pos = current_impl_type_.find("__");
+            if (sep_pos != std::string::npos) {
+                std::string base_name = current_impl_type_.substr(0, sep_pos);
+                std::string args_str = current_impl_type_.substr(sep_pos + 2);
+
+                // Parse type args from mangled suffix
+                std::vector<types::TypePtr> type_args;
+                size_t pos = 0;
+                while (pos < args_str.size()) {
+                    auto next_sep = args_str.find("__", pos);
+                    std::string arg = (next_sep == std::string::npos)
+                                          ? args_str.substr(pos)
+                                          : args_str.substr(pos, next_sep - pos);
+                    types::TypePtr arg_type;
+                    if (arg == "I32")
+                        arg_type = types::make_i32();
+                    else if (arg == "I64")
+                        arg_type = types::make_i64();
+                    else if (arg == "I8")
+                        arg_type = types::make_primitive(types::PrimitiveKind::I8);
+                    else if (arg == "I16")
+                        arg_type = types::make_primitive(types::PrimitiveKind::I16);
+                    else if (arg == "U8")
+                        arg_type = types::make_primitive(types::PrimitiveKind::U8);
+                    else if (arg == "U16")
+                        arg_type = types::make_primitive(types::PrimitiveKind::U16);
+                    else if (arg == "U32")
+                        arg_type = types::make_primitive(types::PrimitiveKind::U32);
+                    else if (arg == "U64")
+                        arg_type = types::make_primitive(types::PrimitiveKind::U64);
+                    else if (arg == "Usize")
+                        arg_type = types::make_primitive(types::PrimitiveKind::U64);
+                    else if (arg == "Isize")
+                        arg_type = types::make_primitive(types::PrimitiveKind::I64);
+                    else if (arg == "F32")
+                        arg_type = types::make_primitive(types::PrimitiveKind::F32);
+                    else if (arg == "F64")
+                        arg_type = types::make_f64();
+                    else if (arg == "Bool")
+                        arg_type = types::make_bool();
+                    else if (arg == "Str")
+                        arg_type = types::make_str();
+                    else {
+                        // Could be another nested generic type - parse recursively
+                        auto nested_sep = arg.find("__");
+                        if (nested_sep != std::string::npos) {
+                            // Recursively parse nested generic like "Mutex__I32"
+                            std::string nested_base = arg.substr(0, nested_sep);
+                            std::string nested_arg_str = arg.substr(nested_sep + 2);
+                            types::TypePtr inner_arg;
+                            if (nested_arg_str == "I32")
+                                inner_arg = types::make_i32();
+                            else if (nested_arg_str == "I64")
+                                inner_arg = types::make_i64();
+                            else if (nested_arg_str == "Bool")
+                                inner_arg = types::make_bool();
+                            else if (nested_arg_str == "Str")
+                                inner_arg = types::make_str();
+                            else {
+                                auto it = std::make_shared<types::Type>();
+                                it->kind = types::NamedType{nested_arg_str, "", {}};
+                                inner_arg = it;
+                            }
+                            auto nt = std::make_shared<types::Type>();
+                            nt->kind = types::NamedType{nested_base, "", {inner_arg}};
+                            arg_type = nt;
+                        } else {
+                            // Simple named type
+                            auto t = std::make_shared<types::Type>();
+                            t->kind = types::NamedType{arg, "", {}};
+                            arg_type = t;
+                        }
+                    }
+                    type_args.push_back(arg_type);
+                    if (next_sep == std::string::npos)
+                        break;
+                    pos = next_sep + 2;
+                }
+                impl_semantic_type->kind = types::NamedType{base_name, "", type_args};
+            } else {
+                impl_semantic_type->kind = types::NamedType{current_impl_type_, "", {}};
+            }
         }
 
         if (!this_inner_type.empty()) {

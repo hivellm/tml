@@ -1,7 +1,38 @@
-// Tests for Outcome[T, E] combinators
-// Tests: map_ok, map_err, and_then_ok, or_else_ok
+// Tests for Outcome[T, E] - basic operations and combinators
 use test
 use std::types
+
+// ============================================================================
+// Basic Outcome Tests
+// ============================================================================
+
+@test
+func test_outcome_ok_unwrap_or() -> I32 {
+    let x: Outcome[I32, I32] = Ok(5)
+    assert(unwrap_or_ok(x, 0) == 5, "Ok(5).unwrap_or(0) should be 5")
+    return 0
+}
+
+@test
+func test_outcome_err_unwrap_or() -> I32 {
+    let a: Outcome[I32, I32] = Err(42)
+    assert(unwrap_or_ok(a, 0) == 0, "Err(42).unwrap_or(0) should be 0")
+    return 0
+}
+
+@test
+func test_outcome_is_ok() -> I32 {
+    let x: Outcome[I32, I32] = Ok(10)
+    assert(is_ok(x), "Ok(10).is_ok() should be true")
+    return 0
+}
+
+@test
+func test_outcome_is_err() -> I32 {
+    let a: Outcome[I32, I32] = Err(99)
+    assert(is_err(a), "Err(99).is_err() should be true")
+    return 0
+}
 
 // ============================================================================
 // map_ok Tests

@@ -1,0 +1,55 @@
+// Consolidated Arc tests
+use test::{assert, assert_eq}
+use std::sync::Arc
+use std::sync::Mutex
+
+type SimpleData {
+    value: I32,
+}
+
+// ============================================================================
+// Arc Creation Tests
+// ============================================================================
+
+@test
+func test_arc_new_i32() -> I32 {
+    let arc: Arc[I32] = Arc::new(42)
+    return 0
+}
+
+@test
+func test_arc_new_struct() -> I32 {
+    let arc: Arc[SimpleData] = Arc::new(SimpleData { value: 42 })
+    return 0
+}
+
+// ============================================================================
+// Arc Duplicate Tests
+// ============================================================================
+
+@test
+func test_arc_duplicate_i32() -> I32 {
+    let arc1: Arc[I32] = Arc::new(42)
+    let arc2: Arc[I32] = arc1.duplicate()
+    // Both arcs should point to the same data
+    return 0
+}
+
+@test
+func test_arc_duplicate_struct() -> I32 {
+    let arc1: Arc[SimpleData] = Arc::new(SimpleData { value: 42 })
+    let arc2: Arc[SimpleData] = arc1.duplicate()
+    // Both arcs should point to the same data
+    return 0
+}
+
+// ============================================================================
+// Arc with Nested Types
+// ============================================================================
+
+@test
+func test_arc_with_mutex() -> I32 {
+    // Test Arc[Mutex[I32]] - previously had type inference issues
+    let a: Arc[Mutex[I32]] = Arc::new(Mutex::new(42))
+    return 0
+}
