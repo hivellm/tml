@@ -100,7 +100,7 @@
 //! }
 //! ```
 
-use sync::ordering::Ordering
+use std::sync::ordering::Ordering
 
 // ============================================================================
 // AtomicBool

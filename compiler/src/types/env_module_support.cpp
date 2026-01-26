@@ -684,11 +684,6 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             } else if (decl->is<parser::StructDecl>()) {
                 const auto& struct_decl = decl->as<parser::StructDecl>();
 
-                // Only include public structs
-                if (struct_decl.vis != parser::Visibility::Public) {
-                    continue;
-                }
-
                 // Convert fields
                 std::vector<std::pair<std::string, TypePtr>> fields;
                 for (const auto& field : struct_decl.fields) {
@@ -710,9 +705,17 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                                      .fields = std::move(fields),
                                      .span = struct_decl.span};
 
-                mod.structs[struct_decl.name] = std::move(struct_def);
-                TML_DEBUG_LN("[MODULE] Registered struct: " << struct_decl.name << " in module "
-                                                            << module_path);
+                // Store in appropriate map based on visibility
+                if (struct_decl.vis == parser::Visibility::Public) {
+                    mod.structs[struct_decl.name] = std::move(struct_def);
+                    TML_DEBUG_LN("[MODULE] Registered struct: " << struct_decl.name << " in module "
+                                                                << module_path);
+                } else {
+                    // Store internal structs for use by the module's own impl methods
+                    mod.internal_structs[struct_decl.name] = std::move(struct_def);
+                    TML_DEBUG_LN("[MODULE] Registered internal struct: "
+                                 << struct_decl.name << " in module " << module_path);
+                }
             } else if (decl->is<parser::EnumDecl>()) {
                 const auto& enum_decl = decl->as<parser::EnumDecl>();
 

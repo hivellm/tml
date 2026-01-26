@@ -547,6 +547,18 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
                 for (const auto& generic_param : decl->generics) {
                     inferred_generics[generic_param.name] = nullptr;
                 }
+
+                // First check if we have type substitutions from enclosing generic context
+                // This is critical for generic functions like channel[T]() where T is
+                // not directly visible in field values but is in current_type_subs_
+                for (const auto& generic_param : decl->generics) {
+                    auto sub_it = current_type_subs_.find(generic_param.name);
+                    if (sub_it != current_type_subs_.end() && sub_it->second) {
+                        inferred_generics[generic_param.name] = sub_it->second;
+                    }
+                }
+
+                // Then try to infer from field values for any remaining unresolved params
                 for (size_t fi = 0; fi < s.fields.size() && fi < decl->fields.size(); ++fi) {
                     const auto& field_decl = decl->fields[fi];
                     if (field_decl.type && field_decl.type->is<parser::NamedType>()) {
@@ -746,28 +758,99 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             }
         }
     } else if (field.object->is<parser::FieldExpr>()) {
-        // Chained field access (e.g., rect.origin.x)
-        // First get the nested field pointer
+        // Chained field access (e.g., this.inner.receiver_alive)
+        // Generate the intermediate field access recursively
         const auto& nested_field = field.object->as<parser::FieldExpr>();
 
         // Get the outermost struct
         if (nested_field.object->is<parser::IdentExpr>()) {
             const auto& ident = nested_field.object->as<parser::IdentExpr>();
-            auto it = locals_.find(ident.name);
-            if (it != locals_.end()) {
-                std::string outer_type = it->second.type;
-                std::string outer_ptr = it->second.reg;
+            std::string outer_type;
+            std::string outer_ptr;
 
-                // Special handling for 'this' in impl methods
-                if (ident.name == "this" && !current_impl_type_.empty()) {
-                    outer_type = "%struct." + current_impl_type_;
-                    // 'this' is already a direct pointer parameter
+            // Special handling for 'this' in impl methods
+            if (ident.name == "this" && !current_impl_type_.empty()) {
+                outer_type = "%struct." + current_impl_type_;
+                outer_ptr = "%this";
+            } else {
+                auto it = locals_.find(ident.name);
+                if (it != locals_.end()) {
+                    outer_type = it->second.type;
+                    outer_ptr = it->second.reg;
                 }
+            }
 
+            if (!outer_type.empty() && !outer_ptr.empty()) {
                 // Get outer struct type name
                 std::string outer_name = outer_type;
                 if (outer_name.starts_with("%struct.")) {
                     outer_name = outer_name.substr(8);
+                }
+
+                // Check for auto-deref on the outer type (e.g., Arc[ChannelInner[T]])
+                types::TypePtr outer_sem_type = infer_expr_type(*nested_field.object);
+                types::TypePtr deref_target = get_deref_target_type(outer_sem_type);
+                if (deref_target && !struct_has_field(outer_name, nested_field.field)) {
+                    // Need to auto-deref to access the field
+                    auto sep_pos = outer_name.find("__");
+                    std::string base_type_name =
+                        (sep_pos != std::string::npos) ? outer_name.substr(0, sep_pos) : outer_name;
+
+                    if (base_type_name == "Arc" || base_type_name == "Shared" ||
+                        base_type_name == "Rc") {
+                        // Arc layout: { ptr: Ptr[ArcInner[T]] }
+                        std::string arc_ptr_field = fresh_reg();
+                        emit_line("  " + arc_ptr_field + " = getelementptr " + outer_type +
+                                  ", ptr " + outer_ptr + ", i32 0, i32 0");
+                        std::string inner_ptr = fresh_reg();
+                        emit_line("  " + inner_ptr + " = load ptr, ptr " + arc_ptr_field);
+
+                        // Get ArcInner type
+                        std::string arc_inner_mangled = mangle_struct_name(
+                            "ArcInner", std::vector<types::TypePtr>{deref_target});
+                        std::string arc_inner_type = "%struct." + arc_inner_mangled;
+
+                        // GEP to data field (index 2)
+                        std::string data_ptr = fresh_reg();
+                        emit_line("  " + data_ptr + " = getelementptr " + arc_inner_type +
+                                  ", ptr " + inner_ptr + ", i32 0, i32 2");
+
+                        // Update outer_ptr and outer_type to point to inner struct
+                        outer_ptr = data_ptr;
+                        if (deref_target->is<types::NamedType>()) {
+                            const auto& inner_named = deref_target->as<types::NamedType>();
+                            if (!inner_named.type_args.empty()) {
+                                require_struct_instantiation(inner_named.name,
+                                                             inner_named.type_args);
+                                outer_name =
+                                    mangle_struct_name(inner_named.name, inner_named.type_args);
+                            } else {
+                                outer_name = inner_named.name;
+                            }
+                            outer_type = "%struct." + outer_name;
+                        }
+                    } else if (base_type_name == "Box" || base_type_name == "Heap") {
+                        // Box layout: { ptr: Ptr[T] }
+                        std::string box_ptr_field = fresh_reg();
+                        emit_line("  " + box_ptr_field + " = getelementptr " + outer_type +
+                                  ", ptr " + outer_ptr + ", i32 0, i32 0");
+                        std::string inner_ptr = fresh_reg();
+                        emit_line("  " + inner_ptr + " = load ptr, ptr " + box_ptr_field);
+
+                        outer_ptr = inner_ptr;
+                        if (deref_target->is<types::NamedType>()) {
+                            const auto& inner_named = deref_target->as<types::NamedType>();
+                            if (!inner_named.type_args.empty()) {
+                                require_struct_instantiation(inner_named.name,
+                                                             inner_named.type_args);
+                                outer_name =
+                                    mangle_struct_name(inner_named.name, inner_named.type_args);
+                            } else {
+                                outer_name = inner_named.name;
+                            }
+                            outer_type = "%struct." + outer_name;
+                        }
+                    }
                 }
 
                 // Get field index for nested field
@@ -781,6 +864,33 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
                 struct_type = nested_type;
                 struct_ptr = nested_ptr;
+            }
+        } else {
+            // Handle deeper nesting: recursively generate the intermediate field access
+            std::string nested_val = gen_expr(*field.object);
+            types::TypePtr nested_sem_type = infer_expr_type(*field.object);
+
+            // For struct types, gen_expr returns a loaded value
+            // We need to store to a temp alloca if it's a struct value
+            if (last_expr_type_.starts_with("%struct.")) {
+                std::string temp_ptr = fresh_reg();
+                emit_line("  " + temp_ptr + " = alloca " + last_expr_type_);
+                emit_line("  store " + last_expr_type_ + " " + nested_val + ", ptr " + temp_ptr);
+                struct_ptr = temp_ptr;
+                struct_type = last_expr_type_;
+            } else if (last_expr_type_ == "ptr") {
+                // Pointer type - use directly
+                struct_ptr = nested_val;
+
+                // Infer the struct type from the semantic type
+                if (nested_sem_type && nested_sem_type->is<types::NamedType>()) {
+                    const auto& named = nested_sem_type->as<types::NamedType>();
+                    if (!named.type_args.empty()) {
+                        struct_type = "%struct." + mangle_struct_name(named.name, named.type_args);
+                    } else {
+                        struct_type = "%struct." + named.name;
+                    }
+                }
             }
         }
     } else if (field.object->is<parser::UnaryExpr>()) {

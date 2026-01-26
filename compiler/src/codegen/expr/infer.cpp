@@ -326,6 +326,14 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 inner_type = operand_type->as<types::RefType>().inner;
                 TML_DEBUG_LN("[INFER]   RefType inner="
                              << (inner_type ? types::type_to_string(inner_type) : "null"));
+            } else if (operand_type->is<types::NamedType>()) {
+                // Handle TML's Ptr[T] or RawPtr[T] wrapper types
+                const auto& named = operand_type->as<types::NamedType>();
+                if ((named.name == "Ptr" || named.name == "RawPtr") && !named.type_args.empty()) {
+                    inner_type = named.type_args[0];
+                    TML_DEBUG_LN("[INFER]   NamedType Ptr inner="
+                                 << (inner_type ? types::type_to_string(inner_type) : "null"));
+                }
             }
 
             // Apply type substitutions for generic types inside the pointer
@@ -516,6 +524,70 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                             return substituted;
                         }
                         return field_type;
+                    }
+                }
+
+                // Field not found directly on struct - try auto-deref coercion
+                // For smart pointers like Arc[T], access fields on the inner T
+                types::TypePtr deref_target = get_deref_target_type(obj_type);
+                if (deref_target) {
+                    TML_DEBUG_LN("[INFER] Trying auto-deref: "
+                                 << named.name << " -> " << types::type_to_string(deref_target));
+                    // Create a synthetic FieldExpr on the deref'd type
+                    // and recursively infer its type
+                    if (deref_target->is<types::NamedType>()) {
+                        const auto& inner_named = deref_target->as<types::NamedType>();
+                        // Look up the inner struct definition
+                        auto inner_struct_def = env_.lookup_struct(inner_named.name);
+                        if (!inner_struct_def && env_.module_registry()) {
+                            const auto& all_modules = env_.module_registry()->get_all_modules();
+                            for (const auto& [mod_name, mod] : all_modules) {
+                                auto mod_struct_it = mod.structs.find(inner_named.name);
+                                if (mod_struct_it != mod.structs.end()) {
+                                    inner_struct_def = mod_struct_it->second;
+                                    break;
+                                }
+                            }
+                        }
+                        // Also check pending_generic_structs_
+                        if (!inner_struct_def) {
+                            auto pending_it = pending_generic_structs_.find(inner_named.name);
+                            if (pending_it != pending_generic_structs_.end()) {
+                                const parser::StructDecl* decl = pending_it->second;
+                                types::StructDef temp_struct_def;
+                                temp_struct_def.name = decl->name;
+                                for (const auto& gp : decl->generics) {
+                                    temp_struct_def.type_params.push_back(gp.name);
+                                }
+                                for (const auto& field_decl : decl->fields) {
+                                    auto ft = resolve_parser_type_with_subs(*field_decl.type, {});
+                                    temp_struct_def.fields.push_back({field_decl.name, ft});
+                                }
+                                inner_struct_def = temp_struct_def;
+                            }
+                        }
+                        if (inner_struct_def) {
+                            TML_DEBUG_LN("[INFER] Found inner struct: " << inner_named.name);
+                            for (const auto& [fname, ftype] : inner_struct_def->fields) {
+                                if (fname == field.field && ftype) {
+                                    TML_DEBUG_LN("[INFER] Found field via auto-deref: " << fname);
+                                    // Apply type substitutions from the inner type
+                                    if (!inner_named.type_args.empty() &&
+                                        !inner_struct_def->type_params.empty()) {
+                                        std::unordered_map<std::string, types::TypePtr> subs;
+                                        for (size_t i = 0;
+                                             i < inner_struct_def->type_params.size() &&
+                                             i < inner_named.type_args.size();
+                                             ++i) {
+                                            subs[inner_struct_def->type_params[i]] =
+                                                inner_named.type_args[i];
+                                        }
+                                        return types::substitute_type(ftype, subs);
+                                    }
+                                    return ftype;
+                                }
+                            }
+                        }
                     }
                 }
             } else {
@@ -1352,6 +1424,75 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
     }
     // Default: I32
     return types::make_i32();
+}
+
+// =============================================================================
+// Deref Coercion Helpers
+// =============================================================================
+
+auto LLVMIRGen::get_deref_target_type(const types::TypePtr& type) -> types::TypePtr {
+    if (!type || !type->is<types::NamedType>()) {
+        return nullptr;
+    }
+
+    const auto& named = type->as<types::NamedType>();
+
+    // Known smart pointer types that implement Deref
+    // Arc[T] -> T (via deref)
+    // Box[T] -> T (via deref)
+    // Heap[T] -> T (via deref) - TML's name for Box
+    // Rc[T] -> T (via deref)
+    // Shared[T] -> T (via deref) - TML's name for Rc
+
+    static const std::unordered_set<std::string> deref_types = {"Arc", "Box",    "Heap",
+                                                                "Rc",  "Shared", "Weak"};
+
+    if (deref_types.count(named.name) && !named.type_args.empty()) {
+        // For these types, Deref::Target is the first type argument
+        return named.type_args[0];
+    }
+
+    return nullptr;
+}
+
+auto LLVMIRGen::struct_has_field(const std::string& struct_name, const std::string& field_name)
+    -> bool {
+    // Check dynamic struct_fields_ registry first
+    auto it = struct_fields_.find(struct_name);
+    if (it != struct_fields_.end()) {
+        for (const auto& field : it->second) {
+            if (field.name == field_name) {
+                return true;
+            }
+        }
+    }
+
+    // Check type environment
+    auto struct_def = env_.lookup_struct(struct_name);
+    if (struct_def) {
+        for (const auto& [fname, ftype] : struct_def->fields) {
+            if (fname == field_name) {
+                return true;
+            }
+        }
+    }
+
+    // Search in module registry
+    if (env_.module_registry()) {
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto mod_struct_it = mod.structs.find(struct_name);
+            if (mod_struct_it != mod.structs.end()) {
+                for (const auto& [fname, ftype] : mod_struct_it->second.fields) {
+                    if (fname == field_name) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
 }
 
 } // namespace tml::codegen

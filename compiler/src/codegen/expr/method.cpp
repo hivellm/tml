@@ -710,6 +710,34 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 }
             }
             base_type = infer_expr_type(*field_expr.object);
+        } else if (field_expr.object->is<parser::FieldExpr>()) {
+            // Handle nested field access: this.inner.field
+            // Generate the nested field access - gen_expr will return the loaded value
+            // but we need the semantic type to determine the struct type
+            std::string nested_val = gen_expr(*field_expr.object);
+            base_type = infer_expr_type(*field_expr.object);
+
+            // For struct types, gen_expr returns a loaded value but we need a pointer
+            // The field is stored in memory, so we can use the value as if it were a pointer
+            // Actually, for struct fields that are themselves structs, gen_field returns
+            // a loaded value. We need the pointer to access sub-fields.
+            // Re-generate using gen_field_ptr if available, or allocate temp storage
+            if (last_expr_type_.starts_with("%struct.") || last_expr_type_ == "ptr") {
+                // For pointer types, the loaded value IS the pointer
+                if (last_expr_type_ == "ptr") {
+                    base_ptr = nested_val;
+                } else {
+                    // For struct values, we need to store to a temp alloca
+                    std::string temp_ptr = fresh_reg();
+                    emit_line("  " + temp_ptr + " = alloca " + last_expr_type_);
+                    emit_line("  store " + last_expr_type_ + " " + nested_val + ", ptr " +
+                              temp_ptr);
+                    base_ptr = temp_ptr;
+                }
+            } else {
+                // Primitive field - use value directly but we may need its address for method calls
+                base_ptr = nested_val;
+            }
         } else if (field_expr.object->is<parser::UnaryExpr>()) {
             // Handle dereferenced pointer field access: (*ptr).field
             const auto& unary = field_expr.object->as<parser::UnaryExpr>();

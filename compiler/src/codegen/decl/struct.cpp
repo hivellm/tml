@@ -157,8 +157,18 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
     else if (env_.module_registry()) {
         const auto& all_modules = env_.module_registry()->get_all_modules();
         for (const auto& [mod_name, mod] : all_modules) {
+            // Check public structs first
             auto struct_it = mod.structs.find(base_name);
-            if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
+            bool found = struct_it != mod.structs.end() && !struct_it->second.type_params.empty();
+
+            // Also check internal structs (for module-internal types like ArcInner)
+            if (!found) {
+                struct_it = mod.internal_structs.find(base_name);
+                found = struct_it != mod.internal_structs.end() &&
+                        !struct_it->second.type_params.empty();
+            }
+
+            if (found) {
                 // Found imported generic struct - use its semantic definition
                 const auto& struct_def = struct_it->second;
 

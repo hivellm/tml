@@ -65,15 +65,16 @@ struct Module {
     std::string file_path; ///< Source file location.
 
     // Symbol tables
-    std::unordered_map<std::string, FuncSig> functions;       ///< Function definitions.
-    std::unordered_map<std::string, StructDef> structs;       ///< Struct definitions.
-    std::unordered_map<std::string, EnumDef> enums;           ///< Enum definitions.
-    std::unordered_map<std::string, BehaviorDef> behaviors;   ///< Behavior definitions.
-    std::unordered_map<std::string, TypePtr> type_aliases;    ///< Type aliases.
-    std::unordered_map<std::string, std::string> submodules;  ///< Submodule name -> path.
-    std::unordered_map<std::string, std::string> constants;   ///< Constants name -> value.
-    std::unordered_map<std::string, ClassDef> classes;        ///< Class definitions.
-    std::unordered_map<std::string, InterfaceDef> interfaces; ///< Interface definitions.
+    std::unordered_map<std::string, FuncSig> functions;          ///< Function definitions.
+    std::unordered_map<std::string, StructDef> structs;          ///< Public struct definitions.
+    std::unordered_map<std::string, StructDef> internal_structs; ///< Internal struct definitions.
+    std::unordered_map<std::string, EnumDef> enums;              ///< Enum definitions.
+    std::unordered_map<std::string, BehaviorDef> behaviors;      ///< Behavior definitions.
+    std::unordered_map<std::string, TypePtr> type_aliases;       ///< Type aliases.
+    std::unordered_map<std::string, std::string> submodules;     ///< Submodule name -> path.
+    std::unordered_map<std::string, std::string> constants;      ///< Constants name -> value.
+    std::unordered_map<std::string, ClassDef> classes;           ///< Class definitions.
+    std::unordered_map<std::string, InterfaceDef> interfaces;    ///< Interface definitions.
 
     std::vector<ReExport> re_exports; ///< Re-exported symbols.
 
