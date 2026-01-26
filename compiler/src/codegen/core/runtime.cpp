@@ -32,6 +32,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <unordered_set>
 
 namespace tml::codegen {
 
@@ -726,12 +727,75 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
     const auto& registry = env_.module_registry();
     const auto& all_modules = registry->get_all_modules();
 
+    // Collect imported module paths AND type names for filtering
+    // This dramatically reduces codegen time by skipping unneeded modules
+    std::unordered_set<std::string> imported_types;
+    std::unordered_set<std::string> imported_module_paths;
+    const auto& all_imports = env_.all_imports();
+    for (const auto& [name, sym] : all_imports) {
+        imported_types.insert(sym.original_name);
+        imported_types.insert(name); // Also add local alias
+        // Track the module path this symbol was imported from
+        if (!sym.module_path.empty()) {
+            imported_module_paths.insert(sym.module_path);
+        }
+    }
+
     emit_line("; Pure TML functions from imported modules");
 
     for (const auto& [module_name, module] : all_modules) {
         // Check if module has pure TML functions
         if (!module.has_pure_tml_functions || module.source_code.empty()) {
             continue;
+        }
+
+        // Early skip: Only process modules that were actually imported from
+        // This avoids expensive re-parsing of modules we don't need
+        if (!imported_module_paths.empty()) {
+            bool should_process = false;
+
+            // Check if this module path matches or is a parent of an imported module
+            // e.g., if "std::sync::arc" is imported, process both "std::sync::arc" and "std::sync"
+            for (const auto& imported_path : imported_module_paths) {
+                // Exact match
+                if (module_name == imported_path) {
+                    should_process = true;
+                    break;
+                }
+                // This module is a parent of an imported module
+                // e.g., module_name="std::sync" and imported_path="std::sync::arc"
+                if (imported_path.find(module_name + "::") == 0) {
+                    should_process = true;
+                    break;
+                }
+                // This module is a submodule of an imported module (rarely needed)
+                // e.g., module_name="std::sync::arc::internal" and imported_path="std::sync::arc"
+                if (module_name.find(imported_path + "::") == 0) {
+                    should_process = true;
+                    break;
+                }
+            }
+
+            // Essential modules that are always needed (ordering, alloc, option)
+            if (!should_process) {
+                static const std::unordered_set<std::string> essential_modules = {
+                    "ordering",
+                    "alloc",
+                    "option",
+                    "types",
+                };
+                std::string last_segment = module_name;
+                auto last_sep = module_name.rfind("::");
+                if (last_sep != std::string::npos) {
+                    last_segment = module_name.substr(last_sep + 2);
+                }
+                should_process = essential_modules.count(last_segment) > 0;
+            }
+
+            if (!should_process) {
+                TML_DEBUG_LN("[MODULE] Early skip module: " << module_name);
+                continue;
+            }
         }
 
         // Re-parse the module source code
@@ -896,6 +960,23 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     const auto& named = impl.self_type->as<parser::NamedType>();
                     if (!named.path.segments.empty()) {
                         type_name = named.path.segments.back();
+                    }
+                }
+
+                // Skip impl blocks for types that aren't actually imported
+                // This dramatically reduces codegen time (e.g., don't generate AtomicBool when only
+                // Arc is used)
+                if (!type_name.empty() && !imported_types.empty() &&
+                    imported_types.find(type_name) == imported_types.end()) {
+                    // Also check if it's a dependency type (e.g., Ordering is used by atomics)
+                    // Skip filtering for common dependency types and primitive behaviors
+                    static const std::unordered_set<std::string> always_generate = {
+                        "Ordering", "MutexGuard", "RwLockReadGuard", "RwLockWriteGuard",
+                        "Weak", // Arc uses Weak
+                    };
+                    if (always_generate.find(type_name) == always_generate.end()) {
+                        TML_DEBUG_LN("[MODULE] Skipping impl for non-imported type: " << type_name);
+                        continue;
                     }
                 }
 

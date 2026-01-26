@@ -1322,10 +1322,80 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         // This prevents re-parsing the same library modules for each test file
         auto shared_registry = std::make_shared<types::ModuleRegistry>();
 
+        // ======================================================================
+        // EARLY CACHE CHECK: Compute source hash first to skip typechecking
+        // ======================================================================
+        // If the DLL is already cached (same source content), we can skip ALL
+        // compilation including type checking. This dramatically speeds up cached runs.
+
+        std::string combined_hash;
+        std::string lib_ext = get_shared_lib_extension();
+        fs::path lib_output = cache_dir / (suite.name + lib_ext);
+
+        // First pass: just preprocess and compute content hashes (fast)
+        for (const auto& test : suite.tests) {
+            std::string source_code;
+            try {
+                source_code = read_file(test.file_path);
+            } catch (const std::exception&) {
+                result.error_message = "Failed to read: " + test.file_path;
+                result.failed_test = test.file_path;
+                return result;
+            }
+
+            auto pp_config = preprocessor::Preprocessor::host_config();
+            preprocessor::Preprocessor pp(pp_config);
+            auto pp_result = pp.process(source_code, test.file_path);
+
+            if (!pp_result.success()) {
+                std::ostringstream oss;
+                oss << "Preprocessor errors in " << test.file_path << ":\n";
+                for (const auto& diag : pp_result.diagnostics) {
+                    if (diag.severity == preprocessor::DiagnosticSeverity::Error) {
+                        oss << "  " << diag.line << ":" << diag.column << ": " << diag.message
+                            << "\n";
+                    }
+                }
+                result.error_message = oss.str();
+                result.failed_test = test.file_path;
+                return result;
+            }
+
+            combined_hash += build::generate_content_hash(pp_result.output);
+        }
+
+        // Check for cached DLL using source-only hash (before typechecking)
+        std::string source_hash = build::generate_content_hash(combined_hash);
+        fs::path cached_dll_by_source = cache_dir / (source_hash + "_suite" + lib_ext);
+
+        if (!no_cache && fs::exists(cached_dll_by_source)) {
+            // Cache hit! Skip all typechecking and compilation
+            if (verbose) {
+                std::cerr << "[DEBUG] EARLY CACHE HIT - skipping compilation\n";
+            }
+            if (!fast_copy_file(cached_dll_by_source, lib_output)) {
+                result.error_message = "Failed to copy cached DLL";
+                return result;
+            }
+
+            auto end = Clock::now();
+            result.success = true;
+            result.dll_path = lib_output.string();
+            result.compile_time_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            return result;
+        }
+
+        // ======================================================================
+        // FULL COMPILATION: Cache miss, do full lex/parse/typecheck/codegen
+        // ======================================================================
+
+        // Reset combined_hash for per-file tracking in full compilation
+        combined_hash.clear();
+
         // Compile each test file to an object file with indexed entry point
         std::vector<fs::path> object_files;
         std::vector<std::string> link_libs;
-        std::string combined_hash;
 
         for (size_t i = 0; i < suite.tests.size(); ++i) {
             const auto& test = suite.tests[i];
@@ -1559,13 +1629,11 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             get_runtime_objects(shared_registry, module, deps_cache, clang, verbose);
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
-        // Generate suite hash for caching
+        // Generate suite hash for full caching (includes runtime objects)
         std::string suite_hash = generate_content_hash(combined_hash);
         std::string exe_hash = generate_exe_hash(suite_hash, object_files);
 
-        std::string lib_ext = get_shared_lib_extension();
         fs::path cached_dll = cache_dir / (exe_hash + "_suite" + lib_ext);
-        fs::path lib_output = cache_dir / (suite.name + lib_ext);
 
         bool use_cached_dll = !no_cache && fs::exists(cached_dll);
 
@@ -1587,6 +1655,18 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             if (!link_result.success) {
                 result.error_message = "Linking failed: " + link_result.error_message;
                 return result;
+            }
+        }
+
+        // Always save with source-only hash for early cache check on next run
+        // This allows skipping typechecking entirely when source hasn't changed
+        // Do this even when using cached_dll so we populate the source-hash cache
+        if (!fs::exists(cached_dll_by_source)) {
+            try {
+                fs::copy_file(cached_dll, cached_dll_by_source,
+                              fs::copy_options::overwrite_existing);
+            } catch (...) {
+                // Ignore errors creating source-hash cache
             }
         }
 
