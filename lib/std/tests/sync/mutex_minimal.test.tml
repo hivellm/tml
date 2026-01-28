@@ -1,0 +1,15 @@
+// Bisecting: try_lock hangs
+use test
+use std::sync::{Mutex, MutexGuard}
+
+@test
+func test_mutex_try_lock_success() {
+    let mutex: Mutex[I32] = Mutex::new(10)
+    when mutex.try_lock() {
+        Just(guard) => {
+            assert_eq(*guard.get(), 10)
+        },
+        Nothing => panic("try_lock should succeed when mutex is unlocked")
+    }
+    return
+}

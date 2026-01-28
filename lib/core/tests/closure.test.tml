@@ -1,0 +1,169 @@
+// Comprehensive Closure Tests
+// Consolidated from: closure_simple.test.tml, closure_field.test.tml, closure_iter.test.tml, iter_map.test.tml
+
+use test
+use core::iter::*
+
+// ============================================================================
+// Section 1: Basic Closure Tests
+// ============================================================================
+
+@test
+func test_closure_direct() -> I32 {
+    let double: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    let result: I32 = double(5)
+    assert_eq(result, 10, "5 * 2 should be 10")
+    return 0
+}
+
+// ============================================================================
+// Section 2: Closure in Struct Field
+// ============================================================================
+
+pub type FuncHolder {
+    f: func(I32) -> I32
+}
+
+@test
+func test_closure_in_field() -> I32 {
+    let double: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    let holder: FuncHolder = FuncHolder { f: double }
+
+    // Extract function from field and call
+    let mapper: func(I32) -> I32 = holder.f
+    let result: I32 = mapper(5)
+    assert_eq(result, 10, "5 * 2 should be 10")
+    return 0
+}
+
+// ============================================================================
+// Section 3: Closure with Iterator Adapters
+// ============================================================================
+
+// ============================================================================
+// Concrete Map implementations for different source iterators
+// ============================================================================
+
+// Map adapter for OnceI32
+pub type MapOnceI32 {
+    iter: OnceI32,
+    f: func(I32) -> I32
+}
+
+impl MapOnceI32 {
+    pub func next(mut this) -> Maybe[I32] {
+        let result: Maybe[I32] = this.iter.next()
+        when result {
+            Just(x) => {
+                let mapper: func(I32) -> I32 = this.f
+                return Just(mapper(x))
+            },
+            Nothing => return Nothing
+        }
+        return Nothing
+    }
+}
+
+pub func map_once_i32(iter: OnceI32, f: func(I32) -> I32) -> MapOnceI32 {
+    return MapOnceI32 { iter: iter, f: f }
+}
+
+// Map adapter for RepeatNI32
+pub type MapRepeatNI32 {
+    iter: RepeatNI32,
+    f: func(I32) -> I32
+}
+
+impl MapRepeatNI32 {
+    pub func next(mut this) -> Maybe[I32] {
+        let result: Maybe[I32] = this.iter.next()
+        when result {
+            Just(x) => {
+                let mapper: func(I32) -> I32 = this.f
+                return Just(mapper(x))
+            },
+            Nothing => return Nothing
+        }
+        return Nothing
+    }
+}
+
+pub func map_repeat_n_i32(iter: RepeatNI32, f: func(I32) -> I32) -> MapRepeatNI32 {
+    return MapRepeatNI32 { iter: iter, f: f }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_map_once_double() -> I32 {
+    let once: OnceI32 = once_i32(7)
+    let double: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    var mapped: MapOnceI32 = map_once_i32(once, double)
+
+    when mapped.next() {
+        Just(n) => assert_eq(n, 14, "7 * 2 should be 14"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_map_once_square() -> I32 {
+    let once: OnceI32 = once_i32(5)
+    let square: func(I32) -> I32 = do(x: I32) -> I32 { x * x }
+    var mapped: MapOnceI32 = map_once_i32(once, square)
+
+    when mapped.next() {
+        Just(n) => assert_eq(n, 25, "5^2 should be 25"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_map_repeat_n() -> I32 {
+    let repeat: RepeatNI32 = repeat_n_i32(3, 3)  // Repeat 3 three times
+    let triple: func(I32) -> I32 = do(x: I32) -> I32 { x * 3 }
+    var mapped: MapRepeatNI32 = map_repeat_n_i32(repeat, triple)
+
+    // First should return 9
+    when mapped.next() {
+        Just(n) => assert_eq(n, 9, "3 * 3 should be 9"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_closure_with_addition() -> I32 {
+    let once: OnceI32 = once_i32(10)
+    let add_five: func(I32) -> I32 = do(x: I32) -> I32 { x + 5 }
+    var mapped: MapOnceI32 = map_once_i32(once, add_five)
+
+    when mapped.next() {
+        Just(n) => assert_eq(n, 15, "10 + 5 should be 15"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_identity_closure() -> I32 {
+    let once: OnceI32 = once_i32(42)
+    let identity: func(I32) -> I32 = do(x: I32) -> I32 { x }
+    var mapped: MapOnceI32 = map_once_i32(once, identity)
+
+    when mapped.next() {
+        Just(n) => assert_eq(n, 42, "identity should return 42"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+

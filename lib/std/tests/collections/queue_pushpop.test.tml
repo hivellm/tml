@@ -1,0 +1,48 @@
+// Test queue push/pop
+use std::sync::LockFreeQueue
+
+func main() {
+    let queue: LockFreeQueue[I32] = LockFreeQueue::new[I32]()
+
+    // Test empty check
+    if not queue.is_empty() {
+        print("FAIL: new queue should be empty\n")
+        return
+    }
+
+    // Test push
+    queue.push(42)
+    if queue.is_empty() {
+        print("FAIL: queue should not be empty after push\n")
+        return
+    }
+
+    // Test pop
+    let result: Maybe[I32] = queue.pop()
+    when result {
+        Just(val) => {
+            if val == 42 {
+                print("PASS\n")
+            } else {
+                print("FAIL: wrong value, got ")
+                print_num(val)
+                print("\n")
+            }
+        },
+        Nothing => print("FAIL: pop returned Nothing\n")
+    }
+}
+
+func print_num(n: I32) {
+    if n == 0 {
+        print("0")
+    } else if n == 42 {
+        print("42")
+    } else if n < 0 {
+        print("-")
+        print_num(0 - n)
+    } else {
+        // Just print something for now
+        print("?")
+    }
+}

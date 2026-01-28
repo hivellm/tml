@@ -1,0 +1,485 @@
+// Tests for std::json module
+use test
+use std::json::types::{Json, JsonObject, JsonArray, parse, parse_or_panic}
+use std::json::builder::{Builder, object, array, PrettyBuilder, pretty_object}
+
+// ============================================================================
+// Parsing Tests
+// ============================================================================
+
+@test
+func test_parse_null() -> I32 {
+    let json: Json = parse_or_panic("null")
+    assert(json.is_null(), "Expected null")
+    assert(not json.is_bool(), "Should not be bool")
+    return 0
+}
+
+@test
+func test_parse_bool() -> I32 {
+    let t: Json = parse_or_panic("true")
+    let f: Json = parse_or_panic("false")
+    assert(t.is_bool(), "Expected bool")
+    assert(t.unwrap_bool() == true, "Expected true")
+    assert(f.unwrap_bool() == false, "Expected false")
+    return 0
+}
+
+@test
+func test_parse_integer() -> I32 {
+    let json: Json = parse_or_panic("42")
+    assert(json.is_number(), "Expected number")
+    assert(json.unwrap_i64() == 42, "Expected 42")
+    return 0
+}
+
+@test
+func test_parse_negative_integer() -> I32 {
+    let json: Json = parse_or_panic("-123")
+    assert(json.is_number(), "Expected number")
+    assert(json.unwrap_i64() == -123, "Expected -123")
+    return 0
+}
+
+@test
+func test_parse_string() -> I32 {
+    let json: Json = parse_or_panic("\"hello world\"")
+    assert(json.is_string(), "Expected string")
+    assert(json.unwrap_str() == "hello world", "Expected hello world")
+    return 0
+}
+
+@test
+func test_parse_empty_array() -> I32 {
+    let json: Json = parse_or_panic("[]")
+    assert(json.is_array(), "Expected array")
+    assert(json.len() == 0, "Expected empty array")
+    return 0
+}
+
+@test
+func test_parse_array_with_numbers() -> I32 {
+    let json: Json = parse_or_panic("[1, 2, 3, 4, 5]")
+    assert(json.is_array(), "Expected array")
+    assert(json.len() == 5, "Expected 5 elements")
+    return 0
+}
+
+@test
+func test_parse_empty_object() -> I32 {
+    let json: Json = parse_or_panic("{}")
+    assert(json.is_object(), "Expected object")
+    assert(json.len() == 0, "Expected empty object")
+    return 0
+}
+
+@test
+func test_parse_object_with_fields() -> I32 {
+    let json: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
+    assert(json.is_object(), "Expected object")
+    assert(json.len() == 2, "Expected 2 fields")
+    assert(json.has("name"), "Expected name field")
+    assert(json.has("age"), "Expected age field")
+    assert(not json.has("unknown"), "Should not have unknown field")
+    return 0
+}
+
+// ============================================================================
+// JsonObject Tests
+// ============================================================================
+
+@test
+func test_json_object_methods() -> I32 {
+    let json: Json = parse_or_panic("{\"a\": 1, \"b\": \"hello\", \"c\": true}")
+    when json.as_object() {
+        Just(obj) => {
+            assert(obj.len() == 3, "Expected 3 fields")
+            assert(obj.has("a"), "Expected field a")
+            assert(obj.has("b"), "Expected field b")
+            assert(obj.has("c"), "Expected field c")
+            assert(not obj.has("d"), "Should not have field d")
+        },
+        Nothing => panic("Expected object"),
+    }
+    return 0
+}
+
+// ============================================================================
+// Serialization Tests
+// ============================================================================
+
+@test
+func test_serialize_null() -> I32 {
+    let json: Json = Json::new_null()
+    assert(json.to_string() == "null", "Expected null string")
+    return 0
+}
+
+@test
+func test_serialize_bool() -> I32 {
+    let t: Json = Json::new_bool(true)
+    let f: Json = Json::new_bool(false)
+    assert(t.to_string() == "true", "Expected true string")
+    assert(f.to_string() == "false", "Expected false string")
+    return 0
+}
+
+@test
+func test_serialize_number() -> I32 {
+    let n: Json = Json::int(42)
+    assert(n.to_string() == "42", "Expected 42 string")
+    return 0
+}
+
+@test
+func test_serialize_string() -> I32 {
+    let s: Json = Json::string("hello")
+    assert(s.to_string() == "\"hello\"", "Expected quoted hello")
+    return 0
+}
+
+// ============================================================================
+// Builder Tests
+// ============================================================================
+
+@test
+func test_builder_object() -> I32 {
+    let b: Builder = object()
+    b.ks("name", "John")
+    b.kn("age", 30)
+    b.kb("active", true)
+    b.end_obj()
+    let result: Str = b.build()
+    assert(result == "{\"name\":\"John\",\"age\":30,\"active\":true}", "Builder object mismatch")
+    return 0
+}
+
+@test
+func test_builder_array() -> I32 {
+    let b: Builder = array()
+    b.n(1)
+    b.n(2)
+    b.n(3)
+    b.end_arr()
+    let result: Str = b.build()
+    assert(result == "[1,2,3]", "Builder array mismatch")
+    return 0
+}
+
+@test
+func test_builder_nested() -> I32 {
+    let b: Builder = object()
+    b.ks("name", "Alice")
+    b.k("scores")
+    b.arr()
+    b.n(90)
+    b.n(85)
+    b.n(92)
+    b.end_arr()
+    b.end_obj()
+    let result: Str = b.build()
+    assert(result == "{\"name\":\"Alice\",\"scores\":[90,85,92]}", "Builder nested mismatch")
+    return 0
+}
+
+@test
+func test_builder_string_escaping() -> I32 {
+    // Test quote escaping
+    let b1: Builder = object()
+    b1.ks("msg", "Hello \"World\"")
+    b1.end_obj()
+    assert(b1.build() == "{\"msg\":\"Hello \\\"World\\\"\"}", "Quote escaping failed")
+
+    // Test backslash escaping
+    let b2: Builder = object()
+    b2.ks("path", "C:\\Users\\test")
+    b2.end_obj()
+    assert(b2.build() == "{\"path\":\"C:\\\\Users\\\\test\"}", "Backslash escaping failed")
+
+    // Test newline/tab escaping
+    let b3: Builder = object()
+    b3.ks("text", "line1\nline2\ttab")
+    b3.end_obj()
+    assert(b3.build() == "{\"text\":\"line1\\nline2\\ttab\"}", "Newline/tab escaping failed")
+
+    return 0
+}
+
+// ============================================================================
+// Error Handling Tests
+// ============================================================================
+
+@test
+func test_parse_invalid_json() -> I32 {
+    when parse("not valid json") {
+        Just(_) => panic("Should have failed to parse"),
+        Nothing => {
+            // Expected - parse returns Nothing for invalid JSON
+        },
+    }
+    return 0
+}
+
+@test
+func test_wrong_type_access() -> I32 {
+    let json: Json = parse_or_panic("42")
+
+    // Trying to get string from number should return Nothing
+    when json.as_str() {
+        Just(_) => panic("Should not get string from number"),
+        Nothing => {},
+    }
+
+    // Trying to get bool from number should return Nothing
+    when json.as_bool() {
+        Just(_) => panic("Should not get bool from number"),
+        Nothing => {},
+    }
+    return 0
+}
+
+// ============================================================================
+// Complex Nested Structures
+// ============================================================================
+
+@test
+func test_complex_nested_json() -> I32 {
+    let json_str: Str = "{\"users\":[{\"name\":\"Alice\",\"age\":30},{\"name\":\"Bob\",\"age\":25}],\"count\":2}"
+    let json: Json = parse_or_panic(json_str)
+
+    assert(json.is_object(), "Expected object")
+
+    when json.get_i64("count") {
+        Just(count) => assert(count == 2, "Expected count 2"),
+        Nothing => panic("Expected count field"),
+    }
+
+    when json.get("users") {
+        Just(users_json) => {
+            assert(users_json.is_array(), "Expected users array")
+            assert(users_json.len() == 2, "Expected 2 users")
+        },
+        Nothing => panic("Expected users field"),
+    }
+    return 0
+}
+
+// ============================================================================
+// Path Navigation Tests
+// ============================================================================
+
+@test
+func test_get_path_simple() -> I32 {
+    let json: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
+
+    when json.get_path("name") {
+        Just(name) => assert(name.unwrap_str() == "Alice", "Expected Alice"),
+        Nothing => panic("Path not found"),
+    }
+
+    when json.get_path("age") {
+        Just(age) => assert(age.unwrap_i64() == 30, "Expected 30"),
+        Nothing => panic("Path not found"),
+    }
+    return 0
+}
+
+@test
+func test_get_path_nested() -> I32 {
+    let json: Json = parse_or_panic("{\"user\": {\"name\": \"Bob\", \"address\": {\"city\": \"NYC\"}}}")
+
+    when json.get_path("user.name") {
+        Just(name) => assert(name.unwrap_str() == "Bob", "Expected Bob"),
+        Nothing => panic("Path not found"),
+    }
+
+    when json.get_path("user.address.city") {
+        Just(city) => assert(city.unwrap_str() == "NYC", "Expected NYC"),
+        Nothing => panic("Path not found"),
+    }
+    return 0
+}
+
+@test
+func test_get_path_array() -> I32 {
+    let json: Json = parse_or_panic("{\"items\": [10, 20, 30]}")
+
+    when json.get_path("items[0]") {
+        Just(item) => assert(item.unwrap_i64() == 10, "Expected 10"),
+        Nothing => panic("Path not found"),
+    }
+
+    when json.get_path("items[2]") {
+        Just(item) => assert(item.unwrap_i64() == 30, "Expected 30"),
+        Nothing => panic("Path not found"),
+    }
+    return 0
+}
+
+@test
+func test_get_path_mixed() -> I32 {
+    let json: Json = parse_or_panic("{\"users\": [{\"name\": \"Alice\"}, {\"name\": \"Bob\"}]}")
+
+    when json.get_path("users[0].name") {
+        Just(name) => assert(name.unwrap_str() == "Alice", "Expected Alice"),
+        Nothing => panic("Path not found"),
+    }
+
+    when json.get_path("users[1].name") {
+        Just(name) => assert(name.unwrap_str() == "Bob", "Expected Bob"),
+        Nothing => panic("Path not found"),
+    }
+    return 0
+}
+
+@test
+func test_get_path_not_found() -> I32 {
+    let json: Json = parse_or_panic("{\"a\": 1}")
+
+    when json.get_path("b") {
+        Just(_) => panic("Should not find path"),
+        Nothing => {},
+    }
+
+    when json.get_path("a.b") {
+        Just(_) => panic("Should not find nested path"),
+        Nothing => {},
+    }
+    return 0
+}
+
+// ============================================================================
+// Pretty Builder Tests
+// ============================================================================
+
+@test
+func test_pretty_builder_object() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.ks("name", "Alice")
+    b.kn("age", 30)
+    b.kb("active", true)
+    b.end_obj()
+    let result: Str = b.build()
+
+    // Result should have newlines and indentation
+    assert(result.contains("\n"), "Pretty output should have newlines")
+    assert(result.contains("  "), "Pretty output should have indentation")
+    assert(result.contains("\"name\": \"Alice\""), "Should have name field")
+    return 0
+}
+
+@test
+func test_pretty_builder_nested() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.ks("name", "Test")
+    b.k("data")
+    b.obj()
+    b.kn("value", 42)
+    b.end_obj()
+    b.end_obj()
+    let result: Str = b.build()
+
+    // Nested object should have deeper indentation
+    assert(result.contains("\"data\":"), "Should have data field")
+    assert(result.contains("\"value\": 42"), "Should have value field")
+    return 0
+}
+
+// ============================================================================
+// Keys/Values Iteration Tests
+// ============================================================================
+
+@test
+func test_json_key_at() -> I32 {
+    let json: Json = parse_or_panic("{\"a\": 1, \"b\": 2, \"c\": 3}")
+
+    when json.key_at(0) {
+        Just(key) => assert(key == "a", "First key should be 'a'"),
+        Nothing => panic("key_at(0) should return a key"),
+    }
+
+    when json.key_at(1) {
+        Just(key) => assert(key == "b", "Second key should be 'b'"),
+        Nothing => panic("key_at(1) should return a key"),
+    }
+
+    when json.key_at(2) {
+        Just(key) => assert(key == "c", "Third key should be 'c'"),
+        Nothing => panic("key_at(2) should return a key"),
+    }
+
+    // Out of bounds
+    when json.key_at(3) {
+        Just(_) => panic("key_at(3) should return Nothing"),
+        Nothing => {},
+    }
+
+    return 0
+}
+
+@test
+func test_json_value_at() -> I32 {
+    let json: Json = parse_or_panic("{\"x\": 10, \"y\": 20}")
+
+    when json.value_at(0) {
+        Just(val) => assert(val.unwrap_i64() == 10, "First value should be 10"),
+        Nothing => panic("value_at(0) should return a value"),
+    }
+
+    when json.value_at(1) {
+        Just(val) => assert(val.unwrap_i64() == 20, "Second value should be 20"),
+        Nothing => panic("value_at(1) should return a value"),
+    }
+
+    // Out of bounds
+    when json.value_at(2) {
+        Just(_) => panic("value_at(2) should return Nothing"),
+        Nothing => {},
+    }
+
+    return 0
+}
+
+@test
+func test_json_object_iteration() -> I32 {
+    let json: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
+
+    // Iterate over all entries
+    var count: I64 = 0
+    var i: I64 = 0
+    loop (i < json.len()) {
+        when json.key_at(i) {
+            Just(key) => {
+                when json.value_at(i) {
+                    Just(_) => count = count + 1,
+                    Nothing => {},
+                }
+            },
+            Nothing => {},
+        }
+        i = i + 1
+    }
+
+    assert(count == 2, "Should iterate over 2 entries")
+    return 0
+}
+
+@test
+func test_json_object_key_at() -> I32 {
+    let json: Json = parse_or_panic("{\"first\": 1, \"second\": 2}")
+
+    when json.as_object() {
+        Just(obj) => {
+            when obj.key_at(0) {
+                Just(key) => assert(key == "first", "First key should be 'first'"),
+                Nothing => panic("key_at(0) should return a key"),
+            }
+            when obj.key_at(1) {
+                Just(key) => assert(key == "second", "Second key should be 'second'"),
+                Nothing => panic("key_at(1) should return a key"),
+            }
+        },
+        Nothing => panic("Expected object"),
+    }
+    return 0
+}

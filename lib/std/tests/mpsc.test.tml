@@ -1,0 +1,238 @@
+// MPSC Channel Tests - Multi-Producer Single-Consumer
+// Consolidated from: channel.test.tml, channel_creation.test.tml, channel_hang.test.tml,
+//                    minimal.test.tml, single.test.tml, tuple.test.tml, debug.test.tml,
+//                    one_element.test.tml, both_elements.test.tml, send_recv.test.tml,
+//                    repro_mutex_ptr.test.tml, sync/mpsc.test.tml
+
+use test::{assert, assert_eq}
+use std::sync::mpsc::{channel, Sender, Receiver, SendError, RecvError, TryRecvError}
+use std::sync::mutex::Mutex
+use std::sync::condvar::Condvar
+use std::sync::arc::Arc
+use std::sync::{MutexGuard}
+use std::sync::atomic::{AtomicUsize, AtomicBool}
+use core::alloc::{Layout, alloc_global}
+
+// ============================================================================
+// Section 1: Error Type Tests
+// ============================================================================
+
+@test
+func test_recv_error_exists() -> I32 {
+    let err: RecvError = RecvError {}
+    return 0
+}
+
+@test
+func test_recv_error_to_string() -> I32 {
+    let err: RecvError = RecvError {}
+    let s: Str = err.to_string()
+    assert(s.len() > 0, "RecvError string should not be empty")
+    return 0
+}
+
+@test
+func test_try_recv_error_empty() -> I32 {
+    let err: TryRecvError = TryRecvError::Empty
+    assert(err.is_empty(), "Empty.is_empty() should be true")
+    assert(not err.is_disconnected(), "Empty.is_disconnected() should be false")
+    return 0
+}
+
+@test
+func test_try_recv_error_disconnected() -> I32 {
+    let err: TryRecvError = TryRecvError::Disconnected
+    assert(not err.is_empty(), "Disconnected.is_empty() should be false")
+    assert(err.is_disconnected(), "Disconnected.is_disconnected() should be true")
+    return 0
+}
+
+@test
+func test_send_error_into_inner_i32() -> I32 {
+    let err: SendError[I32] = SendError { value: 42 }
+    let v: I32 = err.into_inner()
+    assert_eq(v, 42, "into_inner should return the value")
+    return 0
+}
+
+@test
+func test_send_error_into_inner_i64() -> I32 {
+    let err: SendError[I64] = SendError { value: 1000000000000 as I64 }
+    let v: I64 = err.into_inner()
+    assert_eq(v, 1000000000000 as I64, "into_inner should return I64 value")
+    return 0
+}
+
+@test
+func test_send_error_into_inner_bool() -> I32 {
+    let err: SendError[Bool] = SendError { value: true }
+    let v: Bool = err.into_inner()
+    assert(v, "into_inner should return true")
+    return 0
+}
+
+// ============================================================================
+// Section 2: Channel Creation Tests
+// ============================================================================
+
+@test
+func test_channel_creation() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    return 0
+}
+
+@test
+func test_channel_minimal() -> I32 {
+    let _result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    return 0
+}
+
+@test
+func test_channel_single() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    return 0
+}
+
+// ============================================================================
+// Section 3: Tuple Access Tests
+// ============================================================================
+
+@test
+func test_channel_tuple_access() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    let rx: Receiver[I32] = result.1
+    return 0
+}
+
+@test
+func test_channel_sender_only() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    return 0
+}
+
+@test
+func test_channel_receiver_only() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let rx: Receiver[I32] = result.1
+    return 0
+}
+
+@test
+func test_channel_extract_sender() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    return 0
+}
+
+@test
+func test_channel_extract_both() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    let rx: Receiver[I32] = result.1
+    return 0
+}
+
+// ============================================================================
+// Section 4: Send/Receive Operations
+// ============================================================================
+
+@test
+func test_channel_send_recv() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    var rx: Receiver[I32] = result.1
+
+    tx.send(42)
+
+    let received: Outcome[I32, RecvError] = rx.recv()
+    when received {
+        Ok(val) => {
+            assert_eq(val, 42)
+        }
+        Err(_) => {
+            assert(false)
+        }
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Section 5: Channel Building Blocks Tests
+// ============================================================================
+
+type SimpleInner {
+    mutex: Mutex[I32],
+    condvar: Condvar,
+    count: AtomicUsize,
+}
+
+@test
+func test_alloc_for_channel() -> I32 {
+    let size: I64 = 32
+    let align: I64 = 8
+    let layout: Layout = Layout::from_size_align_unchecked(size, align)
+    let ptr: Ptr[U8] = alloc_global(layout)
+    return 0
+}
+
+@test
+func test_mutex_i32_for_channel() -> I32 {
+    var x: I32 = 42
+    var mutex: Mutex[I32] = Mutex::new(x)
+    return 0
+}
+
+@test
+func test_condvar_for_channel() -> I32 {
+    let cv: Condvar = Condvar::new()
+    return 0
+}
+
+@test
+func test_arc_i32_for_channel() -> I32 {
+    let arc: Arc[I32] = Arc::new(42)
+    return 0
+}
+
+@test
+func test_atomic_for_channel() -> I32 {
+    let au: AtomicUsize = AtomicUsize::new(1)
+    let ab: AtomicBool = AtomicBool::new(true)
+    return 0
+}
+
+@test
+func test_mutex_ptr_for_channel() -> I32 {
+    var x: I32 = 42
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ref x as Ptr[I32])
+    return 0
+}
+
+@test
+func test_arc_struct_for_channel() -> I32 {
+    let inner: Arc[SimpleInner] = Arc::new(SimpleInner {
+        mutex: Mutex::new(0),
+        condvar: Condvar::new(),
+        count: AtomicUsize::new(1),
+    })
+    return 0
+}
+
+// ============================================================================
+// Section 6: Mutex with Pointer Type Tests (Channel Prerequisites)
+// ============================================================================
+
+type MpscData {
+    value: I32,
+}
+
+@test
+func test_mutex_ptr_i32_guard() -> I32 {
+    var x: I32 = 42
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ref x as Ptr[I32])
+    let guard: MutexGuard[Ptr[I32]] = mutex.lock()
+    return 0
+}

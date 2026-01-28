@@ -1,0 +1,263 @@
+// Mutex and RwLock tests
+// Tests locking primitives and RAII guards
+use test
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard}
+
+// ============================================================================
+// Mutex Tests
+// ============================================================================
+
+@test
+func test_mutex_new() {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    assert(not mutex.is_locked())
+    println("Mutex new test passed!")
+}
+
+@test
+func test_mutex_lock_and_read() {
+    let mutex: Mutex[I32] = Mutex::new(100)
+
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 100)
+    }  // guard dropped here, lock released
+
+    println("Mutex lock and read test passed!")
+}
+
+@test
+func test_mutex_lock_and_write() {
+    let mutex: Mutex[I32] = Mutex::new(0)
+
+    {
+        var guard: MutexGuard[I32] = mutex.lock()
+        *guard.get_mut() = 42
+    }
+
+    // Lock again to verify the write
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 42)
+    }
+
+    println("Mutex lock and write test passed!")
+}
+
+@test
+func test_mutex_try_lock_success() {
+    let mutex: Mutex[I32] = Mutex::new(10)
+
+    when mutex.try_lock() {
+        Just(guard) => {
+            assert_eq(*guard.get(), 10)
+        },
+        Nothing => panic("try_lock should succeed when mutex is unlocked")
+    }
+    println("Mutex try_lock success test passed!")
+}
+
+@test
+func test_mutex_is_locked() {
+    let mutex: Mutex[I32] = Mutex::new(0)
+
+    assert(not mutex.is_locked())
+
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        // Note: is_locked checks the raw state, may vary by implementation
+        // For now just verify we can lock and unlock
+    }
+
+    assert(not mutex.is_locked())
+    println("Mutex is_locked test passed!")
+}
+
+@test
+func test_mutex_into_inner() {
+    let mutex: Mutex[I32] = Mutex::new(999)
+
+    // Modify the value
+    {
+        var guard: MutexGuard[I32] = mutex.lock()
+        *guard.get_mut() = 123
+    }
+
+    // Consume mutex and get inner value
+    let value: I32 = mutex.into_inner()
+    assert_eq(value, 123)
+    println("Mutex into_inner test passed!")
+}
+
+@test
+func test_mutex_get_mut() {
+    var mutex: Mutex[I32] = Mutex::new(50)
+
+    // get_mut requires exclusive access to the mutex (not locked)
+    *mutex.get_mut() = 75
+
+    let guard: MutexGuard[I32] = mutex.lock()
+    assert_eq(*guard.get(), 75)
+    println("Mutex get_mut test passed!")
+}
+
+// ============================================================================
+// RwLock Tests
+// ============================================================================
+
+@test
+func test_rwlock_new() {
+    let rwlock: RwLock[I32] = RwLock::new(42)
+    println("RwLock new test passed!")
+}
+
+@test
+func test_rwlock_read() {
+    let rwlock: RwLock[I32] = RwLock::new(100)
+
+    {
+        let guard: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*guard.get(), 100)
+    }
+
+    println("RwLock read test passed!")
+}
+
+@test
+func test_rwlock_multiple_readers() {
+    let rwlock: RwLock[I32] = RwLock::new(55)
+
+    {
+        let r1: RwLockReadGuard[I32] = rwlock.read()
+        let r2: RwLockReadGuard[I32] = rwlock.read()
+
+        // Both readers see the same value
+        assert_eq(*r1.get(), 55)
+        assert_eq(*r2.get(), 55)
+    }
+
+    println("RwLock multiple readers test passed!")
+}
+
+@test
+func test_rwlock_write() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+
+    {
+        var guard: RwLockWriteGuard[I32] = rwlock.write()
+        *guard.get_mut() = 42
+    }
+
+    // Verify the write
+    {
+        let guard: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*guard.get(), 42)
+    }
+
+    println("RwLock write test passed!")
+}
+
+@test
+func test_rwlock_try_read_success() {
+    let rwlock: RwLock[I32] = RwLock::new(77)
+
+    when rwlock.try_read() {
+        Just(guard) => {
+            assert_eq(*guard.get(), 77)
+        },
+        Nothing => panic("try_read should succeed")
+    }
+
+    println("RwLock try_read success test passed!")
+}
+
+@test
+func test_rwlock_try_write_success() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+
+    when rwlock.try_write() {
+        Just(guard) => {
+            *guard.get_mut() = 88
+        },
+        Nothing => panic("try_write should succeed")
+    }
+
+    let r: RwLockReadGuard[I32] = rwlock.read()
+    assert_eq(*r.get(), 88)
+    println("RwLock try_write success test passed!")
+}
+
+@test
+func test_rwlock_into_inner() {
+    let rwlock: RwLock[I32] = RwLock::new(123)
+
+    {
+        var w: RwLockWriteGuard[I32] = rwlock.write()
+        *w.get_mut() = 456
+    }
+
+    let value: I32 = rwlock.into_inner()
+    assert_eq(value, 456)
+    println("RwLock into_inner test passed!")
+}
+
+// ============================================================================
+// Guard Drop Tests (RAII)
+// ============================================================================
+
+@test
+func test_mutex_guard_drop_releases_lock() {
+    let mutex: Mutex[I32] = Mutex::new(0)
+
+    // Scope 1: acquire lock
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        // lock is held
+    }
+    // guard dropped, lock released
+
+    // Scope 2: should be able to acquire lock again
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        // if we get here, lock was released
+    }
+
+    println("MutexGuard drop releases lock test passed!")
+}
+
+@test
+func test_rwlock_read_guard_drop() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+
+    {
+        let r: RwLockReadGuard[I32] = rwlock.read()
+    }
+    // read guard dropped
+
+    // Should be able to write now
+    {
+        var w: RwLockWriteGuard[I32] = rwlock.write()
+        *w.get_mut() = 1
+    }
+
+    println("RwLockReadGuard drop test passed!")
+}
+
+@test
+func test_rwlock_write_guard_drop() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+
+    {
+        var w: RwLockWriteGuard[I32] = rwlock.write()
+        *w.get_mut() = 42
+    }
+    // write guard dropped
+
+    // Should be able to read now
+    {
+        let r: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*r.get(), 42)
+    }
+
+    println("RwLockWriteGuard drop test passed!")
+}

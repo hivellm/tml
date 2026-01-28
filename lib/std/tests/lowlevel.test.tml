@@ -1,0 +1,286 @@
+// Lowlevel Pointer Operations Tests
+// Consolidated from: ptr_generic.test.tml, mutexguard_deref.test.tml, double_deref.test.tml,
+//                    arc_ptr_deref.test.tml, mutex_ptr_simple.test.tml, mutex_ptr_field2.test.tml,
+//                    ptr_field_test.test.tml, nested_deref_generic.test.tml, nested_simple.test.tml
+
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+use std::sync::Arc
+
+// ============================================================================
+// Section 1: Basic Pointer Operations
+// ============================================================================
+
+type Point {
+    x: I32,
+    y: I32,
+}
+
+type Target {
+    value: I32,
+}
+
+type Container {
+    x: I32,
+    ptr: Ptr[Target],
+}
+
+@test
+func test_ptr_field() -> I32 {
+    var t: Target = Target { value: 100 }
+    var c: Container = Container { x: 42, ptr: ref t as Ptr[Target] }
+    assert_eq(c.x, 42)
+    return 0
+}
+
+@test
+func test_double_deref() -> I32 {
+    var point: Point = Point { x: 10, y: 20 }
+    let ptr: Ptr[Point] = ref point as Ptr[Point]
+    var ptr_ptr: Ptr[Ptr[Point]] = ref ptr as Ptr[Ptr[Point]]
+
+    lowlevel {
+        (*(*ptr_ptr)).x = 99
+    }
+
+    assert_eq(point.x, 99)
+    return 0
+}
+
+// ============================================================================
+// Section 2: Generic Pointer Operations
+// ============================================================================
+
+type Node[T] {
+    value: T,
+    next: Ptr[Node[T]],
+}
+
+func test_ptr_deref[T](ptr: Ptr[Node[T]], value: T) {
+    lowlevel {
+        (*ptr).value = value
+    }
+}
+
+@test
+func test_lowlevel_ptr_generic() -> I32 {
+    var node: Node[I32] = Node { value: 0, next: null }
+    let ptr: Ptr[Node[I32]] = ref node as Ptr[Node[I32]]
+
+    test_ptr_deref[I32](ptr, 42)
+
+    assert_eq(node.value, 42)
+    return 0
+}
+
+// ============================================================================
+// Section 3: MutexGuard Dereference Operations
+// ============================================================================
+
+func read_guarded[T](guard: ref MutexGuard[T]) -> T {
+    return *guard
+}
+
+@test
+func test_mutexguard_deref_i32() -> I32 {
+    var mutex: Mutex[I32] = Mutex::new(42)
+    let guard: MutexGuard[I32] = mutex.lock()
+
+    let value: I32 = *guard
+
+    assert_eq(value, 42)
+    return 0
+}
+
+@test
+func test_mutexguard_deref_i64() -> I32 {
+    var mutex: Mutex[I64] = Mutex::new(1234567890123)
+    let guard: MutexGuard[I64] = mutex.lock()
+
+    let value: I64 = *guard
+
+    assert_eq(value, 1234567890123)
+    return 0
+}
+
+@test
+func test_mutexguard_deref_bool() -> I32 {
+    var mutex: Mutex[Bool] = Mutex::new(true)
+    let guard: MutexGuard[Bool] = mutex.lock()
+
+    let value: Bool = *guard
+
+    assert(value)
+    return 0
+}
+
+@test
+func test_mutexguard_deref_ptr() -> I32 {
+    var x: I32 = 100
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ref x as Ptr[I32])
+    let guard: MutexGuard[Ptr[I32]] = mutex.lock()
+
+    let ptr: Ptr[I32] = *guard
+    lowlevel {
+        let value: I32 = *ptr
+        assert_eq(value, 100)
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Section 4: Mutex[Ptr[T]] Operations
+// ============================================================================
+
+@test
+func test_mutex_ptr_deref() -> I32 {
+    var x: I32 = 42
+    let ptr: Ptr[I32] = ref x as Ptr[I32]
+
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ptr)
+    let guard: MutexGuard[Ptr[I32]] = mutex.lock()
+
+    let inner_ptr: Ptr[I32] = *guard
+
+    lowlevel {
+        let val: I32 = *inner_ptr
+        assert_eq(val, 42)
+    }
+
+    return 0
+}
+
+@test
+func test_mutex_ptr_field_access() -> I32 {
+    var pt: Point = Point { x: 10, y: 20 }
+    let ptr: Ptr[Point] = ref pt as Ptr[Point]
+
+    var mutex: Mutex[Ptr[Point]] = Mutex::new(ptr)
+    let guard: MutexGuard[Ptr[Point]] = mutex.lock()
+
+    lowlevel {
+        let inner_ptr: Ptr[Point] = *guard
+        let val: I32 = (*inner_ptr).x
+        assert_eq(val, 10)
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Section 5: Nested Pointer Dereference with Smart Pointers
+// ============================================================================
+
+func set_next_simple(guard: ref MutexGuard[Ptr[Node[I32]]], new_next: Ptr[Node[I32]]) {
+    lowlevel {
+        (*(*guard)).next = new_next
+    }
+}
+
+@test
+func test_nested_deref_simple() -> I32 {
+    var node1: Node[I32] = Node { value: 1, next: null }
+    var node2: Node[I32] = Node { value: 2, next: null }
+
+    let ptr1: Ptr[Node[I32]] = ref node1 as Ptr[Node[I32]]
+    let ptr2: Ptr[Node[I32]] = ref node2 as Ptr[Node[I32]]
+
+    var mutex: Mutex[Ptr[Node[I32]]] = Mutex::new(ptr1)
+    let guard: MutexGuard[Ptr[Node[I32]]] = mutex.lock()
+
+    set_next_simple(ref guard, ptr2)
+
+    assert_eq(node1.next as I64, ptr2 as I64)
+    return 0
+}
+
+@test
+func test_nested_deref_debug() -> I32 {
+    var node1: Node[I32] = Node { value: 1, next: null }
+    var node2: Node[I32] = Node { value: 2, next: null }
+
+    let ptr1: Ptr[Node[I32]] = ref node1 as Ptr[Node[I32]]
+    let ptr2: Ptr[Node[I32]] = ref node2 as Ptr[Node[I32]]
+
+    var mutex: Mutex[Ptr[Node[I32]]] = Mutex::new(ptr1)
+    let guard: MutexGuard[Ptr[Node[I32]]] = mutex.lock()
+
+    lowlevel {
+        (*(*guard)).next = ptr2
+    }
+
+    assert_eq(node1.next as I64, ptr2 as I64)
+    return 0
+}
+
+// ============================================================================
+// Section 6: Arc[Ptr[T]] Operations
+// ============================================================================
+
+type SimpleData {
+    value: I32,
+}
+
+@test
+func test_arc_ptr_deref() -> I32 {
+    var data: SimpleData = SimpleData { value: 10 }
+    let ptr: Ptr[SimpleData] = ref data as Ptr[SimpleData]
+    let arc: Arc[Ptr[SimpleData]] = Arc::new(ptr)
+
+    lowlevel {
+        (*(*arc)).value = 42
+    }
+
+    assert_eq(data.value, 42)
+    return 0
+}
+
+// ============================================================================
+// Section 7: Generic Wrapper with Ptr[T] Type Arguments
+// ============================================================================
+
+type Wrapper[T] {
+    value: T,
+}
+
+impl[T] Wrapper[T] {
+    func new(value: T) -> Wrapper[T] {
+        return Wrapper { value: value }
+    }
+}
+
+@test
+func test_wrapper_i32() -> I32 {
+    let w: Wrapper[I32] = Wrapper::new[I32](42)
+    return 0
+}
+
+@test
+func test_wrapper_ptr_i32() -> I32 {
+    var x: I32 = 100
+    let p: Ptr[I32] = ref x as Ptr[I32]
+    let w: Wrapper[Ptr[I32]] = Wrapper::new[Ptr[I32]](p)
+    return 0
+}
+
+// ============================================================================
+// Section 8: Drop and Consume Semantics
+// ============================================================================
+
+use core::mem::drop
+
+@test
+func test_drop_prevents_double_drop() -> I32 {
+    var x: I32 = 42
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ref x as Ptr[I32])
+
+    let guard: MutexGuard[Ptr[I32]] = mutex.lock()
+
+    // Explicitly drop the guard
+    drop(guard)
+
+    // If drop() correctly marks as consumed,
+    // the automatic drop at function exit should NOT drop guard again
+    return 0
+}

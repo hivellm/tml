@@ -1,0 +1,26 @@
+// Progressive MPSC test - channel creation + tuple access
+use test::{assert, assert_eq}
+use std::sync::mpsc::{channel, Sender, Receiver, RecvError}
+
+@test
+func test_channel_creation() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    return 0
+}
+
+@test
+func test_channel_tuple_access() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    let rx: Receiver[I32] = result.1
+    return 0
+}
+
+@test
+func test_channel_send() -> I32 {
+    let result: (Sender[I32], Receiver[I32]) = channel[I32]()
+    let tx: Sender[I32] = result.0
+    let rx: Receiver[I32] = result.1
+    tx.send(42)
+    return 0
+}
