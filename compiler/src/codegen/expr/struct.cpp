@@ -33,6 +33,105 @@
 
 namespace tml::codegen {
 
+// Static helper to parse mangled type strings back to semantic types
+// e.g., "ptr_ChannelNode__I32" -> PtrType{inner=NamedType{name="ChannelNode", type_args=[I32]}}
+static types::TypePtr parse_mangled_type_string(const std::string& s) {
+    // Primitives
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I8};
+        return t;
+    }
+    if (s == "I16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I16};
+        return t;
+    }
+    if (s == "U8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U8};
+        return t;
+    }
+    if (s == "U16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U16};
+        return t;
+    }
+    if (s == "U32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U32};
+        return t;
+    }
+    if (s == "U64") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "Usize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "Isize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I64};
+        return t;
+    }
+    if (s == "F32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::F32};
+        return t;
+    }
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+
+    // Check for pointer prefix (e.g., ptr_ChannelNode__I32 -> Ptr[ChannelNode[I32]])
+    if (s.size() > 4 && s.substr(0, 4) == "ptr_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = false, .inner = inner};
+            return t;
+        }
+    }
+    if (s.size() > 7 && s.substr(0, 7) == "mutptr_") {
+        std::string inner_str = s.substr(7);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = true, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for nested generic (e.g., Mutex__I32)
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+        auto inner = parse_mangled_type_string(arg_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::NamedType{base, "", {inner}};
+            return t;
+        }
+    }
+
+    // Simple struct type
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 // Generate struct expression, returning pointer to allocated struct
 auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string {
     std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
@@ -193,10 +292,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 else if (type_args_str == "Unit")
                     type_args.push_back(types::make_unit());
                 else {
-                    // Try as named type
-                    auto t = std::make_shared<types::Type>();
-                    t->kind = types::NamedType{type_args_str, "", {}};
-                    type_args.push_back(t);
+                    // Try as named type, using parse_mangled_type_string for proper handling
+                    type_args.push_back(parse_mangled_type_string(type_args_str));
                 }
                 require_struct_instantiation(base_name, type_args);
             }
@@ -678,6 +775,24 @@ auto LLVMIRGen::get_field_type(const std::string& struct_name, const std::string
     return "i32";
 }
 
+// Helper to get field semantic type for struct types - uses dynamic registry
+auto LLVMIRGen::get_field_semantic_type(const std::string& struct_name,
+                                        const std::string& field_name) -> types::TypePtr {
+    // Check the dynamic struct_fields_ registry
+    auto it = struct_fields_.find(struct_name);
+    if (it != struct_fields_.end()) {
+        for (const auto& field : it->second) {
+            if (field.name == field_name) {
+                return field.semantic_type;
+            }
+        }
+    }
+
+    // Note: class_fields_ uses a different struct (ClassFieldInfo) without semantic_type
+    // For class fields, we'd need to look up the type from the class definition
+    return nullptr;
+}
+
 // Helper to get full class field info (including inheritance details)
 auto LLVMIRGen::get_class_field_info(const std::string& class_name, const std::string& field_name)
     -> std::optional<ClassFieldInfo> {
@@ -820,10 +935,9 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                         if (deref_target->is<types::NamedType>()) {
                             const auto& inner_named = deref_target->as<types::NamedType>();
                             if (!inner_named.type_args.empty()) {
-                                require_struct_instantiation(inner_named.name,
-                                                             inner_named.type_args);
-                                outer_name =
-                                    mangle_struct_name(inner_named.name, inner_named.type_args);
+                                // Use return value to handle UNRESOLVED cases
+                                outer_name = require_struct_instantiation(inner_named.name,
+                                                                          inner_named.type_args);
                             } else {
                                 outer_name = inner_named.name;
                             }
@@ -841,10 +955,9 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                         if (deref_target->is<types::NamedType>()) {
                             const auto& inner_named = deref_target->as<types::NamedType>();
                             if (!inner_named.type_args.empty()) {
-                                require_struct_instantiation(inner_named.name,
-                                                             inner_named.type_args);
-                                outer_name =
-                                    mangle_struct_name(inner_named.name, inner_named.type_args);
+                                // Use return value to handle UNRESOLVED cases
+                                outer_name = require_struct_instantiation(inner_named.name,
+                                                                          inner_named.type_args);
                             } else {
                                 outer_name = inner_named.name;
                             }
@@ -864,6 +977,46 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
                 struct_type = nested_type;
                 struct_ptr = nested_ptr;
+
+                std::cerr << "[DEBUG] nested_field=" << nested_field.field
+                          << ", nested_type=" << nested_type << ", outer_name=" << outer_name
+                          << "\n";
+
+                // If nested_type is "ptr", get the semantic type for correct type inference
+                // This is crucial for generic struct fields like `mutex: mut ref Mutex[T]`
+                if (nested_type == "ptr") {
+                    types::TypePtr field_sem_type =
+                        get_field_semantic_type(outer_name, nested_field.field);
+                    std::cerr << "[GEN_FIELD nested] outer_name=" << outer_name
+                              << ", field=" << nested_field.field << ", field_sem_type="
+                              << (field_sem_type ? types::type_to_string(field_sem_type) : "null")
+                              << "\n";
+                    if (field_sem_type && !current_type_subs_.empty()) {
+                        field_sem_type =
+                            apply_type_substitutions(field_sem_type, current_type_subs_);
+                    }
+                    // Store the semantic type for later use in the struct_type == "ptr" path
+                    if (field_sem_type) {
+                        // Extract the inner type from Ref/Ptr
+                        types::TypePtr inner_type = field_sem_type;
+                        if (field_sem_type->is<types::RefType>()) {
+                            inner_type = field_sem_type->as<types::RefType>().inner;
+                        } else if (field_sem_type->is<types::PtrType>()) {
+                            inner_type = field_sem_type->as<types::PtrType>().inner;
+                        }
+                        if (inner_type && inner_type->is<types::NamedType>()) {
+                            const auto& named = inner_type->as<types::NamedType>();
+                            if (!named.type_args.empty()) {
+                                // Use return value to handle UNRESOLVED cases
+                                std::string mangled =
+                                    require_struct_instantiation(named.name, named.type_args);
+                                struct_type = "%struct." + mangled;
+                            } else {
+                                struct_type = "%struct." + named.name;
+                            }
+                        }
+                    }
+                }
             }
         } else {
             // Handle deeper nesting: recursively generate the intermediate field access
@@ -883,10 +1036,20 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                 struct_ptr = nested_val;
 
                 // Infer the struct type from the semantic type
-                if (nested_sem_type && nested_sem_type->is<types::NamedType>()) {
-                    const auto& named = nested_sem_type->as<types::NamedType>();
+                // Apply type substitutions for generic contexts
+                types::TypePtr resolved_sem_type = nested_sem_type;
+                if (resolved_sem_type && !current_type_subs_.empty()) {
+                    resolved_sem_type =
+                        apply_type_substitutions(resolved_sem_type, current_type_subs_);
+                }
+
+                if (resolved_sem_type && resolved_sem_type->is<types::NamedType>()) {
+                    const auto& named = resolved_sem_type->as<types::NamedType>();
                     if (!named.type_args.empty()) {
-                        struct_type = "%struct." + mangle_struct_name(named.name, named.type_args);
+                        // Use return value to handle UNRESOLVED cases
+                        std::string mangled =
+                            require_struct_instantiation(named.name, named.type_args);
+                        struct_type = "%struct." + mangled;
                     } else {
                         struct_type = "%struct." + named.name;
                     }
@@ -931,9 +1094,10 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                         const auto& named = inner_type->as<types::NamedType>();
                         if (!named.type_args.empty()) {
                             // Ensure generic struct is instantiated so fields are registered
-                            require_struct_instantiation(type_name, named.type_args);
-                            struct_type =
-                                "%struct." + mangle_struct_name(type_name, named.type_args);
+                            // Use return value to handle UNRESOLVED cases
+                            std::string mangled =
+                                require_struct_instantiation(type_name, named.type_args);
+                            struct_type = "%struct." + mangled;
                         } else {
                             struct_type = "%struct." + type_name;
                         }
@@ -1124,9 +1288,11 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             if (deref_target->is<types::NamedType>()) {
                 const auto& inner_named = deref_target->as<types::NamedType>();
                 if (!inner_named.type_args.empty()) {
-                    struct_type =
-                        "%struct." + mangle_struct_name(inner_named.name, inner_named.type_args);
-                    type_name = mangle_struct_name(inner_named.name, inner_named.type_args);
+                    // Use return value to handle UNRESOLVED cases
+                    std::string mangled =
+                        require_struct_instantiation(inner_named.name, inner_named.type_args);
+                    struct_type = "%struct." + mangled;
+                    type_name = mangled;
                 } else {
                     struct_type = "%struct." + inner_named.name;
                     type_name = inner_named.name;
@@ -1150,14 +1316,34 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             if (deref_target->is<types::NamedType>()) {
                 const auto& inner_named = deref_target->as<types::NamedType>();
                 if (!inner_named.type_args.empty()) {
-                    struct_type =
-                        "%struct." + mangle_struct_name(inner_named.name, inner_named.type_args);
-                    type_name = mangle_struct_name(inner_named.name, inner_named.type_args);
+                    // Use return value to handle UNRESOLVED cases
+                    std::string mangled =
+                        require_struct_instantiation(inner_named.name, inner_named.type_args);
+                    struct_type = "%struct." + mangled;
+                    type_name = mangled;
                 } else {
                     struct_type = "%struct." + inner_named.name;
                     type_name = inner_named.name;
                 }
             }
+        } else if (base_type_name == "Ptr" || base_type_name == "RawPtr") {
+            // Ptr[T] is already a pointer to T
+            // struct_ptr is the pointer value, just update the type info
+            if (deref_target->is<types::NamedType>()) {
+                const auto& inner_named = deref_target->as<types::NamedType>();
+                if (!inner_named.type_args.empty()) {
+                    // Use return value to handle UNRESOLVED cases
+                    std::string mangled =
+                        require_struct_instantiation(inner_named.name, inner_named.type_args);
+                    struct_type = "%struct." + mangled;
+                    type_name = mangled;
+                } else {
+                    struct_type = "%struct." + inner_named.name;
+                    type_name = inner_named.name;
+                }
+            }
+            TML_DEBUG_LN("[GEN_FIELD] Ptr auto-deref: struct_type=" << struct_type
+                                                                    << " type_name=" << type_name);
         }
     }
 

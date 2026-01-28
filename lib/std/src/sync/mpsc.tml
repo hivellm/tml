@@ -69,7 +69,7 @@ use std::sync::mutex::Mutex
 use std::sync::condvar::Condvar
 use std::sync::arc::Arc
 use core::alloc::{Layout, alloc_global, dealloc_global}
-use core::mem::{size_of, align_of}
+use core::mem::{size_of, align_of, drop}
 use core::clone::Duplicate
 
 // ============================================================================
@@ -432,6 +432,12 @@ impl[T] Receiver[T] {
 
             // Free old sentinel
             ChannelNode::free[T](head)
+
+            // Explicitly drop the guard to release the mutex lock
+            // before returning. This is needed because drop() marks
+            // the variable as consumed, preventing automatic drop
+            // on this code path.
+            drop(head_guard)
 
             this.inner.len.fetch_sub(1, Ordering::Relaxed)
 

@@ -13,6 +13,132 @@
 
 namespace tml::codegen {
 
+// Helper: Parse a mangled type string back into a semantic type
+// e.g., "ptr_ChannelNode__I32" -> PtrType{inner=NamedType{name="ChannelNode", type_args=[I32]}}
+static types::TypePtr parse_mangled_type_string(const std::string& s) {
+    // Handle primitive types
+    if (s == "I8")
+        return types::make_primitive(types::PrimitiveKind::I8);
+    if (s == "I16")
+        return types::make_primitive(types::PrimitiveKind::I16);
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I128")
+        return types::make_primitive(types::PrimitiveKind::I128);
+    if (s == "U8")
+        return types::make_primitive(types::PrimitiveKind::U8);
+    if (s == "U16")
+        return types::make_primitive(types::PrimitiveKind::U16);
+    if (s == "U32")
+        return types::make_primitive(types::PrimitiveKind::U32);
+    if (s == "U64")
+        return types::make_primitive(types::PrimitiveKind::U64);
+    if (s == "U128")
+        return types::make_primitive(types::PrimitiveKind::U128);
+    if (s == "F32")
+        return types::make_primitive(types::PrimitiveKind::F32);
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+    if (s == "Unit")
+        return types::make_unit();
+    if (s == "Usize")
+        return types::make_primitive(types::PrimitiveKind::U64);
+    if (s == "Isize")
+        return types::make_primitive(types::PrimitiveKind::I64);
+
+    // Check for pointer prefix (e.g., ptr_ChannelNode__I32 -> Ptr[ChannelNode[I32]])
+    if (s.size() > 4 && s.substr(0, 4) == "ptr_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = false, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for mutable pointer prefix
+    if (s.size() > 7 && s.substr(0, 7) == "mutptr_") {
+        std::string inner_str = s.substr(7);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = true, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for ref prefix
+    if (s.size() > 4 && s.substr(0, 4) == "ref_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::RefType{.is_mut = false, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for mutable ref prefix
+    if (s.size() > 7 && s.substr(0, 7) == "mutref_") {
+        std::string inner_str = s.substr(7);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::RefType{.is_mut = true, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for nested generic (e.g., Mutex__I32, ChannelNode__I32)
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+
+        // Parse all type arguments (separated by __)
+        std::vector<types::TypePtr> type_args;
+        size_t pos = 0;
+        while (pos < arg_str.size()) {
+            // Find next __ delimiter
+            auto next_delim = arg_str.find("__", pos);
+            std::string arg_part;
+            if (next_delim == std::string::npos) {
+                arg_part = arg_str.substr(pos);
+                pos = arg_str.size();
+            } else {
+                arg_part = arg_str.substr(pos, next_delim - pos);
+                pos = next_delim + 2;
+            }
+
+            auto arg_type = parse_mangled_type_string(arg_part);
+            if (arg_type) {
+                type_args.push_back(arg_type);
+            } else {
+                // Fallback: create NamedType
+                auto t = std::make_shared<types::Type>();
+                t->kind = types::NamedType{arg_part, "", {}};
+                type_args.push_back(t);
+            }
+        }
+
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::NamedType{base, "", std::move(type_args)};
+        return t;
+    }
+
+    // Simple struct type (no generics, no prefix)
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 // Helper to extract name from FuncParam pattern
 static std::string get_param_name(const parser::FuncParam& param) {
     if (param.pattern && param.pattern->is<parser::IdentPattern>()) {
@@ -230,35 +356,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
                     else if (arg == "Str")
                         arg_type = types::make_str();
                     else {
-                        // Could be another nested generic type - parse recursively
-                        auto nested_sep = arg.find("__");
-                        if (nested_sep != std::string::npos) {
-                            // Recursively parse nested generic like "Mutex__I32"
-                            std::string nested_base = arg.substr(0, nested_sep);
-                            std::string nested_arg_str = arg.substr(nested_sep + 2);
-                            types::TypePtr inner_arg;
-                            if (nested_arg_str == "I32")
-                                inner_arg = types::make_i32();
-                            else if (nested_arg_str == "I64")
-                                inner_arg = types::make_i64();
-                            else if (nested_arg_str == "Bool")
-                                inner_arg = types::make_bool();
-                            else if (nested_arg_str == "Str")
-                                inner_arg = types::make_str();
-                            else {
-                                auto it = std::make_shared<types::Type>();
-                                it->kind = types::NamedType{nested_arg_str, "", {}};
-                                inner_arg = it;
-                            }
-                            auto nt = std::make_shared<types::Type>();
-                            nt->kind = types::NamedType{nested_base, "", {inner_arg}};
-                            arg_type = nt;
-                        } else {
-                            // Simple named type
-                            auto t = std::make_shared<types::Type>();
-                            t->kind = types::NamedType{arg, "", {}};
-                            arg_type = t;
-                        }
+                        // Parse mangled type string properly (handles ptr_, nested generics, etc.)
+                        arg_type = parse_mangled_type_string(arg);
                     }
                     type_args.push_back(arg_type);
                     if (next_sep == std::string::npos)
@@ -267,7 +366,13 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
                 }
                 impl_semantic_type->kind = types::NamedType{base_name, "", type_args};
             } else {
-                impl_semantic_type->kind = types::NamedType{current_impl_type_, "", {}};
+                // Parse the mangled type name properly
+                auto parsed = parse_mangled_type_string(current_impl_type_);
+                if (parsed) {
+                    impl_semantic_type = parsed;
+                } else {
+                    impl_semantic_type->kind = types::NamedType{current_impl_type_, "", {}};
+                }
             }
         }
 
@@ -375,6 +480,25 @@ void LLVMIRGen::gen_impl_method_instantiation(
     const std::unordered_map<std::string, types::TypePtr>& type_subs,
     const std::vector<parser::GenericParam>& impl_generics, const std::string& method_type_suffix,
     bool is_library_type, const std::string& base_type_name) {
+    // Build full method name and check if already generated
+    std::string method_name_for_key = method.name;
+    if (!method_type_suffix.empty()) {
+        method_name_for_key += "__" + method_type_suffix;
+    }
+    std::string generated_key = "tml_" + mangled_type_name + "_" + method_name_for_key;
+    std::string llvm_name = "@" + generated_key;
+
+    // Prevent duplicate function generation - this can happen when the same method
+    // is requested from multiple code paths or when processing nested method calls
+    // Check both tracking sets since gen_impl_method and gen_impl_method_instantiation
+    // can generate the same function
+    if (generated_impl_methods_output_.count(generated_key) > 0 ||
+        generated_functions_.count(llvm_name) > 0) {
+        return;
+    }
+    generated_impl_methods_output_.insert(generated_key);
+    generated_functions_.insert(llvm_name);
+
     // Save current context
     std::string saved_func = current_func_;
     std::string saved_ret_type = current_ret_type_;
@@ -547,8 +671,13 @@ void LLVMIRGen::gen_impl_method_instantiation(
             }
             this_semantic_type->kind = types::NamedType{base_type_name, module_path, type_args};
         } else {
-            // Fallback: use mangled name without type args
-            this_semantic_type->kind = types::NamedType{mangled_type_name, module_path, {}};
+            // Fallback: parse the mangled name properly
+            auto parsed = parse_mangled_type_string(mangled_type_name);
+            if (parsed) {
+                this_semantic_type = parsed;
+            } else {
+                this_semantic_type->kind = types::NamedType{mangled_type_name, module_path, {}};
+            }
         }
 
         locals_["this"] = VarInfo{"%this", this_type, this_semantic_type, std::nullopt};
@@ -567,12 +696,17 @@ void LLVMIRGen::gen_impl_method_instantiation(
 
     // Generate method body
     if (method.body.has_value()) {
+        // Push drop scope for method body (enables RAII for local variables)
+        push_drop_scope();
+
         for (const auto& stmt : method.body->stmts) {
             gen_stmt(*stmt);
         }
         if (method.body->expr.has_value()) {
             std::string result = gen_expr(*method.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
+                // Emit drops before returning
+                emit_all_drops();
                 // Fix: if returning ptr type with "0" placeholder (from loops), use null
                 if (ret_type == "ptr" && result == "0") {
                     emit_line("  ret ptr null");
@@ -604,6 +738,8 @@ void LLVMIRGen::gen_impl_method_instantiation(
                 block_terminated_ = true;
             }
         }
+
+        pop_drop_scope();
     }
 
     // Add implicit return if needed

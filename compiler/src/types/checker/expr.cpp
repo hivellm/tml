@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <unordered_set>
 
 namespace tml::types {
 
@@ -565,6 +566,33 @@ auto TypeChecker::check_unary(const parser::UnaryExpr& unary) -> TypePtr {
         }
         if (operand->is<PtrType>()) {
             return operand->as<PtrType>().inner;
+        }
+        // Handle NamedType cases for pointer and smart pointer types
+        if (operand->is<NamedType>()) {
+            const auto& named = operand->as<NamedType>();
+            // Handle Ptr[T] which is stored as NamedType{name="Ptr", type_args=[T]}
+            // This is common in generic contexts where Ptr[Node[T]] appears
+            if (named.name == "Ptr" && !named.type_args.empty()) {
+                return named.type_args[0];
+            }
+            // Handle smart pointer types that implement Deref behavior
+            // Dereferencing these returns the inner type T
+            static const std::unordered_set<std::string> deref_types = {
+                "Arc",
+                "Rc",
+                "Box",
+                "Heap",
+                "Shared",
+                "Sync",
+                "MutexGuard",
+                "RwLockReadGuard",
+                "RwLockWriteGuard",
+                "Ref",
+                "RefMut",
+            };
+            if (deref_types.count(named.name) > 0 && !named.type_args.empty()) {
+                return named.type_args[0];
+            }
         }
         error("Cannot dereference non-reference type", unary.operand->span);
         return make_unit();
@@ -2043,6 +2071,37 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
             return make_unit();
         }
 
+        // Handle Ptr[T] - dereference through to inner type for field access
+        // This allows (*ptr).field syntax to work by auto-dereferencing Ptr[T] to T
+        if (named.name == "Ptr" && !named.type_args.empty()) {
+            auto inner_type = named.type_args[0];
+            if (inner_type->is<NamedType>()) {
+                auto& inner_named = inner_type->as<NamedType>();
+                auto inner_struct = env_.lookup_struct(inner_named.name);
+                if (inner_struct) {
+                    std::unordered_map<std::string, TypePtr> inner_subs;
+                    if (!inner_struct->type_params.empty() && !inner_named.type_args.empty()) {
+                        for (size_t i = 0; i < inner_struct->type_params.size() &&
+                                           i < inner_named.type_args.size();
+                             ++i) {
+                            inner_subs[inner_struct->type_params[i]] = inner_named.type_args[i];
+                        }
+                    }
+                    for (const auto& [fname, ftype] : inner_struct->fields) {
+                        if (fname == field.field) {
+                            if (!inner_subs.empty()) {
+                                return substitute_type(ftype, inner_subs);
+                            }
+                            return ftype;
+                        }
+                    }
+                    error("Unknown field: " + field.field + " on Ptr[" + inner_named.name + "]",
+                          field.object->span);
+                    return make_unit();
+                }
+            }
+        }
+
         // Otherwise check if it's a struct
         auto struct_def = env_.lookup_struct(named.name);
         if (struct_def) {
@@ -2062,6 +2121,54 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                     return ftype;
                 }
             }
+
+            // Deref coercion: if field not found and type implements Deref, try inner type
+            // This handles smart pointers like Arc[T], Box[T], MutexGuard[T], etc.
+            static const std::unordered_set<std::string> deref_types = {
+                "Arc",
+                "Rc",
+                "Box",
+                "Heap",
+                "Shared",
+                "Sync",
+                "MutexGuard",
+                "RwLockReadGuard",
+                "RwLockWriteGuard",
+                "Ref",
+                "RefMut",
+                "Ptr", // Allow (*ptr).field to access fields through Ptr[T]
+            };
+
+            if (deref_types.count(named.name) > 0 && !named.type_args.empty()) {
+                // Get the inner type (T in Arc[T])
+                auto inner_type = named.type_args[0];
+
+                // Recursively look up field on the inner type
+                if (inner_type->is<NamedType>()) {
+                    auto& inner_named = inner_type->as<NamedType>();
+                    auto inner_struct = env_.lookup_struct(inner_named.name);
+                    if (inner_struct) {
+                        std::unordered_map<std::string, TypePtr> inner_subs;
+                        if (!inner_struct->type_params.empty() && !inner_named.type_args.empty()) {
+                            for (size_t i = 0; i < inner_struct->type_params.size() &&
+                                               i < inner_named.type_args.size();
+                                 ++i) {
+                                inner_subs[inner_struct->type_params[i]] = inner_named.type_args[i];
+                            }
+                        }
+
+                        for (const auto& [fname, ftype] : inner_struct->fields) {
+                            if (fname == field.field) {
+                                if (!inner_subs.empty()) {
+                                    return substitute_type(ftype, inner_subs);
+                                }
+                                return ftype;
+                            }
+                        }
+                    }
+                }
+            }
+
             error("Unknown field: " + field.field, field.object->span);
         }
     }

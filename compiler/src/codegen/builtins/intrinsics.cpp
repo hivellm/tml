@@ -120,7 +120,9 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         // Slice intrinsics
         "slice_get", "slice_get_mut", "slice_set",
         // Math intrinsics
-        "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc"};
+        "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc",
+        // Drop intrinsic - for explicit destruction
+        "drop"};
 
     // Extract base name for intrinsic matching - handles qualified paths like
     // "core::intrinsics::sqrt" by extracting just "sqrt"
@@ -1067,6 +1069,121 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // fence()
     if (intrinsic_name == "fence") {
         emit_line("  fence seq_cst");
+        last_expr_type_ = "void";
+        return "0";
+    }
+
+    // drop[T](val: T) -> Unit
+    // Explicitly drops a value, calling its destructor if it has one.
+    // This intrinsic correctly handles generic type substitution.
+    if (intrinsic_name == "drop") {
+        if (!call.args.empty()) {
+            // CRITICAL: Mark the variable as consumed to prevent double-drop
+            // When a variable is explicitly dropped, the automatic drop at scope exit
+            // should NOT drop it again. This fixes hangs caused by unlocking mutexes twice.
+            if (call.args[0]->is<parser::IdentExpr>()) {
+                const auto& ident = call.args[0]->as<parser::IdentExpr>();
+                mark_var_consumed(ident.name);
+            }
+
+            // Infer the type of the argument, applying current type substitutions
+            types::TypePtr arg_semantic_type = infer_expr_type(*call.args[0]);
+
+            // Apply current type substitutions to resolve generic types
+            if (arg_semantic_type && arg_semantic_type->is<types::NamedType>()) {
+                const auto& named = arg_semantic_type->as<types::NamedType>();
+                // Check if this is a generic type parameter that needs substitution
+                auto sub_it = current_type_subs_.find(named.name);
+                if (sub_it != current_type_subs_.end()) {
+                    arg_semantic_type = sub_it->second;
+                }
+            }
+
+            std::string arg_val = gen_expr(*call.args[0]);
+            std::string arg_type = last_expr_type_;
+
+            // For primitive types (i8, i16, i32, i64, float, double, ptr, i1),
+            // drop is a no-op
+            if (arg_type == "i8" || arg_type == "i16" || arg_type == "i32" || arg_type == "i64" ||
+                arg_type == "i128" || arg_type == "float" || arg_type == "double" ||
+                arg_type == "ptr" || arg_type == "i1" || arg_type == "void") {
+                last_expr_type_ = "void";
+                return "0";
+            }
+
+            // For struct types, check if a drop function exists before calling
+            if (arg_type.starts_with("%struct.") || arg_type.starts_with("%class.")) {
+                // Extract the type name (e.g., "Counter" from "%struct.Counter")
+                std::string type_name;
+                if (arg_type.starts_with("%struct.")) {
+                    type_name = arg_type.substr(8); // Skip "%struct."
+                } else {
+                    type_name = arg_type.substr(7); // Skip "%class."
+                }
+
+                // Check if this type has a Drop implementation
+                // Look for drop method in impl blocks or generated functions
+                std::string drop_fn_name = "tml_" + type_name + "_drop";
+                bool has_drop = generated_functions_.count("@" + drop_fn_name) > 0 ||
+                                generated_impl_methods_.count(drop_fn_name) > 0;
+
+                // Also check in the environment for types that have Drop trait
+                if (!has_drop && arg_semantic_type) {
+                    // Check if there's a drop impl for this type in pending_generic_impls_
+                    // or if it's a known type with automatic drop (like Arc, Box, etc.)
+                    if (arg_semantic_type->is<types::NamedType>()) {
+                        const auto& named = arg_semantic_type->as<types::NamedType>();
+                        // Types that have automatic drop implementations
+                        static const std::unordered_set<std::string> auto_drop_types = {
+                            "Arc",
+                            "Rc",
+                            "Box",
+                            "Heap",
+                            "Shared",
+                            "Sync",
+                            "Mutex",
+                            "RwLock",
+                            "MutexGuard",
+                            "RwLockReadGuard",
+                            "RwLockWriteGuard",
+                            "Text",
+                            "List",
+                            "HashMap",
+                            "Buffer",
+                            "LockFreeQueue",
+                            "LockFreeStack"};
+                        // Check for base type (without generic args in mangled name)
+                        std::string base_type = named.name;
+                        auto pos = type_name.find("__");
+                        if (pos != std::string::npos) {
+                            base_type = type_name.substr(0, pos);
+                        }
+                        has_drop = auto_drop_types.count(base_type) > 0;
+                    }
+                }
+
+                if (has_drop) {
+                    // Generate the drop function name
+                    std::string drop_fn = "@tml_" + type_name + "_drop";
+
+                    // Store the value to get a pointer (drop functions take pointers)
+                    std::string temp_alloca = fresh_reg();
+                    emit_line("  " + temp_alloca + " = alloca " + arg_type);
+                    emit_line("  store " + arg_type + " " + arg_val + ", ptr " + temp_alloca);
+
+                    // Call the drop function with the pointer
+                    emit_line("  call void " + drop_fn + "(ptr " + temp_alloca + ")");
+                }
+                // If no drop impl, it's a no-op
+
+                last_expr_type_ = "void";
+                return "0";
+            }
+
+            // Fallback: just ignore the drop for unknown types
+            last_expr_type_ = "void";
+            return "0";
+        }
         last_expr_type_ = "void";
         return "0";
     }

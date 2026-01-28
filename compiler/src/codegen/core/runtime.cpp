@@ -779,17 +779,25 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             // Essential modules that are always needed (ordering, alloc, option)
             if (!should_process) {
                 static const std::unordered_set<std::string> essential_modules = {
-                    "ordering",
-                    "alloc",
-                    "option",
-                    "types",
+                    "core::ordering",    "core::alloc",      "core::option",       "core::types",
+                    "std::sync::atomic", "std::sync::mutex", "std::sync::condvar",
                 };
-                std::string last_segment = module_name;
-                auto last_sep = module_name.rfind("::");
-                if (last_sep != std::string::npos) {
-                    last_segment = module_name.substr(last_sep + 2);
+                // Check both full path and last segment for core modules
+                should_process = essential_modules.count(module_name) > 0;
+                if (!should_process) {
+                    // Also check last segment for backwards compat with non-prefixed modules
+                    std::string last_segment = module_name;
+                    auto last_sep = module_name.rfind("::");
+                    if (last_sep != std::string::npos) {
+                        last_segment = module_name.substr(last_sep + 2);
+                    }
+                    static const std::unordered_set<std::string> essential_last_segments = {
+                        "ordering",
+                        "alloc",
+                        "option",
+                    };
+                    should_process = essential_last_segments.count(last_segment) > 0;
                 }
-                should_process = essential_modules.count(last_segment) > 0;
             }
 
             if (!should_process) {
@@ -971,8 +979,29 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     // Also check if it's a dependency type (e.g., Ordering is used by atomics)
                     // Skip filtering for common dependency types and primitive behaviors
                     static const std::unordered_set<std::string> always_generate = {
-                        "Ordering", "MutexGuard", "RwLockReadGuard", "RwLockWriteGuard",
+                        "Ordering",
+                        "MutexGuard",
+                        "RwLockReadGuard",
+                        "RwLockWriteGuard",
                         "Weak", // Arc uses Weak
+                        // Atomic types - needed by Arc, Mutex, and other sync primitives
+                        "AtomicUsize",
+                        "AtomicIsize",
+                        "AtomicBool",
+                        "AtomicI32",
+                        "AtomicI64",
+                        "AtomicU32",
+                        "AtomicU64",
+                        "AtomicPtr",
+                        // Internal types used by sync primitives
+                        "ArcInner",
+                        "Layout",
+                        "LayoutError",
+                        // Sync primitives - needed by MPSC channels
+                        "Mutex",
+                        "Condvar",
+                        "RawMutex",
+                        "RawCondvar",
                     };
                     if (always_generate.find(type_name) == always_generate.end()) {
                         TML_DEBUG_LN("[MODULE] Skipping impl for non-imported type: " << type_name);

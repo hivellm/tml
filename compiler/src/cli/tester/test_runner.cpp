@@ -1541,7 +1541,11 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     options.source_file = test.file_path;
                     codegen::LLVMIRGen llvm_gen(env, options);
 
+                    if (verbose)
+                        std::cerr << "[DEBUG]   Starting codegen...\n" << std::flush;
                     auto gen_result = llvm_gen.generate(module);
+                    if (verbose)
+                        std::cerr << "[DEBUG]   Codegen complete\n" << std::flush;
                     if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
                         const auto& errors =
                             std::get<std::vector<codegen::LLVMGenError>>(gen_result);
@@ -1581,8 +1585,12 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     obj_options.debug_info = CompilerOptions::debug_info;
                     obj_options.verbose = false;
 
+                    if (verbose)
+                        std::cerr << "[DEBUG]   Starting clang compile...\n" << std::flush;
                     auto obj_result =
                         compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+                    if (verbose)
+                        std::cerr << "[DEBUG]   Clang compile complete\n" << std::flush;
                     fs::remove(ll_output);
 
                     if (!obj_result.success) {
@@ -1625,8 +1633,13 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
         std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
+        if (verbose)
+            std::cerr << "[DEBUG]   Getting runtime objects...\n" << std::flush;
         auto runtime_objects =
             get_runtime_objects(shared_registry, module, deps_cache, clang, verbose);
+        if (verbose)
+            std::cerr << "[DEBUG]   Got " << runtime_objects.size() << " runtime objects\n"
+                      << std::flush;
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
         // Generate suite hash for full caching (includes runtime objects)
@@ -1651,7 +1664,11 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             }
 
+            if (verbose)
+                std::cerr << "[DEBUG]   Starting link...\n" << std::flush;
             auto link_result = link_objects(object_files, cached_dll, clang, link_options);
+            if (verbose)
+                std::cerr << "[DEBUG]   Link complete\n" << std::flush;
             if (!link_result.success) {
                 result.error_message = "Linking failed: " + link_result.error_message;
                 return result;

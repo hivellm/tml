@@ -395,7 +395,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         }
     }
 
-    // Handle static methods from imported structs (like FormatSpec::new())
+    // Handle static methods from imported structs (like FormatSpec::new(), Text::from())
     if (env_.module_registry()) {
         std::string qualified_name = type_name + "::" + method;
         const auto& all_modules = env_.module_registry()->get_all_modules();
@@ -407,8 +407,27 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                 // Get return type - ensure struct type is defined
                 std::string ret_type = llvm_type_from_semantic(func_sig.return_type);
 
-                // Generate function name
-                std::string fn_name = "@tml_" + get_suite_prefix() + type_name + "_" + method;
+                // For library types, use no suite prefix; for local test types use suite prefix
+                bool is_library_type =
+                    mod.structs.count(type_name) > 0 || mod.enums.count(type_name) > 0;
+                std::string fn_name = "@tml_" + (is_library_type ? "" : get_suite_prefix()) +
+                                      type_name + "_" + method;
+
+                // Queue method instantiation for library types
+                if (is_library_type) {
+                    std::string mangled_method_name = "tml_" + type_name + "_" + method;
+                    if (generated_impl_methods_.find(mangled_method_name) ==
+                        generated_impl_methods_.end()) {
+                        pending_impl_method_instantiations_.push_back(
+                            PendingImplMethod{type_name,
+                                              method,
+                                              {},
+                                              type_name,
+                                              "",
+                                              /*is_library_type=*/true});
+                        generated_impl_methods_.insert(mangled_method_name);
+                    }
+                }
 
                 // Use registered function's return type if available (handles value class by-value
                 // returns)

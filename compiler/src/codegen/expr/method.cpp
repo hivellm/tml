@@ -93,6 +93,27 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
     if (s == "Str")
         return types::make_str();
 
+    // Check for pointer prefix (e.g., ptr_ChannelNode__I32 -> Ptr[ChannelNode[I32]])
+    // Must be checked BEFORE the __ delim check to properly handle nested types
+    if (s.size() > 4 && s.substr(0, 4) == "ptr_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = false, .inner = inner};
+            return t;
+        }
+    }
+    if (s.size() > 7 && s.substr(0, 7) == "mutptr_") {
+        std::string inner_str = s.substr(7);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = true, .inner = inner};
+            return t;
+        }
+    }
+
     // Check for nested generic (e.g., Mutex__I32)
     auto delim = s.find("__");
     if (delim != std::string::npos) {
@@ -308,10 +329,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     else if (inner_str == "Str")
                         inner = types::make_str();
                     else {
-                        // For struct types as inner
-                        auto inner_t = std::make_shared<types::Type>();
-                        inner_t->kind = types::NamedType{inner_str, "", {}};
-                        inner = inner_t;
+                        // For struct types as inner (including nested generics like
+                        // ChannelNode__I32)
+                        inner = parse_mangled_type_string(inner_str);
                     }
                     auto t = std::make_shared<types::Type>();
                     t->kind = types::PtrType{false, inner};
@@ -346,9 +366,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     else if (inner_str == "Str")
                         inner = types::make_str();
                     else {
-                        auto inner_t = std::make_shared<types::Type>();
-                        inner_t->kind = types::NamedType{inner_str, "", {}};
-                        inner = inner_t;
+                        // For struct types as inner (including nested generics like
+                        // ChannelNode__I32)
+                        inner = parse_mangled_type_string(inner_str);
                     }
                     auto t = std::make_shared<types::Type>();
                     t->kind = types::PtrType{true, inner};
@@ -369,10 +389,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     }
                 }
 
-                // For struct types, create a NamedType
-                auto t = std::make_shared<types::Type>();
-                t->kind = types::NamedType{type_arg_str, "", {}};
-                return t;
+                // For struct types, use parse_mangled_type_string for proper handling
+                return parse_mangled_type_string(type_arg_str);
             };
 
             // First, try to extract type args from explicit generics on the PathExpr (e.g.,
@@ -533,6 +551,24 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             // Determine if this is an imported library type (for suite prefix decisions)
             bool is_imported = !imported_type_params.empty();
+
+            // Also check if this is a non-generic imported type (e.g., Text::from)
+            // or an enum (e.g., AddressFamily::to_raw)
+            if (!is_imported && env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    auto struct_it = mod.structs.find(type_name);
+                    if (struct_it != mod.structs.end()) {
+                        is_imported = true;
+                        break;
+                    }
+                    auto enum_it = mod.enums.find(type_name);
+                    if (enum_it != mod.enums.end()) {
+                        is_imported = true;
+                        break;
+                    }
+                }
+            }
 
             // Request impl method instantiation if needed
             // This must be done regardless of func_sig to handle local generic structs
@@ -1014,8 +1050,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 std::string struct_type_name = base_type_name;
                 if (!base_named.type_args.empty()) {
                     // Ensure generic struct is instantiated so fields are registered
-                    require_struct_instantiation(base_type_name, base_named.type_args);
-                    struct_type_name = mangle_struct_name(base_type_name, base_named.type_args);
+                    // Use the return value which handles UNRESOLVED cases properly
+                    struct_type_name =
+                        require_struct_instantiation(base_type_name, base_named.type_args);
                 }
                 std::string llvm_struct_type = "%struct." + struct_type_name;
 
@@ -1058,10 +1095,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         if (deref_target->is<types::NamedType>()) {
                             const auto& inner_named = deref_target->as<types::NamedType>();
                             if (!inner_named.type_args.empty()) {
-                                require_struct_instantiation(inner_named.name,
-                                                             inner_named.type_args);
-                                struct_type_name =
-                                    mangle_struct_name(inner_named.name, inner_named.type_args);
+                                // Use return value to handle UNRESOLVED cases
+                                struct_type_name = require_struct_instantiation(
+                                    inner_named.name, inner_named.type_args);
                             } else {
                                 struct_type_name = inner_named.name;
                             }
@@ -1080,10 +1116,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         if (deref_target->is<types::NamedType>()) {
                             const auto& inner_named = deref_target->as<types::NamedType>();
                             if (!inner_named.type_args.empty()) {
-                                require_struct_instantiation(inner_named.name,
-                                                             inner_named.type_args);
-                                struct_type_name =
-                                    mangle_struct_name(inner_named.name, inner_named.type_args);
+                                // Use return value to handle UNRESOLVED cases
+                                struct_type_name = require_struct_instantiation(
+                                    inner_named.name, inner_named.type_args);
                             } else {
                                 struct_type_name = inner_named.name;
                             }
@@ -1158,38 +1193,14 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 if (sep_pos != std::string::npos) {
                     base_name = current_impl_type_.substr(0, sep_pos);
 
-                    // Parse type args from mangled suffix
+                    // Parse type args from mangled suffix using recursive parser
+                    // This properly handles nested types like ptr_ChannelNode__I32 as
+                    // Ptr[ChannelNode[I32]] For most generic types (Mutex, MutexGuard, Arc, etc.)
+                    // which have a single type parameter, this is the complete type arg.
                     std::string args_str = current_impl_type_.substr(sep_pos + 2);
-                    size_t pos = 0;
-                    while (pos < args_str.size()) {
-                        auto next_sep = args_str.find("__", pos);
-                        std::string arg = (next_sep == std::string::npos)
-                                              ? args_str.substr(pos)
-                                              : args_str.substr(pos, next_sep - pos);
-
-                        types::TypePtr arg_type;
-                        if (arg == "I32")
-                            arg_type = types::make_i32();
-                        else if (arg == "I64")
-                            arg_type = types::make_i64();
-                        else if (arg == "U32")
-                            arg_type = types::make_primitive(types::PrimitiveKind::U32);
-                        else if (arg == "U64")
-                            arg_type = types::make_primitive(types::PrimitiveKind::U64);
-                        else if (arg == "Bool")
-                            arg_type = types::make_bool();
-                        else if (arg == "Str")
-                            arg_type = types::make_str();
-                        else {
-                            auto t = std::make_shared<types::Type>();
-                            t->kind = types::NamedType{arg, "", {}};
-                            arg_type = t;
-                        }
-                        type_args.push_back(arg_type);
-
-                        if (next_sep == std::string::npos)
-                            break;
-                        pos = next_sep + 2;
+                    auto parsed_type = parse_mangled_type_string(args_str);
+                    if (parsed_type) {
+                        type_args.push_back(parsed_type);
                     }
                 }
 

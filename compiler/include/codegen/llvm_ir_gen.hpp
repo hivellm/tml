@@ -731,8 +731,13 @@ private:
     std::unordered_map<std::string, const parser::ImplDecl*> pending_generic_impls_;
 
     // Generated impl method instantiations (mangled_name -> true)
-    // Tracks which specialized methods have already been generated
+    // Tracks which specialized methods have been REQUESTED for generation
     std::unordered_set<std::string> generated_impl_methods_;
+
+    // Tracks which impl methods have actually been OUTPUT to prevent duplicates
+    // (separate from generated_impl_methods_ because the same method can be requested
+    // from multiple code paths before being processed)
+    std::unordered_set<std::string> generated_impl_methods_output_;
 
     // Generated function names (full LLVM names) to avoid duplicates
     // Used when processing directory modules that may have same-named functions
@@ -919,6 +924,10 @@ private:
     // Helper: convert LLVM type string back to semantic type (for common primitives)
     auto semantic_type_from_llvm(const std::string& llvm_type) -> types::TypePtr;
 
+    // Helper: check if a type contains unresolved generic type parameters
+    // Returns true if the type or any nested type contains GenericType
+    auto contains_unresolved_generic(const types::TypePtr& type) -> bool;
+
     // Helper: unify a parser type pattern with a semantic type to extract type bindings
     // Example: unify(Maybe[T], Maybe[I32], {T}) -> {T: I32}
     void unify_types(const parser::Type& pattern, const types::TypePtr& concrete,
@@ -1095,6 +1104,8 @@ private:
     auto get_field_index(const std::string& struct_name, const std::string& field_name) -> int;
     auto get_field_type(const std::string& struct_name, const std::string& field_name)
         -> std::string;
+    auto get_field_semantic_type(const std::string& struct_name, const std::string& field_name)
+        -> types::TypePtr;
     auto get_class_field_info(const std::string& class_name, const std::string& field_name)
         -> std::optional<ClassFieldInfo>;
 

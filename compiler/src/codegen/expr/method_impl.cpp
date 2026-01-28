@@ -197,6 +197,36 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             generated_impl_methods_.insert(mangled_method_name);
         }
     }
+    // Handle non-generic imported types with non-generic methods (e.g., Text::as_str)
+    else {
+        // Check if this is an imported type (struct or enum)
+        if (env_.module_registry()) {
+            const auto& all_modules = env_.module_registry()->get_all_modules();
+            for (const auto& [mod_name, mod] : all_modules) {
+                auto struct_it = mod.structs.find(named.name);
+                if (struct_it != mod.structs.end()) {
+                    is_imported = true;
+                    break;
+                }
+                auto enum_it = mod.enums.find(named.name);
+                if (enum_it != mod.enums.end()) {
+                    is_imported = true;
+                    break;
+                }
+            }
+        }
+
+        if (is_imported) {
+            std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method;
+            if (generated_impl_methods_.find(mangled_method_name) ==
+                generated_impl_methods_.end()) {
+                pending_impl_method_instantiations_.push_back(
+                    PendingImplMethod{mangled_type_name, method, type_subs, named.name,
+                                      /*method_type_suffix=*/"", /*is_library_type=*/true});
+                generated_impl_methods_.insert(mangled_method_name);
+            }
+        }
+    }
 
     // Look up in functions_ to get the correct LLVM name
     std::string full_method_name = method;

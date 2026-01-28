@@ -24,8 +24,131 @@
 #include "types/module.hpp"
 
 #include <iostream>
+#include <unordered_set>
 
 namespace tml::codegen {
+
+// Helper: Parse a mangled type string back into a semantic type
+// e.g., "ptr_ChannelNode__I32" -> PtrType{inner=NamedType{name="ChannelNode", type_args=[I32]}}
+static types::TypePtr parse_mangled_type_string(const std::string& s) {
+    // Handle primitive types
+    if (s == "I8")
+        return types::make_primitive(types::PrimitiveKind::I8);
+    if (s == "I16")
+        return types::make_primitive(types::PrimitiveKind::I16);
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I128")
+        return types::make_primitive(types::PrimitiveKind::I128);
+    if (s == "U8")
+        return types::make_primitive(types::PrimitiveKind::U8);
+    if (s == "U16")
+        return types::make_primitive(types::PrimitiveKind::U16);
+    if (s == "U32")
+        return types::make_primitive(types::PrimitiveKind::U32);
+    if (s == "U64")
+        return types::make_primitive(types::PrimitiveKind::U64);
+    if (s == "U128")
+        return types::make_primitive(types::PrimitiveKind::U128);
+    if (s == "F32")
+        return types::make_primitive(types::PrimitiveKind::F32);
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+    if (s == "Unit")
+        return types::make_unit();
+
+    // Check for pointer prefix (e.g., ptr_ChannelNode__I32 -> Ptr[ChannelNode[I32]])
+    if (s.size() > 4 && s.substr(0, 4) == "ptr_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = false, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for mutable pointer prefix
+    if (s.size() > 7 && s.substr(0, 7) == "mutptr_") {
+        std::string inner_str = s.substr(7);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = true, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for ref prefix
+    if (s.size() > 4 && s.substr(0, 4) == "ref_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::RefType{.is_mut = false, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for mutable ref prefix
+    if (s.size() > 7 && s.substr(0, 7) == "mutref_") {
+        std::string inner_str = s.substr(7);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::RefType{.is_mut = true, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for nested generic (e.g., Mutex__I32, ChannelNode__I32)
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+
+        // Parse all type arguments (separated by __)
+        std::vector<types::TypePtr> type_args;
+        size_t pos = 0;
+        while (pos < arg_str.size()) {
+            // Find next __ delimiter
+            auto next_delim = arg_str.find("__", pos);
+            std::string arg_part;
+            if (next_delim == std::string::npos) {
+                arg_part = arg_str.substr(pos);
+                pos = arg_str.size();
+            } else {
+                arg_part = arg_str.substr(pos, next_delim - pos);
+                pos = next_delim + 2;
+            }
+
+            auto arg_type = parse_mangled_type_string(arg_part);
+            if (arg_type) {
+                type_args.push_back(arg_type);
+            } else {
+                // Fallback: create NamedType
+                auto t = std::make_shared<types::Type>();
+                t->kind = types::NamedType{arg_part, "", {}};
+                type_args.push_back(t);
+            }
+        }
+
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::NamedType{base, "", std::move(type_args)};
+        return t;
+    }
+
+    // Simple struct type (no generics, no prefix)
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
 
 // Helper: infer semantic type from expression for generics instantiation
 auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
@@ -244,10 +367,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                 else if (elem_name == "Unit")
                                     elem_type = types::make_unit();
                                 else {
-                                    // Named type (struct)
-                                    auto et = std::make_shared<types::Type>();
-                                    et->kind = types::NamedType{elem_name, "", {}};
-                                    elem_type = et;
+                                    // Named type (struct) - parse mangled name properly
+                                    elem_type = parse_mangled_type_string(elem_name);
                                 }
                                 elements.push_back(elem_type);
 
@@ -257,10 +378,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                             }
                             arg_type = types::make_tuple(std::move(elements));
                         } else {
-                            // Named type without generics
-                            auto t = std::make_shared<types::Type>();
-                            t->kind = types::NamedType{arg, "", {}};
-                            arg_type = t;
+                            // Named type without generics - parse mangled name properly
+                            arg_type = parse_mangled_type_string(arg);
                         }
                         type_args.push_back(arg_type);
 
@@ -274,10 +393,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     return result;
                 }
 
-                // Non-generic struct type
-                auto result = std::make_shared<types::Type>();
-                result->kind = types::NamedType{mangled, "", {}};
-                return result;
+                // Non-generic struct type - parse mangled name properly
+                return parse_mangled_type_string(mangled);
             }
         }
 
@@ -327,12 +444,36 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 TML_DEBUG_LN("[INFER]   RefType inner="
                              << (inner_type ? types::type_to_string(inner_type) : "null"));
             } else if (operand_type->is<types::NamedType>()) {
-                // Handle TML's Ptr[T] or RawPtr[T] wrapper types
+                // Handle TML's Ptr[T], RawPtr[T], and smart pointer types
                 const auto& named = operand_type->as<types::NamedType>();
-                if ((named.name == "Ptr" || named.name == "RawPtr") && !named.type_args.empty()) {
-                    inner_type = named.type_args[0];
-                    TML_DEBUG_LN("[INFER]   NamedType Ptr inner="
-                                 << (inner_type ? types::type_to_string(inner_type) : "null"));
+                if (!named.type_args.empty()) {
+                    // Check for Ptr/RawPtr
+                    if (named.name == "Ptr" || named.name == "RawPtr") {
+                        inner_type = named.type_args[0];
+                        TML_DEBUG_LN("[INFER]   NamedType Ptr inner="
+                                     << (inner_type ? types::type_to_string(inner_type) : "null"));
+                    }
+                    // Check for smart pointer types that implement Deref
+                    // These return their inner type T when dereferenced
+                    static const std::unordered_set<std::string> deref_types = {
+                        "Arc",
+                        "Box",
+                        "Heap",
+                        "Rc",
+                        "Shared",
+                        "Weak",
+                        "MutexGuard",
+                        "RwLockReadGuard",
+                        "RwLockWriteGuard",
+                        "Ref",
+                        "RefMut",
+                    };
+                    if (deref_types.count(named.name) > 0) {
+                        inner_type = named.type_args[0];
+                        TML_DEBUG_LN("[INFER]   NamedType "
+                                     << named.name << " deref inner="
+                                     << (inner_type ? types::type_to_string(inner_type) : "null"));
+                    }
                 }
             }
 
@@ -600,6 +741,15 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             if (!named.type_args.empty()) {
                 lookup_name = mangle_struct_name(named.name, named.type_args);
             }
+
+            // First try to get the semantic type directly (preserves full type info)
+            types::TypePtr field_sem_type = get_field_semantic_type(lookup_name, field.field);
+            if (field_sem_type) {
+                TML_DEBUG_LN("[INFER] Got semantic type from registry: "
+                             << types::type_to_string(field_sem_type));
+                return field_sem_type;
+            }
+
             std::string field_llvm_type = get_field_type(lookup_name, field.field);
             // Convert LLVM type back to semantic type
             if (field_llvm_type == "i32")
@@ -613,7 +763,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             if (field_llvm_type == "double")
                 return types::make_f64();
             if (field_llvm_type == "ptr")
-                return types::make_str();
+                return types::make_str(); // Legacy fallback for unknown ptr types
             if (field_llvm_type.starts_with("%struct.")) {
                 std::string mangled = field_llvm_type.substr(8);
 
@@ -758,10 +908,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     return result;
                 }
 
-                // Non-generic struct type
-                auto result = std::make_shared<types::Type>();
-                result->kind = types::NamedType{mangled, "", {}};
-                return result;
+                // Non-generic struct type - parse mangled name properly
+                return parse_mangled_type_string(mangled);
             }
             // Handle slice type: { ptr, i64 }
             if (field_llvm_type == "{ ptr, i64 }") {
@@ -1443,9 +1591,23 @@ auto LLVMIRGen::get_deref_target_type(const types::TypePtr& type) -> types::Type
     // Heap[T] -> T (via deref) - TML's name for Box
     // Rc[T] -> T (via deref)
     // Shared[T] -> T (via deref) - TML's name for Rc
+    // Ptr[T] -> T (via deref in lowlevel blocks)
+    // MutexGuard[T] -> T (via deref)
 
-    static const std::unordered_set<std::string> deref_types = {"Arc", "Box",    "Heap",
-                                                                "Rc",  "Shared", "Weak"};
+    static const std::unordered_set<std::string> deref_types = {
+        "Arc",
+        "Box",
+        "Heap",
+        "Rc",
+        "Shared",
+        "Weak",
+        "Ptr",
+        "MutexGuard",
+        "RwLockReadGuard",
+        "RwLockWriteGuard",
+        "Ref",
+        "RefMut",
+    };
 
     if (deref_types.count(named.name) && !named.type_args.empty()) {
         // For these types, Deref::Target is the first type argument

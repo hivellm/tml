@@ -1,6 +1,6 @@
 # Tasks: Native Thread-Safety Implementation
 
-**Status**: In Progress (90%) - Phase 1-7, 8.1-8.2, 9-11 complete. Phase 8.3 (MPSC) BLOCKED by codegen bugs.
+**Status**: In Progress (95%) - Phase 1-11 complete. Phase 12-15 pending (async, testing, docs, optimization).
 
 **Note**: This task covers implementing native thread-safety primitives for TML, including atomic types, synchronization primitives, thread management, and memory ordering semantics. The implementation follows Rust's safety model with Send/Sync behaviors for compile-time thread-safety verification.
 

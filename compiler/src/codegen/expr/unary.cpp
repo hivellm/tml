@@ -27,6 +27,94 @@
 
 namespace tml::codegen {
 
+// Static helper to parse mangled type strings back to semantic types
+static types::TypePtr parse_mangled_type_string(const std::string& s) {
+    // Primitives
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I8};
+        return t;
+    }
+    if (s == "I16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I16};
+        return t;
+    }
+    if (s == "U8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U8};
+        return t;
+    }
+    if (s == "U16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U16};
+        return t;
+    }
+    if (s == "U32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U32};
+        return t;
+    }
+    if (s == "U64") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "F32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::F32};
+        return t;
+    }
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+
+    // Check for pointer prefix
+    if (s.size() > 4 && s.substr(0, 4) == "ptr_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = false, .inner = inner};
+            return t;
+        }
+    }
+    if (s.size() > 7 && s.substr(0, 7) == "mutptr_") {
+        std::string inner_str = s.substr(7);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = true, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for nested generic (e.g., Mutex__I32)
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+        auto inner = parse_mangled_type_string(arg_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::NamedType{base, "", {inner}};
+            return t;
+        }
+    }
+
+    // Simple struct type
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
     // Handle ref operations specially - we need the address, not the value
     if (unary.op == parser::UnaryOp::Ref || unary.op == parser::UnaryOp::RefMut) {
@@ -172,9 +260,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                                     else if (arg == "F64")
                                         arg_type = types::make_primitive(types::PrimitiveKind::F64);
                                     else {
-                                        auto t = std::make_shared<types::Type>();
-                                        t->kind = types::NamedType{arg, "", {}};
-                                        arg_type = t;
+                                        // Use parse_mangled_type_string for proper handling
+                                        arg_type = parse_mangled_type_string(arg);
                                     }
                                     outer_type_args.push_back(arg_type);
                                     if (next_sep == std::string::npos)
@@ -250,9 +337,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                             else if (arg == "Str")
                                 arg_type = types::make_str();
                             else {
-                                auto t = std::make_shared<types::Type>();
-                                t->kind = types::NamedType{arg, "", {}};
-                                arg_type = t;
+                                // Use parse_mangled_type_string for proper handling
+                                arg_type = parse_mangled_type_string(arg);
                             }
                             type_args_for_struct.push_back(arg_type);
                             if (next_sep == std::string::npos)
@@ -309,10 +395,11 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
 
                     // If we have type_args, ensure struct is instantiated first
                     // This registers fields in struct_fields_ so we can look them up
+                    // Use the return value which handles UNRESOLVED cases properly
                     std::string struct_type_name_for_lookup = lookup_name;
                     if (!type_args.empty()) {
-                        require_struct_instantiation(type_name, type_args);
-                        struct_type_name_for_lookup = mangle_struct_name(type_name, type_args);
+                        struct_type_name_for_lookup =
+                            require_struct_instantiation(type_name, type_args);
                     }
 
                     // First check struct_fields_ directly for instantiated generic structs
@@ -391,9 +478,9 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                         std::string llvm_struct_type;
                         bool is_class = env_.lookup_class(lookup_name).has_value();
                         if (!type_args.empty()) {
-                            // Struct already instantiated above
-                            llvm_struct_type =
-                                "%struct." + mangle_struct_name(type_name, type_args);
+                            // Use the result from require_struct_instantiation which was called
+                            // above struct_type_name_for_lookup should already be set correctly
+                            llvm_struct_type = "%struct." + struct_type_name_for_lookup;
                         } else if (is_class) {
                             // Classes use %class. prefix in LLVM type names
                             // Note: class fields are offset by 1 due to vtable pointer
@@ -463,6 +550,25 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                     if (it != locals_.end()) {
                         guard_ptr = it->second.reg;
                     }
+                } else {
+                    // For non-identifier operands (like *guard where guard is a ref),
+                    // evaluate the expression and store to a temp alloca
+                    std::string guard_value = gen_expr(*unary.operand);
+                    types::TypePtr concrete_inner = named.type_args[0];
+                    if (!current_type_subs_.empty()) {
+                        concrete_inner =
+                            apply_type_substitutions(concrete_inner, current_type_subs_);
+                    }
+                    // Use require_struct_instantiation to handle UNRESOLVED cases
+                    std::string guard_mangled_temp = require_struct_instantiation(
+                        "MutexGuard", std::vector<types::TypePtr>{concrete_inner});
+                    std::string guard_type_temp = "%struct." + guard_mangled_temp;
+
+                    guard_ptr = fresh_reg();
+                    emit_line("  " + guard_ptr + " = alloca " + guard_type_temp);
+                    emit_line("  store " + guard_type_temp + " " + guard_value + ", ptr " +
+                              guard_ptr);
+                    TML_DEBUG_LN("[DEREF] Created temp alloca for MutexGuard: " << guard_ptr);
                 }
 
                 if (!guard_ptr.empty()) {
@@ -478,10 +584,11 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                     }
 
                     // Get the mangled MutexGuard and Mutex type names
-                    std::string guard_mangled = mangle_struct_name(
+                    // Use require_struct_instantiation to handle UNRESOLVED cases
+                    std::string guard_mangled = require_struct_instantiation(
                         "MutexGuard", std::vector<types::TypePtr>{concrete_inner});
-                    std::string mutex_mangled =
-                        mangle_struct_name("Mutex", std::vector<types::TypePtr>{concrete_inner});
+                    std::string mutex_mangled = require_struct_instantiation(
+                        "Mutex", std::vector<types::TypePtr>{concrete_inner});
                     std::string guard_type = "%struct." + guard_mangled;
                     std::string mutex_type = "%struct." + mutex_mangled;
 
@@ -498,6 +605,77 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                     std::string data_ptr = fresh_reg();
                     emit_line("  " + data_ptr + " = getelementptr " + mutex_type + ", ptr " +
                               mutex_ptr + ", i32 0, i32 0");
+
+                    // Load the data value
+                    inner_llvm_type = llvm_type_from_semantic(concrete_inner);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+                    last_expr_type_ = inner_llvm_type;
+                    return result;
+                }
+            }
+
+            // Handle Arc[T] - deref returns T via ptr->data
+            // Arc[T] { ptr: Ptr[ArcInner[T]] }
+            // ArcInner[T] { strong, weak, data: T }
+            if (named.name == "Arc" && !named.type_args.empty()) {
+                TML_DEBUG_LN(
+                    "[DEREF] Arc detected, type_arg=" << types::type_to_string(named.type_args[0]));
+
+                // Get pointer to the Arc (not the value)
+                std::string arc_ptr;
+                if (unary.operand->is<parser::IdentExpr>()) {
+                    const auto& ident = unary.operand->as<parser::IdentExpr>();
+                    auto it = locals_.find(ident.name);
+                    if (it != locals_.end()) {
+                        arc_ptr = it->second.reg;
+                    }
+                } else {
+                    // For non-identifier operands, evaluate and store to temp
+                    std::string arc_value = gen_expr(*unary.operand);
+                    types::TypePtr concrete_inner = named.type_args[0];
+                    if (!current_type_subs_.empty()) {
+                        concrete_inner =
+                            apply_type_substitutions(concrete_inner, current_type_subs_);
+                    }
+                    // Use require_struct_instantiation to handle UNRESOLVED cases
+                    std::string arc_mangled_temp = require_struct_instantiation(
+                        "Arc", std::vector<types::TypePtr>{concrete_inner});
+                    std::string arc_type_temp = "%struct." + arc_mangled_temp;
+
+                    arc_ptr = fresh_reg();
+                    emit_line("  " + arc_ptr + " = alloca " + arc_type_temp);
+                    emit_line("  store " + arc_type_temp + " " + arc_value + ", ptr " + arc_ptr);
+                }
+
+                if (!arc_ptr.empty()) {
+                    types::TypePtr concrete_inner = named.type_args[0];
+                    if (!current_type_subs_.empty()) {
+                        concrete_inner =
+                            apply_type_substitutions(concrete_inner, current_type_subs_);
+                    }
+
+                    // Use require_struct_instantiation to handle UNRESOLVED cases
+                    std::string arc_mangled = require_struct_instantiation(
+                        "Arc", std::vector<types::TypePtr>{concrete_inner});
+                    std::string inner_mangled = require_struct_instantiation(
+                        "ArcInner", std::vector<types::TypePtr>{concrete_inner});
+                    std::string arc_type = "%struct." + arc_mangled;
+                    std::string inner_type = "%struct." + inner_mangled;
+
+                    // GEP to get ptr field (field 0) of Arc
+                    std::string ptr_field_ptr = fresh_reg();
+                    emit_line("  " + ptr_field_ptr + " = getelementptr " + arc_type + ", ptr " +
+                              arc_ptr + ", i32 0, i32 0");
+
+                    // Load the ArcInner pointer
+                    std::string inner_ptr = fresh_reg();
+                    emit_line("  " + inner_ptr + " = load ptr, ptr " + ptr_field_ptr);
+
+                    // GEP to get data field (field 2) of ArcInner
+                    std::string data_ptr = fresh_reg();
+                    emit_line("  " + data_ptr + " = getelementptr " + inner_type + ", ptr " +
+                              inner_ptr + ", i32 0, i32 2");
 
                     // Load the data value
                     inner_llvm_type = llvm_type_from_semantic(concrete_inner);

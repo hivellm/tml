@@ -352,8 +352,17 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     continue;
                 }
                 // Skip generic impl blocks - they will be instantiated when methods are called
-                // (e.g., impl[T] Container[T] { ... } is not generated directly)
-                if (!impl.generics.empty()) {
+                // (e.g., impl[T] Container[T] { ... } or impl Wrapper[T] { ... } is not generated
+                // directly) Check both impl-level generics AND self_type generics
+                bool has_impl_generics = !impl.generics.empty();
+                bool has_type_generics = false;
+                if (impl.self_type->kind.index() == 0) { // NamedType
+                    const auto& named = std::get<parser::NamedType>(impl.self_type->kind);
+                    if (named.generics.has_value() && !named.generics->args.empty()) {
+                        has_type_generics = true;
+                    }
+                }
+                if (has_impl_generics || has_type_generics) {
                     // Store the generic impl block for later instantiation
                     pending_generic_impls_[type_name] = &impl;
                     continue;
@@ -792,9 +801,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
     // Generate main entry point
     bool has_user_main = false;
+    bool main_returns_void = true;
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>() && decl->as<parser::FuncDecl>().name == "main") {
             has_user_main = true;
+            const auto& func = decl->as<parser::FuncDecl>();
+            main_returns_void = !func.return_type.has_value();
             break;
         }
     }
@@ -1120,7 +1132,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
             emit_line("define i32 @" + entry_name + "() {");
 #endif
             emit_line("entry:");
-            emit_line("  %ret = call i32 @" + tml_main_fn + "()");
+            if (main_returns_void) {
+                emit_line("  call void @" + tml_main_fn + "()");
+            } else {
+                emit_line("  %ret = call i32 @" + tml_main_fn + "()");
+            }
             // Print coverage report if enabled
             if (options_.coverage_enabled) {
                 emit_line("  call void @print_coverage_report()");
@@ -1128,12 +1144,16 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     emit_line("  call void @write_coverage_html(ptr " + coverage_output_str + ")");
                 }
             }
-            emit_line("  ret i32 %ret");
+            emit_line("  ret i32 " + std::string(main_returns_void ? "0" : "%ret"));
             emit_line("}");
         } else {
             emit_line("define i32 @main(i32 %argc, ptr %argv) {");
             emit_line("entry:");
-            emit_line("  %ret = call i32 @" + tml_main_fn + "()");
+            if (main_returns_void) {
+                emit_line("  call void @" + tml_main_fn + "()");
+            } else {
+                emit_line("  %ret = call i32 @" + tml_main_fn + "()");
+            }
             // Print coverage report if enabled
             if (options_.coverage_enabled) {
                 emit_line("  call void @print_coverage_report()");
@@ -1141,7 +1161,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     emit_line("  call void @write_coverage_html(ptr " + coverage_output_str + ")");
                 }
             }
-            emit_line("  ret i32 %ret");
+            emit_line("  ret i32 " + std::string(main_returns_void ? "0" : "%ret"));
             emit_line("}");
         }
     }

@@ -34,6 +34,64 @@
 
 namespace tml::codegen {
 
+// Helper to parse mangled type strings for drop instantiation
+// Handles: primitives, ptr_X (Ptr[X]), Nested__Y (Nested[Y])
+static types::TypePtr parse_mangled_type_for_drop(const std::string& s) {
+    // Primitives
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "F32")
+        return types::make_primitive(types::PrimitiveKind::F32);
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Str")
+        return types::make_str();
+    if (s == "I8")
+        return types::make_primitive(types::PrimitiveKind::I8);
+    if (s == "I16")
+        return types::make_primitive(types::PrimitiveKind::I16);
+    if (s == "U8")
+        return types::make_primitive(types::PrimitiveKind::U8);
+    if (s == "U16")
+        return types::make_primitive(types::PrimitiveKind::U16);
+    if (s == "U32")
+        return types::make_primitive(types::PrimitiveKind::U32);
+    if (s == "U64")
+        return types::make_primitive(types::PrimitiveKind::U64);
+
+    // Pointer prefix: ptr_X -> Ptr[X]
+    if (s.size() > 4 && s.substr(0, 4) == "ptr_") {
+        auto inner = parse_mangled_type_for_drop(s.substr(4));
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.inner = inner};
+            return t;
+        }
+    }
+
+    // Nested generic: Base__Arg -> Base[Arg]
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+        auto inner = parse_mangled_type_for_drop(arg_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::NamedType{base, "", {inner}};
+            return t;
+        }
+    }
+
+    // Simple struct type
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 void LLVMIRGen::mark_var_consumed(const std::string& var_name) {
     consumed_vars_.insert(var_name);
 }
@@ -56,6 +114,8 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
         return;
     }
 
+    TML_DEBUG_LN("[DROP] Registering " << var_name << " for drop, type=" << type_name);
+
     if (!drop_scopes_.empty()) {
         drop_scopes_.back().push_back(DropInfo{var_name, var_reg, type_name, llvm_type});
 
@@ -67,28 +127,17 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
 
             // Check if Drop impl method already generated
             std::string drop_key = "tml_" + type_name + "_drop";
+            TML_DEBUG_LN("[DROP]   base_type=" << base_type << ", drop_key=" << drop_key
+                                               << ", already_generated="
+                                               << (generated_impl_methods_.find(drop_key) !=
+                                                   generated_impl_methods_.end()));
             if (generated_impl_methods_.find(drop_key) == generated_impl_methods_.end()) {
                 // Build type_subs from mangled name
                 std::unordered_map<std::string, types::TypePtr> type_subs;
                 std::string remaining = type_name.substr(sep_pos + 2);
 
-                // Assume single type parameter T for now
-                types::TypePtr type_arg = nullptr;
-                if (remaining == "I32")
-                    type_arg = types::make_i32();
-                else if (remaining == "I64")
-                    type_arg = types::make_i64();
-                else if (remaining == "Bool")
-                    type_arg = types::make_bool();
-                else if (remaining == "F32")
-                    type_arg = types::make_primitive(types::PrimitiveKind::F32);
-                else if (remaining == "F64")
-                    type_arg = types::make_f64();
-                else {
-                    auto t = std::make_shared<types::Type>();
-                    t->kind = types::NamedType{remaining, "", {}};
-                    type_arg = t;
-                }
+                // Parse mangled type parameter (handles ptr_X, Nested__Y, etc.)
+                types::TypePtr type_arg = parse_mangled_type_for_drop(remaining);
 
                 if (type_arg) {
                     type_subs["T"] = type_arg;

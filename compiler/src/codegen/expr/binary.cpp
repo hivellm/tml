@@ -27,6 +27,7 @@
 #include "lexer/lexer.hpp"
 
 #include <functional>
+#include <unordered_set>
 
 namespace tml::codegen {
 
@@ -155,9 +156,10 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                             }
 
                             // Get the mangled MutexGuard and Mutex type names
-                            std::string guard_mangled = mangle_struct_name(
+                            // Use require_struct_instantiation to handle UNRESOLVED cases
+                            std::string guard_mangled = require_struct_instantiation(
                                 "MutexGuard", std::vector<types::TypePtr>{concrete_inner});
-                            std::string mutex_mangled = mangle_struct_name(
+                            std::string mutex_mangled = require_struct_instantiation(
                                 "Mutex", std::vector<types::TypePtr>{concrete_inner});
                             std::string guard_type = "%struct." + guard_mangled;
                             std::string mutex_type = "%struct." + mutex_mangled;
@@ -277,6 +279,155 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                                 // Get the inner type (first type arg)
                                 struct_type = llvm_type_from_semantic(named.type_args[0]);
                             }
+                            // Handle smart pointer types that implement DerefMut
+                            // For (*guard).field = value where guard is MutexGuard[T]
+                            static const std::unordered_set<std::string> deref_mut_types = {
+                                "Arc",
+                                "Box",
+                                "Heap",
+                                "Rc",
+                                "Shared",
+                                "Weak",
+                                "MutexGuard",
+                                "RwLockReadGuard",
+                                "RwLockWriteGuard",
+                                "Ref",
+                                "RefMut",
+                            };
+                            if (deref_mut_types.count(named.name) > 0 && !named.type_args.empty()) {
+                                // Get the inner type (first type arg)
+                                types::TypePtr inner_type = named.type_args[0];
+                                if (!current_type_subs_.empty()) {
+                                    inner_type =
+                                        apply_type_substitutions(inner_type, current_type_subs_);
+                                }
+                                struct_type = llvm_type_from_semantic(inner_type);
+                                TML_DEBUG_LN("[FIELD_ASSIGN] Smart pointer "
+                                             << named.name << " deref to " << struct_type);
+
+                                // For MutexGuard specifically, navigate to mutex->data
+                                if (named.name == "MutexGuard") {
+                                    // struct_ptr is currently the MutexGuard VALUE (not a pointer!)
+                                    // We need to store it to a temp alloca and navigate through it
+
+                                    // Get mangled type names
+                                    // Use require_struct_instantiation to handle UNRESOLVED cases
+                                    std::string guard_mangled = require_struct_instantiation(
+                                        "MutexGuard", std::vector<types::TypePtr>{inner_type});
+                                    std::string mutex_mangled = require_struct_instantiation(
+                                        "Mutex", std::vector<types::TypePtr>{inner_type});
+                                    std::string guard_llvm_type = "%struct." + guard_mangled;
+                                    std::string mutex_llvm_type = "%struct." + mutex_mangled;
+
+                                    // Store MutexGuard value to temp alloca
+                                    std::string temp_alloca = fresh_reg();
+                                    emit_line("  " + temp_alloca + " = alloca " + guard_llvm_type);
+                                    emit_line("  store " + guard_llvm_type + " " + struct_ptr +
+                                              ", ptr " + temp_alloca);
+
+                                    // GEP to mutex field (field 0) of MutexGuard
+                                    std::string mutex_field_ptr = fresh_reg();
+                                    emit_line("  " + mutex_field_ptr + " = getelementptr " +
+                                              guard_llvm_type + ", ptr " + temp_alloca +
+                                              ", i32 0, i32 0");
+
+                                    // Load the mutex pointer
+                                    std::string mutex_ptr = fresh_reg();
+                                    emit_line("  " + mutex_ptr + " = load ptr, ptr " +
+                                              mutex_field_ptr);
+
+                                    // GEP to data field (field 0) of Mutex
+                                    std::string data_ptr = fresh_reg();
+                                    emit_line("  " + data_ptr + " = getelementptr " +
+                                              mutex_llvm_type + ", ptr " + mutex_ptr +
+                                              ", i32 0, i32 0");
+
+                                    // For field access, we need the pointer to the data
+                                    // If inner_type is Ptr[T], load the pointer value
+                                    // Otherwise, data_ptr points directly to the struct
+                                    if (inner_type->is<types::NamedType>()) {
+                                        const auto& inner_named =
+                                            inner_type->as<types::NamedType>();
+                                        if (inner_named.name == "Ptr" &&
+                                            !inner_named.type_args.empty()) {
+                                            // Load the Ptr value
+                                            std::string ptr_val = fresh_reg();
+                                            emit_line("  " + ptr_val + " = load ptr, ptr " +
+                                                      data_ptr);
+                                            struct_ptr = ptr_val;
+                                            // struct_type is already set to inner of Ptr
+                                            struct_type =
+                                                llvm_type_from_semantic(inner_named.type_args[0]);
+                                            TML_DEBUG_LN("[FIELD_ASSIGN] MutexGuard[Ptr[T]] "
+                                                         "navigated to data ptr: "
+                                                         << struct_ptr);
+                                        } else {
+                                            struct_ptr = data_ptr;
+                                        }
+                                    } else {
+                                        struct_ptr = data_ptr;
+                                    }
+                                }
+                                // For Arc specifically, navigate to ptr->data
+                                // Arc[T] { ptr: Ptr[ArcInner[T]] }
+                                // ArcInner[T] { strong, weak, data: T }
+                                else if (named.name == "Arc") {
+                                    // Get mangled type names
+                                    // Use require_struct_instantiation to handle UNRESOLVED cases
+                                    std::string arc_mangled = require_struct_instantiation(
+                                        "Arc", std::vector<types::TypePtr>{inner_type});
+                                    std::string inner_mangled = require_struct_instantiation(
+                                        "ArcInner", std::vector<types::TypePtr>{inner_type});
+                                    std::string arc_llvm_type = "%struct." + arc_mangled;
+                                    std::string inner_llvm_type = "%struct." + inner_mangled;
+
+                                    // Store Arc value to temp alloca
+                                    std::string temp_alloca = fresh_reg();
+                                    emit_line("  " + temp_alloca + " = alloca " + arc_llvm_type);
+                                    emit_line("  store " + arc_llvm_type + " " + struct_ptr +
+                                              ", ptr " + temp_alloca);
+
+                                    // GEP to ptr field (field 0) of Arc
+                                    std::string ptr_field_ptr = fresh_reg();
+                                    emit_line("  " + ptr_field_ptr + " = getelementptr " +
+                                              arc_llvm_type + ", ptr " + temp_alloca +
+                                              ", i32 0, i32 0");
+
+                                    // Load the ArcInner pointer
+                                    std::string inner_ptr = fresh_reg();
+                                    emit_line("  " + inner_ptr + " = load ptr, ptr " +
+                                              ptr_field_ptr);
+
+                                    // GEP to data field (field 2) of ArcInner
+                                    std::string data_ptr = fresh_reg();
+                                    emit_line("  " + data_ptr + " = getelementptr " +
+                                              inner_llvm_type + ", ptr " + inner_ptr +
+                                              ", i32 0, i32 2");
+
+                                    // For field access, we need the pointer to the data
+                                    if (inner_type->is<types::NamedType>()) {
+                                        const auto& inner_named =
+                                            inner_type->as<types::NamedType>();
+                                        if (inner_named.name == "Ptr" &&
+                                            !inner_named.type_args.empty()) {
+                                            // Load the Ptr value
+                                            std::string ptr_val = fresh_reg();
+                                            emit_line("  " + ptr_val + " = load ptr, ptr " +
+                                                      data_ptr);
+                                            struct_ptr = ptr_val;
+                                            struct_type =
+                                                llvm_type_from_semantic(inner_named.type_args[0]);
+                                            TML_DEBUG_LN("[FIELD_ASSIGN] Arc[Ptr[T]] "
+                                                         "navigated to data ptr: "
+                                                         << struct_ptr);
+                                        } else {
+                                            struct_ptr = data_ptr;
+                                        }
+                                    } else {
+                                        struct_ptr = data_ptr;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -285,8 +436,14 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             if (!struct_type.empty() && !struct_ptr.empty()) {
                 // If struct_type is ptr (e.g., for mut ref parameters), resolve the inner type
                 // and load the pointer from the alloca first
+                TML_DEBUG_LN("[FIELD_ASSIGN] struct_type=" << struct_type
+                                                           << " struct_ptr=" << struct_ptr
+                                                           << " field=" << field.field);
                 if (struct_type == "ptr") {
                     types::TypePtr semantic_type = infer_expr_type(*field.object);
+                    TML_DEBUG_LN(
+                        "[FIELD_ASSIGN] semantic_type="
+                        << (semantic_type ? types::type_to_string(semantic_type) : "null"));
                     if (semantic_type) {
                         if (semantic_type->is<types::RefType>()) {
                             const auto& ref = semantic_type->as<types::RefType>();
@@ -307,6 +464,16 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                             const auto& cls = semantic_type->as<types::ClassType>();
                             struct_type = "%class." + cls.name;
                             // For class types, 'this' is already a direct pointer - no load needed
+                        } else if (semantic_type->is<types::NamedType>()) {
+                            // Handle Ptr[T] - struct_ptr is the pointer value, get inner type
+                            const auto& named = semantic_type->as<types::NamedType>();
+                            if (named.name == "Ptr" && !named.type_args.empty()) {
+                                struct_type = llvm_type_from_semantic(named.type_args[0]);
+                                TML_DEBUG_LN("[FIELD_ASSIGN] Ptr[T] inner type: " << struct_type);
+                                // struct_ptr is already the pointer value - no load needed
+                            } else {
+                                struct_type = llvm_type_from_semantic(semantic_type);
+                            }
                         } else {
                             struct_type = llvm_type_from_semantic(semantic_type);
                         }

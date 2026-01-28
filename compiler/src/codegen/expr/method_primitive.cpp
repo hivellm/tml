@@ -230,6 +230,216 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             last_expr_type_ = llvm_ty;
             return result;
         }
+
+        // abs() -> Self (absolute value for signed integers)
+        if (method == "abs" && is_signed) {
+            // if this < 0 { 0 - this } else { this }
+            std::string cmp = fresh_reg();
+            emit_line("  " + cmp + " = icmp slt " + llvm_ty + " " + receiver + ", 0");
+            std::string neg = fresh_reg();
+            emit_line("  " + neg + " = sub " + llvm_ty + " 0, " + receiver);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = select i1 " + cmp + ", " + llvm_ty + " " + neg + ", " +
+                      llvm_ty + " " + receiver);
+            last_expr_type_ = llvm_ty;
+            return result;
+        }
+
+        // signum() -> Self (sign: -1, 0, or 1)
+        if (method == "signum" && is_signed) {
+            // if this > 0 { 1 } else if this < 0 { -1 } else { 0 }
+            std::string cmp_pos = fresh_reg();
+            emit_line("  " + cmp_pos + " = icmp sgt " + llvm_ty + " " + receiver + ", 0");
+            std::string cmp_neg = fresh_reg();
+            emit_line("  " + cmp_neg + " = icmp slt " + llvm_ty + " " + receiver + ", 0");
+            std::string neg_one = fresh_reg();
+            emit_line("  " + neg_one + " = select i1 " + cmp_neg + ", " + llvm_ty + " -1, " +
+                      llvm_ty + " 0");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = select i1 " + cmp_pos + ", " + llvm_ty + " 1, " +
+                      llvm_ty + " " + neg_one);
+            last_expr_type_ = llvm_ty;
+            return result;
+        }
+
+        // is_positive() -> Bool (this > 0)
+        if (method == "is_positive" && is_signed) {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp sgt " + llvm_ty + " " + receiver + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+
+        // is_negative() -> Bool (this < 0)
+        if (method == "is_negative" && is_signed) {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp slt " + llvm_ty + " " + receiver + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+
+        // pow(exp) -> Self (integer power)
+        if (method == "pow" && is_integer) {
+            if (call.args.empty()) {
+                report_error("pow() requires an exponent argument", call.span);
+                return "0";
+            }
+            std::string exp = gen_expr(*call.args[0]);
+            // Use runtime function for integer power
+            // Convert to double, use float_pow, convert back
+            std::string double_base = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + double_base + " = sitofp " + llvm_ty + " " + receiver +
+                          " to double");
+            } else {
+                emit_line("  " + double_base + " = uitofp " + llvm_ty + " " + receiver +
+                          " to double");
+            }
+            std::string i32_exp = exp;
+            if (last_expr_type_ == "i64") {
+                i32_exp = fresh_reg();
+                emit_line("  " + i32_exp + " = trunc i64 " + exp + " to i32");
+            } else if (last_expr_type_ != "i32") {
+                i32_exp = fresh_reg();
+                emit_line("  " + i32_exp + " = sext " + last_expr_type_ + " " + exp + " to i32");
+            }
+            std::string double_result = fresh_reg();
+            emit_line("  " + double_result + " = call double @float_pow(double " + double_base +
+                      ", i32 " + i32_exp + ")");
+            std::string result = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + result + " = fptosi double " + double_result + " to " + llvm_ty);
+            } else {
+                emit_line("  " + result + " = fptoui double " + double_result + " to " + llvm_ty);
+            }
+            last_expr_type_ = llvm_ty;
+            return result;
+        }
+
+        // ============ Bit Assign Operations (mut this methods) ============
+        // These methods mutate the receiver and return void
+
+        // bitand_assign(rhs) - this = this & rhs
+        if (method == "bitand_assign" && !receiver_ptr.empty()) {
+            if (call.args.empty()) {
+                report_error("bitand_assign() requires an argument", call.span);
+                return "0";
+            }
+            std::string rhs = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = and " + llvm_ty + " " + receiver + ", " + rhs);
+            emit_line("  store " + llvm_ty + " " + result + ", ptr " + receiver_ptr);
+            last_expr_type_ = "void";
+            return std::string("void");
+        }
+
+        // bitor_assign(rhs) - this = this | rhs
+        if (method == "bitor_assign" && !receiver_ptr.empty()) {
+            if (call.args.empty()) {
+                report_error("bitor_assign() requires an argument", call.span);
+                return "0";
+            }
+            std::string rhs = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = or " + llvm_ty + " " + receiver + ", " + rhs);
+            emit_line("  store " + llvm_ty + " " + result + ", ptr " + receiver_ptr);
+            last_expr_type_ = "void";
+            return std::string("void");
+        }
+
+        // bitxor_assign(rhs) - this = this ^ rhs
+        if (method == "bitxor_assign" && !receiver_ptr.empty()) {
+            if (call.args.empty()) {
+                report_error("bitxor_assign() requires an argument", call.span);
+                return "0";
+            }
+            std::string rhs = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = xor " + llvm_ty + " " + receiver + ", " + rhs);
+            emit_line("  store " + llvm_ty + " " + result + ", ptr " + receiver_ptr);
+            last_expr_type_ = "void";
+            return std::string("void");
+        }
+
+        // shl_assign(rhs) - this = this << rhs
+        if (method == "shl_assign" && !receiver_ptr.empty()) {
+            if (call.args.empty()) {
+                report_error("shl_assign() requires an argument", call.span);
+                return "0";
+            }
+            std::string rhs = gen_expr(*call.args[0]);
+            std::string rhs_type = last_expr_type_;
+            // Ensure shift amount matches receiver type
+            std::string rhs_final = rhs;
+            if (rhs_type != llvm_ty) {
+                rhs_final = fresh_reg();
+                // Determine if we need to extend or truncate
+                int rhs_bits = (rhs_type == "i8")    ? 8
+                               : (rhs_type == "i16") ? 16
+                               : (rhs_type == "i32") ? 32
+                               : (rhs_type == "i64") ? 64
+                                                     : 128;
+                int llvm_bits = (llvm_ty == "i8")    ? 8
+                                : (llvm_ty == "i16") ? 16
+                                : (llvm_ty == "i32") ? 32
+                                : (llvm_ty == "i64") ? 64
+                                                     : 128;
+                if (rhs_bits > llvm_bits) {
+                    emit_line("  " + rhs_final + " = trunc " + rhs_type + " " + rhs + " to " +
+                              llvm_ty);
+                } else {
+                    emit_line("  " + rhs_final + " = zext " + rhs_type + " " + rhs + " to " +
+                              llvm_ty);
+                }
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = shl " + llvm_ty + " " + receiver + ", " + rhs_final);
+            emit_line("  store " + llvm_ty + " " + result + ", ptr " + receiver_ptr);
+            last_expr_type_ = "void";
+            return std::string("void");
+        }
+
+        // shr_assign(rhs) - this = this >> rhs (arithmetic for signed, logical for unsigned)
+        if (method == "shr_assign" && !receiver_ptr.empty()) {
+            if (call.args.empty()) {
+                report_error("shr_assign() requires an argument", call.span);
+                return "0";
+            }
+            std::string rhs = gen_expr(*call.args[0]);
+            std::string rhs_type = last_expr_type_;
+            // Ensure shift amount matches receiver type
+            std::string rhs_final = rhs;
+            if (rhs_type != llvm_ty) {
+                rhs_final = fresh_reg();
+                // Determine if we need to extend or truncate
+                int rhs_bits = (rhs_type == "i8")    ? 8
+                               : (rhs_type == "i16") ? 16
+                               : (rhs_type == "i32") ? 32
+                               : (rhs_type == "i64") ? 64
+                                                     : 128;
+                int llvm_bits = (llvm_ty == "i8")    ? 8
+                                : (llvm_ty == "i16") ? 16
+                                : (llvm_ty == "i32") ? 32
+                                : (llvm_ty == "i64") ? 64
+                                                     : 128;
+                if (rhs_bits > llvm_bits) {
+                    emit_line("  " + rhs_final + " = trunc " + rhs_type + " " + rhs + " to " +
+                              llvm_ty);
+                } else {
+                    emit_line("  " + rhs_final + " = zext " + rhs_type + " " + rhs + " to " +
+                              llvm_ty);
+                }
+            }
+            std::string result = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + result + " = ashr " + llvm_ty + " " + receiver + ", " + rhs_final);
+            } else {
+                emit_line("  " + result + " = lshr " + llvm_ty + " " + receiver + ", " + rhs_final);
+            }
+            emit_line("  store " + llvm_ty + " " + result + ", ptr " + receiver_ptr);
+            last_expr_type_ = "void";
+            return std::string("void");
+        }
     }
 
     // Bool operations

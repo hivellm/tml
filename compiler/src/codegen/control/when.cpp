@@ -305,6 +305,11 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         emit_line(arm_labels[arm_idx] + ":");
         block_terminated_ = false;
 
+        // Push a drop scope for arm-local bindings (e.g., destructured guards)
+        push_drop_scope();
+        // Save current locals so we can clean up arm-scoped bindings later
+        auto saved_locals = locals_;
+
         // Bind pattern variables
         if (arm.pattern->is<parser::EnumPattern>()) {
             const auto& enum_pat = arm.pattern->as<parser::EnumPattern>();
@@ -657,6 +662,20 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             }
         }
 
+        // Register arm-bound variables for drop (e.g., MutexGuard from Just(guard))
+        for (const auto& [name, info] : locals_) {
+            if (saved_locals.find(name) == saved_locals.end()) {
+                // This variable was bound in this arm
+                std::string type_name;
+                if (info.type.starts_with("%struct.")) {
+                    type_name = info.type.substr(8); // Strip "%struct."
+                }
+                if (!type_name.empty()) {
+                    register_for_drop(name, info.reg, type_name, info.type);
+                }
+            }
+        }
+
         // Execute arm body
         std::string arm_value = gen_expr(*arm.body);
         std::string arm_type = last_expr_type_;
@@ -681,11 +700,19 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             }
 
             emit_line("  store " + store_type + " " + store_value + ", ptr " + result_ptr);
+            // Drop arm-scoped variables before leaving the arm
+            emit_scope_drops();
             emit_line("  br label %" + label_end);
         } else if (!block_terminated_) {
             // Void arm - just branch to end
+            // Drop arm-scoped variables before leaving the arm
+            emit_scope_drops();
             emit_line("  br label %" + label_end);
         }
+
+        // Pop drop scope and restore locals (arm bindings are out of scope)
+        pop_drop_scope();
+        locals_ = saved_locals;
 
         // Next check label (if not last arm)
         if (arm_idx + 1 < when.arms.size()) {

@@ -372,14 +372,49 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
 
         // If it has type arguments, need to use mangled name and ensure instantiation
         if (!named.type_args.empty()) {
+            // Check if any type argument contains unresolved generic parameters
+            // If so, try to apply current type substitutions first
+            std::vector<types::TypePtr> resolved_type_args = named.type_args;
+            bool has_unresolved = false;
+            for (const auto& arg : named.type_args) {
+                if (contains_unresolved_generic(arg)) {
+                    has_unresolved = true;
+                    break;
+                }
+            }
+
+            // If there are unresolved generics, try to apply current_type_subs_
+            if (has_unresolved && !current_type_subs_.empty()) {
+                resolved_type_args.clear();
+                for (const auto& arg : named.type_args) {
+                    resolved_type_args.push_back(apply_type_substitutions(arg, current_type_subs_));
+                }
+                // Re-check if still has unresolved generics
+                has_unresolved = false;
+                for (const auto& arg : resolved_type_args) {
+                    if (contains_unresolved_generic(arg)) {
+                        has_unresolved = true;
+                        break;
+                    }
+                }
+            }
+
+            // If still has unresolved generics after substitution, skip instantiation
+            // This prevents creating invalid struct types with incomplete type arguments
+            if (has_unresolved) {
+                // Return opaque pointer type - the struct will be instantiated later
+                // when called with concrete types
+                return "ptr";
+            }
+
             // Check if it's a generic enum (like Maybe, Outcome)
             auto enum_it = pending_generic_enums_.find(named.name);
             if (enum_it != pending_generic_enums_.end()) {
-                std::string mangled = require_enum_instantiation(named.name, named.type_args);
+                std::string mangled = require_enum_instantiation(named.name, resolved_type_args);
                 return "%struct." + mangled;
             }
             // Otherwise try as struct
-            std::string mangled = require_struct_instantiation(named.name, named.type_args);
+            std::string mangled = require_struct_instantiation(named.name, resolved_type_args);
             return "%struct." + mangled;
         }
 
@@ -1027,6 +1062,92 @@ auto LLVMIRGen::apply_type_substitutions(
     }
 
     return type;
+}
+
+// ============ Unresolved Generic Check ============
+// Check if a type contains any unresolved generic type parameters
+// This is used to avoid premature struct instantiation with incomplete types
+
+auto LLVMIRGen::contains_unresolved_generic(const types::TypePtr& type) -> bool {
+    if (!type)
+        return false;
+
+    if (type->is<types::GenericType>()) {
+        // Found an unresolved generic parameter
+        return true;
+    }
+
+    if (type->is<types::NamedType>()) {
+        const auto& named = type->as<types::NamedType>();
+
+        // Check if this is a known generic struct being used without type arguments
+        // e.g., ChannelNode (which requires T) being used without [I32]
+        if (named.type_args.empty()) {
+            // Check if this struct requires type parameters
+            auto pgs_it = pending_generic_structs_.find(named.name);
+            if (pgs_it != pending_generic_structs_.end() && !pgs_it->second->generics.empty()) {
+                // This is a generic struct being used without type args - treat as unresolved
+                return true;
+            }
+            // Also check module registry for imported generic structs
+            if (env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    auto struct_it = mod.structs.find(named.name);
+                    if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
+                        // Imported generic struct being used without type args
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Check all type arguments recursively
+        for (const auto& arg : named.type_args) {
+            if (contains_unresolved_generic(arg)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    if (type->is<types::RefType>()) {
+        return contains_unresolved_generic(type->as<types::RefType>().inner);
+    }
+
+    if (type->is<types::PtrType>()) {
+        return contains_unresolved_generic(type->as<types::PtrType>().inner);
+    }
+
+    if (type->is<types::ArrayType>()) {
+        return contains_unresolved_generic(type->as<types::ArrayType>().element);
+    }
+
+    if (type->is<types::SliceType>()) {
+        return contains_unresolved_generic(type->as<types::SliceType>().element);
+    }
+
+    if (type->is<types::TupleType>()) {
+        const auto& tuple = type->as<types::TupleType>();
+        for (const auto& elem : tuple.elements) {
+            if (contains_unresolved_generic(elem)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    if (type->is<types::FuncType>()) {
+        const auto& func = type->as<types::FuncType>();
+        for (const auto& param : func.params) {
+            if (contains_unresolved_generic(param)) {
+                return true;
+            }
+        }
+        return contains_unresolved_generic(func.return_type);
+    }
+
+    return false;
 }
 
 // ============ Type Unification ============

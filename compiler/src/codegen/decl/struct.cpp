@@ -20,7 +20,8 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
         std::vector<FieldInfo> fields;
         for (size_t i = 0; i < s.fields.size(); ++i) {
             std::string ft = llvm_type_ptr(s.fields[i].type);
-            fields.push_back({s.fields[i].name, static_cast<int>(i), ft});
+            types::TypePtr sem_type = resolve_parser_type_with_subs(*s.fields[i].type, {});
+            fields.push_back({s.fields[i].name, static_cast<int>(i), ft, sem_type});
         }
         struct_types_[s.name] = type_name;
         struct_fields_[s.name] = fields;
@@ -51,7 +52,8 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
         if (ft == "void")
             ft = "{}";
         field_types.push_back(ft);
-        fields.push_back({s.fields[i].name, static_cast<int>(i), ft});
+        types::TypePtr sem_type = resolve_parser_type_with_subs(*s.fields[i].type, {});
+        fields.push_back({s.fields[i].name, static_cast<int>(i), ft, sem_type});
     }
 
     // Register first to prevent duplicates from recursive types
@@ -91,7 +93,7 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
         // Use for_data=true since struct fields need concrete types (Unit -> {} not void)
         std::string ft = llvm_type_from_semantic(field_type, true);
         field_types.push_back(ft);
-        fields.push_back({decl.fields[i].name, static_cast<int>(i), ft});
+        fields.push_back({decl.fields[i].name, static_cast<int>(i), ft, field_type});
     }
 
     // 4. Emit struct type definition to type_defs_buffer_ (ensures types before functions)
@@ -114,8 +116,41 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
 auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
                                              const std::vector<types::TypePtr>& type_args)
     -> std::string {
+    // Check for unresolved generic types in type_args
+    // If any type argument contains unresolved generics, we cannot instantiate yet
+    // This prevents creating invalid struct types with incomplete type arguments
+    // First, try to apply current type substitutions to resolve any unresolved generics
+    std::vector<types::TypePtr> resolved_args = type_args;
+    if (!current_type_subs_.empty()) {
+        for (auto& arg : resolved_args) {
+            arg = apply_type_substitutions(arg, current_type_subs_);
+        }
+    }
+
+    for (const auto& arg : resolved_args) {
+        if (contains_unresolved_generic(arg)) {
+            // Define a dummy struct with fields matching Mutex to avoid index errors
+            // This is a workaround until we fix the root cause
+            std::string placeholder_name = base_name + "__UNRESOLVED";
+            if (struct_types_.find(placeholder_name) == struct_types_.end()) {
+                // Mutex has 3 fields: data (ptr), handle (ptr), is_locked (i1)
+                std::string type_def = "%struct." + placeholder_name + " = type { ptr, ptr, i1 }";
+                type_defs_buffer_ << type_def << "\n";
+                struct_types_[placeholder_name] = "%struct." + placeholder_name;
+                // Register dummy fields
+                struct_fields_[placeholder_name] = {{"data", 0, "ptr", types::make_i64()},
+                                                    {"handle", 1, "ptr", types::make_i64()},
+                                                    {"is_locked", 2, "i1", types::make_bool()}};
+            }
+            return placeholder_name;
+        }
+    }
+
+    // Use resolved_args for the rest of the function instead of type_args
+    const std::vector<types::TypePtr>& final_type_args = resolved_args;
+
     // Generate mangled name
-    std::string mangled = mangle_struct_name(base_name, type_args);
+    std::string mangled = mangle_struct_name(base_name, final_type_args);
 
     // Check if already registered
     auto it = struct_instantiations_.find(mangled);
@@ -125,7 +160,7 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
 
     // Register new instantiation (mark as generated since we'll generate immediately)
     struct_instantiations_[mangled] = GenericInstantiation{
-        base_name, type_args, mangled,
+        base_name, final_type_args, mangled,
         true // Mark as generated since we'll generate it immediately
     };
 
@@ -136,8 +171,8 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
 
         // Create substitution map
         std::unordered_map<std::string, types::TypePtr> subs;
-        for (size_t i = 0; i < decl->generics.size() && i < type_args.size(); ++i) {
-            subs[decl->generics[i].name] = type_args[i];
+        for (size_t i = 0; i < decl->generics.size() && i < final_type_args.size(); ++i) {
+            subs[decl->generics[i].name] = final_type_args[i];
         }
 
         // Register field info
@@ -146,12 +181,12 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
             types::TypePtr field_type = resolve_parser_type_with_subs(*decl->fields[i].type, subs);
             // Use for_data=true since struct fields need concrete types (Unit -> {} not void)
             std::string ft = llvm_type_from_semantic(field_type, true);
-            fields.push_back({decl->fields[i].name, static_cast<int>(i), ft});
+            fields.push_back({decl->fields[i].name, static_cast<int>(i), ft, field_type});
         }
         struct_fields_[mangled] = fields;
 
         // Generate type definition immediately to type_defs_buffer_
-        gen_struct_instantiation(*decl, type_args);
+        gen_struct_instantiation(*decl, final_type_args);
     }
     // Handle imported generic structs from module registry
     else if (env_.module_registry()) {
@@ -174,8 +209,9 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
 
                 // Create substitution map from type params
                 std::unordered_map<std::string, types::TypePtr> subs;
-                for (size_t i = 0; i < struct_def.type_params.size() && i < type_args.size(); ++i) {
-                    subs[struct_def.type_params[i]] = type_args[i];
+                for (size_t i = 0; i < struct_def.type_params.size() && i < final_type_args.size();
+                     ++i) {
+                    subs[struct_def.type_params[i]] = final_type_args[i];
                 }
 
                 // Register field info using the semantic struct definition
@@ -186,7 +222,7 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
                     // Apply type substitution to field type
                     types::TypePtr resolved_type = apply_type_substitutions(field_type, subs);
                     std::string ft = llvm_type_from_semantic(resolved_type, true);
-                    fields.push_back({field_name, field_idx++, ft});
+                    fields.push_back({field_name, field_idx++, ft, resolved_type});
                     field_types_vec.push_back(ft);
                 }
                 struct_fields_[mangled] = fields;

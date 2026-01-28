@@ -143,6 +143,9 @@ void LLVMIRGen::generate_pending_instantiations() {
             pending_impl_method_instantiations_.clear();
 
             for (const auto& pim : pending) {
+                TML_DEBUG_LN("[IMPL_INST] Looking for "
+                             << pim.base_type_name << "::" << pim.method_name
+                             << " (mangled: " << pim.mangled_type_name << ")");
                 // First check locally defined impls
                 auto impl_it = pending_generic_impls_.find(pim.base_type_name);
                 if (impl_it != pending_generic_impls_.end()) {
@@ -197,6 +200,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                 } else if (env_.module_registry()) {
                     // Check imported modules - need to re-parse to get impl AST
                     const auto& all_modules = env_.module_registry()->get_all_modules();
+                    TML_DEBUG_LN("[IMPL_INST]   Not in local impls, searching "
+                                 << all_modules.size() << " modules");
                     bool found = false;
                     for (const auto& [mod_name, mod] : all_modules) {
                         if (found)
@@ -209,9 +214,15 @@ void LLVMIRGen::generate_pending_instantiations() {
                         if (struct_it == mod.structs.end() && !pim.is_library_type)
                             continue;
 
+                        TML_DEBUG_LN("[IMPL_INST]   Checking module: "
+                                     << mod_name << " (has struct: "
+                                     << (struct_it != mod.structs.end() ? "yes" : "no") << ")");
+
                         // Re-parse the module source to get impl AST
-                        if (mod.source_code.empty())
+                        if (mod.source_code.empty()) {
+                            TML_DEBUG_LN("[IMPL_INST]   Module has no source_code, skipping");
                             continue;
+                        }
 
                         auto source = lexer::Source::from_string(mod.source_code, mod.file_path);
                         lexer::Lexer lex(source);
@@ -246,6 +257,10 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 continue;
                             if (target.path.segments.back() != pim.base_type_name)
                                 continue;
+
+                            TML_DEBUG_LN("[IMPL_INST]   Found impl for "
+                                         << pim.base_type_name
+                                         << ", methods: " << impl_decl.methods.size());
 
                             // Process associated type bindings from the imported impl
                             auto saved_associated_types = current_associated_types_;

@@ -60,6 +60,15 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
     if (ret.value.has_value()) {
         val = gen_expr(*ret.value.value());
         val_type = last_expr_type_;
+
+        // Mark the returned variable as consumed (moved) so it won't be dropped.
+        // This prevents double-free / use-after-free for types with Drop (like Mutex).
+        // When returning a variable by value, the value is moved out and the local
+        // should NOT have its destructor called.
+        if (ret.value.value()->is<parser::IdentExpr>()) {
+            const auto& ident = ret.value.value()->as<parser::IdentExpr>();
+            mark_var_consumed(ident.name);
+        }
     }
 
     // Emit lifetime.end for all allocas before returning
