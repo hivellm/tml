@@ -129,6 +129,9 @@ pub type AtomicBool {
 }
 
 impl AtomicBool {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
     /// Creates a new `AtomicBool` with the given initial value.
     ///
     /// # Examples
@@ -274,6 +277,33 @@ impl AtomicBool {
         return this.compare_exchange(current, new, success, failure)
     }
 
+    /// Stores a value into the atomic boolean if the current value is the same
+    /// as the `current` value, returning the previous value.
+    ///
+    /// This is a simpler version of [`compare_exchange`][Self::compare_exchange]
+    /// with a single ordering parameter.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    /// let prev = flag.compare_and_swap(false, true, Ordering::SeqCst)
+    /// assert_eq(prev, false)  // Previous value was false
+    /// ```
+    pub func compare_and_swap(
+        mut this,
+        current: Bool,
+        new: Bool,
+        order: Ordering
+    ) -> Bool {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
+    }
+
     /// Logical "and" with a boolean value.
     ///
     /// Returns the previous value.
@@ -392,6 +422,9 @@ pub type AtomicI32 {
 }
 
 impl AtomicI32 {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
     /// Creates a new `AtomicI32` with the given initial value.
     pub func new(v: I32) -> AtomicI32 {
         return AtomicI32 { value: v }
@@ -446,6 +479,14 @@ impl AtomicI32 {
         failure: Ordering
     ) -> Outcome[I32, I32] {
         return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: I32, new: I32, order: Ordering) -> I32 {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
     }
 
     /// Adds to the current value, returning the previous value.
@@ -565,6 +606,9 @@ pub type AtomicI64 {
 }
 
 impl AtomicI64 {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
     pub func new(v: I64) -> AtomicI64 {
         return AtomicI64 { value: v }
     }
@@ -609,6 +653,14 @@ impl AtomicI64 {
         failure: Ordering
     ) -> Outcome[I64, I64] {
         return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: I64, new: I64, order: Ordering) -> I64 {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
     }
 
     pub func fetch_add(mut this, val: I64, order: Ordering) -> I64 {
@@ -687,6 +739,9 @@ pub type AtomicU32 {
 }
 
 impl AtomicU32 {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
     pub func new(v: U32) -> AtomicU32 {
         return AtomicU32 { value: v }
     }
@@ -731,6 +786,14 @@ impl AtomicU32 {
         failure: Ordering
     ) -> Outcome[U32, U32] {
         return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: U32, new: U32, order: Ordering) -> U32 {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
     }
 
     pub func fetch_add(mut this, val: U32, order: Ordering) -> U32 {
@@ -809,6 +872,9 @@ pub type AtomicU64 {
 }
 
 impl AtomicU64 {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
     pub func new(v: U64) -> AtomicU64 {
         return AtomicU64 { value: v }
     }
@@ -853,6 +919,14 @@ impl AtomicU64 {
         failure: Ordering
     ) -> Outcome[U64, U64] {
         return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: U64, new: U64, order: Ordering) -> U64 {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
     }
 
     pub func fetch_add(mut this, val: U64, order: Ordering) -> U64 {
@@ -934,6 +1008,9 @@ pub type AtomicUsize {
 }
 
 impl AtomicUsize {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
     pub func new(v: Usize) -> AtomicUsize {
         return AtomicUsize { value: v }
     }
@@ -978,6 +1055,14 @@ impl AtomicUsize {
         failure: Ordering
     ) -> Outcome[Usize, Usize] {
         return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: Usize, new: Usize, order: Ordering) -> Usize {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
     }
 
     pub func fetch_add(mut this, val: Usize, order: Ordering) -> Usize {
@@ -1056,6 +1141,9 @@ pub type AtomicIsize {
 }
 
 impl AtomicIsize {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
     pub func new(v: Isize) -> AtomicIsize {
         return AtomicIsize { value: v }
     }
@@ -1100,6 +1188,14 @@ impl AtomicIsize {
         failure: Ordering
     ) -> Outcome[Isize, Isize] {
         return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: Isize, new: Isize, order: Ordering) -> Isize {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
     }
 
     pub func fetch_add(mut this, val: Isize, order: Ordering) -> Isize {
@@ -1191,6 +1287,9 @@ pub type AtomicPtr[T] {
 }
 
 impl[T] AtomicPtr[T] {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
     /// Creates a new `AtomicPtr` from a raw pointer.
     pub func new(p: Ptr[T]) -> AtomicPtr[T] {
         return AtomicPtr { ptr: p }
@@ -1248,6 +1347,14 @@ impl[T] AtomicPtr[T] {
         failure: Ordering
     ) -> Outcome[Ptr[T], Ptr[T]] {
         return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: Ptr[T], new: Ptr[T], order: Ordering) -> Ptr[T] {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
     }
 
     /// Returns `true` if operations on this type are lock-free.

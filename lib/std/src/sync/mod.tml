@@ -183,4 +183,4 @@ pub use sync::queue::LockFreeQueue
 
 pub use sync::stack::LockFreeStack
 
-pub use sync::mpsc::{Sender, Receiver, channel, SendError, RecvError, TryRecvError}
+pub use sync::mpsc::{Sender, Receiver, channel, SendError, RecvError, TryRecvError, RecvTimeoutError}

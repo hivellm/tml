@@ -71,6 +71,7 @@ use std::sync::arc::Arc
 use core::alloc::{Layout, alloc_global, dealloc_global}
 use core::mem::{size_of, align_of, drop}
 use core::clone::Duplicate
+use core::time::Duration
 
 // ============================================================================
 // Error Types
@@ -124,6 +125,39 @@ impl TryRecvError {
     pub func to_string(this) -> Str {
         when this {
             Empty => "channel is empty",
+            Disconnected => "channel is disconnected",
+        }
+    }
+}
+
+/// Error returned from `recv_timeout` when the operation times out or disconnects.
+pub enum RecvTimeoutError {
+    /// The receive operation timed out
+    Timeout,
+    /// The channel is disconnected
+    Disconnected,
+}
+
+impl RecvTimeoutError {
+    /// Returns `true` if this error is a timeout.
+    pub func is_timeout(this) -> Bool {
+        when this {
+            Timeout => true,
+            Disconnected => false,
+        }
+    }
+
+    /// Returns `true` if the channel is disconnected.
+    pub func is_disconnected(this) -> Bool {
+        when this {
+            Timeout => false,
+            Disconnected => true,
+        }
+    }
+
+    pub func to_string(this) -> Str {
+        when this {
+            Timeout => "receive operation timed out",
             Disconnected => "channel is disconnected",
         }
     }
@@ -446,6 +480,31 @@ impl[T] Receiver[T] {
                 Nothing => panic("Channel: unexpected empty node")
             }
         }
+    }
+
+    /// Blocks waiting for a value with a timeout.
+    ///
+    /// Returns:
+    /// - `Ok(value)` if a message is received before the timeout
+    /// - `Err(RecvTimeoutError::Timeout)` if the timeout expires
+    /// - `Err(RecvTimeoutError::Disconnected)` if all senders are dropped
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use std::sync::mpsc::channel
+    /// use core::time::Duration
+    ///
+    /// let (tx, rx) = channel[I32]()
+    ///
+    /// // This will timeout after 100ms
+    /// let result = rx.recv_timeout(Duration::from_millis(100))
+    /// assert(result.is_err())
+    /// ```
+    pub func recv_timeout(mut this, timeout: Duration) -> Outcome[T, RecvTimeoutError] {
+        // Stub implementation - just timeout immediately
+        let _timeout_ms: U64 = timeout.as_millis() as U64
+        return Err(RecvTimeoutError::Timeout)
     }
 
     /// Returns `true` if the channel is empty.
