@@ -350,4 +350,162 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
     return obj_path_str;
 }
 
+// ============================================================================
+// LLVM Coverage Tools
+// ============================================================================
+
+std::string find_llvm_profdata() {
+#ifdef _WIN32
+    std::string exe_name = "llvm-profdata.exe";
+#else
+    std::string exe_name = "llvm-profdata";
+#endif
+
+    // Search locations (same as clang)
+    std::vector<std::string> search_paths = {
+        "F:/LLVM/bin/" + exe_name,
+        "C:/Program Files/LLVM/bin/" + exe_name,
+        "C:/LLVM/bin/" + exe_name,
+    };
+
+    for (const auto& p : search_paths) {
+        if (fs::exists(p)) {
+            return p;
+        }
+    }
+
+    // Try to find alongside clang
+    std::string clang = find_clang();
+    if (!clang.empty()) {
+        fs::path clang_dir = fs::path(clang).parent_path();
+        fs::path profdata_path = clang_dir / exe_name;
+        if (fs::exists(profdata_path)) {
+            return profdata_path.string();
+        }
+    }
+
+#ifndef _WIN32
+    // Unix: try system path
+    return "llvm-profdata";
+#else
+    return "";
+#endif
+}
+
+std::string find_llvm_cov() {
+#ifdef _WIN32
+    std::string exe_name = "llvm-cov.exe";
+#else
+    std::string exe_name = "llvm-cov";
+#endif
+
+    // Search locations (same as clang)
+    std::vector<std::string> search_paths = {
+        "F:/LLVM/bin/" + exe_name,
+        "C:/Program Files/LLVM/bin/" + exe_name,
+        "C:/LLVM/bin/" + exe_name,
+    };
+
+    for (const auto& p : search_paths) {
+        if (fs::exists(p)) {
+            return p;
+        }
+    }
+
+    // Try to find alongside clang
+    std::string clang = find_clang();
+    if (!clang.empty()) {
+        fs::path clang_dir = fs::path(clang).parent_path();
+        fs::path cov_path = clang_dir / exe_name;
+        if (fs::exists(cov_path)) {
+            return cov_path.string();
+        }
+    }
+
+#ifndef _WIN32
+    // Unix: try system path
+    return "llvm-cov";
+#else
+    return "";
+#endif
+}
+
+bool is_llvm_coverage_available() {
+    std::string profdata = find_llvm_profdata();
+    std::string cov = find_llvm_cov();
+    return !profdata.empty() && !cov.empty();
+}
+
+std::string find_llvm_profile_runtime() {
+    // Find clang_rt.profile library for coverage instrumentation
+    std::string clang = find_clang();
+    if (clang.empty()) {
+        return "";
+    }
+
+    fs::path clang_dir = fs::path(clang).parent_path();
+    fs::path llvm_root = clang_dir.parent_path();
+
+    // Get clang version by running clang --print-resource-dir
+    // or by checking lib/clang/*/lib/windows/
+#ifdef _WIN32
+    // Windows: look for clang_rt.profile-x86_64.lib
+    std::vector<fs::path> search_paths;
+
+    // Try lib/clang/*/lib/windows/ pattern
+    fs::path clang_lib = llvm_root / "lib" / "clang";
+    if (fs::exists(clang_lib)) {
+        for (const auto& entry : fs::directory_iterator(clang_lib)) {
+            if (entry.is_directory()) {
+                fs::path profile_lib =
+                    entry.path() / "lib" / "windows" / "clang_rt.profile-x86_64.lib";
+                if (fs::exists(profile_lib)) {
+                    return profile_lib.string();
+                }
+            }
+        }
+    }
+
+    // Fallback: try direct paths
+    search_paths = {
+        llvm_root / "lib" / "clang" / "21" / "lib" / "windows" / "clang_rt.profile-x86_64.lib",
+        llvm_root / "lib" / "clang" / "20" / "lib" / "windows" / "clang_rt.profile-x86_64.lib",
+        llvm_root / "lib" / "clang" / "19" / "lib" / "windows" / "clang_rt.profile-x86_64.lib",
+        llvm_root / "lib" / "clang" / "18" / "lib" / "windows" / "clang_rt.profile-x86_64.lib",
+    };
+
+    for (const auto& path : search_paths) {
+        if (fs::exists(path)) {
+            return path.string();
+        }
+    }
+#else
+    // Unix: look for libclang_rt.profile-*.a
+    fs::path clang_lib = llvm_root / "lib" / "clang";
+    if (fs::exists(clang_lib)) {
+        for (const auto& entry : fs::directory_iterator(clang_lib)) {
+            if (entry.is_directory()) {
+                fs::path lib_dir = entry.path() / "lib";
+                // Try various platform subdirs
+                for (const auto& subdir : {"linux", "darwin", ""}) {
+                    fs::path search_dir = lib_dir / subdir;
+                    if (fs::exists(search_dir)) {
+                        for (const auto& lib_entry : fs::directory_iterator(search_dir)) {
+                            std::string name = lib_entry.path().filename().string();
+                            if (name.find("profile") != std::string::npos &&
+                                (name.find("x86_64") != std::string::npos ||
+                                 name.find("aarch64") != std::string::npos)) {
+                                return lib_entry.path().string();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+#endif
+
+    return "";
+}
+
 } // namespace tml::cli

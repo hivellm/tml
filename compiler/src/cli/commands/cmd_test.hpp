@@ -130,8 +130,10 @@ struct TestOptions {
     bool no_cache = false;             // Disable build cache
     std::string save_baseline;         // Save benchmark results to file (for --bench)
     std::string compare_baseline;      // Compare against baseline file (for --bench)
-    bool coverage = false;             // Enable code coverage tracking
+    bool coverage = false;             // Enable code coverage tracking (function-level)
     std::string coverage_output;       // Coverage output file (default: coverage.html)
+    bool coverage_source = false;      // Enable LLVM source code coverage
+    std::string coverage_source_dir;   // Directory to write coverage reports
     bool profile = false;              // Show detailed phase timings
     bool suite_mode = true;            // Use suite-based DLL compilation (fewer DLLs, faster)
     std::string corpus_dir;            // Directory for fuzz corpus (inputs)

@@ -39,6 +39,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                          TestResultCollector& collector, const ColorOutput& c) {
     using Clock = std::chrono::high_resolution_clock;
 
+    // Aggregate covered functions across all suites for library coverage analysis
+    std::set<std::string> all_covered_functions;
+
     try {
 
         // Group test files into suites
@@ -215,6 +218,68 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 collector.add(std::move(result));
             }
 
+            // Collect coverage data before unloading DLL
+            if (CompilerOptions::coverage) {
+                // Get coverage functions from the DLL
+                using PrintCoverageFunc = void (*)();
+                using WriteCoverageHtmlFunc = void (*)(const char*);
+                using TmlSetOutputSuppressed = void (*)(int32_t);
+                using GetFuncCountFunc = int32_t (*)();
+                using GetFuncNameFunc = const char* (*)(int32_t);
+                using GetFuncHitsFunc = int32_t (*)(int32_t);
+
+                auto print_coverage =
+                    lib.get_function<PrintCoverageFunc>("tml_print_coverage_report");
+                auto write_html = lib.get_function<WriteCoverageHtmlFunc>("write_coverage_html");
+                auto set_output_suppressed =
+                    lib.get_function<TmlSetOutputSuppressed>("tml_set_output_suppressed");
+                auto get_func_count = lib.get_function<GetFuncCountFunc>("tml_get_func_count");
+                auto get_func_name = lib.get_function<GetFuncNameFunc>("tml_get_func_name");
+                auto get_func_hits = lib.get_function<GetFuncHitsFunc>("tml_get_func_hits");
+
+                if (opts.verbose) {
+                    std::cerr << "[DEBUG] Coverage enabled, looking for functions...\n";
+                    std::cerr << "[DEBUG] print_coverage: "
+                              << (print_coverage ? "found" : "NOT FOUND") << "\n";
+                    std::cerr << "[DEBUG] write_html: " << (write_html ? "found" : "NOT FOUND")
+                              << "\n";
+                }
+
+                // Collect covered function names for library analysis
+                if (get_func_count && get_func_name && get_func_hits) {
+                    int32_t count = get_func_count();
+                    for (int32_t i = 0; i < count; i++) {
+                        const char* name = get_func_name(i);
+                        int32_t hits = get_func_hits(i);
+                        if (name && hits > 0) {
+                            all_covered_functions.insert(name);
+                        }
+                    }
+                }
+
+                // Ensure output is not suppressed when printing coverage report
+                if (set_output_suppressed) {
+                    set_output_suppressed(0);
+                }
+                // Flush before printing
+                std::cout << std::flush;
+                std::cerr << std::flush;
+                std::fflush(stdout);
+                std::fflush(stderr);
+
+                // In verbose mode, print the full coverage report to console
+                if (print_coverage && opts.verbose) {
+                    print_coverage();
+                    std::fflush(stdout);
+                    std::fflush(stderr);
+                }
+
+                // NOTE: We don't call write_html here anymore - the C runtime's
+                // HTML generator only shows called functions, not library coverage.
+                // The proper HTML report is generated after all suites complete
+                // using write_library_coverage_html().
+            }
+
             // Clean up suite DLL
             lib.unload();
             try {
@@ -228,6 +293,17 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 #endif
             } catch (...) {
                 // Ignore cleanup errors
+            }
+        }
+
+        // Print library coverage analysis after all suites complete
+        if (CompilerOptions::coverage && !all_covered_functions.empty()) {
+            print_library_coverage_report(all_covered_functions, c);
+
+            // Write HTML report with proper library coverage data
+            if (!CompilerOptions::coverage_output.empty()) {
+                write_library_coverage_html(all_covered_functions,
+                                            CompilerOptions::coverage_output);
             }
         }
 

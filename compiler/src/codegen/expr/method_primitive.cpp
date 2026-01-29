@@ -454,18 +454,33 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
     // duplicate() -> Self (copy semantics for primitives)
     if (method == "duplicate") {
+        // Coverage tracking for Duplicate::duplicate
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Duplicate::duplicate");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         last_expr_type_ = llvm_ty;
         return receiver;
     }
 
     // to_owned() -> Self
     if (method == "to_owned") {
+        // Coverage tracking for ToOwned::to_owned
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("ToOwned::to_owned");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         last_expr_type_ = llvm_ty;
         return receiver;
     }
 
     // borrow() -> ref Self
     if (method == "borrow") {
+        // Coverage tracking for Borrow::borrow
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Borrow::borrow");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         if (!receiver_ptr.empty()) {
             last_expr_type_ = "ptr";
             return receiver_ptr;
@@ -479,6 +494,11 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
     // borrow_mut() -> mut ref Self
     if (method == "borrow_mut") {
+        // Coverage tracking for BorrowMut::borrow_mut
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("BorrowMut::borrow_mut");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         if (!receiver_ptr.empty()) {
             last_expr_type_ = "ptr";
             return receiver_ptr;

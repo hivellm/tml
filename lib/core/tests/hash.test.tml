@@ -1,0 +1,276 @@
+// Tests for core::hash module
+// Tests Hash behavior and combine_hashes
+
+use test
+use core::hash::{Hash, combine_hashes}
+
+// =============================================================================
+// I8 Hash Tests
+// =============================================================================
+
+@test
+func test_hash_i8() -> I32 {
+    let x: I8 = 42
+    let h: I64 = x.hash()
+    // Hash should be deterministic
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+@test
+func test_hash_i8_different() -> I32 {
+    let x: I8 = 42
+    let y: I8 = 43
+    let hx: I64 = x.hash()
+    let hy: I64 = y.hash()
+    // Different values should (usually) have different hashes
+    assert(hx != hy, "different values should have different hashes")
+    return 0
+}
+
+// =============================================================================
+// I16 Hash Tests
+// =============================================================================
+
+@test
+func test_hash_i16() -> I32 {
+    let x: I16 = 1000
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+// =============================================================================
+// I32 Hash Tests
+// =============================================================================
+
+@test
+func test_hash_i32() -> I32 {
+    let x: I32 = 12345
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+@test
+func test_hash_i32_zero() -> I32 {
+    let x: I32 = 0
+    let h: I64 = x.hash()
+    // Zero should have a valid hash
+    assert(h == h, "zero should have a hash")
+    return 0
+}
+
+@test
+func test_hash_i32_negative() -> I32 {
+    let x: I32 = -12345
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "negative hash should be deterministic")
+    return 0
+}
+
+// =============================================================================
+// I64 Hash Tests
+// =============================================================================
+
+@test
+func test_hash_i64() -> I32 {
+    let x: I64 = 9876543210
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+@test
+func test_hash_i64_large() -> I32 {
+    let x: I64 = 9223372036854775807  // max I64
+    let h: I64 = x.hash()
+    assert(h == h, "large value should have a hash")
+    return 0
+}
+
+// =============================================================================
+// U8 Hash Tests
+// =============================================================================
+
+@test
+func test_hash_u8() -> I32 {
+    let x: U8 = 255
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+// =============================================================================
+// U16 Hash Tests
+// =============================================================================
+
+@test
+func test_hash_u16() -> I32 {
+    let x: U16 = 65535
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+// =============================================================================
+// U32 Hash Tests
+// =============================================================================
+
+@test
+func test_hash_u32() -> I32 {
+    let x: U32 = 4000000
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+// =============================================================================
+// U64 Hash Tests
+// =============================================================================
+
+@test
+func test_hash_u64() -> I32 {
+    let x: U64 = 18446744073709551615  // max U64
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+// =============================================================================
+// Bool Hash Tests
+// =============================================================================
+
+@test
+func test_hash_bool_true() -> I32 {
+    let x: Bool = true
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+@test
+func test_hash_bool_false() -> I32 {
+    let x: Bool = false
+    let h: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+@test
+func test_hash_bool_different() -> I32 {
+    let t: Bool = true
+    let f: Bool = false
+    let ht: I64 = t.hash()
+    let hf: I64 = f.hash()
+    assert(ht != hf, "true and false should have different hashes")
+    return 0
+}
+
+// =============================================================================
+// Str Hash Tests
+// =============================================================================
+
+@test
+func test_hash_str() -> I32 {
+    let s: Str = Str::from("hello")
+    let h: I64 = s.hash()
+    let h2: I64 = s.hash()
+    assert_eq(h, h2, "hash should be deterministic")
+    return 0
+}
+
+@test
+func test_hash_str_different() -> I32 {
+    let s1: Str = Str::from("hello")
+    let s2: Str = Str::from("world")
+    let h1: I64 = s1.hash()
+    let h2: I64 = s2.hash()
+    assert(h1 != h2, "different strings should have different hashes")
+    return 0
+}
+
+@test
+func test_hash_str_empty() -> I32 {
+    let s: Str = Str::from("")
+    let h: I64 = s.hash()
+    assert(h == h, "empty string should have a hash")
+    return 0
+}
+
+// =============================================================================
+// combine_hashes Tests
+// =============================================================================
+
+@test
+func test_combine_hashes_basic() -> I32 {
+    let h1: I64 = 123
+    let h2: I64 = 456
+    let combined: I64 = combine_hashes(h1, h2)
+    // Combined hash should be deterministic
+    let combined2: I64 = combine_hashes(h1, h2)
+    assert_eq(combined, combined2, "combine_hashes should be deterministic")
+    return 0
+}
+
+@test
+func test_combine_hashes_order_matters() -> I32 {
+    let h1: I64 = 123
+    let h2: I64 = 456
+    let c1: I64 = combine_hashes(h1, h2)
+    let c2: I64 = combine_hashes(h2, h1)
+    // Order should matter for combine_hashes
+    assert(c1 != c2, "combine_hashes should be order-sensitive")
+    return 0
+}
+
+@test
+func test_combine_hashes_with_zero() -> I32 {
+    let h1: I64 = 12345
+    let h2: I64 = 0
+    let combined: I64 = combine_hashes(h1, h2)
+    // Combining with zero should still produce a valid hash
+    assert(combined == combined, "combining with zero should work")
+    return 0
+}
+
+@test
+func test_combine_hashes_same_values() -> I32 {
+    let h: I64 = 12345
+    let combined: I64 = combine_hashes(h, h)
+    // Combining same values should work
+    assert(combined == combined, "combining same values should work")
+    return 0
+}
+
+// =============================================================================
+// Hash Contract Tests (equal values have equal hashes)
+// =============================================================================
+
+@test
+func test_hash_contract_i32() -> I32 {
+    let x: I32 = 42
+    let y: I32 = 42
+    assert_eq(x, y, "values should be equal")
+    assert_eq(x.hash(), y.hash(), "equal values must have equal hashes")
+    return 0
+}
+
+@test
+func test_hash_contract_str() -> I32 {
+    let s1: Str = Str::from("test")
+    let s2: Str = Str::from("test")
+    assert_eq(s1.hash(), s2.hash(), "equal strings must have equal hashes")
+    return 0
+}

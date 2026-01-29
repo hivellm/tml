@@ -115,11 +115,19 @@ struct CompilerOptions {
     /// Output format for diagnostics.
     static inline DiagnosticFormat diagnostic_format = DiagnosticFormat::Text;
 
-    /// Enable code coverage instrumentation.
+    /// Enable code coverage instrumentation (function-level tracking).
     static inline bool coverage = false;
 
-    /// Output path for coverage HTML report.
+    /// Output path for coverage HTML report (function-level).
     static inline std::string coverage_output;
+
+    /// Enable LLVM source code coverage instrumentation.
+    /// This enables -fprofile-instr-generate and -fcoverage-mapping for
+    /// line-by-line coverage analysis using llvm-cov.
+    static inline bool coverage_source = false;
+
+    /// Output directory for LLVM source coverage reports.
+    static inline std::string coverage_source_dir = "coverage";
 
     /// Enable memory leak checking at runtime.
     /// When enabled, compiled programs track all allocations and report

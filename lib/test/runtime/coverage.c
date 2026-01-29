@@ -7,6 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Export functions from DLLs
+#ifdef _WIN32
+#define TML_EXPORT __declspec(dllexport)
+#else
+#define TML_EXPORT __attribute__((visibility("default")))
+#endif
+
 // Maximum number of entries to track
 #define MAX_FUNCTIONS 1024
 #define MAX_LINES 8192
@@ -96,28 +103,28 @@ static int32_t find_or_create_branch(const char* file, int32_t line, int32_t bra
 
 // ============ Public API ============
 
-void tml_cover_func(const char* name) {
+TML_EXPORT void tml_cover_func(const char* name) {
     int32_t idx = find_or_create_func(name);
     if (idx >= 0) {
         g_functions[idx].hit_count++;
     }
 }
 
-void tml_cover_line(const char* file, int32_t line) {
+TML_EXPORT void tml_cover_line(const char* file, int32_t line) {
     int32_t idx = find_or_create_line(file, line);
     if (idx >= 0) {
         g_lines[idx].hit_count++;
     }
 }
 
-void tml_cover_branch(const char* file, int32_t line, int32_t branch_id) {
+TML_EXPORT void tml_cover_branch(const char* file, int32_t line, int32_t branch_id) {
     int32_t idx = find_or_create_branch(file, line, branch_id);
     if (idx >= 0) {
         g_branches[idx].hit_count++;
     }
 }
 
-int32_t tml_get_covered_func_count(void) {
+TML_EXPORT int32_t tml_get_covered_func_count(void) {
     int32_t count = 0;
     for (int32_t i = 0; i < g_func_count; i++) {
         if (g_functions[i].hit_count > 0) {
@@ -127,7 +134,7 @@ int32_t tml_get_covered_func_count(void) {
     return count;
 }
 
-int32_t tml_get_covered_line_count(void) {
+TML_EXPORT int32_t tml_get_covered_line_count(void) {
     int32_t count = 0;
     for (int32_t i = 0; i < g_line_count; i++) {
         if (g_lines[i].hit_count > 0) {
@@ -137,7 +144,7 @@ int32_t tml_get_covered_line_count(void) {
     return count;
 }
 
-int32_t tml_get_covered_branch_count(void) {
+TML_EXPORT int32_t tml_get_covered_branch_count(void) {
     int32_t count = 0;
     for (int32_t i = 0; i < g_branch_count; i++) {
         if (g_branches[i].hit_count > 0) {
@@ -147,7 +154,7 @@ int32_t tml_get_covered_branch_count(void) {
     return count;
 }
 
-int32_t tml_is_func_covered(const char* name) {
+TML_EXPORT int32_t tml_is_func_covered(const char* name) {
     for (int32_t i = 0; i < g_func_count; i++) {
         if (strcmp(g_functions[i].name, name) == 0) {
             return g_functions[i].hit_count > 0 ? 1 : 0;
@@ -156,19 +163,40 @@ int32_t tml_is_func_covered(const char* name) {
     return 0;
 }
 
-int32_t tml_get_coverage_percent(void) {
+TML_EXPORT int32_t tml_get_coverage_percent(void) {
     if (g_func_count == 0)
         return 100;
     return (tml_get_covered_func_count() * 100) / g_func_count;
 }
 
-void tml_reset_coverage(void) {
+// Get total function count
+TML_EXPORT int32_t tml_get_func_count(void) {
+    return g_func_count;
+}
+
+// Get function name by index (for iteration)
+TML_EXPORT const char* tml_get_func_name(int32_t idx) {
+    if (idx >= 0 && idx < g_func_count) {
+        return g_functions[idx].name;
+    }
+    return NULL;
+}
+
+// Get function hit count by index
+TML_EXPORT int32_t tml_get_func_hits(int32_t idx) {
+    if (idx >= 0 && idx < g_func_count) {
+        return g_functions[idx].hit_count;
+    }
+    return 0;
+}
+
+TML_EXPORT void tml_reset_coverage(void) {
     g_func_count = 0;
     g_line_count = 0;
     g_branch_count = 0;
 }
 
-void tml_print_coverage_report(void) {
+TML_EXPORT void tml_print_coverage_report(void) {
     printf("\n");
     printf("================================================================================\n");
     printf("                           CODE COVERAGE REPORT\n");
@@ -246,12 +274,12 @@ void tml_print_coverage_report(void) {
 }
 
 // Alias for codegen compatibility
-void print_coverage_report(void) {
+TML_EXPORT void print_coverage_report(void) {
     tml_print_coverage_report();
 }
 
 // Write coverage report to JSON file
-void write_coverage_json(const char* filename) {
+TML_EXPORT void write_coverage_json(const char* filename) {
     if (!filename)
         filename = "coverage.json";
 
@@ -283,7 +311,7 @@ void write_coverage_json(const char* filename) {
 }
 
 // Write coverage report to HTML file
-void write_coverage_html(const char* filename) {
+TML_EXPORT void write_coverage_html(const char* filename) {
     if (!filename)
         filename = "coverage.html";
 

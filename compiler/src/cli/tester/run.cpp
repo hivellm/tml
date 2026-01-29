@@ -22,6 +22,8 @@
 //! By default, tests run in parallel using N/2 threads where N is the
 //! hardware thread count. This can be overridden with `--test-threads=N`.
 
+#include "cli/builder/builder_internal.hpp"
+#include "coverage.hpp"
 #include "tester_internal.hpp"
 
 #ifdef _WIN32
@@ -118,6 +120,11 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
         } else if (arg.starts_with("--coverage-output=")) {
             opts.coverage_output = arg.substr(18);
             opts.coverage = true; // Implicitly enable coverage
+        } else if (arg == "--coverage-source") {
+            opts.coverage_source = true;
+        } else if (arg.starts_with("--coverage-source-dir=")) {
+            opts.coverage_source_dir = arg.substr(22);
+            opts.coverage_source = true; // Implicitly enable source coverage
         } else if (arg == "--check-leaks") {
             opts.check_leaks = true;
         } else if (arg == "--no-check-leaks") {
@@ -172,6 +179,12 @@ int run_test(int argc, char* argv[], bool verbose) {
     } else if (opts.coverage) {
         // Default coverage output file if coverage is enabled but no path specified
         tml::CompilerOptions::coverage_output = "coverage.html";
+    }
+
+    // Set LLVM source coverage options
+    tml::CompilerOptions::coverage_source = opts.coverage_source;
+    if (!opts.coverage_source_dir.empty()) {
+        tml::CompilerOptions::coverage_source_dir = opts.coverage_source_dir;
     }
 
     // Set memory leak checking option
@@ -232,6 +245,36 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
+    // Initialize LLVM source coverage collector if enabled
+    std::unique_ptr<tester::CoverageCollector> coverage_collector;
+    if (opts.coverage_source) {
+        coverage_collector = std::make_unique<tester::CoverageCollector>();
+        if (!coverage_collector->initialize()) {
+            std::cerr << c.red() << "Coverage Error: " << c.reset()
+                      << coverage_collector->get_last_error() << "\n";
+            return 1;
+        }
+
+        // Set up profraw output directory
+        fs::path coverage_dir = fs::path(tml::CompilerOptions::coverage_source_dir);
+        fs::path profraw_dir = coverage_dir / "profraw";
+        coverage_collector->set_profraw_dir(profraw_dir);
+
+        // Set environment variable for LLVM profile output
+        // Use %p for process ID to handle parallel tests
+        std::string profile_path = coverage_collector->get_profile_env("test");
+#ifdef _WIN32
+        _putenv_s("LLVM_PROFILE_FILE", profile_path.c_str());
+#else
+        setenv("LLVM_PROFILE_FILE", profile_path.c_str(), 1);
+#endif
+
+        if (!opts.quiet) {
+            std::cout << c.dim() << " Source coverage enabled (output: " << coverage_dir.string()
+                      << ")" << c.reset() << "\n";
+        }
+    }
+
     TestResultCollector collector;
 
     // Determine number of threads
@@ -245,6 +288,41 @@ int run_test(int argc, char* argv[], bool verbose) {
             num_threads = std::max(1u, hw_threads / 2);
         }
     }
+
+    // Helper to process coverage after tests complete
+    auto process_coverage = [&]() {
+        if (!coverage_collector)
+            return;
+
+        fs::path coverage_dir = fs::path(tml::CompilerOptions::coverage_source_dir);
+        fs::path profdata = coverage_dir / "coverage.profdata";
+
+        coverage_collector->collect_profraw_files();
+
+        if (!opts.quiet) {
+            std::cout << c.dim() << "\n Generating coverage report..." << c.reset() << std::flush;
+        }
+
+        if (coverage_collector->merge_profiles(profdata)) {
+            if (!opts.quiet) {
+                std::cout << "\r" << std::string(40, ' ') << "\r" << std::flush;
+            }
+
+            // Generate function-level coverage report from profdata
+            // (Line-level coverage requires coverage mapping data which we don't generate yet)
+            auto report = coverage_collector->generate_function_report(profdata);
+
+            if (!opts.quiet && report.success) {
+                coverage_collector->print_function_report(report);
+            } else if (!opts.quiet && !report.success) {
+                std::cout << c.yellow() << "Warning: " << c.reset() << report.error_message << "\n";
+            }
+        } else if (!opts.quiet) {
+            std::cout << "\n"
+                      << c.red() << "Coverage Error: " << c.reset()
+                      << coverage_collector->get_last_error() << "\n";
+        }
+    };
 
     // Suite mode: compile multiple test files into single DLLs per suite
     // This is now the default behavior as internal linkage prevents duplicate symbols
@@ -265,7 +343,16 @@ int run_test(int argc, char* argv[], bool verbose) {
             if (opts.profile && collector.profile_stats.total_tests > 0) {
                 print_profile_stats(collector.profile_stats, opts);
             }
+
+            // Print TML runtime coverage summary
+            if (opts.coverage && !CompilerOptions::coverage_output.empty()) {
+                std::cout << "\n " << c.dim() << "Coverage report: " << c.reset()
+                          << CompilerOptions::coverage_output << "\n";
+            }
         }
+
+        // Process LLVM source coverage
+        process_coverage();
 
         int failed = 0;
         for (const auto& result : collector.results) {
@@ -361,6 +448,9 @@ int run_test(int argc, char* argv[], bool verbose) {
             print_profile_stats(collector.profile_stats, opts);
         }
     }
+
+    // Process coverage
+    process_coverage();
 
     // Count failures
     int failed = 0;

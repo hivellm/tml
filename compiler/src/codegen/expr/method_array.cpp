@@ -52,18 +52,33 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
     // len() returns the array size as I64
     if (method == "len" || method == "length") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Array::len");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         last_expr_type_ = "i64";
         return std::to_string(arr_size);
     }
 
     // is_empty() returns true if size is 0
     if (method == "is_empty" || method == "isEmpty") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Array::is_empty");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         last_expr_type_ = "i1";
         return arr_size == 0 ? "true" : "false";
     }
 
     // get(index) returns Maybe[ref T]
     if (method == "get") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Array::get");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         if (call.args.empty()) {
             report_error("get requires an index argument", call.span);
             return "0";
@@ -137,6 +152,11 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
     // first() returns Maybe[ref T]
     if (method == "first") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Array::first");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         // Create ref type for Maybe[ref T]
         auto ref_type = std::make_shared<types::Type>();
         ref_type->kind =
@@ -177,6 +197,11 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
     // last() returns Maybe[ref T]
     if (method == "last") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Array::last");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         // Create ref type for Maybe[ref T]
         auto ref_type = std::make_shared<types::Type>();
         ref_type->kind =
@@ -217,6 +242,11 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
     // map(closure) returns [U; N]
     if (method == "map") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Array::map");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         if (call.args.empty()) {
             report_error("map requires a closure argument", call.span);
             return "0";
@@ -258,6 +288,11 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
     // eq(other) returns Bool
     if (method == "eq") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Array::eq");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         if (call.args.empty()) {
             report_error("eq requires an argument", call.span);
             return "0";
@@ -312,6 +347,11 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
     // ne(other) returns Bool
     if (method == "ne") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Array::ne");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         if (call.args.empty()) {
             report_error("ne requires an argument", call.span);
             return "0";
@@ -367,6 +407,11 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
 
     // cmp(other) returns Ordering
     if (method == "cmp") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Array::cmp");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         if (call.args.empty()) {
             report_error("cmp requires an argument", call.span);
             return "0";

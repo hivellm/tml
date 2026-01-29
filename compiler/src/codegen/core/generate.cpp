@@ -1097,7 +1097,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
         }
 
         // Print coverage report if enabled
-        if (options_.coverage_enabled) {
+        // In suite mode (coverage_quiet=true), the test runner handles printing
+        // after all tests complete, so we don't print here
+        if (options_.coverage_enabled && !options_.coverage_quiet) {
             emit_line("  call void @print_coverage_report()");
             // Write HTML report if output file specified
             if (!coverage_output_str.empty()) {
@@ -1138,7 +1140,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 emit_line("  %ret = call i32 @" + tml_main_fn + "()");
             }
             // Print coverage report if enabled
-            if (options_.coverage_enabled) {
+            // In suite mode (coverage_quiet=true), the test runner handles printing
+            // after all tests complete, so we don't print here
+            if (options_.coverage_enabled && !options_.coverage_quiet) {
                 emit_line("  call void @print_coverage_report()");
                 if (!coverage_output_str.empty()) {
                     emit_line("  call void @write_coverage_html(ptr " + coverage_output_str + ")");

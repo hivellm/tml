@@ -455,6 +455,12 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                     args_str += typed_args[i].first + " " + typed_args[i].second;
                 }
 
+                // Coverage instrumentation at call site for library static methods
+                if (options_.coverage_enabled) {
+                    std::string func_name_str = add_string_literal(qualified_name);
+                    emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+                }
+
                 std::string result = fresh_reg();
                 if (ret_type == "void") {
                     emit_line("  call void " + fn_name + "(" + args_str + ")");

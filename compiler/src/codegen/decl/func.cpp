@@ -425,6 +425,33 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
     }
 
+    // LLVM source-based coverage instrumentation
+    // Only instrument user code (not library functions) to avoid duplicate symbols in suite mode
+    // For full library coverage, would need to compile library separately with coverage
+    if (options_.llvm_source_coverage && current_module_prefix_.empty()) {
+        // Create function name global for profiling
+        std::string prof_name = "@__profn_" + func_llvm_name;
+        std::string name_value = func_llvm_name;
+        size_t name_len = name_value.length() + 1; // +1 for null terminator
+
+        // Emit the function name constant in the profile names section
+        // Note: We use linkonce_odr to handle multiple definitions in suite mode
+        type_defs_buffer_ << prof_name << " = linkonce_odr constant [" << name_len << " x i8] c\""
+                          << name_value << "\\00\", section \"__llvm_prf_names\"\n";
+
+        // Compute a simple hash based on the function name (FNV-1a)
+        uint64_t hash = 14695981039346656037ULL; // FNV offset basis
+        for (char c : name_value) {
+            hash ^= static_cast<uint64_t>(c);
+            hash *= 1099511628211ULL; // FNV prime
+        }
+
+        // Insert instrprof.increment at function entry
+        // Arguments: name ptr, hash, num counters, counter index
+        emit_line("  call void @llvm.instrprof.increment(ptr " + prof_name + ", i64 " +
+                  std::to_string(hash) + ", i32 1, i32 0)");
+    }
+
     // Generate function body
     if (func.body) {
         // Push drop scope for function body - variables here need drop at return
@@ -691,6 +718,37 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
             // Emit llvm.dbg.declare intrinsic
             emit_debug_declare(alloca_reg, param_debug_id, loc_id);
         }
+    }
+
+    // TML runtime coverage for generic instantiation
+    // This tracks library function calls via the TML coverage runtime
+    if (options_.coverage_enabled) {
+        std::string func_name_str = add_string_literal(func.name);
+        emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+    }
+
+    // LLVM source-based coverage instrumentation for generic instantiation
+    if (options_.llvm_source_coverage) {
+        // Create function name global for profiling
+        std::string prof_name = "@__profn_tml_" + mangled;
+        std::string name_value = "tml_" + mangled;
+        size_t name_len = name_value.length() + 1; // +1 for null terminator
+
+        // Emit the function name constant in the profile names section
+        // Note: We use linkonce_odr to handle multiple definitions in suite mode
+        type_defs_buffer_ << prof_name << " = linkonce_odr constant [" << name_len << " x i8] c\""
+                          << name_value << "\\00\", section \"__llvm_prf_names\"\n";
+
+        // Compute a simple hash based on the function name (FNV-1a)
+        uint64_t hash = 14695981039346656037ULL; // FNV offset basis
+        for (char c : name_value) {
+            hash ^= static_cast<uint64_t>(c);
+            hash *= 1099511628211ULL; // FNV prime
+        }
+
+        // Insert instrprof.increment at function entry
+        emit_line("  call void @llvm.instrprof.increment(ptr " + prof_name + ", i64 " +
+                  std::to_string(hash) + ", i32 1, i32 0)");
     }
 
     // 8. Generate function body

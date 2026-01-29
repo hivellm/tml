@@ -34,6 +34,7 @@
 
 #include "backend/lld_linker.hpp"
 #include "common.hpp"
+#include "compiler_setup.hpp"
 
 #ifdef TML_HAS_LLVM_BACKEND
 #include "backend/llvm_backend.hpp"
@@ -326,6 +327,15 @@ static ObjectCompileResult compile_ll_with_clang(const fs::path& ll_file,
         }
     }
 
+    // LLVM Source Code Coverage Instrumentation
+    // Note: -fprofile-instr-generate enables instrumentation for profile-guided optimization
+    // For LLVM IR input, this links the profile runtime but doesn't add instrumentation
+    // TODO: To get true coverage, we'd need to add instrumentation in our own LLVM IR codegen
+    if (options.coverage) {
+        cmd << " -fprofile-instr-generate";
+        cmd << " -fcoverage-mapping";
+    }
+
     // Suppress warnings
     cmd << " -Wno-override-module";
 
@@ -459,6 +469,16 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
             cmd << " -fuse-ld=lld";
         }
 
+        // LLVM Source Code Coverage (links profile runtime)
+        if (options.coverage) {
+            cmd << " -fprofile-instr-generate";
+            // Link the profile runtime library
+            std::string profile_rt = find_llvm_profile_runtime();
+            if (!profile_rt.empty()) {
+                cmd << " \"" << to_forward_slashes(profile_rt) << "\"";
+            }
+        }
+
         // Output file
         cmd << " -o \"" << to_forward_slashes(output_file) << "\"";
 
@@ -538,6 +558,16 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
             }
             if (options.lto_jobs > 0) {
                 cmd << " -flto-jobs=" << options.lto_jobs;
+            }
+        }
+
+        // LLVM Source Code Coverage (links profile runtime)
+        if (options.coverage) {
+            cmd << " -fprofile-instr-generate";
+            // Link the profile runtime library
+            std::string profile_rt = find_llvm_profile_runtime();
+            if (!profile_rt.empty()) {
+                cmd << " \"" << to_forward_slashes(profile_rt) << "\"";
             }
         }
 
@@ -655,6 +685,34 @@ static LinkResult link_objects_with_lld(const std::vector<fs::path>& object_file
     std::vector<fs::path> all_objects = object_files;
     for (const auto& obj : options.additional_objects) {
         all_objects.push_back(obj);
+    }
+
+    // Add profile runtime library for LLVM source coverage
+    if (options.coverage) {
+        std::string profile_rt = find_llvm_profile_runtime();
+        if (!profile_rt.empty()) {
+            all_objects.push_back(fs::path(profile_rt));
+        }
+        // Export the profile write function so we can call it before DLL unload
+        lld_opts.extra_flags.push_back("/EXPORT:__llvm_profile_write_file");
+    }
+
+    // For DLLs (test suites), export TML runtime coverage functions
+    // LLD on Windows requires explicit exports even for __declspec(dllexport) symbols
+    if (options.output_type == LinkOptions::OutputType::DynamicLib) {
+        // Core test functions
+        lld_opts.extra_flags.push_back("/EXPORT:tml_run_test_with_catch");
+        lld_opts.extra_flags.push_back("/EXPORT:tml_set_output_suppressed");
+        // Coverage functions
+        lld_opts.extra_flags.push_back("/EXPORT:tml_print_coverage_report");
+        lld_opts.extra_flags.push_back("/EXPORT:print_coverage_report");
+        lld_opts.extra_flags.push_back("/EXPORT:write_coverage_html");
+        lld_opts.extra_flags.push_back("/EXPORT:write_coverage_json");
+        lld_opts.extra_flags.push_back("/EXPORT:tml_cover_func");
+        lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_count");
+        lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_name");
+        lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_hits");
+        lld_opts.extra_flags.push_back("/EXPORT:tml_get_covered_func_count");
     }
 
     // Link

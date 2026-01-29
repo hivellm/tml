@@ -357,6 +357,21 @@ bool DynamicLibrary::load(const std::string& path) {
 
 void DynamicLibrary::unload() {
     if (handle_) {
+        // If coverage is enabled, write profile data before unloading
+        // __llvm_profile_write_file() is provided by the LLVM profile runtime
+        if (CompilerOptions::coverage_source) {
+#ifdef _WIN32
+            auto write_profile =
+                reinterpret_cast<int (*)()>(GetProcAddress(handle_, "__llvm_profile_write_file"));
+#else
+            auto write_profile =
+                reinterpret_cast<int (*)()>(dlsym(handle_, "__llvm_profile_write_file"));
+#endif
+            if (write_profile) {
+                write_profile();
+            }
+        }
+
 #ifdef _WIN32
         FreeLibrary(handle_);
 #else
@@ -471,6 +486,7 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
     options.emit_debug_info = CompilerOptions::debug_info;
     options.debug_level = CompilerOptions::debug_level;
     options.source_file = test_file;
+    options.llvm_source_coverage = CompilerOptions::coverage_source; // LLVM instrprof
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);
@@ -516,6 +532,7 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
         obj_options.verbose = false;
         obj_options.target_triple = tml::CompilerOptions::target_triple;
         obj_options.sysroot = tml::CompilerOptions::sysroot;
+        obj_options.coverage = tml::CompilerOptions::coverage_source; // LLVM source coverage
 
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
         if (!obj_result.success) {
@@ -540,6 +557,7 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
     link_options.verbose = false;
     link_options.target_triple = tml::CompilerOptions::target_triple;
     link_options.sysroot = tml::CompilerOptions::sysroot;
+    link_options.coverage = tml::CompilerOptions::coverage_source; // LLVM source coverage
 
     for (const auto& lib : llvm_gen.get_link_libs()) {
         if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
@@ -847,6 +865,7 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
         obj_options.verbose = false;
         obj_options.target_triple = tml::CompilerOptions::target_triple;
         obj_options.sysroot = tml::CompilerOptions::sysroot;
+        obj_options.coverage = tml::CompilerOptions::coverage_source; // LLVM source coverage
 
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
         if (!obj_result.success) {
@@ -871,6 +890,7 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
     link_options.verbose = false;
     link_options.target_triple = tml::CompilerOptions::target_triple;
     link_options.sysroot = tml::CompilerOptions::sysroot;
+    link_options.coverage = tml::CompilerOptions::coverage_source; // LLVM source coverage
 
     for (const auto& lib : llvm_gen.get_link_libs()) {
         if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
@@ -987,6 +1007,7 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
     options.emit_debug_info = CompilerOptions::debug_info;
     options.debug_level = CompilerOptions::debug_level;
     options.source_file = test_file;
+    options.llvm_source_coverage = CompilerOptions::coverage_source; // LLVM instrprof
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);
@@ -1035,6 +1056,7 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
         obj_options.verbose = false;
         obj_options.target_triple = tml::CompilerOptions::target_triple;
         obj_options.sysroot = tml::CompilerOptions::sysroot;
+        obj_options.coverage = tml::CompilerOptions::coverage_source; // LLVM source coverage
 
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
         if (!obj_result.success) {
@@ -1067,6 +1089,7 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
         link_options.verbose = false;
         link_options.target_triple = tml::CompilerOptions::target_triple;
         link_options.sysroot = tml::CompilerOptions::sysroot;
+        link_options.coverage = tml::CompilerOptions::coverage_source; // LLVM source coverage
 
         for (const auto& lib : llvm_gen.get_link_libs()) {
             if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
@@ -1364,6 +1387,11 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             combined_hash += build::generate_content_hash(pp_result.output);
         }
 
+        // Include coverage flag in hash to separate coverage-enabled builds
+        if (CompilerOptions::coverage) {
+            combined_hash += ":coverage";
+        }
+
         // Check for cached DLL using source-only hash (before typechecking)
         std::string source_hash = build::generate_content_hash(combined_hash);
         fs::path cached_dll_by_source = cache_dir / (source_hash + "_suite" + lib_ext);
@@ -1533,12 +1561,18 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     options.emit_comments = false;
                     options.generate_dll_entry = true;
                     options.suite_test_index = static_cast<int>(i); // tml_test_N
+                    options.suite_total_tests = static_cast<int>(suite.tests.size());
                     options.dll_export = true;
                     options.force_internal_linkage =
                         true; // Internal linkage for all non-entry functions
                     options.emit_debug_info = CompilerOptions::debug_info;
                     options.debug_level = CompilerOptions::debug_level;
                     options.source_file = test.file_path;
+                    options.coverage_enabled = CompilerOptions::coverage;
+                    options.coverage_quiet = CompilerOptions::coverage; // Quiet in suite mode
+                    options.coverage_output_file = CompilerOptions::coverage_output;
+                    options.llvm_source_coverage =
+                        CompilerOptions::coverage_source; // LLVM instrprof
                     codegen::LLVMIRGen llvm_gen(env, options);
 
                     if (verbose)
@@ -1584,6 +1618,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     obj_options.optimization_level = CompilerOptions::optimization_level;
                     obj_options.debug_info = CompilerOptions::debug_info;
                     obj_options.verbose = false;
+                    obj_options.coverage = CompilerOptions::coverage_source; // LLVM source coverage
 
                     if (verbose)
                         std::cerr << "[DEBUG]   Starting clang compile...\n" << std::flush;
@@ -1655,6 +1690,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             LinkOptions link_options;
             link_options.output_type = LinkOptions::OutputType::DynamicLib;
             link_options.verbose = false;
+            link_options.coverage = CompilerOptions::coverage_source; // LLVM source coverage
 
             for (const auto& lib : link_libs) {
                 if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {

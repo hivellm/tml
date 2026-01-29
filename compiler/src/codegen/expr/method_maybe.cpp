@@ -23,6 +23,10 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
 
     // is_just() / is_some() -> Bool (tag == 0)
     if (method == "is_just" || method == "is_some") {
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Maybe::is_just");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         std::string result = fresh_reg();
         emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 0");
         last_expr_type_ = "i1";
@@ -31,6 +35,10 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
 
     // is_nothing() / is_none() -> Bool (tag == 1)
     if (method == "is_nothing" || method == "is_none") {
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Maybe::is_nothing");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         std::string result = fresh_reg();
         emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 1");
         last_expr_type_ = "i1";
@@ -46,6 +54,10 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
 
     // unwrap() -> T (get the value from Just, panics on Nothing)
     if (method == "unwrap" || method == "expect") {
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Maybe::unwrap");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         // Extract the data bytes as a pointer
         std::string data_ptr = fresh_reg();
         std::string alloca_reg = fresh_reg();
@@ -63,6 +75,10 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
 
     // unwrap_or(default) -> T
     if (method == "unwrap_or") {
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Maybe::unwrap_or");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         if (call.args.empty()) {
             report_error("unwrap_or() requires a default value", call.span);
             return "0";
@@ -174,6 +190,10 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
 
     // map(f) -> Maybe[U]
     if (method == "map") {
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Maybe::map");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
             report_error("map requires a closure argument", call.span);
             return receiver;

@@ -105,11 +105,11 @@ impl PoolStats {
 
     /// Returns the hit rate as a percentage (0-100).
     pub func hit_rate(this) -> F64 {
-        let total = this.hits + this.misses
+        let total: I64 = this.hits + this.misses
         if total == 0 {
             return 100.0
         }
-        (this.hits as F64 / total as F64) * 100.0
+        return (this.hits as F64 / total as F64) * 100.0
     }
 }
 

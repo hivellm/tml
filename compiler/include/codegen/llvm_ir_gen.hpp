@@ -60,7 +60,9 @@ struct LLVMGenError {
 /// Options for LLVM IR generation.
 struct LLVMGenOptions {
     bool emit_comments = true;           ///< Include source comments in IR.
-    bool coverage_enabled = false;       ///< Inject coverage instrumentation.
+    bool coverage_enabled = false;       ///< Inject coverage instrumentation (TML runtime).
+    bool coverage_quiet = false;         ///< Suppress coverage console output (suite mode).
+    bool llvm_source_coverage = false;   ///< LLVM source-based coverage (instrprof).
     bool dll_export = false;             ///< Add dllexport for Windows DLLs.
     bool emit_debug_info = false;        ///< Generate DWARF debug information.
     bool generate_dll_entry = false;     ///< Generate tml_test_entry (no main).
@@ -68,6 +70,7 @@ struct LLVMGenOptions {
     bool force_internal_linkage = false; ///< Force internal linkage (suite mode).
     int debug_level = 2;                 ///< Debug level: 1=minimal, 2=standard, 3=full.
     int suite_test_index = -1;           ///< Suite test index (-1 = tml_test_entry).
+    int suite_total_tests = -1;          ///< Total tests in suite (for coverage aggregation).
     std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
     std::string source_file;                              ///< Source file path for debug info.
     std::string coverage_output_file;                     ///< Coverage output path.

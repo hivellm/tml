@@ -34,7 +34,9 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -214,5 +216,17 @@ std::vector<uint8_t> hex_to_bytes(const std::string& hex);
 
 // Run fuzz tests and display results
 int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c);
+
+// ============================================================================
+// Library Coverage Analysis
+// ============================================================================
+
+// Print library coverage analysis showing what's NOT covered
+void print_library_coverage_report(const std::set<std::string>& covered_functions,
+                                   const ColorOutput& c);
+
+// Write library coverage analysis to HTML file
+void write_library_coverage_html(const std::set<std::string>& covered_functions,
+                                 const std::string& output_path);
 
 } // namespace tml::cli::tester

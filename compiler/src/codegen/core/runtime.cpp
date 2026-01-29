@@ -109,6 +109,13 @@ void LLVMIRGen::emit_runtime_decls() {
         emit_line("");
     }
 
+    // LLVM instrumentation profile intrinsic (for source-based coverage)
+    if (options_.llvm_source_coverage) {
+        emit_line("; LLVM instrumentation profile intrinsics (source-based coverage)");
+        emit_line("declare void @llvm.instrprof.increment(ptr, i64, i32, i32) #1");
+        emit_line("");
+    }
+
     // Stack save/restore intrinsics (for loop alloca cleanup)
     emit_line("; Stack management intrinsics");
     emit_line("declare ptr @llvm.stacksave() nounwind");

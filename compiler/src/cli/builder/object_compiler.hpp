@@ -69,6 +69,7 @@ struct ObjectCompileOptions {
     bool lto = false;                  // Enable Link-Time Optimization
     bool thin_lto = false;             // Use ThinLTO (faster, less memory)
     bool aggressive_sroa = true;       // Aggressive scalar replacement of aggregates
+    bool coverage = false;             // Enable LLVM source code coverage instrumentation
     std::string target_triple;         // Target triple for cross-compilation (empty = host)
     std::string sysroot;               // Sysroot path for cross-compilation
     CompilerBackend compiler_backend = CompilerBackend::Auto; // Which compiler to use
@@ -99,6 +100,7 @@ struct LinkOptions {
     bool verbose = false;
     bool lto = false;                         // Enable Link-Time Optimization
     bool thin_lto = false;                    // Use ThinLTO (faster, less memory)
+    bool coverage = false;                    // Link with LLVM coverage runtime
     int lto_jobs = 0;                         // Parallel LTO jobs (0 = auto)
     std::vector<fs::path> additional_objects; // Runtime libs, etc.
     std::vector<std::string> link_flags;

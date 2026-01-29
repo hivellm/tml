@@ -58,4 +58,24 @@ std::string find_runtime_library();
 // Check if pre-compiled runtime is available
 bool is_precompiled_runtime_available();
 
+// ============================================================================
+// LLVM Coverage Tools
+// ============================================================================
+
+// Find llvm-profdata (for merging profile data)
+// Returns empty string if not found
+std::string find_llvm_profdata();
+
+// Find llvm-cov (for generating coverage reports)
+// Returns empty string if not found
+std::string find_llvm_cov();
+
+// Check if LLVM coverage tools are available
+bool is_llvm_coverage_available();
+
+// Find LLVM profile runtime library (clang_rt.profile)
+// Required for linking coverage-instrumented binaries
+// Returns empty string if not found
+std::string find_llvm_profile_runtime();
+
 } // namespace tml::cli

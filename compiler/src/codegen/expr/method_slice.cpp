@@ -69,6 +69,11 @@ auto LLVMIRGen::gen_slice_type_method(const parser::MethodCallExpr& call, const 
 
     // len() returns the slice length
     if (method == "len" || method == "length") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Slice::len");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         std::string len_ptr = fresh_reg();
         emit_line("  " + len_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + slice_ptr +
                   ", i32 0, i32 1");
@@ -80,6 +85,11 @@ auto LLVMIRGen::gen_slice_type_method(const parser::MethodCallExpr& call, const 
 
     // is_empty() returns true if length is 0
     if (method == "is_empty" || method == "isEmpty") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Slice::is_empty");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         std::string len_ptr = fresh_reg();
         emit_line("  " + len_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + slice_ptr +
                   ", i32 0, i32 1");
@@ -119,6 +129,11 @@ auto LLVMIRGen::gen_slice_method(const parser::MethodCallExpr& call, const std::
 
     // len() -> I64
     if (method == "len" || method == "length") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal(receiver_type_name + "::len");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         // Store the struct to access its field
         std::string tmp = fresh_reg();
         emit_line("  " + tmp + " = alloca " + struct_type);
@@ -135,6 +150,11 @@ auto LLVMIRGen::gen_slice_method(const parser::MethodCallExpr& call, const std::
 
     // is_empty() -> Bool
     if (method == "is_empty" || method == "isEmpty") {
+        // Track coverage for this method call
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal(receiver_type_name + "::is_empty");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
         // Store the struct to access its field
         std::string tmp = fresh_reg();
         emit_line("  " + tmp + " = alloca " + struct_type);

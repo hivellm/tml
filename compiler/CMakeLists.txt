@@ -728,6 +728,7 @@ add_library(tml_cli STATIC
     src/cli/builder/run_profiled.cpp
     # Tester modules
     src/cli/tester/benchmark.cpp
+    src/cli/tester/coverage.cpp
     src/cli/tester/discovery.cpp
     src/cli/tester/execution.cpp
     src/cli/tester/fuzzer.cpp
@@ -736,6 +737,7 @@ add_library(tml_cli STATIC
     src/cli/tester/run.cpp
     src/cli/tester/suite_execution.cpp
     src/cli/tester/test_runner.cpp
+    src/cli/tester/library_coverage.cpp
     # Linter modules
     src/cli/linter/config.cpp
     src/cli/linter/discovery.cpp

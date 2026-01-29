@@ -49,3 +49,4 @@ build/
 
 # Compiler build artifacts
 packages/compiler/build/
+coverage.html
