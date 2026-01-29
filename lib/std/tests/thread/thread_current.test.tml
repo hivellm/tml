@@ -1,0 +1,146 @@
+// Thread current and ThreadId tests
+// Tests for thread::current(), ThreadId operations, and Thread type
+use test::{assert, assert_eq}
+use std::thread
+
+// ============================================================================
+// thread::current() Tests
+// ============================================================================
+
+@test
+func test_current_thread_returns_thread() -> I32 {
+    // thread::current() should return a Thread object
+    let t: thread::Thread = thread::current()
+    // Should complete without error
+    return 0
+}
+
+@test
+func test_current_thread_has_id() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    // Thread ID should be obtainable
+    return 0
+}
+
+@test
+func test_current_thread_id_as_u64() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    let raw: U64 = id.as_u64()
+    // Raw ID should be non-zero for the main thread
+    assert(raw > 0, "Thread ID should be non-zero")
+    return 0
+}
+
+@test
+func test_current_thread_name_is_nothing() -> I32 {
+    // Default main thread has no name in our implementation
+    let t: thread::Thread = thread::current()
+    let name: Maybe[Str] = t.name()
+    when name {
+        Just(_) => {
+            // Some implementations may have a name
+            return 0
+        },
+        Nothing => {
+            // Expected: no name for main thread
+            return 0
+        }
+    }
+}
+
+@test
+func test_current_thread_consistent() -> I32 {
+    // Multiple calls to current() should return same thread ID
+    let t1: thread::Thread = thread::current()
+    let t2: thread::Thread = thread::current()
+    let id1: U64 = t1.id().as_u64()
+    let id2: U64 = t2.id().as_u64()
+    assert_eq(id1, id2)
+    return 0
+}
+
+// ============================================================================
+// ThreadId Tests
+// ============================================================================
+
+@test
+func test_thread_id_equality() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id1: thread::ThreadId = t.id()
+    let id2: thread::ThreadId = t.id()
+    // Same thread should have equal IDs
+    assert(id1 == id2, "Same thread IDs should be equal")
+    return 0
+}
+
+@test
+func test_thread_id_as_u64_consistent() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    let raw1: U64 = id.as_u64()
+    let raw2: U64 = id.as_u64()
+    assert_eq(raw1, raw2)
+    return 0
+}
+
+@test
+func test_thread_id_positive() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    let raw: U64 = id.as_u64()
+    // Thread IDs are positive (non-zero)
+    assert(raw != 0, "Thread ID should not be zero")
+    return 0
+}
+
+// ============================================================================
+// Thread Type Tests
+// ============================================================================
+
+@test
+func test_thread_id_method() -> I32 {
+    let t: thread::Thread = thread::current()
+    // Calling id() should work
+    let _: thread::ThreadId = t.id()
+    return 0
+}
+
+@test
+func test_thread_name_method() -> I32 {
+    let t: thread::Thread = thread::current()
+    // Calling name() should work
+    let _: Maybe[Str] = t.name()
+    return 0
+}
+
+// ============================================================================
+// Integration Tests
+// ============================================================================
+
+@test
+func test_thread_current_with_sleep() -> I32 {
+    // Get thread before and after sleep - should be same
+    let t1: thread::Thread = thread::current()
+    thread::sleep_ms(1)
+    let t2: thread::Thread = thread::current()
+
+    let id1: U64 = t1.id().as_u64()
+    let id2: U64 = t2.id().as_u64()
+    assert_eq(id1, id2)
+    return 0
+}
+
+@test
+func test_thread_current_with_yield() -> I32 {
+    // Get thread before and after yield - should be same
+    let t1: thread::Thread = thread::current()
+    thread::yield_now()
+    let t2: thread::Thread = thread::current()
+
+    let id1: U64 = t1.id().as_u64()
+    let id2: U64 = t2.id().as_u64()
+    assert_eq(id1, id2)
+    return 0
+}

@@ -1,173 +1,346 @@
-# Channels (Go-style)
+# MPSC Channels
 
-Channels provide a way for concurrent tasks to communicate by passing
-messages. This approach—"share memory by communicating"—helps avoid
-many concurrency pitfalls.
+Channels provide a way for threads to communicate by passing messages.
+TML provides MPSC (Multi-Producer, Single-Consumer) channels—multiple
+threads can send, but only one receives.
 
 ## What is a Channel?
 
 A channel is a typed conduit through which you can send and receive values.
-Think of it as a thread-safe queue.
-
-## Channel Functions
-
-| Function | Description |
-|----------|-------------|
-| `channel_create()` | Create a new channel |
-| `channel_send(ch, value)` | Send value (blocks if full) |
-| `channel_recv(ch)` | Receive value (blocks if empty) |
-| `channel_try_send(ch, value)` | Non-blocking send, returns bool |
-| `channel_try_recv(ch, out_ptr)` | Non-blocking receive, returns bool |
-| `channel_len(ch)` | Get number of items in channel |
-| `channel_close(ch)` | Mark channel as closed |
-| `channel_destroy(ch)` | Free channel memory |
-
-## Creating and Using Channels
+Think of it as a thread-safe queue connecting producers to a consumer.
 
 ```tml
+use std::sync::mpsc::{channel, Sender, Receiver}
+
+// Create a channel for I32 values
+let (tx, rx): (Sender[I32], Receiver[I32]) = channel[I32]()
+
+// tx = transmitter (sender)
+// rx = receiver
+```
+
+## Basic Usage
+
+### Sending and Receiving
+
+```tml
+use std::sync::mpsc::{channel, Sender, Receiver}
+
 func main() {
-    let ch = channel_create()
-    println("Channel created")
+    let (tx, rx): (Sender[I32], Receiver[I32]) = channel[I32]()
 
-    // Check initial length
-    println(channel_len(ch))  // 0
+    // Send a value
+    tx.send(42)
 
-    // Send some values
-    channel_try_send(ch, 42)
-    channel_try_send(ch, 100)
-
-    println(channel_len(ch))  // 2
-
-    // Receive values
-    let out = alloc(4)
-
-    if channel_try_recv(ch, out) {
-        println(read_i32(out))  // 42
+    // Receive the value
+    when rx.recv() {
+        Ok(value) => println(value),  // 42
+        Err(e) => println("Channel closed")
     }
-
-    if channel_try_recv(ch, out) {
-        println(read_i32(out))  // 100
-    }
-
-    println(channel_len(ch))  // 0
-
-    dealloc(out)
-    channel_close(ch)
-    channel_destroy(ch)
 }
 ```
 
-## Non-Blocking Operations
+### Non-Blocking Receive
 
-Use `try_send` and `try_recv` when you don't want to block:
+Use `try_recv()` when you don't want to block:
 
 ```tml
+use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError}
+
 func main() {
-    let ch = channel_create()
-    let out = alloc(4)
+    let (tx, rx): (Sender[I32], Receiver[I32]) = channel[I32]()
 
     // Try to receive from empty channel
-    if channel_try_recv(ch, out) {
-        println("Got value")
-    } else {
-        println("Channel empty")  // This runs
+    when rx.try_recv() {
+        Ok(value) => println("Got: ", value),
+        Err(TryRecvError::Empty) => println("No message yet"),
+        Err(TryRecvError::Disconnected) => println("Sender dropped")
     }
 
     // Send a value
-    channel_try_send(ch, 42)
+    tx.send(42)
 
-    // Now receive succeeds
-    if channel_try_recv(ch, out) {
-        println("Got: ", read_i32(out))  // Got: 42
+    // Now try_recv succeeds
+    when rx.try_recv() {
+        Ok(value) => println("Got: ", value),  // Got: 42
+        Err(_) => println("Failed")
     }
+}
+```
 
-    dealloc(out)
-    channel_destroy(ch)
+## Multiple Producers
+
+Clone the sender to allow multiple threads to send:
+
+```tml
+use std::sync::mpsc::{channel, Sender, Receiver}
+use std::thread
+
+func main() {
+    let (tx, rx): (Sender[I32], Receiver[I32]) = channel[I32]()
+
+    // Clone sender for second producer
+    let tx2: Sender[I32] = tx.duplicate()
+
+    // Producer 1
+    thread::spawn(do() {
+        tx.send(1)
+        tx.send(2)
+    })
+
+    // Producer 2
+    thread::spawn(do() {
+        tx2.send(10)
+        tx2.send(20)
+    })
+
+    // Consumer receives all messages (order may vary)
+    for i in 0 to 4 {
+        when rx.recv() {
+            Ok(value) => println(value),
+            Err(_) => break
+        }
+    }
 }
 ```
 
 ## Channel Patterns
 
-### Producer-Consumer
+### Worker Pool
 
-One side produces values, another consumes:
+Distribute work to multiple worker threads:
 
 ```tml
+use std::sync::mpsc::{channel, Sender, Receiver}
+use std::thread
+
+type Task { id: I32 }
+
 func main() {
-    let ch = channel_create()
-    let out = alloc(4)
+    let (tx, rx): (Sender[Task], Receiver[Task]) = channel[Task]()
 
-    // Producer: send numbers 1-5
-    for i in 1 through 5 {
-        channel_try_send(ch, i)
-    }
-
-    // Consumer: receive all
-    loop {
-        if channel_try_recv(ch, out) {
-            println(read_i32(out))
-        } else {
-            break
+    // Single receiver, but work distributed across threads
+    thread::spawn(do() {
+        loop {
+            when rx.recv() {
+                Ok(task) => {
+                    println("Processing task ", task.id)
+                },
+                Err(_) => break  // Channel closed
+            }
         }
+    })
+
+    // Send tasks
+    for i in 0 to 5 {
+        tx.send(Task { id: i })
     }
 
-    dealloc(out)
-    channel_destroy(ch)
+    // Drop sender to close channel (worker will exit)
+}
+```
+
+### Request-Response
+
+Use a channel in each message for responses:
+
+```tml
+use std::sync::mpsc::{channel, Sender, Receiver}
+
+type Request {
+    query: Str,
+    response_tx: Sender[I32]
+}
+
+func main() {
+    let (tx, rx): (Sender[Request], Receiver[Request]) = channel[Request]()
+
+    // Server thread
+    thread::spawn(do() {
+        loop {
+            when rx.recv() {
+                Ok(req) => {
+                    // Process request and send response
+                    let result: I32 = req.query.len() as I32
+                    req.response_tx.send(result)
+                },
+                Err(_) => break
+            }
+        }
+    })
+
+    // Client: send request with response channel
+    let (resp_tx, resp_rx): (Sender[I32], Receiver[I32]) = channel[I32]()
+    tx.send(Request { query: "hello", response_tx: resp_tx })
+
+    // Wait for response
+    when resp_rx.recv() {
+        Ok(result) => println("Response: ", result),  // Response: 5
+        Err(_) => println("No response")
+    }
 }
 ```
 
 ### Pipeline
 
-Chain channels together:
+Chain channels to form processing pipelines:
 
 ```tml
+use std::sync::mpsc::{channel, Sender, Receiver}
+use std::thread
+
 func main() {
-    let ch1 = channel_create()
-    let ch2 = channel_create()
-    let out = alloc(4)
+    // Stage 1 -> Stage 2 -> Stage 3
+    let (tx1, rx1): (Sender[I32], Receiver[I32]) = channel[I32]()
+    let (tx2, rx2): (Sender[I32], Receiver[I32]) = channel[I32]()
 
-    // Stage 1: Generate numbers
-    for i in 1 through 3 {
-        channel_try_send(ch1, i)
-    }
-
-    // Stage 2: Double each number
-    loop {
-        if channel_try_recv(ch1, out) {
-            let value = read_i32(out)
-            channel_try_send(ch2, value * 2)
-        } else {
-            break
+    // Stage 2: Double the value
+    thread::spawn(do() {
+        loop {
+            when rx1.recv() {
+                Ok(v) => tx2.send(v * 2),
+                Err(_) => break
+            }
         }
-    }
+    })
 
-    // Stage 3: Print results
-    loop {
-        if channel_try_recv(ch2, out) {
-            println(read_i32(out))  // 2, 4, 6
-        } else {
-            break
+    // Stage 3: Print the value
+    thread::spawn(do() {
+        loop {
+            when rx2.recv() {
+                Ok(v) => println("Final: ", v),
+                Err(_) => break
+            }
         }
-    }
+    })
 
-    dealloc(out)
-    channel_destroy(ch1)
-    channel_destroy(ch2)
+    // Stage 1: Generate values
+    for i in 1 through 5 {
+        tx1.send(i)
+    }
+    // Output: 2, 4, 6, 8, 10
 }
 ```
 
-## Why Channels?
+## Error Handling
 
-Channels are preferred over shared memory because:
+### SendError
 
-1. **Clear ownership**: Data is transferred, not shared
-2. **No locks needed**: The channel handles synchronization
-3. **Easier reasoning**: Message flow is explicit
-4. **Fewer bugs**: No race conditions on the data itself
+Sending fails if the receiver is dropped:
+
+```tml
+use std::sync::mpsc::{channel, Sender, Receiver, SendError}
+
+func main() {
+    let (tx, rx): (Sender[I32], Receiver[I32]) = channel[I32]()
+
+    // Drop the receiver
+    drop(rx)
+
+    // Sending now fails
+    when tx.send(42) {
+        Ok(_) => println("Sent"),
+        Err(SendError(value)) => {
+            println("Failed to send: ", value)  // value is returned
+        }
+    }
+}
+```
+
+### RecvError
+
+Receiving fails when all senders are dropped and channel is empty:
+
+```tml
+use std::sync::mpsc::{channel, Sender, Receiver}
+
+func main() {
+    let (tx, rx): (Sender[I32], Receiver[I32]) = channel[I32]()
+
+    // Send one value then drop sender
+    tx.send(42)
+    drop(tx)
+
+    // First recv succeeds
+    when rx.recv() {
+        Ok(v) => println(v),  // 42
+        Err(_) => {}
+    }
+
+    // Second recv fails - channel closed
+    when rx.recv() {
+        Ok(v) => println(v),
+        Err(_) => println("Channel closed")  // This runs
+    }
+}
+```
+
+## Iterating Over Messages
+
+Receive messages in a loop until the channel closes:
+
+```tml
+use std::sync::mpsc::{channel, Sender, Receiver}
+
+func main() {
+    let (tx, rx): (Sender[I32], Receiver[I32]) = channel[I32]()
+
+    tx.send(1)
+    tx.send(2)
+    tx.send(3)
+    drop(tx)  // Close the channel
+
+    // Receive until channel closes
+    loop {
+        when rx.recv() {
+            Ok(value) => println(value),
+            Err(_) => break
+        }
+    }
+}
+```
+
+## Comparison with Shared Memory
+
+| Channels | Shared Memory (Mutex) |
+|----------|----------------------|
+| Data is transferred, not shared | Data is shared with locks |
+| Clear ownership semantics | Must manage lock/unlock |
+| No direct data races | Possible to forget unlocking |
+| May have more allocation | May have lock contention |
+| Better for message passing | Better for shared state |
 
 ## Best Practices
 
-1. **Close channels when done**: Signals receivers that no more data is coming
-2. **Don't send on closed channels**: Causes errors
-3. **Always clean up**: Call `channel_destroy` when finished
-4. **Prefer non-blocking for polling**: Use `try_recv` in loops
+1. **Use channels for communication, mutex for shared state**
+   - If you're passing data between threads, use channels
+   - If multiple threads need to modify the same data, use `Mutex[T]`
+
+2. **Drop senders when done**
+   - This signals receivers that no more messages are coming
+   - Helps receivers know when to stop
+
+3. **Handle errors**
+   - `send()` can fail if receiver is dropped
+   - `recv()` can fail if all senders are dropped
+
+4. **Consider backpressure**
+   - Unbounded channels can grow forever
+   - Consider bounded channels for production systems (future feature)
+
+## Thread Safety
+
+- `Sender[T]` is `Send` and `Sync` - can be cloned and shared
+- `Receiver[T]` is `Send` but NOT `Sync` - only one thread can receive
+- `T` must be `Send` - values are transferred between threads
+
+```tml
+use std::sync::mpsc::{channel, Sender, Receiver}
+use core::marker::Send
+
+// This works because I32 is Send
+let (tx, rx): (Sender[I32], Receiver[I32]) = channel[I32]()
+
+// Sender can be cloned for multiple producers
+let tx2: Sender[I32] = tx.duplicate()
+```

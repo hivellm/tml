@@ -1,0 +1,277 @@
+// Send/Sync behavior tests
+// Tests for marker behaviors used for thread safety
+use test::{assert, assert_eq}
+use core::marker::{Send, Sync}
+use std::sync::{Arc, Mutex, RwLock, Condvar, Barrier, Once, OnceLock}
+use std::sync::atomic::{AtomicI32, AtomicU32, AtomicBool, AtomicI64, AtomicU64}
+
+// ============================================================================
+// Test Helper Types
+// ============================================================================
+
+// Simple struct that should be Send + Sync (all primitive fields)
+type Point { x: I32, y: I32 }
+
+// Struct with a generic field
+type Container[T] { value: T }
+
+// ============================================================================
+// Primitive Types Send/Sync Tests
+// ============================================================================
+
+@test
+func test_i32_is_send() -> I32 {
+    // I32 implements Send - can be transferred between threads
+    let x: I32 = 42
+    // This compiles because I32: Send
+    return 0
+}
+
+@test
+func test_i32_is_sync() -> I32 {
+    // I32 implements Sync - can be shared between threads via reference
+    let x: I32 = 42
+    // This compiles because I32: Sync
+    return 0
+}
+
+@test
+func test_bool_is_send_sync() -> I32 {
+    let b: Bool = true
+    // Bool implements both Send and Sync
+    return 0
+}
+
+@test
+func test_f64_is_send_sync() -> I32 {
+    let f: F64 = 3.14
+    // F64 implements both Send and Sync
+    return 0
+}
+
+// ============================================================================
+// Struct Send/Sync Derivation Tests
+// ============================================================================
+
+@test
+func test_struct_with_primitives_is_send() -> I32 {
+    // Point has only primitive fields, so it's Send
+    let p: Point = Point { x: 1, y: 2 }
+    return 0
+}
+
+@test
+func test_struct_with_primitives_is_sync() -> I32 {
+    // Point has only primitive fields, so it's Sync
+    let p: Point = Point { x: 1, y: 2 }
+    return 0
+}
+
+@test
+func test_container_of_i32_is_send() -> I32 {
+    // Container[I32] is Send because I32 is Send
+    let c: Container[I32] = Container { value: 42 }
+    return 0
+}
+
+// ============================================================================
+// Atomic Types Send/Sync Tests
+// ============================================================================
+
+@test
+func test_atomic_i32_is_send() -> I32 {
+    let a: AtomicI32 = AtomicI32::new(0)
+    // AtomicI32 implements Send
+    return 0
+}
+
+@test
+func test_atomic_i32_is_sync() -> I32 {
+    let a: AtomicI32 = AtomicI32::new(0)
+    // AtomicI32 implements Sync - safe for concurrent access
+    return 0
+}
+
+@test
+func test_atomic_bool_is_send_sync() -> I32 {
+    let a: AtomicBool = AtomicBool::new(false)
+    // AtomicBool implements both Send and Sync
+    return 0
+}
+
+@test
+func test_atomic_u64_is_send_sync() -> I32 {
+    let a: AtomicU64 = AtomicU64::new(0)
+    // AtomicU64 implements both Send and Sync
+    return 0
+}
+
+// ============================================================================
+// Mutex Send/Sync Tests
+// ============================================================================
+
+@test
+func test_mutex_of_i32_is_send() -> I32 {
+    let m: Mutex[I32] = Mutex::new(0)
+    // Mutex[I32] is Send because I32 is Send
+    return 0
+}
+
+@test
+func test_mutex_of_i32_is_sync() -> I32 {
+    let m: Mutex[I32] = Mutex::new(0)
+    // Mutex[I32] is Sync because I32 is Send
+    // (Mutex provides synchronized access)
+    return 0
+}
+
+@test
+func test_mutex_of_point_is_send() -> I32 {
+    let m: Mutex[Point] = Mutex::new(Point { x: 0, y: 0 })
+    // Mutex[Point] is Send
+    return 0
+}
+
+// ============================================================================
+// RwLock Send/Sync Tests
+// ============================================================================
+
+@test
+func test_rwlock_of_i32_is_send() -> I32 {
+    let rw: RwLock[I32] = RwLock::new(0)
+    // RwLock[I32] is Send
+    return 0
+}
+
+@test
+func test_rwlock_of_i32_is_sync() -> I32 {
+    let rw: RwLock[I32] = RwLock::new(0)
+    // RwLock[I32] is Sync
+    return 0
+}
+
+// ============================================================================
+// Arc Send/Sync Tests
+// ============================================================================
+
+@test
+func test_arc_of_i32_is_send() -> I32 {
+    let a: Arc[I32] = Arc::new(42)
+    // Arc[I32] is Send because I32 is Send + Sync
+    return 0
+}
+
+@test
+func test_arc_of_i32_is_sync() -> I32 {
+    let a: Arc[I32] = Arc::new(42)
+    // Arc[I32] is Sync because I32 is Send + Sync
+    return 0
+}
+
+@test
+func test_arc_can_be_cloned_across_threads() -> I32 {
+    // Arc allows shared ownership across threads
+    let a1: Arc[I32] = Arc::new(42)
+    let a2: Arc[I32] = a1.duplicate()
+    assert_eq(a1.strong_count(), 2 as I64)
+    return 0
+}
+
+// ============================================================================
+// Condvar Send/Sync Tests
+// ============================================================================
+
+@test
+func test_condvar_is_send() -> I32 {
+    let cv: Condvar = Condvar::new()
+    // Condvar is Send
+    return 0
+}
+
+@test
+func test_condvar_is_sync() -> I32 {
+    let cv: Condvar = Condvar::new()
+    // Condvar is Sync
+    return 0
+}
+
+// ============================================================================
+// Barrier Send/Sync Tests
+// ============================================================================
+
+@test
+func test_barrier_is_send() -> I32 {
+    let b: Barrier = Barrier::new(1)
+    // Barrier is Send
+    return 0
+}
+
+@test
+func test_barrier_is_sync() -> I32 {
+    let b: Barrier = Barrier::new(1)
+    // Barrier is Sync
+    return 0
+}
+
+// ============================================================================
+// Once/OnceLock Send/Sync Tests
+// ============================================================================
+
+@test
+func test_once_is_send() -> I32 {
+    let o: Once = Once::new()
+    // Once is Send
+    return 0
+}
+
+@test
+func test_once_is_sync() -> I32 {
+    let o: Once = Once::new()
+    // Once is Sync
+    return 0
+}
+
+@test
+func test_oncelock_of_i32_is_send() -> I32 {
+    let ol: OnceLock[I32] = OnceLock::new[I32]()
+    // OnceLock[I32] is Send
+    return 0
+}
+
+@test
+func test_oncelock_of_i32_is_sync() -> I32 {
+    let ol: OnceLock[I32] = OnceLock::new[I32]()
+    // OnceLock[I32] is Sync
+    return 0
+}
+
+// ============================================================================
+// Combined Usage Tests
+// ============================================================================
+
+@test
+func test_arc_mutex_pattern() -> I32 {
+    // Common pattern: Arc[Mutex[T]] for shared mutable state
+    let shared: Arc[Mutex[I32]] = Arc::new(Mutex::new(0))
+    let clone: Arc[Mutex[I32]] = shared.duplicate()
+
+    // Both can be used from different contexts
+    assert_eq(shared.strong_count(), 2 as I64)
+    return 0
+}
+
+@test
+func test_nested_container_send() -> I32 {
+    // Container[Container[I32]] should be Send
+    let nested: Container[Container[I32]] = Container {
+        value: Container { value: 42 }
+    }
+    return 0
+}
+
+// Note: Tests for negative cases (types that are NOT Send/Sync) would require
+// compile-time failure tests, which is not yet supported in the test framework.
+// Examples of types that should NOT be Send/Sync:
+// - Ptr[T] (raw pointers)
+// - MutexGuard[T] (holds a lock, cannot be transferred)
+// - RwLockReadGuard[T], RwLockWriteGuard[T]

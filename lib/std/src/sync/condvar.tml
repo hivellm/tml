@@ -82,8 +82,8 @@
 //! }
 //! ```
 
-use sync::mutex::{Mutex, MutexGuard}
-use sync::atomic::{AtomicU32, Ordering}
+use std::sync::mutex::{Mutex, MutexGuard}
+use std::sync::atomic::{AtomicU32, Ordering}
 
 // ============================================================================
 // Platform-specific raw condition variable
@@ -117,7 +117,7 @@ func raw_condvar_notify_one(cvar: mut ref RawCondvar) -> I32
 func raw_condvar_notify_all(cvar: mut ref RawCondvar) -> I32
 
 // Import RawMutex from mutex module (needed for wait operations)
-use sync::mutex::RawMutex
+use std::sync::mutex::RawMutex
 
 // ============================================================================
 // Condvar

@@ -1,0 +1,110 @@
+// Thread management tests
+// Tests for thread::sleep_ms, yield_now, available_parallelism
+// Note: current() and spawn/join tests disabled due to codegen issues
+use test::{assert, assert_eq}
+use std::thread
+
+// ============================================================================
+// Thread Sleep Tests
+// ============================================================================
+
+@test
+func test_thread_sleep_ms_short() -> I32 {
+    // Sleep for 1ms - should complete without error
+    thread::sleep_ms(1)
+    return 0
+}
+
+@test
+func test_thread_sleep_ms_10() -> I32 {
+    // Sleep for 10ms
+    thread::sleep_ms(10)
+    return 0
+}
+
+@test
+func test_thread_sleep_ms_zero() -> I32 {
+    // Sleep for 0ms - should return immediately
+    thread::sleep_ms(0)
+    return 0
+}
+
+@test
+func test_thread_sleep_multiple() -> I32 {
+    // Multiple short sleeps
+    thread::sleep_ms(5)
+    thread::sleep_ms(5)
+    thread::sleep_ms(5)
+    return 0
+}
+
+// ============================================================================
+// Thread Yield Tests
+// ============================================================================
+
+@test
+func test_thread_yield_now() -> I32 {
+    // Yield should not cause any errors
+    thread::yield_now()
+    return 0
+}
+
+@test
+func test_thread_yield_multiple() -> I32 {
+    // Multiple yields in a row
+    thread::yield_now()
+    thread::yield_now()
+    thread::yield_now()
+    return 0
+}
+
+// ============================================================================
+// Available Parallelism Tests
+// ============================================================================
+
+@test
+func test_available_parallelism() -> I32 {
+    let cores: U32 = thread::available_parallelism()
+    // Should have at least 1 core
+    assert(cores >= 1, "Should have at least 1 core")
+    return 0
+}
+
+@test
+func test_available_parallelism_reasonable() -> I32 {
+    let cores: U32 = thread::available_parallelism()
+    // Should have a reasonable number of cores (less than 1024)
+    assert(cores < 1024, "Should have less than 1024 cores")
+    return 0
+}
+
+@test
+func test_available_parallelism_consistent() -> I32 {
+    // Multiple calls should return the same value
+    let cores1: U32 = thread::available_parallelism()
+    let cores2: U32 = thread::available_parallelism()
+    assert_eq(cores1, cores2)
+    return 0
+}
+
+// ============================================================================
+// Combined Tests
+// ============================================================================
+
+@test
+func test_thread_operations_combined() -> I32 {
+    // Test various thread operations in sequence
+    thread::yield_now()
+    thread::sleep_ms(1)
+
+    let cores: U32 = thread::available_parallelism()
+    assert(cores >= 1, "Should have at least 1 core")
+
+    thread::yield_now()
+    return 0
+}
+
+// Note: The following tests are disabled due to codegen issues:
+// - thread::current() - depends on intrinsic not yet implemented
+// - thread::spawn/join - JoinHandle[T] generic instantiation issues
+// These will be enabled once the codegen properly handles these cases.

@@ -261,3 +261,113 @@ func test_rwlock_write_guard_drop() {
 
     println("RwLockWriteGuard drop test passed!")
 }
+
+// ============================================================================
+// Additional Edge Case Tests
+// ============================================================================
+
+@test
+func test_mutex_with_i64() {
+    // Test Mutex with a different type
+    let mutex: Mutex[I64] = Mutex::new(1000000000000 as I64)
+
+    {
+        let guard: MutexGuard[I64] = mutex.lock()
+        assert_eq(*guard.get(), 1000000000000 as I64)
+    }
+
+    println("Mutex with I64 test passed!")
+}
+
+@test
+func test_mutex_with_bool() {
+    let mutex: Mutex[Bool] = Mutex::new(false)
+
+    {
+        var guard: MutexGuard[Bool] = mutex.lock()
+        *guard.get_mut() = true
+    }
+
+    {
+        let guard: MutexGuard[Bool] = mutex.lock()
+        assert(*guard.get())
+    }
+
+    println("Mutex with Bool test passed!")
+}
+
+@test
+func test_mutex_sequential_locks() {
+    // Test multiple sequential lock/unlock cycles
+    let mutex: Mutex[I32] = Mutex::new(0)
+
+    var i: I32 = 0
+    loop (i < 5) {
+        {
+            var guard: MutexGuard[I32] = mutex.lock()
+            *guard.get_mut() = *guard.get() + 1
+        }
+        i = i + 1
+    }
+
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 5)
+    }
+
+    println("Mutex sequential locks test passed!")
+}
+
+@test
+func test_rwlock_with_i64() {
+    let rwlock: RwLock[I64] = RwLock::new(9999999999 as I64)
+
+    {
+        let r: RwLockReadGuard[I64] = rwlock.read()
+        assert_eq(*r.get(), 9999999999 as I64)
+    }
+
+    println("RwLock with I64 test passed!")
+}
+
+@test
+func test_rwlock_read_after_write() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+
+    // Write
+    {
+        var w: RwLockWriteGuard[I32] = rwlock.write()
+        *w.get_mut() = 100
+    }
+
+    // Multiple reads after write
+    {
+        let r1: RwLockReadGuard[I32] = rwlock.read()
+        let r2: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*r1.get(), 100)
+        assert_eq(*r2.get(), 100)
+    }
+
+    println("RwLock read after write test passed!")
+}
+
+@test
+func test_rwlock_sequential_writes() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+
+    var i: I32 = 0
+    loop (i < 3) {
+        {
+            var w: RwLockWriteGuard[I32] = rwlock.write()
+            *w.get_mut() = *w.get() + 10
+        }
+        i = i + 1
+    }
+
+    {
+        let r: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*r.get(), 30)
+    }
+
+    println("RwLock sequential writes test passed!")
+}

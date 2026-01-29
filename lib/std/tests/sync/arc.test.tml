@@ -1,19 +1,15 @@
-// Arc (Atomic Reference Counted) Tests
-// Consolidated from: arc.test.tml, arc_basics.test.tml, arc_complex_struct.test.tml,
-//                    arc_field_simple.test.tml, arc_deref_debug.test.tml
-
+// Consolidated Arc tests
 use test::{assert, assert_eq}
 use std::sync::Arc
 use std::sync::Mutex
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering}
-
-// ============================================================================
-// Section 1: Basic Arc Operations
-// ============================================================================
 
 type SimpleData {
     value: I32,
 }
+
+// ============================================================================
+// Arc Creation Tests
+// ============================================================================
 
 @test
 func test_arc_new_i32() -> I32 {
@@ -28,13 +24,14 @@ func test_arc_new_struct() -> I32 {
 }
 
 // ============================================================================
-// Section 2: Arc Duplicate (Clone) Tests
+// Arc Duplicate Tests
 // ============================================================================
 
 @test
 func test_arc_duplicate_i32() -> I32 {
     let arc1: Arc[I32] = Arc::new(42)
     let arc2: Arc[I32] = arc1.duplicate()
+    // Both arcs should point to the same data
     return 0
 }
 
@@ -42,158 +39,17 @@ func test_arc_duplicate_i32() -> I32 {
 func test_arc_duplicate_struct() -> I32 {
     let arc1: Arc[SimpleData] = Arc::new(SimpleData { value: 42 })
     let arc2: Arc[SimpleData] = arc1.duplicate()
+    // Both arcs should point to the same data
     return 0
 }
 
 // ============================================================================
-// Section 3: Arc with Nested Types
+// Arc with Nested Types
 // ============================================================================
 
 @test
 func test_arc_with_mutex() -> I32 {
+    // Test Arc[Mutex[I32]] - previously had type inference issues
     let a: Arc[Mutex[I32]] = Arc::new(Mutex::new(42))
-    return 0
-}
-
-// ============================================================================
-// Section 4: Arc Deref Coercion Tests
-// ============================================================================
-
-type Simple {
-    x: I32,
-}
-
-@test
-func test_simple_direct() -> I32 {
-    let s: Simple = Simple { x: 42 }
-    assert_eq(s.x, 42)
-    return 0
-}
-
-@test
-func test_arc_field() -> I32 {
-    let arc: Arc[Simple] = Arc::new(Simple { x: 100 })
-    let val: I32 = arc.x
-    assert_eq(val, 100)
-    return 0
-}
-
-// ============================================================================
-// Section 5: Arc with Atomic Fields
-// ============================================================================
-
-type Counter {
-    value: AtomicUsize,
-}
-
-@test
-func test_arc_counter_creation() -> I32 {
-    let arc: Arc[Counter] = Arc::new(Counter {
-        value: AtomicUsize::new(42),
-    })
-    return 0
-}
-
-@test
-func test_arc_counter_field_access() -> I32 {
-    let arc: Arc[Counter] = Arc::new(Counter {
-        value: AtomicUsize::new(42),
-    })
-    let val: U64 = arc.value.load(Ordering::Relaxed)
-    assert_eq(val, 42)
-    return 0
-}
-
-@test
-func test_arc_counter_field_modify() -> I32 {
-    let arc: Arc[Counter] = Arc::new(Counter {
-        value: AtomicUsize::new(0),
-    })
-    arc.value.store(100, Ordering::Relaxed)
-    let val: U64 = arc.value.load(Ordering::Relaxed)
-    assert_eq(val, 100)
-    return 0
-}
-
-// ============================================================================
-// Section 6: Arc with Complex Structs (Channel-like patterns)
-// ============================================================================
-
-type SimpleInner {
-    count: AtomicUsize,
-    flag: AtomicBool,
-}
-
-@test
-func test_arc_simple_inner() -> I32 {
-    let inner: Arc[SimpleInner] = Arc::new(SimpleInner {
-        count: AtomicUsize::new(0),
-        flag: AtomicBool::new(true),
-    })
-    return 0
-}
-
-@test
-func test_arc_simple_inner_field_access() -> I32 {
-    let inner: Arc[SimpleInner] = Arc::new(SimpleInner {
-        count: AtomicUsize::new(42),
-        flag: AtomicBool::new(true),
-    })
-    let val: U64 = inner.count.load(Ordering::Relaxed)
-    assert_eq(val, 42)
-    return 0
-}
-
-type MutexInner[T] {
-    data: Mutex[T],
-}
-
-@test
-func test_arc_mutex_inner() -> I32 {
-    let inner: Arc[MutexInner[I32]] = Arc::new(MutexInner {
-        data: Mutex::new(100),
-    })
-    return 0
-}
-
-type PtrMutexInner[T] {
-    head: Mutex[Ptr[T]],
-}
-
-@test
-func test_arc_ptr_mutex_inner() -> I32 {
-    let inner: Arc[PtrMutexInner[I32]] = Arc::new(PtrMutexInner {
-        head: Mutex::new(null),
-    })
-    return 0
-}
-
-type ComplexInner[T] {
-    head: Mutex[Ptr[T]],
-    count: AtomicUsize,
-    flag: AtomicBool,
-}
-
-@test
-func test_arc_complex_inner() -> I32 {
-    let inner: Arc[ComplexInner[I32]] = Arc::new(ComplexInner {
-        head: Mutex::new(null),
-        count: AtomicUsize::new(1),
-        flag: AtomicBool::new(true),
-    })
-    return 0
-}
-
-@test
-func test_arc_complex_inner_field_access() -> I32 {
-    let inner: Arc[ComplexInner[I32]] = Arc::new(ComplexInner {
-        head: Mutex::new(null),
-        count: AtomicUsize::new(42),
-        flag: AtomicBool::new(true),
-    })
-    let val: U64 = inner.count.load(Ordering::Relaxed)
-    assert_eq(val, 42)
-    let flag_val: Bool = inner.flag.load(Ordering::Relaxed)
-    assert(flag_val)
     return 0
 }

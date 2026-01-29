@@ -44,8 +44,8 @@
 //! }
 //! ```
 
-use sync::atomic::{AtomicU32, Ordering, spin_loop_hint}
-use sync::mutex::Mutex
+use std::sync::atomic::{AtomicU32, Ordering, spin_loop_hint}
+use std::sync::mutex::Mutex
 
 // ============================================================================
 // Once
@@ -149,6 +149,24 @@ impl Once {
                     spin_loop_hint()
                 }
             }
+        }
+    }
+
+    /// Attempts to mark this Once as completed without running any code.
+    /// Returns true if this call successfully transitioned from incomplete to complete,
+    /// false if already initialized.
+    ///
+    /// This is used internally by OnceLock to implement set().
+    pub func try_set_completed(mut this) -> Bool {
+        let current: Outcome[U32, U32] = this.state.compare_exchange(
+            ONCE_INCOMPLETE,
+            ONCE_COMPLETE,
+            Ordering::AcqRel,
+            Ordering::Acquire
+        )
+        when current {
+            Ok(_) => return true,
+            Err(_) => return false
         }
     }
 
@@ -280,23 +298,12 @@ impl[T] OnceLock[T] {
     /// assert_eq(*cell.get().unwrap(), 42)
     /// ```
     pub func set(mut this, value: T) -> Outcome[Unit, T] {
-        // Try to be the one to set
-        let current: Outcome[U32, U32] = this.once.state.compare_exchange(
-            ONCE_INCOMPLETE,
-            ONCE_RUNNING,
-            Ordering::AcqRel,
-            Ordering::Acquire
-        )
-
-        when current {
-            Ok(_) => {
-                this.value = Just(value)
-                this.once.state.store(ONCE_COMPLETE, Ordering::Release)
-                return Ok(())
-            },
-            Err(_) => {
-                return Err(value)
-            }
+        // Use try_set_completed to avoid nested field atomic access issues
+        if this.once.try_set_completed() {
+            this.value = Just(value)
+            return Ok(())
+        } else {
+            return Err(value)
         }
     }
 

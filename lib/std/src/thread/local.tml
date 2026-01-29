@@ -61,7 +61,7 @@
 //! Thread-local values are lazily initialized on first access in each thread.
 //! The initializer function is called once per thread that accesses the value.
 
-use sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering}
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering}
 use core::alloc::{Layout, alloc_global, dealloc_global}
 use core::mem::{size_of, align_of}
 
@@ -453,16 +453,9 @@ impl[T] Drop for LocalKey[T] {
 
 /// Get the current thread's ID.
 ///
-/// This is an internal function used by LocalKey.
-func current_thread_id() -> U64 {
-    // This would be implemented as an intrinsic that gets the OS thread ID
-    // For now, we use a placeholder that gets the thread ID
-    return __intrinsic_current_thread_id()
-}
-
-/// Intrinsic to get the current thread ID.
-@extern("tml_current_thread_id")
-func __intrinsic_current_thread_id() -> U64
+/// Get the current thread ID from the OS.
+@extern("tml_thread_current_id")
+func current_thread_id() -> U64
 
 // ============================================================================
 // Convenience Macros (implemented as functions)

@@ -37,8 +37,11 @@
 
 - [Fearless Concurrency](ch07-00-concurrency.md)
     - [Atomic Operations](ch07-01-atomics.md)
-    - [Channels (Go-style)](ch07-02-channels.md)
+    - [MPSC Channels](ch07-02-channels.md)
     - [Mutex and Synchronization](ch07-03-mutex-and-sync.md)
+    - [Arc and Shared Ownership](ch07-04-arc.md)
+    - [Send and Sync](ch07-05-send-sync.md)
+    - [Thread Management](ch07-06-threads.md)
 
 ## Standard Library and Testing
 

@@ -59,7 +59,7 @@
 //! assert_eq(stack.len(), 400)
 //! ```
 
-use sync::atomic::{AtomicPtr, AtomicUsize, Ordering}
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering}
 use core::alloc::{Layout, alloc_global, dealloc_global}
 use core::mem::{size_of, align_of}
 

@@ -6,7 +6,7 @@ multiple threads access the same memory.
 
 ## Why Atomics?
 
-Consider incrementing a counter from two threads:
+Consider incrementing a counter from two threads without synchronization:
 
 ```
 Thread 1: read counter (0)
@@ -16,130 +16,283 @@ Thread 2: write counter (1)  // Lost update!
 ```
 
 Without atomics, both threads read 0 and write 1, losing an increment.
+Atomic operations ensure each increment is indivisible.
 
-## Atomic Functions
+## Atomic Types
 
-TML provides these atomic operations:
+TML provides atomic types in `std::sync::atomic`:
 
-| Function | Description |
-|----------|-------------|
-| `atomic_load(ptr)` | Read value atomically |
-| `atomic_store(ptr, value)` | Write value atomically |
-| `atomic_add(ptr, value)` | Add and return old value |
-| `atomic_sub(ptr, value)` | Subtract and return old value |
-| `atomic_exchange(ptr, value)` | Swap and return old value |
-| `atomic_cas(ptr, expected, desired)` | Compare-and-swap, returns bool |
-| `atomic_and(ptr, value)` | Bitwise AND, returns old value |
-| `atomic_or(ptr, value)` | Bitwise OR, returns old value |
+| Type | Description |
+|------|-------------|
+| `AtomicBool` | Atomic boolean |
+| `AtomicI8`, `AtomicI16`, `AtomicI32`, `AtomicI64` | Atomic signed integers |
+| `AtomicU8`, `AtomicU16`, `AtomicU32`, `AtomicU64` | Atomic unsigned integers |
+| `AtomicIsize`, `AtomicUsize` | Atomic pointer-sized integers |
+| `AtomicPtr[T]` | Atomic raw pointer |
 
-## Basic Example
+## Memory Ordering
+
+Every atomic operation requires a memory ordering that specifies
+synchronization guarantees:
 
 ```tml
-func main() {
-    let counter = alloc(4)
-    write_i32(counter, 0)
+use std::sync::atomic::{AtomicI32, Ordering}
 
-    // Atomic store
-    atomic_store(counter, 42)
-    println(atomic_load(counter))  // 42
+let counter: AtomicI32 = AtomicI32::new(0)
 
-    // Atomic add (returns old value)
-    let old = atomic_add(counter, 10)
-    println(old)                    // 42 (old value)
-    println(atomic_load(counter))   // 52 (new value)
+// Load with Acquire ordering
+let value: I32 = counter.load(Ordering::Acquire)
 
-    dealloc(counter)
-}
+// Store with Release ordering
+counter.store(42, Ordering::Release)
 ```
 
-## Compare-and-Swap (CAS)
+### Ordering Options
+
+| Ordering | Description |
+|----------|-------------|
+| `Relaxed` | No synchronization, just atomicity |
+| `Acquire` | Synchronizes with Release stores (for loads) |
+| `Release` | Synchronizes with Acquire loads (for stores) |
+| `AcqRel` | Both Acquire and Release (for read-modify-write) |
+| `SeqCst` | Strongest ordering, globally consistent |
+
+**When in doubt, use `SeqCst`**. It's the safest option, though potentially
+slower on some architectures.
+
+## Basic Operations
+
+### Creating Atomic Values
+
+```tml
+use std::sync::atomic::{AtomicI32, AtomicBool, Ordering}
+
+// Create atomic values
+let counter: AtomicI32 = AtomicI32::new(0)
+let flag: AtomicBool = AtomicBool::new(false)
+```
+
+### Load and Store
+
+```tml
+use std::sync::atomic::{AtomicI32, Ordering}
+
+let counter: AtomicI32 = AtomicI32::new(0)
+
+// Atomic store
+counter.store(42, Ordering::SeqCst)
+
+// Atomic load
+let value: I32 = counter.load(Ordering::SeqCst)
+assert_eq(value, 42)
+```
+
+### Swap
+
+Exchange the value atomically and return the old value:
+
+```tml
+use std::sync::atomic::{AtomicI32, Ordering}
+
+let counter: AtomicI32 = AtomicI32::new(100)
+
+// Swap returns old value
+let old: I32 = counter.swap(200, Ordering::SeqCst)
+assert_eq(old, 100)
+assert_eq(counter.load(Ordering::SeqCst), 200)
+```
+
+## Arithmetic Operations
+
+All fetch operations return the **previous** value:
+
+```tml
+use std::sync::atomic::{AtomicI32, Ordering}
+
+let counter: AtomicI32 = AtomicI32::new(10)
+
+// fetch_add: add and return old value
+let old: I32 = counter.fetch_add(5, Ordering::SeqCst)
+assert_eq(old, 10)
+assert_eq(counter.load(Ordering::SeqCst), 15)
+
+// fetch_sub: subtract and return old value
+let old: I32 = counter.fetch_sub(3, Ordering::SeqCst)
+assert_eq(old, 15)
+assert_eq(counter.load(Ordering::SeqCst), 12)
+```
+
+### All Arithmetic Operations
+
+| Method | Description |
+|--------|-------------|
+| `fetch_add(val, ord)` | Add and return old value |
+| `fetch_sub(val, ord)` | Subtract and return old value |
+| `fetch_max(val, ord)` | Maximum of current and val |
+| `fetch_min(val, ord)` | Minimum of current and val |
+
+## Bitwise Operations
+
+```tml
+use std::sync::atomic::{AtomicU32, Ordering}
+
+let flags: AtomicU32 = AtomicU32::new(0b1111)
+
+// Bitwise AND (clear bits)
+let old: U32 = flags.fetch_and(0b1100, Ordering::SeqCst)
+assert_eq(old, 0b1111)
+assert_eq(flags.load(Ordering::SeqCst), 0b1100)
+
+// Bitwise OR (set bits)
+let old: U32 = flags.fetch_or(0b0011, Ordering::SeqCst)
+assert_eq(old, 0b1100)
+assert_eq(flags.load(Ordering::SeqCst), 0b1111)
+
+// Bitwise XOR (toggle bits)
+let old: U32 = flags.fetch_xor(0b1010, Ordering::SeqCst)
+assert_eq(old, 0b1111)
+assert_eq(flags.load(Ordering::SeqCst), 0b0101)
+```
+
+## Compare-and-Exchange (CAS)
 
 CAS is the most powerful atomic operation. It only updates if the current
 value matches the expected value:
 
 ```tml
-func main() {
-    let counter = alloc(4)
-    atomic_store(counter, 100)
+use std::sync::atomic::{AtomicI32, Ordering}
 
-    // Try to swap 100 -> 200 (should succeed)
-    let success1 = atomic_cas(counter, 100, 200)
-    println(success1)               // true
-    println(atomic_load(counter))   // 200
+let counter: AtomicI32 = AtomicI32::new(100)
 
-    // Try to swap 100 -> 300 (should fail, current is 200)
-    let success2 = atomic_cas(counter, 100, 300)
-    println(success2)               // false
-    println(atomic_load(counter))   // 200 (unchanged)
-
-    dealloc(counter)
+// Try to change 100 -> 200
+when counter.compare_exchange(100, 200, Ordering::SeqCst, Ordering::SeqCst) {
+    Ok(old) => {
+        // Success! old == 100
+        assert_eq(old, 100)
+        assert_eq(counter.load(Ordering::SeqCst), 200)
+    },
+    Err(current) => {
+        // Failed - someone changed it first
+        // current contains the actual value
+    }
 }
 ```
 
-## Spinlocks
+### CAS Variants
 
-Build a simple lock using atomics:
+| Method | Description |
+|--------|-------------|
+| `compare_exchange(cur, new, succ_ord, fail_ord)` | Strong CAS |
+| `compare_exchange_weak(cur, new, succ_ord, fail_ord)` | Weak CAS (may fail spuriously) |
+
+Use `compare_exchange_weak` in loops for potentially better performance:
 
 ```tml
-func main() {
-    let lock = alloc(4)
-    write_i32(lock, 0)  // 0 = unlocked
+use std::sync::atomic::{AtomicI32, Ordering}
 
-    // Acquire lock
-    let acquired = spin_trylock(lock)
-    println(acquired)  // true
+let counter: AtomicI32 = AtomicI32::new(0)
 
-    // Try again (should fail)
-    let acquired2 = spin_trylock(lock)
-    println(acquired2)  // false
-
-    // Release lock
-    spin_unlock(lock)
-
-    // Now can acquire again
-    let acquired3 = spin_trylock(lock)
-    println(acquired3)  // true
-
-    spin_unlock(lock)
-    dealloc(lock)
+// Lock-free increment using CAS loop
+var current: I32 = counter.load(Ordering::Relaxed)
+loop {
+    when counter.compare_exchange_weak(current, current + 1, Ordering::SeqCst, Ordering::Relaxed) {
+        Ok(_) => break,
+        Err(actual) => current = actual  // Retry with actual value
+    }
 }
 ```
 
-## Memory Fences
+## AtomicBool
 
-Control memory ordering with fences:
+AtomicBool is useful for flags and simple synchronization:
 
 ```tml
-func main() {
-    fence()          // Full memory barrier
-    fence_acquire()  // Acquire fence
-    fence_release()  // Release fence
+use std::sync::atomic::{AtomicBool, Ordering}
+
+let ready: AtomicBool = AtomicBool::new(false)
+
+// Check and set
+let was_ready: Bool = ready.swap(true, Ordering::SeqCst)
+
+// Common pattern: publish data
+// Thread 1: prepare data, then set flag
+ready.store(true, Ordering::Release)
+
+// Thread 2: wait for flag, then read data
+loop (not ready.load(Ordering::Acquire)) {
+    // spin or yield
 }
+// Now safe to read the data
 ```
 
-Fences ensure that memory operations before/after the fence are properly
-ordered with respect to other threads.
+## Memory Ordering Examples
 
-## Atomic Bitwise Operations
+### Producer-Consumer Pattern
 
-Use atomic AND/OR for flag manipulation:
+Use Release/Acquire for producer-consumer synchronization:
 
 ```tml
-func main() {
-    let flags = alloc(4)
-    atomic_store(flags, 0xFF)  // 255
+use std::sync::atomic::{AtomicBool, Ordering}
 
-    // Clear lower 4 bits
-    let old1 = atomic_and(flags, 0xF0)
-    println(old1)                   // 255 (old)
-    println(atomic_load(flags))     // 240 (new: 255 & 0xF0)
+let ready: AtomicBool = AtomicBool::new(false)
+var data: I32 = 0
 
-    // Set lower 4 bits
-    let old2 = atomic_or(flags, 0x0F)
-    println(old2)                   // 240 (old)
-    println(atomic_load(flags))     // 255 (new: 240 | 0x0F)
+// Producer thread
+data = 42                              // Write data
+ready.store(true, Ordering::Release)   // Publish: all writes before are visible
 
-    dealloc(flags)
+// Consumer thread
+loop (not ready.load(Ordering::Acquire)) {
+    // spin
+}
+// Acquire guarantees we see the write to `data`
+assert_eq(data, 42)
+```
+
+### Simple Counter (Relaxed is OK)
+
+When you just need a counter and don't care about ordering with other data:
+
+```tml
+use std::sync::atomic::{AtomicI64, Ordering}
+
+let requests: AtomicI64 = AtomicI64::new(0)
+
+// Multiple threads can increment - order doesn't matter
+requests.fetch_add(1, Ordering::Relaxed)
+
+// Read the total later
+let total: I64 = requests.load(Ordering::Relaxed)
+```
+
+## Fence Operations
+
+Fences provide ordering constraints without accessing specific variables:
+
+```tml
+use std::sync::atomic::{fence, Ordering}
+
+// All writes before this fence are visible to threads
+// that see writes after a corresponding Acquire fence
+fence(Ordering::Release)
+
+// All reads after this fence see writes that happened
+// before a corresponding Release fence
+fence(Ordering::Acquire)
+```
+
+### Spin Loop Hint
+
+Optimize spin loops with a CPU hint:
+
+```tml
+use std::sync::atomic::{AtomicBool, spin_loop_hint, Ordering}
+
+let flag: AtomicBool = AtomicBool::new(false)
+
+// Efficient spin loop
+loop (not flag.load(Ordering::Acquire)) {
+    spin_loop_hint()  // Hint to CPU: we're spinning
 }
 ```
 
@@ -150,6 +303,43 @@ Use atomics for:
 1. **Simple counters**: Increment/decrement across threads
 2. **Flags**: Boolean state shared between threads
 3. **Lock-free data structures**: Building queues, stacks
-4. **Building higher-level primitives**: Implementing mutex, semaphore
+4. **Statistics gathering**: When exact order doesn't matter
 
-For complex shared state, consider using channels or mutex instead.
+For complex shared state, prefer `Mutex[T]` or channels—they're easier
+to use correctly.
+
+## Common Mistakes
+
+### Wrong: Using Relaxed for Synchronization
+
+```tml
+// WRONG: Relaxed doesn't synchronize!
+ready.store(true, Ordering::Relaxed)  // Producer
+// ...
+loop (not ready.load(Ordering::Relaxed)) {}  // Consumer
+// Consumer may not see writes before the store!
+```
+
+### Right: Using Release/Acquire
+
+```tml
+// RIGHT: Release/Acquire synchronize
+ready.store(true, Ordering::Release)  // Producer
+// ...
+loop (not ready.load(Ordering::Acquire)) {}  // Consumer
+// Consumer sees all writes before the Release store
+```
+
+## Lock-Free Check
+
+All atomic types provide `is_lock_free()` to check if operations are truly
+lock-free on the current platform:
+
+```tml
+use std::sync::atomic::AtomicI64
+
+let counter: AtomicI64 = AtomicI64::new(0)
+if counter.is_lock_free() {
+    println("64-bit atomics are lock-free on this platform")
+}
+```

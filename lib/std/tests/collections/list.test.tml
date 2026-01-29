@@ -1,0 +1,168 @@
+// Tests for List[T] collection type
+use test::{assert, assert_eq}
+use std::collections::List
+
+// ============================================================================
+// List[T] Tests
+// ============================================================================
+
+@test
+func test_list_new() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+    assert(list.is_empty(), "new list should be empty")
+    assert_eq(list.len(), 0 as I64, "new list len should be 0")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_push_and_get() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(10)
+    list.push(20)
+    list.push(30)
+
+    assert_eq(list.len(), 3 as I64, "len after 3 pushes")
+    assert(not list.is_empty(), "list should not be empty")
+
+    let v0: I64 = list.get(0)
+    assert_eq(v0, 10 as I64, "get index 0")
+
+    let v1: I64 = list.get(1)
+    assert_eq(v1, 20 as I64, "get index 1")
+
+    let v2: I64 = list.get(2)
+    assert_eq(v2, 30 as I64, "get index 2")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_set() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(1)
+    list.push(2)
+    list.push(3)
+
+    list.set(1, 42)
+
+    let v0: I64 = list.get(0)
+    assert_eq(v0, 1 as I64, "index 0 unchanged")
+
+    let v1: I64 = list.get(1)
+    assert_eq(v1, 42 as I64, "index 1 changed")
+
+    let v2: I64 = list.get(2)
+    assert_eq(v2, 3 as I64, "index 2 unchanged")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_pop() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(100)
+    list.push(200)
+    list.push(300)
+
+    let v1: I64 = list.pop()
+    assert_eq(v1, 300 as I64, "pop should return last")
+    assert_eq(list.len(), 2 as I64, "len after pop")
+
+    let v2: I64 = list.pop()
+    assert_eq(v2, 200 as I64, "pop should return 200")
+
+    let v3: I64 = list.pop()
+    assert_eq(v3, 100 as I64, "pop should return 100")
+
+    assert(list.is_empty(), "list should be empty after popping all")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_first_last() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(1)
+    list.push(2)
+    list.push(3)
+
+    let first: I64 = list.first()
+    assert_eq(first, 1 as I64, "first should be 1")
+
+    let last: I64 = list.last()
+    assert_eq(last, 3 as I64, "last should be 3")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_clear() -> I32 {
+    let list: List[I32] = List[I32].new(8)
+
+    list.push(1)
+    list.push(2)
+    list.push(3)
+
+    list.clear()
+
+    assert(list.is_empty(), "list should be empty after clear")
+    assert_eq(list.len(), 0 as I64, "len should be 0 after clear")
+
+    // Should be able to push again
+    list.push(42)
+    assert_eq(list.len(), 1 as I64, "can push after clear")
+
+    let val: I64 = list.get(0)
+    assert_eq(val, 42 as I64, "value correct after clear and push")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_capacity() -> I32 {
+    let list: List[I32] = List[I32].new(16)
+    let cap: I64 = list.capacity()
+    assert(cap >= (16 as I64), "capacity should be at least 16")
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_i64() -> I32 {
+    let list: List[I64] = List[I64].new(4)
+
+    list.push(1000000000000 as I64)
+    list.push(2000000000000 as I64)
+
+    let v0: I64 = list.get(0)
+    assert_eq(v0, 1000000000000 as I64, "i64 value 1")
+
+    let v1: I64 = list.get(1)
+    assert_eq(v1, 2000000000000 as I64, "i64 value 2")
+
+    list.destroy()
+    return 0
+}
+
+@test
+func test_list_default() -> I32 {
+    let list: List[I32] = List[I32].default()
+    assert(list.is_empty(), "default list should be empty")
+    let cap: I64 = list.capacity()
+    assert(cap >= (8 as I64), "default capacity should be at least 8")
+    list.push(42)
+    let val: I64 = list.get(0)
+    assert_eq(val, 42 as I64, "can use default list")
+    list.destroy()
+    return 0
+}

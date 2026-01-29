@@ -1,0 +1,152 @@
+// Tests for HashMap[K, V] collection type
+use test::{assert, assert_eq}
+use std::collections::{HashMap, HashMapIter}
+
+// ============================================================================
+// HashMap[K, V] Tests
+// ============================================================================
+
+@test
+func test_hashmap_new() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+    assert_eq(map.len(), 0 as I64, "new hashmap len should be 0")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_set_get() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 100 as I64)
+    map.set(2 as I64, 200 as I64)
+    map.set(3 as I64, 300 as I64)
+
+    assert_eq(map.len(), 3 as I64, "len after 3 sets")
+
+    let v1: I64 = map.get(1 as I64)
+    assert_eq(v1, 100 as I64, "get key 1")
+
+    let v2: I64 = map.get(2 as I64)
+    assert_eq(v2, 200 as I64, "get key 2")
+
+    let v3: I64 = map.get(3 as I64)
+    assert_eq(v3, 300 as I64, "get key 3")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_has() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(42 as I64, 999 as I64)
+
+    assert(map.has(42 as I64), "should have key 42")
+    assert(not map.has(99 as I64), "should not have key 99")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_remove() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 10 as I64)
+    map.set(2 as I64, 20 as I64)
+
+    assert_eq(map.len(), 2 as I64, "len before remove")
+
+    let removed: Bool = map.remove(1 as I64)
+    assert(removed, "remove should return true")
+    assert_eq(map.len(), 1 as I64, "len after remove")
+    assert(not map.has(1 as I64), "key 1 should be gone")
+    assert(map.has(2 as I64), "key 2 should still exist")
+
+    let not_removed: Bool = map.remove(999 as I64)
+    assert(not not_removed, "remove non-existent should return false")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_overwrite() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 100 as I64)
+    let v1: I64 = map.get(1 as I64)
+    assert_eq(v1, 100 as I64, "initial value")
+
+    map.set(1 as I64, 200 as I64)
+    let v2: I64 = map.get(1 as I64)
+    assert_eq(v2, 200 as I64, "overwritten value")
+    assert_eq(map.len(), 1 as I64, "len should still be 1")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_clear() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 10 as I64)
+    map.set(2 as I64, 20 as I64)
+    map.set(3 as I64, 30 as I64)
+
+    map.clear()
+
+    assert_eq(map.len(), 0 as I64, "len after clear")
+    assert(not map.has(1 as I64), "key 1 gone after clear")
+    assert(not map.has(2 as I64), "key 2 gone after clear")
+
+    // Can add again
+    map.set(5 as I64, 50 as I64)
+    let v: I64 = map.get(5 as I64)
+    assert_eq(v, 50 as I64, "value after clear and set")
+
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_iter() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].new(16)
+
+    map.set(1 as I64, 100 as I64)
+    map.set(2 as I64, 200 as I64)
+    map.set(3 as I64, 300 as I64)
+
+    let iter: HashMapIter[I64, I64] = map.iter()
+    var count: I64 = 0
+    var sum: I64 = 0
+
+    loop (iter.has_next()) {
+        let k: I64 = iter.key()
+        let v: I64 = iter.value()
+        sum = sum + v
+        count = count + 1
+        iter.next()
+    }
+
+    assert_eq(count, 3 as I64, "should iterate 3 times")
+    assert_eq(sum, 600 as I64, "sum of values should be 600")
+
+    iter.destroy()
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_default() -> I32 {
+    let map: HashMap[I64, I64] = HashMap[I64, I64].default()
+    assert_eq(map.len(), 0 as I64, "default map should be empty")
+    map.set(1 as I64, 42 as I64)
+    let val: I64 = map.get(1 as I64)
+    assert_eq(val, 42 as I64, "can use default map")
+    map.destroy()
+    return 0
+}

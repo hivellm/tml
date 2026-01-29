@@ -61,8 +61,8 @@
 //! returns, even if the closure panics. This is enforced by the type system:
 //! [`ScopedJoinHandle`] cannot be sent outside the scope.
 
-use sync::atomic::{AtomicBool, AtomicUsize, Ordering}
-use sync::{Mutex, MutexGuard, Condvar, Arc}
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering}
+use std::sync::{Mutex, MutexGuard, Condvar, Arc}
 use core::marker::{Send, Sync}
 
 // ============================================================================

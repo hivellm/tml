@@ -64,9 +64,9 @@
 //! }
 //! ```
 
-use sync::mutex::Mutex
-use sync::condvar::Condvar
-use sync::atomic::{AtomicU32, Ordering}
+use std::sync::mutex::Mutex
+use std::sync::condvar::Condvar
+use std::sync::atomic::{AtomicU32, Ordering}
 
 // ============================================================================
 // Barrier
@@ -159,20 +159,20 @@ impl Barrier {
     /// ```
     pub func wait(mut this) -> BarrierWaitResult {
         var guard: MutexGuard[BarrierState] = this.mutex.lock()
-        let generation: I64 = guard.generation
+        let generation: U32 = (*guard.get()).generation
 
-        guard.count = guard.count + 1
+        (*guard.get_mut()).count = (*guard.get()).count + 1
 
-        if guard.count >= this.num_threads {
+        if (*guard.get()).count >= this.num_threads {
             // Last thread to arrive - reset and wake everyone
-            guard.count = 0
-            guard.generation = guard.generation + 1
+            (*guard.get_mut()).count = 0
+            (*guard.get_mut()).generation = (*guard.get()).generation + 1
             this.cvar.notify_all()
             return BarrierWaitResult { is_leader: true }
         }
 
         // Wait for generation to change
-        loop (guard.generation == generation) {
+        loop ((*guard.get()).generation == generation) {
             guard = this.cvar.wait(guard)
         }
 
