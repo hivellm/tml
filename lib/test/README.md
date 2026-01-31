@@ -1,6 +1,8 @@
 # TML Test Framework
 
-A lightweight, built-in testing framework for TML.
+A comprehensive testing framework for TML with assertions, benchmarking, and code coverage.
+
+**Status**: 2445 tests passing across 223 test files
 
 ## Features
 
@@ -9,7 +11,10 @@ A lightweight, built-in testing framework for TML.
 - **Module-based assertions** - Import via `use test`
 - **Polymorphic assertions** - `assert_eq`, `assert_ne`, `assert_gt`, etc. work with any comparable type
 - **Pattern matching support** - Full enum pattern matching in tests
-- **Auto-generated test runner** - Tests are void functions, fail via assertions
+- **Parallel execution** - Multi-threaded test runner
+- **Benchmarking** - `@bench` decorator for performance testing
+- **Code coverage** - Track function, line, and branch coverage
+- **HTML/JSON reports** - Generate coverage reports
 
 ## Quick Start
 
@@ -31,67 +36,39 @@ func test_subtraction() {
 }
 ```
 
-> **Note**: Test functions don't need a return type. They pass if they complete
-> without triggering an assertion failure. Failed assertions call `panic()` which
-> exits with code 1.
-
 Run tests:
 
 ```bash
 tml test                    # Run all tests in current directory
+tml test lib               # Run tests in lib directory
+tml test --coverage        # Run with code coverage
 ```
 
 ## Available Assertions
 
 All assertion functions are available via `use test`. All comparison assertions are **polymorphic** - they work with any type that supports the required comparison operators.
 
-### `assert(condition: Bool, message: Str)`
-Basic boolean assertion:
-```tml
-assert(x > 0, "x must be positive")
-```
+### Basic Assertions
 
-### `assert_eq[T](left: T, right: T, message: Str)`
-Assert equality (polymorphic - works with any type):
 ```tml
+// Boolean assertion
+assert(x > 0, "x must be positive")
+
+// Equality (polymorphic)
 assert_eq(result, 42, "result should be 42")
 assert_eq(is_valid, true, "should be valid")
 assert_eq(name, "Alice", "name should be Alice")
-```
 
-### `assert_ne[T](left: T, right: T, message: Str)`
-Assert inequality (polymorphic):
-```tml
+// Inequality (polymorphic)
 assert_ne(result, 0, "result should not be zero")
-```
 
-### `assert_gt[T](left: T, right: T, message: Str)`
-Assert greater than (polymorphic):
-```tml
+// Comparisons (polymorphic)
 assert_gt(score, 50, "score must be above 50")
-```
-
-### `assert_gte[T](left: T, right: T, message: Str)`
-Assert greater than or equal (polymorphic):
-```tml
 assert_gte(age, 18, "must be at least 18")
-```
-
-### `assert_lt[T](left: T, right: T, message: Str)`
-Assert less than (polymorphic):
-```tml
 assert_lt(errors, 10, "must have fewer than 10 errors")
-```
-
-### `assert_lte[T](left: T, right: T, message: Str)`
-Assert less than or equal (polymorphic):
-```tml
 assert_lte(count, 100, "must not exceed 100")
-```
 
-### `assert_in_range[T](value: T, min: T, max: T, message: Str)`
-Assert value is within range [min, max] (polymorphic):
-```tml
+// Range check (polymorphic)
 assert_in_range(score, 0, 100, "score must be 0-100")
 ```
 
@@ -134,22 +111,17 @@ func test_color_matching() {
 
     assert_eq(is_red, true, "color should be Red")
 }
-```
-
-## Module System
-
-Tests must explicitly import the test module:
-
-```tml
-use test  // Required at top of file
 
 @test
-func my_test() {
-    assert_eq(1, 1, "test")
+func test_maybe_matching() {
+    let value: Maybe[I32] = Just(42)
+
+    when value {
+        Just(n) => assert_eq(n, 42, "should be 42"),
+        Nothing => panic("should not be Nothing")
+    }
 }
 ```
-
-Without `use test`, assertion functions will not be available.
 
 ## CLI Options
 
@@ -162,34 +134,37 @@ tml test basics                 # Filter by test name
 tml test --group=compiler       # Filter by directory
 tml test --verbose              # Verbose output (single-threaded)
 tml test --quiet                # Minimal output
+
+# Coverage options
+tml test --coverage             # Enable coverage tracking
+tml test --coverage-html        # Generate HTML coverage report
+tml test --coverage-json        # Generate JSON coverage report
 ```
 
 ## Test Timeout
 
-Tests have a maximum execution time to prevent infinite loops from blocking the test suite:
+Tests have a maximum execution time to prevent infinite loops:
 
 - **Default timeout**: 20 seconds per test
 - **Configurable via CLI**: `--timeout=N` where N is seconds
 - **Behavior**: If a test exceeds the timeout, it's marked as FAILED with a TIMEOUT message
-- **Use case**: Prevents tests with infinite loops or deadlocks from hanging forever
 
-Example:
 ```bash
-tml test --timeout=5            # Set 5 second timeout for all tests
+tml test --timeout=5            # Set 5 second timeout
 tml test --timeout=60           # Set 60 second timeout for slower tests
 ```
 
 ## Benchmarking
 
-Benchmark functions with the `@bench` decorator to measure performance:
+Benchmark functions with the `@bench` decorator:
 
 ```tml
 @bench
 func bench_fibonacci() -> Unit {
-    let mut a: I32 = 0
-    let mut b: I32 = 1
-    let mut i: I32 = 0
-    loop (i < 20) {
+    var a: I32 = 0
+    var b: I32 = 1
+    var i: I32 = 0
+    loop i < 20 {
         let temp: I32 = a + b
         a = b
         b = temp
@@ -209,10 +184,112 @@ func bench_fibonacci() -> Unit {
 tml run bench_file.tml     # Run all benchmarks in file
 ```
 
-**Benchmark requirements:**
-- Function must be decorated with `@bench`
-- Must return `Unit` (no return value)
-- Should perform meaningful work in the function body
+## Code Coverage
+
+The test framework includes code coverage tracking:
+
+### Coverage Functions
+
+```tml
+use test::coverage
+
+// Track function coverage
+cover_func("my_function")
+
+// Track line coverage
+cover_line("file.tml", 42)
+
+// Track branch coverage
+cover_branch("file.tml", 50, 0)  // branch 0 (e.g., if-true)
+cover_branch("file.tml", 50, 1)  // branch 1 (e.g., if-false)
+
+// Get coverage stats
+let func_count: I32 = get_covered_func_count()
+let line_count: I32 = get_covered_line_count()
+let branch_count: I32 = get_covered_branch_count()
+let percent: I32 = get_coverage_percent()
+
+// Check specific function
+let is_covered: Bool = is_func_covered("my_function")
+
+// Reset coverage data
+reset_coverage()
+
+// Generate reports
+print_coverage_report()
+```
+
+### Coverage Reports
+
+```bash
+# Generate HTML report
+tml test --coverage --coverage-html
+# Output: coverage.html
+
+# Generate JSON report
+tml test --coverage --coverage-json
+# Output: coverage.json
+```
+
+### Example Coverage Test
+
+```tml
+use test
+use test::coverage
+
+func add(a: I32, b: I32) -> I32 {
+    cover_func("add")
+    return a + b
+}
+
+@test
+func test_coverage_tracking() {
+    reset_coverage()
+
+    assert_eq(get_covered_func_count(), 0, "initially no coverage")
+
+    let result: I32 = add(2, 3)
+    assert_eq(result, 5, "add works")
+
+    assert_eq(get_covered_func_count(), 1, "one function covered")
+    assert(is_func_covered("add"), "add should be covered")
+}
+```
+
+## Module Structure
+
+```
+lib/test/
+├── src/
+│   ├── mod.tml           # Main module (exports all submodules)
+│   ├── types.tml         # Test result types
+│   ├── assertions/       # Assertion functions
+│   ├── runner/           # Test runner
+│   ├── bench/            # Benchmark support
+│   ├── report/           # Report generation
+│   └── coverage/         # Coverage tracking
+└── runtime/
+    ├── assertions.c      # C runtime for assertions
+    └── coverage.c        # C runtime for coverage
+```
+
+## Test Output
+
+```
+TML v0.1.0
+
+Running 223 test files...
+Grouped into 46 test suites
+
+ + compiler_tests (1094 tests) 202ms
+ + lib/core (657 tests) 0ms
+ + lib/std (694 tests) 128ms
+
+Tests       2445 passed (2445 tests, 223 files)
+Duration    571ms
+
+All tests passed!
+```
 
 ## Implementation Status
 
@@ -220,16 +297,12 @@ tml run bench_file.tml     # Run all benchmarks in file
 - [x] Test discovery (*.test.tml files)
 - [x] Auto-generated test runner
 - [x] Module system (`use test`)
-- [x] **Polymorphic assertions** (`assert_eq[T]`, `assert_ne[T]`, etc.)
+- [x] Polymorphic assertions (`assert_eq[T]`, `assert_ne[T]`, etc.)
 - [x] Pattern matching support
 - [x] CLI integration (`tml test`)
 - [x] Parallel execution (multi-threaded)
 - [x] Test filtering by name/pattern
 - [x] Benchmarking (`@bench`)
 - [x] Test timeout (default 20s, configurable)
-
-## Test Results
-
-Current test suite: 34/34 tests passing (100%)
-- All compiler tests: PASSED
-- All test framework examples: PASSED
+- [x] Code coverage (function, line, branch)
+- [x] HTML/JSON coverage reports
