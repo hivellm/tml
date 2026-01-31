@@ -1,15 +1,157 @@
-// Tests for core::convert module - minimal tests
-
+// Tests for core::convert module
 use test
-use core::convert::{From}
+use core::convert::From
 
-// Just test I32 identity to avoid codegen issues
+// ============================================================================
+// Custom types for testing From
+// ============================================================================
+
+type Celsius {
+    value: I32
+}
+
+type Fahrenheit {
+    value: I32
+}
+
+impl From[Celsius] for Fahrenheit {
+    pub func from(c: Celsius) -> Fahrenheit {
+        return Fahrenheit { value: c.value * 9 / 5 + 32 }
+    }
+}
+
+impl From[Fahrenheit] for Celsius {
+    pub func from(f: Fahrenheit) -> Celsius {
+        return Celsius { value: (f.value - 32) * 5 / 9 }
+    }
+}
+
+// ============================================================================
+// From tests with custom types
+// ============================================================================
+
 @test
-func test_from_identity_i32() -> I32 {
-    let x: I32 = 42
-    let y: I32 = I32::from(x)
-    assert_eq(y, 42, "identity conversion should preserve value")
+func test_from_celsius_to_fahrenheit() -> I32 {
+    let celsius: Celsius = Celsius { value: 0 }
+    let fahrenheit: Fahrenheit = Fahrenheit::from(celsius)
+    assert_eq(fahrenheit.value, 32, "0C should be 32F")
     return 0
 }
 
-// Note: Other From tests removed - codegen issues with cross-type conversions
+@test
+func test_from_celsius_100() -> I32 {
+    let celsius: Celsius = Celsius { value: 100 }
+    let fahrenheit: Fahrenheit = Fahrenheit::from(celsius)
+    assert_eq(fahrenheit.value, 212, "100C should be 212F")
+    return 0
+}
+
+@test
+func test_from_fahrenheit_to_celsius() -> I32 {
+    let fahrenheit: Fahrenheit = Fahrenheit { value: 32 }
+    let celsius: Celsius = Celsius::from(fahrenheit)
+    assert_eq(celsius.value, 0, "32F should be 0C")
+    return 0
+}
+
+@test
+func test_from_fahrenheit_212() -> I32 {
+    let fahrenheit: Fahrenheit = Fahrenheit { value: 212 }
+    let celsius: Celsius = Celsius::from(fahrenheit)
+    assert_eq(celsius.value, 100, "212F should be 100C")
+    return 0
+}
+
+// ============================================================================
+// Primitive From tests (I32 -> I64, etc.)
+// ============================================================================
+
+@test
+func test_i64_from_i32() -> I32 {
+    let small: I32 = 42
+    let big: I64 = I64::from(small)
+    assert_eq(big, 42, "I64::from(I32) should work")
+    return 0
+}
+
+@test
+func test_i64_from_i16() -> I32 {
+    let small: I16 = 1000
+    let big: I64 = I64::from(small)
+    assert_eq(big, 1000, "I64::from(I16) should work")
+    return 0
+}
+
+@test
+func test_i32_from_i16() -> I32 {
+    let small: I16 = -500
+    let big: I32 = I32::from(small)
+    assert_eq(big, -500, "I32::from(I16) should preserve sign")
+    return 0
+}
+
+@test
+func test_i32_from_i8() -> I32 {
+    let small: I8 = 127
+    let big: I32 = I32::from(small)
+    assert_eq(big, 127, "I32::from(I8) max value")
+    return 0
+}
+
+@test
+func test_i32_from_i8_negative() -> I32 {
+    let small: I8 = -128
+    let big: I32 = I32::from(small)
+    assert_eq(big, -128, "I32::from(I8) min value")
+    return 0
+}
+
+// ============================================================================
+// Unsigned From tests
+// ============================================================================
+
+@test
+func test_u64_from_u32() -> I32 {
+    let small: U32 = 4000000000
+    let big: U64 = U64::from(small)
+    assert_eq(big, 4000000000, "U64::from(U32) should work")
+    return 0
+}
+
+@test
+func test_u32_from_u16() -> I32 {
+    let small: U16 = 65535
+    let big: U32 = U32::from(small)
+    assert_eq(big, 65535, "U32::from(U16) max value")
+    return 0
+}
+
+@test
+func test_u16_from_u8() -> I32 {
+    let small: U8 = 255
+    let big: U16 = U16::from(small)
+    assert_eq(big, 255, "U16::from(U8) max value")
+    return 0
+}
+
+// ============================================================================
+// Float From tests
+// ============================================================================
+
+@test
+func test_f64_from_f32() -> I32 {
+    let small: F32 = 3.14
+    let big: F64 = F64::from(small)
+    let int_val: I64 = (big * 100.0) as I64
+    assert_eq(int_val, 314, "F64::from(F32) should preserve value")
+    return 0
+}
+
+@test
+func test_f64_from_i32() -> I32 {
+    let int_val: I32 = 42
+    let float_val: F64 = F64::from(int_val)
+    let result: I64 = float_val as I64
+    assert_eq(result, 42, "F64::from(I32) should work")
+    return 0
+}

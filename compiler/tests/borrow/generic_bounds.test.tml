@@ -119,66 +119,62 @@ func copy_type_function_call() -> I32 {
 // Maybe[T] with Duplicate Bound
 // =============================================================================
 
-// Note: Generic method resolution for .duplicate() on Maybe[T] is pending
-// full generic behavior impl support.
-// @test
-// func maybe_duplicate() -> I32 {
-//     // Maybe[T] implements Duplicate when T: Duplicate
-//     let m1: Maybe[I32] = Just(42)
-//     let m2: Maybe[I32] = m1.duplicate()
-//
-//     when m1 {
-//         Just(val) => assert_eq(val, 42, "m1 should still have value"),
-//         Nothing => return 1,
-//     }
-//
-//     when m2 {
-//         Just(val) => assert_eq(val, 42, "m2 should have duplicated value"),
-//         Nothing => return 1,
-//     }
-//
-//     return 0
-// }
+@test
+func maybe_duplicate() -> I32 {
+    // Maybe[T] implements Duplicate when T: Duplicate
+    let m1: Maybe[I32] = Just(42)
+    let m2: Maybe[I32] = m1.duplicate()
+
+    when m1 {
+        Just(val) => assert_eq(val, 42, "m1 should still have value"),
+        Nothing => return 1,
+    }
+
+    when m2 {
+        Just(val) => assert_eq(val, 42, "m2 should have duplicated value"),
+        Nothing => return 1,
+    }
+
+    return 0
+}
 
 // =============================================================================
 // Outcome[T, E] with Duplicate Bound
 // =============================================================================
 
-// Note: Generic method resolution for .duplicate() on Outcome[T,E] is pending
-// full generic behavior impl support.
-// @test
-// func outcome_duplicate_ok() -> I32 {
-//     // Outcome[T, E] implements Duplicate when T: Duplicate and E: Duplicate
-//     let r1: Outcome[I32, I32] = Ok(42)
-//     let r2: Outcome[I32, I32] = r1.duplicate()
-//
-//     when r1 {
-//         Ok(val) => assert_eq(val, 42, "r1 should still have value"),
-//         Err(_) => return 1,
-//     }
-//
-//     when r2 {
-//         Ok(val) => assert_eq(val, 42, "r2 should have duplicated value"),
-//         Err(_) => return 1,
-//     }
-//
-//     return 0
-// }
+@test
+func outcome_duplicate_ok() -> I32 {
+    // Outcome[T, E] implements Duplicate when T: Duplicate and E: Duplicate
+    let r1: Outcome[I32, I32] = Ok(42)
+    let r2: Outcome[I32, I32] = r1.duplicate()
 
-// @test
-// func outcome_duplicate_err() -> I32 {
-//     let r1: Outcome[I32, I32] = Err(100)
-//     let r2: Outcome[I32, I32] = r1.duplicate()
-//
-//     when r1 {
-//         Ok(_) => return 1,
-//         Err(e) => assert_eq(e, 100, "r1 should still have error"),
-//     }
-//
-//     when r2 {
-//         Ok(_) => return 1,
-//         Err(e) => assert_eq(e, 100, "r2 should have duplicated error"),
-//     }
-//
-//     return 0
-// }
+    when r1 {
+        Ok(val) => assert_eq(val, 42, "r1 should still have value"),
+        Err(_) => return 1,
+    }
+
+    when r2 {
+        Ok(val) => assert_eq(val, 42, "r2 should have duplicated value"),
+        Err(_) => return 1,
+    }
+
+    return 0
+}
+
+@test
+func outcome_duplicate_err() -> I32 {
+    let r1: Outcome[I32, I32] = Err(100)
+    let r2: Outcome[I32, I32] = r1.duplicate()
+
+    when r1 {
+        Ok(_) => return 1,
+        Err(e) => assert_eq(e, 100, "r1 should still have error"),
+    }
+
+    when r2 {
+        Ok(_) => return 1,
+        Err(e) => assert_eq(e, 100, "r2 should have duplicated error"),
+    }
+
+    return 0
+}

@@ -1,0 +1,397 @@
+// Tests for TryFrom narrowing and cross conversions
+use test
+use core::convert::{TryFrom, TryFromIntError}
+
+// ============================================================================
+// TryFrom narrowing conversions: I64 -> smaller signed
+// ============================================================================
+
+@test
+func test_try_from_i64_to_i32_success() -> I32 {
+    let value: I64 = 100
+    when I32::try_from(value) {
+        Ok(n) => assert_eq(n, 100, "I64 100 -> I32 100"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i32_overflow_high() -> I32 {
+    let value: I64 = 3000000000  // > I32::MAX
+    when I32::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            when e {
+                TryFromIntError::Overflow => {},
+                _ => panic("Should be Overflow")
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i32_overflow_low() -> I32 {
+    let value: I64 = -3000000000  // < I32::MIN
+    when I32::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            when e {
+                TryFromIntError::Overflow => {},
+                _ => panic("Should be Overflow")
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i16_success() -> I32 {
+    let value: I64 = 1000
+    when I16::try_from(value) {
+        Ok(n) => assert_eq(n as I32, 1000, "I64 1000 -> I16 1000"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i16_overflow() -> I32 {
+    let value: I64 = 50000  // > I16::MAX (32767)
+    when I16::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i8_success() -> I32 {
+    let value: I64 = 100
+    when I8::try_from(value) {
+        Ok(n) => assert_eq(n as I32, 100, "I64 100 -> I8 100"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i8_overflow() -> I32 {
+    let value: I64 = 200  // > I8::MAX (127)
+    when I8::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i8_negative() -> I32 {
+    let value: I64 = -100
+    when I8::try_from(value) {
+        Ok(n) => assert_eq(n as I32, -100, "I64 -100 -> I8 -100"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i8_negative_overflow() -> I32 {
+    let value: I64 = -200  // < I8::MIN (-128)
+    when I8::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+// ============================================================================
+// TryFrom narrowing conversions: I32 -> smaller signed
+// ============================================================================
+
+@test
+func test_try_from_i32_to_i16_success() -> I32 {
+    let value: I32 = 10000
+    when I16::try_from(value) {
+        Ok(n) => assert_eq(n as I32, 10000, "I32 10000 -> I16 10000"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i32_to_i16_overflow() -> I32 {
+    let value: I32 = 40000  // > I16::MAX
+    when I16::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_try_from_i32_to_i8_success() -> I32 {
+    let value: I32 = 50
+    when I8::try_from(value) {
+        Ok(n) => assert_eq(n as I32, 50, "I32 50 -> I8 50"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i32_to_i8_overflow() -> I32 {
+    let value: I32 = 500
+    when I8::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+// ============================================================================
+// TryFrom narrowing conversions: unsigned
+// ============================================================================
+
+@test
+func test_try_from_u64_to_u32_success() -> I32 {
+    let value: U64 = 1000000
+    when U32::try_from(value) {
+        Ok(n) => assert_eq(n, 1000000 as U32, "U64 -> U32 success"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_u64_to_u32_overflow() -> I32 {
+    let value: U64 = 5000000000  // > U32::MAX
+    when U32::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_try_from_u32_to_u16_success() -> I32 {
+    let value: U32 = 50000
+    when U16::try_from(value) {
+        Ok(n) => assert_eq(n, 50000 as U16, "U32 -> U16 success"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_u32_to_u16_overflow() -> I32 {
+    let value: U32 = 70000  // > U16::MAX (65535)
+    when U16::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+@test
+func test_try_from_u16_to_u8_success() -> I32 {
+    let value: U16 = 200
+    when U8::try_from(value) {
+        Ok(n) => assert_eq(n, 200 as U8, "U16 -> U8 success"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_u16_to_u8_overflow() -> I32 {
+    let value: U16 = 300  // > U8::MAX (255)
+    when U8::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+// ============================================================================
+// TryFrom cross conversions: signed to unsigned
+// ============================================================================
+
+@test
+func test_try_from_i8_to_u8_success() -> I32 {
+    let value: I8 = 100
+    when U8::try_from(value) {
+        Ok(n) => assert_eq(n, 100 as U8, "I8 100 -> U8 100"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i8_to_u8_negative() -> I32 {
+    let value: I8 = -50
+    when U8::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            when e {
+                TryFromIntError::NegativeToUnsigned => {},
+                _ => panic("Should be NegativeToUnsigned")
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_from_i32_to_u32_success() -> I32 {
+    let value: I32 = 1000
+    when U32::try_from(value) {
+        Ok(n) => assert_eq(n, 1000 as U32, "I32 1000 -> U32 1000"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i32_to_u32_negative() -> I32 {
+    let value: I32 = -1
+    when U32::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            when e {
+                TryFromIntError::NegativeToUnsigned => {},
+                _ => panic("Should be NegativeToUnsigned")
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_u64_success() -> I32 {
+    let value: I64 = 9000000000000
+    when U64::try_from(value) {
+        Ok(n) => assert_eq(n, 9000000000000 as U64, "I64 -> U64 success"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_u64_negative() -> I32 {
+    let value: I64 = -100
+    when U64::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            when e {
+                TryFromIntError::NegativeToUnsigned => {},
+                _ => panic("Should be NegativeToUnsigned")
+            }
+        }
+    }
+    return 0
+}
+
+// ============================================================================
+// TryFrom cross conversions: unsigned to signed
+// ============================================================================
+
+@test
+func test_try_from_u8_to_i8_success() -> I32 {
+    let value: U8 = 100
+    when I8::try_from(value) {
+        Ok(n) => assert_eq(n as I32, 100, "U8 100 -> I8 100"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_u8_to_i8_overflow() -> I32 {
+    let value: U8 = 200  // > I8::MAX (127)
+    when I8::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            when e {
+                TryFromIntError::Overflow => {},
+                _ => panic("Should be Overflow")
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_from_u32_to_i32_success() -> I32 {
+    let value: U32 = 2000000000  // < I32::MAX
+    when I32::try_from(value) {
+        Ok(n) => assert_eq(n, 2000000000, "U32 -> I32 success"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_u32_to_i32_overflow() -> I32 {
+    let value: U32 = 3000000000  // > I32::MAX
+    when I32::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+// ============================================================================
+// Edge cases
+// ============================================================================
+
+@test
+func test_try_from_i32_to_i32_boundary() -> I32 {
+    // Test at boundaries
+    let max_i8: I64 = 127
+    let min_i8: I64 = -128
+
+    when I8::try_from(max_i8) {
+        Ok(n) => assert_eq(n as I32, 127, "I8::MAX works"),
+        Err(_) => panic("Should succeed at I8::MAX")
+    }
+
+    when I8::try_from(min_i8) {
+        Ok(n) => assert_eq(n as I32, -128, "I8::MIN works"),
+        Err(_) => panic("Should succeed at I8::MIN")
+    }
+
+    // Just outside boundaries
+    when I8::try_from(max_i8 + 1) {
+        Ok(_) => panic("Should fail at I8::MAX + 1"),
+        Err(_) => {}
+    }
+
+    when I8::try_from(min_i8 - 1) {
+        Ok(_) => panic("Should fail at I8::MIN - 1"),
+        Err(_) => {}
+    }
+
+    return 0
+}
+
+@test
+func test_try_from_zero() -> I32 {
+    // Zero should always succeed
+    let zero_i64: I64 = 0
+    let zero_u64: U64 = 0
+
+    when I8::try_from(zero_i64) {
+        Ok(n) => assert_eq(n as I32, 0, "Zero to I8"),
+        Err(_) => panic("Zero should succeed")
+    }
+
+    when U8::try_from(zero_u64) {
+        Ok(n) => assert_eq(n, 0 as U8, "Zero to U8"),
+        Err(_) => panic("Zero should succeed")
+    }
+
+    return 0
+}
+

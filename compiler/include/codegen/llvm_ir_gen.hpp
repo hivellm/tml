@@ -779,6 +779,11 @@ private:
     // Used by infer_expr_type to determine return types of function calls
     std::unordered_map<std::string, types::TypePtr> func_return_types_;
 
+    // Concrete types for impl Behavior returns (func_name -> concrete LLVM type)
+    // When a function returns `impl Behavior`, we analyze the function body to find
+    // the actual concrete type being returned
+    std::unordered_map<std::string, std::string> impl_behavior_concrete_types_;
+
     // Storage for imported module ASTs (keeps AST alive so pointers in pending_generic_* remain
     // valid)
     std::vector<parser::Module> imported_module_asts_;

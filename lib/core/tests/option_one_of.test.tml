@@ -1,0 +1,38 @@
+// Test for Maybe::one_of method (renamed from xor because xor is a keyword)
+use test::*
+
+@test
+func test_maybe_one_of_just_nothing() {
+    let x: Maybe[I32] = Just(2)
+    let y: Maybe[I32] = Nothing
+    let result: Maybe[I32] = x.one_of(y)
+    // Just xor Nothing = Just
+    assert(result.is_just())
+}
+
+@test
+func test_maybe_one_of_nothing_just() {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = Just(3)
+    let result: Maybe[I32] = x.one_of(y)
+    // Nothing xor Just = Just
+    assert(result.is_just())
+}
+
+@test
+func test_maybe_one_of_just_just() {
+    let x: Maybe[I32] = Just(2)
+    let y: Maybe[I32] = Just(3)
+    let result: Maybe[I32] = x.one_of(y)
+    // Just xor Just = Nothing
+    assert(result.is_nothing())
+}
+
+@test
+func test_maybe_one_of_nothing_nothing() {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = Nothing
+    let result: Maybe[I32] = x.one_of(y)
+    // Nothing xor Nothing = Nothing
+    assert(result.is_nothing())
+}

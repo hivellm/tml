@@ -164,13 +164,31 @@ auto HirBuilder::lower_module(const parser::Module& ast_module) -> HirModule {
                 if constexpr (std::is_same_v<T, parser::FuncDecl>) {
                     module.functions.push_back(lower_function(d));
                 } else if constexpr (std::is_same_v<T, parser::StructDecl>) {
-                    module.structs.push_back(lower_struct(d));
+                    // Skip generic structs - they need instantiation
+                    if (d.generics.empty()) {
+                        module.structs.push_back(lower_struct(d));
+                    }
                 } else if constexpr (std::is_same_v<T, parser::EnumDecl>) {
-                    module.enums.push_back(lower_enum(d));
+                    // Skip generic enums - they need instantiation
+                    if (d.generics.empty()) {
+                        module.enums.push_back(lower_enum(d));
+                    }
                 } else if constexpr (std::is_same_v<T, parser::TraitDecl>) {
                     module.behaviors.push_back(lower_behavior(d));
                 } else if constexpr (std::is_same_v<T, parser::ImplDecl>) {
-                    module.impls.push_back(lower_impl(d));
+                    // Skip generic impl blocks - they need to be instantiated on-demand
+                    // via the direct LLVM codegen path, not through MIR
+                    bool has_impl_generics = !d.generics.empty();
+                    bool has_type_generics = false;
+                    if (d.self_type && d.self_type->is<parser::NamedType>()) {
+                        const auto& named = d.self_type->as<parser::NamedType>();
+                        if (named.generics.has_value() && !named.generics->args.empty()) {
+                            has_type_generics = true;
+                        }
+                    }
+                    if (!has_impl_generics && !has_type_generics) {
+                        module.impls.push_back(lower_impl(d));
+                    }
                 } else if constexpr (std::is_same_v<T, parser::ConstDecl>) {
                     module.constants.push_back(lower_const(d));
                 } else if constexpr (std::is_same_v<T, parser::UseDecl>) {

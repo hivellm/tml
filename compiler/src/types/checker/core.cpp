@@ -703,6 +703,43 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         }
     }
 
+    // Also process inline bounds from generic parameters (e.g., [T: Duplicate])
+    // These need to be added to where_constraints so call-site checking can verify them
+    for (const auto& param : func.generics) {
+        if (!param.is_const && !param.is_lifetime && !param.bounds.empty()) {
+            std::vector<std::string> behavior_names;
+            std::vector<BoundConstraint> parameterized_bounds;
+
+            for (const auto& bound : param.bounds) {
+                if (bound->is<parser::NamedType>()) {
+                    const auto& named = bound->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        std::string behavior_name = named.path.segments.back();
+
+                        // Check if this has type arguments (parameterized bound)
+                        if (named.generics && !named.generics->args.empty()) {
+                            std::vector<TypePtr> type_args;
+                            for (const auto& arg : named.generics->args) {
+                                if (arg.is_type()) {
+                                    type_args.push_back(resolve_type(*arg.as_type()));
+                                }
+                            }
+                            parameterized_bounds.push_back(
+                                BoundConstraint{behavior_name, std::move(type_args)});
+                        } else {
+                            behavior_names.push_back(behavior_name);
+                        }
+                    }
+                }
+            }
+
+            if (!behavior_names.empty() || !parameterized_bounds.empty()) {
+                where_constraints.push_back(WhereConstraint{
+                    param.name, std::move(behavior_names), std::move(parameterized_bounds)});
+            }
+        }
+    }
+
     // Extract type parameter names from generics (excluding const params and lifetimes)
     std::vector<std::string> func_type_params;
     std::unordered_map<std::string, std::string> lifetime_bounds;
@@ -955,10 +992,18 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
             params.push_back(resolve_type(*p.type));
         }
         TypePtr ret = method.return_type ? resolve_type(**method.return_type) : make_unit();
+
+        // Collect type parameters: impl-level + method-level
+        // This supports generic methods on non-generic types (e.g., func identity[T](x: T) -> T)
+        std::vector<std::string> method_type_params = impl_type_params;
+        for (const auto& param : method.generics) {
+            method_type_params.push_back(param.name);
+        }
+
         env_.define_func(FuncSig{.name = qualified_name,
                                  .params = std::move(params),
                                  .return_type = std::move(ret),
-                                 .type_params = impl_type_params,
+                                 .type_params = method_type_params,
                                  .is_async = method.is_async,
                                  .span = method.span});
     }

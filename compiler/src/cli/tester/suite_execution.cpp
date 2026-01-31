@@ -296,14 +296,40 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             }
         }
 
+        // Collect test run statistics from the results
+        TestRunStats test_stats;
+        test_stats.total_files = static_cast<int>(test_files.size());
+
+        // Aggregate stats by suite
+        std::map<std::string, SuiteStats> suite_map;
+        for (const auto& result : collector.results) {
+            auto& ss = suite_map[result.group];
+            ss.name = result.group;
+            ss.test_count += result.test_count;
+            ss.duration_ms += result.duration_ms;
+            test_stats.total_tests += result.test_count;
+            test_stats.total_duration_ms += result.duration_ms;
+        }
+
+        // Convert map to vector
+        for (auto& [name, ss] : suite_map) {
+            test_stats.suites.push_back(std::move(ss));
+        }
+
+        // Sort suites by test count (descending)
+        std::sort(test_stats.suites.begin(), test_stats.suites.end(),
+                  [](const SuiteStats& a, const SuiteStats& b) {
+                      return a.test_count > b.test_count;
+                  });
+
         // Print library coverage analysis after all suites complete
         if (CompilerOptions::coverage && !all_covered_functions.empty()) {
-            print_library_coverage_report(all_covered_functions, c);
+            print_library_coverage_report(all_covered_functions, c, test_stats);
 
             // Write HTML report with proper library coverage data
             if (!CompilerOptions::coverage_output.empty()) {
                 write_library_coverage_html(all_covered_functions,
-                                            CompilerOptions::coverage_output);
+                                            CompilerOptions::coverage_output, test_stats);
             }
         }
 

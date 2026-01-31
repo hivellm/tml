@@ -128,8 +128,128 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     std::string inner_ret_type = "void"; // For async functions, the unwrapped return type
     types::TypePtr semantic_ret = nullptr;
     if (func.return_type.has_value()) {
-        inner_ret_type = llvm_type_ptr(*func.return_type);
         semantic_ret = resolve_parser_type_with_subs(**func.return_type, {});
+
+        // Handle impl Behavior return types - analyze function body to find concrete type
+        if (semantic_ret && semantic_ret->is<types::ImplBehaviorType>() && func.body.has_value()) {
+            // Set current_func_ temporarily so llvm_type_from_semantic can look up the concrete type
+            std::string saved_func = current_func_;
+            current_func_ = func.name;
+
+            // Look for return expressions and infer concrete type from them
+            std::string concrete_type;
+
+            // Recursive function to find ReturnExpr in expressions
+            std::function<void(const parser::Expr&)> find_in_expr;
+            find_in_expr = [&](const parser::Expr& expr) {
+                if (!concrete_type.empty())
+                    return;
+                if (expr.is<parser::ReturnExpr>()) {
+                    const auto& ret_expr = expr.as<parser::ReturnExpr>();
+                    if (ret_expr.value.has_value()) {
+                        const auto& ret_value = **ret_expr.value;
+                        // Check if return value is a struct literal directly
+                        if (ret_value.is<parser::StructExpr>()) {
+                            const auto& struct_expr = ret_value.as<parser::StructExpr>();
+                            if (!struct_expr.path.segments.empty()) {
+                                concrete_type = "%struct." + struct_expr.path.segments.back();
+                                return;
+                            }
+                        }
+                        // Otherwise try to infer the type
+                        auto expr_type = infer_expr_type(ret_value);
+                        if (expr_type) {
+                            // First try to get the LLVM type
+                            std::string llvm_t = llvm_type_from_semantic(expr_type, false);
+                            if (!llvm_t.empty() && llvm_t != "ptr" && llvm_t != "i32") {
+                                concrete_type = llvm_t;
+                            }
+                            // If that failed, try to extract from NamedType directly
+                            // This handles the case where struct isn't registered yet
+                            if (concrete_type.empty() && expr_type->is<types::NamedType>()) {
+                                const auto& named = expr_type->as<types::NamedType>();
+                                if (!named.name.empty()) {
+                                    concrete_type = "%struct." + named.name;
+                                }
+                            }
+                        }
+                    }
+                } else if (expr.is<parser::StructExpr>()) {
+                    // Handle struct literal directly (implicit return)
+                    const auto& struct_expr = expr.as<parser::StructExpr>();
+                    if (!struct_expr.path.segments.empty()) {
+                        concrete_type = "%struct." + struct_expr.path.segments.back();
+                    }
+                } else if (expr.is<parser::BlockExpr>()) {
+                    const auto& block = expr.as<parser::BlockExpr>();
+                    for (const auto& s : block.stmts) {
+                        if (s->is<parser::ExprStmt>()) {
+                            find_in_expr(*s->as<parser::ExprStmt>().expr);
+                        }
+                    }
+                    if (block.expr.has_value()) {
+                        find_in_expr(**block.expr);
+                    }
+                } else if (expr.is<parser::IfExpr>()) {
+                    const auto& if_expr = expr.as<parser::IfExpr>();
+                    find_in_expr(*if_expr.then_branch);
+                    if (if_expr.else_branch.has_value()) {
+                        find_in_expr(**if_expr.else_branch);
+                    }
+                } else if (expr.is<parser::WhenExpr>()) {
+                    const auto& when_expr = expr.as<parser::WhenExpr>();
+                    for (const auto& arm : when_expr.arms) {
+                        find_in_expr(*arm.body);
+                    }
+                } else if (expr.is<parser::LoopExpr>()) {
+                    find_in_expr(*expr.as<parser::LoopExpr>().body);
+                }
+            };
+
+            // Recursive function to find ReturnExpr in statements
+            std::function<void(const parser::Stmt&)> find_in_stmt;
+            find_in_stmt = [&](const parser::Stmt& stmt) {
+                if (!concrete_type.empty())
+                    return;
+                if (stmt.is<parser::ExprStmt>()) {
+                    find_in_expr(*stmt.as<parser::ExprStmt>().expr);
+                }
+            };
+
+            // Analyze function body statements
+            for (const auto& stmt : func.body->stmts) {
+                find_in_stmt(*stmt);
+                if (!concrete_type.empty())
+                    break;
+            }
+
+            // Also check the block's tail expression (if any)
+            // This handles both `return x` as tail expr and `x` as implicit return
+            if (concrete_type.empty() && func.body->expr.has_value()) {
+                const auto& tail_expr = **func.body->expr;
+                // First check if the tail expr is a ReturnExpr
+                find_in_expr(tail_expr);
+
+                // If still empty, check if tail expr is a struct literal directly
+                // (implicit return of struct value)
+                if (concrete_type.empty() && tail_expr.is<parser::StructExpr>()) {
+                    auto expr_type = infer_expr_type(tail_expr);
+                    if (expr_type && expr_type->is<types::NamedType>()) {
+                        const auto& named = expr_type->as<types::NamedType>();
+                        if (!named.name.empty()) {
+                            concrete_type = "%struct." + named.name;
+                        }
+                    }
+                }
+            }
+
+            // Store the concrete type for use when generating LLVM types
+            if (!concrete_type.empty()) {
+                impl_behavior_concrete_types_[func.name] = concrete_type;
+            }
+        }
+
+        inner_ret_type = llvm_type_ptr(*func.return_type);
     }
 
     // Async functions return Poll[T] instead of T

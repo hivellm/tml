@@ -395,6 +395,142 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         }
     }
 
+    // Primitive type static methods (from) - Type::from(value) conversions
+    // Implements the From behavior for primitive type widening/narrowing
+    if (method == "from" && !call.args.empty()) {
+        // Helper to get LLVM type and bit width for TML primitive types
+        auto get_type_info = [](const std::string& tml_type)
+            -> std::tuple<std::string, int, bool, bool> {
+            // Returns: (llvm_type, bit_width, is_signed, is_float)
+            if (tml_type == "I8")
+                return {"i8", 8, true, false};
+            if (tml_type == "I16")
+                return {"i16", 16, true, false};
+            if (tml_type == "I32")
+                return {"i32", 32, true, false};
+            if (tml_type == "I64")
+                return {"i64", 64, true, false};
+            if (tml_type == "I128")
+                return {"i128", 128, true, false};
+            if (tml_type == "U8")
+                return {"i8", 8, false, false};
+            if (tml_type == "U16")
+                return {"i16", 16, false, false};
+            if (tml_type == "U32")
+                return {"i32", 32, false, false};
+            if (tml_type == "U64")
+                return {"i64", 64, false, false};
+            if (tml_type == "U128")
+                return {"i128", 128, false, false};
+            if (tml_type == "F32")
+                return {"float", 32, true, true};
+            if (tml_type == "F64")
+                return {"double", 64, true, true};
+            if (tml_type == "Bool")
+                return {"i1", 1, false, false};
+            return {"", 0, false, false};
+        };
+
+        auto [target_llvm, target_bits, target_signed, target_float] = get_type_info(type_name);
+
+        if (!target_llvm.empty()) {
+            // Generate the source value
+            std::string src_val = gen_expr(*call.args[0]);
+            std::string src_llvm = last_expr_type_;
+            // Use last_expr_is_unsigned_ which is set by gen_expr
+            bool src_signed = !last_expr_is_unsigned_;
+            bool src_float = (src_llvm == "float" || src_llvm == "double");
+            int src_bits = 0;
+
+            if (src_llvm == "i1")
+                src_bits = 1;
+            else if (src_llvm == "i8")
+                src_bits = 8;
+            else if (src_llvm == "i16")
+                src_bits = 16;
+            else if (src_llvm == "i32")
+                src_bits = 32;
+            else if (src_llvm == "i64")
+                src_bits = 64;
+            else if (src_llvm == "i128")
+                src_bits = 128;
+            else if (src_llvm == "float")
+                src_bits = 32;
+            else if (src_llvm == "double")
+                src_bits = 64;
+
+            // Same type - identity conversion
+            if (src_llvm == target_llvm) {
+                last_expr_type_ = target_llvm;
+                return src_val;
+            }
+
+            std::string result = fresh_reg();
+
+            // Float to float conversion
+            if (src_float && target_float) {
+                if (src_bits < target_bits) {
+                    emit_line("  " + result + " = fpext " + src_llvm + " " + src_val + " to " +
+                              target_llvm);
+                } else {
+                    emit_line("  " + result + " = fptrunc " + src_llvm + " " + src_val + " to " +
+                              target_llvm);
+                }
+                last_expr_type_ = target_llvm;
+                return result;
+            }
+
+            // Int to float conversion
+            if (!src_float && target_float) {
+                if (src_signed) {
+                    emit_line("  " + result + " = sitofp " + src_llvm + " " + src_val + " to " +
+                              target_llvm);
+                } else {
+                    emit_line("  " + result + " = uitofp " + src_llvm + " " + src_val + " to " +
+                              target_llvm);
+                }
+                last_expr_type_ = target_llvm;
+                return result;
+            }
+
+            // Float to int conversion
+            if (src_float && !target_float) {
+                if (target_signed) {
+                    emit_line("  " + result + " = fptosi " + src_llvm + " " + src_val + " to " +
+                              target_llvm);
+                } else {
+                    emit_line("  " + result + " = fptoui " + src_llvm + " " + src_val + " to " +
+                              target_llvm);
+                }
+                last_expr_type_ = target_llvm;
+                return result;
+            }
+
+            // Int to int conversion
+            if (src_bits < target_bits) {
+                // Widening conversion
+                if (src_signed) {
+                    emit_line("  " + result + " = sext " + src_llvm + " " + src_val + " to " +
+                              target_llvm);
+                } else {
+                    emit_line("  " + result + " = zext " + src_llvm + " " + src_val + " to " +
+                              target_llvm);
+                }
+            } else if (src_bits > target_bits) {
+                // Narrowing conversion (truncation)
+                emit_line("  " + result + " = trunc " + src_llvm + " " + src_val + " to " +
+                          target_llvm);
+            } else {
+                // Same bit width, just return the value (e.g., I32 to U32)
+                last_expr_type_ = target_llvm;
+                return src_val;
+            }
+
+            last_expr_type_ = target_llvm;
+            return result;
+        }
+    }
+
     // Handle static methods from imported structs (like FormatSpec::new(), Text::from())
     if (env_.module_registry()) {
         std::string qualified_name = type_name + "::" + method;

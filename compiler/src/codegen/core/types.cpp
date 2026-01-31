@@ -232,6 +232,16 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
         }
         result += " }";
         return result;
+    } else if (type.is<parser::ImplBehaviorType>()) {
+        // impl Behavior return types - look up the concrete type from function analysis
+        if (!current_func_.empty()) {
+            auto it = impl_behavior_concrete_types_.find(current_func_);
+            if (it != impl_behavior_concrete_types_.end()) {
+                return it->second;
+            }
+        }
+        // Fallback to pointer type
+        return "ptr";
     }
     return "i32"; // Default
 }
@@ -332,6 +342,32 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // Sometimes Never appears as NamedType instead of PrimitiveType
         if (named.name == "Never") {
             return "void";
+        }
+
+        // Handle unresolved associated types like "T::Owned" that were deferred from type checking
+        // These need to be resolved using current type substitutions
+        auto colon_pos = named.name.find("::");
+        if (colon_pos != std::string::npos && !current_type_subs_.empty()) {
+            std::string first_part = named.name.substr(0, colon_pos);
+            std::string second_part = named.name.substr(colon_pos + 2);
+
+            // Try to resolve the first part (e.g., "T" -> I32)
+            auto it = current_type_subs_.find(first_part);
+            if (it != current_type_subs_.end() && it->second) {
+                const auto& concrete_type = it->second;
+                // For primitives with "Owned" associated type, return the primitive LLVM type
+                if (second_part == "Owned" && concrete_type->is<types::PrimitiveType>()) {
+                    return llvm_type_from_semantic(concrete_type, for_data);
+                }
+                // For named types, look up the associated type
+                if (concrete_type->is<types::NamedType>()) {
+                    const auto& concrete_named = concrete_type->as<types::NamedType>();
+                    auto assoc_type = lookup_associated_type(concrete_named.name, second_part);
+                    if (assoc_type) {
+                        return llvm_type_from_semantic(assoc_type, for_data);
+                    }
+                }
+            }
         }
 
         // Ptr[T] in TML syntax is represented as NamedType with name "Ptr"
@@ -551,6 +587,20 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // Ensure the dyn type is defined before use
         emit_dyn_type(dyn.behavior_name);
         return "%dyn." + dyn.behavior_name;
+    } else if (type->is<types::ImplBehaviorType>()) {
+        // impl Behavior return types - the concrete type should be determined from
+        // analyzing the function body. Check if we have a stored concrete type.
+        // For now, if we're in a function context, check impl_behavior_concrete_types_.
+        if (!current_func_.empty()) {
+            auto it = impl_behavior_concrete_types_.find(current_func_);
+            if (it != impl_behavior_concrete_types_.end()) {
+                return it->second;
+            }
+        }
+        // Fallback: use pointer type (caller should handle casting)
+        // This is a placeholder - proper impl Behavior handling requires analyzing
+        // the function body to determine the concrete return type.
+        return "ptr";
     } else if (type->is<types::ArrayType>()) {
         // Fixed-size arrays: [T; N] -> [N x llvm_type(T)]
         const auto& arr = type->as<types::ArrayType>();
@@ -680,6 +730,32 @@ auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
     } else if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
 
+        // Handle unresolved associated types like "T::Owned" that were deferred from type checking
+        // These need to be resolved using current type substitutions
+        auto colon_pos = named.name.find("::");
+        if (colon_pos != std::string::npos && !current_type_subs_.empty()) {
+            std::string first_part = named.name.substr(0, colon_pos);
+            std::string second_part = named.name.substr(colon_pos + 2);
+
+            // Try to resolve the first part (e.g., "T" -> I32)
+            auto it = current_type_subs_.find(first_part);
+            if (it != current_type_subs_.end() && it->second) {
+                const auto& concrete_type = it->second;
+                // For primitives with "Owned" associated type, return the primitive itself
+                if (second_part == "Owned" && concrete_type->is<types::PrimitiveType>()) {
+                    return mangle_type(concrete_type);
+                }
+                // For named types, look up the associated type
+                if (concrete_type->is<types::NamedType>()) {
+                    const auto& concrete_named = concrete_type->as<types::NamedType>();
+                    auto assoc_type = lookup_associated_type(concrete_named.name, second_part);
+                    if (assoc_type) {
+                        return mangle_type(assoc_type);
+                    }
+                }
+            }
+        }
+
         // Handle Ptr[T] stored as NamedType - convert to ptr_ prefix for consistency
         // This ensures consistent mangling whether Ptr comes as NamedType or PtrType
         if (named.name == "Ptr" && !named.type_args.empty()) {
@@ -784,6 +860,20 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                             const auto& named = concrete_type->as<types::NamedType>();
                             // Look up the associated type of this concrete type
                             auto assoc_type = lookup_associated_type(named.name, second);
+                            if (assoc_type) {
+                                return assoc_type;
+                            }
+                        } else if (concrete_type->is<types::PrimitiveType>()) {
+                            // For primitive types with associated types (e.g., T::Owned where T: ToOwned)
+                            // Most primitives have Self as their Owned type
+                            if (second == "Owned") {
+                                // For ToOwned, Owned = Self for all primitive types
+                                return concrete_type;
+                            }
+                            // For other associated types on primitives, look up by primitive name
+                            auto prim_kind = concrete_type->as<types::PrimitiveType>().kind;
+                            std::string prim_name = types::primitive_kind_to_string(prim_kind);
+                            auto assoc_type = lookup_associated_type(prim_name, second);
                             if (assoc_type) {
                                 return assoc_type;
                             }
@@ -998,6 +1088,32 @@ auto LLVMIRGen::apply_type_substitutions(
             return it->second;
         }
 
+        // Handle unresolved associated types like "T::Owned" that were deferred from type checking
+        // These are stored as a single name string "T::Owned" by the type checker
+        auto colon_pos = named.name.find("::");
+        if (colon_pos != std::string::npos) {
+            std::string first_part = named.name.substr(0, colon_pos);
+            std::string second_part = named.name.substr(colon_pos + 2);
+
+            // Try to resolve the first part (e.g., "T" -> I32)
+            auto param_it = subs.find(first_part);
+            if (param_it != subs.end() && param_it->second) {
+                const auto& concrete_type = param_it->second;
+                // For primitives with "Owned" associated type, return the primitive itself
+                if (second_part == "Owned" && concrete_type->is<types::PrimitiveType>()) {
+                    return concrete_type;
+                }
+                // For named types, look up the associated type
+                if (concrete_type->is<types::NamedType>()) {
+                    const auto& concrete_named = concrete_type->as<types::NamedType>();
+                    auto assoc_type = lookup_associated_type(concrete_named.name, second_part);
+                    if (assoc_type) {
+                        return assoc_type;
+                    }
+                }
+            }
+        }
+
         // If it has type args, recursively apply substitutions to them
         if (!named.type_args.empty()) {
             std::vector<types::TypePtr> new_args;
@@ -1079,6 +1195,13 @@ auto LLVMIRGen::contains_unresolved_generic(const types::TypePtr& type) -> bool 
 
     if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
+
+        // Check for unresolved associated types like "T::Owned"
+        // These are stored as a single name string by the type checker
+        if (named.name.find("::") != std::string::npos) {
+            // This is an unresolved associated type
+            return true;
+        }
 
         // Check if this is a known generic struct being used without type arguments
         // e.g., ChannelNode (which requires T) being used without [I32]

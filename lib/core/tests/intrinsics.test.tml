@@ -1,0 +1,131 @@
+// Tests for core::intrinsics module - size_of and align_of
+use test
+use core::intrinsics::{size_of, align_of}
+
+// ============================================================================
+// Type information intrinsics - size_of
+// ============================================================================
+
+@test
+func test_size_of_i8() -> I32 {
+    let size: I64 = size_of[I8]()
+    assert_eq(size, 1, "I8 is 1 byte")
+    return 0
+}
+
+@test
+func test_size_of_i16() -> I32 {
+    let size: I64 = size_of[I16]()
+    assert_eq(size, 2, "I16 is 2 bytes")
+    return 0
+}
+
+@test
+func test_size_of_i32() -> I32 {
+    let size: I64 = size_of[I32]()
+    assert_eq(size, 4, "I32 is 4 bytes")
+    return 0
+}
+
+@test
+func test_size_of_i64() -> I32 {
+    let size: I64 = size_of[I64]()
+    assert_eq(size, 8, "I64 is 8 bytes")
+    return 0
+}
+
+@test
+func test_size_of_u8() -> I32 {
+    let size: I64 = size_of[U8]()
+    assert_eq(size, 1, "U8 is 1 byte")
+    return 0
+}
+
+@test
+func test_size_of_u16() -> I32 {
+    let size: I64 = size_of[U16]()
+    assert_eq(size, 2, "U16 is 2 bytes")
+    return 0
+}
+
+@test
+func test_size_of_u32() -> I32 {
+    let size: I64 = size_of[U32]()
+    assert_eq(size, 4, "U32 is 4 bytes")
+    return 0
+}
+
+@test
+func test_size_of_u64() -> I32 {
+    let size: I64 = size_of[U64]()
+    assert_eq(size, 8, "U64 is 8 bytes")
+    return 0
+}
+
+@test
+func test_size_of_bool() -> I32 {
+    let size: I64 = size_of[Bool]()
+    assert_eq(size, 1, "Bool is 1 byte")
+    return 0
+}
+
+@test
+func test_size_of_f32() -> I32 {
+    let size: I64 = size_of[F32]()
+    assert_eq(size, 4, "F32 is 4 bytes")
+    return 0
+}
+
+@test
+func test_size_of_f64() -> I32 {
+    let size: I64 = size_of[F64]()
+    assert_eq(size, 8, "F64 is 8 bytes")
+    return 0
+}
+
+// ============================================================================
+// Type information intrinsics - align_of
+// ============================================================================
+
+@test
+func test_align_of_i8() -> I32 {
+    let align: I64 = align_of[I8]()
+    assert_eq(align, 1, "I8 align is 1")
+    return 0
+}
+
+@test
+func test_align_of_i16() -> I32 {
+    let align: I64 = align_of[I16]()
+    assert_eq(align, 2, "I16 align is 2")
+    return 0
+}
+
+@test
+func test_align_of_i32() -> I32 {
+    let align: I64 = align_of[I32]()
+    assert_eq(align, 4, "I32 align is 4")
+    return 0
+}
+
+@test
+func test_align_of_i64() -> I32 {
+    let align: I64 = align_of[I64]()
+    assert_eq(align, 8, "I64 align is 8")
+    return 0
+}
+
+@test
+func test_align_of_f32() -> I32 {
+    let align: I64 = align_of[F32]()
+    assert_eq(align, 4, "F32 align is 4")
+    return 0
+}
+
+@test
+func test_align_of_f64() -> I32 {
+    let align: I64 = align_of[F64]()
+    assert_eq(align, 8, "F64 align is 8")
+    return 0
+}
+

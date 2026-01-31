@@ -524,11 +524,16 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         return result;
     }
 
-    // xor(other) -> Maybe[T]
-    if (method == "xor") {
+    // one_of(other) -> Maybe[T] (renamed from xor because xor is a keyword)
+    if (method == "one_of") {
         if (call.args.empty()) {
-            report_error("xor requires an argument", call.span);
+            report_error("one_of requires an argument", call.span);
             return receiver;
+        }
+
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Maybe::one_of");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
         }
 
         std::string other = gen_expr(*call.args[0]);
@@ -604,6 +609,18 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
                   nothing_result + ", %" + nothing_label + " ]");
         last_expr_type_ = enum_type_name;
         return result;
+    }
+
+    // duplicate() -> Maybe[T] (copy semantics)
+    if (method == "duplicate") {
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Maybe::duplicate");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
+        // For value types (primitives), just return the receiver as-is
+        // since it's already passed by value
+        last_expr_type_ = enum_type_name;
+        return receiver;
     }
 
     // map_or(default, f) -> U

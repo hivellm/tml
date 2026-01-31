@@ -191,8 +191,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (call.callee->is<parser::PathExpr>()) {
         const auto& path = call.callee->as<parser::PathExpr>().path;
         if (path.segments.size() == 2) {
-            const std::string& type_name = path.segments[0];
+            std::string type_name = path.segments[0];
             const std::string& method = path.segments[1];
+
+            // Substitute type parameter with concrete type (e.g., T -> I64)
+            // This handles T::default() in generic contexts
+            auto type_sub_it = current_type_subs_.find(type_name);
+            if (type_sub_it != current_type_subs_.end()) {
+                type_name = types::type_to_string(type_sub_it->second);
+            }
 
             bool is_primitive_type =
                 type_name == "I8" || type_name == "I16" || type_name == "I32" ||
@@ -339,16 +346,27 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     }
                 } else if (!src_is_float && target_is_float) {
                     // Int to float conversion
-                    // Assume source is signed for now (most common case for From trait)
-                    emit_line("  " + result + " = sitofp " + src_type + " " + src_val + " to " +
-                              target_ty);
+                    // Use last_expr_is_unsigned_ to determine si/ui conversion
+                    if (last_expr_is_unsigned_) {
+                        emit_line("  " + result + " = uitofp " + src_type + " " + src_val + " to " +
+                                  target_ty);
+                    } else {
+                        emit_line("  " + result + " = sitofp " + src_type + " " + src_val + " to " +
+                                  target_ty);
+                    }
                 } else {
                     // Int to int conversion
                     if (src_width < target_width) {
                         // Extension - use sext for signed, zext for unsigned
-                        // For From trait, we typically extend signed types
-                        emit_line("  " + result + " = sext " + src_type + " " + src_val + " to " +
-                                  target_ty);
+                        // Use last_expr_is_unsigned_ which was set by gen_expr for the source
+                        // Special case: i1 (Bool) is always unsigned - use zext to get 0 or 1
+                        if (last_expr_is_unsigned_ || src_type == "i1") {
+                            emit_line("  " + result + " = zext " + src_type + " " + src_val +
+                                      " to " + target_ty);
+                        } else {
+                            emit_line("  " + result + " = sext " + src_type + " " + src_val +
+                                      " to " + target_ty);
+                        }
                     } else if (src_width > target_width) {
                         // Truncation
                         emit_line("  " + result + " = trunc " + src_type + " " + src_val + " to " +
@@ -616,7 +634,30 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                     // Set payload if present (stored in field 1, the [N x i8] array)
                     if (has_payload && !call.args.empty()) {
+                        // For nested generics like Maybe[Maybe[I32]], we need to compute
+                        // the inner type for the payload before generating the inner expression.
+                        // expected_enum_type_ might be %struct.Maybe__Maybe__I32, but the
+                        // inner Just(42) needs %struct.Maybe__I32 as its expected type.
+                        std::string saved_expected = expected_enum_type_;
+                        if (!enum_type.empty() && enum_type.starts_with("%struct.")) {
+                            // Extract type args from the mangled name
+                            std::string mangled = enum_type.substr(8); // Skip "%struct."
+                            auto sep = mangled.find("__");
+                            if (sep != std::string::npos) {
+                                std::string base = mangled.substr(0, sep);
+                                std::string type_arg_str = mangled.substr(sep + 2);
+                                // For single-type-param generics, the payload is the type arg
+                                // Check if this is a single-type-param enum
+                                size_t num_type_params = gen_enum_decl->generics.size();
+                                if (num_type_params == 1 && type_arg_str.find("__") != std::string::npos) {
+                                    // The type arg itself is a generic - set expected type for inner
+                                    expected_enum_type_ = "%struct." + type_arg_str;
+                                }
+                            }
+                        }
+
                         std::string payload = gen_expr(*call.args[0]);
+                        expected_enum_type_ = saved_expected;
 
                         // Get pointer to payload field ([N x i8])
                         std::string payload_ptr = fresh_reg();
@@ -1368,21 +1409,29 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 }
             }
 
-            // Check if this is an imported generic struct
+            // Check if this is an imported generic struct or enum
             std::vector<std::string> imported_type_params;
             if (env_.module_registry()) {
                 const auto& all_modules = env_.module_registry()->get_all_modules();
                 for (const auto& [mod_name, mod] : all_modules) {
+                    // Check structs
                     auto struct_it = mod.structs.find(type_name);
                     if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
                         imported_type_params = struct_it->second.type_params;
                         break;
                     }
+                    // Check enums
+                    auto enum_it = mod.enums.find(type_name);
+                    if (enum_it != mod.enums.end() && !enum_it->second.type_params.empty()) {
+                        imported_type_params = enum_it->second.type_params;
+                        break;
+                    }
                 }
             }
 
-            // Also check local generic structs
+            // Also check local generic structs and enums
             bool is_local_generic = pending_generic_structs_.count(type_name) > 0 ||
+                                    pending_generic_enums_.count(type_name) > 0 ||
                                     pending_generic_impls_.count(type_name) > 0;
 
             if (!imported_type_params.empty() || is_local_generic) {
@@ -1592,6 +1641,64 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         if (it != current_type_subs_.end()) {
                             type_subs[gname] = it->second;
                             mangled_type_name = type_name + "__" + mangle_type(it->second);
+                        }
+                    }
+                }
+
+                // Infer type args from argument types
+                // E.g., ManuallyDrop::into_inner(md) where md: ManuallyDrop[I64] -> T = I64
+                if (type_subs.empty() && !generic_names.empty() && !call.args.empty()) {
+                    // Get the function signature to know param types
+                    std::string qualified_name = type_name + "::" + method;
+                    auto func_sig = env_.lookup_func(qualified_name);
+                    if (!func_sig && env_.module_registry()) {
+                        const auto& all_modules = env_.module_registry()->get_all_modules();
+                        for (const auto& [mod_name, mod] : all_modules) {
+                            auto func_it2 = mod.functions.find(qualified_name);
+                            if (func_it2 != mod.functions.end()) {
+                                func_sig = func_it2->second;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (func_sig) {
+                        // Try to infer type args from argument types matching param types
+                        for (size_t i = 0; i < call.args.size() && i < func_sig->params.size(); ++i) {
+                            auto arg_type = infer_expr_type(*call.args[i]);
+                            const auto& param_type = func_sig->params[i];
+
+                            // If arg is NamedType[X] and param is NamedType[T], map T -> X
+                            if (arg_type && arg_type->is<types::NamedType>() &&
+                                param_type->is<types::NamedType>()) {
+                                const auto& arg_named = arg_type->as<types::NamedType>();
+                                const auto& param_named = param_type->as<types::NamedType>();
+                                if (arg_named.name == param_named.name &&
+                                    !arg_named.type_args.empty() &&
+                                    arg_named.type_args.size() == param_named.type_args.size()) {
+                                    // Map generic params to concrete types
+                                    for (size_t j = 0;
+                                         j < generic_names.size() && j < arg_named.type_args.size();
+                                         ++j) {
+                                        type_subs[generic_names[j]] = arg_named.type_args[j];
+                                    }
+                                    // Update mangled type name
+                                    if (!type_subs.empty()) {
+                                        std::vector<types::TypePtr> type_args;
+                                        for (const auto& gname : generic_names) {
+                                            auto it = type_subs.find(gname);
+                                            if (it != type_subs.end()) {
+                                                type_args.push_back(it->second);
+                                            }
+                                        }
+                                        if (!type_args.empty()) {
+                                            mangled_type_name =
+                                                type_name + "__" + mangle_type_args(type_args);
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
                         }
                     }
                 }

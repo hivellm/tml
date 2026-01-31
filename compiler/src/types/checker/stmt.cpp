@@ -71,7 +71,8 @@ auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
     TML_DEBUG_LN("[check_let] resolved var_type: " << type_to_string(var_type));
 
     if (let.init) {
-        TypePtr init_type = check_expr(**let.init);
+        // Pass var_type as expected type for numeric/tuple literal coercion
+        TypePtr init_type = check_expr(**let.init, var_type);
         // Check that init type is compatible with declared type
         TypePtr resolved_var = env_.resolve(var_type);
         TypePtr resolved_init = env_.resolve(init_type);
@@ -99,7 +100,8 @@ auto TypeChecker::check_var(const parser::VarStmt& var) -> TypePtr {
     }
 
     TypePtr var_type = resolve_type(**var.type_annotation);
-    TypePtr init_type = check_expr(*var.init);
+    // Pass var_type as expected type for numeric/tuple literal coercion
+    TypePtr init_type = check_expr(*var.init, var_type);
 
     // Type compatibility is checked during expression type checking
     env_.current_scope()->define(var.name, var_type, true, SourceSpan{});

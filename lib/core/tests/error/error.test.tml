@@ -2,7 +2,7 @@
 // Tests IoErrorKind enum Display
 
 use test
-use core::error::{IoErrorKind}
+use core::error::{IoErrorKind, IoError, SimpleError, ParseError}
 
 // =============================================================================
 // IoErrorKind Tests - These work because IoErrorKind has explicit Display impl
@@ -72,5 +72,79 @@ func test_io_error_kind_already_exists() -> I32 {
     return 0
 }
 
-// Note: SimpleError, ParseError, IoError, ChainedError, BoxedError tests
-// removed - Display impl resolution for custom types needs work
+// =============================================================================
+// SimpleError Tests
+// =============================================================================
+
+@test
+func test_simple_error_display() -> I32 {
+    let err: SimpleError = SimpleError::new("test message")
+    let s: Str = err.to_string()
+    assert_eq(s, "test message", "SimpleError to_string")
+    return 0
+}
+
+@test
+func test_simple_error_debug() -> I32 {
+    let err: SimpleError = SimpleError::new("oops")
+    let s: Str = err.debug_string()
+    assert_eq(s, "SimpleError(\"oops\")", "SimpleError debug_string")
+    return 0
+}
+
+// =============================================================================
+// ParseError Tests
+// =============================================================================
+
+@test
+func test_parse_error_display() -> I32 {
+    let err: ParseError = ParseError::new("unexpected token")
+    let s: Str = err.to_string()
+    assert_eq(s, "parse error: unexpected token", "ParseError to_string")
+    return 0
+}
+
+@test
+func test_parse_error_with_position() -> I32 {
+    let err: ParseError = ParseError::with_position("expected '}'", 42)
+    let s: Str = err.to_string()
+    assert_eq(s, "parse error at position 42: expected '}'", "ParseError with position")
+    return 0
+}
+
+@test
+func test_parse_error_debug() -> I32 {
+    let err: ParseError = ParseError::new("syntax error")
+    let s: Str = err.debug_string()
+    assert_eq(s, "ParseError { message: \"syntax error\", position: Nothing }", "ParseError debug")
+    return 0
+}
+
+// =============================================================================
+// IoError Tests
+// =============================================================================
+
+@test
+func test_io_error_display() -> I32 {
+    let err: IoError = IoError::new(IoErrorKind::PermissionDenied)
+    let s: Str = err.to_string()
+    assert_eq(s, "permission denied", "IoError to_string")
+    return 0
+}
+
+@test
+func test_io_error_with_message() -> I32 {
+    let err: IoError = IoError::with_message(IoErrorKind::NotFound, "config.json")
+    let s: Str = err.to_string()
+    assert_eq(s, "entity not found: config.json", "IoError with message")
+    return 0
+}
+
+@test
+func test_io_error_kind_method() -> I32 {
+    let err: IoError = IoError::new(IoErrorKind::TimedOut)
+    let kind: IoErrorKind = err.kind()
+    let s: Str = kind.to_string()
+    assert_eq(s, "operation timed out", "IoError kind method")
+    return 0
+}

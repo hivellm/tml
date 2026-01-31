@@ -1,0 +1,126 @@
+// Test Maybe/Outcome type inference scenarios
+use test
+
+// Test 1: Type inference with explicit annotation (baseline - should work)
+@test
+func test_explicit_type() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    when m {
+        Just(v) => assert_eq(v, 42, "explicit should work"),
+        Nothing => return 1
+    }
+    return 0
+}
+
+// Test 2: Type inference from return type
+func return_just() -> Maybe[I32] {
+    return Just(42)
+}
+
+func return_nothing() -> Maybe[I32] {
+    return Nothing
+}
+
+@test
+func test_return_type_inference() -> I32 {
+    let m: Maybe[I32] = return_just()
+    when m {
+        Just(v) => assert_eq(v, 42, "return should work"),
+        Nothing => return 1
+    }
+
+    let n: Maybe[I32] = return_nothing()
+    when n {
+        Just(_) => return 1,
+        Nothing => assert(true, "Nothing works")
+    }
+    return 0
+}
+
+// Test 3: Type inference for generic function call
+func unwrap_or[T](opt: Maybe[T], default_val: T) -> T {
+    when opt {
+        Just(v) => return v,
+        Nothing => return default_val
+    }
+}
+
+@test
+func test_generic_function_inference() -> I32 {
+    let m: Maybe[I32] = Just(10)
+    let val: I32 = unwrap_or(m, 0)
+    assert_eq(val, 10, "generic function should infer T from Maybe[I32]")
+    return 0
+}
+
+// Test 4: Type inference without explicit type on variable (if supported)
+// @test
+// func test_implicit_type() -> I32 {
+//     let m = Just(42)  // Should infer Maybe[I32]
+//     when m {
+//         Just(v) => assert_eq(v, 42, "implicit should work"),
+//         Nothing => return 1
+//     }
+//     return 0
+// }
+
+// Test 5: Outcome type inference
+func outcome_unwrap_or[T, E](res: Outcome[T, E], default_val: T) -> T {
+    when res {
+        Ok(v) => return v,
+        Err(_) => return default_val
+    }
+}
+
+@test
+func test_outcome_inference() -> I32 {
+    let r: Outcome[I32, Str] = Ok(100)
+    let val: I32 = outcome_unwrap_or(r, 0)
+    assert_eq(val, 100, "outcome generic should work")
+    return 0
+}
+
+// Test 6: Nested Maybe inference
+@test
+func test_nested_maybe() -> I32 {
+    let outer: Maybe[Maybe[I32]] = Just(Just(42))
+    when outer {
+        Just(inner) => {
+            when inner {
+                Just(v) => assert_eq(v, 42, "nested should work"),
+                Nothing => return 1
+            }
+        },
+        Nothing => return 1
+    }
+    return 0
+}
+
+// Test 7: Maybe with larger types
+@test
+func test_maybe_i64() -> I32 {
+    let m: Maybe[I64] = Just(123456789012)
+    when m {
+        Just(v) => {
+            if v == 123456789012 {
+                return 0
+            } else {
+                return 1
+            }
+        },
+        Nothing => return 1
+    }
+}
+
+// Test 8: Outcome with different types
+@test
+func test_outcome_str_error() -> I32 {
+    let r: Outcome[I64, I32] = Err(404)
+    when r {
+        Ok(_) => return 1,
+        Err(code) => {
+            assert_eq(code, 404, "error code should match")
+            return 0
+        }
+    }
+}

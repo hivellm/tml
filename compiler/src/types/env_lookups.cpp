@@ -808,26 +808,49 @@ bool TypeEnv::is_trivially_destructible(const std::string& type_name) const {
             }
         }
 
+        // Helper lambda to parse type arguments from mangled string respecting type param count
+        // For N type params, we split only N-1 times so the last arg can contain nested generics
+        // e.g., Outcome__I32__Maybe__Str with 2 params -> ["I32", "Maybe__Str"]
+        auto parse_type_args = [](const std::string& remaining, size_t num_type_params)
+            -> std::vector<std::string> {
+            std::vector<std::string> args;
+            if (num_type_params == 0)
+                return args;
+            if (num_type_params == 1) {
+                args.push_back(remaining);
+                return args;
+            }
+
+            // Split only num_type_params - 1 times
+            size_t pos = 0;
+            for (size_t i = 0; i < num_type_params - 1 && pos < remaining.size(); ++i) {
+                auto next_sep = remaining.find("__", pos);
+                if (next_sep != std::string::npos) {
+                    args.push_back(remaining.substr(pos, next_sep - pos));
+                    pos = next_sep + 2;
+                } else {
+                    // No more separators - remaining goes into this arg
+                    args.push_back(remaining.substr(pos));
+                    pos = remaining.size();
+                }
+            }
+            // Last arg gets everything remaining (may contain nested generics)
+            if (pos < remaining.size()) {
+                args.push_back(remaining.substr(pos));
+            }
+            return args;
+        };
+
         // Check if the base struct exists and doesn't implement Drop
         auto base_struct = lookup_struct(base_type);
         if (base_struct) {
             // Base type exists and doesn't implement Drop
             // Check if any type argument is non-trivially destructible
             std::string remaining = type_name.substr(sep_pos + 2);
+            size_t num_type_params = base_struct->type_params.size();
 
-            // Parse the remaining type arguments (separated by __)
-            size_t pos = 0;
-            while (pos < remaining.size()) {
-                auto next_sep = remaining.find("__", pos);
-                std::string type_arg;
-                if (next_sep != std::string::npos) {
-                    type_arg = remaining.substr(pos, next_sep - pos);
-                    pos = next_sep + 2;
-                } else {
-                    type_arg = remaining.substr(pos);
-                    pos = remaining.size();
-                }
-
+            auto type_args = parse_type_args(remaining, num_type_params);
+            for (const auto& type_arg : type_args) {
                 if (!type_arg.empty() && !is_trivially_destructible(type_arg)) {
                     return false;
                 }
@@ -840,18 +863,10 @@ bool TypeEnv::is_trivially_destructible(const std::string& type_name) const {
         if (base_enum) {
             // Similar logic - base enum exists and doesn't implement Drop
             std::string remaining = type_name.substr(sep_pos + 2);
-            size_t pos = 0;
-            while (pos < remaining.size()) {
-                auto next_sep = remaining.find("__", pos);
-                std::string type_arg;
-                if (next_sep != std::string::npos) {
-                    type_arg = remaining.substr(pos, next_sep - pos);
-                    pos = next_sep + 2;
-                } else {
-                    type_arg = remaining.substr(pos);
-                    pos = remaining.size();
-                }
+            size_t num_type_params = base_enum->type_params.size();
 
+            auto type_args = parse_type_args(remaining, num_type_params);
+            for (const auto& type_arg : type_args) {
                 if (!type_arg.empty() && !is_trivially_destructible(type_arg)) {
                     return false;
                 }

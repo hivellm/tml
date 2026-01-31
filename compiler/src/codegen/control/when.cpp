@@ -362,6 +362,21 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                                     }
                                 }
                             }
+                            // For generic enums, substitute type parameters
+                            if (payload_type && !named.type_args.empty()) {
+                                std::unordered_map<std::string, types::TypePtr> enum_type_subs;
+                                auto enum_def2 = env_.lookup_enum(named.name);
+                                if (enum_def2 && !enum_def2->type_params.empty()) {
+                                    for (size_t i = 0;
+                                         i < enum_def2->type_params.size() && i < named.type_args.size();
+                                         ++i) {
+                                        enum_type_subs[enum_def2->type_params[i]] = named.type_args[i];
+                                    }
+                                }
+                                if (!enum_type_subs.empty()) {
+                                    payload_type = types::substitute_type(payload_type, enum_type_subs);
+                                }
+                            }
                         }
                     }
 
@@ -460,6 +475,24 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                                         payload_type = var_payloads[0];
                                         break;
                                     }
+                                }
+                            }
+                            // For generic enums, the payload type may be a type parameter (T)
+                            // Use type args from the scrutinee type to substitute
+                            if (payload_type && !named.type_args.empty()) {
+                                // Build type subs from enum type params -> type args
+                                std::unordered_map<std::string, types::TypePtr> enum_type_subs;
+                                auto enum_def2 = env_.lookup_enum(named.name);
+                                if (enum_def2 && !enum_def2->type_params.empty()) {
+                                    for (size_t i = 0;
+                                         i < enum_def2->type_params.size() && i < named.type_args.size();
+                                         ++i) {
+                                        enum_type_subs[enum_def2->type_params[i]] = named.type_args[i];
+                                    }
+                                }
+                                // Apply substitutions
+                                if (!enum_type_subs.empty()) {
+                                    payload_type = types::substitute_type(payload_type, enum_type_subs);
                                 }
                             }
                         }

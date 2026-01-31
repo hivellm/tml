@@ -161,6 +161,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     if (has_type_name) {
+        // Substitute type parameter with concrete type (e.g., T -> I64)
+        // This handles T::default() in generic contexts (for MethodCallExpr)
+        auto type_sub_it = current_type_subs_.find(type_name);
+        if (type_sub_it != current_type_subs_.end()) {
+            type_name = types::type_to_string(type_sub_it->second);
+        }
+
         // Check for class static method call (ClassName.staticMethod())
         auto class_def = env_.lookup_class(type_name);
         if (class_def.has_value()) {
@@ -200,9 +207,29 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             }
         }
 
-        // Check if this is a generic struct from:
-        // 1. Local pending_generic_structs_ or pending_generic_impls_
-        // 2. Imported structs from module registry with type_params
+        // Handle primitive type From conversions early - before generic struct handling
+        // This intercepts calls like U16::from(u8_val) and generates inline LLVM conversions
+        if (method == "from" && !call.args.empty()) {
+            // Check if type_name is a primitive type
+            auto is_primitive = [](const std::string& name) {
+                return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+                       name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
+                       name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
+                       name == "Bool";
+            };
+
+            if (is_primitive(type_name)) {
+                // Delegate to gen_static_method_call which has the full From implementation
+                auto result = gen_static_method_call(call, type_name);
+                if (result) {
+                    return *result;
+                }
+            }
+        }
+
+        // Check if this is a generic struct/enum from:
+        // 1. Local pending_generic_structs_, pending_generic_enums_, or pending_generic_impls_
+        // 2. Imported structs/enums from module registry with type_params
         // 3. Method call has explicit type arguments (e.g., StackNode::new[T])
         // NOTE: Exclude runtime-managed collection types (List, HashMap, Buffer, HashMapIter)
         // as they have special handling in gen_static_method_call
@@ -211,15 +238,22 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         bool is_generic_struct =
             !is_runtime_collection &&
             (pending_generic_structs_.count(type_name) > 0 ||
+             pending_generic_enums_.count(type_name) > 0 ||
              pending_generic_impls_.count(type_name) > 0 ||
              !call.type_args.empty()); // Also treat calls with explicit type args as generic
 
-        // Also check for imported generic structs (except runtime collections)
+        // Also check for imported generic structs and enums (except runtime collections)
+        // Note: We search module registry even when is_generic_struct is true due to explicit
+        // type args, because we need to find the generic parameter names (e.g., T) for type_subs
         std::vector<std::string> imported_type_params;
-        if (!is_generic_struct && !is_runtime_collection && env_.module_registry()) {
+        bool is_local_generic = pending_generic_structs_.count(type_name) > 0 ||
+                                pending_generic_enums_.count(type_name) > 0 ||
+                                pending_generic_impls_.count(type_name) > 0;
+        if (!is_local_generic && !is_runtime_collection && env_.module_registry()) {
             TML_DEBUG_LN("[STATIC_METHOD] Looking for " << type_name << " in module registry");
             const auto& all_modules = env_.module_registry()->get_all_modules();
             for (const auto& [mod_name, mod] : all_modules) {
+                // Check structs
                 auto struct_it = mod.structs.find(type_name);
                 if (struct_it != mod.structs.end()) {
                     TML_DEBUG_LN("[STATIC_METHOD] Found " << type_name << " in " << mod_name
@@ -228,6 +262,18 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     if (!struct_it->second.type_params.empty()) {
                         is_generic_struct = true;
                         imported_type_params = struct_it->second.type_params;
+                        break;
+                    }
+                }
+                // Check enums
+                auto enum_it = mod.enums.find(type_name);
+                if (enum_it != mod.enums.end()) {
+                    TML_DEBUG_LN("[STATIC_METHOD] Found enum " << type_name << " in " << mod_name
+                                                               << " with type_params.size="
+                                                               << enum_it->second.type_params.size());
+                    if (!enum_it->second.type_params.empty()) {
+                        is_generic_struct = true;
+                        imported_type_params = enum_it->second.type_params;
                         break;
                     }
                 }
@@ -546,6 +592,22 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                                                      << " from argument " << i);
                         }
                     }
+                }
+            }
+
+            // Fallback: If func_sig is null but we have arguments and a single type parameter,
+            // infer the type from the first argument. This handles imported generic types
+            // (especially enums) where the method signature isn't in the function registry.
+            if (type_subs.empty() && !func_sig && !call.args.empty() &&
+                imported_type_params.size() == 1) {
+                // Infer from first argument
+                auto arg_type = infer_expr_type(*call.args[0]);
+                if (arg_type) {
+                    type_subs[imported_type_params[0]] = arg_type;
+                    mangled_type_name += "__" + mangle_type(arg_type);
+                    TML_DEBUG_LN("[STATIC_METHOD] Fallback inferred "
+                                 << imported_type_params[0] << " = " << mangle_type(arg_type)
+                                 << " from first argument");
                 }
             }
 
@@ -1767,10 +1829,20 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         // Handle Maybe[T] methods
         if (named.name == "Maybe") {
             std::string enum_type_name = llvm_type_from_semantic(receiver_type, true);
+
+            // If receiver is from field access, it's a pointer - need to load first
+            std::string maybe_val = receiver;
+            if (call.receiver->is<parser::FieldExpr>() &&
+                enum_type_name.starts_with("%struct.")) {
+                std::string loaded = fresh_reg();
+                emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
+                maybe_val = loaded;
+            }
+
             std::string tag_val = fresh_reg();
-            emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + receiver +
+            emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + maybe_val +
                       ", 0");
-            auto result = gen_maybe_method(call, receiver, enum_type_name, tag_val, named);
+            auto result = gen_maybe_method(call, maybe_val, enum_type_name, tag_val, named);
             if (result) {
                 return *result;
             }
@@ -1779,10 +1851,20 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         // Handle Outcome[T, E] methods
         if (named.name == "Outcome" && named.type_args.size() >= 2) {
             std::string enum_type_name = llvm_type_from_semantic(receiver_type, true);
+
+            // If receiver is from field access, it's a pointer - need to load first
+            std::string outcome_val = receiver;
+            if (call.receiver->is<parser::FieldExpr>() &&
+                enum_type_name.starts_with("%struct.")) {
+                std::string loaded = fresh_reg();
+                emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
+                outcome_val = loaded;
+            }
+
             std::string tag_val = fresh_reg();
-            emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + receiver +
+            emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + outcome_val +
                       ", 0");
-            auto result = gen_outcome_method(call, receiver, enum_type_name, tag_val, named);
+            auto result = gen_outcome_method(call, outcome_val, enum_type_name, tag_val, named);
             if (result) {
                 return *result;
             }
@@ -1994,6 +2076,78 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     if (auto class_result =
             try_gen_class_instance_call(call, receiver, receiver_ptr, receiver_type)) {
         return *class_result;
+    }
+
+    // =========================================================================
+    // 17. Handle function pointer field calls (e.g., vtable.call_fn(args))
+    // =========================================================================
+    {
+        // Get the receiver type name - use receiver_type_name that was computed earlier
+        std::string fn_field_type_name = receiver_type_name;
+
+        // Look up the struct definition
+        auto struct_def = env_.lookup_struct(fn_field_type_name);
+        if (struct_def) {
+            // Look for a field with the method name
+            int field_idx = 0;
+            for (const auto& [field_name, field_type] : struct_def->fields) {
+                if (field_name == method) {
+                    // Check if the field is a function type
+                    if (field_type->is<types::FuncType>()) {
+                        const auto& func = field_type->as<types::FuncType>();
+
+                        // Get pointer to the field
+                        std::string field_ptr = fresh_reg();
+                        emit_line("  " + field_ptr + " = getelementptr inbounds %struct." +
+                                  fn_field_type_name + ", ptr " + receiver_ptr + ", i32 0, i32 " +
+                                  std::to_string(field_idx));
+
+                        // Load the function pointer
+                        std::string func_ptr = fresh_reg();
+                        emit_line("  " + func_ptr + " = load ptr, ptr " + field_ptr);
+
+                        // Generate arguments
+                        std::vector<std::string> arg_values;
+                        std::vector<std::string> arg_types;
+                        for (size_t i = 0; i < call.args.size(); ++i) {
+                            std::string arg = gen_expr(*call.args[i]);
+                            arg_values.push_back(arg);
+                            if (i < func.params.size()) {
+                                arg_types.push_back(llvm_type_from_semantic(func.params[i]));
+                            } else {
+                                arg_types.push_back(last_expr_type_);
+                            }
+                        }
+
+                        // Determine return type
+                        std::string ret_type = llvm_type_from_semantic(func.return_type);
+
+                        // Build argument list
+                        std::string args_str;
+                        for (size_t i = 0; i < arg_values.size(); ++i) {
+                            if (i > 0)
+                                args_str += ", ";
+                            args_str += arg_types[i] + " " + arg_values[i];
+                        }
+
+                        // Emit the call
+                        std::string result;
+                        if (ret_type != "void") {
+                            result = fresh_reg();
+                            emit_line("  " + result + " = call " + ret_type + " " + func_ptr + "(" +
+                                      args_str + ")");
+                        } else {
+                            emit_line("  call void " + func_ptr + "(" + args_str + ")");
+                        }
+
+                        last_expr_type_ = ret_type;
+                        return ret_type == "void" ? "void" : result;
+                    }
+                    break;
+                }
+                field_idx++;
+            }
+        }
     }
 
     report_error("Unknown method: " + method, call.span);

@@ -1,42 +1,42 @@
 # Tasks: Codegen & Type System Test Blockers
 
-**Status**: Not Started (0%)
+**Status**: In Progress (70%)
 
-## Phase 1: Critical Codegen Bugs
+## Phase 1: Critical Codegen Bugs (100% Complete)
 
-- [ ] 1.1.1 Fix cross-type From conversions (I8→I16, etc) failing at runtime
-- [ ] 1.1.2 Fix U64 large literal codegen error
-- [ ] 1.1.3 Fix Ordering enum to_string `zext i64 to i64` error
-- [ ] 1.1.4 Fix I8/I16 MIN negative value codegen bug
-- [ ] 1.1.5 Fix I8 negative return value codegen bug
-- [ ] 1.1.6 Fix F32 float/double promotion issue
-- [ ] 1.1.7 Fix Bool variable codegen issue
-- [ ] 1.1.8 Fix U8/U16 bitwise operation type coercion
+- [x] 1.1.1 Fix cross-type From conversions (I8→I16, etc) failing at runtime
+- [x] 1.1.2 Fix U64 large literal codegen error
+- [x] 1.1.3 Fix Ordering enum to_string `zext i64 to i64` error
+- [x] 1.1.4 Fix I8/I16 MIN negative value codegen bug
+- [x] 1.1.5 Fix I8 negative return value codegen bug
+- [x] 1.1.6 Fix F32 float/double promotion issue
+- [x] 1.1.7 Fix Bool variable codegen issue
+- [x] 1.1.8 Fix U8/U16 bitwise operation type coercion
 
 ## Phase 2: Generic Type System Issues
 
-- [ ] 2.1.1 Fix generic Range types compiler bug
-- [ ] 2.1.2 Fix generic enum Nothing variant typing in generic context
-- [ ] 2.1.3 Fix generic enum payload type parameter substitution
-- [ ] 2.1.4 Fix generic tuple return type limitation
-- [ ] 2.1.5 Support generic methods on non-generic types
-- [ ] 2.1.6 Fix T::default() substitution in generic context
-- [ ] 2.1.7 Fix generic function return type inference
-- [ ] 2.1.8 Fix generic .duplicate() method resolution for Maybe[T]/Outcome[T,E]
-- [ ] 2.1.9 Fix Bound generic enum variant resolution
-- [ ] 2.1.10 Fix associated types codegen (Cow, ToOwned)
-- [ ] 2.1.11 Fix generic Maybe/Outcome type inference
+- [x] 2.1.1 Fix generic Range types compiler bug
+- [x] 2.1.2 Fix generic enum Nothing variant typing in generic context
+- [x] 2.1.3 Fix generic enum payload type parameter substitution
+- [x] 2.1.4 Fix generic tuple return type limitation
+- [x] 2.1.5 Support generic methods on non-generic types
+- [x] 2.1.6 Fix T::default() substitution in generic context
+- [x] 2.1.7 Fix generic function return type inference
+- [x] 2.1.8 Fix generic .duplicate() method resolution for Maybe[T]/Outcome[T,E]
+- [x] 2.1.9 Fix Bound generic enum variant resolution
+- [~] 2.1.10 Fix associated types codegen (Cow works, ToOwned partial)
+- [x] 2.1.11 Fix generic Maybe/Outcome type inference (nested generics like Maybe[Maybe[I32]] now work)
 
 ## Phase 3: Display/Behavior Implementation
 
-- [ ] 3.1.1 Fix Display impl resolution for custom types (SimpleError, ParseError, IoError, etc)
-- [ ] 3.1.2 Add runtime support for `impl Behavior` returns
-- [ ] 3.1.3 Implement Clone behavior verification
+- [x] 3.1.1 Fix Display impl resolution for custom types (SimpleError, ParseError, IoError - working)
+- [~] 3.1.2 Add runtime support for `impl Behavior` returns (infrastructure in place, type inference from body WIP)
+- [x] 3.1.3 Implement Clone behavior verification
 
 ## Phase 4: Runtime Features
 
 - [ ] 4.1.1 Complete async/await support for async iterators
-- [ ] 4.1.2 Fix Poll types (blocked by generic enum issues)
+- [x] 4.1.2 Fix Poll types and function pointer field calling
 - [ ] 4.1.3 Add Drop behavior runtime support
 - [ ] 4.1.4 Implement drop_in_place in lowlevel context
 - [ ] 4.1.5 Add codegen support for partial moves
@@ -45,7 +45,7 @@
 
 ## Phase 5: Other Issues
 
-- [ ] 5.1.1 Fix tuple literals defaulting to I64 instead of I32
+- [x] 5.1.1 Fix tuple literals defaulting to I64 instead of I32
 - [ ] 5.1.2 Support module constant access
-- [ ] 5.1.3 Fix core::option 'xor' keyword bug
+- [x] 5.1.3 Fix core::option 'xor' keyword bug (renamed to one_of)
 - [ ] 5.1.4 Fix generic type inference with lifetime bounds

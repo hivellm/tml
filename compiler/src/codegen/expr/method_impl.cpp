@@ -136,14 +136,34 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             }
         }
 
-        // Check imported structs for type params
+        // Check imported structs and enums for type params
         std::vector<std::string> imported_type_params;
         if (impl_it == pending_generic_impls_.end() && env_.module_registry()) {
             const auto& all_modules = env_.module_registry()->get_all_modules();
             for (const auto& [mod_name, mod] : all_modules) {
+                // Check structs
                 auto struct_it = mod.structs.find(named.name);
                 if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
                     imported_type_params = struct_it->second.type_params;
+                    for (size_t i = 0;
+                         i < imported_type_params.size() && i < named.type_args.size(); ++i) {
+                        type_subs[imported_type_params[i]] = named.type_args[i];
+                        if (named.type_args[i] && named.type_args[i]->is<types::NamedType>()) {
+                            const auto& arg_named = named.type_args[i]->as<types::NamedType>();
+                            auto item_type = lookup_associated_type(arg_named.name, "Item");
+                            if (item_type) {
+                                std::string assoc_key = imported_type_params[i] + "::Item";
+                                type_subs[assoc_key] = item_type;
+                                type_subs["Item"] = item_type;
+                            }
+                        }
+                    }
+                    break;
+                }
+                // Check enums
+                auto enum_it = mod.enums.find(named.name);
+                if (enum_it != mod.enums.end() && !enum_it->second.type_params.empty()) {
+                    imported_type_params = enum_it->second.type_params;
                     for (size_t i = 0;
                          i < imported_type_params.size() && i < named.type_args.size(); ++i) {
                         type_subs[imported_type_params[i]] = named.type_args[i];
@@ -469,7 +489,36 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
         typed_args.push_back({arg_type, val});
     }
 
-    std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
+    // Build type substitutions for generic types
+    std::unordered_map<std::string, types::TypePtr> type_subs;
+    if (!named2.type_args.empty() && env_.module_registry()) {
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto enum_it = mod.enums.find(named2.name);
+            if (enum_it != mod.enums.end() && !enum_it->second.type_params.empty()) {
+                for (size_t i = 0;
+                     i < enum_it->second.type_params.size() && i < named2.type_args.size(); ++i) {
+                    type_subs[enum_it->second.type_params[i]] = named2.type_args[i];
+                }
+                break;
+            }
+            auto struct_it = mod.structs.find(named2.name);
+            if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
+                for (size_t i = 0;
+                     i < struct_it->second.type_params.size() && i < named2.type_args.size(); ++i) {
+                    type_subs[struct_it->second.type_params[i]] = named2.type_args[i];
+                }
+                break;
+            }
+        }
+    }
+
+    // Apply type substitutions to return type for generic types
+    auto return_type = func_sig->return_type;
+    if (!type_subs.empty()) {
+        return_type = types::substitute_type(return_type, type_subs);
+    }
+    std::string ret_type = llvm_type_from_semantic(return_type);
     std::string args_str;
     for (size_t i = 0; i < typed_args.size(); ++i) {
         if (i > 0)

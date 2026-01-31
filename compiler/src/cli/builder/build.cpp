@@ -233,11 +233,42 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         }
     }
 
+    // Check if there are local generic types that need instantiation
+    // MIR codegen doesn't support generic type instantiation, so we need AST codegen
+    bool has_local_generics = false;
+    for (const auto& decl : module.decls) {
+        if (decl->is<parser::StructDecl>()) {
+            if (!decl->as<parser::StructDecl>().generics.empty()) {
+                has_local_generics = true;
+                break;
+            }
+        } else if (decl->is<parser::EnumDecl>()) {
+            if (!decl->as<parser::EnumDecl>().generics.empty()) {
+                has_local_generics = true;
+                break;
+            }
+        } else if (decl->is<parser::ImplDecl>()) {
+            const auto& impl = decl->as<parser::ImplDecl>();
+            if (!impl.generics.empty()) {
+                has_local_generics = true;
+                break;
+            }
+            if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
+                const auto& named = impl.self_type->as<parser::NamedType>();
+                if (named.generics.has_value() && !named.generics->args.empty()) {
+                    has_local_generics = true;
+                    break;
+                }
+            }
+        }
+    }
+
     // Use MIR-based codegen for all optimization levels (including O0)
     // This provides consistent behavior for features like volatile that are implemented in MIR
     // But fall back to AST codegen when TML imports need codegen (MIR doesn't support this yet)
+    // Also fall back to AST codegen when there are local generic types
     int opt_level = tml::CompilerOptions::optimization_level;
-    if (!has_tml_imports_needing_codegen) { // Use MIR when no TML imports need codegen
+    if (!has_tml_imports_needing_codegen && !has_local_generics) { // Use MIR when safe
         // Build MIR from HIR for optimized codegen
         auto env_copy = env;
         hir::HirBuilder hir_builder(env_copy);

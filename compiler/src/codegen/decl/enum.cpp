@@ -204,7 +204,7 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
 
         // Helper lambda to calculate size of an LLVM type
         std::function<size_t(const std::string&)> calc_type_size;
-        calc_type_size = [this, &calc_type_size](const std::string& ty) -> size_t {
+        calc_type_size = [this, &calc_type_size, &decl](const std::string& ty) -> size_t {
             if (ty == "{}" || ty == "void")
                 return 0; // Unit type has zero size
             if (ty == "i8")
@@ -245,6 +245,43 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
                         struct_size += calc_type_size(field.llvm_type);
                     }
                     return struct_size > 0 ? struct_size : 8;
+                }
+
+                // For enum types (not in struct_fields_), check if it's a known enum instantiation
+                // Enums have layout { i32, [N x i64] } = 4 + padding + N*8 bytes
+                auto enum_it = enum_instantiations_.find(struct_name);
+                if (enum_it != enum_instantiations_.end()) {
+                    const auto& inst = enum_it->second;
+                    auto decl_it = pending_generic_enums_.find(inst.base_name);
+                    if (decl_it != pending_generic_enums_.end()) {
+                        // Recursively calculate the inner enum's payload size
+                        const parser::EnumDecl* inner_decl = decl_it->second;
+                        std::unordered_map<std::string, types::TypePtr> inner_subs;
+                        for (size_t i = 0;
+                             i < inner_decl->generics.size() && i < inst.type_args.size(); ++i) {
+                            inner_subs[inner_decl->generics[i].name] = inst.type_args[i];
+                        }
+
+                        size_t inner_max_size = 0;
+                        for (const auto& variant : inner_decl->variants) {
+                            size_t vsize = 0;
+                            if (variant.tuple_fields.has_value()) {
+                                for (const auto& field_type : *variant.tuple_fields) {
+                                    types::TypePtr resolved =
+                                        resolve_parser_type_with_subs(*field_type, inner_subs);
+                                    std::string vty = llvm_type_from_semantic(resolved, true);
+                                    vsize += calc_type_size(vty);
+                                }
+                            }
+                            inner_max_size = std::max(inner_max_size, vsize);
+                        }
+                        if (inner_max_size == 0)
+                            inner_max_size = 8;
+                        size_t inner_num_i64 = (inner_max_size + 7) / 8;
+                        // Enum layout: { i32, [N x i64] } with 8-byte alignment
+                        // i32 tag (4 bytes) + padding (4 bytes) + N * 8 bytes
+                        return 8 + inner_num_i64 * 8;
+                    }
                 }
             }
             return 8; // Default size

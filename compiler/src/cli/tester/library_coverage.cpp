@@ -22,7 +22,21 @@ namespace tml::cli::tester {
 struct ModuleCoverage {
     std::string name;
     std::vector<std::string> functions;
+    std::vector<std::string> covered_functions;   // Functions that were tested (unique)
+    std::vector<std::string> uncovered_functions; // Functions that were NOT tested (unique)
     int covered_count = 0;
+
+    // Deduplicate functions
+    void deduplicate() {
+        std::set<std::string> seen;
+        std::vector<std::string> unique_funcs;
+        for (const auto& f : functions) {
+            if (seen.insert(f).second) {
+                unique_funcs.push_back(f);
+            }
+        }
+        functions = std::move(unique_funcs);
+    }
 };
 
 /// Extract function names from a TML source file
@@ -43,6 +57,13 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
     // - impl[T] TypeName[T]
     // - impl[T: Trait] TypeName[T]
     std::regex impl_regex(R"(^\s*impl\s*(?:\[[^\]]*\])?\s*(\w+))");
+
+    // Match behavior blocks with optional generic parameters:
+    // - behavior BehaviorName
+    // - behavior BehaviorName[T]
+    // - pub behavior BehaviorName[Rhs = Self]
+    std::regex behavior_regex(R"(^\s*(pub\s+)?behavior\s+(\w+))");
+
     std::regex func_regex(R"(^\s*(pub\s+)?func\s+(\w+))");
     std::smatch match;
 
@@ -52,8 +73,13 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             current_impl = match[1].str();
             impl_brace_depth = 0; // Reset depth, will count opening brace below
         }
+        // Track behavior blocks - detect "behavior BehaviorName" or "pub behavior BehaviorName"
+        else if (std::regex_search(line, match, behavior_regex)) {
+            current_impl = match[2].str();
+            impl_brace_depth = 0; // Reset depth, will count opening brace below
+        }
 
-        // Count braces to track impl block scope
+        // Count braces to track impl/behavior block scope
         if (!current_impl.empty()) {
             for (char c : line) {
                 if (c == '{')
@@ -61,7 +87,7 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
                 else if (c == '}')
                     impl_brace_depth--;
             }
-            // When we exit the impl block (depth <= 0), clear current_impl
+            // When we exit the impl/behavior block (depth <= 0), clear current_impl
             if (impl_brace_depth <= 0) {
                 current_impl.clear();
                 impl_brace_depth = 0;
@@ -166,6 +192,7 @@ static std::vector<ModuleCoverage> scan_library(const std::vector<fs::path>& lib
         ModuleCoverage mc;
         mc.name = name;
         mc.functions = std::move(funcs);
+        mc.deduplicate();  // Remove duplicate function names
         result.push_back(std::move(mc));
     }
 
@@ -180,7 +207,11 @@ static std::vector<ModuleCoverage> scan_library(const std::vector<fs::path>& lib
 // ============================================================================
 
 void print_library_coverage_report(const std::set<std::string>& covered_functions,
-                                   const ColorOutput& c) {
+                                   const ColorOutput& c,
+                                   const TestRunStats& test_stats) {
+    // Suppress unused parameter warning if test_stats is empty
+    (void)test_stats;
+
     // Get library paths (core, std, and test libraries)
     fs::path cwd = fs::current_path();
     std::vector<fs::path> lib_dirs = {cwd / "lib" / "core", cwd / "lib" / "std",
@@ -204,24 +235,26 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
                           "Maybe::unwrap",      "Maybe::unwrap_or", "Maybe::map"};
     modules.insert(modules.begin(), std::move(builtins));
 
-    // Calculate coverage
+    // Calculate coverage and populate per-function lists
     int total_funcs = 0;
     int total_covered = 0;
     std::vector<std::pair<std::string, std::vector<std::string>>> uncovered_by_module;
 
     for (auto& mod : modules) {
-        std::vector<std::string> uncovered;
+        mod.covered_functions.clear();
+        mod.uncovered_functions.clear();
         for (const auto& func : mod.functions) {
             total_funcs++;
             if (covered_functions.count(func) > 0) {
                 mod.covered_count++;
+                mod.covered_functions.push_back(func);
                 total_covered++;
             } else {
-                uncovered.push_back(func);
+                mod.uncovered_functions.push_back(func);
             }
         }
-        if (!uncovered.empty()) {
-            uncovered_by_module.push_back({mod.name, std::move(uncovered)});
+        if (!mod.uncovered_functions.empty()) {
+            uncovered_by_module.push_back({mod.name, mod.uncovered_functions});
         }
     }
 
@@ -248,7 +281,7 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
         std::cout << c.green();
     std::cout << std::fixed << std::setprecision(1) << overall_pct << "%" << c.reset() << ")\n\n";
 
-    // Per-module table
+    // Per-module table with function details
     std::cout << c.dim()
               << "--------------------------------------------------------------------------------"
               << c.reset() << "\n";
@@ -280,6 +313,14 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
                   << mod.name << std::right << std::setw(5) << mod.covered_count << "/" << std::left
                   << std::setw(5) << mod_total << std::right << color << std::setw(9) << std::fixed
                   << std::setprecision(1) << pct << "%" << c.reset() << "\n";
+
+        // Always show function details for every module
+        for (const auto& func : mod.covered_functions) {
+            std::cout << "      " << c.green() << "+" << c.reset() << " " << c.dim() << func << c.reset() << "\n";
+        }
+        for (const auto& func : mod.uncovered_functions) {
+            std::cout << "      " << c.red() << "X" << c.reset() << " " << c.dim() << func << c.reset() << "\n";
+        }
     }
 
     // Count modules with 0% coverage
@@ -414,6 +455,59 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
     std::cout << c.dim()
               << "================================================================================"
               << c.reset() << "\n";
+
+    // Print uncovered functions by module
+    if (!uncovered_by_module.empty()) {
+        std::cout << "\n";
+        std::cout << c.cyan() << c.bold()
+                  << "================================================================================"
+                  << c.reset() << "\n";
+        std::cout << c.cyan() << c.bold() << "                    UNCOVERED FUNCTIONS BY MODULE"
+                  << c.reset() << "\n";
+        std::cout << c.cyan() << c.bold()
+                  << "================================================================================"
+                  << c.reset() << "\n\n";
+
+        // Sort by number of uncovered functions (most first)
+        std::vector<std::pair<std::string, std::vector<std::string>>> sorted_uncovered =
+            uncovered_by_module;
+        std::sort(sorted_uncovered.begin(), sorted_uncovered.end(),
+                  [](const auto& a, const auto& b) { return a.second.size() > b.second.size(); });
+
+        // Only show top 20 modules with most uncovered functions
+        int shown_modules = 0;
+        for (const auto& [module_name, funcs] : sorted_uncovered) {
+            if (shown_modules >= 20)
+                break;
+            shown_modules++;
+
+            std::cout << " " << c.yellow() << c.bold() << module_name << c.reset() << " " << c.dim()
+                      << "(" << funcs.size() << " uncovered)" << c.reset() << "\n";
+
+            // Show up to 10 functions per module
+            int shown_funcs = 0;
+            for (const auto& func : funcs) {
+                if (shown_funcs >= 10) {
+                    std::cout << "   " << c.dim() << "... and " << (funcs.size() - 10) << " more"
+                              << c.reset() << "\n";
+                    break;
+                }
+                std::cout << "   " << c.red() << "✗" << c.reset() << " " << c.dim() << func
+                          << c.reset() << "\n";
+                shown_funcs++;
+            }
+            std::cout << "\n";
+        }
+
+        if (sorted_uncovered.size() > 20) {
+            std::cout << " " << c.dim() << "... and " << (sorted_uncovered.size() - 20)
+                      << " more modules with uncovered functions" << c.reset() << "\n";
+        }
+
+        std::cout << c.dim()
+                  << "================================================================================"
+                  << c.reset() << "\n";
+    }
 }
 
 // ============================================================================
@@ -421,7 +515,8 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
 // ============================================================================
 
 void write_library_coverage_html(const std::set<std::string>& covered_functions,
-                                 const std::string& output_path) {
+                                 const std::string& output_path,
+                                 const TestRunStats& test_stats) {
     // Get library paths (core, std, and test libraries)
     fs::path cwd = fs::current_path();
     std::vector<fs::path> lib_dirs = {cwd / "lib" / "core", cwd / "lib" / "std",
@@ -445,24 +540,26 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
                           "Maybe::unwrap",      "Maybe::unwrap_or", "Maybe::map"};
     modules.insert(modules.begin(), std::move(builtins));
 
-    // Calculate coverage
+    // Calculate coverage and populate per-function lists
     int total_funcs = 0;
     int total_covered = 0;
     std::vector<std::pair<std::string, std::vector<std::string>>> uncovered_by_module;
 
     for (auto& mod : modules) {
-        std::vector<std::string> uncovered;
+        mod.covered_functions.clear();
+        mod.uncovered_functions.clear();
         for (const auto& func : mod.functions) {
             total_funcs++;
             if (covered_functions.count(func) > 0) {
                 mod.covered_count++;
+                mod.covered_functions.push_back(func);
                 total_covered++;
             } else {
-                uncovered.push_back(func);
+                mod.uncovered_functions.push_back(func);
             }
         }
-        if (!uncovered.empty()) {
-            uncovered_by_module.push_back({mod.name, std::move(uncovered)});
+        if (!mod.uncovered_functions.empty()) {
+            uncovered_by_module.push_back({mod.name, mod.uncovered_functions});
         }
     }
 
@@ -748,6 +845,75 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       align-items: center;
       gap: 12px;
     }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+    .tab {
+      padding: 12px 20px;
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.2s;
+    }
+    .tab:hover {
+      color: var(--text);
+      background: rgba(88, 166, 255, 0.05);
+    }
+    .tab.active {
+      color: var(--blue);
+      border-bottom-color: var(--blue);
+    }
+    .tab-panel {
+      display: none;
+    }
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* Test suites */
+    .suite-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .suite-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .suite-name {
+      font-weight: 600;
+      font-family: monospace;
+    }
+    .suite-stats {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+    .suite-tests {
+      color: var(--green);
+      font-weight: 500;
+    }
+    .suite-duration {
+      color: var(--text-dim);
+    }
   </style>
 </head>
 <body>
@@ -769,13 +935,13 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       </div>
       <div class="stat-card">
         <div class="stat-value stat-green">)"
-      << full_coverage << R"(</div>
-        <div class="stat-label">Modules 100% Covered</div>
+      << test_stats.total_tests << R"(</div>
+        <div class="stat-label">Tests Passed</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value stat-yellow">)"
-      << partial_coverage << R"(</div>
-        <div class="stat-label">Modules Partial</div>
+        <div class="stat-value">)"
+      << test_stats.total_files << R"(</div>
+        <div class="stat-label">Test Files</div>
       </div>
       <div class="stat-card">
         <div class="stat-value stat-red">)"
@@ -792,11 +958,58 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       << R"(" style="width: )" << overall_pct << R"(%;"></div>
       </div>
       <div class="progress-text">)"
-      << total_covered << " of " << total_funcs << R"( library functions have test coverage</div>
+      << total_covered << " of " << total_funcs << R"HTML( library functions have test coverage</div>
     </div>
 
-    <h2 class="section-title">Module Coverage</h2>
-    <div class="module-groups">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('overview')">Overview</button>
+      <button class="tab" onclick="showTab('modules')">Module Coverage</button>
+      <button class="tab" onclick="showTab('priorities')">Priorities</button>
+      <button class="tab" onclick="showTab('uncovered')">Uncovered Functions</button>
+      <button class="tab" onclick="showTab('suites')">Test Suites</button>
+    </div>
+
+    <div id="overview" class="tab-panel active">
+      <div class="stats" style="margin-top: 0;">
+        <div class="stat-card">
+          <div class="stat-value stat-green">)HTML"
+      << full_coverage << R"(</div>
+          <div class="stat-label">Modules 100% Covered</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-yellow">)"
+      << partial_coverage << R"(</div>
+          <div class="stat-label">Modules Partial</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-red">)"
+      << zero_coverage << R"(</div>
+          <div class="stat-label">Modules 0% Covered</div>
+        </div>
+      </div>
+
+      <h2 class="section-title">Test Suites</h2>
+      <div class="suite-list">
+)";
+
+    // Write test suite details in overview
+    for (const auto& suite : test_stats.suites) {
+        f << "        <div class=\"suite-item\">\n";
+        f << "          <span class=\"suite-name\">" << suite.name << "</span>\n";
+        f << "          <div class=\"suite-stats\">\n";
+        f << "            <span class=\"suite-tests\">" << suite.test_count << " tests</span>\n";
+        f << "            <span class=\"suite-duration\">" << suite.duration_ms << "ms</span>\n";
+        f << "          </div>\n";
+        f << "        </div>\n";
+    }
+
+    f << R"(      </div>
+    </div>
+
+    <!-- Modules Tab -->
+    <div id="modules" class="tab-panel">
+      <h2 class="section-title">Module Coverage</h2>
+      <div class="module-groups">
 )";
 
     // Group modules by top-level category
@@ -895,14 +1108,25 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
                 display_name = display_name.substr(name.length() + 1);
             }
 
-            f << "          <div class=\"submodule-row\">\n";
-            f << "            <span class=\"submodule-name\">" << display_name << "</span>\n";
-            f << "            <div class=\"submodule-stats\">\n";
-            f << "              <span style=\"color: var(--" << sub_color << ");\">" << std::fixed
+            f << "          <div class=\"submodule-row\" style=\"flex-direction: column; align-items: stretch;\">\n";
+            f << "            <div style=\"display: flex; justify-content: space-between; align-items: center;\">\n";
+            f << "              <span class=\"submodule-name\">" << display_name << "</span>\n";
+            f << "              <div class=\"submodule-stats\">\n";
+            f << "                <span style=\"color: var(--" << sub_color << ");\">" << std::fixed
               << std::setprecision(1) << sub_pct << "%</span>\n";
-            f << "              <span>" << sub->covered_count << "/" << sub_total << "</span>\n";
-            f << "              <span class=\"status-badge " << sub_badge << "\">" << sub_badge_text
+            f << "                <span>" << sub->covered_count << "/" << sub_total << "</span>\n";
+            f << "                <span class=\"status-badge " << sub_badge << "\">" << sub_badge_text
               << "</span>\n";
+            f << "              </div>\n";
+            f << "            </div>\n";
+            // Show all functions for this module
+            f << "            <div class=\"func-list\" style=\"margin-top: 8px; padding-left: 16px; font-size: 12px;\">\n";
+            for (const auto& func : sub->covered_functions) {
+                f << "              <div style=\"color: var(--green);\">+ " << func << "</div>\n";
+            }
+            for (const auto& func : sub->uncovered_functions) {
+                f << "              <div style=\"color: var(--red);\">✗ " << func << "</div>\n";
+            }
             f << "            </div>\n";
             f << "          </div>\n";
         }
@@ -911,7 +1135,8 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
         f << "      </div>\n";
     }
 
-    f << "    </div>\n";
+    f << "      </div>\n";  // Close module-groups
+    f << "    </div>\n";    // Close modules tab panel
 
     // Priority section - modules that need tests
     std::set<std::string> critical_modules = {
@@ -961,26 +1186,28 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
     std::sort(low_list.begin(), low_list.end(), sort_by_uncovered);
 
     f << R"(
-    <h2 class="section-title">Test Improvement Priorities</h2>
-    <div class="stats">
-      <div class="stat-card">
-        <div class="stat-value stat-red">)"
+    <!-- Priorities Tab -->
+    <div id="priorities" class="tab-panel">
+      <h2 class="section-title">Test Improvement Priorities</h2>
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-value stat-red">)"
       << critical_list.size() << R"(</div>
-        <div class="stat-label">Critical (0%, high priority)</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value stat-red">)"
+          <div class="stat-label">Critical (0%, high priority)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-red">)"
       << zero_list.size() << R"(</div>
-        <div class="stat-label">Zero Coverage (0%)</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value stat-yellow">)"
+          <div class="stat-label">Zero Coverage (0%)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value stat-yellow">)"
       << low_list.size() << R"(</div>
-        <div class="stat-label">Low Coverage (<30%)</div>
+          <div class="stat-label">Low Coverage (<30%)</div>
+        </div>
       </div>
-    </div>
 
-    <table>
+      <table>
       <thead>
         <tr>
           <th>Priority</th>
@@ -1030,15 +1257,20 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
     }
 
     f << R"(      </tbody>
-    </table>
+      </table>
+    </div>
 )";
 
     // Uncovered functions section
-    if (!uncovered_by_module.empty()) {
-        f << R"(
-    <div class="uncovered-section">
+    f << R"(
+    <!-- Uncovered Tab -->
+    <div id="uncovered" class="tab-panel">
       <h2 class="section-title">Uncovered Functions ()"
-          << (total_funcs - total_covered) << R"( total)</h2>
+      << (total_funcs - total_covered) << R"( total)</h2>
+)";
+
+    if (!uncovered_by_module.empty()) {
+        f << R"(      <div class="uncovered-section">
 )";
 
         // Sort by number of uncovered (most uncovered first)
@@ -1061,14 +1293,75 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
             f << "      </div>\n";
         }
 
-        f << "    </div>\n";
+        f << "      </div>\n";  // Close uncovered-section
+    } else {
+        f << "      <p style=\"color: var(--text-dim);\">No uncovered functions - excellent!</p>\n";
     }
 
+    f << "    </div>\n";  // Close uncovered tab panel
+
+    // Test Suites tab
     f << R"(
+    <!-- Test Suites Tab -->
+    <div id="suites" class="tab-panel">
+      <h2 class="section-title">Test Suite Details</h2>
+      <div class="suite-list">
+)";
+
+    for (const auto& suite : test_stats.suites) {
+        f << "        <div class=\"suite-item\">\n";
+        f << "          <span class=\"suite-name\">" << suite.name << "</span>\n";
+        f << "          <div class=\"suite-stats\">\n";
+        f << "            <span class=\"suite-tests\">" << suite.test_count << " tests</span>\n";
+        f << "            <span class=\"suite-duration\">" << suite.duration_ms << "ms</span>\n";
+        f << "          </div>\n";
+        f << "        </div>\n";
+    }
+
+    f << R"(      </div>
+
+      <div class="stats" style="margin-top: 24px;">
+        <div class="stat-card">
+          <div class="stat-value stat-green">)"
+      << test_stats.total_tests << R"(</div>
+          <div class="stat-label">Total Tests</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">)"
+      << test_stats.total_files << R"(</div>
+          <div class="stat-label">Test Files</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">)"
+      << test_stats.suites.size() << R"(</div>
+          <div class="stat-label">Test Suites</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">)"
+      << test_stats.total_duration_ms << R"(ms</div>
+          <div class="stat-label">Total Duration</div>
+        </div>
+      </div>
+    </div>
+
     <div class="footer">
-      Generated by TML Compiler &bull; Click on module headers to expand uncovered functions
+      Generated by TML Compiler &bull; Click on module headers to expand details
     </div>
   </div>
+
+  <script>
+    function showTab(tabId) {
+      // Hide all panels
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+
+      // Show selected panel
+      document.getElementById(tabId).classList.add('active');
+
+      // Mark selected tab
+      event.target.classList.add('active');
+    }
+  </script>
 </body>
 </html>
 )";

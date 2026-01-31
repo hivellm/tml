@@ -464,6 +464,30 @@ auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, 
                 if (it != subs.end() && t.type_args.empty()) {
                     return it->second;
                 }
+
+                // Handle unresolved associated types like "T::Owned"
+                // These are stored as a single name string by the type checker
+                auto colon_pos = t.name.find("::");
+                if (colon_pos != std::string::npos) {
+                    std::string first_part = t.name.substr(0, colon_pos);
+                    std::string second_part = t.name.substr(colon_pos + 2);
+
+                    // Try to resolve the first part (e.g., "T" -> I32)
+                    auto param_it = subs.find(first_part);
+                    if (param_it != subs.end() && param_it->second) {
+                        const auto& concrete_type = param_it->second;
+                        // For primitives with "Owned" associated type, return the primitive itself
+                        if (second_part == "Owned" && concrete_type->is<PrimitiveType>()) {
+                            return concrete_type;
+                        }
+                        // For named types, the associated type would need further resolution
+                        // For now, just return the concrete type for "Owned" (common case)
+                        if (second_part == "Owned") {
+                            return concrete_type;
+                        }
+                    }
+                }
+
                 if (t.type_args.empty()) {
                     auto result = std::make_shared<Type>();
                     result->kind = t;

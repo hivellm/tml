@@ -83,7 +83,13 @@ func test_u32_to_string() -> I32 {
     return 0
 }
 
-// Note: U64 test removed - codegen issue with large literals
+@test
+func test_u64_to_string() -> I32 {
+    let x: U64 = 10000000000
+    let s: Str = (x as I64).to_string()
+    assert_eq(s, "10000000000", "U64 to_string via I64 cast")
+    return 0
+}
 
 // =============================================================================
 // Display Tests - Bool
@@ -125,4 +131,30 @@ func test_str_to_string_empty() -> I32 {
     return 0
 }
 
-// Note: Ordering tests removed - codegen issue with enum to_string
+// =============================================================================
+// Display Tests - Ordering enum
+// =============================================================================
+
+@test
+func test_ordering_less_to_string() -> I32 {
+    let ord: Ordering = Ordering::Less
+    let s: Str = ord.to_string()
+    assert_eq(s, "Less", "Ordering::Less to_string")
+    return 0
+}
+
+@test
+func test_ordering_equal_to_string() -> I32 {
+    let ord: Ordering = Ordering::Equal
+    let s: Str = ord.to_string()
+    assert_eq(s, "Equal", "Ordering::Equal to_string")
+    return 0
+}
+
+@test
+func test_ordering_greater_to_string() -> I32 {
+    let ord: Ordering = Ordering::Greater
+    let s: Str = ord.to_string()
+    assert_eq(s, "Greater", "Ordering::Greater to_string")
+    return 0
+}

@@ -107,6 +107,7 @@ auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
     }
     case lexer::TokenKind::BoolLiteral:
         last_expr_type_ = "i1";
+        last_expr_is_unsigned_ = true; // Bool is unsigned (0 or 1), use zext not sext
         return lit.token.bool_value() ? "1" : "0";
     case lexer::TokenKind::StringLiteral: {
         std::string str_val = std::string(lit.token.string_value().value);
@@ -163,7 +164,9 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
         last_expr_is_unsigned_ = false;
         if (var.semantic_type) {
             if (auto* prim = std::get_if<types::PrimitiveType>(&var.semantic_type->kind)) {
-                last_expr_is_unsigned_ = prim->kind == types::PrimitiveKind::U8 ||
+                // Bool is treated as unsigned (0 or 1) for extension purposes
+                last_expr_is_unsigned_ = prim->kind == types::PrimitiveKind::Bool ||
+                                         prim->kind == types::PrimitiveKind::U8 ||
                                          prim->kind == types::PrimitiveKind::U16 ||
                                          prim->kind == types::PrimitiveKind::U32 ||
                                          prim->kind == types::PrimitiveKind::U64 ||

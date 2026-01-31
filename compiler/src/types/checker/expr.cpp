@@ -81,6 +81,91 @@ static std::string primitive_to_string(PrimitiveKind kind) {
     return "unknown";
 }
 
+/// Extract type parameter bindings by matching parameter type against argument type.
+/// For example, matching `ManuallyDrop[T]` against `ManuallyDrop[I64]` extracts {T -> I64}.
+static void extract_type_params(
+    const TypePtr& param_type, const TypePtr& arg_type,
+    const std::vector<std::string>& type_params,
+    std::unordered_map<std::string, TypePtr>& substitutions) {
+    if (!param_type || !arg_type)
+        return;
+
+    // If param_type is a NamedType that matches a type parameter directly
+    if (param_type->is<NamedType>()) {
+        const auto& named = param_type->as<NamedType>();
+        // Check if this is a type parameter (simple name with no type_args)
+        if (named.type_args.empty() && named.module_path.empty()) {
+            for (const auto& tp : type_params) {
+                if (named.name == tp) {
+                    substitutions[tp] = arg_type;
+                    return;
+                }
+            }
+        }
+        // If both are NamedType with same name, recursively match type_args
+        if (arg_type->is<NamedType>()) {
+            const auto& arg_named = arg_type->as<NamedType>();
+            if (named.name == arg_named.name &&
+                named.type_args.size() == arg_named.type_args.size()) {
+                for (size_t i = 0; i < named.type_args.size(); ++i) {
+                    extract_type_params(named.type_args[i], arg_named.type_args[i],
+                                        type_params, substitutions);
+                }
+            }
+        }
+        return;
+    }
+
+    // If param_type is a GenericType
+    if (param_type->is<GenericType>()) {
+        const auto& gen = param_type->as<GenericType>();
+        for (const auto& tp : type_params) {
+            if (gen.name == tp) {
+                substitutions[tp] = arg_type;
+                return;
+            }
+        }
+        return;
+    }
+
+    // RefType: match inner types
+    if (param_type->is<RefType>() && arg_type->is<RefType>()) {
+        const auto& param_ref = param_type->as<RefType>();
+        const auto& arg_ref = arg_type->as<RefType>();
+        extract_type_params(param_ref.inner, arg_ref.inner, type_params, substitutions);
+        return;
+    }
+
+    // TupleType: match element types
+    if (param_type->is<TupleType>() && arg_type->is<TupleType>()) {
+        const auto& param_tuple = param_type->as<TupleType>();
+        const auto& arg_tuple = arg_type->as<TupleType>();
+        if (param_tuple.elements.size() == arg_tuple.elements.size()) {
+            for (size_t i = 0; i < param_tuple.elements.size(); ++i) {
+                extract_type_params(param_tuple.elements[i], arg_tuple.elements[i],
+                                    type_params, substitutions);
+            }
+        }
+        return;
+    }
+
+    // ArrayType: match element types
+    if (param_type->is<ArrayType>() && arg_type->is<ArrayType>()) {
+        const auto& param_arr = param_type->as<ArrayType>();
+        const auto& arg_arr = arg_type->as<ArrayType>();
+        extract_type_params(param_arr.element, arg_arr.element, type_params, substitutions);
+        return;
+    }
+
+    // SliceType: match element types
+    if (param_type->is<SliceType>() && arg_type->is<SliceType>()) {
+        const auto& param_slice = param_type->as<SliceType>();
+        const auto& arg_slice = arg_type->as<SliceType>();
+        extract_type_params(param_slice.element, arg_slice.element, type_params, substitutions);
+        return;
+    }
+}
+
 auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
     return std::visit(
         [this, &expr](const auto& e) -> TypePtr {
@@ -176,6 +261,21 @@ auto TypeChecker::check_expr(const parser::Expr& expr, TypePtr expected_type) ->
             } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
                 // For array expressions, propagate expected type for element coercion
                 return check_array(e, expected_type);
+            } else if constexpr (std::is_same_v<T, parser::TupleExpr>) {
+                // For tuple expressions, propagate expected element types for coercion
+                std::vector<TypePtr> element_types;
+                const TupleType* expected_tuple = nullptr;
+                if (expected_type && expected_type->is<TupleType>()) {
+                    expected_tuple = &expected_type->as<TupleType>();
+                }
+                for (size_t i = 0; i < e.elements.size(); ++i) {
+                    TypePtr expected_elem = nullptr;
+                    if (expected_tuple && i < expected_tuple->elements.size()) {
+                        expected_elem = expected_tuple->elements[i];
+                    }
+                    element_types.push_back(check_expr(*e.elements[i], expected_elem));
+                }
+                return make_tuple(std::move(element_types));
             } else {
                 // For other expressions, fall back to regular check_expr
                 return check_expr(expr);
@@ -891,6 +991,60 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                     }
                 }
 
+                // Check for local struct/enum static methods (before imports)
+                // This handles Type::method() calls for types defined in the current file
+                std::string qualified_func = type_name + "::" + method;
+                auto local_func = env_.lookup_func(qualified_func);
+                if (local_func) {
+                    // Type check arguments and collect their types
+                    std::vector<TypePtr> arg_types;
+                    for (size_t i = 0; i < call.args.size(); ++i) {
+                        // Pass expected param type for numeric literal coercion
+                        TypePtr expected_param = (i < local_func->params.size())
+                                                     ? local_func->params[i]
+                                                     : nullptr;
+                        arg_types.push_back(check_expr(*call.args[i], expected_param));
+                    }
+
+                    // Handle generic functions - infer type params from arguments
+                    if (!local_func->type_params.empty()) {
+                        std::unordered_map<std::string, TypePtr> substitutions;
+
+                        // For static methods on generic types (like Wrapper[T]::unwrap),
+                        // extract type args from arguments that match the type pattern.
+                        // E.g., if arg is Wrapper[I64] and param is Wrapper[T], extract T=I64
+                        for (size_t i = 0;
+                             i < arg_types.size() && i < local_func->params.size(); ++i) {
+                            const auto& arg_type = arg_types[i];
+                            const auto& param_type = local_func->params[i];
+
+                            // If both arg and param are NamedType with same base name,
+                            // directly map type_params to arg's type_args (like instance methods)
+                            if (arg_type->is<NamedType>() && param_type->is<NamedType>()) {
+                                const auto& arg_named = arg_type->as<NamedType>();
+                                const auto& param_named = param_type->as<NamedType>();
+                                if (arg_named.name == param_named.name &&
+                                    !arg_named.type_args.empty() &&
+                                    param_named.type_args.size() == arg_named.type_args.size()) {
+                                    // Map type params to concrete types from argument
+                                    for (size_t j = 0;
+                                         j < local_func->type_params.size() &&
+                                         j < arg_named.type_args.size();
+                                         ++j) {
+                                        substitutions[local_func->type_params[j]] =
+                                            arg_named.type_args[j];
+                                    }
+                                }
+                            }
+                            // Also use extract_type_params for more complex cases
+                            extract_type_params(param_type, arg_type, local_func->type_params,
+                                                substitutions);
+                        }
+                        return substitute_type(local_func->return_type, substitutions);
+                    }
+                    return local_func->return_type;
+                }
+
                 // Try to resolve type_name as an imported symbol
                 auto imported_path = env_.resolve_imported_symbol(type_name);
                 if (imported_path.has_value()) {
@@ -901,16 +1055,56 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                     }
 
                     // Look up the qualified function name in the module
-                    std::string qualified_func = type_name + "::" + method;
+                    // (reuse qualified_func from above)
                     auto module = env_.get_module(module_path);
                     if (module) {
                         auto func_it = module->functions.find(qualified_func);
                         if (func_it != module->functions.end()) {
-                            // Type check arguments
-                            for (const auto& arg : call.args) {
-                                check_expr(*arg);
+                            const auto& func = func_it->second;
+
+                            // Type check arguments and collect their types
+                            std::vector<TypePtr> arg_types;
+                            for (size_t i = 0; i < call.args.size(); ++i) {
+                                // Pass expected param type for numeric literal coercion
+                                TypePtr expected_param = (i < func.params.size())
+                                                             ? func.params[i]
+                                                             : nullptr;
+                                arg_types.push_back(check_expr(*call.args[i], expected_param));
                             }
-                            return func_it->second.return_type;
+
+                            // Handle generic functions - infer type params from arguments
+                            if (!func.type_params.empty()) {
+                                std::unordered_map<std::string, TypePtr> substitutions;
+
+                                // Same logic as local functions above
+                                for (size_t i = 0;
+                                     i < arg_types.size() && i < func.params.size(); ++i) {
+                                    const auto& arg_type = arg_types[i];
+                                    const auto& param_type = func.params[i];
+
+                                    // Direct mapping for matching NamedTypes
+                                    if (arg_type->is<NamedType>() && param_type->is<NamedType>()) {
+                                        const auto& arg_named = arg_type->as<NamedType>();
+                                        const auto& param_named = param_type->as<NamedType>();
+                                        if (arg_named.name == param_named.name &&
+                                            !arg_named.type_args.empty() &&
+                                            param_named.type_args.size() ==
+                                                arg_named.type_args.size()) {
+                                            for (size_t j = 0;
+                                                 j < func.type_params.size() &&
+                                                 j < arg_named.type_args.size();
+                                                 ++j) {
+                                                substitutions[func.type_params[j]] =
+                                                    arg_named.type_args[j];
+                                            }
+                                        }
+                                    }
+                                    extract_type_params(param_type, arg_type, func.type_params,
+                                                        substitutions);
+                                }
+                                return substitute_type(func.return_type, substitutions);
+                            }
+                            return func.return_type;
                         }
                     }
                 }
@@ -1497,8 +1691,8 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 return receiver_type;
             }
 
-            // xor(other) returns Maybe[T]
-            if (call.method == "xor") {
+            // xor(other) returns Maybe[T] - renamed to one_of because xor is a keyword
+            if (call.method == "xor" || call.method == "one_of") {
                 return receiver_type;
             }
 
@@ -1533,6 +1727,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 // For now, return a generic Outcome type
                 // The actual error type comes from the closure
                 return receiver_type; // Simplified - would need proper inference
+            }
+
+            // duplicate() returns Maybe[T]
+            if (call.method == "duplicate") {
+                return receiver_type;
             }
         }
 
@@ -1695,6 +1894,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (call.method == "iter") {
                 std::vector<TypePtr> type_args = {ok_type};
                 return std::make_shared<Type>(NamedType{"OutcomeIter", "", type_args});
+            }
+
+            // duplicate() returns Outcome[T, E]
+            if (call.method == "duplicate") {
+                return receiver_type;
             }
         }
 
@@ -1969,6 +2173,42 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         if (call.method == "call" || call.method == "call_mut" || call.method == "call_once") {
             // Return the function's return type
             return func.return_type;
+        }
+    }
+
+    // Fallback: Check if "method" is actually a field with a function type
+    // This handles cases like vtable.call_fn(args) where call_fn is a field
+    // containing a function pointer
+    TypePtr method_receiver = receiver_type;
+    if (method_receiver->is<RefType>()) {
+        method_receiver = method_receiver->as<RefType>().inner;
+    }
+    if (method_receiver->is<NamedType>()) {
+        const auto& named = method_receiver->as<NamedType>();
+        auto struct_def = env_.lookup_struct(named.name);
+        if (struct_def) {
+            // Look for a field with the method name
+            for (const auto& [field_name, field_type] : struct_def->fields) {
+                if (field_name == call.method) {
+                    // Check if the field is a function type
+                    if (field_type->is<FuncType>()) {
+                        const auto& func = field_type->as<FuncType>();
+                        // Check argument count
+                        if (call.args.size() != func.params.size()) {
+                            error("Wrong number of arguments: expected " +
+                                      std::to_string(func.params.size()) + ", got " +
+                                      std::to_string(call.args.size()),
+                                  call.receiver->span);
+                        }
+                        // Type check arguments
+                        for (size_t i = 0; i < std::min(call.args.size(), func.params.size()); ++i) {
+                            check_expr(*call.args[i], func.params[i]);
+                        }
+                        return func.return_type;
+                    }
+                    break;
+                }
+            }
         }
     }
 

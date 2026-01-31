@@ -567,6 +567,22 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         // Get the type of the object
         types::TypePtr obj_type = infer_expr_type(*field.object);
 
+        // Handle tuple element access (tuple.0, tuple.1, etc.)
+        if (obj_type && obj_type->is<types::TupleType>()) {
+            const auto& tuple_type = obj_type->as<types::TupleType>();
+            // Check if field name is a numeric index
+            if (!field.field.empty() && std::isdigit(field.field[0])) {
+                try {
+                    size_t index = std::stoul(field.field);
+                    if (index < tuple_type.elements.size()) {
+                        return tuple_type.elements[index];
+                    }
+                } catch (...) {
+                    // Not a valid index, fall through to other handling
+                }
+            }
+        }
+
         if (obj_type && obj_type->is<types::NamedType>()) {
             const auto& named = obj_type->as<types::NamedType>();
 
@@ -1557,7 +1573,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             return result;
         }
     }
-    // Handle index expressions arr[i]
+    // Handle index expressions arr[i] or tuple.0
     if (expr.is<parser::IndexExpr>()) {
         const auto& idx = expr.as<parser::IndexExpr>();
         types::TypePtr obj_type = infer_expr_type(*idx.object);
@@ -1567,9 +1583,90 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             return obj_type->as<types::ArrayType>().element;
         }
 
+        // If the object is a tuple, return the element type at the index
+        if (obj_type && obj_type->is<types::TupleType>()) {
+            const auto& tuple_type = obj_type->as<types::TupleType>();
+            // Get the index value (tuple indices are literals like .0, .1, etc.)
+            if (idx.index && idx.index->is<parser::LiteralExpr>()) {
+                const auto& lit = idx.index->as<parser::LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                    size_t index = static_cast<size_t>(lit.token.int_value().value);
+                    if (index < tuple_type.elements.size()) {
+                        return tuple_type.elements[index];
+                    }
+                }
+            }
+            // If we can't determine the index, return the first element type as fallback
+            if (!tuple_type.elements.empty()) {
+                return tuple_type.elements[0];
+            }
+        }
+
         // Default: assume I32 for list element
         return types::make_i32();
     }
+
+    // Handle cast expressions (x as I64)
+    if (expr.is<parser::CastExpr>()) {
+        const auto& cast = expr.as<parser::CastExpr>();
+        // The type of a cast expression is its target type
+        if (cast.target && cast.target->is<parser::NamedType>()) {
+            const auto& named = cast.target->as<parser::NamedType>();
+            if (!named.path.segments.empty()) {
+                const std::string& type_name = named.path.segments.back();
+                // Handle primitive types
+                if (type_name == "I8")
+                    return types::make_primitive(types::PrimitiveKind::I8);
+                if (type_name == "I16")
+                    return types::make_primitive(types::PrimitiveKind::I16);
+                if (type_name == "I32")
+                    return types::make_i32();
+                if (type_name == "I64")
+                    return types::make_i64();
+                if (type_name == "I128")
+                    return types::make_primitive(types::PrimitiveKind::I128);
+                if (type_name == "U8")
+                    return types::make_primitive(types::PrimitiveKind::U8);
+                if (type_name == "U16")
+                    return types::make_primitive(types::PrimitiveKind::U16);
+                if (type_name == "U32")
+                    return types::make_primitive(types::PrimitiveKind::U32);
+                if (type_name == "U64")
+                    return types::make_primitive(types::PrimitiveKind::U64);
+                if (type_name == "U128")
+                    return types::make_primitive(types::PrimitiveKind::U128);
+                if (type_name == "F32")
+                    return types::make_primitive(types::PrimitiveKind::F32);
+                if (type_name == "F64")
+                    return types::make_f64();
+                if (type_name == "Bool")
+                    return types::make_bool();
+                if (type_name == "Str")
+                    return types::make_str();
+                if (type_name == "Char")
+                    return types::make_primitive(types::PrimitiveKind::Char);
+                // For other named types (classes, etc.), return a NamedType
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{type_name, "", {}};
+                return result;
+            }
+        }
+        // For pointer types in casts
+        if (cast.target && cast.target->is<parser::PtrType>()) {
+            const auto& ptr = cast.target->as<parser::PtrType>();
+            auto inner = std::make_shared<types::Type>();
+            if (ptr.inner && ptr.inner->is<parser::NamedType>()) {
+                const auto& inner_named = ptr.inner->as<parser::NamedType>();
+                if (!inner_named.path.segments.empty()) {
+                    inner->kind = types::NamedType{inner_named.path.segments.back(), "", {}};
+                }
+            } else {
+                inner = types::make_unit();
+            }
+            return types::make_ptr(inner);
+        }
+    }
+
     // Default: I32
     return types::make_i32();
 }

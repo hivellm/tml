@@ -855,6 +855,18 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         return result;
     }
 
+    // duplicate() -> Outcome[T, E] (copy semantics)
+    if (method == "duplicate") {
+        if (options_.coverage_enabled) {
+            std::string func_name_str = add_string_literal("Outcome::duplicate");
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
+        // For value types (primitives), just return the receiver as-is
+        // since it's already passed by value
+        last_expr_type_ = enum_type_name;
+        return receiver;
+    }
+
     // Method not handled
     return std::nullopt;
 }

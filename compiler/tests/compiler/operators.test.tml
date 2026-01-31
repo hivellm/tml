@@ -263,10 +263,34 @@ func test_shift_right_assign() -> I32 {
     return 0
 }
 
-// Note: U8/U16 bitwise operations have type coercion limitations
-// where the result is widened to I32 but not properly truncated.
-// The behavior implementations are correct; this is a compiler codegen issue.
-// Testing bitwise assignment operators on I32 and I64 instead.
+// Test U8 bitwise operations
+@test
+func test_u8_bitwise() -> I32 {
+    let a: U8 = 0xFF as U8
+    let b: U8 = 0x0F as U8
+    let result: U8 = a & b
+    assert_eq(result as I32, 0x0F, "U8: 0xFF & 0x0F should equal 0x0F")
+
+    let or_result: U8 = (0xF0 as U8) | (0x0F as U8)
+    assert_eq(or_result as I32, 0xFF, "U8: 0xF0 | 0x0F should equal 0xFF")
+
+    let xor_result: U8 = (0xFF as U8) xor (0x0F as U8)
+    assert_eq(xor_result as I32, 0xF0, "U8: 0xFF xor 0x0F should equal 0xF0")
+    return 0
+}
+
+// Test U16 bitwise operations
+@test
+func test_u16_bitwise() -> I32 {
+    let a: U16 = 0xFFFF as U16
+    let b: U16 = 0x00FF as U16
+    let result: U16 = a & b
+    assert_eq(result as I32, 0x00FF, "U16: 0xFFFF & 0x00FF should equal 0x00FF")
+
+    let or_result: U16 = (0xFF00 as U16) | (0x00FF as U16)
+    assert_eq(or_result as I32, 0xFFFF, "U16: 0xFF00 | 0x00FF should equal 0xFFFF")
+    return 0
+}
 
 @test
 func test_bitwise_assign_i64() -> I32 {

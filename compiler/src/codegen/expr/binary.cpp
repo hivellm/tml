@@ -1169,8 +1169,23 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         }
     }
 
+    // =========================================================================
+    // Coverage Tracking for Inlined Primitive Operators
+    // =========================================================================
+    // When coverage is enabled, we track which trait methods are implicitly
+    // used by inlined primitive operators. This allows coverage reports to
+    // show that using `a & b` exercises `BitAnd::bitand`.
+    auto emit_operator_coverage = [&](const std::string& trait_name, const std::string& method) {
+        if (options_.coverage_enabled) {
+            std::string qualified_name = trait_name + "::" + method;
+            std::string func_name_str = add_string_literal(qualified_name);
+            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        }
+    };
+
     switch (bin.op) {
     case parser::BinaryOp::Add:
+        emit_operator_coverage("Add", "add");
         if (is_ptr_arith) {
             // Pointer arithmetic: ptr + int -> getelementptr
             // Determine element type from semantic pointer type
@@ -1201,6 +1216,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         }
         break;
     case parser::BinaryOp::Sub:
+        emit_operator_coverage("Sub", "sub");
         if (is_float) {
             emit_line("  " + result + " = fsub " + float_type + " " + left + ", " + right);
             last_expr_type_ = float_type;
@@ -1213,6 +1229,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         }
         break;
     case parser::BinaryOp::Mul:
+        emit_operator_coverage("Mul", "mul");
         if (is_float) {
             emit_line("  " + result + " = fmul " + float_type + " " + left + ", " + right);
             last_expr_type_ = float_type;
@@ -1225,6 +1242,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         }
         break;
     case parser::BinaryOp::Div:
+        emit_operator_coverage("Div", "div");
         if (is_float) {
             emit_line("  " + result + " = fdiv " + float_type + " " + left + ", " + right);
             last_expr_type_ = float_type;
@@ -1237,6 +1255,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         }
         break;
     case parser::BinaryOp::Mod:
+        emit_operator_coverage("Rem", "rem");
         if (is_unsigned) {
             emit_line("  " + result + " = urem " + int_type + " " + left + ", " + right);
         } else {
@@ -1246,6 +1265,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     // Comparisons return i1 (use fcmp for floats, icmp for integers, str_eq for strings)
     case parser::BinaryOp::Eq:
+        emit_operator_coverage("Eq", "eq");
         if (is_float) {
             emit_line("  " + result + " = fcmp oeq " + float_type + " " + left + ", " + right);
         } else if (is_string) {
@@ -1262,6 +1282,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         last_expr_type_ = "i1";
         break;
     case parser::BinaryOp::Ne:
+        emit_operator_coverage("Eq", "ne");
         if (is_float) {
             emit_line("  " + result + " = fcmp one " + float_type + " " + left + ", " + right);
         } else if (is_string) {
@@ -1278,6 +1299,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         last_expr_type_ = "i1";
         break;
     case parser::BinaryOp::Lt:
+        emit_operator_coverage("Ord", "lt");
         if (is_float) {
             emit_line("  " + result + " = fcmp olt " + float_type + " " + left + ", " + right);
         } else if (is_unsigned) {
@@ -1288,6 +1310,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         last_expr_type_ = "i1";
         break;
     case parser::BinaryOp::Gt:
+        emit_operator_coverage("Ord", "gt");
         if (is_float) {
             emit_line("  " + result + " = fcmp ogt " + float_type + " " + left + ", " + right);
         } else if (is_unsigned) {
@@ -1298,6 +1321,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         last_expr_type_ = "i1";
         break;
     case parser::BinaryOp::Le:
+        emit_operator_coverage("Ord", "le");
         if (is_float) {
             emit_line("  " + result + " = fcmp ole " + float_type + " " + left + ", " + right);
         } else if (is_unsigned) {
@@ -1308,6 +1332,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         last_expr_type_ = "i1";
         break;
     case parser::BinaryOp::Ge:
+        emit_operator_coverage("Ord", "ge");
         if (is_float) {
             emit_line("  " + result + " = fcmp oge " + float_type + " " + left + ", " + right);
         } else if (is_unsigned) {
@@ -1328,23 +1353,28 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     // Bitwise operators work on same type
     case parser::BinaryOp::BitAnd:
+        emit_operator_coverage("BitAnd", "bitand");
         emit_line("  " + result + " = and " + int_type + " " + left + ", " + right);
         last_expr_type_ = int_type;
         break;
     case parser::BinaryOp::BitOr:
+        emit_operator_coverage("BitOr", "bitor");
         emit_line("  " + result + " = or " + int_type + " " + left + ", " + right);
         last_expr_type_ = int_type;
         break;
     case parser::BinaryOp::BitXor:
+        emit_operator_coverage("BitXor", "bitxor");
         emit_line("  " + result + " = xor " + int_type + " " + left + ", " + right);
         last_expr_type_ = int_type;
         break;
     case parser::BinaryOp::Shl:
+        emit_operator_coverage("Shl", "shift_left");
         // nuw = no unsigned wrap for shift
         emit_line("  " + result + " = shl nuw " + int_type + " " + left + ", " + right);
         last_expr_type_ = int_type;
         break;
     case parser::BinaryOp::Shr:
+        emit_operator_coverage("Shr", "shift_right");
         if (is_unsigned) {
             // Logical shift right for unsigned (fills with 0s)
             emit_line("  " + result + " = lshr " + int_type + " " + left + ", " + right);

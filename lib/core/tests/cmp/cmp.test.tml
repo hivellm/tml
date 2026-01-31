@@ -1,0 +1,118 @@
+// Tests for core::cmp module
+use test
+use core::cmp::{Ordering, min, max}
+
+// ============================================================================
+// Ordering tests using pattern matching
+// ============================================================================
+
+@test
+func test_ordering_less() -> I32 {
+    let ord: Ordering = Ordering::Less
+    var is_less: Bool = false
+    when ord {
+        Less => { is_less = true },
+        Greater => {},
+        Equal => {}
+    }
+    assert(is_less, "should be Less")
+    return 0
+}
+
+@test
+func test_ordering_greater() -> I32 {
+    let ord: Ordering = Ordering::Greater
+    var is_greater: Bool = false
+    when ord {
+        Less => {},
+        Greater => { is_greater = true },
+        Equal => {}
+    }
+    assert(is_greater, "should be Greater")
+    return 0
+}
+
+@test
+func test_ordering_equal() -> I32 {
+    let ord: Ordering = Ordering::Equal
+    var is_equal: Bool = false
+    when ord {
+        Less => {},
+        Greater => {},
+        Equal => { is_equal = true }
+    }
+    assert(is_equal, "should be Equal")
+    return 0
+}
+
+// ============================================================================
+// PartialEq tests on primitives
+// ============================================================================
+
+@test
+func test_i32_eq() -> I32 {
+    let a: I32 = 42
+    let b: I32 = 42
+    let c: I32 = 0
+    
+    assert(a == b, "42 == 42")
+    assert(a != c, "42 != 0")
+    return 0
+}
+
+@test
+func test_i64_eq() -> I32 {
+    let a: I64 = 1000000
+    let b: I64 = 1000000
+    let c: I64 = 0
+    
+    assert(a == b, "1000000 == 1000000")
+    assert(a != c, "1000000 != 0")
+    return 0
+}
+
+// ============================================================================
+// min/max tests
+// ============================================================================
+
+@test
+func test_min_i32() -> I32 {
+    let result: I32 = min(5, 10)
+    assert_eq(result, 5, "min(5, 10) = 5")
+    return 0
+}
+
+@test
+func test_max_i32() -> I32 {
+    let result: I32 = max(5, 10)
+    assert_eq(result, 10, "max(5, 10) = 10")
+    return 0
+}
+
+@test
+func test_min_negative() -> I32 {
+    let result: I32 = min(-5, -10)
+    assert_eq(result, -10, "min(-5, -10) = -10")
+    return 0
+}
+
+@test
+func test_max_negative() -> I32 {
+    let result: I32 = max(-5, -10)
+    assert_eq(result, -5, "max(-5, -10) = -5")
+    return 0
+}
+
+@test
+func test_min_equal() -> I32 {
+    let result: I32 = min(7, 7)
+    assert_eq(result, 7, "min(7, 7) = 7")
+    return 0
+}
+
+@test
+func test_max_equal() -> I32 {
+    let result: I32 = max(7, 7)
+    assert_eq(result, 7, "max(7, 7) = 7")
+    return 0
+}

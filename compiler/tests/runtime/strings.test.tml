@@ -114,11 +114,11 @@ func test_str_substring_single_char() -> I32 {
 }
 
 // ============ str_contains tests ============
-// Note: Using assert directly to avoid Bool variable codegen issue
 
 @test
 func test_str_contains_found() -> I32 {
-    assert(str_contains("hello world", "world"), "should contain 'world'")
+    let result: Bool = str_contains("hello world", "world")
+    assert(result, "should contain 'world'")
     return 0
 }
 

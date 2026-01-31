@@ -362,10 +362,23 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         has_type_generics = true;
                     }
                 }
+                // Also check if any methods have their own generic parameters
+                bool has_method_generics = false;
+                for (const auto& m : impl.methods) {
+                    if (!m.generics.empty()) {
+                        has_method_generics = true;
+                        break;
+                    }
+                }
                 if (has_impl_generics || has_type_generics) {
                     // Store the generic impl block for later instantiation
                     pending_generic_impls_[type_name] = &impl;
                     continue;
+                }
+                // For impls with generic methods, store for instantiation but continue
+                // to generate non-generic methods
+                if (has_method_generics) {
+                    pending_generic_impls_[type_name] = &impl;
                 }
                 // Populate associated types from impl type_bindings
                 current_associated_types_.clear();
@@ -382,6 +395,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 }
 
                 for (const auto& method : impl.methods) {
+                    // Skip methods with their own generic parameters
+                    // These will be instantiated on-demand when called with concrete types
+                    if (!method.generics.empty()) {
+                        continue;
+                    }
+
                     // Generate method with mangled name TypeName_MethodName
                     std::string method_name = suite_prefix + type_name + "_" + method.name;
                     current_func_ = method_name;

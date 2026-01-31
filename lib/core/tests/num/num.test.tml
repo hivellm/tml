@@ -267,16 +267,17 @@ func test_distributive_property() -> I32 {
 
 // ============ Float Properties ============
 
-// Note: F32 tests temporarily skipped due to codegen issue with float/double promotion
-// @test
-// func test_float_f32_basic() -> I32 {
-//     let x: F32 = 3.14
-//     let y: F32 = 2.0
-//     let sum: F32 = x + y
-//     assert(sum > 5.0, "3.14 + 2.0 should be > 5.0")
-//     assert(sum < 6.0, "3.14 + 2.0 should be < 6.0")
-//     return 0
-// }
+// Test F32 basic operations
+@test
+func test_float_f32_basic() -> I32 {
+    let x: F32 = 3.14 as F32
+    let y: F32 = 2.0 as F32
+    let sum: F32 = x + y
+    // Use F32 literals for comparison
+    assert(sum > (5.0 as F32), "3.14 + 2.0 should be > 5.0")
+    assert(sum < (6.0 as F32), "3.14 + 2.0 should be < 6.0")
+    return 0
+}
 
 @test
 func test_float_f64_arithmetic() -> I32 {
@@ -360,6 +361,49 @@ func test_i32_min_max_constants() -> I32 {
     return 0
 }
 
-// Note: I8, I16, U8, U16, U32 constant tests temporarily disabled due to I8 codegen bug
-// The bug is that return -128 generates i32 subtraction instead of i8 constant
+// Test I8 MIN/MAX values using literals
+@test
+func test_i8_min_max_literals() -> I32 {
+    let min_val: I8 = -128 as I8
+    let max_val: I8 = 127 as I8
+    assert_eq(min_val as I32, -128, "I8 -128 literal should be -128")
+    assert_eq(max_val as I32, 127, "I8 127 literal should be 127")
+    return 0
+}
+
+// Test I16 MIN/MAX values using literals
+@test
+func test_i16_min_max_literals() -> I32 {
+    let min_val: I16 = -32768 as I16
+    let max_val: I16 = 32767 as I16
+    assert_eq(min_val as I32, -32768, "I16 -32768 literal should be -32768")
+    assert_eq(max_val as I32, 32767, "I16 32767 literal should be 32767")
+    return 0
+}
+
+// Helper function that returns negative I8
+func get_negative_i8() -> I8 {
+    return -50 as I8
+}
+
+// Test I8 negative return value
+@test
+func test_i8_negative_return() -> I32 {
+    let val: I8 = get_negative_i8()
+    assert_eq(val as I32, -50, "I8 negative return value should be -50")
+    return 0
+}
+
+// Helper function that returns I8::MIN (-128)
+func get_i8_min() -> I8 {
+    return -128 as I8
+}
+
+// Test I8 MIN return value
+@test
+func test_i8_min_return() -> I32 {
+    let val: I8 = get_i8_min()
+    assert_eq(val as I32, -128, "I8 MIN return value should be -128")
+    return 0
+}
 

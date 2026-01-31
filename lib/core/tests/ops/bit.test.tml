@@ -1,0 +1,461 @@
+// Tests for core::ops::bit module (bitwise operators and compound assignments)
+use test
+
+// ============================================================================
+// BitAnd operator tests
+// ============================================================================
+
+@test
+func test_bitand_u8() -> I32 {
+    let a: U8 = 0b1100
+    let b: U8 = 0b1010
+    let result: U8 = a & b
+    assert_eq(result, 0b1000 as U8, "U8 & operation")
+    return 0
+}
+
+@test
+func test_bitand_u32() -> I32 {
+    let a: U32 = 0xFF00
+    let b: U32 = 0x0FF0
+    let result: U32 = a & b
+    assert_eq(result, 0x0F00 as U32, "U32 & operation")
+    return 0
+}
+
+@test
+func test_bitand_i32() -> I32 {
+    let a: I32 = 0xFF
+    let b: I32 = 0x0F
+    let result: I32 = a & b
+    assert_eq(result, 0x0F, "I32 & operation")
+    return 0
+}
+
+@test
+func test_bitand_zero() -> I32 {
+    let a: I32 = 0xFFFF
+    let b: I32 = 0
+    let result: I32 = a & b
+    assert_eq(result, 0, "Anything & 0 = 0")
+    return 0
+}
+
+// ============================================================================
+// BitOr operator tests
+// ============================================================================
+
+@test
+func test_bitor_u8() -> I32 {
+    let a: U8 = 0b1100
+    let b: U8 = 0b1010
+    let result: U8 = a | b
+    assert_eq(result, 0b1110 as U8, "U8 | operation")
+    return 0
+}
+
+@test
+func test_bitor_u32() -> I32 {
+    let a: U32 = 0xF000
+    let b: U32 = 0x000F
+    let result: U32 = a | b
+    assert_eq(result, 0xF00F as U32, "U32 | operation")
+    return 0
+}
+
+@test
+func test_bitor_i32() -> I32 {
+    let a: I32 = 0xF0
+    let b: I32 = 0x0F
+    let result: I32 = a | b
+    assert_eq(result, 0xFF, "I32 | operation")
+    return 0
+}
+
+@test
+func test_bitor_zero() -> I32 {
+    let a: I32 = 42
+    let b: I32 = 0
+    let result: I32 = a | b
+    assert_eq(result, 42, "x | 0 = x")
+    return 0
+}
+
+// ============================================================================
+// BitXor operator tests
+// ============================================================================
+
+@test
+func test_bitxor_u8() -> I32 {
+    let a: U8 = 0b1100
+    let b: U8 = 0b1010
+    let result: U8 = a ^ b
+    assert_eq(result, 0b0110 as U8, "U8 ^ operation")
+    return 0
+}
+
+@test
+func test_bitxor_u32() -> I32 {
+    let a: U32 = 0xFFFF
+    let b: U32 = 0x00FF
+    let result: U32 = a ^ b
+    assert_eq(result, 0xFF00 as U32, "U32 ^ operation")
+    return 0
+}
+
+@test
+func test_bitxor_i32() -> I32 {
+    let a: I32 = 0xFF
+    let b: I32 = 0xFF
+    let result: I32 = a ^ b
+    assert_eq(result, 0, "x ^ x = 0")
+    return 0
+}
+
+@test
+func test_bitxor_zero() -> I32 {
+    let a: I32 = 42
+    let b: I32 = 0
+    let result: I32 = a ^ b
+    assert_eq(result, 42, "x ^ 0 = x")
+    return 0
+}
+
+@test
+func test_bitxor_self_inverse() -> I32 {
+    let a: I32 = 12345
+    let b: I32 = 67890
+    let xored: I32 = a ^ b
+    let result: I32 = xored ^ b
+    assert_eq(result, a, "(a ^ b) ^ b = a")
+    return 0
+}
+
+// ============================================================================
+// Not operator tests
+// ============================================================================
+
+@test
+func test_not_bool_true() -> I32 {
+    let a: Bool = true
+    let result: Bool = not a
+    assert_eq(result, false, "not true = false")
+    return 0
+}
+
+@test
+func test_not_bool_false() -> I32 {
+    let a: Bool = false
+    let result: Bool = not a
+    assert_eq(result, true, "not false = true")
+    return 0
+}
+
+@test
+func test_not_double() -> I32 {
+    let a: Bool = true
+    let result: Bool = not not a
+    assert_eq(result, true, "not not a = a")
+    return 0
+}
+
+// ============================================================================
+// Shift left operator tests
+// ============================================================================
+
+@test
+func test_shl_u8() -> I32 {
+    let a: U8 = 1
+    let result: U8 = a << 4
+    assert_eq(result, 16 as U8, "U8 << operation")
+    return 0
+}
+
+@test
+func test_shl_u32() -> I32 {
+    let a: U32 = 1
+    let result: U32 = a << 16
+    assert_eq(result, 65536 as U32, "U32 << 16")
+    return 0
+}
+
+@test
+func test_shl_i32() -> I32 {
+    let a: I32 = 1
+    let result: I32 = a << 10
+    assert_eq(result, 1024, "I32 << 10 = 1024")
+    return 0
+}
+
+@test
+func test_shl_zero() -> I32 {
+    let a: I32 = 42
+    let result: I32 = a << 0
+    assert_eq(result, 42, "x << 0 = x")
+    return 0
+}
+
+// ============================================================================
+// Shift right operator tests
+// ============================================================================
+
+@test
+func test_shr_u8() -> I32 {
+    let a: U8 = 16
+    let result: U8 = a >> 4
+    assert_eq(result, 1 as U8, "U8 >> operation")
+    return 0
+}
+
+@test
+func test_shr_u32() -> I32 {
+    let a: U32 = 65536
+    let result: U32 = a >> 16
+    assert_eq(result, 1 as U32, "U32 >> 16")
+    return 0
+}
+
+@test
+func test_shr_i32() -> I32 {
+    let a: I32 = 1024
+    let result: I32 = a >> 10
+    assert_eq(result, 1, "I32 >> 10 = 1")
+    return 0
+}
+
+@test
+func test_shr_zero() -> I32 {
+    let a: I32 = 42
+    let result: I32 = a >> 0
+    assert_eq(result, 42, "x >> 0 = x")
+    return 0
+}
+
+@test
+func test_shr_i32_negative() -> I32 {
+    let a: I32 = -8
+    let result: I32 = a >> 1
+    assert_eq(result, -4, "Arithmetic right shift preserves sign")
+    return 0
+}
+
+// ============================================================================
+// BitAndAssign operator tests
+// ============================================================================
+
+@test
+func test_bitand_assign_i32() -> I32 {
+    var a: I32 = 0xFF
+    a = a & 0x0F
+    assert_eq(a, 0x0F, "I32 &= operation")
+    return 0
+}
+
+@test
+func test_bitand_assign_u32() -> I32 {
+    var a: U32 = 0xFF00
+    a = a & (0x0FF0 as U32)
+    assert_eq(a, 0x0F00 as U32, "U32 &= operation")
+    return 0
+}
+
+@test
+func test_bitand_assign_i64() -> I32 {
+    var a: I64 = 0xFFFF
+    a = a & 0x00FF
+    assert_eq(a, 0x00FF, "I64 &= operation")
+    return 0
+}
+
+// ============================================================================
+// BitOrAssign operator tests
+// ============================================================================
+
+@test
+func test_bitor_assign_i32() -> I32 {
+    var a: I32 = 0xF0
+    a = a | 0x0F
+    assert_eq(a, 0xFF, "I32 |= operation")
+    return 0
+}
+
+@test
+func test_bitor_assign_u32() -> I32 {
+    var a: U32 = 0xF000
+    a = a | (0x000F as U32)
+    assert_eq(a, 0xF00F as U32, "U32 |= operation")
+    return 0
+}
+
+@test
+func test_bitor_assign_i64() -> I32 {
+    var a: I64 = 0xFF00
+    a = a | 0x00FF
+    assert_eq(a, 0xFFFF, "I64 |= operation")
+    return 0
+}
+
+// ============================================================================
+// BitXorAssign operator tests
+// ============================================================================
+
+@test
+func test_bitxor_assign_i32() -> I32 {
+    var a: I32 = 0xFF
+    a = a ^ 0x0F
+    assert_eq(a, 0xF0, "I32 ^= operation")
+    return 0
+}
+
+@test
+func test_bitxor_assign_u32() -> I32 {
+    var a: U32 = 0xFFFF
+    a = a ^ (0x00FF as U32)
+    assert_eq(a, 0xFF00 as U32, "U32 ^= operation")
+    return 0
+}
+
+@test
+func test_bitxor_assign_self() -> I32 {
+    var a: I32 = 12345
+    a = a ^ a
+    assert_eq(a, 0, "x ^= x results in 0")
+    return 0
+}
+
+// ============================================================================
+// ShlAssign operator tests
+// ============================================================================
+
+@test
+func test_shl_assign_i32() -> I32 {
+    var a: I32 = 1
+    a = a << 4
+    assert_eq(a, 16, "I32 <<= operation")
+    return 0
+}
+
+@test
+func test_shl_assign_u32() -> I32 {
+    var a: U32 = 1
+    a = a << 8
+    assert_eq(a, 256 as U32, "U32 <<= operation")
+    return 0
+}
+
+@test
+func test_shl_assign_i64() -> I32 {
+    var a: I64 = 1
+    a = a << 32
+    assert_eq(a, 4294967296, "I64 <<= 32")
+    return 0
+}
+
+// ============================================================================
+// ShrAssign operator tests
+// ============================================================================
+
+@test
+func test_shr_assign_i32() -> I32 {
+    var a: I32 = 16
+    a = a >> 4
+    assert_eq(a, 1, "I32 >>= operation")
+    return 0
+}
+
+@test
+func test_shr_assign_u32() -> I32 {
+    var a: U32 = 256
+    a = a >> 8
+    assert_eq(a, 1 as U32, "U32 >>= operation")
+    return 0
+}
+
+@test
+func test_shr_assign_i64() -> I32 {
+    var a: I64 = 4294967296
+    a = a >> 32
+    assert_eq(a, 1, "I64 >>= 32")
+    return 0
+}
+
+// ============================================================================
+// Combined operations tests
+// ============================================================================
+
+@test
+func test_combined_bit_operations() -> I32 {
+    let a: I32 = 0b11001100
+    let b: I32 = 0b10101010
+
+    let and_result: I32 = a & b  // 0b10001000
+    let or_result: I32 = a | b   // 0b11101110
+    let xor_result: I32 = a ^ b  // 0b01100110
+
+    assert_eq(and_result, 0b10001000, "AND result")
+    assert_eq(or_result, 0b11101110, "OR result")
+    assert_eq(xor_result, 0b01100110, "XOR result")
+
+    return 0
+}
+
+@test
+func test_bit_mask_operations() -> I32 {
+    let value: I32 = 0xABCD
+    let mask: I32 = 0x00FF
+
+    // Extract lower byte
+    let lower: I32 = value & mask
+    assert_eq(lower, 0xCD, "Extract lower byte")
+
+    // Set bits
+    let with_bits: I32 = value | 0x0F00
+    assert_eq(with_bits, 0xAFCD, "Set bits")
+
+    // Toggle bits
+    let toggled: I32 = value ^ 0x00F0
+    assert_eq(toggled, 0xAB3D, "Toggle bits")
+
+    return 0
+}
+
+@test
+func test_shift_multiply_divide() -> I32 {
+    let x: I32 = 10
+
+    // Left shift by 1 is multiply by 2
+    assert_eq(x << 1, 20, "<<1 is *2")
+    assert_eq(x << 2, 40, "<<2 is *4")
+    assert_eq(x << 3, 80, "<<3 is *8")
+
+    // Right shift by 1 is divide by 2
+    let y: I32 = 80
+    assert_eq(y >> 1, 40, ">>1 is /2")
+    assert_eq(y >> 2, 20, ">>2 is /4")
+    assert_eq(y >> 3, 10, ">>3 is /8")
+
+    return 0
+}
+
+// Helper function for power of 2 check
+func is_pow2(n: I32) -> Bool {
+    return n > 0 and (n & (n - 1)) == 0
+}
+
+@test
+func test_power_of_two_check() -> I32 {
+    // A number is power of 2 if (n & (n-1)) == 0 and n > 0
+    assert(is_pow2(1), "1 is power of 2")
+    assert(is_pow2(2), "2 is power of 2")
+    assert(is_pow2(4), "4 is power of 2")
+    assert(is_pow2(8), "8 is power of 2")
+    assert(is_pow2(16), "16 is power of 2")
+    assert(is_pow2(256), "256 is power of 2")
+
+    assert(not is_pow2(3), "3 is not power of 2")
+    assert(not is_pow2(6), "6 is not power of 2")
+    assert(not is_pow2(12), "12 is not power of 2")
+
+    return 0
+}
+

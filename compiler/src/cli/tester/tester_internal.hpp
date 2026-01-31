@@ -218,15 +218,34 @@ std::vector<uint8_t> hex_to_bytes(const std::string& hex);
 int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c);
 
 // ============================================================================
+// Test Suite Statistics (for coverage report)
+// ============================================================================
+
+struct SuiteStats {
+    std::string name;
+    int test_count;
+    int64_t duration_ms;
+};
+
+struct TestRunStats {
+    int total_tests = 0;
+    int total_files = 0;
+    int64_t total_duration_ms = 0;
+    std::vector<SuiteStats> suites;
+};
+
+// ============================================================================
 // Library Coverage Analysis
 // ============================================================================
 
 // Print library coverage analysis showing what's NOT covered
 void print_library_coverage_report(const std::set<std::string>& covered_functions,
-                                   const ColorOutput& c);
+                                   const ColorOutput& c,
+                                   const TestRunStats& test_stats = {});
 
 // Write library coverage analysis to HTML file
 void write_library_coverage_html(const std::set<std::string>& covered_functions,
-                                 const std::string& output_path);
+                                 const std::string& output_path,
+                                 const TestRunStats& test_stats = {});
 
 } // namespace tml::cli::tester
