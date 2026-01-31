@@ -192,7 +192,7 @@ static std::vector<ModuleCoverage> scan_library(const std::vector<fs::path>& lib
         ModuleCoverage mc;
         mc.name = name;
         mc.functions = std::move(funcs);
-        mc.deduplicate();  // Remove duplicate function names
+        mc.deduplicate(); // Remove duplicate function names
         result.push_back(std::move(mc));
     }
 
@@ -207,8 +207,7 @@ static std::vector<ModuleCoverage> scan_library(const std::vector<fs::path>& lib
 // ============================================================================
 
 void print_library_coverage_report(const std::set<std::string>& covered_functions,
-                                   const ColorOutput& c,
-                                   const TestRunStats& test_stats) {
+                                   const ColorOutput& c, const TestRunStats& test_stats) {
     // Suppress unused parameter warning if test_stats is empty
     (void)test_stats;
 
@@ -316,10 +315,12 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
 
         // Always show function details for every module
         for (const auto& func : mod.covered_functions) {
-            std::cout << "      " << c.green() << "+" << c.reset() << " " << c.dim() << func << c.reset() << "\n";
+            std::cout << "      " << c.green() << "+" << c.reset() << " " << c.dim() << func
+                      << c.reset() << "\n";
         }
         for (const auto& func : mod.uncovered_functions) {
-            std::cout << "      " << c.red() << "X" << c.reset() << " " << c.dim() << func << c.reset() << "\n";
+            std::cout << "      " << c.red() << "X" << c.reset() << " " << c.dim() << func
+                      << c.reset() << "\n";
         }
     }
 
@@ -459,14 +460,16 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
     // Print uncovered functions by module
     if (!uncovered_by_module.empty()) {
         std::cout << "\n";
-        std::cout << c.cyan() << c.bold()
-                  << "================================================================================"
-                  << c.reset() << "\n";
+        std::cout
+            << c.cyan() << c.bold()
+            << "================================================================================"
+            << c.reset() << "\n";
         std::cout << c.cyan() << c.bold() << "                    UNCOVERED FUNCTIONS BY MODULE"
                   << c.reset() << "\n";
-        std::cout << c.cyan() << c.bold()
-                  << "================================================================================"
-                  << c.reset() << "\n\n";
+        std::cout
+            << c.cyan() << c.bold()
+            << "================================================================================"
+            << c.reset() << "\n\n";
 
         // Sort by number of uncovered functions (most first)
         std::vector<std::pair<std::string, std::vector<std::string>>> sorted_uncovered =
@@ -504,9 +507,10 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
                       << " more modules with uncovered functions" << c.reset() << "\n";
         }
 
-        std::cout << c.dim()
-                  << "================================================================================"
-                  << c.reset() << "\n";
+        std::cout
+            << c.dim()
+            << "================================================================================"
+            << c.reset() << "\n";
     }
 }
 
@@ -515,8 +519,7 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
 // ============================================================================
 
 void write_library_coverage_html(const std::set<std::string>& covered_functions,
-                                 const std::string& output_path,
-                                 const TestRunStats& test_stats) {
+                                 const std::string& output_path, const TestRunStats& test_stats) {
     // Get library paths (core, std, and test libraries)
     fs::path cwd = fs::current_path();
     std::vector<fs::path> lib_dirs = {cwd / "lib" / "core", cwd / "lib" / "std",
@@ -564,6 +567,25 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
     }
 
     double overall_pct = total_funcs > 0 ? (100.0 * total_covered / total_funcs) : 0.0;
+
+    // Calculate TML-only test stats (excluding compiler_tests which are C++ unit tests)
+    int tml_tests = 0, tml_suites = 0;
+    for (const auto& suite : test_stats.suites) {
+        if (suite.name == "compiler_tests")
+            continue;
+        tml_tests += suite.test_count;
+        tml_suites++;
+    }
+    // Estimate TML files (total files minus compiler test files)
+    int compiler_test_files = 0;
+    for (const auto& suite : test_stats.suites) {
+        if (suite.name == "compiler_tests") {
+            // Compiler tests have approximately 1 file per ~40 tests
+            compiler_test_files = (suite.test_count + 39) / 40;
+            break;
+        }
+    }
+    int tml_files = test_stats.total_files - compiler_test_files;
 
     // Count modules by coverage status
     int full_coverage = 0, partial_coverage = 0, zero_coverage = 0;
@@ -935,12 +957,12 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       </div>
       <div class="stat-card">
         <div class="stat-value stat-green">)"
-      << test_stats.total_tests << R"(</div>
+      << tml_tests << R"(</div>
         <div class="stat-label">Tests Passed</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">)"
-      << test_stats.total_files << R"(</div>
+      << tml_files << R"(</div>
         <div class="stat-label">Test Files</div>
       </div>
       <div class="stat-card">
@@ -958,7 +980,8 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       << R"(" style="width: )" << overall_pct << R"(%;"></div>
       </div>
       <div class="progress-text">)"
-      << total_covered << " of " << total_funcs << R"HTML( library functions have test coverage</div>
+      << total_covered << " of " << total_funcs
+      << R"HTML( library functions have test coverage</div>
     </div>
 
     <div class="tabs">
@@ -992,8 +1015,10 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       <div class="suite-list">
 )";
 
-    // Write test suite details in overview
+    // Write test suite details in overview (skip compiler_tests - those are C++ unit tests)
     for (const auto& suite : test_stats.suites) {
+        if (suite.name == "compiler_tests")
+            continue;
         f << "        <div class=\"suite-item\">\n";
         f << "          <span class=\"suite-name\">" << suite.name << "</span>\n";
         f << "          <div class=\"suite-stats\">\n";
@@ -1108,19 +1133,22 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
                 display_name = display_name.substr(name.length() + 1);
             }
 
-            f << "          <div class=\"submodule-row\" style=\"flex-direction: column; align-items: stretch;\">\n";
-            f << "            <div style=\"display: flex; justify-content: space-between; align-items: center;\">\n";
+            f << "          <div class=\"submodule-row\" style=\"flex-direction: column; "
+                 "align-items: stretch;\">\n";
+            f << "            <div style=\"display: flex; justify-content: space-between; "
+                 "align-items: center;\">\n";
             f << "              <span class=\"submodule-name\">" << display_name << "</span>\n";
             f << "              <div class=\"submodule-stats\">\n";
             f << "                <span style=\"color: var(--" << sub_color << ");\">" << std::fixed
               << std::setprecision(1) << sub_pct << "%</span>\n";
             f << "                <span>" << sub->covered_count << "/" << sub_total << "</span>\n";
-            f << "                <span class=\"status-badge " << sub_badge << "\">" << sub_badge_text
-              << "</span>\n";
+            f << "                <span class=\"status-badge " << sub_badge << "\">"
+              << sub_badge_text << "</span>\n";
             f << "              </div>\n";
             f << "            </div>\n";
             // Show all functions for this module
-            f << "            <div class=\"func-list\" style=\"margin-top: 8px; padding-left: 16px; font-size: 12px;\">\n";
+            f << "            <div class=\"func-list\" style=\"margin-top: 8px; padding-left: "
+                 "16px; font-size: 12px;\">\n";
             for (const auto& func : sub->covered_functions) {
                 f << "              <div style=\"color: var(--green);\">+ " << func << "</div>\n";
             }
@@ -1135,8 +1163,8 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
         f << "      </div>\n";
     }
 
-    f << "      </div>\n";  // Close module-groups
-    f << "    </div>\n";    // Close modules tab panel
+    f << "      </div>\n"; // Close module-groups
+    f << "    </div>\n";   // Close modules tab panel
 
     // Priority section - modules that need tests
     std::set<std::string> critical_modules = {
@@ -1293,12 +1321,12 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
             f << "      </div>\n";
         }
 
-        f << "      </div>\n";  // Close uncovered-section
+        f << "      </div>\n"; // Close uncovered-section
     } else {
         f << "      <p style=\"color: var(--text-dim);\">No uncovered functions - excellent!</p>\n";
     }
 
-    f << "    </div>\n";  // Close uncovered tab panel
+    f << "    </div>\n"; // Close uncovered tab panel
 
     // Test Suites tab
     f << R"(
@@ -1308,7 +1336,10 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       <div class="suite-list">
 )";
 
+    // Write TML test suites (excluding compiler_tests which are C++ unit tests)
     for (const auto& suite : test_stats.suites) {
+        if (suite.name == "compiler_tests")
+            continue;
         f << "        <div class=\"suite-item\">\n";
         f << "          <span class=\"suite-name\">" << suite.name << "</span>\n";
         f << "          <div class=\"suite-stats\">\n";
@@ -1323,17 +1354,17 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       <div class="stats" style="margin-top: 24px;">
         <div class="stat-card">
           <div class="stat-value stat-green">)"
-      << test_stats.total_tests << R"(</div>
+      << tml_tests << R"(</div>
           <div class="stat-label">Total Tests</div>
         </div>
         <div class="stat-card">
           <div class="stat-value">)"
-      << test_stats.total_files << R"(</div>
+      << tml_files << R"(</div>
           <div class="stat-label">Test Files</div>
         </div>
         <div class="stat-card">
           <div class="stat-value">)"
-      << test_stats.suites.size() << R"(</div>
+      << tml_suites << R"(</div>
           <div class="stat-label">Test Suites</div>
         </div>
         <div class="stat-card">
