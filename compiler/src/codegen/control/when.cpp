@@ -73,7 +73,14 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
 
         if (variant_tag >= 0) {
             std::string cmp = fresh_reg();
-            emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " + std::to_string(variant_tag));
+            // For unit-only enums (represented as just i32), scrutinee IS the tag
+            // If tag is empty, use scrutinee directly
+            std::string tag_value = tag.empty() ? scrutinee : tag;
+            // Use appropriate type: i32 for normal enums, scrutinee_type for primitive
+            // representations
+            std::string cmp_type = tag.empty() ? scrutinee_type : "i32";
+            emit_line("  " + cmp + " = icmp eq " + cmp_type + " " + tag_value + ", " +
+                      std::to_string(variant_tag));
             return cmp;
         }
         return "";
@@ -102,7 +109,14 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
 
         if (variant_tag >= 0) {
             std::string cmp = fresh_reg();
-            emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " + std::to_string(variant_tag));
+            // For unit-only enums (represented as just i32), scrutinee IS the tag
+            // If tag is empty, use scrutinee directly
+            std::string tag_value = tag.empty() ? scrutinee : tag;
+            // Use appropriate type: i32 for normal enums, scrutinee_type for primitive
+            // representations
+            std::string cmp_type = tag.empty() ? scrutinee_type : "i32";
+            emit_line("  " + cmp + " = icmp eq " + cmp_type + " " + tag_value + ", " +
+                      std::to_string(variant_tag));
             return cmp;
         }
         return ""; // Binding pattern - always matches
@@ -367,14 +381,16 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                                 std::unordered_map<std::string, types::TypePtr> enum_type_subs;
                                 auto enum_def2 = env_.lookup_enum(named.name);
                                 if (enum_def2 && !enum_def2->type_params.empty()) {
-                                    for (size_t i = 0;
-                                         i < enum_def2->type_params.size() && i < named.type_args.size();
+                                    for (size_t i = 0; i < enum_def2->type_params.size() &&
+                                                       i < named.type_args.size();
                                          ++i) {
-                                        enum_type_subs[enum_def2->type_params[i]] = named.type_args[i];
+                                        enum_type_subs[enum_def2->type_params[i]] =
+                                            named.type_args[i];
                                     }
                                 }
                                 if (!enum_type_subs.empty()) {
-                                    payload_type = types::substitute_type(payload_type, enum_type_subs);
+                                    payload_type =
+                                        types::substitute_type(payload_type, enum_type_subs);
                                 }
                             }
                         }
@@ -484,15 +500,17 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                                 std::unordered_map<std::string, types::TypePtr> enum_type_subs;
                                 auto enum_def2 = env_.lookup_enum(named.name);
                                 if (enum_def2 && !enum_def2->type_params.empty()) {
-                                    for (size_t i = 0;
-                                         i < enum_def2->type_params.size() && i < named.type_args.size();
+                                    for (size_t i = 0; i < enum_def2->type_params.size() &&
+                                                       i < named.type_args.size();
                                          ++i) {
-                                        enum_type_subs[enum_def2->type_params[i]] = named.type_args[i];
+                                        enum_type_subs[enum_def2->type_params[i]] =
+                                            named.type_args[i];
                                     }
                                 }
                                 // Apply substitutions
                                 if (!enum_type_subs.empty()) {
-                                    payload_type = types::substitute_type(payload_type, enum_type_subs);
+                                    payload_type =
+                                        types::substitute_type(payload_type, enum_type_subs);
                                 }
                             }
                         }
