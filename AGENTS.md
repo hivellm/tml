@@ -1666,6 +1666,25 @@ codespell **/*.md            # Spell check
 - NEVER mock/stub functionality just to make tests pass without fixing root cause
 - FIX the actual problem causing test failures
 
+### TML Test Rules - STRICTLY FORBIDDEN (TML-Specific)
+- **NEVER move tests to `pending/` folders** - All tests MUST live in the main `tests/` directory
+- **NEVER create placeholder implementations** - Implement the actual functionality
+- **NEVER simplify test assertions** - Fix the code, not the test
+- **NEVER create stubs** - Write real implementations
+- **NEVER skip tests by any means** - Every test must pass before committing
+- **NEVER invent creative ways to bypass tests** - This includes:
+  - Moving to pending/
+  - Commenting with "SKIPPED" or "TODO"
+  - Simplifying assertions to always pass
+  - Adding conditionals to skip at runtime
+  - Creating fake implementations
+
+When a TML test fails:
+1. Investigate the root cause in compiler codegen, type checker, or runtime
+2. Implement the missing functionality properly
+3. Keep working until the test passes
+4. The test stays in place - do NOT defer or move it
+
 ### Git Hook Bypassing - STRICTLY FORBIDDEN  
 - NEVER use --no-verify flag on git commit
 - NEVER use --no-verify flag on git push

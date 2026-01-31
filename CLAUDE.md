@@ -277,6 +277,28 @@ func feature_a_only() { ... }
 
 Tests represent the specification of what the code should do. Simplifying tests to make them pass defeats the purpose of testing.
 
+### MANDATORY: No Test Circumvention
+
+**This is NON-NEGOTIABLE. You MUST follow these rules:**
+
+1. **NEVER move tests to `pending/` folders** - All tests must live in the main `tests/` directory
+2. **NEVER create placeholder implementations** - Implement the actual functionality
+3. **NEVER simplify test assertions** - Fix the code, not the test
+4. **NEVER create stubs** - Write real implementations
+5. **NEVER comment out failing tests** - Fix the underlying issue
+6. **NEVER skip tests** - Every test must pass
+
+When a test fails:
+- Investigate the root cause in the compiler or library
+- Implement the missing codegen, type checking, or runtime functionality
+- Keep working until the test passes
+- Do NOT invent creative ways to bypass the test
+
+If a test reveals a bug that requires significant work:
+- Create a task in `rulebook/tasks/` to track the fix
+- Fix the bug properly, don't defer it
+- The test stays in place and must pass before committing
+
 ## Key CLI Files
 
 The CLI is organized into subfolders:

@@ -31,6 +31,46 @@
 
 namespace tml::codegen {
 
+// Helper: Convert a parser::Type to a string for name mangling
+// Used to extract behavior type parameters for impl method names
+static std::string parser_type_to_string(const parser::Type& type) {
+    if (type.is<parser::NamedType>()) {
+        const auto& named = type.as<parser::NamedType>();
+        std::string result = named.path.segments.empty() ? "" : named.path.segments.back();
+        if (named.generics.has_value() && !named.generics->args.empty()) {
+            result += "__";
+            for (size_t i = 0; i < named.generics->args.size(); ++i) {
+                if (i > 0)
+                    result += "__";
+                const auto& arg = named.generics->args[i];
+                if (arg.is_type()) {
+                    result += parser_type_to_string(*arg.as_type());
+                }
+            }
+        }
+        return result;
+    } else if (type.is<parser::PtrType>()) {
+        const auto& ptr = type.as<parser::PtrType>();
+        std::string prefix = ptr.is_mut ? "mutptr_" : "ptr_";
+        return prefix + parser_type_to_string(*ptr.inner);
+    } else if (type.is<parser::RefType>()) {
+        const auto& ref = type.as<parser::RefType>();
+        std::string prefix = ref.is_mut ? "mutref_" : "ref_";
+        return prefix + parser_type_to_string(*ref.inner);
+    } else if (type.is<parser::SliceType>()) {
+        const auto& slice = type.as<parser::SliceType>();
+        return "Slice__" + parser_type_to_string(*slice.element);
+    } else if (type.is<parser::TupleType>()) {
+        const auto& tuple = type.as<parser::TupleType>();
+        std::string result = "Tuple";
+        for (const auto& elem : tuple.elements) {
+            result += "__" + parser_type_to_string(*elem);
+        }
+        return result;
+    }
+    return "";
+}
+
 auto LLVMIRGen::generate(const parser::Module& module)
     -> Result<std::string, std::vector<LLVMGenError>> {
     errors_.clear();
@@ -394,6 +434,32 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
                 }
 
+                // Extract behavior type parameters for function name mangling
+                // Only for PRIMITIVE types that have multiple TryFrom/From overloads
+                // For impl TryFrom[I64] for I32, we extract "I64" to create I32_try_from_I64
+                // Custom types like Celsius don't get the suffix
+                auto is_primitive = [](const std::string& name) {
+                    return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+                           name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
+                           name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
+                           name == "Bool";
+                };
+                std::string behavior_type_suffix = "";
+                if (is_primitive(type_name) && impl.trait_type &&
+                    impl.trait_type->is<parser::NamedType>()) {
+                    const auto& trait_named = impl.trait_type->as<parser::NamedType>();
+                    if (trait_named.generics.has_value() && !trait_named.generics->args.empty()) {
+                        for (const auto& arg : trait_named.generics->args) {
+                            if (arg.is_type()) {
+                                std::string arg_type_str = parser_type_to_string(*arg.as_type());
+                                if (!arg_type_str.empty()) {
+                                    behavior_type_suffix += "_" + arg_type_str;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 for (const auto& method : impl.methods) {
                     // Skip methods with their own generic parameters
                     // These will be instantiated on-demand when called with concrete types
@@ -401,8 +467,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         continue;
                     }
 
-                    // Generate method with mangled name TypeName_MethodName
-                    std::string method_name = suite_prefix + type_name + "_" + method.name;
+                    // Generate method with mangled name TypeName_MethodName_BehaviorTypeParams
+                    // For impl TryFrom[I64] for I32, try_from becomes I32_try_from_I64
+                    std::string method_name =
+                        suite_prefix + type_name + "_" + method.name + behavior_type_suffix;
                     current_func_ = method_name;
                     current_impl_type_ = type_name; // Track impl self type for 'this' access
                     locals_.clear();

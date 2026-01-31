@@ -649,8 +649,10 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                 // For single-type-param generics, the payload is the type arg
                                 // Check if this is a single-type-param enum
                                 size_t num_type_params = gen_enum_decl->generics.size();
-                                if (num_type_params == 1 && type_arg_str.find("__") != std::string::npos) {
-                                    // The type arg itself is a generic - set expected type for inner
+                                if (num_type_params == 1 &&
+                                    type_arg_str.find("__") != std::string::npos) {
+                                    // The type arg itself is a generic - set expected type for
+                                    // inner
                                     expected_enum_type_ = "%struct." + type_arg_str;
                                 }
                             }
@@ -1664,7 +1666,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                     if (func_sig) {
                         // Try to infer type args from argument types matching param types
-                        for (size_t i = 0; i < call.args.size() && i < func_sig->params.size(); ++i) {
+                        for (size_t i = 0; i < call.args.size() && i < func_sig->params.size();
+                             ++i) {
                             auto arg_type = infer_expr_type(*call.args[i]);
                             const auto& param_type = func_sig->params[i];
 
@@ -1978,6 +1981,87 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         // Local functions in test files also have signatures from the type checker.
         // Only functions found in the module registry are true library functions.
         std::string prefix = is_library_function ? "" : get_suite_prefix();
+
+        // For primitive type try_from/from calls, we need behavior suffix
+        // e.g., I32::try_from(value: I64) should call @tml_I32_try_from_I64
+        std::string behavior_suffix = "";
+        size_t sep_pos = fn_name.find("::");
+        if (sep_pos != std::string::npos) {
+            std::string type_name = fn_name.substr(0, sep_pos);
+            std::string method = fn_name.substr(sep_pos + 2);
+
+            auto is_primitive = [](const std::string& name) {
+                return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+                       name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
+                       name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
+                       name == "Bool";
+            };
+
+            if ((method == "try_from" || method == "from") && is_primitive(type_name) &&
+                !call.args.empty()) {
+                // Generate first argument to determine its type
+                std::string arg_val = gen_expr(*call.args[0]);
+                std::string arg_llvm_type = last_expr_type_;
+
+                // Convert LLVM type to TML type name for suffix
+                std::string arg_tml_type;
+                if (arg_llvm_type == "i8")
+                    arg_tml_type = last_expr_is_unsigned_ ? "U8" : "I8";
+                else if (arg_llvm_type == "i16")
+                    arg_tml_type = last_expr_is_unsigned_ ? "U16" : "I16";
+                else if (arg_llvm_type == "i32")
+                    arg_tml_type = last_expr_is_unsigned_ ? "U32" : "I32";
+                else if (arg_llvm_type == "i64")
+                    arg_tml_type = last_expr_is_unsigned_ ? "U64" : "I64";
+                else if (arg_llvm_type == "i128")
+                    arg_tml_type = last_expr_is_unsigned_ ? "U128" : "I128";
+                else if (arg_llvm_type == "float")
+                    arg_tml_type = "F32";
+                else if (arg_llvm_type == "double")
+                    arg_tml_type = "F64";
+                else if (arg_llvm_type == "i1")
+                    arg_tml_type = "Bool";
+
+                if (!arg_tml_type.empty()) {
+                    // Use double underscore to match impl.cpp's convention for method_type_suffix
+                    behavior_suffix = "__" + arg_tml_type;
+                }
+
+                // Build mangled name with suffix (uses __ separator)
+                // e.g., I32_try_from__I64 for I32::try_from(I64 value)
+                mangled = "@tml_" + prefix + sanitized_name + behavior_suffix;
+
+                // Queue method instantiation with behavior suffix
+                // The mangled_method key must match what impl.cpp generates
+                std::string mangled_method = "tml_" + type_name + "_" + method + behavior_suffix;
+                if (generated_impl_methods_.find(mangled_method) == generated_impl_methods_.end()) {
+                    pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                        type_name,
+                        method,
+                        {},           // No type_subs for primitive impls
+                        type_name,    // base_type_name
+                        arg_tml_type, // Use as method_type_suffix (behavior param)
+                        /*is_library_type=*/true});
+                    generated_impl_methods_.insert(mangled_method);
+                }
+
+                // Determine return type
+                std::string ret_type = "i32"; // Default
+                if (func_it != functions_.end()) {
+                    ret_type = func_it->second.ret_type;
+                } else if (func_sig.has_value()) {
+                    ret_type = llvm_type_from_semantic(func_sig->return_type);
+                }
+
+                // Generate call with actual argument type (NO coercion)
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = call " + ret_type + " " + mangled + "(" +
+                          arg_llvm_type + " " + arg_val + ")");
+                last_expr_type_ = ret_type;
+                return result;
+            }
+        }
+
         mangled = "@tml_" + prefix + sanitized_name;
     }
 

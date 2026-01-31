@@ -258,6 +258,45 @@ void LLVMIRGen::generate_pending_instantiations() {
                             if (target.path.segments.back() != pim.base_type_name)
                                 continue;
 
+                            // For TryFrom/From on primitive types, match the behavior type
+                            // parameter e.g., for I32::try_from(I64), find impl TryFrom[I64] for
+                            // I32
+                            if (!pim.method_type_suffix.empty() && impl_decl.trait_type) {
+                                if (impl_decl.trait_type->is<parser::NamedType>()) {
+                                    const auto& trait =
+                                        impl_decl.trait_type->as<parser::NamedType>();
+                                    std::string trait_name = trait.path.segments.empty()
+                                                                 ? ""
+                                                                 : trait.path.segments.back();
+                                    // Only check for TryFrom/From behaviors
+                                    if ((trait_name == "TryFrom" || trait_name == "From") &&
+                                        trait.generics.has_value() &&
+                                        !trait.generics->args.empty()) {
+                                        // Extract the behavior type parameter
+                                        bool matches = false;
+                                        for (const auto& arg : trait.generics->args) {
+                                            if (arg.is_type() &&
+                                                arg.as_type()->is<parser::NamedType>()) {
+                                                const auto& arg_named =
+                                                    arg.as_type()->as<parser::NamedType>();
+                                                std::string arg_type_name =
+                                                    arg_named.path.segments.empty()
+                                                        ? ""
+                                                        : arg_named.path.segments.back();
+                                                if (arg_type_name == pim.method_type_suffix) {
+                                                    matches = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if (!matches) {
+                                            continue; // Wrong behavior type parameter, skip this
+                                                      // impl
+                                        }
+                                    }
+                                }
+                            }
+
                             TML_DEBUG_LN("[IMPL_INST]   Found impl for "
                                          << pim.base_type_name
                                          << ", methods: " << impl_decl.methods.size());

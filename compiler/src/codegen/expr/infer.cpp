@@ -1022,7 +1022,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
     if (expr.is<parser::CallExpr>()) {
         const auto& call = expr.as<parser::CallExpr>();
 
-        // Handle PathExpr callee (like Builder::create)
+        // Handle PathExpr callee (like Builder::create or I32::try_from)
         if (call.callee->is<parser::PathExpr>()) {
             const auto& path = call.callee->as<parser::PathExpr>();
             // For Type::method() syntax, segments are [Type, method]
@@ -1036,6 +1036,25 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     for (const auto& m : class_def->methods) {
                         if (m.sig.name == method_name && m.is_static) {
                             return m.sig.return_type;
+                        }
+                    }
+                }
+
+                // Check for impl static methods (like I32::try_from)
+                // Look up qualified name in TypeEnv
+                std::string qualified_name = type_name + "::" + method_name;
+                auto func_sig = env_.lookup_func(qualified_name);
+                if (func_sig.has_value()) {
+                    return func_sig->return_type;
+                }
+
+                // Check module registry for library impl methods
+                if (env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        auto func_it = mod.functions.find(qualified_name);
+                        if (func_it != mod.functions.end()) {
+                            return func_it->second.return_type;
                         }
                     }
                 }

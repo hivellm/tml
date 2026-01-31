@@ -13,3 +13,4 @@ pub use assertions
 pub use runner
 pub use bench
 pub use report
+pub use coverage

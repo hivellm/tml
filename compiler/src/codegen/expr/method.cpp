@@ -268,9 +268,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 // Check enums
                 auto enum_it = mod.enums.find(type_name);
                 if (enum_it != mod.enums.end()) {
-                    TML_DEBUG_LN("[STATIC_METHOD] Found enum " << type_name << " in " << mod_name
-                                                               << " with type_params.size="
-                                                               << enum_it->second.type_params.size());
+                    TML_DEBUG_LN("[STATIC_METHOD] Found enum "
+                                 << type_name << " in " << mod_name << " with type_params.size="
+                                 << enum_it->second.type_params.size());
                     if (!enum_it->second.type_params.empty()) {
                         is_generic_struct = true;
                         imported_type_params = enum_it->second.type_params;
@@ -899,20 +899,10 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     }
                 }
 
-                // Look up in functions_ for the correct LLVM name
-                std::string method_lookup_key = mangled_type_name + "_" + method;
-                auto method_it = functions_.find(method_lookup_key);
-                std::string fn_name;
-                if (method_it != functions_.end()) {
-                    fn_name = method_it->second.llvm_name;
-                } else {
-                    // Fallback - only use suite prefix for test-local methods
-                    std::string prefix =
-                        is_library_method(type_name, method) ? "" : get_suite_prefix();
-                    fn_name = "@tml_" + prefix + mangled_type_name + "_" + method;
-                }
-
+                // Generate arguments FIRST to determine their types
+                // Needed for behavior method overload resolution (e.g., TryFrom[I64])
                 std::vector<std::pair<std::string, std::string>> typed_args;
+                std::vector<std::string> arg_tml_types;
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     // Set expected type context before generating argument
                     // This helps with type inference for nested generic calls
@@ -933,8 +923,43 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string val = gen_expr(*call.args[i]);
                     expected_enum_type_ = saved_expected_enum;
                     std::string arg_type = last_expr_type_;
+
+                    // Collect TML type name for behavior param lookup
+                    std::string tml_type_name;
+                    if (arg_type == "i8")
+                        tml_type_name = last_expr_is_unsigned_ ? "U8" : "I8";
+                    else if (arg_type == "i16")
+                        tml_type_name = last_expr_is_unsigned_ ? "U16" : "I16";
+                    else if (arg_type == "i32")
+                        tml_type_name = last_expr_is_unsigned_ ? "U32" : "I32";
+                    else if (arg_type == "i64")
+                        tml_type_name = last_expr_is_unsigned_ ? "U64" : "I64";
+                    else if (arg_type == "i128")
+                        tml_type_name = last_expr_is_unsigned_ ? "U128" : "I128";
+                    else if (arg_type == "float")
+                        tml_type_name = "F32";
+                    else if (arg_type == "double")
+                        tml_type_name = "F64";
+                    else if (arg_type == "i1")
+                        tml_type_name = "Bool";
+                    else if (arg_type == "ptr")
+                        tml_type_name = "Str";
+                    arg_tml_types.push_back(tml_type_name);
+
+                    // For TryFrom/From on primitive types, DON'T coerce types - use actual arg type
+                    // This is because func_sig might have wrong param type (only one overload
+                    // registered)
+                    auto is_primitive_target = [](const std::string& name) {
+                        return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+                               name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
+                               name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
+                               name == "Bool";
+                    };
+                    bool skip_coercion = (method == "try_from" || method == "from") &&
+                                         is_primitive_target(type_name);
+
                     std::string expected_type = arg_type;
-                    if (i < func_sig->params.size()) {
+                    if (!skip_coercion && i < func_sig->params.size()) {
                         auto param_type = func_sig->params[i];
                         if (!type_subs_fallback.empty()) {
                             param_type = types::substitute_type(param_type, type_subs_fallback);
@@ -961,6 +986,37 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         }
                     }
                     typed_args.push_back({expected_type, val});
+                }
+
+                // Build function name with behavior type parameter suffix for overloaded methods
+                // Only add suffix for PRIMITIVE types that have multiple TryFrom/From overloads
+                // e.g., I32::try_from(I64) -> I32_try_from_I64
+                // Custom types like Celsius::from(Fahrenheit) stay as Celsius_from
+                std::string behavior_suffix = "";
+                // DEBUG: emit comment to verify code path
+                emit_line("  ; DEBUG: method.cpp path for " + type_name + "::" + method);
+                auto is_primitive = [](const std::string& name) {
+                    return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+                           name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
+                           name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
+                           name == "Bool";
+                };
+                if ((method == "try_from" || method == "from") && is_primitive(type_name) &&
+                    !arg_tml_types.empty() && !arg_tml_types[0].empty()) {
+                    behavior_suffix = "_" + arg_tml_types[0];
+                }
+
+                // Look up in functions_ for the correct LLVM name
+                std::string method_lookup_key = mangled_type_name + "_" + method + behavior_suffix;
+                auto method_it = functions_.find(method_lookup_key);
+                std::string fn_name;
+                if (method_it != functions_.end()) {
+                    fn_name = method_it->second.llvm_name;
+                } else {
+                    // Fallback - only use suite prefix for test-local methods
+                    std::string prefix =
+                        is_library_method(type_name, method) ? "" : get_suite_prefix();
+                    fn_name = "@tml_" + prefix + mangled_type_name + "_" + method + behavior_suffix;
                 }
 
                 std::string args_str;
@@ -1832,8 +1888,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             // If receiver is from field access, it's a pointer - need to load first
             std::string maybe_val = receiver;
-            if (call.receiver->is<parser::FieldExpr>() &&
-                enum_type_name.starts_with("%struct.")) {
+            if (call.receiver->is<parser::FieldExpr>() && enum_type_name.starts_with("%struct.")) {
                 std::string loaded = fresh_reg();
                 emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
                 maybe_val = loaded;
@@ -1854,8 +1909,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             // If receiver is from field access, it's a pointer - need to load first
             std::string outcome_val = receiver;
-            if (call.receiver->is<parser::FieldExpr>() &&
-                enum_type_name.starts_with("%struct.")) {
+            if (call.receiver->is<parser::FieldExpr>() && enum_type_name.starts_with("%struct.")) {
                 std::string loaded = fresh_reg();
                 emit_line("  " + loaded + " = load " + enum_type_name + ", ptr " + receiver);
                 outcome_val = loaded;
