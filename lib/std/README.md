@@ -2,7 +2,7 @@
 
 The TML standard library provides common data structures, I/O operations, networking, threading, and more.
 
-**Status**: 694 tests passing
+**Status**: 718 tests passing
 
 ## Modules
 

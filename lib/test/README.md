@@ -2,7 +2,7 @@
 
 A comprehensive testing framework for TML with assertions, benchmarking, and code coverage.
 
-**Status**: 2445 tests passing across 223 test files
+**Status**: 2510 tests passing across 235 test files
 
 ## Features
 

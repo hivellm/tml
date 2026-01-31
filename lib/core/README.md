@@ -2,7 +2,7 @@
 
 The `core` library provides fundamental behaviors and types for the TML language. This is the foundation that other libraries build upon, similar to Rust's `core` crate.
 
-**Status**: 657 tests passing
+**Status**: 697 tests passing
 
 ## Modules
 

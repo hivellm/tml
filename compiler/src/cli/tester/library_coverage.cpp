@@ -568,24 +568,13 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
 
     double overall_pct = total_funcs > 0 ? (100.0 * total_covered / total_funcs) : 0.0;
 
-    // Calculate TML-only test stats (excluding compiler_tests which are C++ unit tests)
+    // Calculate test stats for all suites
     int tml_tests = 0, tml_suites = 0;
     for (const auto& suite : test_stats.suites) {
-        if (suite.name == "compiler_tests")
-            continue;
         tml_tests += suite.test_count;
         tml_suites++;
     }
-    // Estimate TML files (total files minus compiler test files)
-    int compiler_test_files = 0;
-    for (const auto& suite : test_stats.suites) {
-        if (suite.name == "compiler_tests") {
-            // Compiler tests have approximately 1 file per ~40 tests
-            compiler_test_files = (suite.test_count + 39) / 40;
-            break;
-        }
-    }
-    int tml_files = test_stats.total_files - compiler_test_files;
+    int tml_files = test_stats.total_files;
 
     // Count modules by coverage status
     int full_coverage = 0, partial_coverage = 0, zero_coverage = 0;
@@ -1015,10 +1004,8 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       <div class="suite-list">
 )";
 
-    // Write test suite details in overview (skip compiler_tests - those are C++ unit tests)
+    // Write test suite details in overview
     for (const auto& suite : test_stats.suites) {
-        if (suite.name == "compiler_tests")
-            continue;
         f << "        <div class=\"suite-item\">\n";
         f << "          <span class=\"suite-name\">" << suite.name << "</span>\n";
         f << "          <div class=\"suite-stats\">\n";
@@ -1336,10 +1323,8 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       <div class="suite-list">
 )";
 
-    // Write TML test suites (excluding compiler_tests which are C++ unit tests)
+    // Write all test suites
     for (const auto& suite : test_stats.suites) {
-        if (suite.name == "compiler_tests")
-            continue;
         f << "        <div class=\"suite-item\">\n";
         f << "          <span class=\"suite-name\">" << suite.name << "</span>\n";
         f << "          <div class=\"suite-stats\">\n";

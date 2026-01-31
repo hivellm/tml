@@ -1252,12 +1252,13 @@ static std::string extract_suite_key(const std::string& file_path) {
 
 // Helper to extract display group from suite key
 static std::string suite_key_to_group(const std::string& key) {
-    // "compiler_tests_compiler" -> "compiler"
+    // "compiler_tests_compiler" -> "compiler/compiler"
+    // "compiler_tests_runtime" -> "compiler/runtime"
     // "lib_core_tests" -> "lib/core"
-    // "compiler_tests_runtime" -> "runtime"
 
     if (key.find("compiler_tests_") == 0) {
-        return key.substr(15); // After "compiler_tests_"
+        std::string subdir = key.substr(15); // After "compiler_tests_"
+        return "compiler/" + subdir;
     }
     if (key.find("lib_") == 0) {
         // "lib_core_tests" -> "lib/core"

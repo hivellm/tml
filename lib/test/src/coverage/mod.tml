@@ -64,6 +64,20 @@ pub func reset_coverage() {
     }
 }
 
+/// Get current coverage percentage (0-100)
+pub func get_coverage_percent() -> I32 {
+    lowlevel {
+        return tml_get_coverage_percent()
+    }
+}
+
+/// Check if a specific function has been covered
+pub func is_func_covered(name: Str) -> Bool {
+    lowlevel {
+        return tml_is_func_covered(name)
+    }
+}
+
 // ============ Coverage Assertions ============
 
 /// Assert that a function has been covered
