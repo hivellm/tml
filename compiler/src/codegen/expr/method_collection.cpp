@@ -56,6 +56,7 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
     // List methods
     if (receiver_type_name == "List") {
         if (method == "push") {
+            emit_coverage("List::push");
             if (call.args.empty()) {
                 report_error("push requires an argument", call.span);
                 return "0";
@@ -71,12 +72,14 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             return "void";
         }
         if (method == "pop") {
+            emit_coverage("List::pop");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @list_pop(ptr " + handle + ")");
             last_expr_type_ = "i64";
             return result;
         }
         if (method == "get") {
+            emit_coverage("List::get");
             if (call.args.empty()) {
                 report_error("get requires an argument", call.span);
                 return "0";
@@ -95,6 +98,7 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "set") {
+            emit_coverage("List::set");
             if (call.args.size() < 2) {
                 report_error("set requires two arguments", call.span);
                 return "void";
@@ -118,22 +122,26 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             return "void";
         }
         if (method == "len" || method == "length") {
+            emit_coverage("List::len");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @list_len(ptr " + handle + ")");
             last_expr_type_ = "i64";
             return result;
         }
         if (method == "capacity") {
+            emit_coverage("List::capacity");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @list_capacity(ptr " + handle + ")");
             last_expr_type_ = "i64";
             return result;
         }
         if (method == "clear") {
+            emit_coverage("List::clear");
             emit_line("  call void @list_clear(ptr " + handle + ")");
             return "void";
         }
         if (method == "is_empty" || method == "isEmpty") {
+            emit_coverage("List::is_empty");
             // Runtime returns i32, convert to i1
             std::string i32_result = fresh_reg();
             emit_line("  " + i32_result + " = call i32 @list_is_empty(ptr " + handle + ")");
@@ -143,22 +151,26 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "destroy") {
+            emit_coverage("List::destroy");
             emit_line("  call void @list_destroy(ptr " + handle + ")");
             return "void";
         }
         if (method == "first") {
+            emit_coverage("List::first");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @list_first(ptr " + handle + ")");
             last_expr_type_ = "i64";
             return result;
         }
         if (method == "last") {
+            emit_coverage("List::last");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @list_last(ptr " + handle + ")");
             last_expr_type_ = "i64";
             return result;
         }
         if (method == "remove") {
+            emit_coverage("List::remove");
             if (call.args.empty()) {
                 report_error("remove requires an index argument", call.span);
                 return "0";
@@ -220,6 +232,7 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
         };
 
         if (method == "get") {
+            emit_coverage("HashMap::get");
             if (call.args.empty()) {
                 report_error("get requires an argument", call.span);
                 return "0";
@@ -235,6 +248,7 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             return result_i64;
         }
         if (method == "set") {
+            emit_coverage("HashMap::set");
             if (call.args.size() < 2) {
                 report_error("set requires two arguments", call.span);
                 return "void";
@@ -250,6 +264,7 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             return "void";
         }
         if (method == "has" || method == "contains") {
+            emit_coverage("HashMap::has");
             if (call.args.empty()) {
                 report_error("has requires a key argument", call.span);
                 return "0";
@@ -267,6 +282,7 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "remove") {
+            emit_coverage("HashMap::remove");
             if (call.args.empty()) {
                 report_error("remove requires a key argument", call.span);
                 return "0";
@@ -284,20 +300,33 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "len" || method == "length") {
+            emit_coverage("HashMap::len");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @hashmap_len(ptr " + handle + ")");
             last_expr_type_ = "i64";
             return result;
         }
+        if (method == "is_empty") {
+            emit_coverage("HashMap::is_empty");
+            std::string len_result = fresh_reg();
+            emit_line("  " + len_result + " = call i64 @hashmap_len(ptr " + handle + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp eq i64 " + len_result + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
         if (method == "clear") {
+            emit_coverage("HashMap::clear");
             emit_line("  call void @hashmap_clear(ptr " + handle + ")");
             return "void";
         }
         if (method == "destroy") {
+            emit_coverage("HashMap::destroy");
             emit_line("  call void @hashmap_destroy(ptr " + handle + ")");
             return "void";
         }
         if (method == "iter") {
+            emit_coverage("HashMap::iter");
             // Create iterator and return it wrapped in HashMapIter struct
             std::string iter_ptr = fresh_reg();
             emit_line("  " + iter_ptr + " = call ptr @hashmap_iter_create(ptr " + handle + ")");

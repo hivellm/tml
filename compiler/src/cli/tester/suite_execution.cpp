@@ -61,34 +61,80 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             std::cerr << std::flush;
         }
 
-        // Compile all suites
+        // Compile all suites IN PARALLEL
         std::vector<std::pair<TestSuite, DynamicLibrary>> loaded_suites;
 
-        for (auto& suite : suites) {
-            if (!opts.quiet && opts.verbose) {
-                std::cout << c.dim() << " Compiling suite: " << suite.name << " ("
-                          << suite.tests.size() << " tests)" << c.reset() << "\n";
-            }
-            std::cout << std::flush;
-            std::cerr << std::flush;
+        // Determine number of compilation threads
+        unsigned int hw_threads = std::thread::hardware_concurrency();
+        unsigned int num_compile_threads = (hw_threads > 0) ? std::max(1u, hw_threads) : 4;
 
-            phase_start = Clock::now();
-            if (opts.verbose) {
-                std::cerr << "[DEBUG] Starting compile_test_suite for: " << suite.name << " ("
-                          << suite.tests.size() << " tests)\n"
-                          << std::flush;
+        // Structure to hold compilation results
+        struct CompileJob {
+            size_t index;
+            TestSuite suite;
+            SuiteCompileResult result;
+            bool compiled = false;
+        };
+
+        std::vector<CompileJob> jobs;
+        jobs.reserve(suites.size());
+        for (size_t i = 0; i < suites.size(); ++i) {
+            jobs.push_back({i, std::move(suites[i]), {}, false});
+        }
+
+        // Thread-safe job queue
+        std::atomic<size_t> next_job{0};
+        std::mutex output_mutex;
+
+        // Compile suites in parallel
+        auto compile_worker = [&]() {
+            while (true) {
+                size_t job_idx = next_job.fetch_add(1);
+                if (job_idx >= jobs.size())
+                    break;
+
+                auto& job = jobs[job_idx];
+
+                if (!opts.quiet && opts.verbose) {
+                    std::lock_guard<std::mutex> lock(output_mutex);
+                    std::cout << c.dim() << " Compiling suite: " << job.suite.name << " ("
+                              << job.suite.tests.size() << " tests)" << c.reset() << "\n";
+                    std::cout << std::flush;
+                }
+
+                job.result = compile_test_suite(job.suite, opts.verbose, opts.no_cache);
+                job.compiled = true;
             }
-            auto compile_result = compile_test_suite(suite, opts.verbose, opts.no_cache);
-            if (opts.verbose) {
-                std::cerr << "[DEBUG] Finished compile_test_suite for: " << suite.name << "\n"
-                          << std::flush;
-            }
-            if (opts.profile) {
-                collector.profile_stats.add("suite_compile",
-                                            std::chrono::duration_cast<std::chrono::microseconds>(
-                                                Clock::now() - phase_start)
-                                                .count());
-            }
+        };
+
+        // Launch compilation threads
+        if (!opts.quiet) {
+            std::cout << c.dim() << " Compiling " << jobs.size() << " suites with "
+                      << num_compile_threads << " threads..." << c.reset() << "\n";
+            std::cout << std::flush;
+        }
+
+        phase_start = Clock::now();
+        std::vector<std::thread> compile_threads;
+        for (unsigned int t = 0; t < std::min(num_compile_threads, (unsigned int)jobs.size());
+             ++t) {
+            compile_threads.emplace_back(compile_worker);
+        }
+        for (auto& t : compile_threads) {
+            t.join();
+        }
+
+        if (opts.profile) {
+            collector.profile_stats.add(
+                "parallel_compile",
+                std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - phase_start)
+                    .count());
+        }
+
+        // Process compilation results and load DLLs (sequential for stability)
+        for (auto& job : jobs) {
+            auto& suite = job.suite;
+            auto& compile_result = job.result;
 
             if (!compile_result.success) {
                 // Report compilation error but continue with other suites
@@ -324,7 +370,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             [](const SuiteStats& a, const SuiteStats& b) { return a.test_count > b.test_count; });
 
         // Print library coverage analysis after all suites complete
-        if (CompilerOptions::coverage && !all_covered_functions.empty()) {
+        // Skip coverage report if a filter is active (incomplete coverage data)
+        if (CompilerOptions::coverage && opts.patterns.empty()) {
+            // Generate report even if no functions were tracked (shows 0% coverage)
             print_library_coverage_report(all_covered_functions, c, test_stats);
 
             // Write HTML report with proper library coverage data
@@ -332,6 +380,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 write_library_coverage_html(all_covered_functions, CompilerOptions::coverage_output,
                                             test_stats);
             }
+        } else if (CompilerOptions::coverage && !opts.patterns.empty()) {
+            std::cout << c.dim() << " [Coverage report skipped - filter active]" << c.reset()
+                      << "\n";
         }
 
         return 0;
