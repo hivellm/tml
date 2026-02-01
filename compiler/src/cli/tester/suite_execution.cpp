@@ -57,6 +57,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         if (!opts.quiet) {
             std::cout << c.dim() << " Grouped into " << suites.size() << " test suite"
                       << (suites.size() != 1 ? "s" : "") << c.reset() << "\n";
+            std::cout << std::flush;
+            std::cerr << std::flush;
         }
 
         // Compile all suites
