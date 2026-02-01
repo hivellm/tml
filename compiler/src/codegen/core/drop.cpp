@@ -96,6 +96,23 @@ void LLVMIRGen::mark_var_consumed(const std::string& var_name) {
     consumed_vars_.insert(var_name);
 }
 
+void LLVMIRGen::mark_field_consumed(const std::string& var_name, const std::string& field_name) {
+    // Mark the specific field as consumed: "var.field"
+    consumed_vars_.insert(var_name + "." + field_name);
+    TML_DEBUG_LN("[DROP] Marked field as consumed: " << var_name << "." << field_name);
+}
+
+bool LLVMIRGen::has_consumed_fields(const std::string& var_name) const {
+    // Check if any field of this variable has been consumed
+    std::string prefix = var_name + ".";
+    for (const auto& consumed : consumed_vars_) {
+        if (consumed.size() > prefix.size() && consumed.substr(0, prefix.size()) == prefix) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void LLVMIRGen::push_drop_scope() {
     drop_scopes_.push_back({});
 }
@@ -199,11 +216,20 @@ void LLVMIRGen::emit_scope_drops() {
 
     // Emit drops in reverse order (LIFO - last declared is dropped first)
     // Skip variables that have been consumed (moved into struct fields, etc.)
+    // Also skip variables that have partial moves (some fields consumed)
     const auto& current_scope = drop_scopes_.back();
     for (auto it = current_scope.rbegin(); it != current_scope.rend(); ++it) {
-        if (consumed_vars_.find(it->var_name) == consumed_vars_.end()) {
-            emit_drop_call(*it);
+        // Skip if the whole variable was consumed
+        if (consumed_vars_.find(it->var_name) != consumed_vars_.end()) {
+            continue;
         }
+        // Skip if any field of this variable was consumed (partial move)
+        // TODO: In the future, we could emit drop calls for individual non-moved fields
+        if (has_consumed_fields(it->var_name)) {
+            TML_DEBUG_LN("[DROP] Skipping drop for " << it->var_name << " due to partial move");
+            continue;
+        }
+        emit_drop_call(*it);
     }
 }
 
@@ -213,9 +239,17 @@ void LLVMIRGen::emit_all_drops() {
     for (auto scope_it = drop_scopes_.rbegin(); scope_it != drop_scopes_.rend(); ++scope_it) {
         // Within each scope, drop in reverse declaration order
         for (auto it = scope_it->rbegin(); it != scope_it->rend(); ++it) {
-            if (consumed_vars_.find(it->var_name) == consumed_vars_.end()) {
-                emit_drop_call(*it);
+            // Skip if the whole variable was consumed
+            if (consumed_vars_.find(it->var_name) != consumed_vars_.end()) {
+                continue;
             }
+            // Skip if any field of this variable was consumed (partial move)
+            if (has_consumed_fields(it->var_name)) {
+                TML_DEBUG_LN("[DROP] Skipping drop for "
+                             << it->var_name << " in emit_all_drops due to partial move");
+                continue;
+            }
+            emit_drop_call(*it);
         }
     }
 }

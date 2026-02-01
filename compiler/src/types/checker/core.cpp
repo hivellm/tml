@@ -650,11 +650,23 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         }
     }
 
+    // Set up generic type parameters for proper resolution of T::AssociatedType in signatures
+    // This is needed so resolve_type can recognize "T::Owned" as an associated type of param T
+    std::unordered_map<std::string, TypePtr> saved_type_params = current_type_params_;
+    for (const auto& param : func.generics) {
+        auto type_var = std::make_shared<Type>();
+        type_var->kind = NamedType{param.name, "", {}};
+        current_type_params_[param.name] = type_var;
+    }
+
     std::vector<TypePtr> params;
     for (const auto& p : func.params) {
         params.push_back(resolve_type(*p.type));
     }
     TypePtr ret = func.return_type ? resolve_type(**func.return_type) : make_unit();
+
+    // Restore previous type params
+    current_type_params_ = saved_type_params;
 
     // Process where clause constraints
     std::vector<WhereConstraint> where_constraints;

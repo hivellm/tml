@@ -1,6 +1,6 @@
 # Tasks: Codegen & Type System Test Blockers
 
-**Status**: In Progress (97%)
+**Status**: Complete (100%)
 
 ## Phase 1: Critical Codegen Bugs (100% Complete)
 
@@ -24,7 +24,7 @@
 - [x] 2.1.7 Fix generic function return type inference
 - [x] 2.1.8 Fix generic .duplicate() method resolution for Maybe[T]/Outcome[T,E]
 - [x] 2.1.9 Fix Bound generic enum variant resolution
-- [~] 2.1.10 Fix associated types codegen (Cow works, ToOwned partial)
+- [x] 2.1.10 Fix associated types codegen (T::Owned resolution through generic bounds)
 - [x] 2.1.11 Fix generic Maybe/Outcome type inference (nested generics like Maybe[Maybe[I32]] now work)
 
 ## Phase 3: Display/Behavior Implementation
@@ -39,7 +39,7 @@
 - [x] 4.1.2 Fix Poll types and function pointer field calling
 - [x] 4.1.3 Add Drop behavior runtime support
 - [x] 4.1.4 Implement drop_in_place in lowlevel context
-- [ ] 4.1.5 Add codegen support for partial moves
+- [x] 4.1.5 Add codegen support for partial moves (field-level move tracking)
 - [x] 4.1.6 Support dyn return from functions (dyn coercion in return statements working)
 - [x] 4.1.7 Support inherited field initialization in struct literals (struct update syntax `..base`)
 
@@ -49,10 +49,3 @@
 - [x] 5.1.2 Support module constant access
 - [x] 5.1.3 Fix core::option 'xor' keyword bug (renamed to one_of)
 - [x] 5.1.4 Fix generic type inference with lifetime bounds (tests pass)
-
-## Remaining Complex Tasks
-
-The following tasks require significant implementation work:
-
-- **4.1.5 Partial moves**: Requires field-level move tracking in codegen (not just whole-variable)
-- **2.1.10 ToOwned**: Associated type resolution through generic bounds (e.g., `Maybe[T::Owned]`)

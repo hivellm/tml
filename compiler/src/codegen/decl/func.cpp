@@ -684,6 +684,47 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
 
     // Extract where constraints for bounded generic method dispatch
     current_where_constraints_.clear();
+
+    // First, extract bounds directly from generic parameters (e.g., [T: ToOwned])
+    for (const auto& generic_param : func.generics) {
+        if (!generic_param.bounds.empty()) {
+            types::WhereConstraint constraint;
+            constraint.type_param = generic_param.name;
+
+            for (const auto& bound : generic_param.bounds) {
+                if (bound->is<parser::NamedType>()) {
+                    const auto& named = bound->as<parser::NamedType>();
+                    std::string behavior_name;
+                    if (!named.path.segments.empty()) {
+                        behavior_name = named.path.segments.back();
+                    }
+
+                    if (!named.generics.has_value() || named.generics->args.empty()) {
+                        // Simple bound like T: ToOwned
+                        constraint.required_behaviors.push_back(behavior_name);
+                    } else {
+                        // Parameterized bound like C: Container[T]
+                        types::BoundConstraint bc;
+                        bc.behavior_name = behavior_name;
+                        for (const auto& arg : named.generics->args) {
+                            if (arg.is_type()) {
+                                bc.type_args.push_back(
+                                    resolve_parser_type_with_subs(*arg.as_type(), subs));
+                            }
+                        }
+                        constraint.parameterized_bounds.push_back(bc);
+                    }
+                }
+            }
+
+            if (!constraint.required_behaviors.empty() ||
+                !constraint.parameterized_bounds.empty()) {
+                current_where_constraints_.push_back(constraint);
+            }
+        }
+    }
+
+    // Then, also extract from explicit where clause if present
     if (func.where_clause) {
         for (const auto& [type_ptr, bounds] : func.where_clause->constraints) {
             // Get the type parameter name from the type pointer

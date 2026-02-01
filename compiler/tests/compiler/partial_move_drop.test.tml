@@ -1,0 +1,67 @@
+// Partial move with Drop types
+// Tests that partial moves work correctly with types that implement Drop
+
+use test
+
+// A type that implements Drop
+type Resource {
+    id: I32
+}
+
+impl Drop for Resource {
+    func drop(this: mut ref This) {
+        // Verify it compiles and runs
+    }
+}
+
+// Container with non-Copy fields
+type Container {
+    a: Resource,
+    b: Resource
+}
+
+impl Drop for Container {
+    func drop(this: mut ref This) {
+        // In a proper implementation, this would call drop on fields:
+        // this.a.drop()  // But c.a was moved, this would be use-after-move!
+        // this.b.drop()
+        // For now, empty to avoid crashes
+    }
+}
+
+@test
+func test_copy_field_with_drop_type() -> I32 {
+    // Create container with Resources
+    let c: Container = Container {
+        a: Resource { id: 1 },
+        b: Resource { id: 2 }
+    }
+    // Access the id field (I32 is Copy)
+    let id_a: I32 = c.a.id
+    let id_b: I32 = c.b.id
+    assert_eq(id_a + id_b, 3, "accessing copy fields through drop types works")
+    return 0
+}
+
+// Helper function to consume a Resource
+func consume_resource(r: Resource) -> I32 {
+    return r.id
+}
+
+// Test: Move one field, access another field's Copy content
+// This requires partial move support in codegen
+// The moved field should NOT be dropped, only the remaining field should
+@test
+func test_partial_move_one_field() -> I32 {
+    let c: Container = Container {
+        a: Resource { id: 10 },
+        b: Resource { id: 20 }
+    }
+    // Move c.a into the function (partial move)
+    let id: I32 = consume_resource(c.a)
+    // Access c.b.id (should still be valid)
+    let other_id: I32 = c.b.id
+    assert_eq(id + other_id, 30, "partial move allows accessing other fields")
+    // At scope end, only c.b should be dropped (c.a was moved)
+    return 0
+}

@@ -1683,9 +1683,18 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     }
 
                     // Determine 'this' type based on func_sig first param
+                    // For instance methods (self/this), struct types are always passed as ptr
+                    // Only primitives are passed by value
                     std::string this_type = "ptr";
                     if (!func_sig->params.empty()) {
-                        this_type = llvm_type_from_semantic(func_sig->params[0]);
+                        auto first_param_type = func_sig->params[0];
+                        std::string llvm_first = llvm_type_from_semantic(first_param_type);
+                        // Primitives (i8, i16, i32, etc.) are passed by value
+                        // Structs/classes (%struct.X, %class.X) are passed by ptr
+                        if (llvm_first[0] != '%') {
+                            this_type = llvm_first; // primitive
+                        }
+                        // else keep as "ptr" for structs
                     }
                     typed_args.push_back({this_type, this_val});
 

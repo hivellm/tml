@@ -208,6 +208,12 @@ private:
     // Mark a variable as consumed (moved)
     void mark_var_consumed(const std::string& var_name);
 
+    // Mark a specific field of a variable as consumed (partial move)
+    void mark_field_consumed(const std::string& var_name, const std::string& field_name);
+
+    // Check if any field of this variable has been consumed (partial move)
+    [[nodiscard]] bool has_consumed_fields(const std::string& var_name) const;
+
     // Drop scope management
     void push_drop_scope();
     void pop_drop_scope();

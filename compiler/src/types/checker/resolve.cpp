@@ -222,8 +222,10 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
                 return assoc_it->second;
             }
             // If the associated type is not defined locally, return a named type placeholder
+            // that preserves the full path (e.g., "T::Owned") so codegen can resolve it
+            // when the type parameter T is substituted with a concrete type.
             auto type = std::make_shared<Type>();
-            type->kind = NamedType{second, "", {}};
+            type->kind = NamedType{first + "::" + second, "", {}};
             return type;
         }
     }

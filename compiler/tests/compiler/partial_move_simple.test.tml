@@ -1,0 +1,19 @@
+// Simple partial move test
+// Tests that moving one field doesn't affect other fields
+
+use test
+
+type Container {
+    a: I32,
+    b: I32
+}
+
+@test
+func test_partial_move_copy_fields() -> I32 {
+    let c: Container = Container { a: 10, b: 20 }
+    // For Copy types (I32), this should work fine
+    let x: I32 = c.a  // Copy, not move
+    let y: I32 = c.b  // Should still work
+    assert_eq(x + y, 30, "partial access of copy fields works")
+    return 0
+}

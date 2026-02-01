@@ -1,0 +1,71 @@
+// Test ToOwned associated types through generic bounds
+// This tests resolving T::Owned where T: ToOwned
+
+use test
+
+// ToOwned behavior with associated type
+behavior ToOwned {
+    type Owned
+    func to_owned(this: ref This) -> This::Owned
+}
+
+// Implement ToOwned for I32 (Owned = I32)
+impl ToOwned for I32 {
+    type Owned = I32
+    func to_owned(this: ref This) -> I32 {
+        return *this
+    }
+}
+
+// Simple test: direct use of to_owned
+@test
+func test_direct_to_owned() -> I32 {
+    let x: I32 = 42
+    let owned: I32 = x.to_owned()
+    assert_eq(owned, 42, "direct to_owned works")
+    return 0
+}
+
+// Generic function using T::Owned through bound
+// This is the key test for 2.1.10 - resolving associated types through generic bounds
+func clone_value[T: ToOwned](value: ref T) -> T::Owned {
+    return value.to_owned()
+}
+
+@test
+func test_generic_to_owned() -> I32 {
+    let x: I32 = 100
+    let cloned: I32 = clone_value(ref x)
+    assert_eq(cloned, 100, "generic T::Owned resolution works")
+    return 0
+}
+
+// Test Maybe[T::Owned] - the key feature for 2.1.10
+func try_clone[T: ToOwned](value: ref T, should_clone: Bool) -> Maybe[T::Owned] {
+    if should_clone {
+        return Just(value.to_owned())
+    }
+    return Nothing
+}
+
+@test
+func test_maybe_associated_type() -> I32 {
+    let x: I32 = 200
+    let result: Maybe[I32] = try_clone(ref x, true)
+    when result {
+        Just(v) => assert_eq(v, 200, "Maybe[T::Owned] works"),
+        Nothing => panic("should have value")
+    }
+    return 0
+}
+
+@test
+func test_maybe_associated_type_nothing() -> I32 {
+    let x: I32 = 300
+    let result: Maybe[I32] = try_clone(ref x, false)
+    when result {
+        Just(_) => panic("should be Nothing"),
+        Nothing => {}
+    }
+    return 0
+}

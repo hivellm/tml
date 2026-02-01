@@ -489,6 +489,21 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             }
         }
 
+        // For Ref operation, wrap operand type in RefType
+        // This is needed for proper type unification in generic function calls
+        if (unary.op == parser::UnaryOp::Ref && operand_type) {
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::RefType{.is_mut = false, .inner = operand_type, .lifetime = ""};
+            return result;
+        }
+
+        // For RefMut operation, wrap operand type in RefType with is_mut = true
+        if (unary.op == parser::UnaryOp::RefMut && operand_type) {
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::RefType{.is_mut = true, .inner = operand_type, .lifetime = ""};
+            return result;
+        }
+
         return operand_type;
     }
     if (expr.is<parser::StructExpr>()) {

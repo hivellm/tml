@@ -942,6 +942,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 const auto& ident = call.args[i]->as<parser::IdentExpr>();
                 mark_var_consumed(ident.name);
             }
+            // Handle partial moves: mark struct field as consumed when passed by value
+            else if (param_takes_ownership && call.args[i]->is<parser::FieldExpr>()) {
+                const auto& field = call.args[i]->as<parser::FieldExpr>();
+                // Get the base variable name
+                if (field.object->is<parser::IdentExpr>()) {
+                    const auto& base = field.object->as<parser::IdentExpr>();
+                    mark_field_consumed(base.name, field.field);
+                }
+            }
         }
 
         // Call the instantiated function
@@ -2077,6 +2086,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // Generate arguments with proper type conversion
     std::vector<std::pair<std::string, std::string>> arg_vals; // (value, type)
     for (size_t i = 0; i < call.args.size(); ++i) {
+        // Check if parameter takes ownership (not a reference)
+        bool param_takes_ownership = true;
+        if (func_sig.has_value() && i < func_sig->params.size()) {
+            if (func_sig->params[i]->is<types::RefType>()) {
+                param_takes_ownership = false;
+            }
+        }
+
         std::string val = gen_expr(*call.args[i]);
         std::string actual_type = last_expr_type_; // Type of the generated value
         std::string expected_type = "i32";         // Default
@@ -2132,6 +2149,20 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
 
         arg_vals.push_back({val, expected_type});
+
+        // Mark variable/field as consumed if passed by value (ownership transfer)
+        if (param_takes_ownership && call.args[i]->is<parser::IdentExpr>()) {
+            const auto& ident = call.args[i]->as<parser::IdentExpr>();
+            mark_var_consumed(ident.name);
+        }
+        // Handle partial moves: mark struct field as consumed when passed by value
+        else if (param_takes_ownership && call.args[i]->is<parser::FieldExpr>()) {
+            const auto& field = call.args[i]->as<parser::FieldExpr>();
+            if (field.object->is<parser::IdentExpr>()) {
+                const auto& base = field.object->as<parser::IdentExpr>();
+                mark_field_consumed(base.name, field.field);
+            }
+        }
     }
 
     // V8-style inline optimization for hot runtime functions
