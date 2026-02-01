@@ -387,14 +387,31 @@ auto handle_check(const json::JsonValue& params) -> ToolResult {
 // Helper: Execute Command and Capture Output
 // ============================================================================
 
+/// Escapes a string for PowerShell command line.
+static auto escape_for_powershell(const std::string& s) -> std::string {
+    std::string result;
+    for (char c : s) {
+        if (c == '"') {
+            result += "\\\""; // Escape double quotes
+        } else if (c == '\\') {
+            result += "\\\\"; // Escape backslashes
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
+
 /// Executes a command and returns its output and exit code.
 static auto execute_command(const std::string& cmd) -> std::pair<std::string, int> {
     std::string output;
     int exit_code = -1;
 
 #ifdef _WIN32
-    // Windows: Use _popen/_pclose
-    FILE* pipe = _popen((cmd + " 2>&1").c_str(), "r");
+    // Windows: Use PowerShell with properly escaped command
+    std::string escaped_cmd = escape_for_powershell(cmd);
+    std::string full_cmd = "powershell -NoProfile -Command \"" + escaped_cmd + " 2>&1\"";
+    FILE* pipe = _popen(full_cmd.c_str(), "r");
     if (pipe) {
         char buffer[4096];
         while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
