@@ -295,12 +295,12 @@ auto handle_compile(const json::JsonValue& params) -> ToolResult {
     // Build command - use the TML executable for full compilation
     std::string tml_exe = get_tml_executable();
     std::stringstream cmd;
-    cmd << "\"" << tml_exe << "\" build \"" << file_path << "\"";
+    cmd << tml_exe << " build " << file_path;
 
     // Add output if specified
     auto* output_param = params.get("output");
     if (output_param != nullptr && output_param->is_string()) {
-        cmd << " -o \"" << output_param->as_string() << "\"";
+        cmd << " -o " << output_param->as_string();
     }
 
     // Add optimization level if specified
@@ -387,30 +387,14 @@ auto handle_check(const json::JsonValue& params) -> ToolResult {
 // Helper: Execute Command and Capture Output
 // ============================================================================
 
-/// Escapes a string for PowerShell command line.
-static auto escape_for_powershell(const std::string& s) -> std::string {
-    std::string result;
-    for (char c : s) {
-        if (c == '"') {
-            result += "\\\""; // Escape double quotes
-        } else if (c == '\\') {
-            result += "\\\\"; // Escape backslashes
-        } else {
-            result += c;
-        }
-    }
-    return result;
-}
-
 /// Executes a command and returns its output and exit code.
 static auto execute_command(const std::string& cmd) -> std::pair<std::string, int> {
     std::string output;
     int exit_code = -1;
 
 #ifdef _WIN32
-    // Windows: Use PowerShell with properly escaped command
-    std::string escaped_cmd = escape_for_powershell(cmd);
-    std::string full_cmd = "powershell -NoProfile -Command \"" + escaped_cmd + " 2>&1\"";
+    // Windows: Execute command directly, redirecting stderr to stdout
+    std::string full_cmd = cmd + " 2>&1";
     FILE* pipe = _popen(full_cmd.c_str(), "r");
     if (pipe) {
         char buffer[4096];
@@ -474,7 +458,7 @@ auto handle_run(const json::JsonValue& params) -> ToolResult {
     // Build command
     std::string tml_exe = get_tml_executable();
     std::stringstream cmd;
-    cmd << "\"" << tml_exe << "\" run \"" << file_path << "\"";
+    cmd << tml_exe << " run " << file_path;
 
     // Add release flag if specified
     auto* release_param = params.get("release");
@@ -487,7 +471,7 @@ auto handle_run(const json::JsonValue& params) -> ToolResult {
     if (args_param != nullptr && args_param->is_array()) {
         for (const auto& arg : args_param->as_array()) {
             if (arg.is_string()) {
-                cmd << " \"" << arg.as_string() << "\"";
+                cmd << " " << arg.as_string();
             }
         }
     }
@@ -524,12 +508,12 @@ auto handle_build(const json::JsonValue& params) -> ToolResult {
     // Build command
     std::string tml_exe = get_tml_executable();
     std::stringstream cmd;
-    cmd << "\"" << tml_exe << "\" build \"" << file_path << "\"";
+    cmd << tml_exe << " build " << file_path;
 
     // Add output if specified
     auto* output_param = params.get("output");
     if (output_param != nullptr && output_param->is_string()) {
-        cmd << " -o \"" << output_param->as_string() << "\"";
+        cmd << " -o " << output_param->as_string();
     }
 
     // Add optimization level if specified
@@ -766,18 +750,18 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
     // Build command - use the TML executable for test execution
     std::string tml_exe = get_tml_executable();
     std::stringstream cmd;
-    cmd << "\"" << tml_exe << "\" test";
+    cmd << tml_exe << " test";
 
     // Get path parameter (optional)
     auto* path_param = params.get("path");
     if (path_param != nullptr && path_param->is_string()) {
-        cmd << " \"" << path_param->as_string() << "\"";
+        cmd << " " << path_param->as_string();
     }
 
     // Get filter parameter (optional)
     auto* filter_param = params.get("filter");
     if (filter_param != nullptr && filter_param->is_string()) {
-        cmd << " --filter \"" << filter_param->as_string() << "\"";
+        cmd << " --filter " << filter_param->as_string();
     }
 
     // Get release parameter (optional)
@@ -841,7 +825,7 @@ auto handle_format(const json::JsonValue& params) -> ToolResult {
     // Build command
     std::string tml_exe = get_tml_executable();
     std::stringstream cmd;
-    cmd << "\"" << tml_exe << "\" format \"" << file_path << "\"";
+    cmd << tml_exe << " format " << file_path;
 
     // Add check flag if specified
     auto* check_param = params.get("check");
@@ -887,7 +871,7 @@ auto handle_lint(const json::JsonValue& params) -> ToolResult {
     // Build command
     std::string tml_exe = get_tml_executable();
     std::stringstream cmd;
-    cmd << "\"" << tml_exe << "\" lint \"" << file_path << "\"";
+    cmd << tml_exe << " lint " << file_path;
 
     // Add fix flag if specified
     auto* fix_param = params.get("fix");
