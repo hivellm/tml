@@ -509,17 +509,6 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 }
             }
         }
-        // Debug: log what expression type we're trying to take reference of
-        std::cerr << "[DEBUG REF] Cannot take reference of expression kind index: "
-                  << unary.operand->kind.index() << std::endl;
-        if (unary.operand->is<parser::CallExpr>()) {
-            std::cerr << "[DEBUG REF]   It's a CallExpr" << std::endl;
-        } else if (unary.operand->is<parser::MethodCallExpr>()) {
-            const auto& method_call = unary.operand->as<parser::MethodCallExpr>();
-            std::cerr << "[DEBUG REF]   It's a MethodCallExpr: " << method_call.method << std::endl;
-        } else if (unary.operand->is<parser::IndexExpr>()) {
-            std::cerr << "[DEBUG REF]   It's an IndexExpr" << std::endl;
-        }
         report_error("Can only take reference of variables", unary.span);
         last_expr_type_ = "ptr";
         return "null";

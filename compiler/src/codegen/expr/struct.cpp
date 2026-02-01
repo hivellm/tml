@@ -978,19 +978,11 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                 struct_type = nested_type;
                 struct_ptr = nested_ptr;
 
-                std::cerr << "[DEBUG] nested_field=" << nested_field.field
-                          << ", nested_type=" << nested_type << ", outer_name=" << outer_name
-                          << "\n";
-
                 // If nested_type is "ptr", get the semantic type for correct type inference
                 // This is crucial for generic struct fields like `mutex: mut ref Mutex[T]`
                 if (nested_type == "ptr") {
                     types::TypePtr field_sem_type =
                         get_field_semantic_type(outer_name, nested_field.field);
-                    std::cerr << "[GEN_FIELD nested] outer_name=" << outer_name
-                              << ", field=" << nested_field.field << ", field_sem_type="
-                              << (field_sem_type ? types::type_to_string(field_sem_type) : "null")
-                              << "\n";
                     if (field_sem_type && !current_type_subs_.empty()) {
                         field_sem_type =
                             apply_type_substitutions(field_sem_type, current_type_subs_);
