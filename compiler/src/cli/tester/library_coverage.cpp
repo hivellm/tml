@@ -71,9 +71,17 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
     std::regex behavior_regex(R"(^\s*(pub\s+)?behavior\s+(\w+))");
 
     std::regex func_regex(R"(^\s*(pub\s+)?func\s+(\w+))");
+    std::regex extern_regex(R"(@extern)");
     std::smatch match;
+    bool skip_next_func = false; // Track if previous line had @extern
 
     while (std::getline(ifs, line)) {
+        // Check for @extern directive - skip the next function declaration
+        if (std::regex_search(line, extern_regex)) {
+            skip_next_func = true;
+            continue;
+        }
+
         // Track impl blocks - detect "impl TypeName" or "impl[T] TypeName" or "impl Behavior for
         // Type"
         if (std::regex_search(line, match, impl_regex)) {
@@ -112,6 +120,12 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
         if (std::regex_search(line, match, func_regex)) {
             std::string func_name = match[2].str();
 
+            // Skip @extern FFI functions (they're C++ code, not coverable by TML coverage)
+            if (skip_next_func) {
+                skip_next_func = false;
+                continue;
+            }
+
             // Skip test functions
             if (func_name.rfind("test_", 0) == 0) {
                 continue;
@@ -123,6 +137,9 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             } else {
                 functions.push_back(func_name);
             }
+        } else {
+            // Reset skip flag if line wasn't a function
+            skip_next_func = false;
         }
     }
 
