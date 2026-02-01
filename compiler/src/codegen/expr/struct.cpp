@@ -1110,6 +1110,39 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                 }
             }
         }
+    } else if (field.object->is<parser::CallExpr>() || field.object->is<parser::MethodCallExpr>()) {
+        // Handle field access on function/method call return value (e.g., func().field)
+        // Generate the call, which returns a struct value
+        std::string call_result = gen_expr(*field.object);
+        types::TypePtr call_type = infer_expr_type(*field.object);
+
+        // For struct return values, we need to store to a temp alloca
+        if (last_expr_type_.starts_with("%struct.")) {
+            std::string temp_ptr = fresh_reg();
+            emit_line("  " + temp_ptr + " = alloca " + last_expr_type_);
+            emit_line("  store " + last_expr_type_ + " " + call_result + ", ptr " + temp_ptr);
+            struct_ptr = temp_ptr;
+            struct_type = last_expr_type_;
+        } else if (last_expr_type_ == "ptr" && call_type) {
+            // Pointer type - the return value is a pointer to the struct
+            struct_ptr = call_result;
+
+            // Resolve the struct type from semantic type
+            types::TypePtr resolved_type = call_type;
+            if (!current_type_subs_.empty()) {
+                resolved_type = apply_type_substitutions(call_type, current_type_subs_);
+            }
+
+            if (resolved_type && resolved_type->is<types::NamedType>()) {
+                const auto& named = resolved_type->as<types::NamedType>();
+                if (!named.type_args.empty()) {
+                    std::string mangled = require_struct_instantiation(named.name, named.type_args);
+                    struct_type = "%struct." + mangled;
+                } else {
+                    struct_type = "%struct." + named.name;
+                }
+            }
+        }
     }
 
     if (struct_type.empty() || struct_ptr.empty()) {

@@ -193,6 +193,42 @@ func test_struct_return() -> I32 {
 }
 
 // ============================================================================
+// Chained Field Access on Returned Structs
+// ============================================================================
+
+// Test field access directly on function return value (e.g., func().field)
+@test
+func test_chained_field_access_on_return() -> I32 {
+    // Access field directly on returned struct (no intermediate variable)
+    let x: I32 = Point::origin().x
+    assert_eq(x, 0, "origin().x should be 0")
+
+    let y: I32 = Point::origin().y
+    assert_eq(y, 0, "origin().y should be 0")
+
+    return 0
+}
+
+@test
+func test_chained_field_access_static_method() -> I32 {
+    // Test with a static method that takes arguments
+    let sum: I32 = Point::new(10, 20).x + Point::new(10, 20).y
+    assert_eq(sum, 30, "Point::new(10,20).x + .y should be 30")
+    return 0
+}
+
+@test
+func test_chained_field_access_function() -> I32 {
+    // Test with a standalone function returning struct
+    let p: Point = Point { x: 5, y: 10 }
+    let swapped_x: I32 = swap_point(p).x
+    let swapped_y: I32 = swap_point(p).y
+    assert_eq(swapped_x, 10, "swap_point(p).x should be 10")
+    assert_eq(swapped_y, 5, "swap_point(p).y should be 5")
+    return 0
+}
+
+// ============================================================================
 // Struct with Mutable Fields
 // ============================================================================
 
@@ -213,6 +249,58 @@ func test_struct_field_increment() -> I32 {
     p.y = p.y + 2
     assert_eq(p.x, 6, "incremented x should be 6")
     assert_eq(p.y, 7, "incremented y should be 7")
+    return 0
+}
+
+// ============================================================================
+// Private Method Visibility Tests
+// ============================================================================
+
+type Calculator {
+    value: I32,
+}
+
+impl Calculator {
+    // Public factory method
+    pub func new(v: I32) -> Calculator {
+        return Calculator { value: v }
+    }
+
+    // Private helper method (no pub modifier)
+    func double_internal(this) -> I32 {
+        return this.value * 2
+    }
+
+    // Public method that calls private method
+    pub func get_doubled(this) -> I32 {
+        return this.double_internal()
+    }
+
+    // Private method with mutation
+    func add_internal(mut this, n: I32) {
+        this.value = this.value + n
+    }
+
+    // Public method that calls private mutating method
+    pub func add(mut this, n: I32) {
+        this.add_internal(n)
+    }
+}
+
+@test
+func test_private_method_visibility() -> I32 {
+    let calc: Calculator = Calculator::new(5)
+    let doubled: I32 = calc.get_doubled()
+    assert_eq(doubled, 10, "get_doubled should call private double_internal and return 10")
+    return 0
+}
+
+@test
+func test_private_mutating_method() -> I32 {
+    let mut calc: Calculator = Calculator::new(10)
+    calc.add(5)
+    let doubled: I32 = calc.get_doubled()
+    assert_eq(doubled, 30, "after add(5), doubled value should be 30")
     return 0
 }
 
