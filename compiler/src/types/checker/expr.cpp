@@ -163,6 +163,23 @@ static void extract_type_params(const TypePtr& param_type, const TypePtr& arg_ty
         extract_type_params(param_slice.element, arg_slice.element, type_params, substitutions);
         return;
     }
+
+    // FuncType: match parameter and return types
+    if (param_type->is<FuncType>() && arg_type->is<FuncType>()) {
+        const auto& param_func = param_type->as<FuncType>();
+        const auto& arg_func = arg_type->as<FuncType>();
+        // Match parameter types
+        if (param_func.params.size() == arg_func.params.size()) {
+            for (size_t i = 0; i < param_func.params.size(); ++i) {
+                extract_type_params(param_func.params[i], arg_func.params[i], type_params,
+                                    substitutions);
+            }
+        }
+        // Match return type
+        extract_type_params(param_func.return_type, arg_func.return_type, type_params,
+                            substitutions);
+        return;
+    }
 }
 
 auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
@@ -1310,14 +1327,27 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
         auto func = env_.lookup_func(qualified);
         if (func) {
-            // For generic impl methods (impl[T] Container[T]), substitute type parameters
-            // using the receiver's type arguments if no explicit type args are provided
-            if (call.type_args.empty() && !func->type_params.empty() && !named.type_args.empty()) {
+            // For generic impl methods, substitute type parameters from:
+            // 1. The receiver's type arguments (e.g., T, E from Outcome[T, E])
+            // 2. Inferred from function arguments (e.g., U in map_or[U])
+            if (call.type_args.empty() && !func->type_params.empty()) {
                 std::unordered_map<std::string, TypePtr> subs;
+
+                // First, substitute from receiver's type_args
                 for (size_t i = 0; i < func->type_params.size() && i < named.type_args.size();
                      ++i) {
                     subs[func->type_params[i]] = named.type_args[i];
                 }
+
+                // Then, infer remaining type params from function arguments
+                // Check arguments and match against parameter types
+                // Note: func->params[0] is 'this', so we offset by 1
+                for (size_t i = 0; i < call.args.size() && i + 1 < func->params.size(); ++i) {
+                    TypePtr arg_type = check_expr(*call.args[i]);
+                    TypePtr param_type = func->params[i + 1]; // Skip 'this' parameter
+                    extract_type_params(param_type, arg_type, func->type_params, subs);
+                }
+
                 return substitute_type(func->return_type, subs);
             }
             return apply_type_args(*func);

@@ -288,8 +288,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @hashmap_destroy(ptr)");
     emit_line("declare void @hashmap_set(ptr, i64, i64)");
     emit_line("declare i64 @hashmap_get(ptr, i64)");
-    emit_line("declare i1 @hashmap_has(ptr, i64)");
-    emit_line("declare i1 @hashmap_remove(ptr, i64)");
+    emit_line("declare i32 @hashmap_has(ptr, i64)");
+    emit_line("declare i32 @hashmap_remove(ptr, i64)");
     emit_line("declare i64 @hashmap_len(ptr)");
     emit_line("declare void @hashmap_clear(ptr)");
     emit_line("declare ptr @hashmap_iter_create(ptr)");

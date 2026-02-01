@@ -557,14 +557,57 @@ void LLVMIRGen::gen_impl_method_instantiation(
     std::string method_name = mangled_type_name + "_" + full_method_name;
     current_func_ = method_name;
     current_impl_type_ = mangled_type_name;
-    current_type_subs_ = type_subs; // Set type substitutions for the method body
+
+    // Build full type_subs including method-level type parameters
+    auto full_type_subs = type_subs;
+
+    // Add method-level type parameters from method_type_suffix
+    // method_type_suffix contains mangled types like "Str" or "I32__Str" for multi-param methods
+    // IMPORTANT: For a single type parameter, the entire suffix is the mangled type.
+    // Do NOT split on "__" as it's also used within mangled type names
+    // (e.g., "ptr_ChannelNode__I32" is a single type: Ptr[ChannelNode[I32]])
+    if (!method_type_suffix.empty() && !method.generics.empty()) {
+        if (method.generics.size() == 1) {
+            // Single type parameter - use entire suffix as the type
+            types::TypePtr param_type = parse_mangled_type_string(method_type_suffix);
+            if (param_type) {
+                full_type_subs[method.generics[0].name] = param_type;
+            }
+        } else {
+            // Multiple type parameters - need to split, but be careful about nested types
+            // For now, use simple splitting (works when params are primitives or simple types)
+            // TODO: Implement smarter parsing for complex nested types
+            std::vector<std::string> suffix_parts;
+            size_t pos = 0;
+            std::string suffix = method_type_suffix;
+            while (pos < suffix.size()) {
+                size_t next = suffix.find("__", pos);
+                if (next == std::string::npos) {
+                    suffix_parts.push_back(suffix.substr(pos));
+                    break;
+                }
+                suffix_parts.push_back(suffix.substr(pos, next - pos));
+                pos = next + 2;
+            }
+
+            // Map suffix parts to method type params
+            for (size_t i = 0; i < method.generics.size() && i < suffix_parts.size(); ++i) {
+                types::TypePtr param_type = parse_mangled_type_string(suffix_parts[i]);
+                if (param_type) {
+                    full_type_subs[method.generics[i].name] = param_type;
+                }
+            }
+        }
+    }
+
+    current_type_subs_ = full_type_subs; // Set type substitutions for the method body
     locals_.clear();
     block_terminated_ = false;
 
     // Determine return type with substitution
     std::string ret_type = "void";
     if (method.return_type.has_value()) {
-        auto resolved_ret = resolve_parser_type_with_subs(**method.return_type, type_subs);
+        auto resolved_ret = resolve_parser_type_with_subs(**method.return_type, full_type_subs);
         ret_type = llvm_type_from_semantic(resolved_ret);
     }
     current_ret_type_ = ret_type;

@@ -674,16 +674,9 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             "coverage");
     }
 
-    // Link std::collections runtime if imported
-    if (registry->has_module("std::collections")) {
-        add_runtime(
-            {
-                "lib/std/runtime/collections.c",
-                "../../../lib/std/runtime/collections.c",
-                "F:/Node/hivellm/tml/lib/std/runtime/collections.c",
-            },
-            "std::collections");
-    }
+    // NOTE: std::collections runtime is already provided by compiler/runtime/collections.c
+    // which is always linked above. Do not link lib/std/runtime/collections.c as it has
+    // different struct layouts that cause memory corruption when both are linked.
 
     // Link std::file runtime if imported
     if (registry->has_module("std::file")) {

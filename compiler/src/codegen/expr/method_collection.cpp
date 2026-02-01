@@ -44,13 +44,35 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
         }
     }
 
-    std::string tmp = fresh_reg();
-    emit_line("  " + tmp + " = alloca " + struct_type);
-    emit_line("  store " + struct_type + " " + receiver + ", ptr " + tmp);
+    // Handle different receiver types:
+    // 1. If last_expr_type_ is a struct type, receiver is a loaded value - store to temp
+    // 2. If last_expr_type_ is empty/ptr/other, receiver might be a pointer from GEP
+    std::string handle;
+
+    // First, ensure we have a valid receiver pointer
+    std::string receiver_ptr;
+    if (last_expr_type_.starts_with("%struct.")) {
+        // Receiver is a loaded struct value - store to temp alloca
+        std::string tmp = fresh_reg();
+        emit_line("  " + tmp + " = alloca " + struct_type);
+        emit_line("  store " + struct_type + " " + receiver + ", ptr " + tmp);
+        receiver_ptr = tmp;
+    } else {
+        // Receiver might be a pointer (from GEP or other source)
+        // Load the struct value first, then store to temp
+        std::string loaded = fresh_reg();
+        emit_line("  " + loaded + " = load " + struct_type + ", ptr " + receiver);
+        std::string tmp = fresh_reg();
+        emit_line("  " + tmp + " = alloca " + struct_type);
+        emit_line("  store " + struct_type + " " + loaded + ", ptr " + tmp);
+        receiver_ptr = tmp;
+    }
+
+    // Extract handle from the collection struct
     std::string handle_ptr = fresh_reg();
-    emit_line("  " + handle_ptr + " = getelementptr " + struct_type + ", ptr " + tmp +
+    emit_line("  " + handle_ptr + " = getelementptr " + struct_type + ", ptr " + receiver_ptr +
               ", i32 0, i32 0");
-    std::string handle = fresh_reg();
+    handle = fresh_reg();
     emit_line("  " + handle + " = load ptr, ptr " + handle_ptr);
 
     // List methods

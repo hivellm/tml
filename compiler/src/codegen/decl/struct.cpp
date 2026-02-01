@@ -191,6 +191,7 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
     // Handle imported generic structs from module registry
     else if (env_.module_registry()) {
         const auto& all_modules = env_.module_registry()->get_all_modules();
+        bool found_in_registry = false;
         for (const auto& [mod_name, mod] : all_modules) {
             // Check public structs first
             auto struct_it = mod.structs.find(base_name);
@@ -204,6 +205,7 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
             }
 
             if (found) {
+                found_in_registry = true;
                 // Found imported generic struct - use its semantic definition
                 const auto& struct_def = struct_it->second;
 
@@ -240,6 +242,44 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
                 struct_types_[mangled] = type_name;
                 break;
             }
+        }
+
+        // Fallback: if not found in registry, check if it's a known runtime-backed collection type
+        // These types have well-defined layouts regardless of their type parameter
+        if (!found_in_registry) {
+            if (base_name == "List" || base_name == "Vec" || base_name == "Array") {
+                // List[T] = type { handle: *Unit } - all instantiations are { ptr }
+                std::string type_name = "%struct." + mangled;
+                std::string def = type_name + " = type { ptr }";
+                type_defs_buffer_ << def << "\n";
+                struct_types_[mangled] = type_name;
+                struct_fields_[mangled] = {
+                    {"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+            } else if (base_name == "HashMap" || base_name == "Map" || base_name == "Dict") {
+                // HashMap[K, V] = type { handle: *Unit } - all instantiations are { ptr }
+                std::string type_name = "%struct." + mangled;
+                std::string def = type_name + " = type { ptr }";
+                type_defs_buffer_ << def << "\n";
+                struct_types_[mangled] = type_name;
+                struct_fields_[mangled] = {
+                    {"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+            }
+        }
+    }
+    // Fallback for when module registry isn't available
+    else {
+        if (base_name == "List" || base_name == "Vec" || base_name == "Array") {
+            std::string type_name = "%struct." + mangled;
+            std::string def = type_name + " = type { ptr }";
+            type_defs_buffer_ << def << "\n";
+            struct_types_[mangled] = type_name;
+            struct_fields_[mangled] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+        } else if (base_name == "HashMap" || base_name == "Map" || base_name == "Dict") {
+            std::string type_name = "%struct." + mangled;
+            std::string def = type_name + " = type { ptr }";
+            type_defs_buffer_ << def << "\n";
+            struct_types_[mangled] = type_name;
+            struct_fields_[mangled] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
         }
     }
 

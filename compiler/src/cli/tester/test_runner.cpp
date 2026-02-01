@@ -1272,9 +1272,10 @@ static std::string suite_key_to_group(const std::string& key) {
 }
 
 std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& test_files) {
-    // Maximum tests per suite to avoid DLL conflicts/hangs
-    // Empirically determined: suites with many tests can hang on Windows
-    constexpr size_t MAX_TESTS_PER_SUITE = 5;
+    // Maximum tests per suite - balance between fewer DLLs and parallel compilation
+    // Lower = more suites that compile faster in parallel
+    // Higher = fewer DLLs but sequential within each suite
+    constexpr size_t MAX_TESTS_PER_SUITE = 15;
 
     // Group files by suite key
     std::map<std::string, std::vector<std::string>> groups;
@@ -1422,15 +1423,27 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         // Reset combined_hash for per-file tracking in full compilation
         combined_hash.clear();
 
-        // Compile each test file to an object file with indexed entry point
+        // Structure to hold pending object compilations
+        struct PendingCompile {
+            fs::path ll_path;
+            fs::path obj_path;
+            std::string test_path;
+            bool needs_compile = false;
+        };
+
         std::vector<fs::path> object_files;
         std::vector<std::string> link_libs;
+        std::vector<PendingCompile> pending_compiles;
+
+        // ======================================================================
+        // PHASE 1: Sequential lex/parse/typecheck/codegen (populates shared_registry)
+        // ======================================================================
 
         for (size_t i = 0; i < suite.tests.size(); ++i) {
             const auto& test = suite.tests[i];
 
             if (verbose) {
-                std::cerr << "[DEBUG]   Compiling test " << (i + 1) << "/" << suite.tests.size()
+                std::cerr << "[DEBUG]   Processing test " << (i + 1) << "/" << suite.tests.size()
                           << ": " << test.file_path << "\n"
                           << std::flush;
             }
@@ -1537,7 +1550,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
                 const auto& env = std::get<types::TypeEnv>(check_result);
 
-                // Only do codegen and object compilation if not cached
+                // Only do codegen if not cached
                 if (!use_cached) {
 
                     // Borrow check
@@ -1576,11 +1589,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                         CompilerOptions::coverage_source; // LLVM instrprof
                     codegen::LLVMIRGen llvm_gen(env, options);
 
-                    if (verbose)
-                        std::cerr << "[DEBUG]   Starting codegen...\n" << std::flush;
                     auto gen_result = llvm_gen.generate(module);
-                    if (verbose)
-                        std::cerr << "[DEBUG]   Codegen complete\n" << std::flush;
                     if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
                         const auto& errors =
                             std::get<std::vector<codegen::LLVMGenError>>(gen_result);
@@ -1604,7 +1613,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                         }
                     }
 
-                    // Write IR and compile to object
+                    // Write IR for later parallel compilation
                     fs::path ll_output = cache_dir / (obj_name + ".ll");
                     std::ofstream ll_file(ll_output);
                     if (!ll_file) {
@@ -1615,25 +1624,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     ll_file << llvm_ir;
                     ll_file.close();
 
-                    ObjectCompileOptions obj_options;
-                    obj_options.optimization_level = CompilerOptions::optimization_level;
-                    obj_options.debug_info = CompilerOptions::debug_info;
-                    obj_options.verbose = false;
-                    obj_options.coverage = CompilerOptions::coverage_source; // LLVM source coverage
-
-                    if (verbose)
-                        std::cerr << "[DEBUG]   Starting clang compile...\n" << std::flush;
-                    auto obj_result =
-                        compile_ll_to_object(ll_output, obj_output, clang, obj_options);
-                    if (verbose)
-                        std::cerr << "[DEBUG]   Clang compile complete\n" << std::flush;
-                    fs::remove(ll_output);
-
-                    if (!obj_result.success) {
-                        result.error_message = "Compilation failed: " + obj_result.error_message;
-                        result.failed_test = test.file_path;
-                        return result;
-                    }
+                    pending_compiles.push_back({ll_output, obj_output, test.file_path, true});
                 }
 
                 object_files.push_back(obj_output);
@@ -1645,6 +1636,70 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             } catch (...) {
                 result.error_message = "Unknown exception while compiling " + test.file_path;
                 result.failed_test = test.file_path;
+                return result;
+            }
+        }
+
+        // ======================================================================
+        // PHASE 2: Parallel object compilation (.ll -> .obj)
+        // ======================================================================
+
+        if (!pending_compiles.empty()) {
+            ObjectCompileOptions obj_options;
+            obj_options.optimization_level = CompilerOptions::optimization_level;
+            obj_options.debug_info = CompilerOptions::debug_info;
+            obj_options.verbose = false;
+            obj_options.coverage = CompilerOptions::coverage_source;
+
+            std::atomic<size_t> next_compile{0};
+            std::atomic<bool> compile_error{false};
+            std::string error_message;
+            std::string failed_test;
+            std::mutex error_mutex;
+
+            unsigned int hw_threads = std::thread::hardware_concurrency();
+            unsigned int num_threads = (hw_threads > 0) ? std::max(1u, hw_threads) : 4;
+
+            auto compile_worker = [&]() {
+                while (!compile_error.load()) {
+                    size_t idx = next_compile.fetch_add(1);
+                    if (idx >= pending_compiles.size())
+                        break;
+
+                    auto& pc = pending_compiles[idx];
+                    auto obj_result =
+                        compile_ll_to_object(pc.ll_path, pc.obj_path, clang, obj_options);
+                    fs::remove(pc.ll_path);
+
+                    if (!obj_result.success) {
+                        std::lock_guard<std::mutex> lock(error_mutex);
+                        if (!compile_error.load()) {
+                            compile_error.store(true);
+                            error_message = "Compilation failed: " + obj_result.error_message;
+                            failed_test = pc.test_path;
+                        }
+                    }
+                }
+            };
+
+            if (verbose) {
+                std::cerr << "[DEBUG]   Compiling " << pending_compiles.size() << " objects with "
+                          << num_threads << " threads...\n"
+                          << std::flush;
+            }
+
+            std::vector<std::thread> threads;
+            for (unsigned int t = 0;
+                 t < std::min(num_threads, (unsigned int)pending_compiles.size()); ++t) {
+                threads.emplace_back(compile_worker);
+            }
+            for (auto& t : threads) {
+                t.join();
+            }
+
+            if (compile_error.load()) {
+                result.error_message = error_message;
+                result.failed_test = failed_test;
                 return result;
             }
         }

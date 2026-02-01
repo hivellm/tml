@@ -139,6 +139,16 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 return it->second.reg;
             }
         }
+        // Handle ref <literal> - allocate temp and return pointer
+        if (unary.operand->is<parser::LiteralExpr>()) {
+            std::string val = gen_expr(*unary.operand);
+            std::string val_type = last_expr_type_;
+            std::string tmp_alloca = fresh_reg();
+            emit_line("  " + tmp_alloca + " = alloca " + val_type);
+            emit_line("  store " + val_type + " " + val + ", ptr " + tmp_alloca);
+            last_expr_type_ = "ptr";
+            return tmp_alloca;
+        }
         // Handle field access: ref this.field, ref x.field
         if (unary.operand->is<parser::FieldExpr>()) {
             const auto& field_expr = unary.operand->as<parser::FieldExpr>();

@@ -407,6 +407,15 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             // We could store type info alongside constants in the future
             return types::make_i64();
         }
+
+        // Check if this is a function reference
+        auto func_sig = env_.lookup_func(ident.name);
+        if (func_sig.has_value()) {
+            // Return a FuncType representing the function's signature
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::FuncType{func_sig->params, func_sig->return_type};
+            return result;
+        }
     }
     if (expr.is<parser::BinaryExpr>()) {
         const auto& bin = expr.as<parser::BinaryExpr>();

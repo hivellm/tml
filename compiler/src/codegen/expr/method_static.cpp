@@ -29,7 +29,12 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
     // List static methods
     if (type_name == "List") {
         std::string struct_name = "List";
-        if (call.receiver->is<parser::PathExpr>()) {
+        // First, try to get type from expected context (set by struct field initialization)
+        if (!expected_enum_type_.empty() && expected_enum_type_.find("%struct.List__") == 0) {
+            struct_name = expected_enum_type_.substr(8); // Remove "%struct." prefix
+        }
+        // Otherwise, try to get from explicit path generics like List[I32].new()
+        else if (call.receiver->is<parser::PathExpr>()) {
             const auto& pe = call.receiver->as<parser::PathExpr>();
             if (pe.generics.has_value() && !pe.generics->args.empty()) {
                 for (const auto& arg : pe.generics->args) {
@@ -86,7 +91,12 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
     // HashMap static methods
     if (type_name == "HashMap") {
         std::string struct_name = "HashMap";
-        if (call.receiver->is<parser::PathExpr>()) {
+        // First, try to get type from expected context (set by struct field initialization)
+        if (!expected_enum_type_.empty() && expected_enum_type_.find("%struct.HashMap__") == 0) {
+            struct_name = expected_enum_type_.substr(8); // Remove "%struct." prefix
+        }
+        // Otherwise, try to get from explicit path generics like HashMap[K, V].new()
+        else if (call.receiver->is<parser::PathExpr>()) {
             const auto& pe = call.receiver->as<parser::PathExpr>();
             if (pe.generics.has_value() && !pe.generics->args.empty()) {
                 for (const auto& arg : pe.generics->args) {

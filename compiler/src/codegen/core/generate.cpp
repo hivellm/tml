@@ -568,14 +568,19 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
                     // Generate body
                     if (method.body.has_value()) {
-                        gen_block(*method.body);
+                        std::string result = gen_block(*method.body);
                         if (!block_terminated_) {
                             if (ret_type == "void") {
                                 emit_line("  ret void");
                             } else if (ret_type == "ptr") {
-                                emit_line("  ret ptr null");
+                                // Use null only if result is "0" (placeholder)
+                                emit_line("  ret ptr " + (result == "0" ? "null" : result));
+                            } else if (result == "0" && ret_type.find("%struct.") == 0) {
+                                // Struct type with "0" placeholder - use zeroinitializer
+                                emit_line("  ret " + ret_type + " zeroinitializer");
                             } else {
-                                emit_line("  ret " + ret_type + " 0");
+                                // Use the actual result from gen_block
+                                emit_line("  ret " + ret_type + " " + result);
                             }
                         }
                     } else {
@@ -584,7 +589,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         } else if (ret_type == "ptr") {
                             emit_line("  ret ptr null");
                         } else {
-                            emit_line("  ret " + ret_type + " 0");
+                            emit_line("  ret " + ret_type + " zeroinitializer");
                         }
                     }
                     emit_line("}");

@@ -1,15 +1,15 @@
 // Tests for Buffer collection type
-use test::{assert, assert_eq}
+use test
 use std::collections::Buffer
 
 // ============================================================================
-// Buffer Tests
+// Buffer Basic Operations
 // ============================================================================
 
 @test
 func test_buffer_new() -> I32 {
     let buf: Buffer = Buffer.new(64)
-    assert_eq(buf.len(), 0 as I64, "new buffer len should be 0")
+    assert_eq(buf.len(), 0 as I64, "new buffer should have len 0")
     let cap: I64 = buf.capacity()
     assert(cap >= (64 as I64), "capacity should be at least 64")
     buf.destroy()
@@ -17,26 +17,36 @@ func test_buffer_new() -> I32 {
 }
 
 @test
+func test_buffer_default() -> I32 {
+    let buf: Buffer = Buffer.default()
+    assert_eq(buf.len(), 0 as I64, "default buffer should have len 0")
+    let cap: I64 = buf.capacity()
+    assert(cap >= (64 as I64), "default capacity")
+    buf.destroy()
+    return 0
+}
+
+@test
 func test_buffer_write_read_byte() -> I32 {
     let buf: Buffer = Buffer.new(64)
-
-    buf.write_byte(0x41)  // 'A'
-    buf.write_byte(0x42)  // 'B'
-    buf.write_byte(0x43)  // 'C'
-
-    assert_eq(buf.len(), 3 as I64, "len after 3 writes")
-
+    
+    buf.write_byte(65)  // A
+    buf.write_byte(66)  // B
+    buf.write_byte(67)  // C
+    
+    assert_eq(buf.len(), 3 as I64, "len after 3 bytes")
+    
     buf.reset_read()
-
-    let b1: I32 = buf.read_byte()
-    assert_eq(b1, 0x41, "read byte 1")
-
-    let b2: I32 = buf.read_byte()
-    assert_eq(b2, 0x42, "read byte 2")
-
-    let b3: I32 = buf.read_byte()
-    assert_eq(b3, 0x43, "read byte 3")
-
+    
+    let a: I32 = buf.read_byte()
+    assert_eq(a, 65, "read first byte")
+    
+    let b: I32 = buf.read_byte()
+    assert_eq(b, 66, "read second byte")
+    
+    let c: I32 = buf.read_byte()
+    assert_eq(c, 67, "read third byte")
+    
     buf.destroy()
     return 0
 }
@@ -44,18 +54,22 @@ func test_buffer_write_read_byte() -> I32 {
 @test
 func test_buffer_write_read_i32() -> I32 {
     let buf: Buffer = Buffer.new(64)
-
-    buf.write_i32(12345)
-    buf.write_i32(-9876)
-
+    
+    buf.write_i32(42)
+    buf.write_i32(-100)
+    buf.write_i32(2147483647)  // I32 MAX
+    
     buf.reset_read()
-
+    
     let v1: I32 = buf.read_i32()
-    assert_eq(v1, 12345, "read i32 1")
-
+    assert_eq(v1, 42, "read first i32")
+    
     let v2: I32 = buf.read_i32()
-    assert_eq(v2, -9876, "read i32 2")
-
+    assert_eq(v2, -100, "read second i32")
+    
+    let v3: I32 = buf.read_i32()
+    assert_eq(v3, 2147483647, "read max i32")
+    
     buf.destroy()
     return 0
 }
@@ -63,45 +77,18 @@ func test_buffer_write_read_i32() -> I32 {
 @test
 func test_buffer_write_read_i64() -> I32 {
     let buf: Buffer = Buffer.new(64)
-
-    buf.write_i64(1234567890123 as I64)
-    buf.write_i64(-9876543210 as I64)
-
+    
+    buf.write_i64(1000000000000 as I64)
+    buf.write_i64(-9999999999 as I64)
+    
     buf.reset_read()
-
+    
     let v1: I64 = buf.read_i64()
-    assert_eq(v1, 1234567890123 as I64, "read i64 1")
-
+    assert_eq(v1, 1000000000000 as I64, "read first i64")
+    
     let v2: I64 = buf.read_i64()
-    assert_eq(v2, -9876543210 as I64, "read i64 2")
-
-    buf.destroy()
-    return 0
-}
-
-@test
-func test_buffer_mixed_types() -> I32 {
-    let buf: Buffer = Buffer.new(64)
-
-    buf.write_byte(0xFF)
-    buf.write_i32(42)
-    buf.write_i64(999999 as I64)
-    buf.write_byte(0x00)
-
-    buf.reset_read()
-
-    let b1: I32 = buf.read_byte()
-    assert_eq(b1, 0xFF, "byte 1")
-
-    let i32_val: I32 = buf.read_i32()
-    assert_eq(i32_val, 42, "i32")
-
-    let i64_val: I64 = buf.read_i64()
-    assert_eq(i64_val, 999999 as I64, "i64")
-
-    let b2: I32 = buf.read_byte()
-    assert_eq(b2, 0x00, "byte 2")
-
+    assert_eq(v2, -9999999999 as I64, "read second i64")
+    
     buf.destroy()
     return 0
 }
@@ -109,25 +96,22 @@ func test_buffer_mixed_types() -> I32 {
 @test
 func test_buffer_remaining() -> I32 {
     let buf: Buffer = Buffer.new(64)
-
+    
     buf.write_i32(1)
     buf.write_i32(2)
     buf.write_i32(3)
-
+    
+    assert_eq(buf.len(), 12 as I64, "12 bytes written")
+    
     buf.reset_read()
-
-    let r1: I64 = buf.remaining()
-    assert_eq(r1, 12 as I64, "remaining at start (3 i32 = 12 bytes)")
-
-    buf.read_i32()
-    let r2: I64 = buf.remaining()
-    assert_eq(r2, 8 as I64, "remaining after 1 read")
-
-    buf.read_i32()
-    buf.read_i32()
-    let r3: I64 = buf.remaining()
-    assert_eq(r3, 0 as I64, "remaining after all reads")
-
+    assert_eq(buf.remaining(), 12 as I64, "all bytes remaining")
+    
+    let _: I32 = buf.read_i32()
+    assert_eq(buf.remaining(), 8 as I64, "8 bytes remaining")
+    
+    let _: I32 = buf.read_i32()
+    assert_eq(buf.remaining(), 4 as I64, "4 bytes remaining")
+    
     buf.destroy()
     return 0
 }
@@ -135,28 +119,63 @@ func test_buffer_remaining() -> I32 {
 @test
 func test_buffer_clear() -> I32 {
     let buf: Buffer = Buffer.new(64)
-
-    buf.write_i32(1)
-    buf.write_i32(2)
-
+    
+    buf.write_i32(100)
+    buf.write_i32(200)
+    
+    assert_eq(buf.len(), 8 as I64, "len before clear")
+    
     buf.clear()
-
+    
     assert_eq(buf.len(), 0 as I64, "len after clear")
-
-    buf.write_i32(99)
-    buf.reset_read()
-    let val: I32 = buf.read_i32()
-    assert_eq(val, 99, "value after clear and write")
-
+    assert_eq(buf.remaining(), 0 as I64, "remaining after clear")
+    
     buf.destroy()
     return 0
 }
 
 @test
-func test_buffer_default() -> I32 {
-    let buf: Buffer = Buffer.default()
-    let cap: I64 = buf.capacity()
-    assert(cap >= (64 as I64), "default capacity should be at least 64")
+func test_buffer_reset_read() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+    
+    buf.write_i32(42)
+    
+    buf.reset_read()
+    let v1: I32 = buf.read_i32()
+    assert_eq(v1, 42, "first read")
+    
+    buf.reset_read()
+    let v2: I32 = buf.read_i32()
+    assert_eq(v2, 42, "read after reset")
+    
     buf.destroy()
     return 0
 }
+
+@test
+func test_buffer_mixed_types() -> I32 {
+    let buf: Buffer = Buffer.new(64)
+    
+    buf.write_byte(255)
+    buf.write_i32(12345)
+    buf.write_i64(9876543210 as I64)
+    buf.write_byte(0)
+    
+    buf.reset_read()
+    
+    let b1: I32 = buf.read_byte()
+    assert_eq(b1, 255, "byte 1")
+    
+    let i1: I32 = buf.read_i32()
+    assert_eq(i1, 12345, "i32")
+    
+    let i2: I64 = buf.read_i64()
+    assert_eq(i2, 9876543210 as I64, "i64")
+    
+    let b2: I32 = buf.read_byte()
+    assert_eq(b2, 0, "byte 2")
+    
+    buf.destroy()
+    return 0
+}
+

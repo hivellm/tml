@@ -42,19 +42,10 @@ void println(const char* message) {
         printf("\n");
 }
 
-// panic(message: Str) -> Never
-void panic(const char* message) {
-    fprintf(stderr, "panic: %s\n", message ? message : "(null)");
-    exit(1);
-}
-
-// assert(condition: Bool, message: Str) -> Unit
-void assert_tml(int32_t condition, const char* message) {
-    if (!condition) {
-        fprintf(stderr, "assertion failed: %s\n", message ? message : "(no message)");
-        exit(1);
-    }
-}
+// NOTE: panic() and assert_tml() are implemented in essential.c
+// They must use the version from essential.c which supports panic catching
+// via setjmp/longjmp for test mode.
+// DO NOT add implementations here - they would override essential.c's versions!
 
 // Type-specific print variants (for polymorphic print)
 void print_i32(int32_t n) {

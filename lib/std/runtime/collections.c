@@ -323,9 +323,9 @@ int64_t hashmap_get(TmlHashMap* map, int64_t key) {
     return 0;
 }
 
-bool hashmap_has(TmlHashMap* map, int64_t key) {
+int32_t hashmap_has(TmlHashMap* map, int64_t key) {
     if (!map)
-        return false;
+        return 0;
 
     uint64_t hash = hash_i64(key);
     int64_t index = hash % map->capacity;
@@ -335,18 +335,18 @@ bool hashmap_has(TmlHashMap* map, int64_t key) {
         HashEntry* entry = &map->entries[probe];
 
         if (!entry->occupied)
-            return false;
+            return 0;
         if (!entry->deleted && entry->key == key) {
-            return true;
+            return 1;
         }
     }
 
-    return false;
+    return 0;
 }
 
-bool hashmap_remove(TmlHashMap* map, int64_t key) {
+int32_t hashmap_remove(TmlHashMap* map, int64_t key) {
     if (!map)
-        return false;
+        return 0;
 
     uint64_t hash = hash_i64(key);
     int64_t index = hash % map->capacity;
@@ -356,15 +356,15 @@ bool hashmap_remove(TmlHashMap* map, int64_t key) {
         HashEntry* entry = &map->entries[probe];
 
         if (!entry->occupied)
-            return false;
+            return 0;
         if (!entry->deleted && entry->key == key) {
             entry->deleted = true;
             map->len--;
-            return true;
+            return 1;
         }
     }
 
-    return false;
+    return 0;
 }
 
 int64_t hashmap_len(TmlHashMap* map) {
@@ -415,9 +415,9 @@ void hashmap_iter_destroy(TmlHashMapIter* iter) {
     free(iter);
 }
 
-bool hashmap_iter_has_next(TmlHashMapIter* iter) {
+int32_t hashmap_iter_has_next(TmlHashMapIter* iter) {
     if (!iter)
-        return false;
+        return 0;
     return iter->index >= 0 && iter->remaining > 0;
 }
 

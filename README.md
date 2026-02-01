@@ -454,10 +454,11 @@ Source (.tml) → Lexer → Parser → Type Check → Borrow Check → HIR → M
 | Trait Objects | Complete (dyn Behavior, multiple methods) |
 | Error Propagation | Complete (`!` operator) |
 | FFI | Complete (@extern, @link) |
-| Test Framework | Complete (@test, 85+ test files) |
+| Test Framework | Complete (@test, 242 test files, 2604 tests) |
 
-### Recent Features (Jan 2026)
+### Recent Features (Jan-Feb 2026)
 
+- **HashMap String Keys** - Fixed string key hashing to use content-based `str_hash()` instead of pointer addresses
 - **HIR (High-level IR)** - New compiler IR layer between type-checked AST and MIR for type-resolved desugaring and monomorphization
 - **Core Library Tests** - Comprehensive tests for iter, slice, num, range, async_iter, marker modules
 - **Numeric Properties** - Zero, One, Bounded behaviors with full test coverage

@@ -55,8 +55,8 @@ TmlHashMap* hashmap_create(int64_t initial_capacity);
 void hashmap_destroy(TmlHashMap* map);
 void hashmap_set(TmlHashMap* map, int64_t key, int64_t value);
 int64_t hashmap_get(TmlHashMap* map, int64_t key);
-bool hashmap_has(TmlHashMap* map, int64_t key);
-bool hashmap_remove(TmlHashMap* map, int64_t key);
+int32_t hashmap_has(TmlHashMap* map, int64_t key);
+int32_t hashmap_remove(TmlHashMap* map, int64_t key);
 int64_t hashmap_len(TmlHashMap* map);
 void hashmap_clear(TmlHashMap* map);
 
@@ -72,7 +72,7 @@ typedef struct {
 
 TmlHashMapIter* hashmap_iter_create(TmlHashMap* map);
 void hashmap_iter_destroy(TmlHashMapIter* iter);
-bool hashmap_iter_has_next(TmlHashMapIter* iter);
+int32_t hashmap_iter_has_next(TmlHashMapIter* iter);
 void hashmap_iter_next(TmlHashMapIter* iter);
 int64_t hashmap_iter_key(TmlHashMapIter* iter);
 int64_t hashmap_iter_value(TmlHashMapIter* iter);

@@ -256,6 +256,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             return "false";
         }
         std::string cmp_val = gen_expr(*call.args[0]);
+        std::string cmp_val_type = last_expr_type_;
 
         std::string is_ok = fresh_reg();
         emit_line("  " + is_ok + " = icmp eq i32 " + tag_val + ", 0");
@@ -276,16 +277,24 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string ok_val = fresh_reg();
         emit_line("  " + ok_val + " = load " + ok_llvm_type + ", ptr " + data_ptr);
 
+        // If cmp_val is a pointer (ref argument), load the value
+        // We always need to dereference the ref, even for Str (ptr) types
+        std::string cmp_val_deref = cmp_val;
+        if (cmp_val_type == "ptr") {
+            cmp_val_deref = fresh_reg();
+            emit_line("  " + cmp_val_deref + " = load " + ok_llvm_type + ", ptr " + cmp_val);
+        }
+
         std::string values_eq = fresh_reg();
         if (ok_llvm_type == "ptr") {
             // str_eq returns i32, convert to i1
             std::string eq_i32 = fresh_reg();
-            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + ok_val + ", ptr " + cmp_val +
-                      ")");
+            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + ok_val + ", ptr " +
+                      cmp_val_deref + ")");
             emit_line("  " + values_eq + " = icmp ne i32 " + eq_i32 + ", 0");
         } else {
             emit_line("  " + values_eq + " = icmp eq " + ok_llvm_type + " " + ok_val + ", " +
-                      cmp_val);
+                      cmp_val_deref);
         }
         emit_line("  br label %" + end_label);
 
@@ -309,6 +318,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             return "false";
         }
         std::string cmp_val = gen_expr(*call.args[0]);
+        std::string cmp_val_type = last_expr_type_;
 
         std::string is_err = fresh_reg();
         emit_line("  " + is_err + " = icmp eq i32 " + tag_val + ", 1");
@@ -330,16 +340,24 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string err_val = fresh_reg();
         emit_line("  " + err_val + " = load " + err_llvm_type + ", ptr " + data_ptr);
 
+        // If cmp_val is a pointer (ref argument), load the value
+        // We always need to dereference the ref, even for Str (ptr) types
+        std::string cmp_val_deref = cmp_val;
+        if (cmp_val_type == "ptr") {
+            cmp_val_deref = fresh_reg();
+            emit_line("  " + cmp_val_deref + " = load " + err_llvm_type + ", ptr " + cmp_val);
+        }
+
         std::string values_eq = fresh_reg();
         if (err_llvm_type == "ptr") {
             // str_eq returns i32, convert to i1
             std::string eq_i32 = fresh_reg();
-            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + err_val + ", ptr " + cmp_val +
-                      ")");
+            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + err_val + ", ptr " +
+                      cmp_val_deref + ")");
             emit_line("  " + values_eq + " = icmp ne i32 " + eq_i32 + ", 0");
         } else {
             emit_line("  " + values_eq + " = icmp eq " + err_llvm_type + " " + err_val + ", " +
-                      cmp_val);
+                      cmp_val_deref);
         }
         emit_line("  br label %" + end_label);
 
@@ -430,11 +448,16 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // is_ok_and(predicate) -> Bool
     if (method == "is_ok_and") {
-        if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("is_ok_and requires a closure argument", call.span);
+        if (call.args.empty()) {
+            report_error("is_ok_and requires a predicate argument", call.span);
             return "false";
         }
-        auto& closure = call.args[0]->as<parser::ClosureExpr>();
+        bool is_closure = call.args[0]->is<parser::ClosureExpr>();
+        bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
+        if (!is_closure && !is_func_ref) {
+            report_error("is_ok_and requires a closure or function reference", call.span);
+            return "false";
+        }
 
         std::string is_ok_label = fresh_label("is_ok_and_ok");
         std::string is_err_label = fresh_label("is_ok_and_err");
@@ -455,16 +478,27 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string ok_val = fresh_reg();
         emit_line("  " + ok_val + " = load " + ok_llvm_type + ", ptr " + data_ptr);
 
-        std::string param_name = "_";
-        if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
-            param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+        std::string pred_result;
+        if (is_closure) {
+            auto& closure = call.args[0]->as<parser::ClosureExpr>();
+            std::string param_name = "_";
+            if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
+                param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+            }
+            std::string param_alloca = fresh_reg();
+            emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
+            emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
+            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
+            pred_result = gen_expr(*closure.body);
+            locals_.erase(param_name);
+        } else {
+            // Function reference - generate a call
+            auto& ident = call.args[0]->as<parser::IdentExpr>();
+            std::string fn_name = "@tml_" + get_suite_prefix() + ident.name;
+            pred_result = fresh_reg();
+            emit_line("  " + pred_result + " = call i1 " + fn_name + "(" + ok_llvm_type + " " +
+                      ok_val + ")");
         }
-        std::string param_alloca = fresh_reg();
-        emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
-        emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
-        std::string pred_result = gen_expr(*closure.body);
-        locals_.erase(param_name);
         emit_line("  br label %" + end_label);
 
         emit_line(is_err_label + ":");
@@ -482,11 +516,16 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // is_err_and(predicate) -> Bool
     if (method == "is_err_and") {
-        if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("is_err_and requires a closure argument", call.span);
+        if (call.args.empty()) {
+            report_error("is_err_and requires a predicate argument", call.span);
             return "false";
         }
-        auto& closure = call.args[0]->as<parser::ClosureExpr>();
+        bool is_closure = call.args[0]->is<parser::ClosureExpr>();
+        bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
+        if (!is_closure && !is_func_ref) {
+            report_error("is_err_and requires a closure or function reference", call.span);
+            return "false";
+        }
 
         std::string is_err_label = fresh_label("is_err_and_err");
         std::string is_ok_label = fresh_label("is_err_and_ok");
@@ -507,16 +546,27 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string err_val = fresh_reg();
         emit_line("  " + err_val + " = load " + err_llvm_type + ", ptr " + data_ptr);
 
-        std::string param_name = "_";
-        if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
-            param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+        std::string pred_result;
+        if (is_closure) {
+            auto& closure = call.args[0]->as<parser::ClosureExpr>();
+            std::string param_name = "_";
+            if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
+                param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+            }
+            std::string param_alloca = fresh_reg();
+            emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
+            emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
+            locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
+            pred_result = gen_expr(*closure.body);
+            locals_.erase(param_name);
+        } else {
+            // Function reference - generate a call
+            auto& ident = call.args[0]->as<parser::IdentExpr>();
+            std::string fn_name = "@tml_" + get_suite_prefix() + ident.name;
+            pred_result = fresh_reg();
+            emit_line("  " + pred_result + " = call i1 " + fn_name + "(" + err_llvm_type + " " +
+                      err_val + ")");
         }
-        std::string param_alloca = fresh_reg();
-        emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
-        emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
-        std::string pred_result = gen_expr(*closure.body);
-        locals_.erase(param_name);
         emit_line("  br label %" + end_label);
 
         emit_line(is_ok_label + ":");
@@ -534,11 +584,16 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // unwrap_or_else(f) -> T
     if (method == "unwrap_or_else") {
-        if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("unwrap_or_else requires a closure argument", call.span);
+        if (call.args.empty()) {
+            report_error("unwrap_or_else requires a function argument", call.span);
             return "0";
         }
-        auto& closure = call.args[0]->as<parser::ClosureExpr>();
+        bool is_closure = call.args[0]->is<parser::ClosureExpr>();
+        bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
+        if (!is_closure && !is_func_ref) {
+            report_error("unwrap_or_else requires a closure or function reference", call.span);
+            return "0";
+        }
 
         std::string is_ok_label = fresh_label("unwrap_else_ok");
         std::string is_err_label = fresh_label("unwrap_else_err");
@@ -571,16 +626,26 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string err_val = fresh_reg();
         emit_line("  " + err_val + " = load " + err_llvm_type + ", ptr " + data_ptr2);
 
-        std::string param_name = "_";
-        if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
-            param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+        std::string closure_result;
+        if (is_closure) {
+            auto& closure = call.args[0]->as<parser::ClosureExpr>();
+            std::string param_name = "_";
+            if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
+                param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+            }
+            std::string param_alloca = fresh_reg();
+            emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
+            emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
+            locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
+            closure_result = gen_expr(*closure.body);
+            locals_.erase(param_name);
+        } else {
+            auto& ident = call.args[0]->as<parser::IdentExpr>();
+            std::string fn_name = "@tml_" + get_suite_prefix() + ident.name;
+            closure_result = fresh_reg();
+            emit_line("  " + closure_result + " = call " + ok_llvm_type + " " + fn_name + "(" +
+                      err_llvm_type + " " + err_val + ")");
         }
-        std::string param_alloca = fresh_reg();
-        emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
-        emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
-        std::string closure_result = gen_expr(*closure.body);
-        locals_.erase(param_name);
         emit_line("  br label %" + end_label);
 
         emit_line(end_label + ":");
@@ -594,11 +659,16 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // map(f) -> Outcome[U, E]
     if (method == "map") {
-        if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("map requires a closure argument", call.span);
+        if (call.args.empty()) {
+            report_error("map requires a function argument", call.span);
             return receiver;
         }
-        auto& closure = call.args[0]->as<parser::ClosureExpr>();
+        bool is_closure = call.args[0]->is<parser::ClosureExpr>();
+        bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
+        if (!is_closure && !is_func_ref) {
+            report_error("map requires a closure or function reference", call.span);
+            return receiver;
+        }
 
         std::string is_ok_label = fresh_label("map_ok");
         std::string is_err_label = fresh_label("map_err");
@@ -619,17 +689,32 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string ok_val = fresh_reg();
         emit_line("  " + ok_val + " = load " + ok_llvm_type + ", ptr " + data_ptr);
 
-        std::string param_name = "_";
-        if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
-            param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+        std::string mapped_val;
+        std::string mapped_type;
+        if (is_closure) {
+            auto& closure = call.args[0]->as<parser::ClosureExpr>();
+            std::string param_name = "_";
+            if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
+                param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+            }
+            std::string param_alloca = fresh_reg();
+            emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
+            emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
+            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
+            mapped_val = gen_expr(*closure.body);
+            mapped_type = last_expr_type_;
+            locals_.erase(param_name);
+        } else {
+            // Function reference - we need to infer the return type
+            auto& ident = call.args[0]->as<parser::IdentExpr>();
+            std::string fn_name = "@tml_" + get_suite_prefix() + ident.name;
+            // For now, assume the mapped type is the same as ok_type
+            // The type checker should have already validated this
+            mapped_type = ok_llvm_type;
+            mapped_val = fresh_reg();
+            emit_line("  " + mapped_val + " = call " + mapped_type + " " + fn_name + "(" +
+                      ok_llvm_type + " " + ok_val + ")");
         }
-        std::string param_alloca = fresh_reg();
-        emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
-        emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
-        std::string mapped_val = gen_expr(*closure.body);
-        std::string mapped_type = last_expr_type_;
-        locals_.erase(param_name);
 
         std::string result_type_name = enum_type_name;
         if (mapped_type != ok_llvm_type) {
@@ -697,13 +782,19 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // map_or(default, f) -> U
     if (method == "map_or") {
-        if (call.args.size() < 2 || !call.args[1]->is<parser::ClosureExpr>()) {
-            report_error("map_or requires a default value and a closure", call.span);
+        if (call.args.size() < 2) {
+            report_error("map_or requires a default value and a function", call.span);
             return "0";
         }
+        bool is_closure = call.args[1]->is<parser::ClosureExpr>();
+        bool is_func_ref = call.args[1]->is<parser::IdentExpr>();
+        if (!is_closure && !is_func_ref) {
+            report_error("map_or requires a closure or function reference", call.span);
+            return "0";
+        }
+
         std::string default_val = gen_expr(*call.args[0]);
         std::string default_type = last_expr_type_;
-        auto& closure = call.args[1]->as<parser::ClosureExpr>();
 
         std::string is_ok_label = fresh_label("map_or_ok");
         std::string is_err_label = fresh_label("map_or_err");
@@ -724,16 +815,26 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string ok_val = fresh_reg();
         emit_line("  " + ok_val + " = load " + ok_llvm_type + ", ptr " + data_ptr);
 
-        std::string param_name = "_";
-        if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
-            param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+        std::string mapped_val;
+        if (is_closure) {
+            auto& closure = call.args[1]->as<parser::ClosureExpr>();
+            std::string param_name = "_";
+            if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
+                param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+            }
+            std::string param_alloca = fresh_reg();
+            emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
+            emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
+            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
+            mapped_val = gen_expr(*closure.body);
+            locals_.erase(param_name);
+        } else {
+            auto& ident = call.args[1]->as<parser::IdentExpr>();
+            std::string fn_name = "@tml_" + get_suite_prefix() + ident.name;
+            mapped_val = fresh_reg();
+            emit_line("  " + mapped_val + " = call " + default_type + " " + fn_name + "(" +
+                      ok_llvm_type + " " + ok_val + ")");
         }
-        std::string param_alloca = fresh_reg();
-        emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
-        emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
-        std::string mapped_val = gen_expr(*closure.body);
-        locals_.erase(param_name);
         emit_line("  br label %" + end_label);
 
         emit_line(is_err_label + ":");
@@ -751,11 +852,16 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // and_then(f) -> Outcome[U, E]
     if (method == "and_then") {
-        if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("and_then requires a closure argument", call.span);
+        if (call.args.empty()) {
+            report_error("and_then requires a function argument", call.span);
             return receiver;
         }
-        auto& closure = call.args[0]->as<parser::ClosureExpr>();
+        bool is_closure = call.args[0]->is<parser::ClosureExpr>();
+        bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
+        if (!is_closure && !is_func_ref) {
+            report_error("and_then requires a closure or function reference", call.span);
+            return receiver;
+        }
 
         std::string is_ok_label = fresh_label("and_then_ok");
         std::string is_err_label = fresh_label("and_then_err");
@@ -776,17 +882,28 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string ok_val = fresh_reg();
         emit_line("  " + ok_val + " = load " + ok_llvm_type + ", ptr " + data_ptr);
 
-        std::string param_name = "_";
-        if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
-            param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+        std::string closure_result;
+        if (is_closure) {
+            auto& closure = call.args[0]->as<parser::ClosureExpr>();
+            std::string param_name = "_";
+            if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
+                param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+            }
+            std::string param_alloca = fresh_reg();
+            emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
+            emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
+            locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
+            closure_result = gen_expr(*closure.body);
+            locals_.erase(param_name);
+        } else {
+            auto& ident = call.args[0]->as<parser::IdentExpr>();
+            std::string fn_name = "@tml_" + get_suite_prefix() + ident.name;
+            // For and_then, the function returns the same Outcome type as the receiver
+            closure_result = fresh_reg();
+            emit_line("  " + closure_result + " = call " + enum_type_name + " " + fn_name + "(" +
+                      ok_llvm_type + " " + ok_val + ")");
         }
-        std::string param_alloca = fresh_reg();
-        emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
-        emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
-        std::string closure_result = gen_expr(*closure.body);
         std::string ok_end_block = current_block_;
-        locals_.erase(param_name);
         emit_line("  br label %" + end_label);
 
         emit_line(is_err_label + ":");
@@ -804,11 +921,16 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // or_else(f) -> Outcome[T, F]
     if (method == "or_else") {
-        if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("or_else requires a closure argument", call.span);
+        if (call.args.empty()) {
+            report_error("or_else requires a function argument", call.span);
             return receiver;
         }
-        auto& closure = call.args[0]->as<parser::ClosureExpr>();
+        bool is_closure = call.args[0]->is<parser::ClosureExpr>();
+        bool is_func_ref = call.args[0]->is<parser::IdentExpr>();
+        if (!is_closure && !is_func_ref) {
+            report_error("or_else requires a closure or function reference", call.span);
+            return receiver;
+        }
 
         std::string is_ok_label = fresh_label("or_else_ok");
         std::string is_err_label = fresh_label("or_else_err");
@@ -833,17 +955,28 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string err_val = fresh_reg();
         emit_line("  " + err_val + " = load " + err_llvm_type + ", ptr " + data_ptr);
 
-        std::string param_name = "_";
-        if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
-            param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+        std::string closure_result;
+        if (is_closure) {
+            auto& closure = call.args[0]->as<parser::ClosureExpr>();
+            std::string param_name = "_";
+            if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
+                param_name = closure.params[0].first->as<parser::IdentPattern>().name;
+            }
+            std::string param_alloca = fresh_reg();
+            emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
+            emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
+            locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
+            closure_result = gen_expr(*closure.body);
+            locals_.erase(param_name);
+        } else {
+            auto& ident = call.args[0]->as<parser::IdentExpr>();
+            std::string fn_name = "@tml_" + get_suite_prefix() + ident.name;
+            // For or_else, the function returns the same Outcome type as the receiver
+            closure_result = fresh_reg();
+            emit_line("  " + closure_result + " = call " + enum_type_name + " " + fn_name + "(" +
+                      err_llvm_type + " " + err_val + ")");
         }
-        std::string param_alloca = fresh_reg();
-        emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
-        emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
-        std::string closure_result = gen_expr(*closure.body);
         std::string err_end_block = current_block_;
-        locals_.erase(param_name);
         emit_line("  br label %" + end_label);
 
         emit_line(end_label + ":");

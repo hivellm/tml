@@ -30,6 +30,7 @@
 #include "types/module.hpp"
 
 #include <iostream>
+#include <unordered_set>
 
 namespace tml::codegen {
 
@@ -1086,13 +1087,24 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             const auto& ident = field_expr.object->as<parser::IdentExpr>();
             if (ident.name == "this") {
                 base_ptr = "%this";
+                // For 'this' in impl blocks, use current_impl_type_ if infer fails
+                base_type = infer_expr_type(*field_expr.object);
+                if (!base_type && !current_impl_type_.empty()) {
+                    // Create a NamedType for current_impl_type_
+                    auto result = std::make_shared<types::Type>();
+                    result->kind = types::NamedType{current_impl_type_, "", {}};
+                    base_type = result;
+                }
             } else {
                 auto it = locals_.find(ident.name);
                 if (it != locals_.end()) {
                     base_ptr = it->second.reg;
+                    base_type = it->second.semantic_type;
+                }
+                if (!base_type) {
+                    base_type = infer_expr_type(*field_expr.object);
                 }
             }
-            base_type = infer_expr_type(*field_expr.object);
         } else if (field_expr.object->is<parser::FieldExpr>()) {
             // Handle nested field access: this.inner.field
             // Generate the nested field access - gen_expr will return the loaded value
@@ -1255,21 +1267,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     emit_line("  " + field_ptr + " = getelementptr " + llvm_struct_type + ", ptr " +
                               base_ptr + ", i32 0, i32 " + std::to_string(field_idx));
 
-                    // For primitive types and pointers, load the value; for structs, keep the
-                    // pointer
+                    // Load the field value for method calls - structs, primitives, and pointers
+                    // all need to be loaded from the field pointer before use.
+                    // The receiver_ptr is kept for methods that mutate the receiver.
                     receiver_ptr = field_ptr;
-                    if (field_type == "i8" || field_type == "i16" || field_type == "i32" ||
-                        field_type == "i64" || field_type == "i128" || field_type == "i1" ||
-                        field_type == "float" || field_type == "double" || field_type == "ptr") {
-                        // Load primitive/pointer value for method calls
-                        // For ptr types: field stores a reference, load the pointer to pass to
-                        // method
-                        std::string loaded = fresh_reg();
-                        emit_line("  " + loaded + " = load " + field_type + ", ptr " + field_ptr);
-                        receiver = loaded;
-                    } else {
-                        receiver = field_ptr;
-                    }
+                    std::string loaded = fresh_reg();
+                    emit_line("  " + loaded + " = load " + field_type + ", ptr " + field_ptr);
+                    receiver = loaded;
                     last_expr_type_ = field_type;
                 }
             }
@@ -1522,6 +1526,42 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                             TML_DEBUG_LN("[METHOD 4b] FOUND method! concrete_type_name="
                                          << concrete_type_name);
 
+                            // For primitive types with intrinsic methods (duplicate, to_owned,
+                            // etc.), delegate to gen_primitive_method instead of generating a
+                            // function call
+                            if (sub_it != current_type_subs_.end() &&
+                                sub_it->second->is<types::PrimitiveType>()) {
+                                // Check if this is an intrinsic primitive method
+                                static const std::unordered_set<std::string> primitive_intrinsics =
+                                    {"duplicate", "to_owned",     "borrow", "borrow_mut",
+                                     "to_string", "debug_string", "hash",   "cmp",
+                                     "add",       "sub",          "mul",    "div",
+                                     "rem",       "neg",          "abs",    "eq",
+                                     "ne",        "lt",           "le",     "gt",
+                                     "ge",        "min",          "max",    "clamp"};
+                                if (primitive_intrinsics.count(method)) {
+                                    TML_DEBUG_LN("[METHOD 4b] Delegating primitive method to "
+                                                 "gen_primitive_method");
+                                    // If receiver was originally a ref T, we need to dereference
+                                    // to get the primitive value for methods like to_owned,
+                                    // duplicate
+                                    std::string actual_receiver = receiver;
+                                    if (receiver_was_ref) {
+                                        std::string prim_ty =
+                                            llvm_type_from_semantic(sub_it->second);
+                                        actual_receiver = fresh_reg();
+                                        emit_line("  " + actual_receiver + " = load " + prim_ty +
+                                                  ", ptr " + receiver);
+                                    }
+                                    auto prim_result = gen_primitive_method(
+                                        call, actual_receiver, receiver_ptr, sub_it->second);
+                                    if (prim_result) {
+                                        return *prim_result;
+                                    }
+                                    // If gen_primitive_method didn't handle it, fall through
+                                }
+                            }
+
                             // Build substitution map from behavior type params to bound's type args
                             std::unordered_map<std::string, types::TypePtr> behavior_subs;
                             if (!bound.type_args.empty() && !behavior_def->type_params.empty()) {
@@ -1531,6 +1571,10 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                     behavior_subs[behavior_def->type_params[i]] =
                                         bound.type_args[i];
                                 }
+                            }
+                            // Also substitute Self with the concrete type
+                            if (sub_it != current_type_subs_.end()) {
+                                behavior_subs["Self"] = sub_it->second;
                             }
 
                             // Look up the impl method: ConcreteType::method
@@ -1640,6 +1684,35 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 TML_DEBUG_LN("[METHOD 4b] checking required_behavior=" << behavior_name
                                                                        << " for method=" << method);
 
+                // For primitive types with intrinsic methods, delegate to gen_primitive_method
+                if (sub_it != current_type_subs_.end() &&
+                    sub_it->second->is<types::PrimitiveType>()) {
+                    static const std::unordered_set<std::string> primitive_intrinsics = {
+                        "duplicate",    "to_owned", "borrow", "borrow_mut", "to_string",
+                        "debug_string", "hash",     "cmp",    "add",        "sub",
+                        "mul",          "div",      "rem",    "neg",        "abs",
+                        "eq",           "ne",       "lt",     "le",         "gt",
+                        "ge",           "min",      "max",    "clamp"};
+                    if (primitive_intrinsics.count(method)) {
+                        TML_DEBUG_LN("[METHOD 4b] Delegating primitive method to "
+                                     "gen_primitive_method (required_behaviors)");
+                        // If receiver was originally a ref T, we need to dereference
+                        // to get the primitive value for methods like to_owned, duplicate
+                        std::string actual_receiver = receiver;
+                        if (receiver_was_ref) {
+                            std::string prim_ty = llvm_type_from_semantic(sub_it->second);
+                            actual_receiver = fresh_reg();
+                            emit_line("  " + actual_receiver + " = load " + prim_ty + ", ptr " +
+                                      receiver);
+                        }
+                        auto prim_result = gen_primitive_method(call, actual_receiver, receiver_ptr,
+                                                                sub_it->second);
+                        if (prim_result) {
+                            return *prim_result;
+                        }
+                    }
+                }
+
                 // First, try to directly dispatch to ConcreteType::method
                 // This handles cases where the behavior definition isn't loaded but the impl exists
                 std::string qualified_name = concrete_type_name + "::" + method;
@@ -1707,9 +1780,18 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         typed_args.push_back({arg_type, val});
                     }
 
-                    std::string ret_type = func_sig->return_type
-                                               ? llvm_type_from_semantic(func_sig->return_type)
-                                               : "void";
+                    // Get return type with Self substitution
+                    std::string ret_type = "void";
+                    if (func_sig->return_type) {
+                        auto return_type = func_sig->return_type;
+                        // Substitute Self with the concrete type
+                        if (sub_it != current_type_subs_.end()) {
+                            std::unordered_map<std::string, types::TypePtr> self_subs;
+                            self_subs["Self"] = sub_it->second;
+                            return_type = types::substitute_type(return_type, self_subs);
+                        }
+                        ret_type = llvm_type_from_semantic(return_type);
+                    }
 
                     std::string args_str;
                     for (size_t i = 0; i < typed_args.size(); ++i) {

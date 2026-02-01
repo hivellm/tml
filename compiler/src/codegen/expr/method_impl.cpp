@@ -96,18 +96,47 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                         if (ta && ta->is<types::NamedType>()) {
                             const auto& ta_named = ta->as<types::NamedType>();
                             if (ta_named.name == type_param) {
-                                auto arg_type = infer_expr_type(*call.args[p_idx - 1]);
-                                if (arg_type && arg_type->is<types::NamedType>()) {
-                                    const auto& arg_named = arg_type->as<types::NamedType>();
-                                    if (ta_idx < arg_named.type_args.size()) {
-                                        auto inferred = arg_named.type_args[ta_idx];
-                                        if (inferred) {
-                                            type_subs[type_param] = inferred;
-                                            if (!method_type_suffix.empty()) {
-                                                method_type_suffix += "_";
+                                // Only infer if we haven't already inferred this type param
+                                if (type_subs.find(type_param) == type_subs.end()) {
+                                    auto arg_type = infer_expr_type(*call.args[p_idx - 1]);
+                                    if (arg_type && arg_type->is<types::NamedType>()) {
+                                        const auto& arg_named = arg_type->as<types::NamedType>();
+                                        if (ta_idx < arg_named.type_args.size()) {
+                                            auto inferred = arg_named.type_args[ta_idx];
+                                            if (inferred) {
+                                                type_subs[type_param] = inferred;
+                                                if (!method_type_suffix.empty()) {
+                                                    method_type_suffix += "_";
+                                                }
+                                                method_type_suffix += mangle_type(inferred);
                                             }
-                                            method_type_suffix += mangle_type(inferred);
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Handle FuncType parameters: func(E) -> F where F is the type param
+                else if (param_type && param_type->is<types::FuncType>()) {
+                    const auto& func_type = param_type->as<types::FuncType>();
+                    // Check if the return type is the type parameter we're looking for
+                    if (func_type.return_type && func_type.return_type->is<types::NamedType>()) {
+                        const auto& ret_named = func_type.return_type->as<types::NamedType>();
+                        if (ret_named.name == type_param && ret_named.type_args.empty()) {
+                            // Only infer if we haven't already inferred this type param
+                            // (multiple function params may share the same return type param)
+                            if (type_subs.find(type_param) == type_subs.end()) {
+                                // Infer from the argument's return type
+                                auto arg_type = infer_expr_type(*call.args[p_idx - 1]);
+                                if (arg_type && arg_type->is<types::FuncType>()) {
+                                    const auto& arg_func = arg_type->as<types::FuncType>();
+                                    if (arg_func.return_type) {
+                                        type_subs[type_param] = arg_func.return_type;
+                                        if (!method_type_suffix.empty()) {
+                                            method_type_suffix += "_";
+                                        }
+                                        method_type_suffix += mangle_type(arg_func.return_type);
                                     }
                                 }
                             }
@@ -138,46 +167,67 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
 
         // Check imported structs and enums for type params
         std::vector<std::string> imported_type_params;
-        if (impl_it == pending_generic_impls_.end() && env_.module_registry()) {
-            const auto& all_modules = env_.module_registry()->get_all_modules();
-            for (const auto& [mod_name, mod] : all_modules) {
-                // Check structs
-                auto struct_it = mod.structs.find(named.name);
-                if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
-                    imported_type_params = struct_it->second.type_params;
-                    for (size_t i = 0;
-                         i < imported_type_params.size() && i < named.type_args.size(); ++i) {
-                        type_subs[imported_type_params[i]] = named.type_args[i];
-                        if (named.type_args[i] && named.type_args[i]->is<types::NamedType>()) {
-                            const auto& arg_named = named.type_args[i]->as<types::NamedType>();
-                            auto item_type = lookup_associated_type(arg_named.name, "Item");
-                            if (item_type) {
-                                std::string assoc_key = imported_type_params[i] + "::Item";
-                                type_subs[assoc_key] = item_type;
-                                type_subs["Item"] = item_type;
-                            }
+        if (impl_it == pending_generic_impls_.end()) {
+            // First check builtin enums via env_.lookup_enum
+            auto builtin_enum = env_.lookup_enum(named.name);
+            if (builtin_enum && !builtin_enum->type_params.empty()) {
+                imported_type_params = builtin_enum->type_params;
+                for (size_t i = 0; i < imported_type_params.size() && i < named.type_args.size();
+                     ++i) {
+                    type_subs[imported_type_params[i]] = named.type_args[i];
+                    if (named.type_args[i] && named.type_args[i]->is<types::NamedType>()) {
+                        const auto& arg_named = named.type_args[i]->as<types::NamedType>();
+                        auto item_type = lookup_associated_type(arg_named.name, "Item");
+                        if (item_type) {
+                            std::string assoc_key = imported_type_params[i] + "::Item";
+                            type_subs[assoc_key] = item_type;
+                            type_subs["Item"] = item_type;
                         }
                     }
-                    break;
                 }
-                // Check enums
-                auto enum_it = mod.enums.find(named.name);
-                if (enum_it != mod.enums.end() && !enum_it->second.type_params.empty()) {
-                    imported_type_params = enum_it->second.type_params;
-                    for (size_t i = 0;
-                         i < imported_type_params.size() && i < named.type_args.size(); ++i) {
-                        type_subs[imported_type_params[i]] = named.type_args[i];
-                        if (named.type_args[i] && named.type_args[i]->is<types::NamedType>()) {
-                            const auto& arg_named = named.type_args[i]->as<types::NamedType>();
-                            auto item_type = lookup_associated_type(arg_named.name, "Item");
-                            if (item_type) {
-                                std::string assoc_key = imported_type_params[i] + "::Item";
-                                type_subs[assoc_key] = item_type;
-                                type_subs["Item"] = item_type;
+            }
+            // Also check module registry for imported structs and enums
+            else if (env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    // Check structs
+                    auto struct_it = mod.structs.find(named.name);
+                    if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
+                        imported_type_params = struct_it->second.type_params;
+                        for (size_t i = 0;
+                             i < imported_type_params.size() && i < named.type_args.size(); ++i) {
+                            type_subs[imported_type_params[i]] = named.type_args[i];
+                            if (named.type_args[i] && named.type_args[i]->is<types::NamedType>()) {
+                                const auto& arg_named = named.type_args[i]->as<types::NamedType>();
+                                auto item_type = lookup_associated_type(arg_named.name, "Item");
+                                if (item_type) {
+                                    std::string assoc_key = imported_type_params[i] + "::Item";
+                                    type_subs[assoc_key] = item_type;
+                                    type_subs["Item"] = item_type;
+                                }
                             }
                         }
+                        break;
                     }
-                    break;
+                    // Check enums
+                    auto enum_it = mod.enums.find(named.name);
+                    if (enum_it != mod.enums.end() && !enum_it->second.type_params.empty()) {
+                        imported_type_params = enum_it->second.type_params;
+                        for (size_t i = 0;
+                             i < imported_type_params.size() && i < named.type_args.size(); ++i) {
+                            type_subs[imported_type_params[i]] = named.type_args[i];
+                            if (named.type_args[i] && named.type_args[i]->is<types::NamedType>()) {
+                                const auto& arg_named = named.type_args[i]->as<types::NamedType>();
+                                auto item_type = lookup_associated_type(arg_named.name, "Item");
+                                if (item_type) {
+                                    std::string assoc_key = imported_type_params[i] + "::Item";
+                                    type_subs[assoc_key] = item_type;
+                                    type_subs["Item"] = item_type;
+                                }
+                            }
+                        }
+                        break;
+                    }
                 }
             }
         }
