@@ -1,6 +1,6 @@
 # Tasks: Codegen & Type System Test Blockers
 
-**Status**: In Progress (70%)
+**Status**: In Progress (85%)
 
 ## Phase 1: Critical Codegen Bugs (100% Complete)
 
@@ -35,10 +35,10 @@
 
 ## Phase 4: Runtime Features
 
-- [ ] 4.1.1 Complete async/await support for async iterators
+- [x] 4.1.1 Complete async/await support for async iterators
 - [x] 4.1.2 Fix Poll types and function pointer field calling
-- [ ] 4.1.3 Add Drop behavior runtime support
-- [ ] 4.1.4 Implement drop_in_place in lowlevel context
+- [x] 4.1.3 Add Drop behavior runtime support
+- [x] 4.1.4 Implement drop_in_place in lowlevel context
 - [ ] 4.1.5 Add codegen support for partial moves
 - [ ] 4.1.6 Support dyn return from functions (requires boxing)
 - [ ] 4.1.7 Support inherited field initialization in struct literals
@@ -46,6 +46,6 @@
 ## Phase 5: Other Issues
 
 - [x] 5.1.1 Fix tuple literals defaulting to I64 instead of I32
-- [ ] 5.1.2 Support module constant access
+- [x] 5.1.2 Support module constant access
 - [x] 5.1.3 Fix core::option 'xor' keyword bug (renamed to one_of)
 - [ ] 5.1.4 Fix generic type inference with lifetime bounds
