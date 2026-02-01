@@ -204,9 +204,15 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + result + " = call ptr @hashmap_create(i64 16)");
             return result;
         } else {
-            std::string i32_cap = gen_expr(*call.args[0]);
-            std::string cap = fresh_reg();
-            emit_line("  " + cap + " = sext i32 " + i32_cap + " to i64");
+            std::string cap_expr = gen_expr(*call.args[0]);
+            std::string cap_type = last_expr_type_;
+            std::string cap;
+            if (cap_type == "i64") {
+                cap = cap_expr;
+            } else {
+                cap = fresh_reg();
+                emit_line("  " + cap + " = sext " + cap_type + " " + cap_expr + " to i64");
+            }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @hashmap_create(i64 " + cap + ")");
             return result;
@@ -226,32 +232,65 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
     if (fn_name == "hashmap_set") {
         if (call.args.size() >= 3) {
             std::string map = gen_expr(*call.args[0]);
-            std::string i32_key = gen_expr(*call.args[1]);
-            std::string key = fresh_reg();
-            emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
-            std::string i32_value = gen_expr(*call.args[2]);
-            std::string value = fresh_reg();
-            emit_line("  " + value + " = sext i32 " + i32_value + " to i64");
+            std::string key_expr = gen_expr(*call.args[1]);
+            std::string key_type = last_expr_type_;
+            std::string key;
+            if (key_type == "i64") {
+                key = key_expr;
+            } else if (key_type == "ptr") {
+                // For strings, call str_hash to get content-based hash
+                std::string hash_result = fresh_reg();
+                emit_line("  " + hash_result + " = call i32 @str_hash(ptr " + key_expr + ")");
+                key = fresh_reg();
+                emit_line("  " + key + " = sext i32 " + hash_result + " to i64");
+            } else {
+                // i32, i16, i8 - sign extend
+                key = fresh_reg();
+                emit_line("  " + key + " = sext " + key_type + " " + key_expr + " to i64");
+            }
+            std::string val_expr = gen_expr(*call.args[2]);
+            std::string val_type = last_expr_type_;
+            std::string value;
+            if (val_type == "i64") {
+                value = val_expr;
+            } else if (val_type == "ptr") {
+                value = fresh_reg();
+                emit_line("  " + value + " = ptrtoint ptr " + val_expr + " to i64");
+            } else {
+                value = fresh_reg();
+                emit_line("  " + value + " = sext " + val_type + " " + val_expr + " to i64");
+            }
             emit_line("  call void @hashmap_set(ptr " + map + ", i64 " + key + ", i64 " + value +
                       ")");
         }
         return "0";
     }
 
-    // hashmap_get(map, key) -> I32
+    // hashmap_get(map, key) -> I64 (or ptr if value was ptr)
     if (fn_name == "hashmap_get") {
         if (call.args.size() >= 2) {
             std::string map = gen_expr(*call.args[0]);
-            std::string i32_key = gen_expr(*call.args[1]);
-            std::string key = fresh_reg();
-            emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
+            std::string key_expr = gen_expr(*call.args[1]);
+            std::string key_type = last_expr_type_;
+            std::string key;
+            if (key_type == "i64") {
+                key = key_expr;
+            } else if (key_type == "ptr") {
+                // For strings, call str_hash to get content-based hash
+                std::string hash_result = fresh_reg();
+                emit_line("  " + hash_result + " = call i32 @str_hash(ptr " + key_expr + ")");
+                key = fresh_reg();
+                emit_line("  " + key + " = sext i32 " + hash_result + " to i64");
+            } else {
+                key = fresh_reg();
+                emit_line("  " + key + " = sext " + key_type + " " + key_expr + " to i64");
+            }
             std::string i64_result = fresh_reg();
             emit_line("  " + i64_result + " = call i64 @hashmap_get(ptr " + map + ", i64 " + key +
                       ")");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
-            last_expr_type_ = "i32";
-            return result;
+            // Return i64 - caller can trunc if needed
+            last_expr_type_ = "i64";
+            return i64_result;
         }
         return "0";
     }
@@ -260,11 +299,27 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
     if (fn_name == "hashmap_has") {
         if (call.args.size() >= 2) {
             std::string map = gen_expr(*call.args[0]);
-            std::string i32_key = gen_expr(*call.args[1]);
-            std::string key = fresh_reg();
-            emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
+            std::string key_expr = gen_expr(*call.args[1]);
+            std::string key_type = last_expr_type_;
+            std::string key;
+            if (key_type == "i64") {
+                key = key_expr;
+            } else if (key_type == "ptr") {
+                // For strings, call str_hash to get content-based hash
+                std::string hash_result = fresh_reg();
+                emit_line("  " + hash_result + " = call i32 @str_hash(ptr " + key_expr + ")");
+                key = fresh_reg();
+                emit_line("  " + key + " = sext i32 " + hash_result + " to i64");
+            } else {
+                key = fresh_reg();
+                emit_line("  " + key + " = sext " + key_type + " " + key_expr + " to i64");
+            }
+            // Runtime returns i32, convert to i1
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @hashmap_has(ptr " + map + ", i64 " + key +
+                      ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @hashmap_has(ptr " + map + ", i64 " + key + ")");
+            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
             last_expr_type_ = "i1";
             return result;
         }
@@ -275,12 +330,27 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
     if (fn_name == "hashmap_remove") {
         if (call.args.size() >= 2) {
             std::string map = gen_expr(*call.args[0]);
-            std::string i32_key = gen_expr(*call.args[1]);
-            std::string key = fresh_reg();
-            emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
+            std::string key_expr = gen_expr(*call.args[1]);
+            std::string key_type = last_expr_type_;
+            std::string key;
+            if (key_type == "i64") {
+                key = key_expr;
+            } else if (key_type == "ptr") {
+                // For strings, call str_hash to get content-based hash
+                std::string hash_result = fresh_reg();
+                emit_line("  " + hash_result + " = call i32 @str_hash(ptr " + key_expr + ")");
+                key = fresh_reg();
+                emit_line("  " + key + " = sext i32 " + hash_result + " to i64");
+            } else {
+                key = fresh_reg();
+                emit_line("  " + key + " = sext " + key_type + " " + key_expr + " to i64");
+            }
+            // Runtime returns i32, convert to i1
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @hashmap_remove(ptr " + map + ", i64 " +
+                      key + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @hashmap_remove(ptr " + map + ", i64 " + key +
-                      ")");
+            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
             last_expr_type_ = "i1";
             return result;
         }
@@ -336,8 +406,11 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
     if (fn_name == "hashmap_iter_has_next") {
         if (!call.args.empty()) {
             std::string iter = gen_expr(*call.args[0]);
+            // Runtime returns i32, convert to i1
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @hashmap_iter_has_next(ptr " + iter + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @hashmap_iter_has_next(ptr " + iter + ")");
+            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
             last_expr_type_ = "i1";
             return result;
         }
@@ -386,9 +459,15 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + result + " = call ptr @buffer_create(i64 16)");
             return result;
         } else {
-            std::string i32_cap = gen_expr(*call.args[0]);
-            std::string cap = fresh_reg();
-            emit_line("  " + cap + " = sext i32 " + i32_cap + " to i64");
+            std::string cap_expr = gen_expr(*call.args[0]);
+            std::string cap_type = last_expr_type_;
+            std::string cap;
+            if (cap_type == "i64") {
+                cap = cap_expr;
+            } else {
+                cap = fresh_reg();
+                emit_line("  " + cap + " = sext " + cap_type + " " + cap_expr + " to i64");
+            }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @buffer_create(i64 " + cap + ")");
             return result;

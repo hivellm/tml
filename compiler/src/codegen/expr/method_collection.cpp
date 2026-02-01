@@ -134,8 +134,12 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             return "void";
         }
         if (method == "is_empty" || method == "isEmpty") {
+            // Runtime returns i32, convert to i1
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @list_is_empty(ptr " + handle + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @list_is_empty(ptr " + handle + ")");
+            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
+            last_expr_type_ = "i1";
             return result;
         }
         if (method == "destroy") {
@@ -174,13 +178,42 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
 
     // HashMap methods
     if (receiver_type_name == "HashMap") {
-        // Helper to ensure argument is i64
-        auto ensure_i64 = [this](const std::string& val, const std::string& type) -> std::string {
+        // Helper to ensure key argument is i64 (with proper string hashing)
+        auto ensure_key_i64 = [this](const std::string& val,
+                                     const std::string& type) -> std::string {
             if (type == "i64")
                 return val;
             if (type == "i32" || type == "i16" || type == "i8") {
                 std::string result = fresh_reg();
                 emit_line("  " + result + " = sext " + type + " " + val + " to i64");
+                return result;
+            }
+            // For strings, call str_hash to get content-based hash (not pointer address!)
+            // This ensures identical strings hash to the same key
+            if (type == "ptr" || val.starts_with("@.str") || val.starts_with("@str")) {
+                std::string hash_result = fresh_reg();
+                emit_line("  " + hash_result + " = call i32 @str_hash(ptr " + val + ")");
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = sext i32 " + hash_result + " to i64");
+                return result;
+            }
+            return val; // Assume it's compatible
+        };
+
+        // Helper to ensure value argument is i64 (uses ptrtoint for pointers)
+        auto ensure_val_i64 = [this](const std::string& val,
+                                     const std::string& type) -> std::string {
+            if (type == "i64")
+                return val;
+            if (type == "i32" || type == "i16" || type == "i8") {
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = sext " + type + " " + val + " to i64");
+                return result;
+            }
+            // For pointers/strings as values, convert to i64 via ptrtoint
+            if (type == "ptr" || val.starts_with("@.str") || val.starts_with("@str")) {
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = ptrtoint ptr " + val + " to i64");
                 return result;
             }
             return val; // Assume it's compatible
@@ -193,7 +226,7 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             }
             std::string key = gen_expr(*call.args[0]);
             std::string key_type = last_expr_type_;
-            std::string key_i64 = ensure_i64(key, key_type);
+            std::string key_i64 = ensure_key_i64(key, key_type);
             std::string result_i64 = fresh_reg();
             emit_line("  " + result_i64 + " = call i64 @hashmap_get(ptr " + handle + ", i64 " +
                       key_i64 + ")");
@@ -210,8 +243,8 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             std::string key_type = last_expr_type_;
             std::string val = gen_expr(*call.args[1]);
             std::string val_type = last_expr_type_;
-            std::string key_i64 = ensure_i64(key, key_type);
-            std::string val_i64 = ensure_i64(val, val_type);
+            std::string key_i64 = ensure_key_i64(key, key_type);
+            std::string val_i64 = ensure_val_i64(val, val_type);
             emit_line("  call void @hashmap_set(ptr " + handle + ", i64 " + key_i64 + ", i64 " +
                       val_i64 + ")");
             return "void";
@@ -223,10 +256,14 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             }
             std::string key = gen_expr(*call.args[0]);
             std::string key_type = last_expr_type_;
-            std::string key_i64 = ensure_i64(key, key_type);
+            std::string key_i64 = ensure_key_i64(key, key_type);
+            // Runtime returns i32, convert to i1
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @hashmap_has(ptr " + handle + ", i64 " +
+                      key_i64 + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @hashmap_has(ptr " + handle + ", i64 " + key_i64 +
-                      ")");
+            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
+            last_expr_type_ = "i1";
             return result;
         }
         if (method == "remove") {
@@ -236,10 +273,14 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             }
             std::string key = gen_expr(*call.args[0]);
             std::string key_type = last_expr_type_;
-            std::string key_i64 = ensure_i64(key, key_type);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @hashmap_remove(ptr " + handle + ", i64 " +
+            std::string key_i64 = ensure_key_i64(key, key_type);
+            // Runtime returns i32, convert to i1
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @hashmap_remove(ptr " + handle + ", i64 " +
                       key_i64 + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
+            last_expr_type_ = "i1";
             return result;
         }
         if (method == "len" || method == "length") {
