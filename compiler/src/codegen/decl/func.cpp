@@ -132,7 +132,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
         // Handle impl Behavior return types - analyze function body to find concrete type
         if (semantic_ret && semantic_ret->is<types::ImplBehaviorType>() && func.body.has_value()) {
-            // Set current_func_ temporarily so llvm_type_from_semantic can look up the concrete type
+            // Set current_func_ temporarily so llvm_type_from_semantic can look up the concrete
+            // type
             std::string saved_func = current_func_;
             current_func_ = func.name;
 

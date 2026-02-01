@@ -83,10 +83,9 @@ static std::string primitive_to_string(PrimitiveKind kind) {
 
 /// Extract type parameter bindings by matching parameter type against argument type.
 /// For example, matching `ManuallyDrop[T]` against `ManuallyDrop[I64]` extracts {T -> I64}.
-static void extract_type_params(
-    const TypePtr& param_type, const TypePtr& arg_type,
-    const std::vector<std::string>& type_params,
-    std::unordered_map<std::string, TypePtr>& substitutions) {
+static void extract_type_params(const TypePtr& param_type, const TypePtr& arg_type,
+                                const std::vector<std::string>& type_params,
+                                std::unordered_map<std::string, TypePtr>& substitutions) {
     if (!param_type || !arg_type)
         return;
 
@@ -108,8 +107,8 @@ static void extract_type_params(
             if (named.name == arg_named.name &&
                 named.type_args.size() == arg_named.type_args.size()) {
                 for (size_t i = 0; i < named.type_args.size(); ++i) {
-                    extract_type_params(named.type_args[i], arg_named.type_args[i],
-                                        type_params, substitutions);
+                    extract_type_params(named.type_args[i], arg_named.type_args[i], type_params,
+                                        substitutions);
                 }
             }
         }
@@ -142,8 +141,8 @@ static void extract_type_params(
         const auto& arg_tuple = arg_type->as<TupleType>();
         if (param_tuple.elements.size() == arg_tuple.elements.size()) {
             for (size_t i = 0; i < param_tuple.elements.size(); ++i) {
-                extract_type_params(param_tuple.elements[i], arg_tuple.elements[i],
-                                    type_params, substitutions);
+                extract_type_params(param_tuple.elements[i], arg_tuple.elements[i], type_params,
+                                    substitutions);
             }
         }
         return;
@@ -1000,9 +999,8 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                     std::vector<TypePtr> arg_types;
                     for (size_t i = 0; i < call.args.size(); ++i) {
                         // Pass expected param type for numeric literal coercion
-                        TypePtr expected_param = (i < local_func->params.size())
-                                                     ? local_func->params[i]
-                                                     : nullptr;
+                        TypePtr expected_param =
+                            (i < local_func->params.size()) ? local_func->params[i] : nullptr;
                         arg_types.push_back(check_expr(*call.args[i], expected_param));
                     }
 
@@ -1013,8 +1011,8 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                         // For static methods on generic types (like Wrapper[T]::unwrap),
                         // extract type args from arguments that match the type pattern.
                         // E.g., if arg is Wrapper[I64] and param is Wrapper[T], extract T=I64
-                        for (size_t i = 0;
-                             i < arg_types.size() && i < local_func->params.size(); ++i) {
+                        for (size_t i = 0; i < arg_types.size() && i < local_func->params.size();
+                             ++i) {
                             const auto& arg_type = arg_types[i];
                             const auto& param_type = local_func->params[i];
 
@@ -1027,9 +1025,8 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                                     !arg_named.type_args.empty() &&
                                     param_named.type_args.size() == arg_named.type_args.size()) {
                                     // Map type params to concrete types from argument
-                                    for (size_t j = 0;
-                                         j < local_func->type_params.size() &&
-                                         j < arg_named.type_args.size();
+                                    for (size_t j = 0; j < local_func->type_params.size() &&
+                                                       j < arg_named.type_args.size();
                                          ++j) {
                                         substitutions[local_func->type_params[j]] =
                                             arg_named.type_args[j];
@@ -1066,9 +1063,8 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                             std::vector<TypePtr> arg_types;
                             for (size_t i = 0; i < call.args.size(); ++i) {
                                 // Pass expected param type for numeric literal coercion
-                                TypePtr expected_param = (i < func.params.size())
-                                                             ? func.params[i]
-                                                             : nullptr;
+                                TypePtr expected_param =
+                                    (i < func.params.size()) ? func.params[i] : nullptr;
                                 arg_types.push_back(check_expr(*call.args[i], expected_param));
                             }
 
@@ -1077,8 +1073,8 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                                 std::unordered_map<std::string, TypePtr> substitutions;
 
                                 // Same logic as local functions above
-                                for (size_t i = 0;
-                                     i < arg_types.size() && i < func.params.size(); ++i) {
+                                for (size_t i = 0; i < arg_types.size() && i < func.params.size();
+                                     ++i) {
                                     const auto& arg_type = arg_types[i];
                                     const auto& param_type = func.params[i];
 
@@ -1090,9 +1086,8 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                                             !arg_named.type_args.empty() &&
                                             param_named.type_args.size() ==
                                                 arg_named.type_args.size()) {
-                                            for (size_t j = 0;
-                                                 j < func.type_params.size() &&
-                                                 j < arg_named.type_args.size();
+                                            for (size_t j = 0; j < func.type_params.size() &&
+                                                               j < arg_named.type_args.size();
                                                  ++j) {
                                                 substitutions[func.type_params[j]] =
                                                     arg_named.type_args[j];
@@ -2201,7 +2196,8 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                                   call.receiver->span);
                         }
                         // Type check arguments
-                        for (size_t i = 0; i < std::min(call.args.size(), func.params.size()); ++i) {
+                        for (size_t i = 0; i < std::min(call.args.size(), func.params.size());
+                             ++i) {
                             check_expr(*call.args[i], func.params[i]);
                         }
                         return func.return_type;

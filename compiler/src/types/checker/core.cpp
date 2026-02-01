@@ -734,8 +734,8 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
             }
 
             if (!behavior_names.empty() || !parameterized_bounds.empty()) {
-                where_constraints.push_back(WhereConstraint{
-                    param.name, std::move(behavior_names), std::move(parameterized_bounds)});
+                where_constraints.push_back(WhereConstraint{param.name, std::move(behavior_names),
+                                                            std::move(parameterized_bounds)});
             }
         }
     }

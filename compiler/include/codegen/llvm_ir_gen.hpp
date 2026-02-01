@@ -874,6 +874,10 @@ private:
     void emit(const std::string& code);
     void emit_line(const std::string& code);
 
+    /// Emits coverage instrumentation for a function call.
+    /// Only emits if coverage_enabled is true. Tracks function calls for coverage reporting.
+    void emit_coverage(const std::string& func_name);
+
     /// Returns suite prefix (e.g., "s0_") when in suite mode, empty string otherwise.
     /// Used to avoid symbol collisions when multiple test files are linked into one DLL.
     auto get_suite_prefix() const -> std::string;

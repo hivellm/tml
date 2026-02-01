@@ -864,8 +864,8 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                                 return assoc_type;
                             }
                         } else if (concrete_type->is<types::PrimitiveType>()) {
-                            // For primitive types with associated types (e.g., T::Owned where T: ToOwned)
-                            // Most primitives have Self as their Owned type
+                            // For primitive types with associated types (e.g., T::Owned where T:
+                            // ToOwned) Most primitives have Self as their Owned type
                             if (second == "Owned") {
                                 // For ToOwned, Owned = Self for all primitive types
                                 return concrete_type;

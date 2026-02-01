@@ -49,6 +49,13 @@ void LLVMIRGen::emit_line(const std::string& code) {
     output_ << code << "\n";
 }
 
+void LLVMIRGen::emit_coverage(const std::string& func_name) {
+    if (options_.coverage_enabled) {
+        std::string func_name_str = add_string_literal(func_name);
+        emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+    }
+}
+
 void LLVMIRGen::report_error(const std::string& msg, const SourceSpan& span) {
     errors_.push_back(LLVMGenError{msg, span, {}});
 }

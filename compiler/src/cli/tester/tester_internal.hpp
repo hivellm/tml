@@ -240,8 +240,7 @@ struct TestRunStats {
 
 // Print library coverage analysis showing what's NOT covered
 void print_library_coverage_report(const std::set<std::string>& covered_functions,
-                                   const ColorOutput& c,
-                                   const TestRunStats& test_stats = {});
+                                   const ColorOutput& c, const TestRunStats& test_stats = {});
 
 // Write library coverage analysis to HTML file
 void write_library_coverage_html(const std::set<std::string>& covered_functions,

@@ -141,6 +141,10 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // Use base_name for all subsequent intrinsic checks
     const std::string& intrinsic_name = base_name;
 
+    // Coverage instrumentation for intrinsics
+    // This tracks all intrinsic calls uniformly, regardless of which specific intrinsic
+    emit_coverage(intrinsic_name);
+
     // Function signature lookup (used by some intrinsics for type info)
     auto func_sig = env_.lookup_func(fn_name);
 

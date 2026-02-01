@@ -811,8 +811,8 @@ bool TypeEnv::is_trivially_destructible(const std::string& type_name) const {
         // Helper lambda to parse type arguments from mangled string respecting type param count
         // For N type params, we split only N-1 times so the last arg can contain nested generics
         // e.g., Outcome__I32__Maybe__Str with 2 params -> ["I32", "Maybe__Str"]
-        auto parse_type_args = [](const std::string& remaining, size_t num_type_params)
-            -> std::vector<std::string> {
+        auto parse_type_args = [](const std::string& remaining,
+                                  size_t num_type_params) -> std::vector<std::string> {
             std::vector<std::string> args;
             if (num_type_params == 0)
                 return args;

@@ -317,10 +317,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         }
 
         // Sort suites by test count (descending)
-        std::sort(test_stats.suites.begin(), test_stats.suites.end(),
-                  [](const SuiteStats& a, const SuiteStats& b) {
-                      return a.test_count > b.test_count;
-                  });
+        std::sort(
+            test_stats.suites.begin(), test_stats.suites.end(),
+            [](const SuiteStats& a, const SuiteStats& b) { return a.test_count > b.test_count; });
 
         // Print library coverage analysis after all suites complete
         if (CompilerOptions::coverage && !all_covered_functions.empty()) {
@@ -328,8 +327,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
             // Write HTML report with proper library coverage data
             if (!CompilerOptions::coverage_output.empty()) {
-                write_library_coverage_html(all_covered_functions,
-                                            CompilerOptions::coverage_output, test_stats);
+                write_library_coverage_html(all_covered_functions, CompilerOptions::coverage_output,
+                                            test_stats);
             }
         }
 
