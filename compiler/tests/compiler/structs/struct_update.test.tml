@@ -1,0 +1,46 @@
+// Isolated test for struct update - one test at a time
+use test
+
+type Point {
+    x: I32,
+    y: I32,
+}
+
+type Config {
+    debug: Bool,
+    verbose: Bool,
+    level: I32,
+}
+
+@test
+func test_basic() -> I32 {
+    let p1: Point = Point { x: 10, y: 20 }
+    let p2: Point = Point { x: 5, ..p1 }
+
+    // Test using assert_eq exactly like the original
+    assert_eq(p2.x, 5, "p2.x should be 5")
+    assert_eq(p2.y, 20, "p2.y should be 20")
+
+    return 0
+}
+
+@test
+func test_config() -> I32 {
+    let c1: Config = Config { debug: false, verbose: false, level: 1 }
+    let c2: Config = Config { debug: true, level: 3, ..c1 }
+
+    assert_eq(c2.debug, true, "c2.debug should be true")
+    assert_eq(c2.verbose, false, "c2.verbose should be false")
+    assert_eq(c2.level, 3, "c2.level should be 3")
+    return 0
+}
+
+@test
+func test_copy_all() -> I32 {
+    let p1: Point = Point { x: 100, y: 200 }
+    let p2: Point = Point { ..p1 }
+
+    assert_eq(p2.x, 100, "p2.x should be 100")
+    assert_eq(p2.y, 200, "p2.y should be 200")
+    return 0
+}

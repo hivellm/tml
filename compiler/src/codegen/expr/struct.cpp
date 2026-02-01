@@ -405,6 +405,16 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         struct_name_for_lookup = struct_name_for_lookup.substr(7);
     }
 
+    // Handle struct update syntax (..base)
+    // If base is present, first copy all fields from base, then override with specified fields
+    if (s.base.has_value()) {
+        // Generate the base expression to get a struct value
+        std::string base_val = gen_expr(**s.base);
+
+        // Store the base value into our new struct (copies all fields)
+        emit_line("  store " + struct_type + " " + base_val + ", ptr " + ptr);
+    }
+
     for (size_t i = 0; i < s.fields.size(); ++i) {
         const std::string& field_name = s.fields[i].first;
         std::string field_val;

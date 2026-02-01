@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Struct Update Syntax** (2026-02-01) - Copy struct with field overrides using `..base`
+  - New syntax: `Point { x: 5, ..base_struct }` copies fields from base_struct, overrides x
+  - Also supports copying all fields: `Point { ..base_struct }` (equivalent to clone)
+  - Works with any struct type, including those with Bool, I32, and other field types
+  - Files modified:
+    - `compiler/src/codegen/expr/struct.cpp` - Implement struct update codegen in gen_struct_expr_ptr
+
+- **Test Organization** (2026-02-01) - Reorganized compiler tests into logical folders
+  - `basics/` - Core language features (variables, expressions, control flow)
+  - `structs/` - Struct-related tests
+  - `enums/` - Enum tests
+  - `generics/` - Generic type parameters and GATs
+  - `closures/` - Closure and higher-order function tests
+  - `patterns/` - Pattern matching tests
+  - `behaviors/` - Traits, impl blocks, dyn dispatch, associated types
+  - `memory/` - Memory management, pointers, drop
+  - `modules/` - Module system tests
+  - `types/` - Numeric types, strings, primitives
+  - `error_handling/` - Try operator, throw
+  - `misc/` - Other tests
+
 - **Loop Variable Declaration Syntax** (2026-01-21) - Cleaner loop syntax with inline variable declaration
   - New syntax: `loop (var i: I32 < N) { ... }` declares and initializes loop variable
   - Variable is automatically initialized to `0` and scoped to the loop
