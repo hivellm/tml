@@ -180,6 +180,55 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
                 return "void";
             }
 
+            // Handle dyn coercion: return a concrete type as dyn Behavior
+            // This converts a concrete struct to a fat pointer {data_ptr, vtable_ptr}
+            if (current_ret_type_.starts_with("%dyn.") &&
+                (val_type.starts_with("%struct.") || val_type.starts_with("%class."))) {
+                // Extract behavior name from %dyn.Counter -> Counter
+                std::string behavior_name = current_ret_type_.substr(5);
+
+                // Extract concrete type name from %struct.SimpleCounter -> SimpleCounter
+                std::string concrete_type;
+                if (val_type.starts_with("%struct.")) {
+                    concrete_type = val_type.substr(8);
+                } else if (val_type.starts_with("%class.")) {
+                    concrete_type = val_type.substr(7);
+                }
+
+                // Look up the vtable
+                std::string vtable = get_vtable(concrete_type, behavior_name);
+                if (!vtable.empty()) {
+                    // Allocate space for the concrete value
+                    std::string data_alloca = fresh_reg();
+                    emit_line("  " + data_alloca + " = alloca " + val_type);
+                    emit_line("  store " + val_type + " " + val + ", ptr " + data_alloca);
+
+                    // Allocate the fat pointer struct
+                    std::string dyn_alloca = fresh_reg();
+                    emit_line("  " + dyn_alloca + " = alloca " + current_ret_type_);
+
+                    // Store data pointer (field 0)
+                    std::string data_field = fresh_reg();
+                    emit_line("  " + data_field + " = getelementptr " + current_ret_type_ +
+                              ", ptr " + dyn_alloca + ", i32 0, i32 0");
+                    emit_line("  store ptr " + data_alloca + ", ptr " + data_field);
+
+                    // Store vtable pointer (field 1)
+                    std::string vtable_field = fresh_reg();
+                    emit_line("  " + vtable_field + " = getelementptr " + current_ret_type_ +
+                              ", ptr " + dyn_alloca + ", i32 0, i32 1");
+                    emit_line("  store ptr " + vtable + ", ptr " + vtable_field);
+
+                    // Load the fat pointer and return it
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = load " + current_ret_type_ + ", ptr " +
+                              dyn_alloca);
+                    emit_line("  ret " + current_ret_type_ + " " + result);
+                    block_terminated_ = true;
+                    return "void";
+                }
+            }
+
             // Handle integer type extension when actual differs from expected
             std::string final_val = val;
             if (val_type != current_ret_type_) {

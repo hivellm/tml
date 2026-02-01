@@ -1,0 +1,77 @@
+// Test impl Behavior return types with full codegen support
+// This tests that functions can return opaque types like `impl Counter`
+
+use test
+
+// Define a simple behavior
+behavior Counter {
+    func count(this: ref This) -> I32
+}
+
+// A struct that implements Counter
+type SimpleCounter {
+    value: I32
+}
+
+impl Counter for SimpleCounter {
+    func count(this: ref This) -> I32 {
+        return this.value
+    }
+}
+
+// Another struct that implements Counter
+type DoubleCounter {
+    val: I32
+}
+
+impl Counter for DoubleCounter {
+    func count(this: ref This) -> I32 {
+        return this.val * 2
+    }
+}
+
+// Function that returns impl Counter
+func make_counter(val: I32) -> impl Counter {
+    return SimpleCounter { value: val }
+}
+
+// Function with conditional return - still same concrete type
+func make_conditional_counter(use_double: Bool, val: I32) -> impl Counter {
+    if use_double {
+        return DoubleCounter { val: val }
+    }
+    return DoubleCounter { val: val }  // Same type, just different values
+}
+
+// Function with if-else returning same type
+func make_from_choice(choice: I32) -> impl Counter {
+    if choice > 0 {
+        return SimpleCounter { value: choice }
+    } else {
+        return SimpleCounter { value: 0 }
+    }
+}
+
+@test
+func test_impl_behavior_return() -> I32 {
+    let c: SimpleCounter = make_counter(42)
+    let count: I32 = c.count()
+    assert_eq(count, 42, "impl Counter return should work")
+    return 0
+}
+
+@test
+func test_impl_behavior_conditional() -> I32 {
+    let c: DoubleCounter = make_conditional_counter(true, 21)
+    assert_eq(c.count(), 42, "conditional impl return should work")
+    return 0
+}
+
+@test
+func test_impl_behavior_if_else() -> I32 {
+    let c1: SimpleCounter = make_from_choice(10)
+    let c2: SimpleCounter = make_from_choice(-5)
+    assert_eq(c1.count(), 10, "positive choice")
+    assert_eq(c2.count(), 0, "negative choice")
+    return 0
+}

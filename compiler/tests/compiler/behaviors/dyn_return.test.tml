@@ -1,0 +1,78 @@
+// Test dyn Behavior return types
+// This tests that functions can return trait objects like `dyn Counter`
+
+use test
+
+// Define a simple behavior
+behavior Counter {
+    func count(this: ref This) -> I32
+}
+
+// A struct that implements Counter
+type SimpleCounter {
+    value: I32
+}
+
+impl Counter for SimpleCounter {
+    func count(this: ref This) -> I32 {
+        return this.value
+    }
+}
+
+// First test: dyn coercion works locally
+@test
+func test_dyn_local() -> I32 {
+    let c: SimpleCounter = SimpleCounter { value: 42 }
+    let d: dyn Counter = c  // Upcast to dyn
+    let count: I32 = d.count()
+    assert_eq(count, 42, "local dyn coercion works")
+    return 0
+}
+
+// Second test: can we return dyn from a function?
+// Note: dyn Counter is unsized, so this requires proper handling
+func get_dyn_counter() -> dyn Counter {
+    let c: SimpleCounter = SimpleCounter { value: 100 }
+    return c
+}
+
+@test
+func test_dyn_return_simple() -> I32 {
+    let d: dyn Counter = get_dyn_counter()
+    let count: I32 = d.count()
+    assert_eq(count, 100, "dyn return should work")
+    return 0
+}
+
+// Another struct that implements Counter
+type DoubleCounter {
+    val: I32
+}
+
+impl Counter for DoubleCounter {
+    func count(this: ref This) -> I32 {
+        return this.val * 2
+    }
+}
+
+// Function with conditional return - same dyn type, different concrete types
+func make_counter(double: Bool, val: I32) -> dyn Counter {
+    if double {
+        return DoubleCounter { val: val }
+    }
+    return SimpleCounter { value: val }
+}
+
+@test
+func test_dyn_return_conditional_simple() -> I32 {
+    let c: dyn Counter = make_counter(false, 42)
+    assert_eq(c.count(), 42, "simple counter via dyn return")
+    return 0
+}
+
+@test
+func test_dyn_return_conditional_double() -> I32 {
+    let c: dyn Counter = make_counter(true, 21)
+    assert_eq(c.count(), 42, "double counter via dyn return")
+    return 0
+}
