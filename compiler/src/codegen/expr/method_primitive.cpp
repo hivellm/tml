@@ -159,11 +159,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // Comparison methods
         if (method == "cmp") {
-            // Coverage tracking for Ord::cmp
-            if (options_.coverage_enabled) {
-                std::string func_name_str = add_string_literal("Ord::cmp");
-                emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-            }
+            emit_coverage("Ord::cmp");
             if (call.args.empty()) {
                 report_error("cmp() requires an argument", call.span);
                 return "0";
@@ -326,11 +322,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // bitand_assign(rhs) - this = this & rhs
         if (method == "bitand_assign" && !receiver_ptr.empty()) {
-            // Coverage tracking for BitAndAssign::bitand_assign
-            if (options_.coverage_enabled) {
-                std::string func_name_str = add_string_literal("BitAndAssign::bitand_assign");
-                emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-            }
+            emit_coverage("BitAndAssign::bitand_assign");
             if (call.args.empty()) {
                 report_error("bitand_assign() requires an argument", call.span);
                 return "0";
@@ -345,11 +337,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // bitor_assign(rhs) - this = this | rhs
         if (method == "bitor_assign" && !receiver_ptr.empty()) {
-            // Coverage tracking for BitOrAssign::bitor_assign
-            if (options_.coverage_enabled) {
-                std::string func_name_str = add_string_literal("BitOrAssign::bitor_assign");
-                emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-            }
+            emit_coverage("BitOrAssign::bitor_assign");
             if (call.args.empty()) {
                 report_error("bitor_assign() requires an argument", call.span);
                 return "0";
@@ -364,11 +352,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // bitxor_assign(rhs) - this = this ^ rhs
         if (method == "bitxor_assign" && !receiver_ptr.empty()) {
-            // Coverage tracking for BitXorAssign::bitxor_assign
-            if (options_.coverage_enabled) {
-                std::string func_name_str = add_string_literal("BitXorAssign::bitxor_assign");
-                emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-            }
+            emit_coverage("BitXorAssign::bitxor_assign");
             if (call.args.empty()) {
                 report_error("bitxor_assign() requires an argument", call.span);
                 return "0";
@@ -383,11 +367,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // shl_assign(rhs) - this = this << rhs
         if (method == "shl_assign" && !receiver_ptr.empty()) {
-            // Coverage tracking for ShlAssign::shl_assign
-            if (options_.coverage_enabled) {
-                std::string func_name_str = add_string_literal("ShlAssign::shl_assign");
-                emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-            }
+            emit_coverage("ShlAssign::shl_assign");
             if (call.args.empty()) {
                 report_error("shl_assign() requires an argument", call.span);
                 return "0";
@@ -426,11 +406,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // shr_assign(rhs) - this = this >> rhs (arithmetic for signed, logical for unsigned)
         if (method == "shr_assign" && !receiver_ptr.empty()) {
-            // Coverage tracking for ShrAssign::shr_assign
-            if (options_.coverage_enabled) {
-                std::string func_name_str = add_string_literal("ShrAssign::shr_assign");
-                emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-            }
+            emit_coverage("ShrAssign::shr_assign");
             if (call.args.empty()) {
                 report_error("shr_assign() requires an argument", call.span);
                 return "0";
@@ -475,11 +451,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
     // Bool operations
     if (kind == types::PrimitiveKind::Bool) {
         if (method == "negate") {
-            // Coverage tracking for Not::negate
-            if (options_.coverage_enabled) {
-                std::string func_name_str = add_string_literal("Not::negate");
-                emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-            }
+            emit_coverage("Not::negate");
             std::string result = fresh_reg();
             emit_line("  " + result + " = xor i1 " + receiver + ", true");
             last_expr_type_ = "i1";
@@ -489,33 +461,21 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
     // duplicate() -> Self (copy semantics for primitives)
     if (method == "duplicate") {
-        // Coverage tracking for Duplicate::duplicate
-        if (options_.coverage_enabled) {
-            std::string func_name_str = add_string_literal("Duplicate::duplicate");
-            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-        }
+        emit_coverage("Duplicate::duplicate");
         last_expr_type_ = llvm_ty;
         return receiver;
     }
 
     // to_owned() -> Self
     if (method == "to_owned") {
-        // Coverage tracking for ToOwned::to_owned
-        if (options_.coverage_enabled) {
-            std::string func_name_str = add_string_literal("ToOwned::to_owned");
-            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-        }
+        emit_coverage("ToOwned::to_owned");
         last_expr_type_ = llvm_ty;
         return receiver;
     }
 
     // borrow() -> ref Self
     if (method == "borrow") {
-        // Coverage tracking for Borrow::borrow
-        if (options_.coverage_enabled) {
-            std::string func_name_str = add_string_literal("Borrow::borrow");
-            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-        }
+        emit_coverage("Borrow::borrow");
         if (!receiver_ptr.empty()) {
             last_expr_type_ = "ptr";
             return receiver_ptr;
@@ -529,11 +489,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
     // borrow_mut() -> mut ref Self
     if (method == "borrow_mut") {
-        // Coverage tracking for BorrowMut::borrow_mut
-        if (options_.coverage_enabled) {
-            std::string func_name_str = add_string_literal("BorrowMut::borrow_mut");
-            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-        }
+        emit_coverage("BorrowMut::borrow_mut");
         if (!receiver_ptr.empty()) {
             last_expr_type_ = "ptr";
             return receiver_ptr;
@@ -547,13 +503,8 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
     // to_string() -> Str and debug_string() -> Str (same for primitives)
     if (method == "to_string" || method == "debug_string") {
-        // Coverage tracking for Display::to_string and Debug::debug_string
-        if (options_.coverage_enabled) {
-            std::string trait_name = (method == "to_string") ? "Display" : "Debug";
-            std::string qualified_name = trait_name + "::" + method;
-            std::string func_name_str = add_string_literal(qualified_name);
-            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-        }
+        std::string trait_name = (method == "to_string") ? "Display" : "Debug";
+        emit_coverage(trait_name + "::" + method);
         std::string result = fresh_reg();
         if (kind == types::PrimitiveKind::Bool) {
             std::string ext = fresh_reg();
@@ -592,11 +543,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
     // hash() -> I64
     if (method == "hash") {
-        // Coverage tracking for Hash::hash
-        if (options_.coverage_enabled) {
-            std::string func_name_str = add_string_literal("Hash::hash");
-            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-        }
+        emit_coverage("Hash::hash");
         std::string result = fresh_reg();
         if (kind == types::PrimitiveKind::Bool) {
             emit_line("  " + result + " = zext i1 " + receiver + " to i64");

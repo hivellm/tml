@@ -1176,11 +1176,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // used by inlined primitive operators. This allows coverage reports to
     // show that using `a & b` exercises `BitAnd::bitand`.
     auto emit_operator_coverage = [&](const std::string& trait_name, const std::string& method) {
-        if (options_.coverage_enabled) {
-            std::string qualified_name = trait_name + "::" + method;
-            std::string func_name_str = add_string_literal(qualified_name);
-            emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-        }
+        emit_coverage(trait_name + "::" + method);
     };
 
     switch (bin.op) {

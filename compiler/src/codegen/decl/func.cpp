@@ -541,10 +541,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     }
 
     // Coverage instrumentation - inject call at function entry
-    if (options_.coverage_enabled) {
-        std::string func_name_str = add_string_literal(func.name);
-        emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-    }
+    emit_coverage(func.name);
 
     // LLVM source-based coverage instrumentation
     // Only instrument user code (not library functions) to avoid duplicate symbols in suite mode
@@ -843,10 +840,7 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
 
     // TML runtime coverage for generic instantiation
     // This tracks library function calls via the TML coverage runtime
-    if (options_.coverage_enabled) {
-        std::string func_name_str = add_string_literal(func.name);
-        emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-    }
+    emit_coverage(func.name);
 
     // LLVM source-based coverage instrumentation for generic instantiation
     if (options_.llvm_source_coverage) {

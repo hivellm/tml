@@ -56,6 +56,20 @@ void LLVMIRGen::emit_coverage(const std::string& func_name) {
     }
 }
 
+void LLVMIRGen::emit_coverage_report_calls(const std::string& coverage_output_str,
+                                           bool check_quiet) {
+    if (!options_.coverage_enabled) {
+        return;
+    }
+    if (check_quiet && options_.coverage_quiet) {
+        return;
+    }
+    emit_line("  call void @print_coverage_report()");
+    if (!coverage_output_str.empty()) {
+        emit_line("  call void @write_coverage_html(ptr " + coverage_output_str + ")");
+    }
+}
+
 void LLVMIRGen::report_error(const std::string& msg, const SourceSpan& span) {
     errors_.push_back(LLVMGenError{msg, span, {}});
 }

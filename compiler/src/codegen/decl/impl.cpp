@@ -409,11 +409,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 
     // Coverage instrumentation - inject call at method entry
     // Uses qualified name like "TypeName::method_name" for library coverage tracking
-    if (options_.coverage_enabled) {
-        std::string qualified_name = type_name + "::" + method.name;
-        std::string func_name_str = add_string_literal(qualified_name);
-        emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-    }
+    emit_coverage(type_name + "::" + method.name);
 
     // Generate method body
     if (method.body) {
@@ -704,11 +700,9 @@ void LLVMIRGen::gen_impl_method_instantiation(
 
     // Coverage instrumentation - inject call at method entry
     // Uses base type name for better readability (e.g., "Arc::new" instead of "Arc__I32::new")
-    if (options_.coverage_enabled) {
+    {
         std::string type_for_coverage = base_type_name.empty() ? mangled_type_name : base_type_name;
-        std::string qualified_name = type_for_coverage + "::" + method.name;
-        std::string func_name_str = add_string_literal(qualified_name);
-        emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
+        emit_coverage(type_for_coverage + "::" + method.name);
     }
 
     // Generate method body

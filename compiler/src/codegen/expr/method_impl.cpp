@@ -344,10 +344,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
 
     // Coverage instrumentation at call site for library methods
     // This tracks usage of library functions even if they get inlined
-    if (options_.coverage_enabled) {
-        std::string func_name_str = add_string_literal(qualified_name);
-        emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-    }
+    emit_coverage(qualified_name);
 
     std::string result = fresh_reg();
     if (ret_type == "void") {
@@ -527,10 +524,7 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     }
 
     // Coverage instrumentation at call site for library methods
-    if (options_.coverage_enabled) {
-        std::string func_name_str = add_string_literal(qualified_name);
-        emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
-    }
+    emit_coverage(qualified_name);
 
     std::string result = fresh_reg();
     if (ret_type == "void") {
