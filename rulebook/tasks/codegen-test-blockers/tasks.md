@@ -1,6 +1,6 @@
 # Tasks: Codegen & Type System Test Blockers
 
-**Status**: In Progress (85%)
+**Status**: In Progress (92%)
 
 ## Phase 1: Critical Codegen Bugs (100% Complete)
 
@@ -41,11 +41,20 @@
 - [x] 4.1.4 Implement drop_in_place in lowlevel context
 - [ ] 4.1.5 Add codegen support for partial moves
 - [ ] 4.1.6 Support dyn return from functions (requires boxing)
-- [ ] 4.1.7 Support inherited field initialization in struct literals
+- [x] 4.1.7 Support inherited field initialization in struct literals (struct update syntax `..base`)
 
 ## Phase 5: Other Issues
 
 - [x] 5.1.1 Fix tuple literals defaulting to I64 instead of I32
 - [x] 5.1.2 Support module constant access
 - [x] 5.1.3 Fix core::option 'xor' keyword bug (renamed to one_of)
-- [ ] 5.1.4 Fix generic type inference with lifetime bounds
+- [x] 5.1.4 Fix generic type inference with lifetime bounds (tests pass)
+
+## Remaining Complex Tasks
+
+The following tasks require significant implementation work:
+
+- **4.1.5 Partial moves**: Requires field-level move tracking in codegen (not just whole-variable)
+- **4.1.6 dyn return**: Requires automatic boxing (Heap[dyn T]) for unsized return types
+- **2.1.10 ToOwned**: Associated type resolution through generic bounds (e.g., `Maybe[T::Owned]`)
+- **3.1.2 impl Behavior**: Type inference from function body for opaque return types
