@@ -130,6 +130,9 @@ auto make_test_tool() -> Tool {
                     {"path", "string", "Path to test file or directory", false},
                     {"filter", "string", "Test name filter", false},
                     {"release", "boolean", "Run in release mode", false},
+                    {"coverage", "boolean", "Generate coverage report", false},
+                    {"profile", "boolean", "Show per-test timing profile", false},
+                    {"verbose", "boolean", "Show verbose output", false},
                 }};
 }
 
@@ -764,6 +767,24 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
     auto* release_param = params.get("release");
     if (release_param != nullptr && release_param->is_bool() && release_param->as_bool()) {
         cmd << " --release";
+    }
+
+    // Get coverage parameter (optional)
+    auto* coverage_param = params.get("coverage");
+    if (coverage_param != nullptr && coverage_param->is_bool() && coverage_param->as_bool()) {
+        cmd << " --coverage";
+    }
+
+    // Get profile parameter (optional)
+    auto* profile_param = params.get("profile");
+    if (profile_param != nullptr && profile_param->is_bool() && profile_param->as_bool()) {
+        cmd << " --profile";
+    }
+
+    // Get verbose parameter (optional)
+    auto* verbose_param = params.get("verbose");
+    if (verbose_param != nullptr && verbose_param->is_bool() && verbose_param->as_bool()) {
+        cmd << " --verbose";
     }
 
     // Execute tests

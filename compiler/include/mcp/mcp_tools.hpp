@@ -112,6 +112,9 @@ auto make_emit_mir_tool() -> Tool;
 /// - `path` (string, optional): Path to test file or directory
 /// - `filter` (string, optional): Test name filter
 /// - `release` (boolean, optional): Run in release mode
+/// - `coverage` (boolean, optional): Generate coverage report
+/// - `profile` (boolean, optional): Show per-test timing profile
+/// - `verbose` (boolean, optional): Show verbose output
 auto make_test_tool() -> Tool;
 
 /// Returns the `format` tool definition.
