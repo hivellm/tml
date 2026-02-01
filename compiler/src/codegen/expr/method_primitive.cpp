@@ -512,7 +512,8 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_line("  " + result + " = call ptr @bool_to_string(i32 " + ext + ")");
         } else if (kind == types::PrimitiveKind::I32) {
             emit_line("  " + result + " = call ptr @i32_to_string(i32 " + receiver + ")");
-        } else if (kind == types::PrimitiveKind::I64) {
+        } else if (kind == types::PrimitiveKind::I64 || kind == types::PrimitiveKind::U64) {
+            // I64 and U64 are both already i64 type
             emit_line("  " + result + " = call ptr @i64_to_string(i64 " + receiver + ")");
         } else if (kind == types::PrimitiveKind::F64) {
             emit_line("  " + result + " = call ptr @float_to_string(double " + receiver + ")");

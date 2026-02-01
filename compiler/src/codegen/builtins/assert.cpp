@@ -40,8 +40,10 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
         if (call.args.size() >= 2) {
             std::string left = gen_expr(*call.args[0]);
             std::string left_type = last_expr_type_;
+            bool left_unsigned = last_expr_is_unsigned_;
             std::string right = gen_expr(*call.args[1]);
             std::string right_type = last_expr_type_;
+            bool right_unsigned = last_expr_is_unsigned_;
 
             // Determine the comparison type
             std::string cmp_type = left_type;
@@ -75,15 +77,23 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             if (left_type != right_type) {
                 // If types differ, convert smaller to larger
                 if (left_type == "i32" && right_type == "i64") {
-                    // Sign-extend i32 left value to i64
+                    // Extend i32 left value to i64 (zext for unsigned, sext for signed)
                     std::string ext_reg = fresh_reg();
-                    emit_line("  " + ext_reg + " = sext i32 " + left + " to i64");
+                    if (left_unsigned) {
+                        emit_line("  " + ext_reg + " = zext i32 " + left + " to i64");
+                    } else {
+                        emit_line("  " + ext_reg + " = sext i32 " + left + " to i64");
+                    }
                     left = ext_reg;
                     cmp_type = "i64";
                 } else if (left_type == "i64" && right_type == "i32") {
-                    // Sign-extend i32 right value to i64
+                    // Extend i32 right value to i64 (zext for unsigned, sext for signed)
                     std::string ext_reg = fresh_reg();
-                    emit_line("  " + ext_reg + " = sext i32 " + right + " to i64");
+                    if (right_unsigned) {
+                        emit_line("  " + ext_reg + " = zext i32 " + right + " to i64");
+                    } else {
+                        emit_line("  " + ext_reg + " = sext i32 " + right + " to i64");
+                    }
                     right = ext_reg;
                     cmp_type = "i64";
                 }
@@ -115,8 +125,10 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
         if (call.args.size() >= 2) {
             std::string left = gen_expr(*call.args[0]);
             std::string left_type = last_expr_type_;
+            bool left_unsigned = last_expr_is_unsigned_;
             std::string right = gen_expr(*call.args[1]);
             std::string right_type = last_expr_type_;
+            bool right_unsigned = last_expr_is_unsigned_;
 
             std::string cmp_type = left_type;
             if (cmp_type.empty())
@@ -127,12 +139,20 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
                 // If types differ, convert smaller to larger
                 if (left_type == "i32" && right_type == "i64") {
                     std::string ext_reg = fresh_reg();
-                    emit_line("  " + ext_reg + " = sext i32 " + left + " to i64");
+                    if (left_unsigned) {
+                        emit_line("  " + ext_reg + " = zext i32 " + left + " to i64");
+                    } else {
+                        emit_line("  " + ext_reg + " = sext i32 " + left + " to i64");
+                    }
                     left = ext_reg;
                     cmp_type = "i64";
                 } else if (left_type == "i64" && right_type == "i32") {
                     std::string ext_reg = fresh_reg();
-                    emit_line("  " + ext_reg + " = sext i32 " + right + " to i64");
+                    if (right_unsigned) {
+                        emit_line("  " + ext_reg + " = zext i32 " + right + " to i64");
+                    } else {
+                        emit_line("  " + ext_reg + " = sext i32 " + right + " to i64");
+                    }
                     right = ext_reg;
                     cmp_type = "i64";
                 }
