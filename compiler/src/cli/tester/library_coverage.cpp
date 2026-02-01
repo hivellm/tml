@@ -52,11 +52,17 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
 
     std::string line;
     // Match impl blocks with optional generic parameters:
-    // - impl TypeName
-    // - impl[T] TypeName
-    // - impl[T] TypeName[T]
-    // - impl[T: Trait] TypeName[T]
-    std::regex impl_regex(R"(^\s*impl\s*(?:\[[^\]]*\])?\s*(\w+))");
+    // - impl TypeName              → captures TypeName
+    // - impl[T] TypeName           → captures TypeName
+    // - impl[T] TypeName[T]        → captures TypeName
+    // - impl[T] Behavior for Type  → captures Type (not Behavior!)
+    // - impl[T] Drop for Arc[T]    → captures Arc
+    //
+    // The regex has two capture groups:
+    // - Group 1: First type name after impl (could be behavior or type)
+    // - Group 2: Type name after "for" keyword (when implementing behavior)
+    // We use group 2 if present, otherwise group 1.
+    std::regex impl_regex(R"(^\s*impl\s*(?:\[[^\]]*\])?\s*(\w+)(?:\s+for\s+(\w+))?)");
 
     // Match behavior blocks with optional generic parameters:
     // - behavior BehaviorName
@@ -68,9 +74,17 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
     std::smatch match;
 
     while (std::getline(ifs, line)) {
-        // Track impl blocks - detect "impl TypeName" or "impl[T] TypeName"
+        // Track impl blocks - detect "impl TypeName" or "impl[T] TypeName" or "impl Behavior for
+        // Type"
         if (std::regex_search(line, match, impl_regex)) {
-            current_impl = match[1].str();
+            // If group 2 matched (has "for Type"), use the type after "for"
+            // Otherwise use group 1 (the first type name)
+            if (match[2].matched) {
+                current_impl =
+                    match[2].str(); // Type after "for" (e.g., Arc from "impl Drop for Arc")
+            } else {
+                current_impl = match[1].str(); // Direct impl (e.g., Arc from "impl Arc")
+            }
             impl_brace_depth = 0; // Reset depth, will count opening brace below
         }
         // Track behavior blocks - detect "behavior BehaviorName" or "pub behavior BehaviorName"
@@ -270,15 +284,17 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
 
     // Overall summary
     double overall_pct = total_funcs > 0 ? (100.0 * total_covered / total_funcs) : 0.0;
-    std::cout << " Overall: " << c.bold() << total_covered << "/" << total_funcs << c.reset()
-              << " functions (" << c.bold();
+    std::cout << " Library Coverage: " << c.bold() << total_covered << "/" << total_funcs
+              << c.reset() << " functions (" << c.bold();
     if (overall_pct < 10)
         std::cout << c.red();
     else if (overall_pct < 50)
         std::cout << c.yellow();
     else
         std::cout << c.green();
-    std::cout << std::fixed << std::setprecision(1) << overall_pct << "%" << c.reset() << ")\n\n";
+    std::cout << std::fixed << std::setprecision(1) << overall_pct << "%" << c.reset() << ")\n";
+    std::cout << " Total Functions Called: " << c.green() << c.bold() << covered_functions.size()
+              << c.reset() << "\n\n";
 
     // Per-module table with function details
     std::cout << c.dim()
@@ -942,7 +958,12 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       <div class="stat-card">
         <div class="stat-value">)"
       << total_covered << " / " << total_funcs << R"(</div>
-        <div class="stat-label">Functions Covered</div>
+        <div class="stat-label">Library Functions Covered</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-green">)"
+      << covered_functions.size() << R"(</div>
+        <div class="stat-label">Total Functions Called</div>
       </div>
       <div class="stat-card">
         <div class="stat-value stat-green">)"
