@@ -54,6 +54,7 @@ void register_compiler_tools(McpServer& server) {
     server.register_tool(make_format_tool(), handle_format);
     server.register_tool(make_lint_tool(), handle_lint);
     server.register_tool(make_docs_search_tool(), handle_docs_search);
+    server.register_tool(make_cache_invalidate_tool(), handle_cache_invalidate);
 }
 
 // ============================================================================
@@ -1020,6 +1021,82 @@ auto handle_docs_search(const json::JsonValue& params) -> ToolResult {
     }
 
     return ToolResult::text(output.str());
+}
+
+// ============================================================================
+// Cache Invalidation Tool
+// ============================================================================
+
+auto make_cache_invalidate_tool() -> Tool {
+    return Tool{.name = "cache/invalidate",
+                .description =
+                    "Invalidate cache for specific source files. Forces full recompilation on "
+                    "next build. Use this when cached results are stale.",
+                .parameters = {
+                    {"files", "array", "List of file paths to invalidate cache for", true},
+                    {"verbose", "boolean", "Show detailed output about invalidated entries", false},
+                }};
+}
+
+auto handle_cache_invalidate(const json::JsonValue& params) -> ToolResult {
+    // Get files parameter (required)
+    auto* files_param = params.get("files");
+    if (files_param == nullptr || !files_param->is_array()) {
+        return ToolResult::error(
+            "Missing or invalid 'files' parameter (expected array of strings)");
+    }
+
+    std::vector<std::string> files;
+    for (const auto& file : files_param->as_array()) {
+        if (file.is_string()) {
+            files.push_back(file.as_string());
+        }
+    }
+
+    if (files.empty()) {
+        return ToolResult::error("No valid file paths provided in 'files' array");
+    }
+
+    // Get verbose parameter (optional)
+    bool verbose = false;
+    auto* verbose_param = params.get("verbose");
+    if (verbose_param != nullptr && verbose_param->is_bool()) {
+        verbose = verbose_param->as_bool();
+    }
+
+    // Build command - use the TML executable for cache invalidation
+    std::string tml_exe = get_tml_executable();
+    std::stringstream cmd;
+    cmd << tml_exe << " cache invalidate";
+
+    if (verbose) {
+        cmd << " --verbose";
+    }
+
+    // Add files
+    for (const auto& file : files) {
+        cmd << " \"" << file << "\"";
+    }
+
+    // Execute
+    auto [output, exit_code] = execute_command(cmd.str());
+
+    std::stringstream result;
+    if (exit_code == 0) {
+        result << "Cache invalidation successful!\n";
+        result << "Files processed: " << files.size() << "\n";
+    } else {
+        result << "Cache invalidation completed with warnings (exit code " << exit_code << ")\n";
+    }
+
+    if (!output.empty()) {
+        result << "\n--- Output ---\n" << output;
+    }
+
+    // Provide guidance
+    result << "\nNext build will recompile these files from scratch.\n";
+
+    return ToolResult::text(result.str());
 }
 
 } // namespace tml::mcp

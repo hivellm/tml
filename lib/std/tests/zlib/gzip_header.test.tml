@@ -1,0 +1,27 @@
+// Tests for GzipHeader
+use test
+use std::zlib::{gzip, GzipHeader, read_gzip_header}
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+@test
+func test_gzip_header_new() -> I32 {
+    let header: GzipHeader = GzipHeader::new()
+
+    // Default header should have unknown OS (255)
+    assert_eq(header.os, 255, "default header os")
+    assert_eq(header.text, false, "default header text flag")
+    assert_eq(header.hcrc, false, "default header hcrc flag")
+
+    return 0
+}
+
+@test
+func test_gzip_header_with_time() -> I32 {
+    let header: GzipHeader = GzipHeader::new()
+    let header2: GzipHeader = header.with_time(1234567890)
+
+    assert_eq(header2.time, 1234567890, "header time")
+
+    return 0
+}

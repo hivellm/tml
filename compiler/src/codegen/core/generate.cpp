@@ -71,6 +71,36 @@ static std::string parser_type_to_string(const parser::Type& type) {
     return "";
 }
 
+// Helper: Get the LLVM type string for a constant's declared type
+// For primitives like I32, I64, Bool, etc.
+static std::string get_const_llvm_type(const parser::TypePtr& type) {
+    if (!type)
+        return "i64"; // Default fallback
+
+    if (type->is<parser::NamedType>()) {
+        const auto& named = type->as<parser::NamedType>();
+        if (!named.path.segments.empty()) {
+            const std::string& name = named.path.segments.back();
+            // Map TML primitive types to LLVM types
+            if (name == "I8" || name == "U8")
+                return "i8";
+            if (name == "I16" || name == "U16")
+                return "i16";
+            if (name == "I32" || name == "U32")
+                return "i32";
+            if (name == "I64" || name == "U64")
+                return "i64";
+            if (name == "I128" || name == "U128")
+                return "i128";
+            if (name == "Bool")
+                return "i1";
+            if (name == "Isize" || name == "Usize")
+                return "i64";
+        }
+    }
+    return "i64"; // Default for unknown types
+}
+
 auto LLVMIRGen::generate(const parser::Module& module)
     -> Result<std::string, std::vector<LLVMGenError>> {
     errors_.clear();
@@ -226,7 +256,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
                     value = "null";
                 }
-                global_constants_[const_decl.name] = value;
+                std::string llvm_type = get_const_llvm_type(const_decl.type);
+                global_constants_[const_decl.name] = {value, llvm_type};
             }
         } else if (decl->is<parser::StructDecl>()) {
             gen_struct_decl(decl->as<parser::StructDecl>());
@@ -312,7 +343,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     }
 
                     if (!value.empty()) {
-                        global_constants_[qualified_name] = value;
+                        std::string llvm_type = get_const_llvm_type(const_decl.type);
+                        global_constants_[qualified_name] = {value, llvm_type};
                     }
                 }
             }
@@ -1565,7 +1597,8 @@ void LLVMIRGen::gen_namespace_decl(const parser::NamespaceDecl& ns) {
                 } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
                     value = (lit.token.lexeme == "true") ? "1" : "0";
                 }
-                global_constants_[qualified_name(const_decl.name)] = value;
+                std::string llvm_type = get_const_llvm_type(const_decl.type);
+                global_constants_[qualified_name(const_decl.name)] = {value, llvm_type};
             }
         }
     }

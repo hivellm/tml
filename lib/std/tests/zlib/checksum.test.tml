@@ -1,7 +1,10 @@
 // Tests for CRC32 and Adler32 checksums
 use test
-use std::zlib::{crc32, crc32_update, crc32_combine}
-use std::zlib::{adler32, adler32_update, adler32_combine}
+use std::zlib::{crc32, crc32_update, crc32_combine, crc32_buffer, crc32_update_buffer}
+use std::zlib::{adler32, adler32_update, adler32_combine, adler32_buffer, adler32_update_buffer}
+use std::zlib::deflate
+use std::zlib::error::ZlibError
+use std::collections::Buffer
 
 @test
 func test_crc32_basic() -> I32 {
@@ -104,6 +107,110 @@ func test_crc32_different_inputs() -> I32 {
         print("crc32 collision between 'hello' and 'Hello'\n")
         return 1
     }
+
+    return 0
+}
+
+@test
+func test_crc32_buffer() -> I32 {
+    // Test CRC32 on a Buffer - use deflate to create a buffer
+    let data: Str = "hello world"
+    let str_crc: I64 = crc32(data)
+
+    // Create a buffer with compressed data, then check CRC of the compressed bytes
+    let result: Outcome[Buffer, ZlibError] = deflate(data)
+    if result.is_err() {
+        print("deflate failed\n")
+        return 1
+    }
+
+    var buf: Buffer = result.unwrap()
+    let buf_crc: I64 = crc32_buffer(ref buf)
+
+    // Buffer CRC should be non-zero (compressed data)
+    if buf_crc == 0 {
+        print("crc32_buffer returned 0\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_crc32_update_buffer() -> I32 {
+    // Test incremental CRC32 with buffer
+    let data: Str = "test data"
+    let result: Outcome[Buffer, ZlibError] = deflate(data)
+    if result.is_err() {
+        return 1
+    }
+
+    var buf: Buffer = result.unwrap()
+
+    // Get CRC of buffer directly
+    let direct_crc: I64 = crc32_buffer(ref buf)
+
+    // Get CRC by updating from initial value (0)
+    let updated_crc: I64 = crc32_update_buffer(0, ref buf)
+
+    assert_eq(updated_crc, direct_crc, "crc32_update_buffer matches crc32_buffer")
+
+    return 0
+}
+
+@test
+func test_adler32_buffer() -> I32 {
+    // Test Adler-32 on a Buffer
+    let data: Str = "hello world"
+    let result: Outcome[Buffer, ZlibError] = deflate(data)
+    if result.is_err() {
+        return 1
+    }
+
+    var buf: Buffer = result.unwrap()
+    let buf_adler: I64 = adler32_buffer(ref buf)
+
+    // Adler-32 should be non-zero for non-empty buffer
+    if buf_adler == 0 {
+        print("adler32_buffer returned 0\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_adler32_update_buffer() -> I32 {
+    // Test incremental Adler-32 with buffer
+    let data: Str = "test data"
+    let result: Outcome[Buffer, ZlibError] = deflate(data)
+    if result.is_err() {
+        return 1
+    }
+
+    var buf: Buffer = result.unwrap()
+
+    // Get Adler-32 of buffer directly
+    let direct_adler: I64 = adler32_buffer(ref buf)
+
+    // Get Adler-32 by updating from initial value (1)
+    let updated_adler: I64 = adler32_update_buffer(1, ref buf)
+
+    assert_eq(updated_adler, direct_adler, "adler32_update_buffer matches adler32_buffer")
+
+    return 0
+}
+
+@test
+func test_adler32_combine() -> I32 {
+    // Test combining two Adler-32 checksums
+    let full_checksum: I64 = adler32("hello world")
+
+    let adler1: I64 = adler32("hello ")
+    let adler2: I64 = adler32("world")
+    let combined: I64 = adler32_combine(adler1, adler2, 5)  // "world" is 5 bytes
+
+    assert_eq(combined, full_checksum, "combined adler32")
 
     return 0
 }

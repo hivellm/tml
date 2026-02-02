@@ -714,13 +714,14 @@ target_link_libraries(tml_doc PUBLIC tml_parser)
 target_include_directories(tml_doc PUBLIC include src)
 
 # MCP library (Model Context Protocol server)
-add_library(tml_mcp STATIC
+# Named tml_mcp_lib to avoid conflict with tml_mcp executable
+add_library(tml_mcp_lib STATIC
     src/mcp/mcp_types.cpp
     src/mcp/mcp_server.cpp
     src/mcp/mcp_tools.cpp
 )
-target_link_libraries(tml_mcp PUBLIC tml_json tml_codegen)
-target_include_directories(tml_mcp PUBLIC include src)
+target_link_libraries(tml_mcp_lib PUBLIC tml_json tml_codegen)
+target_include_directories(tml_mcp_lib PUBLIC include src)
 
 # ============================================================================
 # LLVM Backend (optional, for self-contained compilation)
@@ -939,7 +940,7 @@ add_library(tml_cli STATIC
     src/cli/linter/semantic.cpp
     src/cli/linter/style.cpp
 )
-target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc tml_mcp tml_lld tml_common ${TML_BACKEND_LIB})
+target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc tml_mcp_lib tml_lld tml_common ${TML_BACKEND_LIB})
 target_include_directories(tml_cli PUBLIC include src)
 
 # OpenSSL for SHA256 hashing (non-Windows)
@@ -953,6 +954,12 @@ endif()
 # Main executable
 add_executable(tml src/main.cpp)
 target_link_libraries(tml PRIVATE tml_cli)
+
+# MCP server executable (separate from main tml to avoid file locking issues)
+# When MCP server is running, tml.exe can still be rebuilt independently
+add_executable(tml_mcp src/main_mcp.cpp)
+target_link_libraries(tml_mcp PRIVATE tml_mcp_lib tml_codegen)
+target_include_directories(tml_mcp PRIVATE include src)
 
 # Tests
 if(TML_BUILD_TESTS)

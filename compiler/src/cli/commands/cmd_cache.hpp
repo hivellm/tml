@@ -4,17 +4,19 @@
 //!
 //! ## Subcommands
 //!
-//! | Function           | Description                          |
-//! |--------------------|--------------------------------------|
-//! | `run_cache_info()` | Display cache statistics             |
-//! | `run_cache_clean()`| Remove old or all cache files        |
-//! | `enforce_cache_limit()` | LRU eviction when over size limit |
+//! | Function              | Description                          |
+//! |-----------------------|--------------------------------------|
+//! | `run_cache_info()`    | Display cache statistics             |
+//! | `run_cache_clean()`   | Remove old or all cache files        |
+//! | `run_cache_invalidate()` | Invalidate cache for specific file |
+//! | `enforce_cache_limit()` | LRU eviction when over size limit  |
 
 #ifndef TML_CLI_CMD_CACHE_HPP
 #define TML_CLI_CMD_CACHE_HPP
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace tml::cli {
 
@@ -41,6 +43,17 @@ int run_cache_info(bool verbose = false);
 int run_cache_clean(bool clean_all = false, int max_age_days = 7, bool verbose = false);
 
 /**
+ * Invalidate cache for specific source files
+ * Clears HIR, MIR, object, and test caches for the specified files.
+ * This forces a full recompilation on the next build.
+ *
+ * @param files List of source file paths to invalidate
+ * @param verbose Print detailed information
+ * @return 0 on success, non-zero on error
+ */
+int run_cache_invalidate(const std::vector<std::string>& files, bool verbose = false);
+
+/**
  * Enforce cache size limit using LRU eviction
  * If cache size exceeds max_size_mb, removes oldest files until under limit
  *
@@ -52,7 +65,7 @@ int enforce_cache_limit(uintmax_t max_size_mb = 1024, bool verbose = false);
 
 /**
  * Main cache command dispatcher
- * Handles: tml cache info, tml cache clean
+ * Handles: tml cache info, tml cache clean, tml cache invalidate
  *
  * @param argc Argument count
  * @param argv Argument values (starting from "cache")

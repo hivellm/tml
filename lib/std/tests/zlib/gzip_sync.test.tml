@@ -1,0 +1,28 @@
+// Tests for gzip sync operations
+use test
+use std::zlib::{gzip_sync, gunzip_sync}
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+@test
+func test_gzip_sync() -> I32 {
+    let original: Str = "Test data for gzip_sync"
+    let result: Outcome[Buffer, ZlibError] = gzip_sync(original)
+
+    if result.is_err() {
+        print("gzip_sync failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let decompress_result: Outcome[Str, ZlibError] = gunzip_sync(ref compressed)
+    if decompress_result.is_err() {
+        print("gunzip_sync failed\n")
+        return 1
+    }
+
+    let decompressed: Str = decompress_result.unwrap()
+    assert_eq(decompressed, original, "gzip_sync/gunzip_sync roundtrip")
+
+    return 0
+}

@@ -25,6 +25,8 @@
 
 #include "codegen/llvm_ir_gen.hpp"
 
+#include <cctype>
+
 namespace tml::codegen {
 
 // Static helper to parse mangled type strings like "Mutex__I32" into proper TypePtr
@@ -1922,19 +1924,31 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (func_it == functions_.end() && !current_module_prefix_.empty()) {
         size_t first_sep = fn_name.find("::");
         if (first_sep != std::string::npos) {
-            // Build qualified name: replace "submod::" with "module_prefix::"
-            // First convert current_module_prefix_ back to :: format
-            std::string module_path = current_module_prefix_;
-            size_t pos = 0;
-            while ((pos = module_path.find("_", pos)) != std::string::npos) {
-                module_path.replace(pos, 1, "::");
-                pos += 2;
+            // Check if first segment is a type name (Type::method) vs submodule name
+            // Type names start with uppercase; submodules are lowercase
+            std::string first_segment = fn_name.substr(0, first_sep);
+            bool is_type_method = !first_segment.empty() && std::isupper(first_segment[0]);
+
+            // Also check if this looks like a static method call (Type_method exists in functions_)
+            std::string potential_method_name = first_segment + "_" + fn_name.substr(first_sep + 2);
+            bool has_impl_method = functions_.find(potential_method_name) != functions_.end();
+
+            // Skip submodule resolution for Type::method calls
+            if (!is_type_method && !has_impl_method) {
+                // Build qualified name: replace "submod::" with "module_prefix::"
+                // First convert current_module_prefix_ back to :: format
+                std::string module_path = current_module_prefix_;
+                size_t pos = 0;
+                while ((pos = module_path.find("_", pos)) != std::string::npos) {
+                    module_path.replace(pos, 1, "::");
+                    pos += 2;
+                }
+                // Get the function part after the submodule prefix
+                std::string func_part = fn_name.substr(first_sep + 2);
+                // Try looking up with full module path
+                std::string qualified_name = module_path + "::" + func_part;
+                func_it = functions_.find(qualified_name);
             }
-            // Get the function part after the submodule prefix
-            std::string func_part = fn_name.substr(first_sep + 2);
-            // Try looking up with full module path
-            std::string qualified_name = module_path + "::" + func_part;
-            func_it = functions_.find(qualified_name);
         } else {
             // Bare function name (no ::) - try qualifying with current module
             // This handles calls to same-module private functions

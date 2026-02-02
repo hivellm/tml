@@ -15,7 +15,7 @@
 #endif
 
 // Maximum number of entries to track
-#define MAX_FUNCTIONS 1024
+#define MAX_FUNCTIONS 4096
 #define MAX_LINES 8192
 #define MAX_BRANCHES 4096
 #define MAX_NAME_LEN 256

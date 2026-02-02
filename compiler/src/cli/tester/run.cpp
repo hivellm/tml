@@ -177,8 +177,10 @@ int run_test(int argc, char* argv[], bool verbose) {
     if (!opts.coverage_output.empty()) {
         tml::CompilerOptions::coverage_output = opts.coverage_output;
     } else if (opts.coverage) {
-        // Default coverage output file if coverage is enabled but no path specified
-        tml::CompilerOptions::coverage_output = "coverage.html";
+        // Default coverage output to build/coverage directory to keep project root clean
+        fs::path coverage_dir = fs::path("build") / "coverage";
+        fs::create_directories(coverage_dir);
+        tml::CompilerOptions::coverage_output = (coverage_dir / "coverage.html").string();
     }
 
     // Set LLVM source coverage options

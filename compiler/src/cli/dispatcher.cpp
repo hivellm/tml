@@ -58,9 +58,12 @@
 #include "common.hpp"
 #include "utils.hpp"
 
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
+
+namespace fs = std::filesystem;
 
 namespace tml::cli {
 
@@ -319,7 +322,9 @@ int tml_main(int argc, char* argv[]) {
 
         // Set default coverage output if not specified
         if (tml::CompilerOptions::coverage && tml::CompilerOptions::coverage_output.empty()) {
-            tml::CompilerOptions::coverage_output = "coverage.html";
+            fs::path coverage_dir = fs::path("build") / "coverage";
+            fs::create_directories(coverage_dir);
+            tml::CompilerOptions::coverage_output = (coverage_dir / "coverage.html").string();
         }
 
         // Store optimization settings in global options for use by build
@@ -413,7 +418,9 @@ int tml_main(int argc, char* argv[]) {
         }
         // Set default coverage output if not specified
         if (opts.coverage && CompilerOptions::coverage_output.empty()) {
-            CompilerOptions::coverage_output = "coverage.html";
+            fs::path coverage_dir = fs::path("build") / "coverage";
+            fs::create_directories(coverage_dir);
+            CompilerOptions::coverage_output = (coverage_dir / "coverage.html").string();
         }
         // Set global coverage flag for runtime linking
         CompilerOptions::coverage = opts.coverage;

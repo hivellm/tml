@@ -1,0 +1,103 @@
+// Tests for raw deflate buffer operations
+use test
+use std::zlib::{deflate_raw, deflate_raw_buffer, deflate_raw_buffer_with_options}
+use std::zlib::{inflate_raw, inflate_raw_to_buffer, inflate_raw_to_buffer_with_options}
+use std::zlib::options::ZlibOptions
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+@test
+func test_deflate_raw_buffer() -> I32 {
+    // First compress to create a buffer
+    let original: Str = "Test data for raw deflate buffer"
+    let result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if result.is_err() {
+        print("deflate_raw failed\n")
+        return 1
+    }
+
+    var input_buf: Buffer = result.unwrap()
+
+    // Now compress the buffer again
+    let result2: Outcome[Buffer, ZlibError] = deflate_raw_buffer(ref input_buf)
+    if result2.is_err() {
+        print("deflate_raw_buffer failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result2.unwrap()
+    if compressed.len() == 0 {
+        print("deflate_raw_buffer returned empty buffer\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_deflate_raw_buffer_with_options() -> I32 {
+    let original: Str = "Test data for raw deflate with options"
+    let result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if result.is_err() {
+        return 1
+    }
+
+    var input_buf: Buffer = result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(6)
+
+    let result2: Outcome[Buffer, ZlibError] = deflate_raw_buffer_with_options(ref input_buf, opts)
+    if result2.is_err() {
+        print("deflate_raw_buffer_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result2.unwrap()
+    if compressed.len() == 0 {
+        print("deflate_raw_buffer_with_options empty\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_inflate_raw_to_buffer() -> I32 {
+    let original: Str = "Test data for inflate_raw_to_buffer"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let result: Outcome[Buffer, ZlibError] = inflate_raw_to_buffer(ref compressed)
+    if result.is_err() {
+        print("inflate_raw_to_buffer failed\n")
+        return 1
+    }
+
+    if result.unwrap().len() == 0 {
+        print("inflate_raw_to_buffer returned empty\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_inflate_raw_to_buffer_with_options() -> I32 {
+    let original: Str = "Test data for inflate_raw_to_buffer with opts"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::deflate_raw()
+    let result: Outcome[Buffer, ZlibError] = inflate_raw_to_buffer_with_options(ref compressed, opts)
+    if result.is_err() {
+        print("inflate_raw_to_buffer_with_options failed\n")
+        return 1
+    }
+
+    return 0
+}

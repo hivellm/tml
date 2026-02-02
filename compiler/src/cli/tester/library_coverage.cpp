@@ -71,25 +71,26 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
     std::regex behavior_regex(R"(^\s*(pub\s+)?behavior\s+(\w+))");
 
     std::regex func_regex(R"(^\s*(pub\s+)?func\s+(\w+))");
-    std::regex extern_regex(R"(@extern)");
     std::smatch match;
-    bool skip_next_func = false; // Track if previous line had @extern
 
     while (std::getline(ifs, line)) {
-        // Check for @extern directive - skip the next function declaration
-        if (std::regex_search(line, extern_regex)) {
-            skip_next_func = true;
-            continue;
-        }
-
         // Track impl blocks - detect "impl TypeName" or "impl[T] TypeName" or "impl Behavior for
         // Type"
         if (std::regex_search(line, match, impl_regex)) {
             // If group 2 matched (has "for Type"), use the type after "for"
+            // Unless it's a single-letter generic like T, in which case use the behavior name
             // Otherwise use group 1 (the first type name)
             if (match[2].matched) {
-                current_impl =
-                    match[2].str(); // Type after "for" (e.g., Arc from "impl Drop for Arc")
+                std::string type_after_for = match[2].str();
+                // If the type is a single uppercase letter (generic parameter like T, U, V),
+                // use the behavior name (group 1) instead for coverage matching
+                if (type_after_for.size() == 1 && std::isupper(type_after_for[0])) {
+                    current_impl =
+                        match[1].str(); // Behavior name (e.g., Borrow from "impl Borrow for T")
+                } else {
+                    current_impl =
+                        type_after_for; // Concrete type (e.g., Arc from "impl Drop for Arc")
+                }
             } else {
                 current_impl = match[1].str(); // Direct impl (e.g., Arc from "impl Arc")
             }
@@ -120,12 +121,6 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
         if (std::regex_search(line, match, func_regex)) {
             std::string func_name = match[2].str();
 
-            // Skip @extern FFI functions (they're C++ code, not coverable by TML coverage)
-            if (skip_next_func) {
-                skip_next_func = false;
-                continue;
-            }
-
             // Skip test functions
             if (func_name.rfind("test_", 0) == 0) {
                 continue;
@@ -137,9 +132,6 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             } else {
                 functions.push_back(func_name);
             }
-        } else {
-            // Reset skip flag if line wasn't a function
-            skip_next_func = false;
         }
     }
 
@@ -1422,6 +1414,65 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
 
     f.close();
     std::cout << "[Coverage] HTML report written to " << output_path << "\n";
+
+    // Build set of all library functions for comparison
+    std::set<std::string> library_functions;
+    for (const auto& mod : modules) {
+        for (const auto& func : mod.functions) {
+            library_functions.insert(func);
+        }
+    }
+
+    // Find functions that were called but not in library (generic instantiations, test funcs, etc.)
+    std::vector<std::string> non_library_functions;
+    for (const auto& func : covered_functions) {
+        if (library_functions.find(func) == library_functions.end()) {
+            non_library_functions.push_back(func);
+        }
+    }
+    std::sort(non_library_functions.begin(), non_library_functions.end());
+
+    // Generate JSON summary alongside the HTML report
+    fs::path json_path = fs::path(output_path).replace_extension(".json");
+    std::ofstream json_file(json_path);
+    if (json_file.is_open()) {
+        json_file << "{\n";
+        json_file << "  \"library_functions\": " << total_funcs << ",\n";
+        json_file << "  \"library_covered\": " << total_covered << ",\n";
+        json_file << "  \"library_coverage_percent\": " << std::fixed << std::setprecision(2)
+                  << overall_pct << ",\n";
+        json_file << "  \"total_functions_called\": " << covered_functions.size() << ",\n";
+        json_file << "  \"non_library_functions_called\": " << non_library_functions.size()
+                  << ",\n";
+        json_file << "  \"tests_passed\": " << tml_tests << ",\n";
+        json_file << "  \"test_files\": " << tml_files << ",\n";
+        json_file << "  \"test_suites\": " << tml_suites << ",\n";
+        json_file << "  \"duration_ms\": " << test_stats.total_duration_ms << ",\n";
+        json_file << "  \"modules_100_percent\": " << full_coverage << ",\n";
+        json_file << "  \"modules_partial\": " << partial_coverage << ",\n";
+        json_file << "  \"modules_zero_coverage\": " << zero_coverage << ",\n";
+        json_file << "  \"suites\": [\n";
+        for (size_t i = 0; i < test_stats.suites.size(); ++i) {
+            const auto& suite = test_stats.suites[i];
+            json_file << "    {\"name\": \"" << suite.name << "\", \"tests\": " << suite.test_count
+                      << ", \"duration_ms\": " << suite.duration_ms << "}";
+            if (i + 1 < test_stats.suites.size())
+                json_file << ",";
+            json_file << "\n";
+        }
+        json_file << "  ],\n";
+        // Add non-library functions for debugging
+        json_file << "  \"non_library_functions\": [\n";
+        for (size_t i = 0; i < non_library_functions.size(); ++i) {
+            json_file << "    \"" << non_library_functions[i] << "\"";
+            if (i + 1 < non_library_functions.size())
+                json_file << ",";
+            json_file << "\n";
+        }
+        json_file << "  ]\n";
+        json_file << "}\n";
+        json_file.close();
+    }
 }
 
 } // namespace tml::cli::tester

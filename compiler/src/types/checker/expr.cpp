@@ -486,12 +486,37 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
             if (const_module) {
                 auto const_it = const_module->constants.find(ident.name);
                 if (const_it != const_module->constants.end()) {
-                    // Found a constant - determine type from module path
-                    // For core::char constants (MIN, MAX), use Char (U32)
+                    // Found a constant - use the stored type info
+                    const std::string& tml_type = const_it->second.tml_type;
+                    if (tml_type == "I8")
+                        return make_primitive(PrimitiveKind::I8);
+                    if (tml_type == "I16")
+                        return make_primitive(PrimitiveKind::I16);
+                    if (tml_type == "I32")
+                        return make_primitive(PrimitiveKind::I32);
+                    if (tml_type == "I64")
+                        return make_primitive(PrimitiveKind::I64);
+                    if (tml_type == "I128")
+                        return make_primitive(PrimitiveKind::I128);
+                    if (tml_type == "U8")
+                        return make_primitive(PrimitiveKind::U8);
+                    if (tml_type == "U16")
+                        return make_primitive(PrimitiveKind::U16);
+                    if (tml_type == "U32")
+                        return make_primitive(PrimitiveKind::U32);
+                    if (tml_type == "U64")
+                        return make_primitive(PrimitiveKind::U64);
+                    if (tml_type == "U128")
+                        return make_primitive(PrimitiveKind::U128);
+                    if (tml_type == "Char")
+                        return make_primitive(PrimitiveKind::U32);
+                    if (tml_type == "Bool")
+                        return make_primitive(PrimitiveKind::Bool);
+                    // Fallback for backward compatibility
                     if (const_module_path.find("char") != std::string::npos) {
                         return make_primitive(PrimitiveKind::U32);
                     }
-                    // Default to I64 for other numeric constants
+                    // Default to I64 for unknown types
                     return make_primitive(PrimitiveKind::I64);
                 }
             }

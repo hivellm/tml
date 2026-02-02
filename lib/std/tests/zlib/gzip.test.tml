@@ -1,6 +1,7 @@
 // Tests for gzip/gunzip compression
 use test
-use std::zlib::{gzip, gunzip, GzipHeader, read_gzip_header}
+use std::zlib::{gzip, gunzip, gzip_with_options, gunzip_with_options}
+use std::zlib::options::ZlibOptions
 use std::zlib::error::ZlibError
 use std::collections::Buffer
 
@@ -52,6 +53,52 @@ func test_gzip_compress_empty() -> I32 {
         let decompressed: Str = decompress_result.unwrap()
         assert_eq(decompressed, original, "empty string roundtrip")
     }
+
+    return 0
+}
+
+@test
+func test_gzip_with_options() -> I32 {
+    let original: Str = "Test data for gzip with options"
+    let options: ZlibOptions = ZlibOptions::gzip().with_level(6)
+    let result: Outcome[Buffer, ZlibError] = gzip_with_options(original, options)
+
+    if result.is_err() {
+        print("gzip_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let decompress_result: Outcome[Str, ZlibError] = gunzip(ref compressed)
+    if decompress_result.is_err() {
+        print("gunzip after gzip_with_options failed\n")
+        return 1
+    }
+
+    let decompressed: Str = decompress_result.unwrap()
+    assert_eq(decompressed, original, "gzip_with_options roundtrip")
+
+    return 0
+}
+
+@test
+func test_gunzip_with_options() -> I32 {
+    let original: Str = "Test data for gunzip with options"
+    let result: Outcome[Buffer, ZlibError] = gzip(original)
+    if result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let options: ZlibOptions = ZlibOptions::gzip()
+    let decompress_result: Outcome[Str, ZlibError] = gunzip_with_options(ref compressed, options)
+    if decompress_result.is_err() {
+        print("gunzip_with_options failed\n")
+        return 1
+    }
+
+    let decompressed: Str = decompress_result.unwrap()
+    assert_eq(decompressed, original, "gunzip_with_options roundtrip")
 
     return 0
 }

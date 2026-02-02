@@ -346,23 +346,28 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
     // First check local global_constants_
     auto const_it = global_constants_.find(full_path);
     std::string const_value;
+    std::string const_llvm_type;
     if (const_it != global_constants_.end()) {
-        const_value = const_it->second;
+        const_value = const_it->second.value;
+        const_llvm_type = const_it->second.llvm_type;
     } else if (env_.module_registry()) {
         // Search all imported modules for the constant
         const auto& all_modules = env_.module_registry()->get_all_modules();
         for (const auto& [mod_name, mod] : all_modules) {
             auto mod_const_it = mod.constants.find(full_path);
             if (mod_const_it != mod.constants.end()) {
-                const_value = mod_const_it->second;
+                const_value = mod_const_it->second.value;
+                const_llvm_type = llvm_type_name(mod_const_it->second.tml_type);
                 break;
             }
         }
     }
 
     if (!const_value.empty()) {
-        // Determine the type based on the prefix (I32::, U64::, etc.)
-        if (path.path.segments.size() >= 1) {
+        // Use the stored type if available, otherwise fall back to path-based type inference
+        if (!const_llvm_type.empty()) {
+            last_expr_type_ = const_llvm_type;
+        } else if (path.path.segments.size() >= 1) {
             std::string type_name = path.path.segments[0];
             if (type_name == "I8") {
                 last_expr_type_ = "i8";

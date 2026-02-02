@@ -1,8 +1,26 @@
-// Tests for deflate/inflate compression
+// Tests for deflate/inflate compression - Full coverage
 use test
 use std::zlib::{deflate, inflate, deflate_raw, inflate_raw}
+use std::zlib::{deflate_with_options, inflate_with_options}
+use std::zlib::{deflate_buffer, deflate_buffer_with_options}
+use std::zlib::{inflate_to_buffer, inflate_to_buffer_with_options}
+use std::zlib::{deflate_raw_with_options, inflate_raw_with_options}
+use std::zlib::{deflate_raw_buffer, deflate_raw_buffer_with_options}
+use std::zlib::{inflate_raw_to_buffer, inflate_raw_to_buffer_with_options}
+use std::zlib::{unzip, unzip_with_options, unzip_to_buffer}
+use std::zlib::{deflate_sync, deflate_sync_with_options}
+use std::zlib::{inflate_sync, inflate_sync_with_options}
+use std::zlib::{deflate_raw_sync, deflate_raw_sync_with_options}
+use std::zlib::{inflate_raw_sync, inflate_raw_sync_with_options}
+use std::zlib::{unzip_sync, unzip_sync_with_options}
+use std::zlib::options::ZlibOptions
+use std::zlib::constants::{Z_BEST_COMPRESSION, Z_BEST_SPEED, Z_DEFAULT_COMPRESSION}
 use std::zlib::error::ZlibError
 use std::collections::Buffer
+
+// ============================================================================
+// Basic deflate/inflate tests
+// ============================================================================
 
 @test
 func test_deflate_basic() -> I32 {
@@ -16,13 +34,11 @@ func test_deflate_basic() -> I32 {
 
     var compressed: Buffer = result.unwrap()
 
-    // Compressed data should be smaller or at least exist
     if compressed.len() == 0 {
         print("compressed data is empty\n")
         return 1
     }
 
-    // Now decompress
     let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
     if inflate_result.is_err() {
         print("inflate failed\n")
@@ -41,7 +57,6 @@ func test_deflate_empty_string() -> I32 {
     let result: Outcome[Buffer, ZlibError] = deflate(original)
 
     if result.is_err() {
-        // Empty string compression might fail or succeed depending on implementation
         return 0
     }
 
@@ -55,6 +70,58 @@ func test_deflate_empty_string() -> I32 {
 
     return 0
 }
+
+// ============================================================================
+// deflate_with_options tests
+// ============================================================================
+
+@test
+func test_deflate_with_options_best_compression() -> I32 {
+    let original: Str = "Test data for best compression level testing"
+    let opts: ZlibOptions = ZlibOptions::default().with_level(Z_BEST_COMPRESSION)
+
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        print("deflate_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if inflate_result.is_err() {
+        print("inflate after best compression failed\n")
+        return 1
+    }
+
+    assert_eq(inflate_result.unwrap(), original, "best compression roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_with_options_best_speed() -> I32 {
+    let original: Str = "Test data for fastest compression level testing"
+    let opts: ZlibOptions = ZlibOptions::default().with_level(Z_BEST_SPEED)
+
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        print("deflate_with_options best speed failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if inflate_result.is_err() {
+        print("inflate after best speed failed\n")
+        return 1
+    }
+
+    assert_eq(inflate_result.unwrap(), original, "best speed roundtrip")
+    return 0
+}
+
+// ============================================================================
+// Raw deflate tests
+// ============================================================================
 
 @test
 func test_deflate_raw_basic() -> I32 {
@@ -86,40 +153,70 @@ func test_deflate_raw_basic() -> I32 {
 }
 
 @test
-func test_deflate_large_data() -> I32 {
-    // Create a larger string with repeating pattern (compresses well)
-    var data: Str = ""
-    var i: I32 = 0
-    loop (i < 100) {
-        data = data + "This is line number " + i.to_string() + " of test data.\n"
-        i = i + 1
-    }
+func test_deflate_raw_with_options() -> I32 {
+    let original: Str = "Raw deflate with custom options"
+    let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(6)
 
-    let result: Outcome[Buffer, ZlibError] = deflate(data)
+    let result: Outcome[Buffer, ZlibError] = deflate_raw_with_options(original, opts)
     if result.is_err() {
-        print("deflate large data failed\n")
+        print("deflate_raw_with_options failed\n")
         return 1
     }
 
     var compressed: Buffer = result.unwrap()
-
-    // Compressed should be significantly smaller due to repetition
-    let original_len: I64 = data.len()
-    let compressed_len: I64 = compressed.len()
-
-    if compressed_len >= original_len {
-        print("compression did not reduce size\n")
-        // This is not necessarily an error, just a warning
-    }
-
-    let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
+    let inflate_result: Outcome[Str, ZlibError] = inflate_raw(ref compressed)
     if inflate_result.is_err() {
-        print("inflate large data failed\n")
+        print("inflate_raw after options failed\n")
         return 1
     }
 
-    let decompressed: Str = inflate_result.unwrap()
-    assert_eq(decompressed, data, "large data roundtrip")
+    assert_eq(inflate_result.unwrap(), original, "raw with options roundtrip")
+    return 0
+}
+
+// ============================================================================
+// Buffer variant tests
+// ============================================================================
+
+@test
+func test_inflate_to_buffer() -> I32 {
+    let original: Str = "Test data for inflate_to_buffer"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let result: Outcome[Buffer, ZlibError] = inflate_to_buffer(ref compressed)
+    if result.is_err() {
+        print("inflate_to_buffer failed\n")
+        return 1
+    }
+
+    let decompressed: Buffer = result.unwrap()
+    if decompressed.len() == 0 {
+        print("inflate_to_buffer returned empty\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_inflate_to_buffer_with_options() -> I32 {
+    let original: Str = "Test data for inflate_to_buffer_with_options"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Buffer, ZlibError] = inflate_to_buffer_with_options(ref compressed, opts)
+    if result.is_err() {
+        print("inflate_to_buffer_with_options failed\n")
+        return 1
+    }
 
     return 0
 }

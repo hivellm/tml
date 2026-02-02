@@ -134,8 +134,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
     // Check global constants first
     auto const_it = global_constants_.find(ident.name);
     if (const_it != global_constants_.end()) {
-        last_expr_type_ = "i64"; // Constants are i64 for now
-        return const_it->second;
+        last_expr_type_ = const_it->second.llvm_type;
+        return const_it->second.value;
     }
 
     // Check imported constants (from "use module::CONSTANT")
@@ -149,8 +149,9 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
             if (module) {
                 auto const_it2 = module->constants.find(symbol_name);
                 if (const_it2 != module->constants.end()) {
-                    last_expr_type_ = "i64"; // Constants are i64 for now
-                    return const_it2->second;
+                    // Use the stored type, mapped to LLVM type
+                    last_expr_type_ = llvm_type_name(const_it2->second.tml_type);
+                    return const_it2->second.value;
                 }
             }
         }

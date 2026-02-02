@@ -16,6 +16,7 @@
 //! | `format` | Format TML source files |
 //! | `lint` | Lint TML source files |
 //! | `docs/search` | Search documentation |
+//! | `cache/invalidate` | Invalidate cache for specific files |
 //!
 //! ## Usage
 //!
@@ -138,6 +139,13 @@ auto make_lint_tool() -> Tool;
 /// - `limit` (number, optional): Maximum results (default: 10)
 auto make_docs_search_tool() -> Tool;
 
+/// Returns the `cache/invalidate` tool definition.
+///
+/// Parameters:
+/// - `files` (array, required): List of file paths to invalidate
+/// - `verbose` (boolean, optional): Show detailed output
+auto make_cache_invalidate_tool() -> Tool;
+
 // ============================================================================
 // Tool Handlers
 // ============================================================================
@@ -251,5 +259,16 @@ auto handle_lint(const json::JsonValue& params) -> ToolResult;
 ///
 /// Result with search results.
 auto handle_docs_search(const json::JsonValue& params) -> ToolResult;
+
+/// Handles the `cache/invalidate` tool invocation.
+///
+/// # Arguments
+///
+/// * `params` - Tool parameters (files, verbose)
+///
+/// # Returns
+///
+/// Result with invalidation status.
+auto handle_cache_invalidate(const json::JsonValue& params) -> ToolResult;
 
 } // namespace tml::mcp

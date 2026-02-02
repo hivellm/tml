@@ -155,7 +155,7 @@ auto ModuleRegistry::lookup_constant(const std::string& module_path,
 
     auto it = module->constants.find(symbol_name);
     if (it != module->constants.end()) {
-        return it->second;
+        return it->second.value; // Return just the value for backward compatibility
     }
     return std::nullopt;
 }

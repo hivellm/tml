@@ -72,7 +72,12 @@ struct Module {
     std::unordered_map<std::string, BehaviorDef> behaviors;      ///< Behavior definitions.
     std::unordered_map<std::string, TypePtr> type_aliases;       ///< Type aliases.
     std::unordered_map<std::string, std::string> submodules;     ///< Submodule name -> path.
-    std::unordered_map<std::string, std::string> constants;      ///< Constants name -> value.
+    /// Constant info with value and type.
+    struct ConstantInfo {
+        std::string value;     ///< The constant value as string.
+        std::string tml_type;  ///< The TML type name (e.g., "I32", "I64").
+    };
+    std::unordered_map<std::string, ConstantInfo> constants;    ///< Constants name -> info.
     std::unordered_map<std::string, ClassDef> classes;           ///< Class definitions.
     std::unordered_map<std::string, InterfaceDef> interfaces;    ///< Interface definitions.
 

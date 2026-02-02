@@ -41,6 +41,20 @@
 
 namespace tml::types {
 
+// Helper: Extract the TML type name from a parser::TypePtr (for constants)
+static std::string get_tml_type_name(const parser::TypePtr& type) {
+    if (!type)
+        return "I64"; // Default fallback
+
+    if (type->is<parser::NamedType>()) {
+        const auto& named = type->as<parser::NamedType>();
+        if (!named.path.segments.empty()) {
+            return named.path.segments.back();
+        }
+    }
+    return "I64"; // Default for unknown types
+}
+
 void TypeEnv::set_module_registry(std::shared_ptr<ModuleRegistry> registry) {
     module_registry_ = std::move(registry);
     // Modules will be loaded lazily when imported via 'use'
@@ -854,7 +868,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                             value = "null";
                         }
                         if (!value.empty()) {
-                            mod.constants[qualified_name] = value;
+                            std::string tml_type = get_tml_type_name(const_decl.type);
+                            mod.constants[qualified_name] = {value, tml_type};
                             TML_DEBUG_LN("[MODULE] Registered impl constant: "
                                          << qualified_name << " = " << value << " in module "
                                          << module_path);
@@ -866,7 +881,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                             const auto& lit = cast.expr->as<parser::LiteralExpr>();
                             if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                                 std::string value = std::to_string(lit.token.int_value().value);
-                                mod.constants[qualified_name] = value;
+                                std::string tml_type = get_tml_type_name(const_decl.type);
+                                mod.constants[qualified_name] = {value, tml_type};
                                 TML_DEBUG_LN("[MODULE] Registered impl constant: "
                                              << qualified_name << " = " << value << " in module "
                                              << module_path);
@@ -881,7 +897,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                                     int64_t int_val =
                                         static_cast<int64_t>(lit.token.int_value().value);
                                     std::string value = std::to_string(-int_val);
-                                    mod.constants[qualified_name] = value;
+                                    std::string tml_type = get_tml_type_name(const_decl.type);
+                                    mod.constants[qualified_name] = {value, tml_type};
                                     TML_DEBUG_LN("[MODULE] Registered impl constant: "
                                                  << qualified_name << " = " << value
                                                  << " in module " << module_path);
@@ -897,7 +914,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                             if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                                 int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
                                 std::string value = std::to_string(-int_val);
-                                mod.constants[qualified_name] = value;
+                                std::string tml_type = get_tml_type_name(const_decl.type);
+                                mod.constants[qualified_name] = {value, tml_type};
                                 TML_DEBUG_LN("[MODULE] Registered impl constant: "
                                              << qualified_name << " = " << value << " in module "
                                              << module_path);
@@ -911,7 +929,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                                     int64_t int_val =
                                         static_cast<int64_t>(lit.token.int_value().value);
                                     std::string value = std::to_string(-int_val);
-                                    mod.constants[qualified_name] = value;
+                                    std::string tml_type = get_tml_type_name(const_decl.type);
+                                    mod.constants[qualified_name] = {value, tml_type};
                                     TML_DEBUG_LN("[MODULE] Registered impl constant: "
                                                  << qualified_name << " = " << value
                                                  << " in module " << module_path);
@@ -925,11 +944,12 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 const auto& const_decl = decl->as<parser::ConstDecl>();
 
                 // Process all constants (public and private - needed for codegen)
+                std::string tml_type = get_tml_type_name(const_decl.type);
                 if (const_decl.value && const_decl.value->is<parser::LiteralExpr>()) {
                     const auto& lit = const_decl.value->as<parser::LiteralExpr>();
                     if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                         std::string value = std::to_string(lit.token.int_value().value);
-                        mod.constants[const_decl.name] = value;
+                        mod.constants[const_decl.name] = {value, tml_type};
                         TML_DEBUG_LN("[MODULE] Registered module constant: "
                                      << const_decl.name << " = " << value << " in module "
                                      << module_path);
@@ -937,7 +957,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         // Handle character literal constants (e.g., '\0', '\u{10FFFF}')
                         std::string value =
                             std::to_string(static_cast<uint32_t>(lit.token.char_value().value));
-                        mod.constants[const_decl.name] = value;
+                        mod.constants[const_decl.name] = {value, tml_type};
                         TML_DEBUG_LN("[MODULE] Registered module constant: "
                                      << const_decl.name << " = " << value << " (char) in module "
                                      << module_path);
@@ -949,7 +969,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         const auto& lit = cast.expr->as<parser::LiteralExpr>();
                         if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                             std::string value = std::to_string(lit.token.int_value().value);
-                            mod.constants[const_decl.name] = value;
+                            mod.constants[const_decl.name] = {value, tml_type};
                             TML_DEBUG_LN("[MODULE] Registered module constant: "
                                          << const_decl.name << " = " << value << " in module "
                                          << module_path);
@@ -964,7 +984,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                             int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
                             std::string value = std::to_string(-int_val);
-                            mod.constants[const_decl.name] = value;
+                            mod.constants[const_decl.name] = {value, tml_type};
                             TML_DEBUG_LN("[MODULE] Registered module constant: "
                                          << const_decl.name << " = " << value << " in module "
                                          << module_path);
@@ -977,7 +997,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                             if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                                 int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
                                 std::string value = std::to_string(-int_val);
-                                mod.constants[const_decl.name] = value;
+                                mod.constants[const_decl.name] = {value, tml_type};
                                 TML_DEBUG_LN("[MODULE] Registered module constant: "
                                              << const_decl.name << " = " << value << " in module "
                                              << module_path);

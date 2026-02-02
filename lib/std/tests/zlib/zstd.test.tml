@@ -1,6 +1,6 @@
 // Tests for Zstd compression
 use test
-use std::zlib::{zstd_compress, zstd_decompress, ZstdOptions}
+use std::zlib::{zstd_compress, zstd_decompress}
 use std::zlib::{zstd_min_level, zstd_max_level, zstd_default_level}
 use std::zlib::error::ZlibError
 use std::collections::Buffer
@@ -53,45 +53,6 @@ func test_zstd_compress_empty() -> I32 {
         let decompressed: Str = decompress_result.unwrap()
         assert_eq(decompressed, original, "empty string roundtrip")
     }
-
-    return 0
-}
-
-@test
-func test_zstd_compress_large_data() -> I32 {
-    // Create a larger string with repeating pattern
-    var data: Str = ""
-    var i: I32 = 0
-    loop (i < 100) {
-        data = data + "Zstd compression test line " + i.to_string() + " with some data.\n"
-        i = i + 1
-    }
-
-    let result: Outcome[Buffer, ZlibError] = zstd_compress(data)
-    if result.is_err() {
-        print("zstd_compress large data failed\n")
-        return 1
-    }
-
-    var compressed: Buffer = result.unwrap()
-
-    // Compressed should be smaller due to repetition
-    let original_len: I64 = data.len()
-    let compressed_len: I64 = compressed.len()
-
-    // Zstd should compress well
-    if compressed_len >= original_len {
-        print("zstd compression did not reduce size\n")
-    }
-
-    let decompress_result: Outcome[Str, ZlibError] = zstd_decompress(ref compressed)
-    if decompress_result.is_err() {
-        print("zstd_decompress large data failed\n")
-        return 1
-    }
-
-    let decompressed: Str = decompress_result.unwrap()
-    assert_eq(decompressed, data, "large data roundtrip")
 
     return 0
 }

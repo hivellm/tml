@@ -248,8 +248,12 @@ private:
     };
     std::unordered_map<std::string, FuncInfo> functions_;
 
-    // Global constants (name -> value as string)
-    std::unordered_map<std::string, std::string> global_constants_;
+    // Global constants (name -> {value, llvm_type})
+    struct ConstInfo {
+        std::string value;     // The constant value as string
+        std::string llvm_type; // The LLVM type (e.g., "i32", "i64")
+    };
+    std::unordered_map<std::string, ConstInfo> global_constants_;
 
     // FFI support - external libraries to link (from @link decorator)
     std::set<std::string> extern_link_libs_;
