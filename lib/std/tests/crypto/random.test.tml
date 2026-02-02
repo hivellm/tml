@@ -1,5 +1,6 @@
-// Tests for crypto random functions
-use test
+//! Tests for crypto random functions
+
+use test::{assert, assert_eq}
 use std::collections::Buffer
 use std::crypto::random::{random_bytes, random_int, random_uuid, SecureRandom}
 
@@ -107,7 +108,7 @@ func test_random_uuid_uniqueness() -> I32 {
 
 @test
 func test_secure_random_bytes() -> I32 {
-    let rng: SecureRandom = SecureRandom.new()
+    let rng: SecureRandom = SecureRandom::new()
 
     let buf: Buffer = rng.bytes(64 as I64)
     assert_eq(buf.len(), 64 as I64, "rng bytes length")
@@ -118,7 +119,7 @@ func test_secure_random_bytes() -> I32 {
 
 @test
 func test_secure_random_next_u32() -> I32 {
-    let rng: SecureRandom = SecureRandom.new()
+    let rng: SecureRandom = SecureRandom::new()
 
     // Generate several random u32 values
     let v1: U32 = rng.next_u32()
@@ -132,7 +133,7 @@ func test_secure_random_next_u32() -> I32 {
 
 @test
 func test_secure_random_next_u64() -> I32 {
-    let rng: SecureRandom = SecureRandom.new()
+    let rng: SecureRandom = SecureRandom::new()
 
     let v1: U64 = rng.next_u64()
     let v2: U64 = rng.next_u64()
@@ -145,7 +146,7 @@ func test_secure_random_next_u64() -> I32 {
 
 @test
 func test_secure_random_int_range() -> I32 {
-    let rng: SecureRandom = SecureRandom.new()
+    let rng: SecureRandom = SecureRandom::new()
 
     let mut i: I64 = 0
     loop (i < (100 as I64)) {
@@ -160,18 +161,18 @@ func test_secure_random_int_range() -> I32 {
 
 @test
 func test_secure_random_next_bool() -> I32 {
-    let rng: SecureRandom = SecureRandom.new()
+    let rng: SecureRandom = SecureRandom::new()
 
     // Just verify we can call it
-    let _: Bool = rng.next_bool()
-    let _: Bool = rng.next_bool()
+    let _b1: Bool = rng.next_bool()
+    let _b2: Bool = rng.next_bool()
 
     return 0
 }
 
 @test
 func test_secure_random_next_f64() -> I32 {
-    let rng: SecureRandom = SecureRandom.new()
+    let rng: SecureRandom = SecureRandom::new()
 
     let mut i: I64 = 0
     loop (i < (100 as I64)) {

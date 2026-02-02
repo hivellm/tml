@@ -118,7 +118,7 @@ pub mod crc32
 pub mod stream
 
 // Re-export error types
-pub use zlib::error::{ZlibError, ZlibErrorKind, ZlibResult}
+pub use zlib::error::{ZlibError, ZlibErrorKind}
 
 // Re-export all constants
 pub use zlib::constants::{

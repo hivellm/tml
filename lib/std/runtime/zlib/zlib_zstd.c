@@ -5,13 +5,16 @@
  */
 
 #include "zlib_internal.h"
+
+#include <zdict.h>
 #include <zstd.h>
+#include <zstd_errors.h>
 
 // Thread-local error code for zstd
 #ifdef _WIN32
-    static __declspec(thread) int32_t g_zstd_last_error = 0;
+static __declspec(thread) int32_t g_zstd_last_error = 0;
 #else
-    static __thread int32_t g_zstd_last_error = 0;
+static __thread int32_t g_zstd_last_error = 0;
 #endif
 
 static void zstd_set_last_error(int32_t code) {
@@ -40,23 +43,21 @@ TmlBuffer* zstd_compress(const char* data, int32_t level) {
     size_t input_len = strlen(data);
 
     // Clamp level to valid range
-    if (level < ZSTD_minCLevel()) level = ZSTD_defaultCLevel();
-    if (level > ZSTD_maxCLevel()) level = ZSTD_maxCLevel();
+    if (level < ZSTD_minCLevel())
+        level = ZSTD_defaultCLevel();
+    if (level > ZSTD_maxCLevel())
+        level = ZSTD_maxCLevel();
 
     // Calculate max compressed size
     size_t max_compressed = ZSTD_compressBound(input_len);
 
     TmlBuffer* output = tml_buffer_create(max_compressed);
     if (!output) {
-        zstd_set_last_error(-2);  // Memory error
+        zstd_set_last_error(-2); // Memory error
         return NULL;
     }
 
-    size_t compressed_size = ZSTD_compress(
-        output->data, max_compressed,
-        data, input_len,
-        level
-    );
+    size_t compressed_size = ZSTD_compress(output->data, max_compressed, data, input_len, level);
 
     if (ZSTD_isError(compressed_size)) {
         tml_buffer_destroy(output);
@@ -75,8 +76,10 @@ TmlBuffer* zstd_compress_buffer(TmlBuffer* data, int32_t level) {
         return NULL;
     }
 
-    if (level < ZSTD_minCLevel()) level = ZSTD_defaultCLevel();
-    if (level > ZSTD_maxCLevel()) level = ZSTD_maxCLevel();
+    if (level < ZSTD_minCLevel())
+        level = ZSTD_defaultCLevel();
+    if (level > ZSTD_maxCLevel())
+        level = ZSTD_maxCLevel();
 
     size_t max_compressed = ZSTD_compressBound(data->len);
 
@@ -86,11 +89,8 @@ TmlBuffer* zstd_compress_buffer(TmlBuffer* data, int32_t level) {
         return NULL;
     }
 
-    size_t compressed_size = ZSTD_compress(
-        output->data, max_compressed,
-        data->data, data->len,
-        level
-    );
+    size_t compressed_size =
+        ZSTD_compress(output->data, max_compressed, data->data, data->len, level);
 
     if (ZSTD_isError(compressed_size)) {
         tml_buffer_destroy(output);
@@ -111,8 +111,10 @@ TmlBuffer* zstd_compress_with_dict(const char* data, int32_t level, TmlBuffer* d
 
     size_t input_len = strlen(data);
 
-    if (level < ZSTD_minCLevel()) level = ZSTD_defaultCLevel();
-    if (level > ZSTD_maxCLevel()) level = ZSTD_maxCLevel();
+    if (level < ZSTD_minCLevel())
+        level = ZSTD_defaultCLevel();
+    if (level > ZSTD_maxCLevel())
+        level = ZSTD_maxCLevel();
 
     size_t max_compressed = ZSTD_compressBound(input_len);
 
@@ -124,19 +126,11 @@ TmlBuffer* zstd_compress_with_dict(const char* data, int32_t level, TmlBuffer* d
 
     size_t compressed_size;
     if (dict && dict->len > 0) {
-        compressed_size = ZSTD_compress_usingDict(
-            ZSTD_createCCtx(), // TODO: reuse context
-            output->data, max_compressed,
-            data, input_len,
-            dict->data, dict->len,
-            level
-        );
+        compressed_size = ZSTD_compress_usingDict(ZSTD_createCCtx(), // TODO: reuse context
+                                                  output->data, max_compressed, data, input_len,
+                                                  dict->data, dict->len, level);
     } else {
-        compressed_size = ZSTD_compress(
-            output->data, max_compressed,
-            data, input_len,
-            level
-        );
+        compressed_size = ZSTD_compress(output->data, max_compressed, data, input_len, level);
     }
 
     if (ZSTD_isError(compressed_size)) {
@@ -164,12 +158,14 @@ char* zstd_decompress(TmlBuffer* data) {
     unsigned long long decompressed_size = ZSTD_getFrameContentSize(data->data, data->len);
 
     size_t out_capacity;
-    if (decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN || decompressed_size == ZSTD_CONTENTSIZE_ERROR) {
+    if (decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN ||
+        decompressed_size == ZSTD_CONTENTSIZE_ERROR) {
         // Unknown size, start with 4x estimate
         out_capacity = data->len * 4;
-        if (out_capacity < 256) out_capacity = 256;
+        if (out_capacity < 256)
+            out_capacity = 256;
     } else {
-        out_capacity = (size_t)decompressed_size + 1;  // +1 for null terminator
+        out_capacity = (size_t)decompressed_size + 1; // +1 for null terminator
     }
 
     uint8_t* output = (uint8_t*)malloc(out_capacity);
@@ -201,9 +197,11 @@ TmlBuffer* zstd_decompress_buffer(TmlBuffer* data) {
     unsigned long long decompressed_size = ZSTD_getFrameContentSize(data->data, data->len);
 
     size_t out_capacity;
-    if (decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN || decompressed_size == ZSTD_CONTENTSIZE_ERROR) {
+    if (decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN ||
+        decompressed_size == ZSTD_CONTENTSIZE_ERROR) {
         out_capacity = data->len * 4;
-        if (out_capacity < 256) out_capacity = 256;
+        if (out_capacity < 256)
+            out_capacity = 256;
     } else {
         out_capacity = (size_t)decompressed_size;
     }
@@ -236,9 +234,11 @@ TmlBuffer* zstd_decompress_with_dict(TmlBuffer* data, TmlBuffer* dict) {
     unsigned long long decompressed_size = ZSTD_getFrameContentSize(data->data, data->len);
 
     size_t out_capacity;
-    if (decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN || decompressed_size == ZSTD_CONTENTSIZE_ERROR) {
+    if (decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN ||
+        decompressed_size == ZSTD_CONTENTSIZE_ERROR) {
         out_capacity = data->len * 4;
-        if (out_capacity < 256) out_capacity = 256;
+        if (out_capacity < 256)
+            out_capacity = 256;
     } else {
         out_capacity = (size_t)decompressed_size;
     }
@@ -251,12 +251,9 @@ TmlBuffer* zstd_decompress_with_dict(TmlBuffer* data, TmlBuffer* dict) {
 
     size_t result;
     if (dict && dict->len > 0) {
-        result = ZSTD_decompress_usingDict(
-            ZSTD_createDCtx(),  // TODO: reuse context
-            output->data, out_capacity,
-            data->data, data->len,
-            dict->data, dict->len
-        );
+        result = ZSTD_decompress_usingDict(ZSTD_createDCtx(), // TODO: reuse context
+                                           output->data, out_capacity, data->data, data->len,
+                                           dict->data, dict->len);
     } else {
         result = ZSTD_decompress(output->data, out_capacity, data->data, data->len);
     }
@@ -277,7 +274,8 @@ TmlBuffer* zstd_decompress_with_dict(TmlBuffer* data, TmlBuffer* dict) {
 // ============================================================================
 
 int64_t zstd_content_size(TmlBuffer* data) {
-    if (!data || data->len == 0) return -1;
+    if (!data || data->len == 0)
+        return -1;
 
     unsigned long long size = ZSTD_getFrameContentSize(data->data, data->len);
     if (size == ZSTD_CONTENTSIZE_UNKNOWN || size == ZSTD_CONTENTSIZE_ERROR) {
@@ -287,7 +285,8 @@ int64_t zstd_content_size(TmlBuffer* data) {
 }
 
 int64_t zstd_decompress_bound(TmlBuffer* data) {
-    if (!data || data->len == 0) return -1;
+    if (!data || data->len == 0)
+        return -1;
 
     unsigned long long bound = ZSTD_getDecompressedSize(data->data, data->len);
     if (bound == 0) {
@@ -298,16 +297,16 @@ int64_t zstd_decompress_bound(TmlBuffer* data) {
 }
 
 int32_t zstd_frame_dict_id(TmlBuffer* data) {
-    if (!data || data->len == 0) return 0;
+    if (!data || data->len == 0)
+        return 0;
     return (int32_t)ZSTD_getDictID_fromFrame(data->data, data->len);
 }
 
 bool zstd_is_frame(TmlBuffer* data) {
-    if (!data || data->len < 4) return false;
+    if (!data || data->len < 4)
+        return false;
     // Check for zstd magic number: 0xFD2FB528
-    return data->data[0] == 0x28 &&
-           data->data[1] == 0xB5 &&
-           data->data[2] == 0x2F &&
+    return data->data[0] == 0x28 && data->data[1] == 0xB5 && data->data[2] == 0x2F &&
            data->data[3] == 0xFD;
 }
 
@@ -334,7 +333,8 @@ struct ZstdCompressContext {
 
 ZstdCompressContext* zstd_compress_context_create(int32_t level, bool checksum) {
     ZstdCompressContext* ctx = (ZstdCompressContext*)calloc(1, sizeof(ZstdCompressContext));
-    if (!ctx) return NULL;
+    if (!ctx)
+        return NULL;
 
     ctx->stream = ZSTD_createCStream();
     if (!ctx->stream) {
@@ -342,8 +342,10 @@ ZstdCompressContext* zstd_compress_context_create(int32_t level, bool checksum) 
         return NULL;
     }
 
-    if (level < ZSTD_minCLevel()) level = ZSTD_defaultCLevel();
-    if (level > ZSTD_maxCLevel()) level = ZSTD_maxCLevel();
+    if (level < ZSTD_minCLevel())
+        level = ZSTD_defaultCLevel();
+    if (level > ZSTD_maxCLevel())
+        level = ZSTD_maxCLevel();
 
     size_t init_result = ZSTD_initCStream(ctx->stream, level);
     if (ZSTD_isError(init_result)) {
@@ -360,38 +362,42 @@ ZstdCompressContext* zstd_compress_context_create(int32_t level, bool checksum) 
     return ctx;
 }
 
-TmlBuffer* zstd_compress_context_process(ZstdCompressContext* ctx, const char* data, int32_t operation) {
-    if (!ctx || !ctx->stream) return NULL;
+TmlBuffer* zstd_compress_context_process(ZstdCompressContext* ctx, const char* data,
+                                         int32_t operation) {
+    if (!ctx || !ctx->stream)
+        return NULL;
 
     size_t input_len = data ? strlen(data) : 0;
 
-    ZSTD_inBuffer input = {
-        .src = data,
-        .size = input_len,
-        .pos = 0
-    };
+    ZSTD_inBuffer input = {.src = data, .size = input_len, .pos = 0};
 
     size_t out_capacity = ZSTD_CStreamOutSize();
     if (input_len > 0) {
         size_t bound = ZSTD_compressBound(input_len);
-        if (bound > out_capacity) out_capacity = bound;
+        if (bound > out_capacity)
+            out_capacity = bound;
     }
 
     TmlBuffer* output = tml_buffer_create(out_capacity);
-    if (!output) return NULL;
+    if (!output)
+        return NULL;
 
-    ZSTD_outBuffer out_buf = {
-        .dst = output->data,
-        .size = out_capacity,
-        .pos = 0
-    };
+    ZSTD_outBuffer out_buf = {.dst = output->data, .size = out_capacity, .pos = 0};
 
     ZSTD_EndDirective mode;
     switch (operation) {
-        case 0: mode = ZSTD_e_continue; break;
-        case 1: mode = ZSTD_e_flush; break;
-        case 2: mode = ZSTD_e_end; break;
-        default: mode = ZSTD_e_continue; break;
+    case 0:
+        mode = ZSTD_e_continue;
+        break;
+    case 1:
+        mode = ZSTD_e_flush;
+        break;
+    case 2:
+        mode = ZSTD_e_end;
+        break;
+    default:
+        mode = ZSTD_e_continue;
+        break;
     }
 
     size_t remaining;
@@ -422,34 +428,38 @@ TmlBuffer* zstd_compress_context_process(ZstdCompressContext* ctx, const char* d
     return output;
 }
 
-TmlBuffer* zstd_compress_context_process_buffer(ZstdCompressContext* ctx, TmlBuffer* data, int32_t operation) {
-    if (!ctx || !ctx->stream || !data) return NULL;
+TmlBuffer* zstd_compress_context_process_buffer(ZstdCompressContext* ctx, TmlBuffer* data,
+                                                int32_t operation) {
+    if (!ctx || !ctx->stream || !data)
+        return NULL;
 
-    ZSTD_inBuffer input = {
-        .src = data->data,
-        .size = data->len,
-        .pos = 0
-    };
+    ZSTD_inBuffer input = {.src = data->data, .size = data->len, .pos = 0};
 
     size_t out_capacity = ZSTD_CStreamOutSize();
     size_t bound = ZSTD_compressBound(data->len);
-    if (bound > out_capacity) out_capacity = bound;
+    if (bound > out_capacity)
+        out_capacity = bound;
 
     TmlBuffer* output = tml_buffer_create(out_capacity);
-    if (!output) return NULL;
+    if (!output)
+        return NULL;
 
-    ZSTD_outBuffer out_buf = {
-        .dst = output->data,
-        .size = out_capacity,
-        .pos = 0
-    };
+    ZSTD_outBuffer out_buf = {.dst = output->data, .size = out_capacity, .pos = 0};
 
     ZSTD_EndDirective mode;
     switch (operation) {
-        case 0: mode = ZSTD_e_continue; break;
-        case 1: mode = ZSTD_e_flush; break;
-        case 2: mode = ZSTD_e_end; break;
-        default: mode = ZSTD_e_continue; break;
+    case 0:
+        mode = ZSTD_e_continue;
+        break;
+    case 1:
+        mode = ZSTD_e_flush;
+        break;
+    case 2:
+        mode = ZSTD_e_end;
+        break;
+    default:
+        mode = ZSTD_e_continue;
+        break;
     }
 
     size_t remaining;
@@ -498,7 +508,8 @@ struct ZstdDecompressContext {
 
 ZstdDecompressContext* zstd_decompress_context_create(void) {
     ZstdDecompressContext* ctx = (ZstdDecompressContext*)calloc(1, sizeof(ZstdDecompressContext));
-    if (!ctx) return NULL;
+    if (!ctx)
+        return NULL;
 
     ctx->stream = ZSTD_createDStream();
     if (!ctx->stream) {
@@ -517,25 +528,20 @@ ZstdDecompressContext* zstd_decompress_context_create(void) {
 }
 
 TmlBuffer* zstd_decompress_context_process(ZstdDecompressContext* ctx, TmlBuffer* data) {
-    if (!ctx || !ctx->stream || !data) return NULL;
+    if (!ctx || !ctx->stream || !data)
+        return NULL;
 
-    ZSTD_inBuffer input = {
-        .src = data->data,
-        .size = data->len,
-        .pos = 0
-    };
+    ZSTD_inBuffer input = {.src = data->data, .size = data->len, .pos = 0};
 
     size_t out_capacity = ZSTD_DStreamOutSize();
-    if (data->len * 4 > out_capacity) out_capacity = data->len * 4;
+    if (data->len * 4 > out_capacity)
+        out_capacity = data->len * 4;
 
     TmlBuffer* output = tml_buffer_create(out_capacity);
-    if (!output) return NULL;
+    if (!output)
+        return NULL;
 
-    ZSTD_outBuffer out_buf = {
-        .dst = output->data,
-        .size = out_capacity,
-        .pos = 0
-    };
+    ZSTD_outBuffer out_buf = {.dst = output->data, .size = out_capacity, .pos = 0};
 
     while (input.pos < input.size) {
         size_t result = ZSTD_decompressStream(ctx->stream, &out_buf, &input);
@@ -584,18 +590,22 @@ struct ZstdDict {
 };
 
 ZstdDict* zstd_dict_create(TmlBuffer* data) {
-    if (!data || data->len == 0) return NULL;
+    if (!data || data->len == 0)
+        return NULL;
 
     ZstdDict* dict = (ZstdDict*)calloc(1, sizeof(ZstdDict));
-    if (!dict) return NULL;
+    if (!dict)
+        return NULL;
 
     dict->cdict = ZSTD_createCDict(data->data, data->len, ZSTD_defaultCLevel());
     dict->ddict = ZSTD_createDDict(data->data, data->len);
     dict->dict_id = ZSTD_getDictID_fromDict(data->data, data->len);
 
     if (!dict->cdict || !dict->ddict) {
-        if (dict->cdict) ZSTD_freeCDict(dict->cdict);
-        if (dict->ddict) ZSTD_freeDDict(dict->ddict);
+        if (dict->cdict)
+            ZSTD_freeCDict(dict->cdict);
+        if (dict->ddict)
+            ZSTD_freeDDict(dict->ddict);
         free(dict);
         return NULL;
     }
@@ -604,11 +614,13 @@ ZstdDict* zstd_dict_create(TmlBuffer* data) {
 }
 
 ZstdDict* zstd_dict_train(TmlBuffer** samples, size_t num_samples, size_t dict_size) {
-    if (!samples || num_samples == 0 || dict_size == 0) return NULL;
+    if (!samples || num_samples == 0 || dict_size == 0)
+        return NULL;
 
     // Calculate total samples size and build sizes array
     size_t* sample_sizes = (size_t*)malloc(num_samples * sizeof(size_t));
-    if (!sample_sizes) return NULL;
+    if (!sample_sizes)
+        return NULL;
 
     size_t total_size = 0;
     for (size_t i = 0; i < num_samples; i++) {
@@ -640,10 +652,8 @@ ZstdDict* zstd_dict_train(TmlBuffer** samples, size_t num_samples, size_t dict_s
     }
 
     // Train the dictionary
-    size_t result = ZDICT_trainFromBuffer(
-        dict_buf->data, dict_size,
-        all_samples, sample_sizes, (unsigned)num_samples
-    );
+    size_t result = ZDICT_trainFromBuffer(dict_buf->data, dict_size, all_samples, sample_sizes,
+                                          (unsigned)num_samples);
 
     free(all_samples);
     free(sample_sizes);
@@ -668,8 +678,10 @@ int32_t zstd_dict_id(ZstdDict* dict) {
 
 void zstd_dict_destroy(ZstdDict* dict) {
     if (dict) {
-        if (dict->cdict) ZSTD_freeCDict(dict->cdict);
-        if (dict->ddict) ZSTD_freeDDict(dict->ddict);
+        if (dict->cdict)
+            ZSTD_freeCDict(dict->cdict);
+        if (dict->ddict)
+            ZSTD_freeDDict(dict->ddict);
         free(dict);
     }
 }

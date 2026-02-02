@@ -489,6 +489,191 @@ foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
 endforeach()
 message(STATUS "TML JSON Runtime: Building static library (tml_json_runtime)")
 
+# ============================================================================
+# Zlib/Compression Runtime Library (optional)
+# ============================================================================
+# Provides compression support for std::zlib module (zlib, brotli, zstd)
+
+option(TML_BUILD_ZLIB_RUNTIME "Build zlib compression runtime" ON)
+
+if(TML_BUILD_ZLIB_RUNTIME)
+    # Find compression libraries
+    # Try find_package first, then manual detection for vcpkg
+    find_package(ZLIB QUIET)
+
+    # Local vcpkg install path (project-local installation in src/)
+    set(VCPKG_LOCAL_PATH "${CMAKE_SOURCE_DIR}/../src/x64-windows")
+
+    # Manual zlib detection if find_package failed
+    if(NOT ZLIB_FOUND)
+        find_path(ZLIB_INCLUDE_DIR zlib.h
+            PATHS
+            "$ENV{ZLIB_DIR}/include"
+            "${VCPKG_LOCAL_PATH}/include"
+            "C:/vcpkg/installed/x64-windows/include"
+            "/usr/include"
+            "/usr/local/include"
+        )
+        find_library(ZLIB_LIBRARY NAMES zlib z zlibstatic zlibd zlib1
+            PATHS
+            "$ENV{ZLIB_DIR}/lib"
+            "${VCPKG_LOCAL_PATH}/lib"
+            "C:/vcpkg/installed/x64-windows/lib"
+            "/usr/lib"
+            "/usr/local/lib"
+        )
+        if(ZLIB_INCLUDE_DIR AND ZLIB_LIBRARY)
+            set(ZLIB_FOUND TRUE)
+            set(ZLIB_INCLUDE_DIRS ${ZLIB_INCLUDE_DIR})
+            set(ZLIB_LIBRARIES ${ZLIB_LIBRARY})
+            message(STATUS "Zlib Runtime: zlib found manually at ${ZLIB_LIBRARY}")
+        endif()
+    endif()
+
+    # Try to find Brotli
+    find_path(BROTLI_INCLUDE_DIR brotli/encode.h
+        PATHS
+        "$ENV{BROTLI_DIR}/include"
+        "${VCPKG_LOCAL_PATH}/include"
+        "C:/vcpkg/installed/x64-windows/include"
+        "/usr/include"
+        "/usr/local/include"
+    )
+    find_library(BROTLI_COMMON_LIB NAMES brotlicommon brotlicommon-static
+        PATHS
+        "$ENV{BROTLI_DIR}/lib"
+        "${VCPKG_LOCAL_PATH}/lib"
+        "C:/vcpkg/installed/x64-windows/lib"
+        "/usr/lib"
+        "/usr/local/lib"
+    )
+    find_library(BROTLI_ENC_LIB NAMES brotlienc brotlienc-static
+        PATHS
+        "$ENV{BROTLI_DIR}/lib"
+        "${VCPKG_LOCAL_PATH}/lib"
+        "C:/vcpkg/installed/x64-windows/lib"
+        "/usr/lib"
+        "/usr/local/lib"
+    )
+    find_library(BROTLI_DEC_LIB NAMES brotlidec brotlidec-static
+        PATHS
+        "$ENV{BROTLI_DIR}/lib"
+        "${VCPKG_LOCAL_PATH}/lib"
+        "C:/vcpkg/installed/x64-windows/lib"
+        "/usr/lib"
+        "/usr/local/lib"
+    )
+
+    # Try to find Zstd
+    find_path(ZSTD_INCLUDE_DIR zstd.h
+        PATHS
+        "$ENV{ZSTD_DIR}/include"
+        "${VCPKG_LOCAL_PATH}/include"
+        "C:/vcpkg/installed/x64-windows/include"
+        "/usr/include"
+        "/usr/local/include"
+    )
+    find_library(ZSTD_LIB NAMES zstd zstd_static libzstd
+        PATHS
+        "$ENV{ZSTD_DIR}/lib"
+        "${VCPKG_LOCAL_PATH}/lib"
+        "C:/vcpkg/installed/x64-windows/lib"
+        "/usr/lib"
+        "/usr/local/lib"
+    )
+
+    # Zlib runtime sources
+    set(TML_ZLIB_RUNTIME_SOURCES
+        ${CMAKE_SOURCE_DIR}/../lib/std/runtime/zlib/zlib_deflate.c
+        ${CMAKE_SOURCE_DIR}/../lib/std/runtime/zlib/zlib_exports.c
+    )
+
+    # Add optional sources based on available libraries
+    set(TML_ZLIB_HAVE_BROTLI OFF)
+    set(TML_ZLIB_HAVE_ZSTD OFF)
+
+    if(BROTLI_INCLUDE_DIR AND BROTLI_COMMON_LIB AND BROTLI_ENC_LIB AND BROTLI_DEC_LIB)
+        set(TML_ZLIB_HAVE_BROTLI ON)
+        list(APPEND TML_ZLIB_RUNTIME_SOURCES
+            ${CMAKE_SOURCE_DIR}/../lib/std/runtime/zlib/zlib_brotli.c
+        )
+        message(STATUS "Zlib Runtime: Brotli support enabled")
+    else()
+        message(STATUS "Zlib Runtime: Brotli not found (brotli compression disabled)")
+    endif()
+
+    if(ZSTD_INCLUDE_DIR AND ZSTD_LIB)
+        set(TML_ZLIB_HAVE_ZSTD ON)
+        list(APPEND TML_ZLIB_RUNTIME_SOURCES
+            ${CMAKE_SOURCE_DIR}/../lib/std/runtime/zlib/zlib_zstd.c
+        )
+        message(STATUS "Zlib Runtime: Zstd support enabled")
+    else()
+        message(STATUS "Zlib Runtime: Zstd not found (zstd compression disabled)")
+    endif()
+
+    if(ZLIB_FOUND)
+        # Create static library
+        add_library(tml_zlib_runtime STATIC ${TML_ZLIB_RUNTIME_SOURCES})
+
+        # Include directories
+        target_include_directories(tml_zlib_runtime PRIVATE
+            ${CMAKE_SOURCE_DIR}/../lib/std/runtime/zlib
+            ${ZLIB_INCLUDE_DIRS}
+        )
+
+        # Link zlib
+        target_link_libraries(tml_zlib_runtime PUBLIC ${ZLIB_LIBRARIES})
+
+        # Add Brotli if available
+        if(TML_ZLIB_HAVE_BROTLI)
+            target_include_directories(tml_zlib_runtime PRIVATE ${BROTLI_INCLUDE_DIR})
+            target_link_libraries(tml_zlib_runtime PUBLIC
+                ${BROTLI_ENC_LIB}
+                ${BROTLI_DEC_LIB}
+                ${BROTLI_COMMON_LIB}
+            )
+            target_compile_definitions(tml_zlib_runtime PRIVATE TML_HAS_BROTLI=1)
+        endif()
+
+        # Add Zstd if available
+        if(TML_ZLIB_HAVE_ZSTD)
+            target_include_directories(tml_zlib_runtime PRIVATE ${ZSTD_INCLUDE_DIR})
+            target_link_libraries(tml_zlib_runtime PUBLIC ${ZSTD_LIB})
+            target_compile_definitions(tml_zlib_runtime PRIVATE TML_HAS_ZSTD=1)
+        endif()
+
+        # C compiler flags
+        if(MSVC)
+            target_compile_options(tml_zlib_runtime PRIVATE
+                /W3
+                $<$<CONFIG:Debug>:/Od>
+                $<$<NOT:$<CONFIG:Debug>>:/O2>
+            )
+            target_compile_definitions(tml_zlib_runtime PRIVATE _CRT_SECURE_NO_WARNINGS)
+        else()
+            target_compile_options(tml_zlib_runtime PRIVATE
+                $<$<CONFIG:Debug>:-O0 -g>
+                $<$<NOT:$<CONFIG:Debug>>:-O3 -fomit-frame-pointer>
+            )
+        endif()
+
+        # Put library in output directory
+        set_target_properties(tml_zlib_runtime PROPERTIES
+            ARCHIVE_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR}
+        )
+        foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+            set_target_properties(tml_zlib_runtime PROPERTIES
+                ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR}
+            )
+        endforeach()
+
+        message(STATUS "TML Zlib Runtime: Building static library (tml_zlib_runtime)")
+    else()
+        message(STATUS "TML Zlib Runtime: zlib not found - compression support disabled")
+    endif()
+endif()
+
 # Profiler library (runtime profiling with cpuprofile export)
 add_library(tml_profiler STATIC
     src/profiler/profiler.cpp

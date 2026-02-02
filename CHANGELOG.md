@@ -8,6 +8,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Crypto Module** (2026-02-02) - Cryptographically secure random number generation
+  - New `std::crypto` module with CSPRNG support using native OS APIs
+  - Windows: BCryptGenRandom (CNG), Linux: getrandom(), macOS: SecRandomCopyBytes
+  - Functions: `random_bytes()`, `random_int()`, `random_uuid()`, `random_fill()`
+  - `SecureRandom` class for object-oriented random generation
+  - Type-specific generators: `random_u8/u16/u32/u64`, `random_i32/i64`, `random_f32/f64`
+  - Timing-safe comparison: `timing_safe_equal()`, `timing_safe_equal_str()`
+  - Prime generation (for RSA): `generate_prime()`, `generate_safe_prime()`, `check_prime()`
+  - Files added:
+    - `lib/std/src/crypto/random.tml` - Random number generation API
+    - `lib/std/src/crypto/error.tml` - CryptoError type
+    - `lib/std/src/crypto/hash.tml` - Hash algorithms (SHA-256, SHA-512, MD5, BLAKE3, etc.)
+    - `lib/std/src/crypto/hmac.tml` - HMAC message authentication
+    - `lib/std/src/crypto/cipher.tml` - Symmetric encryption (AES-GCM, ChaCha20)
+    - `lib/std/src/crypto/kdf.tml` - Key derivation (PBKDF2, HKDF, scrypt)
+    - `lib/std/src/crypto/sign.tml` - Digital signatures (ECDSA, Ed25519)
+    - `lib/std/src/crypto/key.tml` - Key management
+    - `lib/std/src/crypto/dh.tml` - Diffie-Hellman key exchange
+    - `lib/std/src/crypto/ecdh.tml` - Elliptic curve Diffie-Hellman
+    - `lib/std/src/crypto/rsa.tml` - RSA encryption/signing
+    - `lib/std/src/crypto/x509.tml` - X.509 certificate handling
+    - `compiler/runtime/crypto.c` - Native FFI implementations
+  - Files modified:
+    - `compiler/CMakeLists.txt` - Added crypto.c to runtime
+    - `compiler/src/cli/builder/helpers.cpp` - Added crypto.c to fallback compilation
+
+- **Zlib Module** (2026-02-02) - Compression and decompression support
+  - New `std::zlib` module for data compression
+  - Deflate/Inflate: `deflate()`, `inflate()` with configurable compression levels
+  - Gzip: `gzip_compress()`, `gzip_decompress()` for gzip format
+  - Brotli: `brotli_compress()`, `brotli_decompress()` for Brotli compression
+  - Zstd: `zstd_compress()`, `zstd_decompress()` for Zstandard compression
+  - CRC32: `crc32()`, `crc32_combine()` checksum functions
+  - Streaming API: `DeflateStream`, `InflateStream` for large data
+  - Configurable options: compression level, window bits, memory level
+  - Files added:
+    - `lib/std/src/zlib/deflate.tml` - Deflate compression
+    - `lib/std/src/zlib/gzip.tml` - Gzip format support
+    - `lib/std/src/zlib/brotli.tml` - Brotli compression
+    - `lib/std/src/zlib/zstd.tml` - Zstandard compression
+    - `lib/std/src/zlib/crc32.tml` - CRC32 checksums
+    - `lib/std/src/zlib/stream.tml` - Streaming compression API
+    - `lib/std/src/zlib/error.tml` - ZlibError type
+    - `lib/std/src/zlib/options.tml` - Compression options
+    - `lib/std/runtime/zlib/` - Native FFI implementations
+
 - **Struct Update Syntax** (2026-02-01) - Copy struct with field overrides using `..base`
   - New syntax: `Point { x: 5, ..base_struct }` copies fields from base_struct, overrides x
   - Also supports copying all fields: `Point { ..base_struct }` (equivalent to clone)

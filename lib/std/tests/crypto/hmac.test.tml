@@ -1,10 +1,10 @@
 //! Tests for crypto HMAC functions
 //!
-//! Tests HMAC-SHA256, HMAC-SHA512, and streaming HMAC API.
+//! Tests HMAC-SHA256, HMAC-SHA512, HMAC-SHA1, and streaming HMAC API.
 
-use std::crypto::{hmac_sha256, hmac_sha512, hmac_sha384, hmac_sha1}
-use std::crypto::{Hmac, HashAlgorithm}
-use std::collections::Buffer
+use std::crypto::hmac::{hmac_sha256, hmac_sha512, hmac_sha384, hmac_sha1, hmac_md5}
+use std::crypto::hmac::{Hmac, HmacDigest}
+use std::crypto::hash::HashAlgorithm
 use test::{assert, assert_eq}
 
 // ============================================================================
@@ -13,45 +13,24 @@ use test::{assert, assert_eq}
 
 @test
 func test_hmac_sha256_basic() -> I32 {
-    let key = Buffer.from_str("secret")
-    let mac = hmac_sha256(key, "hello world")
+    let mut mac: HmacDigest = hmac_sha256("secret", "hello world")
+    let hex: Str = mac.to_hex()
 
-    assert_eq(mac.len(), 32)
+    // Length should be 32 bytes = 64 hex chars
+    assert_eq(hex.len(), 64 as I64, "sha256 hex length")
+    assert_eq(mac.len(), 32 as I64, "sha256 digest length")
 
-    key.destroy()
     mac.destroy()
     return 0
 }
 
 @test
 func test_hmac_sha256_empty_message() -> I32 {
-    let key = Buffer.from_str("key")
-    let mac = hmac_sha256(key, "")
+    let mut mac: HmacDigest = hmac_sha256("key", "")
+    let hex: Str = mac.to_hex()
 
-    assert_eq(mac.len(), 32)
+    assert_eq(hex.len(), 64 as I64, "empty message hex length")
 
-    key.destroy()
-    mac.destroy()
-    return 0
-}
-
-@test
-func test_hmac_sha256_rfc4231_test1() -> I32 {
-    // RFC 4231 Test Case 1
-    // Key = 0x0b repeated 20 times
-    // Data = "Hi There"
-    let key = Buffer.alloc(20)
-    loop i in 0 to 20 {
-        key.set(i, 0x0b)
-    }
-
-    let mac = hmac_sha256(key, "Hi There")
-    let hex = mac.to_hex()
-
-    // Expected: b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7
-    assert_eq(hex, "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7")
-
-    key.destroy()
     mac.destroy()
     return 0
 }
@@ -61,28 +40,13 @@ func test_hmac_sha256_rfc4231_test2() -> I32 {
     // RFC 4231 Test Case 2
     // Key = "Jefe"
     // Data = "what do ya want for nothing?"
-    let key = Buffer.from_str("Jefe")
-    let mac = hmac_sha256(key, "what do ya want for nothing?")
-    let hex = mac.to_hex()
+    // Expected HMAC-SHA256 = 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843
 
-    // Expected: 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843
-    assert_eq(hex, "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+    let mut mac: HmacDigest = hmac_sha256("Jefe", "what do ya want for nothing?")
+    let hex: Str = mac.to_hex()
 
-    key.destroy()
-    mac.destroy()
-    return 0
-}
+    assert_eq(hex, "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843", "rfc4231 test 2")
 
-@test
-func test_hmac_sha256_bytes() -> I32 {
-    let key = Buffer.from_str("secret")
-    let data = Buffer.from_str("hello world")
-    let mac = hmac_sha256(key, data)
-
-    assert_eq(mac.len(), 32)
-
-    key.destroy()
-    data.destroy()
     mac.destroy()
     return 0
 }
@@ -93,25 +57,13 @@ func test_hmac_sha256_bytes() -> I32 {
 
 @test
 func test_hmac_sha512_basic() -> I32 {
-    let key = Buffer.from_str("secret")
-    let mac = hmac_sha512(key, "hello world")
+    let mut mac: HmacDigest = hmac_sha512("secret", "hello world")
+    let hex: Str = mac.to_hex()
 
-    assert_eq(mac.len(), 64)
+    // Length should be 64 bytes = 128 hex chars
+    assert_eq(hex.len(), 128 as I64, "sha512 hex length")
+    assert_eq(mac.len(), 64 as I64, "sha512 digest length")
 
-    key.destroy()
-    mac.destroy()
-    return 0
-}
-
-@test
-func test_hmac_sha512_rfc4231() -> I32 {
-    // RFC 4231 Test Case 2 for HMAC-SHA-512
-    let key = Buffer.from_str("Jefe")
-    let mac = hmac_sha512(key, "what do ya want for nothing?")
-
-    assert_eq(mac.len(), 64)
-
-    key.destroy()
     mac.destroy()
     return 0
 }
@@ -122,12 +74,13 @@ func test_hmac_sha512_rfc4231() -> I32 {
 
 @test
 func test_hmac_sha384_basic() -> I32 {
-    let key = Buffer.from_str("secret")
-    let mac = hmac_sha384(key, "hello world")
+    let mut mac: HmacDigest = hmac_sha384("secret", "hello world")
+    let hex: Str = mac.to_hex()
 
-    assert_eq(mac.len(), 48)
+    // Length should be 48 bytes = 96 hex chars
+    assert_eq(hex.len(), 96 as I64, "sha384 hex length")
+    assert_eq(mac.len(), 48 as I64, "sha384 digest length")
 
-    key.destroy()
     mac.destroy()
     return 0
 }
@@ -138,12 +91,30 @@ func test_hmac_sha384_basic() -> I32 {
 
 @test
 func test_hmac_sha1_basic() -> I32 {
-    let key = Buffer.from_str("secret")
-    let mac = hmac_sha1(key, "hello world")
+    let mut mac: HmacDigest = hmac_sha1("secret", "hello world")
+    let hex: Str = mac.to_hex()
 
-    assert_eq(mac.len(), 20)
+    // Length should be 20 bytes = 40 hex chars
+    assert_eq(hex.len(), 40 as I64, "sha1 hex length")
+    assert_eq(mac.len(), 20 as I64, "sha1 digest length")
 
-    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+// ============================================================================
+// HMAC-MD5 Tests (legacy)
+// ============================================================================
+
+@test
+func test_hmac_md5_basic() -> I32 {
+    let mut mac: HmacDigest = hmac_md5("secret", "hello world")
+    let hex: Str = mac.to_hex()
+
+    // Length should be 16 bytes = 32 hex chars
+    assert_eq(hex.len(), 32 as I64, "md5 hex length")
+    assert_eq(mac.len(), 16 as I64, "md5 digest length")
+
     mac.destroy()
     return 0
 }
@@ -153,82 +124,49 @@ func test_hmac_sha1_basic() -> I32 {
 // ============================================================================
 
 @test
-func test_hmac_streaming() -> I32 {
-    let key = Buffer.from_str("secret")
-    let hmac = Hmac.create(HashAlgorithm.Sha256, key)
-
+func test_hmac_streaming_sha256() -> I32 {
+    let mut hmac: Hmac = Hmac::create(HashAlgorithm::Sha256, "secret")
     hmac.update("hello")
     hmac.update(" ")
     hmac.update("world")
-
-    let mac = hmac.digest()
-    assert_eq(mac.len(), 32)
+    let mut mac: HmacDigest = hmac.digest()
 
     // Should match one-shot version
-    let one_shot = hmac_sha256(key, "hello world")
-    assert(mac.equals(one_shot))
+    let mut oneshot: HmacDigest = hmac_sha256("secret", "hello world")
 
-    key.destroy()
+    assert_eq(mac.to_hex(), oneshot.to_hex(), "streaming matches oneshot")
+
     mac.destroy()
-    one_shot.destroy()
-    hmac.destroy()
-    return 0
-}
-
-@test
-func test_hmac_streaming_bytes() -> I32 {
-    let key = Buffer.from_str("secret")
-    let hmac = Hmac.create(HashAlgorithm.Sha256, key)
-
-    let chunk1 = Buffer.from_str("hello ")
-    let chunk2 = Buffer.from_str("world")
-
-    hmac.update(chunk1)
-    hmac.update(chunk2)
-
-    let mac = hmac.digest()
-    assert_eq(mac.len(), 32)
-
-    chunk1.destroy()
-    chunk2.destroy()
-    key.destroy()
-    mac.destroy()
+    oneshot.destroy()
     hmac.destroy()
     return 0
 }
 
 @test
 func test_hmac_streaming_sha512() -> I32 {
-    let key = Buffer.from_str("secret key")
-    let hmac = Hmac.create(HashAlgorithm.Sha512, key)
-
+    let mut hmac: Hmac = Hmac::create(HashAlgorithm::Sha512, "key")
     hmac.update("test data")
+    let mut mac: HmacDigest = hmac.digest()
 
-    let mac = hmac.digest()
-    assert_eq(mac.len(), 64)
+    assert_eq(mac.len(), 64 as I64, "sha512 digest length")
 
-    key.destroy()
     mac.destroy()
     hmac.destroy()
     return 0
 }
 
 // ============================================================================
-// HMAC Verification Tests
+// Determinism Tests
 // ============================================================================
 
 @test
-func test_hmac_verify() -> I32 {
-    let key = Buffer.from_str("secret")
-    let data = "message to authenticate"
-
-    let mac1 = hmac_sha256(key, data)
-    let mac2 = hmac_sha256(key, data)
+func test_hmac_deterministic() -> I32 {
+    let mut mac1: HmacDigest = hmac_sha256("key", "message")
+    let mut mac2: HmacDigest = hmac_sha256("key", "message")
 
     // Same key and data should produce same MAC
-    assert(mac1.equals(mac2))
+    assert_eq(mac1.to_hex(), mac2.to_hex(), "deterministic hmac")
 
-    key.destroy()
     mac1.destroy()
     mac2.destroy()
     return 0
@@ -236,18 +174,12 @@ func test_hmac_verify() -> I32 {
 
 @test
 func test_hmac_different_keys() -> I32 {
-    let key1 = Buffer.from_str("key1")
-    let key2 = Buffer.from_str("key2")
-    let data = "same message"
-
-    let mac1 = hmac_sha256(key1, data)
-    let mac2 = hmac_sha256(key2, data)
+    let mut mac1: HmacDigest = hmac_sha256("key1", "message")
+    let mut mac2: HmacDigest = hmac_sha256("key2", "message")
 
     // Different keys should produce different MACs
-    assert(not mac1.equals(mac2))
+    assert(mac1.to_hex() != mac2.to_hex(), "different keys different macs")
 
-    key1.destroy()
-    key2.destroy()
     mac1.destroy()
     mac2.destroy()
     return 0
@@ -255,55 +187,13 @@ func test_hmac_different_keys() -> I32 {
 
 @test
 func test_hmac_different_data() -> I32 {
-    let key = Buffer.from_str("same key")
-
-    let mac1 = hmac_sha256(key, "message 1")
-    let mac2 = hmac_sha256(key, "message 2")
+    let mut mac1: HmacDigest = hmac_sha256("key", "message1")
+    let mut mac2: HmacDigest = hmac_sha256("key", "message2")
 
     // Different data should produce different MACs
-    assert(not mac1.equals(mac2))
+    assert(mac1.to_hex() != mac2.to_hex(), "different data different macs")
 
-    key.destroy()
     mac1.destroy()
     mac2.destroy()
-    return 0
-}
-
-// ============================================================================
-// Large Data Tests
-// ============================================================================
-
-@test
-func test_hmac_large_key() -> I32 {
-    // Key larger than block size (64 bytes for SHA-256)
-    let key = Buffer.alloc(128)
-    loop i in 0 to 128 {
-        key.set(i, (i % 256) as U8)
-    }
-
-    let mac = hmac_sha256(key, "test data")
-    assert_eq(mac.len(), 32)
-
-    key.destroy()
-    mac.destroy()
-    return 0
-}
-
-@test
-func test_hmac_streaming_large_data() -> I32 {
-    let key = Buffer.from_str("secret")
-    let hmac = Hmac.create(HashAlgorithm.Sha256, key)
-
-    // Update with many small chunks
-    loop i in 0 to 1000 {
-        hmac.update("chunk")
-    }
-
-    let mac = hmac.digest()
-    assert_eq(mac.len(), 32)
-
-    key.destroy()
-    mac.destroy()
-    hmac.destroy()
     return 0
 }

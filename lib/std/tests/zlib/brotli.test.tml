@@ -1,8 +1,96 @@
 // Tests for Brotli compression
 use test
+use std::zlib::{brotli_compress, brotli_decompress, BrotliOptions}
+use std::zlib::error::ZlibError
+use std::collections::Buffer
 
 @test
-func test_brotli_module_placeholder() -> I32 {
-    assert_eq(1, 1, "basic test works")
+func test_brotli_compress_basic() -> I32 {
+    let original: Str = "Hello, World! This is some test data to compress with Brotli."
+    let result: Outcome[Buffer, ZlibError] = brotli_compress(original)
+
+    if result.is_err() {
+        print("brotli_compress failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+
+    // Compressed data should exist
+    if compressed.len() == 0 {
+        print("compressed data is empty\n")
+        return 1
+    }
+
+    // Now decompress
+    let decompress_result: Outcome[Str, ZlibError] = brotli_decompress(ref compressed)
+    if decompress_result.is_err() {
+        print("brotli_decompress failed\n")
+        return 1
+    }
+
+    let decompressed: Str = decompress_result.unwrap()
+    assert_eq(decompressed, original, "brotli roundtrip")
+
+    return 0
+}
+
+@test
+func test_brotli_compress_empty() -> I32 {
+    let original: Str = ""
+    let result: Outcome[Buffer, ZlibError] = brotli_compress(original)
+
+    if result.is_err() {
+        // Empty string compression might fail
+        return 0
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let decompress_result: Outcome[Str, ZlibError] = brotli_decompress(ref compressed)
+
+    if decompress_result.is_ok() {
+        let decompressed: Str = decompress_result.unwrap()
+        assert_eq(decompressed, original, "empty string roundtrip")
+    }
+
+    return 0
+}
+
+@test
+func test_brotli_compress_large_data() -> I32 {
+    // Create a larger string with repeating pattern
+    var data: Str = ""
+    var i: I32 = 0
+    loop (i < 100) {
+        data = data + "Brotli compression test line " + i.to_string() + " with some data.\n"
+        i = i + 1
+    }
+
+    let result: Outcome[Buffer, ZlibError] = brotli_compress(data)
+    if result.is_err() {
+        print("brotli_compress large data failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+
+    // Compressed should be smaller due to repetition
+    let original_len: I64 = data.len()
+    let compressed_len: I64 = compressed.len()
+
+    // Brotli should compress well
+    if compressed_len >= original_len {
+        print("brotli compression did not reduce size\n")
+    }
+
+    let decompress_result: Outcome[Str, ZlibError] = brotli_decompress(ref compressed)
+    if decompress_result.is_err() {
+        print("brotli_decompress large data failed\n")
+        return 1
+    }
+
+    let decompressed: Str = decompress_result.unwrap()
+    assert_eq(decompressed, data, "large data roundtrip")
+
     return 0
 }

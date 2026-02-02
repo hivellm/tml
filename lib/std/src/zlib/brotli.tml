@@ -32,9 +32,79 @@
 //! ```
 
 use std::collections::{Buffer}
-use std::zlib::error::{ZlibError, ZlibErrorKind, ZlibResult}
+use std::zlib::error::{ZlibError, ZlibErrorKind}
 use std::zlib::options::{BrotliOptions}
-use std::zlib::constants::*
+use std::zlib::constants::{
+    BROTLI_OPERATION_PROCESS,
+    BROTLI_OPERATION_FLUSH,
+    BROTLI_OPERATION_FINISH
+}
+
+// ============================================================================
+// FFI Function Declarations
+// ============================================================================
+
+@extern("brotli_compress")
+func ffi_brotli_compress(data: Str, quality: I32, mode: I32, lgwin: I32, lgblock: I32, size_hint: I64) -> *Unit
+
+@extern("brotli_compress_buffer")
+func ffi_brotli_compress_buffer(handle: *Unit, quality: I32, mode: I32, lgwin: I32, lgblock: I32, size_hint: I64) -> *Unit
+
+@extern("brotli_decompress")
+func ffi_brotli_decompress(handle: *Unit, large_window: Bool) -> Str
+
+@extern("brotli_decompress_buffer")
+func ffi_brotli_decompress_buffer(handle: *Unit, large_window: Bool) -> *Unit
+
+@extern("brotli_get_error_code")
+func ffi_brotli_get_error_code(handle: *Unit) -> I32
+
+@extern("brotli_last_error_code")
+func ffi_brotli_last_error_code() -> I32
+
+@extern("buffer_destroy")
+func ffi_buffer_destroy(handle: *Unit)
+
+// Encoder FFI
+@extern("brotli_encoder_create")
+func ffi_brotli_encoder_create(quality: I32, mode: I32, lgwin: I32, lgblock: I32) -> *Unit
+
+@extern("brotli_encoder_process")
+func ffi_brotli_encoder_process(handle: *Unit, data: Str, op: I32) -> *Unit
+
+@extern("brotli_encoder_process_buffer")
+func ffi_brotli_encoder_process_buffer(handle: *Unit, data_handle: *Unit, op: I32) -> *Unit
+
+@extern("brotli_encoder_is_finished")
+func ffi_brotli_encoder_is_finished(handle: *Unit) -> Bool
+
+@extern("brotli_encoder_has_more_output")
+func ffi_brotli_encoder_has_more_output(handle: *Unit) -> Bool
+
+@extern("brotli_encoder_destroy")
+func ffi_brotli_encoder_destroy(handle: *Unit)
+
+// Decoder FFI
+@extern("brotli_decoder_create")
+func ffi_brotli_decoder_create(large_window: Bool) -> *Unit
+
+@extern("brotli_decoder_process")
+func ffi_brotli_decoder_process(handle: *Unit, data_handle: *Unit) -> *Unit
+
+@extern("brotli_decoder_is_finished")
+func ffi_brotli_decoder_is_finished(handle: *Unit) -> Bool
+
+@extern("brotli_decoder_needs_more_input")
+func ffi_brotli_decoder_needs_more_input(handle: *Unit) -> Bool
+
+@extern("brotli_decoder_has_more_output")
+func ffi_brotli_decoder_has_more_output(handle: *Unit) -> Bool
+
+@extern("brotli_decoder_get_error_code")
+func ffi_brotli_decoder_get_error_code(handle: *Unit) -> I32
+
+@extern("brotli_decoder_destroy")
+func ffi_brotli_decoder_destroy(handle: *Unit)
 
 // ============================================================================
 // Brotli Compression
@@ -55,7 +125,7 @@ use std::zlib::constants::*
 /// ```tml
 /// let compressed = brotli_compress("Hello, World!")?
 /// ```
-pub func brotli_compress(data: Str) -> ZlibResult[Buffer] {
+pub func brotli_compress(data: Str) -> Outcome[Buffer, ZlibError] {
     return brotli_compress_with_options(data, BrotliOptions::default())
 }
 
@@ -69,23 +139,21 @@ pub func brotli_compress(data: Str) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func brotli_compress_with_options(data: Str, options: BrotliOptions) -> ZlibResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        brotli_compress(
-            data,
-            options.quality,
-            options.mode,
-            options.lgwin,
-            options.lgblock,
-            options.size_hint
-        )
-    }
+pub func brotli_compress_with_options(data: Str, options: BrotliOptions) -> Outcome[Buffer, ZlibError] {
+    let handle: *Unit = ffi_brotli_compress(
+        data,
+        options.quality,
+        options.mode,
+        options.lgwin,
+        options.lgblock,
+        options.size_hint
+    )
     if handle == null {
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
-    let code: I32 = lowlevel { brotli_get_error_code(handle) }
+    let code: I32 = ffi_brotli_get_error_code(handle)
     if code != 0 {
-        lowlevel { buffer_destroy(handle) }
+        ffi_buffer_destroy(handle)
         return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
     }
     return Ok(Buffer { handle: handle })
@@ -100,7 +168,7 @@ pub func brotli_compress_with_options(data: Str, options: BrotliOptions) -> Zlib
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func brotli_compress_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+pub func brotli_compress_buffer(data: ref Buffer) -> Outcome[Buffer, ZlibError] {
     return brotli_compress_buffer_with_options(data, BrotliOptions::default())
 }
 
@@ -114,23 +182,21 @@ pub func brotli_compress_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func brotli_compress_buffer_with_options(data: ref Buffer, options: BrotliOptions) -> ZlibResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        brotli_compress_buffer(
-            data.handle,
-            options.quality,
-            options.mode,
-            options.lgwin,
-            options.lgblock,
-            options.size_hint
-        )
-    }
+pub func brotli_compress_buffer_with_options(data: ref Buffer, options: BrotliOptions) -> Outcome[Buffer, ZlibError] {
+    let handle: *Unit = ffi_brotli_compress_buffer(
+        data.handle,
+        options.quality,
+        options.mode,
+        options.lgwin,
+        options.lgblock,
+        options.size_hint
+    )
     if handle == null {
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
-    let code: I32 = lowlevel { brotli_get_error_code(handle) }
+    let code: I32 = ffi_brotli_get_error_code(handle)
     if code != 0 {
-        lowlevel { buffer_destroy(handle) }
+        ffi_buffer_destroy(handle)
         return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
     }
     return Ok(Buffer { handle: handle })
@@ -138,13 +204,13 @@ pub func brotli_compress_buffer_with_options(data: ref Buffer, options: BrotliOp
 
 /// Synchronously compresses data using Brotli.
 /// Alias for `brotli_compress()`.
-pub func brotli_compress_sync(data: Str) -> ZlibResult[Buffer] {
+pub func brotli_compress_sync(data: Str) -> Outcome[Buffer, ZlibError] {
     return brotli_compress(data)
 }
 
 /// Synchronously compresses data using Brotli with options.
 /// Alias for `brotli_compress_with_options()`.
-pub func brotli_compress_sync_with_options(data: Str, options: BrotliOptions) -> ZlibResult[Buffer] {
+pub func brotli_compress_sync_with_options(data: Str, options: BrotliOptions) -> Outcome[Buffer, ZlibError] {
     return brotli_compress_with_options(data, options)
 }
 
@@ -167,7 +233,7 @@ pub func brotli_compress_sync_with_options(data: Str, options: BrotliOptions) ->
 /// ```tml
 /// let decompressed = brotli_decompress(compressed)?
 /// ```
-pub func brotli_decompress(data: ref Buffer) -> ZlibResult[Str] {
+pub func brotli_decompress(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return brotli_decompress_with_options(data, BrotliOptions::default())
 }
 
@@ -181,11 +247,9 @@ pub func brotli_decompress(data: ref Buffer) -> ZlibResult[Str] {
 /// # Returns
 ///
 /// Decompressed data as a string.
-pub func brotli_decompress_with_options(data: ref Buffer, options: BrotliOptions) -> ZlibResult[Str] {
-    let result: Str = lowlevel {
-        brotli_decompress(data.handle, options.large_window)
-    }
-    let code: I32 = lowlevel { brotli_last_error_code() }
+pub func brotli_decompress_with_options(data: ref Buffer, options: BrotliOptions) -> Outcome[Str, ZlibError] {
+    let result: Str = ffi_brotli_decompress(data.handle, options.large_window)
+    let code: I32 = ffi_brotli_last_error_code()
     if code != 0 {
         return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
     }
@@ -201,7 +265,7 @@ pub func brotli_decompress_with_options(data: ref Buffer, options: BrotliOptions
 /// # Returns
 ///
 /// Decompressed data as a Buffer.
-pub func brotli_decompress_to_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+pub func brotli_decompress_to_buffer(data: ref Buffer) -> Outcome[Buffer, ZlibError] {
     return brotli_decompress_to_buffer_with_options(data, BrotliOptions::default())
 }
 
@@ -215,28 +279,26 @@ pub func brotli_decompress_to_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Decompressed data as a Buffer.
-pub func brotli_decompress_to_buffer_with_options(data: ref Buffer, options: BrotliOptions) -> ZlibResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        brotli_decompress_buffer(data.handle, options.large_window)
-    }
+pub func brotli_decompress_to_buffer_with_options(data: ref Buffer, options: BrotliOptions) -> Outcome[Buffer, ZlibError] {
+    let handle: *Unit = ffi_brotli_decompress_buffer(data.handle, options.large_window)
     if handle == null {
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
-    let code: I32 = lowlevel { brotli_get_error_code(handle) }
+    let code: I32 = ffi_brotli_get_error_code(handle)
     if code != 0 {
-        lowlevel { buffer_destroy(handle) }
+        ffi_buffer_destroy(handle)
         return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
     }
     return Ok(Buffer { handle: handle })
 }
 
 /// Synchronously decompresses Brotli data.
-pub func brotli_decompress_sync(data: ref Buffer) -> ZlibResult[Str] {
+pub func brotli_decompress_sync(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return brotli_decompress(data)
 }
 
 /// Synchronously decompresses Brotli data with options.
-pub func brotli_decompress_sync_with_options(data: ref Buffer, options: BrotliOptions) -> ZlibResult[Str] {
+pub func brotli_decompress_sync_with_options(data: ref Buffer, options: BrotliOptions) -> Outcome[Str, ZlibError] {
     return brotli_decompress_with_options(data, options)
 }
 
@@ -252,20 +314,18 @@ pub type BrotliCompress {
 
 impl BrotliCompress {
     /// Creates a new Brotli compressor with default options.
-    pub func new() -> ZlibResult[BrotliCompress] {
+    pub func new() -> Outcome[BrotliCompress, ZlibError] {
         return BrotliCompress::with_options(BrotliOptions::default())
     }
 
     /// Creates a new Brotli compressor with custom options.
-    pub func with_options(options: BrotliOptions) -> ZlibResult[BrotliCompress] {
-        let handle: *Unit = lowlevel {
-            brotli_encoder_create(
-                options.quality,
-                options.mode,
-                options.lgwin,
-                options.lgblock
-            )
-        }
+    pub func with_options(options: BrotliOptions) -> Outcome[BrotliCompress, ZlibError] {
+        let handle: *Unit = ffi_brotli_encoder_create(
+            options.quality,
+            options.mode,
+            options.lgwin,
+            options.lgblock
+        )
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -281,10 +341,8 @@ impl BrotliCompress {
     /// # Returns
     ///
     /// Compressed chunk (may be empty if more input is needed).
-    pub func write(this, data: Str) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            brotli_encoder_process(this.handle, data, BROTLI_OPERATION_PROCESS)
-        }
+    pub func write(this, data: Str) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_brotli_encoder_process(this.handle, data, BROTLI_OPERATION_PROCESS)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -292,10 +350,8 @@ impl BrotliCompress {
     }
 
     /// Writes buffer data to be compressed.
-    pub func write_buffer(this, data: ref Buffer) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            brotli_encoder_process_buffer(this.handle, data.handle, BROTLI_OPERATION_PROCESS)
-        }
+    pub func write_buffer(this, data: ref Buffer) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_brotli_encoder_process_buffer(this.handle, data.handle, BROTLI_OPERATION_PROCESS)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -303,10 +359,8 @@ impl BrotliCompress {
     }
 
     /// Flushes pending compressed data.
-    pub func flush(this) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            brotli_encoder_process(this.handle, "", BROTLI_OPERATION_FLUSH)
-        }
+    pub func flush(this) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_brotli_encoder_process(this.handle, "", BROTLI_OPERATION_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -314,10 +368,8 @@ impl BrotliCompress {
     }
 
     /// Finishes compression and returns remaining data.
-    pub func finish(this) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            brotli_encoder_process(this.handle, "", BROTLI_OPERATION_FINISH)
-        }
+    pub func finish(this) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_brotli_encoder_process(this.handle, "", BROTLI_OPERATION_FINISH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -326,20 +378,20 @@ impl BrotliCompress {
 
     /// Returns true if the compressor is finished.
     pub func is_finished(this) -> Bool {
-        let finished: Bool = lowlevel { brotli_encoder_is_finished(this.handle) }
+        let finished: Bool = ffi_brotli_encoder_is_finished(this.handle)
         return finished
     }
 
     /// Returns true if more output is available.
     pub func has_more_output(this) -> Bool {
-        let has: Bool = lowlevel { brotli_encoder_has_more_output(this.handle) }
+        let has: Bool = ffi_brotli_encoder_has_more_output(this.handle)
         return has
     }
 
     /// Frees the compressor resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { brotli_encoder_destroy(this.handle) }
+            ffi_brotli_encoder_destroy(this.handle)
             this.handle = null
         }
     }
@@ -357,15 +409,13 @@ pub type BrotliDecompress {
 
 impl BrotliDecompress {
     /// Creates a new Brotli decompressor with default options.
-    pub func new() -> ZlibResult[BrotliDecompress] {
+    pub func new() -> Outcome[BrotliDecompress, ZlibError] {
         return BrotliDecompress::with_options(BrotliOptions::default())
     }
 
     /// Creates a new Brotli decompressor with custom options.
-    pub func with_options(options: BrotliOptions) -> ZlibResult[BrotliDecompress] {
-        let handle: *Unit = lowlevel {
-            brotli_decoder_create(options.large_window)
-        }
+    pub func with_options(options: BrotliOptions) -> Outcome[BrotliDecompress, ZlibError] {
+        let handle: *Unit = ffi_brotli_decoder_create(options.large_window)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -381,12 +431,10 @@ impl BrotliDecompress {
     /// # Returns
     ///
     /// Decompressed chunk.
-    pub func write(this, data: ref Buffer) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            brotli_decoder_process(this.handle, data.handle)
-        }
+    pub func write(this, data: ref Buffer) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_brotli_decoder_process(this.handle, data.handle)
         if handle == null {
-            let code: I32 = lowlevel { brotli_decoder_get_error_code(this.handle) }
+            let code: I32 = ffi_brotli_decoder_get_error_code(this.handle)
             return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
         }
         return Ok(Buffer { handle: handle })
@@ -394,32 +442,32 @@ impl BrotliDecompress {
 
     /// Returns true if the decompressor is finished.
     pub func is_finished(this) -> Bool {
-        let finished: Bool = lowlevel { brotli_decoder_is_finished(this.handle) }
+        let finished: Bool = ffi_brotli_decoder_is_finished(this.handle)
         return finished
     }
 
     /// Returns true if more input is needed.
     pub func needs_more_input(this) -> Bool {
-        let needs: Bool = lowlevel { brotli_decoder_needs_more_input(this.handle) }
+        let needs: Bool = ffi_brotli_decoder_needs_more_input(this.handle)
         return needs
     }
 
     /// Returns true if more output is available.
     pub func has_more_output(this) -> Bool {
-        let has: Bool = lowlevel { brotli_decoder_has_more_output(this.handle) }
+        let has: Bool = ffi_brotli_decoder_has_more_output(this.handle)
         return has
     }
 
     /// Gets the error code if decompression failed.
     pub func error_code(this) -> I32 {
-        let code: I32 = lowlevel { brotli_decoder_get_error_code(this.handle) }
+        let code: I32 = ffi_brotli_decoder_get_error_code(this.handle)
         return code
     }
 
     /// Frees the decompressor resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { brotli_decoder_destroy(this.handle) }
+            ffi_brotli_decoder_destroy(this.handle)
             this.handle = null
         }
     }

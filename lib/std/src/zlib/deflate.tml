@@ -26,10 +26,35 @@
 //! let compressed = deflate_with_options(data, opts)?
 //! ```
 
-use std::collections::{Buffer}
-use std::zlib::error::{ZlibError, ZlibErrorKind, ZlibResult}
-use std::zlib::options::{ZlibOptions}
+use std::collections::Buffer
+use std::zlib::error::{ZlibError, ZlibErrorKind}
+use std::zlib::options::ZlibOptions
 use std::zlib::constants::*
+
+// ============================================================================
+// FFI Function Declarations
+// ============================================================================
+
+@extern("zlib_deflate")
+func ffi_zlib_deflate(data: Str, level: I32, window_bits: I32, mem_level: I32, strategy: I32) -> *Unit
+
+@extern("zlib_deflate_buffer")
+func ffi_zlib_deflate_buffer(handle: *Unit, level: I32, window_bits: I32, mem_level: I32, strategy: I32) -> *Unit
+
+@extern("zlib_inflate")
+func ffi_zlib_inflate(handle: *Unit, window_bits: I32) -> Str
+
+@extern("zlib_inflate_buffer")
+func ffi_zlib_inflate_buffer(handle: *Unit, window_bits: I32) -> *Unit
+
+@extern("zlib_get_error_code")
+func ffi_zlib_get_error_code(handle: *Unit) -> I32
+
+@extern("zlib_last_error_code")
+func ffi_zlib_last_error_code() -> I32
+
+@extern("buffer_destroy")
+func ffi_buffer_destroy(handle: *Unit)
 
 // ============================================================================
 // Deflate Compression (with zlib header)
@@ -52,7 +77,7 @@ use std::zlib::constants::*
 /// ```tml
 /// let compressed = deflate("Hello, World!")?
 /// ```
-pub func deflate(data: Str) -> ZlibResult[Buffer] {
+pub func deflate(data: Str) -> Outcome[Buffer, ZlibError] {
     return deflate_with_options(data, ZlibOptions::default())
 }
 
@@ -66,22 +91,20 @@ pub func deflate(data: Str) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func deflate_with_options(data: Str, options: ZlibOptions) -> ZlibResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        zlib_deflate(
-            data,
-            options.level,
-            options.window_bits,
-            options.mem_level,
-            options.strategy
-        )
-    }
+pub func deflate_with_options(data: Str, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
+    let handle: *Unit = ffi_zlib_deflate(
+        data,
+        options.level,
+        options.window_bits,
+        options.mem_level,
+        options.strategy
+    )
     if handle == null {
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
-    let code: I32 = lowlevel { zlib_get_error_code(handle) }
+    let code: I32 = ffi_zlib_get_error_code(handle)
     if code != Z_OK and code != Z_STREAM_END {
-        lowlevel { buffer_destroy(handle) }
+        ffi_buffer_destroy(handle)
         return Err(ZlibError::from_code(code))
     }
     return Ok(Buffer { handle: handle })
@@ -96,7 +119,7 @@ pub func deflate_with_options(data: Str, options: ZlibOptions) -> ZlibResult[Buf
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func deflate_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+pub func deflate_buffer(data: ref Buffer) -> Outcome[Buffer, ZlibError] {
     return deflate_buffer_with_options(data, ZlibOptions::default())
 }
 
@@ -110,22 +133,20 @@ pub func deflate_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func deflate_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        zlib_deflate_buffer(
-            data.handle,
-            options.level,
-            options.window_bits,
-            options.mem_level,
-            options.strategy
-        )
-    }
+pub func deflate_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
+    let handle: *Unit = ffi_zlib_deflate_buffer(
+        data.handle,
+        options.level,
+        options.window_bits,
+        options.mem_level,
+        options.strategy
+    )
     if handle == null {
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
-    let code: I32 = lowlevel { zlib_get_error_code(handle) }
+    let code: I32 = ffi_zlib_get_error_code(handle)
     if code != Z_OK and code != Z_STREAM_END {
-        lowlevel { buffer_destroy(handle) }
+        ffi_buffer_destroy(handle)
         return Err(ZlibError::from_code(code))
     }
     return Ok(Buffer { handle: handle })
@@ -133,13 +154,13 @@ pub func deflate_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> 
 
 /// Synchronously compresses data using deflate.
 /// Alias for `deflate()`.
-pub func deflate_sync(data: Str) -> ZlibResult[Buffer] {
+pub func deflate_sync(data: Str) -> Outcome[Buffer, ZlibError] {
     return deflate(data)
 }
 
 /// Synchronously compresses data using deflate with options.
 /// Alias for `deflate_with_options()`.
-pub func deflate_sync_with_options(data: Str, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func deflate_sync_with_options(data: Str, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     return deflate_with_options(data, options)
 }
 
@@ -164,7 +185,7 @@ pub func deflate_sync_with_options(data: Str, options: ZlibOptions) -> ZlibResul
 /// ```tml
 /// let compressed = deflate_raw("Hello, World!")?
 /// ```
-pub func deflate_raw(data: Str) -> ZlibResult[Buffer] {
+pub func deflate_raw(data: Str) -> Outcome[Buffer, ZlibError] {
     return deflate_raw_with_options(data, ZlibOptions::deflate_raw())
 }
 
@@ -178,7 +199,7 @@ pub func deflate_raw(data: Str) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func deflate_raw_with_options(data: Str, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func deflate_raw_with_options(data: Str, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     // Ensure window_bits is negative for raw deflate
     var opts: ZlibOptions = options
     if opts.window_bits > 0 {
@@ -188,12 +209,12 @@ pub func deflate_raw_with_options(data: Str, options: ZlibOptions) -> ZlibResult
 }
 
 /// Compresses buffer data using raw deflate.
-pub func deflate_raw_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+pub func deflate_raw_buffer(data: ref Buffer) -> Outcome[Buffer, ZlibError] {
     return deflate_raw_buffer_with_options(data, ZlibOptions::deflate_raw())
 }
 
 /// Compresses buffer data using raw deflate with custom options.
-pub func deflate_raw_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func deflate_raw_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     var opts: ZlibOptions = options
     if opts.window_bits > 0 {
         opts.window_bits = -opts.window_bits
@@ -202,12 +223,12 @@ pub func deflate_raw_buffer_with_options(data: ref Buffer, options: ZlibOptions)
 }
 
 /// Synchronously compresses data using raw deflate.
-pub func deflate_raw_sync(data: Str) -> ZlibResult[Buffer] {
+pub func deflate_raw_sync(data: Str) -> Outcome[Buffer, ZlibError] {
     return deflate_raw(data)
 }
 
 /// Synchronously compresses data using raw deflate with options.
-pub func deflate_raw_sync_with_options(data: Str, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func deflate_raw_sync_with_options(data: Str, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     return deflate_raw_with_options(data, options)
 }
 
@@ -232,7 +253,7 @@ pub func deflate_raw_sync_with_options(data: Str, options: ZlibOptions) -> ZlibR
 /// ```tml
 /// let decompressed = inflate(compressed)?
 /// ```
-pub func inflate(data: ref Buffer) -> ZlibResult[Str] {
+pub func inflate(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return inflate_with_options(data, ZlibOptions::default())
 }
 
@@ -246,11 +267,9 @@ pub func inflate(data: ref Buffer) -> ZlibResult[Str] {
 /// # Returns
 ///
 /// Decompressed data as a string.
-pub func inflate_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Str] {
-    let result: Str = lowlevel {
-        zlib_inflate(data.handle, options.window_bits)
-    }
-    let code: I32 = lowlevel { zlib_last_error_code() }
+pub func inflate_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Str, ZlibError] {
+    let result: Str = ffi_zlib_inflate(data.handle, options.window_bits)
+    let code: I32 = ffi_zlib_last_error_code()
     if code != Z_OK and code != Z_STREAM_END {
         return Err(ZlibError::from_code(code))
     }
@@ -266,7 +285,7 @@ pub func inflate_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibRes
 /// # Returns
 ///
 /// Decompressed data as a Buffer.
-pub func inflate_to_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+pub func inflate_to_buffer(data: ref Buffer) -> Outcome[Buffer, ZlibError] {
     return inflate_to_buffer_with_options(data, ZlibOptions::default())
 }
 
@@ -280,28 +299,26 @@ pub func inflate_to_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Decompressed data as a Buffer.
-pub func inflate_to_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        zlib_inflate_buffer(data.handle, options.window_bits)
-    }
+pub func inflate_to_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
+    let handle: *Unit = ffi_zlib_inflate_buffer(data.handle, options.window_bits)
     if handle == null {
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
-    let code: I32 = lowlevel { zlib_get_error_code(handle) }
+    let code: I32 = ffi_zlib_get_error_code(handle)
     if code != Z_OK and code != Z_STREAM_END {
-        lowlevel { buffer_destroy(handle) }
+        ffi_buffer_destroy(handle)
         return Err(ZlibError::from_code(code))
     }
     return Ok(Buffer { handle: handle })
 }
 
 /// Synchronously decompresses deflate data.
-pub func inflate_sync(data: ref Buffer) -> ZlibResult[Str] {
+pub func inflate_sync(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return inflate(data)
 }
 
 /// Synchronously decompresses deflate data with options.
-pub func inflate_sync_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Str] {
+pub func inflate_sync_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Str, ZlibError] {
     return inflate_with_options(data, options)
 }
 
@@ -326,7 +343,7 @@ pub func inflate_sync_with_options(data: ref Buffer, options: ZlibOptions) -> Zl
 /// ```tml
 /// let decompressed = inflate_raw(compressed)?
 /// ```
-pub func inflate_raw(data: ref Buffer) -> ZlibResult[Str] {
+pub func inflate_raw(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return inflate_raw_with_options(data, ZlibOptions::deflate_raw())
 }
 
@@ -340,7 +357,7 @@ pub func inflate_raw(data: ref Buffer) -> ZlibResult[Str] {
 /// # Returns
 ///
 /// Decompressed data as a string.
-pub func inflate_raw_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Str] {
+pub func inflate_raw_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Str, ZlibError] {
     var opts: ZlibOptions = options
     if opts.window_bits > 0 {
         opts.window_bits = -opts.window_bits
@@ -349,12 +366,12 @@ pub func inflate_raw_with_options(data: ref Buffer, options: ZlibOptions) -> Zli
 }
 
 /// Decompresses raw deflate data to a buffer.
-pub func inflate_raw_to_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+pub func inflate_raw_to_buffer(data: ref Buffer) -> Outcome[Buffer, ZlibError] {
     return inflate_raw_to_buffer_with_options(data, ZlibOptions::deflate_raw())
 }
 
 /// Decompresses raw deflate data to a buffer with options.
-pub func inflate_raw_to_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func inflate_raw_to_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     var opts: ZlibOptions = options
     if opts.window_bits > 0 {
         opts.window_bits = -opts.window_bits
@@ -363,12 +380,12 @@ pub func inflate_raw_to_buffer_with_options(data: ref Buffer, options: ZlibOptio
 }
 
 /// Synchronously decompresses raw deflate data.
-pub func inflate_raw_sync(data: ref Buffer) -> ZlibResult[Str] {
+pub func inflate_raw_sync(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return inflate_raw(data)
 }
 
 /// Synchronously decompresses raw deflate data with options.
-pub func inflate_raw_sync_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Str] {
+pub func inflate_raw_sync_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Str, ZlibError] {
     return inflate_raw_with_options(data, options)
 }
 
@@ -395,7 +412,7 @@ pub func inflate_raw_sync_with_options(data: ref Buffer, options: ZlibOptions) -
 /// // Works with both zlib and gzip compressed data
 /// let decompressed = unzip(compressed)?
 /// ```
-pub func unzip(data: ref Buffer) -> ZlibResult[Str] {
+pub func unzip(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return unzip_with_options(data, ZlibOptions::auto_detect())
 }
 
@@ -409,7 +426,7 @@ pub func unzip(data: ref Buffer) -> ZlibResult[Str] {
 /// # Returns
 ///
 /// Decompressed data as a string.
-pub func unzip_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Str] {
+pub func unzip_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Str, ZlibError] {
     var opts: ZlibOptions = options
     // Ensure auto-detect mode
     if opts.window_bits > 0 and opts.window_bits < 32 {
@@ -419,12 +436,12 @@ pub func unzip_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResul
 }
 
 /// Decompresses data with auto-detection to a buffer.
-pub func unzip_to_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+pub func unzip_to_buffer(data: ref Buffer) -> Outcome[Buffer, ZlibError] {
     return unzip_to_buffer_with_options(data, ZlibOptions::auto_detect())
 }
 
 /// Decompresses data with auto-detection to a buffer with options.
-pub func unzip_to_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func unzip_to_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     var opts: ZlibOptions = options
     if opts.window_bits > 0 and opts.window_bits < 32 {
         opts.window_bits = opts.window_bits + AUTO_DETECT_WINDOW_OFFSET
@@ -433,11 +450,11 @@ pub func unzip_to_buffer_with_options(data: ref Buffer, options: ZlibOptions) ->
 }
 
 /// Synchronously decompresses data with auto-detection.
-pub func unzip_sync(data: ref Buffer) -> ZlibResult[Str] {
+pub func unzip_sync(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return unzip(data)
 }
 
 /// Synchronously decompresses data with auto-detection and options.
-pub func unzip_sync_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Str] {
+pub func unzip_sync_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Str, ZlibError] {
     return unzip_with_options(data, options)
 }

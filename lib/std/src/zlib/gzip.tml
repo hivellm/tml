@@ -25,10 +25,53 @@
 //! let compressed = gzip_with_options(data, opts)?
 //! ```
 
-use std::collections::{Buffer}
-use std::zlib::error::{ZlibError, ZlibErrorKind, ZlibResult}
-use std::zlib::options::{ZlibOptions}
+use std::collections::Buffer
+use std::zlib::error::{ZlibError, ZlibErrorKind}
+use std::zlib::options::ZlibOptions
 use std::zlib::constants::*
+
+// ============================================================================
+// FFI Function Declarations
+// ============================================================================
+
+@extern("zlib_deflate")
+func ffi_zlib_deflate(data: Str, level: I32, window_bits: I32, mem_level: I32, strategy: I32) -> *Unit
+
+@extern("zlib_deflate_buffer")
+func ffi_zlib_deflate_buffer(handle: *Unit, level: I32, window_bits: I32, mem_level: I32, strategy: I32) -> *Unit
+
+@extern("zlib_inflate")
+func ffi_zlib_inflate(handle: *Unit, window_bits: I32) -> Str
+
+@extern("zlib_inflate_buffer")
+func ffi_zlib_inflate_buffer(handle: *Unit, window_bits: I32) -> *Unit
+
+@extern("zlib_get_error_code")
+func ffi_zlib_get_error_code(handle: *Unit) -> I32
+
+@extern("zlib_last_error_code")
+func ffi_zlib_last_error_code() -> I32
+
+@extern("buffer_destroy")
+func ffi_buffer_destroy(handle: *Unit)
+
+@extern("zlib_gzip_header_text")
+func ffi_zlib_gzip_header_text(handle: *Unit) -> Bool
+
+@extern("zlib_gzip_header_os")
+func ffi_zlib_gzip_header_os(handle: *Unit) -> I32
+
+@extern("zlib_gzip_header_name")
+func ffi_zlib_gzip_header_name(handle: *Unit) -> Str
+
+@extern("zlib_gzip_header_comment")
+func ffi_zlib_gzip_header_comment(handle: *Unit) -> Str
+
+@extern("zlib_gzip_header_hcrc")
+func ffi_zlib_gzip_header_hcrc(handle: *Unit) -> Bool
+
+@extern("zlib_gzip_header_time")
+func ffi_zlib_gzip_header_time(handle: *Unit) -> I64
 
 // ============================================================================
 // Gzip Compression
@@ -52,7 +95,7 @@ use std::zlib::constants::*
 /// ```tml
 /// let compressed = gzip("Hello, World!")?
 /// ```
-pub func gzip(data: Str) -> ZlibResult[Buffer] {
+pub func gzip(data: Str) -> Outcome[Buffer, ZlibError] {
     return gzip_with_options(data, ZlibOptions::gzip())
 }
 
@@ -66,28 +109,26 @@ pub func gzip(data: Str) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func gzip_with_options(data: Str, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func gzip_with_options(data: Str, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     // Ensure gzip format window bits
     var opts: ZlibOptions = options
     if opts.window_bits > 0 and opts.window_bits <= Z_MAX_WINDOWBITS {
         opts.window_bits = opts.window_bits + GZIP_WINDOW_OFFSET
     }
 
-    let handle: *Unit = lowlevel {
-        zlib_deflate(
-            data,
-            opts.level,
-            opts.window_bits,
-            opts.mem_level,
-            opts.strategy
-        )
-    }
+    let handle: *Unit = ffi_zlib_deflate(
+        data,
+        opts.level,
+        opts.window_bits,
+        opts.mem_level,
+        opts.strategy
+    )
     if handle == null {
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
-    let code: I32 = lowlevel { zlib_get_error_code(handle) }
+    let code: I32 = ffi_zlib_get_error_code(handle)
     if code != Z_OK and code != Z_STREAM_END {
-        lowlevel { buffer_destroy(handle) }
+        ffi_buffer_destroy(handle)
         return Err(ZlibError::from_code(code))
     }
     return Ok(Buffer { handle: handle })
@@ -102,7 +143,7 @@ pub func gzip_with_options(data: Str, options: ZlibOptions) -> ZlibResult[Buffer
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func gzip_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+pub func gzip_buffer(data: ref Buffer) -> Outcome[Buffer, ZlibError] {
     return gzip_buffer_with_options(data, ZlibOptions::gzip())
 }
 
@@ -116,27 +157,25 @@ pub func gzip_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Compressed data as a Buffer.
-pub func gzip_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func gzip_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     var opts: ZlibOptions = options
     if opts.window_bits > 0 and opts.window_bits <= Z_MAX_WINDOWBITS {
         opts.window_bits = opts.window_bits + GZIP_WINDOW_OFFSET
     }
 
-    let handle: *Unit = lowlevel {
-        zlib_deflate_buffer(
-            data.handle,
-            opts.level,
-            opts.window_bits,
-            opts.mem_level,
-            opts.strategy
-        )
-    }
+    let handle: *Unit = ffi_zlib_deflate_buffer(
+        data.handle,
+        opts.level,
+        opts.window_bits,
+        opts.mem_level,
+        opts.strategy
+    )
     if handle == null {
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
-    let code: I32 = lowlevel { zlib_get_error_code(handle) }
+    let code: I32 = ffi_zlib_get_error_code(handle)
     if code != Z_OK and code != Z_STREAM_END {
-        lowlevel { buffer_destroy(handle) }
+        ffi_buffer_destroy(handle)
         return Err(ZlibError::from_code(code))
     }
     return Ok(Buffer { handle: handle })
@@ -144,13 +183,13 @@ pub func gzip_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> Zli
 
 /// Synchronously compresses data using gzip.
 /// Alias for `gzip()`.
-pub func gzip_sync(data: Str) -> ZlibResult[Buffer] {
+pub func gzip_sync(data: Str) -> Outcome[Buffer, ZlibError] {
     return gzip(data)
 }
 
 /// Synchronously compresses data using gzip with options.
 /// Alias for `gzip_with_options()`.
-pub func gzip_sync_with_options(data: Str, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func gzip_sync_with_options(data: Str, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     return gzip_with_options(data, options)
 }
 
@@ -175,7 +214,7 @@ pub func gzip_sync_with_options(data: Str, options: ZlibOptions) -> ZlibResult[B
 /// ```tml
 /// let decompressed = gunzip(compressed)?
 /// ```
-pub func gunzip(data: ref Buffer) -> ZlibResult[Str] {
+pub func gunzip(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return gunzip_with_options(data, ZlibOptions::gzip())
 }
 
@@ -189,17 +228,15 @@ pub func gunzip(data: ref Buffer) -> ZlibResult[Str] {
 /// # Returns
 ///
 /// Decompressed data as a string.
-pub func gunzip_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Str] {
+pub func gunzip_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Str, ZlibError] {
     // Ensure gzip format window bits
     var opts: ZlibOptions = options
     if opts.window_bits > 0 and opts.window_bits <= Z_MAX_WINDOWBITS {
         opts.window_bits = opts.window_bits + GZIP_WINDOW_OFFSET
     }
 
-    let result: Str = lowlevel {
-        zlib_inflate(data.handle, opts.window_bits)
-    }
-    let code: I32 = lowlevel { zlib_last_error_code() }
+    let result: Str = ffi_zlib_inflate(data.handle, opts.window_bits)
+    let code: I32 = ffi_zlib_last_error_code()
     if code != Z_OK and code != Z_STREAM_END {
         return Err(ZlibError::from_code(code))
     }
@@ -215,7 +252,7 @@ pub func gunzip_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResu
 /// # Returns
 ///
 /// Decompressed data as a Buffer.
-pub func gunzip_to_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+pub func gunzip_to_buffer(data: ref Buffer) -> Outcome[Buffer, ZlibError] {
     return gunzip_to_buffer_with_options(data, ZlibOptions::gzip())
 }
 
@@ -229,33 +266,31 @@ pub func gunzip_to_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
 /// # Returns
 ///
 /// Decompressed data as a Buffer.
-pub func gunzip_to_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Buffer] {
+pub func gunzip_to_buffer_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Buffer, ZlibError] {
     var opts: ZlibOptions = options
     if opts.window_bits > 0 and opts.window_bits <= Z_MAX_WINDOWBITS {
         opts.window_bits = opts.window_bits + GZIP_WINDOW_OFFSET
     }
 
-    let handle: *Unit = lowlevel {
-        zlib_inflate_buffer(data.handle, opts.window_bits)
-    }
+    let handle: *Unit = ffi_zlib_inflate_buffer(data.handle, opts.window_bits)
     if handle == null {
         return Err(ZlibError::new(ZlibErrorKind::MemoryError))
     }
-    let code: I32 = lowlevel { zlib_get_error_code(handle) }
+    let code: I32 = ffi_zlib_get_error_code(handle)
     if code != Z_OK and code != Z_STREAM_END {
-        lowlevel { buffer_destroy(handle) }
+        ffi_buffer_destroy(handle)
         return Err(ZlibError::from_code(code))
     }
     return Ok(Buffer { handle: handle })
 }
 
 /// Synchronously decompresses gzip data.
-pub func gunzip_sync(data: ref Buffer) -> ZlibResult[Str] {
+pub func gunzip_sync(data: ref Buffer) -> Outcome[Str, ZlibError] {
     return gunzip(data)
 }
 
 /// Synchronously decompresses gzip data with options.
-pub func gunzip_sync_with_options(data: ref Buffer, options: ZlibOptions) -> ZlibResult[Str] {
+pub func gunzip_sync_with_options(data: ref Buffer, options: ZlibOptions) -> Outcome[Str, ZlibError] {
     return gunzip_with_options(data, options)
 }
 
@@ -366,19 +401,14 @@ impl GzipHeader {
 ///     print("Original filename: {name}\n")
 /// }
 /// ```
-pub func read_gzip_header(data: ref Buffer) -> ZlibResult[GzipHeader] {
-    // Check minimum gzip header size (10 bytes)
-    if data.len() < 10 {
-        return Err(ZlibError::new(ZlibErrorKind::DataError))
-    }
-
-    // Parse gzip header
-    let text: Bool = lowlevel { zlib_gzip_header_text(data.handle) }
-    let os: I32 = lowlevel { zlib_gzip_header_os(data.handle) }
-    let name: Str = lowlevel { zlib_gzip_header_name(data.handle) }
-    let comment: Str = lowlevel { zlib_gzip_header_comment(data.handle) }
-    let hcrc: Bool = lowlevel { zlib_gzip_header_hcrc(data.handle) }
-    let time: I64 = lowlevel { zlib_gzip_header_time(data.handle) }
+pub func read_gzip_header(data: ref Buffer) -> Outcome[GzipHeader, ZlibError] {
+    // Parse gzip header - FFI functions check size internally
+    let text: Bool = ffi_zlib_gzip_header_text(data.handle)
+    let os: I32 = ffi_zlib_gzip_header_os(data.handle)
+    let name: Str = ffi_zlib_gzip_header_name(data.handle)
+    let comment: Str = ffi_zlib_gzip_header_comment(data.handle)
+    let hcrc: Bool = ffi_zlib_gzip_header_hcrc(data.handle)
+    let time: I64 = ffi_zlib_gzip_header_time(data.handle)
 
     return Ok(GzipHeader {
         text: text,

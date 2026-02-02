@@ -24,7 +24,41 @@
 //! // crc2 is equivalent to crc32("hello world")
 //! ```
 
-use std::collections::{Buffer}
+use std::collections::Buffer
+
+// ============================================================================
+// FFI Function Declarations (tml_ prefix to avoid collision with zlib.h)
+// ============================================================================
+
+@extern("tml_crc32_compute")
+func ffi_crc32_compute(data: Str) -> U32
+
+@extern("tml_crc32_compute_buffer")
+func ffi_crc32_compute_buffer(handle: *Unit) -> U32
+
+@extern("tml_crc32_update")
+func ffi_crc32_update(crc: U32, data: Str) -> U32
+
+@extern("tml_crc32_update_buffer")
+func ffi_crc32_update_buffer(crc: U32, handle: *Unit) -> U32
+
+@extern("tml_crc32_combine")
+func ffi_crc32_combine(crc1: U32, crc2: U32, len2: I64) -> U32
+
+@extern("tml_adler32_compute")
+func ffi_adler32_compute(data: Str) -> U32
+
+@extern("tml_adler32_compute_buffer")
+func ffi_adler32_compute_buffer(handle: *Unit) -> U32
+
+@extern("tml_adler32_update")
+func ffi_adler32_update(adler: U32, data: Str) -> U32
+
+@extern("tml_adler32_update_buffer")
+func ffi_adler32_update_buffer(adler: U32, handle: *Unit) -> U32
+
+@extern("tml_adler32_combine")
+func ffi_adler32_combine(adler1: U32, adler2: U32, len2: I64) -> U32
 
 // ============================================================================
 // CRC32 Computation
@@ -49,8 +83,8 @@ use std::collections::{Buffer}
 /// print("CRC32: {checksum}\n")  // 907060870
 /// ```
 pub func crc32(data: Str) -> I64 {
-    let result: I64 = lowlevel { zlib_crc32(data) }
-    return result
+    let result: U32 = ffi_crc32_compute(data)
+    return result as I64
 }
 
 /// Computes the CRC32 checksum of a buffer.
@@ -63,8 +97,8 @@ pub func crc32(data: Str) -> I64 {
 ///
 /// The 32-bit unsigned CRC32 value as I64.
 pub func crc32_buffer(data: ref Buffer) -> I64 {
-    let result: I64 = lowlevel { zlib_crc32_buffer(data.handle) }
-    return result
+    let result: U32 = ffi_crc32_compute_buffer(data.handle)
+    return result as I64
 }
 
 /// Updates an existing CRC32 checksum with additional data.
@@ -89,8 +123,8 @@ pub func crc32_buffer(data: ref Buffer) -> I64 {
 /// // crc is equivalent to crc32("hello world")
 /// ```
 pub func crc32_update(crc: I64, data: Str) -> I64 {
-    let result: I64 = lowlevel { zlib_crc32_update(crc, data) }
-    return result
+    let result: U32 = ffi_crc32_update(crc as U32, data)
+    return result as I64
 }
 
 /// Updates an existing CRC32 checksum with buffer data.
@@ -104,8 +138,8 @@ pub func crc32_update(crc: I64, data: Str) -> I64 {
 ///
 /// The updated CRC32 value.
 pub func crc32_update_buffer(crc: I64, data: ref Buffer) -> I64 {
-    let result: I64 = lowlevel { zlib_crc32_update_buffer(crc, data.handle) }
-    return result
+    let result: U32 = ffi_crc32_update_buffer(crc as U32, data.handle)
+    return result as I64
 }
 
 /// Combines two CRC32 checksums.
@@ -132,8 +166,8 @@ pub func crc32_update_buffer(crc: I64, data: ref Buffer) -> I64 {
 /// // combined equals crc32("hello world")
 /// ```
 pub func crc32_combine(crc1: I64, crc2: I64, len2: I64) -> I64 {
-    let result: I64 = lowlevel { zlib_crc32_combine(crc1, crc2, len2) }
-    return result
+    let result: U32 = ffi_crc32_combine(crc1 as U32, crc2 as U32, len2)
+    return result as I64
 }
 
 // ============================================================================
@@ -159,8 +193,8 @@ pub func crc32_combine(crc1: I64, crc2: I64, len2: I64) -> I64 {
 /// let checksum = adler32("hello")
 /// ```
 pub func adler32(data: Str) -> I64 {
-    let result: I64 = lowlevel { zlib_adler32(data) }
-    return result
+    let result: U32 = ffi_adler32_compute(data)
+    return result as I64
 }
 
 /// Computes the Adler-32 checksum of a buffer.
@@ -173,8 +207,8 @@ pub func adler32(data: Str) -> I64 {
 ///
 /// The 32-bit Adler-32 value as I64.
 pub func adler32_buffer(data: ref Buffer) -> I64 {
-    let result: I64 = lowlevel { zlib_adler32_buffer(data.handle) }
-    return result
+    let result: U32 = ffi_adler32_compute_buffer(data.handle)
+    return result as I64
 }
 
 /// Updates an existing Adler-32 checksum with additional data.
@@ -188,8 +222,8 @@ pub func adler32_buffer(data: ref Buffer) -> I64 {
 ///
 /// The updated Adler-32 value.
 pub func adler32_update(adler: I64, data: Str) -> I64 {
-    let result: I64 = lowlevel { zlib_adler32_update(adler, data) }
-    return result
+    let result: U32 = ffi_adler32_update(adler as U32, data)
+    return result as I64
 }
 
 /// Updates an existing Adler-32 checksum with buffer data.
@@ -203,8 +237,8 @@ pub func adler32_update(adler: I64, data: Str) -> I64 {
 ///
 /// The updated Adler-32 value.
 pub func adler32_update_buffer(adler: I64, data: ref Buffer) -> I64 {
-    let result: I64 = lowlevel { zlib_adler32_update_buffer(adler, data.handle) }
-    return result
+    let result: U32 = ffi_adler32_update_buffer(adler as U32, data.handle)
+    return result as I64
 }
 
 /// Combines two Adler-32 checksums.
@@ -219,6 +253,6 @@ pub func adler32_update_buffer(adler: I64, data: ref Buffer) -> I64 {
 ///
 /// Combined Adler-32 equivalent to computing on concatenated data.
 pub func adler32_combine(adler1: I64, adler2: I64, len2: I64) -> I64 {
-    let result: I64 = lowlevel { zlib_adler32_combine(adler1, adler2, len2) }
-    return result
+    let result: U32 = ffi_adler32_combine(adler1 as U32, adler2 as U32, len2)
+    return result as I64
 }

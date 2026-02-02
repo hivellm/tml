@@ -10,19 +10,19 @@
  */
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <bcrypt.h>
+#include <windows.h>
 #pragma comment(lib, "bcrypt.lib")
 #elif defined(__APPLE__)
 #define TML_EXPORT __attribute__((visibility("default")))
-#include <stdlib.h>  // arc4random_buf
+#include <stdlib.h> // arc4random_buf
 #elif defined(__linux__)
 #define TML_EXPORT __attribute__((visibility("default")))
 #include <sys/random.h>
@@ -37,7 +37,8 @@
 // ============================================================================
 
 static int fill_random_bytes(uint8_t* buffer, size_t size) {
-    if (size == 0) return 0;
+    if (size == 0)
+        return 0;
 
 #ifdef _WIN32
     NTSTATUS status = BCryptGenRandom(NULL, buffer, (ULONG)size, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
@@ -51,7 +52,8 @@ static int fill_random_bytes(uint8_t* buffer, size_t size) {
 #else
     // Fallback: /dev/urandom
     int fd = open("/dev/urandom", O_RDONLY);
-    if (fd < 0) return -1;
+    if (fd < 0)
+        return -1;
     ssize_t bytes_read = read(fd, buffer, size);
     close(fd);
     return (bytes_read == (ssize_t)size) ? 0 : -1;
@@ -71,7 +73,8 @@ typedef struct {
 
 static TmlBuffer* create_buffer(int64_t capacity) {
     TmlBuffer* buf = (TmlBuffer*)malloc(sizeof(TmlBuffer));
-    if (!buf) return NULL;
+    if (!buf)
+        return NULL;
     buf->data = (uint8_t*)malloc(capacity > 0 ? capacity : 1);
     if (!buf->data) {
         free(buf);
@@ -92,7 +95,8 @@ TML_EXPORT void* crypto_random_bytes(int64_t size) {
         return create_buffer(0);
     }
     TmlBuffer* buf = create_buffer(size);
-    if (!buf) return NULL;
+    if (!buf)
+        return NULL;
 
     if (fill_random_bytes(buf->data, size) != 0) {
         free(buf->data);
@@ -105,14 +109,17 @@ TML_EXPORT void* crypto_random_bytes(int64_t size) {
 
 TML_EXPORT void crypto_random_fill(void* handle) {
     TmlBuffer* buf = (TmlBuffer*)handle;
-    if (!buf || buf->length <= 0) return;
+    if (!buf || buf->length <= 0)
+        return;
     fill_random_bytes(buf->data, buf->length);
 }
 
 TML_EXPORT void crypto_random_fill_range(void* handle, int64_t offset, int64_t size) {
     TmlBuffer* buf = (TmlBuffer*)handle;
-    if (!buf || offset < 0 || size <= 0) return;
-    if (offset + size > buf->length) return;
+    if (!buf || offset < 0 || size <= 0)
+        return;
+    if (offset + size > buf->length)
+        return;
     fill_random_bytes(buf->data + offset, size);
 }
 
@@ -121,7 +128,8 @@ TML_EXPORT void crypto_random_fill_range(void* handle, int64_t offset, int64_t s
 // ============================================================================
 
 TML_EXPORT int64_t crypto_random_int(int64_t min, int64_t max) {
-    if (min >= max) return min;
+    if (min >= max)
+        return min;
 
     uint64_t range = (uint64_t)(max - min);
     uint64_t random_value;
@@ -177,14 +185,14 @@ TML_EXPORT float crypto_random_f32(void) {
     uint32_t random_bits;
     fill_random_bytes((uint8_t*)&random_bits, sizeof(random_bits));
     // Convert to float in [0, 1) by dividing by 2^32
-    return (float)(random_bits >> 8) / 16777216.0f;  // 2^24
+    return (float)(random_bits >> 8) / 16777216.0f; // 2^24
 }
 
 TML_EXPORT double crypto_random_f64(void) {
     uint64_t random_bits;
     fill_random_bytes((uint8_t*)&random_bits, sizeof(random_bits));
     // Convert to double in [0, 1) by dividing by 2^53
-    return (double)(random_bits >> 11) / 9007199254740992.0;  // 2^53
+    return (double)(random_bits >> 11) / 9007199254740992.0; // 2^53
 }
 
 // ============================================================================
@@ -202,7 +210,8 @@ TML_EXPORT const char* crypto_random_uuid(void) {
 
     // Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     char* uuid = (char*)malloc(37);
-    if (!uuid) return "";
+    if (!uuid)
+        return "";
 
     static const char hex[] = "0123456789abcdef";
     char* p = uuid;
@@ -227,7 +236,8 @@ TML_EXPORT int32_t crypto_timing_safe_equal(void* a_handle, void* b_handle) {
     TmlBuffer* a = (TmlBuffer*)a_handle;
     TmlBuffer* b = (TmlBuffer*)b_handle;
 
-    if (!a || !b || a->length != b->length) return 0;
+    if (!a || !b || a->length != b->length)
+        return 0;
 
     volatile uint8_t result = 0;
     for (int64_t i = 0; i < a->length; i++) {
@@ -237,12 +247,14 @@ TML_EXPORT int32_t crypto_timing_safe_equal(void* a_handle, void* b_handle) {
 }
 
 TML_EXPORT int32_t crypto_timing_safe_equal_str(const char* a, const char* b) {
-    if (!a || !b) return 0;
+    if (!a || !b)
+        return 0;
 
     size_t len_a = strlen(a);
     size_t len_b = strlen(b);
 
-    if (len_a != len_b) return 0;
+    if (len_a != len_b)
+        return 0;
 
     volatile uint8_t result = 0;
     for (size_t i = 0; i < len_a; i++) {
@@ -280,3 +292,889 @@ TML_EXPORT int32_t crypto_check_prime_rounds(void* handle, int64_t rounds) {
     (void)rounds;
     return 0;
 }
+
+// ============================================================================
+// Hash Functions Implementation (Windows CNG)
+// ============================================================================
+
+#ifdef _WIN32
+
+// Hash context structure
+typedef struct {
+    BCRYPT_ALG_HANDLE alg;
+    BCRYPT_HASH_HANDLE hash;
+    uint8_t* hash_object;
+    DWORD hash_object_size;
+    DWORD digest_size;
+} HashContext;
+
+// Get algorithm handle by name
+static BCRYPT_ALG_HANDLE get_hash_algorithm(const char* name, DWORD* digest_size) {
+    BCRYPT_ALG_HANDLE alg = NULL;
+    LPCWSTR alg_id = NULL;
+
+    if (strcmp(name, "md5") == 0) {
+        alg_id = BCRYPT_MD5_ALGORITHM;
+        *digest_size = 16;
+    } else if (strcmp(name, "sha1") == 0) {
+        alg_id = BCRYPT_SHA1_ALGORITHM;
+        *digest_size = 20;
+    } else if (strcmp(name, "sha256") == 0) {
+        alg_id = BCRYPT_SHA256_ALGORITHM;
+        *digest_size = 32;
+    } else if (strcmp(name, "sha384") == 0) {
+        alg_id = BCRYPT_SHA384_ALGORITHM;
+        *digest_size = 48;
+    } else if (strcmp(name, "sha512") == 0) {
+        alg_id = BCRYPT_SHA512_ALGORITHM;
+        *digest_size = 64;
+    } else if (strcmp(name, "sha512-256") == 0) {
+        // SHA-512/256 not directly available in CNG, use SHA-512 and truncate
+        alg_id = BCRYPT_SHA512_ALGORITHM;
+        *digest_size = 32; // Will truncate
+    } else {
+        return NULL;
+    }
+
+    NTSTATUS status = BCryptOpenAlgorithmProvider(&alg, alg_id, NULL, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        return NULL;
+    }
+    return alg;
+}
+
+// One-shot hash of string
+static TmlBuffer* hash_string(const char* data, const char* algorithm) {
+    DWORD digest_size = 0;
+    BCRYPT_ALG_HANDLE alg = get_hash_algorithm(algorithm, &digest_size);
+    if (!alg)
+        return NULL;
+
+    // Handle SHA-512/256 special case
+    int truncate_to_256 = (strcmp(algorithm, "sha512-256") == 0);
+    DWORD actual_digest_size = truncate_to_256 ? 64 : digest_size;
+
+    // Get hash object size
+    DWORD hash_object_size = 0;
+    DWORD result_size = 0;
+    BCryptGetProperty(alg, BCRYPT_OBJECT_LENGTH, (PUCHAR)&hash_object_size, sizeof(DWORD),
+                      &result_size, 0);
+
+    uint8_t* hash_object = (uint8_t*)malloc(hash_object_size);
+    if (!hash_object) {
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    BCRYPT_HASH_HANDLE hash;
+    NTSTATUS status = BCryptCreateHash(alg, &hash, hash_object, hash_object_size, NULL, 0, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        free(hash_object);
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    // Hash the data
+    size_t data_len = data ? strlen(data) : 0;
+    if (data_len > 0) {
+        BCryptHashData(hash, (PUCHAR)data, (ULONG)data_len, 0);
+    }
+
+    // Get digest
+    uint8_t* digest_buf = (uint8_t*)malloc(actual_digest_size);
+    if (!digest_buf) {
+        BCryptDestroyHash(hash);
+        free(hash_object);
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    BCryptFinishHash(hash, digest_buf, actual_digest_size, 0);
+
+    // Create result buffer
+    TmlBuffer* result = create_buffer(digest_size);
+    if (result) {
+        memcpy(result->data, digest_buf,
+               digest_size); // Copy only digest_size bytes (truncate if needed)
+        result->length = digest_size;
+    }
+
+    free(digest_buf);
+    BCryptDestroyHash(hash);
+    free(hash_object);
+    BCryptCloseAlgorithmProvider(alg, 0);
+
+    return result;
+}
+
+// One-shot hash of buffer
+static TmlBuffer* hash_buffer(TmlBuffer* input, const char* algorithm) {
+    if (!input)
+        return NULL;
+
+    DWORD digest_size = 0;
+    BCRYPT_ALG_HANDLE alg = get_hash_algorithm(algorithm, &digest_size);
+    if (!alg)
+        return NULL;
+
+    int truncate_to_256 = (strcmp(algorithm, "sha512-256") == 0);
+    DWORD actual_digest_size = truncate_to_256 ? 64 : digest_size;
+
+    DWORD hash_object_size = 0;
+    DWORD result_size = 0;
+    BCryptGetProperty(alg, BCRYPT_OBJECT_LENGTH, (PUCHAR)&hash_object_size, sizeof(DWORD),
+                      &result_size, 0);
+
+    uint8_t* hash_object = (uint8_t*)malloc(hash_object_size);
+    if (!hash_object) {
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    BCRYPT_HASH_HANDLE hash;
+    NTSTATUS status = BCryptCreateHash(alg, &hash, hash_object, hash_object_size, NULL, 0, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        free(hash_object);
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    if (input->length > 0) {
+        BCryptHashData(hash, input->data, (ULONG)input->length, 0);
+    }
+
+    uint8_t* digest_buf = (uint8_t*)malloc(actual_digest_size);
+    if (!digest_buf) {
+        BCryptDestroyHash(hash);
+        free(hash_object);
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    BCryptFinishHash(hash, digest_buf, actual_digest_size, 0);
+
+    TmlBuffer* result = create_buffer(digest_size);
+    if (result) {
+        memcpy(result->data, digest_buf, digest_size);
+        result->length = digest_size;
+    }
+
+    free(digest_buf);
+    BCryptDestroyHash(hash);
+    free(hash_object);
+    BCryptCloseAlgorithmProvider(alg, 0);
+
+    return result;
+}
+
+#else
+// Non-Windows implementations (stubs for now)
+static TmlBuffer* hash_string(const char* data, const char* algorithm) {
+    (void)data;
+    (void)algorithm;
+    return NULL;
+}
+
+static TmlBuffer* hash_buffer(TmlBuffer* input, const char* algorithm) {
+    (void)input;
+    (void)algorithm;
+    return NULL;
+}
+#endif
+
+// ============================================================================
+// Public API: One-shot hash functions
+// ============================================================================
+
+TML_EXPORT void* crypto_md5(const char* data) {
+    return hash_string(data, "md5");
+}
+
+TML_EXPORT void* crypto_md5_bytes(void* handle) {
+    return hash_buffer((TmlBuffer*)handle, "md5");
+}
+
+TML_EXPORT void* crypto_sha1(const char* data) {
+    return hash_string(data, "sha1");
+}
+
+TML_EXPORT void* crypto_sha1_bytes(void* handle) {
+    return hash_buffer((TmlBuffer*)handle, "sha1");
+}
+
+TML_EXPORT void* crypto_sha256(const char* data) {
+    return hash_string(data, "sha256");
+}
+
+TML_EXPORT void* crypto_sha256_bytes(void* handle) {
+    return hash_buffer((TmlBuffer*)handle, "sha256");
+}
+
+TML_EXPORT void* crypto_sha384(const char* data) {
+    return hash_string(data, "sha384");
+}
+
+TML_EXPORT void* crypto_sha384_bytes(void* handle) {
+    return hash_buffer((TmlBuffer*)handle, "sha384");
+}
+
+TML_EXPORT void* crypto_sha512(const char* data) {
+    return hash_string(data, "sha512");
+}
+
+TML_EXPORT void* crypto_sha512_bytes(void* handle) {
+    return hash_buffer((TmlBuffer*)handle, "sha512");
+}
+
+TML_EXPORT void* crypto_sha512_256(const char* data) {
+    return hash_string(data, "sha512-256");
+}
+
+TML_EXPORT void* crypto_sha512_256_bytes(void* handle) {
+    return hash_buffer((TmlBuffer*)handle, "sha512-256");
+}
+
+// ============================================================================
+// Public API: Bytes to hex/base64 conversion
+// ============================================================================
+
+TML_EXPORT const char* crypto_bytes_to_hex(void* handle) {
+    TmlBuffer* buf = (TmlBuffer*)handle;
+    if (!buf || buf->length <= 0) {
+        char* empty = (char*)malloc(1);
+        if (empty)
+            empty[0] = '\0';
+        return empty;
+    }
+
+    char* hex = (char*)malloc(buf->length * 2 + 1);
+    if (!hex)
+        return "";
+
+    static const char hex_chars[] = "0123456789abcdef";
+    for (int64_t i = 0; i < buf->length; i++) {
+        hex[i * 2] = hex_chars[buf->data[i] >> 4];
+        hex[i * 2 + 1] = hex_chars[buf->data[i] & 0x0F];
+    }
+    hex[buf->length * 2] = '\0';
+
+    return hex;
+}
+
+static const char base64_chars[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+TML_EXPORT const char* crypto_bytes_to_base64(void* handle) {
+    TmlBuffer* buf = (TmlBuffer*)handle;
+    if (!buf || buf->length <= 0) {
+        char* empty = (char*)malloc(1);
+        if (empty)
+            empty[0] = '\0';
+        return empty;
+    }
+
+    size_t input_len = (size_t)buf->length;
+    size_t output_len = 4 * ((input_len + 2) / 3);
+    char* output = (char*)malloc(output_len + 1);
+    if (!output)
+        return "";
+
+    size_t i, j;
+    for (i = 0, j = 0; i < input_len;) {
+        uint32_t octet_a = i < input_len ? buf->data[i++] : 0;
+        uint32_t octet_b = i < input_len ? buf->data[i++] : 0;
+        uint32_t octet_c = i < input_len ? buf->data[i++] : 0;
+
+        uint32_t triple = (octet_a << 16) + (octet_b << 8) + octet_c;
+
+        output[j++] = base64_chars[(triple >> 18) & 0x3F];
+        output[j++] = base64_chars[(triple >> 12) & 0x3F];
+        output[j++] = base64_chars[(triple >> 6) & 0x3F];
+        output[j++] = base64_chars[triple & 0x3F];
+    }
+
+    // Add padding
+    size_t mod = input_len % 3;
+    if (mod == 1) {
+        output[output_len - 1] = '=';
+        output[output_len - 2] = '=';
+    } else if (mod == 2) {
+        output[output_len - 1] = '=';
+    }
+
+    output[output_len] = '\0';
+    return output;
+}
+
+TML_EXPORT void* crypto_hex_to_bytes(const char* hex) {
+    if (!hex)
+        return NULL;
+
+    size_t len = strlen(hex);
+    if (len % 2 != 0)
+        return NULL;
+
+    TmlBuffer* buf = create_buffer(len / 2);
+    if (!buf)
+        return NULL;
+
+    for (size_t i = 0; i < len; i += 2) {
+        char high = hex[i];
+        char low = hex[i + 1];
+
+        uint8_t val = 0;
+        if (high >= '0' && high <= '9')
+            val = (high - '0') << 4;
+        else if (high >= 'a' && high <= 'f')
+            val = (high - 'a' + 10) << 4;
+        else if (high >= 'A' && high <= 'F')
+            val = (high - 'A' + 10) << 4;
+        else {
+            free(buf->data);
+            free(buf);
+            return NULL;
+        }
+
+        if (low >= '0' && low <= '9')
+            val |= (low - '0');
+        else if (low >= 'a' && low <= 'f')
+            val |= (low - 'a' + 10);
+        else if (low >= 'A' && low <= 'F')
+            val |= (low - 'A' + 10);
+        else {
+            free(buf->data);
+            free(buf);
+            return NULL;
+        }
+
+        buf->data[i / 2] = val;
+    }
+    buf->length = len / 2;
+
+    return buf;
+}
+
+static int base64_decode_char(char c) {
+    if (c >= 'A' && c <= 'Z')
+        return c - 'A';
+    if (c >= 'a' && c <= 'z')
+        return c - 'a' + 26;
+    if (c >= '0' && c <= '9')
+        return c - '0' + 52;
+    if (c == '+')
+        return 62;
+    if (c == '/')
+        return 63;
+    return -1;
+}
+
+TML_EXPORT void* crypto_base64_to_bytes(const char* b64) {
+    if (!b64)
+        return NULL;
+
+    size_t len = strlen(b64);
+    if (len == 0)
+        return create_buffer(0);
+
+    // Calculate output length
+    size_t padding = 0;
+    if (len >= 1 && b64[len - 1] == '=')
+        padding++;
+    if (len >= 2 && b64[len - 2] == '=')
+        padding++;
+
+    size_t output_len = (len / 4) * 3 - padding;
+    TmlBuffer* buf = create_buffer(output_len);
+    if (!buf)
+        return NULL;
+
+    size_t i, j;
+    for (i = 0, j = 0; i < len;) {
+        int a = (i < len && b64[i] != '=') ? base64_decode_char(b64[i++]) : 0;
+        int b = (i < len && b64[i] != '=') ? base64_decode_char(b64[i++]) : 0;
+        int c = (i < len && b64[i] != '=') ? base64_decode_char(b64[i++]) : 0;
+        int d = (i < len && b64[i] != '=') ? base64_decode_char(b64[i++]) : 0;
+
+        if (a < 0 || b < 0 || c < 0 || d < 0) {
+            free(buf->data);
+            free(buf);
+            return NULL;
+        }
+
+        uint32_t triple = (a << 18) + (b << 12) + (c << 6) + d;
+
+        if (j < output_len)
+            buf->data[j++] = (triple >> 16) & 0xFF;
+        if (j < output_len)
+            buf->data[j++] = (triple >> 8) & 0xFF;
+        if (j < output_len)
+            buf->data[j++] = triple & 0xFF;
+    }
+
+    buf->length = output_len;
+    return buf;
+}
+
+// ============================================================================
+// Public API: Streaming hash functions
+// ============================================================================
+
+#ifdef _WIN32
+
+TML_EXPORT void* crypto_hash_create(const char* algorithm) {
+    DWORD digest_size = 0;
+    BCRYPT_ALG_HANDLE alg = get_hash_algorithm(algorithm, &digest_size);
+    if (!alg)
+        return NULL;
+
+    HashContext* ctx = (HashContext*)malloc(sizeof(HashContext));
+    if (!ctx) {
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    ctx->alg = alg;
+    ctx->digest_size = digest_size;
+
+    DWORD result_size = 0;
+    BCryptGetProperty(alg, BCRYPT_OBJECT_LENGTH, (PUCHAR)&ctx->hash_object_size, sizeof(DWORD),
+                      &result_size, 0);
+
+    ctx->hash_object = (uint8_t*)malloc(ctx->hash_object_size);
+    if (!ctx->hash_object) {
+        BCryptCloseAlgorithmProvider(alg, 0);
+        free(ctx);
+        return NULL;
+    }
+
+    NTSTATUS status =
+        BCryptCreateHash(alg, &ctx->hash, ctx->hash_object, ctx->hash_object_size, NULL, 0, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        free(ctx->hash_object);
+        BCryptCloseAlgorithmProvider(alg, 0);
+        free(ctx);
+        return NULL;
+    }
+
+    return ctx;
+}
+
+TML_EXPORT void crypto_hash_update_str(void* handle, const char* data) {
+    HashContext* ctx = (HashContext*)handle;
+    if (!ctx || !data)
+        return;
+
+    size_t len = strlen(data);
+    if (len > 0) {
+        BCryptHashData(ctx->hash, (PUCHAR)data, (ULONG)len, 0);
+    }
+}
+
+TML_EXPORT void crypto_hash_update_bytes(void* handle, void* data_handle) {
+    HashContext* ctx = (HashContext*)handle;
+    TmlBuffer* buf = (TmlBuffer*)data_handle;
+    if (!ctx || !buf || buf->length <= 0)
+        return;
+
+    BCryptHashData(ctx->hash, buf->data, (ULONG)buf->length, 0);
+}
+
+TML_EXPORT void* crypto_hash_digest(void* handle) {
+    HashContext* ctx = (HashContext*)handle;
+    if (!ctx)
+        return NULL;
+
+    TmlBuffer* result = create_buffer(ctx->digest_size);
+    if (!result)
+        return NULL;
+
+    BCryptFinishHash(ctx->hash, result->data, ctx->digest_size, 0);
+    result->length = ctx->digest_size;
+
+    return result;
+}
+
+TML_EXPORT void* crypto_hash_copy(void* handle) {
+    HashContext* ctx = (HashContext*)handle;
+    if (!ctx)
+        return NULL;
+
+    HashContext* new_ctx = (HashContext*)malloc(sizeof(HashContext));
+    if (!new_ctx)
+        return NULL;
+
+    new_ctx->digest_size = ctx->digest_size;
+    new_ctx->hash_object_size = ctx->hash_object_size;
+
+    // Open new algorithm provider
+    DWORD dummy_size;
+    new_ctx->alg = get_hash_algorithm("sha256", &dummy_size); // Will be overwritten
+    if (!new_ctx->alg) {
+        free(new_ctx);
+        return NULL;
+    }
+
+    new_ctx->hash_object = (uint8_t*)malloc(new_ctx->hash_object_size);
+    if (!new_ctx->hash_object) {
+        BCryptCloseAlgorithmProvider(new_ctx->alg, 0);
+        free(new_ctx);
+        return NULL;
+    }
+
+    NTSTATUS status = BCryptDuplicateHash(ctx->hash, &new_ctx->hash, new_ctx->hash_object,
+                                          new_ctx->hash_object_size, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        free(new_ctx->hash_object);
+        BCryptCloseAlgorithmProvider(new_ctx->alg, 0);
+        free(new_ctx);
+        return NULL;
+    }
+
+    return new_ctx;
+}
+
+TML_EXPORT void crypto_hash_destroy(void* handle) {
+    HashContext* ctx = (HashContext*)handle;
+    if (!ctx)
+        return;
+
+    if (ctx->hash)
+        BCryptDestroyHash(ctx->hash);
+    if (ctx->hash_object)
+        free(ctx->hash_object);
+    if (ctx->alg)
+        BCryptCloseAlgorithmProvider(ctx->alg, 0);
+    free(ctx);
+}
+
+#else
+// Non-Windows stubs
+TML_EXPORT void* crypto_hash_create(const char* algorithm) {
+    (void)algorithm;
+    return NULL;
+}
+TML_EXPORT void crypto_hash_update_str(void* handle, const char* data) {
+    (void)handle;
+    (void)data;
+}
+TML_EXPORT void crypto_hash_update_bytes(void* handle, void* data_handle) {
+    (void)handle;
+    (void)data_handle;
+}
+TML_EXPORT void* crypto_hash_digest(void* handle) {
+    (void)handle;
+    return NULL;
+}
+TML_EXPORT void* crypto_hash_copy(void* handle) {
+    (void)handle;
+    return NULL;
+}
+TML_EXPORT void crypto_hash_destroy(void* handle) {
+    (void)handle;
+}
+#endif
+
+// ============================================================================
+// HMAC Functions Implementation
+// ============================================================================
+
+#ifdef _WIN32
+
+// HMAC context structure
+typedef struct {
+    BCRYPT_ALG_HANDLE alg;
+    BCRYPT_HASH_HANDLE hash;
+    uint8_t* hash_object;
+    DWORD hash_object_size;
+    DWORD digest_size;
+} HmacContext;
+
+// One-shot HMAC helper
+static TmlBuffer* hmac_compute(const char* algorithm, const uint8_t* key, size_t key_len,
+                               const uint8_t* data, size_t data_len) {
+    DWORD digest_size = 0;
+    BCRYPT_ALG_HANDLE alg = get_hash_algorithm(algorithm, &digest_size);
+    if (!alg)
+        return NULL;
+
+    // Open with HMAC flag
+    BCryptCloseAlgorithmProvider(alg, 0);
+
+    LPCWSTR alg_id = NULL;
+    if (strcmp(algorithm, "md5") == 0)
+        alg_id = BCRYPT_MD5_ALGORITHM;
+    else if (strcmp(algorithm, "sha1") == 0)
+        alg_id = BCRYPT_SHA1_ALGORITHM;
+    else if (strcmp(algorithm, "sha256") == 0)
+        alg_id = BCRYPT_SHA256_ALGORITHM;
+    else if (strcmp(algorithm, "sha384") == 0)
+        alg_id = BCRYPT_SHA384_ALGORITHM;
+    else if (strcmp(algorithm, "sha512") == 0)
+        alg_id = BCRYPT_SHA512_ALGORITHM;
+    else
+        return NULL;
+
+    NTSTATUS status = BCryptOpenAlgorithmProvider(&alg, alg_id, NULL, BCRYPT_ALG_HANDLE_HMAC_FLAG);
+    if (!BCRYPT_SUCCESS(status))
+        return NULL;
+
+    // Get hash object size
+    DWORD hash_object_size = 0;
+    DWORD result_size = 0;
+    BCryptGetProperty(alg, BCRYPT_OBJECT_LENGTH, (PUCHAR)&hash_object_size, sizeof(DWORD),
+                      &result_size, 0);
+
+    uint8_t* hash_object = (uint8_t*)malloc(hash_object_size);
+    if (!hash_object) {
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    BCRYPT_HASH_HANDLE hash;
+    status =
+        BCryptCreateHash(alg, &hash, hash_object, hash_object_size, (PUCHAR)key, (ULONG)key_len, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        free(hash_object);
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    // Hash the data
+    if (data_len > 0) {
+        BCryptHashData(hash, (PUCHAR)data, (ULONG)data_len, 0);
+    }
+
+    // Get digest
+    TmlBuffer* result = create_buffer(digest_size);
+    if (!result) {
+        BCryptDestroyHash(hash);
+        free(hash_object);
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    BCryptFinishHash(hash, result->data, digest_size, 0);
+    result->length = digest_size;
+
+    BCryptDestroyHash(hash);
+    free(hash_object);
+    BCryptCloseAlgorithmProvider(alg, 0);
+
+    return result;
+}
+
+// One-shot HMAC with string key and data
+TML_EXPORT void* crypto_hmac_sha256(const char* key, const char* data) {
+    size_t key_len = key ? strlen(key) : 0;
+    size_t data_len = data ? strlen(data) : 0;
+    return hmac_compute("sha256", (const uint8_t*)key, key_len, (const uint8_t*)data, data_len);
+}
+
+TML_EXPORT void* crypto_hmac_sha256_bytes(void* key_handle, void* data_handle) {
+    TmlBuffer* key = (TmlBuffer*)key_handle;
+    TmlBuffer* data = (TmlBuffer*)data_handle;
+    if (!key || !data)
+        return NULL;
+    return hmac_compute("sha256", key->data, key->length, data->data, data->length);
+}
+
+TML_EXPORT void* crypto_hmac_sha512(const char* key, const char* data) {
+    size_t key_len = key ? strlen(key) : 0;
+    size_t data_len = data ? strlen(data) : 0;
+    return hmac_compute("sha512", (const uint8_t*)key, key_len, (const uint8_t*)data, data_len);
+}
+
+TML_EXPORT void* crypto_hmac_sha512_bytes(void* key_handle, void* data_handle) {
+    TmlBuffer* key = (TmlBuffer*)key_handle;
+    TmlBuffer* data = (TmlBuffer*)data_handle;
+    if (!key || !data)
+        return NULL;
+    return hmac_compute("sha512", key->data, key->length, data->data, data->length);
+}
+
+TML_EXPORT void* crypto_hmac_sha384(const char* key, const char* data) {
+    size_t key_len = key ? strlen(key) : 0;
+    size_t data_len = data ? strlen(data) : 0;
+    return hmac_compute("sha384", (const uint8_t*)key, key_len, (const uint8_t*)data, data_len);
+}
+
+TML_EXPORT void* crypto_hmac_sha1(const char* key, const char* data) {
+    size_t key_len = key ? strlen(key) : 0;
+    size_t data_len = data ? strlen(data) : 0;
+    return hmac_compute("sha1", (const uint8_t*)key, key_len, (const uint8_t*)data, data_len);
+}
+
+TML_EXPORT void* crypto_hmac_md5(const char* key, const char* data) {
+    size_t key_len = key ? strlen(key) : 0;
+    size_t data_len = data ? strlen(data) : 0;
+    return hmac_compute("md5", (const uint8_t*)key, key_len, (const uint8_t*)data, data_len);
+}
+
+// Streaming HMAC
+TML_EXPORT void* crypto_hmac_create(const char* algorithm, const char* key) {
+    DWORD digest_size = 0;
+
+    LPCWSTR alg_id = NULL;
+    if (strcmp(algorithm, "md5") == 0) {
+        alg_id = BCRYPT_MD5_ALGORITHM;
+        digest_size = 16;
+    } else if (strcmp(algorithm, "sha1") == 0) {
+        alg_id = BCRYPT_SHA1_ALGORITHM;
+        digest_size = 20;
+    } else if (strcmp(algorithm, "sha256") == 0) {
+        alg_id = BCRYPT_SHA256_ALGORITHM;
+        digest_size = 32;
+    } else if (strcmp(algorithm, "sha384") == 0) {
+        alg_id = BCRYPT_SHA384_ALGORITHM;
+        digest_size = 48;
+    } else if (strcmp(algorithm, "sha512") == 0) {
+        alg_id = BCRYPT_SHA512_ALGORITHM;
+        digest_size = 64;
+    } else
+        return NULL;
+
+    BCRYPT_ALG_HANDLE alg;
+    NTSTATUS status = BCryptOpenAlgorithmProvider(&alg, alg_id, NULL, BCRYPT_ALG_HANDLE_HMAC_FLAG);
+    if (!BCRYPT_SUCCESS(status))
+        return NULL;
+
+    HmacContext* ctx = (HmacContext*)malloc(sizeof(HmacContext));
+    if (!ctx) {
+        BCryptCloseAlgorithmProvider(alg, 0);
+        return NULL;
+    }
+
+    ctx->alg = alg;
+    ctx->digest_size = digest_size;
+
+    DWORD result_size = 0;
+    BCryptGetProperty(alg, BCRYPT_OBJECT_LENGTH, (PUCHAR)&ctx->hash_object_size, sizeof(DWORD),
+                      &result_size, 0);
+
+    ctx->hash_object = (uint8_t*)malloc(ctx->hash_object_size);
+    if (!ctx->hash_object) {
+        BCryptCloseAlgorithmProvider(alg, 0);
+        free(ctx);
+        return NULL;
+    }
+
+    size_t key_len = key ? strlen(key) : 0;
+    status = BCryptCreateHash(alg, &ctx->hash, ctx->hash_object, ctx->hash_object_size, (PUCHAR)key,
+                              (ULONG)key_len, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        free(ctx->hash_object);
+        BCryptCloseAlgorithmProvider(alg, 0);
+        free(ctx);
+        return NULL;
+    }
+
+    return ctx;
+}
+
+TML_EXPORT void crypto_hmac_update_str(void* handle, const char* data) {
+    HmacContext* ctx = (HmacContext*)handle;
+    if (!ctx || !data)
+        return;
+
+    size_t len = strlen(data);
+    if (len > 0) {
+        BCryptHashData(ctx->hash, (PUCHAR)data, (ULONG)len, 0);
+    }
+}
+
+TML_EXPORT void crypto_hmac_update_bytes(void* handle, void* data_handle) {
+    HmacContext* ctx = (HmacContext*)handle;
+    TmlBuffer* buf = (TmlBuffer*)data_handle;
+    if (!ctx || !buf || buf->length <= 0)
+        return;
+
+    BCryptHashData(ctx->hash, buf->data, (ULONG)buf->length, 0);
+}
+
+TML_EXPORT void* crypto_hmac_digest(void* handle) {
+    HmacContext* ctx = (HmacContext*)handle;
+    if (!ctx)
+        return NULL;
+
+    TmlBuffer* result = create_buffer(ctx->digest_size);
+    if (!result)
+        return NULL;
+
+    BCryptFinishHash(ctx->hash, result->data, ctx->digest_size, 0);
+    result->length = ctx->digest_size;
+
+    return result;
+}
+
+TML_EXPORT void crypto_hmac_destroy(void* handle) {
+    HmacContext* ctx = (HmacContext*)handle;
+    if (!ctx)
+        return;
+
+    if (ctx->hash)
+        BCryptDestroyHash(ctx->hash);
+    if (ctx->hash_object)
+        free(ctx->hash_object);
+    if (ctx->alg)
+        BCryptCloseAlgorithmProvider(ctx->alg, 0);
+    free(ctx);
+}
+
+#else
+// Non-Windows stubs
+TML_EXPORT void* crypto_hmac_sha256(const char* key, const char* data) {
+    (void)key;
+    (void)data;
+    return NULL;
+}
+TML_EXPORT void* crypto_hmac_sha256_bytes(void* key, void* data) {
+    (void)key;
+    (void)data;
+    return NULL;
+}
+TML_EXPORT void* crypto_hmac_sha512(const char* key, const char* data) {
+    (void)key;
+    (void)data;
+    return NULL;
+}
+TML_EXPORT void* crypto_hmac_sha512_bytes(void* key, void* data) {
+    (void)key;
+    (void)data;
+    return NULL;
+}
+TML_EXPORT void* crypto_hmac_sha384(const char* key, const char* data) {
+    (void)key;
+    (void)data;
+    return NULL;
+}
+TML_EXPORT void* crypto_hmac_sha1(const char* key, const char* data) {
+    (void)key;
+    (void)data;
+    return NULL;
+}
+TML_EXPORT void* crypto_hmac_md5(const char* key, const char* data) {
+    (void)key;
+    (void)data;
+    return NULL;
+}
+TML_EXPORT void* crypto_hmac_create(const char* algorithm, const char* key) {
+    (void)algorithm;
+    (void)key;
+    return NULL;
+}
+TML_EXPORT void crypto_hmac_update_str(void* handle, const char* data) {
+    (void)handle;
+    (void)data;
+}
+TML_EXPORT void crypto_hmac_update_bytes(void* handle, void* data_handle) {
+    (void)handle;
+    (void)data_handle;
+}
+TML_EXPORT void* crypto_hmac_digest(void* handle) {
+    (void)handle;
+    return NULL;
+}
+TML_EXPORT void crypto_hmac_destroy(void* handle) {
+    (void)handle;
+}
+#endif

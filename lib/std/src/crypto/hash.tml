@@ -12,27 +12,19 @@
 //! | SHA-384 | 384 bits | Strong | Higher security margin |
 //! | SHA-512 | 512 bits | Strong | Best for 64-bit platforms |
 //! | SHA-512/256 | 256 bits | Strong | SHA-512 truncated to 256 bits |
-//! | SHA3-256 | 256 bits | Strong | Keccak-based, quantum-resistant |
-//! | SHA3-384 | 384 bits | Strong | Keccak-based |
-//! | SHA3-512 | 512 bits | Strong | Keccak-based |
-//! | BLAKE2b | 1-512 bits | Strong | Fast, secure |
-//! | BLAKE2s | 1-256 bits | Strong | Optimized for 32-bit |
-//! | BLAKE3 | 256 bits | Strong | Fastest secure hash |
 //!
 //! # Examples
 //!
 //! ## One-shot Hashing
 //!
 //! ```tml
-//! use std::crypto::{sha256, sha512, blake3}
+//! use std::crypto::{sha256, sha512}
 //!
 //! let hash1 = sha256("hello world")
 //! let hash2 = sha512("hello world")
-//! let hash3 = blake3("hello world")
 //!
 //! print("SHA-256: {hash1.to_hex()}\n")
 //! print("SHA-512: {hash2.to_hex()}\n")
-//! print("BLAKE3:  {hash3.to_hex()}\n")
 //! ```
 //!
 //! ## Streaming Hash
@@ -40,28 +32,93 @@
 //! ```tml
 //! use std::crypto::{Hash, HashAlgorithm}
 //!
-//! let hash = Hash::new(HashAlgorithm::Sha256)
+//! let hash = Hash::create(HashAlgorithm::Sha256)
 //! hash.update("hello ")
 //! hash.update("world")
 //! let digest = hash.digest()
 //!
 //! print("Digest: {digest.to_hex()}\n")
 //! ```
-//!
-//! ## Hash with Bytes
-//!
-//! ```tml
-//! use std::crypto::{Hash, HashAlgorithm}
-//! use std::collections::Buffer
-//!
-//! let data = Buffer::from_bytes([0x01, 0x02, 0x03, 0x04])
-//! let hash = Hash::new(HashAlgorithm::Sha256)
-//! hash.update_bytes(data)
-//! let digest = hash.digest()
-//! ```
 
-use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::error::CryptoError
 use std::collections::Buffer
+
+// ============================================================================
+// FFI Function Declarations
+// ============================================================================
+
+@extern("crypto_md5")
+func ffi_crypto_md5(data: Str) -> *Unit
+
+@extern("crypto_md5_bytes")
+func ffi_crypto_md5_bytes(handle: *Unit) -> *Unit
+
+@extern("crypto_sha1")
+func ffi_crypto_sha1(data: Str) -> *Unit
+
+@extern("crypto_sha1_bytes")
+func ffi_crypto_sha1_bytes(handle: *Unit) -> *Unit
+
+@extern("crypto_sha256")
+func ffi_crypto_sha256(data: Str) -> *Unit
+
+@extern("crypto_sha256_bytes")
+func ffi_crypto_sha256_bytes(handle: *Unit) -> *Unit
+
+@extern("crypto_sha384")
+func ffi_crypto_sha384(data: Str) -> *Unit
+
+@extern("crypto_sha384_bytes")
+func ffi_crypto_sha384_bytes(handle: *Unit) -> *Unit
+
+@extern("crypto_sha512")
+func ffi_crypto_sha512(data: Str) -> *Unit
+
+@extern("crypto_sha512_bytes")
+func ffi_crypto_sha512_bytes(handle: *Unit) -> *Unit
+
+@extern("crypto_sha512_256")
+func ffi_crypto_sha512_256(data: Str) -> *Unit
+
+@extern("crypto_sha512_256_bytes")
+func ffi_crypto_sha512_256_bytes(handle: *Unit) -> *Unit
+
+@extern("crypto_bytes_to_hex")
+func ffi_crypto_bytes_to_hex(handle: *Unit) -> Str
+
+@extern("crypto_bytes_to_base64")
+func ffi_crypto_bytes_to_base64(handle: *Unit) -> Str
+
+@extern("crypto_hex_to_bytes")
+func ffi_crypto_hex_to_bytes(hex: Str) -> *Unit
+
+@extern("crypto_base64_to_bytes")
+func ffi_crypto_base64_to_bytes(b64: Str) -> *Unit
+
+@extern("crypto_hash_create")
+func ffi_crypto_hash_create(algorithm: Str) -> *Unit
+
+@extern("crypto_hash_update_str")
+func ffi_crypto_hash_update_str(handle: *Unit, data: Str)
+
+@extern("crypto_hash_update_bytes")
+func ffi_crypto_hash_update_bytes(handle: *Unit, data_handle: *Unit)
+
+@extern("crypto_hash_digest")
+func ffi_crypto_hash_digest(handle: *Unit) -> *Unit
+
+@extern("crypto_hash_copy")
+func ffi_crypto_hash_copy(handle: *Unit) -> *Unit
+
+@extern("crypto_hash_destroy")
+func ffi_crypto_hash_destroy(handle: *Unit)
+
+@extern("crypto_timing_safe_equal")
+func ffi_crypto_timing_safe_equal(a: *Unit, b: *Unit) -> Bool
+
+// ============================================================================
+// Hash Algorithm Enum
+// ============================================================================
 
 /// Supported hash algorithms.
 pub type HashAlgorithm {
@@ -77,22 +134,10 @@ pub type HashAlgorithm {
     Sha512,
     /// SHA-512/256 (256-bit, truncated SHA-512)
     Sha512_256,
-    /// SHA3-256 (256-bit, Keccak)
-    Sha3_256,
-    /// SHA3-384 (384-bit, Keccak)
-    Sha3_384,
-    /// SHA3-512 (512-bit, Keccak)
-    Sha3_512,
-    /// BLAKE2b (up to 512-bit)
-    Blake2b512,
-    /// BLAKE2s (up to 256-bit)
-    Blake2s256,
-    /// BLAKE3 (256-bit)
-    Blake3,
 }
 
 impl HashAlgorithm {
-    /// Returns the algorithm name as used by OpenSSL.
+    /// Returns the algorithm name as used by the FFI.
     pub func name(this) -> Str {
         when this {
             HashAlgorithm::Md5 => return "md5"
@@ -101,12 +146,6 @@ impl HashAlgorithm {
             HashAlgorithm::Sha384 => return "sha384"
             HashAlgorithm::Sha512 => return "sha512"
             HashAlgorithm::Sha512_256 => return "sha512-256"
-            HashAlgorithm::Sha3_256 => return "sha3-256"
-            HashAlgorithm::Sha3_384 => return "sha3-384"
-            HashAlgorithm::Sha3_512 => return "sha3-512"
-            HashAlgorithm::Blake2b512 => return "blake2b512"
-            HashAlgorithm::Blake2s256 => return "blake2s256"
-            HashAlgorithm::Blake3 => return "blake3"
         }
     }
 
@@ -119,12 +158,6 @@ impl HashAlgorithm {
             HashAlgorithm::Sha384 => return 48
             HashAlgorithm::Sha512 => return 64
             HashAlgorithm::Sha512_256 => return 32
-            HashAlgorithm::Sha3_256 => return 32
-            HashAlgorithm::Sha3_384 => return 48
-            HashAlgorithm::Sha3_512 => return 64
-            HashAlgorithm::Blake2b512 => return 64
-            HashAlgorithm::Blake2s256 => return 32
-            HashAlgorithm::Blake3 => return 32
         }
     }
 
@@ -137,63 +170,28 @@ impl HashAlgorithm {
             HashAlgorithm::Sha384 => return 128
             HashAlgorithm::Sha512 => return 128
             HashAlgorithm::Sha512_256 => return 128
-            HashAlgorithm::Sha3_256 => return 136
-            HashAlgorithm::Sha3_384 => return 104
-            HashAlgorithm::Sha3_512 => return 72
-            HashAlgorithm::Blake2b512 => return 128
-            HashAlgorithm::Blake2s256 => return 64
-            HashAlgorithm::Blake3 => return 64
-        }
-    }
-
-    /// Parses an algorithm from a string name.
-    pub func from_name(name: Str) -> Maybe[HashAlgorithm] {
-        when name {
-            "md5" => return Just(HashAlgorithm::Md5)
-            "sha1" => return Just(HashAlgorithm::Sha1)
-            "sha256" => return Just(HashAlgorithm::Sha256)
-            "sha384" => return Just(HashAlgorithm::Sha384)
-            "sha512" => return Just(HashAlgorithm::Sha512)
-            "sha512-256" => return Just(HashAlgorithm::Sha512_256)
-            "sha3-256" => return Just(HashAlgorithm::Sha3_256)
-            "sha3-384" => return Just(HashAlgorithm::Sha3_384)
-            "sha3-512" => return Just(HashAlgorithm::Sha3_512)
-            "blake2b512" => return Just(HashAlgorithm::Blake2b512)
-            "blake2s256" => return Just(HashAlgorithm::Blake2s256)
-            "blake3" => return Just(HashAlgorithm::Blake3)
-            _ => return Nothing
         }
     }
 }
+
+// ============================================================================
+// Digest Type
+// ============================================================================
 
 /// A cryptographic hash digest (the output of a hash function).
 pub type Digest {
     data: Buffer
-    algorithm: HashAlgorithm
 }
 
 impl Digest {
-    /// Creates a new Digest from raw bytes.
-    pub func from_bytes(data: Buffer, algorithm: HashAlgorithm) -> Digest {
-        return Digest { data: data, algorithm: algorithm }
-    }
-
     /// Returns the digest as a hexadecimal string.
     pub func to_hex(this) -> Str {
-        let hex: Str = lowlevel { crypto_bytes_to_hex(this.data.handle) }
-        return hex
+        return ffi_crypto_bytes_to_hex(this.data.handle)
     }
 
     /// Returns the digest as a base64 string.
     pub func to_base64(this) -> Str {
-        let b64: Str = lowlevel { crypto_bytes_to_base64(this.data.handle) }
-        return b64
-    }
-
-    /// Returns the digest as a base64url string (URL-safe).
-    pub func to_base64url(this) -> Str {
-        let b64url: Str = lowlevel { crypto_bytes_to_base64url(this.data.handle) }
-        return b64url
+        return ffi_crypto_bytes_to_base64(this.data.handle)
     }
 
     /// Returns the raw bytes of the digest.
@@ -201,86 +199,48 @@ impl Digest {
         return ref this.data
     }
 
-    /// Returns the length of the digest in bytes.
-    pub func len(this) -> I64 {
-        return this.data.len()
-    }
 
-    /// Returns the hash algorithm used to create this digest.
-    pub func algorithm(this) -> HashAlgorithm {
-        return this.algorithm
-    }
-
-    /// Compares two digests in constant time to prevent timing attacks.
-    pub func equals(this, other: ref Digest) -> Bool {
-        if this.data.len() != other.data.len() {
-            return false
-        }
-        let result: Bool = lowlevel { crypto_timing_safe_equal(this.data.handle, other.data.handle) }
-        return result
-    }
-
-    /// Parses a digest from a hexadecimal string.
-    pub func from_hex(hex: Str, algorithm: HashAlgorithm) -> CryptoResult[Digest] {
-        let handle: *Unit = lowlevel { crypto_hex_to_bytes(hex) }
-        if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "invalid hex string"))
-        }
-        let buffer = Buffer { handle: handle }
-        return Ok(Digest { data: buffer, algorithm: algorithm })
-    }
-
-    /// Parses a digest from a base64 string.
-    pub func from_base64(b64: Str, algorithm: HashAlgorithm) -> CryptoResult[Digest] {
-        let handle: *Unit = lowlevel { crypto_base64_to_bytes(b64) }
-        if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "invalid base64 string"))
-        }
-        let buffer = Buffer { handle: handle }
-        return Ok(Digest { data: buffer, algorithm: algorithm })
+    /// Frees the digest resources.
+    pub func destroy(mut this) {
+        this.data.destroy()
     }
 }
+
+// ============================================================================
+// Streaming Hash Type
+// ============================================================================
 
 /// Streaming hash computation object.
 ///
 /// Use this for computing hashes of large data or data that arrives in chunks.
 pub type Hash {
     handle: *Unit
-    algorithm: HashAlgorithm
     finalized: Bool
 }
 
 impl Hash {
     /// Creates a new Hash object for the specified algorithm.
-    pub func new(algorithm: HashAlgorithm) -> CryptoResult[Hash] {
-        let handle: *Unit = lowlevel { crypto_hash_create(algorithm.name()) }
-        if handle == null {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::UnsupportedAlgorithm,
-                "failed to create hash context for {algorithm.name()}"
-            ))
-        }
-        return Ok(Hash {
+    pub func create(algorithm: HashAlgorithm) -> Hash {
+        let algo_name: Str = algorithm.name()
+        let handle: *Unit = ffi_crypto_hash_create(algo_name)
+        return Hash {
             handle: handle,
-            algorithm: algorithm,
             finalized: false,
-        })
+        }
     }
 
     /// Updates the hash with string data.
-    pub func update(mut this, data: Str) -> ref Hash {
+    pub func update(mut this, data: Str) {
         if not this.finalized {
-            lowlevel { crypto_hash_update_str(this.handle, data) }
+            ffi_crypto_hash_update_str(this.handle, data)
         }
-        return ref this
     }
 
     /// Updates the hash with binary data.
-    pub func update_bytes(mut this, data: ref Buffer) -> ref Hash {
+    pub func update_bytes(mut this, data: ref Buffer) {
         if not this.finalized {
-            lowlevel { crypto_hash_update_bytes(this.handle, data.handle) }
+            ffi_crypto_hash_update_bytes(this.handle, data.handle)
         }
-        return ref this
     }
 
     /// Finalizes the hash and returns the digest.
@@ -288,33 +248,24 @@ impl Hash {
     /// After calling this method, the hash object cannot be used for further updates.
     pub func digest(mut this) -> Digest {
         this.finalized = true
-        let result_handle: *Unit = lowlevel { crypto_hash_digest(this.handle) }
-        let buffer = Buffer { handle: result_handle }
-        return Digest { data: buffer, algorithm: this.algorithm }
+        let result_handle: *Unit = ffi_crypto_hash_digest(this.handle)
+        let buffer: Buffer = Buffer { handle: result_handle }
+        return Digest { data: buffer }
     }
 
     /// Creates a copy of this hash object for parallel computation.
-    pub func copy(this) -> CryptoResult[Hash] {
-        let new_handle: *Unit = lowlevel { crypto_hash_copy(this.handle) }
-        if new_handle == null {
-            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
-        }
-        return Ok(Hash {
+    pub func copy(this) -> Hash {
+        let new_handle: *Unit = ffi_crypto_hash_copy(this.handle)
+        return Hash {
             handle: new_handle,
-            algorithm: this.algorithm,
             finalized: this.finalized,
-        })
-    }
-
-    /// Returns the algorithm being used.
-    pub func algorithm(this) -> HashAlgorithm {
-        return this.algorithm
+        }
     }
 
     /// Frees the hash context resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { crypto_hash_destroy(this.handle) }
+            ffi_crypto_hash_destroy(this.handle)
             this.handle = null
         }
     }
@@ -328,235 +279,88 @@ impl Hash {
 ///
 /// **Warning**: MD5 is cryptographically broken. Use only for legacy compatibility.
 pub func md5(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_md5(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Md5 }
+    let handle: *Unit = ffi_crypto_md5(data)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
 /// Computes the MD5 hash of the input bytes.
 pub func md5_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_md5_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Md5 }
+    let handle: *Unit = ffi_crypto_md5_bytes(data.handle)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
 /// Computes the SHA-1 hash of the input string.
 ///
 /// **Warning**: SHA-1 is deprecated for security use. Prefer SHA-256 or better.
 pub func sha1(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha1(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha1 }
+    let handle: *Unit = ffi_crypto_sha1(data)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
 /// Computes the SHA-1 hash of the input bytes.
 pub func sha1_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha1_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha1 }
+    let handle: *Unit = ffi_crypto_sha1_bytes(data.handle)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
 /// Computes the SHA-256 hash of the input string.
 ///
 /// This is the recommended hash function for most applications.
 pub func sha256(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha256(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha256 }
+    let handle: *Unit = ffi_crypto_sha256(data)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
 /// Computes the SHA-256 hash of the input bytes.
 pub func sha256_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha256_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha256 }
+    let handle: *Unit = ffi_crypto_sha256_bytes(data.handle)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
 /// Computes the SHA-384 hash of the input string.
 pub func sha384(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha384(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha384 }
+    let handle: *Unit = ffi_crypto_sha384(data)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
 /// Computes the SHA-384 hash of the input bytes.
 pub func sha384_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha384_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha384 }
+    let handle: *Unit = ffi_crypto_sha384_bytes(data.handle)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
 /// Computes the SHA-512 hash of the input string.
 pub func sha512(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha512(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha512 }
+    let handle: *Unit = ffi_crypto_sha512(data)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
 /// Computes the SHA-512 hash of the input bytes.
 pub func sha512_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha512_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha512 }
+    let handle: *Unit = ffi_crypto_sha512_bytes(data.handle)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
-/// Computes the SHA3-256 hash of the input string.
-pub func sha3_256(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha3_256(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha3_256 }
+/// Computes the SHA-512/256 hash of the input string.
+pub func sha512_256(data: Str) -> Digest {
+    let handle: *Unit = ffi_crypto_sha512_256(data)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }
 
-/// Computes the SHA3-256 hash of the input bytes.
-pub func sha3_256_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha3_256_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha3_256 }
-}
-
-/// Computes the SHA3-384 hash of the input string.
-pub func sha3_384(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha3_384(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha3_384 }
-}
-
-/// Computes the SHA3-384 hash of the input bytes.
-pub func sha3_384_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha3_384_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha3_384 }
-}
-
-/// Computes the SHA3-512 hash of the input string.
-pub func sha3_512(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha3_512(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha3_512 }
-}
-
-/// Computes the SHA3-512 hash of the input bytes.
-pub func sha3_512_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_sha3_512_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Sha3_512 }
-}
-
-/// Computes the BLAKE2b hash of the input string (512-bit output).
-pub func blake2b(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_blake2b512(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Blake2b512 }
-}
-
-/// Computes the BLAKE2b hash of the input bytes (512-bit output).
-pub func blake2b_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_blake2b512_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Blake2b512 }
-}
-
-/// Computes the BLAKE2b hash with custom output length.
-pub func blake2b_custom(data: Str, output_len: I64) -> Digest {
-    let handle: *Unit = lowlevel { crypto_blake2b_custom(data, output_len) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Blake2b512 }
-}
-
-/// Computes the BLAKE2s hash of the input string (256-bit output).
-pub func blake2s(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_blake2s256(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Blake2s256 }
-}
-
-/// Computes the BLAKE2s hash of the input bytes (256-bit output).
-pub func blake2s_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_blake2s256_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Blake2s256 }
-}
-
-/// Computes the BLAKE3 hash of the input string (256-bit output).
-///
-/// BLAKE3 is extremely fast and secure, suitable for all hashing needs.
-pub func blake3(data: Str) -> Digest {
-    let handle: *Unit = lowlevel { crypto_blake3(data) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Blake3 }
-}
-
-/// Computes the BLAKE3 hash of the input bytes.
-pub func blake3_bytes(data: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_blake3_bytes(data.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Blake3 }
-}
-
-/// Computes BLAKE3 with a key for keyed hashing (MAC).
-pub func blake3_keyed(data: Str, key: ref Buffer) -> CryptoResult[Digest] {
-    if key.len() != 32 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "BLAKE3 keyed mode requires exactly 32-byte key"
-        ))
-    }
-    let handle: *Unit = lowlevel { crypto_blake3_keyed(data, key.handle) }
-    let buffer = Buffer { handle: handle }
-    return Ok(Digest { data: buffer, algorithm: HashAlgorithm::Blake3 })
-}
-
-/// Computes BLAKE3 in key derivation mode.
-pub func blake3_derive_key(context: Str, input: ref Buffer) -> Digest {
-    let handle: *Unit = lowlevel { crypto_blake3_derive_key(context, input.handle) }
-    let buffer = Buffer { handle: handle }
-    return Digest { data: buffer, algorithm: HashAlgorithm::Blake3 }
-}
-
-// ============================================================================
-// Generic hash function
-// ============================================================================
-
-/// Computes a hash using the specified algorithm.
-pub func hash(algorithm: HashAlgorithm, data: Str) -> Digest {
-    when algorithm {
-        HashAlgorithm::Md5 => return md5(data)
-        HashAlgorithm::Sha1 => return sha1(data)
-        HashAlgorithm::Sha256 => return sha256(data)
-        HashAlgorithm::Sha384 => return sha384(data)
-        HashAlgorithm::Sha512 => return sha512(data)
-        HashAlgorithm::Sha512_256 => {
-            let handle: *Unit = lowlevel { crypto_sha512_256(data) }
-            let buffer = Buffer { handle: handle }
-            return Digest { data: buffer, algorithm: HashAlgorithm::Sha512_256 }
-        }
-        HashAlgorithm::Sha3_256 => return sha3_256(data)
-        HashAlgorithm::Sha3_384 => return sha3_384(data)
-        HashAlgorithm::Sha3_512 => return sha3_512(data)
-        HashAlgorithm::Blake2b512 => return blake2b(data)
-        HashAlgorithm::Blake2s256 => return blake2s(data)
-        HashAlgorithm::Blake3 => return blake3(data)
-    }
-}
-
-/// Computes a hash of bytes using the specified algorithm.
-pub func hash_bytes(algorithm: HashAlgorithm, data: ref Buffer) -> Digest {
-    when algorithm {
-        HashAlgorithm::Md5 => return md5_bytes(data)
-        HashAlgorithm::Sha1 => return sha1_bytes(data)
-        HashAlgorithm::Sha256 => return sha256_bytes(data)
-        HashAlgorithm::Sha384 => return sha384_bytes(data)
-        HashAlgorithm::Sha512 => return sha512_bytes(data)
-        HashAlgorithm::Sha512_256 => {
-            let handle: *Unit = lowlevel { crypto_sha512_256_bytes(data.handle) }
-            let buffer = Buffer { handle: handle }
-            return Digest { data: buffer, algorithm: HashAlgorithm::Sha512_256 }
-        }
-        HashAlgorithm::Sha3_256 => return sha3_256_bytes(data)
-        HashAlgorithm::Sha3_384 => return sha3_384_bytes(data)
-        HashAlgorithm::Sha3_512 => return sha3_512_bytes(data)
-        HashAlgorithm::Blake2b512 => return blake2b_bytes(data)
-        HashAlgorithm::Blake2s256 => return blake2s_bytes(data)
-        HashAlgorithm::Blake3 => return blake3_bytes(data)
-    }
+/// Computes the SHA-512/256 hash of the input bytes.
+pub func sha512_256_bytes(data: ref Buffer) -> Digest {
+    let handle: *Unit = ffi_crypto_sha512_256_bytes(data.handle)
+    let buffer: Buffer = Buffer { handle: handle }
+    return Digest { data: buffer }
 }

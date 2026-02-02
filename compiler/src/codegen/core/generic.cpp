@@ -294,9 +294,11 @@ void LLVMIRGen::generate_pending_instantiations() {
 
                     // DEBUG: Log method lookup result
                     if (pim.base_type_name == "RangeInclusive" || pim.base_type_name == "Range") {
-                        std::cerr << "[DEBUG GENERIC] " << pim.base_type_name << "::" << pim.method_name
-                                  << " - local impl has " << impl.methods.size() << " methods, has_method="
-                                  << (has_method ? "yes" : "no") << ", generics=";
+                        std::cerr << "[DEBUG GENERIC] " << pim.base_type_name
+                                  << "::" << pim.method_name << " - local impl has "
+                                  << impl.methods.size()
+                                  << " methods, has_method=" << (has_method ? "yes" : "no")
+                                  << ", generics=";
                         for (const auto& g : impl.generics) {
                             std::cerr << g.name << " ";
                         }
@@ -321,9 +323,10 @@ void LLVMIRGen::generate_pending_instantiations() {
                                     pending_generic_impls_.find(concrete_named.name);
                                 if (concrete_impl_it != pending_generic_impls_.end()) {
                                     const auto& concrete_impl = *concrete_impl_it->second;
-                                    for (const auto& concrete_binding : concrete_impl.type_bindings) {
-                                        auto concrete_resolved =
-                                            resolve_parser_type_with_subs(*concrete_binding.type, {});
+                                    for (const auto& concrete_binding :
+                                         concrete_impl.type_bindings) {
+                                        auto concrete_resolved = resolve_parser_type_with_subs(
+                                            *concrete_binding.type, {});
                                         current_associated_types_[concrete_binding.name] =
                                             concrete_resolved;
                                     }
@@ -346,8 +349,9 @@ void LLVMIRGen::generate_pending_instantiations() {
                                     auto type_arg = parse_mangled_type_string(suffix);
                                     if (type_arg) {
                                         effective_type_subs[impl.generics[0].name] = type_arg;
-                                        TML_DEBUG_LN("[IMPL_INST] Recovered type_subs from mangled name: "
-                                                     << impl.generics[0].name << " -> " << suffix);
+                                        TML_DEBUG_LN(
+                                            "[IMPL_INST] Recovered type_subs from mangled name: "
+                                            << impl.generics[0].name << " -> " << suffix);
                                     }
                                 } else {
                                     // Multiple type params - split on "__"
@@ -384,10 +388,10 @@ void LLVMIRGen::generate_pending_instantiations() {
                         // Find the method in the impl block and generate it
                         for (const auto& m : impl.methods) {
                             if (m.name == pim.method_name) {
-                                gen_impl_method_instantiation(pim.mangled_type_name, m,
-                                                              effective_type_subs, impl.generics,
-                                                              pim.method_type_suffix, pim.is_library_type,
-                                                              pim.base_type_name);
+                                gen_impl_method_instantiation(
+                                    pim.mangled_type_name, m, effective_type_subs, impl.generics,
+                                    pim.method_type_suffix, pim.is_library_type,
+                                    pim.base_type_name);
                                 method_generated = true;
                                 break;
                             }
@@ -539,10 +543,11 @@ void LLVMIRGen::generate_pending_instantiations() {
                                     if (impl_decl.generics.size() == 1) {
                                         auto type_arg = parse_mangled_type_string(suffix);
                                         if (type_arg) {
-                                            effective_type_subs[impl_decl.generics[0].name] = type_arg;
-                                            TML_DEBUG_LN("[IMPL_INST] Recovered type_subs (imported): "
-                                                         << impl_decl.generics[0].name
-                                                         << " -> " << suffix);
+                                            effective_type_subs[impl_decl.generics[0].name] =
+                                                type_arg;
+                                            TML_DEBUG_LN(
+                                                "[IMPL_INST] Recovered type_subs (imported): "
+                                                << impl_decl.generics[0].name << " -> " << suffix);
                                         }
                                     } else {
                                         std::vector<std::string> parts;
@@ -557,7 +562,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                                             pos = next + 2;
                                         }
                                         for (size_t i = 0;
-                                             i < impl_decl.generics.size() && i < parts.size(); ++i) {
+                                             i < impl_decl.generics.size() && i < parts.size();
+                                             ++i) {
                                             auto type_arg = parse_mangled_type_string(parts[i]);
                                             if (type_arg) {
                                                 effective_type_subs[impl_decl.generics[i].name] =
@@ -570,8 +576,8 @@ void LLVMIRGen::generate_pending_instantiations() {
 
                             // Then resolve the impl's own type bindings
                             for (const auto& binding : impl_decl.type_bindings) {
-                                auto resolved =
-                                    resolve_parser_type_with_subs(*binding.type, effective_type_subs);
+                                auto resolved = resolve_parser_type_with_subs(*binding.type,
+                                                                              effective_type_subs);
                                 current_associated_types_[binding.name] = resolved;
                             }
 

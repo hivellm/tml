@@ -1998,8 +1998,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         bool is_generic_struct = struct_it != mod.structs.end() &&
                                                  !struct_it->second.type_params.empty();
                         auto enum_it = mod.enums.find(type_name);
-                        bool is_generic_enum = enum_it != mod.enums.end() &&
-                                               !enum_it->second.type_params.empty();
+                        bool is_generic_enum =
+                            enum_it != mod.enums.end() && !enum_it->second.type_params.empty();
 
                         if (is_type && !is_generic_struct && !is_generic_enum) {
                             std::string mangled_method = "tml_" + type_name + "_" + method_name;

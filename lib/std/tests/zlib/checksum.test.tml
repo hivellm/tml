@@ -1,8 +1,109 @@
 // Tests for CRC32 and Adler32 checksums
 use test
+use std::zlib::{crc32, crc32_update, crc32_combine}
+use std::zlib::{adler32, adler32_update, adler32_combine}
 
 @test
-func test_checksum_module_placeholder() -> I32 {
-    assert_eq(1, 1, "basic test works")
+func test_crc32_basic() -> I32 {
+    // Test basic CRC32 computation
+    let checksum: I64 = crc32("hello")
+
+    // CRC32 of "hello" is a known value: 907060870
+    assert_eq(checksum, 907060870, "crc32 of 'hello'")
+
+    return 0
+}
+
+@test
+func test_crc32_empty() -> I32 {
+    // CRC32 of empty string should be 0
+    let checksum: I64 = crc32("")
+    assert_eq(checksum, 0, "crc32 of empty string")
+
+    return 0
+}
+
+@test
+func test_crc32_update() -> I32 {
+    // Incremental CRC32 should match single computation
+    let full_checksum: I64 = crc32("hello world")
+
+    // Compute incrementally
+    let partial: I64 = crc32("hello ")
+    let updated: I64 = crc32_update(partial, "world")
+
+    assert_eq(updated, full_checksum, "incremental crc32")
+
+    return 0
+}
+
+@test
+func test_crc32_combine() -> I32 {
+    // Combined CRC32 should match single computation
+    let full_checksum: I64 = crc32("hello world")
+
+    let crc1: I64 = crc32("hello ")
+    let crc2: I64 = crc32("world")
+    let combined: I64 = crc32_combine(crc1, crc2, 5)  // "world" is 5 bytes
+
+    assert_eq(combined, full_checksum, "combined crc32")
+
+    return 0
+}
+
+@test
+func test_adler32_basic() -> I32 {
+    // Test basic Adler-32 computation
+    let checksum: I64 = adler32("hello")
+
+    // Adler-32 should return a non-zero value for non-empty strings
+    if checksum == 0 {
+        print("adler32 returned 0 for non-empty string\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_adler32_empty() -> I32 {
+    // Adler-32 of empty string is 1 (initial value)
+    let checksum: I64 = adler32("")
+    assert_eq(checksum, 1, "adler32 of empty string")
+
+    return 0
+}
+
+@test
+func test_adler32_update() -> I32 {
+    // Incremental Adler-32 should match single computation
+    let full_checksum: I64 = adler32("hello world")
+
+    // Compute incrementally
+    let partial: I64 = adler32("hello ")
+    let updated: I64 = adler32_update(partial, "world")
+
+    assert_eq(updated, full_checksum, "incremental adler32")
+
+    return 0
+}
+
+@test
+func test_crc32_different_inputs() -> I32 {
+    // Different inputs should produce different checksums
+    let crc1: I64 = crc32("hello")
+    let crc2: I64 = crc32("world")
+    let crc3: I64 = crc32("Hello")  // Different case
+
+    if crc1 == crc2 {
+        print("crc32 collision between 'hello' and 'world'\n")
+        return 1
+    }
+
+    if crc1 == crc3 {
+        print("crc32 collision between 'hello' and 'Hello'\n")
+        return 1
+    }
+
     return 0
 }

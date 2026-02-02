@@ -4,6 +4,7 @@
 //! and test results to enable smart test skipping.
 
 #include "cli/tester/test_cache.hpp"
+
 #include "common.hpp"
 #include "common/crc32c.hpp"
 
@@ -46,20 +47,29 @@ std::string TestCacheManager::normalize_path(const std::string& path) {
 
 std::string TestCacheManager::status_to_string(CachedTestStatus status) {
     switch (status) {
-        case CachedTestStatus::Pass: return "pass";
-        case CachedTestStatus::Fail: return "fail";
-        case CachedTestStatus::Error: return "error";
-        case CachedTestStatus::Timeout: return "timeout";
-        case CachedTestStatus::Unknown: return "unknown";
+    case CachedTestStatus::Pass:
+        return "pass";
+    case CachedTestStatus::Fail:
+        return "fail";
+    case CachedTestStatus::Error:
+        return "error";
+    case CachedTestStatus::Timeout:
+        return "timeout";
+    case CachedTestStatus::Unknown:
+        return "unknown";
     }
     return "unknown";
 }
 
 CachedTestStatus TestCacheManager::string_to_status(const std::string& str) {
-    if (str == "pass") return CachedTestStatus::Pass;
-    if (str == "fail") return CachedTestStatus::Fail;
-    if (str == "error") return CachedTestStatus::Error;
-    if (str == "timeout") return CachedTestStatus::Timeout;
+    if (str == "pass")
+        return CachedTestStatus::Pass;
+    if (str == "fail")
+        return CachedTestStatus::Fail;
+    if (str == "error")
+        return CachedTestStatus::Error;
+    if (str == "timeout")
+        return CachedTestStatus::Timeout;
     return CachedTestStatus::Unknown;
 }
 
@@ -106,20 +116,33 @@ void skip_ws(const std::string& json, size_t& pos) {
 
 // Parse a JSON string value (assumes pos is at opening quote)
 std::string parse_string(const std::string& json, size_t& pos) {
-    if (pos >= json.size() || json[pos] != '"') return "";
-    ++pos;  // Skip opening quote
+    if (pos >= json.size() || json[pos] != '"')
+        return "";
+    ++pos; // Skip opening quote
 
     std::string result;
     while (pos < json.size() && json[pos] != '"') {
         if (json[pos] == '\\' && pos + 1 < json.size()) {
             ++pos;
             switch (json[pos]) {
-                case 'n': result += '\n'; break;
-                case 't': result += '\t'; break;
-                case 'r': result += '\r'; break;
-                case '\\': result += '\\'; break;
-                case '"': result += '"'; break;
-                default: result += json[pos]; break;
+            case 'n':
+                result += '\n';
+                break;
+            case 't':
+                result += '\t';
+                break;
+            case 'r':
+                result += '\r';
+                break;
+            case '\\':
+                result += '\\';
+                break;
+            case '"':
+                result += '"';
+                break;
+            default:
+                result += json[pos];
+                break;
             }
         } else {
             result += json[pos];
@@ -127,15 +150,18 @@ std::string parse_string(const std::string& json, size_t& pos) {
         ++pos;
     }
 
-    if (pos < json.size()) ++pos;  // Skip closing quote
+    if (pos < json.size())
+        ++pos; // Skip closing quote
     return result;
 }
 
 // Parse a JSON number
 int64_t parse_number(const std::string& json, size_t& pos) {
     size_t start = pos;
-    if (pos < json.size() && json[pos] == '-') ++pos;
-    while (pos < json.size() && std::isdigit(json[pos])) ++pos;
+    if (pos < json.size() && json[pos] == '-')
+        ++pos;
+    while (pos < json.size() && std::isdigit(json[pos]))
+        ++pos;
     return std::stoll(json.substr(start, pos - start));
 }
 
@@ -156,18 +182,30 @@ std::string escape_json(const std::string& str) {
     std::string result;
     for (char c : str) {
         switch (c) {
-            case '"': result += "\\\""; break;
-            case '\\': result += "\\\\"; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += c; break;
+        case '"':
+            result += "\\\"";
+            break;
+        case '\\':
+            result += "\\\\";
+            break;
+        case '\n':
+            result += "\\n";
+            break;
+        case '\r':
+            result += "\\r";
+            break;
+        case '\t':
+            result += "\\t";
+            break;
+        default:
+            result += c;
+            break;
         }
     }
     return result;
 }
 
-}  // namespace
+} // namespace
 
 // ============================================================================
 // Load Cache
@@ -179,7 +217,7 @@ bool TestCacheManager::load(const std::string& cache_file) {
 
     std::ifstream file(cache_file);
     if (!file) {
-        return false;  // File doesn't exist, will be created on save
+        return false; // File doesn't exist, will be created on save
     }
 
     std::ostringstream oss;
@@ -190,20 +228,25 @@ bool TestCacheManager::load(const std::string& cache_file) {
     skip_ws(json, pos);
 
     if (pos >= json.size() || json[pos] != '{') {
-        return false;  // Invalid JSON
+        return false; // Invalid JSON
     }
-    ++pos;  // Skip opening brace
+    ++pos; // Skip opening brace
 
     // Parse top-level object
     while (pos < json.size()) {
         skip_ws(json, pos);
-        if (json[pos] == '}') break;
-        if (json[pos] == ',') { ++pos; skip_ws(json, pos); }
+        if (json[pos] == '}')
+            break;
+        if (json[pos] == ',') {
+            ++pos;
+            skip_ws(json, pos);
+        }
 
         // Parse key
         std::string key = parse_string(json, pos);
         skip_ws(json, pos);
-        if (json[pos] != ':') break;
+        if (json[pos] != ':')
+            break;
         ++pos;
         skip_ws(json, pos);
 
@@ -211,27 +254,36 @@ bool TestCacheManager::load(const std::string& cache_file) {
             int64_t version = parse_number(json, pos);
             if (version != CACHE_VERSION) {
                 tests_.clear();
-                return false;  // Version mismatch, invalidate cache
+                return false; // Version mismatch, invalidate cache
             }
         } else if (key == "tests") {
             // Parse tests object
-            if (json[pos] != '{') continue;
+            if (json[pos] != '{')
+                continue;
             ++pos;
 
             while (pos < json.size()) {
                 skip_ws(json, pos);
-                if (json[pos] == '}') { ++pos; break; }
-                if (json[pos] == ',') { ++pos; skip_ws(json, pos); }
+                if (json[pos] == '}') {
+                    ++pos;
+                    break;
+                }
+                if (json[pos] == ',') {
+                    ++pos;
+                    skip_ws(json, pos);
+                }
 
                 // Parse test file path
                 std::string test_path = parse_string(json, pos);
                 skip_ws(json, pos);
-                if (json[pos] != ':') break;
+                if (json[pos] != ':')
+                    break;
                 ++pos;
                 skip_ws(json, pos);
 
                 // Parse test info object
-                if (json[pos] != '{') continue;
+                if (json[pos] != '{')
+                    continue;
                 ++pos;
 
                 CachedTestInfo info;
@@ -239,12 +291,19 @@ bool TestCacheManager::load(const std::string& cache_file) {
 
                 while (pos < json.size()) {
                     skip_ws(json, pos);
-                    if (json[pos] == '}') { ++pos; break; }
-                    if (json[pos] == ',') { ++pos; skip_ws(json, pos); }
+                    if (json[pos] == '}') {
+                        ++pos;
+                        break;
+                    }
+                    if (json[pos] == ',') {
+                        ++pos;
+                        skip_ws(json, pos);
+                    }
 
                     std::string field = parse_string(json, pos);
                     skip_ws(json, pos);
-                    if (json[pos] != ':') break;
+                    if (json[pos] != ':')
+                        break;
                     ++pos;
                     skip_ws(json, pos);
 
@@ -268,8 +327,14 @@ bool TestCacheManager::load(const std::string& cache_file) {
                             ++pos;
                             while (pos < json.size()) {
                                 skip_ws(json, pos);
-                                if (json[pos] == ']') { ++pos; break; }
-                                if (json[pos] == ',') { ++pos; skip_ws(json, pos); }
+                                if (json[pos] == ']') {
+                                    ++pos;
+                                    break;
+                                }
+                                if (json[pos] == ',') {
+                                    ++pos;
+                                    skip_ws(json, pos);
+                                }
                                 info.test_functions.push_back(parse_string(json, pos));
                             }
                         }
@@ -279,8 +344,14 @@ bool TestCacheManager::load(const std::string& cache_file) {
                             ++pos;
                             while (pos < json.size()) {
                                 skip_ws(json, pos);
-                                if (json[pos] == '}') { ++pos; break; }
-                                if (json[pos] == ',') { ++pos; skip_ws(json, pos); }
+                                if (json[pos] == '}') {
+                                    ++pos;
+                                    break;
+                                }
+                                if (json[pos] == ',') {
+                                    ++pos;
+                                    skip_ws(json, pos);
+                                }
                                 std::string dep_path = parse_string(json, pos);
                                 skip_ws(json, pos);
                                 if (json[pos] == ':') {
@@ -298,16 +369,20 @@ bool TestCacheManager::load(const std::string& cache_file) {
                             int depth = 1;
                             ++pos;
                             while (pos < json.size() && depth > 0) {
-                                if (json[pos] == '{') ++depth;
-                                else if (json[pos] == '}') --depth;
+                                if (json[pos] == '{')
+                                    ++depth;
+                                else if (json[pos] == '}')
+                                    --depth;
                                 ++pos;
                             }
                         } else if (json[pos] == '[') {
                             int depth = 1;
                             ++pos;
                             while (pos < json.size() && depth > 0) {
-                                if (json[pos] == '[') ++depth;
-                                else if (json[pos] == ']') --depth;
+                                if (json[pos] == '[')
+                                    ++depth;
+                                else if (json[pos] == ']')
+                                    --depth;
                                 ++pos;
                             }
                         } else {
@@ -342,7 +417,8 @@ bool TestCacheManager::save(const std::string& cache_file) const {
 
     bool first = true;
     for (const auto& [path, info] : tests_) {
-        if (!first) file << ",\n";
+        if (!first)
+            file << ",\n";
         first = false;
 
         file << "    \"" << escape_json(path) << "\": {\n";
@@ -351,13 +427,15 @@ bool TestCacheManager::save(const std::string& cache_file) const {
         file << "      \"last_updated\": \"" << escape_json(info.last_updated) << "\",\n";
         file << "      \"last_result\": \"" << status_to_string(info.last_result) << "\",\n";
         file << "      \"duration_ms\": " << info.duration_ms << ",\n";
-        file << "      \"coverage_enabled\": " << (info.coverage_enabled ? "true" : "false") << ",\n";
+        file << "      \"coverage_enabled\": " << (info.coverage_enabled ? "true" : "false")
+             << ",\n";
         file << "      \"profile_enabled\": " << (info.profile_enabled ? "true" : "false") << ",\n";
 
         // Test functions array
         file << "      \"test_functions\": [";
         for (size_t i = 0; i < info.test_functions.size(); ++i) {
-            if (i > 0) file << ", ";
+            if (i > 0)
+                file << ", ";
             file << "\"" << escape_json(info.test_functions[i]) << "\"";
         }
         file << "],\n";
@@ -366,7 +444,8 @@ bool TestCacheManager::save(const std::string& cache_file) const {
         file << "      \"dependency_hashes\": {";
         bool first_dep = true;
         for (const auto& [dep_path, dep_hash] : info.dependency_hashes) {
-            if (!first_dep) file << ", ";
+            if (!first_dep)
+                file << ", ";
             first_dep = false;
             file << "\"" << escape_json(dep_path) << "\": \"" << escape_json(dep_hash) << "\"";
         }
@@ -464,7 +543,8 @@ bool TestCacheManager::can_skip(const std::string& test_file) const {
 // Cache Access
 // ============================================================================
 
-std::optional<CachedTestInfo> TestCacheManager::get_cached_info(const std::string& test_file) const {
+std::optional<CachedTestInfo>
+TestCacheManager::get_cached_info(const std::string& test_file) const {
     std::string normalized = normalize_path(test_file);
     auto it = tests_.find(normalized);
     if (it == tests_.end()) {
@@ -473,15 +553,12 @@ std::optional<CachedTestInfo> TestCacheManager::get_cached_info(const std::strin
     return it->second;
 }
 
-void TestCacheManager::update(const std::string& test_file,
-                               const std::string& sha512,
-                               const std::string& suite,
-                               const std::vector<std::string>& test_functions,
-                               CachedTestStatus result,
-                               int64_t duration_ms,
-                               const std::map<std::string, std::string>& dependency_hashes,
-                               bool coverage_enabled,
-                               bool profile_enabled) {
+void TestCacheManager::update(const std::string& test_file, const std::string& sha512,
+                              const std::string& suite,
+                              const std::vector<std::string>& test_functions,
+                              CachedTestStatus result, int64_t duration_ms,
+                              const std::map<std::string, std::string>& dependency_hashes,
+                              bool coverage_enabled, bool profile_enabled) {
     std::string normalized = normalize_path(test_file);
 
     CachedTestInfo info;
@@ -530,4 +607,4 @@ TestCacheManager::CacheStats TestCacheManager::get_stats() const {
     return stats;
 }
 
-}  // namespace tml::cli
+} // namespace tml::cli

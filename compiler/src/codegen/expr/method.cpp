@@ -252,7 +252,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                 pending_generic_impls_.count(type_name) > 0;
         // DEBUG: always print type_name when handling generic struct calls
         if (type_name == "Range" || type_name == "RangeInclusive") {
-            std::cerr << "[DEBUG] type_name=" << type_name << " is_local_generic=" << is_local_generic
+            std::cerr << "[DEBUG] type_name=" << type_name
+                      << " is_local_generic=" << is_local_generic
                       << " is_runtime_collection=" << is_runtime_collection
                       << " has_registry=" << (env_.module_registry() ? "yes" : "no") << "\n";
         }
@@ -271,7 +272,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     resolved_module_path = resolved_module_path.substr(0, last_sep);
                 }
                 TML_DEBUG_LN("[STATIC_METHOD] Resolved " << type_name << " to module "
-                                                          << resolved_module_path);
+                                                         << resolved_module_path);
             }
 
             const auto& all_modules = env_.module_registry()->get_all_modules();
@@ -1808,7 +1809,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                             // Spill struct to stack for method call
                             std::string tmp = fresh_reg();
                             emit_line("  " + tmp + " = alloca " + last_expr_type_);
-                            emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
+                            emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " +
+                                      tmp);
                             this_val = tmp;
                         }
                     }

@@ -3,12 +3,17 @@
 # Generated at: 2025-12-21T02:59:51.669Z
 
 # Toolchain submodules (gcc/llvm in src/)
-src/gcc/
 src/llvm/
-src/llvm-project/
 src/clang/
 src/lld/
 src/compiler-rt/
+
+# vcpkg dependencies (installed locally via: vcpkg install --x-install-root=src)
+src/x64-windows/
+src/x86-windows/
+src/x64-linux/
+src/arm64-osx/
+src/vcpkg/
 
 # Common
 .claude/

@@ -364,6 +364,43 @@ func test_maybe_unwrap() -> I32 {
 - **CMake 3.20+**
 - **LLVM 15+**
 
+### Optional Dependencies (for std::zlib module)
+
+The `std::zlib` compression module requires external libraries.
+
+**Option 1: Install locally in project (recommended)**
+
+The project includes a `vcpkg.json` manifest file. Simply run:
+
+```bash
+cd tml
+vcpkg install --x-install-root=src
+```
+
+This reads `vcpkg.json` and installs zlib, brotli, and zstd to `tml/src/x64-windows/`. The build system auto-detects them.
+
+**Option 2: Install globally via vcpkg**
+
+```bash
+vcpkg install zlib:x64-windows brotli:x64-windows zstd:x64-windows
+```
+
+Global vcpkg paths (Windows):
+- Headers: `C:\vcpkg\installed\x64-windows\include`
+- Libraries: `C:\vcpkg\installed\x64-windows\lib`
+
+**Option 3: System package managers**
+
+```bash
+# Linux (apt)
+sudo apt install zlib1g-dev libbrotli-dev libzstd-dev
+
+# macOS (brew)
+brew install zlib brotli zstd
+```
+
+The build system auto-detects these libraries from multiple paths. If not found, compression support is disabled but the compiler still works.
+
 ### Build
 
 ```bash

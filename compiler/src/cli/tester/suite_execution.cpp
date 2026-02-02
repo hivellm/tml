@@ -32,8 +32,8 @@
 //! The test cache (`.test-cache.json`) tracks file hashes to skip unchanged tests.
 //! When a test file hasn't changed and previously passed, it can be skipped.
 
-#include "tester_internal.hpp"
 #include "cli/tester/test_cache.hpp"
+#include "tester_internal.hpp"
 
 namespace tml::cli::tester {
 
@@ -56,8 +56,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
     int skipped_count = 0;
 
     // Don't update cache when filter is active (partial test runs shouldn't affect cache)
-    bool should_update_cache = !opts.no_cache && !opts.coverage && !opts.coverage_source
-                               && opts.patterns.empty();
+    bool should_update_cache =
+        !opts.no_cache && !opts.coverage && !opts.coverage_source && opts.patterns.empty();
 
     // Load existing cache (always load for skipping, but only update if no filter)
     if (!opts.no_cache && !opts.coverage && !opts.coverage_source) {
@@ -110,7 +110,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         break;
                     }
                     // Only compute hash if we need to verify
-                    std::string file_hash = TestCacheManager::compute_file_hash(test_info.file_path);
+                    std::string file_hash =
+                        TestCacheManager::compute_file_hash(test_info.file_path);
                     file_hash_cache[test_info.file_path] = file_hash;
                     if (cached_info->sha512 != file_hash) {
                         all_cached = false;
@@ -217,10 +218,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             }
 
             if (opts.profile) {
-                collector.profile_stats.add(
-                    "parallel_compile",
-                    std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - phase_start)
-                        .count());
+                collector.profile_stats.add("parallel_compile",
+                                            std::chrono::duration_cast<std::chrono::microseconds>(
+                                                Clock::now() - phase_start)
+                                                .count());
             }
 
             // Process compilation results and load DLLs (sequential for stability)
@@ -237,7 +238,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     error_result.passed = false;
                     error_result.compilation_error = true;
                     error_result.exit_code = EXIT_COMPILATION_ERROR;
-                    error_result.error_message = "COMPILATION FAILED\n" + compile_result.error_message;
+                    error_result.error_message =
+                        "COMPILATION FAILED\n" + compile_result.error_message;
 
                     collector.add(std::move(error_result));
 
@@ -257,12 +259,12 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 phase_start = Clock::now();
                 DynamicLibrary lib;
                 bool load_ok = lib.load(suite.dll_path);
-            if (opts.profile) {
-                collector.profile_stats.add("suite_load",
-                                            std::chrono::duration_cast<std::chrono::microseconds>(
-                                                Clock::now() - phase_start)
-                                                .count());
-            }
+                if (opts.profile) {
+                    collector.profile_stats.add(
+                        "suite_load", std::chrono::duration_cast<std::chrono::microseconds>(
+                                          Clock::now() - phase_start)
+                                          .count());
+                }
                 if (!load_ok) {
                     TestResult error_result;
                     error_result.file_path = suite.tests.empty() ? "" : suite.tests[0].file_path;
@@ -274,8 +276,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     collector.add(std::move(error_result));
 
                     // Log the error immediately
-                    std::cerr << c.red() << c.bold() << "DLL LOAD FAILED: " << c.reset() << suite.name
-                              << "\n";
+                    std::cerr << c.red() << c.bold() << "DLL LOAD FAILED: " << c.reset()
+                              << suite.name << "\n";
                     std::cerr << c.dim() << lib.get_error() << c.reset() << "\n";
 
                     continue; // Continue with other suites instead of stopping
@@ -397,16 +399,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     // Extract test function names from the file
                     // (For now, we just record the count)
                     test_cache.update(
-                        test_info.file_path,
-                        file_hash,
-                        suite.name,
-                        test_functions,
+                        test_info.file_path, file_hash, suite.name, test_functions,
                         result.passed ? CachedTestStatus::Pass : CachedTestStatus::Fail,
-                        result.duration_ms,
-                        {},  // dependency_hashes (TODO: track imports)
-                        opts.coverage,
-                        opts.profile
-                    );
+                        result.duration_ms, {}, // dependency_hashes (TODO: track imports)
+                        opts.coverage, opts.profile);
                 }
 
                 collector.add(std::move(result));
@@ -538,7 +534,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             if (test_cache.save(cache_file.string())) {
                 if (opts.verbose) {
                     auto stats = test_cache.get_stats();
-                    std::cerr << "[DEBUG] Saved test cache with " << stats.total_entries << " entries\n";
+                    std::cerr << "[DEBUG] Saved test cache with " << stats.total_entries
+                              << " entries\n";
                 }
             }
         } else if (opts.verbose && !opts.patterns.empty()) {

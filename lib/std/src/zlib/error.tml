@@ -140,5 +140,5 @@ impl ZlibError {
     }
 }
 
-/// Result type alias for zlib operations.
-pub type ZlibResult[T] = Outcome[T, ZlibError]
+// Note: Use Outcome[T, ZlibError] directly instead of type alias
+// to avoid codegen issues with generic type aliases

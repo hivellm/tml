@@ -23,9 +23,60 @@
 //! ```
 
 use std::collections::{Buffer}
-use std::zlib::error::{ZlibError, ZlibErrorKind, ZlibResult}
+use std::zlib::error::{ZlibError, ZlibErrorKind}
 use std::zlib::options::{ZlibOptions}
 use std::zlib::constants::*
+
+// ============================================================================
+// FFI Function Declarations
+// ============================================================================
+
+// Deflate stream FFI
+@extern("zlib_deflate_stream_create")
+func ffi_zlib_deflate_stream_create(level: I32, window_bits: I32, mem_level: I32, strategy: I32) -> *Unit
+
+@extern("zlib_deflate_stream_process")
+func ffi_zlib_deflate_stream_process(handle: *Unit, data: Str, flush: I32) -> *Unit
+
+@extern("zlib_deflate_stream_process_buffer")
+func ffi_zlib_deflate_stream_process_buffer(handle: *Unit, data_handle: *Unit, flush: I32) -> *Unit
+
+@extern("zlib_deflate_stream_params")
+func ffi_zlib_deflate_stream_params(handle: *Unit, level: I32, strategy: I32) -> *Unit
+
+@extern("zlib_deflate_stream_reset")
+func ffi_zlib_deflate_stream_reset(handle: *Unit) -> Bool
+
+@extern("zlib_deflate_stream_bytes_written")
+func ffi_zlib_deflate_stream_bytes_written(handle: *Unit) -> I64
+
+@extern("zlib_deflate_stream_destroy")
+func ffi_zlib_deflate_stream_destroy(handle: *Unit)
+
+// Inflate stream FFI
+@extern("zlib_inflate_stream_create")
+func ffi_zlib_inflate_stream_create(window_bits: I32) -> *Unit
+
+@extern("zlib_inflate_stream_process")
+func ffi_zlib_inflate_stream_process(handle: *Unit, data_handle: *Unit) -> *Unit
+
+@extern("zlib_inflate_stream_flush")
+func ffi_zlib_inflate_stream_flush(handle: *Unit, flush: I32) -> *Unit
+
+@extern("zlib_inflate_stream_reset")
+func ffi_zlib_inflate_stream_reset(handle: *Unit) -> Bool
+
+@extern("zlib_inflate_stream_is_finished")
+func ffi_zlib_inflate_stream_is_finished(handle: *Unit) -> Bool
+
+@extern("zlib_inflate_stream_bytes_written")
+func ffi_zlib_inflate_stream_bytes_written(handle: *Unit) -> I64
+
+@extern("zlib_inflate_stream_error_code")
+func ffi_zlib_inflate_stream_error_code(handle: *Unit) -> I32
+
+@extern("zlib_inflate_stream_destroy")
+func ffi_zlib_inflate_stream_destroy(handle: *Unit)
 
 // ============================================================================
 // Deflate Stream (zlib format)
@@ -39,20 +90,18 @@ pub type Deflate {
 
 impl Deflate {
     /// Creates a new Deflate compressor with default options.
-    pub func new() -> ZlibResult[Deflate] {
+    pub func new() -> Outcome[Deflate, ZlibError] {
         return Deflate::with_options(ZlibOptions::default())
     }
 
     /// Creates a new Deflate compressor with custom options.
-    pub func with_options(options: ZlibOptions) -> ZlibResult[Deflate] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_create(
-                options.level,
-                options.window_bits,
-                options.mem_level,
-                options.strategy
-            )
-        }
+    pub func with_options(options: ZlibOptions) -> Outcome[Deflate, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_create(
+            options.level,
+            options.window_bits,
+            options.mem_level,
+            options.strategy
+        )
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -68,10 +117,8 @@ impl Deflate {
     /// # Returns
     ///
     /// Compressed chunk (may be empty if more input is needed).
-    pub func write(this, data: Str) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process(this.handle, data, Z_NO_FLUSH)
-        }
+    pub func write(this, data: Str) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process(this.handle, data, Z_NO_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -79,10 +126,8 @@ impl Deflate {
     }
 
     /// Writes buffer data to compress.
-    pub func write_buffer(this, data: ref Buffer) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process_buffer(this.handle, data.handle, Z_NO_FLUSH)
-        }
+    pub func write_buffer(this, data: ref Buffer) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process_buffer(this.handle, data.handle, Z_NO_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -90,10 +135,8 @@ impl Deflate {
     }
 
     /// Flushes pending compressed data with specified flush mode.
-    pub func flush_with_mode(this, mode: I32) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process(this.handle, "", mode)
-        }
+    pub func flush_with_mode(this, mode: I32) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process(this.handle, "", mode)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -101,29 +144,27 @@ impl Deflate {
     }
 
     /// Flushes pending compressed data (sync flush).
-    pub func flush(this) -> ZlibResult[Buffer] {
+    pub func flush(this) -> Outcome[Buffer, ZlibError] {
         return this.flush_with_mode(Z_SYNC_FLUSH)
     }
 
     /// Flushes all pending data (full flush).
-    pub func full_flush(this) -> ZlibResult[Buffer] {
+    pub func full_flush(this) -> Outcome[Buffer, ZlibError] {
         return this.flush_with_mode(Z_FULL_FLUSH)
     }
 
     /// Finishes compression and returns remaining data.
-    pub func finish(this) -> ZlibResult[Buffer] {
+    pub func finish(this) -> Outcome[Buffer, ZlibError] {
         return this.flush_with_mode(Z_FINISH)
     }
 
     /// Updates compression parameters during streaming.
     ///
     /// Can only be called between chunks (after flush).
-    pub func params(mut this, level: I32, strategy: I32) -> ZlibResult[Buffer] {
+    pub func params(mut this, level: I32, strategy: I32) -> Outcome[Buffer, ZlibError] {
         this.options.level = level
         this.options.strategy = strategy
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_params(this.handle, level, strategy)
-        }
+        let handle: *Unit = ffi_zlib_deflate_stream_params(this.handle, level, strategy)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::StreamError))
         }
@@ -131,8 +172,8 @@ impl Deflate {
     }
 
     /// Resets the compressor for a new stream.
-    pub func reset(this) -> ZlibResult[Unit] {
-        let success: Bool = lowlevel { zlib_deflate_stream_reset(this.handle) }
+    pub func reset(this) -> Outcome[Unit, ZlibError] {
+        let success: Bool = ffi_zlib_deflate_stream_reset(this.handle)
         if not success {
             return Err(ZlibError::new(ZlibErrorKind::StreamError))
         }
@@ -141,14 +182,14 @@ impl Deflate {
 
     /// Returns the number of bytes written to the engine.
     pub func bytes_written(this) -> I64 {
-        let bytes: I64 = lowlevel { zlib_deflate_stream_bytes_written(this.handle) }
+        let bytes: I64 = ffi_zlib_deflate_stream_bytes_written(this.handle)
         return bytes
     }
 
     /// Frees the compressor resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { zlib_deflate_stream_destroy(this.handle) }
+            ffi_zlib_deflate_stream_destroy(this.handle)
             this.handle = null
         }
     }
@@ -166,24 +207,22 @@ pub type DeflateRaw {
 
 impl DeflateRaw {
     /// Creates a new DeflateRaw compressor with default options.
-    pub func new() -> ZlibResult[DeflateRaw] {
+    pub func new() -> Outcome[DeflateRaw, ZlibError] {
         return DeflateRaw::with_options(ZlibOptions::deflate_raw())
     }
 
     /// Creates a new DeflateRaw compressor with custom options.
-    pub func with_options(options: ZlibOptions) -> ZlibResult[DeflateRaw] {
+    pub func with_options(options: ZlibOptions) -> Outcome[DeflateRaw, ZlibError] {
         var opts: ZlibOptions = options
         if opts.window_bits > 0 {
             opts.window_bits = -opts.window_bits
         }
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_create(
-                opts.level,
-                opts.window_bits,
-                opts.mem_level,
-                opts.strategy
-            )
-        }
+        let handle: *Unit = ffi_zlib_deflate_stream_create(
+            opts.level,
+            opts.window_bits,
+            opts.mem_level,
+            opts.strategy
+        )
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -191,10 +230,8 @@ impl DeflateRaw {
     }
 
     /// Writes data to compress.
-    pub func write(this, data: Str) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process(this.handle, data, Z_NO_FLUSH)
-        }
+    pub func write(this, data: Str) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process(this.handle, data, Z_NO_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -202,10 +239,8 @@ impl DeflateRaw {
     }
 
     /// Writes buffer data to compress.
-    pub func write_buffer(this, data: ref Buffer) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process_buffer(this.handle, data.handle, Z_NO_FLUSH)
-        }
+    pub func write_buffer(this, data: ref Buffer) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process_buffer(this.handle, data.handle, Z_NO_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -213,10 +248,8 @@ impl DeflateRaw {
     }
 
     /// Flushes pending compressed data.
-    pub func flush(this) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process(this.handle, "", Z_SYNC_FLUSH)
-        }
+    pub func flush(this) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process(this.handle, "", Z_SYNC_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -224,10 +257,8 @@ impl DeflateRaw {
     }
 
     /// Finishes compression and returns remaining data.
-    pub func finish(this) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process(this.handle, "", Z_FINISH)
-        }
+    pub func finish(this) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process(this.handle, "", Z_FINISH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -235,8 +266,8 @@ impl DeflateRaw {
     }
 
     /// Resets the compressor for a new stream.
-    pub func reset(this) -> ZlibResult[Unit] {
-        let success: Bool = lowlevel { zlib_deflate_stream_reset(this.handle) }
+    pub func reset(this) -> Outcome[Unit, ZlibError] {
+        let success: Bool = ffi_zlib_deflate_stream_reset(this.handle)
         if not success {
             return Err(ZlibError::new(ZlibErrorKind::StreamError))
         }
@@ -246,7 +277,7 @@ impl DeflateRaw {
     /// Frees the compressor resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { zlib_deflate_stream_destroy(this.handle) }
+            ffi_zlib_deflate_stream_destroy(this.handle)
             this.handle = null
         }
     }
@@ -264,24 +295,22 @@ pub type Gzip {
 
 impl Gzip {
     /// Creates a new Gzip compressor with default options.
-    pub func new() -> ZlibResult[Gzip] {
+    pub func new() -> Outcome[Gzip, ZlibError] {
         return Gzip::with_options(ZlibOptions::gzip())
     }
 
     /// Creates a new Gzip compressor with custom options.
-    pub func with_options(options: ZlibOptions) -> ZlibResult[Gzip] {
+    pub func with_options(options: ZlibOptions) -> Outcome[Gzip, ZlibError] {
         var opts: ZlibOptions = options
         if opts.window_bits > 0 and opts.window_bits <= Z_MAX_WINDOWBITS {
             opts.window_bits = opts.window_bits + GZIP_WINDOW_OFFSET
         }
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_create(
-                opts.level,
-                opts.window_bits,
-                opts.mem_level,
-                opts.strategy
-            )
-        }
+        let handle: *Unit = ffi_zlib_deflate_stream_create(
+            opts.level,
+            opts.window_bits,
+            opts.mem_level,
+            opts.strategy
+        )
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -289,10 +318,8 @@ impl Gzip {
     }
 
     /// Writes data to compress.
-    pub func write(this, data: Str) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process(this.handle, data, Z_NO_FLUSH)
-        }
+    pub func write(this, data: Str) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process(this.handle, data, Z_NO_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -300,10 +327,8 @@ impl Gzip {
     }
 
     /// Writes buffer data to compress.
-    pub func write_buffer(this, data: ref Buffer) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process_buffer(this.handle, data.handle, Z_NO_FLUSH)
-        }
+    pub func write_buffer(this, data: ref Buffer) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process_buffer(this.handle, data.handle, Z_NO_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -311,10 +336,8 @@ impl Gzip {
     }
 
     /// Flushes pending compressed data.
-    pub func flush(this) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process(this.handle, "", Z_SYNC_FLUSH)
-        }
+    pub func flush(this) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process(this.handle, "", Z_SYNC_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -322,10 +345,8 @@ impl Gzip {
     }
 
     /// Finishes compression and returns remaining data.
-    pub func finish(this) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_deflate_stream_process(this.handle, "", Z_FINISH)
-        }
+    pub func finish(this) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_deflate_stream_process(this.handle, "", Z_FINISH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -333,8 +354,8 @@ impl Gzip {
     }
 
     /// Resets the compressor for a new stream.
-    pub func reset(this) -> ZlibResult[Unit] {
-        let success: Bool = lowlevel { zlib_deflate_stream_reset(this.handle) }
+    pub func reset(this) -> Outcome[Unit, ZlibError] {
+        let success: Bool = ffi_zlib_deflate_stream_reset(this.handle)
         if not success {
             return Err(ZlibError::new(ZlibErrorKind::StreamError))
         }
@@ -344,7 +365,7 @@ impl Gzip {
     /// Frees the compressor resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { zlib_deflate_stream_destroy(this.handle) }
+            ffi_zlib_deflate_stream_destroy(this.handle)
             this.handle = null
         }
     }
@@ -362,15 +383,13 @@ pub type Inflate {
 
 impl Inflate {
     /// Creates a new Inflate decompressor with default options.
-    pub func new() -> ZlibResult[Inflate] {
+    pub func new() -> Outcome[Inflate, ZlibError] {
         return Inflate::with_options(ZlibOptions::default())
     }
 
     /// Creates a new Inflate decompressor with custom options.
-    pub func with_options(options: ZlibOptions) -> ZlibResult[Inflate] {
-        let handle: *Unit = lowlevel {
-            zlib_inflate_stream_create(options.window_bits)
-        }
+    pub func with_options(options: ZlibOptions) -> Outcome[Inflate, ZlibError] {
+        let handle: *Unit = ffi_zlib_inflate_stream_create(options.window_bits)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -378,22 +397,18 @@ impl Inflate {
     }
 
     /// Writes compressed data to decompress.
-    pub func write(this, data: ref Buffer) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_inflate_stream_process(this.handle, data.handle)
-        }
+    pub func write(this, data: ref Buffer) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_inflate_stream_process(this.handle, data.handle)
         if handle == null {
-            let code: I32 = lowlevel { zlib_inflate_stream_error_code(this.handle) }
+            let code: I32 = ffi_zlib_inflate_stream_error_code(this.handle)
             return Err(ZlibError::from_code(code))
         }
         return Ok(Buffer { handle: handle })
     }
 
     /// Flushes pending decompressed data.
-    pub func flush(this) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_inflate_stream_flush(this.handle, Z_SYNC_FLUSH)
-        }
+    pub func flush(this) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_inflate_stream_flush(this.handle, Z_SYNC_FLUSH)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -401,8 +416,8 @@ impl Inflate {
     }
 
     /// Resets the decompressor for a new stream.
-    pub func reset(this) -> ZlibResult[Unit] {
-        let success: Bool = lowlevel { zlib_inflate_stream_reset(this.handle) }
+    pub func reset(this) -> Outcome[Unit, ZlibError] {
+        let success: Bool = ffi_zlib_inflate_stream_reset(this.handle)
         if not success {
             return Err(ZlibError::new(ZlibErrorKind::StreamError))
         }
@@ -411,20 +426,20 @@ impl Inflate {
 
     /// Returns true if decompression is finished.
     pub func is_finished(this) -> Bool {
-        let finished: Bool = lowlevel { zlib_inflate_stream_is_finished(this.handle) }
+        let finished: Bool = ffi_zlib_inflate_stream_is_finished(this.handle)
         return finished
     }
 
     /// Returns the number of bytes written to output.
     pub func bytes_written(this) -> I64 {
-        let bytes: I64 = lowlevel { zlib_inflate_stream_bytes_written(this.handle) }
+        let bytes: I64 = ffi_zlib_inflate_stream_bytes_written(this.handle)
         return bytes
     }
 
     /// Frees the decompressor resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { zlib_inflate_stream_destroy(this.handle) }
+            ffi_zlib_inflate_stream_destroy(this.handle)
             this.handle = null
         }
     }
@@ -442,19 +457,17 @@ pub type InflateRaw {
 
 impl InflateRaw {
     /// Creates a new InflateRaw decompressor with default options.
-    pub func new() -> ZlibResult[InflateRaw] {
+    pub func new() -> Outcome[InflateRaw, ZlibError] {
         return InflateRaw::with_options(ZlibOptions::deflate_raw())
     }
 
     /// Creates a new InflateRaw decompressor with custom options.
-    pub func with_options(options: ZlibOptions) -> ZlibResult[InflateRaw] {
+    pub func with_options(options: ZlibOptions) -> Outcome[InflateRaw, ZlibError] {
         var opts: ZlibOptions = options
         if opts.window_bits > 0 {
             opts.window_bits = -opts.window_bits
         }
-        let handle: *Unit = lowlevel {
-            zlib_inflate_stream_create(opts.window_bits)
-        }
+        let handle: *Unit = ffi_zlib_inflate_stream_create(opts.window_bits)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -462,20 +475,18 @@ impl InflateRaw {
     }
 
     /// Writes compressed data to decompress.
-    pub func write(this, data: ref Buffer) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_inflate_stream_process(this.handle, data.handle)
-        }
+    pub func write(this, data: ref Buffer) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_inflate_stream_process(this.handle, data.handle)
         if handle == null {
-            let code: I32 = lowlevel { zlib_inflate_stream_error_code(this.handle) }
+            let code: I32 = ffi_zlib_inflate_stream_error_code(this.handle)
             return Err(ZlibError::from_code(code))
         }
         return Ok(Buffer { handle: handle })
     }
 
     /// Resets the decompressor for a new stream.
-    pub func reset(this) -> ZlibResult[Unit] {
-        let success: Bool = lowlevel { zlib_inflate_stream_reset(this.handle) }
+    pub func reset(this) -> Outcome[Unit, ZlibError] {
+        let success: Bool = ffi_zlib_inflate_stream_reset(this.handle)
         if not success {
             return Err(ZlibError::new(ZlibErrorKind::StreamError))
         }
@@ -485,7 +496,7 @@ impl InflateRaw {
     /// Frees the decompressor resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { zlib_inflate_stream_destroy(this.handle) }
+            ffi_zlib_inflate_stream_destroy(this.handle)
             this.handle = null
         }
     }
@@ -503,19 +514,17 @@ pub type Gunzip {
 
 impl Gunzip {
     /// Creates a new Gunzip decompressor with default options.
-    pub func new() -> ZlibResult[Gunzip] {
+    pub func new() -> Outcome[Gunzip, ZlibError] {
         return Gunzip::with_options(ZlibOptions::gzip())
     }
 
     /// Creates a new Gunzip decompressor with custom options.
-    pub func with_options(options: ZlibOptions) -> ZlibResult[Gunzip] {
+    pub func with_options(options: ZlibOptions) -> Outcome[Gunzip, ZlibError] {
         var opts: ZlibOptions = options
         if opts.window_bits > 0 and opts.window_bits <= Z_MAX_WINDOWBITS {
             opts.window_bits = opts.window_bits + GZIP_WINDOW_OFFSET
         }
-        let handle: *Unit = lowlevel {
-            zlib_inflate_stream_create(opts.window_bits)
-        }
+        let handle: *Unit = ffi_zlib_inflate_stream_create(opts.window_bits)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -523,20 +532,18 @@ impl Gunzip {
     }
 
     /// Writes compressed data to decompress.
-    pub func write(this, data: ref Buffer) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_inflate_stream_process(this.handle, data.handle)
-        }
+    pub func write(this, data: ref Buffer) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_inflate_stream_process(this.handle, data.handle)
         if handle == null {
-            let code: I32 = lowlevel { zlib_inflate_stream_error_code(this.handle) }
+            let code: I32 = ffi_zlib_inflate_stream_error_code(this.handle)
             return Err(ZlibError::from_code(code))
         }
         return Ok(Buffer { handle: handle })
     }
 
     /// Resets the decompressor for a new stream.
-    pub func reset(this) -> ZlibResult[Unit] {
-        let success: Bool = lowlevel { zlib_inflate_stream_reset(this.handle) }
+    pub func reset(this) -> Outcome[Unit, ZlibError] {
+        let success: Bool = ffi_zlib_inflate_stream_reset(this.handle)
         if not success {
             return Err(ZlibError::new(ZlibErrorKind::StreamError))
         }
@@ -546,7 +553,7 @@ impl Gunzip {
     /// Frees the decompressor resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { zlib_inflate_stream_destroy(this.handle) }
+            ffi_zlib_inflate_stream_destroy(this.handle)
             this.handle = null
         }
     }
@@ -564,19 +571,17 @@ pub type Unzip {
 
 impl Unzip {
     /// Creates a new Unzip decompressor with default options.
-    pub func new() -> ZlibResult[Unzip] {
+    pub func new() -> Outcome[Unzip, ZlibError] {
         return Unzip::with_options(ZlibOptions::auto_detect())
     }
 
     /// Creates a new Unzip decompressor with custom options.
-    pub func with_options(options: ZlibOptions) -> ZlibResult[Unzip] {
+    pub func with_options(options: ZlibOptions) -> Outcome[Unzip, ZlibError] {
         var opts: ZlibOptions = options
         if opts.window_bits > 0 and opts.window_bits < 32 {
             opts.window_bits = opts.window_bits + AUTO_DETECT_WINDOW_OFFSET
         }
-        let handle: *Unit = lowlevel {
-            zlib_inflate_stream_create(opts.window_bits)
-        }
+        let handle: *Unit = ffi_zlib_inflate_stream_create(opts.window_bits)
         if handle == null {
             return Err(ZlibError::new(ZlibErrorKind::MemoryError))
         }
@@ -584,20 +589,18 @@ impl Unzip {
     }
 
     /// Writes compressed data to decompress.
-    pub func write(this, data: ref Buffer) -> ZlibResult[Buffer] {
-        let handle: *Unit = lowlevel {
-            zlib_inflate_stream_process(this.handle, data.handle)
-        }
+    pub func write(this, data: ref Buffer) -> Outcome[Buffer, ZlibError] {
+        let handle: *Unit = ffi_zlib_inflate_stream_process(this.handle, data.handle)
         if handle == null {
-            let code: I32 = lowlevel { zlib_inflate_stream_error_code(this.handle) }
+            let code: I32 = ffi_zlib_inflate_stream_error_code(this.handle)
             return Err(ZlibError::from_code(code))
         }
         return Ok(Buffer { handle: handle })
     }
 
     /// Resets the decompressor for a new stream.
-    pub func reset(this) -> ZlibResult[Unit] {
-        let success: Bool = lowlevel { zlib_inflate_stream_reset(this.handle) }
+    pub func reset(this) -> Outcome[Unit, ZlibError] {
+        let success: Bool = ffi_zlib_inflate_stream_reset(this.handle)
         if not success {
             return Err(ZlibError::new(ZlibErrorKind::StreamError))
         }
@@ -607,7 +610,7 @@ impl Unzip {
     /// Frees the decompressor resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { zlib_inflate_stream_destroy(this.handle) }
+            ffi_zlib_inflate_stream_destroy(this.handle)
             this.handle = null
         }
     }
@@ -618,71 +621,71 @@ impl Unzip {
 // ============================================================================
 
 /// Creates a new Deflate compressor (factory function).
-pub func create_deflate() -> ZlibResult[Deflate] {
+pub func create_deflate() -> Outcome[Deflate, ZlibError] {
     return Deflate::new()
 }
 
 /// Creates a new Deflate compressor with options (factory function).
-pub func create_deflate_with_options(options: ZlibOptions) -> ZlibResult[Deflate] {
+pub func create_deflate_with_options(options: ZlibOptions) -> Outcome[Deflate, ZlibError] {
     return Deflate::with_options(options)
 }
 
 /// Creates a new DeflateRaw compressor (factory function).
-pub func create_deflate_raw() -> ZlibResult[DeflateRaw] {
+pub func create_deflate_raw() -> Outcome[DeflateRaw, ZlibError] {
     return DeflateRaw::new()
 }
 
 /// Creates a new DeflateRaw compressor with options (factory function).
-pub func create_deflate_raw_with_options(options: ZlibOptions) -> ZlibResult[DeflateRaw] {
+pub func create_deflate_raw_with_options(options: ZlibOptions) -> Outcome[DeflateRaw, ZlibError] {
     return DeflateRaw::with_options(options)
 }
 
 /// Creates a new Gzip compressor (factory function).
-pub func create_gzip() -> ZlibResult[Gzip] {
+pub func create_gzip() -> Outcome[Gzip, ZlibError] {
     return Gzip::new()
 }
 
 /// Creates a new Gzip compressor with options (factory function).
-pub func create_gzip_with_options(options: ZlibOptions) -> ZlibResult[Gzip] {
+pub func create_gzip_with_options(options: ZlibOptions) -> Outcome[Gzip, ZlibError] {
     return Gzip::with_options(options)
 }
 
 /// Creates a new Inflate decompressor (factory function).
-pub func create_inflate() -> ZlibResult[Inflate] {
+pub func create_inflate() -> Outcome[Inflate, ZlibError] {
     return Inflate::new()
 }
 
 /// Creates a new Inflate decompressor with options (factory function).
-pub func create_inflate_with_options(options: ZlibOptions) -> ZlibResult[Inflate] {
+pub func create_inflate_with_options(options: ZlibOptions) -> Outcome[Inflate, ZlibError] {
     return Inflate::with_options(options)
 }
 
 /// Creates a new InflateRaw decompressor (factory function).
-pub func create_inflate_raw() -> ZlibResult[InflateRaw] {
+pub func create_inflate_raw() -> Outcome[InflateRaw, ZlibError] {
     return InflateRaw::new()
 }
 
 /// Creates a new InflateRaw decompressor with options (factory function).
-pub func create_inflate_raw_with_options(options: ZlibOptions) -> ZlibResult[InflateRaw] {
+pub func create_inflate_raw_with_options(options: ZlibOptions) -> Outcome[InflateRaw, ZlibError] {
     return InflateRaw::with_options(options)
 }
 
 /// Creates a new Gunzip decompressor (factory function).
-pub func create_gunzip() -> ZlibResult[Gunzip] {
+pub func create_gunzip() -> Outcome[Gunzip, ZlibError] {
     return Gunzip::new()
 }
 
 /// Creates a new Gunzip decompressor with options (factory function).
-pub func create_gunzip_with_options(options: ZlibOptions) -> ZlibResult[Gunzip] {
+pub func create_gunzip_with_options(options: ZlibOptions) -> Outcome[Gunzip, ZlibError] {
     return Gunzip::with_options(options)
 }
 
 /// Creates a new Unzip decompressor (factory function).
-pub func create_unzip() -> ZlibResult[Unzip] {
+pub func create_unzip() -> Outcome[Unzip, ZlibError] {
     return Unzip::new()
 }
 
 /// Creates a new Unzip decompressor with options (factory function).
-pub func create_unzip_with_options(options: ZlibOptions) -> ZlibResult[Unzip] {
+pub func create_unzip_with_options(options: ZlibOptions) -> Outcome[Unzip, ZlibError] {
     return Unzip::with_options(options)
 }
