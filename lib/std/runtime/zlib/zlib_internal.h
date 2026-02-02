@@ -305,8 +305,7 @@ void* gunzip_buffer(void* handle, int32_t window_bits);
 void* read_gzip_header(void* handle);
 void gzip_header_destroy_wrapper(void* handle);
 
-// Buffer destroy export (used by TML)
-void buffer_destroy(void* handle);
+// Note: buffer_destroy is declared in collections.c (main runtime)
 
 #ifdef __cplusplus
 }

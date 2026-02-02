@@ -173,8 +173,10 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
 #endif
     }
 
-    // Always print command for debugging
-    std::cerr << "[DEBUG LLD] Command: " << cmd << "\n";
+    // Print command only in verbose mode
+    if (options.verbose) {
+        std::cerr << "[DEBUG LLD] Command: " << cmd << "\n";
+    }
 
     // Execute the command
     int ret = execute_command(cmd, options.verbose);
@@ -277,8 +279,16 @@ auto LLDLinker::build_windows_command(const std::vector<fs::path>& object_files,
     for (const auto& obj : object_files) {
         // For static libraries (.lib), use /WHOLEARCHIVE to include all objects
         // This is needed for FFI functions that may not be referenced until runtime
+        // EXCEPTION: Don't use /WHOLEARCHIVE for external libraries (vcpkg, etc.)
+        // which are import libraries for DLLs, not static libraries
         std::string ext = obj.extension().string();
-        if (ext == ".lib") {
+        std::string path_str = obj.string();
+        bool is_external_lib = (path_str.find("x64-windows") != std::string::npos || // vcpkg
+                                path_str.find("vcpkg") != std::string::npos ||
+                                path_str.find("zstd.lib") != std::string::npos ||
+                                path_str.find("brotli") != std::string::npos ||
+                                path_str.find("zlib.lib") != std::string::npos);
+        if (ext == ".lib" && !is_external_lib) {
             cmd << " /WHOLEARCHIVE:" << quote_path(obj);
         } else {
             cmd << " " << quote_path(obj);

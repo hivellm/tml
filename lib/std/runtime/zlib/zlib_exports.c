@@ -565,14 +565,5 @@ void brotli_decoder_destroy(void* state) {
     brotli_decoder_destroy_internal(state);
 }
 
-// ============================================================================
-// Buffer destroy export (used by TML lowlevel calls)
-// ============================================================================
-
-void buffer_destroy(void* handle) {
-    if (handle) {
-        TmlBuffer* buf = (TmlBuffer*)handle;
-        free(buf->data);
-        free(buf);
-    }
-}
+// Note: buffer_destroy is provided by collections.c in the main runtime
+// Do not define here to avoid duplicate symbol errors

@@ -799,6 +799,116 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
         }
     }
 
+    // Link std::zlib runtime if imported (pre-built C library with zlib, brotli, zstd)
+    // Check for std::zlib or any submodule
+    auto uses_zlib_module = [&registry]() -> bool {
+        if (registry->has_module("std::zlib"))
+            return true;
+        for (const auto& [path, _] : registry->get_all_modules()) {
+            if (path.find("std::zlib::") == 0 || path == "std::zlib") {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (uses_zlib_module()) {
+        // Find the zlib runtime library (built alongside tml.exe)
+        auto find_zlib_runtime = []() -> std::optional<fs::path> {
+#ifdef _WIN32
+            std::string lib_name = "tml_zlib_runtime.lib";
+#else
+            std::string lib_name = "libtml_zlib_runtime.a";
+#endif
+            // Search locations: prioritize release when optimizing, debug otherwise
+            std::vector<std::string> search_paths;
+            bool is_release = CompilerOptions::optimization_level >= 1;
+            if (is_release) {
+                search_paths = {
+                    ".",
+                    "build/release",
+                    "build/debug",
+                    "../build/release",
+                    "../build/debug",
+                    "F:/Node/hivellm/tml/build/release",
+                    "F:/Node/hivellm/tml/build/debug",
+                };
+            } else {
+                search_paths = {
+                    ".",
+                    "build/debug",
+                    "build/release",
+                    "../build/debug",
+                    "../build/release",
+                    "F:/Node/hivellm/tml/build/debug",
+                    "F:/Node/hivellm/tml/build/release",
+                };
+            }
+
+            for (const auto& search_path : search_paths) {
+                fs::path lib_path = fs::path(search_path) / lib_name;
+                if (fs::exists(lib_path)) {
+                    return fs::absolute(lib_path);
+                }
+            }
+            return std::nullopt;
+        };
+
+        if (auto zlib_lib = find_zlib_runtime()) {
+            objects.push_back(*zlib_lib);
+            if (verbose) {
+                std::cout << "Including zlib runtime library: " << zlib_lib->string() << "\n";
+            }
+
+            // Also need to link the underlying compression libraries
+            // (zstd, brotli, zlib) which are dependencies of tml_zlib_runtime
+            auto find_vcpkg_lib = [](const std::string& lib_name) -> std::optional<fs::path> {
+                std::vector<std::string> search_paths = {
+                    "src/x64-windows/lib",
+                    "src/x64-windows/debug/lib",
+                    "../src/x64-windows/lib",
+                    "../src/x64-windows/debug/lib",
+                };
+                for (const auto& path : search_paths) {
+                    fs::path lib_path = fs::path(path) / (lib_name + ".lib");
+                    if (fs::exists(lib_path)) {
+                        return fs::absolute(lib_path);
+                    }
+                }
+                return std::nullopt;
+            };
+
+            // Add zstd library
+            if (auto zstd_lib = find_vcpkg_lib("zstd")) {
+                objects.push_back(*zstd_lib);
+                if (verbose) {
+                    std::cout << "Including zstd library: " << zstd_lib->string() << "\n";
+                }
+            }
+
+            // Add brotli libraries
+            for (const auto& brotli_lib_name :
+                 {"brotlicommon", "brotlidec", "brotlienc", "brotlicommon-static",
+                  "brotlidec-static", "brotlienc-static"}) {
+                if (auto brotli_lib = find_vcpkg_lib(brotli_lib_name)) {
+                    objects.push_back(*brotli_lib);
+                    if (verbose) {
+                        std::cout << "Including brotli library: " << brotli_lib->string() << "\n";
+                    }
+                }
+            }
+
+            // Add zlib library
+            if (auto zlib_base_lib = find_vcpkg_lib("zlib")) {
+                objects.push_back(*zlib_base_lib);
+                if (verbose) {
+                    std::cout << "Including zlib base library: " << zlib_base_lib->string() << "\n";
+                }
+            }
+        } else if (verbose) {
+            std::cout << "Warning: std::zlib imported but tml_zlib_runtime library not found\n";
+        }
+    }
+
     // Link std::profiler runtime if imported (pre-built C++ library)
     if (registry->has_module("std::profiler")) {
         // Find the profiler runtime library (built alongside tml.exe)

@@ -327,12 +327,30 @@ bool DynamicLibrary::load(const std::string& path) {
     fs::path abs_path = fs::absolute(path);
     std::wstring wpath = abs_path.wstring();
 
+    // Add vcpkg bin directories to DLL search path for dependencies (zstd, brotli, zlib)
+    // This is needed because the test DLL depends on these libraries
+    static bool vcpkg_paths_added = false;
+    if (!vcpkg_paths_added) {
+        vcpkg_paths_added = true;
+        // Try common vcpkg bin locations
+        std::vector<std::string> vcpkg_paths = {"src/x64-windows/bin", "../src/x64-windows/bin",
+                                                "../../src/x64-windows/bin"};
+        for (const auto& vcpkg_path : vcpkg_paths) {
+            if (fs::exists(vcpkg_path)) {
+                fs::path abs_vcpkg_path = fs::absolute(vcpkg_path);
+                AddDllDirectory(abs_vcpkg_path.wstring().c_str());
+            }
+        }
+    }
+
     // Use LoadLibraryExW with optimized flags:
     // - LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: Search only the DLL's directory for dependencies
     // - LOAD_LIBRARY_SEARCH_DEFAULT_DIRS: Also search system directories
+    // - LOAD_LIBRARY_SEARCH_USER_DIRS: Search directories added with AddDllDirectory
     // This avoids searching the entire PATH which can be slow
     handle_ = LoadLibraryExW(wpath.c_str(), nullptr,
-                             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+                             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+                                 LOAD_LIBRARY_SEARCH_USER_DIRS);
     if (!handle_) {
         // Fallback to regular LoadLibrary if the optimized version fails
         // (e.g., on older Windows versions)
