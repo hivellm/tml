@@ -35,6 +35,132 @@
 
 namespace tml::codegen {
 
+// Helper: Parse a mangled type string back into a semantic type
+// e.g., "ptr_ChannelNode__I32" -> PtrType{inner=NamedType{name="ChannelNode", type_args=[I32]}}
+static types::TypePtr parse_mangled_type_string(const std::string& s) {
+    // Handle primitive types
+    if (s == "I8")
+        return types::make_primitive(types::PrimitiveKind::I8);
+    if (s == "I16")
+        return types::make_primitive(types::PrimitiveKind::I16);
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I128")
+        return types::make_primitive(types::PrimitiveKind::I128);
+    if (s == "U8")
+        return types::make_primitive(types::PrimitiveKind::U8);
+    if (s == "U16")
+        return types::make_primitive(types::PrimitiveKind::U16);
+    if (s == "U32")
+        return types::make_primitive(types::PrimitiveKind::U32);
+    if (s == "U64")
+        return types::make_primitive(types::PrimitiveKind::U64);
+    if (s == "U128")
+        return types::make_primitive(types::PrimitiveKind::U128);
+    if (s == "F32")
+        return types::make_primitive(types::PrimitiveKind::F32);
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+    if (s == "Unit")
+        return types::make_unit();
+    if (s == "Usize")
+        return types::make_primitive(types::PrimitiveKind::U64);
+    if (s == "Isize")
+        return types::make_primitive(types::PrimitiveKind::I64);
+
+    // Check for pointer prefix (e.g., ptr_ChannelNode__I32 -> Ptr[ChannelNode[I32]])
+    if (s.size() > 4 && s.substr(0, 4) == "ptr_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = false, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for mutable pointer prefix
+    if (s.size() > 7 && s.substr(0, 7) == "mutptr_") {
+        std::string inner_str = s.substr(7);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.is_mut = true, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for ref prefix
+    if (s.size() > 4 && s.substr(0, 4) == "ref_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::RefType{.is_mut = false, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for mutable ref prefix
+    if (s.size() > 7 && s.substr(0, 7) == "mutref_") {
+        std::string inner_str = s.substr(7);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::RefType{.is_mut = true, .inner = inner};
+            return t;
+        }
+    }
+
+    // Check for nested generic (e.g., Mutex__I32, ChannelNode__I32)
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+
+        // Parse all type arguments (separated by __)
+        std::vector<types::TypePtr> type_args;
+        size_t pos = 0;
+        while (pos < arg_str.size()) {
+            // Find next __ delimiter
+            auto next_delim = arg_str.find("__", pos);
+            std::string arg_part;
+            if (next_delim == std::string::npos) {
+                arg_part = arg_str.substr(pos);
+                pos = arg_str.size();
+            } else {
+                arg_part = arg_str.substr(pos, next_delim - pos);
+                pos = next_delim + 2;
+            }
+
+            auto arg_type = parse_mangled_type_string(arg_part);
+            if (arg_type) {
+                type_args.push_back(arg_type);
+            } else {
+                // Fallback: create NamedType
+                auto t = std::make_shared<types::Type>();
+                t->kind = types::NamedType{arg_part, "", {}};
+                type_args.push_back(t);
+            }
+        }
+
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::NamedType{base, "", std::move(type_args)};
+        return t;
+    }
+
+    // Simple struct type (no generics, no prefix)
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 // ============ Generate Pending Generic Instantiations ============
 // Iteratively generate all pending struct/enum/func instantiations
 // Loops until no new instantiations are added (handles recursive types)
@@ -146,58 +272,134 @@ void LLVMIRGen::generate_pending_instantiations() {
                 TML_DEBUG_LN("[IMPL_INST] Looking for "
                              << pim.base_type_name << "::" << pim.method_name
                              << " (mangled: " << pim.mangled_type_name << ")");
+
+                bool method_generated = false;
+
                 // First check locally defined impls
                 auto impl_it = pending_generic_impls_.find(pim.base_type_name);
                 if (impl_it != pending_generic_impls_.end()) {
                     const auto& impl = *impl_it->second;
 
-                    // Process associated type bindings from the impl block
-                    // e.g., `type Item = I::Item` becomes `Item -> I64` when I -> RangeIterI64
-                    auto saved_associated_types = current_associated_types_;
-                    current_associated_types_.clear();
-
-                    // First, we need to find the associated types from the concrete types
-                    // that the generic params were substituted to
-                    // For example: if I -> RangeIterI64, look up RangeIterI64's Item type
-                    for (const auto& [param_name, concrete_type] : pim.type_subs) {
-                        if (concrete_type && concrete_type->is<types::NamedType>()) {
-                            const auto& concrete_named = concrete_type->as<types::NamedType>();
-                            // Find the impl block for this concrete type to get its associated
-                            // types
-                            auto concrete_impl_it =
-                                pending_generic_impls_.find(concrete_named.name);
-                            if (concrete_impl_it != pending_generic_impls_.end()) {
-                                const auto& concrete_impl = *concrete_impl_it->second;
-                                for (const auto& concrete_binding : concrete_impl.type_bindings) {
-                                    auto concrete_resolved =
-                                        resolve_parser_type_with_subs(*concrete_binding.type, {});
-                                    current_associated_types_[concrete_binding.name] =
-                                        concrete_resolved;
-                                }
-                            }
-                        }
-                    }
-
-                    // Now resolve the impl's own type bindings with the substitutions
-                    for (const auto& binding : impl.type_bindings) {
-                        // Resolve the binding type with the current type substitutions
-                        auto resolved = resolve_parser_type_with_subs(*binding.type, pim.type_subs);
-                        current_associated_types_[binding.name] = resolved;
-                    }
-
-                    // Find the method in the impl block
+                    // Check if this impl has the method we're looking for BEFORE
+                    // doing any processing. This handles the case where multiple
+                    // modules define the same type (e.g., core::range::Range vs
+                    // core::ops::range::Range) but with different methods.
+                    bool has_method = false;
                     for (const auto& m : impl.methods) {
                         if (m.name == pim.method_name) {
-                            gen_impl_method_instantiation(pim.mangled_type_name, m, pim.type_subs,
-                                                          impl.generics, pim.method_type_suffix,
-                                                          pim.is_library_type, pim.base_type_name);
+                            has_method = true;
                             break;
                         }
                     }
 
-                    // Restore associated types
-                    current_associated_types_ = saved_associated_types;
-                } else if (env_.module_registry()) {
+                    // DEBUG: Log method lookup result
+                    if (pim.base_type_name == "RangeInclusive" || pim.base_type_name == "Range") {
+                        std::cerr << "[DEBUG GENERIC] " << pim.base_type_name << "::" << pim.method_name
+                                  << " - local impl has " << impl.methods.size() << " methods, has_method="
+                                  << (has_method ? "yes" : "no") << ", generics=";
+                        for (const auto& g : impl.generics) {
+                            std::cerr << g.name << " ";
+                        }
+                        std::cerr << "\n";
+                    }
+
+                    if (has_method) {
+                        // Process associated type bindings from the impl block
+                        // e.g., `type Item = I::Item` becomes `Item -> I64` when I -> RangeIterI64
+                        auto saved_associated_types = current_associated_types_;
+                        current_associated_types_.clear();
+
+                        // First, we need to find the associated types from the concrete types
+                        // that the generic params were substituted to
+                        // For example: if I -> RangeIterI64, look up RangeIterI64's Item type
+                        for (const auto& [param_name, concrete_type] : pim.type_subs) {
+                            if (concrete_type && concrete_type->is<types::NamedType>()) {
+                                const auto& concrete_named = concrete_type->as<types::NamedType>();
+                                // Find the impl block for this concrete type to get its associated
+                                // types
+                                auto concrete_impl_it =
+                                    pending_generic_impls_.find(concrete_named.name);
+                                if (concrete_impl_it != pending_generic_impls_.end()) {
+                                    const auto& concrete_impl = *concrete_impl_it->second;
+                                    for (const auto& concrete_binding : concrete_impl.type_bindings) {
+                                        auto concrete_resolved =
+                                            resolve_parser_type_with_subs(*concrete_binding.type, {});
+                                        current_associated_types_[concrete_binding.name] =
+                                            concrete_resolved;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Recover type_subs from mangled_type_name if empty
+                        // For example: mangled_type_name="Range__I64", base_type_name="Range"
+                        // Extract "I64" and map to impl generics (e.g., T -> I64)
+                        auto effective_type_subs = pim.type_subs;
+                        if (effective_type_subs.empty() && !impl.generics.empty() &&
+                            pim.mangled_type_name.length() > pim.base_type_name.length() + 2) {
+                            std::string suffix =
+                                pim.mangled_type_name.substr(pim.base_type_name.length());
+                            if (suffix.starts_with("__")) {
+                                suffix = suffix.substr(2);
+                                // For single type param, use entire suffix
+                                if (impl.generics.size() == 1) {
+                                    auto type_arg = parse_mangled_type_string(suffix);
+                                    if (type_arg) {
+                                        effective_type_subs[impl.generics[0].name] = type_arg;
+                                        TML_DEBUG_LN("[IMPL_INST] Recovered type_subs from mangled name: "
+                                                     << impl.generics[0].name << " -> " << suffix);
+                                    }
+                                } else {
+                                    // Multiple type params - split on "__"
+                                    std::vector<std::string> parts;
+                                    size_t pos = 0;
+                                    while (pos < suffix.size()) {
+                                        size_t next = suffix.find("__", pos);
+                                        if (next == std::string::npos) {
+                                            parts.push_back(suffix.substr(pos));
+                                            break;
+                                        }
+                                        parts.push_back(suffix.substr(pos, next - pos));
+                                        pos = next + 2;
+                                    }
+                                    for (size_t i = 0; i < impl.generics.size() && i < parts.size();
+                                         ++i) {
+                                        auto type_arg = parse_mangled_type_string(parts[i]);
+                                        if (type_arg) {
+                                            effective_type_subs[impl.generics[i].name] = type_arg;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Now resolve the impl's own type bindings with the substitutions
+                        for (const auto& binding : impl.type_bindings) {
+                            // Resolve the binding type with the current type substitutions
+                            auto resolved =
+                                resolve_parser_type_with_subs(*binding.type, effective_type_subs);
+                            current_associated_types_[binding.name] = resolved;
+                        }
+
+                        // Find the method in the impl block and generate it
+                        for (const auto& m : impl.methods) {
+                            if (m.name == pim.method_name) {
+                                gen_impl_method_instantiation(pim.mangled_type_name, m,
+                                                              effective_type_subs, impl.generics,
+                                                              pim.method_type_suffix, pim.is_library_type,
+                                                              pim.base_type_name);
+                                method_generated = true;
+                                break;
+                            }
+                        }
+
+                        // Restore associated types
+                        current_associated_types_ = saved_associated_types;
+                    }
+                }
+
+                // If not found in local impls, check imported modules
+                if (!method_generated && env_.module_registry()) {
                     // Check imported modules - need to re-parse to get impl AST
                     const auto& all_modules = env_.module_registry()->get_all_modules();
                     TML_DEBUG_LN("[IMPL_INST]   Not in local impls, searching "
@@ -326,10 +528,50 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 }
                             }
 
+                            // Recover type_subs from mangled_type_name if empty
+                            auto effective_type_subs = pim.type_subs;
+                            if (effective_type_subs.empty() && !impl_decl.generics.empty() &&
+                                pim.mangled_type_name.length() > pim.base_type_name.length() + 2) {
+                                std::string suffix =
+                                    pim.mangled_type_name.substr(pim.base_type_name.length());
+                                if (suffix.starts_with("__")) {
+                                    suffix = suffix.substr(2);
+                                    if (impl_decl.generics.size() == 1) {
+                                        auto type_arg = parse_mangled_type_string(suffix);
+                                        if (type_arg) {
+                                            effective_type_subs[impl_decl.generics[0].name] = type_arg;
+                                            TML_DEBUG_LN("[IMPL_INST] Recovered type_subs (imported): "
+                                                         << impl_decl.generics[0].name
+                                                         << " -> " << suffix);
+                                        }
+                                    } else {
+                                        std::vector<std::string> parts;
+                                        size_t pos = 0;
+                                        while (pos < suffix.size()) {
+                                            size_t next = suffix.find("__", pos);
+                                            if (next == std::string::npos) {
+                                                parts.push_back(suffix.substr(pos));
+                                                break;
+                                            }
+                                            parts.push_back(suffix.substr(pos, next - pos));
+                                            pos = next + 2;
+                                        }
+                                        for (size_t i = 0;
+                                             i < impl_decl.generics.size() && i < parts.size(); ++i) {
+                                            auto type_arg = parse_mangled_type_string(parts[i]);
+                                            if (type_arg) {
+                                                effective_type_subs[impl_decl.generics[i].name] =
+                                                    type_arg;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             // Then resolve the impl's own type bindings
                             for (const auto& binding : impl_decl.type_bindings) {
                                 auto resolved =
-                                    resolve_parser_type_with_subs(*binding.type, pim.type_subs);
+                                    resolve_parser_type_with_subs(*binding.type, effective_type_subs);
                                 current_associated_types_[binding.name] = resolved;
                             }
 
@@ -338,7 +580,7 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 const auto& method_decl = impl_decl.methods[mi];
                                 if (method_decl.name == pim.method_name) {
                                     gen_impl_method_instantiation(
-                                        pim.mangled_type_name, method_decl, pim.type_subs,
+                                        pim.mangled_type_name, method_decl, effective_type_subs,
                                         impl_decl.generics, pim.method_type_suffix,
                                         pim.is_library_type, pim.base_type_name);
                                     found = true;

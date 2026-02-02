@@ -1,0 +1,315 @@
+//! Tests for crypto hash functions
+//!
+//! Tests MD5, SHA-1, SHA-2 family, and streaming hash API.
+
+use std::crypto::{sha256, sha512, sha384, sha1, md5, sha512_256}
+use std::crypto::{sha3_256, sha3_384, sha3_512}
+use std::crypto::{blake2b512, blake2s256, blake3}
+use std::crypto::{Hash, HashAlgorithm}
+use std::collections::Buffer
+use test::{assert, assert_eq}
+
+// ============================================================================
+// SHA-256 Tests
+// ============================================================================
+
+@test
+func test_sha256_empty_string() -> I32 {
+    let digest = sha256("")
+    // SHA-256 of empty string: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    assert_eq(digest.len(), 32)
+
+    let hex = digest.to_hex()
+    assert_eq(hex, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+    digest.destroy()
+    return 0
+}
+
+@test
+func test_sha256_hello_world() -> I32 {
+    let digest = sha256("hello world")
+    // SHA-256 of "hello world": b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+    assert_eq(digest.len(), 32)
+
+    let hex = digest.to_hex()
+    assert_eq(hex, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+
+    digest.destroy()
+    return 0
+}
+
+@test
+func test_sha256_bytes() -> I32 {
+    let data = Buffer.from_str("hello world")
+    let digest = sha256(data)
+
+    let hex = digest.to_hex()
+    assert_eq(hex, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+
+    data.destroy()
+    digest.destroy()
+    return 0
+}
+
+// ============================================================================
+// SHA-512 Tests
+// ============================================================================
+
+@test
+func test_sha512_empty_string() -> I32 {
+    let digest = sha512("")
+    assert_eq(digest.len(), 64)
+
+    let hex = digest.to_hex()
+    // SHA-512 of empty string
+    assert_eq(hex, "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e")
+
+    digest.destroy()
+    return 0
+}
+
+@test
+func test_sha512_hello() -> I32 {
+    let digest = sha512("hello")
+    assert_eq(digest.len(), 64)
+
+    digest.destroy()
+    return 0
+}
+
+// ============================================================================
+// SHA-384 Tests
+// ============================================================================
+
+@test
+func test_sha384_empty_string() -> I32 {
+    let digest = sha384("")
+    assert_eq(digest.len(), 48)
+
+    digest.destroy()
+    return 0
+}
+
+// ============================================================================
+// SHA-1 Tests (legacy, not for security)
+// ============================================================================
+
+@test
+func test_sha1_empty_string() -> I32 {
+    let digest = sha1("")
+    // SHA-1 of empty string: da39a3ee5e6b4b0d3255bfef95601890afd80709
+    assert_eq(digest.len(), 20)
+
+    let hex = digest.to_hex()
+    assert_eq(hex, "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+
+    digest.destroy()
+    return 0
+}
+
+@test
+func test_sha1_hello() -> I32 {
+    let digest = sha1("hello")
+    // SHA-1 of "hello": aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d
+    let hex = digest.to_hex()
+    assert_eq(hex, "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d")
+
+    digest.destroy()
+    return 0
+}
+
+// ============================================================================
+// MD5 Tests (legacy, not for security)
+// ============================================================================
+
+@test
+func test_md5_empty_string() -> I32 {
+    let digest = md5("")
+    // MD5 of empty string: d41d8cd98f00b204e9800998ecf8427e
+    assert_eq(digest.len(), 16)
+
+    let hex = digest.to_hex()
+    assert_eq(hex, "d41d8cd98f00b204e9800998ecf8427e")
+
+    digest.destroy()
+    return 0
+}
+
+@test
+func test_md5_hello() -> I32 {
+    let digest = md5("hello")
+    // MD5 of "hello": 5d41402abc4b2a76b9719d911017c592
+    let hex = digest.to_hex()
+    assert_eq(hex, "5d41402abc4b2a76b9719d911017c592")
+
+    digest.destroy()
+    return 0
+}
+
+// ============================================================================
+// SHA-512/256 Tests
+// ============================================================================
+
+@test
+func test_sha512_256_empty() -> I32 {
+    let digest = sha512_256("")
+    assert_eq(digest.len(), 32)
+
+    digest.destroy()
+    return 0
+}
+
+// ============================================================================
+// Streaming Hash API Tests
+// ============================================================================
+
+@test
+func test_hash_streaming_sha256() -> I32 {
+    let hash = Hash.create(HashAlgorithm.Sha256)
+
+    hash.update("hello")
+    hash.update(" ")
+    hash.update("world")
+
+    let digest = hash.digest()
+    let hex = digest.to_hex()
+
+    // Should be same as sha256("hello world")
+    assert_eq(hex, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+
+    digest.destroy()
+    hash.destroy()
+    return 0
+}
+
+@test
+func test_hash_streaming_with_bytes() -> I32 {
+    let hash = Hash.create(HashAlgorithm.Sha256)
+
+    let data1 = Buffer.from_str("hello ")
+    let data2 = Buffer.from_str("world")
+
+    hash.update(data1)
+    hash.update(data2)
+
+    let digest = hash.digest()
+    let hex = digest.to_hex()
+
+    assert_eq(hex, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+
+    data1.destroy()
+    data2.destroy()
+    digest.destroy()
+    hash.destroy()
+    return 0
+}
+
+@test
+func test_hash_copy() -> I32 {
+    let hash1 = Hash.create(HashAlgorithm.Sha256)
+    hash1.update("hello")
+
+    // Copy the hash state
+    let hash2 = hash1.copy()
+
+    // Continue with different data
+    hash1.update(" world")
+    hash2.update(" there")
+
+    let digest1 = hash1.digest()
+    let digest2 = hash2.digest()
+
+    // They should be different
+    assert(digest1.to_hex() != digest2.to_hex())
+
+    // digest1 should be sha256("hello world")
+    assert_eq(digest1.to_hex(), "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+
+    digest1.destroy()
+    digest2.destroy()
+    hash1.destroy()
+    hash2.destroy()
+    return 0
+}
+
+@test
+func test_hash_algorithm_sha512() -> I32 {
+    let hash = Hash.create(HashAlgorithm.Sha512)
+    hash.update("test")
+
+    let digest = hash.digest()
+    assert_eq(digest.len(), 64)
+
+    digest.destroy()
+    hash.destroy()
+    return 0
+}
+
+@test
+func test_hash_algorithm_md5() -> I32 {
+    let hash = Hash.create(HashAlgorithm.Md5)
+    hash.update("hello")
+
+    let digest = hash.digest()
+    assert_eq(digest.len(), 16)
+    assert_eq(digest.to_hex(), "5d41402abc4b2a76b9719d911017c592")
+
+    digest.destroy()
+    hash.destroy()
+    return 0
+}
+
+// ============================================================================
+// Digest Encoding Tests
+// ============================================================================
+
+@test
+func test_digest_to_base64() -> I32 {
+    let digest = sha256("hello")
+    let base64 = digest.to_base64()
+
+    // SHA-256 of "hello" in base64
+    assert_eq(base64, "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=")
+
+    digest.destroy()
+    return 0
+}
+
+@test
+func test_digest_equals() -> I32 {
+    let d1 = sha256("hello")
+    let d2 = sha256("hello")
+    let d3 = sha256("world")
+
+    assert(d1.equals(d2))
+    assert(not d1.equals(d3))
+
+    d1.destroy()
+    d2.destroy()
+    d3.destroy()
+    return 0
+}
+
+// ============================================================================
+// Large Data Tests
+// ============================================================================
+
+@test
+func test_hash_large_data() -> I32 {
+    let hash = Hash.create(HashAlgorithm.Sha256)
+
+    // Hash 1MB of data in chunks
+    let chunk = Buffer.alloc(1024)
+    loop i in 0 to 1024 {
+        hash.update(chunk)
+    }
+
+    let digest = hash.digest()
+    assert_eq(digest.len(), 32)
+
+    chunk.destroy()
+    digest.destroy()
+    hash.destroy()
+    return 0
+}

@@ -1,0 +1,154 @@
+//! Cryptographic error types.
+//!
+//! This module defines error types for cryptographic operations.
+
+/// Kinds of cryptographic errors.
+pub type CryptoErrorKind {
+    /// Invalid key format or encoding
+    InvalidKey,
+    /// Invalid initialization vector
+    InvalidIv,
+    /// Invalid authentication tag
+    InvalidAuthTag,
+    /// Authentication failed (AEAD decryption)
+    AuthenticationFailed,
+    /// Invalid signature
+    InvalidSignature,
+    /// Signature verification failed
+    VerificationFailed,
+    /// Unsupported algorithm
+    UnsupportedAlgorithm,
+    /// Invalid parameter
+    InvalidParameter,
+    /// Invalid padding
+    InvalidPadding,
+    /// Key derivation failed
+    KeyDerivationFailed,
+    /// Random number generation failed
+    RandomGenerationFailed,
+    /// Certificate parsing failed
+    CertificateParseError,
+    /// Certificate verification failed
+    CertificateVerificationFailed,
+    /// Certificate expired
+    CertificateExpired,
+    /// Certificate not yet valid
+    CertificateNotYetValid,
+    /// Key exchange failed
+    KeyExchangeFailed,
+    /// Buffer too small
+    BufferTooSmall,
+    /// Operation failed
+    OperationFailed,
+    /// Internal error
+    InternalError,
+}
+
+impl CryptoErrorKind {
+    /// Returns a human-readable description of the error kind.
+    pub func description(this) -> Str {
+        when this {
+            CryptoErrorKind::InvalidKey => return "invalid key format or encoding"
+            CryptoErrorKind::InvalidIv => return "invalid initialization vector"
+            CryptoErrorKind::InvalidAuthTag => return "invalid authentication tag"
+            CryptoErrorKind::AuthenticationFailed => return "authentication failed"
+            CryptoErrorKind::InvalidSignature => return "invalid signature format"
+            CryptoErrorKind::VerificationFailed => return "signature verification failed"
+            CryptoErrorKind::UnsupportedAlgorithm => return "unsupported algorithm"
+            CryptoErrorKind::InvalidParameter => return "invalid parameter"
+            CryptoErrorKind::InvalidPadding => return "invalid padding"
+            CryptoErrorKind::KeyDerivationFailed => return "key derivation failed"
+            CryptoErrorKind::RandomGenerationFailed => return "random generation failed"
+            CryptoErrorKind::CertificateParseError => return "certificate parsing failed"
+            CryptoErrorKind::CertificateVerificationFailed => return "certificate verification failed"
+            CryptoErrorKind::CertificateExpired => return "certificate has expired"
+            CryptoErrorKind::CertificateNotYetValid => return "certificate is not yet valid"
+            CryptoErrorKind::KeyExchangeFailed => return "key exchange failed"
+            CryptoErrorKind::BufferTooSmall => return "buffer too small"
+            CryptoErrorKind::OperationFailed => return "operation failed"
+            CryptoErrorKind::InternalError => return "internal cryptographic error"
+        }
+    }
+}
+
+/// Error type for cryptographic operations.
+///
+/// Simplified error type that stores only message and details as strings.
+pub type CryptoError {
+    message: Str
+    details: Str
+}
+
+impl CryptoError {
+    /// Create a new CryptoError with just a message.
+    pub func new(message: Str) -> CryptoError {
+        return CryptoError { message: message, details: "" }
+    }
+
+    /// Create a new CryptoError with message and details.
+    pub func with_details(message: Str, details: Str) -> CryptoError {
+        return CryptoError { message: message + ": " + details, details: details }
+    }
+
+    /// Create error for invalid parameter.
+    pub func invalid_parameter(details: Str) -> CryptoError {
+        return CryptoError::with_details("invalid parameter", details)
+    }
+
+    /// Create error for buffer too small.
+    pub func buffer_too_small(details: Str) -> CryptoError {
+        return CryptoError::with_details("buffer too small", details)
+    }
+
+    /// Create error for random generation failure.
+    pub func random_failed() -> CryptoError {
+        return CryptoError::new("random generation failed")
+    }
+
+    /// Create error for invalid key.
+    pub func invalid_key(details: Str) -> CryptoError {
+        return CryptoError::with_details("invalid key", details)
+    }
+
+    /// Create error for invalid IV.
+    pub func invalid_iv(details: Str) -> CryptoError {
+        return CryptoError::with_details("invalid IV", details)
+    }
+
+    /// Create error for authentication failure.
+    pub func auth_failed() -> CryptoError {
+        return CryptoError::new("authentication failed")
+    }
+
+    /// Create error for verification failure.
+    pub func verification_failed() -> CryptoError {
+        return CryptoError::new("signature verification failed")
+    }
+
+    /// Create error for unsupported algorithm.
+    pub func unsupported_algorithm(algo: Str) -> CryptoError {
+        return CryptoError::with_details("unsupported algorithm", algo)
+    }
+
+    /// Create error for operation failure.
+    pub func operation_failed(details: Str) -> CryptoError {
+        return CryptoError::with_details("operation failed", details)
+    }
+
+    /// Get the error message.
+    pub func get_message(this) -> Str {
+        return this.message
+    }
+
+    /// Get the error details.
+    pub func get_details(this) -> Str {
+        return this.details
+    }
+
+    /// Convert to string.
+    pub func to_string(this) -> Str {
+        return "CryptoError: " + this.message
+    }
+}
+
+// Note: CryptoResult[T] = Outcome[T, CryptoError] - use Outcome directly due to codegen limitations

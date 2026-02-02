@@ -1,0 +1,224 @@
+//! CRC32 checksum computation.
+//!
+//! This module provides functions for computing CRC32 checksums,
+//! commonly used for data integrity verification.
+//!
+//! # Examples
+//!
+//! ## Compute CRC32 of a string
+//!
+//! ```tml
+//! use std::zlib::{crc32}
+//!
+//! let checksum = crc32("hello")
+//! print("CRC32: {checksum}\n")  // 907060870
+//! ```
+//!
+//! ## Incremental CRC32
+//!
+//! ```tml
+//! use std::zlib::{crc32, crc32_combine}
+//!
+//! let crc1 = crc32("hello")
+//! let crc2 = crc32_update(crc1, " world")
+//! // crc2 is equivalent to crc32("hello world")
+//! ```
+
+use std::collections::{Buffer}
+
+// ============================================================================
+// CRC32 Computation
+// ============================================================================
+
+/// Computes the CRC32 checksum of a string.
+///
+/// Uses the standard CRC32 polynomial (0xEDB88320, reflected).
+///
+/// # Arguments
+///
+/// * `data` - The data to compute the checksum for
+///
+/// # Returns
+///
+/// The 32-bit unsigned CRC32 value as I64 (to avoid sign issues).
+///
+/// # Example
+///
+/// ```tml
+/// let checksum = crc32("hello")
+/// print("CRC32: {checksum}\n")  // 907060870
+/// ```
+pub func crc32(data: Str) -> I64 {
+    let result: I64 = lowlevel { zlib_crc32(data) }
+    return result
+}
+
+/// Computes the CRC32 checksum of a buffer.
+///
+/// # Arguments
+///
+/// * `data` - The buffer to compute the checksum for
+///
+/// # Returns
+///
+/// The 32-bit unsigned CRC32 value as I64.
+pub func crc32_buffer(data: ref Buffer) -> I64 {
+    let result: I64 = lowlevel { zlib_crc32_buffer(data.handle) }
+    return result
+}
+
+/// Updates an existing CRC32 checksum with additional data.
+///
+/// This allows computing the CRC32 of data in chunks.
+///
+/// # Arguments
+///
+/// * `crc` - The current CRC32 value
+/// * `data` - The additional data to include
+///
+/// # Returns
+///
+/// The updated CRC32 value.
+///
+/// # Example
+///
+/// ```tml
+/// let crc = crc32("hello")
+/// let crc = crc32_update(crc, " ")
+/// let crc = crc32_update(crc, "world")
+/// // crc is equivalent to crc32("hello world")
+/// ```
+pub func crc32_update(crc: I64, data: Str) -> I64 {
+    let result: I64 = lowlevel { zlib_crc32_update(crc, data) }
+    return result
+}
+
+/// Updates an existing CRC32 checksum with buffer data.
+///
+/// # Arguments
+///
+/// * `crc` - The current CRC32 value
+/// * `data` - The additional buffer data to include
+///
+/// # Returns
+///
+/// The updated CRC32 value.
+pub func crc32_update_buffer(crc: I64, data: ref Buffer) -> I64 {
+    let result: I64 = lowlevel { zlib_crc32_update_buffer(crc, data.handle) }
+    return result
+}
+
+/// Combines two CRC32 checksums.
+///
+/// This is useful when the CRC32 of separate data chunks was computed
+/// in parallel and needs to be combined.
+///
+/// # Arguments
+///
+/// * `crc1` - CRC32 of the first chunk
+/// * `crc2` - CRC32 of the second chunk
+/// * `len2` - Length of the second chunk
+///
+/// # Returns
+///
+/// Combined CRC32 equivalent to computing CRC32 of concatenated data.
+///
+/// # Example
+///
+/// ```tml
+/// let crc1 = crc32("hello")
+/// let crc2 = crc32(" world")
+/// let combined = crc32_combine(crc1, crc2, 6)
+/// // combined equals crc32("hello world")
+/// ```
+pub func crc32_combine(crc1: I64, crc2: I64, len2: I64) -> I64 {
+    let result: I64 = lowlevel { zlib_crc32_combine(crc1, crc2, len2) }
+    return result
+}
+
+// ============================================================================
+// Adler32 Checksum
+// ============================================================================
+
+/// Computes the Adler-32 checksum of a string.
+///
+/// Adler-32 is faster than CRC32 but has weaker error detection.
+/// It's used in the zlib format.
+///
+/// # Arguments
+///
+/// * `data` - The data to compute the checksum for
+///
+/// # Returns
+///
+/// The 32-bit Adler-32 value as I64.
+///
+/// # Example
+///
+/// ```tml
+/// let checksum = adler32("hello")
+/// ```
+pub func adler32(data: Str) -> I64 {
+    let result: I64 = lowlevel { zlib_adler32(data) }
+    return result
+}
+
+/// Computes the Adler-32 checksum of a buffer.
+///
+/// # Arguments
+///
+/// * `data` - The buffer to compute the checksum for
+///
+/// # Returns
+///
+/// The 32-bit Adler-32 value as I64.
+pub func adler32_buffer(data: ref Buffer) -> I64 {
+    let result: I64 = lowlevel { zlib_adler32_buffer(data.handle) }
+    return result
+}
+
+/// Updates an existing Adler-32 checksum with additional data.
+///
+/// # Arguments
+///
+/// * `adler` - The current Adler-32 value
+/// * `data` - The additional data to include
+///
+/// # Returns
+///
+/// The updated Adler-32 value.
+pub func adler32_update(adler: I64, data: Str) -> I64 {
+    let result: I64 = lowlevel { zlib_adler32_update(adler, data) }
+    return result
+}
+
+/// Updates an existing Adler-32 checksum with buffer data.
+///
+/// # Arguments
+///
+/// * `adler` - The current Adler-32 value
+/// * `data` - The additional buffer data to include
+///
+/// # Returns
+///
+/// The updated Adler-32 value.
+pub func adler32_update_buffer(adler: I64, data: ref Buffer) -> I64 {
+    let result: I64 = lowlevel { zlib_adler32_update_buffer(adler, data.handle) }
+    return result
+}
+
+/// Combines two Adler-32 checksums.
+///
+/// # Arguments
+///
+/// * `adler1` - Adler-32 of the first chunk
+/// * `adler2` - Adler-32 of the second chunk
+/// * `len2` - Length of the second chunk
+///
+/// # Returns
+///
+/// Combined Adler-32 equivalent to computing on concatenated data.
+pub func adler32_combine(adler1: I64, adler2: I64, len2: I64) -> I64 {
+    let result: I64 = lowlevel { zlib_adler32_combine(adler1, adler2, len2) }
+    return result
+}

@@ -34,6 +34,27 @@ scripts\clean.bat
 
 **Why scripts only?** The build scripts handle environment setup, path configuration, and proper sequencing that direct cmake calls miss. Using cmake directly can result in tests that appear to pass but actually fail silently or hang indefinitely.
 
+## Test Cache Management
+
+**CRITICAL: NEVER DELETE TEST CACHES!**
+
+Do NOT delete or clear any of the following cache directories:
+- `build/debug/.run-cache/` - Compiled test DLLs
+- `build/debug/.test-cache/` - Test results cache
+- `.test-cache.json` - Test metadata cache
+
+The test cache system is designed to automatically invalidate when:
+- Source files change (hash-based detection)
+- Coverage mode changes (coverage_enabled flag)
+- Dependencies change
+
+If you think tests are stale, run with `--no-cache` flag instead of deleting caches:
+```bash
+tml test --no-cache
+```
+
+**Why not delete caches?** Deleting caches forces full recompilation of ALL test DLLs, which is slow and unnecessary. The cache invalidation logic handles all cases correctly.
+
 Output directories:
 
 - `build/debug/tml.exe` - Debug compiler

@@ -1,0 +1,185 @@
+// Tests for crypto random functions
+use test
+use std::collections::Buffer
+use std::crypto::random::{random_bytes, random_int, random_uuid, SecureRandom}
+
+// ============================================================================
+// random_bytes Tests
+// ============================================================================
+
+@test
+func test_random_bytes_length() -> I32 {
+    let buf16: Buffer = random_bytes(16 as I64)
+    let buf32: Buffer = random_bytes(32 as I64)
+    let buf64: Buffer = random_bytes(64 as I64)
+
+    assert_eq(buf16.len(), 16 as I64, "buf16 length")
+    assert_eq(buf32.len(), 32 as I64, "buf32 length")
+    assert_eq(buf64.len(), 64 as I64, "buf64 length")
+
+    buf16.destroy()
+    buf32.destroy()
+    buf64.destroy()
+    return 0
+}
+
+@test
+func test_random_bytes_zero_length() -> I32 {
+    let buf: Buffer = random_bytes(0 as I64)
+    assert_eq(buf.len(), 0 as I64, "zero length buffer")
+    buf.destroy()
+    return 0
+}
+
+// ============================================================================
+// random_int Tests
+// ============================================================================
+
+@test
+func test_random_int_range() -> I32 {
+    // Generate many random integers and check they're in range
+    let mut i: I64 = 0
+    loop (i < (100 as I64)) {
+        let n: I64 = random_int(0 as I64, 100 as I64)
+        assert(n >= (0 as I64), "n >= 0")
+        assert(n < (100 as I64), "n < 100")
+        i = i + (1 as I64)
+    }
+    return 0
+}
+
+@test
+func test_random_int_single_value() -> I32 {
+    // Range of 1 should always return the same value
+    let mut i: I64 = 0
+    loop (i < (10 as I64)) {
+        let n: I64 = random_int(42 as I64, 43 as I64)
+        assert_eq(n, 42 as I64, "single value range")
+        i = i + (1 as I64)
+    }
+    return 0
+}
+
+@test
+func test_random_int_negative_range() -> I32 {
+    let mut i: I64 = 0
+    loop (i < (100 as I64)) {
+        let n: I64 = random_int(-50 as I64, 50 as I64)
+        assert(n >= (-50 as I64), "n >= -50")
+        assert(n < (50 as I64), "n < 50")
+        i = i + (1 as I64)
+    }
+    return 0
+}
+
+// ============================================================================
+// random_uuid Tests
+// ============================================================================
+
+@test
+func test_random_uuid_format() -> I32 {
+    let uuid: Str = random_uuid()
+
+    // UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    // Length should be 36 characters
+    assert_eq(uuid.len(), 36 as I64, "uuid length")
+
+    return 0
+}
+
+@test
+func test_random_uuid_uniqueness() -> I32 {
+    let uuid1: Str = random_uuid()
+    let uuid2: Str = random_uuid()
+    let uuid3: Str = random_uuid()
+
+    // All UUIDs should be different
+    assert(uuid1 != uuid2, "uuid1 != uuid2")
+    assert(uuid2 != uuid3, "uuid2 != uuid3")
+    assert(uuid1 != uuid3, "uuid1 != uuid3")
+
+    return 0
+}
+
+// ============================================================================
+// SecureRandom Tests
+// ============================================================================
+
+@test
+func test_secure_random_bytes() -> I32 {
+    let rng: SecureRandom = SecureRandom.new()
+
+    let buf: Buffer = rng.bytes(64 as I64)
+    assert_eq(buf.len(), 64 as I64, "rng bytes length")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_secure_random_next_u32() -> I32 {
+    let rng: SecureRandom = SecureRandom.new()
+
+    // Generate several random u32 values
+    let v1: U32 = rng.next_u32()
+    let v2: U32 = rng.next_u32()
+    let v3: U32 = rng.next_u32()
+
+    // They should likely be different (extremely unlikely to be same)
+    // We just check that we can call it without error
+    return 0
+}
+
+@test
+func test_secure_random_next_u64() -> I32 {
+    let rng: SecureRandom = SecureRandom.new()
+
+    let v1: U64 = rng.next_u64()
+    let v2: U64 = rng.next_u64()
+
+    // Should be different (with overwhelming probability)
+    assert(v1 != v2, "u64 values should differ")
+
+    return 0
+}
+
+@test
+func test_secure_random_int_range() -> I32 {
+    let rng: SecureRandom = SecureRandom.new()
+
+    let mut i: I64 = 0
+    loop (i < (100 as I64)) {
+        let n: I64 = rng.int_range(10 as I64, 20 as I64)
+        assert(n >= (10 as I64), "n >= 10")
+        assert(n < (20 as I64), "n < 20")
+        i = i + (1 as I64)
+    }
+
+    return 0
+}
+
+@test
+func test_secure_random_next_bool() -> I32 {
+    let rng: SecureRandom = SecureRandom.new()
+
+    // Just verify we can call it
+    let _: Bool = rng.next_bool()
+    let _: Bool = rng.next_bool()
+
+    return 0
+}
+
+@test
+func test_secure_random_next_f64() -> I32 {
+    let rng: SecureRandom = SecureRandom.new()
+
+    let mut i: I64 = 0
+    loop (i < (100 as I64)) {
+        let f: F64 = rng.next_f64()
+        assert(f >= 0.0, "f >= 0.0")
+        assert(f < 1.0, "f < 1.0")
+        i = i + (1 as I64)
+    }
+
+    return 0
+}

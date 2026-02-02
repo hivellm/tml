@@ -58,7 +58,7 @@ impl SmallVec8 {
     }
 
     /// Gets element at index from inline storage.
-    func get_at(this, index: I64) -> I64 {
+    pub func get_at(this, index: I64) -> I64 {
         if index == (0 as I64) { return this.e0 }
         if index == (1 as I64) { return this.e1 }
         if index == (2 as I64) { return this.e2 }
@@ -71,7 +71,7 @@ impl SmallVec8 {
     }
 
     /// Sets element at index in inline storage.
-    func set_at(mut this, index: I64, value: I64) {
+    pub func set_at(mut this, index: I64, value: I64) {
         if index == (0 as I64) { this.e0 = value; return }
         if index == (1 as I64) { this.e1 = value; return }
         if index == (2 as I64) { this.e2 = value; return }

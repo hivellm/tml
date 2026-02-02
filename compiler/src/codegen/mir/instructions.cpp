@@ -51,6 +51,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string type_str = mir_type_to_llvm(type_ptr);
                 std::string volatile_kw = i.is_volatile ? "volatile " : "";
                 emitln("    " + result_reg + " = load " + volatile_kw + type_str + ", ptr " + ptr);
+                // Track the loaded value's type for method call receiver handling
+                value_types_[inst.result] = type_str;
 
             } else if constexpr (std::is_same_v<T, mir::StoreInst>) {
                 std::string value = get_value_reg(i.value);
@@ -67,6 +69,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 mir::MirTypePtr type_ptr = i.alloc_type ? i.alloc_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
                 emitln("    " + result_reg + " = alloca " + type_str);
+                // Track alloca as pointer type for method call receiver handling
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_types_[inst.result] = "ptr";
+                }
 
             } else if constexpr (std::is_same_v<T, mir::GetElementPtrInst>) {
                 std::string base = get_value_reg(i.base);
@@ -136,6 +142,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     emit(", i32 " + get_value_reg(idx));
                 }
                 emitln();
+                // GEP result is always a pointer
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_types_[inst.result] = "ptr";
+                }
 
             } else if constexpr (std::is_same_v<T, mir::ExtractValueInst>) {
                 emit_extract_value_inst(i, result_reg, inst);
@@ -568,7 +578,21 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string declared_type = mir_type_to_llvm(arg_ptr);
 
         std::string arg_type = declared_type;
-        if (actual_type.find("%struct.") == 0) {
+
+        // For devirtualized method calls, the first arg is the receiver (this)
+        // If it's a struct value but the function expects ptr, spill to memory
+        bool is_devirt_receiver = i.devirt_info.has_value() && j == 0;
+        bool is_struct_value = actual_type.find("%struct.") == 0;
+        bool expects_ptr = declared_type == "ptr";
+
+        if (is_devirt_receiver && is_struct_value && expects_ptr) {
+            // Spill struct value to memory so we can pass a pointer
+            std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
+            emitln("    " + spill_ptr + " = alloca " + actual_type);
+            emitln("    store " + actual_type + " " + arg + ", ptr " + spill_ptr);
+            arg = spill_ptr;
+            arg_type = "ptr";
+        } else if (is_struct_value) {
             arg_type = actual_type;
         } else if ((declared_type == "void" || declared_type == "i32") && !actual_type.empty() &&
                    actual_type != declared_type) {
@@ -1547,15 +1571,20 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         ret_ptr = mir::make_ptr_type();
     }
     std::string ret_type = mir_type_to_llvm(ret_ptr);
+
+    // Determine the actual LLVM type of the receiver value
+    // Priority: value_types_ (what the register actually holds) > i.receiver.type (MIR type)
     std::string receiver_actual_type;
-    if (i.receiver.type) {
+    auto vt_it = value_types_.find(i.receiver.id);
+    if (vt_it != value_types_.end() && !vt_it->second.empty() && vt_it->second != "ptr") {
+        // Use the actual type from value_types_ (what the register holds)
+        receiver_actual_type = vt_it->second;
+    } else if (i.receiver.type) {
         receiver_actual_type = mir_type_to_llvm(i.receiver.type);
     }
-    if (receiver_actual_type.empty() || receiver_actual_type == "ptr") {
-        auto it = value_types_.find(i.receiver.id);
-        if (it != value_types_.end()) {
-            receiver_actual_type = it->second;
-        }
+    // Final fallback
+    if (receiver_actual_type.empty()) {
+        receiver_actual_type = "ptr";
     }
 
     static const std::unordered_set<std::string> primitive_tml_types = {
@@ -1569,7 +1598,12 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
     if (is_primitive_tml) {
         receiver_type_for_call = receiver_actual_type;
     } else if (is_struct_type) {
-        receiver_type_for_call = receiver_actual_type;
+        // Struct value needs to be spilled to memory - methods expect a pointer
+        std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
+        emitln("    " + spill_ptr + " = alloca " + receiver_actual_type);
+        emitln("    store " + receiver_actual_type + " " + receiver + ", ptr " + spill_ptr);
+        receiver = spill_ptr;
+        receiver_type_for_call = "ptr";
     } else if (receiver_actual_type == "ptr" || receiver_actual_type.empty()) {
         receiver_type_for_call = "ptr";
     } else {
@@ -1593,7 +1627,9 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             c = static_cast<char>(std::tolower(c));
         func_name = lower_type + "_" + i.method_name;
     } else {
-        func_name = recv_type + "__" + i.method_name;
+        // Non-primitive methods use the tml_ prefix and single underscore
+        // Example: RangeIterI64.next() -> tml_RangeIterI64_next
+        func_name = "tml_" + recv_type + "_" + i.method_name;
     }
 
     emit("call " + ret_type + " @" + func_name + "(");

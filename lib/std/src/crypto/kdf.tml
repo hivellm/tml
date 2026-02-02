@@ -1,0 +1,643 @@
+//! Key Derivation Functions.
+//!
+//! This module provides key derivation functions for deriving cryptographic
+//! keys from passwords, shared secrets, or other key material.
+//!
+//! # Password Hashing
+//!
+//! For password hashing and verification, prefer:
+//! 1. **Argon2** (recommended) - Memory-hard, GPU-resistant
+//! 2. **scrypt** - Memory-hard, widely supported
+//! 3. **PBKDF2** - CPU-intensive, FIPS compliant
+//!
+//! # Key Derivation
+//!
+//! For deriving keys from shared secrets (e.g., ECDH):
+//! - **HKDF** - Extract-then-expand based on HMAC
+//!
+//! # Security Recommendations
+//!
+//! | Use Case | Recommended KDF | Parameters |
+//! |----------|-----------------|------------|
+//! | Password storage | Argon2id | m=65536, t=3, p=4 |
+//! | Password-based encryption | Argon2id or scrypt | High memory |
+//! | Key derivation from DH | HKDF-SHA256 | - |
+//! | FIPS compliance | PBKDF2-SHA256 | 600,000+ iterations |
+//!
+//! # Examples
+//!
+//! ## Argon2 Password Hashing
+//!
+//! ```tml
+//! use std::crypto::{argon2, Argon2Variant, Argon2Params, random_bytes}
+//!
+//! let params = Argon2Params::default()
+//! let salt = random_bytes(16)
+//! let hash = argon2(Argon2Variant::Argon2id, "password", salt, params)?
+//! ```
+//!
+//! ## scrypt Key Derivation
+//!
+//! ```tml
+//! use std::crypto::{scrypt, ScryptParams, random_bytes}
+//!
+//! let params = ScryptParams::default()
+//! let salt = random_bytes(16)
+//! let key = scrypt("password", salt, 32, params)?
+//! ```
+//!
+//! ## PBKDF2
+//!
+//! ```tml
+//! use std::crypto::{pbkdf2, HashAlgorithm, random_bytes}
+//!
+//! let salt = random_bytes(16)
+//! let key = pbkdf2("password", salt, 100000, 32, HashAlgorithm::Sha256)?
+//! ```
+//!
+//! ## HKDF
+//!
+//! ```tml
+//! use std::crypto::{hkdf, HashAlgorithm}
+//!
+//! let ikm = shared_secret  // e.g., from ECDH
+//! let salt = random_bytes(32)
+//! let info = "encryption key"
+//! let key = hkdf(HashAlgorithm::Sha256, ikm, salt, info, 32)?
+//! ```
+
+use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::hash::HashAlgorithm
+use std::collections::Buffer
+
+// ============================================================================
+// PBKDF2
+// ============================================================================
+
+/// Derives a key using PBKDF2.
+///
+/// PBKDF2 (Password-Based Key Derivation Function 2) is a CPU-intensive
+/// key derivation function that is FIPS 140-2 compliant.
+///
+/// # Parameters
+///
+/// - `password`: The password to derive from
+/// - `salt`: Random salt (at least 16 bytes recommended)
+/// - `iterations`: Number of iterations (at least 100,000 for SHA-256)
+/// - `key_length`: Desired key length in bytes
+/// - `digest`: Hash algorithm to use
+///
+/// # Example
+///
+/// ```tml
+/// let key = pbkdf2("password", salt, 100000, 32, HashAlgorithm::Sha256)?
+/// ```
+pub func pbkdf2(
+    password: Str,
+    salt: ref Buffer,
+    iterations: I64,
+    key_length: I64,
+    digest: HashAlgorithm,
+) -> CryptoResult[Buffer] {
+    if iterations < 1 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "iterations must be at least 1"
+        ))
+    }
+    if key_length < 1 or key_length > 1024 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "key length must be between 1 and 1024"
+        ))
+    }
+
+    let handle: *Unit = lowlevel {
+        crypto_pbkdf2(password, salt.handle, iterations, key_length, digest.name())
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Derives a key using PBKDF2 with binary password.
+pub func pbkdf2_bytes(
+    password: ref Buffer,
+    salt: ref Buffer,
+    iterations: I64,
+    key_length: I64,
+    digest: HashAlgorithm,
+) -> CryptoResult[Buffer] {
+    if iterations < 1 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "iterations must be at least 1"
+        ))
+    }
+    if key_length < 1 or key_length > 1024 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "key length must be between 1 and 1024"
+        ))
+    }
+
+    let handle: *Unit = lowlevel {
+        crypto_pbkdf2_bytes(password.handle, salt.handle, iterations, key_length, digest.name())
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+// ============================================================================
+// scrypt
+// ============================================================================
+
+/// Parameters for scrypt key derivation.
+pub type ScryptParams {
+    /// CPU/memory cost parameter (must be power of 2)
+    pub n: I64
+    /// Block size parameter
+    pub r: I64
+    /// Parallelization parameter
+    pub p: I64
+    /// Maximum memory usage in bytes (0 for default)
+    pub maxmem: I64
+}
+
+impl ScryptParams {
+    /// Default scrypt parameters (N=16384, r=8, p=1).
+    ///
+    /// Suitable for interactive logins.
+    pub func default() -> ScryptParams {
+        return ScryptParams {
+            n: 16384,
+            r: 8,
+            p: 1,
+            maxmem: 0,
+        }
+    }
+
+    /// High-security scrypt parameters (N=1048576, r=8, p=1).
+    ///
+    /// Suitable for file encryption or non-interactive use.
+    pub func high_security() -> ScryptParams {
+        return ScryptParams {
+            n: 1048576,
+            r: 8,
+            p: 1,
+            maxmem: 0,
+        }
+    }
+
+    /// Low-memory scrypt parameters (N=16384, r=8, p=1, maxmem=32MB).
+    pub func low_memory() -> ScryptParams {
+        return ScryptParams {
+            n: 16384,
+            r: 8,
+            p: 1,
+            maxmem: 33554432,  // 32 MB
+        }
+    }
+
+    /// Creates custom scrypt parameters.
+    pub func custom(n: I64, r: I64, p: I64) -> ScryptParams {
+        return ScryptParams {
+            n: n,
+            r: r,
+            p: p,
+            maxmem: 0,
+        }
+    }
+}
+
+/// Derives a key using scrypt.
+///
+/// scrypt is a memory-hard key derivation function designed to be
+/// expensive to compute on GPUs and ASICs.
+///
+/// # Parameters
+///
+/// - `password`: The password to derive from
+/// - `salt`: Random salt (at least 16 bytes recommended)
+/// - `key_length`: Desired key length in bytes
+/// - `params`: scrypt parameters
+///
+/// # Example
+///
+/// ```tml
+/// let params = ScryptParams::default()
+/// let key = scrypt("password", salt, 32, params)?
+/// ```
+pub func scrypt(
+    password: Str,
+    salt: ref Buffer,
+    key_length: I64,
+    params: ref ScryptParams,
+) -> CryptoResult[Buffer] {
+    if key_length < 1 or key_length > 1024 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "key length must be between 1 and 1024"
+        ))
+    }
+
+    let handle: *Unit = lowlevel {
+        crypto_scrypt(password, salt.handle, key_length, params.n, params.r, params.p, params.maxmem)
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Derives a key using scrypt with binary password.
+pub func scrypt_bytes(
+    password: ref Buffer,
+    salt: ref Buffer,
+    key_length: I64,
+    params: ref ScryptParams,
+) -> CryptoResult[Buffer] {
+    if key_length < 1 or key_length > 1024 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "key length must be between 1 and 1024"
+        ))
+    }
+
+    let handle: *Unit = lowlevel {
+        crypto_scrypt_bytes(password.handle, salt.handle, key_length, params.n, params.r, params.p, params.maxmem)
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+// ============================================================================
+// HKDF
+// ============================================================================
+
+/// Derives a key using HKDF (HMAC-based Key Derivation Function).
+///
+/// HKDF is designed for deriving cryptographic keys from a shared secret,
+/// such as the output of ECDH.
+///
+/// # Parameters
+///
+/// - `digest`: Hash algorithm to use
+/// - `ikm`: Input keying material
+/// - `salt`: Optional salt (can be empty)
+/// - `info`: Context and application-specific information
+/// - `key_length`: Desired key length in bytes
+///
+/// # Example
+///
+/// ```tml
+/// let key = hkdf(HashAlgorithm::Sha256, shared_secret, salt, "encryption", 32)?
+/// ```
+pub func hkdf(
+    digest: HashAlgorithm,
+    ikm: ref Buffer,
+    salt: ref Buffer,
+    info: Str,
+    key_length: I64,
+) -> CryptoResult[Buffer] {
+    let max_length = digest.digest_size() * 255
+    if key_length < 1 or key_length > max_length {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "key length must be between 1 and {max_length}"
+        ))
+    }
+
+    let handle: *Unit = lowlevel {
+        crypto_hkdf(digest.name(), ikm.handle, salt.handle, info, key_length)
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// HKDF with binary info.
+pub func hkdf_bytes(
+    digest: HashAlgorithm,
+    ikm: ref Buffer,
+    salt: ref Buffer,
+    info: ref Buffer,
+    key_length: I64,
+) -> CryptoResult[Buffer] {
+    let max_length = digest.digest_size() * 255
+    if key_length < 1 or key_length > max_length {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "key length must be between 1 and {max_length}"
+        ))
+    }
+
+    let handle: *Unit = lowlevel {
+        crypto_hkdf_bytes(digest.name(), ikm.handle, salt.handle, info.handle, key_length)
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// HKDF Extract step only.
+///
+/// Extracts a pseudorandom key (PRK) from the input keying material.
+pub func hkdf_extract(
+    digest: HashAlgorithm,
+    ikm: ref Buffer,
+    salt: ref Buffer,
+) -> CryptoResult[Buffer] {
+    let handle: *Unit = lowlevel {
+        crypto_hkdf_extract(digest.name(), ikm.handle, salt.handle)
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// HKDF Expand step only.
+///
+/// Expands a pseudorandom key into output keying material.
+pub func hkdf_expand(
+    digest: HashAlgorithm,
+    prk: ref Buffer,
+    info: ref Buffer,
+    key_length: I64,
+) -> CryptoResult[Buffer] {
+    let max_length = digest.digest_size() * 255
+    if key_length < 1 or key_length > max_length {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "key length must be between 1 and {max_length}"
+        ))
+    }
+
+    let handle: *Unit = lowlevel {
+        crypto_hkdf_expand(digest.name(), prk.handle, info.handle, key_length)
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+// ============================================================================
+// Argon2
+// ============================================================================
+
+/// Argon2 algorithm variants.
+pub type Argon2Variant {
+    /// Argon2d - Data-dependent, faster but vulnerable to side-channels
+    Argon2d,
+    /// Argon2i - Data-independent, resistant to side-channels
+    Argon2i,
+    /// Argon2id - Hybrid (recommended)
+    Argon2id,
+}
+
+impl Argon2Variant {
+    pub func name(this) -> Str {
+        when this {
+            Argon2Variant::Argon2d => return "argon2d"
+            Argon2Variant::Argon2i => return "argon2i"
+            Argon2Variant::Argon2id => return "argon2id"
+        }
+    }
+}
+
+/// Parameters for Argon2 key derivation.
+pub type Argon2Params {
+    /// Time cost (number of iterations)
+    pub time_cost: I64
+    /// Memory cost in KiB
+    pub memory_cost: I64
+    /// Parallelism (number of threads)
+    pub parallelism: I64
+}
+
+impl Argon2Params {
+    /// Default Argon2 parameters for interactive use.
+    ///
+    /// OWASP recommendation: t=3, m=64MB, p=4
+    pub func default() -> Argon2Params {
+        return Argon2Params {
+            time_cost: 3,
+            memory_cost: 65536,  // 64 MB
+            parallelism: 4,
+        }
+    }
+
+    /// High-security Argon2 parameters for sensitive data.
+    ///
+    /// t=4, m=128MB, p=4
+    pub func high_security() -> Argon2Params {
+        return Argon2Params {
+            time_cost: 4,
+            memory_cost: 131072,  // 128 MB
+            parallelism: 4,
+        }
+    }
+
+    /// Low-memory Argon2 parameters for constrained environments.
+    ///
+    /// t=6, m=16MB, p=2
+    pub func low_memory() -> Argon2Params {
+        return Argon2Params {
+            time_cost: 6,
+            memory_cost: 16384,  // 16 MB
+            parallelism: 2,
+        }
+    }
+
+    /// Creates custom Argon2 parameters.
+    pub func custom(time_cost: I64, memory_cost: I64, parallelism: I64) -> Argon2Params {
+        return Argon2Params {
+            time_cost: time_cost,
+            memory_cost: memory_cost,
+            parallelism: parallelism,
+        }
+    }
+}
+
+/// Derives a key using Argon2.
+///
+/// Argon2 is a modern password hashing algorithm that won the Password
+/// Hashing Competition. It is designed to be memory-hard and resist
+/// GPU cracking attacks.
+///
+/// # Parameters
+///
+/// - `variant`: Argon2 variant (Argon2id recommended)
+/// - `password`: The password to hash
+/// - `salt`: Random salt (at least 16 bytes)
+/// - `key_length`: Desired output length in bytes
+/// - `params`: Argon2 parameters
+///
+/// # Example
+///
+/// ```tml
+/// let params = Argon2Params::default()
+/// let salt = random_bytes(16)
+/// let hash = argon2(Argon2Variant::Argon2id, "password", salt, 32, params)?
+/// ```
+pub func argon2(
+    variant: Argon2Variant,
+    password: Str,
+    salt: ref Buffer,
+    key_length: I64,
+    params: ref Argon2Params,
+) -> CryptoResult[Buffer] {
+    if salt.len() < 8 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "salt must be at least 8 bytes"
+        ))
+    }
+    if key_length < 4 or key_length > 1024 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "key length must be between 4 and 1024"
+        ))
+    }
+    if params.time_cost < 1 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "time cost must be at least 1"
+        ))
+    }
+    if params.memory_cost < 8 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "memory cost must be at least 8 KiB"
+        ))
+    }
+    if params.parallelism < 1 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "parallelism must be at least 1"
+        ))
+    }
+
+    let handle: *Unit = lowlevel {
+        crypto_argon2(
+            variant.name(),
+            password,
+            salt.handle,
+            key_length,
+            params.time_cost,
+            params.memory_cost,
+            params.parallelism
+        )
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Derives a key using Argon2 with binary password.
+pub func argon2_bytes(
+    variant: Argon2Variant,
+    password: ref Buffer,
+    salt: ref Buffer,
+    key_length: I64,
+    params: ref Argon2Params,
+) -> CryptoResult[Buffer] {
+    if salt.len() < 8 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "salt must be at least 8 bytes"
+        ))
+    }
+    if key_length < 4 or key_length > 1024 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "key length must be between 4 and 1024"
+        ))
+    }
+
+    let handle: *Unit = lowlevel {
+        crypto_argon2_bytes(
+            variant.name(),
+            password.handle,
+            salt.handle,
+            key_length,
+            params.time_cost,
+            params.memory_cost,
+            params.parallelism
+        )
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Verifies a password against an Argon2 hash.
+///
+/// The hash should be in the standard encoded format:
+/// $argon2id$v=19$m=65536,t=3,p=4$salt$hash
+pub func argon2_verify(encoded_hash: Str, password: Str) -> Bool {
+    let result: Bool = lowlevel { crypto_argon2_verify(encoded_hash, password) }
+    return result
+}
+
+/// Hashes a password with Argon2 and returns the encoded string.
+///
+/// Returns a string in the format:
+/// $argon2id$v=19$m=65536,t=3,p=4$salt$hash
+pub func argon2_hash(
+    variant: Argon2Variant,
+    password: Str,
+    params: ref Argon2Params,
+) -> CryptoResult[Str] {
+    let result: Str = lowlevel {
+        crypto_argon2_hash(
+            variant.name(),
+            password,
+            params.time_cost,
+            params.memory_cost,
+            params.parallelism
+        )
+    }
+    if result == "" {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(result)
+}
+
+// ============================================================================
+// bcrypt (for compatibility)
+// ============================================================================
+
+/// Hashes a password using bcrypt.
+///
+/// **Note**: For new applications, prefer Argon2.
+pub func bcrypt_hash(password: Str, rounds: I64) -> CryptoResult[Str] {
+    if rounds < 4 or rounds > 31 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "bcrypt rounds must be between 4 and 31"
+        ))
+    }
+    let result: Str = lowlevel { crypto_bcrypt_hash(password, rounds) }
+    if result == "" {
+        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+    }
+    return Ok(result)
+}
+
+/// Verifies a password against a bcrypt hash.
+pub func bcrypt_verify(hash: Str, password: Str) -> Bool {
+    let result: Bool = lowlevel { crypto_bcrypt_verify(hash, password) }
+    return result
+}

@@ -1,0 +1,192 @@
+// Tests for core::soo module - Small Object Optimization
+use test
+use core::soo::SmallVec8
+
+// ============================================================================
+// SmallVec8 Creation and Basic Properties
+// ============================================================================
+
+@test
+func test_smallvec8_new() -> I32 {
+    let vec: SmallVec8 = SmallVec8::new()
+    assert(vec.len() == (0 as I64), "new SmallVec8 should have len 0")
+    assert(vec.is_empty(), "new SmallVec8 should be empty")
+    return 0
+}
+
+@test
+func test_smallvec8_capacity() -> I32 {
+    let vec: SmallVec8 = SmallVec8::new()
+    assert(vec.capacity() == (8 as I64), "SmallVec8 capacity should be 8")
+    return 0
+}
+
+@test
+func test_smallvec8_is_inline() -> I32 {
+    let vec: SmallVec8 = SmallVec8::new()
+    assert(vec.is_inline(), "SmallVec8 should always be inline")
+    return 0
+}
+
+@test
+func test_smallvec8_is_full_empty() -> I32 {
+    let vec: SmallVec8 = SmallVec8::new()
+    assert(not vec.is_full(), "empty SmallVec8 should not be full")
+    return 0
+}
+
+// ============================================================================
+// SmallVec8 Push and Pop
+// ============================================================================
+
+@test
+func test_smallvec8_push() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+    vec.push(42)
+    assert(vec.len() == (1 as I64), "after push, len should be 1")
+    assert(not vec.is_empty(), "after push, should not be empty")
+    return 0
+}
+
+@test
+func test_smallvec8_push_multiple() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+    vec.push(10)
+    vec.push(20)
+    vec.push(30)
+    assert(vec.len() == (3 as I64), "after 3 pushes, len should be 3")
+    return 0
+}
+
+@test
+func test_smallvec8_pop() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+    vec.push(42)
+    let val: Maybe[I64] = vec.pop()
+    when val {
+        Just(v) => assert(v == (42 as I64), "pop should return pushed value"),
+        Nothing => assert(false, "pop should not return Nothing")
+    }
+    assert(vec.len() == (0 as I64), "after pop, len should be 0")
+    return 0
+}
+
+@test
+func test_smallvec8_push_pop_sequence() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+    vec.push(1)
+    vec.push(2)
+    vec.push(3)
+
+    let v3: Maybe[I64] = vec.pop()
+    when v3 {
+        Just(v) => assert(v == (3 as I64), "first pop should return 3"),
+        Nothing => assert(false, "pop should not return Nothing")
+    }
+
+    let v2: Maybe[I64] = vec.pop()
+    when v2 {
+        Just(v) => assert(v == (2 as I64), "second pop should return 2"),
+        Nothing => assert(false, "pop should not return Nothing")
+    }
+
+    let v1: Maybe[I64] = vec.pop()
+    when v1 {
+        Just(v) => assert(v == (1 as I64), "third pop should return 1"),
+        Nothing => assert(false, "pop should not return Nothing")
+    }
+
+    assert(vec.is_empty(), "after all pops, should be empty")
+    return 0
+}
+
+// ============================================================================
+// SmallVec8 Get and Set
+// ============================================================================
+
+@test
+func test_smallvec8_get_unchecked() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+    vec.push(100)
+    vec.push(200)
+    vec.push(300)
+
+    let v0: I64 = vec.get_unchecked(0)
+    let v1: I64 = vec.get_unchecked(1)
+    let v2: I64 = vec.get_unchecked(2)
+
+    assert(v0 == (100 as I64), "get_unchecked(0) should return 100")
+    assert(v1 == (200 as I64), "get_unchecked(1) should return 200")
+    assert(v2 == (300 as I64), "get_unchecked(2) should return 300")
+    return 0
+}
+
+@test
+func test_smallvec8_get() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+    vec.push(100)
+    vec.push(200)
+
+    let v0: Maybe[I64] = vec.get(0)
+    when v0 {
+        Just(v) => assert(v == (100 as I64), "get(0) should return 100"),
+        Nothing => assert(false, "get(0) should not return Nothing")
+    }
+
+    let v_invalid: Maybe[I64] = vec.get(10)
+    when v_invalid {
+        Just(_) => assert(false, "get(10) should return Nothing"),
+        Nothing => assert(true, "get out of bounds returns Nothing")
+    }
+    return 0
+}
+
+@test
+func test_smallvec8_set() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+    vec.push(100)
+    vec.push(200)
+
+    vec.set(0, 999)
+    let v0: I64 = vec.get_unchecked(0)
+    assert(v0 == (999 as I64), "after set, get_unchecked(0) should return 999")
+    return 0
+}
+
+// ============================================================================
+// SmallVec8 Full Capacity
+// ============================================================================
+
+@test
+func test_smallvec8_fill_to_capacity() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+    vec.push(1)
+    vec.push(2)
+    vec.push(3)
+    vec.push(4)
+    vec.push(5)
+    vec.push(6)
+    vec.push(7)
+    vec.push(8)
+
+    assert(vec.len() == (8 as I64), "after 8 pushes, len should be 8")
+    assert(vec.is_full(), "after 8 pushes, should be full")
+    return 0
+}
+
+// ============================================================================
+// SmallVec8 Clear
+// ============================================================================
+
+@test
+func test_smallvec8_clear() -> I32 {
+    var vec: SmallVec8 = SmallVec8::new()
+    vec.push(1)
+    vec.push(2)
+    vec.push(3)
+    vec.clear()
+
+    assert(vec.len() == (0 as I64), "after clear, len should be 0")
+    assert(vec.is_empty(), "after clear, should be empty")
+    return 0
+}

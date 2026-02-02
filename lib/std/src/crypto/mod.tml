@@ -1,0 +1,316 @@
+//! Cryptographic primitives and utilities.
+//!
+//! This module provides comprehensive cryptographic functionality including:
+//!
+//! - **Hash functions**: SHA-1, SHA-2, SHA-3, MD5, BLAKE2, BLAKE3
+//! - **HMAC**: Keyed-hash message authentication codes
+//! - **Ciphers**: AES, ChaCha20-Poly1305 symmetric encryption
+//! - **Signatures**: RSA, ECDSA, Ed25519, Ed448 digital signatures
+//! - **Key generation**: Symmetric and asymmetric key generation
+//! - **Key derivation**: PBKDF2, scrypt, HKDF, Argon2
+//! - **Random**: Cryptographically secure random number generation
+//! - **X.509**: Certificate parsing and verification
+//! - **Diffie-Hellman**: DH and ECDH key exchange
+//! - **RSA**: Public-key encryption/decryption
+//!
+//! # Hash Functions
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Hash`] | Streaming hash computation |
+//! | [`Hasher`] | Behavior for hashable types |
+//! | [`sha1()`] | Compute SHA-1 hash (160-bit) |
+//! | [`sha256()`] | Compute SHA-256 hash (256-bit) |
+//! | [`sha384()`] | Compute SHA-384 hash (384-bit) |
+//! | [`sha512()`] | Compute SHA-512 hash (512-bit) |
+//! | [`sha3_256()`] | Compute SHA3-256 hash (256-bit) |
+//! | [`sha3_384()`] | Compute SHA3-384 hash (384-bit) |
+//! | [`sha3_512()`] | Compute SHA3-512 hash (512-bit) |
+//! | [`md5()`] | Compute MD5 hash (128-bit, legacy) |
+//! | [`blake2b()`] | Compute BLAKE2b hash (up to 512-bit) |
+//! | [`blake2s()`] | Compute BLAKE2s hash (up to 256-bit) |
+//! | [`blake3()`] | Compute BLAKE3 hash (256-bit) |
+//!
+//! # HMAC
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Hmac`] | HMAC computation object |
+//! | [`hmac_sha256()`] | Compute HMAC-SHA256 |
+//! | [`hmac_sha512()`] | Compute HMAC-SHA512 |
+//!
+//! # Symmetric Encryption
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Cipher`] | Encryption object |
+//! | [`Decipher`] | Decryption object |
+//! | [`CipherAlgorithm`] | Supported cipher algorithms |
+//! | [`aes_encrypt()`] | AES encryption helper |
+//! | [`aes_decrypt()`] | AES decryption helper |
+//!
+//! # Digital Signatures
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Signer`] | Signature creation object |
+//! | [`Verifier`] | Signature verification object |
+//! | [`sign()`] | Sign data with private key |
+//! | [`verify()`] | Verify signature with public key |
+//!
+//! # Key Management
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`SecretKey`] | Symmetric key object |
+//! | [`PrivateKey`] | Asymmetric private key |
+//! | [`PublicKey`] | Asymmetric public key |
+//! | [`KeyPair`] | Public/private key pair |
+//! | [`generate_key()`] | Generate symmetric key |
+//! | [`generate_key_pair()`] | Generate asymmetric key pair |
+//!
+//! # Key Derivation
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`pbkdf2()`] | PBKDF2 key derivation |
+//! | [`scrypt()`] | scrypt key derivation |
+//! | [`hkdf()`] | HKDF key derivation |
+//! | [`argon2()`] | Argon2 password hashing |
+//!
+//! # Random Number Generation
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`random_bytes()`] | Generate random bytes |
+//! | [`random_int()`] | Generate random integer |
+//! | [`random_uuid()`] | Generate random UUID v4 |
+//! | [`SecureRandom`] | CSPRNG instance |
+//!
+//! # Certificates
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`X509Certificate`] | X.509 certificate |
+//! | [`X509Chain`] | Certificate chain |
+//!
+//! # Key Exchange
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`DiffieHellman`] | Classic DH key exchange |
+//! | [`Ecdh`] | Elliptic curve DH |
+//!
+//! # Examples
+//!
+//! ## Hashing
+//!
+//! ```tml
+//! use std::crypto::{sha256, Hash, HashAlgorithm}
+//!
+//! // One-shot hashing
+//! let digest = sha256("hello world")
+//! print(digest.to_hex())
+//!
+//! // Streaming hash
+//! let hash = Hash::new(HashAlgorithm::Sha256)
+//! hash.update("hello ")
+//! hash.update("world")
+//! let result = hash.digest()
+//! ```
+//!
+//! ## HMAC
+//!
+//! ```tml
+//! use std::crypto::{Hmac, HashAlgorithm}
+//!
+//! let hmac = Hmac::new(HashAlgorithm::Sha256, "secret-key")
+//! hmac.update("message to authenticate")
+//! let mac = hmac.digest()
+//! ```
+//!
+//! ## Encryption
+//!
+//! ```tml
+//! use std::crypto::{Cipher, CipherAlgorithm, random_bytes}
+//!
+//! let key = random_bytes(32)  // 256-bit key
+//! let iv = random_bytes(16)   // 128-bit IV
+//!
+//! let cipher = Cipher::new(CipherAlgorithm::Aes256Cbc, key, iv)
+//! cipher.update("secret message")
+//! let encrypted = cipher.finalize()
+//! ```
+//!
+//! ## Key Generation
+//!
+//! ```tml
+//! use std::crypto::{generate_key_pair, KeyType}
+//!
+//! let keypair = generate_key_pair(KeyType::Rsa, 2048)
+//! let public_pem = keypair.public_key.to_pem()
+//! let private_pem = keypair.private_key.to_pem()
+//! ```
+//!
+//! ## Password Hashing
+//!
+//! ```tml
+//! use std::crypto::{argon2, Argon2Variant}
+//!
+//! let hash = argon2(
+//!     Argon2Variant::Argon2id,
+//!     "user-password",
+//!     random_bytes(16),  // salt
+//!     3,                 // iterations
+//!     65536,             // memory (KB)
+//!     4,                 // parallelism
+//!     32,                // output length
+//! )
+//! ```
+
+// Re-export submodules
+pub mod error
+pub mod hash
+pub mod hmac
+pub mod cipher
+pub mod sign
+pub mod key
+pub mod kdf
+pub mod random
+pub mod x509
+pub mod dh
+pub mod ecdh
+pub mod rsa
+pub mod constants
+
+// Re-export error types
+pub use crypto::error::{CryptoError, CryptoErrorKind}
+
+// Re-export hash types and functions
+pub use crypto::hash::{
+    Hash,
+    HashAlgorithm,
+    Digest,
+    sha1,
+    sha256,
+    sha384,
+    sha512,
+    sha3_256,
+    sha3_384,
+    sha3_512,
+    md5,
+    blake2b,
+    blake2s,
+    blake3,
+}
+
+// Re-export HMAC types
+pub use crypto::hmac::{
+    Hmac,
+    hmac_sha256,
+    hmac_sha384,
+    hmac_sha512,
+}
+
+// Re-export cipher types
+pub use crypto::cipher::{
+    Cipher,
+    Decipher,
+    CipherAlgorithm,
+    CipherMode,
+    AuthTag,
+    aes_encrypt,
+    aes_decrypt,
+    aes_gcm_encrypt,
+    aes_gcm_decrypt,
+    chacha20_poly1305_encrypt,
+    chacha20_poly1305_decrypt,
+}
+
+// Re-export signature types
+pub use crypto::sign::{
+    Signer,
+    Verifier,
+    SignatureAlgorithm,
+    sign,
+    verify,
+}
+
+// Re-export key types
+pub use crypto::key::{
+    SecretKey,
+    PrivateKey,
+    PublicKey,
+    KeyPair,
+    KeyType,
+    KeyFormat,
+    KeyEncoding,
+    generate_key,
+    generate_key_pair,
+    create_private_key,
+    create_public_key,
+    create_secret_key,
+}
+
+// Re-export KDF functions
+pub use crypto::kdf::{
+    pbkdf2,
+    scrypt,
+    ScryptParams,
+    hkdf,
+    hkdf_extract,
+    hkdf_expand,
+    argon2,
+    Argon2Variant,
+    Argon2Params,
+}
+
+// Re-export random functions
+pub use crypto::random::{
+    SecureRandom,
+    random_bytes,
+    random_fill,
+    random_int,
+    random_uuid,
+    timing_safe_equal,
+}
+
+// Re-export X.509 types
+pub use crypto::x509::{
+    X509Certificate,
+    X509Chain,
+    X509Name,
+    X509Extension,
+    KeyUsage,
+}
+
+// Re-export DH types
+pub use crypto::dh::{
+    DiffieHellman,
+    DhGroup,
+    create_dh,
+    create_dh_group,
+}
+
+// Re-export ECDH types
+pub use crypto::ecdh::{
+    Ecdh,
+    EcCurve,
+    create_ecdh,
+}
+
+// Re-export RSA functions
+pub use crypto::rsa::{
+    public_encrypt,
+    public_decrypt,
+    private_encrypt,
+    private_decrypt,
+    RsaPadding,
+}
+
+// Re-export constants
+pub use crypto::constants::{
+    SUPPORTED_CIPHERS,
+    SUPPORTED_HASHES,
+    SUPPORTED_CURVES,
+}

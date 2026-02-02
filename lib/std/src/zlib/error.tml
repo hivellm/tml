@@ -1,0 +1,144 @@
+//! Error types for zlib compression operations.
+//!
+//! This module defines error types used throughout the zlib module
+//! for handling compression and decompression failures.
+
+/// Error kinds for zlib operations.
+pub type ZlibErrorKind {
+    /// No error occurred.
+    Ok,
+    /// Stream error - invalid stream state.
+    StreamError,
+    /// Data error - corrupted or invalid input data.
+    DataError,
+    /// Memory error - allocation failed.
+    MemoryError,
+    /// Buffer error - insufficient output buffer space.
+    BufferError,
+    /// Version error - incompatible library version.
+    VersionError,
+    /// Dictionary needed but not provided.
+    NeedDict,
+    /// Invalid compression level specified.
+    InvalidLevel,
+    /// Invalid window bits specified.
+    InvalidWindowBits,
+    /// Invalid memory level specified.
+    InvalidMemLevel,
+    /// Invalid strategy specified.
+    InvalidStrategy,
+    /// Invalid flush mode specified.
+    InvalidFlush,
+    /// Input data exceeds maximum allowed length.
+    InputTooLarge,
+    /// Output data exceeds maximum allowed length.
+    OutputTooLarge,
+    /// Operation was cancelled.
+    Cancelled,
+    /// Invalid parameter provided.
+    InvalidParameter,
+    /// Unknown or unspecified error.
+    Unknown,
+}
+
+impl ZlibErrorKind {
+    /// Returns the error message for an error kind.
+    pub func to_message(this) -> Str {
+        when this {
+            ZlibErrorKind::Ok => return "no error"
+            ZlibErrorKind::StreamError => return "stream error: invalid stream state"
+            ZlibErrorKind::DataError => return "data error: corrupted or invalid input"
+            ZlibErrorKind::MemoryError => return "memory error: allocation failed"
+            ZlibErrorKind::BufferError => return "buffer error: insufficient output space"
+            ZlibErrorKind::VersionError => return "version error: incompatible library"
+            ZlibErrorKind::NeedDict => return "dictionary needed for decompression"
+            ZlibErrorKind::InvalidLevel => return "invalid compression level"
+            ZlibErrorKind::InvalidWindowBits => return "invalid window bits value"
+            ZlibErrorKind::InvalidMemLevel => return "invalid memory level"
+            ZlibErrorKind::InvalidStrategy => return "invalid compression strategy"
+            ZlibErrorKind::InvalidFlush => return "invalid flush mode"
+            ZlibErrorKind::InputTooLarge => return "input data too large"
+            ZlibErrorKind::OutputTooLarge => return "output exceeds maximum length"
+            ZlibErrorKind::Cancelled => return "operation was cancelled"
+            ZlibErrorKind::InvalidParameter => return "invalid parameter provided"
+            ZlibErrorKind::Unknown => return "unknown error"
+        }
+    }
+}
+
+/// Creates a ZlibErrorKind from a zlib return code.
+pub func zlib_error_kind_from_code(code: I32) -> ZlibErrorKind {
+    if code == 0 { return ZlibErrorKind::Ok }
+    if code == -1 { return ZlibErrorKind::Unknown }
+    if code == -2 { return ZlibErrorKind::StreamError }
+    if code == -3 { return ZlibErrorKind::DataError }
+    if code == -4 { return ZlibErrorKind::MemoryError }
+    if code == -5 { return ZlibErrorKind::BufferError }
+    if code == -6 { return ZlibErrorKind::VersionError }
+    if code == 2 { return ZlibErrorKind::NeedDict }
+    return ZlibErrorKind::Unknown
+}
+
+/// Error type for zlib operations.
+pub type ZlibError {
+    /// The kind of error that occurred.
+    pub kind: ZlibErrorKind
+    /// Optional error message with details.
+    pub message: Str
+    /// Original zlib return code (if applicable).
+    pub code: I32
+}
+
+impl ZlibError {
+    /// Creates a new ZlibError with the given kind.
+    pub func new(kind: ZlibErrorKind) -> ZlibError {
+        return ZlibError {
+            kind: kind,
+            message: kind.to_message(),
+            code: 0,
+        }
+    }
+
+    /// Creates a new ZlibError with kind and code.
+    pub func with_code(kind: ZlibErrorKind, code: I32) -> ZlibError {
+        return ZlibError {
+            kind: kind,
+            message: kind.to_message(),
+            code: code,
+        }
+    }
+
+    /// Creates a new ZlibError with kind and message.
+    pub func with_message(kind: ZlibErrorKind, message: Str) -> ZlibError {
+        return ZlibError {
+            kind: kind,
+            message: message,
+            code: 0,
+        }
+    }
+
+    /// Creates a ZlibError from a zlib return code.
+    pub func from_code(code: I32) -> ZlibError {
+        let kind: ZlibErrorKind = zlib_error_kind_from_code(code)
+        return ZlibError::with_code(kind, code)
+    }
+
+    /// Returns true if this is an OK (no error) result.
+    pub func is_ok(this) -> Bool {
+        when this.kind {
+            ZlibErrorKind::Ok => return true
+            _ => return false
+        }
+    }
+
+    /// Returns the error message.
+    pub func to_string(this) -> Str {
+        if this.code != 0 {
+            return this.message + " (code: " + this.code.to_string() + ")"
+        }
+        return this.message
+    }
+}
+
+/// Result type alias for zlib operations.
+pub type ZlibResult[T] = Outcome[T, ZlibError]

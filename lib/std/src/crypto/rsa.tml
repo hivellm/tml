@@ -1,0 +1,418 @@
+//! RSA encryption and decryption.
+//!
+//! This module provides RSA public-key encryption and decryption operations.
+//!
+//! # Security Notes
+//!
+//! - For signing/verification, use the `sign` module instead
+//! - RSA encryption should only be used for small data (e.g., symmetric keys)
+//! - For encrypting larger data, use hybrid encryption (RSA + AES)
+//! - Minimum recommended key size: 2048 bits
+//! - Prefer OAEP padding over PKCS#1 v1.5
+//!
+//! # Padding Schemes
+//!
+//! | Padding | Use Case | Notes |
+//! |---------|----------|-------|
+//! | OAEP | General encryption | Recommended |
+//! | PKCS#1 v1.5 | Legacy compatibility | Avoid if possible |
+//! | No padding | Raw RSA | Dangerous, avoid |
+//!
+//! # Maximum Data Size
+//!
+//! The maximum data size that can be encrypted depends on the key size
+//! and padding scheme:
+//!
+//! - OAEP with SHA-256: key_bytes - 66
+//! - PKCS#1 v1.5: key_bytes - 11
+//! - No padding: key_bytes
+//!
+//! For a 2048-bit key (256 bytes): max 190 bytes with OAEP/SHA-256.
+//!
+//! # Examples
+//!
+//! ## Encrypt with Public Key
+//!
+//! ```tml
+//! use std::crypto::{public_encrypt, RsaPadding, PublicKey}
+//!
+//! let encrypted = public_encrypt(public_key, data, RsaPadding::OaepSha256)?
+//! ```
+//!
+//! ## Decrypt with Private Key
+//!
+//! ```tml
+//! use std::crypto::{private_decrypt, RsaPadding, PrivateKey}
+//!
+//! let decrypted = private_decrypt(private_key, encrypted, RsaPadding::OaepSha256)?
+//! ```
+//!
+//! ## Hybrid Encryption (RSA + AES)
+//!
+//! ```tml
+//! use std::crypto::{
+//!     public_encrypt, private_decrypt, RsaPadding,
+//!     aes_gcm_encrypt, aes_gcm_decrypt,
+//!     random_bytes,
+//! }
+//!
+//! // Encrypt
+//! func hybrid_encrypt(public_key: ref PublicKey, data: ref Buffer) -> (Buffer, Buffer) {
+//!     let aes_key = random_bytes(32)
+//!     let nonce = random_bytes(12)
+//!
+//!     // Encrypt the AES key with RSA
+//!     let encrypted_key = public_encrypt(public_key, ref aes_key, RsaPadding::OaepSha256)?
+//!
+//!     // Encrypt the data with AES
+//!     let (ciphertext, tag) = aes_gcm_encrypt(aes_key, nonce, data, Buffer::empty())?
+//!
+//!     // Combine nonce + ciphertext + tag
+//!     let encrypted_data = concat(nonce, ciphertext, tag)
+//!
+//!     return (encrypted_key, encrypted_data)
+//! }
+//! ```
+
+use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::key::{PublicKey, PrivateKey}
+use std::collections::Buffer
+
+/// RSA padding schemes.
+pub type RsaPadding {
+    /// PKCS#1 v1.5 padding (legacy)
+    Pkcs1,
+    /// OAEP with SHA-1 (not recommended)
+    OaepSha1,
+    /// OAEP with SHA-256 (recommended)
+    OaepSha256,
+    /// OAEP with SHA-384
+    OaepSha384,
+    /// OAEP with SHA-512
+    OaepSha512,
+    /// No padding (dangerous, raw RSA)
+    None,
+}
+
+impl RsaPadding {
+    /// Returns the padding name.
+    pub func name(this) -> Str {
+        when this {
+            RsaPadding::Pkcs1 => return "pkcs1"
+            RsaPadding::OaepSha1 => return "oaep-sha1"
+            RsaPadding::OaepSha256 => return "oaep-sha256"
+            RsaPadding::OaepSha384 => return "oaep-sha384"
+            RsaPadding::OaepSha512 => return "oaep-sha512"
+            RsaPadding::None => return "none"
+        }
+    }
+
+    /// Returns the overhead in bytes for this padding scheme.
+    pub func overhead(this, key_bits: I64) -> I64 {
+        when this {
+            RsaPadding::Pkcs1 => return 11
+            RsaPadding::OaepSha1 => return 42   // 2 * 20 + 2
+            RsaPadding::OaepSha256 => return 66  // 2 * 32 + 2
+            RsaPadding::OaepSha384 => return 98  // 2 * 48 + 2
+            RsaPadding::OaepSha512 => return 130 // 2 * 64 + 2
+            RsaPadding::None => return 0
+        }
+    }
+
+    /// Returns the maximum data size that can be encrypted.
+    pub func max_data_size(this, key_bits: I64) -> I64 {
+        let key_bytes = key_bits / 8
+        return key_bytes - this.overhead(key_bits)
+    }
+
+    /// Returns true if this is an OAEP padding scheme.
+    pub func is_oaep(this) -> Bool {
+        when this {
+            RsaPadding::OaepSha1 => return true
+            RsaPadding::OaepSha256 => return true
+            RsaPadding::OaepSha384 => return true
+            RsaPadding::OaepSha512 => return true
+            _ => return false
+        }
+    }
+}
+
+/// OAEP options for RSA encryption.
+pub type OaepOptions {
+    /// Hash algorithm for OAEP (default: SHA-256)
+    pub hash: Str
+    /// MGF1 hash algorithm (default: same as hash)
+    pub mgf1_hash: Str
+    /// Optional label (rarely used)
+    pub label: Buffer
+}
+
+impl OaepOptions {
+    /// Default OAEP options (SHA-256).
+    pub func default() -> OaepOptions {
+        return OaepOptions {
+            hash: "sha256",
+            mgf1_hash: "sha256",
+            label: Buffer::new(0),
+        }
+    }
+
+    /// OAEP options with SHA-1 (for compatibility).
+    pub func sha1() -> OaepOptions {
+        return OaepOptions {
+            hash: "sha1",
+            mgf1_hash: "sha1",
+            label: Buffer::new(0),
+        }
+    }
+
+    /// OAEP options with SHA-384.
+    pub func sha384() -> OaepOptions {
+        return OaepOptions {
+            hash: "sha384",
+            mgf1_hash: "sha384",
+            label: Buffer::new(0),
+        }
+    }
+
+    /// OAEP options with SHA-512.
+    pub func sha512() -> OaepOptions {
+        return OaepOptions {
+            hash: "sha512",
+            mgf1_hash: "sha512",
+            label: Buffer::new(0),
+        }
+    }
+}
+
+// ============================================================================
+// Public key encryption
+// ============================================================================
+
+/// Encrypts data with a public key.
+///
+/// The maximum data size depends on the key size and padding scheme.
+/// For OAEP with SHA-256 and 2048-bit key: max 190 bytes.
+pub func public_encrypt(
+    key: ref PublicKey,
+    data: ref Buffer,
+    padding: RsaPadding,
+) -> CryptoResult[Buffer] {
+    let key_bits = key.size_bits()
+    let max_size = padding.max_data_size(key_bits)
+
+    if data.len() > max_size {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "data too large for RSA encryption (max {max_size} bytes with {padding.name()})"
+        ))
+    }
+
+    let handle: *Unit = lowlevel { crypto_rsa_public_encrypt(key.handle, data.handle, padding.name()) }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Encrypts data with a public key using custom OAEP options.
+pub func public_encrypt_oaep(
+    key: ref PublicKey,
+    data: ref Buffer,
+    options: ref OaepOptions,
+) -> CryptoResult[Buffer] {
+    let handle: *Unit = lowlevel {
+        crypto_rsa_public_encrypt_oaep(
+            key.handle,
+            data.handle,
+            options.hash,
+            options.mgf1_hash,
+            options.label.handle
+        )
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Encrypts a string with a public key.
+pub func public_encrypt_str(
+    key: ref PublicKey,
+    data: Str,
+    padding: RsaPadding,
+) -> CryptoResult[Buffer] {
+    let data_buf_handle: *Unit = lowlevel { crypto_str_to_bytes(data) }
+    let data_buf = Buffer { handle: data_buf_handle }
+    return public_encrypt(key, ref data_buf, padding)
+}
+
+// ============================================================================
+// Private key decryption
+// ============================================================================
+
+/// Decrypts data with a private key.
+pub func private_decrypt(
+    key: ref PrivateKey,
+    data: ref Buffer,
+    padding: RsaPadding,
+) -> CryptoResult[Buffer] {
+    let handle: *Unit = lowlevel { crypto_rsa_private_decrypt(key.handle, data.handle, padding.name()) }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Decrypts data with a private key using custom OAEP options.
+pub func private_decrypt_oaep(
+    key: ref PrivateKey,
+    data: ref Buffer,
+    options: ref OaepOptions,
+) -> CryptoResult[Buffer] {
+    let handle: *Unit = lowlevel {
+        crypto_rsa_private_decrypt_oaep(
+            key.handle,
+            data.handle,
+            options.hash,
+            options.mgf1_hash,
+            options.label.handle
+        )
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Decrypts data and returns as string.
+pub func private_decrypt_str(
+    key: ref PrivateKey,
+    data: ref Buffer,
+    padding: RsaPadding,
+) -> CryptoResult[Str] {
+    let decrypted = private_decrypt(key, data, padding)?
+    let result: Str = lowlevel { crypto_bytes_to_str(decrypted.handle) }
+    return Ok(result)
+}
+
+// ============================================================================
+// Private key encryption (for signatures, rarely used directly)
+// ============================================================================
+
+/// Encrypts data with a private key (raw RSA operation).
+///
+/// This is rarely used directly. For signing, use the `sign` module.
+pub func private_encrypt(
+    key: ref PrivateKey,
+    data: ref Buffer,
+    padding: RsaPadding,
+) -> CryptoResult[Buffer] {
+    let handle: *Unit = lowlevel { crypto_rsa_private_encrypt(key.handle, data.handle, padding.name()) }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+// ============================================================================
+// Public key decryption (for signature verification, rarely used directly)
+// ============================================================================
+
+/// Decrypts data with a public key (raw RSA operation).
+///
+/// This is rarely used directly. For verification, use the `sign` module.
+pub func public_decrypt(
+    key: ref PublicKey,
+    data: ref Buffer,
+    padding: RsaPadding,
+) -> CryptoResult[Buffer] {
+    let handle: *Unit = lowlevel { crypto_rsa_public_decrypt(key.handle, data.handle, padding.name()) }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+// ============================================================================
+// Hybrid encryption helpers
+// ============================================================================
+
+/// Encrypts data using hybrid encryption (RSA + AES-GCM).
+///
+/// This is the recommended way to encrypt larger data with RSA.
+/// Returns (encrypted_key, nonce || ciphertext || tag).
+pub func hybrid_encrypt(
+    public_key: ref PublicKey,
+    data: ref Buffer,
+) -> CryptoResult[(Buffer, Buffer)] {
+    // Generate random AES key and nonce
+    let aes_key_handle: *Unit = lowlevel { crypto_random_bytes(32) }
+    let aes_key = Buffer { handle: aes_key_handle }
+    let nonce_handle: *Unit = lowlevel { crypto_random_bytes(12) }
+    let nonce = Buffer { handle: nonce_handle }
+
+    // Encrypt the AES key with RSA-OAEP
+    let encrypted_key = public_encrypt(public_key, ref aes_key, RsaPadding::OaepSha256)?
+
+    // Encrypt the data with AES-GCM
+    let aad = Buffer::new(0)
+    let ciphertext_handle: *Unit = lowlevel {
+        crypto_aes_gcm_encrypt(aes_key.handle, nonce.handle, data.handle, aad.handle)
+    }
+    if ciphertext_handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+    }
+
+    // Get auth tag
+    let tag_handle: *Unit = lowlevel { crypto_aes_gcm_get_tag(ciphertext_handle) }
+    let ciphertext = Buffer { handle: ciphertext_handle }
+    let tag = Buffer { handle: tag_handle }
+
+    // Combine nonce + ciphertext + tag
+    let result_handle: *Unit = lowlevel {
+        crypto_concat_buffers3(nonce.handle, ciphertext.handle, tag.handle)
+    }
+    let encrypted_data = Buffer { handle: result_handle }
+
+    return Ok((encrypted_key, encrypted_data))
+}
+
+/// Decrypts data encrypted with hybrid_encrypt().
+pub func hybrid_decrypt(
+    private_key: ref PrivateKey,
+    encrypted_key: ref Buffer,
+    encrypted_data: ref Buffer,
+) -> CryptoResult[Buffer] {
+    // Decrypt the AES key
+    let aes_key = private_decrypt(private_key, encrypted_key, RsaPadding::OaepSha256)?
+
+    // Extract nonce (12 bytes), ciphertext, and tag (16 bytes)
+    if encrypted_data.len() < 28 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidParameter,
+            "encrypted data too short"
+        ))
+    }
+
+    let nonce_handle: *Unit = lowlevel { crypto_buffer_slice(encrypted_data.handle, 0, 12) }
+    let nonce = Buffer { handle: nonce_handle }
+
+    let ciphertext_len = encrypted_data.len() - 28
+    let ciphertext_handle: *Unit = lowlevel { crypto_buffer_slice(encrypted_data.handle, 12, ciphertext_len) }
+    let ciphertext = Buffer { handle: ciphertext_handle }
+
+    let tag_handle: *Unit = lowlevel { crypto_buffer_slice(encrypted_data.handle, 12 + ciphertext_len, 16) }
+    let tag = Buffer { handle: tag_handle }
+
+    // Decrypt with AES-GCM
+    let aad = Buffer::new(0)
+    let plaintext_handle: *Unit = lowlevel {
+        crypto_aes_gcm_decrypt(aes_key.handle, nonce.handle, ciphertext.handle, aad.handle, tag.handle)
+    }
+    if plaintext_handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::AuthenticationFailed))
+    }
+
+    return Ok(Buffer { handle: plaintext_handle })
+}

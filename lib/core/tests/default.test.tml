@@ -1,0 +1,128 @@
+// Tests for core::default module
+use test
+use core::default::Default
+
+// ============================================================================
+// Primitive Default Tests
+// ============================================================================
+
+@test
+func test_i8_default() -> I32 {
+    let val: I8 = I8::default()
+    assert(val == 0 as I8, "I8::default() should be 0")
+    return 0
+}
+
+@test
+func test_i16_default() -> I32 {
+    let val: I16 = I16::default()
+    assert(val == 0 as I16, "I16::default() should be 0")
+    return 0
+}
+
+@test
+func test_i32_default() -> I32 {
+    let val: I32 = I32::default()
+    assert(val == 0, "I32::default() should be 0")
+    return 0
+}
+
+@test
+func test_i64_default() -> I32 {
+    let val: I64 = I64::default()
+    assert(val == 0, "I64::default() should be 0")
+    return 0
+}
+
+@test
+func test_u8_default() -> I32 {
+    let val: U8 = U8::default()
+    assert(val == 0 as U8, "U8::default() should be 0")
+    return 0
+}
+
+@test
+func test_u16_default() -> I32 {
+    let val: U16 = U16::default()
+    assert(val == 0 as U16, "U16::default() should be 0")
+    return 0
+}
+
+@test
+func test_u32_default() -> I32 {
+    let val: U32 = U32::default()
+    assert(val == 0 as U32, "U32::default() should be 0")
+    return 0
+}
+
+@test
+func test_u64_default() -> I32 {
+    let val: U64 = U64::default()
+    assert(val == 0 as U64, "U64::default() should be 0")
+    return 0
+}
+
+@test
+func test_f32_default() -> I32 {
+    let val: F32 = F32::default()
+    assert(val == 0.0 as F32, "F32::default() should be 0.0")
+    return 0
+}
+
+@test
+func test_f64_default() -> I32 {
+    let val: F64 = F64::default()
+    assert(val == 0.0, "F64::default() should be 0.0")
+    return 0
+}
+
+@test
+func test_bool_default() -> I32 {
+    let val: Bool = Bool::default()
+    assert(val == false, "Bool::default() should be false")
+    return 0
+}
+
+@test
+func test_str_default() -> I32 {
+    let val: Str = Str::default()
+    assert(val == "", "Str::default() should be empty string")
+    return 0
+}
+
+// ============================================================================
+// Maybe Default Test (commented out due to codegen bug with generic static methods)
+// ============================================================================
+
+// @test
+// func test_maybe_default() -> I32 {
+//     let val: Maybe[I32] = Maybe::default()
+//     when val {
+//         Just(_) => panic("Maybe::default() should be Nothing"),
+//         Nothing => {},
+//     }
+//     return 0
+// }
+
+// ============================================================================
+// Custom Type with Default
+// ============================================================================
+
+type Point {
+    x: I32,
+    y: I32
+}
+
+impl Default for Point {
+    pub func default() -> Point {
+        return Point { x: 0, y: 0 }
+    }
+}
+
+@test
+func test_custom_default() -> I32 {
+    let p: Point = Point::default()
+    assert(p.x == 0, "Point::default().x should be 0")
+    assert(p.y == 0, "Point::default().y should be 0")
+    return 0
+}

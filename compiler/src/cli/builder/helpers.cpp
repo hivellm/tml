@@ -609,6 +609,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                     std::cout << "Including thread runtime: " << thread_obj << "\n";
                 }
             }
+
+            // Include crypto.c for cryptographic functions (CSPRNG, etc.)
+            fs::path crypto_c = runtime_dir / "crypto.c";
+            if (fs::exists(crypto_c)) {
+                std::string crypto_obj = ensure_c_compiled(to_forward_slashes(crypto_c.string()),
+                                                           deps_cache, clang, verbose);
+                objects.push_back(fs::path(crypto_obj));
+                if (verbose) {
+                    std::cout << "Including crypto runtime: " << crypto_obj << "\n";
+                }
+            }
         }
     }
 

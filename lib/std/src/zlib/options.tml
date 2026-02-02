@@ -1,0 +1,680 @@
+//! Compression options for zlib, Brotli, and Zstd.
+//!
+//! This module provides option types for configuring compression
+//! and decompression operations.
+
+use std::collections::{Buffer, HashMap}
+use std::zlib::constants::*
+
+// ============================================================================
+// Zlib Options
+// ============================================================================
+
+/// Options for zlib-based compression (deflate, gzip).
+pub type ZlibOptions {
+    /// Flush mode for intermediate operations.
+    /// Default: Z_NO_FLUSH
+    pub flush: I32
+
+    /// Flush mode for final operation.
+    /// Default: Z_FINISH
+    pub finish_flush: I32
+
+    /// Size of output chunks (in bytes).
+    /// Default: 16384 (16KB)
+    pub chunk_size: I64
+
+    /// Base 2 log of the maximum window size (8-15).
+    /// Default: 15
+    /// For gzip: add 16 (so 24-31)
+    /// For raw deflate: use negative values
+    pub window_bits: I32
+
+    /// Compression level (0-9, or -1 for default).
+    /// Default: Z_DEFAULT_COMPRESSION (-1)
+    /// 0 = no compression, 1 = fastest, 9 = best
+    pub level: I32
+
+    /// How much memory to use for internal state (1-9).
+    /// Default: 8
+    pub mem_level: I32
+
+    /// Compression strategy.
+    /// Default: Z_DEFAULT_STRATEGY
+    pub strategy: I32
+
+    /// Preset dictionary for compression/decompression.
+    pub dictionary: Maybe[Buffer]
+
+    /// Maximum output length (0 = unlimited).
+    pub max_output_length: I64
+
+    /// If true, return object with buffer and engine info.
+    pub info: Bool
+}
+
+impl ZlibOptions {
+    /// Creates default options for compression.
+    pub func default() -> ZlibOptions {
+        return ZlibOptions {
+            flush: Z_NO_FLUSH,
+            finish_flush: Z_FINISH,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            window_bits: Z_DEFAULT_WINDOWBITS,
+            level: Z_DEFAULT_COMPRESSION,
+            mem_level: Z_DEFAULT_MEMLEVEL,
+            strategy: Z_DEFAULT_STRATEGY,
+            dictionary: Nothing,
+            max_output_length: 0,
+            info: false,
+        }
+    }
+
+    /// Creates options for deflate (raw deflate without header).
+    pub func deflate_raw() -> ZlibOptions {
+        return ZlibOptions {
+            flush: Z_NO_FLUSH,
+            finish_flush: Z_FINISH,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            window_bits: -Z_DEFAULT_WINDOWBITS,
+            level: Z_DEFAULT_COMPRESSION,
+            mem_level: Z_DEFAULT_MEMLEVEL,
+            strategy: Z_DEFAULT_STRATEGY,
+            dictionary: Nothing,
+            max_output_length: 0,
+            info: false,
+        }
+    }
+
+    /// Creates options for gzip format.
+    pub func gzip() -> ZlibOptions {
+        return ZlibOptions {
+            flush: Z_NO_FLUSH,
+            finish_flush: Z_FINISH,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            window_bits: Z_DEFAULT_WINDOWBITS + GZIP_WINDOW_OFFSET,
+            level: Z_DEFAULT_COMPRESSION,
+            mem_level: Z_DEFAULT_MEMLEVEL,
+            strategy: Z_DEFAULT_STRATEGY,
+            dictionary: Nothing,
+            max_output_length: 0,
+            info: false,
+        }
+    }
+
+    /// Creates options for auto-detecting format (gzip or deflate).
+    pub func auto_detect() -> ZlibOptions {
+        return ZlibOptions {
+            flush: Z_NO_FLUSH,
+            finish_flush: Z_FINISH,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            window_bits: Z_DEFAULT_WINDOWBITS + AUTO_DETECT_WINDOW_OFFSET,
+            level: Z_DEFAULT_COMPRESSION,
+            mem_level: Z_DEFAULT_MEMLEVEL,
+            strategy: Z_DEFAULT_STRATEGY,
+            dictionary: Nothing,
+            max_output_length: 0,
+            info: false,
+        }
+    }
+
+    /// Sets the compression level (returns new options).
+    pub func with_level(this, new_level: I32) -> ZlibOptions {
+        return ZlibOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            window_bits: this.window_bits,
+            level: new_level,
+            mem_level: this.mem_level,
+            strategy: this.strategy,
+            dictionary: this.dictionary,
+            max_output_length: this.max_output_length,
+            info: this.info,
+        }
+    }
+
+    /// Sets the window bits (returns new options).
+    pub func with_window_bits(this, bits: I32) -> ZlibOptions {
+        return ZlibOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            window_bits: bits,
+            level: this.level,
+            mem_level: this.mem_level,
+            strategy: this.strategy,
+            dictionary: this.dictionary,
+            max_output_length: this.max_output_length,
+            info: this.info,
+        }
+    }
+
+    /// Sets the memory level (returns new options).
+    pub func with_mem_level(this, new_mem_level: I32) -> ZlibOptions {
+        return ZlibOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            window_bits: this.window_bits,
+            level: this.level,
+            mem_level: new_mem_level,
+            strategy: this.strategy,
+            dictionary: this.dictionary,
+            max_output_length: this.max_output_length,
+            info: this.info,
+        }
+    }
+
+    /// Sets the compression strategy (returns new options).
+    pub func with_strategy(this, new_strategy: I32) -> ZlibOptions {
+        return ZlibOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            window_bits: this.window_bits,
+            level: this.level,
+            mem_level: this.mem_level,
+            strategy: new_strategy,
+            dictionary: this.dictionary,
+            max_output_length: this.max_output_length,
+            info: this.info,
+        }
+    }
+
+    /// Sets the chunk size (returns new options).
+    pub func with_chunk_size(this, size: I64) -> ZlibOptions {
+        return ZlibOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: size,
+            window_bits: this.window_bits,
+            level: this.level,
+            mem_level: this.mem_level,
+            strategy: this.strategy,
+            dictionary: this.dictionary,
+            max_output_length: this.max_output_length,
+            info: this.info,
+        }
+    }
+
+    /// Sets the maximum output length (returns new options).
+    pub func with_max_output(this, max: I64) -> ZlibOptions {
+        return ZlibOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            window_bits: this.window_bits,
+            level: this.level,
+            mem_level: this.mem_level,
+            strategy: this.strategy,
+            dictionary: this.dictionary,
+            max_output_length: max,
+            info: this.info,
+        }
+    }
+}
+
+// ============================================================================
+// Brotli Options
+// ============================================================================
+
+/// Options for Brotli compression.
+pub type BrotliOptions {
+    /// Flush mode for intermediate operations.
+    /// Default: BROTLI_OPERATION_PROCESS
+    pub flush: I32
+
+    /// Flush mode for final operation.
+    /// Default: BROTLI_OPERATION_FINISH
+    pub finish_flush: I32
+
+    /// Size of output chunks (in bytes).
+    /// Default: 16384 (16KB)
+    pub chunk_size: I64
+
+    /// Compression quality (0-11).
+    /// Default: BROTLI_DEFAULT_QUALITY (4)
+    pub quality: I32
+
+    /// Compression mode.
+    /// Default: BROTLI_MODE_GENERIC
+    pub mode: I32
+
+    /// Log2 of sliding window size (10-24, or 30 for large window).
+    /// Default: BROTLI_DEFAULT_WINDOW (22)
+    pub lgwin: I32
+
+    /// Log2 of input block size (16-24).
+    /// Default: 0 (auto)
+    pub lgblock: I32
+
+    /// Hint about uncompressed size (0 = unknown).
+    pub size_hint: I64
+
+    /// Enable large window mode (window up to 30 bits).
+    pub large_window: Bool
+
+    /// Disable literal context modeling.
+    pub disable_literal_context_modeling: Bool
+
+    /// Maximum output length (0 = unlimited).
+    pub max_output_length: I64
+}
+
+impl BrotliOptions {
+    /// Creates default Brotli options.
+    pub func default() -> BrotliOptions {
+        return BrotliOptions {
+            flush: BROTLI_OPERATION_PROCESS,
+            finish_flush: BROTLI_OPERATION_FINISH,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            quality: BROTLI_DEFAULT_QUALITY,
+            mode: BROTLI_MODE_GENERIC,
+            lgwin: BROTLI_DEFAULT_WINDOW,
+            lgblock: 0,
+            size_hint: 0,
+            large_window: false,
+            disable_literal_context_modeling: false,
+            max_output_length: 0,
+        }
+    }
+
+    /// Creates options optimized for text compression.
+    pub func text() -> BrotliOptions {
+        return BrotliOptions {
+            flush: BROTLI_OPERATION_PROCESS,
+            finish_flush: BROTLI_OPERATION_FINISH,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            quality: BROTLI_DEFAULT_QUALITY,
+            mode: BROTLI_MODE_TEXT,
+            lgwin: BROTLI_DEFAULT_WINDOW,
+            lgblock: 0,
+            size_hint: 0,
+            large_window: false,
+            disable_literal_context_modeling: false,
+            max_output_length: 0,
+        }
+    }
+
+    /// Creates options optimized for font compression.
+    pub func font() -> BrotliOptions {
+        return BrotliOptions {
+            flush: BROTLI_OPERATION_PROCESS,
+            finish_flush: BROTLI_OPERATION_FINISH,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            quality: BROTLI_DEFAULT_QUALITY,
+            mode: BROTLI_MODE_FONT,
+            lgwin: BROTLI_DEFAULT_WINDOW,
+            lgblock: 0,
+            size_hint: 0,
+            large_window: false,
+            disable_literal_context_modeling: false,
+            max_output_length: 0,
+        }
+    }
+
+    /// Creates options for fastest compression.
+    pub func fast() -> BrotliOptions {
+        return BrotliOptions {
+            flush: BROTLI_OPERATION_PROCESS,
+            finish_flush: BROTLI_OPERATION_FINISH,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            quality: BROTLI_MIN_QUALITY,
+            mode: BROTLI_MODE_GENERIC,
+            lgwin: BROTLI_DEFAULT_WINDOW,
+            lgblock: 0,
+            size_hint: 0,
+            large_window: false,
+            disable_literal_context_modeling: false,
+            max_output_length: 0,
+        }
+    }
+
+    /// Creates options for best compression.
+    pub func best() -> BrotliOptions {
+        return BrotliOptions {
+            flush: BROTLI_OPERATION_PROCESS,
+            finish_flush: BROTLI_OPERATION_FINISH,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            quality: BROTLI_MAX_QUALITY,
+            mode: BROTLI_MODE_GENERIC,
+            lgwin: BROTLI_DEFAULT_WINDOW,
+            lgblock: 0,
+            size_hint: 0,
+            large_window: false,
+            disable_literal_context_modeling: false,
+            max_output_length: 0,
+        }
+    }
+
+    /// Sets the compression quality (returns new options).
+    pub func with_quality(this, new_quality: I32) -> BrotliOptions {
+        return BrotliOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            quality: new_quality,
+            mode: this.mode,
+            lgwin: this.lgwin,
+            lgblock: this.lgblock,
+            size_hint: this.size_hint,
+            large_window: this.large_window,
+            disable_literal_context_modeling: this.disable_literal_context_modeling,
+            max_output_length: this.max_output_length,
+        }
+    }
+
+    /// Sets the compression mode (returns new options).
+    pub func with_mode(this, new_mode: I32) -> BrotliOptions {
+        return BrotliOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            quality: this.quality,
+            mode: new_mode,
+            lgwin: this.lgwin,
+            lgblock: this.lgblock,
+            size_hint: this.size_hint,
+            large_window: this.large_window,
+            disable_literal_context_modeling: this.disable_literal_context_modeling,
+            max_output_length: this.max_output_length,
+        }
+    }
+
+    /// Sets the window size (log2) (returns new options).
+    pub func with_lgwin(this, new_lgwin: I32) -> BrotliOptions {
+        return BrotliOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            quality: this.quality,
+            mode: this.mode,
+            lgwin: new_lgwin,
+            lgblock: this.lgblock,
+            size_hint: this.size_hint,
+            large_window: this.large_window,
+            disable_literal_context_modeling: this.disable_literal_context_modeling,
+            max_output_length: this.max_output_length,
+        }
+    }
+
+    /// Sets the chunk size (returns new options).
+    pub func with_chunk_size(this, size: I64) -> BrotliOptions {
+        return BrotliOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: size,
+            quality: this.quality,
+            mode: this.mode,
+            lgwin: this.lgwin,
+            lgblock: this.lgblock,
+            size_hint: this.size_hint,
+            large_window: this.large_window,
+            disable_literal_context_modeling: this.disable_literal_context_modeling,
+            max_output_length: this.max_output_length,
+        }
+    }
+
+    /// Sets the maximum output length (returns new options).
+    pub func with_max_output(this, max: I64) -> BrotliOptions {
+        return BrotliOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            quality: this.quality,
+            mode: this.mode,
+            lgwin: this.lgwin,
+            lgblock: this.lgblock,
+            size_hint: this.size_hint,
+            large_window: this.large_window,
+            disable_literal_context_modeling: this.disable_literal_context_modeling,
+            max_output_length: max,
+        }
+    }
+}
+
+// ============================================================================
+// Zstd Options
+// ============================================================================
+
+/// Options for Zstd compression.
+pub type ZstdOptions {
+    /// Flush mode for intermediate operations.
+    /// Default: ZSTD_E_CONTINUE
+    pub flush: I32
+
+    /// Flush mode for final operation.
+    /// Default: ZSTD_E_END
+    pub finish_flush: I32
+
+    /// Size of output chunks (in bytes).
+    /// Default: 16384 (16KB)
+    pub chunk_size: I64
+
+    /// Compression level (1-22).
+    /// Default: ZSTD_DEFAULT_CLEVEL (3)
+    pub level: I32
+
+    /// Compression strategy.
+    /// Default: 0 (auto based on level)
+    pub strategy: I32
+
+    /// Log2 of maximum back-reference distance (10-31).
+    /// Default: 0 (auto)
+    pub window_log: I32
+
+    /// Enable long distance matching.
+    pub enable_ldm: Bool
+
+    /// Include content size in frame header.
+    pub content_size: Bool
+
+    /// Include checksum in frame.
+    pub checksum: Bool
+
+    /// Include dictionary ID in frame.
+    pub dict_id: Bool
+
+    /// Number of threads for multi-threaded compression.
+    /// Default: 0 (single-threaded)
+    pub nb_workers: I32
+
+    /// Pledged source size (0 = unknown).
+    pub pledged_src_size: I64
+
+    /// Maximum output length (0 = unlimited).
+    pub max_output_length: I64
+}
+
+impl ZstdOptions {
+    /// Creates default Zstd options.
+    pub func default() -> ZstdOptions {
+        return ZstdOptions {
+            flush: ZSTD_E_CONTINUE,
+            finish_flush: ZSTD_E_END,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            level: ZSTD_DEFAULT_CLEVEL,
+            strategy: 0,
+            window_log: 0,
+            enable_ldm: false,
+            content_size: true,
+            checksum: false,
+            dict_id: true,
+            nb_workers: 0,
+            pledged_src_size: 0,
+            max_output_length: 0,
+        }
+    }
+
+    /// Creates options for fastest compression.
+    pub func fast() -> ZstdOptions {
+        return ZstdOptions {
+            flush: ZSTD_E_CONTINUE,
+            finish_flush: ZSTD_E_END,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            level: ZSTD_MIN_CLEVEL,
+            strategy: 0,
+            window_log: 0,
+            enable_ldm: false,
+            content_size: true,
+            checksum: false,
+            dict_id: true,
+            nb_workers: 0,
+            pledged_src_size: 0,
+            max_output_length: 0,
+        }
+    }
+
+    /// Creates options for best compression.
+    pub func best() -> ZstdOptions {
+        return ZstdOptions {
+            flush: ZSTD_E_CONTINUE,
+            finish_flush: ZSTD_E_END,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            level: ZSTD_MAX_CLEVEL,
+            strategy: 0,
+            window_log: 0,
+            enable_ldm: false,
+            content_size: true,
+            checksum: false,
+            dict_id: true,
+            nb_workers: 0,
+            pledged_src_size: 0,
+            max_output_length: 0,
+        }
+    }
+
+    /// Creates options for multi-threaded compression.
+    pub func parallel(workers: I32) -> ZstdOptions {
+        return ZstdOptions {
+            flush: ZSTD_E_CONTINUE,
+            finish_flush: ZSTD_E_END,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            level: ZSTD_DEFAULT_CLEVEL,
+            strategy: 0,
+            window_log: 0,
+            enable_ldm: false,
+            content_size: true,
+            checksum: false,
+            dict_id: true,
+            nb_workers: workers,
+            pledged_src_size: 0,
+            max_output_length: 0,
+        }
+    }
+
+    /// Sets the compression level (returns new options).
+    pub func with_level(this, new_level: I32) -> ZstdOptions {
+        return ZstdOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            level: new_level,
+            strategy: this.strategy,
+            window_log: this.window_log,
+            enable_ldm: this.enable_ldm,
+            content_size: this.content_size,
+            checksum: this.checksum,
+            dict_id: this.dict_id,
+            nb_workers: this.nb_workers,
+            pledged_src_size: this.pledged_src_size,
+            max_output_length: this.max_output_length,
+        }
+    }
+
+    /// Sets the compression strategy (returns new options).
+    pub func with_strategy(this, new_strategy: I32) -> ZstdOptions {
+        return ZstdOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            level: this.level,
+            strategy: new_strategy,
+            window_log: this.window_log,
+            enable_ldm: this.enable_ldm,
+            content_size: this.content_size,
+            checksum: this.checksum,
+            dict_id: this.dict_id,
+            nb_workers: this.nb_workers,
+            pledged_src_size: this.pledged_src_size,
+            max_output_length: this.max_output_length,
+        }
+    }
+
+    /// Sets the number of worker threads (returns new options).
+    pub func with_workers(this, workers: I32) -> ZstdOptions {
+        return ZstdOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            level: this.level,
+            strategy: this.strategy,
+            window_log: this.window_log,
+            enable_ldm: this.enable_ldm,
+            content_size: this.content_size,
+            checksum: this.checksum,
+            dict_id: this.dict_id,
+            nb_workers: workers,
+            pledged_src_size: this.pledged_src_size,
+            max_output_length: this.max_output_length,
+        }
+    }
+
+    /// Enables checksum in frame (returns new options).
+    pub func with_checksum(this) -> ZstdOptions {
+        return ZstdOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            level: this.level,
+            strategy: this.strategy,
+            window_log: this.window_log,
+            enable_ldm: this.enable_ldm,
+            content_size: this.content_size,
+            checksum: true,
+            dict_id: this.dict_id,
+            nb_workers: this.nb_workers,
+            pledged_src_size: this.pledged_src_size,
+            max_output_length: this.max_output_length,
+        }
+    }
+
+    /// Sets the chunk size (returns new options).
+    pub func with_chunk_size(this, size: I64) -> ZstdOptions {
+        return ZstdOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: size,
+            level: this.level,
+            strategy: this.strategy,
+            window_log: this.window_log,
+            enable_ldm: this.enable_ldm,
+            content_size: this.content_size,
+            checksum: this.checksum,
+            dict_id: this.dict_id,
+            nb_workers: this.nb_workers,
+            pledged_src_size: this.pledged_src_size,
+            max_output_length: this.max_output_length,
+        }
+    }
+
+    /// Sets the maximum output length (returns new options).
+    pub func with_max_output(this, max: I64) -> ZstdOptions {
+        return ZstdOptions {
+            flush: this.flush,
+            finish_flush: this.finish_flush,
+            chunk_size: this.chunk_size,
+            level: this.level,
+            strategy: this.strategy,
+            window_log: this.window_log,
+            enable_ldm: this.enable_ldm,
+            content_size: this.content_size,
+            checksum: this.checksum,
+            dict_id: this.dict_id,
+            nb_workers: this.nb_workers,
+            pledged_src_size: this.pledged_src_size,
+            max_output_length: max,
+        }
+    }
+}

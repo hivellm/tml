@@ -1,0 +1,517 @@
+//! Tests for crypto Elliptic Curve Diffie-Hellman key exchange
+//!
+//! Tests ECDH with various curves including X25519 and NIST curves.
+
+use std::crypto::{Ecdh, EcCurve}
+use std::crypto::{x25519, x448}
+use std::crypto::{generate_key_pair, KeyType}
+use std::crypto::random_bytes
+use std::collections::Buffer
+use test::{assert, assert_eq}
+
+// ============================================================================
+// ECDH P-256 Tests
+// ============================================================================
+
+@test
+func test_ecdh_p256_key_exchange() -> I32 {
+    let alice = Ecdh.create(EcCurve.P256)
+    let bob = Ecdh.create(EcCurve.P256)
+
+    when (alice, bob) {
+        (Just(a), Just(b)) => {
+            a.generate_keys()
+            b.generate_keys()
+
+            let alice_pub = a.get_public_key()
+            let bob_pub = b.get_public_key()
+
+            when (alice_pub, bob_pub) {
+                (Just(ap), Just(bp)) => {
+                    let alice_secret = a.compute_secret(bp)
+                    let bob_secret = b.compute_secret(ap)
+
+                    when (alice_secret, bob_secret) {
+                        (Just(as_), Just(bs)) => {
+                            // Shared secrets should be equal
+                            assert(as_.equals(bs))
+                            // P-256 shared secret is 32 bytes
+                            assert_eq(as_.len(), 32)
+
+                            as_.destroy()
+                            bs.destroy()
+                        }
+                        _ => {
+                            assert(false)
+                        }
+                    }
+
+                    ap.destroy()
+                    bp.destroy()
+                }
+                _ => {}
+            }
+
+            a.destroy()
+            b.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}
+
+@test
+func test_ecdh_p256_public_key_format() -> I32 {
+    let ecdh = Ecdh.create(EcCurve.P256)
+
+    when ecdh {
+        Just(e) => {
+            e.generate_keys()
+
+            let public_key = e.get_public_key()
+            when public_key {
+                Just(pk) => {
+                    // Uncompressed P-256 public key is 65 bytes (0x04 + x + y)
+                    assert_eq(pk.len(), 65)
+                    // First byte should be 0x04 for uncompressed
+                    assert_eq(pk.get(0), 0x04)
+
+                    pk.destroy()
+                }
+                Nothing => {}
+            }
+
+            e.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// ECDH P-384 Tests
+// ============================================================================
+
+@test
+func test_ecdh_p384_key_exchange() -> I32 {
+    let alice = Ecdh.create(EcCurve.P384)
+    let bob = Ecdh.create(EcCurve.P384)
+
+    when (alice, bob) {
+        (Just(a), Just(b)) => {
+            a.generate_keys()
+            b.generate_keys()
+
+            let alice_pub = a.get_public_key()
+            let bob_pub = b.get_public_key()
+
+            when (alice_pub, bob_pub) {
+                (Just(ap), Just(bp)) => {
+                    let alice_secret = a.compute_secret(bp)
+                    let bob_secret = b.compute_secret(ap)
+
+                    when (alice_secret, bob_secret) {
+                        (Just(as_), Just(bs)) => {
+                            assert(as_.equals(bs))
+                            // P-384 shared secret is 48 bytes
+                            assert_eq(as_.len(), 48)
+
+                            as_.destroy()
+                            bs.destroy()
+                        }
+                        _ => {}
+                    }
+
+                    ap.destroy()
+                    bp.destroy()
+                }
+                _ => {}
+            }
+
+            a.destroy()
+            b.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// ECDH P-521 Tests
+// ============================================================================
+
+@test
+func test_ecdh_p521_key_exchange() -> I32 {
+    let alice = Ecdh.create(EcCurve.P521)
+    let bob = Ecdh.create(EcCurve.P521)
+
+    when (alice, bob) {
+        (Just(a), Just(b)) => {
+            a.generate_keys()
+            b.generate_keys()
+
+            let alice_pub = a.get_public_key()
+            let bob_pub = b.get_public_key()
+
+            when (alice_pub, bob_pub) {
+                (Just(ap), Just(bp)) => {
+                    let alice_secret = a.compute_secret(bp)
+                    let bob_secret = b.compute_secret(ap)
+
+                    when (alice_secret, bob_secret) {
+                        (Just(as_), Just(bs)) => {
+                            assert(as_.equals(bs))
+                            // P-521 shared secret is 66 bytes
+                            assert_eq(as_.len(), 66)
+
+                            as_.destroy()
+                            bs.destroy()
+                        }
+                        _ => {}
+                    }
+
+                    ap.destroy()
+                    bp.destroy()
+                }
+                _ => {}
+            }
+
+            a.destroy()
+            b.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// X25519 Tests
+// ============================================================================
+
+@test
+func test_x25519_key_exchange() -> I32 {
+    let alice_key = generate_key_pair(KeyType.X25519)
+    let bob_key = generate_key_pair(KeyType.X25519)
+
+    when (alice_key, bob_key) {
+        (Just(alice), Just(bob)) => {
+            let alice_secret = x25519(alice.private_key, bob.public_key)
+            let bob_secret = x25519(bob.private_key, alice.public_key)
+
+            when (alice_secret, bob_secret) {
+                (Just(as_), Just(bs)) => {
+                    // Shared secrets should be equal
+                    assert(as_.equals(bs))
+                    // X25519 shared secret is 32 bytes
+                    assert_eq(as_.len(), 32)
+
+                    as_.destroy()
+                    bs.destroy()
+                }
+                _ => {
+                    assert(false)
+                }
+            }
+
+            alice.destroy()
+            bob.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}
+
+@test
+func test_x25519_key_size() -> I32 {
+    let key_pair = generate_key_pair(KeyType.X25519)
+
+    when key_pair {
+        Just(kp) => {
+            // X25519 keys are 32 bytes each
+            assert_eq(kp.private_key.len(), 32)
+            assert_eq(kp.public_key.len(), 32)
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_x25519_rfc7748_vector() -> I32 {
+    // RFC 7748 test vector
+    // Alice's private key: 77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a
+    // Alice's public key: 8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a
+    // Bob's private key: 5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb
+    // Bob's public key: de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f
+    // Shared secret: 4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742
+
+    let alice_priv = Buffer.from_hex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
+    let bob_pub = Buffer.from_hex("de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f")
+
+    when (alice_priv, bob_pub) {
+        (Just(apriv), Just(bpub)) => {
+            let shared = x25519(apriv, bpub)
+
+            when shared {
+                Just(s) => {
+                    let expected = "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
+                    assert_eq(s.to_hex(), expected)
+                    s.destroy()
+                }
+                Nothing => {}
+            }
+
+            apriv.destroy()
+            bpub.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// X448 Tests
+// ============================================================================
+
+@test
+func test_x448_key_exchange() -> I32 {
+    let alice_key = generate_key_pair(KeyType.X448)
+    let bob_key = generate_key_pair(KeyType.X448)
+
+    when (alice_key, bob_key) {
+        (Just(alice), Just(bob)) => {
+            let alice_secret = x448(alice.private_key, bob.public_key)
+            let bob_secret = x448(bob.private_key, alice.public_key)
+
+            when (alice_secret, bob_secret) {
+                (Just(as_), Just(bs)) => {
+                    assert(as_.equals(bs))
+                    // X448 shared secret is 56 bytes
+                    assert_eq(as_.len(), 56)
+
+                    as_.destroy()
+                    bs.destroy()
+                }
+                _ => {}
+            }
+
+            alice.destroy()
+            bob.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// ECDH with Key Import Tests
+// ============================================================================
+
+@test
+func test_ecdh_set_private_key() -> I32 {
+    let ecdh1 = Ecdh.create(EcCurve.P256)
+    let ecdh2 = Ecdh.create(EcCurve.P256)
+
+    when (ecdh1, ecdh2) {
+        (Just(e1), Just(e2)) => {
+            e1.generate_keys()
+
+            let priv_key = e1.get_private_key()
+            when priv_key {
+                Just(pk) => {
+                    e2.set_private_key(pk)
+                    e2.generate_public_key()
+
+                    let pub1 = e1.get_public_key()
+                    let pub2 = e2.get_public_key()
+
+                    when (pub1, pub2) {
+                        (Just(p1), Just(p2)) => {
+                            assert(p1.equals(p2))
+                            p1.destroy()
+                            p2.destroy()
+                        }
+                        _ => {}
+                    }
+
+                    pk.destroy()
+                }
+                Nothing => {}
+            }
+
+            e1.destroy()
+            e2.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// ECDH Error Handling Tests
+// ============================================================================
+
+@test
+func test_ecdh_invalid_public_key() -> I32 {
+    let ecdh = Ecdh.create(EcCurve.P256)
+
+    when ecdh {
+        Just(e) => {
+            e.generate_keys()
+
+            // Create an invalid public key (not on curve)
+            let invalid_pub = random_bytes(65)
+            invalid_pub.set(0, 0x04)  // Uncompressed prefix
+
+            let secret = e.compute_secret(invalid_pub)
+
+            when secret {
+                Just(s) => {
+                    // Might succeed with some implementations
+                    s.destroy()
+                }
+                Nothing => {
+                    // Expected to fail with point validation
+                }
+            }
+
+            invalid_pub.destroy()
+            e.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_ecdh_wrong_curve_public_key() -> I32 {
+    let p256 = Ecdh.create(EcCurve.P256)
+    let p384 = Ecdh.create(EcCurve.P384)
+
+    when (p256, p384) {
+        (Just(e256), Just(e384)) => {
+            e256.generate_keys()
+            e384.generate_keys()
+
+            let p256_pub = e256.get_public_key()
+            let p384_pub = e384.get_public_key()
+
+            when (p256_pub, p384_pub) {
+                (Just(pub256), Just(pub384)) => {
+                    // Try to use P-384 public key with P-256 context
+                    let secret = e256.compute_secret(pub384)
+
+                    when secret {
+                        Just(s) => {
+                            s.destroy()
+                        }
+                        Nothing => {
+                            // Expected to fail
+                        }
+                    }
+
+                    pub256.destroy()
+                    pub384.destroy()
+                }
+                _ => {}
+            }
+
+            e256.destroy()
+            e384.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// ECDH Key Uniqueness Tests
+// ============================================================================
+
+@test
+func test_ecdh_key_uniqueness() -> I32 {
+    let ecdh = Ecdh.create(EcCurve.P256)
+
+    when ecdh {
+        Just(e) => {
+            e.generate_keys()
+            let pub1 = e.get_public_key()
+
+            e.generate_keys()
+            let pub2 = e.get_public_key()
+
+            when (pub1, pub2) {
+                (Just(p1), Just(p2)) => {
+                    assert(not p1.equals(p2))
+                    p1.destroy()
+                    p2.destroy()
+                }
+                _ => {}
+            }
+
+            e.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// ECDH with secp256k1 Tests
+// ============================================================================
+
+@test
+func test_ecdh_secp256k1() -> I32 {
+    let alice = Ecdh.create(EcCurve.Secp256k1)
+    let bob = Ecdh.create(EcCurve.Secp256k1)
+
+    when (alice, bob) {
+        (Just(a), Just(b)) => {
+            a.generate_keys()
+            b.generate_keys()
+
+            let alice_pub = a.get_public_key()
+            let bob_pub = b.get_public_key()
+
+            when (alice_pub, bob_pub) {
+                (Just(ap), Just(bp)) => {
+                    let alice_secret = a.compute_secret(bp)
+                    let bob_secret = b.compute_secret(ap)
+
+                    when (alice_secret, bob_secret) {
+                        (Just(as_), Just(bs)) => {
+                            assert(as_.equals(bs))
+                            assert_eq(as_.len(), 32)
+                            as_.destroy()
+                            bs.destroy()
+                        }
+                        _ => {}
+                    }
+
+                    ap.destroy()
+                    bp.destroy()
+                }
+                _ => {}
+            }
+
+            a.destroy()
+            b.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}

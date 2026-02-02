@@ -1,0 +1,369 @@
+//! Compression and decompression using zlib, Brotli, and Zstd.
+//!
+//! This module provides comprehensive compression functionality using
+//! multiple algorithms, following the Node.js zlib API conventions.
+//!
+//! # Supported Algorithms
+//!
+//! | Algorithm | Compression | Decompression | Streaming |
+//! |-----------|-------------|---------------|-----------|
+//! | Deflate   | `deflate()` | `inflate()`   | `Deflate`, `Inflate` |
+//! | Deflate Raw | `deflate_raw()` | `inflate_raw()` | `DeflateRaw`, `InflateRaw` |
+//! | Gzip      | `gzip()`    | `gunzip()`    | `Gzip`, `Gunzip` |
+//! | Auto      | -           | `unzip()`     | `Unzip` |
+//! | Brotli    | `brotli_compress()` | `brotli_decompress()` | `BrotliCompress`, `BrotliDecompress` |
+//! | Zstd      | `zstd_compress()` | `zstd_decompress()` | `ZstdCompress`, `ZstdDecompress` |
+//!
+//! # Checksums
+//!
+//! | Function | Description |
+//! |----------|-------------|
+//! | `crc32()` | CRC32 checksum |
+//! | `adler32()` | Adler-32 checksum |
+//!
+//! # Quick Examples
+//!
+//! ## Gzip Compression
+//!
+//! ```tml
+//! use std::zlib::{gzip, gunzip}
+//!
+//! let compressed = gzip("Hello, World!")?
+//! let decompressed = gunzip(compressed)?
+//! assert_eq(decompressed, "Hello, World!")
+//! ```
+//!
+//! ## Brotli Compression
+//!
+//! ```tml
+//! use std::zlib::{brotli_compress, brotli_decompress}
+//!
+//! let compressed = brotli_compress("Hello, World!")?
+//! let decompressed = brotli_decompress(compressed)?
+//! ```
+//!
+//! ## Zstd Compression
+//!
+//! ```tml
+//! use std::zlib::{zstd_compress, zstd_decompress}
+//!
+//! let compressed = zstd_compress("Hello, World!")?
+//! let decompressed = zstd_decompress(compressed)?
+//! ```
+//!
+//! ## Streaming Compression
+//!
+//! ```tml
+//! use std::zlib::{Gzip, Gunzip}
+//!
+//! let compressor = Gzip::new()?
+//! let chunk1 = compressor.write("Hello, ")?
+//! let chunk2 = compressor.write("World!")?
+//! let final_chunk = compressor.finish()?
+//! compressor.destroy()
+//! ```
+//!
+//! ## Custom Options
+//!
+//! ```tml
+//! use std::zlib::{gzip_with_options, ZlibOptions, Z_BEST_COMPRESSION}
+//!
+//! let opts = ZlibOptions::gzip().with_level(Z_BEST_COMPRESSION)
+//! let compressed = gzip_with_options(data, opts)?
+//! ```
+//!
+//! ## CRC32 Checksum
+//!
+//! ```tml
+//! use std::zlib::{crc32, crc32_update}
+//!
+//! let checksum = crc32("hello")
+//! let checksum = crc32_update(checksum, " world")
+//! ```
+//!
+//! # Compression Levels
+//!
+//! For zlib/gzip:
+//! - `Z_NO_COMPRESSION` (0): Store only, no compression
+//! - `Z_BEST_SPEED` (1): Fastest compression
+//! - `Z_DEFAULT_COMPRESSION` (-1): Default balance
+//! - `Z_BEST_COMPRESSION` (9): Best compression ratio
+//!
+//! For Brotli:
+//! - Quality 0-11, default 4
+//! - Higher quality = better ratio but slower
+//!
+//! For Zstd:
+//! - Level 1-22, default 3
+//! - Higher level = better ratio but slower
+//!
+//! # Format Comparison
+//!
+//! | Format | Use Case | Speed | Ratio |
+//! |--------|----------|-------|-------|
+//! | Gzip | HTTP compression, general | Fast | Good |
+//! | Deflate | Internal, protocols | Fast | Good |
+//! | Brotli | HTTP/2, modern web | Medium | Better |
+//! | Zstd | Real-time, streaming | Very Fast | Best |
+
+// Re-export submodules
+pub mod error
+pub mod constants
+pub mod options
+pub mod deflate
+pub mod gzip
+pub mod brotli
+pub mod zstd
+pub mod crc32
+pub mod stream
+
+// Re-export error types
+pub use zlib::error::{ZlibError, ZlibErrorKind, ZlibResult}
+
+// Re-export all constants
+pub use zlib::constants::{
+    // Zlib flush modes
+    Z_NO_FLUSH,
+    Z_PARTIAL_FLUSH,
+    Z_SYNC_FLUSH,
+    Z_FULL_FLUSH,
+    Z_FINISH,
+    Z_BLOCK,
+    Z_TREES,
+
+    // Zlib compression levels
+    Z_NO_COMPRESSION,
+    Z_BEST_SPEED,
+    Z_BEST_COMPRESSION,
+    Z_DEFAULT_COMPRESSION,
+
+    // Zlib strategies
+    Z_FILTERED,
+    Z_HUFFMAN_ONLY,
+    Z_RLE,
+    Z_FIXED,
+    Z_DEFAULT_STRATEGY,
+
+    // Zlib return codes
+    Z_OK,
+    Z_STREAM_END,
+    Z_NEED_DICT,
+    Z_ERRNO,
+    Z_STREAM_ERROR,
+    Z_DATA_ERROR,
+    Z_MEM_ERROR,
+    Z_BUF_ERROR,
+    Z_VERSION_ERROR,
+
+    // Zlib window bits
+    Z_MIN_WINDOWBITS,
+    Z_MAX_WINDOWBITS,
+    Z_DEFAULT_WINDOWBITS,
+    GZIP_WINDOW_OFFSET,
+    AUTO_DETECT_WINDOW_OFFSET,
+    RAW_DEFLATE_WINDOW_OFFSET,
+
+    // Zlib memory levels
+    Z_MIN_MEMLEVEL,
+    Z_MAX_MEMLEVEL,
+    Z_DEFAULT_MEMLEVEL,
+
+    // Default chunk size
+    DEFAULT_CHUNK_SIZE,
+
+    // Brotli modes
+    BROTLI_MODE_GENERIC,
+    BROTLI_MODE_TEXT,
+    BROTLI_MODE_FONT,
+
+    // Brotli quality
+    BROTLI_MIN_QUALITY,
+    BROTLI_MAX_QUALITY,
+    BROTLI_DEFAULT_QUALITY,
+
+    // Brotli window
+    BROTLI_MIN_WINDOW_BITS,
+    BROTLI_MAX_WINDOW_BITS,
+    BROTLI_DEFAULT_WINDOW,
+    BROTLI_LARGE_MAX_WINDOW_BITS,
+
+    // Brotli operations
+    BROTLI_OPERATION_PROCESS,
+    BROTLI_OPERATION_FLUSH,
+    BROTLI_OPERATION_FINISH,
+    BROTLI_OPERATION_EMIT_METADATA,
+
+    // Brotli parameters
+    BROTLI_PARAM_MODE,
+    BROTLI_PARAM_QUALITY,
+    BROTLI_PARAM_LGWIN,
+    BROTLI_PARAM_LGBLOCK,
+    BROTLI_PARAM_SIZE_HINT,
+    BROTLI_PARAM_LARGE_WINDOW,
+
+    // Zstd operations
+    ZSTD_E_CONTINUE,
+    ZSTD_E_FLUSH,
+    ZSTD_E_END,
+
+    // Zstd levels
+    ZSTD_MIN_CLEVEL,
+    ZSTD_MAX_CLEVEL,
+    ZSTD_DEFAULT_CLEVEL,
+
+    // Zstd strategies
+    ZSTD_FAST,
+    ZSTD_DFAST,
+    ZSTD_GREEDY,
+    ZSTD_LAZY,
+    ZSTD_LAZY2,
+    ZSTD_BTLAZY2,
+    ZSTD_BTOPT,
+    ZSTD_BTULTRA,
+    ZSTD_BTULTRA2,
+
+    // Zstd parameters
+    ZSTD_C_COMPRESSIONLEVEL,
+    ZSTD_C_WINDOWLOG,
+    ZSTD_C_STRATEGY,
+    ZSTD_C_NBWORKERS,
+    ZSTD_D_WINDOWLOGMAX,
+}
+
+// Re-export options types
+pub use zlib::options::{ZlibOptions, BrotliOptions, ZstdOptions}
+
+// Re-export deflate functions
+pub use zlib::deflate::{
+    deflate,
+    deflate_with_options,
+    deflate_buffer,
+    deflate_buffer_with_options,
+    deflate_sync,
+    deflate_sync_with_options,
+    deflate_raw,
+    deflate_raw_with_options,
+    deflate_raw_buffer,
+    deflate_raw_buffer_with_options,
+    deflate_raw_sync,
+    deflate_raw_sync_with_options,
+    inflate,
+    inflate_with_options,
+    inflate_to_buffer,
+    inflate_to_buffer_with_options,
+    inflate_sync,
+    inflate_sync_with_options,
+    inflate_raw,
+    inflate_raw_with_options,
+    inflate_raw_to_buffer,
+    inflate_raw_to_buffer_with_options,
+    inflate_raw_sync,
+    inflate_raw_sync_with_options,
+    unzip,
+    unzip_with_options,
+    unzip_to_buffer,
+    unzip_to_buffer_with_options,
+    unzip_sync,
+    unzip_sync_with_options,
+}
+
+// Re-export gzip functions
+pub use zlib::gzip::{
+    gzip,
+    gzip_with_options,
+    gzip_buffer,
+    gzip_buffer_with_options,
+    gzip_sync,
+    gzip_sync_with_options,
+    gunzip,
+    gunzip_with_options,
+    gunzip_to_buffer,
+    gunzip_to_buffer_with_options,
+    gunzip_sync,
+    gunzip_sync_with_options,
+    GzipHeader,
+    read_gzip_header,
+}
+
+// Re-export brotli functions
+pub use zlib::brotli::{
+    brotli_compress,
+    brotli_compress_with_options,
+    brotli_compress_buffer,
+    brotli_compress_buffer_with_options,
+    brotli_compress_sync,
+    brotli_compress_sync_with_options,
+    brotli_decompress,
+    brotli_decompress_with_options,
+    brotli_decompress_to_buffer,
+    brotli_decompress_to_buffer_with_options,
+    brotli_decompress_sync,
+    brotli_decompress_sync_with_options,
+    BrotliCompress,
+    BrotliDecompress,
+}
+
+// Re-export zstd functions
+pub use zlib::zstd::{
+    zstd_compress,
+    zstd_compress_with_options,
+    zstd_compress_buffer,
+    zstd_compress_buffer_with_options,
+    zstd_compress_sync,
+    zstd_compress_sync_with_options,
+    zstd_decompress,
+    zstd_decompress_with_options,
+    zstd_decompress_to_buffer,
+    zstd_decompress_to_buffer_with_options,
+    zstd_decompress_sync,
+    zstd_decompress_sync_with_options,
+    ZstdCompress,
+    ZstdDecompress,
+    ZstdDict,
+    zstd_content_size,
+    zstd_decompress_bound,
+    zstd_frame_dict_id,
+    zstd_is_frame,
+    zstd_min_level,
+    zstd_max_level,
+    zstd_default_level,
+}
+
+// Re-export CRC32 functions
+pub use zlib::crc32::{
+    crc32,
+    crc32_buffer,
+    crc32_update,
+    crc32_update_buffer,
+    crc32_combine,
+    adler32,
+    adler32_buffer,
+    adler32_update,
+    adler32_update_buffer,
+    adler32_combine,
+}
+
+// Re-export streaming classes
+pub use zlib::stream::{
+    Deflate,
+    DeflateRaw,
+    Gzip,
+    Inflate,
+    InflateRaw,
+    Gunzip,
+    Unzip,
+    create_deflate,
+    create_deflate_with_options,
+    create_deflate_raw,
+    create_deflate_raw_with_options,
+    create_gzip,
+    create_gzip_with_options,
+    create_inflate,
+    create_inflate_with_options,
+    create_inflate_raw,
+    create_inflate_raw_with_options,
+    create_gunzip,
+    create_gunzip_with_options,
+    create_unzip,
+    create_unzip_with_options,
+}

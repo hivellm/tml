@@ -329,11 +329,23 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         } else {
             impl_receiver_val = receiver;
         }
-    } else if (call.receiver->is<parser::FieldExpr>() && !receiver_ptr.empty()) {
+    } else if (call.receiver->is<parser::FieldExpr>()) {
+        // For field expressions:
+        // - For ptr types: use loaded pointer value
+        // - For struct fields: use field pointer directly (mutations in place)
+        // - Otherwise: spill struct to stack for method call
         if (last_expr_type_ == "ptr") {
             impl_receiver_val = receiver;
-        } else {
+        } else if (!receiver_ptr.empty()) {
             impl_receiver_val = receiver_ptr;
+        } else if (last_expr_type_.starts_with("%struct.")) {
+            // Field expression but no receiver_ptr - need to spill struct to stack
+            std::string tmp = fresh_reg();
+            emit_line("  " + tmp + " = alloca " + last_expr_type_);
+            emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
+            impl_receiver_val = tmp;
+        } else {
+            impl_receiver_val = receiver;
         }
     } else if (last_expr_type_.starts_with("%struct.")) {
         std::string tmp = fresh_reg();
@@ -503,14 +515,23 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
         } else {
             impl_receiver_val = receiver;
         }
-    } else if (call.receiver->is<parser::FieldExpr>() && !receiver_ptr.empty()) {
+    } else if (call.receiver->is<parser::FieldExpr>()) {
         // For field expressions:
+        // - For ptr types: use loaded pointer value
         // - For struct fields: use field pointer directly (mutations in place)
-        // - For pointer/ref fields: use loaded pointer value (method expects ptr to target)
+        // - Otherwise: spill struct to stack for method call
         if (last_expr_type_ == "ptr") {
-            impl_receiver_val = receiver; // Use loaded pointer value
+            impl_receiver_val = receiver;
+        } else if (!receiver_ptr.empty()) {
+            impl_receiver_val = receiver_ptr;
+        } else if (last_expr_type_.starts_with("%struct.")) {
+            // Field expression but no receiver_ptr - need to spill struct to stack
+            std::string tmp = fresh_reg();
+            emit_line("  " + tmp + " = alloca " + last_expr_type_);
+            emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
+            impl_receiver_val = tmp;
         } else {
-            impl_receiver_val = receiver_ptr; // Use field pointer for struct fields
+            impl_receiver_val = receiver;
         }
     } else if (last_expr_type_.starts_with("%struct.")) {
         std::string tmp = fresh_reg();

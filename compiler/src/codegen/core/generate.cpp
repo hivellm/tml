@@ -1247,9 +1247,14 @@ auto LLVMIRGen::generate(const parser::Module& module)
     }
 
     // Emit function attributes for optimization
+    // When coverage is enabled, add noinline to prevent LLVM from inlining library functions
     emit_line("");
     emit_line("; Function attributes for optimization");
-    emit_line("attributes #0 = { nounwind mustprogress willreturn }");
+    if (options_.coverage_enabled) {
+        emit_line("attributes #0 = { nounwind mustprogress willreturn noinline }");
+    } else {
+        emit_line("attributes #0 = { nounwind mustprogress willreturn }");
+    }
 
     // Emit loop metadata at the end
     emit_loop_metadata();

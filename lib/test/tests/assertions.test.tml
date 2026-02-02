@@ -1,0 +1,215 @@
+//! Tests for test::assertions module - comparison and boolean assertions.
+
+use test
+
+// ============================================================================
+// assert_gt tests
+// ============================================================================
+
+@test
+func test_assert_gt_i32() {
+    // 10 > 5 should pass
+    assert_gt(10, 5, "10 should be greater than 5")
+}
+
+@test
+func test_assert_gt_i64() {
+    // Large numbers
+    let big: I64 = 1000000000 as I64
+    let small: I64 = 999999999 as I64
+    assert_gt(big, small, "big should be greater than small")
+}
+
+@test
+func test_assert_gt_negative() {
+    // -5 > -10 should pass
+    assert_gt(-5, -10, "-5 should be greater than -10")
+}
+
+// ============================================================================
+// assert_gte tests
+// ============================================================================
+
+@test
+func test_assert_gte_greater() {
+    // 10 >= 5 should pass
+    assert_gte(10, 5, "10 should be >= 5")
+}
+
+@test
+func test_assert_gte_equal() {
+    // 5 >= 5 should pass
+    assert_gte(5, 5, "5 should be >= 5")
+}
+
+@test
+func test_assert_gte_i64() {
+    let val: I64 = 100 as I64
+    assert_gte(val, 100 as I64, "100 should be >= 100")
+    assert_gte(val, 50 as I64, "100 should be >= 50")
+}
+
+// ============================================================================
+// assert_lt tests
+// ============================================================================
+
+@test
+func test_assert_lt_i32() {
+    // 5 < 10 should pass
+    assert_lt(5, 10, "5 should be less than 10")
+}
+
+@test
+func test_assert_lt_i64() {
+    let small: I64 = 1 as I64
+    let big: I64 = 1000 as I64
+    assert_lt(small, big, "1 should be less than 1000")
+}
+
+@test
+func test_assert_lt_negative() {
+    // -10 < -5 should pass
+    assert_lt(-10, -5, "-10 should be less than -5")
+}
+
+// ============================================================================
+// assert_lte tests
+// ============================================================================
+
+@test
+func test_assert_lte_less() {
+    // 5 <= 10 should pass
+    assert_lte(5, 10, "5 should be <= 10")
+}
+
+@test
+func test_assert_lte_equal() {
+    // 5 <= 5 should pass
+    assert_lte(5, 5, "5 should be <= 5")
+}
+
+@test
+func test_assert_lte_i64() {
+    let val: I64 = 100 as I64
+    assert_lte(val, 100 as I64, "100 should be <= 100")
+    assert_lte(val, 200 as I64, "100 should be <= 200")
+}
+
+// ============================================================================
+// assert_in_range tests
+// ============================================================================
+
+@test
+func test_assert_in_range_middle() {
+    // 5 is in [1, 10]
+    assert_in_range(5, 1, 10, "5 should be in range [1, 10]")
+}
+
+@test
+func test_assert_in_range_min() {
+    // 1 is in [1, 10]
+    assert_in_range(1, 1, 10, "1 should be in range [1, 10]")
+}
+
+@test
+func test_assert_in_range_max() {
+    // 10 is in [1, 10]
+    assert_in_range(10, 1, 10, "10 should be in range [1, 10]")
+}
+
+@test
+func test_assert_in_range_negative() {
+    // -5 is in [-10, 0]
+    assert_in_range(-5, -10, 0, "-5 should be in range [-10, 0]")
+}
+
+// ============================================================================
+// assert_true tests
+// ============================================================================
+
+@test
+func test_assert_true_simple() {
+    assert_true(true, "true should be true")
+}
+
+@test
+func test_assert_true_expression() {
+    let x: I32 = 10
+    assert_true(x > 5, "10 > 5 should be true")
+}
+
+@test
+func test_assert_true_equality() {
+    let a: I32 = 42
+    let b: I32 = 42
+    assert_true(a == b, "42 == 42 should be true")
+}
+
+// ============================================================================
+// assert_false tests
+// ============================================================================
+
+@test
+func test_assert_false_simple() {
+    assert_false(false, "false should be false")
+}
+
+@test
+func test_assert_false_expression() {
+    let x: I32 = 10
+    assert_false(x < 5, "10 < 5 should be false")
+}
+
+@test
+func test_assert_false_inequality() {
+    let a: I32 = 42
+    let b: I32 = 24
+    assert_false(a == b, "42 == 24 should be false")
+}
+
+// ============================================================================
+// assert_str_len tests
+// ============================================================================
+
+@test
+func test_assert_str_len_hello() {
+    assert_str_len("hello", 5, "hello has 5 characters")
+}
+
+@test
+func test_assert_str_len_empty() {
+    assert_str_len("", 0, "empty string has 0 characters")
+}
+
+@test
+func test_assert_str_len_space() {
+    assert_str_len(" ", 1, "space has 1 character")
+}
+
+// ============================================================================
+// assert_str_empty tests
+// ============================================================================
+
+@test
+func test_assert_str_empty() {
+    assert_str_empty("", "empty string should be empty")
+}
+
+// ============================================================================
+// assert_str_not_empty tests
+// ============================================================================
+
+@test
+func test_assert_str_not_empty_hello() {
+    assert_str_not_empty("hello", "hello is not empty")
+}
+
+@test
+func test_assert_str_not_empty_space() {
+    assert_str_not_empty(" ", "space is not empty")
+}
+
+@test
+func test_assert_str_not_empty_newline() {
+    assert_str_not_empty("\n", "newline is not empty")
+}

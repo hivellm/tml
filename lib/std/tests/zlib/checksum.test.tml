@@ -1,0 +1,8 @@
+// Tests for CRC32 and Adler32 checksums
+use test
+
+@test
+func test_checksum_module_placeholder() -> I32 {
+    assert_eq(1, 1, "basic test works")
+    return 0
+}

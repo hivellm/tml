@@ -161,6 +161,25 @@ auto HirMirBuilder::build_var(const hir::HirVarExpr& var) -> Value {
         }
     }
 
+    // For mutable struct variables stored via alloca, emit a load to get the value
+    // The variable holds a pointer, but we need the value for most expressions
+    if (ctx_.mut_struct_vars.count(var.name) > 0) {
+        // result is the alloca pointer, need to load the struct value
+        auto ptr_type = result.type;
+        MirTypePtr pointee_type;
+        if (ptr_type && std::holds_alternative<MirPointerType>(ptr_type->kind)) {
+            pointee_type = std::get<MirPointerType>(ptr_type->kind).pointee;
+        } else {
+            pointee_type = convert_type(var.type);
+        }
+
+        LoadInst load;
+        load.ptr = result;
+        load.result_type = pointee_type;
+
+        return emit(load, pointee_type);
+    }
+
     return result;
 }
 
@@ -400,8 +419,23 @@ auto HirMirBuilder::build_call(const hir::HirCallExpr& call) -> Value {
 // ============================================================================
 
 auto HirMirBuilder::build_method_call(const hir::HirMethodCallExpr& call) -> Value {
-    // Build receiver
-    Value receiver = build_expr(call.receiver);
+    // Build receiver - but for mutable struct variables, we need the pointer, not the loaded value
+    Value receiver;
+    bool receiver_is_ptr = false;
+
+    // Check if receiver is a variable reference to a mutable struct
+    if (auto* var_expr = std::get_if<hir::HirVarExpr>(&call.receiver->kind)) {
+        if (ctx_.mut_struct_vars.count(var_expr->name) > 0) {
+            // Get the alloca pointer directly (don't load)
+            receiver = get_variable(var_expr->name);
+            receiver_is_ptr = true;
+        }
+    }
+
+    // If not a mut_struct_var, build normally
+    if (!receiver_is_ptr) {
+        receiver = build_expr(call.receiver);
+    }
 
     // Build arguments
     std::vector<Value> args;
@@ -1086,7 +1120,9 @@ auto HirMirBuilder::build_for(const hir::HirForExpr& for_expr) -> Value {
     MirTypePtr maybe_type = make_enum_type("Maybe", {element_type});
 
     MethodCallInst next_call;
-    next_call.receiver = current_iter;
+    // Pass the pointer to the iterator, not the loaded value.
+    // Methods with `mut self` expect a pointer so they can modify the iterator.
+    next_call.receiver = iter_ptr;
     next_call.receiver_type = get_type_name(iter.type);
     next_call.method_name = "next";
     next_call.args = {};
@@ -1639,6 +1675,19 @@ auto HirMirBuilder::build_assign(const hir::HirAssignExpr& assign) -> Value {
                 return const_unit();
             }
         }
+        // Check if this is a mutable struct variable - need to emit store
+        if (ctx_.mut_struct_vars.count(var->name) > 0) {
+            auto it = ctx_.variables.find(var->name);
+            if (it != ctx_.variables.end()) {
+                Value alloca_ptr = it->second;
+                StoreInst store;
+                store.ptr = alloca_ptr;
+                store.value = rhs;
+                store.value_type = rhs.type;
+                emit_void(store);
+                return const_unit();
+            }
+        }
         set_variable(var->name, rhs);
         return const_unit();
     }
@@ -1792,6 +1841,19 @@ auto HirMirBuilder::build_compound_assign(const hir::HirCompoundAssignExpr& assi
                 store.value = result;
                 store.value_type = result.type;
                 store.is_volatile = true;
+                emit_void(store);
+                return const_unit();
+            }
+        }
+        // Check if this is a mutable struct variable - need to emit store
+        if (ctx_.mut_struct_vars.count(var->name) > 0) {
+            auto it = ctx_.variables.find(var->name);
+            if (it != ctx_.variables.end()) {
+                Value alloca_ptr = it->second;
+                StoreInst store;
+                store.ptr = alloca_ptr;
+                store.value = result;
+                store.value_type = result.type;
                 emit_void(store);
                 return const_unit();
             }

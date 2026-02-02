@@ -120,7 +120,8 @@ This project uses @hivellm/rulebook standards.
 4. Update docs/ when implementing features
 5. Follow strict documentation structure
 6. **NEVER run destructive deletions (`rm -rf`) in this repository; when adding submodules always use `git submodule add`.**
-7. **Temporary files and scripts**:
+7. **NEVER delete test caches** - Do NOT delete `build/debug/.run-cache/`, `build/debug/.test-cache/`, or `.test-cache.json`. The cache system auto-invalidates correctly. Use `tml test --no-cache` if you think tests are stale.
+8. **Temporary files and scripts**:
    - ✅ ALL scripts MUST be created in `/scripts` directory
    - ✅ ALL temporary files (test, log, debug) MUST be in `/scripts`
    - ✅ ALL temporary files MUST be removed immediately after use (MANDATORY)

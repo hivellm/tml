@@ -1,0 +1,843 @@
+//! Symmetric encryption and decryption.
+//!
+//! This module provides symmetric cipher operations for encrypting and
+//! decrypting data using secret keys.
+//!
+//! # Supported Algorithms
+//!
+//! | Algorithm | Key Size | Block/Nonce | Mode | Notes |
+//! |-----------|----------|-------------|------|-------|
+//! | AES-128-CBC | 128 bits | 128-bit IV | CBC | Requires padding |
+//! | AES-192-CBC | 192 bits | 128-bit IV | CBC | Requires padding |
+//! | AES-256-CBC | 256 bits | 128-bit IV | CBC | Requires padding |
+//! | AES-128-CTR | 128 bits | 128-bit IV | CTR | Stream mode |
+//! | AES-192-CTR | 192 bits | 128-bit IV | CTR | Stream mode |
+//! | AES-256-CTR | 256 bits | 128-bit IV | CTR | Stream mode |
+//! | AES-128-GCM | 128 bits | 96-bit nonce | GCM | AEAD, authenticated |
+//! | AES-192-GCM | 192 bits | 96-bit nonce | GCM | AEAD, authenticated |
+//! | AES-256-GCM | 256 bits | 96-bit nonce | GCM | AEAD, authenticated |
+//! | AES-128-CCM | 128 bits | 56-104 bit | CCM | AEAD |
+//! | AES-256-CCM | 256 bits | 56-104 bit | CCM | AEAD |
+//! | ChaCha20-Poly1305 | 256 bits | 96-bit nonce | AEAD | Recommended |
+//! | XChaCha20-Poly1305 | 256 bits | 192-bit nonce | AEAD | Extended nonce |
+//!
+//! # AEAD (Authenticated Encryption with Associated Data)
+//!
+//! AEAD modes (GCM, CCM, ChaCha20-Poly1305) provide both confidentiality and
+//! authenticity. They produce an authentication tag that must be verified
+//! during decryption.
+//!
+//! # Examples
+//!
+//! ## AES-256-GCM Encryption (Recommended)
+//!
+//! ```tml
+//! use std::crypto::{aes_gcm_encrypt, aes_gcm_decrypt, random_bytes}
+//!
+//! let key = random_bytes(32)    // 256-bit key
+//! let nonce = random_bytes(12)  // 96-bit nonce
+//! let plaintext = "secret message"
+//! let aad = "associated data"   // optional
+//!
+//! // Encrypt
+//! let (ciphertext, tag) = aes_gcm_encrypt(key, nonce, plaintext, aad)?
+//!
+//! // Decrypt
+//! let decrypted = aes_gcm_decrypt(key, nonce, ciphertext, aad, tag)?
+//! ```
+//!
+//! ## ChaCha20-Poly1305 (Alternative)
+//!
+//! ```tml
+//! use std::crypto::{chacha20_poly1305_encrypt, chacha20_poly1305_decrypt, random_bytes}
+//!
+//! let key = random_bytes(32)
+//! let nonce = random_bytes(12)
+//!
+//! let (ciphertext, tag) = chacha20_poly1305_encrypt(key, nonce, "message", "")?
+//! let plaintext = chacha20_poly1305_decrypt(key, nonce, ciphertext, "", tag)?
+//! ```
+//!
+//! ## Streaming Encryption
+//!
+//! ```tml
+//! use std::crypto::{Cipher, CipherAlgorithm, random_bytes}
+//!
+//! let key = random_bytes(32)
+//! let iv = random_bytes(16)
+//!
+//! let cipher = Cipher::new(CipherAlgorithm::Aes256Cbc, key, iv)?
+//! cipher.update("first chunk ")
+//! cipher.update("second chunk")
+//! let encrypted = cipher.finalize()?
+//! ```
+
+use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::collections::Buffer
+
+/// Supported cipher algorithms.
+pub type CipherAlgorithm {
+    // AES CBC modes
+    Aes128Cbc,
+    Aes192Cbc,
+    Aes256Cbc,
+    // AES CTR modes
+    Aes128Ctr,
+    Aes192Ctr,
+    Aes256Ctr,
+    // AES GCM modes (AEAD)
+    Aes128Gcm,
+    Aes192Gcm,
+    Aes256Gcm,
+    // AES CCM modes (AEAD)
+    Aes128Ccm,
+    Aes256Ccm,
+    // AES OCB modes (AEAD)
+    Aes128Ocb,
+    Aes256Ocb,
+    // ChaCha20 variants
+    ChaCha20,
+    ChaCha20Poly1305,
+    XChaCha20Poly1305,
+    // Legacy (not recommended)
+    Aes128Ecb,
+    Aes256Ecb,
+    Des3Cbc,
+    BlowfishCbc,
+}
+
+impl CipherAlgorithm {
+    /// Returns the OpenSSL algorithm name.
+    pub func name(this) -> Str {
+        when this {
+            CipherAlgorithm::Aes128Cbc => return "aes-128-cbc"
+            CipherAlgorithm::Aes192Cbc => return "aes-192-cbc"
+            CipherAlgorithm::Aes256Cbc => return "aes-256-cbc"
+            CipherAlgorithm::Aes128Ctr => return "aes-128-ctr"
+            CipherAlgorithm::Aes192Ctr => return "aes-192-ctr"
+            CipherAlgorithm::Aes256Ctr => return "aes-256-ctr"
+            CipherAlgorithm::Aes128Gcm => return "aes-128-gcm"
+            CipherAlgorithm::Aes192Gcm => return "aes-192-gcm"
+            CipherAlgorithm::Aes256Gcm => return "aes-256-gcm"
+            CipherAlgorithm::Aes128Ccm => return "aes-128-ccm"
+            CipherAlgorithm::Aes256Ccm => return "aes-256-ccm"
+            CipherAlgorithm::Aes128Ocb => return "aes-128-ocb"
+            CipherAlgorithm::Aes256Ocb => return "aes-256-ocb"
+            CipherAlgorithm::ChaCha20 => return "chacha20"
+            CipherAlgorithm::ChaCha20Poly1305 => return "chacha20-poly1305"
+            CipherAlgorithm::XChaCha20Poly1305 => return "xchacha20-poly1305"
+            CipherAlgorithm::Aes128Ecb => return "aes-128-ecb"
+            CipherAlgorithm::Aes256Ecb => return "aes-256-ecb"
+            CipherAlgorithm::Des3Cbc => return "des-ede3-cbc"
+            CipherAlgorithm::BlowfishCbc => return "bf-cbc"
+        }
+    }
+
+    /// Returns the required key size in bytes.
+    pub func key_size(this) -> I64 {
+        when this {
+            CipherAlgorithm::Aes128Cbc => return 16
+            CipherAlgorithm::Aes192Cbc => return 24
+            CipherAlgorithm::Aes256Cbc => return 32
+            CipherAlgorithm::Aes128Ctr => return 16
+            CipherAlgorithm::Aes192Ctr => return 24
+            CipherAlgorithm::Aes256Ctr => return 32
+            CipherAlgorithm::Aes128Gcm => return 16
+            CipherAlgorithm::Aes192Gcm => return 24
+            CipherAlgorithm::Aes256Gcm => return 32
+            CipherAlgorithm::Aes128Ccm => return 16
+            CipherAlgorithm::Aes256Ccm => return 32
+            CipherAlgorithm::Aes128Ocb => return 16
+            CipherAlgorithm::Aes256Ocb => return 32
+            CipherAlgorithm::ChaCha20 => return 32
+            CipherAlgorithm::ChaCha20Poly1305 => return 32
+            CipherAlgorithm::XChaCha20Poly1305 => return 32
+            CipherAlgorithm::Aes128Ecb => return 16
+            CipherAlgorithm::Aes256Ecb => return 32
+            CipherAlgorithm::Des3Cbc => return 24
+            CipherAlgorithm::BlowfishCbc => return 16
+        }
+    }
+
+    /// Returns the IV/nonce size in bytes.
+    pub func iv_size(this) -> I64 {
+        when this {
+            CipherAlgorithm::Aes128Cbc => return 16
+            CipherAlgorithm::Aes192Cbc => return 16
+            CipherAlgorithm::Aes256Cbc => return 16
+            CipherAlgorithm::Aes128Ctr => return 16
+            CipherAlgorithm::Aes192Ctr => return 16
+            CipherAlgorithm::Aes256Ctr => return 16
+            CipherAlgorithm::Aes128Gcm => return 12
+            CipherAlgorithm::Aes192Gcm => return 12
+            CipherAlgorithm::Aes256Gcm => return 12
+            CipherAlgorithm::Aes128Ccm => return 12
+            CipherAlgorithm::Aes256Ccm => return 12
+            CipherAlgorithm::Aes128Ocb => return 12
+            CipherAlgorithm::Aes256Ocb => return 12
+            CipherAlgorithm::ChaCha20 => return 16
+            CipherAlgorithm::ChaCha20Poly1305 => return 12
+            CipherAlgorithm::XChaCha20Poly1305 => return 24
+            CipherAlgorithm::Aes128Ecb => return 0
+            CipherAlgorithm::Aes256Ecb => return 0
+            CipherAlgorithm::Des3Cbc => return 8
+            CipherAlgorithm::BlowfishCbc => return 8
+        }
+    }
+
+    /// Returns the block size in bytes.
+    pub func block_size(this) -> I64 {
+        when this {
+            CipherAlgorithm::ChaCha20 => return 1
+            CipherAlgorithm::ChaCha20Poly1305 => return 1
+            CipherAlgorithm::XChaCha20Poly1305 => return 1
+            CipherAlgorithm::Aes128Ctr => return 1
+            CipherAlgorithm::Aes192Ctr => return 1
+            CipherAlgorithm::Aes256Ctr => return 1
+            CipherAlgorithm::Des3Cbc => return 8
+            CipherAlgorithm::BlowfishCbc => return 8
+            _ => return 16  // AES block size
+        }
+    }
+
+    /// Returns true if this is an AEAD algorithm.
+    pub func is_aead(this) -> Bool {
+        when this {
+            CipherAlgorithm::Aes128Gcm => return true
+            CipherAlgorithm::Aes192Gcm => return true
+            CipherAlgorithm::Aes256Gcm => return true
+            CipherAlgorithm::Aes128Ccm => return true
+            CipherAlgorithm::Aes256Ccm => return true
+            CipherAlgorithm::Aes128Ocb => return true
+            CipherAlgorithm::Aes256Ocb => return true
+            CipherAlgorithm::ChaCha20Poly1305 => return true
+            CipherAlgorithm::XChaCha20Poly1305 => return true
+            _ => return false
+        }
+    }
+
+    /// Returns the authentication tag size for AEAD modes.
+    pub func tag_size(this) -> I64 {
+        if this.is_aead() {
+            return 16
+        }
+        return 0
+    }
+
+    /// Parses an algorithm from a string name.
+    pub func from_name(name: Str) -> Maybe[CipherAlgorithm] {
+        when name {
+            "aes-128-cbc" => return Just(CipherAlgorithm::Aes128Cbc)
+            "aes-192-cbc" => return Just(CipherAlgorithm::Aes192Cbc)
+            "aes-256-cbc" => return Just(CipherAlgorithm::Aes256Cbc)
+            "aes-128-ctr" => return Just(CipherAlgorithm::Aes128Ctr)
+            "aes-192-ctr" => return Just(CipherAlgorithm::Aes192Ctr)
+            "aes-256-ctr" => return Just(CipherAlgorithm::Aes256Ctr)
+            "aes-128-gcm" => return Just(CipherAlgorithm::Aes128Gcm)
+            "aes-192-gcm" => return Just(CipherAlgorithm::Aes192Gcm)
+            "aes-256-gcm" => return Just(CipherAlgorithm::Aes256Gcm)
+            "aes-128-ccm" => return Just(CipherAlgorithm::Aes128Ccm)
+            "aes-256-ccm" => return Just(CipherAlgorithm::Aes256Ccm)
+            "aes-128-ocb" => return Just(CipherAlgorithm::Aes128Ocb)
+            "aes-256-ocb" => return Just(CipherAlgorithm::Aes256Ocb)
+            "chacha20" => return Just(CipherAlgorithm::ChaCha20)
+            "chacha20-poly1305" => return Just(CipherAlgorithm::ChaCha20Poly1305)
+            "xchacha20-poly1305" => return Just(CipherAlgorithm::XChaCha20Poly1305)
+            "aes-128-ecb" => return Just(CipherAlgorithm::Aes128Ecb)
+            "aes-256-ecb" => return Just(CipherAlgorithm::Aes256Ecb)
+            "des-ede3-cbc" => return Just(CipherAlgorithm::Des3Cbc)
+            "bf-cbc" => return Just(CipherAlgorithm::BlowfishCbc)
+            _ => return Nothing
+        }
+    }
+}
+
+/// Cipher modes for block ciphers.
+pub type CipherMode {
+    /// Electronic Codebook (not recommended)
+    Ecb,
+    /// Cipher Block Chaining
+    Cbc,
+    /// Counter mode
+    Ctr,
+    /// Galois/Counter Mode (AEAD)
+    Gcm,
+    /// Counter with CBC-MAC (AEAD)
+    Ccm,
+    /// Offset Codebook Mode (AEAD)
+    Ocb,
+    /// Output Feedback
+    Ofb,
+    /// Cipher Feedback
+    Cfb,
+}
+
+/// Authentication tag for AEAD modes.
+pub type AuthTag {
+    data: Buffer
+}
+
+impl AuthTag {
+    /// Creates an AuthTag from raw bytes.
+    pub func from_bytes(data: Buffer) -> AuthTag {
+        return AuthTag { data: data }
+    }
+
+    /// Returns the tag as bytes.
+    pub func bytes(this) -> ref Buffer {
+        return ref this.data
+    }
+
+    /// Returns the tag as a hexadecimal string.
+    pub func to_hex(this) -> Str {
+        let hex: Str = lowlevel { crypto_bytes_to_hex(this.data.handle) }
+        return hex
+    }
+
+    /// Returns the tag length in bytes.
+    pub func len(this) -> I64 {
+        return this.data.len()
+    }
+
+    /// Parses an AuthTag from hexadecimal.
+    pub func from_hex(hex: Str) -> CryptoResult[AuthTag] {
+        let handle: *Unit = lowlevel { crypto_hex_to_bytes(hex) }
+        if handle == null {
+            return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "invalid hex string"))
+        }
+        return Ok(AuthTag { data: Buffer { handle: handle } })
+    }
+}
+
+/// Encryption cipher for streaming encryption.
+pub type Cipher {
+    handle: *Unit
+    algorithm: CipherAlgorithm
+    finalized: Bool
+    output: Buffer
+}
+
+impl Cipher {
+    /// Creates a new Cipher for encryption.
+    pub func new(algorithm: CipherAlgorithm, key: ref Buffer, iv: ref Buffer) -> CryptoResult[Cipher] {
+        // Validate key size
+        if key.len() != algorithm.key_size() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidKey,
+                "expected {algorithm.key_size()} byte key, got {key.len()}"
+            ))
+        }
+
+        // Validate IV size
+        if iv.len() != algorithm.iv_size() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidIv,
+                "expected {algorithm.iv_size()} byte IV, got {iv.len()}"
+            ))
+        }
+
+        let handle: *Unit = lowlevel { crypto_cipher_create(algorithm.name(), key.handle, iv.handle, 1) }
+        if handle == null {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::UnsupportedAlgorithm,
+                "failed to create cipher for {algorithm.name()}"
+            ))
+        }
+
+        return Ok(Cipher {
+            handle: handle,
+            algorithm: algorithm,
+            finalized: false,
+            output: Buffer::new(64),
+        })
+    }
+
+    /// Sets the Additional Authenticated Data for AEAD modes.
+    pub func set_aad(mut this, aad: ref Buffer) -> CryptoResult[ref Cipher] {
+        if not this.algorithm.is_aead() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidParameter,
+                "AAD is only supported for AEAD ciphers"
+            ))
+        }
+        lowlevel { crypto_cipher_set_aad(this.handle, aad.handle) }
+        return Ok(ref this)
+    }
+
+    /// Sets AAD from a string.
+    pub func set_aad_str(mut this, aad: Str) -> CryptoResult[ref Cipher] {
+        if not this.algorithm.is_aead() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidParameter,
+                "AAD is only supported for AEAD ciphers"
+            ))
+        }
+        lowlevel { crypto_cipher_set_aad_str(this.handle, aad) }
+        return Ok(ref this)
+    }
+
+    /// Enables or disables automatic padding.
+    pub func set_auto_padding(mut this, enabled: Bool) -> ref Cipher {
+        lowlevel { crypto_cipher_set_padding(this.handle, enabled) }
+        return ref this
+    }
+
+    /// Updates the cipher with plaintext data.
+    pub func update(mut this, data: Str) -> ref Cipher {
+        if not this.finalized {
+            lowlevel { crypto_cipher_update_str(this.handle, data, this.output.handle) }
+        }
+        return ref this
+    }
+
+    /// Updates the cipher with binary plaintext data.
+    pub func update_bytes(mut this, data: ref Buffer) -> ref Cipher {
+        if not this.finalized {
+            lowlevel { crypto_cipher_update_bytes(this.handle, data.handle, this.output.handle) }
+        }
+        return ref this
+    }
+
+    /// Finalizes the encryption and returns the ciphertext.
+    pub func finalize(mut this) -> CryptoResult[Buffer] {
+        if this.finalized {
+            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        }
+        this.finalized = true
+        let success: Bool = lowlevel { crypto_cipher_finalize(this.handle, this.output.handle) }
+        if not success {
+            return Err(CryptoError::new(CryptoErrorKind::InvalidPadding))
+        }
+        return Ok(this.output)
+    }
+
+    /// Gets the authentication tag after finalization (AEAD modes only).
+    pub func get_auth_tag(this) -> CryptoResult[AuthTag] {
+        if not this.algorithm.is_aead() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidParameter,
+                "auth tag is only available for AEAD ciphers"
+            ))
+        }
+        if not this.finalized {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::OperationFailed,
+                "cipher must be finalized before getting auth tag"
+            ))
+        }
+        let tag_handle: *Unit = lowlevel { crypto_cipher_get_tag(this.handle) }
+        if tag_handle == null {
+            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        }
+        return Ok(AuthTag { data: Buffer { handle: tag_handle } })
+    }
+
+    /// Returns the algorithm being used.
+    pub func algorithm(this) -> CipherAlgorithm {
+        return this.algorithm
+    }
+
+    /// Frees the cipher resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { crypto_cipher_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+/// Decryption cipher for streaming decryption.
+pub type Decipher {
+    handle: *Unit
+    algorithm: CipherAlgorithm
+    finalized: Bool
+    output: Buffer
+}
+
+impl Decipher {
+    /// Creates a new Decipher for decryption.
+    pub func new(algorithm: CipherAlgorithm, key: ref Buffer, iv: ref Buffer) -> CryptoResult[Decipher] {
+        // Validate key size
+        if key.len() != algorithm.key_size() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidKey,
+                "expected {algorithm.key_size()} byte key, got {key.len()}"
+            ))
+        }
+
+        // Validate IV size
+        if iv.len() != algorithm.iv_size() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidIv,
+                "expected {algorithm.iv_size()} byte IV, got {iv.len()}"
+            ))
+        }
+
+        let handle: *Unit = lowlevel { crypto_cipher_create(algorithm.name(), key.handle, iv.handle, 0) }
+        if handle == null {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::UnsupportedAlgorithm,
+                "failed to create decipher for {algorithm.name()}"
+            ))
+        }
+
+        return Ok(Decipher {
+            handle: handle,
+            algorithm: algorithm,
+            finalized: false,
+            output: Buffer::new(64),
+        })
+    }
+
+    /// Sets the Additional Authenticated Data for AEAD modes.
+    pub func set_aad(mut this, aad: ref Buffer) -> CryptoResult[ref Decipher] {
+        if not this.algorithm.is_aead() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidParameter,
+                "AAD is only supported for AEAD ciphers"
+            ))
+        }
+        lowlevel { crypto_cipher_set_aad(this.handle, aad.handle) }
+        return Ok(ref this)
+    }
+
+    /// Sets AAD from a string.
+    pub func set_aad_str(mut this, aad: Str) -> CryptoResult[ref Decipher] {
+        if not this.algorithm.is_aead() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidParameter,
+                "AAD is only supported for AEAD ciphers"
+            ))
+        }
+        lowlevel { crypto_cipher_set_aad_str(this.handle, aad) }
+        return Ok(ref this)
+    }
+
+    /// Sets the authentication tag for AEAD decryption.
+    pub func set_auth_tag(mut this, tag: ref AuthTag) -> CryptoResult[ref Decipher] {
+        if not this.algorithm.is_aead() {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidParameter,
+                "auth tag is only supported for AEAD ciphers"
+            ))
+        }
+        lowlevel { crypto_cipher_set_tag(this.handle, tag.data.handle) }
+        return Ok(ref this)
+    }
+
+    /// Enables or disables automatic padding.
+    pub func set_auto_padding(mut this, enabled: Bool) -> ref Decipher {
+        lowlevel { crypto_cipher_set_padding(this.handle, enabled) }
+        return ref this
+    }
+
+    /// Updates the decipher with ciphertext data.
+    pub func update_bytes(mut this, data: ref Buffer) -> ref Decipher {
+        if not this.finalized {
+            lowlevel { crypto_cipher_update_bytes(this.handle, data.handle, this.output.handle) }
+        }
+        return ref this
+    }
+
+    /// Finalizes the decryption and returns the plaintext.
+    pub func finalize(mut this) -> CryptoResult[Buffer] {
+        if this.finalized {
+            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        }
+        this.finalized = true
+        let success: Bool = lowlevel { crypto_cipher_finalize(this.handle, this.output.handle) }
+        if not success {
+            if this.algorithm.is_aead() {
+                return Err(CryptoError::new(CryptoErrorKind::AuthenticationFailed))
+            }
+            return Err(CryptoError::new(CryptoErrorKind::InvalidPadding))
+        }
+        return Ok(this.output)
+    }
+
+    /// Returns the algorithm being used.
+    pub func algorithm(this) -> CipherAlgorithm {
+        return this.algorithm
+    }
+
+    /// Frees the decipher resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { crypto_cipher_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+// ============================================================================
+// One-shot encryption/decryption helpers
+// ============================================================================
+
+/// Encrypts data using AES-CBC.
+pub func aes_encrypt(key: ref Buffer, iv: ref Buffer, plaintext: ref Buffer) -> CryptoResult[Buffer] {
+    let algorithm = if key.len() == 16 {
+        CipherAlgorithm::Aes128Cbc
+    } else if key.len() == 24 {
+        CipherAlgorithm::Aes192Cbc
+    } else if key.len() == 32 {
+        CipherAlgorithm::Aes256Cbc
+    } else {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidKey,
+            "AES key must be 16, 24, or 32 bytes"
+        ))
+    }
+
+    let mut cipher = Cipher::new(algorithm, key, iv)?
+    cipher.update_bytes(plaintext)
+    return cipher.finalize()
+}
+
+/// Decrypts data using AES-CBC.
+pub func aes_decrypt(key: ref Buffer, iv: ref Buffer, ciphertext: ref Buffer) -> CryptoResult[Buffer] {
+    let algorithm = if key.len() == 16 {
+        CipherAlgorithm::Aes128Cbc
+    } else if key.len() == 24 {
+        CipherAlgorithm::Aes192Cbc
+    } else if key.len() == 32 {
+        CipherAlgorithm::Aes256Cbc
+    } else {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidKey,
+            "AES key must be 16, 24, or 32 bytes"
+        ))
+    }
+
+    let mut decipher = Decipher::new(algorithm, key, iv)?
+    decipher.update_bytes(ciphertext)
+    return decipher.finalize()
+}
+
+/// Encrypts data using AES-GCM (AEAD).
+///
+/// Returns the ciphertext and authentication tag.
+pub func aes_gcm_encrypt(
+    key: ref Buffer,
+    nonce: ref Buffer,
+    plaintext: ref Buffer,
+    aad: ref Buffer,
+) -> CryptoResult[(Buffer, AuthTag)] {
+    let algorithm = if key.len() == 16 {
+        CipherAlgorithm::Aes128Gcm
+    } else if key.len() == 24 {
+        CipherAlgorithm::Aes192Gcm
+    } else if key.len() == 32 {
+        CipherAlgorithm::Aes256Gcm
+    } else {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidKey,
+            "AES-GCM key must be 16, 24, or 32 bytes"
+        ))
+    }
+
+    let mut cipher = Cipher::new(algorithm, key, nonce)?
+    cipher.set_aad(aad)?
+    cipher.update_bytes(plaintext)
+    let ciphertext = cipher.finalize()?
+    let tag = cipher.get_auth_tag()?
+    return Ok((ciphertext, tag))
+}
+
+/// Decrypts data using AES-GCM (AEAD).
+///
+/// Verifies the authentication tag and returns the plaintext.
+pub func aes_gcm_decrypt(
+    key: ref Buffer,
+    nonce: ref Buffer,
+    ciphertext: ref Buffer,
+    aad: ref Buffer,
+    tag: ref AuthTag,
+) -> CryptoResult[Buffer] {
+    let algorithm = if key.len() == 16 {
+        CipherAlgorithm::Aes128Gcm
+    } else if key.len() == 24 {
+        CipherAlgorithm::Aes192Gcm
+    } else if key.len() == 32 {
+        CipherAlgorithm::Aes256Gcm
+    } else {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidKey,
+            "AES-GCM key must be 16, 24, or 32 bytes"
+        ))
+    }
+
+    let mut decipher = Decipher::new(algorithm, key, nonce)?
+    decipher.set_aad(aad)?
+    decipher.set_auth_tag(tag)?
+    decipher.update_bytes(ciphertext)
+    return decipher.finalize()
+}
+
+/// Encrypts data using ChaCha20-Poly1305 (AEAD).
+///
+/// Returns the ciphertext and authentication tag.
+pub func chacha20_poly1305_encrypt(
+    key: ref Buffer,
+    nonce: ref Buffer,
+    plaintext: ref Buffer,
+    aad: ref Buffer,
+) -> CryptoResult[(Buffer, AuthTag)] {
+    if key.len() != 32 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidKey,
+            "ChaCha20-Poly1305 requires 32-byte key"
+        ))
+    }
+    if nonce.len() != 12 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidIv,
+            "ChaCha20-Poly1305 requires 12-byte nonce"
+        ))
+    }
+
+    let mut cipher = Cipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)?
+    cipher.set_aad(aad)?
+    cipher.update_bytes(plaintext)
+    let ciphertext = cipher.finalize()?
+    let tag = cipher.get_auth_tag()?
+    return Ok((ciphertext, tag))
+}
+
+/// Decrypts data using ChaCha20-Poly1305 (AEAD).
+pub func chacha20_poly1305_decrypt(
+    key: ref Buffer,
+    nonce: ref Buffer,
+    ciphertext: ref Buffer,
+    aad: ref Buffer,
+    tag: ref AuthTag,
+) -> CryptoResult[Buffer] {
+    if key.len() != 32 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidKey,
+            "ChaCha20-Poly1305 requires 32-byte key"
+        ))
+    }
+    if nonce.len() != 12 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidIv,
+            "ChaCha20-Poly1305 requires 12-byte nonce"
+        ))
+    }
+
+    let mut decipher = Decipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)?
+    decipher.set_aad(aad)?
+    decipher.set_auth_tag(tag)?
+    decipher.update_bytes(ciphertext)
+    return decipher.finalize()
+}
+
+/// Encrypts data using XChaCha20-Poly1305 (extended nonce AEAD).
+pub func xchacha20_poly1305_encrypt(
+    key: ref Buffer,
+    nonce: ref Buffer,
+    plaintext: ref Buffer,
+    aad: ref Buffer,
+) -> CryptoResult[(Buffer, AuthTag)] {
+    if key.len() != 32 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidKey,
+            "XChaCha20-Poly1305 requires 32-byte key"
+        ))
+    }
+    if nonce.len() != 24 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidIv,
+            "XChaCha20-Poly1305 requires 24-byte nonce"
+        ))
+    }
+
+    let mut cipher = Cipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)?
+    cipher.set_aad(aad)?
+    cipher.update_bytes(plaintext)
+    let ciphertext = cipher.finalize()?
+    let tag = cipher.get_auth_tag()?
+    return Ok((ciphertext, tag))
+}
+
+/// Decrypts data using XChaCha20-Poly1305 (extended nonce AEAD).
+pub func xchacha20_poly1305_decrypt(
+    key: ref Buffer,
+    nonce: ref Buffer,
+    ciphertext: ref Buffer,
+    aad: ref Buffer,
+    tag: ref AuthTag,
+) -> CryptoResult[Buffer] {
+    if key.len() != 32 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidKey,
+            "XChaCha20-Poly1305 requires 32-byte key"
+        ))
+    }
+    if nonce.len() != 24 {
+        return Err(CryptoError::with_details(
+            CryptoErrorKind::InvalidIv,
+            "XChaCha20-Poly1305 requires 24-byte nonce"
+        ))
+    }
+
+    let mut decipher = Decipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)?
+    decipher.set_aad(aad)?
+    decipher.set_auth_tag(tag)?
+    decipher.update_bytes(ciphertext)
+    return decipher.finalize()
+}
+
+/// Encrypts a string and returns base64-encoded result with IV prepended.
+///
+/// Convenient helper for simple encryption use cases.
+pub func encrypt_string(key: ref Buffer, plaintext: Str) -> CryptoResult[Str] {
+    // Generate random IV
+    let iv_handle: *Unit = lowlevel { crypto_random_bytes(12) }
+    let iv = Buffer { handle: iv_handle }
+
+    // Encrypt with AES-GCM
+    let plaintext_buf_handle: *Unit = lowlevel { crypto_str_to_bytes(plaintext) }
+    let plaintext_buf = Buffer { handle: plaintext_buf_handle }
+
+    let aad = Buffer::new(0)
+    let (ciphertext, tag) = aes_gcm_encrypt(key, ref iv, ref plaintext_buf, ref aad)?
+
+    // Combine IV + ciphertext + tag
+    let result_handle: *Unit = lowlevel { crypto_concat_buffers3(iv.handle, ciphertext.handle, tag.data.handle) }
+    let result = Buffer { handle: result_handle }
+
+    // Return base64
+    let b64: Str = lowlevel { crypto_bytes_to_base64(result.handle) }
+    return Ok(b64)
+}
+
+/// Decrypts a base64-encoded string encrypted with encrypt_string().
+pub func decrypt_string(key: ref Buffer, encrypted_base64: Str) -> CryptoResult[Str] {
+    // Decode base64
+    let data_handle: *Unit = lowlevel { crypto_base64_to_bytes(encrypted_base64) }
+    if data_handle == null {
+        return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "invalid base64"))
+    }
+    let data = Buffer { handle: data_handle }
+
+    // Extract IV (12 bytes), ciphertext, and tag (16 bytes)
+    if data.len() < 28 {  // 12 + 16 minimum
+        return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "encrypted data too short"))
+    }
+
+    let iv_handle: *Unit = lowlevel { crypto_buffer_slice(data.handle, 0, 12) }
+    let iv = Buffer { handle: iv_handle }
+
+    let ciphertext_len = data.len() - 28
+    let ciphertext_handle: *Unit = lowlevel { crypto_buffer_slice(data.handle, 12, ciphertext_len) }
+    let ciphertext = Buffer { handle: ciphertext_handle }
+
+    let tag_handle: *Unit = lowlevel { crypto_buffer_slice(data.handle, 12 + ciphertext_len, 16) }
+    let tag = AuthTag { data: Buffer { handle: tag_handle } }
+
+    let aad = Buffer::new(0)
+    let plaintext = aes_gcm_decrypt(key, ref iv, ref ciphertext, ref aad, ref tag)?
+
+    let result: Str = lowlevel { crypto_bytes_to_str(plaintext.handle) }
+    return Ok(result)
+}

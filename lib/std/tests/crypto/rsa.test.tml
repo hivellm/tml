@@ -1,0 +1,598 @@
+//! Tests for crypto RSA encryption/decryption
+//!
+//! Tests RSA-OAEP, RSA-PKCS1, and hybrid encryption.
+
+use std::crypto::{public_encrypt, private_decrypt, RsaPadding, OaepOptions}
+use std::crypto::{hybrid_encrypt, hybrid_decrypt}
+use std::crypto::{generate_key_pair, KeyType}
+use std::crypto::random_bytes
+use std::collections::Buffer
+use test::{assert, assert_eq}
+
+// ============================================================================
+// RSA-OAEP Tests
+// ============================================================================
+
+@test
+func test_rsa_oaep_encrypt_decrypt() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            let plaintext = Buffer.from_str("Hello, RSA!")
+
+            let ciphertext = public_encrypt(kp.public_key, plaintext, RsaPadding.OaepSha256)
+
+            when ciphertext {
+                Just(ct) => {
+                    // RSA 2048 produces 256 byte ciphertext
+                    assert_eq(ct.len(), 256)
+
+                    let decrypted = private_decrypt(kp.private_key, ct, RsaPadding.OaepSha256)
+
+                    when decrypted {
+                        Just(pt) => {
+                            assert(pt.equals(plaintext))
+                            pt.destroy()
+                        }
+                        Nothing => {
+                            assert(false)
+                        }
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {
+                    assert(false)
+                }
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_rsa_oaep_sha512() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            let plaintext = Buffer.from_str("Test with SHA-512")
+
+            let ciphertext = public_encrypt(kp.public_key, plaintext, RsaPadding.OaepSha512)
+
+            when ciphertext {
+                Just(ct) => {
+                    let decrypted = private_decrypt(kp.private_key, ct, RsaPadding.OaepSha512)
+
+                    when decrypted {
+                        Just(pt) => {
+                            assert(pt.equals(plaintext))
+                            pt.destroy()
+                        }
+                        Nothing => {}
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_rsa_oaep_with_label() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            let plaintext = Buffer.from_str("Secret message")
+            let label = Buffer.from_str("context label")
+            let options = OaepOptions.new("sha256", label)
+
+            let ciphertext = public_encrypt(kp.public_key, plaintext, RsaPadding.OaepCustom(options))
+
+            when ciphertext {
+                Just(ct) => {
+                    // Decrypt with same label should work
+                    let decrypted = private_decrypt(kp.private_key, ct, RsaPadding.OaepCustom(options))
+
+                    when decrypted {
+                        Just(pt) => {
+                            assert(pt.equals(plaintext))
+                            pt.destroy()
+                        }
+                        Nothing => {}
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            label.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_rsa_oaep_wrong_label_fails() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            let plaintext = Buffer.from_str("Secret")
+            let label1 = Buffer.from_str("label1")
+            let label2 = Buffer.from_str("label2")
+            let options1 = OaepOptions.new("sha256", label1)
+            let options2 = OaepOptions.new("sha256", label2)
+
+            let ciphertext = public_encrypt(kp.public_key, plaintext, RsaPadding.OaepCustom(options1))
+
+            when ciphertext {
+                Just(ct) => {
+                    // Decrypt with different label should fail
+                    let decrypted = private_decrypt(kp.private_key, ct, RsaPadding.OaepCustom(options2))
+
+                    when decrypted {
+                        Just(pt) => {
+                            pt.destroy()
+                            assert(false)  // Should have failed
+                        }
+                        Nothing => {
+                            // Expected
+                        }
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            label1.destroy()
+            label2.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// RSA-PKCS1 v1.5 Tests
+// ============================================================================
+
+@test
+func test_rsa_pkcs1_encrypt_decrypt() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            let plaintext = Buffer.from_str("PKCS#1 v1.5 test")
+
+            let ciphertext = public_encrypt(kp.public_key, plaintext, RsaPadding.Pkcs1)
+
+            when ciphertext {
+                Just(ct) => {
+                    assert_eq(ct.len(), 256)
+
+                    let decrypted = private_decrypt(kp.private_key, ct, RsaPadding.Pkcs1)
+
+                    when decrypted {
+                        Just(pt) => {
+                            assert(pt.equals(plaintext))
+                            pt.destroy()
+                        }
+                        Nothing => {}
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// RSA Key Size Tests
+// ============================================================================
+
+@test
+func test_rsa_4096_encrypt_decrypt() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa4096)
+
+    when key_pair {
+        Just(kp) => {
+            let plaintext = Buffer.from_str("RSA 4096-bit test")
+
+            let ciphertext = public_encrypt(kp.public_key, plaintext, RsaPadding.OaepSha256)
+
+            when ciphertext {
+                Just(ct) => {
+                    // RSA 4096 produces 512 byte ciphertext
+                    assert_eq(ct.len(), 512)
+
+                    let decrypted = private_decrypt(kp.private_key, ct, RsaPadding.OaepSha256)
+
+                    when decrypted {
+                        Just(pt) => {
+                            assert(pt.equals(plaintext))
+                            pt.destroy()
+                        }
+                        Nothing => {}
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// RSA Maximum Plaintext Size Tests
+// ============================================================================
+
+@test
+func test_rsa_max_plaintext_oaep_sha256() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            // RSA 2048 with OAEP-SHA256 can encrypt up to 190 bytes
+            // 256 - 2*32 - 2 = 190 bytes
+            let plaintext = random_bytes(190)
+
+            let ciphertext = public_encrypt(kp.public_key, plaintext, RsaPadding.OaepSha256)
+
+            when ciphertext {
+                Just(ct) => {
+                    let decrypted = private_decrypt(kp.private_key, ct, RsaPadding.OaepSha256)
+
+                    when decrypted {
+                        Just(pt) => {
+                            assert(pt.equals(plaintext))
+                            pt.destroy()
+                        }
+                        Nothing => {}
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_rsa_too_large_plaintext_fails() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            // Try to encrypt too much data (256 bytes is too large for any RSA padding)
+            let plaintext = random_bytes(256)
+
+            let ciphertext = public_encrypt(kp.public_key, plaintext, RsaPadding.OaepSha256)
+
+            when ciphertext {
+                Just(ct) => {
+                    ct.destroy()
+                    assert(false)  // Should have failed
+                }
+                Nothing => {
+                    // Expected
+                }
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// RSA Wrong Key Tests
+// ============================================================================
+
+@test
+func test_rsa_wrong_key_fails() -> I32 {
+    let key_pair1 = generate_key_pair(KeyType.Rsa2048)
+    let key_pair2 = generate_key_pair(KeyType.Rsa2048)
+
+    when (key_pair1, key_pair2) {
+        (Just(kp1), Just(kp2)) => {
+            let plaintext = Buffer.from_str("Secret")
+
+            // Encrypt with kp1's public key
+            let ciphertext = public_encrypt(kp1.public_key, plaintext, RsaPadding.OaepSha256)
+
+            when ciphertext {
+                Just(ct) => {
+                    // Decrypt with kp2's private key should fail
+                    let decrypted = private_decrypt(kp2.private_key, ct, RsaPadding.OaepSha256)
+
+                    when decrypted {
+                        Just(pt) => {
+                            pt.destroy()
+                            assert(false)
+                        }
+                        Nothing => {
+                            // Expected
+                        }
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            kp1.destroy()
+            kp2.destroy()
+        }
+        _ => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Hybrid Encryption Tests
+// ============================================================================
+
+@test
+func test_hybrid_encrypt_decrypt() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            // Hybrid encryption can handle any size data
+            let plaintext = random_bytes(10000)
+
+            let ciphertext = hybrid_encrypt(kp.public_key, plaintext)
+
+            when ciphertext {
+                Just(ct) => {
+                    // Ciphertext will be larger than plaintext (RSA-encrypted key + AES-GCM)
+                    assert(ct.len() > plaintext.len())
+
+                    let decrypted = hybrid_decrypt(kp.private_key, ct)
+
+                    when decrypted {
+                        Just(pt) => {
+                            assert(pt.equals(plaintext))
+                            pt.destroy()
+                        }
+                        Nothing => {
+                            assert(false)
+                        }
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {
+                    assert(false)
+                }
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_hybrid_encrypt_large_data() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            // Encrypt 1MB of data
+            let plaintext = random_bytes(1024 * 1024)
+
+            let ciphertext = hybrid_encrypt(kp.public_key, plaintext)
+
+            when ciphertext {
+                Just(ct) => {
+                    let decrypted = hybrid_decrypt(kp.private_key, ct)
+
+                    when decrypted {
+                        Just(pt) => {
+                            assert_eq(pt.len(), plaintext.len())
+                            // Verify first and last bytes
+                            assert_eq(pt.get(0), plaintext.get(0))
+                            assert_eq(pt.get(pt.len() - 1), plaintext.get(plaintext.len() - 1))
+                            pt.destroy()
+                        }
+                        Nothing => {}
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_hybrid_encrypt_empty_data() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            let plaintext = Buffer.alloc(0)
+
+            let ciphertext = hybrid_encrypt(kp.public_key, plaintext)
+
+            when ciphertext {
+                Just(ct) => {
+                    let decrypted = hybrid_decrypt(kp.private_key, ct)
+
+                    when decrypted {
+                        Just(pt) => {
+                            assert_eq(pt.len(), 0)
+                            pt.destroy()
+                        }
+                        Nothing => {}
+                    }
+
+                    ct.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_hybrid_encrypt_tampered_fails() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            let plaintext = Buffer.from_str("Secret message")
+
+            let ciphertext = hybrid_encrypt(kp.public_key, plaintext)
+
+            when ciphertext {
+                Just(ct) => {
+                    // Tamper with ciphertext
+                    let tampered = ct.duplicate()
+                    tampered.set(tampered.len() - 1, tampered.get(tampered.len() - 1) xor 0xFF)
+
+                    let decrypted = hybrid_decrypt(kp.private_key, tampered)
+
+                    when decrypted {
+                        Just(pt) => {
+                            pt.destroy()
+                            assert(false)  // Should have failed
+                        }
+                        Nothing => {
+                            // Expected - authentication failed
+                        }
+                    }
+
+                    ct.destroy()
+                    tampered.destroy()
+                }
+                Nothing => {}
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// RSA Determinism Tests
+// ============================================================================
+
+@test
+func test_rsa_oaep_randomized() -> I32 {
+    let key_pair = generate_key_pair(KeyType.Rsa2048)
+
+    when key_pair {
+        Just(kp) => {
+            let plaintext = Buffer.from_str("Test")
+
+            // OAEP encryption is randomized
+            let ct1 = public_encrypt(kp.public_key, plaintext, RsaPadding.OaepSha256)
+            let ct2 = public_encrypt(kp.public_key, plaintext, RsaPadding.OaepSha256)
+
+            when (ct1, ct2) {
+                (Just(c1), Just(c2)) => {
+                    // Ciphertexts should be different
+                    assert(not c1.equals(c2))
+
+                    // But both should decrypt to same plaintext
+                    let pt1 = private_decrypt(kp.private_key, c1, RsaPadding.OaepSha256)
+                    let pt2 = private_decrypt(kp.private_key, c2, RsaPadding.OaepSha256)
+
+                    when (pt1, pt2) {
+                        (Just(p1), Just(p2)) => {
+                            assert(p1.equals(p2))
+                            assert(p1.equals(plaintext))
+                            p1.destroy()
+                            p2.destroy()
+                        }
+                        _ => {}
+                    }
+
+                    c1.destroy()
+                    c2.destroy()
+                }
+                _ => {}
+            }
+
+            plaintext.destroy()
+            kp.destroy()
+        }
+        Nothing => {}
+    }
+
+    return 0
+}

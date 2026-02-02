@@ -247,7 +247,7 @@ impl Drop for Arena {
 /// Aligns a value up to the specified alignment.
 func align_up(value: I64, align: I64) -> I64 {
     let mask: I64 = align - 1
-    (value + mask) & (~mask)
+    return (value + mask) & (0 - align)
 }
 
 // ============================================================================

@@ -1,0 +1,515 @@
+//! Digital signatures.
+//!
+//! This module provides digital signature creation and verification using
+//! asymmetric cryptography.
+//!
+//! # Supported Algorithms
+//!
+//! | Algorithm | Key Type | Description |
+//! |-----------|----------|-------------|
+//! | RSA-SHA256 | RSA | RSA with SHA-256 |
+//! | RSA-SHA384 | RSA | RSA with SHA-384 |
+//! | RSA-SHA512 | RSA | RSA with SHA-512 |
+//! | RSA-PSS | RSA | RSA-PSS (probabilistic) |
+//! | ECDSA-SHA256 | EC P-256 | ECDSA with SHA-256 |
+//! | ECDSA-SHA384 | EC P-384 | ECDSA with SHA-384 |
+//! | ECDSA-SHA512 | EC P-521 | ECDSA with SHA-512 |
+//! | Ed25519 | Ed25519 | EdDSA with Curve25519 |
+//! | Ed448 | Ed448 | EdDSA with Curve448 |
+//!
+//! # Examples
+//!
+//! ## One-shot Signing
+//!
+//! ```tml
+//! use std::crypto::{sign, verify, generate_key_pair, KeyType}
+//!
+//! let keypair = generate_key_pair(KeyType::Ed25519)?
+//! let message = "data to sign"
+//!
+//! // Sign
+//! let signature = sign(SignatureAlgorithm::Ed25519, keypair.private_key, message)?
+//!
+//! // Verify
+//! let valid = verify(SignatureAlgorithm::Ed25519, keypair.public_key, message, signature)?
+//! assert(valid)
+//! ```
+//!
+//! ## Streaming Signing
+//!
+//! ```tml
+//! use std::crypto::{Signer, SignatureAlgorithm, PrivateKey}
+//!
+//! let signer = Signer::new(SignatureAlgorithm::RsaSha256, private_key)?
+//! signer.update("first part of message")
+//! signer.update("second part")
+//! let signature = signer.sign()?
+//! ```
+//!
+//! ## Streaming Verification
+//!
+//! ```tml
+//! use std::crypto::{Verifier, SignatureAlgorithm, PublicKey}
+//!
+//! let verifier = Verifier::new(SignatureAlgorithm::RsaSha256, public_key)?
+//! verifier.update("first part of message")
+//! verifier.update("second part")
+//! let valid = verifier.verify(signature)?
+//! ```
+
+use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::key::{PrivateKey, PublicKey}
+use std::collections::Buffer
+
+/// Signature algorithms.
+pub type SignatureAlgorithm {
+    // RSA PKCS#1 v1.5
+    RsaSha1,
+    RsaSha256,
+    RsaSha384,
+    RsaSha512,
+    // RSA-PSS
+    RsaPssSha256,
+    RsaPssSha384,
+    RsaPssSha512,
+    // ECDSA
+    EcdsaSha1,
+    EcdsaSha256,
+    EcdsaSha384,
+    EcdsaSha512,
+    // EdDSA
+    Ed25519,
+    Ed448,
+    // DSA (legacy)
+    DsaSha1,
+    DsaSha256,
+}
+
+impl SignatureAlgorithm {
+    /// Returns the algorithm name.
+    pub func name(this) -> Str {
+        when this {
+            SignatureAlgorithm::RsaSha1 => return "RSA-SHA1"
+            SignatureAlgorithm::RsaSha256 => return "RSA-SHA256"
+            SignatureAlgorithm::RsaSha384 => return "RSA-SHA384"
+            SignatureAlgorithm::RsaSha512 => return "RSA-SHA512"
+            SignatureAlgorithm::RsaPssSha256 => return "RSA-PSS-SHA256"
+            SignatureAlgorithm::RsaPssSha384 => return "RSA-PSS-SHA384"
+            SignatureAlgorithm::RsaPssSha512 => return "RSA-PSS-SHA512"
+            SignatureAlgorithm::EcdsaSha1 => return "ECDSA-SHA1"
+            SignatureAlgorithm::EcdsaSha256 => return "ECDSA-SHA256"
+            SignatureAlgorithm::EcdsaSha384 => return "ECDSA-SHA384"
+            SignatureAlgorithm::EcdsaSha512 => return "ECDSA-SHA512"
+            SignatureAlgorithm::Ed25519 => return "Ed25519"
+            SignatureAlgorithm::Ed448 => return "Ed448"
+            SignatureAlgorithm::DsaSha1 => return "DSA-SHA1"
+            SignatureAlgorithm::DsaSha256 => return "DSA-SHA256"
+        }
+    }
+
+    /// Returns true if this algorithm uses RSA.
+    pub func is_rsa(this) -> Bool {
+        when this {
+            SignatureAlgorithm::RsaSha1 => return true
+            SignatureAlgorithm::RsaSha256 => return true
+            SignatureAlgorithm::RsaSha384 => return true
+            SignatureAlgorithm::RsaSha512 => return true
+            SignatureAlgorithm::RsaPssSha256 => return true
+            SignatureAlgorithm::RsaPssSha384 => return true
+            SignatureAlgorithm::RsaPssSha512 => return true
+            _ => return false
+        }
+    }
+
+    /// Returns true if this algorithm uses ECDSA.
+    pub func is_ecdsa(this) -> Bool {
+        when this {
+            SignatureAlgorithm::EcdsaSha1 => return true
+            SignatureAlgorithm::EcdsaSha256 => return true
+            SignatureAlgorithm::EcdsaSha384 => return true
+            SignatureAlgorithm::EcdsaSha512 => return true
+            _ => return false
+        }
+    }
+
+    /// Returns true if this algorithm uses EdDSA.
+    pub func is_eddsa(this) -> Bool {
+        when this {
+            SignatureAlgorithm::Ed25519 => return true
+            SignatureAlgorithm::Ed448 => return true
+            _ => return false
+        }
+    }
+
+    /// Returns true if this algorithm uses RSA-PSS.
+    pub func is_pss(this) -> Bool {
+        when this {
+            SignatureAlgorithm::RsaPssSha256 => return true
+            SignatureAlgorithm::RsaPssSha384 => return true
+            SignatureAlgorithm::RsaPssSha512 => return true
+            _ => return false
+        }
+    }
+
+    /// Parses an algorithm from a string name.
+    pub func from_name(name: Str) -> Maybe[SignatureAlgorithm] {
+        when name {
+            "RSA-SHA1" => return Just(SignatureAlgorithm::RsaSha1)
+            "RSA-SHA256" => return Just(SignatureAlgorithm::RsaSha256)
+            "RSA-SHA384" => return Just(SignatureAlgorithm::RsaSha384)
+            "RSA-SHA512" => return Just(SignatureAlgorithm::RsaSha512)
+            "RSA-PSS-SHA256" => return Just(SignatureAlgorithm::RsaPssSha256)
+            "RSA-PSS-SHA384" => return Just(SignatureAlgorithm::RsaPssSha384)
+            "RSA-PSS-SHA512" => return Just(SignatureAlgorithm::RsaPssSha512)
+            "ECDSA-SHA1" => return Just(SignatureAlgorithm::EcdsaSha1)
+            "ECDSA-SHA256" => return Just(SignatureAlgorithm::EcdsaSha256)
+            "ECDSA-SHA384" => return Just(SignatureAlgorithm::EcdsaSha384)
+            "ECDSA-SHA512" => return Just(SignatureAlgorithm::EcdsaSha512)
+            "Ed25519" => return Just(SignatureAlgorithm::Ed25519)
+            "Ed448" => return Just(SignatureAlgorithm::Ed448)
+            "DSA-SHA1" => return Just(SignatureAlgorithm::DsaSha1)
+            "DSA-SHA256" => return Just(SignatureAlgorithm::DsaSha256)
+            _ => return Nothing
+        }
+    }
+}
+
+/// A cryptographic signature.
+pub type Signature {
+    data: Buffer
+    algorithm: SignatureAlgorithm
+}
+
+impl Signature {
+    /// Creates a Signature from raw bytes.
+    pub func from_bytes(data: Buffer, algorithm: SignatureAlgorithm) -> Signature {
+        return Signature { data: data, algorithm: algorithm }
+    }
+
+    /// Returns the signature as bytes.
+    pub func bytes(this) -> ref Buffer {
+        return ref this.data
+    }
+
+    /// Returns the signature as a hexadecimal string.
+    pub func to_hex(this) -> Str {
+        let hex: Str = lowlevel { crypto_bytes_to_hex(this.data.handle) }
+        return hex
+    }
+
+    /// Returns the signature as a base64 string.
+    pub func to_base64(this) -> Str {
+        let b64: Str = lowlevel { crypto_bytes_to_base64(this.data.handle) }
+        return b64
+    }
+
+    /// Returns the signature length in bytes.
+    pub func len(this) -> I64 {
+        return this.data.len()
+    }
+
+    /// Returns the algorithm used.
+    pub func algorithm(this) -> SignatureAlgorithm {
+        return this.algorithm
+    }
+
+    /// Parses a Signature from hexadecimal.
+    pub func from_hex(hex: Str, algorithm: SignatureAlgorithm) -> CryptoResult[Signature] {
+        let handle: *Unit = lowlevel { crypto_hex_to_bytes(hex) }
+        if handle == null {
+            return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "invalid hex string"))
+        }
+        return Ok(Signature { data: Buffer { handle: handle }, algorithm: algorithm })
+    }
+
+    /// Parses a Signature from base64.
+    pub func from_base64(b64: Str, algorithm: SignatureAlgorithm) -> CryptoResult[Signature] {
+        let handle: *Unit = lowlevel { crypto_base64_to_bytes(b64) }
+        if handle == null {
+            return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "invalid base64 string"))
+        }
+        return Ok(Signature { data: Buffer { handle: handle }, algorithm: algorithm })
+    }
+
+    /// Parses a Signature from DER format.
+    pub func from_der(der: ref Buffer, algorithm: SignatureAlgorithm) -> Signature {
+        return Signature { data: der.duplicate(), algorithm: algorithm }
+    }
+}
+
+/// Streaming signature creation.
+pub type Signer {
+    handle: *Unit
+    algorithm: SignatureAlgorithm
+    finalized: Bool
+}
+
+impl Signer {
+    /// Creates a new Signer with the specified algorithm and private key.
+    pub func new(algorithm: SignatureAlgorithm, key: ref PrivateKey) -> CryptoResult[Signer] {
+        let handle: *Unit = lowlevel { crypto_signer_create(algorithm.name(), key.handle) }
+        if handle == null {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidKey,
+                "failed to create signer for {algorithm.name()}"
+            ))
+        }
+        return Ok(Signer {
+            handle: handle,
+            algorithm: algorithm,
+            finalized: false,
+        })
+    }
+
+    /// Updates the signer with string data.
+    pub func update(mut this, data: Str) -> ref Signer {
+        if not this.finalized {
+            lowlevel { crypto_signer_update_str(this.handle, data) }
+        }
+        return ref this
+    }
+
+    /// Updates the signer with binary data.
+    pub func update_bytes(mut this, data: ref Buffer) -> ref Signer {
+        if not this.finalized {
+            lowlevel { crypto_signer_update_bytes(this.handle, data.handle) }
+        }
+        return ref this
+    }
+
+    /// Finalizes and returns the signature.
+    pub func sign(mut this) -> CryptoResult[Signature] {
+        if this.finalized {
+            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        }
+        this.finalized = true
+        let result_handle: *Unit = lowlevel { crypto_signer_sign(this.handle) }
+        if result_handle == null {
+            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        }
+        return Ok(Signature { data: Buffer { handle: result_handle }, algorithm: this.algorithm })
+    }
+
+    /// Returns the algorithm being used.
+    pub func algorithm(this) -> SignatureAlgorithm {
+        return this.algorithm
+    }
+
+    /// Frees the signer resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { crypto_signer_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+/// Streaming signature verification.
+pub type Verifier {
+    handle: *Unit
+    algorithm: SignatureAlgorithm
+    finalized: Bool
+}
+
+impl Verifier {
+    /// Creates a new Verifier with the specified algorithm and public key.
+    pub func new(algorithm: SignatureAlgorithm, key: ref PublicKey) -> CryptoResult[Verifier] {
+        let handle: *Unit = lowlevel { crypto_verifier_create(algorithm.name(), key.handle) }
+        if handle == null {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidKey,
+                "failed to create verifier for {algorithm.name()}"
+            ))
+        }
+        return Ok(Verifier {
+            handle: handle,
+            algorithm: algorithm,
+            finalized: false,
+        })
+    }
+
+    /// Updates the verifier with string data.
+    pub func update(mut this, data: Str) -> ref Verifier {
+        if not this.finalized {
+            lowlevel { crypto_verifier_update_str(this.handle, data) }
+        }
+        return ref this
+    }
+
+    /// Updates the verifier with binary data.
+    pub func update_bytes(mut this, data: ref Buffer) -> ref Verifier {
+        if not this.finalized {
+            lowlevel { crypto_verifier_update_bytes(this.handle, data.handle) }
+        }
+        return ref this
+    }
+
+    /// Verifies the signature.
+    ///
+    /// Returns true if the signature is valid, false otherwise.
+    pub func verify(mut this, signature: ref Signature) -> CryptoResult[Bool] {
+        if this.finalized {
+            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        }
+        this.finalized = true
+        let result: Bool = lowlevel { crypto_verifier_verify(this.handle, signature.data.handle) }
+        return Ok(result)
+    }
+
+    /// Returns the algorithm being used.
+    pub func algorithm(this) -> SignatureAlgorithm {
+        return this.algorithm
+    }
+
+    /// Frees the verifier resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { crypto_verifier_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+// ============================================================================
+// One-shot signing/verification
+// ============================================================================
+
+/// Signs data with a private key.
+pub func sign(algorithm: SignatureAlgorithm, key: ref PrivateKey, data: Str) -> CryptoResult[Signature] {
+    let mut signer = Signer::new(algorithm, key)?
+    signer.update(data)
+    return signer.sign()
+}
+
+/// Signs binary data with a private key.
+pub func sign_bytes(algorithm: SignatureAlgorithm, key: ref PrivateKey, data: ref Buffer) -> CryptoResult[Signature] {
+    let mut signer = Signer::new(algorithm, key)?
+    signer.update_bytes(data)
+    return signer.sign()
+}
+
+/// Verifies a signature with a public key.
+pub func verify(algorithm: SignatureAlgorithm, key: ref PublicKey, data: Str, signature: ref Signature) -> CryptoResult[Bool] {
+    let mut verifier = Verifier::new(algorithm, key)?
+    verifier.update(data)
+    return verifier.verify(signature)
+}
+
+/// Verifies a signature of binary data with a public key.
+pub func verify_bytes(algorithm: SignatureAlgorithm, key: ref PublicKey, data: ref Buffer, signature: ref Signature) -> CryptoResult[Bool] {
+    let mut verifier = Verifier::new(algorithm, key)?
+    verifier.update_bytes(data)
+    return verifier.verify(signature)
+}
+
+// ============================================================================
+// Algorithm-specific helpers
+// ============================================================================
+
+/// Signs data with RSA-SHA256.
+pub func sign_rsa_sha256(key: ref PrivateKey, data: Str) -> CryptoResult[Signature] {
+    return sign(SignatureAlgorithm::RsaSha256, key, data)
+}
+
+/// Verifies RSA-SHA256 signature.
+pub func verify_rsa_sha256(key: ref PublicKey, data: Str, signature: ref Signature) -> CryptoResult[Bool] {
+    return verify(SignatureAlgorithm::RsaSha256, key, data, signature)
+}
+
+/// Signs data with RSA-SHA512.
+pub func sign_rsa_sha512(key: ref PrivateKey, data: Str) -> CryptoResult[Signature] {
+    return sign(SignatureAlgorithm::RsaSha512, key, data)
+}
+
+/// Verifies RSA-SHA512 signature.
+pub func verify_rsa_sha512(key: ref PublicKey, data: Str, signature: ref Signature) -> CryptoResult[Bool] {
+    return verify(SignatureAlgorithm::RsaSha512, key, data, signature)
+}
+
+/// Signs data with ECDSA-SHA256.
+pub func sign_ecdsa_sha256(key: ref PrivateKey, data: Str) -> CryptoResult[Signature] {
+    return sign(SignatureAlgorithm::EcdsaSha256, key, data)
+}
+
+/// Verifies ECDSA-SHA256 signature.
+pub func verify_ecdsa_sha256(key: ref PublicKey, data: Str, signature: ref Signature) -> CryptoResult[Bool] {
+    return verify(SignatureAlgorithm::EcdsaSha256, key, data, signature)
+}
+
+/// Signs data with Ed25519.
+pub func sign_ed25519(key: ref PrivateKey, data: Str) -> CryptoResult[Signature] {
+    return sign(SignatureAlgorithm::Ed25519, key, data)
+}
+
+/// Verifies Ed25519 signature.
+pub func verify_ed25519(key: ref PublicKey, data: Str, signature: ref Signature) -> CryptoResult[Bool] {
+    return verify(SignatureAlgorithm::Ed25519, key, data, signature)
+}
+
+/// Signs data with Ed448.
+pub func sign_ed448(key: ref PrivateKey, data: Str) -> CryptoResult[Signature] {
+    return sign(SignatureAlgorithm::Ed448, key, data)
+}
+
+/// Verifies Ed448 signature.
+pub func verify_ed448(key: ref PublicKey, data: Str, signature: ref Signature) -> CryptoResult[Bool] {
+    return verify(SignatureAlgorithm::Ed448, key, data, signature)
+}
+
+// ============================================================================
+// RSA-PSS options
+// ============================================================================
+
+/// Options for RSA-PSS signing.
+pub type PssOptions {
+    /// Salt length (-1 for auto)
+    salt_length: I64
+    /// MGF1 hash algorithm
+    mgf1_hash: Str
+}
+
+impl PssOptions {
+    /// Default PSS options.
+    pub func default() -> PssOptions {
+        return PssOptions {
+            salt_length: -1,  // Auto (same as hash length)
+            mgf1_hash: "sha256",
+        }
+    }
+
+    /// Creates options with specific salt length.
+    pub func with_salt_length(len: I64) -> PssOptions {
+        return PssOptions {
+            salt_length: len,
+            mgf1_hash: "sha256",
+        }
+    }
+}
+
+/// Signs data with RSA-PSS.
+pub func sign_rsa_pss(
+    key: ref PrivateKey,
+    data: Str,
+    options: ref PssOptions,
+) -> CryptoResult[Signature] {
+    let handle: *Unit = lowlevel {
+        crypto_sign_rsa_pss(key.handle, data, options.salt_length, options.mgf1_hash)
+    }
+    if handle == null {
+        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+    }
+    return Ok(Signature { data: Buffer { handle: handle }, algorithm: SignatureAlgorithm::RsaPssSha256 })
+}
+
+/// Verifies RSA-PSS signature.
+pub func verify_rsa_pss(
+    key: ref PublicKey,
+    data: Str,
+    signature: ref Signature,
+    options: ref PssOptions,
+) -> CryptoResult[Bool] {
+    let result: Bool = lowlevel {
+        crypto_verify_rsa_pss(key.handle, data, signature.data.handle, options.salt_length, options.mgf1_hash)
+    }
+    return Ok(result)
+}

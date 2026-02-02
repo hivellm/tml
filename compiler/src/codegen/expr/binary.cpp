@@ -889,6 +889,220 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // Check if either operand is a struct (enum)
     bool is_enum_struct = left_type.starts_with("%struct.") && right_type.starts_with("%struct.");
 
+    // Check if operands are tuples (anonymous LLVM structs: { type1, type2, ... })
+    bool is_tuple = left_type.starts_with("{ ") && left_type.ends_with(" }") &&
+                    right_type.starts_with("{ ") && right_type.ends_with(" }") &&
+                    left_type == right_type;
+
+    // Handle tuple comparison (element-by-element)
+    if (is_tuple && (bin.op == parser::BinaryOp::Eq || bin.op == parser::BinaryOp::Ne)) {
+        // Emit coverage for tuple PartialEq
+        if (bin.op == parser::BinaryOp::Eq) {
+            emit_coverage("PartialEq::eq");
+        } else {
+            emit_coverage("PartialEq::ne");
+        }
+
+        // Parse tuple element types from the LLVM type string "{ i32, i32 }"
+        std::vector<std::string> elem_types;
+        std::string inner = left_type.substr(2, left_type.size() - 4); // Remove "{ " and " }"
+        size_t pos = 0;
+        while (pos < inner.size()) {
+            // Find the next comma or end
+            size_t comma_pos = inner.find(", ", pos);
+            if (comma_pos == std::string::npos) {
+                elem_types.push_back(inner.substr(pos));
+                break;
+            }
+            elem_types.push_back(inner.substr(pos, comma_pos - pos));
+            pos = comma_pos + 2; // Skip ", "
+        }
+
+        // Allocate space for both tuples
+        std::string left_alloca = fresh_reg();
+        emit_line("  " + left_alloca + " = alloca " + left_type);
+        emit_line("  store " + left_type + " " + left + ", ptr " + left_alloca);
+
+        std::string right_alloca = fresh_reg();
+        emit_line("  " + right_alloca + " = alloca " + right_type);
+        emit_line("  store " + right_type + " " + right + ", ptr " + right_alloca);
+
+        // Compare element by element
+        std::string cmp_result = "1"; // Start with true (i1 1)
+        for (size_t i = 0; i < elem_types.size(); ++i) {
+            // Get pointers to elements
+            std::string left_elem_ptr = fresh_reg();
+            emit_line("  " + left_elem_ptr + " = getelementptr " + left_type + ", ptr " +
+                      left_alloca + ", i32 0, i32 " + std::to_string(i));
+            std::string left_elem = fresh_reg();
+            emit_line("  " + left_elem + " = load " + elem_types[i] + ", ptr " + left_elem_ptr);
+
+            std::string right_elem_ptr = fresh_reg();
+            emit_line("  " + right_elem_ptr + " = getelementptr " + right_type + ", ptr " +
+                      right_alloca + ", i32 0, i32 " + std::to_string(i));
+            std::string right_elem = fresh_reg();
+            emit_line("  " + right_elem + " = load " + elem_types[i] + ", ptr " + right_elem_ptr);
+
+            // Compare elements
+            std::string elem_cmp = fresh_reg();
+            if (elem_types[i] == "double" || elem_types[i] == "float") {
+                emit_line("  " + elem_cmp + " = fcmp oeq " + elem_types[i] + " " + left_elem +
+                          ", " + right_elem);
+            } else {
+                emit_line("  " + elem_cmp + " = icmp eq " + elem_types[i] + " " + left_elem + ", " +
+                          right_elem);
+            }
+
+            // AND with previous result
+            std::string new_result = fresh_reg();
+            emit_line("  " + new_result + " = and i1 " + cmp_result + ", " + elem_cmp);
+            cmp_result = new_result;
+        }
+
+        // For != we need to negate the result
+        if (bin.op == parser::BinaryOp::Ne) {
+            std::string neg_result = fresh_reg();
+            emit_line("  " + neg_result + " = xor i1 " + cmp_result + ", 1");
+            last_expr_type_ = "i1";
+            return neg_result;
+        }
+
+        last_expr_type_ = "i1";
+        return cmp_result;
+    }
+
+    // Handle tuple ordering comparison (lexicographic order: <, >, <=, >=)
+    if (is_tuple && (bin.op == parser::BinaryOp::Lt || bin.op == parser::BinaryOp::Gt ||
+                     bin.op == parser::BinaryOp::Le || bin.op == parser::BinaryOp::Ge)) {
+        // Emit coverage for tuple PartialOrd
+        emit_coverage("PartialOrd::partial_cmp");
+
+        // Parse tuple element types from the LLVM type string "{ i32, i32 }"
+        std::vector<std::string> elem_types;
+        std::string inner = left_type.substr(2, left_type.size() - 4); // Remove "{ " and " }"
+        size_t pos = 0;
+        while (pos < inner.size()) {
+            size_t comma_pos = inner.find(", ", pos);
+            if (comma_pos == std::string::npos) {
+                elem_types.push_back(inner.substr(pos));
+                break;
+            }
+            elem_types.push_back(inner.substr(pos, comma_pos - pos));
+            pos = comma_pos + 2;
+        }
+
+        // Allocate space for both tuples
+        std::string left_alloca = fresh_reg();
+        emit_line("  " + left_alloca + " = alloca " + left_type);
+        emit_line("  store " + left_type + " " + left + ", ptr " + left_alloca);
+
+        std::string right_alloca = fresh_reg();
+        emit_line("  " + right_alloca + " = alloca " + right_type);
+        emit_line("  store " + right_type + " " + right + ", ptr " + right_alloca);
+
+        // Lexicographic comparison using result alloca
+        // Initialize with "all equal" result (false for </>, true for <=/>=)
+        bool equal_result = (bin.op == parser::BinaryOp::Le || bin.op == parser::BinaryOp::Ge);
+        std::string final_label = fresh_label("tuple_cmp_done");
+        std::string result_alloca = fresh_reg();
+        emit_line("  " + result_alloca + " = alloca i1");
+        emit_line("  store i1 " + std::string(equal_result ? "1" : "0") + ", ptr " + result_alloca);
+
+        for (size_t i = 0; i < elem_types.size(); ++i) {
+            // Get pointers to elements
+            std::string left_elem_ptr = fresh_reg();
+            emit_line("  " + left_elem_ptr + " = getelementptr " + left_type + ", ptr " +
+                      left_alloca + ", i32 0, i32 " + std::to_string(i));
+            std::string left_elem = fresh_reg();
+            emit_line("  " + left_elem + " = load " + elem_types[i] + ", ptr " + left_elem_ptr);
+
+            std::string right_elem_ptr = fresh_reg();
+            emit_line("  " + right_elem_ptr + " = getelementptr " + right_type + ", ptr " +
+                      right_alloca + ", i32 0, i32 " + std::to_string(i));
+            std::string right_elem = fresh_reg();
+            emit_line("  " + right_elem + " = load " + elem_types[i] + ", ptr " + right_elem_ptr);
+
+            // Check if elements are equal
+            std::string eq_cmp = fresh_reg();
+            bool is_float_elem = (elem_types[i] == "double" || elem_types[i] == "float");
+            if (is_float_elem) {
+                emit_line("  " + eq_cmp + " = fcmp oeq " + elem_types[i] + " " + left_elem + ", " +
+                          right_elem);
+            } else {
+                emit_line("  " + eq_cmp + " = icmp eq " + elem_types[i] + " " + left_elem + ", " +
+                          right_elem);
+            }
+
+            std::string not_eq_label = fresh_label("tuple_cmp_neq");
+            std::string next_label =
+                (i + 1 < elem_types.size()) ? fresh_label("tuple_cmp_next") : final_label;
+
+            emit_line("  br i1 " + eq_cmp + ", label %" + next_label + ", label %" + not_eq_label);
+
+            // Not equal - do the actual comparison
+            emit_line(not_eq_label + ":");
+            std::string cmp_result = fresh_reg();
+
+            // Determine comparison predicate based on operator
+            std::string cmp_pred;
+            if (is_float_elem) {
+                switch (bin.op) {
+                case parser::BinaryOp::Lt:
+                    cmp_pred = "olt";
+                    break;
+                case parser::BinaryOp::Gt:
+                    cmp_pred = "ogt";
+                    break;
+                case parser::BinaryOp::Le:
+                    cmp_pred = "olt";
+                    break; // for <=, if not equal, check <
+                case parser::BinaryOp::Ge:
+                    cmp_pred = "ogt";
+                    break; // for >=, if not equal, check >
+                default:
+                    cmp_pred = "oeq";
+                }
+                emit_line("  " + cmp_result + " = fcmp " + cmp_pred + " " + elem_types[i] + " " +
+                          left_elem + ", " + right_elem);
+            } else {
+                switch (bin.op) {
+                case parser::BinaryOp::Lt:
+                    cmp_pred = "slt";
+                    break;
+                case parser::BinaryOp::Gt:
+                    cmp_pred = "sgt";
+                    break;
+                case parser::BinaryOp::Le:
+                    cmp_pred = "slt";
+                    break; // for <=, if not equal, check <
+                case parser::BinaryOp::Ge:
+                    cmp_pred = "sgt";
+                    break; // for >=, if not equal, check >
+                default:
+                    cmp_pred = "eq";
+                }
+                emit_line("  " + cmp_result + " = icmp " + cmp_pred + " " + elem_types[i] + " " +
+                          left_elem + ", " + right_elem);
+            }
+
+            emit_line("  store i1 " + cmp_result + ", ptr " + result_alloca);
+            emit_line("  br label %" + final_label);
+
+            // Continue to next element
+            if (i + 1 < elem_types.size()) {
+                emit_line(next_label + ":");
+            }
+        }
+
+        // All elements were equal - result_alloca already has the correct value
+        emit_line(final_label + ":");
+        std::string final_result = fresh_reg();
+        emit_line("  " + final_result + " = load i1, ptr " + result_alloca);
+
+        last_expr_type_ = "i1";
+        return final_result;
+    }
+
     // For enum struct comparisons, extract the tag field (first i32)
     if (is_enum_struct) {
         // Allocate space for left struct

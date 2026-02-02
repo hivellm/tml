@@ -1,0 +1,239 @@
+//! Tests for core::any module - TypeId and type reflection.
+
+use core::any::*
+use core::cmp::*
+
+// ============================================================================
+// TypeId Construction and Basic Operations
+// ============================================================================
+
+@test
+func test_typeid_construction() {
+    let id1: TypeId = TypeId { id: 12345 }
+    assert(id1.id == 12345)
+
+    let id2: TypeId = TypeId { id: 0 }
+    assert(id2.id == 0)
+
+    let id3: TypeId = TypeId { id: 18446744073709551615 } // U64 max
+    assert(id3.id == 18446744073709551615)
+}
+
+// ============================================================================
+// PartialEq Implementation
+// ============================================================================
+
+@test
+func test_typeid_eq() {
+    let id1: TypeId = TypeId { id: 100 }
+    let id2: TypeId = TypeId { id: 100 }
+    let id3: TypeId = TypeId { id: 200 }
+
+    // Same ids should be equal
+    assert(id1.eq(ref id2) == true)
+    assert(id2.eq(ref id1) == true)
+
+    // Different ids should not be equal
+    assert(id1.eq(ref id3) == false)
+    assert(id3.eq(ref id1) == false)
+}
+
+@test
+func test_typeid_ne() {
+    let id1: TypeId = TypeId { id: 100 }
+    let id2: TypeId = TypeId { id: 100 }
+    let id3: TypeId = TypeId { id: 200 }
+
+    // Same ids should not be "not equal"
+    assert(id1.ne(ref id2) == false)
+
+    // Different ids should be "not equal"
+    assert(id1.ne(ref id3) == true)
+    assert(id3.ne(ref id1) == true)
+}
+
+@test
+func test_typeid_equality_reflexive() {
+    let id: TypeId = TypeId { id: 42 }
+    assert(id.eq(ref id) == true)
+    assert(id.ne(ref id) == false)
+}
+
+// ============================================================================
+// PartialOrd Implementation
+// ============================================================================
+
+@test
+func test_typeid_lt() {
+    let id1: TypeId = TypeId { id: 100 }
+    let id2: TypeId = TypeId { id: 200 }
+    let id3: TypeId = TypeId { id: 100 }
+
+    assert(id1.lt(ref id2) == true)
+    assert(id2.lt(ref id1) == false)
+    assert(id1.lt(ref id3) == false) // equal, not less
+}
+
+@test
+func test_typeid_le() {
+    let id1: TypeId = TypeId { id: 100 }
+    let id2: TypeId = TypeId { id: 200 }
+    let id3: TypeId = TypeId { id: 100 }
+
+    assert(id1.le(ref id2) == true)
+    assert(id2.le(ref id1) == false)
+    assert(id1.le(ref id3) == true) // equal counts as le
+}
+
+@test
+func test_typeid_gt() {
+    let id1: TypeId = TypeId { id: 200 }
+    let id2: TypeId = TypeId { id: 100 }
+    let id3: TypeId = TypeId { id: 200 }
+
+    assert(id1.gt(ref id2) == true)
+    assert(id2.gt(ref id1) == false)
+    assert(id1.gt(ref id3) == false) // equal, not greater
+}
+
+@test
+func test_typeid_ge() {
+    let id1: TypeId = TypeId { id: 200 }
+    let id2: TypeId = TypeId { id: 100 }
+    let id3: TypeId = TypeId { id: 200 }
+
+    assert(id1.ge(ref id2) == true)
+    assert(id2.ge(ref id1) == false)
+    assert(id1.ge(ref id3) == true) // equal counts as ge
+}
+
+@test
+func test_typeid_partial_cmp() {
+    let id1: TypeId = TypeId { id: 100 }
+    let id2: TypeId = TypeId { id: 200 }
+    let id3: TypeId = TypeId { id: 100 }
+
+    // Less
+    let cmp1: Maybe[Ordering] = id1.partial_cmp(ref id2)
+    when cmp1 {
+        Just(ord) => {
+            assert(ord == Ordering::Less)
+        },
+        Nothing => {
+            assert(false)
+        }
+    }
+
+    // Greater
+    let cmp2: Maybe[Ordering] = id2.partial_cmp(ref id1)
+    when cmp2 {
+        Just(ord) => {
+            assert(ord == Ordering::Greater)
+        },
+        Nothing => {
+            assert(false)
+        }
+    }
+
+    // Equal
+    let cmp3: Maybe[Ordering] = id1.partial_cmp(ref id3)
+    when cmp3 {
+        Just(ord) => {
+            assert(ord == Ordering::Equal)
+        },
+        Nothing => {
+            assert(false)
+        }
+    }
+}
+
+// ============================================================================
+// Ord Implementation
+// ============================================================================
+
+@test
+func test_typeid_cmp() {
+    let id1: TypeId = TypeId { id: 100 }
+    let id2: TypeId = TypeId { id: 200 }
+    let id3: TypeId = TypeId { id: 100 }
+
+    assert(id1.cmp(ref id2) == Ordering::Less)
+    assert(id2.cmp(ref id1) == Ordering::Greater)
+    assert(id1.cmp(ref id3) == Ordering::Equal)
+}
+
+@test
+func test_typeid_cmp_edge_cases() {
+    let zero: TypeId = TypeId { id: 0 }
+    let one: TypeId = TypeId { id: 1 }
+    let max: TypeId = TypeId { id: 18446744073709551615 }
+
+    assert(zero.cmp(ref one) == Ordering::Less)
+    assert(one.cmp(ref zero) == Ordering::Greater)
+    assert(one.cmp(ref max) == Ordering::Less)
+    assert(max.cmp(ref one) == Ordering::Greater)
+    assert(zero.cmp(ref max) == Ordering::Less)
+}
+
+// ============================================================================
+// Duplicate Implementation
+// ============================================================================
+
+@test
+func test_typeid_duplicate() {
+    let id1: TypeId = TypeId { id: 12345 }
+    let id2: TypeId = id1.duplicate()
+
+    // Should have same value
+    assert(id2.id == 12345)
+    assert(id1.eq(ref id2))
+
+    // Modifying one shouldn't affect the other (they're copies)
+    // Note: TypeId fields are not mutable in normal use, but duplicate creates a new instance
+}
+
+@test
+func test_typeid_duplicate_preserves_value() {
+    let original: TypeId = TypeId { id: 999999 }
+    let copy1: TypeId = original.duplicate()
+    let copy2: TypeId = copy1.duplicate()
+
+    assert(original.eq(ref copy1))
+    assert(copy1.eq(ref copy2))
+    assert(original.eq(ref copy2))
+}
+
+// ============================================================================
+// Combined Operations
+// ============================================================================
+
+@test
+func test_typeid_ordering_consistency() {
+    let a: TypeId = TypeId { id: 10 }
+    let b: TypeId = TypeId { id: 20 }
+    let c: TypeId = TypeId { id: 30 }
+
+    // Transitivity: if a < b and b < c, then a < c
+    assert(a.lt(ref b))
+    assert(b.lt(ref c))
+    assert(a.lt(ref c))
+
+    // Consistency with cmp
+    assert(a.cmp(ref b) == Ordering::Less)
+    assert(b.cmp(ref c) == Ordering::Less)
+    assert(a.cmp(ref c) == Ordering::Less)
+}
+
+@test
+func test_typeid_equality_and_ordering() {
+    let id1: TypeId = TypeId { id: 50 }
+    let id2: TypeId = TypeId { id: 50 }
+
+    // Equal values
+    assert(id1.eq(ref id2))
+    assert(id1.cmp(ref id2) == Ordering::Equal)
+    assert(id1.le(ref id2))
+    assert(id1.ge(ref id2))
+    assert(not id1.lt(ref id2))
+    assert(not id1.gt(ref id2))
+}

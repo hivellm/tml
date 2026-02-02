@@ -40,6 +40,7 @@ struct BuildContext {
     uint32_t current_block = 0;                       ///< Current basic block ID.
     std::unordered_map<std::string, Value> variables; ///< Variable -> SSA value.
     std::unordered_set<std::string> volatile_vars;    ///< Set of volatile variable names.
+    std::unordered_set<std::string> mut_struct_vars;  ///< Mutable struct vars stored via alloca.
 
     // Loop context for break/continue
     struct LoopContext {

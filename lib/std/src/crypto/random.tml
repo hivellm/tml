@@ -1,0 +1,377 @@
+//! Cryptographically secure random number generation.
+//!
+//! This module provides cryptographically secure pseudo-random number
+//! generation (CSPRNG) for generating keys, IVs, nonces, and other
+//! security-sensitive random data.
+//!
+//! # Security
+//!
+//! All functions in this module use the operating system's CSPRNG:
+//! - Windows: BCryptGenRandom (CNG)
+//! - Linux: getrandom() syscall
+//! - macOS: SecRandomCopyBytes
+//! - Other Unix: /dev/urandom
+//!
+//! # Examples
+//!
+//! ## Generate Random Bytes
+//!
+//! ```tml
+//! use std::crypto::{random_bytes, random_fill}
+//!
+//! // Generate 32 random bytes
+//! let key = random_bytes(32)
+//!
+//! // Fill existing buffer with random data
+//! let mut buffer = Buffer::new(64)
+//! random_fill(mut buffer)
+//! ```
+//!
+//! ## Generate Random Numbers
+//!
+//! ```tml
+//! use std::crypto::{random_int, random_uuid}
+//!
+//! // Random integer in range [0, 100)
+//! let n = random_int(0, 100)
+//!
+//! // Random UUID v4
+//! let uuid = random_uuid()
+//! print("UUID: {uuid}\n")  // e.g., "550e8400-e29b-41d4-a716-446655440000"
+//! ```
+//!
+//! ## Secure Random Generator
+//!
+//! ```tml
+//! use std::crypto::SecureRandom
+//!
+//! let rng = SecureRandom::new()
+//!
+//! let byte = rng.next_u8()
+//! let int = rng.next_i32()
+//! let float = rng.next_f64()  // [0.0, 1.0)
+//! ```
+
+use std::crypto::error::CryptoError
+use std::collections::Buffer
+
+// ============================================================================
+// FFI Function Declarations
+// ============================================================================
+
+@extern("crypto_random_bytes")
+func ffi_crypto_random_bytes(size: I64) -> *Unit
+
+@extern("crypto_random_fill")
+func ffi_crypto_random_fill(handle: *Unit)
+
+@extern("crypto_random_fill_range")
+func ffi_crypto_random_fill_range(handle: *Unit, offset: I64, size: I64)
+
+@extern("crypto_random_int")
+func ffi_crypto_random_int(min: I64, max: I64) -> I64
+
+@extern("crypto_random_u8")
+func ffi_crypto_random_u8() -> U8
+
+@extern("crypto_random_u16")
+func ffi_crypto_random_u16() -> U16
+
+@extern("crypto_random_u32")
+func ffi_crypto_random_u32() -> U32
+
+@extern("crypto_random_u64")
+func ffi_crypto_random_u64() -> U64
+
+@extern("crypto_random_i32")
+func ffi_crypto_random_i32() -> I32
+
+@extern("crypto_random_i64")
+func ffi_crypto_random_i64() -> I64
+
+@extern("crypto_random_f32")
+func ffi_crypto_random_f32() -> F32
+
+@extern("crypto_random_f64")
+func ffi_crypto_random_f64() -> F64
+
+@extern("crypto_random_uuid")
+func ffi_crypto_random_uuid() -> Str
+
+@extern("crypto_timing_safe_equal")
+func ffi_crypto_timing_safe_equal(a: *Unit, b: *Unit) -> Bool
+
+@extern("crypto_timing_safe_equal_str")
+func ffi_crypto_timing_safe_equal_str(a: Str, b: Str) -> Bool
+
+@extern("crypto_generate_prime")
+func ffi_crypto_generate_prime(bits: I64) -> *Unit
+
+@extern("crypto_generate_safe_prime")
+func ffi_crypto_generate_safe_prime(bits: I64) -> *Unit
+
+@extern("crypto_check_prime")
+func ffi_crypto_check_prime(handle: *Unit) -> Bool
+
+@extern("crypto_check_prime_rounds")
+func ffi_crypto_check_prime_rounds(handle: *Unit, rounds: I64) -> Bool
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Generates cryptographically secure random bytes.
+///
+/// # Example
+///
+/// ```tml
+/// let key = random_bytes(32)  // 256-bit key
+/// let iv = random_bytes(16)   // 128-bit IV
+/// let nonce = random_bytes(12)  // 96-bit nonce
+/// ```
+pub func random_bytes(size: I64) -> Buffer {
+    if size <= 0 {
+        return Buffer::new(0)
+    }
+    let handle: *Unit = ffi_crypto_random_bytes(size)
+    return Buffer { handle: handle }
+}
+
+/// Fills a buffer with cryptographically secure random bytes.
+///
+/// This is more efficient than `random_bytes()` when you already have
+/// a buffer allocated.
+///
+/// # Example
+///
+/// ```tml
+/// let mut buffer = Buffer::new(64)
+/// random_fill(mut buffer)
+/// ```
+pub func random_fill(buffer: mut ref Buffer) {
+    let buf_len: I64 = buffer.len()
+    if buf_len > 0 {
+        ffi_crypto_random_fill(buffer.handle)
+    }
+}
+
+/// Fills a portion of a buffer with random bytes.
+///
+/// # Parameters
+///
+/// - `buffer`: Buffer to fill
+/// - `offset`: Starting offset
+/// - `size`: Number of bytes to fill
+pub func random_fill_range(buffer: mut ref Buffer, offset: I64, size: I64) -> Outcome[Unit, CryptoError] {
+    if offset < 0 or size < 0 {
+        return Err(CryptoError::invalid_parameter("offset and size must be non-negative"))
+    }
+    let buf_len2: I64 = buffer.len()
+    if offset + size > buf_len2 {
+        return Err(CryptoError::buffer_too_small("buffer too small for offset + size"))
+    }
+    ffi_crypto_random_fill_range(buffer.handle, offset, size)
+    return Ok(())
+}
+
+/// Generates a cryptographically secure random integer in the range [min, max).
+///
+/// Uses rejection sampling to ensure uniform distribution.
+///
+/// # Example
+///
+/// ```tml
+/// let dice = random_int(1, 7)  // 1-6
+/// let coin = random_int(0, 2)  // 0 or 1
+/// ```
+pub func random_int(min: I64, max: I64) -> I64 {
+    if min >= max {
+        return min
+    }
+    return ffi_crypto_random_int(min, max)
+}
+
+/// Generates a cryptographically secure random 32-bit unsigned integer.
+pub func random_u32() -> U32 {
+    return ffi_crypto_random_u32()
+}
+
+/// Generates a cryptographically secure random 64-bit unsigned integer.
+pub func random_u64() -> U64 {
+    return ffi_crypto_random_u64()
+}
+
+/// Generates a random UUID version 4.
+///
+/// Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+/// where y is one of [8, 9, a, b]
+///
+/// # Example
+///
+/// ```tml
+/// let uuid = random_uuid()
+/// print("Session ID: {uuid}\n")
+/// ```
+pub func random_uuid() -> Str {
+    return ffi_crypto_random_uuid()
+}
+
+/// Compares two buffers in constant time.
+///
+/// This function is designed to prevent timing attacks by ensuring
+/// the comparison takes the same amount of time regardless of where
+/// the buffers differ.
+///
+/// Returns true if the buffers are equal, false otherwise.
+///
+/// # Example
+///
+/// ```tml
+/// let valid = timing_safe_equal(received_mac, expected_mac)
+/// if valid {
+///     process_message()
+/// }
+/// ```
+pub func timing_safe_equal(a: ref Buffer, b: ref Buffer) -> Bool {
+    if a.len() != b.len() {
+        return false
+    }
+    return ffi_crypto_timing_safe_equal(a.handle, b.handle)
+}
+
+/// Compares two strings in constant time.
+pub func timing_safe_equal_str(a: Str, b: Str) -> Bool {
+    return ffi_crypto_timing_safe_equal_str(a, b)
+}
+
+/// Cryptographically secure random number generator.
+///
+/// Provides a convenient object-oriented interface to the CSPRNG.
+pub type SecureRandom {
+    _marker: U8  // Placeholder, no state needed
+}
+
+impl SecureRandom {
+    /// Creates a new SecureRandom instance.
+    pub func new() -> SecureRandom {
+        return SecureRandom { _marker: 0 }
+    }
+
+    /// Generates random bytes.
+    pub func bytes(this, size: I64) -> Buffer {
+        return random_bytes(size)
+    }
+
+    /// Fills a buffer with random bytes.
+    pub func fill(this, buffer: mut ref Buffer) {
+        random_fill(buffer)
+    }
+
+    /// Generates a random U8.
+    pub func next_u8(this) -> U8 {
+        return ffi_crypto_random_u8()
+    }
+
+    /// Generates a random U16.
+    pub func next_u16(this) -> U16 {
+        return ffi_crypto_random_u16()
+    }
+
+    /// Generates a random U32.
+    pub func next_u32(this) -> U32 {
+        return random_u32()
+    }
+
+    /// Generates a random U64.
+    pub func next_u64(this) -> U64 {
+        return random_u64()
+    }
+
+    /// Generates a random I32.
+    pub func next_i32(this) -> I32 {
+        return ffi_crypto_random_i32()
+    }
+
+    /// Generates a random I64.
+    pub func next_i64(this) -> I64 {
+        return ffi_crypto_random_i64()
+    }
+
+    /// Generates a random F32 in [0.0, 1.0).
+    pub func next_f32(this) -> F32 {
+        return ffi_crypto_random_f32()
+    }
+
+    /// Generates a random F64 in [0.0, 1.0).
+    pub func next_f64(this) -> F64 {
+        return ffi_crypto_random_f64()
+    }
+
+    /// Generates a random integer in range [min, max).
+    pub func int_range(this, min: I64, max: I64) -> I64 {
+        return random_int(min, max)
+    }
+
+    /// Generates a random boolean.
+    pub func next_bool(this) -> Bool {
+        return random_int(0, 2) == 1
+    }
+
+    // Note: shuffle and choose methods require generic slice support
+    // which is not yet fully implemented. These will be added when
+    // generic method support for slices is available.
+}
+
+// ============================================================================
+// Prime number generation (for key generation)
+// ============================================================================
+
+/// Generates a random prime number of the specified bit length.
+///
+/// This is primarily used internally for RSA key generation.
+pub func generate_prime(bits: I64) -> Outcome[Buffer, CryptoError] {
+    if bits < 64 or bits > 16384 {
+        return Err(CryptoError::invalid_parameter("prime bit length must be between 64 and 16384"))
+    }
+    let handle: *Unit = ffi_crypto_generate_prime(bits)
+    if handle == null {
+        return Err(CryptoError::random_failed())
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Generates a random safe prime (p where (p-1)/2 is also prime).
+pub func generate_safe_prime(bits: I64) -> Outcome[Buffer, CryptoError] {
+    if bits < 64 or bits > 16384 {
+        return Err(CryptoError::invalid_parameter("prime bit length must be between 64 and 16384"))
+    }
+    let handle: *Unit = ffi_crypto_generate_safe_prime(bits)
+    if handle == null {
+        return Err(CryptoError::random_failed())
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Checks if a number is probably prime using Miller-Rabin.
+///
+/// Returns true if the number is probably prime, false if definitely composite.
+pub func check_prime(candidate: ref Buffer) -> Bool {
+    return ffi_crypto_check_prime(candidate.handle)
+}
+
+/// Checks if a number is probably prime with specified number of rounds.
+pub func check_prime_rounds(candidate: ref Buffer, rounds: I64) -> Bool {
+    return ffi_crypto_check_prime_rounds(candidate.handle, rounds)
+}
+
+// ============================================================================
+// Web Crypto API compatible functions
+// ============================================================================
+
+/// Gets random values for a typed array (Web Crypto API compatible).
+///
+/// Fills the buffer with cryptographically secure random values.
+pub func get_random_values(buffer: mut ref Buffer) -> ref Buffer {
+    random_fill(buffer)
+    return ref buffer
+}

@@ -24,6 +24,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // is_ok() -> Bool (tag == 0)
     if (method == "is_ok") {
+        emit_coverage("Outcome::is_ok");
         std::string result = fresh_reg();
         emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 0");
         last_expr_type_ = "i1";
@@ -32,6 +33,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // is_err() -> Bool (tag == 1)
     if (method == "is_err") {
+        emit_coverage("Outcome::is_err");
         std::string result = fresh_reg();
         emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 1");
         last_expr_type_ = "i1";
@@ -45,6 +47,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // unwrap() -> T (get the Ok value)
     if (method == "unwrap" || method == "expect") {
+        emit_coverage(method == "expect" ? "Outcome::expect" : "Outcome::unwrap");
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
         emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
@@ -59,6 +62,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // unwrap_err() -> E (get the Err value)
     if (method == "unwrap_err" || method == "expect_err") {
+        emit_coverage(method == "expect_err" ? "Outcome::expect_err" : "Outcome::unwrap_err");
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
         emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
@@ -73,6 +77,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // unwrap_or(default) -> T
     if (method == "unwrap_or") {
+        emit_coverage("Outcome::unwrap_or");
         if (call.args.empty()) {
             report_error("unwrap_or requires an argument", call.span);
             return "0";
@@ -99,6 +104,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // unwrap_or_default() -> T
     if (method == "unwrap_or_default") {
+        emit_coverage("Outcome::unwrap_or_default");
         std::string default_val;
         if (ok_llvm_type == "i8" || ok_llvm_type == "i16" || ok_llvm_type == "i32" ||
             ok_llvm_type == "i64" || ok_llvm_type == "i128") {
@@ -131,6 +137,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // ok() -> Maybe[T]
     if (method == "ok") {
+        emit_coverage("Outcome::ok");
         std::vector<types::TypePtr> maybe_type_args = {ok_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
         std::string maybe_type = "%struct." + maybe_mangled;
@@ -191,6 +198,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // err() -> Maybe[E]
     if (method == "err") {
+        emit_coverage("Outcome::err");
         std::vector<types::TypePtr> maybe_type_args = {err_type};
         std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
         std::string maybe_type = "%struct." + maybe_mangled;
@@ -251,6 +259,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // contains(ref value) -> Bool
     if (method == "contains") {
+        emit_coverage("Outcome::contains");
         if (call.args.empty()) {
             report_error("contains requires an argument", call.span);
             return "false";
@@ -313,6 +322,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // contains_err(ref value) -> Bool
     if (method == "contains_err") {
+        emit_coverage("Outcome::contains_err");
         if (call.args.empty()) {
             report_error("contains_err requires an argument", call.span);
             return "false";
@@ -376,6 +386,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // alt(other) -> Outcome[T, E]
     if (method == "alt") {
+        emit_coverage("Outcome::alt");
         if (call.args.empty()) {
             report_error("alt requires an argument", call.span);
             return receiver;
@@ -393,6 +404,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // also(other) -> Outcome[U, E]
     if (method == "also") {
+        emit_coverage("Outcome::also");
         if (call.args.empty()) {
             report_error("also requires an argument", call.span);
             return receiver;
@@ -448,6 +460,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // is_ok_and(predicate) -> Bool
     if (method == "is_ok_and") {
+        emit_coverage("Outcome::is_ok_and");
         if (call.args.empty()) {
             report_error("is_ok_and requires a predicate argument", call.span);
             return "false";
@@ -516,6 +529,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // is_err_and(predicate) -> Bool
     if (method == "is_err_and") {
+        emit_coverage("Outcome::is_err_and");
         if (call.args.empty()) {
             report_error("is_err_and requires a predicate argument", call.span);
             return "false";
@@ -584,6 +598,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // unwrap_or_else(f) -> T
     if (method == "unwrap_or_else") {
+        emit_coverage("Outcome::unwrap_or_else");
         if (call.args.empty()) {
             report_error("unwrap_or_else requires a function argument", call.span);
             return "0";
@@ -659,6 +674,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // map(f) -> Outcome[U, E]
     if (method == "map") {
+        emit_coverage("Outcome::map");
         if (call.args.empty()) {
             report_error("map requires a function argument", call.span);
             return receiver;
@@ -782,6 +798,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // map_or(default, f) -> U
     if (method == "map_or") {
+        emit_coverage("Outcome::map_or");
         if (call.args.size() < 2) {
             report_error("map_or requires a default value and a function", call.span);
             return "0";
@@ -852,6 +869,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // and_then(f) -> Outcome[U, E]
     if (method == "and_then") {
+        emit_coverage("Outcome::and_then");
         if (call.args.empty()) {
             report_error("and_then requires a function argument", call.span);
             return receiver;
@@ -921,6 +939,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
 
     // or_else(f) -> Outcome[T, F]
     if (method == "or_else") {
+        emit_coverage("Outcome::or_else");
         if (call.args.empty()) {
             report_error("or_else requires a function argument", call.span);
             return receiver;

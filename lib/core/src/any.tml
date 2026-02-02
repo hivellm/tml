@@ -136,12 +136,8 @@ impl Hash for TypeId {
 }
 
 impl Debug for TypeId {
-    pub func fmt_debug(this, f: mut ref Formatter) -> FmtResult {
-        // Simple debug output showing the internal ID
-        f.write_str("TypeId(")
-        f.write_str(this.id.to_string())
-        f.write_str(")")
-        return FmtResult::Ok
+    pub func debug_string(this) -> Str {
+        return "TypeId(" + this.id.to_string() + ")"
     }
 }
 

@@ -1,0 +1,309 @@
+//! Tests for crypto HMAC functions
+//!
+//! Tests HMAC-SHA256, HMAC-SHA512, and streaming HMAC API.
+
+use std::crypto::{hmac_sha256, hmac_sha512, hmac_sha384, hmac_sha1}
+use std::crypto::{Hmac, HashAlgorithm}
+use std::collections::Buffer
+use test::{assert, assert_eq}
+
+// ============================================================================
+// HMAC-SHA256 Tests
+// ============================================================================
+
+@test
+func test_hmac_sha256_basic() -> I32 {
+    let key = Buffer.from_str("secret")
+    let mac = hmac_sha256(key, "hello world")
+
+    assert_eq(mac.len(), 32)
+
+    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_sha256_empty_message() -> I32 {
+    let key = Buffer.from_str("key")
+    let mac = hmac_sha256(key, "")
+
+    assert_eq(mac.len(), 32)
+
+    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_sha256_rfc4231_test1() -> I32 {
+    // RFC 4231 Test Case 1
+    // Key = 0x0b repeated 20 times
+    // Data = "Hi There"
+    let key = Buffer.alloc(20)
+    loop i in 0 to 20 {
+        key.set(i, 0x0b)
+    }
+
+    let mac = hmac_sha256(key, "Hi There")
+    let hex = mac.to_hex()
+
+    // Expected: b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7
+    assert_eq(hex, "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7")
+
+    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_sha256_rfc4231_test2() -> I32 {
+    // RFC 4231 Test Case 2
+    // Key = "Jefe"
+    // Data = "what do ya want for nothing?"
+    let key = Buffer.from_str("Jefe")
+    let mac = hmac_sha256(key, "what do ya want for nothing?")
+    let hex = mac.to_hex()
+
+    // Expected: 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843
+    assert_eq(hex, "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+
+    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_sha256_bytes() -> I32 {
+    let key = Buffer.from_str("secret")
+    let data = Buffer.from_str("hello world")
+    let mac = hmac_sha256(key, data)
+
+    assert_eq(mac.len(), 32)
+
+    key.destroy()
+    data.destroy()
+    mac.destroy()
+    return 0
+}
+
+// ============================================================================
+// HMAC-SHA512 Tests
+// ============================================================================
+
+@test
+func test_hmac_sha512_basic() -> I32 {
+    let key = Buffer.from_str("secret")
+    let mac = hmac_sha512(key, "hello world")
+
+    assert_eq(mac.len(), 64)
+
+    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_sha512_rfc4231() -> I32 {
+    // RFC 4231 Test Case 2 for HMAC-SHA-512
+    let key = Buffer.from_str("Jefe")
+    let mac = hmac_sha512(key, "what do ya want for nothing?")
+
+    assert_eq(mac.len(), 64)
+
+    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+// ============================================================================
+// HMAC-SHA384 Tests
+// ============================================================================
+
+@test
+func test_hmac_sha384_basic() -> I32 {
+    let key = Buffer.from_str("secret")
+    let mac = hmac_sha384(key, "hello world")
+
+    assert_eq(mac.len(), 48)
+
+    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+// ============================================================================
+// HMAC-SHA1 Tests (legacy)
+// ============================================================================
+
+@test
+func test_hmac_sha1_basic() -> I32 {
+    let key = Buffer.from_str("secret")
+    let mac = hmac_sha1(key, "hello world")
+
+    assert_eq(mac.len(), 20)
+
+    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+// ============================================================================
+// Streaming HMAC API Tests
+// ============================================================================
+
+@test
+func test_hmac_streaming() -> I32 {
+    let key = Buffer.from_str("secret")
+    let hmac = Hmac.create(HashAlgorithm.Sha256, key)
+
+    hmac.update("hello")
+    hmac.update(" ")
+    hmac.update("world")
+
+    let mac = hmac.digest()
+    assert_eq(mac.len(), 32)
+
+    // Should match one-shot version
+    let one_shot = hmac_sha256(key, "hello world")
+    assert(mac.equals(one_shot))
+
+    key.destroy()
+    mac.destroy()
+    one_shot.destroy()
+    hmac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_streaming_bytes() -> I32 {
+    let key = Buffer.from_str("secret")
+    let hmac = Hmac.create(HashAlgorithm.Sha256, key)
+
+    let chunk1 = Buffer.from_str("hello ")
+    let chunk2 = Buffer.from_str("world")
+
+    hmac.update(chunk1)
+    hmac.update(chunk2)
+
+    let mac = hmac.digest()
+    assert_eq(mac.len(), 32)
+
+    chunk1.destroy()
+    chunk2.destroy()
+    key.destroy()
+    mac.destroy()
+    hmac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_streaming_sha512() -> I32 {
+    let key = Buffer.from_str("secret key")
+    let hmac = Hmac.create(HashAlgorithm.Sha512, key)
+
+    hmac.update("test data")
+
+    let mac = hmac.digest()
+    assert_eq(mac.len(), 64)
+
+    key.destroy()
+    mac.destroy()
+    hmac.destroy()
+    return 0
+}
+
+// ============================================================================
+// HMAC Verification Tests
+// ============================================================================
+
+@test
+func test_hmac_verify() -> I32 {
+    let key = Buffer.from_str("secret")
+    let data = "message to authenticate"
+
+    let mac1 = hmac_sha256(key, data)
+    let mac2 = hmac_sha256(key, data)
+
+    // Same key and data should produce same MAC
+    assert(mac1.equals(mac2))
+
+    key.destroy()
+    mac1.destroy()
+    mac2.destroy()
+    return 0
+}
+
+@test
+func test_hmac_different_keys() -> I32 {
+    let key1 = Buffer.from_str("key1")
+    let key2 = Buffer.from_str("key2")
+    let data = "same message"
+
+    let mac1 = hmac_sha256(key1, data)
+    let mac2 = hmac_sha256(key2, data)
+
+    // Different keys should produce different MACs
+    assert(not mac1.equals(mac2))
+
+    key1.destroy()
+    key2.destroy()
+    mac1.destroy()
+    mac2.destroy()
+    return 0
+}
+
+@test
+func test_hmac_different_data() -> I32 {
+    let key = Buffer.from_str("same key")
+
+    let mac1 = hmac_sha256(key, "message 1")
+    let mac2 = hmac_sha256(key, "message 2")
+
+    // Different data should produce different MACs
+    assert(not mac1.equals(mac2))
+
+    key.destroy()
+    mac1.destroy()
+    mac2.destroy()
+    return 0
+}
+
+// ============================================================================
+// Large Data Tests
+// ============================================================================
+
+@test
+func test_hmac_large_key() -> I32 {
+    // Key larger than block size (64 bytes for SHA-256)
+    let key = Buffer.alloc(128)
+    loop i in 0 to 128 {
+        key.set(i, (i % 256) as U8)
+    }
+
+    let mac = hmac_sha256(key, "test data")
+    assert_eq(mac.len(), 32)
+
+    key.destroy()
+    mac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_streaming_large_data() -> I32 {
+    let key = Buffer.from_str("secret")
+    let hmac = Hmac.create(HashAlgorithm.Sha256, key)
+
+    // Update with many small chunks
+    loop i in 0 to 1000 {
+        hmac.update("chunk")
+    }
+
+    let mac = hmac.digest()
+    assert_eq(mac.len(), 32)
+
+    key.destroy()
+    mac.destroy()
+    hmac.destroy()
+    return 0
+}

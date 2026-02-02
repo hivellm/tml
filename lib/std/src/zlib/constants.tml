@@ -1,0 +1,390 @@
+//! Constants for zlib, Brotli, and Zstd compression.
+//!
+//! This module provides all compression-related constants following
+//! the Node.js zlib API conventions.
+
+// ============================================================================
+// Zlib Flush Modes
+// ============================================================================
+
+/// No flush - accumulate more input before producing output.
+pub const Z_NO_FLUSH: I32 = 0
+
+/// Partial flush - flush some output.
+pub const Z_PARTIAL_FLUSH: I32 = 1
+
+/// Sync flush - flush all pending output and align on byte boundary.
+pub const Z_SYNC_FLUSH: I32 = 2
+
+/// Full flush - flush all output and reset compression state.
+pub const Z_FULL_FLUSH: I32 = 3
+
+/// Finish - finish compression, flush all remaining output.
+pub const Z_FINISH: I32 = 4
+
+/// Block flush - stop at next block boundary.
+pub const Z_BLOCK: I32 = 5
+
+/// Trees flush - emit stored trees.
+pub const Z_TREES: I32 = 6
+
+// ============================================================================
+// Zlib Compression Levels
+// ============================================================================
+
+/// No compression (store only).
+pub const Z_NO_COMPRESSION: I32 = 0
+
+/// Best speed (fastest compression, lowest ratio).
+pub const Z_BEST_SPEED: I32 = 1
+
+/// Best compression (slowest compression, highest ratio).
+pub const Z_BEST_COMPRESSION: I32 = 9
+
+/// Default compression level (balance of speed and ratio).
+pub const Z_DEFAULT_COMPRESSION: I32 = -1
+
+// ============================================================================
+// Zlib Compression Strategies
+// ============================================================================
+
+/// Filtered - data produced by a filter (or predictor).
+pub const Z_FILTERED: I32 = 1
+
+/// Huffman only - force Huffman encoding only (no string match).
+pub const Z_HUFFMAN_ONLY: I32 = 2
+
+/// RLE - limit match distances to one (run-length encoding effect).
+pub const Z_RLE: I32 = 3
+
+/// Fixed - use fixed Huffman codes only.
+pub const Z_FIXED: I32 = 4
+
+/// Default strategy - for normal data.
+pub const Z_DEFAULT_STRATEGY: I32 = 0
+
+// ============================================================================
+// Zlib Return Codes
+// ============================================================================
+
+/// Operation completed successfully.
+pub const Z_OK: I32 = 0
+
+/// End of stream reached.
+pub const Z_STREAM_END: I32 = 1
+
+/// A preset dictionary is needed for decompression.
+pub const Z_NEED_DICT: I32 = 2
+
+/// File error (errno set).
+pub const Z_ERRNO: I32 = -1
+
+/// Stream state is inconsistent.
+pub const Z_STREAM_ERROR: I32 = -2
+
+/// Input data was corrupted.
+pub const Z_DATA_ERROR: I32 = -3
+
+/// Not enough memory.
+pub const Z_MEM_ERROR: I32 = -4
+
+/// Output buffer too small.
+pub const Z_BUF_ERROR: I32 = -5
+
+/// Incompatible version.
+pub const Z_VERSION_ERROR: I32 = -6
+
+// ============================================================================
+// Zlib Window Bits
+// ============================================================================
+
+/// Minimum window bits (256 bytes).
+pub const Z_MIN_WINDOWBITS: I32 = 8
+
+/// Maximum window bits (32K bytes).
+pub const Z_MAX_WINDOWBITS: I32 = 15
+
+/// Default window bits.
+pub const Z_DEFAULT_WINDOWBITS: I32 = 15
+
+/// Add 16 to windowBits for gzip format.
+pub const GZIP_WINDOW_OFFSET: I32 = 16
+
+/// Add 32 to windowBits for auto-detect gzip/deflate.
+pub const AUTO_DETECT_WINDOW_OFFSET: I32 = 32
+
+/// Use negative windowBits for raw deflate (no header).
+pub const RAW_DEFLATE_WINDOW_OFFSET: I32 = -1
+
+// ============================================================================
+// Zlib Memory Levels
+// ============================================================================
+
+/// Minimum memory level.
+pub const Z_MIN_MEMLEVEL: I32 = 1
+
+/// Maximum memory level.
+pub const Z_MAX_MEMLEVEL: I32 = 9
+
+/// Default memory level.
+pub const Z_DEFAULT_MEMLEVEL: I32 = 8
+
+// ============================================================================
+// Default Chunk Size
+// ============================================================================
+
+/// Default chunk size for streaming (16KB).
+pub const DEFAULT_CHUNK_SIZE: I64 = 16384
+
+// ============================================================================
+// Brotli Modes
+// ============================================================================
+
+/// Generic mode - default for most data.
+pub const BROTLI_MODE_GENERIC: I32 = 0
+
+/// Text mode - optimized for UTF-8 text.
+pub const BROTLI_MODE_TEXT: I32 = 1
+
+/// Font mode - optimized for WOFF 2.0 fonts.
+pub const BROTLI_MODE_FONT: I32 = 2
+
+// ============================================================================
+// Brotli Quality Levels
+// ============================================================================
+
+/// Minimum Brotli quality (fastest).
+pub const BROTLI_MIN_QUALITY: I32 = 0
+
+/// Maximum Brotli quality (best compression).
+pub const BROTLI_MAX_QUALITY: I32 = 11
+
+/// Default Brotli quality.
+pub const BROTLI_DEFAULT_QUALITY: I32 = 4
+
+// ============================================================================
+// Brotli Window Bits
+// ============================================================================
+
+/// Minimum Brotli window bits.
+pub const BROTLI_MIN_WINDOW_BITS: I32 = 10
+
+/// Maximum Brotli window bits.
+pub const BROTLI_MAX_WINDOW_BITS: I32 = 24
+
+/// Default Brotli window bits.
+pub const BROTLI_DEFAULT_WINDOW: I32 = 22
+
+/// Large window mode Brotli window bits.
+pub const BROTLI_LARGE_MAX_WINDOW_BITS: I32 = 30
+
+// ============================================================================
+// Brotli Block Bits
+// ============================================================================
+
+/// Minimum Brotli input block bits.
+pub const BROTLI_MIN_INPUT_BLOCK_BITS: I32 = 16
+
+/// Maximum Brotli input block bits.
+pub const BROTLI_MAX_INPUT_BLOCK_BITS: I32 = 24
+
+// ============================================================================
+// Brotli Operations (Flush Modes)
+// ============================================================================
+
+/// Process input without flushing.
+pub const BROTLI_OPERATION_PROCESS: I32 = 0
+
+/// Flush the current output buffer.
+pub const BROTLI_OPERATION_FLUSH: I32 = 1
+
+/// Finish and close the stream.
+pub const BROTLI_OPERATION_FINISH: I32 = 2
+
+/// Emit metadata block.
+pub const BROTLI_OPERATION_EMIT_METADATA: I32 = 3
+
+// ============================================================================
+// Brotli Encoder Parameters
+// ============================================================================
+
+/// Compression mode parameter.
+pub const BROTLI_PARAM_MODE: I32 = 0
+
+/// Compression quality parameter.
+pub const BROTLI_PARAM_QUALITY: I32 = 1
+
+/// Sliding window size parameter.
+pub const BROTLI_PARAM_LGWIN: I32 = 2
+
+/// Input block size parameter.
+pub const BROTLI_PARAM_LGBLOCK: I32 = 3
+
+/// Disable literal context modeling.
+pub const BROTLI_PARAM_DISABLE_LITERAL_CONTEXT_MODELING: I32 = 4
+
+/// Uncompressed size hint parameter.
+pub const BROTLI_PARAM_SIZE_HINT: I32 = 5
+
+/// Enable large window mode.
+pub const BROTLI_PARAM_LARGE_WINDOW: I32 = 6
+
+/// Number of postfix bits.
+pub const BROTLI_PARAM_NPOSTFIX: I32 = 7
+
+/// Number of direct distance codes.
+pub const BROTLI_PARAM_NDIRECT: I32 = 8
+
+/// Stream offset.
+pub const BROTLI_PARAM_STREAM_OFFSET: I32 = 9
+
+// ============================================================================
+// Brotli Decoder Parameters
+// ============================================================================
+
+/// Disable ring-buffer reallocation.
+pub const BROTLI_DECODER_PARAM_DISABLE_RING_BUFFER_REALLOCATION: I32 = 0
+
+/// Enable large window mode in decoder.
+pub const BROTLI_DECODER_PARAM_LARGE_WINDOW: I32 = 1
+
+// ============================================================================
+// Zstd Operations (Flush Modes)
+// ============================================================================
+
+/// Continue compression without flushing.
+pub const ZSTD_E_CONTINUE: I32 = 0
+
+/// Flush current block.
+pub const ZSTD_E_FLUSH: I32 = 1
+
+/// Finish and close frame.
+pub const ZSTD_E_END: I32 = 2
+
+// ============================================================================
+// Zstd Compression Levels
+// ============================================================================
+
+/// Minimum Zstd compression level.
+pub const ZSTD_MIN_CLEVEL: I32 = 1
+
+/// Maximum Zstd compression level.
+pub const ZSTD_MAX_CLEVEL: I32 = 22
+
+/// Default Zstd compression level.
+pub const ZSTD_DEFAULT_CLEVEL: I32 = 3
+
+// ============================================================================
+// Zstd Strategies
+// ============================================================================
+
+/// Zstd fast strategy.
+pub const ZSTD_FAST: I32 = 1
+
+/// Zstd double-fast strategy.
+pub const ZSTD_DFAST: I32 = 2
+
+/// Zstd greedy strategy.
+pub const ZSTD_GREEDY: I32 = 3
+
+/// Zstd lazy strategy.
+pub const ZSTD_LAZY: I32 = 4
+
+/// Zstd lazy2 strategy.
+pub const ZSTD_LAZY2: I32 = 5
+
+/// Zstd btlazy2 strategy.
+pub const ZSTD_BTLAZY2: I32 = 6
+
+/// Zstd btopt strategy.
+pub const ZSTD_BTOPT: I32 = 7
+
+/// Zstd btultra strategy.
+pub const ZSTD_BTULTRA: I32 = 8
+
+/// Zstd btultra2 strategy (best compression).
+pub const ZSTD_BTULTRA2: I32 = 9
+
+// ============================================================================
+// Zstd Compression Parameters
+// ============================================================================
+
+/// Compression level parameter.
+pub const ZSTD_C_COMPRESSIONLEVEL: I32 = 100
+
+/// Window log parameter.
+pub const ZSTD_C_WINDOWLOG: I32 = 101
+
+/// Hash log parameter.
+pub const ZSTD_C_HASHLOG: I32 = 102
+
+/// Chain log parameter.
+pub const ZSTD_C_CHAINLOG: I32 = 103
+
+/// Search log parameter.
+pub const ZSTD_C_SEARCHLOG: I32 = 104
+
+/// Minimum match parameter.
+pub const ZSTD_C_MINMATCH: I32 = 105
+
+/// Target length parameter.
+pub const ZSTD_C_TARGETLENGTH: I32 = 106
+
+/// Strategy parameter.
+pub const ZSTD_C_STRATEGY: I32 = 107
+
+/// Enable long distance matching.
+pub const ZSTD_C_ENABLELONGDISTANCEMATCHING: I32 = 160
+
+/// LDM hash log parameter.
+pub const ZSTD_C_LDMHASHLOG: I32 = 161
+
+/// LDM min match parameter.
+pub const ZSTD_C_LDMMINMATCH: I32 = 162
+
+/// LDM bucket size log parameter.
+pub const ZSTD_C_LDMBUCKETSIZELOG: I32 = 163
+
+/// LDM hash rate log parameter.
+pub const ZSTD_C_LDMHASHRATELOG: I32 = 164
+
+/// Content size flag parameter.
+pub const ZSTD_C_CONTENTSIZE_FLAG: I32 = 200
+
+/// Checksum flag parameter.
+pub const ZSTD_C_CHECKSUM_FLAG: I32 = 201
+
+/// Dict ID flag parameter.
+pub const ZSTD_C_DICTID_FLAG: I32 = 202
+
+/// Number of workers for multi-threaded compression.
+pub const ZSTD_C_NBWORKERS: I32 = 400
+
+/// Job size for multi-threaded compression.
+pub const ZSTD_C_JOBSIZE: I32 = 401
+
+/// Overlap log parameter.
+pub const ZSTD_C_OVERLAPLOG: I32 = 402
+
+// ============================================================================
+// Zstd Decompression Parameters
+// ============================================================================
+
+/// Maximum window log for decompression.
+pub const ZSTD_D_WINDOWLOGMAX: I32 = 100
+
+// ============================================================================
+// Zstd Window Bits
+// ============================================================================
+
+/// Minimum Zstd window log.
+pub const ZSTD_WINDOWLOG_MIN: I32 = 10
+
+/// Maximum Zstd window log (32-bit).
+pub const ZSTD_WINDOWLOG_MAX_32: I32 = 30
+
+/// Maximum Zstd window log (64-bit).
+pub const ZSTD_WINDOWLOG_MAX_64: I32 = 31
+
+/// Default Zstd window log.
+pub const ZSTD_WINDOWLOG_DEFAULT: I32 = 0

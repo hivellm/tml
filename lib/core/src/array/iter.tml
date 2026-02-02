@@ -256,15 +256,16 @@ impl[T: Debug, const N: I64] Debug for ArrayIter[T, N] {
     }
 }
 
-impl[T, const N: I64] Default for ArrayIter[T, N] where N = 0 {
-    pub func default() -> ArrayIter[T, 0] {
-        return ArrayIter {
-            data: [],
-            start: 0,
-            end: 0
-        }
-    }
-}
+// NOTE: This requires where-clause support for const generics
+// impl[T, const N: I64] Default for ArrayIter[T, N] where N = 0 {
+//     pub func default() -> ArrayIter[T, 0] {
+//         return ArrayIter {
+//             data: [],
+//             start: 0,
+//             end: 0
+//         }
+//     }
+// }
 
 // ============================================================================
 // IntoIterator for Array

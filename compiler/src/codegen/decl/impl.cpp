@@ -643,12 +643,14 @@ void LLVMIRGen::gen_impl_method_instantiation(
     }
 
     // Add remaining parameters with type substitution
+    // IMPORTANT: Use full_type_subs here to properly substitute all type parameters
+    // including impl-level (T from impl[T] Range[T]) and method-level generics
     for (size_t i = param_start; i < method.params.size(); ++i) {
         if (!params.empty()) {
             params += ", ";
             param_types += ", ";
         }
-        auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, type_subs);
+        auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, full_type_subs);
         std::string param_type = llvm_type_from_semantic(resolved_param);
         std::string param_name = get_param_name(method.params[i]);
         params += param_type + " %" + param_name;
@@ -672,7 +674,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
         param_types_vec.push_back(this_type);
     }
     for (size_t i = param_start; i < method.params.size(); ++i) {
-        auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, type_subs);
+        auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, full_type_subs);
         param_types_vec.push_back(llvm_type_from_semantic(resolved_param));
     }
     functions_[method_name] = FuncInfo{"@" + func_llvm_name, func_type, ret_type, param_types_vec};
@@ -731,9 +733,10 @@ void LLVMIRGen::gen_impl_method_instantiation(
     }
 
     // Register other parameters in locals by creating allocas
+    // Use full_type_subs to properly substitute type parameters
     for (size_t i = param_start; i < method.params.size(); ++i) {
         std::string param_name = get_param_name(method.params[i]);
-        auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, type_subs);
+        auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, full_type_subs);
         std::string param_type = llvm_type_from_semantic(resolved_param);
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + param_type);

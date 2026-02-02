@@ -77,6 +77,43 @@ void HirMirBuilder::build_let_stmt(const hir::HirLetStmt& let) {
         }
     }
 
+    // For mutable struct variables, allocate via alloca so methods can modify them
+    // This is needed because mut self methods take a pointer, not a value copy
+    if (auto* binding = std::get_if<hir::HirBindingPattern>(&let.pattern->kind)) {
+        if (binding->is_mut && init_value.type) {
+            // Check if this is a struct type (not a primitive, pointer, or array)
+            bool is_struct = std::holds_alternative<MirStructType>(init_value.type->kind);
+            if (is_struct) {
+                // Create alloca for the mutable struct variable
+                AllocaInst alloca;
+                alloca.alloc_type = init_value.type;
+                alloca.name = binding->name;
+
+                auto ptr_type = make_pointer_type(init_value.type, true);
+                auto alloca_val = emit(std::move(alloca), ptr_type);
+
+                // Store initial value
+                StoreInst store;
+                store.ptr = alloca_val;
+                store.value = init_value;
+                store.value_type = init_value.type;
+                emit_void(std::move(store));
+
+                // Map variable to alloca pointer
+                ctx_.variables[binding->name] = alloca_val;
+                ctx_.mut_struct_vars.insert(binding->name);
+
+                // Register for drop if needed
+                MirTypePtr var_type = init_value.type;
+                std::string type_name = get_type_name(var_type);
+                if (!type_name.empty() && !env_.is_trivially_destructible(type_name)) {
+                    ctx_.register_for_drop(binding->name, alloca_val, type_name, var_type);
+                }
+                return;
+            }
+        }
+    }
+
     // Bind pattern to value (non-volatile path)
     build_pattern_binding(let.pattern, init_value);
 

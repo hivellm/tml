@@ -1,0 +1,238 @@
+//! Cryptographic constants and utility functions.
+//!
+//! This module provides constants and utility functions for working with
+//! the crypto module, including lists of supported algorithms and helper
+//! functions for algorithm discovery.
+
+use std::collections::List
+
+// ============================================================================
+// Supported algorithms lists
+// ============================================================================
+
+/// Returns a list of supported hash algorithms.
+pub func get_hashes() -> List[Str] {
+    let handle: *Unit = lowlevel { crypto_get_hashes() }
+    return List[Str] { handle: handle }
+}
+
+/// Returns a list of supported cipher algorithms.
+pub func get_ciphers() -> List[Str] {
+    let handle: *Unit = lowlevel { crypto_get_ciphers() }
+    return List[Str] { handle: handle }
+}
+
+/// Returns a list of supported elliptic curves.
+pub func get_curves() -> List[Str] {
+    let handle: *Unit = lowlevel { crypto_get_curves() }
+    return List[Str] { handle: handle }
+}
+
+/// Returns information about a cipher algorithm.
+pub func get_cipher_info(name: Str) -> Maybe[CipherInfo] {
+    let exists: Bool = lowlevel { crypto_cipher_exists(name) }
+    if not exists {
+        return Nothing
+    }
+
+    let key_length: I64 = lowlevel { crypto_cipher_key_length(name) }
+    let iv_length: I64 = lowlevel { crypto_cipher_iv_length(name) }
+    let block_size: I64 = lowlevel { crypto_cipher_block_size(name) }
+    let mode: Str = lowlevel { crypto_cipher_mode(name) }
+
+    return Just(CipherInfo {
+        name: name,
+        key_length: key_length,
+        iv_length: iv_length,
+        block_size: block_size,
+        mode: mode,
+    })
+}
+
+/// Information about a cipher algorithm.
+pub type CipherInfo {
+    pub name: Str
+    pub key_length: I64
+    pub iv_length: I64
+    pub block_size: I64
+    pub mode: Str
+}
+
+// ============================================================================
+// Commonly used algorithm lists (compile-time constants)
+// ============================================================================
+
+/// Standard hash algorithms.
+pub const SUPPORTED_HASHES: [Str; 12] = [
+    "md5",
+    "sha1",
+    "sha256",
+    "sha384",
+    "sha512",
+    "sha512-256",
+    "sha3-256",
+    "sha3-384",
+    "sha3-512",
+    "blake2b512",
+    "blake2s256",
+    "blake3",
+]
+
+/// Standard cipher algorithms.
+pub const SUPPORTED_CIPHERS: [Str; 16] = [
+    "aes-128-cbc",
+    "aes-192-cbc",
+    "aes-256-cbc",
+    "aes-128-ctr",
+    "aes-256-ctr",
+    "aes-128-gcm",
+    "aes-192-gcm",
+    "aes-256-gcm",
+    "aes-128-ccm",
+    "aes-256-ccm",
+    "chacha20",
+    "chacha20-poly1305",
+    "xchacha20-poly1305",
+    "des-ede3-cbc",
+    "bf-cbc",
+    "rc4",
+]
+
+/// Standard elliptic curves.
+pub const SUPPORTED_CURVES: [Str; 9] = [
+    "prime256v1",
+    "secp384r1",
+    "secp521r1",
+    "secp256k1",
+    "X25519",
+    "X448",
+    "brainpoolP256r1",
+    "brainpoolP384r1",
+    "brainpoolP512r1",
+]
+
+/// Named DH groups.
+pub const SUPPORTED_DH_GROUPS: [Str; 13] = [
+    "modp1",
+    "modp2",
+    "modp5",
+    "modp14",
+    "modp15",
+    "modp16",
+    "modp17",
+    "modp18",
+    "ffdhe2048",
+    "ffdhe3072",
+    "ffdhe4096",
+    "ffdhe6144",
+    "ffdhe8192",
+]
+
+// ============================================================================
+// OpenSSL constants
+// ============================================================================
+
+/// RSA padding constants.
+pub const RSA_PKCS1_PADDING: I64 = 1
+pub const RSA_NO_PADDING: I64 = 3
+pub const RSA_PKCS1_OAEP_PADDING: I64 = 4
+pub const RSA_PKCS1_PSS_PADDING: I64 = 6
+
+/// Key format constants.
+pub const KEY_FORMAT_PEM: I64 = 1
+pub const KEY_FORMAT_DER: I64 = 2
+pub const KEY_FORMAT_JWK: I64 = 3
+
+/// Key type constants.
+pub const KEY_TYPE_SECRET: I64 = 1
+pub const KEY_TYPE_PUBLIC: I64 = 2
+pub const KEY_TYPE_PRIVATE: I64 = 3
+
+// ============================================================================
+// FIPS mode
+// ============================================================================
+
+/// Returns true if FIPS mode is enabled.
+pub func fips_enabled() -> Bool {
+    let result: Bool = lowlevel { crypto_fips_mode() }
+    return result
+}
+
+/// Enables or disables FIPS mode.
+///
+/// Note: This may fail if the crypto library was not compiled with FIPS support.
+pub func set_fips_mode(enabled: Bool) -> Bool {
+    let result: Bool = lowlevel { crypto_set_fips_mode(enabled) }
+    return result
+}
+
+// ============================================================================
+// Secure heap (for sensitive data)
+// ============================================================================
+
+/// Returns the number of bytes used in the secure heap.
+pub func secure_heap_used() -> I64 {
+    let used: I64 = lowlevel { crypto_secure_heap_used() }
+    return used
+}
+
+// ============================================================================
+// Engine support
+// ============================================================================
+
+/// Sets the crypto engine (for hardware acceleration).
+pub func set_engine(engine_id: Str) -> Bool {
+    let result: Bool = lowlevel { crypto_set_engine(engine_id) }
+    return result
+}
+
+// ============================================================================
+// Encoding utilities
+// ============================================================================
+
+use std::collections::Buffer
+
+/// Encodes bytes to hexadecimal string.
+pub func bytes_to_hex(data: ref Buffer) -> Str {
+    let hex: Str = lowlevel { crypto_bytes_to_hex(data.handle) }
+    return hex
+}
+
+/// Decodes hexadecimal string to bytes.
+pub func hex_to_bytes(hex: Str) -> Maybe[Buffer] {
+    let handle: *Unit = lowlevel { crypto_hex_to_bytes(hex) }
+    if handle == null {
+        return Nothing
+    }
+    return Just(Buffer { handle: handle })
+}
+
+/// Encodes bytes to base64 string.
+pub func bytes_to_base64(data: ref Buffer) -> Str {
+    let b64: Str = lowlevel { crypto_bytes_to_base64(data.handle) }
+    return b64
+}
+
+/// Decodes base64 string to bytes.
+pub func base64_to_bytes(b64: Str) -> Maybe[Buffer] {
+    let handle: *Unit = lowlevel { crypto_base64_to_bytes(b64) }
+    if handle == null {
+        return Nothing
+    }
+    return Just(Buffer { handle: handle })
+}
+
+/// Encodes bytes to base64url string (URL-safe base64).
+pub func bytes_to_base64url(data: ref Buffer) -> Str {
+    let b64url: Str = lowlevel { crypto_bytes_to_base64url(data.handle) }
+    return b64url
+}
+
+/// Decodes base64url string to bytes.
+pub func base64url_to_bytes(b64url: Str) -> Maybe[Buffer] {
+    let handle: *Unit = lowlevel { crypto_base64url_to_bytes(b64url) }
+    if handle == null {
+        return Nothing
+    }
+    return Just(Buffer { handle: handle })
+}

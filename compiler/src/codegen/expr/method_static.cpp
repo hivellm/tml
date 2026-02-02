@@ -550,6 +550,20 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             if (func_it != mod.functions.end()) {
                 const auto& func_sig = func_it->second;
 
+                // Check if this is a generic type - if so, let the generic handling code
+                // in method.cpp deal with it (via expected_enum_type_ context)
+                auto struct_it = mod.structs.find(type_name);
+                if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
+                    // This is a generic type like Range[T] - skip here and let method.cpp handle it
+                    // The caller will have set expected_enum_type_ with the instantiated type
+                    return std::nullopt;
+                }
+                auto enum_it = mod.enums.find(type_name);
+                if (enum_it != mod.enums.end() && !enum_it->second.type_params.empty()) {
+                    // This is a generic enum - skip here and let method.cpp handle it
+                    return std::nullopt;
+                }
+
                 // Get return type - ensure struct type is defined
                 std::string ret_type = llvm_type_from_semantic(func_sig.return_type);
 

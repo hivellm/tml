@@ -250,10 +250,37 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         bool is_local_generic = pending_generic_structs_.count(type_name) > 0 ||
                                 pending_generic_enums_.count(type_name) > 0 ||
                                 pending_generic_impls_.count(type_name) > 0;
+        // DEBUG: always print type_name when handling generic struct calls
+        if (type_name == "Range" || type_name == "RangeInclusive") {
+            std::cerr << "[DEBUG] type_name=" << type_name << " is_local_generic=" << is_local_generic
+                      << " is_runtime_collection=" << is_runtime_collection
+                      << " has_registry=" << (env_.module_registry() ? "yes" : "no") << "\n";
+        }
         if (!is_local_generic && !is_runtime_collection && env_.module_registry()) {
             TML_DEBUG_LN("[STATIC_METHOD] Looking for " << type_name << " in module registry");
+
+            // First, try to resolve via imported symbols to get the correct module path
+            // This is crucial when multiple modules export the same type name (e.g., Range)
+            std::string resolved_module_path;
+            auto resolved = env_.resolve_imported_symbol(type_name);
+            if (resolved) {
+                // Full path like "core::ops::range::Range" -> module is "core::ops::range"
+                resolved_module_path = *resolved;
+                auto last_sep = resolved_module_path.rfind("::");
+                if (last_sep != std::string::npos) {
+                    resolved_module_path = resolved_module_path.substr(0, last_sep);
+                }
+                TML_DEBUG_LN("[STATIC_METHOD] Resolved " << type_name << " to module "
+                                                          << resolved_module_path);
+            }
+
             const auto& all_modules = env_.module_registry()->get_all_modules();
             for (const auto& [mod_name, mod] : all_modules) {
+                // If we resolved a specific module, only check that one
+                if (!resolved_module_path.empty() && mod_name != resolved_module_path) {
+                    continue;
+                }
+
                 // Check structs
                 auto struct_it = mod.structs.find(type_name);
                 if (struct_it != mod.structs.end()) {
@@ -1624,6 +1651,22 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                             this_val = it->second.reg;
                                         }
                                     }
+                                } else if (call.receiver->is<parser::FieldExpr>()) {
+                                    // For field expressions:
+                                    // - If receiver_ptr is set, use it (pointer to field)
+                                    // - Otherwise, spill the struct to stack
+                                    if (last_expr_type_ == "ptr") {
+                                        this_val = receiver;
+                                    } else if (!receiver_ptr.empty()) {
+                                        this_val = receiver_ptr;
+                                    } else if (last_expr_type_.starts_with("%struct.")) {
+                                        // Spill struct to stack for method call
+                                        std::string tmp = fresh_reg();
+                                        emit_line("  " + tmp + " = alloca " + last_expr_type_);
+                                        emit_line("  store " + last_expr_type_ + " " + receiver +
+                                                  ", ptr " + tmp);
+                                        this_val = tmp;
+                                    }
                                 }
 
                                 typed_args.push_back({this_type, this_val});
@@ -1752,6 +1795,21 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                             } else {
                                 this_val = it->second.reg;
                             }
+                        }
+                    } else if (call.receiver->is<parser::FieldExpr>()) {
+                        // For field expressions:
+                        // - If receiver_ptr is set, use it (pointer to field)
+                        // - Otherwise, spill the struct to stack
+                        if (last_expr_type_ == "ptr") {
+                            this_val = receiver;
+                        } else if (!receiver_ptr.empty()) {
+                            this_val = receiver_ptr;
+                        } else if (last_expr_type_.starts_with("%struct.")) {
+                            // Spill struct to stack for method call
+                            std::string tmp = fresh_reg();
+                            emit_line("  " + tmp + " = alloca " + last_expr_type_);
+                            emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
+                            this_val = tmp;
                         }
                     }
 

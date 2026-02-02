@@ -104,6 +104,7 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/sync.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/pool.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto.c
 )
 
 # Create static library
@@ -144,6 +145,12 @@ foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
 endforeach()
 
 message(STATUS "TML Runtime: Building static library (tml_runtime)")
+
+# Common utilities library
+add_library(tml_common STATIC
+    src/common/crc32c.cpp
+)
+target_include_directories(tml_common PUBLIC include src)
 
 # Preprocessor library (C-style conditional compilation)
 add_library(tml_preprocessor STATIC
@@ -737,6 +744,7 @@ add_library(tml_cli STATIC
     src/cli/tester/run.cpp
     src/cli/tester/suite_execution.cpp
     src/cli/tester/test_runner.cpp
+    src/cli/tester/test_cache.cpp
     src/cli/tester/library_coverage.cpp
     # Linter modules
     src/cli/linter/config.cpp
@@ -746,7 +754,7 @@ add_library(tml_cli STATIC
     src/cli/linter/semantic.cpp
     src/cli/linter/style.cpp
 )
-target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc tml_mcp tml_lld ${TML_BACKEND_LIB})
+target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc tml_mcp tml_lld tml_common ${TML_BACKEND_LIB})
 target_include_directories(tml_cli PUBLIC include src)
 
 # OpenSSL for SHA256 hashing (non-Windows)

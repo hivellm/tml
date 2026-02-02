@@ -1,0 +1,339 @@
+//! HMAC (Hash-based Message Authentication Code).
+//!
+//! HMAC provides message authentication using a secret key combined with a
+//! cryptographic hash function. It verifies both data integrity and authenticity.
+//!
+//! # Security Properties
+//!
+//! - **Authentication**: Only someone with the key can produce a valid HMAC
+//! - **Integrity**: Any modification to the message changes the HMAC
+//! - **Non-repudiation**: Not provided (anyone with the key can create a valid HMAC)
+//!
+//! # Examples
+//!
+//! ## One-shot HMAC
+//!
+//! ```tml
+//! use std::crypto::{hmac_sha256, hmac_sha512}
+//!
+//! let mac1 = hmac_sha256("secret-key", "message to authenticate")
+//! let mac2 = hmac_sha512("secret-key", "message to authenticate")
+//!
+//! print("HMAC-SHA256: {mac1.to_hex()}\n")
+//! print("HMAC-SHA512: {mac2.to_hex()}\n")
+//! ```
+//!
+//! ## Streaming HMAC
+//!
+//! ```tml
+//! use std::crypto::{Hmac, HashAlgorithm}
+//!
+//! let hmac = Hmac::new(HashAlgorithm::Sha256, "secret-key")
+//! hmac.update("first part ")
+//! hmac.update("second part")
+//! let mac = hmac.digest()
+//! ```
+//!
+//! ## Verify HMAC
+//!
+//! ```tml
+//! use std::crypto::{Hmac, HashAlgorithm, Digest}
+//!
+//! func verify_message(key: Str, message: Str, expected_mac: ref Digest) -> Bool {
+//!     let hmac = Hmac::new(HashAlgorithm::Sha256, key)
+//!     hmac.update(message)
+//!     let computed = hmac.digest()
+//!     return computed.equals(expected_mac)  // constant-time comparison
+//! }
+//! ```
+
+use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::hash::{HashAlgorithm, Digest}
+use std::collections::Buffer
+
+/// HMAC computation object.
+///
+/// Provides streaming HMAC computation using any supported hash algorithm.
+pub type Hmac {
+    handle: *Unit
+    algorithm: HashAlgorithm
+    finalized: Bool
+}
+
+impl Hmac {
+    /// Creates a new HMAC object with the specified algorithm and string key.
+    pub func new(algorithm: HashAlgorithm, key: Str) -> CryptoResult[Hmac] {
+        let handle: *Unit = lowlevel { crypto_hmac_create(algorithm.name(), key) }
+        if handle == null {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::UnsupportedAlgorithm,
+                "failed to create HMAC context for {algorithm.name()}"
+            ))
+        }
+        return Ok(Hmac {
+            handle: handle,
+            algorithm: algorithm,
+            finalized: false,
+        })
+    }
+
+    /// Creates a new HMAC object with a binary key.
+    pub func new_with_key(algorithm: HashAlgorithm, key: ref Buffer) -> CryptoResult[Hmac] {
+        let handle: *Unit = lowlevel { crypto_hmac_create_bytes(algorithm.name(), key.handle) }
+        if handle == null {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::UnsupportedAlgorithm,
+                "failed to create HMAC context for {algorithm.name()}"
+            ))
+        }
+        return Ok(Hmac {
+            handle: handle,
+            algorithm: algorithm,
+            finalized: false,
+        })
+    }
+
+    /// Updates the HMAC with string data.
+    pub func update(mut this, data: Str) -> ref Hmac {
+        if not this.finalized {
+            lowlevel { crypto_hmac_update_str(this.handle, data) }
+        }
+        return ref this
+    }
+
+    /// Updates the HMAC with binary data.
+    pub func update_bytes(mut this, data: ref Buffer) -> ref Hmac {
+        if not this.finalized {
+            lowlevel { crypto_hmac_update_bytes(this.handle, data.handle) }
+        }
+        return ref this
+    }
+
+    /// Finalizes the HMAC and returns the message authentication code.
+    pub func digest(mut this) -> Digest {
+        this.finalized = true
+        let result_handle: *Unit = lowlevel { crypto_hmac_digest(this.handle) }
+        let buffer = Buffer { handle: result_handle }
+        return Digest::from_bytes(buffer, this.algorithm)
+    }
+
+    /// Returns the algorithm being used.
+    pub func algorithm(this) -> HashAlgorithm {
+        return this.algorithm
+    }
+
+    /// Frees the HMAC context resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { crypto_hmac_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+// ============================================================================
+// One-shot HMAC functions
+// ============================================================================
+
+/// Computes HMAC-MD5.
+///
+/// **Warning**: MD5 is not recommended for security-sensitive applications.
+pub func hmac_md5(key: Str, data: Str) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_md5(key, data) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Md5)
+}
+
+/// Computes HMAC-MD5 with binary key and data.
+pub func hmac_md5_bytes(key: ref Buffer, data: ref Buffer) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_md5_bytes(key.handle, data.handle) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Md5)
+}
+
+/// Computes HMAC-SHA1.
+///
+/// **Warning**: SHA-1 is deprecated. Prefer HMAC-SHA256 or better.
+pub func hmac_sha1(key: Str, data: Str) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha1(key, data) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha1)
+}
+
+/// Computes HMAC-SHA1 with binary key and data.
+pub func hmac_sha1_bytes(key: ref Buffer, data: ref Buffer) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha1_bytes(key.handle, data.handle) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha1)
+}
+
+/// Computes HMAC-SHA256.
+///
+/// This is the recommended HMAC function for most applications.
+pub func hmac_sha256(key: Str, data: Str) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha256(key, data) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha256)
+}
+
+/// Computes HMAC-SHA256 with binary key and data.
+pub func hmac_sha256_bytes(key: ref Buffer, data: ref Buffer) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha256_bytes(key.handle, data.handle) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha256)
+}
+
+/// Computes HMAC-SHA384.
+pub func hmac_sha384(key: Str, data: Str) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha384(key, data) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha384)
+}
+
+/// Computes HMAC-SHA384 with binary key and data.
+pub func hmac_sha384_bytes(key: ref Buffer, data: ref Buffer) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha384_bytes(key.handle, data.handle) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha384)
+}
+
+/// Computes HMAC-SHA512.
+pub func hmac_sha512(key: Str, data: Str) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha512(key, data) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha512)
+}
+
+/// Computes HMAC-SHA512 with binary key and data.
+pub func hmac_sha512_bytes(key: ref Buffer, data: ref Buffer) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha512_bytes(key.handle, data.handle) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha512)
+}
+
+/// Computes HMAC-SHA3-256.
+pub func hmac_sha3_256(key: Str, data: Str) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha3_256(key, data) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha3_256)
+}
+
+/// Computes HMAC-SHA3-256 with binary key and data.
+pub func hmac_sha3_256_bytes(key: ref Buffer, data: ref Buffer) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha3_256_bytes(key.handle, data.handle) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha3_256)
+}
+
+/// Computes HMAC-SHA3-512.
+pub func hmac_sha3_512(key: Str, data: Str) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha3_512(key, data) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha3_512)
+}
+
+/// Computes HMAC-SHA3-512 with binary key and data.
+pub func hmac_sha3_512_bytes(key: ref Buffer, data: ref Buffer) -> Digest {
+    let handle: *Unit = lowlevel { crypto_hmac_sha3_512_bytes(key.handle, data.handle) }
+    let buffer = Buffer { handle: handle }
+    return Digest::from_bytes(buffer, HashAlgorithm::Sha3_512)
+}
+
+// ============================================================================
+// Generic HMAC function
+// ============================================================================
+
+/// Computes an HMAC using the specified algorithm.
+pub func hmac(algorithm: HashAlgorithm, key: Str, data: Str) -> Digest {
+    when algorithm {
+        HashAlgorithm::Md5 => return hmac_md5(key, data)
+        HashAlgorithm::Sha1 => return hmac_sha1(key, data)
+        HashAlgorithm::Sha256 => return hmac_sha256(key, data)
+        HashAlgorithm::Sha384 => return hmac_sha384(key, data)
+        HashAlgorithm::Sha512 => return hmac_sha512(key, data)
+        HashAlgorithm::Sha512_256 => {
+            let handle: *Unit = lowlevel { crypto_hmac_sha512_256(key, data) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Sha512_256)
+        }
+        HashAlgorithm::Sha3_256 => return hmac_sha3_256(key, data)
+        HashAlgorithm::Sha3_384 => {
+            let handle: *Unit = lowlevel { crypto_hmac_sha3_384(key, data) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Sha3_384)
+        }
+        HashAlgorithm::Sha3_512 => return hmac_sha3_512(key, data)
+        HashAlgorithm::Blake2b512 => {
+            let handle: *Unit = lowlevel { crypto_hmac_blake2b(key, data) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Blake2b512)
+        }
+        HashAlgorithm::Blake2s256 => {
+            let handle: *Unit = lowlevel { crypto_hmac_blake2s(key, data) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Blake2s256)
+        }
+        HashAlgorithm::Blake3 => {
+            // BLAKE3 has native keyed mode, not HMAC
+            let handle: *Unit = lowlevel { crypto_blake3_keyed_str(key, data) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Blake3)
+        }
+    }
+}
+
+/// Computes an HMAC of bytes using the specified algorithm.
+pub func hmac_bytes(algorithm: HashAlgorithm, key: ref Buffer, data: ref Buffer) -> Digest {
+    when algorithm {
+        HashAlgorithm::Md5 => return hmac_md5_bytes(key, data)
+        HashAlgorithm::Sha1 => return hmac_sha1_bytes(key, data)
+        HashAlgorithm::Sha256 => return hmac_sha256_bytes(key, data)
+        HashAlgorithm::Sha384 => return hmac_sha384_bytes(key, data)
+        HashAlgorithm::Sha512 => return hmac_sha512_bytes(key, data)
+        HashAlgorithm::Sha512_256 => {
+            let handle: *Unit = lowlevel { crypto_hmac_sha512_256_bytes(key.handle, data.handle) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Sha512_256)
+        }
+        HashAlgorithm::Sha3_256 => return hmac_sha3_256_bytes(key, data)
+        HashAlgorithm::Sha3_384 => {
+            let handle: *Unit = lowlevel { crypto_hmac_sha3_384_bytes(key.handle, data.handle) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Sha3_384)
+        }
+        HashAlgorithm::Sha3_512 => return hmac_sha3_512_bytes(key, data)
+        HashAlgorithm::Blake2b512 => {
+            let handle: *Unit = lowlevel { crypto_hmac_blake2b_bytes(key.handle, data.handle) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Blake2b512)
+        }
+        HashAlgorithm::Blake2s256 => {
+            let handle: *Unit = lowlevel { crypto_hmac_blake2s_bytes(key.handle, data.handle) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Blake2s256)
+        }
+        HashAlgorithm::Blake3 => {
+            let handle: *Unit = lowlevel { crypto_blake3_keyed_bytes(key.handle, data.handle) }
+            let buffer = Buffer { handle: handle }
+            return Digest::from_bytes(buffer, HashAlgorithm::Blake3)
+        }
+    }
+}
+
+// ============================================================================
+// Verification helpers
+// ============================================================================
+
+/// Verifies an HMAC in constant time.
+///
+/// Returns true if the computed HMAC matches the expected value.
+pub func hmac_verify(algorithm: HashAlgorithm, key: Str, data: Str, expected: ref Digest) -> Bool {
+    let computed = hmac(algorithm, key, data)
+    return computed.equals(expected)
+}
+
+/// Verifies an HMAC of bytes in constant time.
+pub func hmac_verify_bytes(algorithm: HashAlgorithm, key: ref Buffer, data: ref Buffer, expected: ref Digest) -> Bool {
+    let computed = hmac_bytes(algorithm, key, data)
+    return computed.equals(expected)
+}

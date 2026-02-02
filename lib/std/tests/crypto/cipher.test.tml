@@ -1,0 +1,464 @@
+//! Tests for crypto cipher functions
+//!
+//! Tests AES-CBC, AES-GCM, and streaming cipher API.
+
+use std::crypto::{Cipher, Decipher, CipherAlgorithm}
+use std::crypto::{aes_256_gcm_encrypt, aes_256_gcm_decrypt}
+use std::crypto::{aes_128_gcm_encrypt, aes_128_gcm_decrypt}
+use std::crypto::random_bytes
+use std::collections::Buffer
+use test::{assert, assert_eq}
+
+// ============================================================================
+// AES-256-GCM Tests
+// ============================================================================
+
+@test
+func test_aes_256_gcm_encrypt_decrypt() -> I32 {
+    let key = random_bytes(32)  // 256-bit key
+    let iv = random_bytes(12)   // 96-bit nonce
+    let plaintext = Buffer.from_str("Hello, World!")
+
+    let (ciphertext, tag) = aes_256_gcm_encrypt(key, iv, plaintext, Nothing)
+
+    // Ciphertext should be same length as plaintext for GCM
+    assert_eq(ciphertext.len(), plaintext.len())
+    // Tag should be 16 bytes
+    assert_eq(tag.len(), 16)
+
+    // Decrypt
+    let decrypted = aes_256_gcm_decrypt(key, iv, ciphertext, tag, Nothing)
+    when decrypted {
+        Just(data) => {
+            assert_eq(data.len(), plaintext.len())
+            assert(data.equals(plaintext))
+            data.destroy()
+        }
+        Nothing => {
+            assert(false)  // Should not fail
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    ciphertext.destroy()
+    tag.destroy()
+    return 0
+}
+
+@test
+func test_aes_256_gcm_with_aad() -> I32 {
+    let key = random_bytes(32)
+    let iv = random_bytes(12)
+    let plaintext = Buffer.from_str("Secret message")
+    let aad = Buffer.from_str("Additional authenticated data")
+
+    let (ciphertext, tag) = aes_256_gcm_encrypt(key, iv, plaintext, Just(aad))
+
+    // Decrypt with same AAD should work
+    let decrypted = aes_256_gcm_decrypt(key, iv, ciphertext, tag, Just(aad))
+    when decrypted {
+        Just(data) => {
+            assert(data.equals(plaintext))
+            data.destroy()
+        }
+        Nothing => {
+            assert(false)
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    ciphertext.destroy()
+    tag.destroy()
+    aad.destroy()
+    return 0
+}
+
+@test
+func test_aes_256_gcm_wrong_key_fails() -> I32 {
+    let key1 = random_bytes(32)
+    let key2 = random_bytes(32)
+    let iv = random_bytes(12)
+    let plaintext = Buffer.from_str("Secret")
+
+    let (ciphertext, tag) = aes_256_gcm_encrypt(key1, iv, plaintext, Nothing)
+
+    // Decrypt with wrong key should fail
+    let decrypted = aes_256_gcm_decrypt(key2, iv, ciphertext, tag, Nothing)
+    when decrypted {
+        Just(data) => {
+            data.destroy()
+            assert(false)  // Should have failed
+        }
+        Nothing => {
+            // Expected - authentication failed
+        }
+    }
+
+    key1.destroy()
+    key2.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    ciphertext.destroy()
+    tag.destroy()
+    return 0
+}
+
+@test
+func test_aes_256_gcm_tampered_ciphertext_fails() -> I32 {
+    let key = random_bytes(32)
+    let iv = random_bytes(12)
+    let plaintext = Buffer.from_str("Secret message")
+
+    let (ciphertext, tag) = aes_256_gcm_encrypt(key, iv, plaintext, Nothing)
+
+    // Tamper with ciphertext
+    let tampered = ciphertext.duplicate()
+    tampered.set(0, tampered.get(0) xor 0xFF)
+
+    // Decrypt should fail
+    let decrypted = aes_256_gcm_decrypt(key, iv, tampered, tag, Nothing)
+    when decrypted {
+        Just(data) => {
+            data.destroy()
+            assert(false)
+        }
+        Nothing => {
+            // Expected
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    ciphertext.destroy()
+    tampered.destroy()
+    tag.destroy()
+    return 0
+}
+
+@test
+func test_aes_256_gcm_wrong_aad_fails() -> I32 {
+    let key = random_bytes(32)
+    let iv = random_bytes(12)
+    let plaintext = Buffer.from_str("Secret")
+    let aad1 = Buffer.from_str("AAD 1")
+    let aad2 = Buffer.from_str("AAD 2")
+
+    let (ciphertext, tag) = aes_256_gcm_encrypt(key, iv, plaintext, Just(aad1))
+
+    // Decrypt with wrong AAD should fail
+    let decrypted = aes_256_gcm_decrypt(key, iv, ciphertext, tag, Just(aad2))
+    when decrypted {
+        Just(data) => {
+            data.destroy()
+            assert(false)
+        }
+        Nothing => {
+            // Expected
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    ciphertext.destroy()
+    tag.destroy()
+    aad1.destroy()
+    aad2.destroy()
+    return 0
+}
+
+// ============================================================================
+// AES-128-GCM Tests
+// ============================================================================
+
+@test
+func test_aes_128_gcm_encrypt_decrypt() -> I32 {
+    let key = random_bytes(16)  // 128-bit key
+    let iv = random_bytes(12)
+    let plaintext = Buffer.from_str("Hello, AES-128!")
+
+    let (ciphertext, tag) = aes_128_gcm_encrypt(key, iv, plaintext, Nothing)
+
+    assert_eq(ciphertext.len(), plaintext.len())
+    assert_eq(tag.len(), 16)
+
+    let decrypted = aes_128_gcm_decrypt(key, iv, ciphertext, tag, Nothing)
+    when decrypted {
+        Just(data) => {
+            assert(data.equals(plaintext))
+            data.destroy()
+        }
+        Nothing => {
+            assert(false)
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    ciphertext.destroy()
+    tag.destroy()
+    return 0
+}
+
+// ============================================================================
+// Streaming Cipher API Tests
+// ============================================================================
+
+@test
+func test_cipher_streaming_aes_cbc() -> I32 {
+    let key = random_bytes(32)
+    let iv = random_bytes(16)  // CBC uses 16-byte IV
+
+    // Encrypt
+    let cipher = Cipher.create(CipherAlgorithm.Aes256Cbc, key, iv)
+    cipher.update("Hello, ")
+    cipher.update("World!")
+    let encrypted = cipher.finalize()
+
+    when encrypted {
+        Ok(ciphertext) => {
+            // Ciphertext length is multiple of block size (16)
+            assert(ciphertext.len() >= 16)
+
+            // Decrypt
+            let decipher = Decipher.create(CipherAlgorithm.Aes256Cbc, key, iv)
+            decipher.update(ciphertext)
+            let decrypted = decipher.finalize()
+
+            when decrypted {
+                Ok(plaintext) => {
+                    let expected = Buffer.from_str("Hello, World!")
+                    assert(plaintext.equals(expected))
+                    expected.destroy()
+                    plaintext.destroy()
+                }
+                Err(e) => {
+                    assert(false)
+                }
+            }
+
+            ciphertext.destroy()
+            decipher.destroy()
+        }
+        Err(e) => {
+            assert(false)
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    cipher.destroy()
+    return 0
+}
+
+@test
+func test_cipher_streaming_aes_gcm() -> I32 {
+    let key = random_bytes(32)
+    let iv = random_bytes(12)
+
+    // Encrypt
+    let cipher = Cipher.create(CipherAlgorithm.Aes256Gcm, key, iv)
+    cipher.set_aad("authenticated header")
+    cipher.update("Secret data")
+    let encrypted = cipher.finalize()
+
+    when encrypted {
+        Ok(ciphertext) => {
+            let tag = cipher.get_auth_tag()
+            when tag {
+                Just(auth_tag) => {
+                    // Decrypt
+                    let decipher = Decipher.create(CipherAlgorithm.Aes256Gcm, key, iv)
+                    decipher.set_aad("authenticated header")
+                    decipher.set_auth_tag(auth_tag)
+                    decipher.update(ciphertext)
+                    let decrypted = decipher.finalize()
+
+                    when decrypted {
+                        Ok(plaintext) => {
+                            let expected = Buffer.from_str("Secret data")
+                            assert(plaintext.equals(expected))
+                            expected.destroy()
+                            plaintext.destroy()
+                        }
+                        Err(e) => {
+                            assert(false)
+                        }
+                    }
+
+                    auth_tag.destroy()
+                    decipher.destroy()
+                }
+                Nothing => {
+                    assert(false)
+                }
+            }
+
+            ciphertext.destroy()
+        }
+        Err(e) => {
+            assert(false)
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    cipher.destroy()
+    return 0
+}
+
+@test
+func test_cipher_no_padding() -> I32 {
+    let key = random_bytes(32)
+    let iv = random_bytes(16)
+
+    // With no padding, input must be multiple of block size
+    let plaintext = Buffer.alloc(32)  // Exactly 2 blocks
+
+    let cipher = Cipher.create(CipherAlgorithm.Aes256Cbc, key, iv)
+    cipher.set_auto_padding(false)
+    cipher.update(plaintext)
+    let encrypted = cipher.finalize()
+
+    when encrypted {
+        Ok(ciphertext) => {
+            assert_eq(ciphertext.len(), 32)
+
+            let decipher = Decipher.create(CipherAlgorithm.Aes256Cbc, key, iv)
+            decipher.set_auto_padding(false)
+            decipher.update(ciphertext)
+            let decrypted = decipher.finalize()
+
+            when decrypted {
+                Ok(result) => {
+                    assert(result.equals(plaintext))
+                    result.destroy()
+                }
+                Err(e) => {
+                    assert(false)
+                }
+            }
+
+            ciphertext.destroy()
+            decipher.destroy()
+        }
+        Err(e) => {
+            assert(false)
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    cipher.destroy()
+    return 0
+}
+
+// ============================================================================
+// Large Data Tests
+// ============================================================================
+
+@test
+func test_cipher_large_data() -> I32 {
+    let key = random_bytes(32)
+    let iv = random_bytes(12)
+
+    // Create 1MB of data
+    let plaintext = Buffer.alloc(1024 * 1024)
+    loop i in 0 to plaintext.len() {
+        plaintext.set(i, (i % 256) as U8)
+    }
+
+    let (ciphertext, tag) = aes_256_gcm_encrypt(key, iv, plaintext, Nothing)
+
+    let decrypted = aes_256_gcm_decrypt(key, iv, ciphertext, tag, Nothing)
+    when decrypted {
+        Just(data) => {
+            assert_eq(data.len(), plaintext.len())
+            // Verify first and last bytes
+            assert_eq(data.get(0), plaintext.get(0))
+            assert_eq(data.get(data.len() - 1), plaintext.get(plaintext.len() - 1))
+            data.destroy()
+        }
+        Nothing => {
+            assert(false)
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    ciphertext.destroy()
+    tag.destroy()
+    return 0
+}
+
+// ============================================================================
+// Empty Data Tests
+// ============================================================================
+
+@test
+func test_cipher_empty_data() -> I32 {
+    let key = random_bytes(32)
+    let iv = random_bytes(12)
+    let plaintext = Buffer.alloc(0)
+
+    let (ciphertext, tag) = aes_256_gcm_encrypt(key, iv, plaintext, Nothing)
+
+    assert_eq(ciphertext.len(), 0)
+    assert_eq(tag.len(), 16)
+
+    let decrypted = aes_256_gcm_decrypt(key, iv, ciphertext, tag, Nothing)
+    when decrypted {
+        Just(data) => {
+            assert_eq(data.len(), 0)
+            data.destroy()
+        }
+        Nothing => {
+            assert(false)
+        }
+    }
+
+    key.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    ciphertext.destroy()
+    tag.destroy()
+    return 0
+}
+
+// ============================================================================
+// Known Test Vectors
+// ============================================================================
+
+@test
+func test_aes_gcm_nist_vector() -> I32 {
+    // NIST SP 800-38D test vector
+    // Key: 00000000000000000000000000000000 (128-bit, all zeros)
+    // IV:  000000000000000000000000 (96-bit, all zeros)
+    // Plaintext: (empty)
+    // AAD: (empty)
+    // Expected Tag: 58e2fccefa7e3061367f1d57a4e7455a
+
+    let key = Buffer.alloc(16)
+    let iv = Buffer.alloc(12)
+    let plaintext = Buffer.alloc(0)
+
+    let (ciphertext, tag) = aes_128_gcm_encrypt(key, iv, plaintext, Nothing)
+
+    assert_eq(ciphertext.len(), 0)
+    assert_eq(tag.to_hex(), "58e2fccefa7e3061367f1d57a4e7455a")
+
+    key.destroy()
+    iv.destroy()
+    plaintext.destroy()
+    ciphertext.destroy()
+    tag.destroy()
+    return 0
+}

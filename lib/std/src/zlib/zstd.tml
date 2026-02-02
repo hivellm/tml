@@ -1,0 +1,571 @@
+//! Zstandard (Zstd) compression and decompression.
+//!
+//! Zstd is a fast lossless compression algorithm developed by Facebook.
+//! It provides excellent compression ratios with very high decompression speeds.
+//!
+//! **Note**: Zstd support is experimental as of Node.js v22.
+//!
+//! # Examples
+//!
+//! ## Compress and decompress data
+//!
+//! ```tml
+//! use std::zlib::{zstd_compress, zstd_decompress}
+//!
+//! let original = "Hello, World! This is some test data to compress."
+//! let compressed = zstd_compress(original)?
+//! let decompressed = zstd_decompress(compressed)?
+//! assert_eq(decompressed, original)
+//! ```
+//!
+//! ## With custom options
+//!
+//! ```tml
+//! use std::zlib::{zstd_compress_with_options, ZstdOptions}
+//!
+//! // Best compression
+//! let opts = ZstdOptions::best()
+//! let compressed = zstd_compress_with_options(data, opts)?
+//!
+//! // Multi-threaded compression
+//! let opts = ZstdOptions::parallel(4).with_level(10)
+//! let compressed = zstd_compress_with_options(data, opts)?
+//! ```
+
+use std::collections::{Buffer}
+use std::zlib::error::{ZlibError, ZlibErrorKind, ZlibResult}
+use std::zlib::options::{ZstdOptions}
+use std::zlib::constants::*
+
+// ============================================================================
+// Zstd Compression
+// ============================================================================
+
+/// Compresses data using Zstd with default options.
+///
+/// # Arguments
+///
+/// * `data` - The data to compress (string)
+///
+/// # Returns
+///
+/// Compressed data as a Buffer.
+///
+/// # Example
+///
+/// ```tml
+/// let compressed = zstd_compress("Hello, World!")?
+/// ```
+pub func zstd_compress(data: Str) -> ZlibResult[Buffer] {
+    return zstd_compress_with_options(data, ZstdOptions::default())
+}
+
+/// Compresses data using Zstd with custom options.
+///
+/// # Arguments
+///
+/// * `data` - The data to compress (string)
+/// * `options` - Zstd compression options
+///
+/// # Returns
+///
+/// Compressed data as a Buffer.
+pub func zstd_compress_with_options(data: Str, options: ZstdOptions) -> ZlibResult[Buffer] {
+    let handle: *Unit = lowlevel {
+        zstd_compress(
+            data,
+            options.level,
+            options.strategy,
+            options.window_log,
+            options.checksum,
+            options.content_size
+        )
+    }
+    if handle == null {
+        return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+    }
+    let code: I32 = lowlevel { zstd_get_error_code(handle) }
+    if code != 0 {
+        lowlevel { buffer_destroy(handle) }
+        return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Compresses buffer data using Zstd with default options.
+///
+/// # Arguments
+///
+/// * `data` - The buffer to compress
+///
+/// # Returns
+///
+/// Compressed data as a Buffer.
+pub func zstd_compress_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+    return zstd_compress_buffer_with_options(data, ZstdOptions::default())
+}
+
+/// Compresses buffer data using Zstd with custom options.
+///
+/// # Arguments
+///
+/// * `data` - The buffer to compress
+/// * `options` - Zstd compression options
+///
+/// # Returns
+///
+/// Compressed data as a Buffer.
+pub func zstd_compress_buffer_with_options(data: ref Buffer, options: ZstdOptions) -> ZlibResult[Buffer] {
+    let handle: *Unit = lowlevel {
+        zstd_compress_buffer(
+            data.handle,
+            options.level,
+            options.strategy,
+            options.window_log,
+            options.checksum,
+            options.content_size
+        )
+    }
+    if handle == null {
+        return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+    }
+    let code: I32 = lowlevel { zstd_get_error_code(handle) }
+    if code != 0 {
+        lowlevel { buffer_destroy(handle) }
+        return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Synchronously compresses data using Zstd.
+/// Alias for `zstd_compress()`.
+pub func zstd_compress_sync(data: Str) -> ZlibResult[Buffer] {
+    return zstd_compress(data)
+}
+
+/// Synchronously compresses data using Zstd with options.
+/// Alias for `zstd_compress_with_options()`.
+pub func zstd_compress_sync_with_options(data: Str, options: ZstdOptions) -> ZlibResult[Buffer] {
+    return zstd_compress_with_options(data, options)
+}
+
+// ============================================================================
+// Zstd Decompression
+// ============================================================================
+
+/// Decompresses Zstd data with default options.
+///
+/// # Arguments
+///
+/// * `data` - The compressed buffer
+///
+/// # Returns
+///
+/// Decompressed data as a string.
+///
+/// # Example
+///
+/// ```tml
+/// let decompressed = zstd_decompress(compressed)?
+/// ```
+pub func zstd_decompress(data: ref Buffer) -> ZlibResult[Str] {
+    return zstd_decompress_with_options(data, ZstdOptions::default())
+}
+
+/// Decompresses Zstd data with custom options.
+///
+/// # Arguments
+///
+/// * `data` - The compressed buffer
+/// * `options` - Zstd decompression options
+///
+/// # Returns
+///
+/// Decompressed data as a string.
+pub func zstd_decompress_with_options(data: ref Buffer, options: ZstdOptions) -> ZlibResult[Str] {
+    let result: Str = lowlevel {
+        zstd_decompress(data.handle, options.window_log)
+    }
+    let code: I32 = lowlevel { zstd_last_error_code() }
+    if code != 0 {
+        return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
+    }
+    return Ok(result)
+}
+
+/// Decompresses Zstd data to a buffer.
+///
+/// # Arguments
+///
+/// * `data` - The compressed buffer
+///
+/// # Returns
+///
+/// Decompressed data as a Buffer.
+pub func zstd_decompress_to_buffer(data: ref Buffer) -> ZlibResult[Buffer] {
+    return zstd_decompress_to_buffer_with_options(data, ZstdOptions::default())
+}
+
+/// Decompresses Zstd data to a buffer with custom options.
+///
+/// # Arguments
+///
+/// * `data` - The compressed buffer
+/// * `options` - Zstd decompression options
+///
+/// # Returns
+///
+/// Decompressed data as a Buffer.
+pub func zstd_decompress_to_buffer_with_options(data: ref Buffer, options: ZstdOptions) -> ZlibResult[Buffer] {
+    let handle: *Unit = lowlevel {
+        zstd_decompress_buffer(data.handle, options.window_log)
+    }
+    if handle == null {
+        return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+    }
+    let code: I32 = lowlevel { zstd_get_error_code(handle) }
+    if code != 0 {
+        lowlevel { buffer_destroy(handle) }
+        return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
+    }
+    return Ok(Buffer { handle: handle })
+}
+
+/// Synchronously decompresses Zstd data.
+pub func zstd_decompress_sync(data: ref Buffer) -> ZlibResult[Str] {
+    return zstd_decompress(data)
+}
+
+/// Synchronously decompresses Zstd data with options.
+pub func zstd_decompress_sync_with_options(data: ref Buffer, options: ZstdOptions) -> ZlibResult[Str] {
+    return zstd_decompress_with_options(data, options)
+}
+
+// ============================================================================
+// Zstd Streaming Compression
+// ============================================================================
+
+/// Zstd streaming compressor.
+pub type ZstdCompress {
+    handle: *Unit
+    options: ZstdOptions
+}
+
+impl ZstdCompress {
+    /// Creates a new Zstd compressor with default options.
+    pub func new() -> ZlibResult[ZstdCompress] {
+        return ZstdCompress::with_options(ZstdOptions::default())
+    }
+
+    /// Creates a new Zstd compressor with custom options.
+    pub func with_options(options: ZstdOptions) -> ZlibResult[ZstdCompress] {
+        let handle: *Unit = lowlevel {
+            zstd_cstream_create(
+                options.level,
+                options.strategy,
+                options.window_log,
+                options.checksum,
+                options.content_size,
+                options.nb_workers
+            )
+        }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(ZstdCompress { handle: handle, options: options })
+    }
+
+    /// Creates a new Zstd compressor with a dictionary.
+    pub func with_dictionary(dict: ref Buffer, level: I32) -> ZlibResult[ZstdCompress] {
+        let opts: ZstdOptions = ZstdOptions::default().with_level(level)
+        let handle: *Unit = lowlevel {
+            zstd_cstream_create_with_dict(dict.handle, level)
+        }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(ZstdCompress { handle: handle, options: opts })
+    }
+
+    /// Writes data to be compressed.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The data to compress
+    ///
+    /// # Returns
+    ///
+    /// Compressed chunk (may be empty if more input is needed).
+    pub func write(this, data: Str) -> ZlibResult[Buffer] {
+        let handle: *Unit = lowlevel {
+            zstd_cstream_process(this.handle, data, ZSTD_E_CONTINUE)
+        }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(Buffer { handle: handle })
+    }
+
+    /// Writes buffer data to be compressed.
+    pub func write_buffer(this, data: ref Buffer) -> ZlibResult[Buffer] {
+        let handle: *Unit = lowlevel {
+            zstd_cstream_process_buffer(this.handle, data.handle, ZSTD_E_CONTINUE)
+        }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(Buffer { handle: handle })
+    }
+
+    /// Flushes pending compressed data.
+    pub func flush(this) -> ZlibResult[Buffer] {
+        let handle: *Unit = lowlevel {
+            zstd_cstream_process(this.handle, "", ZSTD_E_FLUSH)
+        }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(Buffer { handle: handle })
+    }
+
+    /// Finishes compression and returns remaining data.
+    pub func finish(this) -> ZlibResult[Buffer] {
+        let handle: *Unit = lowlevel {
+            zstd_cstream_process(this.handle, "", ZSTD_E_END)
+        }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(Buffer { handle: handle })
+    }
+
+    /// Resets the compressor for a new stream.
+    pub func reset(this) -> ZlibResult[Unit] {
+        let success: Bool = lowlevel { zstd_cstream_reset(this.handle) }
+        if not success {
+            return Err(ZlibError::new(ZlibErrorKind::StreamError))
+        }
+        return Ok(())
+    }
+
+    /// Sets the pledged source size for the current frame.
+    pub func set_pledged_size(this, size: I64) -> ZlibResult[Unit] {
+        let success: Bool = lowlevel { zstd_cstream_set_pledged_size(this.handle, size) }
+        if not success {
+            return Err(ZlibError::new(ZlibErrorKind::InvalidParameter))
+        }
+        return Ok(())
+    }
+
+    /// Frees the compressor resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { zstd_cstream_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+// ============================================================================
+// Zstd Streaming Decompression
+// ============================================================================
+
+/// Zstd streaming decompressor.
+pub type ZstdDecompress {
+    handle: *Unit
+    options: ZstdOptions
+}
+
+impl ZstdDecompress {
+    /// Creates a new Zstd decompressor with default options.
+    pub func new() -> ZlibResult[ZstdDecompress] {
+        return ZstdDecompress::with_options(ZstdOptions::default())
+    }
+
+    /// Creates a new Zstd decompressor with custom options.
+    pub func with_options(options: ZstdOptions) -> ZlibResult[ZstdDecompress] {
+        let handle: *Unit = lowlevel {
+            zstd_dstream_create(options.window_log)
+        }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(ZstdDecompress { handle: handle, options: options })
+    }
+
+    /// Creates a new Zstd decompressor with a dictionary.
+    pub func with_dictionary(dict: ref Buffer) -> ZlibResult[ZstdDecompress] {
+        let handle: *Unit = lowlevel {
+            zstd_dstream_create_with_dict(dict.handle)
+        }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(ZstdDecompress { handle: handle, options: ZstdOptions::default() })
+    }
+
+    /// Writes compressed data to decompress.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The compressed data
+    ///
+    /// # Returns
+    ///
+    /// Decompressed chunk.
+    pub func write(this, data: ref Buffer) -> ZlibResult[Buffer] {
+        let handle: *Unit = lowlevel {
+            zstd_dstream_process(this.handle, data.handle)
+        }
+        if handle == null {
+            let code: I32 = lowlevel { zstd_dstream_get_error_code(this.handle) }
+            return Err(ZlibError::with_code(ZlibErrorKind::DataError, code))
+        }
+        return Ok(Buffer { handle: handle })
+    }
+
+    /// Resets the decompressor for a new stream.
+    pub func reset(this) -> ZlibResult[Unit] {
+        let success: Bool = lowlevel { zstd_dstream_reset(this.handle) }
+        if not success {
+            return Err(ZlibError::new(ZlibErrorKind::StreamError))
+        }
+        return Ok(())
+    }
+
+    /// Returns the frame content size if known.
+    pub func content_size(this) -> Maybe[I64] {
+        let size: I64 = lowlevel { zstd_dstream_content_size(this.handle) }
+        if size < 0 {
+            return Nothing
+        }
+        return Just(size)
+    }
+
+    /// Frees the decompressor resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { zstd_dstream_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+// ============================================================================
+// Zstd Dictionary
+// ============================================================================
+
+/// Zstd compression dictionary.
+///
+/// Dictionaries can significantly improve compression ratio for small inputs
+/// that share common patterns (e.g., JSON documents with similar structure).
+pub type ZstdDict {
+    handle: *Unit
+}
+
+impl ZstdDict {
+    /// Loads a dictionary from a buffer.
+    pub func from_buffer(data: ref Buffer) -> ZlibResult[ZstdDict] {
+        let handle: *Unit = lowlevel { zstd_dict_create(data.handle) }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(ZstdDict { handle: handle })
+    }
+
+    /// Trains a dictionary from sample data.
+    ///
+    /// # Arguments
+    ///
+    /// * `samples` - List of sample data to train from
+    /// * `dict_size` - Target dictionary size in bytes
+    ///
+    /// # Returns
+    ///
+    /// A trained dictionary.
+    pub func train(samples: ref std::collections::List[Buffer], dict_size: I64) -> ZlibResult[ZstdDict] {
+        let handle: *Unit = lowlevel {
+            zstd_dict_train(samples.handle, dict_size)
+        }
+        if handle == null {
+            return Err(ZlibError::new(ZlibErrorKind::MemoryError))
+        }
+        return Ok(ZstdDict { handle: handle })
+    }
+
+    /// Returns the dictionary ID.
+    pub func id(this) -> I32 {
+        let id: I32 = lowlevel { zstd_dict_get_id(this.handle) }
+        return id
+    }
+
+    /// Exports the dictionary to a buffer.
+    pub func to_buffer(this) -> Buffer {
+        let handle: *Unit = lowlevel { zstd_dict_to_buffer(this.handle) }
+        return Buffer { handle: handle }
+    }
+
+    /// Frees the dictionary resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { zstd_dict_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+// ============================================================================
+// Zstd Utility Functions
+// ============================================================================
+
+/// Returns the content size from a Zstd frame.
+///
+/// # Arguments
+///
+/// * `data` - The compressed buffer
+///
+/// # Returns
+///
+/// The content size, or Nothing if unknown.
+pub func zstd_content_size(data: ref Buffer) -> Maybe[I64] {
+    let size: I64 = lowlevel { zstd_get_frame_content_size(data.handle) }
+    if size < 0 {
+        return Nothing
+    }
+    return Just(size)
+}
+
+/// Returns the decompressed size bound for the given compressed data.
+///
+/// This is an upper bound on the decompressed size; actual size may be smaller.
+pub func zstd_decompress_bound(data: ref Buffer) -> I64 {
+    let bound: I64 = lowlevel { zstd_get_decompress_bound(data.handle) }
+    return bound
+}
+
+/// Returns the dictionary ID from a Zstd frame.
+pub func zstd_frame_dict_id(data: ref Buffer) -> I32 {
+    let id: I32 = lowlevel { zstd_get_frame_dict_id(data.handle) }
+    return id
+}
+
+/// Returns true if the data is a valid Zstd frame.
+pub func zstd_is_frame(data: ref Buffer) -> Bool {
+    let valid: Bool = lowlevel { zstd_is_frame(data.handle) }
+    return valid
+}
+
+/// Returns the minimum compression level.
+pub func zstd_min_level() -> I32 {
+    return ZSTD_MIN_CLEVEL
+}
+
+/// Returns the maximum compression level.
+pub func zstd_max_level() -> I32 {
+    return ZSTD_MAX_CLEVEL
+}
+
+/// Returns the default compression level.
+pub func zstd_default_level() -> I32 {
+    return ZSTD_DEFAULT_CLEVEL
+}

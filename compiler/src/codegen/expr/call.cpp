@@ -209,6 +209,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 type_name == "Bool" || type_name == "Str";
 
             if (is_primitive_type && method == "default") {
+                // Track coverage for inlined primitive default calls
+                emit_coverage(type_name + "::default");
+
                 // Integer types: default is 0
                 if (type_name == "I8" || type_name == "I16" || type_name == "I32" ||
                     type_name == "I64" || type_name == "I128" || type_name == "U8" ||
@@ -1424,7 +1427,27 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::vector<std::string> imported_type_params;
             if (env_.module_registry()) {
                 const auto& all_modules = env_.module_registry()->get_all_modules();
+
+                // First, try to resolve via imported symbols to get the correct module path
+                // This is important when multiple modules define types with the same name
+                // (e.g., core::ops::range::Range vs core::range::Range)
+                std::string resolved_module_path;
+                auto resolved = env_.resolve_imported_symbol(type_name);
+                if (resolved) {
+                    resolved_module_path = *resolved;
+                    // Remove the type name suffix to get just the module path
+                    auto last_sep = resolved_module_path.rfind("::");
+                    if (last_sep != std::string::npos) {
+                        resolved_module_path = resolved_module_path.substr(0, last_sep);
+                    }
+                }
+
                 for (const auto& [mod_name, mod] : all_modules) {
+                    // If we resolved a specific module path, only check that module
+                    if (!resolved_module_path.empty() && mod_name != resolved_module_path) {
+                        continue;
+                    }
+
                     // Check structs
                     auto struct_it = mod.structs.find(type_name);
                     if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
@@ -1959,6 +1982,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                     // Queue instantiation for non-generic library static methods (e.g., Text::from)
                     // Only for Type::method calls (sanitized_name has no ::)
+                    // Generic types are handled separately via expected_enum_type_ context
                     size_t sep_pos = fn_name.find("::");
                     if (sep_pos != std::string::npos) {
                         std::string type_name = fn_name.substr(0, sep_pos);
@@ -1967,7 +1991,17 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         // Check if this type exists in the module
                         bool is_type =
                             mod.structs.count(type_name) > 0 || mod.enums.count(type_name) > 0;
-                        if (is_type) {
+
+                        // Skip generic types - they need type substitutions from context
+                        // and are handled via expected_enum_type_ in method.cpp
+                        auto struct_it = mod.structs.find(type_name);
+                        bool is_generic_struct = struct_it != mod.structs.end() &&
+                                                 !struct_it->second.type_params.empty();
+                        auto enum_it = mod.enums.find(type_name);
+                        bool is_generic_enum = enum_it != mod.enums.end() &&
+                                               !enum_it->second.type_params.empty();
+
+                        if (is_type && !is_generic_struct && !is_generic_enum) {
                             std::string mangled_method = "tml_" + type_name + "_" + method_name;
                             if (generated_impl_methods_.find(mangled_method) ==
                                 generated_impl_methods_.end()) {

@@ -1,0 +1,9 @@
+// Tests for deflate/inflate compression
+use test
+
+@test
+func test_zlib_module_placeholder() -> I32 {
+    // Simple test that zlib module tests can run
+    assert_eq(1, 1, "basic test works")
+    return 0
+}

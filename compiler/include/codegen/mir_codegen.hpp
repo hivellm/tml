@@ -51,6 +51,7 @@ namespace tml::codegen {
 struct MirCodegenOptions {
     bool emit_comments = true;                            ///< Include source comments in IR.
     bool dll_export = false;                              ///< Add dllexport for Windows DLLs.
+    bool coverage_enabled = false;                        ///< Disable inlining for coverage builds.
     std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
 };
 

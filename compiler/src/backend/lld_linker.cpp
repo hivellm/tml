@@ -173,6 +173,9 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
 #endif
     }
 
+    // Always print command for debugging
+    std::cerr << "[DEBUG LLD] Command: " << cmd << "\n";
+
     // Execute the command
     int ret = execute_command(cmd, options.verbose);
 
@@ -270,9 +273,16 @@ auto LLDLinker::build_windows_command(const std::vector<fs::path>& object_files,
         }
     }
 
-    // Object files
+    // Object files and static libraries
     for (const auto& obj : object_files) {
-        cmd << " " << quote_path(obj);
+        // For static libraries (.lib), use /WHOLEARCHIVE to include all objects
+        // This is needed for FFI functions that may not be referenced until runtime
+        std::string ext = obj.extension().string();
+        if (ext == ".lib") {
+            cmd << " /WHOLEARCHIVE:" << quote_path(obj);
+        } else {
+            cmd << " " << quote_path(obj);
+        }
     }
 
     // Extra flags

@@ -1,0 +1,334 @@
+//! Diffie-Hellman key exchange.
+//!
+//! This module provides classic Diffie-Hellman (DH) key exchange for
+//! establishing shared secrets over insecure channels.
+//!
+//! # Security Note
+//!
+//! For new applications, prefer ECDH (elliptic curve DH) over classic DH
+//! due to smaller key sizes and faster operations with equivalent security.
+//!
+//! # Named Groups
+//!
+//! | Group | Size | Security Level |
+//! |-------|------|----------------|
+//! | modp1 | 768 bits | Weak (deprecated) |
+//! | modp2 | 1024 bits | Weak (deprecated) |
+//! | modp5 | 1536 bits | Low |
+//! | modp14 | 2048 bits | Medium |
+//! | modp15 | 3072 bits | High |
+//! | modp16 | 4096 bits | High |
+//! | modp17 | 6144 bits | Very High |
+//! | modp18 | 8192 bits | Very High |
+//!
+//! # Examples
+//!
+//! ## Key Exchange with Named Group
+//!
+//! ```tml
+//! use std::crypto::{create_dh_group, DhGroup}
+//!
+//! // Alice
+//! let alice = create_dh_group(DhGroup::Modp14)?
+//! let alice_public = alice.public_key()
+//!
+//! // Bob
+//! let bob = create_dh_group(DhGroup::Modp14)?
+//! let bob_public = bob.public_key()
+//!
+//! // Compute shared secrets
+//! let alice_secret = alice.compute_secret(bob_public)?
+//! let bob_secret = bob.compute_secret(alice_public)?
+//!
+//! // alice_secret == bob_secret
+//! ```
+//!
+//! ## Custom DH Parameters
+//!
+//! ```tml
+//! use std::crypto::{create_dh, DiffieHellman}
+//!
+//! // Create DH with custom prime and generator
+//! let dh = create_dh(prime_bytes, generator_bytes)?
+//! dh.generate_keys()
+//!
+//! let shared_secret = dh.compute_secret(other_public_key)?
+//! ```
+
+use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::collections::Buffer
+
+/// Named Diffie-Hellman groups (RFC 3526, RFC 7919).
+pub type DhGroup {
+    /// 768-bit MODP group (DEPRECATED, insecure)
+    Modp1,
+    /// 1024-bit MODP group (DEPRECATED, insecure)
+    Modp2,
+    /// 1536-bit MODP group (weak)
+    Modp5,
+    /// 2048-bit MODP group (minimum recommended)
+    Modp14,
+    /// 3072-bit MODP group
+    Modp15,
+    /// 4096-bit MODP group
+    Modp16,
+    /// 6144-bit MODP group
+    Modp17,
+    /// 8192-bit MODP group
+    Modp18,
+    /// ffdhe2048 (RFC 7919)
+    Ffdhe2048,
+    /// ffdhe3072 (RFC 7919)
+    Ffdhe3072,
+    /// ffdhe4096 (RFC 7919)
+    Ffdhe4096,
+    /// ffdhe6144 (RFC 7919)
+    Ffdhe6144,
+    /// ffdhe8192 (RFC 7919)
+    Ffdhe8192,
+}
+
+impl DhGroup {
+    /// Returns the group name.
+    pub func name(this) -> Str {
+        when this {
+            DhGroup::Modp1 => return "modp1"
+            DhGroup::Modp2 => return "modp2"
+            DhGroup::Modp5 => return "modp5"
+            DhGroup::Modp14 => return "modp14"
+            DhGroup::Modp15 => return "modp15"
+            DhGroup::Modp16 => return "modp16"
+            DhGroup::Modp17 => return "modp17"
+            DhGroup::Modp18 => return "modp18"
+            DhGroup::Ffdhe2048 => return "ffdhe2048"
+            DhGroup::Ffdhe3072 => return "ffdhe3072"
+            DhGroup::Ffdhe4096 => return "ffdhe4096"
+            DhGroup::Ffdhe6144 => return "ffdhe6144"
+            DhGroup::Ffdhe8192 => return "ffdhe8192"
+        }
+    }
+
+    /// Returns the prime size in bits.
+    pub func prime_bits(this) -> I64 {
+        when this {
+            DhGroup::Modp1 => return 768
+            DhGroup::Modp2 => return 1024
+            DhGroup::Modp5 => return 1536
+            DhGroup::Modp14 => return 2048
+            DhGroup::Modp15 => return 3072
+            DhGroup::Modp16 => return 4096
+            DhGroup::Modp17 => return 6144
+            DhGroup::Modp18 => return 8192
+            DhGroup::Ffdhe2048 => return 2048
+            DhGroup::Ffdhe3072 => return 3072
+            DhGroup::Ffdhe4096 => return 4096
+            DhGroup::Ffdhe6144 => return 6144
+            DhGroup::Ffdhe8192 => return 8192
+        }
+    }
+
+    /// Returns true if this group is deprecated.
+    pub func is_deprecated(this) -> Bool {
+        when this {
+            DhGroup::Modp1 => return true
+            DhGroup::Modp2 => return true
+            DhGroup::Modp5 => return true
+            _ => return false
+        }
+    }
+
+    /// Parses a group from its name.
+    pub func from_name(name: Str) -> Maybe[DhGroup] {
+        when name {
+            "modp1" => return Just(DhGroup::Modp1)
+            "modp2" => return Just(DhGroup::Modp2)
+            "modp5" => return Just(DhGroup::Modp5)
+            "modp14" => return Just(DhGroup::Modp14)
+            "modp15" => return Just(DhGroup::Modp15)
+            "modp16" => return Just(DhGroup::Modp16)
+            "modp17" => return Just(DhGroup::Modp17)
+            "modp18" => return Just(DhGroup::Modp18)
+            "ffdhe2048" => return Just(DhGroup::Ffdhe2048)
+            "ffdhe3072" => return Just(DhGroup::Ffdhe3072)
+            "ffdhe4096" => return Just(DhGroup::Ffdhe4096)
+            "ffdhe6144" => return Just(DhGroup::Ffdhe6144)
+            "ffdhe8192" => return Just(DhGroup::Ffdhe8192)
+            _ => return Nothing
+        }
+    }
+}
+
+/// Diffie-Hellman key exchange object.
+pub type DiffieHellman {
+    handle: *Unit
+    group: Maybe[DhGroup]
+    prime_length: I64
+}
+
+impl DiffieHellman {
+    /// Creates a DH object with custom prime and generator.
+    pub func new(prime: ref Buffer, generator: ref Buffer) -> CryptoResult[DiffieHellman] {
+        let handle: *Unit = lowlevel { crypto_dh_create(prime.handle, generator.handle) }
+        if handle == null {
+            return Err(CryptoError::new(CryptoErrorKind::InvalidParameter))
+        }
+        return Ok(DiffieHellman {
+            handle: handle,
+            group: Nothing,
+            prime_length: prime.len() * 8,
+        })
+    }
+
+    /// Creates a DH object with the specified prime length.
+    ///
+    /// Generates a new random prime (slow operation).
+    pub func generate(prime_length: I64) -> CryptoResult[DiffieHellman] {
+        if prime_length < 512 or prime_length > 8192 {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::InvalidParameter,
+                "prime length must be between 512 and 8192 bits"
+            ))
+        }
+        let handle: *Unit = lowlevel { crypto_dh_generate(prime_length) }
+        if handle == null {
+            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        }
+        return Ok(DiffieHellman {
+            handle: handle,
+            group: Nothing,
+            prime_length: prime_length,
+        })
+    }
+
+    /// Creates a DH object with a named group.
+    pub func with_group(group: DhGroup) -> CryptoResult[DiffieHellman] {
+        let handle: *Unit = lowlevel { crypto_dh_create_group(group.name()) }
+        if handle == null {
+            return Err(CryptoError::with_details(
+                CryptoErrorKind::UnsupportedAlgorithm,
+                "unsupported DH group: {group.name()}"
+            ))
+        }
+        return Ok(DiffieHellman {
+            handle: handle,
+            group: Just(group),
+            prime_length: group.prime_bits(),
+        })
+    }
+
+    /// Generates the public/private key pair.
+    pub func generate_keys(mut this) {
+        lowlevel { crypto_dh_generate_keys(this.handle) }
+    }
+
+    /// Returns the public key.
+    pub func public_key(this) -> Buffer {
+        let handle: *Unit = lowlevel { crypto_dh_get_public_key(this.handle) }
+        return Buffer { handle: handle }
+    }
+
+    /// Returns the private key.
+    pub func private_key(this) -> Buffer {
+        let handle: *Unit = lowlevel { crypto_dh_get_private_key(this.handle) }
+        return Buffer { handle: handle }
+    }
+
+    /// Sets the public key (for receiving other party's key).
+    pub func set_public_key(mut this, key: ref Buffer) {
+        lowlevel { crypto_dh_set_public_key(this.handle, key.handle) }
+    }
+
+    /// Sets the private key.
+    pub func set_private_key(mut this, key: ref Buffer) {
+        lowlevel { crypto_dh_set_private_key(this.handle, key.handle) }
+    }
+
+    /// Returns the prime (p).
+    pub func prime(this) -> Buffer {
+        let handle: *Unit = lowlevel { crypto_dh_get_prime(this.handle) }
+        return Buffer { handle: handle }
+    }
+
+    /// Returns the generator (g).
+    pub func generator(this) -> Buffer {
+        let handle: *Unit = lowlevel { crypto_dh_get_generator(this.handle) }
+        return Buffer { handle: handle }
+    }
+
+    /// Computes the shared secret using the other party's public key.
+    pub func compute_secret(this, other_public_key: ref Buffer) -> CryptoResult[Buffer] {
+        let handle: *Unit = lowlevel { crypto_dh_compute_secret(this.handle, other_public_key.handle) }
+        if handle == null {
+            return Err(CryptoError::new(CryptoErrorKind::KeyExchangeFailed))
+        }
+        return Ok(Buffer { handle: handle })
+    }
+
+    /// Returns the DH group if using a named group.
+    pub func group(this) -> Maybe[DhGroup] {
+        return this.group
+    }
+
+    /// Returns the prime length in bits.
+    pub func prime_length(this) -> I64 {
+        return this.prime_length
+    }
+
+    /// Returns verification error flags (if any).
+    ///
+    /// Non-zero indicates parameter validation issues.
+    pub func verify_error(this) -> I64 {
+        let error: I64 = lowlevel { crypto_dh_check(this.handle) }
+        return error
+    }
+
+    /// Validates the DH parameters.
+    pub func check_params(this) -> Bool {
+        return this.verify_error() == 0
+    }
+
+    /// Frees the DH resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { crypto_dh_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+// ============================================================================
+// Convenience functions
+// ============================================================================
+
+/// Creates a DH object with custom prime and generator.
+pub func create_dh(prime: ref Buffer, generator: ref Buffer) -> CryptoResult[DiffieHellman] {
+    return DiffieHellman::new(prime, generator)
+}
+
+/// Creates a DH object with a named group.
+pub func create_dh_group(group: DhGroup) -> CryptoResult[DiffieHellman] {
+    return DiffieHellman::with_group(group)
+}
+
+/// Gets DH parameters for a named group.
+///
+/// Returns (prime, generator) as buffers.
+pub func get_dh_group_params(group: DhGroup) -> (Buffer, Buffer) {
+    let prime_handle: *Unit = lowlevel { crypto_dh_group_get_prime(group.name()) }
+    let gen_handle: *Unit = lowlevel { crypto_dh_group_get_generator(group.name()) }
+    return (Buffer { handle: prime_handle }, Buffer { handle: gen_handle })
+}
+
+/// Performs a complete DH key exchange (for simple use cases).
+///
+/// Returns the shared secret.
+pub func diffie_hellman(
+    private_key: ref Buffer,
+    public_key: ref Buffer,
+    prime: ref Buffer,
+    generator: ref Buffer,
+) -> CryptoResult[Buffer] {
+    let mut dh = DiffieHellman::new(prime, generator)?
+    dh.set_private_key(private_key)
+    return dh.compute_secret(public_key)
+}
