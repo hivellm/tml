@@ -49,6 +49,7 @@
 //! ```
 
 use std::json::types::Json
+use std::json::builder::{Builder, array, object}
 
 // FFI function for creating JSON values
 @extern("tml_json_parse_fast")
@@ -225,8 +226,6 @@ use std::collections::List
 /// ```
 impl[T: ToJson] ToJson for List[T] {
     func to_json(this) -> Json {
-        use std::json::builder::{Builder, array}
-
         let b: Builder = array()
         var i: I64 = 0
         let length: I64 = this.len()
@@ -306,10 +305,8 @@ use std::collections::{HashMap, HashMapIter}
 /// ```
 impl[V: ToJson] ToJson for HashMap[I64, V] {
     func to_json(this) -> Json {
-        use std::json::builder::{Builder, object}
-
         let b: Builder = object()
-        let iter = this.iter()
+        let iter: HashMapIter = this.iter()
         loop (iter.has_next()) {
             let key: I64 = iter.key()
             let value: V = iter.value()

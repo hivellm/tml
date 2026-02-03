@@ -85,6 +85,7 @@ struct ParseError {
     SourceSpan span;                ///< Error location.
     std::vector<std::string> notes; ///< Additional notes.
     std::vector<FixItHint> fixes;   ///< Suggested fixes.
+    std::string code;               ///< Error code (e.g., "P001"). Empty uses default.
 };
 
 /// Parser for TML source code.

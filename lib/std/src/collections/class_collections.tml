@@ -24,6 +24,8 @@
 //! print(list.count().to_string())  // 3
 //! ```
 
+use std::collections::List
+
 // ============================================================================
 // ArrayList[T] - Dynamic array
 // ============================================================================
@@ -41,23 +43,25 @@
 /// print(list.get(0).to_string())  // 10
 /// ```
 pub type ArrayList[T] {
-    data: [T],
+    data: List[T],
     length: I64
 }
 
 impl[T] ArrayList[T] {
     /// Creates a new empty ArrayList.
     pub func create() -> ArrayList[T] {
+        let list: List[T] = List[T].new(16)
         return ArrayList {
-            data: [],
+            data: list,
             length: 0,
         }
     }
 
     /// Creates an ArrayList with specified initial capacity.
     pub func with_capacity(capacity: I64) -> ArrayList[T] {
+        let list: List[T] = List[T].new(capacity)
         return ArrayList {
-            data: [],
+            data: list,
             length: 0,
         }
     }
@@ -86,12 +90,12 @@ impl[T] ArrayList[T] {
 
     /// Gets the element at the specified index.
     pub func get(this, index: I64) -> T {
-        return this.data[index]
+        return this.data.get(index)
     }
 
     /// Sets the element at the specified index.
     pub func set(mut this, index: I64, value: T) {
-        this.data[index] = value
+        this.data.set(index, value)
     }
 
     /// Inserts an item at the specified index.
@@ -104,10 +108,10 @@ impl[T] ArrayList[T] {
         this.data.push(item) // Ensure capacity
         var i: I64 = this.length
         loop (i > index) {
-            this.data[i] = this.data[i - 1]
+            this.data.set(i, this.data.get(i - 1))
             i = i - 1
         }
-        this.data[index] = item
+        this.data.set(index, item)
         this.length = this.length + 1
     }
 
@@ -120,7 +124,7 @@ impl[T] ArrayList[T] {
         // Shift elements left
         var i: I64 = index
         loop (i < this.length - 1) {
-            this.data[i] = this.data[i + 1]
+            this.data.set(i, this.data.get(i + 1))
             i = i + 1
         }
         this.length = this.length - 1
@@ -140,9 +144,9 @@ impl[T] ArrayList[T] {
         var left: I64 = 0
         var right: I64 = this.length - 1
         loop (left < right) {
-            let temp: T = this.data[left]
-            this.data[left] = this.data[right]
-            this.data[right] = temp
+            let temp: T = this.data.get(left)
+            this.data.set(left, this.data.get(right))
+            this.data.set(right, temp)
             left = left + 1
             right = right - 1
         }
@@ -156,7 +160,7 @@ impl[T: PartialEq] ArrayList[T] {
     pub func remove(mut this, item: T) -> Bool {
         var i: I64 = 0
         loop (i < this.length) {
-            if this.data[i] == item {
+            if this.data.get(i) == item {
                 this.remove_at(i)
                 return true
             }
@@ -169,7 +173,7 @@ impl[T: PartialEq] ArrayList[T] {
     pub func contains(this, item: T) -> Bool {
         var i: I64 = 0
         loop (i < this.length) {
-            if this.data[i] == item {
+            if this.data.get(i) == item {
                 return true
             }
             i = i + 1
@@ -181,7 +185,7 @@ impl[T: PartialEq] ArrayList[T] {
     pub func index_of(this, item: T) -> I64 {
         var i: I64 = 0
         loop (i < this.length) {
-            if this.data[i] == item {
+            if this.data.get(i) == item {
                 return i
             }
             i = i + 1
@@ -209,7 +213,7 @@ impl[T: PartialEq] ArrayList[T] {
 /// ```
 pub type HashSet[T] {
     /// Flat storage of all elements
-    data: [T],
+    data: List[T],
     /// Number of elements
     length: I64
 }
@@ -217,16 +221,18 @@ pub type HashSet[T] {
 impl[T] HashSet[T] {
     /// Creates a new empty HashSet.
     pub func create() -> HashSet[T] {
+        let list: List[T] = List[T].new(16)
         return HashSet {
-            data: [],
+            data: list,
             length: 0,
         }
     }
 
     /// Creates a HashSet with specified initial capacity.
     pub func with_capacity(capacity: I64) -> HashSet[T] {
+        let list: List[T] = List[T].new(capacity)
         return HashSet {
-            data: [],
+            data: list,
             length: 0,
         }
     }
@@ -253,7 +259,7 @@ impl[T: PartialEq] HashSet[T] {
         // Check if already present
         var i: I64 = 0
         loop (i < this.length) {
-            if this.data[i] == item {
+            if this.data.get(i) == item {
                 return false
             }
             i = i + 1
@@ -268,9 +274,9 @@ impl[T: PartialEq] HashSet[T] {
     pub func remove(mut this, item: T) -> Bool {
         var i: I64 = 0
         loop (i < this.length) {
-            if this.data[i] == item {
+            if this.data.get(i) == item {
                 // Swap with last and remove
-                this.data[i] = this.data[this.length - 1]
+                this.data.set(i, this.data.get(this.length - 1))
                 this.length = this.length - 1
                 return true
             }
@@ -283,7 +289,7 @@ impl[T: PartialEq] HashSet[T] {
     pub func contains(this, item: T) -> Bool {
         var i: I64 = 0
         loop (i < this.length) {
-            if this.data[i] == item {
+            if this.data.get(i) == item {
                 return true
             }
             i = i + 1
@@ -311,7 +317,7 @@ impl[T: PartialEq] HashSet[T] {
 /// ```
 pub type Queue[T] {
     /// Internal storage
-    data: [T],
+    data: List[T],
     /// Head index (front of queue)
     head: I64,
     /// Tail index (back of queue)
@@ -326,8 +332,9 @@ impl[T] Queue[T] {
     /// Creates a new empty Queue.
     pub func create() -> Queue[T] {
         let initial_capacity: I64 = 16
+        let list: List[T] = List[T].new(initial_capacity)
         return Queue {
-            data: [],
+            data: list,
             head: 0,
             tail: 0,
             length: 0,
@@ -337,8 +344,9 @@ impl[T] Queue[T] {
 
     /// Creates a Queue with specified initial capacity.
     pub func with_capacity(cap: I64) -> Queue[T] {
+        let list: List[T] = List[T].new(cap)
         return Queue {
-            data: [],
+            data: list,
             head: 0,
             tail: 0,
             length: 0,
@@ -385,7 +393,7 @@ impl[T] Queue[T] {
         }
 
         let idx: I64 = this.head % this.capacity
-        let item: T = this.data[idx]
+        let item: T = this.data.get(idx)
         this.head = this.head + 1
         this.length = this.length - 1
 
@@ -405,20 +413,20 @@ impl[T] Queue[T] {
         }
 
         let idx: I64 = this.head % this.capacity
-        return Just(this.data[idx])
+        return Just(this.data.get(idx))
     }
 
     /// Grows the queue capacity.
-    func grow(mut this) {
+    pub func grow(mut this) {
         let new_capacity: I64 = this.capacity * 2
-        var new_data: [T] = []
+        var new_data: List[T] = List[T].new(new_capacity)
 
         // Copy elements in order
         var i: I64 = this.head
         var cnt: I64 = 0
         loop (cnt < this.length) {
             let idx: I64 = i % this.capacity
-            new_data.push(this.data[idx])
+            new_data.push(this.data.get(idx))
             i = i + 1
             cnt = cnt + 1
         }
@@ -439,13 +447,13 @@ impl[T: PartialEq] Queue[T] {
         var cnt: I64 = 0
         loop (cnt < this.length) {
             let idx: I64 = i % this.capacity
-            if this.data[idx] == item {
+            if this.data.get(idx) == item {
                 // Shift elements to fill the gap
                 var j: I64 = cnt
                 loop (j < this.length - 1) {
                     let curr_idx: I64 = (this.head + j) % this.capacity
                     let next_idx: I64 = (this.head + j + 1) % this.capacity
-                    this.data[curr_idx] = this.data[next_idx]
+                    this.data.set(curr_idx, this.data.get(next_idx))
                     j = j + 1
                 }
                 this.tail = this.tail - 1
@@ -464,7 +472,7 @@ impl[T: PartialEq] Queue[T] {
         var cnt: I64 = 0
         loop (cnt < this.length) {
             let idx: I64 = i % this.capacity
-            if this.data[idx] == item {
+            if this.data.get(idx) == item {
                 return true
             }
             i = i + 1
@@ -493,7 +501,7 @@ impl[T: PartialEq] Queue[T] {
 /// ```
 pub type Stack[T] {
     /// Internal storage
-    data: [T],
+    data: List[T],
     /// Length
     length: I64
 }
@@ -501,16 +509,18 @@ pub type Stack[T] {
 impl[T] Stack[T] {
     /// Creates a new empty Stack.
     pub func create() -> Stack[T] {
+        let list: List[T] = List[T].new(16)
         return Stack {
-            data: [],
+            data: list,
             length: 0,
         }
     }
 
     /// Creates a Stack with specified initial capacity.
     pub func with_capacity(capacity: I64) -> Stack[T] {
+        let list: List[T] = List[T].new(capacity)
         return Stack {
-            data: [],
+            data: list,
             length: 0,
         }
     }
@@ -544,7 +554,7 @@ impl[T] Stack[T] {
             return Nothing
         }
         this.length = this.length - 1
-        return Just(this.data[this.length])
+        return Just(this.data.get(this.length))
     }
 
     /// Returns the item at the top without removing it.
@@ -552,7 +562,7 @@ impl[T] Stack[T] {
         if this.length == 0 {
             return Nothing
         }
-        return Just(this.data[this.length - 1])
+        return Just(this.data.get(this.length - 1))
     }
 }
 
@@ -563,11 +573,11 @@ impl[T: PartialEq] Stack[T] {
     pub func remove(mut this, item: T) -> Bool {
         var i: I64 = 0
         loop (i < this.length) {
-            if this.data[i] == item {
+            if this.data.get(i) == item {
                 // Shift elements down
                 var j: I64 = i
                 loop (j < this.length - 1) {
-                    this.data[j] = this.data[j + 1]
+                    this.data.set(j, this.data.get(j + 1))
                     j = j + 1
                 }
                 this.length = this.length - 1
@@ -582,7 +592,7 @@ impl[T: PartialEq] Stack[T] {
     pub func contains(this, item: T) -> Bool {
         var i: I64 = 0
         loop (i < this.length) {
-            if this.data[i] == item {
+            if this.data.get(i) == item {
                 return true
             }
             i = i + 1
@@ -623,7 +633,7 @@ pub type LinkedListNode[T] {
 /// ```
 pub type LinkedList[T] {
     /// Nodes storage
-    nodes: [LinkedListNode[T]],
+    nodes: List[LinkedListNode[T]],
     /// Number of nodes in storage
     node_count: I64,
     /// Head index (-1 for empty)
@@ -637,8 +647,9 @@ pub type LinkedList[T] {
 impl[T] LinkedList[T] {
     /// Creates a new empty LinkedList.
     pub func create() -> LinkedList[T] {
+        let nodes: List[LinkedListNode[T]] = List[LinkedListNode[T]].new(16)
         return LinkedList {
-            nodes: [],
+            nodes: nodes,
             node_count: 0,
             head: -1,
             tail: -1,
@@ -678,7 +689,9 @@ impl[T] LinkedList[T] {
         this.node_count = this.node_count + 1
 
         if this.head >= 0 {
-            this.nodes[this.head].prev = node_idx
+            var head_node: LinkedListNode[T] = this.nodes.get(this.head)
+            head_node.prev = node_idx
+            this.nodes.set(this.head, head_node)
         }
 
         this.head = node_idx
@@ -702,7 +715,9 @@ impl[T] LinkedList[T] {
         this.node_count = this.node_count + 1
 
         if this.tail >= 0 {
-            this.nodes[this.tail].next = node_idx
+            var tail_node: LinkedListNode[T] = this.nodes.get(this.tail)
+            tail_node.next = node_idx
+            this.nodes.set(this.tail, tail_node)
         }
 
         this.tail = node_idx
@@ -720,11 +735,14 @@ impl[T] LinkedList[T] {
             return Nothing
         }
 
-        let value: T = this.nodes[this.head].value
-        let next: I64 = this.nodes[this.head].next
+        let head_node: LinkedListNode[T] = this.nodes.get(this.head)
+        let value: T = head_node.value
+        let next: I64 = head_node.next
 
         if next >= 0 {
-            this.nodes[next].prev = -1
+            var next_node: LinkedListNode[T] = this.nodes.get(next)
+            next_node.prev = -1
+            this.nodes.set(next, next_node)
         } else {
             this.tail = -1
         }
@@ -741,11 +759,14 @@ impl[T] LinkedList[T] {
             return Nothing
         }
 
-        let value: T = this.nodes[this.tail].value
-        let prev: I64 = this.nodes[this.tail].prev
+        let tail_node: LinkedListNode[T] = this.nodes.get(this.tail)
+        let value: T = tail_node.value
+        let prev: I64 = tail_node.prev
 
         if prev >= 0 {
-            this.nodes[prev].next = -1
+            var prev_node: LinkedListNode[T] = this.nodes.get(prev)
+            prev_node.next = -1
+            this.nodes.set(prev, prev_node)
         } else {
             this.head = -1
         }
@@ -761,7 +782,7 @@ impl[T] LinkedList[T] {
         if this.head < 0 {
             return Nothing
         }
-        return Just(this.nodes[this.head].value)
+        return Just(this.nodes.get(this.head).value)
     }
 
     /// Returns the last item without removing it.
@@ -769,7 +790,7 @@ impl[T] LinkedList[T] {
         if this.tail < 0 {
             return Nothing
         }
-        return Just(this.nodes[this.tail].value)
+        return Just(this.nodes.get(this.tail).value)
     }
 }
 
@@ -780,20 +801,25 @@ impl[T: PartialEq] LinkedList[T] {
     pub func remove(mut this, item: T) -> Bool {
         var idx: I64 = this.head
         loop (idx >= 0) {
-            if this.nodes[idx].value == item {
-                let prev_idx: I64 = this.nodes[idx].prev
-                let next_idx: I64 = this.nodes[idx].next
+            let current: LinkedListNode[T] = this.nodes.get(idx)
+            if current.value == item {
+                let prev_idx: I64 = current.prev
+                let next_idx: I64 = current.next
 
                 // Update previous node's next pointer
                 if prev_idx >= 0 {
-                    this.nodes[prev_idx].next = next_idx
+                    var prev_node: LinkedListNode[T] = this.nodes.get(prev_idx)
+                    prev_node.next = next_idx
+                    this.nodes.set(prev_idx, prev_node)
                 } else {
                     this.head = next_idx
                 }
 
                 // Update next node's prev pointer
                 if next_idx >= 0 {
-                    this.nodes[next_idx].prev = prev_idx
+                    var next_node: LinkedListNode[T] = this.nodes.get(next_idx)
+                    next_node.prev = prev_idx
+                    this.nodes.set(next_idx, next_node)
                 } else {
                     this.tail = prev_idx
                 }
@@ -801,7 +827,7 @@ impl[T: PartialEq] LinkedList[T] {
                 this.length = this.length - 1
                 return true
             }
-            idx = this.nodes[idx].next
+            idx = current.next
         }
         return false
     }
@@ -810,10 +836,11 @@ impl[T: PartialEq] LinkedList[T] {
     pub func contains(this, item: T) -> Bool {
         var idx: I64 = this.head
         loop (idx >= 0) {
-            if this.nodes[idx].value == item {
+            let current: LinkedListNode[T] = this.nodes.get(idx)
+            if current.value == item {
                 return true
             }
-            idx = this.nodes[idx].next
+            idx = current.next
         }
         return false
     }

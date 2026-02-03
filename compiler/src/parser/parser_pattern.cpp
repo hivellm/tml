@@ -112,7 +112,8 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
                                       "Expected literal after 'to'/'through' in range pattern",
                                   .span = peek().span,
                                   .notes = {},
-                                  .fixes = {}};
+                                  .fixes = {},
+                                  .code = "P014"};
             }
             auto end_token = advance();
 
@@ -204,7 +205,8 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
                                       "Parser error: infinite loop detected in tuple pattern",
                                   .span = peek().span,
                                   .notes = {},
-                                  .fixes = {}};
+                                  .fixes = {},
+                                  .code = "P043"};
             }
 
             skip_newlines();
@@ -312,7 +314,8 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
                             return ParseError{.message = "Expected ',' or '}' in struct pattern",
                                               .span = peek().span,
                                               .notes = {},
-                                              .fixes = {}};
+                                              .fixes = {},
+                                              .code = "P041"};
                         }
                     }
                     skip_newlines();
@@ -344,7 +347,11 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
             .span = span});
     }
 
-    return ParseError{.message = "Expected pattern", .span = peek().span, .notes = {}, .fixes = {}};
+    return ParseError{.message = "Expected pattern",
+                      .span = peek().span,
+                      .notes = {},
+                      .fixes = {},
+                      .code = "P007"};
 }
 
 } // namespace tml::parser

@@ -181,10 +181,10 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             }
         }
 
-        report_error("Cannot call non-function field", call.span);
+        report_error("Cannot call non-function field", call.span, "C003");
         return "0";
     } else {
-        report_error("Complex callee not supported", call.span);
+        report_error("Complex callee not supported", call.span, "C002");
         return "0";
     }
 
@@ -2505,6 +2505,12 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         emit_line("pl_done." + id + ":");
         last_expr_type_ = "void";
         return "0";
+    }
+
+    // Coverage tracking for @extern FFI function calls
+    // This tracks which FFI functions are actually called by tests
+    if (func_it != functions_.end() && func_it->second.is_extern) {
+        emit_coverage(func_it->second.tml_name);
     }
 
     // Call - handle void vs non-void return types

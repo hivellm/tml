@@ -154,10 +154,28 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         mir_module = hir_mir_builder.build(hir_module);
 
         // Run infinite loop detection (early static analysis)
+        // This is a compile-time error - infinite loops are not allowed
         mir::InfiniteLoopCheckPass loop_check;
         loop_check.run(mir_module);
         if (loop_check.has_warnings()) {
-            loop_check.print_warnings();
+            // Print errors (not warnings) for infinite loops
+            for (const auto& warning : loop_check.get_warnings()) {
+                std::cerr << "\033[1;31merror:\033[0m potential infinite loop in function '"
+                          << warning.function_name << "' at block '" << warning.block_name
+                          << "': " << warning.reason << "\n";
+                std::cerr << "  \033[36mnote:\033[0m infinite loops are not allowed - add a break "
+                             "condition or return statement\n";
+            }
+            return 1; // Fail compilation
+        }
+
+        // Run memory leak detection (early static analysis)
+        // This is a compile-time error - memory leaks are not allowed
+        mir::MemoryLeakCheckPass leak_check;
+        leak_check.run(mir_module);
+        if (leak_check.has_errors()) {
+            leak_check.print_warnings();
+            return 1; // Fail compilation
         }
 
         // Apply MIR optimizations based on optimization level
@@ -284,10 +302,28 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         auto mir_module = hir_mir_builder.build(hir_module);
 
         // Run infinite loop detection (early static analysis)
+        // This is a compile-time error - infinite loops are not allowed
         mir::InfiniteLoopCheckPass loop_check;
         loop_check.run(mir_module);
         if (loop_check.has_warnings()) {
-            loop_check.print_warnings();
+            // Print errors (not warnings) for infinite loops
+            for (const auto& warning : loop_check.get_warnings()) {
+                std::cerr << "\033[1;31merror:\033[0m potential infinite loop in function '"
+                          << warning.function_name << "' at block '" << warning.block_name
+                          << "': " << warning.reason << "\n";
+                std::cerr << "  \033[36mnote:\033[0m infinite loops are not allowed - add a break "
+                             "condition or return statement\n";
+            }
+            return 1; // Infinite loop detected - compilation aborted
+        }
+
+        // Run memory leak detection (early static analysis)
+        // This is a compile-time error - memory leaks are not allowed
+        mir::MemoryLeakCheckPass leak_check;
+        leak_check.run(mir_module);
+        if (leak_check.has_errors()) {
+            leak_check.print_warnings();
+            return 1; // Memory leak detected - compilation aborted
         }
 
         // Apply MIR optimizations

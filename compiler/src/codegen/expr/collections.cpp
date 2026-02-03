@@ -555,7 +555,7 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
     }
 
     // Not found - might be a function or module path
-    report_error("Unknown path: " + full_path, path.span);
+    report_error("Unknown path: " + full_path, path.span, "C004");
     return "0";
 }
 

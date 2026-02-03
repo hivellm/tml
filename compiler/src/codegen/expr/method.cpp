@@ -175,12 +175,43 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             // Look for static method
             for (const auto& m : class_def->methods) {
                 if (m.sig.name == method && m.is_static) {
+                    // For generic classes, extract type arguments and apply substitution
+                    std::unordered_map<std::string, types::TypePtr> type_subs_local;
+                    std::string mangled_type_suffix;
+
+                    // Extract type args from PathExpr generics (e.g., LinkedList[I64].create())
+                    if (call.receiver->is<parser::PathExpr>()) {
+                        const auto& pe = call.receiver->as<parser::PathExpr>();
+                        if (pe.generics.has_value() && !pe.generics->args.empty()) {
+                            for (size_t i = 0;
+                                 i < pe.generics->args.size() && i < class_def->type_params.size();
+                                 ++i) {
+                                const auto& arg = pe.generics->args[i];
+                                if (arg.is_type()) {
+                                    auto resolved = resolve_parser_type_with_subs(
+                                        *arg.as_type(), current_type_subs_);
+                                    if (resolved) {
+                                        type_subs_local[class_def->type_params[i]] = resolved;
+                                        mangled_type_suffix += "__" + mangle_type(resolved);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Generate call to static method
                     // Only use suite prefix for test-local methods, not library methods
                     std::string prefix =
                         is_library_method(type_name, method) ? "" : get_suite_prefix();
-                    std::string func_name = "@tml_" + prefix + type_name + "_" + method;
-                    std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
+                    std::string func_name =
+                        "@tml_" + prefix + type_name + mangled_type_suffix + "_" + method;
+
+                    // Apply type substitution to return type
+                    types::TypePtr return_type = m.sig.return_type;
+                    if (!type_subs_local.empty()) {
+                        return_type = types::substitute_type(return_type, type_subs_local);
+                    }
+                    std::string ret_type = llvm_type_from_semantic(return_type);
 
                     // Generate arguments
                     std::vector<std::string> args;
@@ -303,6 +334,18 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     if (!enum_it->second.type_params.empty()) {
                         is_generic_struct = true;
                         imported_type_params = enum_it->second.type_params;
+                        break;
+                    }
+                }
+                // Check classes (pub type declarations)
+                auto class_it = mod.classes.find(type_name);
+                if (class_it != mod.classes.end()) {
+                    TML_DEBUG_LN("[STATIC_METHOD] Found class "
+                                 << type_name << " in " << mod_name << " with type_params.size="
+                                 << class_it->second.type_params.size());
+                    if (!class_it->second.type_params.empty()) {
+                        is_generic_struct = true;
+                        imported_type_params = class_it->second.type_params;
                         break;
                     }
                 }
@@ -480,7 +523,17 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         for (const auto& g : impl_it->second->generics) {
                             generic_names.push_back(g.name);
                         }
-                    } else if (!imported_type_params.empty()) {
+                    }
+                    // Also check pending_generic_structs_ for imported generic structs
+                    if (generic_names.empty()) {
+                        auto struct_it = pending_generic_structs_.find(type_name);
+                        if (struct_it != pending_generic_structs_.end()) {
+                            for (const auto& g : struct_it->second->generics) {
+                                generic_names.push_back(g.name);
+                            }
+                        }
+                    }
+                    if (generic_names.empty() && !imported_type_params.empty()) {
                         generic_names = imported_type_params;
                     }
 
@@ -1073,7 +1126,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 }
             }
 
-            report_error("Unknown static method: " + type_name + "." + method, call.span);
+            report_error("Unknown static method: " + type_name + "." + method, call.span, "C006");
             return "0";
         }
     }
@@ -1891,7 +1944,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
         if (method == "write") {
             if (call.args.empty()) {
-                report_error("Ptr.write() requires a value argument", call.span);
+                report_error("Ptr.write() requires a value argument", call.span, "C008");
                 return "void";
             }
             std::string val = gen_expr(*call.args[0]);
@@ -1900,7 +1953,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
         if (method == "offset") {
             if (call.args.empty()) {
-                report_error("Ptr.offset() requires an offset argument", call.span);
+                report_error("Ptr.offset() requires an offset argument", call.span, "C008");
                 return receiver;
             }
             std::string offset = gen_expr(*call.args[0]);
@@ -1980,7 +2033,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             }
             if (method == "then_cmp") {
                 if (call.args.empty()) {
-                    report_error("then_cmp() requires an argument", call.span);
+                    report_error("then_cmp() requires an argument", call.span, "C008");
                     return "0";
                 }
                 std::string other = gen_expr(*call.args[0]);
@@ -2253,7 +2306,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
         if (method == "write_str") {
             if (call.args.empty()) {
-                report_error("write_str requires a content argument", call.span);
+                report_error("write_str requires a content argument", call.span, "C008");
                 return "0";
             }
             std::string content_arg = gen_expr(*call.args[0]);
@@ -2355,7 +2408,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
     }
 
-    report_error("Unknown method: " + method, call.span);
+    report_error("Unknown method: " + method, call.span, "C006");
     return "0";
 }
 

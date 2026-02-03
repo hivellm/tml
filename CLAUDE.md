@@ -14,9 +14,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build Commands
 
-**CRITICAL: NEVER BUILD MANUALLY!**
+**⚠️⚠️⚠️ CRITICAL: NEVER USE CMAKE DIRECTLY! ⚠️⚠️⚠️**
 
-Do NOT use `cmake --build` or any direct cmake commands. This causes silent failures and incomplete test execution. ALWAYS use the provided scripts:
+**THIS IS A HARD REQUIREMENT - NO EXCEPTIONS:**
+- ❌ NEVER run `cmake --build`
+- ❌ NEVER run `cmake -B`
+- ❌ NEVER run any direct cmake commands
+- ❌ NEVER use powershell/cmd to call cmake
+
+**WHY:** Direct cmake calls CORRUPT the build directory, cause silent failures, break incremental compilation, and waste time. The build scripts handle critical environment setup that cmake alone cannot.
+
+**ALWAYS use the provided scripts:**
 
 ```bash
 # Windows - from project root (f:\Node\hivellm\tml)

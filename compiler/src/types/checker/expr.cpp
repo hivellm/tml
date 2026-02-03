@@ -567,8 +567,8 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
                     // This is a mutable reference, assignment through it is allowed
                     return;
                 }
-                error("Cannot assign to immutable variable '" + ident.name + "'",
-                      binary.left->span);
+                error("Cannot assign to immutable variable '" + ident.name + "'", binary.left->span,
+                      "T013");
             }
         }
     };
@@ -735,7 +735,7 @@ auto TypeChecker::check_unary(const parser::UnaryExpr& unary) -> TypePtr {
                 return named.type_args[0];
             }
         }
-        error("Cannot dereference non-reference type", unary.operand->span);
+        error("Cannot dereference non-reference type", unary.operand->span, "T017");
         return make_unit();
     case parser::UnaryOp::Inc:
     case parser::UnaryOp::Dec:
@@ -831,7 +831,7 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                                 error("Type '" + type_name + "' does not implement behavior '" +
                                           behavior + "' required by constraint on " +
                                           constraint.type_param,
-                                      call.callee->span);
+                                      call.callee->span, "T026");
                             }
                         }
 
@@ -854,7 +854,7 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                                 error("Type '" + type_name + "' does not implement behavior '" +
                                           bound.behavior_name + type_args_str +
                                           "' required by constraint on " + constraint.type_param,
-                                      call.callee->span);
+                                      call.callee->span, "T026");
                             }
                             // Note: Full parameterized bound checking (verifying type args match)
                             // would require tracking impl blocks with their type arguments.
@@ -873,7 +873,7 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                             error("E033: type '" + type_name +
                                       "' may not live long enough - does not satisfy `life " +
                                       lifetime_bound + "` bound on type parameter " + param_name,
-                                  call.callee->span);
+                                  call.callee->span, "T054");
                         }
                     }
                 }
@@ -891,7 +891,7 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                         error("Enum variant '" + variant_name + "' expects " +
                                   std::to_string(payload_types.size()) + " arguments, but got " +
                                   std::to_string(call.args.size()),
-                              call.callee->span);
+                              call.callee->span, "T034");
                         return make_unit();
                     }
 
@@ -1154,7 +1154,7 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
     if (callee_type->is<FuncType>()) {
         auto& func = callee_type->as<FuncType>();
         if (call.args.size() != func.params.size()) {
-            error("Wrong number of arguments", call.callee->span);
+            error("Wrong number of arguments", call.callee->span, "T004");
         }
 
         // Infer generic type substitutions from argument types
@@ -1301,13 +1301,13 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         if (call.method == "read") {
             // p.read() -> T - dereference the pointer and read the value
             if (!call.args.empty()) {
-                error("Pointer read() takes no arguments", call.receiver->span);
+                error("Pointer read() takes no arguments", call.receiver->span, "T049");
             }
             return inner;
         } else if (call.method == "write") {
             // p.write(value) -> () - write value through the pointer
             if (call.args.size() != 1) {
-                error("Pointer write() requires exactly one argument", call.receiver->span);
+                error("Pointer write() requires exactly one argument", call.receiver->span, "T049");
             } else {
                 TypePtr arg_type = check_expr(*call.args[0]);
                 TypePtr resolved_inner = env_.resolve(inner);
@@ -1315,20 +1315,21 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 if (!types_compatible(resolved_inner, resolved_arg)) {
                     error("Type mismatch in pointer write: expected " + type_to_string(inner) +
                               ", got " + type_to_string(arg_type),
-                          call.args[0]->span);
+                          call.args[0]->span, "T001");
                 }
             }
             return make_unit();
         } else if (call.method == "is_null") {
             // p.is_null() -> Bool
             if (!call.args.empty()) {
-                error("Pointer is_null() takes no arguments", call.receiver->span);
+                error("Pointer is_null() takes no arguments", call.receiver->span, "T049");
             }
             return make_bool();
         } else if (call.method == "offset") {
             // p.offset(count) -> *T - returns pointer offset by count elements
             if (call.args.size() != 1) {
-                error("Pointer offset() requires exactly one argument", call.receiver->span);
+                error("Pointer offset() requires exactly one argument", call.receiver->span,
+                      "T049");
             } else {
                 TypePtr arg_type = check_expr(*call.args[0]);
                 // Allow I32 or I64 for offset
@@ -1336,12 +1337,13 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                                      (arg_type->as<PrimitiveType>().kind == PrimitiveKind::I32 ||
                                       arg_type->as<PrimitiveType>().kind == PrimitiveKind::I64));
                 if (!valid_offset) {
-                    error("Pointer offset() requires I32 or I64 argument", call.args[0]->span);
+                    error("Pointer offset() requires I32 or I64 argument", call.args[0]->span,
+                          "T001");
                 }
             }
             return receiver_type; // Return same pointer type
         } else {
-            error("Unknown pointer method '" + call.method + "'", call.receiver->span);
+            error("Unknown pointer method '" + call.method + "'", call.receiver->span, "T049");
             return make_unit();
         }
     }
@@ -1464,7 +1466,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 }
             }
             error("Unknown method '" + call.method + "' on class '" + class_type.name + "'",
-                  call.receiver->span);
+                  call.receiver->span, "T006");
         }
     }
 
@@ -1491,7 +1493,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 }
             }
             error("Unknown method '" + call.method + "' on behavior '" + dyn.behavior_name + "'",
-                  call.receiver->span);
+                  call.receiver->span, "T006");
         }
     }
 
@@ -2248,7 +2250,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                             error("Wrong number of arguments: expected " +
                                       std::to_string(func.params.size()) + ", got " +
                                       std::to_string(call.args.size()),
-                                  call.receiver->span);
+                                  call.receiver->span, "T004");
                         }
                         // Type check arguments
                         for (size_t i = 0; i < std::min(call.args.size(), func.params.size());
@@ -2323,7 +2325,8 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                 break;
             }
         }
-        error("Unknown field: " + field.field + " on class " + class_type.name, field.object->span);
+        error("Unknown field: " + field.field + " on class " + class_type.name, field.object->span,
+              "T005");
     }
 
     if (obj_type->is<NamedType>()) {
@@ -2358,7 +2361,8 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                     break;
                 }
             }
-            error("Unknown field: " + field.field + " on class " + named.name, field.object->span);
+            error("Unknown field: " + field.field + " on class " + named.name, field.object->span,
+                  "T005");
             return make_unit();
         }
 
@@ -2387,7 +2391,7 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                         }
                     }
                     error("Unknown field: " + field.field + " on Ptr[" + inner_named.name + "]",
-                          field.object->span);
+                          field.object->span, "T005");
                     return make_unit();
                 }
             }
@@ -2460,7 +2464,7 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                 }
             }
 
-            error("Unknown field: " + field.field, field.object->span);
+            error("Unknown field: " + field.field, field.object->span, "T005");
         }
     }
 
@@ -2472,7 +2476,7 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                 return tuple.elements[idx];
             }
         } catch (...) {}
-        error("Invalid tuple field: " + field.field, field.object->span);
+        error("Invalid tuple field: " + field.field, field.object->span, "T036");
     }
 
     return make_unit();
@@ -2573,7 +2577,7 @@ auto TypeChecker::check_is(const parser::IsExpr& is_expr) -> TypePtr {
 auto TypeChecker::check_await(const parser::AwaitExpr& await_expr, SourceSpan span) -> TypePtr {
     // Check that we're in an async function
     if (!in_async_func_) {
-        error("Cannot use `.await` outside of an async function", span);
+        error("Cannot use `.await` outside of an async function", span, "T032");
         return make_unit();
     }
 
@@ -2655,13 +2659,13 @@ auto TypeChecker::check_lowlevel(const parser::LowlevelExpr& lowlevel) -> TypePt
 auto TypeChecker::check_base(const parser::BaseExpr& base) -> TypePtr {
     // Verify we're in a class context with a parent class
     if (!current_self_type_) {
-        error("'base' can only be used inside a class method", base.span);
+        error("'base' can only be used inside a class method", base.span, "T048");
         return make_unit();
     }
 
     // Check if self type is a ClassType
     if (!current_self_type_->is<ClassType>()) {
-        error("'base' can only be used inside a class method", base.span);
+        error("'base' can only be used inside a class method", base.span, "T048");
         return make_unit();
     }
 
@@ -2669,12 +2673,12 @@ auto TypeChecker::check_base(const parser::BaseExpr& base) -> TypePtr {
     auto class_def = env_.lookup_class(class_type.name);
 
     if (!class_def.has_value()) {
-        error("Class '" + class_type.name + "' not found", base.span);
+        error("Class '" + class_type.name + "' not found", base.span, "T046");
         return make_unit();
     }
 
     if (!class_def->base_class.has_value()) {
-        error("Class '" + class_type.name + "' has no base class", base.span);
+        error("Class '" + class_type.name + "' has no base class", base.span, "T046");
         return make_unit();
     }
 
@@ -2682,7 +2686,7 @@ auto TypeChecker::check_base(const parser::BaseExpr& base) -> TypePtr {
     auto base_class_def = env_.lookup_class(base_class_name);
 
     if (!base_class_def.has_value()) {
-        error("Base class '" + base_class_name + "' not found", base.span);
+        error("Base class '" + base_class_name + "' not found", base.span, "T046");
         return make_unit();
     }
 
@@ -2701,7 +2705,7 @@ auto TypeChecker::check_base(const parser::BaseExpr& base) -> TypePtr {
         }
 
         error("Method '" + base.member + "' not found in base class '" + base_class_name + "'",
-              base.span);
+              base.span, "T006");
         return make_unit();
     } else {
         // Field access on base class
@@ -2712,7 +2716,7 @@ auto TypeChecker::check_base(const parser::BaseExpr& base) -> TypePtr {
         }
 
         error("Field '" + base.member + "' not found in base class '" + base_class_name + "'",
-              base.span);
+              base.span, "T005");
         return make_unit();
     }
 }
@@ -2723,20 +2727,20 @@ auto TypeChecker::check_new(const parser::NewExpr& new_expr) -> TypePtr {
     if (!new_expr.class_type.segments.empty()) {
         class_name = new_expr.class_type.segments.back();
     } else {
-        error("Invalid class name in new expression", new_expr.span);
+        error("Invalid class name in new expression", new_expr.span, "T002");
         return make_unit();
     }
 
     auto class_def = env_.lookup_class(class_name);
 
     if (!class_def.has_value()) {
-        error("Class '" + class_name + "' not found", new_expr.span);
+        error("Class '" + class_name + "' not found", new_expr.span, "T046");
         return make_unit();
     }
 
     // Check if class is abstract
     if (class_def->is_abstract) {
-        error("Cannot instantiate abstract class '" + class_name + "'", new_expr.span);
+        error("Cannot instantiate abstract class '" + class_name + "'", new_expr.span, "T040");
         return make_unit();
     }
 

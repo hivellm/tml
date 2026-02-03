@@ -55,6 +55,7 @@ struct LLVMGenError {
     std::string message;            ///< Error description.
     SourceSpan span;                ///< Source location.
     std::vector<std::string> notes; ///< Additional context.
+    std::string code;               ///< Error code (e.g., "C001"). Empty uses default.
 };
 
 /// Options for LLVM IR generation.
@@ -245,6 +246,8 @@ private:
         std::string llvm_func_type;           // e.g., "i32 (i32)"
         std::string ret_type;                 // e.g., "i32"
         std::vector<std::string> param_types; // e.g., {"i32", "%struct.Layout"}
+        bool is_extern = false;               // true for @extern FFI functions
+        std::string tml_name;                 // Original TML name for coverage tracking
     };
     std::unordered_map<std::string, FuncInfo> functions_;
 
@@ -1127,6 +1130,7 @@ private:
 
     // Utility
     void report_error(const std::string& msg, const SourceSpan& span);
+    void report_error(const std::string& msg, const SourceSpan& span, const std::string& code);
 
     // Struct field access helpers
     auto get_field_index(const std::string& struct_name, const std::string& field_name) -> int;

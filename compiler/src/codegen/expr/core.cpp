@@ -30,6 +30,9 @@
 #include "codegen/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"
 
+#include <iomanip>
+#include <sstream>
+
 namespace tml::codegen {
 
 auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
@@ -103,7 +106,18 @@ auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
         // storing a double value to a float variable (var_type == "float" && last_expr_type_ ==
         // "double").
         last_expr_type_ = "double";
-        return std::to_string(float_val.value);
+        // Use full precision for double literals (17 significant digits for IEEE 754)
+        // std::to_string only gives 6 digits which causes precision loss
+        std::ostringstream oss;
+        oss << std::setprecision(17) << float_val.value;
+        std::string result = oss.str();
+        // LLVM requires a decimal point to recognize float literals
+        // e.g., "0" must become "0.0", not just "0"
+        if (result.find('.') == std::string::npos && result.find('e') == std::string::npos &&
+            result.find('E') == std::string::npos) {
+            result += ".0";
+        }
+        return result;
     }
     case lexer::TokenKind::BoolLiteral:
         last_expr_type_ = "i1";
@@ -431,7 +445,7 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
         }
     }
 
-    report_error("Unknown variable: " + ident.name, ident.span);
+    report_error("Unknown variable: " + ident.name, ident.span, "C004");
     last_expr_type_ = "i32";
     return "0";
 }

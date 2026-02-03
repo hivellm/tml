@@ -161,6 +161,18 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 expected_enum_type_ = field_type;
             }
 
+            // Set expected_literal_type_ for integer fields to allow coercion of literals
+            if (field_type == "i8") {
+                expected_literal_type_ = "i8";
+                expected_literal_is_unsigned_ = false;
+            } else if (field_type == "i16") {
+                expected_literal_type_ = "i16";
+                expected_literal_is_unsigned_ = false;
+            } else if (field_type == "i64") {
+                expected_literal_type_ = "i64";
+                expected_literal_is_unsigned_ = false;
+            }
+
             std::string field_val = gen_expr(*s.fields[i].second);
 
             // Mark variable as consumed if field value is an identifier (move semantics)
@@ -169,8 +181,10 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 mark_var_consumed(ident.name);
             }
 
-            // Restore expected_enum_type_
+            // Restore expected types
             expected_enum_type_ = saved_expected_enum_type;
+            expected_literal_type_.clear();
+            expected_literal_is_unsigned_ = false;
 
             if (field_type.empty()) {
                 field_type = last_expr_type_;
@@ -211,6 +225,19 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 expected_enum_type_ = field_type;
             }
 
+            // Set expected_literal_type_ for integer fields to allow coercion of literals
+            // This handles cases like `head: -1` where -1 should be i64 not i32
+            if (field_type == "i8") {
+                expected_literal_type_ = "i8";
+                expected_literal_is_unsigned_ = false;
+            } else if (field_type == "i16") {
+                expected_literal_type_ = "i16";
+                expected_literal_is_unsigned_ = false;
+            } else if (field_type == "i64") {
+                expected_literal_type_ = "i64";
+                expected_literal_is_unsigned_ = false;
+            }
+
             std::string field_val = gen_expr(*s.fields[i].second);
 
             // Mark variable as consumed if field value is an identifier (move semantics)
@@ -219,8 +246,10 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 mark_var_consumed(ident.name);
             }
 
-            // Restore expected_enum_type_
+            // Restore expected types
             expected_enum_type_ = saved_expected_enum_type;
+            expected_literal_type_.clear();
+            expected_literal_is_unsigned_ = false;
 
             if (field_type.empty()) {
                 field_type = last_expr_type_;
@@ -1116,6 +1145,15 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         std::string call_result = gen_expr(*field.object);
         types::TypePtr call_type = infer_expr_type(*field.object);
 
+        // Apply current type substitutions to resolve generic types
+        if (call_type && !current_type_subs_.empty()) {
+            call_type = apply_type_substitutions(call_type, current_type_subs_);
+        }
+
+        TML_DEBUG_LN("[GEN_FIELD] CallExpr/MethodCallExpr - field="
+                     << field.field << " last_expr_type_=" << last_expr_type_
+                     << " call_type=" << (call_type ? types::type_to_string(call_type) : "null"));
+
         // For struct return values, we need to store to a temp alloca
         if (last_expr_type_.starts_with("%struct.")) {
             std::string temp_ptr = fresh_reg();
@@ -1123,6 +1161,46 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             emit_line("  store " + last_expr_type_ + " " + call_result + ", ptr " + temp_ptr);
             struct_ptr = temp_ptr;
             struct_type = last_expr_type_;
+        } else if ((last_expr_type_ == "ptr" || last_expr_type_ == "i64") && call_type &&
+                   call_type->is<types::NamedType>()) {
+            // Check if the semantic type is a struct - if so, treat i64 as ptr
+            // This handles cases like List::get returning an i64 that is actually a struct pointer
+            const auto& named = call_type->as<types::NamedType>();
+
+            // Look up if this is a struct type
+            bool is_struct_type = false;
+            auto struct_def = env_.lookup_struct(named.name);
+            if (struct_def) {
+                is_struct_type = true;
+            } else if (env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    if (mod.structs.find(named.name) != mod.structs.end() ||
+                        mod.internal_structs.find(named.name) != mod.internal_structs.end()) {
+                        is_struct_type = true;
+                        break;
+                    }
+                }
+            }
+
+            if (is_struct_type) {
+                // Convert i64 to ptr if needed
+                if (last_expr_type_ == "i64") {
+                    std::string ptr_val = fresh_reg();
+                    emit_line("  " + ptr_val + " = inttoptr i64 " + call_result + " to ptr");
+                    struct_ptr = ptr_val;
+                } else {
+                    struct_ptr = call_result;
+                }
+
+                // Resolve the struct type
+                if (!named.type_args.empty()) {
+                    std::string mangled = require_struct_instantiation(named.name, named.type_args);
+                    struct_type = "%struct." + mangled;
+                } else {
+                    struct_type = "%struct." + named.name;
+                }
+            }
         } else if (last_expr_type_ == "ptr" && call_type) {
             // Pointer type - the return value is a pointer to the struct
             struct_ptr = call_result;
@@ -1146,7 +1224,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     }
 
     if (struct_type.empty() || struct_ptr.empty()) {
-        report_error("Cannot resolve field access object", field.span);
+        report_error("Cannot resolve field access object", field.span, "C003");
         return "0";
     }
 
@@ -1228,7 +1306,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             size_t idx = std::stoul(field.field);
 
             if (idx >= tuple_type.elements.size()) {
-                report_error("Tuple index out of bounds: " + field.field, field.span);
+                report_error("Tuple index out of bounds: " + field.field, field.span, "C003");
                 return "0";
             }
 

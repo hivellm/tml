@@ -85,7 +85,7 @@ auto Lexer::lex_hex_number() -> Token {
     }
 
     if (pos_ == digit_start) {
-        return make_error_token("Expected hexadecimal digits after '0x'");
+        return make_error_token("Expected hexadecimal digits after '0x'", "L008");
     }
 
     // Parse the value (ignoring underscores)
@@ -100,7 +100,7 @@ auto Lexer::lex_hex_number() -> Token {
     uint64_t value = 0;
     auto result = std::from_chars(digits.data(), digits.data() + digits.size(), value, 16);
     if (result.ec != std::errc{}) {
-        return make_error_token("Invalid hexadecimal number");
+        return make_error_token("Invalid hexadecimal number", "L008");
     }
 
     // Check for type suffix
@@ -112,7 +112,7 @@ auto Lexer::lex_hex_number() -> Token {
         }
         suffix = std::string(source_.slice(suffix_start, pos_));
         if (!is_valid_int_suffix(suffix)) {
-            return make_error_token("Invalid integer type suffix '" + suffix + "'");
+            return make_error_token("Invalid integer type suffix '" + suffix + "'", "L003");
         }
     }
 
@@ -138,7 +138,7 @@ auto Lexer::lex_binary_number() -> Token {
     }
 
     if (pos_ == digit_start) {
-        return make_error_token("Expected binary digits after '0b'");
+        return make_error_token("Expected binary digits after '0b'", "L009");
     }
 
     // Parse the value
@@ -153,7 +153,7 @@ auto Lexer::lex_binary_number() -> Token {
     uint64_t value = 0;
     auto result = std::from_chars(digits.data(), digits.data() + digits.size(), value, 2);
     if (result.ec != std::errc{}) {
-        return make_error_token("Invalid binary number");
+        return make_error_token("Invalid binary number", "L009");
     }
 
     // Check for type suffix
@@ -165,7 +165,7 @@ auto Lexer::lex_binary_number() -> Token {
         }
         suffix = std::string(source_.slice(suffix_start, pos_));
         if (!is_valid_int_suffix(suffix)) {
-            return make_error_token("Invalid integer type suffix '" + suffix + "'");
+            return make_error_token("Invalid integer type suffix '" + suffix + "'", "L003");
         }
     }
 
@@ -191,7 +191,7 @@ auto Lexer::lex_octal_number() -> Token {
     }
 
     if (pos_ == digit_start) {
-        return make_error_token("Expected octal digits after '0o'");
+        return make_error_token("Expected octal digits after '0o'", "L010");
     }
 
     // Parse the value
@@ -206,7 +206,7 @@ auto Lexer::lex_octal_number() -> Token {
     uint64_t value = 0;
     auto result = std::from_chars(digits.data(), digits.data() + digits.size(), value, 8);
     if (result.ec != std::errc{}) {
-        return make_error_token("Invalid octal number");
+        return make_error_token("Invalid octal number", "L010");
     }
 
     // Check for type suffix
@@ -218,7 +218,7 @@ auto Lexer::lex_octal_number() -> Token {
         }
         suffix = std::string(source_.slice(suffix_start, pos_));
         if (!is_valid_int_suffix(suffix)) {
-            return make_error_token("Invalid integer type suffix '" + suffix + "'");
+            return make_error_token("Invalid integer type suffix '" + suffix + "'", "L003");
         }
     }
 
@@ -282,7 +282,7 @@ auto Lexer::lex_decimal_number() -> Token {
         }
 
         if (pos_ == exp_start) {
-            return make_error_token("Expected exponent digits");
+            return make_error_token("Expected exponent digits", "L003");
         }
     }
 
@@ -303,7 +303,7 @@ auto Lexer::lex_decimal_number() -> Token {
         errno = 0;
         double value = std::strtod(digits.c_str(), &end_ptr);
         if (errno == ERANGE || end_ptr != digits.c_str() + digits.size()) {
-            return make_error_token("Invalid floating-point number");
+            return make_error_token("Invalid floating-point number", "L003");
         }
 
         // Check for float type suffix
@@ -315,7 +315,7 @@ auto Lexer::lex_decimal_number() -> Token {
             }
             suffix = std::string(source_.slice(suffix_start, pos_));
             if (!is_valid_float_suffix(suffix)) {
-                return make_error_token("Invalid float type suffix '" + suffix + "'");
+                return make_error_token("Invalid float type suffix '" + suffix + "'", "L003");
             }
         }
 
@@ -336,14 +336,14 @@ auto Lexer::lex_decimal_number() -> Token {
             if (first == 'f') {
                 // This is a float with suffix (e.g., 42f32)
                 if (!is_valid_float_suffix(suffix)) {
-                    return make_error_token("Invalid float type suffix '" + suffix + "'");
+                    return make_error_token("Invalid float type suffix '" + suffix + "'", "L003");
                 }
                 // Parse as integer first then convert to float
                 uint64_t int_value = 0;
                 auto result =
                     std::from_chars(digits.data(), digits.data() + digits.size(), int_value, 10);
                 if (result.ec != std::errc{}) {
-                    return make_error_token("Invalid number");
+                    return make_error_token("Invalid number", "L003");
                 }
 
                 auto token = make_token(TokenKind::FloatLiteral);
@@ -352,7 +352,7 @@ auto Lexer::lex_decimal_number() -> Token {
             } else {
                 // Integer suffix
                 if (!is_valid_int_suffix(suffix)) {
-                    return make_error_token("Invalid integer type suffix '" + suffix + "'");
+                    return make_error_token("Invalid integer type suffix '" + suffix + "'", "L003");
                 }
             }
         }
@@ -361,7 +361,7 @@ auto Lexer::lex_decimal_number() -> Token {
         uint64_t value = 0;
         auto result = std::from_chars(digits.data(), digits.data() + digits.size(), value, 10);
         if (result.ec != std::errc{}) {
-            return make_error_token("Invalid integer number");
+            return make_error_token("Invalid integer number", "L003");
         }
 
         auto token = make_token(TokenKind::IntLiteral);

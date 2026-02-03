@@ -26,6 +26,17 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                                        const std::string& type_name) -> std::optional<std::string> {
     const std::string& method = call.method;
 
+    // Helper lambda to resolve type parameter names to concrete types
+    auto resolve_type_arg_name = [this](const std::string& name) -> std::string {
+        // Check if this is a type parameter that needs resolution
+        auto it = current_type_subs_.find(name);
+        if (it != current_type_subs_.end()) {
+            // Resolve the type parameter to its concrete type
+            return mangle_type(it->second);
+        }
+        return name;
+    };
+
     // List static methods
     if (type_name == "List") {
         std::string struct_name = "List";
@@ -33,7 +44,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         if (!expected_enum_type_.empty() && expected_enum_type_.find("%struct.List__") == 0) {
             struct_name = expected_enum_type_.substr(8); // Remove "%struct." prefix
         }
-        // Otherwise, try to get from explicit path generics like List[I32].new()
+        // Otherwise, try to get from explicit path generics like List[I32].new() or List[T]::new()
         else if (call.receiver->is<parser::PathExpr>()) {
             const auto& pe = call.receiver->as<parser::PathExpr>();
             if (pe.generics.has_value() && !pe.generics->args.empty()) {
@@ -41,7 +52,10 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                     if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
                         const auto& named = arg.as_type()->as<parser::NamedType>();
                         if (!named.path.segments.empty()) {
-                            struct_name += "__" + named.path.segments.back();
+                            std::string type_name_arg = named.path.segments.back();
+                            // Resolve type parameters (T -> concrete type)
+                            std::string resolved = resolve_type_arg_name(type_name_arg);
+                            struct_name += "__" + resolved;
                         }
                     }
                 }
@@ -50,6 +64,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         std::string struct_type = "%struct." + struct_name;
 
         if (method == "new") {
+            emit_coverage("List::new");
             std::string cap = call.args.empty() ? "8" : gen_expr(*call.args[0]);
             std::string cap_type = last_expr_type_;
             std::string cap_i64;
@@ -73,6 +88,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "default") {
+            emit_coverage("List::default");
             std::string handle = fresh_reg();
             emit_line("  " + handle + " = call ptr @list_create(i64 8)");
             std::string list_ptr = fresh_reg();
@@ -95,7 +111,8 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         if (!expected_enum_type_.empty() && expected_enum_type_.find("%struct.HashMap__") == 0) {
             struct_name = expected_enum_type_.substr(8); // Remove "%struct." prefix
         }
-        // Otherwise, try to get from explicit path generics like HashMap[K, V].new()
+        // Otherwise, try to get from explicit path generics like HashMap[K, V].new() or HashMap[K,
+        // V]::new()
         else if (call.receiver->is<parser::PathExpr>()) {
             const auto& pe = call.receiver->as<parser::PathExpr>();
             if (pe.generics.has_value() && !pe.generics->args.empty()) {
@@ -103,7 +120,10 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                     if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
                         const auto& named = arg.as_type()->as<parser::NamedType>();
                         if (!named.path.segments.empty()) {
-                            struct_name += "__" + named.path.segments.back();
+                            std::string type_name_arg = named.path.segments.back();
+                            // Resolve type parameters (T -> concrete type)
+                            std::string resolved = resolve_type_arg_name(type_name_arg);
+                            struct_name += "__" + resolved;
                         }
                     }
                 }
@@ -112,6 +132,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         std::string struct_type = "%struct." + struct_name;
 
         if (method == "new") {
+            emit_coverage("HashMap::new");
             std::string cap = call.args.empty() ? "16" : gen_expr(*call.args[0]);
             std::string cap_i64 = fresh_reg();
             emit_line("  " + cap_i64 + " = sext i32 " + cap + " to i64");
@@ -129,6 +150,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "default") {
+            emit_coverage("HashMap::default");
             std::string handle = fresh_reg();
             emit_line("  " + handle + " = call ptr @hashmap_create(i64 16)");
             std::string map_ptr = fresh_reg();
@@ -149,6 +171,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         std::string struct_type = "%struct.Buffer";
 
         if (method == "new") {
+            emit_coverage("Buffer::new");
             std::string cap = call.args.empty() ? "64" : gen_expr(*call.args[0]);
             std::string cap_i64 = fresh_reg();
             emit_line("  " + cap_i64 + " = sext i32 " + cap + " to i64");
@@ -166,8 +189,49 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "default") {
+            emit_coverage("Buffer::default");
             std::string handle = fresh_reg();
             emit_line("  " + handle + " = call ptr @buffer_create(i64 64)");
+            std::string buf_ptr = fresh_reg();
+            emit_line("  " + buf_ptr + " = alloca " + struct_type);
+            std::string handle_field = fresh_reg();
+            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " + buf_ptr +
+                      ", i32 0, i32 0");
+            emit_line("  store ptr " + handle + ", ptr " + handle_field);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + struct_type + ", ptr " + buf_ptr);
+            last_expr_type_ = struct_type;
+            return result;
+        }
+        if (method == "from_hex") {
+            emit_coverage("Buffer::from_hex");
+            if (call.args.empty()) {
+                report_error("from_hex requires a hex string argument", call.span, "C008");
+                return "0";
+            }
+            std::string hex_arg = gen_expr(*call.args[0]);
+            std::string handle = fresh_reg();
+            emit_line("  " + handle + " = call ptr @buffer_from_hex(ptr " + hex_arg + ")");
+            std::string buf_ptr = fresh_reg();
+            emit_line("  " + buf_ptr + " = alloca " + struct_type);
+            std::string handle_field = fresh_reg();
+            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " + buf_ptr +
+                      ", i32 0, i32 0");
+            emit_line("  store ptr " + handle + ", ptr " + handle_field);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + struct_type + ", ptr " + buf_ptr);
+            last_expr_type_ = struct_type;
+            return result;
+        }
+        if (method == "from_string") {
+            emit_coverage("Buffer::from_string");
+            if (call.args.empty()) {
+                report_error("from_string requires a string argument", call.span, "C008");
+                return "0";
+            }
+            std::string str_arg = gen_expr(*call.args[0]);
+            std::string handle = fresh_reg();
+            emit_line("  " + handle + " = call ptr @buffer_from_string(ptr " + str_arg + ")");
             std::string buf_ptr = fresh_reg();
             emit_line("  " + buf_ptr + " = alloca " + struct_type);
             std::string handle_field = fresh_reg();
@@ -184,6 +248,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
     // File static methods
     if (type_name == "File") {
         if (method == "open_read") {
+            emit_coverage("File::open_read");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string handle = fresh_reg();
             emit_line("  " + handle + " = call ptr @file_open_read(ptr " + path_arg + ")");
@@ -199,6 +264,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "open_write") {
+            emit_coverage("File::open_write");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string handle = fresh_reg();
             emit_line("  " + handle + " = call ptr @file_open_write(ptr " + path_arg + ")");
@@ -214,6 +280,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "open_append") {
+            emit_coverage("File::open_append");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string handle = fresh_reg();
             emit_line("  " + handle + " = call ptr @file_open_append(ptr " + path_arg + ")");
@@ -229,6 +296,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "read_all") {
+            emit_coverage("File::read_all");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @file_read_all(ptr " + path_arg + ")");
@@ -236,6 +304,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "write_all") {
+            emit_coverage("File::write_all");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string content_arg = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
@@ -245,6 +314,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "append_all") {
+            emit_coverage("File::append_all");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string content_arg = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
@@ -258,6 +328,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
     // Path static methods
     if (type_name == "Path") {
         if (method == "exists") {
+            emit_coverage("Path::exists");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i1 @path_exists(ptr " + path_arg + ")");
@@ -265,6 +336,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "is_file") {
+            emit_coverage("Path::is_file");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i1 @path_is_file(ptr " + path_arg + ")");
@@ -272,6 +344,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "is_dir") {
+            emit_coverage("Path::is_dir");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i1 @path_is_dir(ptr " + path_arg + ")");
@@ -279,6 +352,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "create_dir") {
+            emit_coverage("Path::create_dir");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i1 @path_create_dir(ptr " + path_arg + ")");
@@ -286,6 +360,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "create_dir_all") {
+            emit_coverage("Path::create_dir_all");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i1 @path_create_dir_all(ptr " + path_arg + ")");
@@ -293,6 +368,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "remove") {
+            emit_coverage("Path::remove");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i1 @path_remove(ptr " + path_arg + ")");
@@ -300,6 +376,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "remove_dir") {
+            emit_coverage("Path::remove_dir");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i1 @path_remove_dir(ptr " + path_arg + ")");
@@ -307,6 +384,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "rename") {
+            emit_coverage("Path::rename");
             std::string from_arg = gen_expr(*call.args[0]);
             std::string to_arg = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
@@ -316,6 +394,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "copy") {
+            emit_coverage("Path::copy");
             std::string from_arg = gen_expr(*call.args[0]);
             std::string to_arg = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
@@ -325,6 +404,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "join") {
+            emit_coverage("Path::join");
             std::string base_arg = gen_expr(*call.args[0]);
             std::string child_arg = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
@@ -334,6 +414,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "parent") {
+            emit_coverage("Path::parent");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @path_parent(ptr " + path_arg + ")");
@@ -341,6 +422,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "filename") {
+            emit_coverage("Path::filename");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @path_filename(ptr " + path_arg + ")");
@@ -348,6 +430,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "extension") {
+            emit_coverage("Path::extension");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @path_extension(ptr " + path_arg + ")");
@@ -355,6 +438,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
             return result;
         }
         if (method == "absolute") {
+            emit_coverage("Path::absolute");
             std::string path_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @path_absolute(ptr " + path_arg + ")");

@@ -50,6 +50,17 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             if (cmp_type.empty())
                 cmp_type = "i32";
 
+            // Get source location and optional message for better error messages
+            std::string file_literal = add_string_literal(options_.source_file);
+            int line = static_cast<int>(call.span.start.line);
+            std::string msg_literal;
+            if (call.args.size() >= 3) {
+                // User provided a message
+                msg_literal = gen_expr(*call.args[2]);
+            } else {
+                msg_literal = add_string_literal("values not equal");
+            }
+
             // For strings, use str_eq
             if (cmp_type == "ptr" || left_type == "ptr" || right_type == "ptr") {
                 std::string cmp_result = fresh_reg();
@@ -64,8 +75,8 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
                           fail_label);
 
                 emit_line(fail_label + ":");
-                std::string msg = add_string_literal("assertion failed: values not equal");
-                emit_line("  call void @panic(ptr " + msg + ")");
+                emit_line("  call void @assert_tml_loc(i32 0, ptr " + msg_literal + ", ptr " +
+                          file_literal + ", i32 " + std::to_string(line) + ")");
                 emit_line("  unreachable");
 
                 emit_line(ok_label + ":");
@@ -108,8 +119,8 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             emit_line("  br i1 " + cmp_result + ", label %" + ok_label + ", label %" + fail_label);
 
             emit_line(fail_label + ":");
-            std::string msg = add_string_literal("assertion failed: values not equal");
-            emit_line("  call void @panic(ptr " + msg + ")");
+            emit_line("  call void @assert_tml_loc(i32 0, ptr " + msg_literal + ", ptr " +
+                      file_literal + ", i32 " + std::to_string(line) + ")");
             emit_line("  unreachable");
 
             emit_line(ok_label + ":");
@@ -129,6 +140,16 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             std::string right = gen_expr(*call.args[1]);
             std::string right_type = last_expr_type_;
             bool right_unsigned = last_expr_is_unsigned_;
+
+            // Get source location and optional message
+            std::string file_literal = add_string_literal(options_.source_file);
+            int line = static_cast<int>(call.span.start.line);
+            std::string msg_literal;
+            if (call.args.size() >= 3) {
+                msg_literal = gen_expr(*call.args[2]);
+            } else {
+                msg_literal = add_string_literal("values are equal");
+            }
 
             std::string cmp_type = left_type;
             if (cmp_type.empty())
@@ -166,8 +187,8 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             emit_line("  br i1 " + cmp_result + ", label %" + ok_label + ", label %" + fail_label);
 
             emit_line(fail_label + ":");
-            std::string msg = add_string_literal("assertion failed: values are equal");
-            emit_line("  call void @panic(ptr " + msg + ")");
+            emit_line("  call void @assert_tml_loc(i32 0, ptr " + msg_literal + ", ptr " +
+                      file_literal + ", i32 " + std::to_string(line) + ")");
             emit_line("  unreachable");
 
             emit_line(ok_label + ":");
@@ -178,18 +199,33 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
         return "0";
     }
 
-    // assert(condition) - Assert condition is true
+    // assert(condition) or assert(condition, message) - Assert condition is true
     if (fn_name == "assert") {
         if (!call.args.empty()) {
             std::string cond = gen_expr(*call.args[0]);
+
+            // Get optional message argument
+            std::string msg_literal;
+            if (call.args.size() >= 2) {
+                // Message provided as second argument
+                std::string user_msg = gen_expr(*call.args[1]);
+                msg_literal = user_msg; // Already a ptr to string
+            } else {
+                msg_literal = add_string_literal("condition was false");
+            }
+
+            // Get source location for better error messages
+            std::string file_literal = add_string_literal(options_.source_file);
+            int line = static_cast<int>(call.span.start.line);
 
             std::string ok_label = fresh_label("assert_ok");
             std::string fail_label = fresh_label("assert_fail");
             emit_line("  br i1 " + cond + ", label %" + ok_label + ", label %" + fail_label);
 
             emit_line(fail_label + ":");
-            std::string msg = add_string_literal("assertion failed");
-            emit_line("  call void @panic(ptr " + msg + ")");
+            // Use assert_tml_loc with file and line info
+            emit_line("  call void @assert_tml_loc(i32 0, ptr " + msg_literal + ", ptr " +
+                      file_literal + ", i32 " + std::to_string(line) + ")");
             emit_line("  unreachable");
 
             emit_line(ok_label + ":");

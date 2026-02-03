@@ -184,6 +184,37 @@ void assert_tml(int32_t condition, const char* message) {
     }
 }
 
+/**
+ * @brief Asserts a condition with file and line information.
+ *
+ * This version is used when the compiler can provide source location.
+ * Provides much better error messages for debugging test failures.
+ *
+ * @param condition The condition to check.
+ * @param message The assertion message.
+ * @param file The source file name.
+ * @param line The line number.
+ */
+TML_EXPORT void assert_tml_loc(int32_t condition, const char* message, const char* file,
+                               int32_t line) {
+    if (!condition) {
+        // Build assertion failed message with location
+        static char assert_msg[2048];
+        snprintf(assert_msg, sizeof(assert_msg), "assertion failed at %s:%d: %s",
+                 file ? file : "<unknown>", line, message ? message : "(no message)");
+
+        // Use panic mechanism if catching is enabled (DLL test context)
+        if (tml_catching_panic) {
+            snprintf(tml_panic_msg, sizeof(tml_panic_msg), "%s", assert_msg);
+            longjmp(tml_panic_jmp_buf, 1);
+        }
+
+        // Normal mode - print and exit
+        fprintf(stderr, "%s\n", assert_msg);
+        exit(1);
+    }
+}
+
 // ============================================================================
 // Type-Specific Print Variants (for polymorphic print)
 // ============================================================================

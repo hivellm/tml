@@ -40,6 +40,7 @@ struct TypeError {
     std::string message;            ///< Error message.
     SourceSpan span;                ///< Error location.
     std::vector<std::string> notes; ///< Additional notes and suggestions.
+    std::string code;               ///< Error code (e.g., "T001"). Empty uses default.
 };
 
 /// Type checker for TML modules.
@@ -221,6 +222,7 @@ private:
     bool type_satisfies_lifetime_bound(TypePtr type, const std::string& lifetime_bound);
 
     void error(const std::string& message, SourceSpan span);
+    void error(const std::string& message, SourceSpan span, const std::string& code);
 
     // Error message improvements
     auto find_similar_names(const std::string& name, const std::vector<std::string>& candidates,

@@ -338,7 +338,7 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
     if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
         error("Cannot redefine builtin type '" + decl.name +
                   "'. Use the builtin type instead of defining your own.",
-              decl.span);
+              decl.span, "T038");
         return;
     }
 
@@ -382,7 +382,7 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
     if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
         error("Cannot redefine builtin type '" + decl.name +
                   "'. Use the builtin type instead of defining your own.",
-              decl.span);
+              decl.span, "T038");
         return;
     }
 
@@ -419,7 +419,7 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
     if (RESERVED_BEHAVIOR_NAMES.count(decl.name) > 0) {
         error("Cannot redefine builtin behavior '" + decl.name +
                   "'. Use the builtin behavior instead of defining your own.",
-              decl.span);
+              decl.span, "T038");
         return;
     }
 
@@ -531,7 +531,7 @@ void TypeChecker::register_type_alias(const parser::TypeAliasDecl& decl) {
     if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
         error("Cannot redefine builtin type '" + decl.name +
                   "'. Use the builtin type instead of defining your own.",
-              decl.span);
+              decl.span, "T038");
         return;
     }
 
@@ -559,7 +559,7 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
 
         if (!module_opt.has_value()) {
             errors_.push_back(
-                TypeError{"Module '" + module_path + "' not found", use_decl.span, {}});
+                TypeError{"Module '" + module_path + "' not found", use_decl.span, {}, "T027"});
             return;
         }
 
@@ -578,7 +578,7 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
 
         if (!module_opt.has_value()) {
             errors_.push_back(
-                TypeError{"Module '" + module_path + "' not found", use_decl.span, {}});
+                TypeError{"Module '" + module_path + "' not found", use_decl.span, {}, "T027"});
             return;
         }
 
@@ -615,7 +615,8 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
     }
 
     if (!module_opt.has_value()) {
-        errors_.push_back(TypeError{"Module '" + module_path + "' not found", use_decl.span, {}});
+        errors_.push_back(
+            TypeError{"Module '" + module_path + "' not found", use_decl.span, {}, "T027"});
         return;
     }
 
@@ -632,12 +633,12 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
             error("Invalid @extern ABI '" + abi +
                       "'. "
                       "Valid options: \"c\", \"c++\", \"stdcall\", \"fastcall\", \"thiscall\"",
-                  func.span);
+                  func.span, "T028");
         }
 
         // @extern functions must not have a body
         if (func.body.has_value()) {
-            error("@extern function '" + func.name + "' must not have a body", func.span);
+            error("@extern function '" + func.name + "' must not have a body", func.span, "T028");
         }
     }
 
@@ -646,7 +647,7 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         if (lib.find("..") != std::string::npos) {
             error("@link path '" + lib +
                       "' contains '..' which is not allowed for security reasons",
-                  func.span);
+                  func.span, "T028");
         }
     }
 
@@ -915,7 +916,7 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
                     error("Function '" + func.name + "' with return type " +
                               type_to_string(return_type) +
                               " must have an explicit return statement",
-                          func.span);
+                          func.span, "T029");
                 }
             }
         }
@@ -941,7 +942,7 @@ void TypeChecker::check_const_decl(const parser::ConstDecl& const_decl) {
     if (!types_equal(init_type, declared_type)) {
         error("Type mismatch in const initializer: expected " + type_to_string(declared_type) +
                   ", found " + type_to_string(init_type),
-              const_decl.value->span);
+              const_decl.value->span, "T001");
         return;
     }
 
@@ -1108,7 +1109,7 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
         if (!types_equal(init_type, declared_type)) {
             error("Type mismatch in const initializer: expected " + type_to_string(declared_type) +
                       ", found " + type_to_string(init_type),
-                  const_decl.value->span);
+                  const_decl.value->span, "T001");
         }
     }
 
@@ -1128,7 +1129,7 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
 void TypeChecker::register_interface_decl(const parser::InterfaceDecl& decl) {
     // Check if the type name is reserved
     if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
-        error("Cannot redefine builtin type '" + decl.name + "'", decl.span);
+        error("Cannot redefine builtin type '" + decl.name + "'", decl.span, "T038");
         return;
     }
 
@@ -1197,7 +1198,7 @@ void TypeChecker::register_interface_decl(const parser::InterfaceDecl& decl) {
 void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
     // Check if the type name is reserved
     if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
-        error("Cannot redefine builtin type '" + decl.name + "'", decl.span);
+        error("Cannot redefine builtin type '" + decl.name + "'", decl.span, "T038");
         return;
     }
 
@@ -1429,7 +1430,7 @@ void TypeChecker::check_interface_decl(const parser::InterfaceDecl& iface) {
         if (!ext.segments.empty()) {
             const std::string& name = ext.segments.back();
             if (!env_.lookup_interface(name).has_value()) {
-                error("Interface '" + name + "' not found", iface.span);
+                error("Interface '" + name + "' not found", iface.span, "T047");
             }
         }
     }
@@ -1479,7 +1480,7 @@ void TypeChecker::validate_value_class(const parser::ClassDecl& cls) {
 
     // @value classes cannot be abstract
     if (cls.is_abstract) {
-        error("@value class '" + cls.name + "' cannot be abstract", cls.span);
+        error("@value class '" + cls.name + "' cannot be abstract", cls.span, "T043");
     }
 
     // @value classes cannot have virtual methods
@@ -1487,7 +1488,7 @@ void TypeChecker::validate_value_class(const parser::ClassDecl& cls) {
         if (method.is_virtual || method.is_abstract) {
             error("@value class '" + cls.name + "' cannot have virtual method '" + method.name +
                       "'. Value classes use direct dispatch only.",
-                  method.span);
+                  method.span, "T042");
         }
     }
 
@@ -1500,7 +1501,7 @@ void TypeChecker::validate_value_class(const parser::ClassDecl& cls) {
             if (base_def.has_value() && !base_def->is_value) {
                 error("@value class '" + cls.name + "' cannot extend non-value class '" +
                           base_name + "'. Base class must also be @value.",
-                      cls.span);
+                      cls.span, "T041");
             }
         }
     }
@@ -1528,12 +1529,12 @@ void TypeChecker::validate_pool_class(const parser::ClassDecl& cls) {
     if (is_value) {
         error("@pool and @value are mutually exclusive on class '" + cls.name +
                   "'. Use one or the other.",
-              cls.span);
+              cls.span, "T044");
     }
 
     // @pool classes cannot be abstract
     if (cls.is_abstract) {
-        error("@pool class '" + cls.name + "' cannot be abstract", cls.span);
+        error("@pool class '" + cls.name + "' cannot be abstract", cls.span, "T040");
     }
 
     // @pool classes should not be sealed (pooling benefits from inheritance)
@@ -1605,7 +1606,7 @@ void TypeChecker::validate_abstract_methods(const parser::ClassDecl& cls) {
         if (!implemented) {
             error("Non-abstract class '" + cls.name + "' does not implement abstract method '" +
                       method_name + "' from '" + declaring_class + "'",
-                  cls.span);
+                  cls.span, "T045");
         }
     }
 }
@@ -1625,7 +1626,7 @@ void TypeChecker::validate_inheritance(const parser::ClassDecl& cls) {
     // Check base class exists
     auto base_def = env_.lookup_class(base_name);
     if (!base_def.has_value()) {
-        error("Base class '" + base_name + "' not found", cls.span);
+        error("Base class '" + base_name + "' not found", cls.span, "T046");
         return;
     }
 
@@ -1641,7 +1642,7 @@ void TypeChecker::validate_inheritance(const parser::ClassDecl& cls) {
         }
         // Only allow if both classes are @value
         if (!this_is_value || !base_def->is_value) {
-            error("Cannot extend sealed class '" + base_name + "'", cls.span);
+            error("Cannot extend sealed class '" + base_name + "'", cls.span, "T041");
             return;
         }
     }
@@ -1652,7 +1653,8 @@ void TypeChecker::validate_inheritance(const parser::ClassDecl& cls) {
 
     while (!current.empty()) {
         if (visited.count(current) > 0) {
-            error("Circular inheritance detected involving class '" + cls.name + "'", cls.span);
+            error("Circular inheritance detected involving class '" + cls.name + "'", cls.span,
+                  "T039");
             return;
         }
         visited.insert(current);
@@ -1666,14 +1668,16 @@ void TypeChecker::validate_inheritance(const parser::ClassDecl& cls) {
 
     // Check if current class would create a cycle
     if (visited.count(cls.name) > 0) {
-        error("Circular inheritance: class '" + cls.name + "' cannot extend itself", cls.span);
+        error("Circular inheritance: class '" + cls.name + "' cannot extend itself", cls.span,
+              "T039");
     }
 }
 
 void TypeChecker::validate_override(const parser::ClassDecl& cls,
                                     const parser::ClassMethod& method) {
     if (!cls.extends.has_value()) {
-        error("Cannot override method '" + method.name + "': class has no base class", method.span);
+        error("Cannot override method '" + method.name + "': class has no base class", method.span,
+              "T006");
         return;
     }
 
@@ -1704,7 +1708,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
                 if (!is_virtual && !parent_method.is_override) {
                     error("Cannot override non-virtual method '" + method.name + "' from '" +
                               current + "'",
-                          method.span);
+                          method.span, "T006");
                     return;
                 }
 
@@ -1718,7 +1722,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
                 if (!types_equal(override_ret, parent_ret)) {
                     error("Override method '" + method.name +
                               "' has different return type than base method",
-                          method.span);
+                          method.span, "T016");
                     return;
                 }
 
@@ -1737,7 +1741,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
                     error("Override method '" + method.name + "' has " +
                               std::to_string(override_params) +
                               " parameters, but base method has " + std::to_string(parent_params),
-                          method.span);
+                          method.span, "T004");
                     return;
                 }
 
@@ -1759,7 +1763,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
                     if (!types_equal(override_param_type, parent_param_type)) {
                         error("Override method '" + method.name + "' parameter " +
                                   std::to_string(i + 1) + " has different type than base method",
-                              method.span);
+                              method.span, "T001");
                         return;
                     }
                 }
@@ -1780,7 +1784,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
 
     if (!found) {
         error("Method '" + method.name + "' marked as override but not found in any base class",
-              method.span);
+              method.span, "T006");
     }
 }
 
@@ -1796,7 +1800,7 @@ void TypeChecker::validate_interface_impl(const parser::ClassDecl& cls) {
         auto iface_def = env_.lookup_interface(iface_name);
 
         if (!iface_def.has_value()) {
-            error("Interface '" + iface_name + "' not found", cls.span);
+            error("Interface '" + iface_name + "' not found", cls.span, "T047");
             continue;
         }
 
@@ -1823,7 +1827,7 @@ void TypeChecker::validate_interface_impl(const parser::ClassDecl& cls) {
                                   "' has incompatible return type with interface '" + iface_name +
                                   "'. Expected '" + type_to_string(expected_return) +
                                   "' but got '" + type_to_string(actual_return) + "'",
-                              cls_method.span);
+                              cls_method.span, "T016");
                     }
 
                     // 2. Check parameter count (excluding 'this')
@@ -1840,7 +1844,7 @@ void TypeChecker::validate_interface_impl(const parser::ClassDecl& cls) {
                                   "' has wrong number of parameters. Interface '" + iface_name +
                                   "' expects " + std::to_string(expected_params) +
                                   " parameters but got " + std::to_string(actual_params),
-                              cls_method.span);
+                              cls_method.span, "T004");
                     } else {
                         // 3. Check parameter types
                         size_t param_idx = 0;
@@ -1861,7 +1865,7 @@ void TypeChecker::validate_interface_impl(const parser::ClassDecl& cls) {
                                               iface_name + "'. Expected '" +
                                               type_to_string(expected_param_type) + "' but got '" +
                                               type_to_string(actual_param_type) + "'",
-                                          cls_method.span);
+                                          cls_method.span, "T001");
                                 }
                             }
                             param_idx++;
@@ -1874,7 +1878,7 @@ void TypeChecker::validate_interface_impl(const parser::ClassDecl& cls) {
             if (!implemented) {
                 error("Class '" + cls.name + "' does not implement method '" +
                           iface_method.sig.name + "' from interface '" + iface_name + "'",
-                      cls.span);
+                      cls.span, "T026");
             }
         }
     }
@@ -2029,7 +2033,7 @@ bool TypeChecker::check_member_visibility(MemberVisibility vis, const std::strin
                       "' from " +
                       (current_class_name.empty() ? "outside any class"
                                                   : "class '" + current_class_name + "'"),
-                  span);
+                  span, "T048");
             return false;
         }
         return true;
@@ -2040,7 +2044,7 @@ bool TypeChecker::check_member_visibility(MemberVisibility vis, const std::strin
         if (current_class_name.empty()) {
             error("Cannot access protected member '" + member_name + "' of class '" +
                       defining_class + "' from outside any class",
-                  span);
+                  span, "T048");
             return false;
         }
 
@@ -2048,7 +2052,7 @@ bool TypeChecker::check_member_visibility(MemberVisibility vis, const std::strin
             error("Cannot access protected member '" + member_name + "' of class '" +
                       defining_class + "' from class '" + current_class_name +
                       "' which is not a subclass",
-                  span);
+                  span, "T048");
             return false;
         }
         return true;

@@ -1,0 +1,320 @@
+// Tests for zlib/options module
+
+use test
+use std::zlib::options::{ZlibOptions, BrotliOptions, ZstdOptions}
+use std::zlib::constants::*
+
+// =============================================================================
+// ZlibOptions Tests
+// =============================================================================
+
+@test
+func test_zlib_options_default() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    assert_eq(opts.flush, Z_NO_FLUSH, "default flush should be Z_NO_FLUSH")
+    assert_eq(opts.finish_flush, Z_FINISH, "default finish_flush should be Z_FINISH")
+    assert_eq(opts.chunk_size, DEFAULT_CHUNK_SIZE, "default chunk_size should be 16384")
+    assert_eq(opts.window_bits, Z_DEFAULT_WINDOWBITS, "default window_bits should be 15")
+    assert_eq(opts.level, Z_DEFAULT_COMPRESSION, "default level should be -1")
+    assert_eq(opts.mem_level, Z_DEFAULT_MEMLEVEL, "default mem_level should be 8")
+    assert_eq(opts.strategy, Z_DEFAULT_STRATEGY, "default strategy should be 0")
+    // Note: dictionary field uses Maybe[Buffer], testing omitted due to compiler issue
+    assert_eq(opts.max_output_length, 0, "default max_output_length should be 0")
+    assert_eq(opts.info, false, "default info should be false")
+    return 0
+}
+
+@test
+func test_zlib_options_deflate_raw() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::deflate_raw()
+    assert_eq(opts.window_bits, -Z_DEFAULT_WINDOWBITS, "deflate_raw window_bits should be negative")
+    assert_eq(opts.level, Z_DEFAULT_COMPRESSION, "deflate_raw level should be default")
+    return 0
+}
+
+@test
+func test_zlib_options_gzip() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::gzip()
+    let expected_window_bits: I32 = Z_DEFAULT_WINDOWBITS + GZIP_WINDOW_OFFSET
+    assert_eq(opts.window_bits, expected_window_bits, "gzip window_bits should include offset")
+    return 0
+}
+
+@test
+func test_zlib_options_auto_detect() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::auto_detect()
+    let expected_window_bits: I32 = Z_DEFAULT_WINDOWBITS + AUTO_DETECT_WINDOW_OFFSET
+    assert_eq(opts.window_bits, expected_window_bits, "auto_detect window_bits should include offset")
+    return 0
+}
+
+@test
+func test_zlib_options_with_level() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let opts2: ZlibOptions = opts.with_level(9)
+    assert_eq(opts2.level, 9, "with_level should set level")
+    assert_eq(opts2.flush, opts.flush, "with_level should preserve flush")
+    return 0
+}
+
+@test
+func test_zlib_options_with_window_bits() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let opts2: ZlibOptions = opts.with_window_bits(12)
+    assert_eq(opts2.window_bits, 12, "with_window_bits should set window_bits")
+    assert_eq(opts2.level, opts.level, "with_window_bits should preserve level")
+    return 0
+}
+
+@test
+func test_zlib_options_with_mem_level() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let opts2: ZlibOptions = opts.with_mem_level(5)
+    assert_eq(opts2.mem_level, 5, "with_mem_level should set mem_level")
+    return 0
+}
+
+@test
+func test_zlib_options_with_strategy() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let opts2: ZlibOptions = opts.with_strategy(Z_HUFFMAN_ONLY)
+    assert_eq(opts2.strategy, Z_HUFFMAN_ONLY, "with_strategy should set strategy")
+    return 0
+}
+
+@test
+func test_zlib_options_with_chunk_size() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let opts2: ZlibOptions = opts.with_chunk_size(32768)
+    assert_eq(opts2.chunk_size, 32768, "with_chunk_size should set chunk_size")
+    return 0
+}
+
+@test
+func test_zlib_options_with_max_output() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let opts2: ZlibOptions = opts.with_max_output(1048576)
+    assert_eq(opts2.max_output_length, 1048576, "with_max_output should set max_output_length")
+    return 0
+}
+
+@test
+func test_zlib_options_chaining() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+        .with_level(6)
+        .with_window_bits(14)
+        .with_mem_level(7)
+    assert_eq(opts.level, 6, "chained level should be set")
+    assert_eq(opts.window_bits, 14, "chained window_bits should be set")
+    assert_eq(opts.mem_level, 7, "chained mem_level should be set")
+    return 0
+}
+
+// =============================================================================
+// BrotliOptions Tests
+// =============================================================================
+
+@test
+func test_brotli_options_default() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default()
+    assert_eq(opts.flush, BROTLI_OPERATION_PROCESS, "default flush should be BROTLI_OPERATION_PROCESS")
+    assert_eq(opts.finish_flush, BROTLI_OPERATION_FINISH, "default finish_flush should be BROTLI_OPERATION_FINISH")
+    assert_eq(opts.chunk_size, DEFAULT_CHUNK_SIZE, "default chunk_size should be 16384")
+    assert_eq(opts.quality, BROTLI_DEFAULT_QUALITY, "default quality should be 4")
+    assert_eq(opts.mode, BROTLI_MODE_GENERIC, "default mode should be BROTLI_MODE_GENERIC")
+    assert_eq(opts.lgwin, BROTLI_DEFAULT_WINDOW, "default lgwin should be 22")
+    assert_eq(opts.lgblock, 0, "default lgblock should be 0")
+    assert_eq(opts.size_hint, 0, "default size_hint should be 0")
+    assert_eq(opts.large_window, false, "default large_window should be false")
+    assert_eq(opts.disable_literal_context_modeling, false, "default disable_literal_context_modeling should be false")
+    assert_eq(opts.max_output_length, 0, "default max_output_length should be 0")
+    return 0
+}
+
+@test
+func test_brotli_options_text() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::text()
+    assert_eq(opts.mode, BROTLI_MODE_TEXT, "text mode should be BROTLI_MODE_TEXT")
+    assert_eq(opts.quality, BROTLI_DEFAULT_QUALITY, "text quality should be default")
+    return 0
+}
+
+@test
+func test_brotli_options_font() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::font()
+    assert_eq(opts.mode, BROTLI_MODE_FONT, "font mode should be BROTLI_MODE_FONT")
+    return 0
+}
+
+@test
+func test_brotli_options_fast() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::fast()
+    assert_eq(opts.quality, BROTLI_MIN_QUALITY, "fast quality should be BROTLI_MIN_QUALITY")
+    assert_eq(opts.mode, BROTLI_MODE_GENERIC, "fast mode should be BROTLI_MODE_GENERIC")
+    return 0
+}
+
+@test
+func test_brotli_options_best() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::best()
+    assert_eq(opts.quality, BROTLI_MAX_QUALITY, "best quality should be BROTLI_MAX_QUALITY")
+    return 0
+}
+
+@test
+func test_brotli_options_with_quality() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default()
+    let opts2: BrotliOptions = opts.with_quality(8)
+    assert_eq(opts2.quality, 8, "with_quality should set quality")
+    assert_eq(opts2.mode, opts.mode, "with_quality should preserve mode")
+    return 0
+}
+
+@test
+func test_brotli_options_with_mode() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default()
+    let opts2: BrotliOptions = opts.with_mode(BROTLI_MODE_TEXT)
+    assert_eq(opts2.mode, BROTLI_MODE_TEXT, "with_mode should set mode")
+    return 0
+}
+
+@test
+func test_brotli_options_with_lgwin() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default()
+    let opts2: BrotliOptions = opts.with_lgwin(18)
+    assert_eq(opts2.lgwin, 18, "with_lgwin should set lgwin")
+    return 0
+}
+
+@test
+func test_brotli_options_with_chunk_size() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default()
+    let opts2: BrotliOptions = opts.with_chunk_size(65536)
+    assert_eq(opts2.chunk_size, 65536, "with_chunk_size should set chunk_size")
+    return 0
+}
+
+@test
+func test_brotli_options_with_max_output() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default()
+    let opts2: BrotliOptions = opts.with_max_output(2097152)
+    assert_eq(opts2.max_output_length, 2097152, "with_max_output should set max_output_length")
+    return 0
+}
+
+@test
+func test_brotli_options_chaining() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default()
+        .with_quality(10)
+        .with_mode(BROTLI_MODE_TEXT)
+        .with_lgwin(20)
+    assert_eq(opts.quality, 10, "chained quality should be set")
+    assert_eq(opts.mode, BROTLI_MODE_TEXT, "chained mode should be set")
+    assert_eq(opts.lgwin, 20, "chained lgwin should be set")
+    return 0
+}
+
+// =============================================================================
+// ZstdOptions Tests
+// =============================================================================
+
+@test
+func test_zstd_options_default() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    assert_eq(opts.flush, ZSTD_E_CONTINUE, "default flush should be ZSTD_E_CONTINUE")
+    assert_eq(opts.finish_flush, ZSTD_E_END, "default finish_flush should be ZSTD_E_END")
+    assert_eq(opts.chunk_size, DEFAULT_CHUNK_SIZE, "default chunk_size should be 16384")
+    assert_eq(opts.level, ZSTD_DEFAULT_CLEVEL, "default level should be 3")
+    assert_eq(opts.strategy, 0, "default strategy should be 0")
+    assert_eq(opts.window_log, 0, "default window_log should be 0")
+    assert_eq(opts.enable_ldm, false, "default enable_ldm should be false")
+    assert_eq(opts.content_size, true, "default content_size should be true")
+    assert_eq(opts.checksum, false, "default checksum should be false")
+    assert_eq(opts.dict_id, true, "default dict_id should be true")
+    assert_eq(opts.nb_workers, 0, "default nb_workers should be 0")
+    assert_eq(opts.pledged_src_size, 0, "default pledged_src_size should be 0")
+    assert_eq(opts.max_output_length, 0, "default max_output_length should be 0")
+    return 0
+}
+
+@test
+func test_zstd_options_fast() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::fast()
+    assert_eq(opts.level, ZSTD_MIN_CLEVEL, "fast level should be ZSTD_MIN_CLEVEL")
+    return 0
+}
+
+@test
+func test_zstd_options_best() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::best()
+    assert_eq(opts.level, ZSTD_MAX_CLEVEL, "best level should be ZSTD_MAX_CLEVEL")
+    return 0
+}
+
+@test
+func test_zstd_options_parallel() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::parallel(4)
+    assert_eq(opts.nb_workers, 4, "parallel should set nb_workers")
+    assert_eq(opts.level, ZSTD_DEFAULT_CLEVEL, "parallel level should be default")
+    return 0
+}
+
+@test
+func test_zstd_options_with_level() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    let opts2: ZstdOptions = opts.with_level(15)
+    assert_eq(opts2.level, 15, "with_level should set level")
+    return 0
+}
+
+@test
+func test_zstd_options_with_strategy() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    let opts2: ZstdOptions = opts.with_strategy(ZSTD_GREEDY)
+    assert_eq(opts2.strategy, ZSTD_GREEDY, "with_strategy should set strategy")
+    return 0
+}
+
+@test
+func test_zstd_options_with_workers() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    let opts2: ZstdOptions = opts.with_workers(8)
+    assert_eq(opts2.nb_workers, 8, "with_workers should set nb_workers")
+    return 0
+}
+
+@test
+func test_zstd_options_with_checksum() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    let opts2: ZstdOptions = opts.with_checksum()
+    assert_eq(opts2.checksum, true, "with_checksum should enable checksum")
+    return 0
+}
+
+@test
+func test_zstd_options_with_chunk_size() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    let opts2: ZstdOptions = opts.with_chunk_size(131072)
+    assert_eq(opts2.chunk_size, 131072, "with_chunk_size should set chunk_size")
+    return 0
+}
+
+@test
+func test_zstd_options_with_max_output() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    let opts2: ZstdOptions = opts.with_max_output(4194304)
+    assert_eq(opts2.max_output_length, 4194304, "with_max_output should set max_output_length")
+    return 0
+}
+
+@test
+func test_zstd_options_chaining() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+        .with_level(12)
+        .with_workers(2)
+        .with_checksum()
+    assert_eq(opts.level, 12, "chained level should be set")
+    assert_eq(opts.nb_workers, 2, "chained nb_workers should be set")
+    assert_eq(opts.checksum, true, "chained checksum should be set")
+    return 0
+}

@@ -115,6 +115,7 @@ void LLVMIRGen::emit_runtime_decls() {
     // TML runtime functions
     emit_line("; TML runtime functions");
     emit_line("declare void @panic(ptr) noreturn");
+    emit_line("declare void @assert_tml_loc(i32, ptr, ptr, i32) noreturn");
     emit_line("");
 
     // Panic catching for @should_panic tests

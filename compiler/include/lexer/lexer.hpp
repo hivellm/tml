@@ -57,6 +57,7 @@ namespace tml::lexer {
 struct LexerError {
     std::string message; ///< Human-readable error description.
     SourceSpan span;     ///< Location of the error in source.
+    std::string code;    ///< Error code (e.g., "L001"). Empty uses default.
 };
 
 /// Lexical analyzer for TML source code.
@@ -171,6 +172,9 @@ private:
 
     /// Creates an error token with the given message.
     [[nodiscard]] auto make_error_token(const std::string& message) -> Token;
+    /// Creates an error token with the given message and error code.
+    [[nodiscard]] auto make_error_token(const std::string& message, const std::string& code)
+        -> Token;
 
     // ========================================================================
     // Whitespace and Comments
@@ -292,6 +296,8 @@ private:
 
     /// Reports a lexer error at the current position.
     void report_error(const std::string& message);
+    /// Reports a lexer error at the current position with an error code.
+    void report_error(const std::string& message, const std::string& code);
 };
 
 } // namespace tml::lexer

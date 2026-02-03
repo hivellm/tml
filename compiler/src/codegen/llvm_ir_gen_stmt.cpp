@@ -213,8 +213,10 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     // Handle tuple pattern destructuring: let (a, b): (T1, T2) = expr
     if (let.pattern->is<parser::TuplePattern>()) {
         if (!let.init.has_value()) {
-            errors_.push_back(LLVMGenError{
-                .message = "Tuple pattern requires an initializer", .span = let.span, .notes = {}});
+            errors_.push_back(LLVMGenError{.message = "Tuple pattern requires an initializer",
+                                           .span = let.span,
+                                           .notes = {},
+                                           .code = "C003"});
             return;
         }
 

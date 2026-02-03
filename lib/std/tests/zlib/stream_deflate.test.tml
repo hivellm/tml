@@ -1,0 +1,215 @@
+// Tests for zlib/stream Deflate class
+// Tests streaming compression with Deflate
+
+use test
+use std::collections::{Buffer}
+use std::zlib::stream::{Deflate}
+use std::zlib::options::{ZlibOptions}
+use std::zlib::error::{ZlibError}
+
+// =============================================================================
+// Deflate::new Tests
+// =============================================================================
+
+@test
+func test_deflate_new() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_with_options() -> I32 {
+    let options: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Deflate, ZlibError] = Deflate::with_options(options)
+    if result.is_err() {
+        assert(false, "Deflate::with_options should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_with_max_level() -> I32 {
+    var options: ZlibOptions = ZlibOptions::default()
+    options.level = 9
+    let result: Outcome[Deflate, ZlibError] = Deflate::with_options(options)
+    if result.is_err() {
+        assert(false, "Deflate with level 9 should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_with_min_level() -> I32 {
+    var options: ZlibOptions = ZlibOptions::default()
+    options.level = 1
+    let result: Outcome[Deflate, ZlibError] = Deflate::with_options(options)
+    if result.is_err() {
+        assert(false, "Deflate with level 1 should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_write_simple() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    let write_result: Outcome[Buffer, ZlibError] = deflate.write("Hello")
+    if write_result.is_err() {
+        deflate.destroy()
+        assert(false, "write should succeed")
+        return 1
+    }
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_write_multiple() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    let w1: Outcome[Buffer, ZlibError] = deflate.write("Hello, ")
+    let w2: Outcome[Buffer, ZlibError] = deflate.write("World!")
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_write_empty() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    let write_result: Outcome[Buffer, ZlibError] = deflate.write("")
+    if write_result.is_err() {
+        deflate.destroy()
+        assert(false, "write empty should succeed")
+        return 1
+    }
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_flush() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = deflate.write("Hello")
+    let flush_result: Outcome[Buffer, ZlibError] = deflate.flush()
+    if flush_result.is_err() {
+        deflate.destroy()
+        assert(false, "flush should succeed")
+        return 1
+    }
+    let buf: Buffer = flush_result.unwrap()
+    assert(buf.len() > 0, "flush should produce output")
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_full_flush() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = deflate.write("Hello")
+    let flush_result: Outcome[Buffer, ZlibError] = deflate.full_flush()
+    if flush_result.is_err() {
+        deflate.destroy()
+        assert(false, "full_flush should succeed")
+        return 1
+    }
+    let buf: Buffer = flush_result.unwrap()
+    assert(buf.len() > 0, "full_flush should produce output")
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_finish() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = deflate.write("Hello, World!")
+    let finish_result: Outcome[Buffer, ZlibError] = deflate.finish()
+    if finish_result.is_err() {
+        deflate.destroy()
+        assert(false, "finish should succeed")
+        return 1
+    }
+    let buf: Buffer = finish_result.unwrap()
+    assert(buf.len() > 0, "finish should produce output")
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_finish_empty() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    let finish_result: Outcome[Buffer, ZlibError] = deflate.finish()
+    if finish_result.is_err() {
+        deflate.destroy()
+        assert(false, "finish empty should succeed")
+        return 1
+    }
+    deflate.destroy()
+    return 0
+}
+
+@test
+func test_deflate_reset() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let deflate: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = deflate.write("Hello")
+    let reset_result: Outcome[Unit, ZlibError] = deflate.reset()
+    if reset_result.is_err() {
+        deflate.destroy()
+        assert(false, "reset should succeed")
+        return 1
+    }
+    deflate.destroy()
+    return 0
+}

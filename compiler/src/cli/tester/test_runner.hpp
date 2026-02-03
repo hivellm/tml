@@ -23,6 +23,7 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,10 @@
 #endif
 
 namespace tml::cli {
+
+// Global mutex for synchronized verbose output in parallel test execution
+// Use this when printing debug output from test runner threads
+extern std::mutex g_verbose_output_mutex;
 
 // Get the platform-specific shared library extension
 // Windows: .dll, macOS: .dylib, Linux: .so
@@ -208,7 +213,10 @@ SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimi
 // Run a specific test within a loaded suite DLL
 // Uses the test index to call the correct entry function
 // verbose: Enable debug logging for test execution
-SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose = false);
+// timeout_seconds: Timeout in seconds (0 = no timeout)
+// test_name: Name of the test (for timeout messages)
+SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose = false,
+                               int timeout_seconds = 0, const std::string& test_name = "");
 
 // Run a specific test with profiling
 SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, PhaseTimings* timings,

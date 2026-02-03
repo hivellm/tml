@@ -185,6 +185,18 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
         }
         struct_fields_[mangled] = fields;
 
+        // Recursively instantiate type arguments that are generic types
+        // This ensures that types like LinkedListNode[I64] in List[LinkedListNode[I64]]
+        // are instantiated before they're used in method bodies
+        for (const auto& arg : final_type_args) {
+            if (arg && arg->is<types::NamedType>()) {
+                const auto& named = arg->as<types::NamedType>();
+                if (!named.type_args.empty()) {
+                    require_struct_instantiation(named.name, named.type_args);
+                }
+            }
+        }
+
         // Generate type definition immediately to type_defs_buffer_
         gen_struct_instantiation(*decl, final_type_args);
     }
@@ -240,6 +252,18 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
                 def += " }";
                 type_defs_buffer_ << def << "\n";
                 struct_types_[mangled] = type_name;
+
+                // Recursively instantiate type arguments that are generic types
+                // This ensures that types like LinkedListNode[I64] in List[LinkedListNode[I64]]
+                // are instantiated before they're used in method bodies
+                for (const auto& arg : final_type_args) {
+                    if (arg && arg->is<types::NamedType>()) {
+                        const auto& named = arg->as<types::NamedType>();
+                        if (!named.type_args.empty()) {
+                            require_struct_instantiation(named.name, named.type_args);
+                        }
+                    }
+                }
                 break;
             }
         }
@@ -255,6 +279,18 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
                 struct_types_[mangled] = type_name;
                 struct_fields_[mangled] = {
                     {"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+
+                // Recursively instantiate type arguments that are generic types
+                // This ensures that types like LinkedListNode[I64] in List[LinkedListNode[I64]]
+                // are instantiated before they're used in method bodies
+                for (const auto& arg : final_type_args) {
+                    if (arg && arg->is<types::NamedType>()) {
+                        const auto& named = arg->as<types::NamedType>();
+                        if (!named.type_args.empty()) {
+                            require_struct_instantiation(named.name, named.type_args);
+                        }
+                    }
+                }
             } else if (base_name == "HashMap" || base_name == "Map" || base_name == "Dict") {
                 // HashMap[K, V] = type { handle: *Unit } - all instantiations are { ptr }
                 std::string type_name = "%struct." + mangled;
@@ -263,6 +299,16 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
                 struct_types_[mangled] = type_name;
                 struct_fields_[mangled] = {
                     {"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+
+                // Recursively instantiate type arguments
+                for (const auto& arg : final_type_args) {
+                    if (arg && arg->is<types::NamedType>()) {
+                        const auto& named = arg->as<types::NamedType>();
+                        if (!named.type_args.empty()) {
+                            require_struct_instantiation(named.name, named.type_args);
+                        }
+                    }
+                }
             }
         }
     }
@@ -274,12 +320,32 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
             type_defs_buffer_ << def << "\n";
             struct_types_[mangled] = type_name;
             struct_fields_[mangled] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+
+            // Recursively instantiate type arguments
+            for (const auto& arg : final_type_args) {
+                if (arg && arg->is<types::NamedType>()) {
+                    const auto& named = arg->as<types::NamedType>();
+                    if (!named.type_args.empty()) {
+                        require_struct_instantiation(named.name, named.type_args);
+                    }
+                }
+            }
         } else if (base_name == "HashMap" || base_name == "Map" || base_name == "Dict") {
             std::string type_name = "%struct." + mangled;
             std::string def = type_name + " = type { ptr }";
             type_defs_buffer_ << def << "\n";
             struct_types_[mangled] = type_name;
             struct_fields_[mangled] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+
+            // Recursively instantiate type arguments
+            for (const auto& arg : final_type_args) {
+                if (arg && arg->is<types::NamedType>()) {
+                    const auto& named = arg->as<types::NamedType>();
+                    if (!named.type_args.empty()) {
+                        require_struct_instantiation(named.name, named.type_args);
+                    }
+                }
+            }
         }
     }
 

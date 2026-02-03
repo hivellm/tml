@@ -71,7 +71,12 @@ void LLVMIRGen::emit_coverage_report_calls(const std::string& coverage_output_st
 }
 
 void LLVMIRGen::report_error(const std::string& msg, const SourceSpan& span) {
-    errors_.push_back(LLVMGenError{msg, span, {}});
+    errors_.push_back(LLVMGenError{msg, span, {}, ""});
+}
+
+void LLVMIRGen::report_error(const std::string& msg, const SourceSpan& span,
+                             const std::string& code) {
+    errors_.push_back(LLVMGenError{msg, span, {}, code});
 }
 
 auto LLVMIRGen::add_string_literal(const std::string& value) -> std::string {

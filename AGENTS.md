@@ -121,6 +121,7 @@ This project uses @hivellm/rulebook standards.
 5. Follow strict documentation structure
 6. **NEVER run destructive deletions (`rm -rf`) in this repository; when adding submodules always use `git submodule add`.**
 7. **NEVER delete test caches** - Do NOT delete `build/debug/.run-cache/`, `build/debug/.test-cache/`, or `.test-cache.json`. The cache system auto-invalidates correctly. Use `tml test --no-cache` if you think tests are stale.
+8. **⚠️ NEVER USE CMAKE DIRECTLY TO BUILD!** - Do NOT run `cmake --build`, `cmake -B`, or any direct cmake commands. This corrupts the build directory and causes silent failures. ALWAYS use `scripts\build.bat` (Windows) or `scripts/build.sh` (Linux/Mac). The build scripts handle environment setup, path configuration, and proper sequencing that direct cmake calls miss.
 8. **Temporary files and scripts**:
    - ✅ ALL scripts MUST be created in `/scripts` directory
    - ✅ ALL temporary files (test, log, debug) MUST be in `/scripts`

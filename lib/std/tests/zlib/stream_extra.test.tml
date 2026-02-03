@@ -1,0 +1,380 @@
+// Extra tests for various stream classes
+use test
+use std::zlib::{deflate, deflate_raw, gzip}
+use std::zlib::stream::{DeflateRaw, Gzip, InflateRaw, Gunzip, Unzip, Inflate}
+use std::zlib::stream::{create_deflate_raw, create_deflate_raw_with_options}
+use std::zlib::stream::{create_gzip, create_gzip_with_options}
+use std::zlib::stream::{create_inflate_raw, create_inflate_raw_with_options}
+use std::zlib::stream::{create_gunzip, create_gunzip_with_options}
+use std::zlib::stream::{create_unzip, create_unzip_with_options}
+use std::zlib::stream::{create_inflate, create_inflate_with_options}
+use std::zlib::options::ZlibOptions
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+// ============================================================================
+// DeflateRaw tests
+// ============================================================================
+
+@test
+func test_create_deflate_raw() -> I32 {
+    let result: Outcome[DeflateRaw, ZlibError] = create_deflate_raw()
+    if result.is_err() {
+        print("create_deflate_raw failed\n")
+        return 1
+    }
+    var defl: DeflateRaw = result.unwrap()
+    defl.destroy()
+    return 0
+}
+
+@test
+func test_create_deflate_raw_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(6)
+    let result: Outcome[DeflateRaw, ZlibError] = create_deflate_raw_with_options(opts)
+    if result.is_err() {
+        print("create_deflate_raw_with_options failed\n")
+        return 1
+    }
+    var defl: DeflateRaw = result.unwrap()
+    defl.destroy()
+    return 0
+}
+
+@test
+func test_deflate_raw_write_buffer() -> I32 {
+    // Create a buffer
+    let compress_result: Outcome[Buffer, ZlibError] = deflate_raw("raw data")
+    if compress_result.is_err() {
+        return 1
+    }
+    var data_buffer: Buffer = compress_result.unwrap()
+
+    // Create deflate raw stream
+    let result: Outcome[DeflateRaw, ZlibError] = DeflateRaw::new()
+    if result.is_err() {
+        return 1
+    }
+    let defl: DeflateRaw = result.unwrap()
+
+    // Write buffer
+    let write_result: Outcome[Buffer, ZlibError] = defl.write_buffer(ref data_buffer)
+    if write_result.is_err() {
+        print("DeflateRaw::write_buffer failed\n")
+        defl.destroy()
+        return 1
+    }
+
+    defl.destroy()
+    return 0
+}
+
+// ============================================================================
+// Gzip tests
+// ============================================================================
+
+@test
+func test_create_gzip() -> I32 {
+    let result: Outcome[Gzip, ZlibError] = create_gzip()
+    if result.is_err() {
+        print("create_gzip failed\n")
+        return 1
+    }
+    var gz: Gzip = result.unwrap()
+    gz.destroy()
+    return 0
+}
+
+@test
+func test_create_gzip_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::gzip().with_level(6)
+    let result: Outcome[Gzip, ZlibError] = create_gzip_with_options(opts)
+    if result.is_err() {
+        print("create_gzip_with_options failed\n")
+        return 1
+    }
+    var gz: Gzip = result.unwrap()
+    gz.destroy()
+    return 0
+}
+
+@test
+func test_gzip_write_buffer() -> I32 {
+    // Create a buffer
+    let compress_result: Outcome[Buffer, ZlibError] = gzip("gzip data")
+    if compress_result.is_err() {
+        return 1
+    }
+    var data_buffer: Buffer = compress_result.unwrap()
+
+    // Create gzip stream
+    let result: Outcome[Gzip, ZlibError] = Gzip::new()
+    if result.is_err() {
+        return 1
+    }
+    let gz: Gzip = result.unwrap()
+
+    // Write buffer
+    let write_result: Outcome[Buffer, ZlibError] = gz.write_buffer(ref data_buffer)
+    if write_result.is_err() {
+        print("Gzip::write_buffer failed\n")
+        gz.destroy()
+        return 1
+    }
+
+    gz.destroy()
+    return 0
+}
+
+// ============================================================================
+// InflateRaw tests
+// ============================================================================
+
+@test
+func test_create_inflate_raw() -> I32 {
+    let result: Outcome[InflateRaw, ZlibError] = create_inflate_raw()
+    if result.is_err() {
+        print("create_inflate_raw failed\n")
+        return 1
+    }
+    var infl: InflateRaw = result.unwrap()
+    infl.destroy()
+    return 0
+}
+
+@test
+func test_create_inflate_raw_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::deflate_raw()
+    let result: Outcome[InflateRaw, ZlibError] = create_inflate_raw_with_options(opts)
+    if result.is_err() {
+        print("create_inflate_raw_with_options failed\n")
+        return 1
+    }
+    var infl: InflateRaw = result.unwrap()
+    infl.destroy()
+    return 0
+}
+
+@test
+func test_inflate_raw_write() -> I32 {
+    // First compress with deflate_raw
+    let original: Str = "Test data for InflateRaw::write"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if compress_result.is_err() {
+        print("deflate_raw failed\n")
+        return 1
+    }
+    var compressed: Buffer = compress_result.unwrap()
+
+    // Create inflate raw stream
+    let result: Outcome[InflateRaw, ZlibError] = InflateRaw::new()
+    if result.is_err() {
+        print("InflateRaw::new failed\n")
+        return 1
+    }
+    let infl: InflateRaw = result.unwrap()
+
+    // Write compressed data
+    let write_result: Outcome[Buffer, ZlibError] = infl.write(ref compressed)
+    if write_result.is_err() {
+        print("InflateRaw::write failed\n")
+        infl.destroy()
+        return 1
+    }
+
+    infl.destroy()
+    return 0
+}
+
+// ============================================================================
+// Gunzip tests
+// ============================================================================
+
+@test
+func test_create_gunzip() -> I32 {
+    let result: Outcome[Gunzip, ZlibError] = create_gunzip()
+    if result.is_err() {
+        print("create_gunzip failed\n")
+        return 1
+    }
+    var gz: Gunzip = result.unwrap()
+    gz.destroy()
+    return 0
+}
+
+@test
+func test_create_gunzip_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::gzip()
+    let result: Outcome[Gunzip, ZlibError] = create_gunzip_with_options(opts)
+    if result.is_err() {
+        print("create_gunzip_with_options failed\n")
+        return 1
+    }
+    var gz: Gunzip = result.unwrap()
+    gz.destroy()
+    return 0
+}
+
+@test
+func test_gunzip_write() -> I32 {
+    // First compress with gzip
+    let original: Str = "Test data for Gunzip::write"
+    let compress_result: Outcome[Buffer, ZlibError] = gzip(original)
+    if compress_result.is_err() {
+        print("gzip failed\n")
+        return 1
+    }
+    var compressed: Buffer = compress_result.unwrap()
+
+    // Create gunzip stream
+    let result: Outcome[Gunzip, ZlibError] = Gunzip::new()
+    if result.is_err() {
+        print("Gunzip::new failed\n")
+        return 1
+    }
+    let gz: Gunzip = result.unwrap()
+
+    // Write compressed data
+    let write_result: Outcome[Buffer, ZlibError] = gz.write(ref compressed)
+    if write_result.is_err() {
+        print("Gunzip::write failed\n")
+        gz.destroy()
+        return 1
+    }
+
+    gz.destroy()
+    return 0
+}
+
+// ============================================================================
+// Unzip tests
+// ============================================================================
+
+@test
+func test_create_unzip() -> I32 {
+    let result: Outcome[Unzip, ZlibError] = create_unzip()
+    if result.is_err() {
+        print("create_unzip failed\n")
+        return 1
+    }
+    var uz: Unzip = result.unwrap()
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_create_unzip_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::auto_detect()
+    let result: Outcome[Unzip, ZlibError] = create_unzip_with_options(opts)
+    if result.is_err() {
+        print("create_unzip_with_options failed\n")
+        return 1
+    }
+    var uz: Unzip = result.unwrap()
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_unzip_new() -> I32 {
+    let result: Outcome[Unzip, ZlibError] = Unzip::new()
+    if result.is_err() {
+        print("Unzip::new failed\n")
+        return 1
+    }
+    var uz: Unzip = result.unwrap()
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_unzip_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::auto_detect()
+    let result: Outcome[Unzip, ZlibError] = Unzip::with_options(opts)
+    if result.is_err() {
+        print("Unzip::with_options failed\n")
+        return 1
+    }
+    var uz: Unzip = result.unwrap()
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_unzip_write() -> I32 {
+    // Unzip can handle both deflate and gzip formats
+    let original: Str = "Test data for Unzip::write"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        print("deflate failed\n")
+        return 1
+    }
+    var compressed: Buffer = compress_result.unwrap()
+
+    // Create unzip stream
+    let result: Outcome[Unzip, ZlibError] = Unzip::new()
+    if result.is_err() {
+        print("Unzip::new failed\n")
+        return 1
+    }
+    let uz: Unzip = result.unwrap()
+
+    // Write compressed data
+    let write_result: Outcome[Buffer, ZlibError] = uz.write(ref compressed)
+    if write_result.is_err() {
+        print("Unzip::write failed\n")
+        uz.destroy()
+        return 1
+    }
+
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_unzip_reset() -> I32 {
+    let result: Outcome[Unzip, ZlibError] = Unzip::new()
+    if result.is_err() {
+        return 1
+    }
+    let uz: Unzip = result.unwrap()
+
+    let reset_result: Outcome[Unit, ZlibError] = uz.reset()
+    if reset_result.is_err() {
+        print("Unzip::reset failed\n")
+        uz.destroy()
+        return 1
+    }
+
+    uz.destroy()
+    return 0
+}
+
+// ============================================================================
+// create_inflate tests
+// ============================================================================
+
+@test
+func test_create_inflate() -> I32 {
+    let result: Outcome[Inflate, ZlibError] = create_inflate()
+    if result.is_err() {
+        print("create_inflate failed\n")
+        return 1
+    }
+    var infl: Inflate = result.unwrap()
+    infl.destroy()
+    return 0
+}
+
+@test
+func test_create_inflate_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Inflate, ZlibError] = create_inflate_with_options(opts)
+    if result.is_err() {
+        print("create_inflate_with_options failed\n")
+        return 1
+    }
+    var infl: Inflate = result.unwrap()
+    infl.destroy()
+    return 0
+}

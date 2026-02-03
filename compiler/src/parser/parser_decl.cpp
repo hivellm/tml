@@ -148,7 +148,8 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
             return ParseError{.message = "Expected identifier after 'type'",
                               .span = peek().span,
                               .notes = {},
-                              .fixes = {}};
+                              .fixes = {},
+                              .code = "P022"};
         }
 
         advance(); // consume name
@@ -269,8 +270,11 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     case lexer::TokenKind::KwNamespace:
         return parse_namespace_decl();
     default:
-        return ParseError{
-            .message = "Expected declaration", .span = peek().span, .notes = {}, .fixes = {}};
+        return ParseError{.message = "Expected declaration",
+                          .span = peek().span,
+                          .notes = {},
+                          .fixes = {},
+                          .code = "P001"};
     }
 }
 
@@ -317,7 +321,8 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators,
             .message = "Expected '(' after function name",
             .span = peek().span,
             .notes = {"Every function needs a parameter list, even if empty: func name()"},
-            .fixes = {fix}};
+            .fixes = {fix},
+            .code = "P010"};
     }
     advance(); // consume '('
 
@@ -331,7 +336,8 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators,
         return ParseError{.message = "Expected ')' after parameters",
                           .span = peek().span,
                           .notes = {},
-                          .fixes = {fix}};
+                          .fixes = {fix},
+                          .code = "P017"};
     }
     advance(); // consume ')'
 
@@ -490,7 +496,8 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
             return ParseError{.message = "Expected ':' after field name",
                               .span = peek().span,
                               .notes = {"Struct fields require type annotations: field_name: Type"},
-                              .fixes = {fix}};
+                              .fixes = {fix},
+                              .code = "P045"};
         }
         advance(); // consume ':'
 
@@ -1301,7 +1308,8 @@ auto Parser::parse_mod_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
         return ParseError{.message = "Expected module name after 'mod'",
                           .span = peek().span,
                           .notes = {},
-                          .fixes = {}};
+                          .fixes = {},
+                          .code = "P026"};
     }
     std::string name = std::string(advance().lexeme);
 
@@ -1386,7 +1394,7 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
                             advance(); // consume lifetime name
                         } else {
                             return ParseError{
-                                "Expected lifetime name after 'life'", peek().span, {}, {}};
+                                "Expected lifetime name after 'life'", peek().span, {}, {}, "P056"};
                         }
                     } else {
                         // Regular behavior bound
@@ -1478,8 +1486,11 @@ auto Parser::parse_where_clause() -> Result<std::optional<WhereClause>, ParseErr
 
             type_equalities.push_back({std::move(type_param), std::move(rhs_type)});
         } else {
-            return ParseError{
-                "Expected ':' or '=' after type parameter in where clause", peek().span, {}, {}};
+            return ParseError{"Expected ':' or '=' after type parameter in where clause",
+                              peek().span,
+                              {},
+                              {},
+                              "P032"};
         }
 
         // Check for ',' to continue parsing constraints

@@ -168,13 +168,13 @@ auto TypeChecker::evaluate_const_expr(const parser::Expr& expr, TypePtr expected
                 return ConstValue::from_i64(l * r, expected_type);
             case parser::BinaryOp::Div:
                 if (r == 0) {
-                    error("Division by zero in const expression", expr.span);
+                    error("Division by zero in const expression", expr.span, "T020");
                     return std::nullopt;
                 }
                 return ConstValue::from_i64(l / r, expected_type);
             case parser::BinaryOp::Mod:
                 if (r == 0) {
-                    error("Modulo by zero in const expression", expr.span);
+                    error("Modulo by zero in const expression", expr.span, "T020");
                     return std::nullopt;
                 }
                 return ConstValue::from_i64(l % r, expected_type);
@@ -220,13 +220,13 @@ auto TypeChecker::evaluate_const_expr(const parser::Expr& expr, TypePtr expected
                 return ConstValue::from_u64(l * r, expected_type);
             case parser::BinaryOp::Div:
                 if (r == 0) {
-                    error("Division by zero in const expression", expr.span);
+                    error("Division by zero in const expression", expr.span, "T020");
                     return std::nullopt;
                 }
                 return ConstValue::from_u64(l / r, expected_type);
             case parser::BinaryOp::Mod:
                 if (r == 0) {
-                    error("Modulo by zero in const expression", expr.span);
+                    error("Modulo by zero in const expression", expr.span, "T020");
                     return std::nullopt;
                 }
                 return ConstValue::from_u64(l % r, expected_type);

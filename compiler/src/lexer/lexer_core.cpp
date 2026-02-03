@@ -176,11 +176,30 @@ auto Lexer::make_error_token(const std::string& message) -> Token {
                  .value = std::monostate{}};
 }
 
+auto Lexer::make_error_token(const std::string& message, const std::string& code) -> Token {
+    report_error(message, code);
+
+    auto start_loc = source_.location(token_start_);
+    auto end_loc = source_.location(pos_ > 0 ? pos_ - 1 : 0);
+
+    return Token{.kind = TokenKind::Error,
+                 .span = {start_loc, end_loc},
+                 .lexeme = source_.slice(token_start_, pos_),
+                 .value = std::monostate{}};
+}
+
 void Lexer::report_error(const std::string& message) {
     auto start_loc = source_.location(token_start_);
     auto end_loc = source_.location(pos_);
 
-    errors_.push_back(LexerError{.message = message, .span = {start_loc, end_loc}});
+    errors_.push_back(LexerError{.message = message, .span = {start_loc, end_loc}, .code = ""});
+}
+
+void Lexer::report_error(const std::string& message, const std::string& code) {
+    auto start_loc = source_.location(token_start_);
+    auto end_loc = source_.location(pos_);
+
+    errors_.push_back(LexerError{.message = message, .span = {start_loc, end_loc}, .code = code});
 }
 
 void Lexer::skip_whitespace() {
@@ -352,7 +371,7 @@ void Lexer::skip_block_comment() {
     }
 
     if (depth > 0) {
-        report_error("Unterminated block comment");
+        report_error("Unterminated block comment", "L012");
     }
 }
 

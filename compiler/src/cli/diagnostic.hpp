@@ -88,11 +88,6 @@ struct Colors {
 //   C001 - Codegen error
 //
 namespace ErrorCodes {
-// Lexer errors (L000-L099)
-constexpr const char* LEX_INVALID_CHAR = "L001";
-constexpr const char* LEX_UNTERMINATED_STRING = "L002";
-constexpr const char* LEX_INVALID_NUMBER = "L003";
-constexpr const char* LEX_INVALID_ESCAPE = "L004";
 
 // Parser errors (P000-P099)
 constexpr const char* PARSE_UNEXPECTED_TOKEN = "P001";
@@ -100,6 +95,66 @@ constexpr const char* PARSE_MISSING_SEMICOLON = "P002";
 constexpr const char* PARSE_MISSING_BRACE = "P003";
 constexpr const char* PARSE_INVALID_EXPR = "P004";
 constexpr const char* PARSE_EXPECTED_TYPE = "P005";
+constexpr const char* PARSE_EXPECTED_IDENTIFIER = "P006";
+constexpr const char* PARSE_EXPECTED_PATTERN = "P007";
+constexpr const char* PARSE_EXPECTED_COLON = "P008";
+constexpr const char* PARSE_EXPECTED_COMMA = "P009";
+constexpr const char* PARSE_EXPECTED_PAREN = "P010";
+constexpr const char* PARSE_EXPECTED_BRACKET = "P011";
+constexpr const char* PARSE_EXPECTED_ARROW = "P012";
+constexpr const char* PARSE_EXPECTED_EQUALS = "P013";
+constexpr const char* PARSE_INVALID_LITERAL = "P014";
+constexpr const char* PARSE_UNCLOSED_STRING = "P015";
+constexpr const char* PARSE_UNCLOSED_BLOCK = "P016";
+constexpr const char* PARSE_UNCLOSED_PAREN = "P017";
+constexpr const char* PARSE_UNCLOSED_BRACKET = "P018";
+constexpr const char* PARSE_INVALID_OPERATOR = "P019";
+constexpr const char* PARSE_EXPECTED_BLOCK = "P020";
+constexpr const char* PARSE_EXPECTED_FUNC_NAME = "P021";
+constexpr const char* PARSE_EXPECTED_TYPE_NAME = "P022";
+constexpr const char* PARSE_EXPECTED_FIELD_NAME = "P023";
+constexpr const char* PARSE_EXPECTED_PARAM_NAME = "P024";
+constexpr const char* PARSE_EXPECTED_VARIANT_NAME = "P025";
+constexpr const char* PARSE_EXPECTED_MODULE_NAME = "P026";
+constexpr const char* PARSE_EXPECTED_BEHAVIOR_NAME = "P027";
+constexpr const char* PARSE_INVALID_VISIBILITY = "P028";
+constexpr const char* PARSE_INVALID_DECORATOR = "P029";
+constexpr const char* PARSE_DUPLICATE_MODIFIER = "P030";
+constexpr const char* PARSE_INVALID_GENERIC_PARAM = "P031";
+constexpr const char* PARSE_INVALID_WHERE_CLAUSE = "P032";
+constexpr const char* PARSE_EXPECTED_IMPL_TARGET = "P033";
+constexpr const char* PARSE_EXPECTED_METHOD_NAME = "P034";
+constexpr const char* PARSE_INVALID_TERNARY = "P035";
+constexpr const char* PARSE_INVALID_CLOSURE = "P036";
+constexpr const char* PARSE_EXPECTED_LOOP_BODY = "P037";
+constexpr const char* PARSE_EXPECTED_IF_CONDITION = "P038";
+constexpr const char* PARSE_EXPECTED_WHEN_SCRUTINEE = "P039";
+constexpr const char* PARSE_EXPECTED_MATCH_ARM = "P040";
+constexpr const char* PARSE_INVALID_STRUCT_LITERAL = "P041";
+constexpr const char* PARSE_INVALID_ARRAY_LITERAL = "P042";
+constexpr const char* PARSE_INVALID_TUPLE = "P043";
+constexpr const char* PARSE_EXPECTED_RETURN_TYPE = "P044";
+constexpr const char* PARSE_EXPECTED_FIELD_TYPE = "P045";
+constexpr const char* PARSE_EXPECTED_PARAM_TYPE = "P046";
+constexpr const char* PARSE_INVALID_INTERPOLATION = "P047";
+constexpr const char* PARSE_UNCLOSED_INTERPOLATION = "P048";
+constexpr const char* PARSE_INVALID_PROPERTY = "P049";
+constexpr const char* PARSE_EXPECTED_GET_OR_SET = "P050";
+constexpr const char* PARSE_INVALID_CONSTRUCTOR = "P051";
+constexpr const char* PARSE_EXPECTED_CLASS_MEMBER = "P052";
+constexpr const char* PARSE_INVALID_USE_PATH = "P053";
+constexpr const char* PARSE_EXPECTED_USE_ITEM = "P054";
+constexpr const char* PARSE_INVALID_LOWLEVEL = "P055";
+constexpr const char* PARSE_EXPECTED_BOUND = "P056";
+constexpr const char* PARSE_INVALID_REF_TYPE = "P057";
+constexpr const char* PARSE_EXPECTED_ENUM_BODY = "P058";
+constexpr const char* PARSE_EXPECTED_STRUCT_BODY = "P059";
+constexpr const char* PARSE_INVALID_BREAK = "P060";
+constexpr const char* PARSE_INVALID_CONTINUE = "P061";
+constexpr const char* PARSE_INVALID_RETURN = "P062";
+constexpr const char* PARSE_EXPECTED_NAMESPACE = "P063";
+constexpr const char* PARSE_INVALID_TEMPLATE = "P064";
+constexpr const char* PARSE_UNCLOSED_TEMPLATE = "P065";
 
 // Type errors (T000-T199)
 constexpr const char* TYPE_MISMATCH = "T001";
@@ -112,20 +167,113 @@ constexpr const char* CANNOT_INFER = "T007";
 constexpr const char* DUPLICATE_DEF = "T008";
 constexpr const char* UNDECLARED_VAR = "T009";
 constexpr const char* NOT_CALLABLE = "T010";
+constexpr const char* MISSING_TYPE_ANNOTATION = "T011";
+constexpr const char* INVALID_ASSIGNMENT = "T012";
+constexpr const char* IMMUTABLE_ASSIGN = "T013";
+constexpr const char* CONDITION_NOT_BOOL = "T014";
+constexpr const char* BRANCH_TYPE_MISMATCH = "T015";
+constexpr const char* RETURN_TYPE_MISMATCH = "T016";
+constexpr const char* INVALID_DEREFERENCE = "T017";
+constexpr const char* INVALID_REFERENCE = "T018";
+constexpr const char* OPERATOR_TYPE_MISMATCH = "T019";
+constexpr const char* DIVISION_BY_ZERO = "T020";
+constexpr const char* INVALID_CAST = "T021";
+constexpr const char* STRUCT_UNKNOWN = "T022";
+constexpr const char* ENUM_UNKNOWN = "T023";
+constexpr const char* VARIANT_UNKNOWN = "T024";
+constexpr const char* BEHAVIOR_UNKNOWN = "T025";
+constexpr const char* BEHAVIOR_NOT_IMPL = "T026";
+constexpr const char* MODULE_NOT_FOUND = "T027";
+constexpr const char* INVALID_EXTERN = "T028";
+constexpr const char* MISSING_RETURN = "T029";
+constexpr const char* BREAK_OUTSIDE_LOOP = "T030";
+constexpr const char* CONTINUE_OUTSIDE_LOOP = "T031";
+constexpr const char* AWAIT_OUTSIDE_ASYNC = "T032";
+constexpr const char* INVALID_TRY_OPERATOR = "T033";
+constexpr const char* WRONG_VARIANT_ARGS = "T034";
+constexpr const char* PATTERN_TYPE_MISMATCH = "T035";
+constexpr const char* TUPLE_ARITY_MISMATCH = "T036";
+constexpr const char* CONST_EVAL_ERROR = "T037";
+constexpr const char* REDEFINE_BUILTIN = "T038";
+constexpr const char* CIRCULAR_DEPENDENCY = "T039";
+constexpr const char* ABSTRACT_INSTANTIATION = "T040";
+constexpr const char* SEALED_EXTENSION = "T041";
+constexpr const char* VALUE_CLASS_VIRTUAL = "T042";
+constexpr const char* VALUE_CLASS_ABSTRACT = "T043";
+constexpr const char* POOL_VALUE_CONFLICT = "T044";
+constexpr const char* MISSING_ABSTRACT_IMPL = "T045";
+constexpr const char* BASE_CLASS_NOT_FOUND = "T046";
+constexpr const char* INTERFACE_NOT_FOUND = "T047";
+constexpr const char* INVALID_BASE_ACCESS = "T048";
+constexpr const char* POINTER_METHOD_ERROR = "T049";
+constexpr const char* ITERATOR_TYPE_ERROR = "T050";
+constexpr const char* RANGE_TYPE_ERROR = "T051";
+constexpr const char* OBJECT_SAFETY_ERROR = "T052";
+constexpr const char* GENERIC_CONSTRAINT_ERROR = "T053";
+constexpr const char* LIFETIME_ERROR = "T054";
 
 // Borrow errors (B000-B099)
 constexpr const char* USE_AFTER_MOVE = "B001";
-constexpr const char* CANNOT_BORROW_MUT = "B002";
-constexpr const char* ALREADY_BORROWED = "B003";
-constexpr const char* LIFETIME_MISMATCH = "B004";
+constexpr const char* MOVE_WHILE_BORROWED = "B002";
+constexpr const char* ASSIGN_NOT_MUTABLE = "B003";
+constexpr const char* ASSIGN_WHILE_BORROWED = "B004";
+constexpr const char* BORROW_AFTER_MOVE = "B005";
+constexpr const char* MUT_BORROW_NOT_MUTABLE = "B006";
+constexpr const char* MUT_BORROW_WHILE_IMMUT = "B007";
+constexpr const char* DOUBLE_MUT_BORROW = "B008";
+constexpr const char* IMMUT_BORROW_WHILE_MUT = "B009";
+constexpr const char* RETURN_LOCAL_REF = "B010";
+constexpr const char* PARTIAL_MOVE = "B011";
+constexpr const char* OVERLAPPING_BORROW = "B012";
+constexpr const char* USE_WHILE_BORROWED = "B013";
+constexpr const char* CLOSURE_CAPTURES_MOVED = "B014";
+constexpr const char* CLOSURE_CAPTURE_CONFLICT = "B015";
+constexpr const char* PARTIALLY_MOVED_VALUE = "B016";
+constexpr const char* REBORROW_OUTLIVES_ORIGIN = "B017";
+constexpr const char* AMBIGUOUS_RETURN_LIFETIME = "B031"; // E031 in docs
+constexpr const char* INTERIOR_MUT_WARNING = "W001";
+constexpr const char* BORROW_OTHER = "B099";
 
 // Codegen errors (C000-C099)
 constexpr const char* CODEGEN_ERROR = "C001";
 constexpr const char* CODEGEN_UNSUPPORTED = "C002";
+constexpr const char* CODEGEN_TYPE_ERROR = "C003";
+constexpr const char* CODEGEN_FUNC_NOT_FOUND = "C004";
+constexpr const char* CODEGEN_STRUCT_NOT_FOUND = "C005";
+constexpr const char* CODEGEN_METHOD_NOT_FOUND = "C006";
+constexpr const char* CODEGEN_INVALID_GENERIC = "C007";
+constexpr const char* CODEGEN_MISSING_IMPL = "C008";
+constexpr const char* CODEGEN_LLVM_ERROR = "C009";
+constexpr const char* CODEGEN_LINK_ERROR = "C010";
+constexpr const char* CODEGEN_ABI_ERROR = "C011";
+constexpr const char* CODEGEN_RUNTIME_ERROR = "C012";
+constexpr const char* CODEGEN_FFI_ERROR = "C013";
+constexpr const char* CODEGEN_INTRINSIC_ERROR = "C014";
+
+// Lexer errors (L000-L099)
+constexpr const char* LEX_INVALID_CHAR = "L001";
+constexpr const char* LEX_UNTERMINATED_STRING = "L002";
+constexpr const char* LEX_INVALID_NUMBER = "L003";
+constexpr const char* LEX_INVALID_ESCAPE = "L004";
+constexpr const char* LEX_UNTERMINATED_CHAR = "L005";
+constexpr const char* LEX_EMPTY_CHAR = "L006";
+constexpr const char* LEX_MULTI_CHAR = "L007";
+constexpr const char* LEX_INVALID_HEX = "L008";
+constexpr const char* LEX_INVALID_BINARY = "L009";
+constexpr const char* LEX_INVALID_OCTAL = "L010";
+constexpr const char* LEX_NUMBER_OVERFLOW = "L011";
+constexpr const char* LEX_UNTERMINATED_COMMENT = "L012";
+constexpr const char* LEX_UNTERMINATED_RAW_STRING = "L013";
+constexpr const char* LEX_INVALID_UNICODE = "L014";
+constexpr const char* LEX_INVALID_INTERPOLATION = "L015";
 
 // General errors (E000-E099)
 constexpr const char* FILE_NOT_FOUND = "E001";
 constexpr const char* IO_ERROR = "E002";
+constexpr const char* INTERNAL_ERROR = "E003";
+constexpr const char* COMMAND_ERROR = "E004";
+constexpr const char* CONFIG_ERROR = "E005";
+constexpr const char* DEPENDENCY_ERROR = "E006";
 } // namespace ErrorCodes
 
 // ============================================================================

@@ -306,7 +306,11 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
 }
 
 void TypeChecker::error(const std::string& message, SourceSpan span) {
-    errors_.push_back(TypeError{message, span, {}});
+    errors_.push_back(TypeError{message, span, {}, ""});
+}
+
+void TypeChecker::error(const std::string& message, SourceSpan span, const std::string& code) {
+    errors_.push_back(TypeError{message, span, {}, code});
 }
 
 // Check if a block contains a return statement or has an implicit return (final expression)

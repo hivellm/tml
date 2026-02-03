@@ -1,7 +1,10 @@
 // Tests for Zstd compression
 use test
 use std::zlib::{zstd_compress, zstd_decompress}
+use std::zlib::{zstd_compress_sync, zstd_compress_sync_with_options}
+use std::zlib::{zstd_decompress_sync, zstd_decompress_sync_with_options}
 use std::zlib::{zstd_min_level, zstd_max_level, zstd_default_level}
+use std::zlib::options::ZstdOptions
 use std::zlib::error::ZlibError
 use std::collections::Buffer
 
@@ -76,5 +79,66 @@ func test_zstd_level_functions() -> I32 {
         return 1
     }
 
+    return 0
+}
+
+@test
+func test_zstd_compress_sync() -> I32 {
+    let original: Str = "Test data for zstd_compress_sync"
+    let result: Outcome[Buffer, ZlibError] = zstd_compress_sync(original)
+
+    if result.is_err() {
+        print("zstd_compress_sync failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let decompress_result: Outcome[Str, ZlibError] = zstd_decompress_sync(ref compressed)
+    if decompress_result.is_err() {
+        print("zstd_decompress_sync failed\n")
+        return 1
+    }
+
+    assert_eq(decompress_result.unwrap(), original, "zstd sync roundtrip")
+    return 0
+}
+
+@test
+func test_zstd_compress_sync_with_options() -> I32 {
+    let original: Str = "Test data for zstd_compress_sync_with_options"
+    let opts: ZstdOptions = ZstdOptions::default().with_level(6)
+    let result: Outcome[Buffer, ZlibError] = zstd_compress_sync_with_options(original, opts)
+
+    if result.is_err() {
+        print("zstd_compress_sync_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    if compressed.len() == 0 {
+        print("zstd_compress_sync_with_options returned empty buffer\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_zstd_decompress_sync_with_options() -> I32 {
+    let original: Str = "Test data for zstd_decompress_sync_with_options"
+    let result: Outcome[Buffer, ZlibError] = zstd_compress_sync(original)
+    if result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let opts: ZstdOptions = ZstdOptions::default()
+    let decompress_result: Outcome[Str, ZlibError] = zstd_decompress_sync_with_options(ref compressed, opts)
+    if decompress_result.is_err() {
+        print("zstd_decompress_sync_with_options failed\n")
+        return 1
+    }
+
+    assert_eq(decompress_result.unwrap(), original, "zstd sync with options roundtrip")
     return 0
 }

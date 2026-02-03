@@ -65,8 +65,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
     // Arithmetic operations
     if (is_integer || is_float) {
         if (method == "add") {
+            emit_coverage("Add::add");
             if (call.args.empty()) {
-                report_error("add() requires an argument", call.span);
+                report_error("add() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -81,8 +82,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         }
 
         if (method == "sub") {
+            emit_coverage("Sub::sub");
             if (call.args.empty()) {
-                report_error("sub() requires an argument", call.span);
+                report_error("sub() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -97,8 +99,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         }
 
         if (method == "mul") {
+            emit_coverage("Mul::mul");
             if (call.args.empty()) {
-                report_error("mul() requires an argument", call.span);
+                report_error("mul() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -113,8 +116,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         }
 
         if (method == "div") {
+            emit_coverage("Div::div");
             if (call.args.empty()) {
-                report_error("div() requires an argument", call.span);
+                report_error("div() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -131,8 +135,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         }
 
         if (method == "rem" && is_integer) {
+            emit_coverage("Rem::rem");
             if (call.args.empty()) {
-                report_error("rem() requires an argument", call.span);
+                report_error("rem() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -147,6 +152,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         }
 
         if (method == "neg") {
+            emit_coverage("Neg::neg");
             std::string result = fresh_reg();
             if (is_float) {
                 emit_line("  " + result + " = fneg " + llvm_ty + " " + receiver);
@@ -161,7 +167,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "cmp") {
             emit_coverage("Ord::cmp");
             if (call.args.empty()) {
-                report_error("cmp() requires an argument", call.span);
+                report_error("cmp() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string other_ptr = gen_expr(*call.args[0]);
@@ -191,8 +197,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         }
 
         if (method == "max") {
+            emit_coverage("Ord::max");
             if (call.args.empty()) {
-                report_error("max() requires an argument", call.span);
+                report_error("max() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -212,8 +219,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         }
 
         if (method == "min") {
+            emit_coverage("Ord::min");
             if (call.args.empty()) {
-                report_error("min() requires an argument", call.span);
+                report_error("min() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string other = gen_expr(*call.args[0]);
@@ -234,6 +242,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // abs() -> Self (absolute value for signed integers)
         if (method == "abs" && is_signed) {
+            emit_coverage("I32::abs");
             // if this < 0 { 0 - this } else { this }
             std::string cmp = fresh_reg();
             emit_line("  " + cmp + " = icmp slt " + llvm_ty + " " + receiver + ", 0");
@@ -248,6 +257,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // signum() -> Self (sign: -1, 0, or 1)
         if (method == "signum" && is_signed) {
+            emit_coverage("I32::signum");
             // if this > 0 { 1 } else if this < 0 { -1 } else { 0 }
             std::string cmp_pos = fresh_reg();
             emit_line("  " + cmp_pos + " = icmp sgt " + llvm_ty + " " + receiver + ", 0");
@@ -265,6 +275,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // is_positive() -> Bool (this > 0)
         if (method == "is_positive" && is_signed) {
+            emit_coverage("I32::is_positive");
             std::string result = fresh_reg();
             emit_line("  " + result + " = icmp sgt " + llvm_ty + " " + receiver + ", 0");
             last_expr_type_ = "i1";
@@ -273,6 +284,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // is_negative() -> Bool (this < 0)
         if (method == "is_negative" && is_signed) {
+            emit_coverage("I32::is_negative");
             std::string result = fresh_reg();
             emit_line("  " + result + " = icmp slt " + llvm_ty + " " + receiver + ", 0");
             last_expr_type_ = "i1";
@@ -281,8 +293,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // pow(exp) -> Self (integer power)
         if (method == "pow" && is_integer) {
+            emit_coverage("I32::pow");
             if (call.args.empty()) {
-                report_error("pow() requires an exponent argument", call.span);
+                report_error("pow() requires an exponent argument", call.span, "C008");
                 return "0";
             }
             std::string exp = gen_expr(*call.args[0]);
@@ -324,7 +337,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "bitand_assign" && !receiver_ptr.empty()) {
             emit_coverage("BitAndAssign::bitand_assign");
             if (call.args.empty()) {
-                report_error("bitand_assign() requires an argument", call.span);
+                report_error("bitand_assign() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -339,7 +352,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "bitor_assign" && !receiver_ptr.empty()) {
             emit_coverage("BitOrAssign::bitor_assign");
             if (call.args.empty()) {
-                report_error("bitor_assign() requires an argument", call.span);
+                report_error("bitor_assign() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -354,7 +367,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "bitxor_assign" && !receiver_ptr.empty()) {
             emit_coverage("BitXorAssign::bitxor_assign");
             if (call.args.empty()) {
-                report_error("bitxor_assign() requires an argument", call.span);
+                report_error("bitxor_assign() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -369,7 +382,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "shl_assign" && !receiver_ptr.empty()) {
             emit_coverage("ShlAssign::shl_assign");
             if (call.args.empty()) {
-                report_error("shl_assign() requires an argument", call.span);
+                report_error("shl_assign() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -408,7 +421,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         if (method == "shr_assign" && !receiver_ptr.empty()) {
             emit_coverage("ShrAssign::shr_assign");
             if (call.args.empty()) {
-                report_error("shr_assign() requires an argument", call.span);
+                report_error("shr_assign() requires an argument", call.span, "C008");
                 return "0";
             }
             std::string rhs = gen_expr(*call.args[0]);
@@ -588,6 +601,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
     if (kind == types::PrimitiveKind::Str) {
         // len() -> I64 (byte length of string)
         if (method == "len") {
+            emit_coverage("Str::len");
             std::string len32 = fresh_reg();
             emit_line("  " + len32 + " = call i32 @str_len(ptr " + receiver + ")");
             std::string result = fresh_reg();
@@ -598,6 +612,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // is_empty() -> Bool
         if (method == "is_empty") {
+            emit_coverage("Str::is_empty");
             std::string len32 = fresh_reg();
             emit_line("  " + len32 + " = call i32 @str_len(ptr " + receiver + ")");
             std::string result = fresh_reg();
@@ -608,6 +623,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // as_bytes() -> ref [U8] (returns pointer to string data)
         if (method == "as_bytes") {
+            emit_coverage("Str::as_bytes");
             // For now, return the string pointer itself as a slice
             // In TML, strings are already represented as pointers to their data
             last_expr_type_ = "ptr";
@@ -616,8 +632,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // char_at(index: I64) -> I32
         if (method == "char_at") {
+            emit_coverage("Str::char_at");
             if (call.args.empty()) {
-                report_error("char_at() requires an index argument", call.span);
+                report_error("char_at() requires an index argument", call.span, "C008");
                 return "0";
             }
             std::string idx = gen_expr(*call.args[0]);
@@ -636,8 +653,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // slice_str(start: I64, end: I64) -> Str, also slice()
         if (method == "slice_str" || method == "slice") {
+            emit_coverage("Str::slice");
             if (call.args.size() < 2) {
-                report_error("slice_str() requires start and end arguments", call.span);
+                report_error("slice_str() requires start and end arguments", call.span, "C008");
                 return "0";
             }
             std::string start = gen_expr(*call.args[0]);
@@ -651,6 +669,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // to_uppercase() -> Str
         if (method == "to_uppercase") {
+            emit_coverage("Str::to_uppercase");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @str_to_upper(ptr " + receiver + ")");
             last_expr_type_ = "ptr";
@@ -659,6 +678,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // to_lowercase() -> Str
         if (method == "to_lowercase") {
+            emit_coverage("Str::to_lowercase");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @str_to_lower(ptr " + receiver + ")");
             last_expr_type_ = "ptr";
@@ -667,8 +687,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // starts_with(prefix: Str) -> Bool
         if (method == "starts_with") {
+            emit_coverage("Str::starts_with");
             if (call.args.empty()) {
-                report_error("starts_with() requires a prefix argument", call.span);
+                report_error("starts_with() requires a prefix argument", call.span, "C008");
                 return "0";
             }
             std::string prefix = gen_expr(*call.args[0]);
@@ -683,8 +704,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // ends_with(suffix: Str) -> Bool
         if (method == "ends_with") {
+            emit_coverage("Str::ends_with");
             if (call.args.empty()) {
-                report_error("ends_with() requires a suffix argument", call.span);
+                report_error("ends_with() requires a suffix argument", call.span, "C008");
                 return "0";
             }
             std::string suffix = gen_expr(*call.args[0]);
@@ -699,8 +721,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // contains(pattern: Str) -> Bool
         if (method == "contains") {
+            emit_coverage("Str::contains");
             if (call.args.empty()) {
-                report_error("contains() requires a pattern argument", call.span);
+                report_error("contains() requires a pattern argument", call.span, "C008");
                 return "0";
             }
             std::string pattern = gen_expr(*call.args[0]);
@@ -715,8 +738,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // find(pattern: Str) -> I64 (returns -1 if not found)
         if (method == "find") {
+            emit_coverage("Str::find");
             if (call.args.empty()) {
-                report_error("find() requires a pattern argument", call.span);
+                report_error("find() requires a pattern argument", call.span, "C008");
                 return "0";
             }
             std::string pattern = gen_expr(*call.args[0]);
@@ -729,8 +753,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // rfind(pattern: Str) -> I64 (returns -1 if not found)
         if (method == "rfind") {
+            emit_coverage("Str::rfind");
             if (call.args.empty()) {
-                report_error("rfind() requires a pattern argument", call.span);
+                report_error("rfind() requires a pattern argument", call.span, "C008");
                 return "0";
             }
             std::string pattern = gen_expr(*call.args[0]);
@@ -743,8 +768,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // split(delimiter: Str) -> List[Str]
         if (method == "split") {
+            emit_coverage("Str::split");
             if (call.args.empty()) {
-                report_error("split() requires a delimiter argument", call.span);
+                report_error("split() requires a delimiter argument", call.span, "C008");
                 return "0";
             }
             std::string delim = gen_expr(*call.args[0]);
@@ -757,6 +783,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // chars() -> List[I32]
         if (method == "chars") {
+            emit_coverage("Str::chars");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @str_chars(ptr " + receiver + ")");
             last_expr_type_ = "ptr";
@@ -765,6 +792,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // trim() -> Str
         if (method == "trim") {
+            emit_coverage("Str::trim");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @str_trim(ptr " + receiver + ")");
             last_expr_type_ = "ptr";
@@ -773,6 +801,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // trim_start() -> Str
         if (method == "trim_start") {
+            emit_coverage("Str::trim_start");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @str_trim_start(ptr " + receiver + ")");
             last_expr_type_ = "ptr";
@@ -781,6 +810,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // trim_end() -> Str
         if (method == "trim_end") {
+            emit_coverage("Str::trim_end");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @str_trim_end(ptr " + receiver + ")");
             last_expr_type_ = "ptr";
@@ -789,6 +819,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // parse_i64() -> Maybe[I64]
         if (method == "parse_i64") {
+            emit_coverage("Str::parse_i64");
             std::string value = fresh_reg();
             emit_line("  " + value + " = call i64 @str_parse_i64(ptr " + receiver + ")");
             // Return Just(value) - create Maybe struct with tag=0 and value
@@ -802,6 +833,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // parse_u16() -> Maybe[U16]
         if (method == "parse_u16") {
+            emit_coverage("Str::parse_u16");
             std::string value64 = fresh_reg();
             emit_line("  " + value64 + " = call i64 @str_parse_i64(ptr " + receiver + ")");
             std::string value = fresh_reg();
@@ -817,8 +849,9 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // replace(from: Str, to: Str) -> Str
         if (method == "replace") {
+            emit_coverage("Str::replace");
             if (call.args.size() < 2) {
-                report_error("replace() requires 'from' and 'to' arguments", call.span);
+                report_error("replace() requires 'from' and 'to' arguments", call.span, "C008");
                 return "0";
             }
             std::string from = gen_expr(*call.args[0]);

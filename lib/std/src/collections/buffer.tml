@@ -1,0 +1,910 @@
+//! Byte buffer for binary data manipulation.
+//!
+//! `Buffer` provides efficient byte-level I/O operations for
+//! serialization, network protocols, and binary file handling.
+//! Compatible with Node.js Buffer API.
+//!
+//! # Example
+//!
+//! ```tml
+//! let buf = Buffer::new(64)
+//! buf.write_i32(42)
+//! buf.write_i64(123456789)
+//! buf.reset_read()
+//! let num = buf.read_i32()  // 42
+//! buf.destroy()
+//! ```
+
+// FFI declarations for extended Buffer functions
+@extern("buffer_get")
+func ffi_buffer_get(handle: *Unit, index: I64) -> I32
+
+@extern("buffer_set")
+func ffi_buffer_set(handle: *Unit, index: I64, value: I32)
+
+@extern("buffer_write_u8")
+func ffi_buffer_write_u8(handle: *Unit, offset: I64, value: I32)
+
+@extern("buffer_read_u8")
+func ffi_buffer_read_u8(handle: *Unit, offset: I64) -> I32
+
+@extern("buffer_read_i8")
+func ffi_buffer_read_i8(handle: *Unit, offset: I64) -> I32
+
+@extern("buffer_write_u16_le")
+func ffi_buffer_write_u16_le(handle: *Unit, offset: I64, value: I32)
+
+@extern("buffer_write_u16_be")
+func ffi_buffer_write_u16_be(handle: *Unit, offset: I64, value: I32)
+
+@extern("buffer_read_u16_le")
+func ffi_buffer_read_u16_le(handle: *Unit, offset: I64) -> I32
+
+@extern("buffer_read_u16_be")
+func ffi_buffer_read_u16_be(handle: *Unit, offset: I64) -> I32
+
+@extern("buffer_read_i16_le")
+func ffi_buffer_read_i16_le(handle: *Unit, offset: I64) -> I32
+
+@extern("buffer_read_i16_be")
+func ffi_buffer_read_i16_be(handle: *Unit, offset: I64) -> I32
+
+@extern("buffer_write_u32_le")
+func ffi_buffer_write_u32_le(handle: *Unit, offset: I64, value: I64)
+
+@extern("buffer_write_u32_be")
+func ffi_buffer_write_u32_be(handle: *Unit, offset: I64, value: I64)
+
+@extern("buffer_read_u32_le")
+func ffi_buffer_read_u32_le(handle: *Unit, offset: I64) -> I64
+
+@extern("buffer_read_u32_be")
+func ffi_buffer_read_u32_be(handle: *Unit, offset: I64) -> I64
+
+@extern("buffer_read_i32_le")
+func ffi_buffer_read_i32_le(handle: *Unit, offset: I64) -> I32
+
+@extern("buffer_read_i32_be")
+func ffi_buffer_read_i32_be(handle: *Unit, offset: I64) -> I32
+
+@extern("buffer_write_u64_le")
+func ffi_buffer_write_u64_le(handle: *Unit, offset: I64, value: I64)
+
+@extern("buffer_write_u64_be")
+func ffi_buffer_write_u64_be(handle: *Unit, offset: I64, value: I64)
+
+@extern("buffer_read_u64_le")
+func ffi_buffer_read_u64_le(handle: *Unit, offset: I64) -> I64
+
+@extern("buffer_read_u64_be")
+func ffi_buffer_read_u64_be(handle: *Unit, offset: I64) -> I64
+
+@extern("buffer_read_i64_le")
+func ffi_buffer_read_i64_le(handle: *Unit, offset: I64) -> I64
+
+@extern("buffer_read_i64_be")
+func ffi_buffer_read_i64_be(handle: *Unit, offset: I64) -> I64
+
+@extern("buffer_write_f32_le")
+func ffi_buffer_write_f32_le(handle: *Unit, offset: I64, value: F32)
+
+@extern("buffer_write_f32_be")
+func ffi_buffer_write_f32_be(handle: *Unit, offset: I64, value: F32)
+
+@extern("buffer_read_f32_le")
+func ffi_buffer_read_f32_le(handle: *Unit, offset: I64) -> F32
+
+@extern("buffer_read_f32_be")
+func ffi_buffer_read_f32_be(handle: *Unit, offset: I64) -> F32
+
+@extern("buffer_write_f64_le")
+func ffi_buffer_write_f64_le(handle: *Unit, offset: I64, value: F64)
+
+@extern("buffer_write_f64_be")
+func ffi_buffer_write_f64_be(handle: *Unit, offset: I64, value: F64)
+
+@extern("buffer_read_f64_le")
+func ffi_buffer_read_f64_le(handle: *Unit, offset: I64) -> F64
+
+@extern("buffer_read_f64_be")
+func ffi_buffer_read_f64_be(handle: *Unit, offset: I64) -> F64
+
+@extern("buffer_fill")
+func ffi_buffer_fill(handle: *Unit, value: I32, start: I64, end: I64)
+
+@extern("buffer_copy")
+func ffi_buffer_copy(src: *Unit, dst: *Unit, target_start: I64, source_start: I64, source_end: I64) -> I64
+
+@extern("buffer_slice")
+func ffi_buffer_slice(handle: *Unit, start: I64, end: I64) -> *Unit
+
+@extern("buffer_swap16")
+func ffi_buffer_swap16(handle: *Unit)
+
+@extern("buffer_swap32")
+func ffi_buffer_swap32(handle: *Unit)
+
+@extern("buffer_swap64")
+func ffi_buffer_swap64(handle: *Unit)
+
+@extern("buffer_compare")
+func ffi_buffer_compare(a: *Unit, b: *Unit) -> I32
+
+@extern("buffer_equals")
+func ffi_buffer_equals(a: *Unit, b: *Unit) -> I32
+
+@extern("buffer_index_of")
+func ffi_buffer_index_of(handle: *Unit, value: I32, start: I64) -> I64
+
+@extern("buffer_last_index_of")
+func ffi_buffer_last_index_of(handle: *Unit, value: I32, start: I64) -> I64
+
+@extern("buffer_includes")
+func ffi_buffer_includes(handle: *Unit, value: I32, start: I64) -> I32
+
+@extern("buffer_to_hex")
+func ffi_buffer_to_hex(handle: *Unit) -> Str
+
+@extern("buffer_to_string")
+func ffi_buffer_to_string(handle: *Unit) -> Str
+
+@extern("buffer_from_hex")
+func ffi_buffer_from_hex(hex: Str) -> *Unit
+
+@extern("buffer_from_string")
+func ffi_buffer_from_string(str: Str) -> *Unit
+
+@extern("buffer_write_i64")
+func ffi_buffer_write_i64(handle: *Unit, value: I64)
+
+@extern("buffer_read_i64")
+func ffi_buffer_read_i64(handle: *Unit) -> I64
+
+/// A byte buffer for reading and writing binary data.
+///
+/// `Buffer` provides efficient byte-level I/O operations for
+/// serialization and network protocols. Compatible with Node.js Buffer API.
+///
+/// # Example
+///
+/// ```tml
+/// let buf = Buffer::new(64)
+/// buf.write_i32(42)
+/// buf.write_i64(123456789)
+/// buf.reset_read()
+/// let num = buf.read_i32()  // 42
+/// buf.destroy()
+/// ```
+pub type Buffer {
+    handle: *Unit
+}
+
+impl Buffer {
+    /// Creates a new buffer with the specified initial capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `initial_capacity` - The initial capacity in bytes
+    ///
+    /// # Returns
+    ///
+    /// A new `Buffer` instance
+    pub func new(initial_capacity: I64) -> Buffer {
+        let h: *Unit = lowlevel { buffer_create(initial_capacity) }
+        Buffer { handle: h }
+    }
+
+    /// Creates a new buffer with default capacity (64 bytes).
+    ///
+    /// # Returns
+    ///
+    /// A new `Buffer` instance with default capacity
+    pub func default() -> Buffer {
+        Buffer.new(64)
+    }
+
+    /// Writes a single byte to the buffer at the current write position.
+    ///
+    /// # Arguments
+    ///
+    /// * `byte` - The byte value (0-255)
+    pub func write_byte(this, byte: I32) {
+        lowlevel { buffer_write_byte(this.handle, byte) }
+    }
+
+    /// Writes a 32-bit signed integer to the buffer (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The 32-bit integer value
+    pub func write_i32(this, value: I32) {
+        lowlevel { buffer_write_i32(this.handle, value) }
+    }
+
+    /// Writes a 64-bit signed integer to the buffer (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The 64-bit integer value
+    pub func write_i64(this, value: I64) {
+        ffi_buffer_write_i64(this.handle, value)
+    }
+
+    /// Reads a single byte from the buffer at the current read position.
+    ///
+    /// # Returns
+    ///
+    /// The byte value, or -1 if at end of buffer
+    pub func read_byte(this) -> I32 {
+        lowlevel { buffer_read_byte(this.handle) }
+    }
+
+    /// Reads a 32-bit signed integer from the buffer (little-endian).
+    ///
+    /// # Returns
+    ///
+    /// The 32-bit integer value
+    pub func read_i32(this) -> I32 {
+        lowlevel { buffer_read_i32(this.handle) }
+    }
+
+    /// Reads a 64-bit signed integer from the buffer (little-endian).
+    ///
+    /// # Returns
+    ///
+    /// The 64-bit integer value
+    pub func read_i64(this) -> I64 {
+        ffi_buffer_read_i64(this.handle)
+    }
+
+    /// Returns the number of bytes written to the buffer.
+    ///
+    /// # Returns
+    ///
+    /// The buffer length in bytes
+    pub func len(this) -> I64 {
+        lowlevel { buffer_len(this.handle) }
+    }
+
+    /// Returns the current capacity of the buffer.
+    ///
+    /// # Returns
+    ///
+    /// The capacity in bytes
+    pub func capacity(this) -> I64 {
+        lowlevel { buffer_capacity(this.handle) }
+    }
+
+    /// Returns the number of bytes remaining to read.
+    ///
+    /// # Returns
+    ///
+    /// The number of unread bytes
+    pub func remaining(this) -> I64 {
+        lowlevel { buffer_remaining(this.handle) }
+    }
+
+    /// Clears the buffer, resetting both length and read position.
+    pub func clear(this) {
+        lowlevel { buffer_clear(this.handle) }
+    }
+
+    /// Resets the read position to the beginning of the buffer.
+    pub func reset_read(this) {
+        lowlevel { buffer_reset_read(this.handle) }
+    }
+
+    /// Destroys the buffer and frees all associated memory.
+    ///
+    /// # Safety
+    ///
+    /// The buffer must not be used after calling this method.
+    pub func destroy(this) {
+        lowlevel { buffer_destroy(this.handle) }
+    }
+
+    // ========================================================================
+    // Index Access (Node.js: buf[index])
+    // ========================================================================
+
+    /// Gets the byte at the specified index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The byte index
+    ///
+    /// # Returns
+    ///
+    /// The byte value at the index, or 0 if out of bounds
+    pub func get(this, index: I64) -> I32 {
+        ffi_buffer_get(this.handle, index)
+    }
+
+    /// Sets the byte at the specified index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The byte index
+    /// * `value` - The byte value (0-255)
+    pub func set(this, index: I64, value: I32) {
+        ffi_buffer_set(this.handle, index, value)
+    }
+
+    // ========================================================================
+    // 8-bit Integer Read/Write
+    // ========================================================================
+
+    /// Writes an unsigned 8-bit integer at the specified offset.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value (0-255)
+    /// * `offset` - The byte offset
+    pub func write_u8(this, value: I32, offset: I64) {
+        ffi_buffer_write_u8(this.handle, offset, value)
+    }
+
+    /// Reads an unsigned 8-bit integer at the specified offset.
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The unsigned 8-bit value (0-255)
+    pub func read_u8(this, offset: I64) -> I32 {
+        ffi_buffer_read_u8(this.handle, offset)
+    }
+
+    /// Reads a signed 8-bit integer at the specified offset.
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The signed 8-bit value (-128 to 127)
+    pub func read_i8(this, offset: I64) -> I32 {
+        ffi_buffer_read_i8(this.handle, offset)
+    }
+
+    // ========================================================================
+    // 16-bit Integer Read/Write
+    // ========================================================================
+
+    /// Writes an unsigned 16-bit integer at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value (0-65535)
+    /// * `offset` - The byte offset
+    pub func write_u16_le(this, value: I32, offset: I64) {
+        ffi_buffer_write_u16_le(this.handle, offset, value)
+    }
+
+    /// Writes an unsigned 16-bit integer at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value (0-65535)
+    /// * `offset` - The byte offset
+    pub func write_u16_be(this, value: I32, offset: I64) {
+        ffi_buffer_write_u16_be(this.handle, offset, value)
+    }
+
+    /// Reads an unsigned 16-bit integer at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The unsigned 16-bit value
+    pub func read_u16_le(this, offset: I64) -> I32 {
+        ffi_buffer_read_u16_le(this.handle, offset)
+    }
+
+    /// Reads an unsigned 16-bit integer at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The unsigned 16-bit value
+    pub func read_u16_be(this, offset: I64) -> I32 {
+        ffi_buffer_read_u16_be(this.handle, offset)
+    }
+
+    /// Reads a signed 16-bit integer at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The signed 16-bit value
+    pub func read_i16_le(this, offset: I64) -> I32 {
+        ffi_buffer_read_i16_le(this.handle, offset)
+    }
+
+    /// Reads a signed 16-bit integer at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The signed 16-bit value
+    pub func read_i16_be(this, offset: I64) -> I32 {
+        ffi_buffer_read_i16_be(this.handle, offset)
+    }
+
+    // ========================================================================
+    // 32-bit Integer Read/Write
+    // ========================================================================
+
+    /// Writes an unsigned 32-bit integer at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value
+    /// * `offset` - The byte offset
+    pub func write_u32_le(this, value: I64, offset: I64) {
+        ffi_buffer_write_u32_le(this.handle, offset, value)
+    }
+
+    /// Writes an unsigned 32-bit integer at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value
+    /// * `offset` - The byte offset
+    pub func write_u32_be(this, value: I64, offset: I64) {
+        ffi_buffer_write_u32_be(this.handle, offset, value)
+    }
+
+    /// Reads an unsigned 32-bit integer at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The unsigned 32-bit value
+    pub func read_u32_le(this, offset: I64) -> I64 {
+        ffi_buffer_read_u32_le(this.handle, offset)
+    }
+
+    /// Reads an unsigned 32-bit integer at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The unsigned 32-bit value
+    pub func read_u32_be(this, offset: I64) -> I64 {
+        ffi_buffer_read_u32_be(this.handle, offset)
+    }
+
+    /// Reads a signed 32-bit integer at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The signed 32-bit value
+    pub func read_i32_at(this, offset: I64) -> I32 {
+        ffi_buffer_read_i32_le(this.handle, offset)
+    }
+
+    /// Reads a signed 32-bit integer at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The signed 32-bit value
+    pub func read_i32_be(this, offset: I64) -> I32 {
+        ffi_buffer_read_i32_be(this.handle, offset)
+    }
+
+    // ========================================================================
+    // 64-bit Integer Read/Write
+    // ========================================================================
+
+    /// Writes an unsigned 64-bit integer at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value
+    /// * `offset` - The byte offset
+    pub func write_u64_le(this, value: I64, offset: I64) {
+        ffi_buffer_write_u64_le(this.handle, offset, value)
+    }
+
+    /// Writes an unsigned 64-bit integer at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value
+    /// * `offset` - The byte offset
+    pub func write_u64_be(this, value: I64, offset: I64) {
+        ffi_buffer_write_u64_be(this.handle, offset, value)
+    }
+
+    /// Reads an unsigned 64-bit integer at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The unsigned 64-bit value
+    pub func read_u64_le(this, offset: I64) -> I64 {
+        ffi_buffer_read_u64_le(this.handle, offset)
+    }
+
+    /// Reads an unsigned 64-bit integer at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The unsigned 64-bit value
+    pub func read_u64_be(this, offset: I64) -> I64 {
+        ffi_buffer_read_u64_be(this.handle, offset)
+    }
+
+    /// Reads a signed 64-bit integer at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The signed 64-bit value
+    pub func read_i64_at(this, offset: I64) -> I64 {
+        ffi_buffer_read_i64_le(this.handle, offset)
+    }
+
+    /// Reads a signed 64-bit integer at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The signed 64-bit value
+    pub func read_i64_be(this, offset: I64) -> I64 {
+        ffi_buffer_read_i64_be(this.handle, offset)
+    }
+
+    // ========================================================================
+    // Float Read/Write
+    // ========================================================================
+
+    /// Writes a 32-bit float at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The float value
+    /// * `offset` - The byte offset
+    pub func write_f32_le(this, value: F32, offset: I64) {
+        ffi_buffer_write_f32_le(this.handle, offset, value)
+    }
+
+    /// Writes a 32-bit float at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The float value
+    /// * `offset` - The byte offset
+    pub func write_f32_be(this, value: F32, offset: I64) {
+        ffi_buffer_write_f32_be(this.handle, offset, value)
+    }
+
+    /// Reads a 32-bit float at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The 32-bit float value
+    pub func read_f32_le(this, offset: I64) -> F32 {
+        ffi_buffer_read_f32_le(this.handle, offset)
+    }
+
+    /// Reads a 32-bit float at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The 32-bit float value
+    pub func read_f32_be(this, offset: I64) -> F32 {
+        ffi_buffer_read_f32_be(this.handle, offset)
+    }
+
+    /// Writes a 64-bit double at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The double value
+    /// * `offset` - The byte offset
+    pub func write_f64_le(this, value: F64, offset: I64) {
+        ffi_buffer_write_f64_le(this.handle, offset, value)
+    }
+
+    /// Writes a 64-bit double at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The double value
+    /// * `offset` - The byte offset
+    pub func write_f64_be(this, value: F64, offset: I64) {
+        ffi_buffer_write_f64_be(this.handle, offset, value)
+    }
+
+    /// Reads a 64-bit double at the specified offset (little-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The 64-bit double value
+    pub func read_f64_le(this, offset: I64) -> F64 {
+        ffi_buffer_read_f64_le(this.handle, offset)
+    }
+
+    /// Reads a 64-bit double at the specified offset (big-endian).
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - The byte offset
+    ///
+    /// # Returns
+    ///
+    /// The 64-bit double value
+    pub func read_f64_be(this, offset: I64) -> F64 {
+        ffi_buffer_read_f64_be(this.handle, offset)
+    }
+
+    // ========================================================================
+    // Manipulation
+    // ========================================================================
+
+    /// Fills a portion of the buffer with the specified value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The byte value to fill with
+    /// * `start` - The start index (inclusive)
+    /// * `end` - The end index (exclusive)
+    pub func fill(this, value: I32, start: I64, end: I64) {
+        ffi_buffer_fill(this.handle, value, start, end)
+    }
+
+    /// Fills the entire buffer with the specified value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The byte value to fill with
+    pub func fill_all(this, value: I32) {
+        ffi_buffer_fill(this.handle, value, 0, this.len())
+    }
+
+    /// Copies bytes from this buffer to a target buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - The target buffer
+    /// * `target_start` - The start position in the target
+    /// * `source_start` - The start position in the source (inclusive)
+    /// * `source_end` - The end position in the source (exclusive)
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes copied
+    pub func copy_to(this, target: ref Buffer, target_start: I64, source_start: I64, source_end: I64) -> I64 {
+        ffi_buffer_copy(this.handle, target.handle, target_start, source_start, source_end)
+    }
+
+    /// Creates a new buffer containing a copy of a portion of this buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `start` - The start index (inclusive)
+    /// * `end` - The end index (exclusive)
+    ///
+    /// # Returns
+    ///
+    /// A new `Buffer` containing the slice
+    pub func slice(this, start: I64, end: I64) -> Buffer {
+        let h: *Unit = ffi_buffer_slice(this.handle, start, end)
+        Buffer { handle: h }
+    }
+
+    /// Swaps byte order for 16-bit values in place.
+    ///
+    /// Useful for converting between little-endian and big-endian.
+    pub func swap16(this) {
+        ffi_buffer_swap16(this.handle)
+    }
+
+    /// Swaps byte order for 32-bit values in place.
+    ///
+    /// Useful for converting between little-endian and big-endian.
+    pub func swap32(this) {
+        ffi_buffer_swap32(this.handle)
+    }
+
+    /// Swaps byte order for 64-bit values in place.
+    ///
+    /// Useful for converting between little-endian and big-endian.
+    pub func swap64(this) {
+        ffi_buffer_swap64(this.handle)
+    }
+
+    // ========================================================================
+    // Search and Comparison
+    // ========================================================================
+
+    /// Compares this buffer with another buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The buffer to compare with
+    ///
+    /// # Returns
+    ///
+    /// -1 if this < other, 0 if equal, 1 if this > other
+    pub func compare(this, other: ref Buffer) -> I32 {
+        ffi_buffer_compare(this.handle, other.handle)
+    }
+
+    /// Checks if this buffer equals another buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The buffer to compare with
+    ///
+    /// # Returns
+    ///
+    /// `true` if buffers are equal, `false` otherwise
+    pub func equals(this, other: ref Buffer) -> Bool {
+        let result: I32 = ffi_buffer_equals(this.handle, other.handle)
+        return result != 0
+    }
+
+    /// Finds the first occurrence of a byte value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The byte value to search for
+    /// * `start` - The index to start searching from
+    ///
+    /// # Returns
+    ///
+    /// The index of the first occurrence, or -1 if not found
+    pub func index_of(this, value: I32, start: I64) -> I64 {
+        ffi_buffer_index_of(this.handle, value, start)
+    }
+
+    /// Finds the last occurrence of a byte value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The byte value to search for
+    /// * `start` - The index to start searching backwards from
+    ///
+    /// # Returns
+    ///
+    /// The index of the last occurrence, or -1 if not found
+    pub func last_index_of(this, value: I32, start: I64) -> I64 {
+        ffi_buffer_last_index_of(this.handle, value, start)
+    }
+
+    /// Checks if the buffer contains a byte value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The byte value to search for
+    /// * `start` - The index to start searching from
+    ///
+    /// # Returns
+    ///
+    /// `true` if the value is found, `false` otherwise
+    pub func includes(this, value: I32, start: I64) -> Bool {
+        let result: I32 = ffi_buffer_includes(this.handle, value, start)
+        return result != 0
+    }
+
+    // ========================================================================
+    // String Conversion
+    // ========================================================================
+
+    /// Converts the buffer to a hexadecimal string.
+    ///
+    /// # Returns
+    ///
+    /// A string containing the hexadecimal representation
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// buf.write_byte(0xDE)
+    /// buf.write_byte(0xAD)
+    /// let hex = buf.to_hex()  // "dead"
+    /// ```
+    pub func to_hex(this) -> Str {
+        ffi_buffer_to_hex(this.handle)
+    }
+
+    /// Converts the buffer to a UTF-8 string.
+    ///
+    /// # Returns
+    ///
+    /// A string containing the UTF-8 representation
+    pub func to_string(this) -> Str {
+        ffi_buffer_to_string(this.handle)
+    }
+
+    /// Creates a buffer from a hexadecimal string.
+    ///
+    /// # Arguments
+    ///
+    /// * `hex` - The hexadecimal string
+    ///
+    /// # Returns
+    ///
+    /// A new `Buffer` containing the decoded bytes
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let buf = Buffer::from_hex("deadbeef")
+    /// ```
+    pub func from_hex(hex: Str) -> Buffer {
+        let h: *Unit = ffi_buffer_from_hex(hex)
+        Buffer { handle: h }
+    }
+
+    /// Creates a buffer from a UTF-8 string.
+    ///
+    /// # Arguments
+    ///
+    /// * `str` - The UTF-8 string
+    ///
+    /// # Returns
+    ///
+    /// A new `Buffer` containing the string bytes
+    pub func from_string(str: Str) -> Buffer {
+        let h: *Unit = ffi_buffer_from_string(str)
+        Buffer { handle: h }
+    }
+}

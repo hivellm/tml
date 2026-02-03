@@ -34,9 +34,12 @@ namespace tml::codegen {
 auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // Handle assignment specially - don't evaluate left for deref assignments
     if (bin.op == parser::BinaryOp::Assign) {
-        // For field assignments, we need to set expected_enum_type_ BEFORE evaluating RHS
+        // For field assignments, we need to set expected types BEFORE evaluating RHS
         // This is needed for generic enum unit variants like 'Nothing' to get the correct type
+        // and for integer literals to get the correct size (e.g., -1 should be i64 not i32)
         std::string saved_expected_enum_type = expected_enum_type_;
+        std::string saved_expected_literal_type = expected_literal_type_;
+        bool saved_expected_literal_is_unsigned = expected_literal_is_unsigned_;
 
         if (bin.left->is<parser::FieldExpr>()) {
             // Get the field type to use as expected enum type for RHS
@@ -46,13 +49,42 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 if (llvm_type.starts_with("%struct.")) {
                     expected_enum_type_ = llvm_type;
                 }
+                // Set expected_literal_type_ for integer fields
+                if (llvm_type == "i8") {
+                    expected_literal_type_ = "i8";
+                    expected_literal_is_unsigned_ = false;
+                } else if (llvm_type == "i16") {
+                    expected_literal_type_ = "i16";
+                    expected_literal_is_unsigned_ = false;
+                } else if (llvm_type == "i64") {
+                    expected_literal_type_ = "i64";
+                    expected_literal_is_unsigned_ = false;
+                }
+            }
+        } else if (bin.left->is<parser::IdentExpr>()) {
+            // For variable assignments, also set expected type
+            auto it = locals_.find(bin.left->as<parser::IdentExpr>().name);
+            if (it != locals_.end()) {
+                const std::string& target_type = it->second.type;
+                if (target_type == "i8") {
+                    expected_literal_type_ = "i8";
+                    expected_literal_is_unsigned_ = false;
+                } else if (target_type == "i16") {
+                    expected_literal_type_ = "i16";
+                    expected_literal_is_unsigned_ = false;
+                } else if (target_type == "i64") {
+                    expected_literal_type_ = "i64";
+                    expected_literal_is_unsigned_ = false;
+                }
             }
         }
 
         std::string right = gen_expr(*bin.right);
 
-        // Restore expected_enum_type_
+        // Restore expected types
         expected_enum_type_ = saved_expected_enum_type;
+        expected_literal_type_ = saved_expected_literal_type;
+        expected_literal_is_unsigned_ = saved_expected_literal_is_unsigned;
 
         if (bin.left->is<parser::IdentExpr>()) {
             auto it = locals_.find(bin.left->as<parser::IdentExpr>().name);
@@ -675,7 +707,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 return result;
             }
         }
-        report_error("Compound assignment requires a variable on the left side", bin.span);
+        report_error("Compound assignment requires a variable on the left side", bin.span, "C003");
         return "0";
     }
 

@@ -1,0 +1,240 @@
+//! Hash-based key-value collection type.
+//!
+//! `HashMap[K, V]` stores key-value pairs with O(1) average lookup time.
+//! Keys must be hashable and comparable.
+//!
+//! # Example
+//!
+//! ```tml
+//! let scores = HashMap[Str, I32]::new(16)
+//! scores.set("Alice", 100)
+//! scores.set("Bob", 85)
+//! let alice_score = scores.get("Alice")  // 100
+//! scores.destroy()
+//! ```
+
+/// A hash-based key-value collection.
+///
+/// `HashMap[K, V]` stores key-value pairs with O(1) average lookup time.
+/// Keys must be hashable and comparable.
+///
+/// # Type Parameters
+///
+/// * `K` - The type of keys
+/// * `V` - The type of values
+///
+/// # Example
+///
+/// ```tml
+/// let scores = HashMap[Str, I32]::new(16)
+/// scores.set("Alice", 100)
+/// scores.set("Bob", 85)
+/// let alice_score = scores.get("Alice")  // 100
+/// scores.destroy()
+/// ```
+pub type HashMap[K, V] {
+    handle: *Unit
+}
+
+impl[K, V] HashMap[K, V] {
+    /// Creates a new hashmap with the specified initial capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `initial_capacity` - The initial capacity of the hashmap
+    ///
+    /// # Returns
+    ///
+    /// A new `HashMap[K, V]` instance
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let map = HashMap[Str, I32]::new(32)
+    /// ```
+    pub func new(initial_capacity: I64) -> HashMap[K, V] {
+        let h: *Unit = lowlevel { hashmap_create(initial_capacity) }
+        HashMap[K, V] { handle: h }
+    }
+
+    /// Creates a new hashmap with default capacity (16).
+    ///
+    /// # Returns
+    ///
+    /// A new `HashMap[K, V]` instance with default capacity
+    pub func default() -> HashMap[K, V] {
+        HashMap[K, V].new(16)
+    }
+
+    /// Inserts a key-value pair into the hashmap.
+    ///
+    /// If the key already exists, the value is updated.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key
+    /// * `value` - The value to associate with the key
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// map.set("name", "Alice")
+    /// ```
+    pub func set(this, key: K, value: V) {
+        lowlevel { hashmap_set(this.handle, key, value) }
+    }
+
+    /// Returns the value associated with the given key.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to look up
+    ///
+    /// # Returns
+    ///
+    /// The value associated with the key, or default if not found
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let value = map.get("name")
+    /// ```
+    pub func get(this, key: K) -> V {
+        lowlevel { hashmap_get(this.handle, key) }
+    }
+
+    /// Returns `true` if the hashmap contains the given key.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if the key exists, `false` otherwise
+    pub func has(this, key: K) -> Bool {
+        lowlevel { hashmap_has(this.handle, key) }
+    }
+
+    /// Removes a key-value pair from the hashmap.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to remove
+    ///
+    /// # Returns
+    ///
+    /// `true` if the key was found and removed, `false` otherwise
+    pub func remove(this, key: K) -> Bool {
+        lowlevel { hashmap_remove(this.handle, key) }
+    }
+
+    /// Returns the number of key-value pairs in the hashmap.
+    ///
+    /// # Returns
+    ///
+    /// The number of entries
+    pub func len(this) -> I64 {
+        lowlevel { hashmap_len(this.handle) }
+    }
+
+    /// Removes all key-value pairs from the hashmap.
+    pub func clear(this) {
+        lowlevel { hashmap_clear(this.handle) }
+    }
+
+    /// Destroys the hashmap and frees all associated memory.
+    ///
+    /// # Safety
+    ///
+    /// The hashmap must not be used after calling this method.
+    pub func destroy(this) {
+        lowlevel { hashmap_destroy(this.handle) }
+    }
+
+    /// Creates an iterator over the hashmap entries.
+    ///
+    /// # Returns
+    ///
+    /// A `HashMapIter[K, V]` for iterating over entries
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let iter = map.iter()
+    /// loop (iter.has_next()) {
+    ///     let key = iter.key()
+    ///     let value = iter.value()
+    ///     iter.next()
+    /// }
+    /// iter.destroy()
+    /// ```
+    pub func iter(this) -> HashMapIter[K, V] {
+        let h: *Unit = lowlevel { hashmap_iter_create(this.handle) }
+        HashMapIter[K, V] { handle: h }
+    }
+}
+
+/// An iterator over HashMap entries.
+///
+/// Created by calling `iter()` on a HashMap. The iterator provides access
+/// to keys and values through the `key()` and `value()` methods.
+///
+/// **Important**: The iterator must be destroyed after use to free memory.
+///
+/// # Example
+///
+/// ```tml
+/// let iter = map.iter()
+/// loop (iter.has_next()) {
+///     print(iter.key().to_string() + " => " + iter.value().to_string())
+///     iter.next()
+/// }
+/// iter.destroy()
+/// ```
+pub type HashMapIter[K, V] {
+    handle: *Unit
+}
+
+impl[K, V] HashMapIter[K, V] {
+    /// Returns `true` if there are more entries to iterate.
+    ///
+    /// # Returns
+    ///
+    /// `true` if more entries exist, `false` otherwise
+    pub func has_next(this) -> Bool {
+        lowlevel { hashmap_iter_has_next(this.handle) }
+    }
+
+    /// Advances the iterator to the next entry.
+    pub func next(this) {
+        lowlevel { hashmap_iter_next(this.handle) }
+    }
+
+    /// Returns the key of the current entry.
+    ///
+    /// # Returns
+    ///
+    /// The current key
+    pub func key(this) -> K {
+        lowlevel { hashmap_iter_key(this.handle) }
+    }
+
+    /// Returns the value of the current entry.
+    ///
+    /// # Returns
+    ///
+    /// The current value
+    pub func value(this) -> V {
+        lowlevel { hashmap_iter_value(this.handle) }
+    }
+
+    /// Destroys the iterator and frees all associated memory.
+    ///
+    /// # Safety
+    ///
+    /// The iterator must not be used after calling this method.
+    pub func destroy(this) {
+        lowlevel { hashmap_iter_destroy(this.handle) }
+    }
+}

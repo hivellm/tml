@@ -80,7 +80,8 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
                                      "requires explicit types)",
                           .span = peek().span,
                           .notes = {"TML requires explicit type annotations for all variables"},
-                          .fixes = {fix}};
+                          .fixes = {fix},
+                          .code = "P008"};
     }
     advance(); // consume ':'
 
@@ -134,7 +135,8 @@ auto Parser::parse_var_stmt() -> Result<StmtPtr, ParseError> {
                                      "requires explicit types)",
                           .span = peek().span,
                           .notes = {"TML requires explicit type annotations for all variables"},
-                          .fixes = {fix}};
+                          .fixes = {fix},
+                          .code = "P008"};
     }
     advance(); // consume ':'
 

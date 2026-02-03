@@ -139,6 +139,7 @@ struct TestOptions {
     std::string corpus_dir;            // Directory for fuzz corpus (inputs)
     std::string crashes_dir;           // Directory to save crash inputs
     bool check_leaks = true;           // Memory leak detection (enabled by default)
+    bool fail_fast = false;            // Stop on first test failure
 };
 
 // Parse test command arguments

@@ -1,0 +1,6 @@
+use std::collections::class_collections::LinkedList
+
+func main() {
+    let list: LinkedList[I64] = LinkedList[I64].create()
+    print("done\n")
+}

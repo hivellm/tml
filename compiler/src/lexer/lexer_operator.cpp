@@ -223,7 +223,7 @@ auto Lexer::lex_operator() -> Token {
         return make_token(TokenKind::Question);
 
     default:
-        return make_error_token("Unexpected character: " + std::string(1, c));
+        return make_error_token("Unexpected character: " + std::string(1, c), "L001");
     }
 }
 

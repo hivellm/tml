@@ -36,7 +36,7 @@ bool is_integer_type(const TypePtr& type);
 auto TypeChecker::check_if(const parser::IfExpr& if_expr) -> TypePtr {
     auto cond_type = check_expr(*if_expr.condition);
     if (!types_equal(env_.resolve(cond_type), make_bool())) {
-        error("If condition must be Bool", if_expr.condition->span);
+        error("If condition must be Bool", if_expr.condition->span, "T014");
     }
 
     auto then_type = check_expr(*if_expr.then_branch);
@@ -53,7 +53,7 @@ auto TypeChecker::check_ternary(const parser::TernaryExpr& ternary) -> TypePtr {
     // Check condition is Bool
     auto cond_type = check_expr(*ternary.condition);
     if (!types_equal(env_.resolve(cond_type), make_bool())) {
-        error("Ternary condition must be Bool", ternary.condition->span);
+        error("Ternary condition must be Bool", ternary.condition->span, "T014");
     }
 
     // Check both branches and ensure they return the same type
@@ -62,7 +62,7 @@ auto TypeChecker::check_ternary(const parser::TernaryExpr& ternary) -> TypePtr {
 
     // Both branches must have the same type
     if (!types_equal(env_.resolve(true_type), env_.resolve(false_type))) {
-        error("Ternary branches must have the same type", ternary.span);
+        error("Ternary branches must have the same type", ternary.span, "T015");
     }
 
     return true_type;
@@ -159,7 +159,7 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
             element_type = iter_type;
         } else {
             error("For loop requires slice or collection type, found: " + type_to_string(iter_type),
-                  for_expr.span);
+                  for_expr.span, "T050");
             element_type = make_unit();
         }
     } else if (iter_type->is<PrimitiveType>()) {
@@ -167,7 +167,7 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
         element_type = iter_type;
     } else {
         error("For loop requires slice or collection type, found: " + type_to_string(iter_type),
-              for_expr.span);
+              for_expr.span, "T050");
         element_type = make_unit();
     }
 
@@ -187,7 +187,7 @@ auto TypeChecker::check_range(const parser::RangeExpr& range) -> TypePtr {
     if (range.start) {
         start_type = check_expr(**range.start);
         if (!is_integer_type(start_type)) {
-            error("Range start must be an integer type", range.span);
+            error("Range start must be an integer type", range.span, "T051");
         }
     }
 
@@ -196,7 +196,7 @@ auto TypeChecker::check_range(const parser::RangeExpr& range) -> TypePtr {
     if (range.end) {
         end_type = check_expr(**range.end);
         if (!is_integer_type(end_type)) {
-            error("Range end must be an integer type", range.span);
+            error("Range end must be an integer type", range.span, "T051");
         }
     }
 
@@ -223,7 +223,7 @@ auto TypeChecker::check_return(const parser::ReturnExpr& ret) -> TypePtr {
         if (!types_compatible(resolved_expected, resolved_actual)) {
             error("Return type mismatch: expected " + type_to_string(resolved_expected) +
                       ", found " + type_to_string(resolved_actual),
-                  SourceSpan{});
+                  SourceSpan{}, "T016");
         }
     }
 
@@ -232,7 +232,7 @@ auto TypeChecker::check_return(const parser::ReturnExpr& ret) -> TypePtr {
 
 auto TypeChecker::check_break(const parser::BreakExpr& brk) -> TypePtr {
     if (loop_depth_ == 0) {
-        error("break outside of loop", SourceSpan{});
+        error("break outside of loop", SourceSpan{}, "T030");
     }
     if (brk.value) {
         check_expr(**brk.value);

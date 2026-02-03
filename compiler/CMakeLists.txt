@@ -339,6 +339,7 @@ add_library(tml_mir STATIC
     src/mir/passes/destructor_hoist.cpp
     src/mir/passes/batch_destruction.cpp
     src/mir/passes/infinite_loop_check.cpp
+    src/mir/passes/memory_leak_check.cpp
     src/mir/passes/bounds_check_elimination.cpp
     src/mir/passes/rvo.cpp
     src/mir/passes/alias_analysis.cpp

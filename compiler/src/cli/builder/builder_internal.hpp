@@ -45,6 +45,7 @@
 #include "mir/mir_builder.hpp"
 #include "mir/mir_pass.hpp"
 #include "mir/passes/infinite_loop_check.hpp"
+#include "mir/passes/memory_leak_check.hpp"
 #include "mir/passes/pgo.hpp"
 #include "parser/parser.hpp"
 #include "preprocessor/preprocessor.hpp"

@@ -121,7 +121,7 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_new_expr(expr.as<parser::NewExpr>());
     }
 
-    report_error("Unsupported expression type", expr.span);
+    report_error("Unsupported expression type", expr.span, "C002");
     return "0";
 }
 

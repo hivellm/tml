@@ -14,10 +14,8 @@
 #define TML_EXPORT __attribute__((visibility("default")))
 #endif
 
-// Maximum number of entries to track
-#define MAX_FUNCTIONS 4096
-#define MAX_LINES 8192
-#define MAX_BRANCHES 4096
+// Dynamic growth parameters
+#define INITIAL_CAPACITY 1024
 #define MAX_NAME_LEN 256
 
 // Coverage data structures
@@ -39,15 +37,52 @@ typedef struct {
     int32_t hit_count;
 } BranchCoverage;
 
-// Global coverage storage
-static FuncCoverage g_functions[MAX_FUNCTIONS];
+// Global coverage storage - dynamically allocated
+static FuncCoverage* g_functions = NULL;
 static int32_t g_func_count = 0;
+static int32_t g_func_capacity = 0;
 
-static LineCoverage g_lines[MAX_LINES];
+static LineCoverage* g_lines = NULL;
 static int32_t g_line_count = 0;
+static int32_t g_line_capacity = 0;
 
-static BranchCoverage g_branches[MAX_BRANCHES];
+static BranchCoverage* g_branches = NULL;
 static int32_t g_branch_count = 0;
+static int32_t g_branch_capacity = 0;
+
+// Helper: Ensure function array has capacity
+static void ensure_func_capacity(void) {
+    if (g_functions == NULL) {
+        g_func_capacity = INITIAL_CAPACITY;
+        g_functions = (FuncCoverage*)malloc(g_func_capacity * sizeof(FuncCoverage));
+    } else if (g_func_count >= g_func_capacity) {
+        g_func_capacity *= 2;
+        g_functions = (FuncCoverage*)realloc(g_functions, g_func_capacity * sizeof(FuncCoverage));
+    }
+}
+
+// Helper: Ensure line array has capacity
+static void ensure_line_capacity(void) {
+    if (g_lines == NULL) {
+        g_line_capacity = INITIAL_CAPACITY;
+        g_lines = (LineCoverage*)malloc(g_line_capacity * sizeof(LineCoverage));
+    } else if (g_line_count >= g_line_capacity) {
+        g_line_capacity *= 2;
+        g_lines = (LineCoverage*)realloc(g_lines, g_line_capacity * sizeof(LineCoverage));
+    }
+}
+
+// Helper: Ensure branch array has capacity
+static void ensure_branch_capacity(void) {
+    if (g_branches == NULL) {
+        g_branch_capacity = INITIAL_CAPACITY;
+        g_branches = (BranchCoverage*)malloc(g_branch_capacity * sizeof(BranchCoverage));
+    } else if (g_branch_count >= g_branch_capacity) {
+        g_branch_capacity *= 2;
+        g_branches =
+            (BranchCoverage*)realloc(g_branches, g_branch_capacity * sizeof(BranchCoverage));
+    }
+}
 
 // Helper: Find or create function entry
 static int32_t find_or_create_func(const char* name) {
@@ -56,13 +91,12 @@ static int32_t find_or_create_func(const char* name) {
             return i;
         }
     }
-    if (g_func_count < MAX_FUNCTIONS) {
-        strncpy(g_functions[g_func_count].name, name, MAX_NAME_LEN - 1);
-        g_functions[g_func_count].name[MAX_NAME_LEN - 1] = '\0';
-        g_functions[g_func_count].hit_count = 0;
-        return g_func_count++;
-    }
-    return -1;
+    // Always grow if needed - no limit
+    ensure_func_capacity();
+    strncpy(g_functions[g_func_count].name, name, MAX_NAME_LEN - 1);
+    g_functions[g_func_count].name[MAX_NAME_LEN - 1] = '\0';
+    g_functions[g_func_count].hit_count = 0;
+    return g_func_count++;
 }
 
 // Helper: Find or create line entry
@@ -72,14 +106,13 @@ static int32_t find_or_create_line(const char* file, int32_t line) {
             return i;
         }
     }
-    if (g_line_count < MAX_LINES) {
-        strncpy(g_lines[g_line_count].file, file, MAX_NAME_LEN - 1);
-        g_lines[g_line_count].file[MAX_NAME_LEN - 1] = '\0';
-        g_lines[g_line_count].line = line;
-        g_lines[g_line_count].hit_count = 0;
-        return g_line_count++;
-    }
-    return -1;
+    // Always grow if needed - no limit
+    ensure_line_capacity();
+    strncpy(g_lines[g_line_count].file, file, MAX_NAME_LEN - 1);
+    g_lines[g_line_count].file[MAX_NAME_LEN - 1] = '\0';
+    g_lines[g_line_count].line = line;
+    g_lines[g_line_count].hit_count = 0;
+    return g_line_count++;
 }
 
 // Helper: Find or create branch entry
@@ -90,15 +123,14 @@ static int32_t find_or_create_branch(const char* file, int32_t line, int32_t bra
             return i;
         }
     }
-    if (g_branch_count < MAX_BRANCHES) {
-        strncpy(g_branches[g_branch_count].file, file, MAX_NAME_LEN - 1);
-        g_branches[g_branch_count].file[MAX_NAME_LEN - 1] = '\0';
-        g_branches[g_branch_count].line = line;
-        g_branches[g_branch_count].branch_id = branch_id;
-        g_branches[g_branch_count].hit_count = 0;
-        return g_branch_count++;
-    }
-    return -1;
+    // Always grow if needed - no limit
+    ensure_branch_capacity();
+    strncpy(g_branches[g_branch_count].file, file, MAX_NAME_LEN - 1);
+    g_branches[g_branch_count].file[MAX_NAME_LEN - 1] = '\0';
+    g_branches[g_branch_count].line = line;
+    g_branches[g_branch_count].branch_id = branch_id;
+    g_branches[g_branch_count].hit_count = 0;
+    return g_branch_count++;
 }
 
 // ============ Public API ============
@@ -191,9 +223,25 @@ TML_EXPORT int32_t tml_get_func_hits(int32_t idx) {
 }
 
 TML_EXPORT void tml_reset_coverage(void) {
+    // Free dynamically allocated memory
+    if (g_functions) {
+        free(g_functions);
+        g_functions = NULL;
+    }
+    if (g_lines) {
+        free(g_lines);
+        g_lines = NULL;
+    }
+    if (g_branches) {
+        free(g_branches);
+        g_branches = NULL;
+    }
     g_func_count = 0;
+    g_func_capacity = 0;
     g_line_count = 0;
+    g_line_capacity = 0;
     g_branch_count = 0;
+    g_branch_capacity = 0;
 }
 
 TML_EXPORT void tml_print_coverage_report(void) {

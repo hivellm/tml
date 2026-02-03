@@ -76,7 +76,7 @@ auto Lexer::lex_string() -> Token {
 
     while (!is_at_end() && peek() != '"') {
         if (peek() == '\n') {
-            return make_error_token("Unterminated string literal");
+            return make_error_token("Unterminated string literal", "L002");
         }
 
         // Check for interpolation: { starts an interpolated expression
@@ -126,14 +126,14 @@ auto Lexer::lex_string() -> Token {
     }
 
     if (is_at_end()) {
-        return make_error_token("Unterminated string literal");
+        return make_error_token("Unterminated string literal", "L002");
     }
 
     // Skip closing quote
     advance();
 
     if (has_error) {
-        return make_error_token("Invalid escape sequence in string");
+        return make_error_token("Invalid escape sequence in string", "L004");
     }
 
     auto token = make_token(TokenKind::StringLiteral);
@@ -151,7 +151,7 @@ auto Lexer::lex_interp_string_continue() -> Token {
 
     while (!is_at_end() && peek() != '"') {
         if (peek() == '\n') {
-            return make_error_token("Unterminated string literal");
+            return make_error_token("Unterminated string literal", "L002");
         }
 
         // Check for another interpolation
@@ -196,7 +196,7 @@ auto Lexer::lex_interp_string_continue() -> Token {
     }
 
     if (is_at_end()) {
-        return make_error_token("Unterminated string literal");
+        return make_error_token("Unterminated string literal", "L002");
     }
 
     // Skip closing quote
@@ -205,7 +205,7 @@ auto Lexer::lex_interp_string_continue() -> Token {
     in_interpolation_ = false;
 
     if (has_error) {
-        return make_error_token("Invalid escape sequence in string");
+        return make_error_token("Invalid escape sequence in string", "L004");
     }
 
     auto token = make_token(TokenKind::InterpStringEnd);
@@ -250,13 +250,13 @@ auto Lexer::lex_raw_string() -> Token {
 
     while (!is_at_end() && peek() != '"') {
         if (peek() == '\n') {
-            return make_error_token("Unterminated raw string literal");
+            return make_error_token("Unterminated raw string literal", "L013");
         }
         value += advance();
     }
 
     if (is_at_end()) {
-        return make_error_token("Unterminated raw string literal");
+        return make_error_token("Unterminated raw string literal", "L013");
     }
 
     // Skip closing quote
@@ -272,7 +272,7 @@ auto Lexer::lex_char() -> Token {
     advance();
 
     if (is_at_end() || peek() == '\'') {
-        return make_error_token("Empty character literal");
+        return make_error_token("Empty character literal", "L006");
     }
 
     char32_t value;
@@ -288,7 +288,7 @@ auto Lexer::lex_char() -> Token {
     }
 
     if (is_at_end() || peek() != '\'') {
-        return make_error_token("Unterminated character literal");
+        return make_error_token("Unterminated character literal", "L005");
     }
 
     // Skip closing quote
@@ -458,14 +458,14 @@ auto Lexer::lex_template_literal() -> Token {
     }
 
     if (is_at_end()) {
-        return make_error_token("Unterminated template literal");
+        return make_error_token("Unterminated template literal", "L015");
     }
 
     // Skip closing backtick
     advance();
 
     if (has_error) {
-        return make_error_token("Invalid escape sequence in template literal");
+        return make_error_token("Invalid escape sequence in template literal", "L004");
     }
 
     // A simple template literal without interpolation - still produces TemplateLiteralEnd
@@ -532,7 +532,7 @@ auto Lexer::lex_template_literal_continue() -> Token {
     }
 
     if (is_at_end()) {
-        return make_error_token("Unterminated template literal");
+        return make_error_token("Unterminated template literal", "L015");
     }
 
     // Skip closing backtick
@@ -541,7 +541,7 @@ auto Lexer::lex_template_literal_continue() -> Token {
     in_template_literal_ = false;
 
     if (has_error) {
-        return make_error_token("Invalid escape sequence in template literal");
+        return make_error_token("Invalid escape sequence in template literal", "L004");
     }
 
     auto token = make_token(TokenKind::TemplateLiteralEnd);

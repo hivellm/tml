@@ -45,7 +45,7 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
     if (match(lexer::TokenKind::KwMut)) {
         // Must be followed by 'ref'
         if (!match(lexer::TokenKind::KwRef)) {
-            return ParseError{"Expected 'ref' after 'mut' in type", peek().span, {}, {}};
+            return ParseError{"Expected 'ref' after 'mut' in type", peek().span, {}, {}, "P057"};
         }
         // Check for optional lifetime annotation: ref[a] or ref[static]
         // Must distinguish from ref [T] (reference to slice)

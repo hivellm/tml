@@ -322,7 +322,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             // Still register the function mapping even if declaration was already emitted
             std::string func_type = ret_type + " (" + param_types + ")";
             functions_[func.name] =
-                FuncInfo{"@" + symbol_name, func_type, ret_type, param_types_vec};
+                FuncInfo{"@" + symbol_name, func_type, ret_type, param_types_vec, true, func.name};
             return;
         }
         declared_externals_.insert(symbol_name);
@@ -345,8 +345,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         emit_line("declare " + call_conv + ret_type + " @" + symbol_name + "(" + param_types + ")");
 
         // Register function - map TML name to external symbol
+        // Mark as extern for coverage tracking
         std::string func_type = ret_type + " (" + param_types + ")";
-        functions_[func.name] = FuncInfo{"@" + symbol_name, func_type, ret_type, param_types_vec};
+        functions_[func.name] =
+            FuncInfo{"@" + symbol_name, func_type, ret_type, param_types_vec, true, func.name};
 
         // Store link libraries for later (linker phase)
         for (const auto& lib : func.link_libs) {

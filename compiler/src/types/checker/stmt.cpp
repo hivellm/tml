@@ -58,7 +58,7 @@ auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
     if (!let.type_annotation.has_value()) {
         error("TML requires explicit type annotation on 'let' statements. Add ': Type' after the "
               "variable name.",
-              let.span);
+              let.span, "T011");
         // Continue with unit type to allow further error checking
         bind_pattern(*let.pattern, make_unit());
         return make_unit();
@@ -79,7 +79,7 @@ auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
         if (!types_compatible(resolved_var, resolved_init)) {
             error("Type mismatch: expected " + type_to_string(resolved_var) + ", found " +
                       type_to_string(resolved_init),
-                  let.span);
+                  let.span, "T001");
         }
     }
 
@@ -92,7 +92,7 @@ auto TypeChecker::check_var(const parser::VarStmt& var) -> TypePtr {
     if (!var.type_annotation.has_value()) {
         error("TML requires explicit type annotation on 'var' statements. Add ': Type' after the "
               "variable name.",
-              var.span);
+              var.span, "T011");
         // Continue with inferred type to allow further error checking
         TypePtr init_type = check_expr(*var.init);
         env_.current_scope()->define(var.name, init_type, true, SourceSpan{});
@@ -117,19 +117,21 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 // Check for duplicate definition in current scope
                 auto existing = env_.current_scope()->lookup(p.name);
                 if (existing) {
-                    error("Duplicate definition of variable '" + p.name + "'", pattern.span);
+                    error("Duplicate definition of variable '" + p.name + "'", pattern.span,
+                          "T008");
                 }
                 env_.current_scope()->define(p.name, type, p.is_mut, pattern.span);
             } else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
                 if (!type->is<TupleType>()) {
-                    error("Cannot destructure non-tuple type with tuple pattern", pattern.span);
+                    error("Cannot destructure non-tuple type with tuple pattern", pattern.span,
+                          "T035");
                     return;
                 }
                 auto& tuple = type->as<TupleType>();
                 if (p.elements.size() != tuple.elements.size()) {
                     error("Tuple pattern has " + std::to_string(p.elements.size()) +
                               " elements, but type has " + std::to_string(tuple.elements.size()),
-                          pattern.span);
+                          pattern.span, "T036");
                     return;
                 }
                 for (size_t i = 0; i < p.elements.size(); ++i) {
@@ -140,7 +142,8 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
             } else if constexpr (std::is_same_v<T, parser::EnumPattern>) {
                 // Extract enum name from type
                 if (!type->is<NamedType>()) {
-                    error("Pattern expects enum type, but got different type", pattern.span);
+                    error("Pattern expects enum type, but got different type", pattern.span,
+                          "T035");
                     return;
                 }
 
@@ -150,7 +153,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 // Lookup enum definition
                 auto enum_def = env_.lookup_enum(enum_name);
                 if (!enum_def) {
-                    error("Unknown enum type '" + enum_name + "' in pattern", pattern.span);
+                    error("Unknown enum type '" + enum_name + "' in pattern", pattern.span, "T023");
                     return;
                 }
 
@@ -170,7 +173,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
 
                 if (variant_it == enum_def->variants.end()) {
                     error("Unknown variant '" + variant_name + "' in enum '" + enum_name + "'",
-                          pattern.span);
+                          pattern.span, "T024");
                     return;
                 }
 
@@ -181,7 +184,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                     if (variant_payload_types.empty()) {
                         error("Variant '" + variant_name +
                                   "' has no payload, but pattern expects one",
-                              pattern.span);
+                              pattern.span, "T034");
                         return;
                     }
 
@@ -190,7 +193,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                                   std::to_string(variant_payload_types.size()) +
                                   " arguments, but pattern has " +
                                   std::to_string(p.payload->size()),
-                              pattern.span);
+                              pattern.span, "T034");
                         return;
                     }
 
@@ -202,13 +205,14 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                     }
                 } else if (!variant_payload_types.empty()) {
                     error("Variant '" + variant_name + "' has payload, but pattern doesn't bind it",
-                          pattern.span);
+                          pattern.span, "T034");
                     return;
                 }
             } else if constexpr (std::is_same_v<T, parser::StructPattern>) {
                 // Struct pattern destructuring: Point { x, y }
                 if (!type->is<NamedType>()) {
-                    error("Cannot destructure non-struct type with struct pattern", pattern.span);
+                    error("Cannot destructure non-struct type with struct pattern", pattern.span,
+                          "T035");
                     return;
                 }
 
@@ -218,7 +222,8 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 // Lookup struct definition
                 auto struct_def = env_.lookup_struct(struct_name);
                 if (!struct_def) {
-                    error("Unknown struct type '" + struct_name + "' in pattern", pattern.span);
+                    error("Unknown struct type '" + struct_name + "' in pattern", pattern.span,
+                          "T022");
                     return;
                 }
 
@@ -233,7 +238,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                     auto it = field_types.find(field_name);
                     if (it == field_types.end()) {
                         error("Unknown field '" + field_name + "' in struct '" + struct_name + "'",
-                              pattern.span);
+                              pattern.span, "T005");
                         continue;
                     }
 
@@ -246,7 +251,8 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
             } else if constexpr (std::is_same_v<T, parser::ArrayPattern>) {
                 // Array pattern destructuring: [a, b, c] or [head, ..rest]
                 if (!type->is<ArrayType>()) {
-                    error("Cannot destructure non-array type with array pattern", pattern.span);
+                    error("Cannot destructure non-array type with array pattern", pattern.span,
+                          "T035");
                     return;
                 }
 

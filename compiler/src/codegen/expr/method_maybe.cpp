@@ -68,7 +68,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     if (method == "unwrap_or") {
         emit_coverage("Maybe::unwrap_or");
         if (call.args.empty()) {
-            report_error("unwrap_or() requires a default value", call.span);
+            report_error("unwrap_or() requires a default value", call.span, "C008");
             return "0";
         }
 
@@ -99,7 +99,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     if (method == "unwrap_or_else") {
         emit_coverage("Maybe::unwrap_or_else");
         if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("unwrap_or_else requires a closure argument", call.span);
+            report_error("unwrap_or_else requires a closure argument", call.span, "C008");
             return "0";
         }
         auto& closure = call.args[0]->as<parser::ClosureExpr>();
@@ -182,7 +182,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     if (method == "map") {
         emit_coverage("Maybe::map");
         if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("map requires a closure argument", call.span);
+            report_error("map requires a closure argument", call.span, "C008");
             return receiver;
         }
         auto& closure = call.args[0]->as<parser::ClosureExpr>();
@@ -270,7 +270,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     if (method == "and_then") {
         emit_coverage("Maybe::and_then");
         if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("and_then requires a closure argument", call.span);
+            report_error("and_then requires a closure argument", call.span, "C008");
             return receiver;
         }
         auto& closure = call.args[0]->as<parser::ClosureExpr>();
@@ -327,7 +327,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     if (method == "or_else") {
         emit_coverage("Maybe::or_else");
         if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("or_else requires a closure argument", call.span);
+            report_error("or_else requires a closure argument", call.span, "C008");
             return receiver;
         }
         auto& closure = call.args[0]->as<parser::ClosureExpr>();
@@ -366,7 +366,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     if (method == "contains") {
         emit_coverage("Maybe::contains");
         if (call.args.empty()) {
-            report_error("contains requires an argument", call.span);
+            report_error("contains requires an argument", call.span, "C008");
             return "false";
         }
         std::string cmp_val = gen_expr(*call.args[0]);
@@ -421,7 +421,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     if (method == "filter") {
         emit_coverage("Maybe::filter");
         if (call.args.empty() || !call.args[0]->is<parser::ClosureExpr>()) {
-            report_error("filter requires a closure argument", call.span);
+            report_error("filter requires a closure argument", call.span, "C008");
             return receiver;
         }
         auto& closure = call.args[0]->as<parser::ClosureExpr>();
@@ -500,7 +500,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     if (method == "alt") {
         emit_coverage("Maybe::alt");
         if (call.args.empty()) {
-            report_error("alt requires an argument", call.span);
+            report_error("alt requires an argument", call.span, "C008");
             return receiver;
         }
 
@@ -519,7 +519,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     // one_of(other) -> Maybe[T] (renamed from xor because xor is a keyword)
     if (method == "one_of") {
         if (call.args.empty()) {
-            report_error("one_of requires an argument", call.span);
+            report_error("one_of requires an argument", call.span, "C008");
             return receiver;
         }
 
@@ -613,7 +613,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     if (method == "map_or") {
         emit_coverage("Maybe::map_or");
         if (call.args.size() < 2) {
-            report_error("map_or requires a default value and a closure", call.span);
+            report_error("map_or requires a default value and a closure", call.span, "C008");
             return "0";
         }
 
@@ -622,7 +622,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         std::string default_type = last_expr_type_;
 
         if (!call.args[1]->is<parser::ClosureExpr>()) {
-            report_error("map_or requires a closure as second argument", call.span);
+            report_error("map_or requires a closure as second argument", call.span, "C008");
             return default_val;
         }
         auto& closure = call.args[1]->as<parser::ClosureExpr>();

@@ -1,0 +1,193 @@
+//! Dynamic array collection type.
+//!
+//! `List[T]` is a generic collection that stores elements of type `T`
+//! contiguously in memory and grows as needed.
+//!
+//! # Example
+//!
+//! ```tml
+//! let nums = List[I32]::new(8)
+//! nums.push(10)
+//! nums.push(20)
+//! let first = nums.get(0)  // 10
+//! nums.destroy()
+//! ```
+
+/// A dynamic array that grows automatically.
+///
+/// `List[T]` is a generic collection that stores elements of type `T`
+/// contiguously in memory and grows as needed.
+///
+/// # Type Parameters
+///
+/// * `T` - The type of elements stored in the list
+///
+/// # Example
+///
+/// ```tml
+/// let nums = List[I32]::new(8)
+/// nums.push(10)
+/// nums.push(20)
+/// let first = nums.get(0)  // 10
+/// nums.destroy()
+/// ```
+pub type List[T] {
+    handle: *Unit
+}
+
+impl[T] List[T] {
+    /// Creates a new list with the specified initial capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `initial_capacity` - The initial capacity of the list
+    ///
+    /// # Returns
+    ///
+    /// A new `List[T]` instance
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let list = List[I32]::new(16)
+    /// ```
+    pub func new(initial_capacity: I64) -> List[T] {
+        let h: *Unit = lowlevel { list_create(initial_capacity) }
+        List[T] { handle: h }
+    }
+
+    /// Creates a new list with default capacity (8).
+    ///
+    /// # Returns
+    ///
+    /// A new `List[T]` instance with default capacity
+    pub func default() -> List[T] {
+        List[T].new(8)
+    }
+
+    /// Appends an element to the back of the list.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The value to append
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// list.push(42)
+    /// ```
+    pub func push(this, value: T) {
+        lowlevel { list_push(this.handle, value) }
+    }
+
+    /// Removes the last element from the list and returns it.
+    ///
+    /// # Returns
+    ///
+    /// The last element of the list
+    ///
+    /// # Panics
+    ///
+    /// Panics if the list is empty
+    pub func pop(this) -> T {
+        lowlevel { list_pop(this.handle) }
+    }
+
+    /// Returns a reference to the element at the given index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The index of the element
+    ///
+    /// # Returns
+    ///
+    /// The element at the given index
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is out of bounds
+    pub func get(this, index: I64) -> T {
+        lowlevel { list_get(this.handle, index) }
+    }
+
+    /// Sets the element at the given index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The index of the element
+    /// * `value` - The new value
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is out of bounds
+    pub func set(this, index: I64, value: T) {
+        lowlevel { list_set(this.handle, index, value) }
+    }
+
+    /// Returns the number of elements in the list.
+    ///
+    /// # Returns
+    ///
+    /// The number of elements
+    pub func len(this) -> I64 {
+        lowlevel { list_len(this.handle) }
+    }
+
+    /// Returns the current capacity of the list.
+    ///
+    /// # Returns
+    ///
+    /// The current capacity
+    pub func capacity(this) -> I64 {
+        lowlevel { list_capacity(this.handle) }
+    }
+
+    /// Returns `true` if the list contains no elements.
+    ///
+    /// # Returns
+    ///
+    /// `true` if empty, `false` otherwise
+    pub func is_empty(this) -> Bool {
+        lowlevel { list_is_empty(this.handle) }
+    }
+
+    /// Returns the first element of the list.
+    ///
+    /// # Returns
+    ///
+    /// The first element
+    ///
+    /// # Panics
+    ///
+    /// Panics if the list is empty
+    pub func first(this) -> T {
+        this.get(0)
+    }
+
+    /// Returns the last element of the list.
+    ///
+    /// # Returns
+    ///
+    /// The last element
+    ///
+    /// # Panics
+    ///
+    /// Panics if the list is empty
+    pub func last(this) -> T {
+        this.get(this.len() - 1)
+    }
+
+    /// Removes all elements from the list.
+    pub func clear(this) {
+        lowlevel { list_clear(this.handle) }
+    }
+
+    /// Destroys the list and frees all associated memory.
+    ///
+    /// # Safety
+    ///
+    /// The list must not be used after calling this method.
+    pub func destroy(this) {
+        lowlevel { list_destroy(this.handle) }
+    }
+}

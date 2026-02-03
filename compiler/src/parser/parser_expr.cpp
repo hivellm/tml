@@ -155,7 +155,8 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
 
             // Expect ':'
             if (!check(lexer::TokenKind::Colon)) {
-                return ParseError{"Expected ':' in ternary expression", peek().span, {}, {}};
+                return ParseError{
+                    "Expected ':' in ternary expression", peek().span, {}, {}, "P035"};
             }
             advance(); // consume ':'
 
@@ -440,7 +441,8 @@ auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {
             return ParseError{.message = "Expected '(' after method type arguments",
                               .span = peek().span,
                               .notes = {},
-                              .fixes = {}};
+                              .fixes = {},
+                              .code = "P010"};
         }
 
         auto span = SourceSpan::merge(start_span, previous().span);
@@ -479,8 +481,11 @@ auto Parser::parse_infix_expr(ExprPtr left, int precedence) -> Result<ExprPtr, P
     auto op_token = advance();
     auto op = token_to_binary_op(op_token.kind);
     if (!op) {
-        return ParseError{
-            .message = "Expected binary operator", .span = op_token.span, .notes = {}, .fixes = {}};
+        return ParseError{.message = "Expected binary operator",
+                          .span = op_token.span,
+                          .notes = {},
+                          .fixes = {},
+                          .code = "P019"};
     }
 
     auto right = parse_expr_with_precedence(precedence);
@@ -597,8 +602,11 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_lowlevel_expr();
     }
 
-    return ParseError{
-        .message = "Expected expression", .span = peek().span, .notes = {}, .fixes = {}};
+    return ParseError{.message = "Expected expression",
+                      .span = peek().span,
+                      .notes = {},
+                      .fixes = {},
+                      .code = "P004"};
 }
 
 auto Parser::parse_literal_expr() -> Result<ExprPtr, ParseError> {
@@ -615,6 +623,53 @@ auto Parser::parse_ident_or_path_expr() -> Result<ExprPtr, ParseError> {
     auto generics = parse_generic_args();
     if (is_err(generics))
         return unwrap_err(generics);
+
+    // After generic args, check for :: to continue with a method call
+    // This supports Type[T]::method() syntax for static method calls
+    // We create a MethodCallExpr with the PathExpr as receiver
+    if (unwrap(generics).has_value() && match(lexer::TokenKind::ColonColon)) {
+        auto method_name_result =
+            expect(lexer::TokenKind::Identifier, "Expected method name after '::'");
+        if (is_err(method_name_result))
+            return unwrap_err(method_name_result);
+        std::string method_name = std::string(unwrap(method_name_result).lexeme);
+
+        // Method-level type arguments (e.g., ::method[U]()) are rare and not supported
+        // for the :: syntax. Use . syntax if you need method-level type args.
+        std::vector<TypePtr> method_type_args;
+
+        // Expect ( for method call
+        auto lparen = expect(lexer::TokenKind::LParen, "Expected '(' for method call after '::'");
+        if (is_err(lparen))
+            return unwrap_err(lparen);
+
+        auto args = parse_call_args();
+        if (is_err(args))
+            return unwrap_err(args);
+
+        auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after arguments");
+        if (is_err(rparen))
+            return unwrap_err(rparen);
+
+        // Create the receiver PathExpr with generics
+        auto receiver_span = unwrap(path).span;
+        if (unwrap(generics).has_value()) {
+            receiver_span = SourceSpan::merge(receiver_span, unwrap(generics)->span);
+        }
+        auto receiver =
+            make_box<Expr>(Expr{.kind = PathExpr{.path = std::move(unwrap(path)),
+                                                 .generics = std::move(unwrap(generics)),
+                                                 .span = receiver_span},
+                                .span = receiver_span});
+
+        auto span = SourceSpan::merge(receiver_span, previous().span);
+        return make_box<Expr>(Expr{.kind = MethodCallExpr{.receiver = std::move(receiver),
+                                                          .method = method_name,
+                                                          .type_args = std::move(method_type_args),
+                                                          .args = std::move(unwrap(args)),
+                                                          .span = span},
+                                   .span = span});
+    }
 
     // Check if it's a struct literal
     // Need to distinguish from block expressions: Point { x: 1 } vs { let x = 1 }
@@ -1104,7 +1159,10 @@ auto Parser::parse_loop_expr() -> Result<ExprPtr, ParseError> {
         if (!check(lexer::TokenKind::Lt)) {
             return ParseError{.message = "Expected '<' after type in loop variable declaration - "
                                          "syntax is: loop (var i: I64 < N)",
-                              .span = peek().span};
+                              .span = peek().span,
+                              .notes = {},
+                              .fixes = {},
+                              .code = "P037"};
         }
         advance(); // consume '<'
 
@@ -1549,7 +1607,8 @@ auto Parser::parse_interp_string_expr() -> Result<ExprPtr, ParseError> {
         return ParseError{.message = "Expected interpolated string start",
                           .span = start_token.span,
                           .notes = {},
-                          .fixes = {}};
+                          .fixes = {},
+                          .code = "P047"};
     }
 
     // Add the initial text segment (may be empty)
@@ -1593,7 +1652,8 @@ auto Parser::parse_interp_string_expr() -> Result<ExprPtr, ParseError> {
                                          ")",
                               .span = peek().span,
                               .notes = {},
-                              .fixes = {}};
+                              .fixes = {},
+                              .code = "P048"};
         }
     }
 
@@ -1636,7 +1696,8 @@ auto Parser::parse_template_literal_expr() -> Result<ExprPtr, ParseError> {
         return ParseError{.message = "Expected template literal start",
                           .span = start_token.span,
                           .notes = {},
-                          .fixes = {}};
+                          .fixes = {},
+                          .code = "P064"};
     }
 
     // Add the initial text segment (may be empty)
@@ -1680,7 +1741,8 @@ auto Parser::parse_template_literal_expr() -> Result<ExprPtr, ParseError> {
                                          ")",
                               .span = peek().span,
                               .notes = {},
-                              .fixes = {}};
+                              .fixes = {},
+                              .code = "P065"};
         }
     }
 

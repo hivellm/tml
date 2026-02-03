@@ -139,7 +139,7 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
         check_expr(*field_expr);
     }
 
-    error("Unknown struct or class: " + name, struct_expr.span);
+    error("Unknown struct or class: " + name, struct_expr.span, "T022");
     return make_unit();
 }
 
@@ -210,7 +210,7 @@ auto TypeChecker::check_try(const parser::TryExpr& try_expr) -> TypePtr {
     // This allows partial compilation while flagging the issue
     error("try operator (!) can only be used on Outcome[T, E] or Maybe[T] types, got " +
               type_to_string(expr_type),
-          try_expr.span);
+          try_expr.span, "T033");
     return expr_type;
 }
 

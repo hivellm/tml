@@ -90,6 +90,16 @@ void panic(const char* message);
  */
 void assert_tml(int32_t condition, const char* message);
 
+/**
+ * @brief Asserts a condition with file and line information.
+ *
+ * @param condition The condition to check.
+ * @param message The assertion message.
+ * @param file The source file name.
+ * @param line The line number.
+ */
+void assert_tml_loc(int32_t condition, const char* message, const char* file, int32_t line);
+
 // ============================================================================
 // Type-Specific Print Functions
 // ============================================================================
