@@ -35,7 +35,43 @@
 #include "cli/tester/test_cache.hpp"
 #include "tester_internal.hpp"
 
+#include <fstream>
+#include <regex>
+
 namespace tml::cli::tester {
+
+// ============================================================================
+// Coverage Regression Check
+// ============================================================================
+
+/// Read the previous coverage count from the existing HTML report
+/// Returns -1 if the file doesn't exist or can't be parsed
+static int get_previous_coverage_count(const std::string& html_path) {
+    if (!fs::exists(html_path)) {
+        return -1;
+    }
+
+    std::ifstream file(html_path);
+    if (!file.is_open()) {
+        return -1;
+    }
+
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+    // Look for the "Functions Covered" stat card value (format: "N / M")
+    // Pattern: <div class="stat-value">N / M</div>
+    std::regex pattern(R"(<div class="stat-value">(\d+)\s*/\s*\d+</div>)");
+    std::smatch match;
+    if (std::regex_search(content, match, pattern)) {
+        try {
+            return std::stoi(match[1].str());
+        } catch (...) {
+            return -1;
+        }
+    }
+
+    return -1;
+}
 
 // ============================================================================
 // Suite-Based Test Execution
@@ -554,10 +590,30 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             // Generate report even if no functions were tracked (shows 0% coverage)
             print_library_coverage_report(all_covered_functions, c, test_stats);
 
-            // Write HTML report with proper library coverage data ONLY if all tests passed
+            // Write HTML report with proper library coverage data ONLY if:
+            // 1. All tests passed
+            // 2. Coverage is not regressing (covered functions >= previous count)
             if (!CompilerOptions::coverage_output.empty() && !has_failures) {
-                write_library_coverage_html(all_covered_functions, CompilerOptions::coverage_output,
-                                            test_stats);
+                int current_covered = static_cast<int>(all_covered_functions.size());
+                int previous_covered =
+                    get_previous_coverage_count(CompilerOptions::coverage_output);
+
+                if (previous_covered < 0 || current_covered >= previous_covered) {
+                    // No previous report or coverage improved/maintained
+                    write_library_coverage_html(all_covered_functions,
+                                                CompilerOptions::coverage_output, test_stats);
+                } else {
+                    // Coverage regression detected
+                    std::cout << c.yellow() << c.bold()
+                              << " [HTML report not updated - coverage regression detected]"
+                              << c.reset() << "\n";
+                    std::cout << c.dim() << "   Previous: " << previous_covered
+                              << " functions covered" << c.reset() << "\n";
+                    std::cout << c.dim() << "   Current:  " << current_covered
+                              << " functions covered" << c.reset() << "\n";
+                    std::cout << c.dim() << "   Run with --force-coverage to update anyway"
+                              << c.reset() << "\n";
+                }
             } else if (has_failures && !CompilerOptions::coverage_output.empty()) {
                 std::cout << c.dim() << " [HTML report not updated - tests failed]" << c.reset()
                           << "\n";
