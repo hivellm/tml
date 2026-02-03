@@ -45,13 +45,18 @@
 #include "cli/tester/tester_internal.hpp"
 #include "preprocessor/preprocessor.hpp"
 
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <sstream>
+#include <thread>
 
 #ifdef _WIN32
 #include <fcntl.h>
@@ -68,6 +73,19 @@
 namespace fs = std::filesystem;
 
 namespace tml::cli {
+
+// Global mutex for synchronized verbose output in parallel test execution
+// Defined here, declared extern in test_runner.hpp
+std::mutex g_verbose_output_mutex;
+
+// Helper macro for synchronized verbose output
+#define VERBOSE_LOG(verbose, msg)                                                                  \
+    do {                                                                                           \
+        if (verbose) {                                                                             \
+            std::lock_guard<std::mutex> _lock(g_verbose_output_mutex);                             \
+            std::cerr << msg << std::flush;                                                        \
+        }                                                                                          \
+    } while (0)
 
 // ============================================================================
 // Windows Crash Handler (at test runner level)
@@ -1849,7 +1867,8 @@ SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimi
 // Function pointer type for tml_run_test_with_catch from runtime
 using TmlRunTestWithCatch = int32_t (*)(TestMainFunc);
 
-SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose) {
+SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose,
+                               int timeout_seconds, const std::string& test_name) {
     SuiteTestResult result;
 
     // Flush output to help debug crashes
@@ -1860,33 +1879,26 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 
     // Get the indexed test function
     std::string func_name = "tml_test_" + std::to_string(test_index);
-    if (verbose) {
-        std::cerr << "[DEBUG]   Looking up symbol: " << func_name << "\n" << std::flush;
-    }
+    VERBOSE_LOG(verbose, "[DEBUG]   Looking up symbol: " << func_name << "\n");
     auto test_func = lib.get_function<TestMainFunc>(func_name.c_str());
     if (!test_func) {
         result.error = "Failed to find " + func_name + " in suite DLL";
+        std::lock_guard<std::mutex> lock(g_verbose_output_mutex);
         std::cerr << "[ERROR] " << result.error << "\n" << std::flush;
         return result;
     }
 
     // Try to get the panic-catching wrapper from the runtime
     auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
-    if (verbose) {
-        std::cerr << "[DEBUG]   tml_run_test_with_catch: "
-                  << (run_with_catch ? "found" : "NOT FOUND") << "\n"
-                  << std::flush;
-    }
+    VERBOSE_LOG(verbose, "[DEBUG]   tml_run_test_with_catch: "
+                             << (run_with_catch ? "found" : "NOT FOUND") << "\n");
 
     // Get output suppression function from runtime (to suppress test output when not verbose)
     using TmlSetOutputSuppressed = void (*)(int32_t);
     auto set_output_suppressed =
         lib.get_function<TmlSetOutputSuppressed>("tml_set_output_suppressed");
-    if (verbose) {
-        std::cerr << "[DEBUG]   tml_set_output_suppressed: "
-                  << (set_output_suppressed ? "found" : "NOT FOUND") << "\n"
-                  << std::flush;
-    }
+    VERBOSE_LOG(verbose, "[DEBUG]   tml_set_output_suppressed: "
+                             << (set_output_suppressed ? "found" : "NOT FOUND") << "\n");
 
     // Suppress output when not in verbose mode
     if (!verbose) {
@@ -1898,23 +1910,113 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         std::fflush(stderr);
     }
 
-    // Set up output capture (skip in verbose mode to see crash output directly)
+    // Save reference to original stderr BEFORE capture for timeout messages
+    // This allows the watchdog to write directly to console even when output is captured
+#ifdef _WIN32
+    int original_stderr_fd = _dup(_fileno(stderr));
+#else
+    int original_stderr_fd = dup(STDERR_FILENO);
+#endif
+
+    // Skip output capture in suite mode (parallel execution) - stdout/stderr redirection
+    // is not thread-safe and causes deadlocks. Instead rely on tml_set_output_suppressed
+    // at the TML runtime level to suppress output when not verbose.
+    // Only capture output in single-threaded mode (non-suite) for error diagnostics.
     OutputCapture capture;
-    bool capture_started = verbose ? false : capture.start();
+    bool capture_started = false; // Disabled - causes deadlocks in parallel mode
 
     // Execute the test
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
-    if (verbose) {
-        std::cerr << "[DEBUG]   Executing test function...\n" << std::flush;
-    }
+    VERBOSE_LOG(verbose, "[DEBUG]   Executing test function...\n");
 
     // Ensure output is flushed before test execution in case of crash
     std::cout << std::flush;
     std::cerr << std::flush;
     std::fflush(stdout);
     std::fflush(stderr);
+
+    // Timeout watchdog thread - monitors test execution and reports hangs
+    std::atomic<bool> test_completed{false};
+    std::atomic<bool> timeout_triggered{false};
+    std::mutex watchdog_mutex;
+    std::condition_variable watchdog_cv;
+    std::thread watchdog_thread;
+
+    if (timeout_seconds > 0) {
+        watchdog_thread = std::thread([&, original_stderr_fd]() {
+            std::unique_lock<std::mutex> lock(watchdog_mutex);
+            // Wait for timeout or test completion
+            auto deadline =
+                std::chrono::steady_clock::now() + std::chrono::seconds(timeout_seconds);
+
+            // Check every second to provide progress updates for long-running tests
+            while (std::chrono::steady_clock::now() < deadline) {
+                if (watchdog_cv.wait_for(lock, std::chrono::seconds(1),
+                                         [&]() { return test_completed.load(); })) {
+                    return; // Test completed normally
+                }
+
+                // If still running, check elapsed time
+                auto elapsed =
+                    std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - start).count();
+
+                // After 5 seconds, start showing progress in non-verbose mode
+                if (!verbose && elapsed >= 5 && elapsed % 5 == 0) {
+                    // Write directly to original stderr (bypasses capture redirection)
+                    std::ostringstream progress_msg;
+                    progress_msg << "\033[33m[WARNING] Test '"
+                                 << (test_name.empty() ? func_name : test_name)
+                                 << "' still running... (" << elapsed << "s)\033[0m\n";
+                    std::string msg = progress_msg.str();
+#ifdef _WIN32
+                    _write(original_stderr_fd, msg.c_str(), (unsigned int)msg.size());
+#else
+                    write(original_stderr_fd, msg.c_str(), msg.size());
+#endif
+                }
+            }
+
+            // Timeout reached - test is hanging
+            timeout_triggered.store(true);
+
+            // Restore output first (in case it was suppressed)
+            if (set_output_suppressed) {
+                set_output_suppressed(0);
+            }
+
+            // Build timeout message
+            std::string test_display = test_name.empty() ? func_name : test_name;
+            std::ostringstream msg;
+            msg << "\n\n\033[1;31m" // Bold red
+                << "============================================================\n"
+                << "               TEST TIMEOUT DETECTED\n"
+                << "============================================================\n"
+                << " Test:    " << test_display << "\n"
+                << " Timeout: " << timeout_seconds << " seconds\n"
+                << "\n"
+                << " The test appears to be stuck in an infinite loop\n"
+                << " or deadlock. Terminating test process...\n"
+                << "============================================================\n"
+                << "\033[0m\n";
+
+            // Write directly to original stderr (bypasses capture redirection)
+            std::string msgStr = msg.str();
+#ifdef _WIN32
+            _write(original_stderr_fd, msgStr.c_str(), (unsigned int)msgStr.size());
+            _commit(original_stderr_fd);
+            // Give time for output to be displayed
+            Sleep(200);
+            TerminateProcess(GetCurrentProcess(), 124); // Exit code 124 = timeout
+#else
+            write(original_stderr_fd, msgStr.c_str(), msgStr.size());
+            fsync(original_stderr_fd);
+            usleep(200000); // 200ms
+            _exit(124);
+#endif
+        });
+    }
 
     // Execute test with crash protection
     // The runtime's tml_run_test_with_catch handles both panics (via setjmp/longjmp)
@@ -1924,9 +2026,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     // because combining SEH with setjmp/longjmp causes BAD_STACK (0xC0000028).
     // The runtime's exception filter handles crashes, so SEH is not needed.
     if (run_with_catch) {
-        if (verbose) {
-            std::cerr << "[DEBUG]   Calling tml_run_test_with_catch wrapper...\n" << std::flush;
-        }
+        VERBOSE_LOG(verbose, "[DEBUG]   Calling tml_run_test_with_catch wrapper...\n");
         result.exit_code = run_with_catch(test_func);
         if (result.exit_code == -1) {
             // Panic was caught
@@ -1939,16 +2039,12 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         } else {
             result.success = (result.exit_code == 0);
         }
-        if (verbose) {
-            std::cerr << "[DEBUG]   tml_run_test_with_catch returned: " << result.exit_code << "\n"
-                      << std::flush;
-        }
+        VERBOSE_LOG(verbose,
+                    "[DEBUG]   tml_run_test_with_catch returned: " << result.exit_code << "\n");
     } else {
         // Fallback: direct call with platform-specific crash protection
 #ifdef _WIN32
-        if (verbose) {
-            std::cerr << "[DEBUG]   Calling test function with SEH protection...\n" << std::flush;
-        }
+        VERBOSE_LOG(verbose, "[DEBUG]   Calling test function with SEH protection...\n");
         result.exit_code = call_test_with_seh(test_func);
         if (g_crash_occurred) {
             result.success = false;
@@ -1961,15 +2057,20 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         result.exit_code = test_func();
         result.success = (result.exit_code == 0);
 #endif
-        if (verbose) {
-            std::cerr << "[DEBUG]   Test returned: " << result.exit_code << "\n" << std::flush;
-        }
+        VERBOSE_LOG(verbose, "[DEBUG]   Test returned: " << result.exit_code << "\n");
     }
 
-    if (verbose) {
-        std::cerr << "[DEBUG]   Test execution complete, exit_code=" << result.exit_code << "\n"
-                  << std::flush;
+    // Signal watchdog that test completed
+    test_completed.store(true);
+    watchdog_cv.notify_all();
+
+    // Wait for watchdog thread to finish
+    if (watchdog_thread.joinable()) {
+        watchdog_thread.join();
     }
+
+    VERBOSE_LOG(verbose,
+                "[DEBUG]   Test execution complete, exit_code=" << result.exit_code << "\n");
 
     auto end = Clock::now();
     result.duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -1982,6 +2083,13 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     if (!verbose && set_output_suppressed) {
         set_output_suppressed(0);
     }
+
+    // Close the duplicated stderr fd
+#ifdef _WIN32
+    _close(original_stderr_fd);
+#else
+    close(original_stderr_fd);
+#endif
 
     return result;
 }

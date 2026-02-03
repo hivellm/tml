@@ -53,7 +53,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
     TestCacheManager test_cache;
     fs::path cache_file = fs::path("build") / ".test-cache.json";
     bool cache_loaded = false;
-    int skipped_count = 0;
+    std::atomic<int> skipped_count{0};
 
     // Don't update cache when filter is active (partial test runs shouldn't affect cache)
     bool should_update_cache =
@@ -141,7 +141,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 result.duration_ms = cached_info ? cached_info->duration_ms : 0;
                 result.exit_code = 0;
                 collector.add(std::move(result));
-                skipped_count++;
+                skipped_count.fetch_add(1);
             }
             if (opts.verbose) {
                 std::cerr << "[DEBUG] Suite fully cached, skipped: " << suite.name << "\n";
@@ -287,203 +287,231 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             }
         } // end of suites_to_compile block
 
-        // Run all tests from loaded suites
-        // Each suite runs in isolation - if one crashes, others continue
-        for (auto& [suite, lib] : loaded_suites) {
-            if (opts.verbose) {
-                std::cerr << "[DEBUG] Running tests from suite: " << suite.name << " ("
-                          << suite.tests.size() << " test files)\n"
-                          << std::flush;
-            }
+        // Run all tests from loaded suites IN PARALLEL
+        // Each suite runs in its own thread with its own DLL
+        // Use global mutex from test_runner.hpp for synchronized console output
+        std::mutex& output_mutex = g_verbose_output_mutex;
+        std::mutex cache_mutex;    // For synchronized cache updates
+        std::mutex coverage_mutex; // For synchronized coverage collection
+        std::atomic<bool> fail_fast_triggered{false};
 
-            for (size_t i = 0; i < suite.tests.size(); ++i) {
-                const auto& test_info = suite.tests[i];
+        // Determine number of execution threads
+        unsigned int hw_threads = std::thread::hardware_concurrency();
+        unsigned int num_exec_threads = (hw_threads > 0) ? std::max(1u, hw_threads) : 4;
 
-                // Use cached hash or compute if not available
-                std::string file_hash;
-                auto hash_it = file_hash_cache.find(test_info.file_path);
-                if (hash_it != file_hash_cache.end()) {
-                    file_hash = hash_it->second;
-                } else {
-                    file_hash = TestCacheManager::compute_file_hash(test_info.file_path);
-                    file_hash_cache[test_info.file_path] = file_hash;
+        // Job queue for parallel suite execution
+        std::atomic<size_t> suite_index{0};
+
+        // Worker function that processes suites
+        auto suite_worker = [&]() {
+            while (true) {
+                // Check if fail-fast was triggered
+                if (fail_fast_triggered.load()) {
+                    return;
                 }
 
-                // Check if we can skip this test (valid cache + previously passed)
-                if (cache_loaded && test_cache.can_skip(test_info.file_path)) {
-                    auto cached_info = test_cache.get_cached_info(test_info.file_path);
-                    if (cached_info && cached_info->sha512 == file_hash) {
-                        // Use cached result
-                        TestResult result;
-                        result.file_path = test_info.file_path;
-                        result.test_name = test_info.test_name;
-                        result.group = suite.group;
-                        result.test_count = test_info.test_count;
-                        result.passed = true;
-                        result.duration_ms = cached_info->duration_ms;
-                        result.exit_code = 0;
-
-                        collector.add(std::move(result));
-                        skipped_count++;
-
-                        if (opts.verbose) {
-                            std::cerr << "[DEBUG] Skipped (cached): " << test_info.test_name << "\n"
-                                      << std::flush;
-                        }
-                        continue;
-                    }
+                // Get next suite to process
+                size_t idx = suite_index.fetch_add(1);
+                if (idx >= loaded_suites.size()) {
+                    return;
                 }
+
+                auto& [suite, lib] = loaded_suites[idx];
 
                 if (opts.verbose) {
-                    std::cerr << "[DEBUG] Starting test " << (i + 1) << "/" << suite.tests.size()
-                              << ": " << test_info.test_name << " (" << test_info.test_count
-                              << " sub-tests)\n"
+                    std::lock_guard<std::mutex> lock(output_mutex);
+                    std::cerr << "[DEBUG] Thread running suite: " << suite.name << " ("
+                              << suite.tests.size() << " test files)\n"
                               << std::flush;
                 }
 
-                TestResult result;
-                result.file_path = test_info.file_path;
-                result.test_name = test_info.test_name;
-                result.group = suite.group;
-                result.test_count = test_info.test_count;
-
-                phase_start = Clock::now();
-
-                // Flush all output before running test (helps with crash debugging)
-                std::cout << std::flush;
-                std::cerr << std::flush;
-                std::fflush(stdout);
-                std::fflush(stderr);
-
-                if (opts.verbose) {
-                    std::cerr << "[DEBUG] Calling run_suite_test for index " << i << "...\n"
-                              << std::flush;
-                }
-
-                auto run_result = run_suite_test(lib, static_cast<int>(i), opts.verbose);
-                int run_exit_code = run_result.exit_code;
-                bool run_success = run_result.success;
-                if (opts.verbose) {
-                    std::cerr << "[DEBUG] run_suite_test returned: exit_code=" << run_exit_code
-                              << ", success=" << (run_success ? "true" : "false") << "\n"
-                              << std::flush;
-                }
-                auto run_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                                           Clock::now() - phase_start)
-                                           .count();
-
-                if (opts.profile) {
-                    collector.profile_stats.add("test_run", run_duration_us);
-                    collector.profile_stats.total_tests++;
-                }
-
-                result.duration_ms = run_duration_us / 1000;
-                result.passed = run_success;
-                result.exit_code = run_exit_code;
-
-                if (!result.passed) {
-                    result.error_message = "Exit code: " + std::to_string(result.exit_code);
-                    // Include detailed error message from run_suite_test
-                    if (!run_result.error.empty()) {
-                        result.error_message += "\n" + run_result.error;
+                for (size_t i = 0; i < suite.tests.size(); ++i) {
+                    // Check fail-fast before each test
+                    if (fail_fast_triggered.load()) {
+                        return;
                     }
-                    // Include captured output which may contain panic/crash info
-                    if (!run_result.output.empty()) {
-                        result.error_message += "\n" + run_result.output;
-                    }
-                }
 
-                // Update cache with result (only when not using filter)
-                if (should_update_cache) {
-                    std::vector<std::string> test_functions;
-                    // Extract test function names from the file
-                    // (For now, we just record the count)
-                    test_cache.update(
-                        test_info.file_path, file_hash, suite.name, test_functions,
-                        result.passed ? CachedTestStatus::Pass : CachedTestStatus::Fail,
-                        result.duration_ms, {}, // dependency_hashes (TODO: track imports)
-                        opts.coverage, opts.profile);
-                }
+                    const auto& test_info = suite.tests[i];
 
-                collector.add(std::move(result));
-            }
+                    // Compute file hash (thread-local, no lock needed)
+                    std::string file_hash =
+                        TestCacheManager::compute_file_hash(test_info.file_path);
 
-            // Collect coverage data before unloading DLL
-            if (CompilerOptions::coverage) {
-                // Get coverage functions from the DLL
-                using PrintCoverageFunc = void (*)();
-                using WriteCoverageHtmlFunc = void (*)(const char*);
-                using TmlSetOutputSuppressed = void (*)(int32_t);
-                using GetFuncCountFunc = int32_t (*)();
-                using GetFuncNameFunc = const char* (*)(int32_t);
-                using GetFuncHitsFunc = int32_t (*)(int32_t);
+                    // Check if we can skip this test (valid cache + previously passed)
+                    if (cache_loaded) {
+                        std::lock_guard<std::mutex> lock(cache_mutex);
+                        if (test_cache.can_skip(test_info.file_path)) {
+                            auto cached_info = test_cache.get_cached_info(test_info.file_path);
+                            if (cached_info && cached_info->sha512 == file_hash) {
+                                // Use cached result
+                                TestResult result;
+                                result.file_path = test_info.file_path;
+                                result.test_name = test_info.test_name;
+                                result.group = suite.group;
+                                result.test_count = test_info.test_count;
+                                result.passed = true;
+                                result.duration_ms = cached_info->duration_ms;
+                                result.exit_code = 0;
 
-                auto print_coverage =
-                    lib.get_function<PrintCoverageFunc>("tml_print_coverage_report");
-                auto write_html = lib.get_function<WriteCoverageHtmlFunc>("write_coverage_html");
-                auto set_output_suppressed =
-                    lib.get_function<TmlSetOutputSuppressed>("tml_set_output_suppressed");
-                auto get_func_count = lib.get_function<GetFuncCountFunc>("tml_get_func_count");
-                auto get_func_name = lib.get_function<GetFuncNameFunc>("tml_get_func_name");
-                auto get_func_hits = lib.get_function<GetFuncHitsFunc>("tml_get_func_hits");
+                                collector.add(std::move(result));
+                                skipped_count.fetch_add(1);
 
-                if (opts.verbose) {
-                    std::cerr << "[DEBUG] Coverage enabled, looking for functions...\n";
-                    std::cerr << "[DEBUG] print_coverage: "
-                              << (print_coverage ? "found" : "NOT FOUND") << "\n";
-                    std::cerr << "[DEBUG] write_html: " << (write_html ? "found" : "NOT FOUND")
-                              << "\n";
-                }
-
-                // Collect covered function names for library analysis
-                if (get_func_count && get_func_name && get_func_hits) {
-                    int32_t count = get_func_count();
-                    for (int32_t i = 0; i < count; i++) {
-                        const char* name = get_func_name(i);
-                        int32_t hits = get_func_hits(i);
-                        if (name && hits > 0) {
-                            all_covered_functions.insert(name);
+                                if (opts.verbose) {
+                                    std::lock_guard<std::mutex> out_lock(output_mutex);
+                                    std::cerr << "[DEBUG] Skipped (cached): " << test_info.test_name
+                                              << "\n"
+                                              << std::flush;
+                                }
+                                continue;
+                            }
                         }
                     }
+
+                    // Show which test is running
+                    if (opts.verbose) {
+                        std::lock_guard<std::mutex> lock(output_mutex);
+                        std::cerr << "[DEBUG] Starting test " << (i + 1) << "/"
+                                  << suite.tests.size() << ": " << test_info.test_name << " ("
+                                  << test_info.test_count << " sub-tests)\n"
+                                  << std::flush;
+                    }
+
+                    TestResult result;
+                    result.file_path = test_info.file_path;
+                    result.test_name = test_info.test_name;
+                    result.group = suite.group;
+                    result.test_count = test_info.test_count;
+
+                    auto test_start = Clock::now();
+
+                    auto run_result = run_suite_test(lib, static_cast<int>(i), opts.verbose,
+                                                     opts.timeout_seconds, test_info.test_name);
+                    int run_exit_code = run_result.exit_code;
+                    bool run_success = run_result.success;
+
+                    auto run_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                               Clock::now() - test_start)
+                                               .count();
+
+                    if (opts.profile) {
+                        collector.profile_stats.add("test_run", run_duration_us);
+                        collector.profile_stats.total_tests++;
+                    }
+
+                    result.duration_ms = run_duration_us / 1000;
+                    result.passed = run_success;
+                    result.exit_code = run_exit_code;
+
+                    if (!result.passed) {
+                        // Build clear error message with test name prominent
+                        result.error_message = "\n  FAILED: " + test_info.test_name;
+                        result.error_message += "\n  File:   " + test_info.file_path;
+                        result.error_message += "\n  Exit:   " + std::to_string(result.exit_code);
+
+                        if (!run_result.error.empty()) {
+                            result.error_message += "\n  Error:  " + run_result.error;
+                        }
+                        if (!run_result.output.empty()) {
+                            std::string output = run_result.output;
+                            while (!output.empty() &&
+                                   (output.back() == '\n' || output.back() == '\r')) {
+                                output.pop_back();
+                            }
+                            if (!output.empty()) {
+                                result.error_message += "\n  Output: " + output;
+                            }
+                        }
+                        result.error_message += "\n";
+                    }
+
+                    // Update cache with result (synchronized)
+                    if (should_update_cache) {
+                        std::lock_guard<std::mutex> lock(cache_mutex);
+                        std::vector<std::string> test_functions;
+                        test_cache.update(
+                            test_info.file_path, file_hash, suite.name, test_functions,
+                            result.passed ? CachedTestStatus::Pass : CachedTestStatus::Fail,
+                            result.duration_ms, {}, opts.coverage, opts.profile);
+                    }
+
+                    collector.add(std::move(result));
+
+                    // Handle fail-fast
+                    if (opts.fail_fast && !run_success) {
+                        fail_fast_triggered.store(true);
+                        std::lock_guard<std::mutex> lock(output_mutex);
+                        std::cerr << "\n\033[1;31m✗ Test failed - stopping (--fail-fast)\033[0m\n";
+                        std::cerr << result.error_message << std::flush;
+                        return;
+                    }
                 }
 
-                // Ensure output is not suppressed when printing coverage report
-                if (set_output_suppressed) {
-                    set_output_suppressed(0);
+                // Collect coverage data before unloading DLL (synchronized)
+                if (CompilerOptions::coverage) {
+                    using GetFuncCountFunc = int32_t (*)();
+                    using GetFuncNameFunc = const char* (*)(int32_t);
+                    using GetFuncHitsFunc = int32_t (*)(int32_t);
+
+                    auto get_func_count = lib.get_function<GetFuncCountFunc>("tml_get_func_count");
+                    auto get_func_name = lib.get_function<GetFuncNameFunc>("tml_get_func_name");
+                    auto get_func_hits = lib.get_function<GetFuncHitsFunc>("tml_get_func_hits");
+
+                    if (get_func_count && get_func_name && get_func_hits) {
+                        std::lock_guard<std::mutex> lock(coverage_mutex);
+                        int32_t count = get_func_count();
+                        for (int32_t i = 0; i < count; i++) {
+                            const char* name = get_func_name(i);
+                            int32_t hits = get_func_hits(i);
+                            if (name && hits > 0) {
+                                all_covered_functions.insert(name);
+                            }
+                        }
+                    }
                 }
-                // Flush before printing
-                std::cout << std::flush;
-                std::cerr << std::flush;
-                std::fflush(stdout);
-                std::fflush(stderr);
 
-                // In verbose mode, print the full coverage report to console
-                if (print_coverage && opts.verbose) {
-                    print_coverage();
-                    std::fflush(stdout);
-                    std::fflush(stderr);
-                }
-
-                // NOTE: We don't call write_html here anymore - the C runtime's
-                // HTML generator only shows called functions, not library coverage.
-                // The proper HTML report is generated after all suites complete
-                // using write_library_coverage_html().
-            }
-
-            // Clean up suite DLL
-            lib.unload();
-            try {
-                fs::remove(suite.dll_path);
+                // Clean up suite DLL
+                lib.unload();
+                try {
+                    fs::remove(suite.dll_path);
 #ifdef _WIN32
-                fs::path lib_file = suite.dll_path;
-                lib_file.replace_extension(".lib");
-                if (fs::exists(lib_file)) {
-                    fs::remove(lib_file);
-                }
+                    fs::path lib_file = suite.dll_path;
+                    lib_file.replace_extension(".lib");
+                    if (fs::exists(lib_file)) {
+                        fs::remove(lib_file);
+                    }
 #endif
-            } catch (...) {
-                // Ignore cleanup errors
+                } catch (...) {
+                    // Ignore cleanup errors
+                }
             }
+        };
+
+        // Launch parallel suite execution threads
+        if (!opts.quiet) {
+            std::cout << c.dim() << " Running " << loaded_suites.size() << " suites with "
+                      << num_exec_threads << " threads..." << c.reset() << "\n";
+        }
+
+        phase_start = Clock::now();
+        std::vector<std::thread> exec_threads;
+        for (unsigned int t = 0; t < std::min(num_exec_threads, (unsigned int)loaded_suites.size());
+             ++t) {
+            exec_threads.emplace_back(suite_worker);
+        }
+        for (auto& t : exec_threads) {
+            t.join();
+        }
+
+        if (opts.profile) {
+            collector.profile_stats.add(
+                "parallel_execute",
+                std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - phase_start)
+                    .count());
+        }
+
+        // Check if fail-fast was triggered
+        if (fail_fast_triggered.load()) {
+            return 1;
         }
 
         // Collect test run statistics from the results
@@ -511,16 +539,28 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             test_stats.suites.begin(), test_stats.suites.end(),
             [](const SuiteStats& a, const SuiteStats& b) { return a.test_count > b.test_count; });
 
+        // Check if any tests failed
+        bool has_failures = false;
+        for (const auto& result : collector.results) {
+            if (!result.passed) {
+                has_failures = true;
+                break;
+            }
+        }
+
         // Print library coverage analysis after all suites complete
         // Skip coverage report if a filter is active (incomplete coverage data)
         if (CompilerOptions::coverage && opts.patterns.empty()) {
             // Generate report even if no functions were tracked (shows 0% coverage)
             print_library_coverage_report(all_covered_functions, c, test_stats);
 
-            // Write HTML report with proper library coverage data
-            if (!CompilerOptions::coverage_output.empty()) {
+            // Write HTML report with proper library coverage data ONLY if all tests passed
+            if (!CompilerOptions::coverage_output.empty() && !has_failures) {
                 write_library_coverage_html(all_covered_functions, CompilerOptions::coverage_output,
                                             test_stats);
+            } else if (has_failures && !CompilerOptions::coverage_output.empty()) {
+                std::cout << c.dim() << " [HTML report not updated - tests failed]" << c.reset()
+                          << "\n";
             }
         } else if (CompilerOptions::coverage && !opts.patterns.empty()) {
             std::cout << c.dim() << " [Coverage report skipped - filter active]" << c.reset()
@@ -543,9 +583,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         }
 
         // Report skipped tests
-        if (skipped_count > 0 && !opts.quiet) {
-            std::cout << c.dim() << " Skipped " << skipped_count << " cached test"
-                      << (skipped_count != 1 ? "s" : "") << " (unchanged)" << c.reset() << "\n";
+        int skipped = skipped_count.load();
+        if (skipped > 0 && !opts.quiet) {
+            std::cout << c.dim() << " Skipped " << skipped << " cached test"
+                      << (skipped != 1 ? "s" : "") << " (unchanged)" << c.reset() << "\n";
         }
 
         return 0;

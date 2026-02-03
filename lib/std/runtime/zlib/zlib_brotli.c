@@ -282,7 +282,9 @@ TmlBuffer* brotli_encoder_process_internal(void* state_ptr, const char* data, in
         break;
     }
 
-    while (available_in > 0 || BrotliEncoderHasMoreOutput(state)) {
+    // Process input and drain any output
+    // Important: Only loop while there's input OR we're finishing/flushing with pending output
+    do {
         if (available_out == 0) {
             // Expand output buffer
             size_t used = next_out - output->data;
@@ -303,7 +305,11 @@ TmlBuffer* brotli_encoder_process_internal(void* state_ptr, const char* data, in
             tml_buffer_destroy(output);
             return NULL;
         }
-    }
+
+        // For PROCESS operation, only continue if there's still input
+        // For FLUSH/FINISH, continue until no more output
+    } while (available_in > 0 ||
+             (op != BROTLI_OPERATION_PROCESS && BrotliEncoderHasMoreOutput(state)));
 
     output->len = next_out - output->data;
     return output;
@@ -345,7 +351,9 @@ TmlBuffer* brotli_encoder_process_buffer_internal(void* state_ptr, TmlBuffer* da
         break;
     }
 
-    while (available_in > 0 || BrotliEncoderHasMoreOutput(state)) {
+    // Process input and drain any output
+    // Important: Only loop while there's input OR we're finishing/flushing with pending output
+    do {
         if (available_out == 0) {
             size_t used = next_out - output->data;
             size_t new_cap = output->capacity * 2;
@@ -365,7 +373,11 @@ TmlBuffer* brotli_encoder_process_buffer_internal(void* state_ptr, TmlBuffer* da
             tml_buffer_destroy(output);
             return NULL;
         }
-    }
+
+        // For PROCESS operation, only continue if there's still input
+        // For FLUSH/FINISH, continue until no more output
+    } while (available_in > 0 ||
+             (op != BROTLI_OPERATION_PROCESS && BrotliEncoderHasMoreOutput(state)));
 
     output->len = next_out - output->data;
     return output;

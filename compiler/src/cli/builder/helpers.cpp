@@ -221,13 +221,16 @@ fs::path get_run_cache_dir() {
 // ============================================================================
 
 void emit_lexer_error(DiagnosticEmitter& emitter, const lexer::LexerError& error) {
-    emitter.error("L001", error.message, error.span);
+    // Use specific error code if provided, otherwise default to L001
+    std::string code = error.code.empty() ? "L001" : error.code;
+    emitter.error(code, error.message, error.span);
 }
 
 void emit_parser_error(DiagnosticEmitter& emitter, const parser::ParseError& error) {
     Diagnostic diag;
     diag.severity = DiagnosticSeverity::Error;
-    diag.code = "P001";
+    // Use specific error code if provided, otherwise default to P001
+    diag.code = error.code.empty() ? "P001" : error.code;
     diag.message = error.message;
     diag.primary_span = error.span;
     diag.notes = error.notes;
@@ -242,11 +245,15 @@ void emit_parser_error(DiagnosticEmitter& emitter, const parser::ParseError& err
 }
 
 void emit_type_error(DiagnosticEmitter& emitter, const types::TypeError& error) {
-    emitter.error("T001", error.message, error.span, error.notes);
+    // Use specific error code if provided, otherwise default to T001
+    std::string code = error.code.empty() ? "T001" : error.code;
+    emitter.error(code, error.message, error.span, error.notes);
 }
 
 void emit_codegen_error(DiagnosticEmitter& emitter, const codegen::LLVMGenError& error) {
-    emitter.error("C001", error.message, error.span, error.notes);
+    // Use specific error code if provided, otherwise default to C001
+    std::string code = error.code.empty() ? "C001" : error.code;
+    emitter.error(code, error.message, error.span, error.notes);
 }
 
 void emit_all_lexer_errors(DiagnosticEmitter& emitter, const lexer::Lexer& lex) {
@@ -457,8 +464,11 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     };
 
     // Check for pre-compiled runtime library first (self-contained mode)
+    // Disable precompiled runtime when coverage or leak checking is enabled,
+    // because those require linking additional runtime components (coverage.c, mem_track.c)
     std::string runtime_lib = find_runtime_library();
-    bool use_precompiled = !runtime_lib.empty() && !CompilerOptions::check_leaks;
+    bool use_precompiled =
+        !runtime_lib.empty() && !CompilerOptions::check_leaks && !CompilerOptions::coverage;
 
     if (use_precompiled) {
         // Use pre-compiled runtime library (no clang needed)
