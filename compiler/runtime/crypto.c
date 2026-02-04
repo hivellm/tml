@@ -17,8 +17,8 @@
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN
-#include <bcrypt.h>
 #include <windows.h>
+#include <bcrypt.h>
 #pragma comment(lib, "bcrypt.lib")
 #elif defined(__APPLE__)
 #define TML_EXPORT __attribute__((visibility("default")))
