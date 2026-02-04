@@ -72,7 +72,9 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
     std::regex behavior_regex(R"(^\s*(pub\s+)?behavior\s+(\w+))");
 
     std::regex func_regex(R"(^\s*(pub\s+)?func\s+(\w+))");
+    std::regex extern_regex(R"(@extern\()");
     std::smatch match;
+    std::string prev_line; // Track previous line for @extern detection
 
     while (std::getline(ifs, line)) {
         // Track impl blocks - detect "impl TypeName" or "impl[T] TypeName" or "impl Behavior for
@@ -124,6 +126,20 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
 
             // Skip test functions
             if (func_name.rfind("test_", 0) == 0) {
+                prev_line = line;
+                continue;
+            }
+
+            // Skip @extern FFI declarations (check previous line for @extern annotation)
+            // These are just declarations that map to C functions, no TML code to cover
+            if (std::regex_search(prev_line, extern_regex)) {
+                prev_line = line;
+                continue;
+            }
+
+            // Skip ffi_ prefixed functions (convention for FFI wrappers)
+            if (func_name.rfind("ffi_", 0) == 0) {
+                prev_line = line;
                 continue;
             }
 
@@ -134,6 +150,8 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
                 functions.push_back(func_name);
             }
         }
+
+        prev_line = line;
     }
 
     return functions;

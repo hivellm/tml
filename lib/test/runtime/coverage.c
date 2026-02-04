@@ -1,5 +1,5 @@
 // TML Code Coverage Runtime
-// Tracks test coverage data
+// Tracks test coverage data using lock-free hash table for performance
 // Note: _CRT_SECURE_NO_WARNINGS is defined via compile flags for all C runtime files
 
 #include <stdint.h>
@@ -10,20 +10,81 @@
 // Export functions from DLLs
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+// Atomic operations for Windows
+#define ATOMIC_INCREMENT(ptr) InterlockedIncrement((volatile LONG*)(ptr))
+#define ATOMIC_LOAD(ptr) ((int32_t)InterlockedCompareExchange((volatile LONG*)(ptr), 0, 0))
+#define ATOMIC_STORE(ptr, val) InterlockedExchange((volatile LONG*)(ptr), (val))
+#define ATOMIC_CAS(ptr, expected, desired)                                                         \
+    (InterlockedCompareExchange((volatile LONG*)(ptr), (desired), (expected)) == (expected))
+// Memory barrier to ensure writes are visible
+#define MEMORY_BARRIER() MemoryBarrier()
+
+static CRITICAL_SECTION g_coverage_lock;
+static volatile LONG g_lock_initialized = 0;
+
+static void ensure_lock_initialized(void) {
+    if (InterlockedCompareExchange(&g_lock_initialized, 1, 0) == 0) {
+        InitializeCriticalSection(&g_coverage_lock);
+    }
+}
+
+#define COVERAGE_LOCK()                                                                            \
+    do {                                                                                           \
+        ensure_lock_initialized();                                                                 \
+        EnterCriticalSection(&g_coverage_lock);                                                    \
+    } while (0)
+#define COVERAGE_UNLOCK() LeaveCriticalSection(&g_coverage_lock)
 #else
 #define TML_EXPORT __attribute__((visibility("default")))
+#include <pthread.h>
+
+// Atomic operations for GCC/Clang
+#define ATOMIC_INCREMENT(ptr) __sync_add_and_fetch((ptr), 1)
+#define ATOMIC_LOAD(ptr) ((int32_t)__sync_add_and_fetch((ptr), 0))
+#define ATOMIC_STORE(ptr, val) __sync_lock_test_and_set((ptr), (val))
+#define ATOMIC_CAS(ptr, expected, desired)                                                         \
+    __sync_bool_compare_and_swap((ptr), (expected), (desired))
+// Memory barrier
+#define MEMORY_BARRIER() __sync_synchronize()
+
+static pthread_mutex_t g_coverage_lock = PTHREAD_MUTEX_INITIALIZER;
+
+#define COVERAGE_LOCK() pthread_mutex_lock(&g_coverage_lock)
+#define COVERAGE_UNLOCK() pthread_mutex_unlock(&g_coverage_lock)
 #endif
 
-// Dynamic growth parameters
-#define INITIAL_CAPACITY 1024
-#define MAX_NAME_LEN 256
+// Hash table parameters
+#define HASH_TABLE_SIZE 4093 // Prime number for better distribution
+#define MAX_NAME_LEN 192     // Function names rarely exceed this
 
-// Coverage data structures
+// FNV-1a hash function for strings
+static uint32_t hash_string(const char* str) {
+    if (!str)
+        return 0;
+    uint32_t hash = 2166136261u;
+    while (*str) {
+        hash ^= (uint8_t)*str++;
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+// Hash table entry for functions
+// State machine: occupied=0 -> occupied=1 (initializing) -> occupied=2 (ready)
 typedef struct {
+    volatile int32_t hit_count; // Atomic counter
+    volatile int32_t occupied;  // 0=empty, 1=initializing, 2=ready
     char name[MAX_NAME_LEN];
-    int32_t hit_count;
-} FuncCoverage;
+} FuncEntry;
 
+// Global hash table - statically allocated for lock-free access
+static FuncEntry g_func_table[HASH_TABLE_SIZE];
+static volatile int32_t g_func_count = 0;
+
+// Legacy line/branch coverage (less frequent, keep simple)
 typedef struct {
     char file[MAX_NAME_LEN];
     int32_t line;
@@ -37,10 +98,7 @@ typedef struct {
     int32_t hit_count;
 } BranchCoverage;
 
-// Global coverage storage - dynamically allocated
-static FuncCoverage* g_functions = NULL;
-static int32_t g_func_count = 0;
-static int32_t g_func_capacity = 0;
+#define INITIAL_CAPACITY 1024
 
 static LineCoverage* g_lines = NULL;
 static int32_t g_line_count = 0;
@@ -50,18 +108,7 @@ static BranchCoverage* g_branches = NULL;
 static int32_t g_branch_count = 0;
 static int32_t g_branch_capacity = 0;
 
-// Helper: Ensure function array has capacity
-static void ensure_func_capacity(void) {
-    if (g_functions == NULL) {
-        g_func_capacity = INITIAL_CAPACITY;
-        g_functions = (FuncCoverage*)malloc(g_func_capacity * sizeof(FuncCoverage));
-    } else if (g_func_count >= g_func_capacity) {
-        g_func_capacity *= 2;
-        g_functions = (FuncCoverage*)realloc(g_functions, g_func_capacity * sizeof(FuncCoverage));
-    }
-}
-
-// Helper: Ensure line array has capacity
+// Helper: Ensure line array has capacity (requires lock)
 static void ensure_line_capacity(void) {
     if (g_lines == NULL) {
         g_line_capacity = INITIAL_CAPACITY;
@@ -72,7 +119,7 @@ static void ensure_line_capacity(void) {
     }
 }
 
-// Helper: Ensure branch array has capacity
+// Helper: Ensure branch array has capacity (requires lock)
 static void ensure_branch_capacity(void) {
     if (g_branches == NULL) {
         g_branch_capacity = INITIAL_CAPACITY;
@@ -84,29 +131,77 @@ static void ensure_branch_capacity(void) {
     }
 }
 
-// Helper: Find or create function entry
-static int32_t find_or_create_func(const char* name) {
-    for (int32_t i = 0; i < g_func_count; i++) {
-        if (strcmp(g_functions[i].name, name) == 0) {
-            return i;
+// Lock-free function lookup/insert using open addressing
+// Uses 3-state machine: 0=empty, 1=initializing, 2=ready
+// Returns pointer to the entry's hit_count for atomic increment
+static volatile int32_t* find_or_create_func_lockfree(const char* name) {
+    if (!name)
+        return NULL;
+
+    uint32_t hash = hash_string(name);
+    uint32_t idx = hash % HASH_TABLE_SIZE;
+    uint32_t start_idx = idx;
+
+    // Linear probing
+    do {
+        FuncEntry* entry = &g_func_table[idx];
+        int32_t state = ATOMIC_LOAD(&entry->occupied);
+
+        if (state == 2) {
+            // Slot is ready, check if it's our key
+            if (strcmp(entry->name, name) == 0) {
+                return &entry->hit_count;
+            }
+            // Different key, continue probing
+        } else if (state == 1) {
+            // Slot is being initialized, spin-wait then check
+            while ((state = ATOMIC_LOAD(&entry->occupied)) == 1) {
+                // Spin wait - entry is being written
+            }
+            if (state == 2 && strcmp(entry->name, name) == 0) {
+                return &entry->hit_count;
+            }
+            // Different key or entry abandoned, continue probing
+        } else {
+            // Empty slot (state == 0), try to claim it
+            if (ATOMIC_CAS(&entry->occupied, 0, 1)) {
+                // We claimed the slot, initialize it
+                strncpy(entry->name, name, MAX_NAME_LEN - 1);
+                entry->name[MAX_NAME_LEN - 1] = '\0';
+                entry->hit_count = 0;
+                MEMORY_BARRIER();                  // Ensure name is written before marking ready
+                ATOMIC_STORE(&entry->occupied, 2); // Mark as ready
+                ATOMIC_INCREMENT(&g_func_count);
+                return &entry->hit_count;
+            }
+            // Someone else claimed it, re-check state
+            state = ATOMIC_LOAD(&entry->occupied);
+            if (state == 1) {
+                // Wait for initialization
+                while ((state = ATOMIC_LOAD(&entry->occupied)) == 1) {
+                    // Spin wait
+                }
+            }
+            if (state == 2 && strcmp(entry->name, name) == 0) {
+                return &entry->hit_count;
+            }
+            // Different key, continue probing
         }
-    }
-    // Always grow if needed - no limit
-    ensure_func_capacity();
-    strncpy(g_functions[g_func_count].name, name, MAX_NAME_LEN - 1);
-    g_functions[g_func_count].name[MAX_NAME_LEN - 1] = '\0';
-    g_functions[g_func_count].hit_count = 0;
-    return g_func_count++;
+
+        idx = (idx + 1) % HASH_TABLE_SIZE;
+    } while (idx != start_idx);
+
+    // Table is full (shouldn't happen with proper sizing)
+    return NULL;
 }
 
-// Helper: Find or create line entry
+// Helper: Find or create line entry (requires lock)
 static int32_t find_or_create_line(const char* file, int32_t line) {
     for (int32_t i = 0; i < g_line_count; i++) {
         if (g_lines[i].line == line && strcmp(g_lines[i].file, file) == 0) {
             return i;
         }
     }
-    // Always grow if needed - no limit
     ensure_line_capacity();
     strncpy(g_lines[g_line_count].file, file, MAX_NAME_LEN - 1);
     g_lines[g_line_count].file[MAX_NAME_LEN - 1] = '\0';
@@ -115,7 +210,7 @@ static int32_t find_or_create_line(const char* file, int32_t line) {
     return g_line_count++;
 }
 
-// Helper: Find or create branch entry
+// Helper: Find or create branch entry (requires lock)
 static int32_t find_or_create_branch(const char* file, int32_t line, int32_t branch_id) {
     for (int32_t i = 0; i < g_branch_count; i++) {
         if (g_branches[i].line == line && g_branches[i].branch_id == branch_id &&
@@ -123,7 +218,6 @@ static int32_t find_or_create_branch(const char* file, int32_t line, int32_t bra
             return i;
         }
     }
-    // Always grow if needed - no limit
     ensure_branch_capacity();
     strncpy(g_branches[g_branch_count].file, file, MAX_NAME_LEN - 1);
     g_branches[g_branch_count].file[MAX_NAME_LEN - 1] = '\0';
@@ -135,31 +229,37 @@ static int32_t find_or_create_branch(const char* file, int32_t line, int32_t bra
 
 // ============ Public API ============
 
+// Lock-free function coverage - the most frequently called function
 TML_EXPORT void tml_cover_func(const char* name) {
-    int32_t idx = find_or_create_func(name);
-    if (idx >= 0) {
-        g_functions[idx].hit_count++;
+    volatile int32_t* hit_count = find_or_create_func_lockfree(name);
+    if (hit_count) {
+        ATOMIC_INCREMENT(hit_count);
     }
 }
 
 TML_EXPORT void tml_cover_line(const char* file, int32_t line) {
+    COVERAGE_LOCK();
     int32_t idx = find_or_create_line(file, line);
     if (idx >= 0) {
         g_lines[idx].hit_count++;
     }
+    COVERAGE_UNLOCK();
 }
 
 TML_EXPORT void tml_cover_branch(const char* file, int32_t line, int32_t branch_id) {
+    COVERAGE_LOCK();
     int32_t idx = find_or_create_branch(file, line, branch_id);
     if (idx >= 0) {
         g_branches[idx].hit_count++;
     }
+    COVERAGE_UNLOCK();
 }
 
 TML_EXPORT int32_t tml_get_covered_func_count(void) {
     int32_t count = 0;
-    for (int32_t i = 0; i < g_func_count; i++) {
-        if (g_functions[i].hit_count > 0) {
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        if (ATOMIC_LOAD(&g_func_table[i].occupied) == 2 &&
+            ATOMIC_LOAD(&g_func_table[i].hit_count) > 0) {
             count++;
         }
     }
@@ -167,67 +267,105 @@ TML_EXPORT int32_t tml_get_covered_func_count(void) {
 }
 
 TML_EXPORT int32_t tml_get_covered_line_count(void) {
+    COVERAGE_LOCK();
     int32_t count = 0;
     for (int32_t i = 0; i < g_line_count; i++) {
         if (g_lines[i].hit_count > 0) {
             count++;
         }
     }
+    COVERAGE_UNLOCK();
     return count;
 }
 
 TML_EXPORT int32_t tml_get_covered_branch_count(void) {
+    COVERAGE_LOCK();
     int32_t count = 0;
     for (int32_t i = 0; i < g_branch_count; i++) {
         if (g_branches[i].hit_count > 0) {
             count++;
         }
     }
+    COVERAGE_UNLOCK();
     return count;
 }
 
 TML_EXPORT int32_t tml_is_func_covered(const char* name) {
-    for (int32_t i = 0; i < g_func_count; i++) {
-        if (strcmp(g_functions[i].name, name) == 0) {
-            return g_functions[i].hit_count > 0 ? 1 : 0;
+    if (!name)
+        return 0;
+    uint32_t hash = hash_string(name);
+    uint32_t idx = hash % HASH_TABLE_SIZE;
+    uint32_t start_idx = idx;
+
+    do {
+        FuncEntry* entry = &g_func_table[idx];
+        int32_t state = ATOMIC_LOAD(&entry->occupied);
+        if (state == 0) {
+            return 0; // Not found (empty slot)
         }
-    }
+        if (state == 2 && strcmp(entry->name, name) == 0) {
+            return ATOMIC_LOAD(&entry->hit_count) > 0 ? 1 : 0;
+        }
+        idx = (idx + 1) % HASH_TABLE_SIZE;
+    } while (idx != start_idx);
+
     return 0;
 }
 
 TML_EXPORT int32_t tml_get_coverage_percent(void) {
-    if (g_func_count == 0)
+    int32_t total = ATOMIC_LOAD(&g_func_count);
+    if (total == 0)
         return 100;
-    return (tml_get_covered_func_count() * 100) / g_func_count;
+
+    int32_t covered = tml_get_covered_func_count();
+    return (covered * 100) / total;
 }
 
 // Get total function count
 TML_EXPORT int32_t tml_get_func_count(void) {
-    return g_func_count;
+    return ATOMIC_LOAD(&g_func_count);
 }
 
-// Get function name by index (for iteration)
+// Get function name by index (iterates through hash table)
+// Note: index is NOT stable - use for iteration only
 TML_EXPORT const char* tml_get_func_name(int32_t idx) {
-    if (idx >= 0 && idx < g_func_count) {
-        return g_functions[idx].name;
+    int32_t count = 0;
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        if (ATOMIC_LOAD(&g_func_table[i].occupied) == 2) {
+            if (count == idx) {
+                return g_func_table[i].name;
+            }
+            count++;
+        }
     }
     return NULL;
 }
 
 // Get function hit count by index
 TML_EXPORT int32_t tml_get_func_hits(int32_t idx) {
-    if (idx >= 0 && idx < g_func_count) {
-        return g_functions[idx].hit_count;
+    int32_t count = 0;
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        if (ATOMIC_LOAD(&g_func_table[i].occupied) == 2) {
+            if (count == idx) {
+                return ATOMIC_LOAD(&g_func_table[i].hit_count);
+            }
+            count++;
+        }
     }
     return 0;
 }
 
 TML_EXPORT void tml_reset_coverage(void) {
-    // Free dynamically allocated memory
-    if (g_functions) {
-        free(g_functions);
-        g_functions = NULL;
+    COVERAGE_LOCK();
+    // Reset hash table
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        g_func_table[i].occupied = 0;
+        g_func_table[i].hit_count = 0;
+        g_func_table[i].name[0] = '\0';
     }
+    g_func_count = 0;
+
+    // Free dynamically allocated memory for lines/branches
     if (g_lines) {
         free(g_lines);
         g_lines = NULL;
@@ -236,15 +374,16 @@ TML_EXPORT void tml_reset_coverage(void) {
         free(g_branches);
         g_branches = NULL;
     }
-    g_func_count = 0;
-    g_func_capacity = 0;
     g_line_count = 0;
     g_line_capacity = 0;
     g_branch_count = 0;
     g_branch_capacity = 0;
+    COVERAGE_UNLOCK();
 }
 
 TML_EXPORT void tml_print_coverage_report(void) {
+    int32_t func_count = tml_get_func_count();
+
     printf("\n");
     printf("================================================================================\n");
     printf("                           CODE COVERAGE REPORT\n");
@@ -253,19 +392,23 @@ TML_EXPORT void tml_print_coverage_report(void) {
 
     // Function coverage
     int32_t covered_funcs = tml_get_covered_func_count();
-    printf("FUNCTION COVERAGE: %d/%d", covered_funcs, g_func_count);
-    if (g_func_count > 0) {
-        printf(" (%.1f%%)", (float)covered_funcs * 100.0f / (float)g_func_count);
+    printf("FUNCTION COVERAGE: %d/%d", covered_funcs, func_count);
+    if (func_count > 0) {
+        printf(" (%.1f%%)", (float)covered_funcs * 100.0f / (float)func_count);
     }
     printf("\n");
     printf("--------------------------------------------------------------------------------\n");
 
-    for (int32_t i = 0; i < g_func_count; i++) {
-        const char* status = g_functions[i].hit_count > 0 ? "[+]" : "[-]";
-        printf("  %s %s (hits: %d)\n", status, g_functions[i].name, g_functions[i].hit_count);
+    // Iterate through hash table
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        if (ATOMIC_LOAD(&g_func_table[i].occupied) == 2) {
+            int32_t hits = ATOMIC_LOAD(&g_func_table[i].hit_count);
+            const char* status = hits > 0 ? "[+]" : "[-]";
+            printf("  %s %s (hits: %d)\n", status, g_func_table[i].name, hits);
+        }
     }
 
-    if (g_func_count == 0) {
+    if (func_count == 0) {
         printf("  (no functions tracked)\n");
     }
 
@@ -310,7 +453,7 @@ TML_EXPORT void tml_print_coverage_report(void) {
     printf("================================================================================\n");
     printf("                              SUMMARY\n");
     printf("================================================================================\n");
-    printf("  Functions: %d covered / %d total\n", covered_funcs, g_func_count);
+    printf("  Functions: %d covered / %d total\n", covered_funcs, func_count);
     if (g_line_count > 0) {
         printf("  Lines:     %d covered / %d total\n", tml_get_covered_line_count(), g_line_count);
     }
@@ -337,19 +480,28 @@ TML_EXPORT void write_coverage_json(const char* filename) {
         return;
     }
 
+    int32_t func_count = tml_get_func_count();
     int32_t covered_funcs = tml_get_covered_func_count();
-    double coverage_pct = g_func_count > 0 ? (100.0 * covered_funcs / g_func_count) : 0.0;
+    double coverage_pct = func_count > 0 ? (100.0 * covered_funcs / func_count) : 0.0;
 
     fprintf(f, "{\n");
-    fprintf(f, "  \"total_functions\": %d,\n", g_func_count);
+    fprintf(f, "  \"total_functions\": %d,\n", func_count);
     fprintf(f, "  \"covered_functions\": %d,\n", covered_funcs);
     fprintf(f, "  \"coverage_percent\": %.2f,\n", coverage_pct);
     fprintf(f, "  \"functions\": [\n");
 
-    for (int32_t i = 0; i < g_func_count; i++) {
-        fprintf(f, "    {\"name\": \"%s\", \"calls\": %d}%s\n", g_functions[i].name,
-                g_functions[i].hit_count, (i + 1 < g_func_count) ? "," : "");
+    int32_t written = 0;
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        if (ATOMIC_LOAD(&g_func_table[i].occupied) == 2) {
+            if (written > 0)
+                fprintf(f, ",\n");
+            fprintf(f, "    {\"name\": \"%s\", \"calls\": %d}", g_func_table[i].name,
+                    ATOMIC_LOAD(&g_func_table[i].hit_count));
+            written++;
+        }
     }
+    if (written > 0)
+        fprintf(f, "\n");
 
     fprintf(f, "  ]\n");
     fprintf(f, "}\n");
@@ -369,13 +521,16 @@ TML_EXPORT void write_coverage_html(const char* filename) {
         return;
     }
 
+    int32_t func_count = tml_get_func_count();
     int32_t covered_funcs = tml_get_covered_func_count();
-    double coverage_pct = g_func_count > 0 ? (100.0 * covered_funcs / g_func_count) : 0.0;
+    double coverage_pct = func_count > 0 ? (100.0 * covered_funcs / func_count) : 0.0;
 
     // Calculate total calls
     int64_t total_calls = 0;
-    for (int32_t i = 0; i < g_func_count; i++) {
-        total_calls += g_functions[i].hit_count;
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        if (ATOMIC_LOAD(&g_func_table[i].occupied) == 2) {
+            total_calls += ATOMIC_LOAD(&g_func_table[i].hit_count);
+        }
     }
 
     // Write HTML
@@ -427,7 +582,7 @@ TML_EXPORT void write_coverage_html(const char* filename) {
     fprintf(f, "        <div class=\"stat-label\">Function Coverage</div>\n");
     fprintf(f, "      </div>\n");
     fprintf(f, "      <div class=\"stat-card\">\n");
-    fprintf(f, "        <div class=\"stat-value\">%d / %d</div>\n", covered_funcs, g_func_count);
+    fprintf(f, "        <div class=\"stat-value\">%d / %d</div>\n", covered_funcs, func_count);
     fprintf(f, "        <div class=\"stat-label\">Functions Covered</div>\n");
     fprintf(f, "      </div>\n");
     fprintf(f, "      <div class=\"stat-card\">\n");
@@ -453,27 +608,34 @@ TML_EXPORT void write_coverage_html(const char* filename) {
 
     // Find max calls for bar scaling
     int32_t max_calls = 1;
-    for (int32_t i = 0; i < g_func_count; i++) {
-        if (g_functions[i].hit_count > max_calls) {
-            max_calls = g_functions[i].hit_count;
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        if (ATOMIC_LOAD(&g_func_table[i].occupied) == 2) {
+            int32_t hits = ATOMIC_LOAD(&g_func_table[i].hit_count);
+            if (hits > max_calls) {
+                max_calls = hits;
+            }
         }
     }
 
-    for (int32_t i = 0; i < g_func_count; i++) {
-        int is_covered = g_functions[i].hit_count > 0;
-        double bar_width = (g_functions[i].hit_count * 100.0) / max_calls;
+    for (int32_t i = 0; i < HASH_TABLE_SIZE; i++) {
+        if (ATOMIC_LOAD(&g_func_table[i].occupied) == 2) {
+            int32_t hits = ATOMIC_LOAD(&g_func_table[i].hit_count);
+            int is_covered = hits > 0;
+            double bar_width = (hits * 100.0) / max_calls;
 
-        fprintf(f, "        <tr>\n");
-        fprintf(f, "          <td>%s</td>\n", g_functions[i].name);
-        fprintf(f, "          <td class=\"calls\">%d</td>\n", g_functions[i].hit_count);
-        fprintf(f, "          <td class=\"%s\">%s", is_covered ? "covered" : "uncovered",
-                is_covered ? "&#x2713;" : "&#x2717;");
-        if (is_covered && bar_width > 0) {
-            fprintf(f, "<span class=\"bar\" style=\"width: %.0fpx; background: #00d26a;\"></span>",
-                    bar_width);
+            fprintf(f, "        <tr>\n");
+            fprintf(f, "          <td>%s</td>\n", g_func_table[i].name);
+            fprintf(f, "          <td class=\"calls\">%d</td>\n", hits);
+            fprintf(f, "          <td class=\"%s\">%s", is_covered ? "covered" : "uncovered",
+                    is_covered ? "&#x2713;" : "&#x2717;");
+            if (is_covered && bar_width > 0) {
+                fprintf(f,
+                        "<span class=\"bar\" style=\"width: %.0fpx; background: #00d26a;\"></span>",
+                        bar_width);
+            }
+            fprintf(f, "</td>\n");
+            fprintf(f, "        </tr>\n");
         }
-        fprintf(f, "</td>\n");
-        fprintf(f, "        </tr>\n");
     }
 
     fprintf(f, "      </tbody>\n");

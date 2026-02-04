@@ -72,8 +72,72 @@
 //! let encrypted = cipher.finalize()?
 //! ```
 
-use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::error::CryptoError
 use std::collections::Buffer
+
+// ============================================================================
+// FFI Function Declarations
+// ============================================================================
+
+@extern("crypto_bytes_to_hex")
+func ffi_crypto_bytes_to_hex(handle: *Unit) -> Str
+
+@extern("crypto_hex_to_bytes")
+func ffi_crypto_hex_to_bytes(hex: Str) -> *Unit
+
+@extern("crypto_bytes_to_base64")
+func ffi_crypto_bytes_to_base64(handle: *Unit) -> Str
+
+@extern("crypto_base64_to_bytes")
+func ffi_crypto_base64_to_bytes(b64: Str) -> *Unit
+
+@extern("crypto_bytes_to_str")
+func ffi_crypto_bytes_to_str(handle: *Unit) -> Str
+
+@extern("crypto_str_to_bytes")
+func ffi_crypto_str_to_bytes(s: Str) -> *Unit
+
+@extern("crypto_cipher_create")
+func ffi_crypto_cipher_create(algorithm: Str, key: *Unit, iv: *Unit, encrypt: I64) -> *Unit
+
+@extern("crypto_cipher_set_aad")
+func ffi_crypto_cipher_set_aad(handle: *Unit, aad: *Unit)
+
+@extern("crypto_cipher_set_aad_str")
+func ffi_crypto_cipher_set_aad_str(handle: *Unit, aad: Str)
+
+@extern("crypto_cipher_set_padding")
+func ffi_crypto_cipher_set_padding(handle: *Unit, enabled: Bool)
+
+@extern("crypto_cipher_update_str")
+func ffi_crypto_cipher_update_str(handle: *Unit, data: Str, output: *Unit)
+
+@extern("crypto_cipher_update_bytes")
+func ffi_crypto_cipher_update_bytes(handle: *Unit, data: *Unit, output: *Unit)
+
+@extern("crypto_cipher_finalize")
+func ffi_crypto_cipher_finalize(handle: *Unit, output: *Unit) -> Bool
+
+@extern("crypto_cipher_get_tag")
+func ffi_crypto_cipher_get_tag(handle: *Unit) -> *Unit
+
+@extern("crypto_cipher_set_tag")
+func ffi_crypto_cipher_set_tag(handle: *Unit, tag: *Unit)
+
+@extern("crypto_cipher_destroy")
+func ffi_crypto_cipher_destroy(handle: *Unit)
+
+@extern("crypto_random_bytes")
+func ffi_crypto_random_bytes(size: I64) -> *Unit
+
+@extern("crypto_concat_buffers3")
+func ffi_crypto_concat_buffers3(a: *Unit, b: *Unit, c: *Unit) -> *Unit
+
+@extern("crypto_buffer_slice")
+func ffi_crypto_buffer_slice(handle: *Unit, offset: I64, length: I64) -> *Unit
+
+@extern("buffer_len")
+func ffi_buffer_len(handle: *Unit) -> I64
 
 /// Supported cipher algorithms.
 pub type CipherAlgorithm {
@@ -224,31 +288,61 @@ impl CipherAlgorithm {
         return 0
     }
 
+    /// Returns AES-CBC algorithm variant based on key length.
+    pub func aes_cbc_for_key_len(key_len: I64) -> Outcome[CipherAlgorithm, CryptoError] {
+        if key_len == 16 {
+            return Ok(CipherAlgorithm::Aes128Cbc)
+        }
+        if key_len == 24 {
+            return Ok(CipherAlgorithm::Aes192Cbc)
+        }
+        if key_len == 32 {
+            return Ok(CipherAlgorithm::Aes256Cbc)
+        }
+        return Err(CryptoError::invalid_key(
+            "AES key must be 16, 24, or 32 bytes"
+        ))
+    }
+
+    /// Returns AES-GCM algorithm variant based on key length.
+    pub func aes_gcm_for_key_len(key_len: I64) -> Outcome[CipherAlgorithm, CryptoError] {
+        if key_len == 16 {
+            return Ok(CipherAlgorithm::Aes128Gcm)
+        }
+        if key_len == 24 {
+            return Ok(CipherAlgorithm::Aes192Gcm)
+        }
+        if key_len == 32 {
+            return Ok(CipherAlgorithm::Aes256Gcm)
+        }
+        return Err(CryptoError::invalid_key(
+            "AES-GCM key must be 16, 24, or 32 bytes"
+        ))
+    }
+
     /// Parses an algorithm from a string name.
     pub func from_name(name: Str) -> Maybe[CipherAlgorithm] {
-        when name {
-            "aes-128-cbc" => return Just(CipherAlgorithm::Aes128Cbc)
-            "aes-192-cbc" => return Just(CipherAlgorithm::Aes192Cbc)
-            "aes-256-cbc" => return Just(CipherAlgorithm::Aes256Cbc)
-            "aes-128-ctr" => return Just(CipherAlgorithm::Aes128Ctr)
-            "aes-192-ctr" => return Just(CipherAlgorithm::Aes192Ctr)
-            "aes-256-ctr" => return Just(CipherAlgorithm::Aes256Ctr)
-            "aes-128-gcm" => return Just(CipherAlgorithm::Aes128Gcm)
-            "aes-192-gcm" => return Just(CipherAlgorithm::Aes192Gcm)
-            "aes-256-gcm" => return Just(CipherAlgorithm::Aes256Gcm)
-            "aes-128-ccm" => return Just(CipherAlgorithm::Aes128Ccm)
-            "aes-256-ccm" => return Just(CipherAlgorithm::Aes256Ccm)
-            "aes-128-ocb" => return Just(CipherAlgorithm::Aes128Ocb)
-            "aes-256-ocb" => return Just(CipherAlgorithm::Aes256Ocb)
-            "chacha20" => return Just(CipherAlgorithm::ChaCha20)
-            "chacha20-poly1305" => return Just(CipherAlgorithm::ChaCha20Poly1305)
-            "xchacha20-poly1305" => return Just(CipherAlgorithm::XChaCha20Poly1305)
-            "aes-128-ecb" => return Just(CipherAlgorithm::Aes128Ecb)
-            "aes-256-ecb" => return Just(CipherAlgorithm::Aes256Ecb)
-            "des-ede3-cbc" => return Just(CipherAlgorithm::Des3Cbc)
-            "bf-cbc" => return Just(CipherAlgorithm::BlowfishCbc)
-            _ => return Nothing
-        }
+        if name == "aes-128-cbc" { return Just(CipherAlgorithm::Aes128Cbc) }
+        if name == "aes-192-cbc" { return Just(CipherAlgorithm::Aes192Cbc) }
+        if name == "aes-256-cbc" { return Just(CipherAlgorithm::Aes256Cbc) }
+        if name == "aes-128-ctr" { return Just(CipherAlgorithm::Aes128Ctr) }
+        if name == "aes-192-ctr" { return Just(CipherAlgorithm::Aes192Ctr) }
+        if name == "aes-256-ctr" { return Just(CipherAlgorithm::Aes256Ctr) }
+        if name == "aes-128-gcm" { return Just(CipherAlgorithm::Aes128Gcm) }
+        if name == "aes-192-gcm" { return Just(CipherAlgorithm::Aes192Gcm) }
+        if name == "aes-256-gcm" { return Just(CipherAlgorithm::Aes256Gcm) }
+        if name == "aes-128-ccm" { return Just(CipherAlgorithm::Aes128Ccm) }
+        if name == "aes-256-ccm" { return Just(CipherAlgorithm::Aes256Ccm) }
+        if name == "aes-128-ocb" { return Just(CipherAlgorithm::Aes128Ocb) }
+        if name == "aes-256-ocb" { return Just(CipherAlgorithm::Aes256Ocb) }
+        if name == "chacha20" { return Just(CipherAlgorithm::ChaCha20) }
+        if name == "chacha20-poly1305" { return Just(CipherAlgorithm::ChaCha20Poly1305) }
+        if name == "xchacha20-poly1305" { return Just(CipherAlgorithm::XChaCha20Poly1305) }
+        if name == "aes-128-ecb" { return Just(CipherAlgorithm::Aes128Ecb) }
+        if name == "aes-256-ecb" { return Just(CipherAlgorithm::Aes256Ecb) }
+        if name == "des-ede3-cbc" { return Just(CipherAlgorithm::Des3Cbc) }
+        if name == "bf-cbc" { return Just(CipherAlgorithm::BlowfishCbc) }
+        return Nothing
     }
 }
 
@@ -290,7 +384,7 @@ impl AuthTag {
 
     /// Returns the tag as a hexadecimal string.
     pub func to_hex(this) -> Str {
-        let hex: Str = lowlevel { crypto_bytes_to_hex(this.data.handle) }
+        let hex: Str = ffi_crypto_bytes_to_hex(this.data.handle)
         return hex
     }
 
@@ -300,10 +394,10 @@ impl AuthTag {
     }
 
     /// Parses an AuthTag from hexadecimal.
-    pub func from_hex(hex: Str) -> CryptoResult[AuthTag] {
-        let handle: *Unit = lowlevel { crypto_hex_to_bytes(hex) }
+    pub func from_hex(hex: Str) -> Outcome[AuthTag, CryptoError] {
+        let handle: *Unit = ffi_crypto_hex_to_bytes(hex)
         if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "invalid hex string"))
+            return Err(CryptoError::invalid_parameter( "invalid hex string"))
         }
         return Ok(AuthTag { data: Buffer { handle: handle } })
     }
@@ -319,27 +413,26 @@ pub type Cipher {
 
 impl Cipher {
     /// Creates a new Cipher for encryption.
-    pub func new(algorithm: CipherAlgorithm, key: ref Buffer, iv: ref Buffer) -> CryptoResult[Cipher] {
+    pub func new(algorithm: CipherAlgorithm, key: ref Buffer, iv: ref Buffer) -> Outcome[Cipher, CryptoError] {
         // Validate key size
-        if key.len() != algorithm.key_size() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidKey,
-                "expected {algorithm.key_size()} byte key, got {key.len()}"
+        let key_len: I64 = ffi_buffer_len(key.handle)
+        if key_len != algorithm.key_size() {
+            return Err(CryptoError::invalid_key(
+                "expected {algorithm.key_size()} byte key, got {key_len}"
             ))
         }
 
         // Validate IV size
-        if iv.len() != algorithm.iv_size() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidIv,
-                "expected {algorithm.iv_size()} byte IV, got {iv.len()}"
+        let iv_len: I64 = ffi_buffer_len(iv.handle)
+        if iv_len != algorithm.iv_size() {
+            return Err(CryptoError::invalid_iv(
+                "expected {algorithm.iv_size()} byte IV, got {iv_len}"
             ))
         }
 
-        let handle: *Unit = lowlevel { crypto_cipher_create(algorithm.name(), key.handle, iv.handle, 1) }
+        let handle: *Unit = ffi_crypto_cipher_create(algorithm.name(), key.handle, iv.handle, 1)
         if handle == null {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::UnsupportedAlgorithm,
+            return Err(CryptoError::unsupported_algorithm(
                 "failed to create cipher for {algorithm.name()}"
             ))
         }
@@ -353,39 +446,37 @@ impl Cipher {
     }
 
     /// Sets the Additional Authenticated Data for AEAD modes.
-    pub func set_aad(mut this, aad: ref Buffer) -> CryptoResult[ref Cipher] {
+    pub func set_aad(mut this, aad: ref Buffer) -> Outcome[ref Cipher, CryptoError] {
         if not this.algorithm.is_aead() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidParameter,
+            return Err(CryptoError::invalid_parameter(
                 "AAD is only supported for AEAD ciphers"
             ))
         }
-        lowlevel { crypto_cipher_set_aad(this.handle, aad.handle) }
+        ffi_crypto_cipher_set_aad(this.handle, aad.handle)
         return Ok(ref this)
     }
 
     /// Sets AAD from a string.
-    pub func set_aad_str(mut this, aad: Str) -> CryptoResult[ref Cipher] {
+    pub func set_aad_str(mut this, aad: Str) -> Outcome[ref Cipher, CryptoError] {
         if not this.algorithm.is_aead() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidParameter,
+            return Err(CryptoError::invalid_parameter(
                 "AAD is only supported for AEAD ciphers"
             ))
         }
-        lowlevel { crypto_cipher_set_aad_str(this.handle, aad) }
+        ffi_crypto_cipher_set_aad_str(this.handle, aad)
         return Ok(ref this)
     }
 
     /// Enables or disables automatic padding.
     pub func set_auto_padding(mut this, enabled: Bool) -> ref Cipher {
-        lowlevel { crypto_cipher_set_padding(this.handle, enabled) }
+        ffi_crypto_cipher_set_padding(this.handle, enabled)
         return ref this
     }
 
     /// Updates the cipher with plaintext data.
     pub func update(mut this, data: Str) -> ref Cipher {
         if not this.finalized {
-            lowlevel { crypto_cipher_update_str(this.handle, data, this.output.handle) }
+            ffi_crypto_cipher_update_str(this.handle, data, this.output.handle)
         }
         return ref this
     }
@@ -393,41 +484,39 @@ impl Cipher {
     /// Updates the cipher with binary plaintext data.
     pub func update_bytes(mut this, data: ref Buffer) -> ref Cipher {
         if not this.finalized {
-            lowlevel { crypto_cipher_update_bytes(this.handle, data.handle, this.output.handle) }
+            ffi_crypto_cipher_update_bytes(this.handle, data.handle, this.output.handle)
         }
         return ref this
     }
 
     /// Finalizes the encryption and returns the ciphertext.
-    pub func finalize(mut this) -> CryptoResult[Buffer] {
+    pub func finalize(mut this) -> Outcome[Buffer, CryptoError] {
         if this.finalized {
-            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+            return Err(CryptoError::operation_failed(""))
         }
         this.finalized = true
-        let success: Bool = lowlevel { crypto_cipher_finalize(this.handle, this.output.handle) }
+        let success: Bool = ffi_crypto_cipher_finalize(this.handle, this.output.handle)
         if not success {
-            return Err(CryptoError::new(CryptoErrorKind::InvalidPadding))
+            return Err(CryptoError::new("invalid padding"))
         }
         return Ok(this.output)
     }
 
     /// Gets the authentication tag after finalization (AEAD modes only).
-    pub func get_auth_tag(this) -> CryptoResult[AuthTag] {
+    pub func get_auth_tag(this) -> Outcome[AuthTag, CryptoError] {
         if not this.algorithm.is_aead() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidParameter,
+            return Err(CryptoError::invalid_parameter(
                 "auth tag is only available for AEAD ciphers"
             ))
         }
         if not this.finalized {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::OperationFailed,
+            return Err(CryptoError::operation_failed(
                 "cipher must be finalized before getting auth tag"
             ))
         }
-        let tag_handle: *Unit = lowlevel { crypto_cipher_get_tag(this.handle) }
+        let tag_handle: *Unit = ffi_crypto_cipher_get_tag(this.handle)
         if tag_handle == null {
-            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+            return Err(CryptoError::operation_failed(""))
         }
         return Ok(AuthTag { data: Buffer { handle: tag_handle } })
     }
@@ -440,7 +529,7 @@ impl Cipher {
     /// Frees the cipher resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { crypto_cipher_destroy(this.handle) }
+            ffi_crypto_cipher_destroy(this.handle)
             this.handle = null
         }
     }
@@ -456,27 +545,26 @@ pub type Decipher {
 
 impl Decipher {
     /// Creates a new Decipher for decryption.
-    pub func new(algorithm: CipherAlgorithm, key: ref Buffer, iv: ref Buffer) -> CryptoResult[Decipher] {
+    pub func new(algorithm: CipherAlgorithm, key: ref Buffer, iv: ref Buffer) -> Outcome[Decipher, CryptoError] {
         // Validate key size
-        if key.len() != algorithm.key_size() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidKey,
-                "expected {algorithm.key_size()} byte key, got {key.len()}"
+        let key_len: I64 = ffi_buffer_len(key.handle)
+        if key_len != algorithm.key_size() {
+            return Err(CryptoError::invalid_key(
+                "expected {algorithm.key_size()} byte key, got {key_len}"
             ))
         }
 
         // Validate IV size
-        if iv.len() != algorithm.iv_size() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidIv,
-                "expected {algorithm.iv_size()} byte IV, got {iv.len()}"
+        let iv_len: I64 = ffi_buffer_len(iv.handle)
+        if iv_len != algorithm.iv_size() {
+            return Err(CryptoError::invalid_iv(
+                "expected {algorithm.iv_size()} byte IV, got {iv_len}"
             ))
         }
 
-        let handle: *Unit = lowlevel { crypto_cipher_create(algorithm.name(), key.handle, iv.handle, 0) }
+        let handle: *Unit = ffi_crypto_cipher_create(algorithm.name(), key.handle, iv.handle, 0)
         if handle == null {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::UnsupportedAlgorithm,
+            return Err(CryptoError::unsupported_algorithm(
                 "failed to create decipher for {algorithm.name()}"
             ))
         }
@@ -490,67 +578,64 @@ impl Decipher {
     }
 
     /// Sets the Additional Authenticated Data for AEAD modes.
-    pub func set_aad(mut this, aad: ref Buffer) -> CryptoResult[ref Decipher] {
+    pub func set_aad(mut this, aad: ref Buffer) -> Outcome[ref Decipher, CryptoError] {
         if not this.algorithm.is_aead() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidParameter,
+            return Err(CryptoError::invalid_parameter(
                 "AAD is only supported for AEAD ciphers"
             ))
         }
-        lowlevel { crypto_cipher_set_aad(this.handle, aad.handle) }
+        ffi_crypto_cipher_set_aad(this.handle, aad.handle)
         return Ok(ref this)
     }
 
     /// Sets AAD from a string.
-    pub func set_aad_str(mut this, aad: Str) -> CryptoResult[ref Decipher] {
+    pub func set_aad_str(mut this, aad: Str) -> Outcome[ref Decipher, CryptoError] {
         if not this.algorithm.is_aead() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidParameter,
+            return Err(CryptoError::invalid_parameter(
                 "AAD is only supported for AEAD ciphers"
             ))
         }
-        lowlevel { crypto_cipher_set_aad_str(this.handle, aad) }
+        ffi_crypto_cipher_set_aad_str(this.handle, aad)
         return Ok(ref this)
     }
 
     /// Sets the authentication tag for AEAD decryption.
-    pub func set_auth_tag(mut this, tag: ref AuthTag) -> CryptoResult[ref Decipher] {
+    pub func set_auth_tag(mut this, tag: ref AuthTag) -> Outcome[ref Decipher, CryptoError] {
         if not this.algorithm.is_aead() {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidParameter,
+            return Err(CryptoError::invalid_parameter(
                 "auth tag is only supported for AEAD ciphers"
             ))
         }
-        lowlevel { crypto_cipher_set_tag(this.handle, tag.data.handle) }
+        ffi_crypto_cipher_set_tag(this.handle, tag.data.handle)
         return Ok(ref this)
     }
 
     /// Enables or disables automatic padding.
     pub func set_auto_padding(mut this, enabled: Bool) -> ref Decipher {
-        lowlevel { crypto_cipher_set_padding(this.handle, enabled) }
+        ffi_crypto_cipher_set_padding(this.handle, enabled)
         return ref this
     }
 
     /// Updates the decipher with ciphertext data.
     pub func update_bytes(mut this, data: ref Buffer) -> ref Decipher {
         if not this.finalized {
-            lowlevel { crypto_cipher_update_bytes(this.handle, data.handle, this.output.handle) }
+            ffi_crypto_cipher_update_bytes(this.handle, data.handle, this.output.handle)
         }
         return ref this
     }
 
     /// Finalizes the decryption and returns the plaintext.
-    pub func finalize(mut this) -> CryptoResult[Buffer] {
+    pub func finalize(mut this) -> Outcome[Buffer, CryptoError] {
         if this.finalized {
-            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+            return Err(CryptoError::operation_failed(""))
         }
         this.finalized = true
-        let success: Bool = lowlevel { crypto_cipher_finalize(this.handle, this.output.handle) }
+        let success: Bool = ffi_crypto_cipher_finalize(this.handle, this.output.handle)
         if not success {
             if this.algorithm.is_aead() {
-                return Err(CryptoError::new(CryptoErrorKind::AuthenticationFailed))
+                return Err(CryptoError::auth_failed())
             }
-            return Err(CryptoError::new(CryptoErrorKind::InvalidPadding))
+            return Err(CryptoError::new("invalid padding"))
         }
         return Ok(this.output)
     }
@@ -563,7 +648,7 @@ impl Decipher {
     /// Frees the decipher resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { crypto_cipher_destroy(this.handle) }
+            ffi_crypto_cipher_destroy(this.handle)
             this.handle = null
         }
     }
@@ -574,41 +659,38 @@ impl Decipher {
 // ============================================================================
 
 /// Encrypts data using AES-CBC.
-pub func aes_encrypt(key: ref Buffer, iv: ref Buffer, plaintext: ref Buffer) -> CryptoResult[Buffer] {
-    let algorithm = if key.len() == 16 {
-        CipherAlgorithm::Aes128Cbc
-    } else if key.len() == 24 {
-        CipherAlgorithm::Aes192Cbc
-    } else if key.len() == 32 {
-        CipherAlgorithm::Aes256Cbc
-    } else {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "AES key must be 16, 24, or 32 bytes"
-        ))
+pub func aes_encrypt(key: ref Buffer, iv: ref Buffer, plaintext: ref Buffer) -> Outcome[Buffer, CryptoError] {
+    let key_len: I64 = ffi_buffer_len(key.handle)
+
+    // Using Never type coercion: Err branch returns (type !), Ok branch returns CipherAlgorithm
+    let algorithm: CipherAlgorithm = when CipherAlgorithm::aes_cbc_for_key_len(key_len) {
+        Err(e) => return Err(e),
+        Ok(a) => a
     }
 
-    let mut cipher = Cipher::new(algorithm, key, iv)?
+    let mut cipher: Cipher = when Cipher::new(algorithm, key, iv) {
+        Err(e) => return Err(e),
+        Ok(c) => c
+    }
+
     cipher.update_bytes(plaintext)
     return cipher.finalize()
 }
 
 /// Decrypts data using AES-CBC.
-pub func aes_decrypt(key: ref Buffer, iv: ref Buffer, ciphertext: ref Buffer) -> CryptoResult[Buffer] {
-    let algorithm = if key.len() == 16 {
-        CipherAlgorithm::Aes128Cbc
-    } else if key.len() == 24 {
-        CipherAlgorithm::Aes192Cbc
-    } else if key.len() == 32 {
-        CipherAlgorithm::Aes256Cbc
-    } else {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "AES key must be 16, 24, or 32 bytes"
-        ))
+pub func aes_decrypt(key: ref Buffer, iv: ref Buffer, ciphertext: ref Buffer) -> Outcome[Buffer, CryptoError] {
+    let key_len: I64 = ffi_buffer_len(key.handle)
+
+    let algorithm: CipherAlgorithm = when CipherAlgorithm::aes_cbc_for_key_len(key_len) {
+        Err(e) => return Err(e),
+        Ok(a) => a
     }
 
-    let mut decipher = Decipher::new(algorithm, key, iv)?
+    let mut decipher: Decipher = when Decipher::new(algorithm, key, iv) {
+        Err(e) => return Err(e),
+        Ok(d) => d
+    }
+
     decipher.update_bytes(ciphertext)
     return decipher.finalize()
 }
@@ -621,26 +703,45 @@ pub func aes_gcm_encrypt(
     nonce: ref Buffer,
     plaintext: ref Buffer,
     aad: ref Buffer,
-) -> CryptoResult[(Buffer, AuthTag)] {
-    let algorithm = if key.len() == 16 {
-        CipherAlgorithm::Aes128Gcm
-    } else if key.len() == 24 {
-        CipherAlgorithm::Aes192Gcm
-    } else if key.len() == 32 {
-        CipherAlgorithm::Aes256Gcm
-    } else {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "AES-GCM key must be 16, 24, or 32 bytes"
-        ))
+) -> Outcome[(Buffer, AuthTag), CryptoError] {
+    let key_len: I64 = ffi_buffer_len(key.handle)
+    let algorithm_result: Outcome[CipherAlgorithm, CryptoError] = CipherAlgorithm::aes_gcm_for_key_len(key_len)
+    let mut algorithm: CipherAlgorithm = CipherAlgorithm::Aes128Gcm
+    when algorithm_result {
+        Err(e) => return Err(e),
+        Ok(a) => algorithm = a
     }
 
-    let mut cipher = Cipher::new(algorithm, key, nonce)?
-    cipher.set_aad(aad)?
+    let cipher_result: Outcome[Cipher, CryptoError] = Cipher::new(algorithm, key, nonce)
+    let mut cipher: Cipher = Cipher { handle: null, algorithm: CipherAlgorithm::Aes128Gcm, finalized: false, output: Buffer::new(0) }
+    when cipher_result {
+        Err(e) => return Err(e),
+        Ok(c) => cipher = c
+    }
+
+    let aad_result: Outcome[ref Cipher, CryptoError] = cipher.set_aad(aad)
+    when aad_result {
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
+
     cipher.update_bytes(plaintext)
-    let ciphertext = cipher.finalize()?
-    let tag = cipher.get_auth_tag()?
-    return Ok((ciphertext, tag))
+
+    let ciphertext_result: Outcome[Buffer, CryptoError] = cipher.finalize()
+    let mut ct: Buffer = Buffer::new(0)
+    when ciphertext_result {
+        Err(e) => return Err(e),
+        Ok(c) => ct = c
+    }
+
+    let tag_result: Outcome[AuthTag, CryptoError] = cipher.get_auth_tag()
+    let mut tag: AuthTag = AuthTag { data: Buffer::new(0) }
+    when tag_result {
+        Err(e) => return Err(e),
+        Ok(t) => tag = t
+    }
+
+    return Ok((ct, tag))
 }
 
 /// Decrypts data using AES-GCM (AEAD).
@@ -652,23 +753,34 @@ pub func aes_gcm_decrypt(
     ciphertext: ref Buffer,
     aad: ref Buffer,
     tag: ref AuthTag,
-) -> CryptoResult[Buffer] {
-    let algorithm = if key.len() == 16 {
-        CipherAlgorithm::Aes128Gcm
-    } else if key.len() == 24 {
-        CipherAlgorithm::Aes192Gcm
-    } else if key.len() == 32 {
-        CipherAlgorithm::Aes256Gcm
-    } else {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "AES-GCM key must be 16, 24, or 32 bytes"
-        ))
+) -> Outcome[Buffer, CryptoError] {
+    let key_len: I64 = ffi_buffer_len(key.handle)
+    let algorithm_result: Outcome[CipherAlgorithm, CryptoError] = CipherAlgorithm::aes_gcm_for_key_len(key_len)
+    let mut algorithm: CipherAlgorithm = CipherAlgorithm::Aes128Gcm
+    when algorithm_result {
+        Err(e) => return Err(e),
+        Ok(a) => algorithm = a
     }
 
-    let mut decipher = Decipher::new(algorithm, key, nonce)?
-    decipher.set_aad(aad)?
-    decipher.set_auth_tag(tag)?
+    let decipher_result: Outcome[Decipher, CryptoError] = Decipher::new(algorithm, key, nonce)
+    let mut decipher: Decipher = Decipher { handle: null, algorithm: CipherAlgorithm::Aes128Gcm, finalized: false, output: Buffer::new(0) }
+    when decipher_result {
+        Err(e) => return Err(e),
+        Ok(d) => decipher = d
+    }
+
+    let aad_result: Outcome[ref Decipher, CryptoError] = decipher.set_aad(aad)
+    when aad_result {
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
+
+    let tag_result: Outcome[ref Decipher, CryptoError] = decipher.set_auth_tag(tag)
+    when tag_result {
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
+
     decipher.update_bytes(ciphertext)
     return decipher.finalize()
 }
@@ -681,26 +793,50 @@ pub func chacha20_poly1305_encrypt(
     nonce: ref Buffer,
     plaintext: ref Buffer,
     aad: ref Buffer,
-) -> CryptoResult[(Buffer, AuthTag)] {
-    if key.len() != 32 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
+) -> Outcome[(Buffer, AuthTag), CryptoError] {
+    let key_len: I64 = ffi_buffer_len(key.handle)
+    if key_len != 32 {
+        return Err(CryptoError::invalid_key(
             "ChaCha20-Poly1305 requires 32-byte key"
         ))
     }
-    if nonce.len() != 12 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidIv,
+    let nonce_len: I64 = ffi_buffer_len(nonce.handle)
+    if nonce_len != 12 {
+        return Err(CryptoError::invalid_iv(
             "ChaCha20-Poly1305 requires 12-byte nonce"
         ))
     }
 
-    let mut cipher = Cipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)?
-    cipher.set_aad(aad)?
+    let cipher_result: Outcome[Cipher, CryptoError] = Cipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)
+    let mut cipher: Cipher = Cipher { handle: null, algorithm: CipherAlgorithm::ChaCha20Poly1305, finalized: false, output: Buffer::new(0) }
+    when cipher_result {
+        Err(e) => return Err(e),
+        Ok(c) => cipher = c
+    }
+
+    let aad_result: Outcome[ref Cipher, CryptoError] = cipher.set_aad(aad)
+    when aad_result {
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
+
     cipher.update_bytes(plaintext)
-    let ciphertext = cipher.finalize()?
-    let tag = cipher.get_auth_tag()?
-    return Ok((ciphertext, tag))
+
+    let ciphertext_result: Outcome[Buffer, CryptoError] = cipher.finalize()
+    let mut ct: Buffer = Buffer::new(0)
+    when ciphertext_result {
+        Err(e) => return Err(e),
+        Ok(c) => ct = c
+    }
+
+    let tag_result: Outcome[AuthTag, CryptoError] = cipher.get_auth_tag()
+    let mut tag: AuthTag = AuthTag { data: Buffer::new(0) }
+    when tag_result {
+        Err(e) => return Err(e),
+        Ok(t) => tag = t
+    }
+
+    return Ok((ct, tag))
 }
 
 /// Decrypts data using ChaCha20-Poly1305 (AEAD).
@@ -710,23 +846,39 @@ pub func chacha20_poly1305_decrypt(
     ciphertext: ref Buffer,
     aad: ref Buffer,
     tag: ref AuthTag,
-) -> CryptoResult[Buffer] {
-    if key.len() != 32 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
+) -> Outcome[Buffer, CryptoError] {
+    let key_len: I64 = ffi_buffer_len(key.handle)
+    if key_len != 32 {
+        return Err(CryptoError::invalid_key(
             "ChaCha20-Poly1305 requires 32-byte key"
         ))
     }
-    if nonce.len() != 12 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidIv,
+    let nonce_len: I64 = ffi_buffer_len(nonce.handle)
+    if nonce_len != 12 {
+        return Err(CryptoError::invalid_iv(
             "ChaCha20-Poly1305 requires 12-byte nonce"
         ))
     }
 
-    let mut decipher = Decipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)?
-    decipher.set_aad(aad)?
-    decipher.set_auth_tag(tag)?
+    let decipher_result: Outcome[Decipher, CryptoError] = Decipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)
+    let mut decipher: Decipher = Decipher { handle: null, algorithm: CipherAlgorithm::ChaCha20Poly1305, finalized: false, output: Buffer::new(0) }
+    when decipher_result {
+        Err(e) => return Err(e),
+        Ok(d) => decipher = d
+    }
+
+    let aad_result: Outcome[ref Decipher, CryptoError] = decipher.set_aad(aad)
+    when aad_result {
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
+
+    let tag_result: Outcome[ref Decipher, CryptoError] = decipher.set_auth_tag(tag)
+    when tag_result {
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
+
     decipher.update_bytes(ciphertext)
     return decipher.finalize()
 }
@@ -737,26 +889,50 @@ pub func xchacha20_poly1305_encrypt(
     nonce: ref Buffer,
     plaintext: ref Buffer,
     aad: ref Buffer,
-) -> CryptoResult[(Buffer, AuthTag)] {
-    if key.len() != 32 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
+) -> Outcome[(Buffer, AuthTag), CryptoError] {
+    let key_len: I64 = ffi_buffer_len(key.handle)
+    if key_len != 32 {
+        return Err(CryptoError::invalid_key(
             "XChaCha20-Poly1305 requires 32-byte key"
         ))
     }
-    if nonce.len() != 24 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidIv,
+    let nonce_len: I64 = ffi_buffer_len(nonce.handle)
+    if nonce_len != 24 {
+        return Err(CryptoError::invalid_iv(
             "XChaCha20-Poly1305 requires 24-byte nonce"
         ))
     }
 
-    let mut cipher = Cipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)?
-    cipher.set_aad(aad)?
+    let cipher_result: Outcome[Cipher, CryptoError] = Cipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)
+    let mut cipher: Cipher = Cipher { handle: null, algorithm: CipherAlgorithm::XChaCha20Poly1305, finalized: false, output: Buffer::new(0) }
+    when cipher_result {
+        Err(e) => return Err(e),
+        Ok(c) => cipher = c
+    }
+
+    let aad_result: Outcome[ref Cipher, CryptoError] = cipher.set_aad(aad)
+    when aad_result {
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
+
     cipher.update_bytes(plaintext)
-    let ciphertext = cipher.finalize()?
-    let tag = cipher.get_auth_tag()?
-    return Ok((ciphertext, tag))
+
+    let ciphertext_result: Outcome[Buffer, CryptoError] = cipher.finalize()
+    let mut ct: Buffer = Buffer::new(0)
+    when ciphertext_result {
+        Err(e) => return Err(e),
+        Ok(c) => ct = c
+    }
+
+    let tag_result: Outcome[AuthTag, CryptoError] = cipher.get_auth_tag()
+    let mut tag: AuthTag = AuthTag { data: Buffer::new(0) }
+    when tag_result {
+        Err(e) => return Err(e),
+        Ok(t) => tag = t
+    }
+
+    return Ok((ct, tag))
 }
 
 /// Decrypts data using XChaCha20-Poly1305 (extended nonce AEAD).
@@ -766,23 +942,39 @@ pub func xchacha20_poly1305_decrypt(
     ciphertext: ref Buffer,
     aad: ref Buffer,
     tag: ref AuthTag,
-) -> CryptoResult[Buffer] {
-    if key.len() != 32 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
+) -> Outcome[Buffer, CryptoError] {
+    let key_len: I64 = ffi_buffer_len(key.handle)
+    if key_len != 32 {
+        return Err(CryptoError::invalid_key(
             "XChaCha20-Poly1305 requires 32-byte key"
         ))
     }
-    if nonce.len() != 24 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidIv,
+    let nonce_len: I64 = ffi_buffer_len(nonce.handle)
+    if nonce_len != 24 {
+        return Err(CryptoError::invalid_iv(
             "XChaCha20-Poly1305 requires 24-byte nonce"
         ))
     }
 
-    let mut decipher = Decipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)?
-    decipher.set_aad(aad)?
-    decipher.set_auth_tag(tag)?
+    let decipher_result: Outcome[Decipher, CryptoError] = Decipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)
+    let mut decipher: Decipher = Decipher { handle: null, algorithm: CipherAlgorithm::XChaCha20Poly1305, finalized: false, output: Buffer::new(0) }
+    when decipher_result {
+        Err(e) => return Err(e),
+        Ok(d) => decipher = d
+    }
+
+    let aad_result: Outcome[ref Decipher, CryptoError] = decipher.set_aad(aad)
+    when aad_result {
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
+
+    let tag_result: Outcome[ref Decipher, CryptoError] = decipher.set_auth_tag(tag)
+    when tag_result {
+        Err(e) => return Err(e),
+        Ok(_) => {}
+    }
+
     decipher.update_bytes(ciphertext)
     return decipher.finalize()
 }
@@ -790,54 +982,70 @@ pub func xchacha20_poly1305_decrypt(
 /// Encrypts a string and returns base64-encoded result with IV prepended.
 ///
 /// Convenient helper for simple encryption use cases.
-pub func encrypt_string(key: ref Buffer, plaintext: Str) -> CryptoResult[Str] {
+pub func encrypt_string(key: ref Buffer, plaintext: Str) -> Outcome[Str, CryptoError] {
     // Generate random IV
-    let iv_handle: *Unit = lowlevel { crypto_random_bytes(12) }
-    let iv = Buffer { handle: iv_handle }
+    let iv_handle: *Unit = ffi_crypto_random_bytes(12)
+    let iv: Buffer = Buffer { handle: iv_handle }
 
     // Encrypt with AES-GCM
-    let plaintext_buf_handle: *Unit = lowlevel { crypto_str_to_bytes(plaintext) }
-    let plaintext_buf = Buffer { handle: plaintext_buf_handle }
+    let plaintext_buf_handle: *Unit = ffi_crypto_str_to_bytes(plaintext)
+    let plaintext_buf: Buffer = Buffer { handle: plaintext_buf_handle }
 
-    let aad = Buffer::new(0)
-    let (ciphertext, tag) = aes_gcm_encrypt(key, ref iv, ref plaintext_buf, ref aad)?
+    let aad: Buffer = Buffer::new(0)
+    let encrypt_result: Outcome[(Buffer, AuthTag), CryptoError] = aes_gcm_encrypt(key, ref iv, ref plaintext_buf, ref aad)
+    let mut ct: Buffer = Buffer::new(0)
+    let mut tag: AuthTag = AuthTag { data: Buffer::new(0) }
+    when encrypt_result {
+        Err(e) => return Err(e),
+        Ok(r) => {
+            ct = r.0
+            tag = r.1
+        }
+    }
 
     // Combine IV + ciphertext + tag
-    let result_handle: *Unit = lowlevel { crypto_concat_buffers3(iv.handle, ciphertext.handle, tag.data.handle) }
-    let result = Buffer { handle: result_handle }
+    let ciphertext: Buffer = ct
+    let result_handle: *Unit = ffi_crypto_concat_buffers3(iv.handle, ciphertext.handle, tag.data.handle)
+    let result: Buffer = Buffer { handle: result_handle }
 
     // Return base64
-    let b64: Str = lowlevel { crypto_bytes_to_base64(result.handle) }
+    let b64: Str = ffi_crypto_bytes_to_base64(result.handle)
     return Ok(b64)
 }
 
 /// Decrypts a base64-encoded string encrypted with encrypt_string().
-pub func decrypt_string(key: ref Buffer, encrypted_base64: Str) -> CryptoResult[Str] {
+pub func decrypt_string(key: ref Buffer, encrypted_base64: Str) -> Outcome[Str, CryptoError] {
     // Decode base64
-    let data_handle: *Unit = lowlevel { crypto_base64_to_bytes(encrypted_base64) }
+    let data_handle: *Unit = ffi_crypto_base64_to_bytes(encrypted_base64)
     if data_handle == null {
-        return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "invalid base64"))
+        return Err(CryptoError::invalid_parameter( "invalid base64"))
     }
-    let data = Buffer { handle: data_handle }
+    let data: Buffer = Buffer { handle: data_handle }
 
     // Extract IV (12 bytes), ciphertext, and tag (16 bytes)
-    if data.len() < 28 {  // 12 + 16 minimum
-        return Err(CryptoError::with_details(CryptoErrorKind::InvalidParameter, "encrypted data too short"))
+    let data_len: I64 = ffi_buffer_len(data.handle)
+    if data_len < 28 {  // 12 + 16 minimum
+        return Err(CryptoError::invalid_parameter( "encrypted data too short"))
     }
 
-    let iv_handle: *Unit = lowlevel { crypto_buffer_slice(data.handle, 0, 12) }
-    let iv = Buffer { handle: iv_handle }
+    let iv_handle: *Unit = ffi_crypto_buffer_slice(data.handle, 0, 12)
+    let iv: Buffer = Buffer { handle: iv_handle }
 
-    let ciphertext_len = data.len() - 28
-    let ciphertext_handle: *Unit = lowlevel { crypto_buffer_slice(data.handle, 12, ciphertext_len) }
-    let ciphertext = Buffer { handle: ciphertext_handle }
+    let ciphertext_len: I64 = data_len - 28
+    let ciphertext_handle: *Unit = ffi_crypto_buffer_slice(data.handle, 12, ciphertext_len)
+    let ciphertext: Buffer = Buffer { handle: ciphertext_handle }
 
-    let tag_handle: *Unit = lowlevel { crypto_buffer_slice(data.handle, 12 + ciphertext_len, 16) }
-    let tag = AuthTag { data: Buffer { handle: tag_handle } }
+    let tag_handle: *Unit = ffi_crypto_buffer_slice(data.handle, 12 + ciphertext_len, 16)
+    let tag: AuthTag = AuthTag { data: Buffer { handle: tag_handle } }
 
-    let aad = Buffer::new(0)
-    let plaintext = aes_gcm_decrypt(key, ref iv, ref ciphertext, ref aad, ref tag)?
+    let aad: Buffer = Buffer::new(0)
+    let decrypt_result: Outcome[Buffer, CryptoError] = aes_gcm_decrypt(key, ref iv, ref ciphertext, ref aad, ref tag)
+    let mut plaintext: Buffer = Buffer::new(0)
+    when decrypt_result {
+        Err(e) => return Err(e),
+        Ok(p) => plaintext = p
+    }
 
-    let result: Str = lowlevel { crypto_bytes_to_str(plaintext.handle) }
+    let result: Str = ffi_crypto_bytes_to_str(plaintext.handle)
     return Ok(result)
 }

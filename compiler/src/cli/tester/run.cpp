@@ -110,7 +110,20 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
         } else if (arg == "--no-color") {
             opts.no_color = true;
         } else if (arg == "--no-cache") {
-            opts.no_cache = true;
+            // Require explicit confirmation for --no-cache
+            // This prevents accidental full recompilation which is slow
+            std::cerr << "\033[1;33mWarning:\033[0m --no-cache will force full recompilation of "
+                         "ALL test DLLs.\n";
+            std::cerr
+                << "The cache auto-invalidates changed files. You probably don't need this.\n";
+            std::cerr << "Continue? [y/N]: ";
+            std::string response;
+            std::getline(std::cin, response);
+            if (response != "y" && response != "Y" && response != "yes" && response != "Yes") {
+                std::cerr << "Aborted. Running with cache enabled.\n";
+            } else {
+                opts.no_cache = true;
+            }
         } else if (arg.starts_with("--save-baseline=")) {
             opts.save_baseline = arg.substr(16);
         } else if (arg.starts_with("--compare=")) {

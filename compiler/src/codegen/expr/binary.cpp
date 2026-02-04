@@ -26,6 +26,7 @@
 #include "codegen/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"
 
+#include <algorithm>
 #include <functional>
 #include <unordered_set>
 
@@ -279,6 +280,130 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                         struct_type = "%struct." + current_impl_type_;
                         // 'this' is already a pointer parameter, not an alloca - use it directly
                         // struct_ptr is already "%this" which is the direct pointer
+                    }
+
+                    // Handle ref types - resolve the actual struct type from semantic type
+                    // This fixes chained field assignment on ref parameters
+                    if (struct_type == "ptr" && it->second.semantic_type) {
+                        types::TypePtr sem_type = it->second.semantic_type;
+                        if (sem_type->is<types::RefType>()) {
+                            const auto& ref = sem_type->as<types::RefType>();
+                            types::TypePtr resolved_inner = ref.inner;
+                            if (!current_type_subs_.empty()) {
+                                resolved_inner =
+                                    apply_type_substitutions(ref.inner, current_type_subs_);
+                            }
+                            struct_type = llvm_type_from_semantic(resolved_inner);
+                            // Load the pointer from the alloca
+                            std::string loaded_ptr = fresh_reg();
+                            emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                            struct_ptr = loaded_ptr;
+                        } else if (sem_type->is<types::PtrType>()) {
+                            const auto& ptr = sem_type->as<types::PtrType>();
+                            types::TypePtr resolved_inner = ptr.inner;
+                            if (!current_type_subs_.empty()) {
+                                resolved_inner =
+                                    apply_type_substitutions(ptr.inner, current_type_subs_);
+                            }
+                            struct_type = llvm_type_from_semantic(resolved_inner);
+                            // Load the pointer from the alloca
+                            std::string loaded_ptr = fresh_reg();
+                            emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                            struct_ptr = loaded_ptr;
+                        }
+                    }
+                }
+            } else if (field.object->is<parser::FieldExpr>()) {
+                // Chained field assignment: outer.inner.value = x
+                // or deeper: app.settings.config.count = x
+                // Collect all field access steps, then traverse from root
+
+                // Collect the chain of field accesses (excluding the final field which is handled
+                // separately) Start with the intermediate fields from field.object
+                std::vector<std::string> field_chain;
+                const parser::Expr* current = field.object.get();
+
+                while (current->is<parser::FieldExpr>()) {
+                    const auto& fe = current->as<parser::FieldExpr>();
+                    field_chain.push_back(fe.field);
+                    current = fe.object.get();
+                }
+
+                // Now 'current' should be an IdentExpr (the root variable)
+                // and field_chain contains intermediate fields in reverse order
+                std::reverse(field_chain.begin(), field_chain.end());
+
+                if (current->is<parser::IdentExpr>()) {
+                    const auto& ident = current->as<parser::IdentExpr>();
+                    std::string current_type;
+                    std::string current_ptr;
+
+                    // Special handling for 'this' in impl methods
+                    if (ident.name == "this" && !current_impl_type_.empty()) {
+                        current_type = "%struct." + current_impl_type_;
+                        current_ptr = "%this";
+                    } else {
+                        auto it = locals_.find(ident.name);
+                        if (it != locals_.end()) {
+                            current_type = it->second.type;
+                            current_ptr = it->second.reg;
+
+                            // Handle ref types - resolve the actual struct type
+                            if (current_type == "ptr" && it->second.semantic_type) {
+                                types::TypePtr sem_type = it->second.semantic_type;
+                                if (sem_type->is<types::RefType>()) {
+                                    const auto& ref = sem_type->as<types::RefType>();
+                                    types::TypePtr resolved_inner = ref.inner;
+                                    if (!current_type_subs_.empty()) {
+                                        resolved_inner =
+                                            apply_type_substitutions(ref.inner, current_type_subs_);
+                                    }
+                                    current_type = llvm_type_from_semantic(resolved_inner);
+                                    std::string loaded_ptr = fresh_reg();
+                                    emit_line("  " + loaded_ptr + " = load ptr, ptr " +
+                                              current_ptr);
+                                    current_ptr = loaded_ptr;
+                                } else if (sem_type->is<types::PtrType>()) {
+                                    const auto& ptr = sem_type->as<types::PtrType>();
+                                    types::TypePtr resolved_inner = ptr.inner;
+                                    if (!current_type_subs_.empty()) {
+                                        resolved_inner =
+                                            apply_type_substitutions(ptr.inner, current_type_subs_);
+                                    }
+                                    current_type = llvm_type_from_semantic(resolved_inner);
+                                    std::string loaded_ptr = fresh_reg();
+                                    emit_line("  " + loaded_ptr + " = load ptr, ptr " +
+                                              current_ptr);
+                                    current_ptr = loaded_ptr;
+                                }
+                            }
+                        }
+                    }
+
+                    // Traverse the field chain with GEPs
+                    // All fields in field_chain are intermediate - the final field is field.field
+                    if (!current_type.empty() && !current_ptr.empty()) {
+                        for (size_t i = 0; i < field_chain.size(); ++i) {
+                            const std::string& fname = field_chain[i];
+                            std::string type_name = current_type;
+                            if (type_name.starts_with("%struct.")) {
+                                type_name = type_name.substr(8);
+                            }
+
+                            int field_idx = get_field_index(type_name, fname);
+                            std::string field_type = get_field_type(type_name, fname);
+
+                            std::string next_ptr = fresh_reg();
+                            emit_line("  " + next_ptr + " = getelementptr " + current_type +
+                                      ", ptr " + current_ptr + ", i32 0, i32 " +
+                                      std::to_string(field_idx));
+
+                            current_ptr = next_ptr;
+                            current_type = field_type;
+                        }
+
+                        struct_type = current_type;
+                        struct_ptr = current_ptr;
                     }
                 }
             } else if (field.object->is<parser::UnaryExpr>()) {

@@ -1,0 +1,372 @@
+//! Tests for chained field access on reference types
+//!
+//! This tests patterns like: ref_var.field1.field2
+//! which should work without explicit intermediate bindings
+
+use test
+
+// ============================================================================
+// Test struct hierarchy - basic
+// ============================================================================
+
+type Inner {
+    value: I64
+}
+
+type Outer {
+    inner: Inner
+}
+
+type Container {
+    outer: Outer
+}
+
+// ============================================================================
+// Test structs with multiple fields
+// ============================================================================
+
+type Point {
+    x: I64,
+    y: I64
+}
+
+type Rectangle {
+    top_left: Point,
+    bottom_right: Point,
+    color: I32
+}
+
+type Canvas {
+    rect: Rectangle,
+    name: I64
+}
+
+// ============================================================================
+// Test structs with mixed types
+// ============================================================================
+
+type Config {
+    enabled: Bool,
+    count: I32,
+    ratio: I64
+}
+
+type Settings {
+    config: Config,
+    id: I64
+}
+
+type Application {
+    settings: Settings,
+    version: I32
+}
+
+// ============================================================================
+// Test structs with pointer fields
+// ============================================================================
+
+type Node {
+    value: I64,
+    next: *Unit
+}
+
+type LinkedList {
+    head: Node,
+    size: I64
+}
+
+// ============================================================================
+// Basic chained field access (no refs - baseline)
+// ============================================================================
+
+@test
+func test_chained_access_value_type() -> I32 {
+    let outer: Outer = Outer { inner: Inner { value: 42 } }
+    let result: I64 = outer.inner.value
+    assert(result == 42, "chained field access on value type")
+    return 0
+}
+
+@test
+func test_triple_chained_access_value_type() -> I32 {
+    let container: Container = Container {
+        outer: Outer {
+            inner: Inner { value: 123 }
+        }
+    }
+    let result: I64 = container.outer.inner.value
+    assert(result == 123, "triple chained field access")
+    return 0
+}
+
+// ============================================================================
+// Chained field access on ref parameters
+// ============================================================================
+
+func get_inner_value_direct(outer: ref Outer) -> I64 {
+    // Direct chained access on ref - this is what we're testing
+    return outer.inner.value
+}
+
+@test
+func test_chained_access_ref_param_direct() -> I32 {
+    let outer: Outer = Outer { inner: Inner { value: 77 } }
+    let result: I64 = get_inner_value_direct(ref outer)
+    assert(result == 77, "direct chained ref access")
+    return 0
+}
+
+// ============================================================================
+// Triple chained access on ref parameters
+// ============================================================================
+
+func get_deep_value(container: ref Container) -> I64 {
+    // Triple-chained on ref parameter
+    return container.outer.inner.value
+}
+
+@test
+func test_triple_chained_ref_param() -> I32 {
+    let c: Container = Container {
+        outer: Outer {
+            inner: Inner { value: 999 }
+        }
+    }
+    let result: I64 = get_deep_value(ref c)
+    assert(result == 999, "triple chained on ref param")
+    return 0
+}
+
+// ============================================================================
+// Multiple fields at each level
+// ============================================================================
+
+func get_rect_top_left_x(canvas: ref Canvas) -> I64 {
+    return canvas.rect.top_left.x
+}
+
+func get_rect_bottom_right_y(canvas: ref Canvas) -> I64 {
+    return canvas.rect.bottom_right.y
+}
+
+func get_rect_color(canvas: ref Canvas) -> I32 {
+    return canvas.rect.color
+}
+
+@test
+func test_multi_field_chain_first() -> I32 {
+    let canvas: Canvas = Canvas {
+        rect: Rectangle {
+            top_left: Point { x: 10, y: 20 },
+            bottom_right: Point { x: 100, y: 200 },
+            color: 255
+        },
+        name: 42
+    }
+    let x: I64 = get_rect_top_left_x(ref canvas)
+    assert(x == 10, "multi-field chain: top_left.x")
+    return 0
+}
+
+@test
+func test_multi_field_chain_second() -> I32 {
+    let canvas: Canvas = Canvas {
+        rect: Rectangle {
+            top_left: Point { x: 10, y: 20 },
+            bottom_right: Point { x: 100, y: 200 },
+            color: 255
+        },
+        name: 42
+    }
+    let y: I64 = get_rect_bottom_right_y(ref canvas)
+    assert(y == 200, "multi-field chain: bottom_right.y")
+    return 0
+}
+
+@test
+func test_multi_field_chain_mixed_depth() -> I32 {
+    let canvas: Canvas = Canvas {
+        rect: Rectangle {
+            top_left: Point { x: 10, y: 20 },
+            bottom_right: Point { x: 100, y: 200 },
+            color: 128
+        },
+        name: 42
+    }
+    let color: I32 = get_rect_color(ref canvas)
+    assert(color == 128, "multi-field chain: rect.color (2 levels)")
+    return 0
+}
+
+// ============================================================================
+// Mixed types in chain
+// ============================================================================
+
+func get_app_config_enabled(app: ref Application) -> Bool {
+    return app.settings.config.enabled
+}
+
+func get_app_config_count(app: ref Application) -> I32 {
+    return app.settings.config.count
+}
+
+func get_app_config_ratio(app: ref Application) -> I64 {
+    return app.settings.config.ratio
+}
+
+@test
+func test_mixed_types_bool() -> I32 {
+    let app: Application = Application {
+        settings: Settings {
+            config: Config {
+                enabled: true,
+                count: 5,
+                ratio: 100
+            },
+            id: 999
+        },
+        version: 1
+    }
+    let enabled: Bool = get_app_config_enabled(ref app)
+    assert(enabled, "mixed types: Bool field access")
+    return 0
+}
+
+@test
+func test_mixed_types_i32() -> I32 {
+    let app: Application = Application {
+        settings: Settings {
+            config: Config {
+                enabled: false,
+                count: 42,
+                ratio: 100
+            },
+            id: 999
+        },
+        version: 1
+    }
+    let count: I32 = get_app_config_count(ref app)
+    assert(count == 42, "mixed types: I32 field access")
+    return 0
+}
+
+@test
+func test_mixed_types_i64() -> I32 {
+    let app: Application = Application {
+        settings: Settings {
+            config: Config {
+                enabled: false,
+                count: 5,
+                ratio: 12345
+            },
+            id: 999
+        },
+        version: 1
+    }
+    let ratio: I64 = get_app_config_ratio(ref app)
+    assert(ratio == 12345, "mixed types: I64 field access")
+    return 0
+}
+
+// ============================================================================
+// Mutable ref access with chained fields
+// ============================================================================
+
+func set_inner_value(outer: mut ref Outer, val: I64) {
+    outer.inner.value = val
+}
+
+@test
+func test_mutable_ref_chain_write() -> I32 {
+    let mut outer: Outer = Outer { inner: Inner { value: 0 } }
+    set_inner_value(mut ref outer, 500)
+    assert(outer.inner.value == 500, "mutable ref chain write")
+    return 0
+}
+
+func increment_config_count(app: mut ref Application) {
+    app.settings.config.count = app.settings.config.count + 1
+}
+
+@test
+func test_mutable_ref_deep_chain_write() -> I32 {
+    let mut app: Application = Application {
+        settings: Settings {
+            config: Config {
+                enabled: true,
+                count: 10,
+                ratio: 100
+            },
+            id: 1
+        },
+        version: 1
+    }
+    increment_config_count(mut ref app)
+    assert(app.settings.config.count == 11, "mutable ref deep chain write")
+    return 0
+}
+
+// ============================================================================
+// Pointer fields in chain
+// ============================================================================
+
+func get_list_head_value(list: ref LinkedList) -> I64 {
+    return list.head.value
+}
+
+func get_list_size(list: ref LinkedList) -> I64 {
+    return list.size
+}
+
+@test
+func test_struct_with_ptr_field() -> I32 {
+    let list: LinkedList = LinkedList {
+        head: Node { value: 777, next: null },
+        size: 1
+    }
+    let val: I64 = get_list_head_value(ref list)
+    assert(val == 777, "struct with ptr field: head.value")
+    return 0
+}
+
+@test
+func test_chain_past_ptr_field() -> I32 {
+    let list: LinkedList = LinkedList {
+        head: Node { value: 888, next: null },
+        size: 5
+    }
+    let size: I64 = get_list_size(ref list)
+    assert(size == 5, "chain with ptr sibling field")
+    return 0
+}
+
+// ============================================================================
+// Local ref bindings with chain
+// ============================================================================
+
+@test
+func test_local_ref_chain() -> I32 {
+    let outer: Outer = Outer { inner: Inner { value: 333 } }
+    let r: ref Outer = ref outer
+    let result: I64 = r.inner.value
+    assert(result == 333, "local ref binding chain")
+    return 0
+}
+
+@test
+func test_local_ref_deep_chain() -> I32 {
+    let canvas: Canvas = Canvas {
+        rect: Rectangle {
+            top_left: Point { x: 50, y: 60 },
+            bottom_right: Point { x: 150, y: 160 },
+            color: 64
+        },
+        name: 100
+    }
+    let r: ref Canvas = ref canvas
+    let x: I64 = r.rect.top_left.x
+    let y: I64 = r.rect.bottom_right.y
+    assert(x == 50, "local ref deep chain: x")
+    assert(y == 160, "local ref deep chain: y")
+    return 0
+}

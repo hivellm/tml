@@ -1,0 +1,116 @@
+//! Tests for never type coercion in when expressions
+//!
+//! The never type (!) represents computations that don't return (e.g., return, break).
+//! It should coerce to any other type, allowing patterns like:
+//!   let x: I64 = when value { 0 => return 1, n => n }
+
+use test
+
+// ============================================================================
+// Basic when expressions with return branches
+// ============================================================================
+
+@test
+func test_when_return_in_first_branch() -> I32 {
+    let x: I64 = 10
+    let result: I64 = when x {
+        0 => return 1,
+        n => n + 5
+    }
+    assert_eq(result, 15, "when with return in first branch")
+    return 0
+}
+
+@test
+func test_when_return_in_last_branch() -> I32 {
+    let x: I64 = 5
+    let result: I64 = when x {
+        5 => 100,
+        _ => return 1
+    }
+    assert_eq(result, 100, "when with return in last branch")
+    return 0
+}
+
+@test
+func test_when_multiple_return_branches() -> I32 {
+    let x: I64 = 3
+    let result: I64 = when x {
+        0 => return 10,
+        1 => return 20,
+        2 => return 30,
+        n => n * 100
+    }
+    assert_eq(result, 300, "when with multiple return branches")
+    return 0
+}
+
+// ============================================================================
+// Nested when expressions
+// ============================================================================
+
+@test
+func test_nested_when_with_return() -> I32 {
+    let a: I64 = 1
+    let b: I64 = 2
+    let result: I64 = when a {
+        0 => return 1,
+        _ => when b {
+            0 => return 2,
+            n => n * 10
+        }
+    }
+    assert_eq(result, 20, "nested when with return")
+    return 0
+}
+
+// ============================================================================
+// When expression used in larger expressions
+// ============================================================================
+
+@test
+func test_when_in_arithmetic() -> I32 {
+    let x: I64 = 5
+    let base_val: I64 = 10
+    let multiplier: I64 = when x {
+        0 => return 1,
+        n => n
+    }
+    let result: I64 = base_val * multiplier
+    assert_eq(result, 50, "when result used in arithmetic")
+    return 0
+}
+
+func double_value(n: I64) -> I64 {
+    return n * 2
+}
+
+@test
+func test_when_in_function_call() -> I32 {
+    let x: I64 = 3
+    let value: I64 = when x {
+        0 => return 1,
+        n => n * 2
+    }
+    let doubled: I64 = double_value(value)
+    assert_eq(doubled, 12, "when result passed to function")
+    return 0
+}
+
+// ============================================================================
+// Edge cases
+// ============================================================================
+
+@test
+func test_when_with_many_return_branches() -> I32 {
+    let x: I64 = 42
+    let result: I64 = when x {
+        0 => return 1,
+        1 => return 2,
+        2 => return 3,
+        3 => return 4,
+        n => n
+    }
+    assert_eq(result, 42, "when with many return branches")
+    return 0
+}

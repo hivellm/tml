@@ -36,6 +36,7 @@
 #include "tester_internal.hpp"
 
 #include <fstream>
+#include <iomanip>
 #include <regex>
 
 namespace tml::cli::tester {
@@ -44,33 +45,47 @@ namespace tml::cli::tester {
 // Coverage Regression Check
 // ============================================================================
 
-/// Read the previous coverage count from the existing HTML report
-/// Returns -1 if the file doesn't exist or can't be parsed
-static int get_previous_coverage_count(const std::string& html_path) {
+/// Coverage statistics from previous report
+struct PreviousCoverage {
+    int covered;    // Number of functions covered
+    int total;      // Total number of library functions
+    double percent; // Coverage percentage
+    bool valid;     // Whether the data was successfully parsed
+};
+
+/// Read the previous coverage from the existing HTML report
+static PreviousCoverage get_previous_coverage(const std::string& html_path) {
+    PreviousCoverage result = {0, 0, 0.0, false};
+
     if (!fs::exists(html_path)) {
-        return -1;
+        return result;
     }
 
     std::ifstream file(html_path);
     if (!file.is_open()) {
-        return -1;
+        return result;
     }
 
     std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
     // Look for the "Functions Covered" stat card value (format: "N / M")
     // Pattern: <div class="stat-value">N / M</div>
-    std::regex pattern(R"(<div class="stat-value">(\d+)\s*/\s*\d+</div>)");
+    std::regex pattern(R"(<div class="stat-value">(\d+)\s*/\s*(\d+)</div>)");
     std::smatch match;
     if (std::regex_search(content, match, pattern)) {
         try {
-            return std::stoi(match[1].str());
+            result.covered = std::stoi(match[1].str());
+            result.total = std::stoi(match[2].str());
+            if (result.total > 0) {
+                result.percent = (100.0 * result.covered) / result.total;
+            }
+            result.valid = true;
         } catch (...) {
-            return -1;
+            // Keep result.valid = false
         }
     }
 
-    return -1;
+    return result;
 }
 
 // ============================================================================
@@ -332,8 +347,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         std::atomic<bool> fail_fast_triggered{false};
 
         // Determine number of execution threads
+        // Force single thread temporarily for debugging
         unsigned int hw_threads = std::thread::hardware_concurrency();
-        unsigned int num_exec_threads = (hw_threads > 0) ? std::max(1u, hw_threads) : 4;
+        unsigned int num_exec_threads = 1; // DEBUG: force single thread
+        (void)hw_threads;
 
         // Job queue for parallel suite execution
         std::atomic<size_t> suite_index{0};
@@ -592,13 +609,27 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
             // Write HTML report with proper library coverage data ONLY if:
             // 1. All tests passed
-            // 2. Coverage is not regressing (covered functions >= previous count)
+            // 2. Coverage PERCENTAGE is not regressing
             if (!CompilerOptions::coverage_output.empty() && !has_failures) {
                 int current_covered = static_cast<int>(all_covered_functions.size());
-                int previous_covered =
-                    get_previous_coverage_count(CompilerOptions::coverage_output);
+                auto previous = get_previous_coverage(CompilerOptions::coverage_output);
 
-                if (previous_covered < 0 || current_covered >= previous_covered) {
+                // Use the previous total as reference for calculating current percentage
+                // This ensures we compare apples to apples even if library grows
+                // If no previous report, allow any coverage
+                bool should_update = true;
+                double current_percent = 0.0;
+
+                if (previous.valid && previous.total > 0) {
+                    // Calculate current percentage using the SAME total as previous
+                    // This is the fair comparison: did we cover more or fewer functions?
+                    current_percent = (100.0 * current_covered) / previous.total;
+
+                    // Regression if current percentage is less than previous
+                    should_update = current_percent >= previous.percent;
+                }
+
+                if (should_update) {
                     // No previous report or coverage improved/maintained
                     write_library_coverage_html(all_covered_functions,
                                                 CompilerOptions::coverage_output, test_stats);
@@ -607,10 +638,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     std::cout << c.yellow() << c.bold()
                               << " [HTML report not updated - coverage regression detected]"
                               << c.reset() << "\n";
-                    std::cout << c.dim() << "   Previous: " << previous_covered
-                              << " functions covered" << c.reset() << "\n";
-                    std::cout << c.dim() << "   Current:  " << current_covered
-                              << " functions covered" << c.reset() << "\n";
+                    std::cout << c.dim() << "   Previous: " << previous.covered << "/"
+                              << previous.total << " functions (" << std::fixed
+                              << std::setprecision(1) << previous.percent << "%)" << c.reset()
+                              << "\n";
+                    std::cout << c.dim() << "   Current:  " << current_covered << "/"
+                              << previous.total << " functions (" << std::fixed
+                              << std::setprecision(1) << current_percent << "%)" << c.reset()
+                              << "\n";
                     std::cout << c.dim() << "   Run with --force-coverage to update anyway"
                               << c.reset() << "\n";
                 }

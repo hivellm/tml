@@ -55,6 +55,14 @@ func ffi_zlib_last_error_code() -> I32
 @extern("buffer_destroy")
 func ffi_buffer_destroy(handle: *Unit)
 
+// Parse gzip header from buffer data - returns a GzipHeaderInfo handle
+@extern("read_gzip_header_wrapper")
+func ffi_gzip_read_header(handle: *Unit) -> *Unit
+
+// Destroy a parsed gzip header
+@extern("gzip_header_destroy_wrapper")
+func ffi_gzip_header_destroy(handle: *Unit)
+
 @extern("zlib_gzip_header_text")
 func ffi_zlib_gzip_header_text(handle: *Unit) -> Bool
 
@@ -402,13 +410,22 @@ impl GzipHeader {
 /// }
 /// ```
 pub func read_gzip_header(data: ref Buffer) -> Outcome[GzipHeader, ZlibError] {
-    // Parse gzip header - FFI functions check size internally
-    let text: Bool = ffi_zlib_gzip_header_text(data.handle)
-    let os: I32 = ffi_zlib_gzip_header_os(data.handle)
-    let name: Str = ffi_zlib_gzip_header_name(data.handle)
-    let comment: Str = ffi_zlib_gzip_header_comment(data.handle)
-    let hcrc: Bool = ffi_zlib_gzip_header_hcrc(data.handle)
-    let time: I64 = ffi_zlib_gzip_header_time(data.handle)
+    // First, parse the gzip header from the buffer data
+    let header_handle: *Unit = ffi_gzip_read_header(data.handle)
+    if header_handle == null {
+        return Err(ZlibError::new(ZlibErrorKind::DataError))
+    }
+
+    // Extract header fields using the accessor functions
+    let text: Bool = ffi_zlib_gzip_header_text(header_handle)
+    let os: I32 = ffi_zlib_gzip_header_os(header_handle)
+    let name: Str = ffi_zlib_gzip_header_name(header_handle)
+    let comment: Str = ffi_zlib_gzip_header_comment(header_handle)
+    let hcrc: Bool = ffi_zlib_gzip_header_hcrc(header_handle)
+    let time: I64 = ffi_zlib_gzip_header_time(header_handle)
+
+    // Clean up the C header struct
+    ffi_gzip_header_destroy(header_handle)
 
     return Ok(GzipHeader {
         text: text,

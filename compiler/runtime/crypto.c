@@ -1178,3 +1178,88 @@ TML_EXPORT void crypto_hmac_destroy(void* handle) {
     (void)handle;
 }
 #endif
+
+// ============================================================================
+// Cipher Functions (stubs - full implementation requires OpenSSL)
+// ============================================================================
+
+TML_EXPORT void* crypto_cipher_create(const char* algorithm, void* key, void* iv, int64_t encrypt) {
+    (void)algorithm;
+    (void)key;
+    (void)iv;
+    (void)encrypt;
+    // Stub: Return NULL to indicate failure
+    return NULL;
+}
+
+TML_EXPORT void crypto_cipher_set_aad(void* handle, void* aad) {
+    (void)handle;
+    (void)aad;
+}
+
+TML_EXPORT void crypto_cipher_set_aad_str(void* handle, const char* aad) {
+    (void)handle;
+    (void)aad;
+}
+
+TML_EXPORT void crypto_cipher_set_padding(void* handle, int32_t enabled) {
+    (void)handle;
+    (void)enabled;
+}
+
+TML_EXPORT void crypto_cipher_update_str(void* handle, const char* data, void* output) {
+    (void)handle;
+    (void)data;
+    (void)output;
+}
+
+TML_EXPORT void crypto_cipher_update_bytes(void* handle, void* data, void* output) {
+    (void)handle;
+    (void)data;
+    (void)output;
+}
+
+TML_EXPORT int32_t crypto_cipher_finalize(void* handle, void* output) {
+    (void)handle;
+    (void)output;
+    return 0; // Return false to indicate failure
+}
+
+TML_EXPORT void* crypto_cipher_get_tag(void* handle) {
+    (void)handle;
+    return NULL;
+}
+
+TML_EXPORT void crypto_cipher_set_tag(void* handle, void* tag) {
+    (void)handle;
+    (void)tag;
+}
+
+TML_EXPORT void crypto_cipher_destroy(void* handle) {
+    (void)handle;
+}
+
+// Additional conversion utilities for cipher (not already defined above)
+TML_EXPORT const char* crypto_bytes_to_str(void* handle) {
+    (void)handle;
+    return "";
+}
+
+TML_EXPORT void* crypto_str_to_bytes(const char* s) {
+    (void)s;
+    return NULL;
+}
+
+TML_EXPORT void* crypto_concat_buffers3(void* a, void* b, void* c) {
+    (void)a;
+    (void)b;
+    (void)c;
+    return NULL;
+}
+
+TML_EXPORT void* crypto_buffer_slice(void* handle, int64_t offset, int64_t length) {
+    (void)handle;
+    (void)offset;
+    (void)length;
+    return NULL;
+}

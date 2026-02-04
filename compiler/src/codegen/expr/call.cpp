@@ -2136,15 +2136,47 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     for (size_t i = 0; i < call.args.size(); ++i) {
         // Check if parameter takes ownership (not a reference)
         bool param_takes_ownership = true;
+        bool param_is_ref = false;
         if (func_sig.has_value() && i < func_sig->params.size()) {
             if (func_sig->params[i]->is<types::RefType>()) {
                 param_takes_ownership = false;
+                param_is_ref = true;
             }
         }
 
-        std::string val = gen_expr(*call.args[i]);
-        std::string actual_type = last_expr_type_; // Type of the generated value
-        std::string expected_type = "i32";         // Default
+        std::string val;
+        std::string actual_type;
+
+        // For ref parameters with IdentExpr arguments, pass the address directly
+        // instead of loading the value
+        if (param_is_ref && call.args[i]->is<parser::IdentExpr>()) {
+            const auto& ident = call.args[i]->as<parser::IdentExpr>();
+            auto it = locals_.find(ident.name);
+            if (it != locals_.end()) {
+                // Pass the alloca address directly (pointer to the variable)
+                val = it->second.reg;
+                actual_type = "ptr";
+            } else {
+                // Fallback to normal gen_expr
+                val = gen_expr(*call.args[i]);
+                actual_type = last_expr_type_;
+            }
+        } else {
+            val = gen_expr(*call.args[i]);
+            actual_type = last_expr_type_;
+
+            // If param is ref but arg is not an IdentExpr (e.g., temporary expression),
+            // we need to store it in a temp alloca and pass the address
+            if (param_is_ref && actual_type.starts_with("%struct.")) {
+                std::string temp_alloca = fresh_reg();
+                emit_line("  " + temp_alloca + " = alloca " + actual_type);
+                emit_line("  store " + actual_type + " " + val + ", ptr " + temp_alloca);
+                val = temp_alloca;
+                actual_type = "ptr";
+            }
+        }
+
+        std::string expected_type = "i32"; // Default
 
         // If we have function signature from TypeEnv, use parameter type
         if (func_sig.has_value() && i < func_sig->params.size()) {

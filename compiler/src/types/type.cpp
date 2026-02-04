@@ -433,6 +433,14 @@ auto types_equal(const TypePtr& a, const TypePtr& b) -> bool {
         a->kind);
 }
 
+auto is_never(const TypePtr& type) -> bool {
+    if (!type)
+        return false;
+    if (!type->is<PrimitiveType>())
+        return false;
+    return type->as<PrimitiveType>().kind == PrimitiveKind::Never;
+}
+
 // Generic type substitution - replaces GenericType with concrete types
 auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, TypePtr>& subs)
     -> TypePtr {

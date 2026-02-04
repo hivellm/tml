@@ -60,6 +60,15 @@ auto TypeChecker::check_ternary(const parser::TernaryExpr& ternary) -> TypePtr {
     auto true_type = check_expr(*ternary.true_value);
     auto false_type = check_expr(*ternary.false_value);
 
+    // Handle Never type coercion:
+    // - Never coerces to any type (it's a bottom type)
+    if (is_never(true_type)) {
+        return false_type;
+    }
+    if (is_never(false_type)) {
+        return true_type;
+    }
+
     // Both branches must have the same type
     if (!types_equal(env_.resolve(true_type), env_.resolve(false_type))) {
         error("Ternary branches must have the same type", ternary.span, "T015");
@@ -100,9 +109,27 @@ auto TypeChecker::check_when(const parser::WhenExpr& when) -> TypePtr {
         }
 
         auto arm_type = check_expr(*arm.body);
+
+        // Unify arm types with Never type coercion:
+        // - Never type coerces to any type (it's a bottom type)
+        // - If result_type is Never, take the new arm's type
+        // - If arm_type is Never, keep the existing result_type
         if (!result_type) {
             result_type = arm_type;
+        } else if (is_never(result_type)) {
+            // Previous result was Never, take this arm's type
+            result_type = arm_type;
+        } else if (!is_never(arm_type)) {
+            // Both types are non-Never, they should match
+            auto resolved_result = env_.resolve(result_type);
+            auto resolved_arm = env_.resolve(arm_type);
+            if (!types_equal(resolved_result, resolved_arm)) {
+                error("When arm type mismatch: expected " + type_to_string(resolved_result) +
+                          ", found " + type_to_string(resolved_arm),
+                      arm.body->span, "T015");
+            }
         }
+        // If arm_type is Never, keep result_type as-is
 
         env_.pop_scope();
     }

@@ -444,6 +444,12 @@ static const char* tml_get_exception_name(DWORD code) {
 /** @brief Previous unhandled exception filter. */
 static LPTOP_LEVEL_EXCEPTION_FILTER tml_prev_filter = NULL;
 
+/** @brief Reference count for exception filter - thread-safe. */
+static volatile LONG tml_filter_refcount = 0;
+
+/** @brief Flag indicating if the filter is installed. */
+static volatile LONG tml_filter_installed = 0;
+
 /** @brief Top-level exception filter for crash catching. */
 static LONG WINAPI tml_exception_filter(EXCEPTION_POINTERS* info) {
     DWORD code = info->ExceptionRecord->ExceptionCode;
@@ -475,17 +481,29 @@ static LONG WINAPI tml_exception_filter(EXCEPTION_POINTERS* info) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-/** @brief Install the unhandled exception filter. */
+/** @brief Install the unhandled exception filter (thread-safe, ref-counted). */
 static void tml_install_exception_filter(void) {
-    tml_prev_filter = SetUnhandledExceptionFilter(tml_exception_filter);
-    // Also disable Windows Error Reporting popup
-    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    // Increment ref count and install filter only once
+    if (InterlockedIncrement(&tml_filter_refcount) == 1) {
+        // First reference - actually install the filter
+        if (InterlockedCompareExchange(&tml_filter_installed, 1, 0) == 0) {
+            tml_prev_filter = SetUnhandledExceptionFilter(tml_exception_filter);
+            // Also disable Windows Error Reporting popup
+            SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+        }
+    }
 }
 
-/** @brief Remove the unhandled exception filter. */
+/** @brief Remove the unhandled exception filter (thread-safe, ref-counted). */
 static void tml_remove_exception_filter(void) {
-    SetUnhandledExceptionFilter(tml_prev_filter);
-    tml_prev_filter = NULL;
+    // Decrement ref count but don't actually remove the filter
+    // The filter stays installed for the lifetime of the process to avoid
+    // race conditions in parallel test execution
+    if (tml_filter_refcount > 0) {
+        InterlockedDecrement(&tml_filter_refcount);
+    }
+    // NOTE: We intentionally don't remove the filter to avoid race conditions.
+    // The filter is harmless when not actively catching panics.
 }
 #endif
 
@@ -749,17 +767,16 @@ TML_EXPORT uint64_t tml_random_seed(void) {
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     (void)hinstDLL;
     (void)lpvReserved;
+    (void)fdwReason;
 
-    switch (fdwReason) {
-    case DLL_PROCESS_ATTACH:
-        // Install crash handler when DLL is loaded
-        tml_install_exception_filter();
-        break;
-    case DLL_PROCESS_DETACH:
-        // Remove crash handler when DLL is unloaded
-        tml_remove_exception_filter();
-        break;
-    }
+    // NOTE: Do NOT install exception filters in DllMain!
+    // When multiple test DLLs are loaded in parallel threads, each DLL's
+    // DllMain would overwrite the previous exception filter, causing race
+    // conditions and crashes.
+    //
+    // The exception filter is installed/removed only in tml_run_test_with_catch()
+    // which properly scopes the filter to each test function execution.
+
     return TRUE;
 }
 #endif

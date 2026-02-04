@@ -1,0 +1,170 @@
+// Tests for Zstd Dictionary functionality
+use test
+use std::zlib::{
+    zstd_compress, zstd_decompress, zstd_content_size,
+    zstd_is_frame, zstd_decompress_bound, zstd_frame_dict_id,
+    ZstdDict
+}
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+// ============================================================================
+// Utility function tests
+// ============================================================================
+
+@test
+func test_zstd_basic_compress() -> I32 {
+    let data: Str = "Hello, World!"
+    let compressed: Outcome[Buffer, ZlibError] = zstd_compress(data)
+    if compressed.is_err() {
+        return 1
+    }
+    var buf: Buffer = compressed.unwrap()
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_zstd_content_size_known() -> I32 {
+    let data: Str = "Hello, World! This is test data for content size."
+    let compressed: Outcome[Buffer, ZlibError] = zstd_compress(data)
+    if compressed.is_err() {
+        return 1
+    }
+    var buf: Buffer = compressed.unwrap()
+
+    let size: Maybe[I64] = zstd_content_size(ref buf)
+    if size.is_nothing() {
+        buf.destroy()
+        return 2
+    }
+
+    let expected_size: I64 = 50
+    let actual_size: I64 = size.unwrap()
+    if actual_size != expected_size {
+        buf.destroy()
+        return 3
+    }
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_zstd_decompress_bound() -> I32 {
+    let data: Str = "Test data for decompress bound"
+    let compressed: Outcome[Buffer, ZlibError] = zstd_compress(data)
+    if compressed.is_err() {
+        return 1
+    }
+    var buf: Buffer = compressed.unwrap()
+
+    let bound: I64 = zstd_decompress_bound(ref buf)
+    if bound < 30 {
+        buf.destroy()
+        return 2
+    }
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_zstd_is_frame() -> I32 {
+    let data: Str = "Test data"
+    let compressed: Outcome[Buffer, ZlibError] = zstd_compress(data)
+    if compressed.is_err() {
+        return 1
+    }
+    var buf: Buffer = compressed.unwrap()
+
+    let is_valid: Bool = zstd_is_frame(ref buf)
+    if not is_valid {
+        buf.destroy()
+        return 2
+    }
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_zstd_frame_dict_id_no_dict() -> I32 {
+    let data: Str = "Test data without dictionary"
+    let compressed: Outcome[Buffer, ZlibError] = zstd_compress(data)
+    if compressed.is_err() {
+        return 1
+    }
+    var buf: Buffer = compressed.unwrap()
+
+    let dict_id: I32 = zstd_frame_dict_id(ref buf)
+    if dict_id != 0 {
+        buf.destroy()
+        return 2
+    }
+
+    buf.destroy()
+    return 0
+}
+
+// ============================================================================
+// ZstdDict tests
+// ============================================================================
+
+@test
+func test_zstd_dict_from_buffer() -> I32 {
+    let compress_result: Outcome[Buffer, ZlibError] = zstd_compress("dictionary content data for testing")
+    if compress_result.is_err() {
+        return 1
+    }
+    var dict_data: Buffer = compress_result.unwrap()
+
+    let dict_result: Outcome[ZstdDict, ZlibError] = ZstdDict::from_buffer(ref dict_data)
+    if dict_result.is_ok() {
+        var dict: ZstdDict = dict_result.unwrap()
+        dict.destroy()
+    }
+
+    dict_data.destroy()
+    return 0
+}
+
+@test
+func test_zstd_dict_id() -> I32 {
+    let compress_result: Outcome[Buffer, ZlibError] = zstd_compress("sample dictionary data")
+    if compress_result.is_err() {
+        return 1
+    }
+    var dict_data: Buffer = compress_result.unwrap()
+
+    let dict_result: Outcome[ZstdDict, ZlibError] = ZstdDict::from_buffer(ref dict_data)
+    if dict_result.is_ok() {
+        var dict: ZstdDict = dict_result.unwrap()
+        let id: I32 = dict.id()
+        assert(id >= 0, "dictionary id should be non-negative")
+        dict.destroy()
+    }
+
+    dict_data.destroy()
+    return 0
+}
+
+@test
+func test_zstd_dict_destroy() -> I32 {
+    let compress_result: Outcome[Buffer, ZlibError] = zstd_compress("destroy test data")
+    if compress_result.is_err() {
+        return 1
+    }
+    var dict_data: Buffer = compress_result.unwrap()
+
+    let dict_result: Outcome[ZstdDict, ZlibError] = ZstdDict::from_buffer(ref dict_data)
+    if dict_result.is_ok() {
+        var dict: ZstdDict = dict_result.unwrap()
+        dict.destroy()
+        // Double destroy should be safe
+        dict.destroy()
+    }
+
+    dict_data.destroy()
+    return 0
+}

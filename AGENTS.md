@@ -1687,6 +1687,49 @@ When a TML test fails:
 3. Keep working until the test passes
 4. The test stays in place - do NOT defer or move it
 
+### TML Test Development - MANDATORY Incremental Workflow
+
+**This workflow is NON-NEGOTIABLE when writing TML tests:**
+
+1. **Write tests incrementally** - Create 1-3 tests at a time, NOT entire test files at once
+2. **Test immediately after writing** - Run the individual test file before moving to the next
+3. **Fix errors before proceeding** - If a test fails, fix it before writing more tests
+4. **Use individual test execution** - NEVER run full test suite when developing new tests
+
+**Correct workflow:**
+```bash
+# Write 1-3 tests in a file
+# Run ONLY that specific test file:
+tml test path/to/specific.test.tml
+
+# OR use MCP tool for individual file:
+mcp__tml__test with path parameter
+
+# Fix any errors
+# Then write more tests
+# Repeat
+```
+
+**WRONG workflow (STRICTLY FORBIDDEN):**
+```bash
+# ❌ Write 20 tests at once
+# ❌ Run full suite: tml test --no-cache
+# ❌ Get 15 errors and struggle to fix them all
+# ❌ Run full test suite when only testing new code
+```
+
+**Why This Matters:**
+- Creating many tests at once leads to cascading errors that are hard to debug
+- Running full test suite is slow and wasteful when only testing new code
+- The compiler supports individual test file execution - USE IT
+- Fixing errors one by one is faster than fixing 10+ errors at once
+
+**Coverage Updates - MANDATORY:**
+- After completing a successful block of tests, run coverage: `tml test --coverage`
+- Coverage reports are how progress is tracked and new features are planned
+- Always update coverage after finishing a module's tests
+- Coverage is the primary metric for analyzing application progress
+
 ### Git Hook Bypassing - STRICTLY FORBIDDEN  
 - NEVER use --no-verify flag on git commit
 - NEVER use --no-verify flag on git push

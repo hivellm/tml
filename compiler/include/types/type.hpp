@@ -85,9 +85,9 @@ struct NamedType {
 
 /// Reference type: `ref T`, `mut ref T`, `ref[a] T`, or `mut ref[a] T`.
 struct RefType {
-    bool is_mut;                          ///< True for mutable reference.
-    TypePtr inner;                        ///< Referenced type.
-    std::optional<std::string> lifetime;  ///< Optional explicit lifetime annotation.
+    bool is_mut;                         ///< True for mutable reference.
+    TypePtr inner;                       ///< Referenced type.
+    std::optional<std::string> lifetime; ///< Optional explicit lifetime annotation.
 };
 
 /// Raw pointer type: `*T` or `*mut T`.
@@ -381,6 +381,12 @@ struct Type {
 
 /// Checks if two types are structurally equal.
 [[nodiscard]] auto types_equal(const TypePtr& a, const TypePtr& b) -> bool;
+
+/// Checks if a type is the Never type (!).
+///
+/// The Never type represents computations that never complete (e.g., return, break).
+/// It is a bottom type that can coerce to any other type.
+[[nodiscard]] auto is_never(const TypePtr& type) -> bool;
 
 /// Converts a type to its string representation.
 [[nodiscard]] auto type_to_string(const TypePtr& type) -> std::string;

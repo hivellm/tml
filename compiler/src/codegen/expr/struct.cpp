@@ -931,6 +931,38 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                 if (it != locals_.end()) {
                     outer_type = it->second.type;
                     outer_ptr = it->second.reg;
+
+                    // Handle ref types - resolve the actual struct type from semantic type
+                    // This fixes chained field access on ref parameters (e.g.,
+                    // ref_param.field1.field2)
+                    if (outer_type == "ptr" && it->second.semantic_type) {
+                        types::TypePtr sem_type = it->second.semantic_type;
+                        if (sem_type->is<types::RefType>()) {
+                            const auto& ref = sem_type->as<types::RefType>();
+                            types::TypePtr resolved_inner = ref.inner;
+                            if (!current_type_subs_.empty()) {
+                                resolved_inner =
+                                    apply_type_substitutions(ref.inner, current_type_subs_);
+                            }
+                            outer_type = llvm_type_from_semantic(resolved_inner);
+                            // Load the pointer from the alloca
+                            std::string loaded_ptr = fresh_reg();
+                            emit_line("  " + loaded_ptr + " = load ptr, ptr " + outer_ptr);
+                            outer_ptr = loaded_ptr;
+                        } else if (sem_type->is<types::PtrType>()) {
+                            const auto& ptr = sem_type->as<types::PtrType>();
+                            types::TypePtr resolved_inner = ptr.inner;
+                            if (!current_type_subs_.empty()) {
+                                resolved_inner =
+                                    apply_type_substitutions(ptr.inner, current_type_subs_);
+                            }
+                            outer_type = llvm_type_from_semantic(resolved_inner);
+                            // Load the pointer from the alloca
+                            std::string loaded_ptr = fresh_reg();
+                            emit_line("  " + loaded_ptr + " = load ptr, ptr " + outer_ptr);
+                            outer_ptr = loaded_ptr;
+                        }
+                    }
                 }
             }
 
