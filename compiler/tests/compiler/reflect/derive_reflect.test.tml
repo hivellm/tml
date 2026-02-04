@@ -185,3 +185,79 @@ func test_derive_reflect_enum_type_info() -> I32 {
     assert(info.variant_count == 3, "should have 3 variants")
     return 0
 }
+
+// ============================================================================
+// Test runtime_type_info - Instance method
+// ============================================================================
+
+@test
+func test_runtime_type_info_struct() -> I32 {
+    // Create an instance
+    let emp: Employee = Employee { id: 1, name: "Alice", salary: 50000.0 }
+
+    // Call runtime_type_info on the instance
+    let info: ref TypeInfo = emp.runtime_type_info()
+
+    // Should return same TypeInfo as static method
+    let name: Str = info.name
+    assert(name == "Employee", "runtime_type_info should return Employee")
+    assert(info.is_struct(), "should be struct kind")
+    assert(info.field_count == 3, "should have 3 fields")
+    return 0
+}
+
+@test
+func test_runtime_type_info_enum() -> I32 {
+    // Create an instance
+    let color: Color = Color::Red
+
+    // Call runtime_type_info on the instance
+    let info: ref TypeInfo = color.runtime_type_info()
+
+    // Should return same TypeInfo as static method
+    let name: Str = info.name
+    assert(name == "Color", "runtime_type_info should return Color")
+    assert(info.is_enum(), "should be enum kind")
+    assert(info.variant_count == 3, "should have 3 variants")
+    return 0
+}
+
+// ============================================================================
+// Test variant_name and variant_tag for enums
+// ============================================================================
+
+@test
+func test_variant_name_red() -> I32 {
+    let color: Color = Color::Red
+    let name: Str = color.variant_name()
+    assert(name == "Red", "Red variant name should be 'Red'")
+    return 0
+}
+
+@test
+func test_variant_name_green() -> I32 {
+    let color: Color = Color::Green
+    let name: Str = color.variant_name()
+    assert(name == "Green", "Green variant name should be 'Green'")
+    return 0
+}
+
+@test
+func test_variant_name_blue() -> I32 {
+    let color: Color = Color::Blue
+    let name: Str = color.variant_name()
+    assert(name == "Blue", "Blue variant name should be 'Blue'")
+    return 0
+}
+
+@test
+func test_variant_tag_values() -> I32 {
+    let red: Color = Color::Red
+    let green: Color = Color::Green
+    let blue: Color = Color::Blue
+
+    assert(red.variant_tag() == 0, "Red should have tag 0")
+    assert(green.variant_tag() == 1, "Green should have tag 1")
+    assert(blue.variant_tag() == 2, "Blue should have tag 2")
+    return 0
+}

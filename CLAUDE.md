@@ -24,6 +24,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **WHY:** Direct cmake calls CORRUPT the build directory, cause silent failures, break incremental compilation, and waste time. The build scripts handle critical environment setup that cmake alone cannot.
 
+**ENFORCED:** The CMakeLists.txt has a build token check that will FAIL with a fatal error if you try to use cmake directly. Only the build scripts pass the required token.
+
 **ALWAYS use the provided scripts:**
 
 ```bash

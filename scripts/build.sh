@@ -135,6 +135,7 @@ if [ "$BUILD_TYPE" = "release" ]; then
 fi
 
 cmake "$ROOT_DIR/compiler" \
+    -DTML_BUILD_TOKEN=tml_script_build_2026 \
     -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
     -DTML_BUILD_TESTS="$BUILD_TESTS" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \

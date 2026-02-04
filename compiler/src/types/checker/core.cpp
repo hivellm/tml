@@ -397,10 +397,25 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
         auto ref_type_info = std::make_shared<Type>();
         ref_type_info->kind = RefType{false, type_info_type, std::nullopt};
 
-        // Register TypeName::type_info() -> ref TypeInfo
-        std::string method_name = full_name + "::type_info";
-        env_.define_func(FuncSig{.name = method_name,
+        // Create self type: ref TypeName
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{full_name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Register TypeName::type_info() -> ref TypeInfo (static method)
+        std::string static_method = full_name + "::type_info";
+        env_.define_func(FuncSig{.name = static_method,
                                  .params = {},
+                                 .return_type = ref_type_info,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+
+        // Register TypeName::runtime_type_info(ref this) -> ref TypeInfo (instance method)
+        std::string instance_method = full_name + "::runtime_type_info";
+        env_.define_func(FuncSig{.name = instance_method,
+                                 .params = {ref_self},
                                  .return_type = ref_type_info,
                                  .type_params = {},
                                  .is_async = false,
@@ -470,11 +485,52 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
         auto ref_type_info = std::make_shared<Type>();
         ref_type_info->kind = RefType{false, type_info_type, std::nullopt};
 
-        // Register EnumName::type_info() -> ref TypeInfo
-        std::string method_name = decl.name + "::type_info";
-        env_.define_func(FuncSig{.name = method_name,
+        // Create self type: ref EnumName
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{decl.name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Register EnumName::type_info() -> ref TypeInfo (static method)
+        std::string static_method = decl.name + "::type_info";
+        env_.define_func(FuncSig{.name = static_method,
                                  .params = {},
                                  .return_type = ref_type_info,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+
+        // Register EnumName::runtime_type_info(ref this) -> ref TypeInfo (instance method)
+        std::string instance_method = decl.name + "::runtime_type_info";
+        env_.define_func(FuncSig{.name = instance_method,
+                                 .params = {ref_self},
+                                 .return_type = ref_type_info,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+
+        // Create Str return type for variant_name
+        auto str_type = std::make_shared<Type>();
+        str_type->kind = PrimitiveType{PrimitiveKind::Str};
+
+        // Create I64 return type for variant_tag
+        auto i64_type = std::make_shared<Type>();
+        i64_type->kind = PrimitiveType{PrimitiveKind::I64};
+
+        // Register EnumName::variant_name(this) -> Str
+        std::string variant_name_method = decl.name + "::variant_name";
+        env_.define_func(FuncSig{.name = variant_name_method,
+                                 .params = {ref_self},
+                                 .return_type = str_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+
+        // Register EnumName::variant_tag(this) -> I64
+        std::string variant_tag_method = decl.name + "::variant_tag";
+        env_.define_func(FuncSig{.name = variant_tag_method,
+                                 .params = {ref_self},
+                                 .return_type = i64_type,
                                  .type_params = {},
                                  .is_async = false,
                                  .span = decl.span});

@@ -1,8 +1,8 @@
 # Tasks: Complete Reflection System Implementation
 
-## Progress: 30% (21/69 tasks complete)
+## Progress: 36% (25/69 tasks complete)
 
-**Status**: Phase 2.2 partial - Derive infrastructure created, pending type checker integration
+**Status**: Phase 3.2 in progress - variant_name/variant_tag for enums complete
 
 **Proposal**: See [proposal.md](proposal.md) for full RFC
 
@@ -39,27 +39,27 @@
 - [x] 2.1.3 Define VariantInfo struct (name, tag, payload_types)
 - [x] 2.1.4 Define TypeInfo struct (id, name, kind, size, align, fields, variants)
 
-### 2.2 TypeInfo Code Generation
-- [ ] 2.2.1 Create `compiler/src/codegen/derive/reflect.cpp` for derive macro
-- [ ] 2.2.2 Generate static TypeInfo for types with `@derive(Reflect)`
-- [ ] 2.2.3 Store TypeInfo in .rdata section (read-only)
-- [ ] 2.2.4 Add `compiler/tests/compiler/type_info_gen.test.tml` test file
+### 2.2 TypeInfo Code Generation ✓
+- [x] 2.2.1 Create `compiler/src/codegen/derive/reflect.cpp` for derive macro
+- [x] 2.2.2 Generate static TypeInfo for types with `@derive(Reflect)`
+- [x] 2.2.3 Store TypeInfo in .rdata section (read-only)
+- [x] 2.2.4 Add `compiler/tests/compiler/reflect/derive_reflect.test.tml` test file
 
 ## Phase 3: Reflect Behavior (P1)
 
 ### 3.1 Reflect Behavior Definition
 - [x] 3.1.1 Define Reflect behavior in `lib/core/reflect.tml`
 - [x] 3.1.2 Add `type_info() -> ref TypeInfo` static method
-- [ ] 3.1.3 Add `runtime_type_info(this) -> ref TypeInfo` method
+- [x] 3.1.3 Add `runtime_type_info(this) -> ref TypeInfo` method
 - [ ] 3.1.4 Add `get_field(ref this, name: Str) -> Maybe[ref Any]` method
 
 ### 3.2 Derive Reflect Implementation
-- [ ] 3.2.1 Implement `@derive(Reflect)` in compiler
+- [x] 3.2.1 Implement `@derive(Reflect)` in compiler
 - [ ] 3.2.2 Generate `get_field_by_index(ref this, index: USize)` accessor
 - [ ] 3.2.3 Generate `set_field(mut ref this, name: Str, value: ref Any)` mutator
-- [ ] 3.2.4 Generate `variant_name(ref this) -> Str` for enums
-- [ ] 3.2.5 Generate `variant_tag(ref this) -> I64` for enums
-- [ ] 3.2.6 Add `compiler/tests/compiler/derive_reflect.test.tml` test file
+- [x] 3.2.4 Generate `variant_name(ref this) -> Str` for enums
+- [x] 3.2.5 Generate `variant_tag(ref this) -> I64` for enums
+- [x] 3.2.6 Add `compiler/tests/compiler/derive_reflect.test.tml` test file
 
 ## Phase 4: Any Type (P2)
 
@@ -151,12 +151,12 @@
 | Phase | Description | Priority | Status | Tasks |
 |-------|-------------|----------|--------|-------|
 | 1 | Core Intrinsics | P0 | ✓ Complete | 11/11 |
-| 2 | TypeInfo Generation | P1 | In Progress | 4/8 |
-| 3 | Reflect Behavior | P1 | In Progress | 2/10 |
+| 2 | TypeInfo Generation | P1 | ✓ Complete | 8/8 |
+| 3 | Reflect Behavior | P1 | In Progress | 6/10 |
 | 4 | Any Type | P2 | Pending | 0/7 |
 | 5 | OOP Reflection | P2 | Pending | 0/20 |
 | 6 | Integration & Testing | P3 | Pending | 0/13 |
-| **Total** | | | | **17/69** |
+| **Total** | | | | **25/69** |
 
 ## Dependencies
 

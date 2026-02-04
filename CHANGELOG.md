@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Reflection: Enum Methods** (2026-02-04) - `variant_name()` and `variant_tag()` for reflected enums
+  - Enums with `@derive(Reflect)` now have runtime variant introspection
+  - `variant_name(this) -> Str` - Returns the name of the active variant as a string
+  - `variant_tag(this) -> I64` - Returns the discriminant tag value (0, 1, 2, ...)
+  - Generated methods use efficient switch statements for variant lookup
+  - Type checker integration: methods are recognized during type checking
+  - Files modified:
+    - `compiler/src/codegen/derive/reflect.cpp` - Added `gen_derive_reflect_enum_methods()`
+    - `compiler/include/codegen/llvm_ir_gen.hpp` - Added function declaration
+    - `compiler/src/types/checker/core.cpp` - Register variant_name/variant_tag signatures
+    - `compiler/tests/compiler/reflect/derive_reflect.test.tml` - Added 4 new tests
+
+- **Build Script Enforcement** (2026-02-04) - CMake direct builds are now blocked
+  - Added build token verification in CMakeLists.txt to prevent direct cmake usage
+  - Only `scripts/build.bat` (Windows) and `scripts/build.sh` (Linux) can build the project
+  - Direct cmake commands fail with a clear error message explaining how to use scripts
+  - This prevents build corruption, cache issues, and silent test failures
+  - Files modified:
+    - `compiler/CMakeLists.txt` - Added TML_BUILD_TOKEN verification
+    - `scripts/build.bat` - Passes TML_BUILD_TOKEN to cmake
+    - `scripts/build.sh` - Passes TML_BUILD_TOKEN to cmake
+    - `CLAUDE.md` - Documented enforcement mechanism
+
 - **Fast Hash Module** (2026-02-04) - Non-cryptographic hash functions for ETags and checksums
   - New `std::hash` module with fast hash algorithms optimized for speed (NOT security)
   - FNV-1a: `fnv1a32()`, `fnv1a64()` - Fast, simple hash with good distribution

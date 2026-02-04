@@ -1000,6 +1000,7 @@ private:
     void gen_derive_reflect_struct(const parser::StructDecl& s);
     void gen_derive_reflect_enum(const parser::EnumDecl& e);
     void gen_derive_reflect_impl(const std::string& type_name, const std::string& typeinfo_name);
+    void gen_derive_reflect_enum_methods(const parser::EnumDecl& e, const std::string& type_name);
 
     // Statement generation
     void gen_stmt(const parser::Stmt& stmt);

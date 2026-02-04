@@ -338,6 +338,12 @@ pub behavior Reflect {
     ///
     /// This is a static method that doesn't require an instance.
     func type_info() -> ref TypeInfo
+
+    /// Returns the TypeInfo for this instance's type.
+    ///
+    /// This is an instance method useful when working with type-erased values.
+    /// It returns the same TypeInfo as the static `type_info()` method.
+    func runtime_type_info(this) -> ref TypeInfo
 }
 
 // ============================================================================

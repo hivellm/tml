@@ -106,6 +106,7 @@ echo Configuring CMake...
 cd /d "%CACHE_DIR%"
 
 cmake "%ROOT_DIR%\compiler" ^
+    -DTML_BUILD_TOKEN=tml_script_build_2026 ^
     -DCMAKE_BUILD_TYPE=%CMAKE_BUILD_TYPE% ^
     -DTML_BUILD_TESTS=%BUILD_TESTS% ^
     -DTML_ENABLE_ASAN=%ENABLE_ASAN% ^

@@ -602,14 +602,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         }
 
         // Print library coverage analysis after all suites complete
-        // Skip coverage report if a filter is active (incomplete coverage data)
-        if (CompilerOptions::coverage && opts.patterns.empty()) {
+        // Coverage report is now generated even with filter active (shows partial coverage)
+        if (CompilerOptions::coverage) {
             // Generate report even if no functions were tracked (shows 0% coverage)
             print_library_coverage_report(all_covered_functions, c, test_stats);
 
             // Write HTML report with proper library coverage data ONLY if:
             // 1. All tests passed
-            // 2. Coverage PERCENTAGE is not regressing
+            // 2. Coverage PERCENTAGE is not regressing (only checked when no filter active)
             if (!CompilerOptions::coverage_output.empty() && !has_failures) {
                 int current_covered = static_cast<int>(all_covered_functions.size());
                 auto previous = get_previous_coverage(CompilerOptions::coverage_output);
@@ -620,7 +620,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 bool should_update = true;
                 double current_percent = 0.0;
 
-                if (previous.valid && previous.total > 0) {
+                // Only check for regression when running full test suite (no filter)
+                // With filter active, always update since it's partial coverage
+                if (previous.valid && previous.total > 0 && opts.patterns.empty()) {
                     // Calculate current percentage using the SAME total as previous
                     // This is the fair comparison: did we cover more or fewer functions?
                     current_percent = (100.0 * current_covered) / previous.total;
@@ -633,6 +635,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     // No previous report or coverage improved/maintained
                     write_library_coverage_html(all_covered_functions,
                                                 CompilerOptions::coverage_output, test_stats);
+                    if (!opts.patterns.empty()) {
+                        std::cout << c.dim() << " [Partial coverage - filter active]" << c.reset()
+                                  << "\n";
+                    }
                 } else {
                     // Coverage regression detected
                     std::cout << c.yellow() << c.bold()
@@ -653,9 +659,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 std::cout << c.dim() << " [HTML report not updated - tests failed]" << c.reset()
                           << "\n";
             }
-        } else if (CompilerOptions::coverage && !opts.patterns.empty()) {
-            std::cout << c.dim() << " [Coverage report skipped - filter active]" << c.reset()
-                      << "\n";
         }
 
         // Save cache (only when not using filter to avoid partial updates)

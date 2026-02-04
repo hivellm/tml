@@ -1,6 +1,41 @@
 cmake_minimum_required(VERSION 3.20)
 project(tml VERSION 0.1.0 LANGUAGES CXX C)
 
+# =============================================================================
+# BUILD SCRIPT ENFORCEMENT
+# =============================================================================
+# This project MUST be built using scripts/build.bat (or scripts/build.sh).
+# Direct cmake commands are NOT supported and will cause issues.
+#
+# The build script passes a special token that proves it's being used.
+# If you're seeing this error, use: scripts\build.bat [debug|release]
+# =============================================================================
+if(NOT DEFINED TML_BUILD_TOKEN OR NOT TML_BUILD_TOKEN STREQUAL "tml_script_build_2026")
+    message(FATAL_ERROR "
+================================================================================
+  ERROR: Direct cmake builds are NOT allowed!
+================================================================================
+
+  This project MUST be built using the build scripts:
+
+    Windows:  scripts\\build.bat [debug|release] [--clean] [--no-tests]
+    Linux:    scripts/build.sh [debug|release] [--clean] [--no-tests]
+
+  DO NOT use cmake directly. The build scripts handle:
+    - Correct output directory structure
+    - Environment configuration
+    - Cache management
+    - Proper sequencing
+
+  Examples:
+    scripts\\build.bat              # Debug build
+    scripts\\build.bat release      # Release build
+    scripts\\build.bat --clean      # Clean rebuild
+
+================================================================================
+")
+endif()
+
 # C++20 required for concepts, ranges, etc.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
