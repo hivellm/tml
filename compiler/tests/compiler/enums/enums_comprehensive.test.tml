@@ -122,7 +122,7 @@ type OutcomeI32 {
 func outcomei32_ok_value(o: OutcomeI32) -> I32 {
     let result: I32 = when o {
         OkI32(v) => v,
-        ErrI32(_) => -1,
+        ErrI32(_) => -1i32,
     }
     return result
 }
@@ -263,9 +263,9 @@ type State {
 
 func state_value(s: State) -> I32 {
     let result: I32 = when s {
-        Initial => 0,
+        Initial => 0i32,
         Running(v) => v,
-        Stopped => -1,
+        Stopped => -1i32,
     }
     return result
 }

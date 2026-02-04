@@ -993,6 +993,12 @@ endif()
 add_executable(tml src/main.cpp)
 target_link_libraries(tml PRIVATE tml_cli)
 
+# Increase stack size on Windows to handle deep recursion during test execution
+# Default is 1MB, increase to 8MB for running large test suites
+if(MSVC)
+    target_link_options(tml PRIVATE /STACK:8388608)
+endif()
+
 # MCP server executable (separate from main tml to avoid file locking issues)
 # When MCP server is running, tml.exe can still be rebuilt independently
 add_executable(tml_mcp src/main_mcp.cpp)
