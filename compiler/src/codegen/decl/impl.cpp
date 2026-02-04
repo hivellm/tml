@@ -680,6 +680,9 @@ void LLVMIRGen::gen_impl_method_instantiation(
     functions_[method_name] = FuncInfo{"@" + func_llvm_name, func_type, ret_type, param_types_vec};
 
     emit_line("");
+    // Use internal linkage for all methods to avoid duplicate symbol warnings
+    // Each object file gets its own copy of library methods - slight code bloat
+    // but avoids complex COMDAT merging issues with LLD on Windows
     emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
     emit_line("entry:");
 
@@ -813,6 +816,12 @@ void LLVMIRGen::gen_impl_method_instantiation(
     }
 
     emit_line("}");
+
+    // NOTE: GlobalLibraryIRCache storage is DISABLED.
+    // Each suite needs its own complete implementation.
+    // See generic.cpp for explanation.
+    (void)is_library_type;
+    (void)generated_key;
 
     // Restore context
     current_func_ = saved_func;

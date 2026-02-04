@@ -264,14 +264,51 @@ void LLVMIRGen::generate_pending_instantiations() {
             changed = true;
 
         // Generate pending impl method instantiations
+        // Track processed methods to avoid duplicate lookups (expensive module searches)
+        std::unordered_set<std::string> processed_impl_methods;
+
         while (!pending_impl_method_instantiations_.empty()) {
             auto pending = std::move(pending_impl_method_instantiations_);
             pending_impl_method_instantiations_.clear();
 
             for (const auto& pim : pending) {
+                // Build deduplication key
+                std::string method_key = pim.mangled_type_name + "::" + pim.method_name;
+                if (!pim.method_type_suffix.empty()) {
+                    method_key += "__" + pim.method_type_suffix;
+                }
+
+                // Skip if already processed or already generated
+                if (processed_impl_methods.count(method_key) > 0) {
+                    continue;
+                }
+
+                // Also check if already generated (from previous compilation phases)
+                // Only check generated_impl_methods_output_ which tracks ACTUALLY generated methods.
+                // Don't check generated_impl_methods_ here - that's for queue deduplication only.
+                std::string generated_key = "tml_" + pim.mangled_type_name + "_" + pim.method_name;
+                if (!pim.method_type_suffix.empty()) {
+                    generated_key += "__" + pim.method_type_suffix;
+                }
+                if (generated_impl_methods_output_.count(generated_key) > 0) {
+                    processed_impl_methods.insert(method_key);
+                    continue;
+                }
+
+                // NOTE: GlobalLibraryIRCache is DISABLED for now.
+                // The cache was causing issues where only declarations were emitted
+                // but implementations were missing when compiling multiple test suites.
+                // Each suite needs its own complete implementation of library methods.
+                // TODO: Revisit caching strategy - perhaps cache at the object file level
+                // instead of the IR level, or clear cache between suites.
+
+                processed_impl_methods.insert(method_key);
+
                 TML_DEBUG_LN("[IMPL_INST] Looking for "
                              << pim.base_type_name << "::" << pim.method_name
-                             << " (mangled: " << pim.mangled_type_name << ")");
+                             << " (mangled: " << pim.mangled_type_name << ")"
+                             << " is_library_type=" << (pim.is_library_type ? "true" : "false")
+                             << " method_type_suffix=" << pim.method_type_suffix);
 
                 bool method_generated = false;
 
@@ -407,7 +444,9 @@ void LLVMIRGen::generate_pending_instantiations() {
                     // Check imported modules - need to re-parse to get impl AST
                     const auto& all_modules = env_.module_registry()->get_all_modules();
                     TML_DEBUG_LN("[IMPL_INST]   Not in local impls, searching "
-                                 << all_modules.size() << " modules");
+                                 << all_modules.size() << " modules for " << pim.base_type_name
+                                 << "::" << pim.method_name);
+
                     bool found = false;
                     for (const auto& [mod_name, mod] : all_modules) {
                         if (found)
@@ -420,32 +459,60 @@ void LLVMIRGen::generate_pending_instantiations() {
                         if (struct_it == mod.structs.end() && !pim.is_library_type)
                             continue;
 
-                        TML_DEBUG_LN("[IMPL_INST]   Checking module: "
-                                     << mod_name << " (has struct: "
-                                     << (struct_it != mod.structs.end() ? "yes" : "no") << ")");
+                        TML_DEBUG_LN("[IMPL_INST]   Checking module: " << mod_name
+                                     << " has_source=" << (!mod.source_code.empty() ? "yes" : "no")
+                                     << " has_struct=" << (struct_it != mod.structs.end() ? "yes" : "no"));
 
-                        // Re-parse the module source to get impl AST
+                        // Get parsed AST from global cache or parse if not cached
                         if (mod.source_code.empty()) {
                             TML_DEBUG_LN("[IMPL_INST]   Module has no source_code, skipping");
                             continue;
                         }
 
-                        auto source = lexer::Source::from_string(mod.source_code, mod.file_path);
-                        lexer::Lexer lex(source);
-                        auto tokens = lex.tokenize();
-                        if (lex.has_errors())
-                            continue;
+                        const parser::Module* parsed_mod_ptr = nullptr;
 
-                        parser::Parser mod_parser(std::move(tokens));
-                        auto module_name_stem = mod.name;
-                        if (auto pos = module_name_stem.rfind("::"); pos != std::string::npos) {
-                            module_name_stem = module_name_stem.substr(pos + 2);
+                        // Check global AST cache first
+                        if (GlobalASTCache::should_cache(mod_name)) {
+                            parsed_mod_ptr = GlobalASTCache::instance().get(mod_name);
+                            if (parsed_mod_ptr) {
+                                TML_DEBUG_LN("[IMPL_INST]   AST cache hit for: " << mod_name);
+                            }
                         }
-                        auto parse_result = mod_parser.parse_module(module_name_stem);
-                        if (!std::holds_alternative<parser::Module>(parse_result))
+
+                        // If not in cache, parse the module
+                        parser::Module local_parsed_mod;
+                        if (!parsed_mod_ptr) {
+                            auto source = lexer::Source::from_string(mod.source_code, mod.file_path);
+                            lexer::Lexer lex(source);
+                            auto tokens = lex.tokenize();
+                            if (lex.has_errors())
+                                continue;
+
+                            parser::Parser mod_parser(std::move(tokens));
+                            auto module_name_stem = mod.name;
+                            if (auto pos = module_name_stem.rfind("::"); pos != std::string::npos) {
+                                module_name_stem = module_name_stem.substr(pos + 2);
+                            }
+                            auto parse_result = mod_parser.parse_module(module_name_stem);
+                            if (!std::holds_alternative<parser::Module>(parse_result))
+                                continue;
+
+                            local_parsed_mod = std::get<parser::Module>(std::move(parse_result));
+
+                            // Store in global cache for library modules
+                            if (GlobalASTCache::should_cache(mod_name)) {
+                                GlobalASTCache::instance().put(mod_name, std::move(local_parsed_mod));
+                                parsed_mod_ptr = GlobalASTCache::instance().get(mod_name);
+                                TML_DEBUG_LN("[IMPL_INST]   AST cached: " << mod_name);
+                            } else {
+                                parsed_mod_ptr = &local_parsed_mod;
+                            }
+                        }
+
+                        if (!parsed_mod_ptr)
                             continue;
 
-                        const auto& parsed_mod = std::get<parser::Module>(parse_result);
+                        const auto& parsed_mod = *parsed_mod_ptr;
 
                         // Find the impl block for this type
                         for (const auto& decl : parsed_mod.decls) {

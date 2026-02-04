@@ -35,7 +35,9 @@
 #include "types/type.hpp"
 
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -99,6 +101,57 @@ struct ImportedSymbol {
 
 /// Union type for any symbol that can be imported.
 using ModuleSymbol = std::variant<FuncSig, StructDef, EnumDef, BehaviorDef, TypePtr>;
+
+// ============================================================================
+// Global Module Cache
+// ============================================================================
+// Thread-safe global cache for pre-parsed library modules (core::*, std::*, test).
+// This cache persists across all test file compilations to avoid re-parsing
+// the same library modules for every test file.
+
+/// Global cache for pre-parsed library modules.
+/// Thread-safe singleton that stores Module structs for library modules.
+class GlobalModuleCache {
+public:
+    /// Get the singleton instance.
+    static GlobalModuleCache& instance();
+
+    /// Check if a module is cached.
+    bool has(const std::string& module_path) const;
+
+    /// Get a cached module (returns nullopt if not cached).
+    std::optional<Module> get(const std::string& module_path) const;
+
+    /// Cache a module (only caches library modules: core::*, std::*, test).
+    void put(const std::string& module_path, const Module& module);
+
+    /// Clear the cache (e.g., for --no-cache flag).
+    void clear();
+
+    /// Get cache statistics.
+    struct Stats {
+        size_t total_entries = 0;
+        size_t cache_hits = 0;
+        size_t cache_misses = 0;
+    };
+    Stats get_stats() const;
+
+    /// Check if a module path should be cached (library modules only).
+    static bool should_cache(const std::string& module_path);
+
+private:
+    GlobalModuleCache() = default;
+    ~GlobalModuleCache() = default;
+
+    // Non-copyable
+    GlobalModuleCache(const GlobalModuleCache&) = delete;
+    GlobalModuleCache& operator=(const GlobalModuleCache&) = delete;
+
+    mutable std::shared_mutex mutex_;
+    std::unordered_map<std::string, Module> cache_;
+    mutable size_t hits_ = 0;
+    mutable size_t misses_ = 0;
+};
 
 /// Central registry for all modules in the program.
 ///

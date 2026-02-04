@@ -145,6 +145,47 @@ public:
     // Get cache version
     static int get_version() { return CACHE_VERSION; }
 
+    // ========================================================================
+    // Backup and Recovery
+    // ========================================================================
+
+    /// Get the temp directory path for cache backups
+    /// Returns: Path like %TEMP%/tml-cache-backup/ on Windows
+    static std::string get_temp_backup_dir();
+
+    /// Backup the cache file and run-cache directory to temp
+    /// @param cache_file Path to the cache file to backup
+    /// @param run_cache_dir Path to the .run-cache directory
+    /// @return true if backup was successful
+    static bool backup_to_temp(const std::string& cache_file, const std::string& run_cache_dir);
+
+    /// Restore cache from temp backup
+    /// @param cache_file Path where the cache file should be restored
+    /// @param run_cache_dir Path where .run-cache should be restored
+    /// @return true if restore was successful (backup exists and was valid)
+    static bool restore_from_temp(const std::string& cache_file, const std::string& run_cache_dir);
+
+    /// Check if a backup exists in temp
+    static bool has_temp_backup();
+
+    // ========================================================================
+    // Cache Cleanup
+    // ========================================================================
+
+    /// Clean up orphaned files from the run cache directory
+    /// Removes .ll, .obj, .dll, .pdb files that don't belong to any current suite
+    /// @param run_cache_dir Path to the .run-cache directory
+    /// @param known_suite_hashes Set of valid suite hash prefixes from current tests
+    /// @param verbose Print details about cleaned files
+    /// @return Number of files removed
+    static size_t cleanup_orphaned_files(const std::string& run_cache_dir,
+                                         const std::vector<std::string>& known_suite_hashes,
+                                         bool verbose = false);
+
+    /// Get the list of known suite hashes from the test cache
+    /// @return Vector of hash prefixes (first 16 chars of file names) for valid suites
+    std::vector<std::string> get_known_suite_hashes() const;
+
 private:
     static constexpr int CACHE_VERSION = 1;
 

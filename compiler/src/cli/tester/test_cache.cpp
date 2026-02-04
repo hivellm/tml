@@ -10,11 +10,13 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <set>
 #include <sstream>
 
 // Simple JSON parsing/writing (avoid dependency on external JSON library)
@@ -605,6 +607,226 @@ TestCacheManager::CacheStats TestCacheManager::get_stats() const {
     }
 
     return stats;
+}
+
+// ============================================================================
+// Backup and Recovery
+// ============================================================================
+
+std::string TestCacheManager::get_temp_backup_dir() {
+#ifdef _WIN32
+    // Use %TEMP% on Windows with _dupenv_s for security
+    char* temp_buf = nullptr;
+    size_t temp_len = 0;
+    std::string temp_path;
+
+    if (_dupenv_s(&temp_buf, &temp_len, "TEMP") == 0 && temp_buf) {
+        temp_path = temp_buf;
+        free(temp_buf);
+    } else if (_dupenv_s(&temp_buf, &temp_len, "TMP") == 0 && temp_buf) {
+        temp_path = temp_buf;
+        free(temp_buf);
+    } else {
+        temp_path = "C:\\Temp";
+    }
+    return temp_path + "\\tml-cache-backup";
+#else
+    // Use /tmp on Unix
+    const char* temp = std::getenv("TMPDIR");
+    if (!temp) {
+        temp = "/tmp";
+    }
+    return std::string(temp) + "/tml-cache-backup";
+#endif
+}
+
+bool TestCacheManager::has_temp_backup() {
+    fs::path backup_dir = get_temp_backup_dir();
+    fs::path cache_backup = backup_dir / ".test-cache.json";
+    return fs::exists(cache_backup);
+}
+
+bool TestCacheManager::backup_to_temp(const std::string& cache_file,
+                                       const std::string& run_cache_dir) {
+    try {
+        fs::path backup_dir = get_temp_backup_dir();
+
+        // Create backup directory
+        fs::create_directories(backup_dir);
+
+        // Backup .test-cache.json
+        if (fs::exists(cache_file)) {
+            fs::path cache_backup = backup_dir / ".test-cache.json";
+            fs::copy_file(cache_file, cache_backup, fs::copy_options::overwrite_existing);
+        }
+
+        // Backup .run-cache directory (only DLL files to save space)
+        if (fs::exists(run_cache_dir)) {
+            fs::path run_backup = backup_dir / ".run-cache";
+            fs::create_directories(run_backup);
+
+            for (const auto& entry : fs::directory_iterator(run_cache_dir)) {
+                if (!entry.is_regular_file())
+                    continue;
+
+                auto ext = entry.path().extension().string();
+                // Only backup compiled test DLLs
+                if (ext == ".dll" || ext == ".so" || ext == ".dylib") {
+                    fs::path dest = run_backup / entry.path().filename();
+                    fs::copy_file(entry.path(), dest, fs::copy_options::overwrite_existing);
+                }
+            }
+        }
+
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[WARN] Failed to backup cache to temp: " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool TestCacheManager::restore_from_temp(const std::string& cache_file,
+                                          const std::string& run_cache_dir) {
+    try {
+        fs::path backup_dir = get_temp_backup_dir();
+        fs::path cache_backup = backup_dir / ".test-cache.json";
+
+        // Check if backup exists
+        if (!fs::exists(cache_backup)) {
+            return false;
+        }
+
+        // Restore .test-cache.json
+        fs::path cache_parent = fs::path(cache_file).parent_path();
+        if (!cache_parent.empty()) {
+            fs::create_directories(cache_parent);
+        }
+        fs::copy_file(cache_backup, cache_file, fs::copy_options::overwrite_existing);
+
+        // Restore .run-cache directory
+        fs::path run_backup = backup_dir / ".run-cache";
+        if (fs::exists(run_backup)) {
+            fs::create_directories(run_cache_dir);
+
+            int restored_count = 0;
+            for (const auto& entry : fs::directory_iterator(run_backup)) {
+                if (!entry.is_regular_file())
+                    continue;
+
+                fs::path dest = fs::path(run_cache_dir) / entry.path().filename();
+                try {
+                    fs::copy_file(entry.path(), dest, fs::copy_options::overwrite_existing);
+                    ++restored_count;
+                } catch (...) {
+                    // Skip files that can't be copied (e.g., in use)
+                }
+            }
+
+            std::cerr << "[INFO] Restored " << restored_count << " cached test DLLs from backup\n";
+        }
+
+        std::cerr << "[INFO] Restored test cache from backup at: " << backup_dir.string() << "\n";
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[WARN] Failed to restore cache from temp: " << e.what() << "\n";
+        return false;
+    }
+}
+
+// ============================================================================
+// Cache Cleanup
+// ============================================================================
+
+std::vector<std::string> TestCacheManager::get_known_suite_hashes() const {
+    std::vector<std::string> hashes;
+    // Collect unique suite names from cached tests
+    std::set<std::string> suite_names;
+    for (const auto& [path, info] : tests_) {
+        if (!info.suite.empty()) {
+            suite_names.insert(info.suite);
+        }
+    }
+    // Note: The actual hash is computed from test file content + suite grouping
+    // For now, we can't easily predict the hash without recomputing
+    // This function would need to be called with hashes from suite_execution
+    return hashes;
+}
+
+size_t TestCacheManager::cleanup_orphaned_files(const std::string& run_cache_dir,
+                                                 const std::vector<std::string>& known_suite_hashes,
+                                                 bool verbose) {
+    if (!fs::exists(run_cache_dir)) {
+        return 0;
+    }
+
+    // Build a set of valid prefixes for quick lookup
+    std::set<std::string> valid_prefixes(known_suite_hashes.begin(), known_suite_hashes.end());
+
+    size_t removed_count = 0;
+    size_t removed_bytes = 0;
+
+    // Extensions to clean up
+    std::vector<std::string> cleanup_extensions = {".ll", ".obj", ".dll", ".pdb", ".exp", ".lib"};
+
+    try {
+        for (const auto& entry : fs::directory_iterator(run_cache_dir)) {
+            if (!entry.is_regular_file())
+                continue;
+
+            std::string filename = entry.path().filename().string();
+            std::string ext = entry.path().extension().string();
+
+            // Check if this is a cleanable extension
+            bool is_cleanup_target = false;
+            for (const auto& target_ext : cleanup_extensions) {
+                if (ext == target_ext) {
+                    is_cleanup_target = true;
+                    break;
+                }
+            }
+
+            if (!is_cleanup_target)
+                continue;
+
+            // Extract hash prefix from filename (format: HASH_suite_N.ext)
+            // e.g., "abc123def456_suite_0.ll" -> "abc123def456"
+            size_t underscore_pos = filename.find('_');
+            if (underscore_pos == std::string::npos)
+                continue;
+
+            std::string hash_prefix = filename.substr(0, underscore_pos);
+
+            // Check if this hash is in our known list
+            if (valid_prefixes.find(hash_prefix) == valid_prefixes.end()) {
+                // This file is orphaned - remove it
+                try {
+                    auto file_size = fs::file_size(entry.path());
+                    fs::remove(entry.path());
+                    ++removed_count;
+                    removed_bytes += file_size;
+
+                    if (verbose) {
+                        std::cerr << "[CLEANUP] Removed orphaned file: " << filename << "\n";
+                    }
+                } catch (const std::exception& e) {
+                    if (verbose) {
+                        std::cerr << "[CLEANUP] Failed to remove " << filename << ": " << e.what()
+                                  << "\n";
+                    }
+                }
+            }
+        }
+
+        if (removed_count > 0) {
+            double mb = static_cast<double>(removed_bytes) / (1024 * 1024);
+            std::cerr << "[CLEANUP] Removed " << removed_count << " orphaned files ("
+                      << std::fixed << std::setprecision(1) << mb << " MB)\n";
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[CLEANUP] Error during cleanup: " << e.what() << "\n";
+    }
+
+    return removed_count;
 }
 
 } // namespace tml::cli

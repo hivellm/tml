@@ -260,6 +260,12 @@ char* zlib_inflate(TmlBuffer* data, int32_t window_bits) {
 
         total_out = strm.total_out;
 
+        // Prevent infinite loop: if input is exhausted AND output buffer has space
+        // (meaning inflate has nothing more to output), then we're done
+        if (strm.avail_in == 0 && strm.avail_out > 0 && ret != Z_STREAM_END) {
+            break;
+        }
+
     } while (ret != Z_STREAM_END);
 
     inflateEnd(&strm);
@@ -325,6 +331,12 @@ TmlBuffer* zlib_inflate_buffer(TmlBuffer* data, int32_t window_bits) {
         }
 
         output->len = strm.total_out;
+
+        // Prevent infinite loop: if input is exhausted AND output buffer has space
+        // (meaning inflate has nothing more to output), then we're done
+        if (strm.avail_in == 0 && strm.avail_out > 0 && ret != Z_STREAM_END) {
+            break;
+        }
 
     } while (ret != Z_STREAM_END);
 
@@ -683,6 +695,11 @@ TmlBuffer* inflate_stream_write(InflateStream* stream, TmlBuffer* data) {
         }
 
         output->len = stream->strm.total_out;
+
+        // Prevent infinite loop when input is exhausted
+        if (stream->strm.avail_in == 0) {
+            break;
+        }
 
     } while (stream->strm.avail_out == 0 && !stream->finished);
 

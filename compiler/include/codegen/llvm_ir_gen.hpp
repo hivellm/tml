@@ -41,7 +41,9 @@
 #include "types/checker.hpp"
 
 #include <memory>
+#include <mutex>
 #include <set>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -49,6 +51,164 @@
 #include <vector>
 
 namespace tml::codegen {
+
+// ============================================================================
+// Global AST Cache
+// ============================================================================
+// Thread-safe global cache for pre-parsed library module ASTs.
+// This cache persists across all test file compilations to avoid re-parsing
+// the same library modules during codegen for every test file.
+
+/// Global cache for pre-parsed module ASTs.
+/// Thread-safe singleton that stores parser::Module structs for library modules.
+class GlobalASTCache {
+public:
+    /// Get the singleton instance.
+    static GlobalASTCache& instance();
+
+    /// Check if a module AST is cached.
+    bool has(const std::string& module_path) const;
+
+    /// Get a cached module AST (returns nullptr if not cached).
+    /// The returned pointer is valid for the lifetime of the cache.
+    const parser::Module* get(const std::string& module_path) const;
+
+    /// Cache a module AST (only caches library modules: core::*, std::*, test).
+    /// Takes ownership of the module via move.
+    void put(const std::string& module_path, parser::Module module);
+
+    /// Clear the cache.
+    void clear();
+
+    /// Get cache statistics.
+    struct Stats {
+        size_t total_entries = 0;
+        size_t cache_hits = 0;
+        size_t cache_misses = 0;
+    };
+    Stats get_stats() const;
+
+    /// Check if a module path should be cached (library modules only).
+    static bool should_cache(const std::string& module_path);
+
+private:
+    GlobalASTCache() = default;
+    ~GlobalASTCache() = default;
+
+    // Non-copyable
+    GlobalASTCache(const GlobalASTCache&) = delete;
+    GlobalASTCache& operator=(const GlobalASTCache&) = delete;
+
+    mutable std::shared_mutex mutex_;
+    std::unordered_map<std::string, parser::Module> cache_;
+    mutable size_t hits_ = 0;
+    mutable size_t misses_ = 0;
+};
+
+// ============================================================================
+// Global Library IR Cache
+// ============================================================================
+// Thread-safe global cache for pre-generated library LLVM IR.
+// This cache persists across all test file compilations in a suite to avoid
+// regenerating the same library definitions for every test file.
+//
+// Caches:
+// - Struct type definitions (e.g., %struct.List__I32 = type { ... })
+// - Enum type definitions (e.g., %struct.Maybe__I32 = type { ... })
+// - Function implementations (library functions)
+// - Impl method implementations (e.g., tml_I32_try_from__I64)
+// - Generic instantiations (e.g., List[I32], HashMap[Str, I64])
+//
+// Usage:
+// 1. Before compiling test files, optionally pre-load common library IR
+// 2. When compiling a test file, check cache before generating
+// 3. If cached, emit declaration only; cache provides implementation
+// 4. At suite end, emit a single file with all cached implementations
+
+/// Type of cached IR entry.
+enum class CachedIRType {
+    StructDef,      ///< Struct type definition
+    EnumDef,        ///< Enum type definition
+    Function,       ///< Function implementation
+    ImplMethod,     ///< Impl method (behavior implementation)
+    GenericInst,    ///< Generic type instantiation
+};
+
+/// Cached IR entry information.
+struct CachedIREntry {
+    std::string key;               ///< Unique key (e.g., "tml_I32_try_from__I64")
+    CachedIRType type;             ///< Type of entry
+    std::string declaration;       ///< LLVM IR declaration (for extern refs)
+    std::string type_definition;   ///< LLVM IR type definition (for structs/enums)
+    std::string implementation;    ///< Full LLVM IR implementation (for functions)
+    bool is_library;               ///< True if from library (no suite prefix)
+    std::vector<std::string> dependencies;  ///< Other entries this depends on
+};
+
+/// Global cache for pre-generated library LLVM IR.
+/// Thread-safe singleton that stores library IR for reuse across test files.
+class GlobalLibraryIRCache {
+public:
+    /// Get the singleton instance.
+    static GlobalLibraryIRCache& instance();
+
+    /// Check if an entry is cached.
+    bool has(const std::string& key) const;
+
+    /// Get a cached entry (returns nullptr if not cached).
+    const CachedIREntry* get(const std::string& key) const;
+
+    /// Cache an IR entry.
+    void put(const std::string& key, CachedIREntry entry);
+
+    /// Get all cached entries of a specific type.
+    std::vector<const CachedIREntry*> get_by_type(CachedIRType type) const;
+
+    /// Get all cached entries (for emitting shared library file).
+    std::vector<const CachedIREntry*> get_all() const;
+
+    /// Clear the cache (e.g., for --no-cache flag or between suites).
+    void clear();
+
+    /// Get cache statistics.
+    struct Stats {
+        size_t total_entries = 0;
+        size_t struct_defs = 0;
+        size_t enum_defs = 0;
+        size_t functions = 0;
+        size_t impl_methods = 0;
+        size_t generic_insts = 0;
+        size_t cache_hits = 0;
+        size_t cache_misses = 0;
+    };
+    Stats get_stats() const;
+
+    /// Mark an entry as "in progress" to avoid duplicate generation in parallel.
+    /// Returns true if this thread should generate it, false if another thread is.
+    bool try_claim(const std::string& key);
+
+    /// Mark an entry as fully generated (release the claim).
+    void release_claim(const std::string& key);
+
+    /// Pre-load common library definitions.
+    /// This scans library modules and pre-generates common instantiations.
+    /// Should be called once before compiling test suites.
+    void preload_library_definitions();
+
+private:
+    GlobalLibraryIRCache() = default;
+    ~GlobalLibraryIRCache() = default;
+
+    // Non-copyable
+    GlobalLibraryIRCache(const GlobalLibraryIRCache&) = delete;
+    GlobalLibraryIRCache& operator=(const GlobalLibraryIRCache&) = delete;
+
+    mutable std::shared_mutex mutex_;
+    std::unordered_map<std::string, CachedIREntry> cache_;
+    std::unordered_set<std::string> in_progress_;  ///< Entries being generated
+    mutable size_t hits_ = 0;
+    mutable size_t misses_ = 0;
+};
 
 /// Error during LLVM IR generation.
 struct LLVMGenError {

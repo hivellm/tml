@@ -100,19 +100,32 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
     std::set<std::string> all_covered_functions;
 
     // Test cache for skipping unchanged tests
-    // Cache file is stored in build/ directory to avoid polluting the source tree
+    // Cache file is stored in build/debug/ directory alongside .run-cache
     TestCacheManager test_cache;
-    fs::path cache_file = fs::path("build") / ".test-cache.json";
+    fs::path cache_file = fs::path("build") / "debug" / ".test-cache.json";
+    fs::path run_cache_dir = fs::path("build") / "debug" / ".run-cache";
     bool cache_loaded = false;
     std::atomic<int> skipped_count{0};
 
     // Don't update cache when filter is active (partial test runs shouldn't affect cache)
-    bool should_update_cache =
-        !opts.no_cache && !opts.coverage && !opts.coverage_source && opts.patterns.empty();
+    // Note: Coverage mode CAN use cache - the cache tracks coverage_enabled per entry
+    // and invalidates when coverage mode changes (see can_skip_test)
+    bool should_update_cache = !opts.no_cache && opts.patterns.empty();
 
     // Load existing cache (always load for skipping, but only update if no filter)
-    if (!opts.no_cache && !opts.coverage && !opts.coverage_source) {
+    // Coverage mode uses the same cache but entries are invalidated when coverage_enabled changes
+    if (!opts.no_cache) {
+        // Try to load cache, if it fails try to restore from temp backup
         cache_loaded = test_cache.load(cache_file.string());
+        if (!cache_loaded && TestCacheManager::has_temp_backup()) {
+            // Cache is missing but we have a backup - try to restore
+            if (TestCacheManager::restore_from_temp(cache_file.string(), run_cache_dir.string())) {
+                cache_loaded = test_cache.load(cache_file.string());
+                if (cache_loaded && opts.verbose) {
+                    std::cerr << "[DEBUG] Cache restored from backup\n";
+                }
+            }
+        }
         if (opts.verbose && cache_loaded) {
             auto stats = test_cache.get_stats();
             std::cerr << "[DEBUG] Loaded test cache with " << stats.total_entries << " entries\n";
@@ -136,6 +149,65 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                       << (suites.size() != 1 ? "s" : "") << c.reset() << "\n";
             std::cout << std::flush;
             std::cerr << std::flush;
+        }
+
+        // Clean up orphaned cache files periodically
+        // This removes .ll, .obj, .dll files that are older than 24 hours and not from current suites
+        if (!opts.no_cache && fs::exists(run_cache_dir)) {
+            // Only clean up once per session to avoid overhead
+            static bool cleanup_done = false;
+            if (!cleanup_done) {
+                cleanup_done = true;
+
+                size_t removed_count = 0;
+                size_t removed_bytes = 0;
+                auto now = fs::file_time_type::clock::now();
+                std::vector<std::string> cleanup_extensions = {".ll", ".obj", ".pdb", ".exp", ".lib"};
+
+                try {
+                    for (const auto& entry : fs::directory_iterator(run_cache_dir)) {
+                        if (!entry.is_regular_file()) continue;
+
+                        std::string ext = entry.path().extension().string();
+                        bool is_cleanup_target = false;
+                        for (const auto& target_ext : cleanup_extensions) {
+                            if (ext == target_ext) {
+                                is_cleanup_target = true;
+                                break;
+                            }
+                        }
+                        if (!is_cleanup_target) continue;
+
+                        // Check file age - remove files older than 24 hours
+                        auto mod_time = fs::last_write_time(entry.path());
+                        auto age = std::chrono::duration_cast<std::chrono::hours>(now - mod_time);
+                        if (age.count() >= 24) {
+                            try {
+                                auto file_size = fs::file_size(entry.path());
+                                fs::remove(entry.path());
+                                ++removed_count;
+                                removed_bytes += file_size;
+                                if (opts.verbose) {
+                                    std::cerr << "[CLEANUP] Removed old file: "
+                                              << entry.path().filename().string() << "\n";
+                                }
+                            } catch (...) {
+                                // Skip files that can't be removed
+                            }
+                        }
+                    }
+
+                    if (removed_count > 0 && !opts.quiet) {
+                        double mb = static_cast<double>(removed_bytes) / (1024 * 1024);
+                        std::cerr << "[CLEANUP] Removed " << removed_count << " old cache files ("
+                                  << std::fixed << std::setprecision(1) << mb << " MB)\n";
+                    }
+                } catch (const std::exception& e) {
+                    if (opts.verbose) {
+                        std::cerr << "[CLEANUP] Error: " << e.what() << "\n";
+                    }
+                }
+            }
         }
 
         // Cache file hashes to avoid recomputing SHA512 multiple times
@@ -209,8 +281,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             }
         } else {
             // Determine number of compilation threads
+            // Force sequential compilation to avoid CPU overload
             unsigned int hw_threads = std::thread::hardware_concurrency();
-            unsigned int num_compile_threads = (hw_threads > 0) ? std::max(1u, hw_threads) : 4;
+            (void)hw_threads; // Unused - sequential mode
+            unsigned int num_compile_threads = 1;
 
             // Structure to hold compilation results
             struct CompileJob {
@@ -536,6 +610,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 } catch (...) {
                     // Ignore cleanup errors
                 }
+
+                // Incremental cache save after each suite completes
+                // This ensures cache is preserved even if process crashes later
+                if (should_update_cache) {
+                    std::lock_guard<std::mutex> lock(cache_mutex);
+                    fs::create_directories(cache_file.parent_path());
+                    test_cache.save(cache_file.string());
+                }
             }
         };
 
@@ -564,6 +646,11 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
         // Check if fail-fast was triggered
         if (fail_fast_triggered.load()) {
+            // Save cache before early exit to preserve progress
+            if (should_update_cache) {
+                fs::create_directories(cache_file.parent_path());
+                test_cache.save(cache_file.string());
+            }
             return 1;
         }
 
@@ -678,6 +765,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     std::cerr << "[DEBUG] Saved test cache with " << stats.total_entries
                               << " entries\n";
                 }
+                // Backup cache to temp directory for recovery if cache is deleted
+                TestCacheManager::backup_to_temp(cache_file.string(), run_cache_dir.string());
             }
         } else if (opts.verbose && !opts.patterns.empty()) {
             std::cerr << "[DEBUG] Cache not updated (filter active)\n";
@@ -693,11 +782,27 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         return 0;
 
     } catch (const std::exception& e) {
+        // Save cache before exit to preserve progress
+        if (should_update_cache) {
+            try {
+                fs::create_directories(cache_file.parent_path());
+                test_cache.save(cache_file.string());
+            } catch (...) {
+            }
+        }
         std::cerr << "\n"
                   << c.red() << c.bold()
                   << "[FATAL] Exception in run_tests_suite_mode: " << e.what() << c.reset() << "\n";
         return 1;
     } catch (...) {
+        // Save cache before exit to preserve progress
+        if (should_update_cache) {
+            try {
+                fs::create_directories(cache_file.parent_path());
+                test_cache.save(cache_file.string());
+            } catch (...) {
+            }
+        }
         std::cerr << "\n"
                   << c.red() << c.bold() << "[FATAL] Unknown exception in run_tests_suite_mode"
                   << c.reset() << "\n";

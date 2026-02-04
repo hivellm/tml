@@ -1362,9 +1362,22 @@ std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& t
     return suites;
 }
 
+// Slow task threshold multiplier - panic if task takes more than this times the average
+constexpr double SLOW_TASK_THRESHOLD = 5.0;
+// Minimum time before considering a task "slow" (avoid false positives on fast tasks)
+// Increased to 15s to accommodate complex tests with many imports
+constexpr int64_t MIN_SLOW_THRESHOLD_US = 15000000; // 15 seconds
+
 SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool no_cache) {
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
+
+    // Phase timing tracking
+    int64_t preprocess_time_us = 0;
+    int64_t phase1_time_us = 0;
+    int64_t phase2_time_us = 0;
+    int64_t runtime_time_us = 0;
+    int64_t link_time_us = 0;
 
     SuiteCompileResult result;
 
@@ -1393,7 +1406,18 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         std::string lib_ext = get_shared_lib_extension();
         fs::path lib_output = cache_dir / (suite.name + lib_ext);
 
-        // First pass: just preprocess and compute content hashes (fast)
+        // Structure to cache preprocessed sources for reuse in Phase 1
+        struct PreprocessedSource {
+            std::string file_path;
+            std::string preprocessed;
+            std::string content_hash;
+        };
+        std::vector<PreprocessedSource> preprocessed_sources;
+        preprocessed_sources.reserve(suite.tests.size());
+
+        auto preprocess_start = Clock::now();
+
+        // First pass: preprocess and compute content hashes (cache for Phase 1)
         for (const auto& test : suite.tests) {
             std::string source_code;
             try {
@@ -1422,8 +1446,15 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 return result;
             }
 
-            combined_hash += build::generate_content_hash(pp_result.output);
+            std::string content_hash = build::generate_content_hash(pp_result.output);
+            combined_hash += content_hash;
+
+            // Cache preprocessed source for reuse in Phase 1
+            preprocessed_sources.push_back({test.file_path, std::move(pp_result.output), content_hash});
         }
+
+        preprocess_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            Clock::now() - preprocess_start).count();
 
         // Include coverage flag in hash to separate coverage-enabled builds
         if (CompilerOptions::coverage) {
@@ -1472,213 +1503,434 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         std::vector<PendingCompile> pending_compiles;
 
         // ======================================================================
-        // PHASE 1: Sequential lex/parse/typecheck/codegen (populates shared_registry)
+        // PHASE 1: Parallel lex/parse/typecheck/codegen
         // ======================================================================
+        // Only processes files that need compilation (not cached).
+        // Uses preprocessed sources cached from the early cache check loop.
+        // Each file is processed independently - the shared_registry is populated
+        // later when we parse the first module for get_runtime_objects.
+
+        // First, identify which files need compilation vs are cached
+        struct CompileTask {
+            size_t index;
+            std::string file_path;
+            std::string preprocessed;
+            std::string content_hash;
+            fs::path obj_output;
+            bool needs_compile;
+        };
+
+        std::vector<CompileTask> tasks;
+        tasks.reserve(suite.tests.size());
 
         for (size_t i = 0; i < suite.tests.size(); ++i) {
-            const auto& test = suite.tests[i];
+            const auto& pp_source = preprocessed_sources[i];
+            std::string obj_name = pp_source.content_hash + "_suite_" + std::to_string(i);
+            fs::path obj_output = cache_dir / (obj_name + get_object_extension());
+            bool needs_compile = no_cache || !fs::exists(obj_output);
+
+            combined_hash += pp_source.content_hash;
+            object_files.push_back(obj_output);
+
+            if (needs_compile) {
+                tasks.push_back({i, pp_source.file_path, pp_source.preprocessed,
+                                 pp_source.content_hash, obj_output, true});
+            }
+        }
+
+        // Process compilation tasks in parallel
+        // NOTE: When multiple suites are being compiled in parallel (the common case),
+        // we limit internal parallelism to avoid thread explosion. With 22 suites and
+        // 32 threads each, we'd have 704 threads competing for CPU!
+        // Use at most 2 internal threads per suite to balance parallelism.
+        auto phase1_start = Clock::now();
+
+        if (!tasks.empty()) {
+            std::atomic<size_t> next_task{0};
+            std::atomic<bool> has_error{false};
+            std::string first_error_msg;
+            std::string first_error_file;
+            std::mutex error_mutex;
+            std::mutex pending_mutex;
+            std::mutex libs_mutex;
+            std::mutex timing_mutex;
+
+            // Per-task timing tracking for slow task detection
+            struct TaskTiming {
+                size_t task_idx;
+                std::string file_path;
+                int64_t duration_us;
+                // Sub-phase timings
+                int64_t lex_us;
+                int64_t parse_us;
+                int64_t typecheck_us;
+                int64_t borrow_us;
+                int64_t codegen_us;
+            };
+            std::vector<TaskTiming> task_timings;
+            task_timings.reserve(tasks.size());
+
+            // Aggregate sub-phase totals for summary
+            std::atomic<int64_t> total_lex_us{0};
+            std::atomic<int64_t> total_parse_us{0};
+            std::atomic<int64_t> total_typecheck_us{0};
+            std::atomic<int64_t> total_borrow_us{0};
+            std::atomic<int64_t> total_codegen_us{0};
+
+            // Running average for slow task detection
+            std::atomic<int64_t> total_task_time_us{0};
+            std::atomic<size_t> completed_tasks{0};
+
+            // Limit internal parallelism - suites are already compiled in parallel
+            // so we don't want to spawn too many threads here
+            unsigned int num_threads = std::min(2u, (unsigned int)tasks.size());
+
+            auto compile_task_worker = [&]() {
+                // Each thread gets its own registry for imports (merged later if needed)
+                auto thread_registry = std::make_shared<types::ModuleRegistry>();
+
+                while (!has_error.load()) {
+                    size_t task_idx = next_task.fetch_add(1);
+                    if (task_idx >= tasks.size())
+                        break;
+
+                    auto& task = tasks[task_idx];
+                    auto task_start = Clock::now();
+
+                    if (verbose) {
+                        std::lock_guard<std::mutex> lock(error_mutex);
+                        std::cerr << "[DEBUG]   Processing test " << (task_idx + 1) << "/"
+                                  << tasks.size() << ": " << task.file_path << "\n"
+                                  << std::flush;
+                    }
+
+                    // Sub-phase timing for detailed profiling
+                    int64_t lex_us = 0, parse_us = 0, typecheck_us = 0, borrow_us = 0, codegen_us = 0;
+
+                    try {
+                        // Lex
+                        auto lex_start = Clock::now();
+                        auto source =
+                            lexer::Source::from_string(task.preprocessed, task.file_path);
+                        lexer::Lexer lex(source);
+                        auto tokens = lex.tokenize();
+                        lex_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                            Clock::now() - lex_start).count();
+
+                        if (lex.has_errors()) {
+                            std::lock_guard<std::mutex> lock(error_mutex);
+                            if (!has_error.load()) {
+                                has_error.store(true);
+                                std::ostringstream oss;
+                                oss << "Lexer errors in " << task.file_path << ":\n";
+                                for (const auto& err : lex.errors()) {
+                                    oss << "  " << err.span.start.line << ":"
+                                        << err.span.start.column << ": " << err.message << "\n";
+                                }
+                                first_error_msg = oss.str();
+                                first_error_file = task.file_path;
+                            }
+                            continue;
+                        }
+
+                        // Parse
+                        auto parse_start = Clock::now();
+                        parser::Parser parser(std::move(tokens));
+                        auto module_name = fs::path(task.file_path).stem().string();
+                        auto parse_result = parser.parse_module(module_name);
+                        parse_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                            Clock::now() - parse_start).count();
+
+                        if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+                            std::lock_guard<std::mutex> lock(error_mutex);
+                            if (!has_error.load()) {
+                                has_error.store(true);
+                                const auto& errors =
+                                    std::get<std::vector<parser::ParseError>>(parse_result);
+                                std::ostringstream oss;
+                                oss << "Parser errors in " << task.file_path << ":\n";
+                                for (const auto& err : errors) {
+                                    oss << "  " << err.span.start.line << ":"
+                                        << err.span.start.column << ": " << err.message << "\n";
+                                }
+                                first_error_msg = oss.str();
+                                first_error_file = task.file_path;
+                            }
+                            continue;
+                        }
+                        const auto& module = std::get<parser::Module>(parse_result);
+
+                        // Type check with thread-local registry
+                        auto typecheck_start = Clock::now();
+                        types::TypeChecker checker;
+                        checker.set_module_registry(thread_registry);
+                        auto check_result = checker.check_module(module);
+                        typecheck_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                            Clock::now() - typecheck_start).count();
+
+                        if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
+                            std::lock_guard<std::mutex> lock(error_mutex);
+                            if (!has_error.load()) {
+                                has_error.store(true);
+                                const auto& errors =
+                                    std::get<std::vector<types::TypeError>>(check_result);
+                                std::ostringstream oss;
+                                oss << "Type errors in " << task.file_path << ":\n";
+                                for (const auto& err : errors) {
+                                    oss << "  " << err.span.start.line << ":"
+                                        << err.span.start.column << ": " << err.message << "\n";
+                                }
+                                first_error_msg = oss.str();
+                                first_error_file = task.file_path;
+                            }
+                            continue;
+                        }
+                        const auto& env = std::get<types::TypeEnv>(check_result);
+
+                        // Borrow check
+                        auto borrow_start = Clock::now();
+                        borrow::BorrowChecker borrow_checker(env);
+                        auto borrow_result = borrow_checker.check_module(module);
+                        borrow_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                            Clock::now() - borrow_start).count();
+
+                        if (std::holds_alternative<std::vector<borrow::BorrowError>>(
+                                borrow_result)) {
+                            std::lock_guard<std::mutex> lock(error_mutex);
+                            if (!has_error.load()) {
+                                has_error.store(true);
+                                const auto& errors =
+                                    std::get<std::vector<borrow::BorrowError>>(borrow_result);
+                                std::ostringstream oss;
+                                oss << "Borrow check errors in " << task.file_path << ":\n";
+                                for (const auto& err : errors) {
+                                    oss << "  " << err.span.start.line << ":"
+                                        << err.span.start.column << ": " << err.message << "\n";
+                                }
+                                first_error_msg = oss.str();
+                                first_error_file = task.file_path;
+                            }
+                            continue;
+                        }
+
+                        // Codegen with indexed entry point
+                        auto codegen_start = Clock::now();
+                        codegen::LLVMGenOptions options;
+                        options.emit_comments = false;
+                        options.generate_dll_entry = true;
+                        options.suite_test_index = static_cast<int>(task.index);
+                        options.suite_total_tests = static_cast<int>(suite.tests.size());
+                        options.dll_export = true;
+                        options.force_internal_linkage = true;
+                        options.emit_debug_info = CompilerOptions::debug_info;
+                        options.debug_level = CompilerOptions::debug_level;
+                        options.source_file = task.file_path;
+                        options.coverage_enabled = CompilerOptions::coverage;
+                        options.coverage_quiet = CompilerOptions::coverage;
+                        options.coverage_output_file = CompilerOptions::coverage_output;
+                        options.llvm_source_coverage = CompilerOptions::coverage_source;
+                        codegen::LLVMIRGen llvm_gen(env, options);
+
+                        auto gen_result = llvm_gen.generate(module);
+                        codegen_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                            Clock::now() - codegen_start).count();
+
+                        if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(
+                                gen_result)) {
+                            std::lock_guard<std::mutex> lock(error_mutex);
+                            if (!has_error.load()) {
+                                has_error.store(true);
+                                const auto& errors =
+                                    std::get<std::vector<codegen::LLVMGenError>>(gen_result);
+                                std::ostringstream oss;
+                                oss << "Codegen errors in " << task.file_path << ":\n";
+                                for (const auto& err : errors) {
+                                    oss << "  " << err.span.start.line << ":"
+                                        << err.span.start.column << ": " << err.message << "\n";
+                                }
+                                first_error_msg = oss.str();
+                                first_error_file = task.file_path;
+                            }
+                            continue;
+                        }
+
+                        const auto& llvm_ir = std::get<std::string>(gen_result);
+
+                        // Collect link libraries (thread-safe)
+                        {
+                            std::lock_guard<std::mutex> lock(libs_mutex);
+                            for (const auto& lib : llvm_gen.get_link_libs()) {
+                                if (std::find(link_libs.begin(), link_libs.end(), lib) ==
+                                    link_libs.end()) {
+                                    link_libs.push_back(lib);
+                                }
+                            }
+                        }
+
+                        // Write IR for later parallel compilation
+                        std::string obj_name =
+                            task.content_hash + "_suite_" + std::to_string(task.index);
+                        fs::path ll_output = cache_dir / (obj_name + ".ll");
+                        std::ofstream ll_file(ll_output);
+                        if (!ll_file) {
+                            std::lock_guard<std::mutex> lock(error_mutex);
+                            if (!has_error.load()) {
+                                has_error.store(true);
+                                first_error_msg = "Cannot write LLVM IR";
+                                first_error_file = task.file_path;
+                            }
+                            continue;
+                        }
+                        ll_file << llvm_ir;
+                        ll_file.close();
+
+                        // Add to pending compiles (thread-safe)
+                        {
+                            std::lock_guard<std::mutex> lock(pending_mutex);
+                            pending_compiles.push_back(
+                                {ll_output, task.obj_output, task.file_path, true});
+                        }
+
+                        // Track task timing and check for slow tasks
+                        auto task_end = Clock::now();
+                        int64_t task_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                            task_end - task_start).count();
+
+                        // Update running totals
+                        total_task_time_us.fetch_add(task_duration_us);
+                        total_lex_us.fetch_add(lex_us);
+                        total_parse_us.fetch_add(parse_us);
+                        total_typecheck_us.fetch_add(typecheck_us);
+                        total_borrow_us.fetch_add(borrow_us);
+                        total_codegen_us.fetch_add(codegen_us);
+                        size_t completed = completed_tasks.fetch_add(1) + 1;
+
+                        // Check for abnormally slow task (only after we have some baseline)
+                        if (completed >= 3) {
+                            int64_t avg_time_us = total_task_time_us.load() / static_cast<int64_t>(completed);
+                            int64_t threshold_us = std::max(MIN_SLOW_THRESHOLD_US,
+                                static_cast<int64_t>(avg_time_us * SLOW_TASK_THRESHOLD));
+
+                            if (task_duration_us > threshold_us) {
+                                std::lock_guard<std::mutex> lock(error_mutex);
+                                std::cerr << "\n[SLOW TASK PANIC] " << task.file_path << "\n"
+                                          << "  Duration: " << (task_duration_us / 1000) << " ms\n"
+                                          << "  Average:  " << (avg_time_us / 1000) << " ms\n"
+                                          << "  Threshold: " << (threshold_us / 1000) << " ms ("
+                                          << SLOW_TASK_THRESHOLD << "x average)\n"
+                                          << "  Sub-phases: lex=" << (lex_us/1000) << "ms, parse=" << (parse_us/1000)
+                                          << "ms, typecheck=" << (typecheck_us/1000) << "ms, borrow=" << (borrow_us/1000)
+                                          << "ms, codegen=" << (codegen_us/1000) << "ms\n"
+                                          << "  This task took " << std::fixed << std::setprecision(1)
+                                          << (static_cast<double>(task_duration_us) / avg_time_us)
+                                          << "x longer than average!\n"
+                                          << "\n*** ABORTING: Task exceeded slow threshold ***\n" << std::flush;
+                                // Signal error to stop other threads gracefully
+                                if (!has_error.load()) {
+                                    has_error.store(true);
+                                    first_error_msg = "SLOW TASK PANIC: " + task.file_path +
+                                        " took " + std::to_string(task_duration_us / 1000) + "ms" +
+                                        " (threshold: " + std::to_string(threshold_us / 1000) + "ms)";
+                                    first_error_file = task.file_path;
+                                }
+                            }
+                        }
+
+                        // Record timing (thread-safe)
+                        {
+                            std::lock_guard<std::mutex> lock(timing_mutex);
+                            task_timings.push_back({task_idx, task.file_path, task_duration_us,
+                                                    lex_us, parse_us, typecheck_us, borrow_us, codegen_us});
+                        }
+
+                    } catch (const std::exception& e) {
+                        std::lock_guard<std::mutex> lock(error_mutex);
+                        if (!has_error.load()) {
+                            has_error.store(true);
+                            first_error_msg =
+                                "Exception while compiling " + task.file_path + ": " + e.what();
+                            first_error_file = task.file_path;
+                        }
+                    } catch (...) {
+                        std::lock_guard<std::mutex> lock(error_mutex);
+                        if (!has_error.load()) {
+                            has_error.store(true);
+                            first_error_msg = "Unknown exception while compiling " + task.file_path;
+                            first_error_file = task.file_path;
+                        }
+                    }
+                }
+            };
 
             if (verbose) {
-                std::cerr << "[DEBUG]   Processing test " << (i + 1) << "/" << suite.tests.size()
-                          << ": " << test.file_path << "\n"
+                std::cerr << "[DEBUG]   Generating " << tasks.size() << " LLVM IR files with "
+                          << num_threads << " threads...\n"
                           << std::flush;
             }
 
-            try {
-                // Read source
-                std::string source_code;
-                try {
-                    source_code = read_file(test.file_path);
-                } catch (const std::exception&) {
-                    result.error_message = "Failed to read: " + test.file_path;
-                    result.failed_test = test.file_path;
-                    return result;
-                }
+            // Launch worker threads
+            std::vector<std::thread> threads;
+            for (unsigned int t = 0; t < std::min(num_threads, (unsigned int)tasks.size()); ++t) {
+                threads.emplace_back(compile_task_worker);
+            }
+            for (auto& t : threads) {
+                t.join();
+            }
 
-                // Preprocess the source code (handles #if, #ifdef, etc.)
-                auto pp_config = preprocessor::Preprocessor::host_config();
-                preprocessor::Preprocessor pp(pp_config);
-                auto pp_result = pp.process(source_code, test.file_path);
-
-                if (!pp_result.success()) {
-                    std::ostringstream oss;
-                    oss << "Preprocessor errors in " << test.file_path << ":\n";
-                    for (const auto& diag : pp_result.diagnostics) {
-                        if (diag.severity == preprocessor::DiagnosticSeverity::Error) {
-                            oss << "  " << diag.line << ":" << diag.column << ": " << diag.message
-                                << "\n";
-                        }
-                    }
-                    result.error_message = oss.str();
-                    result.failed_test = test.file_path;
-                    return result;
-                }
-
-                // Use preprocessed source for subsequent steps
-                std::string preprocessed_source = pp_result.output;
-
-                // Generate content hash for this file (use preprocessed source for accurate
-                // caching)
-                std::string content_hash = build::generate_content_hash(preprocessed_source);
-                combined_hash += content_hash;
-
-                // Check for cached object
-                std::string obj_name = content_hash + "_suite_" + std::to_string(i);
-                fs::path obj_output = cache_dir / (obj_name + get_object_extension());
-
-                bool use_cached = !no_cache && fs::exists(obj_output);
-
-                // ALWAYS lex/parse/typecheck to populate the shared_registry with imports
-                // This ensures get_runtime_objects can find all required modules (e.g., JSON)
-                // even when using cached object files.
-
-                // Lex (use preprocessed source)
-                auto source = lexer::Source::from_string(preprocessed_source, test.file_path);
-                lexer::Lexer lex(source);
-                auto tokens = lex.tokenize();
-                if (lex.has_errors()) {
-                    std::ostringstream oss;
-                    oss << "Lexer errors in " << test.file_path << ":\n";
-                    for (const auto& err : lex.errors()) {
-                        oss << "  " << err.span.start.line << ":" << err.span.start.column << ": "
-                            << err.message << "\n";
-                    }
-                    result.error_message = oss.str();
-                    result.failed_test = test.file_path;
-                    return result;
-                }
-
-                // Parse
-                parser::Parser parser(std::move(tokens));
-                auto module_name = fs::path(test.file_path).stem().string();
-                auto parse_result = parser.parse_module(module_name);
-                if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-                    const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
-                    std::ostringstream oss;
-                    oss << "Parser errors in " << test.file_path << ":\n";
-                    for (const auto& err : errors) {
-                        oss << "  " << err.span.start.line << ":" << err.span.start.column << ": "
-                            << err.message << "\n";
-                    }
-                    result.error_message = oss.str();
-                    result.failed_test = test.file_path;
-                    return result;
-                }
-                const auto& module = std::get<parser::Module>(parse_result);
-
-                // Type check - use shared registry to avoid re-parsing modules for each test
-                // This populates the registry with imported modules for later use by
-                // get_runtime_objects
-                types::TypeChecker checker;
-                checker.set_module_registry(shared_registry);
-                auto check_result = checker.check_module(module);
-                if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
-                    const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
-                    std::ostringstream oss;
-                    oss << "Type errors in " << test.file_path << ":\n";
-                    for (const auto& err : errors) {
-                        oss << "  " << err.span.start.line << ":" << err.span.start.column << ": "
-                            << err.message << "\n";
-                    }
-                    result.error_message = oss.str();
-                    result.failed_test = test.file_path;
-                    return result;
-                }
-                const auto& env = std::get<types::TypeEnv>(check_result);
-
-                // Only do codegen if not cached
-                if (!use_cached) {
-
-                    // Borrow check
-                    borrow::BorrowChecker borrow_checker(env);
-                    auto borrow_result = borrow_checker.check_module(module);
-                    if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
-                        const auto& errors =
-                            std::get<std::vector<borrow::BorrowError>>(borrow_result);
-                        std::ostringstream oss;
-                        oss << "Borrow check errors in " << test.file_path << ":\n";
-                        for (const auto& err : errors) {
-                            oss << "  " << err.span.start.line << ":" << err.span.start.column
-                                << ": " << err.message << "\n";
-                        }
-                        result.error_message = oss.str();
-                        result.failed_test = test.file_path;
-                        return result;
-                    }
-
-                    // Codegen with indexed entry point
-                    codegen::LLVMGenOptions options;
-                    options.emit_comments = false;
-                    options.generate_dll_entry = true;
-                    options.suite_test_index = static_cast<int>(i); // tml_test_N
-                    options.suite_total_tests = static_cast<int>(suite.tests.size());
-                    options.dll_export = true;
-                    options.force_internal_linkage =
-                        true; // Internal linkage for all non-entry functions
-                    options.emit_debug_info = CompilerOptions::debug_info;
-                    options.debug_level = CompilerOptions::debug_level;
-                    options.source_file = test.file_path;
-                    options.coverage_enabled = CompilerOptions::coverage;
-                    options.coverage_quiet = CompilerOptions::coverage; // Quiet in suite mode
-                    options.coverage_output_file = CompilerOptions::coverage_output;
-                    options.llvm_source_coverage =
-                        CompilerOptions::coverage_source; // LLVM instrprof
-                    codegen::LLVMIRGen llvm_gen(env, options);
-
-                    auto gen_result = llvm_gen.generate(module);
-                    if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
-                        const auto& errors =
-                            std::get<std::vector<codegen::LLVMGenError>>(gen_result);
-                        std::ostringstream oss;
-                        oss << "Codegen errors in " << test.file_path << ":\n";
-                        for (const auto& err : errors) {
-                            oss << "  " << err.span.start.line << ":" << err.span.start.column
-                                << ": " << err.message << "\n";
-                        }
-                        result.error_message = oss.str();
-                        result.failed_test = test.file_path;
-                        return result;
-                    }
-
-                    const auto& llvm_ir = std::get<std::string>(gen_result);
-
-                    // Collect link libraries
-                    for (const auto& lib : llvm_gen.get_link_libs()) {
-                        if (std::find(link_libs.begin(), link_libs.end(), lib) == link_libs.end()) {
-                            link_libs.push_back(lib);
-                        }
-                    }
-
-                    // Write IR for later parallel compilation
-                    fs::path ll_output = cache_dir / (obj_name + ".ll");
-                    std::ofstream ll_file(ll_output);
-                    if (!ll_file) {
-                        result.error_message = "Cannot write LLVM IR";
-                        result.failed_test = test.file_path;
-                        return result;
-                    }
-                    ll_file << llvm_ir;
-                    ll_file.close();
-
-                    pending_compiles.push_back({ll_output, obj_output, test.file_path, true});
-                }
-
-                object_files.push_back(obj_output);
-            } catch (const std::exception& e) {
-                result.error_message =
-                    "Exception while compiling " + test.file_path + ": " + e.what();
-                result.failed_test = test.file_path;
-                return result;
-            } catch (...) {
-                result.error_message = "Unknown exception while compiling " + test.file_path;
-                result.failed_test = test.file_path;
+            // Check for errors
+            if (has_error.load()) {
+                result.error_message = first_error_msg;
+                result.failed_test = first_error_file;
                 return result;
             }
+
+            // Print Phase 1 timing summary if verbose
+            if (verbose && !task_timings.empty()) {
+                // Sort by duration (slowest first)
+                std::sort(task_timings.begin(), task_timings.end(),
+                    [](const TaskTiming& a, const TaskTiming& b) {
+                        return a.duration_us > b.duration_us;
+                    });
+
+                // Print aggregate sub-phase breakdown
+                int64_t total_us = total_task_time_us.load();
+                if (total_us > 0) {
+                    std::cerr << "[DEBUG] Phase 1 sub-phase breakdown:\n"
+                              << "  Lex:       " << std::setw(6) << (total_lex_us.load() / 1000) << " ms ("
+                              << std::fixed << std::setprecision(1)
+                              << (100.0 * total_lex_us.load() / total_us) << "%)\n"
+                              << "  Parse:     " << std::setw(6) << (total_parse_us.load() / 1000) << " ms ("
+                              << (100.0 * total_parse_us.load() / total_us) << "%)\n"
+                              << "  TypeCheck: " << std::setw(6) << (total_typecheck_us.load() / 1000) << " ms ("
+                              << (100.0 * total_typecheck_us.load() / total_us) << "%)\n"
+                              << "  Borrow:    " << std::setw(6) << (total_borrow_us.load() / 1000) << " ms ("
+                              << (100.0 * total_borrow_us.load() / total_us) << "%)\n"
+                              << "  Codegen:   " << std::setw(6) << (total_codegen_us.load() / 1000) << " ms ("
+                              << (100.0 * total_codegen_us.load() / total_us) << "%)\n";
+                }
+
+                std::cerr << "[DEBUG] Phase 1 slowest files (top 5):\n";
+                for (size_t i = 0; i < std::min(size_t(5), task_timings.size()); ++i) {
+                    const auto& t = task_timings[i];
+                    std::cerr << "  " << std::setw(5) << (t.duration_us / 1000) << " ms: "
+                              << fs::path(t.file_path).filename().string()
+                              << " [lex=" << (t.lex_us/1000) << ", parse=" << (t.parse_us/1000)
+                              << ", tc=" << (t.typecheck_us/1000) << ", borrow=" << (t.borrow_us/1000)
+                              << ", cg=" << (t.codegen_us/1000) << "]\n";
+                }
+                std::cerr << std::flush;
+            }
         }
+
+        phase1_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            Clock::now() - phase1_start).count();
 
         // ======================================================================
         // PHASE 2: Parallel object compilation (.ll -> .obj)
         // ======================================================================
+        // Like Phase 1, limit internal parallelism since suites compile in parallel
+
+        auto phase2_start = Clock::now();
 
         if (!pending_compiles.empty()) {
             ObjectCompileOptions obj_options;
@@ -1692,9 +1944,21 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             std::string error_message;
             std::string failed_test;
             std::mutex error_mutex;
+            std::mutex timing_mutex;
 
-            unsigned int hw_threads = std::thread::hardware_concurrency();
-            unsigned int num_threads = (hw_threads > 0) ? std::max(1u, hw_threads) : 4;
+            // Per-task timing for Phase 2
+            struct ObjTiming {
+                std::string test_path;
+                int64_t duration_us;
+            };
+            std::vector<ObjTiming> obj_timings;
+            obj_timings.reserve(pending_compiles.size());
+
+            std::atomic<int64_t> total_obj_time_us{0};
+            std::atomic<size_t> completed_objs{0};
+
+            // Limit internal parallelism - suites are already compiled in parallel
+            unsigned int num_threads = std::min(2u, (unsigned int)pending_compiles.size());
 
             auto compile_worker = [&]() {
                 while (!compile_error.load()) {
@@ -1703,9 +1967,43 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                         break;
 
                     auto& pc = pending_compiles[idx];
+                    auto obj_start = Clock::now();
+
                     auto obj_result =
                         compile_ll_to_object(pc.ll_path, pc.obj_path, clang, obj_options);
                     fs::remove(pc.ll_path);
+
+                    auto obj_end = Clock::now();
+                    int64_t obj_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                        obj_end - obj_start).count();
+
+                    // Update timing stats
+                    total_obj_time_us.fetch_add(obj_duration_us);
+                    size_t completed = completed_objs.fetch_add(1) + 1;
+
+                    // Check for slow object compilation
+                    if (completed >= 3) {
+                        int64_t avg_us = total_obj_time_us.load() / static_cast<int64_t>(completed);
+                        int64_t threshold_us = std::max(MIN_SLOW_THRESHOLD_US,
+                            static_cast<int64_t>(avg_us * SLOW_TASK_THRESHOLD));
+
+                        if (obj_duration_us > threshold_us) {
+                            std::lock_guard<std::mutex> lock(error_mutex);
+                            std::cerr << "\n[SLOW OBJ PANIC] " << pc.test_path << "\n"
+                                      << "  Duration: " << (obj_duration_us / 1000) << " ms\n"
+                                      << "  Average:  " << (avg_us / 1000) << " ms\n"
+                                      << "  This .obj compilation took "
+                                      << std::fixed << std::setprecision(1)
+                                      << (static_cast<double>(obj_duration_us) / avg_us)
+                                      << "x longer than average!\n" << std::flush;
+                        }
+                    }
+
+                    // Record timing
+                    {
+                        std::lock_guard<std::mutex> lock(timing_mutex);
+                        obj_timings.push_back({pc.test_path, obj_duration_us});
+                    }
 
                     if (!obj_result.success) {
                         std::lock_guard<std::mutex> lock(error_mutex);
@@ -1733,6 +2031,22 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 t.join();
             }
 
+            // Print Phase 2 timing summary if verbose
+            if (verbose && !obj_timings.empty()) {
+                std::sort(obj_timings.begin(), obj_timings.end(),
+                    [](const ObjTiming& a, const ObjTiming& b) {
+                        return a.duration_us > b.duration_us;
+                    });
+
+                std::cerr << "[DEBUG] Phase 2 timing summary (top 5 slowest .obj):\n";
+                for (size_t i = 0; i < std::min(size_t(5), obj_timings.size()); ++i) {
+                    const auto& t = obj_timings[i];
+                    std::cerr << "  " << (t.duration_us / 1000) << " ms: "
+                              << fs::path(t.test_path).filename().string() << "\n";
+                }
+                std::cerr << std::flush;
+            }
+
             if (compile_error.load()) {
                 result.error_message = error_message;
                 result.failed_test = failed_test;
@@ -1740,34 +2054,44 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             }
         }
 
+        phase2_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            Clock::now() - phase2_start).count();
+
         // Get runtime objects (only need to do once for the suite)
-        // Reuse shared_registry which already has all loaded modules
-        // Use first module for runtime deps (they're usually the same)
-        std::string rt_source_code = read_file(suite.tests[0].file_path);
+        // Parse AND typecheck the first module to populate shared_registry with imports
+        // This is needed because thread registries are not merged into shared_registry
+        auto runtime_start = Clock::now();
 
-        // Preprocess the source (required for #if WINDOWS etc.)
-        auto rt_pp_config = preprocessor::Preprocessor::host_config();
-        preprocessor::Preprocessor rt_pp(rt_pp_config);
-        auto rt_pp_result = rt_pp.process(rt_source_code, suite.tests[0].file_path);
-        std::string rt_preprocessed = rt_pp_result.success() ? rt_pp_result.output : rt_source_code;
-
-        auto source = lexer::Source::from_string(rt_preprocessed, suite.tests[0].file_path);
+        const auto& first_pp = preprocessed_sources[0];
+        auto source = lexer::Source::from_string(first_pp.preprocessed, first_pp.file_path);
         lexer::Lexer lex(source);
         auto tokens = lex.tokenize();
         parser::Parser parser(std::move(tokens));
-        auto parse_result = parser.parse_module(fs::path(suite.tests[0].file_path).stem().string());
+        auto parse_result = parser.parse_module(fs::path(first_pp.file_path).stem().string());
         const auto& module = std::get<parser::Module>(parse_result);
+
+        // Type check to populate shared_registry with imported modules (e.g., "test")
+        // This is necessary for get_runtime_objects to detect which runtimes to link
+        types::TypeChecker checker;
+        checker.set_module_registry(shared_registry);
+        (void)checker.check_module(module); // Ignore result, we just want to populate registry
 
         std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
         if (verbose)
             std::cerr << "[DEBUG]   Getting runtime objects...\n" << std::flush;
+        // Note: Pass verbose=false to avoid repeated "Including runtime:" messages
+        // when compiling multiple suites in parallel. The runtime objects are the
+        // same for all suites and would spam the output.
         auto runtime_objects =
-            get_runtime_objects(shared_registry, module, deps_cache, clang, verbose);
+            get_runtime_objects(shared_registry, module, deps_cache, clang, false);
         if (verbose)
             std::cerr << "[DEBUG]   Got " << runtime_objects.size() << " runtime objects\n"
                       << std::flush;
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
+
+        runtime_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            Clock::now() - runtime_start).count();
 
         // Generate suite hash for full caching (includes runtime objects)
         std::string suite_hash = generate_content_hash(combined_hash);
@@ -1776,6 +2100,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         fs::path cached_dll = cache_dir / (exe_hash + "_suite" + lib_ext);
 
         bool use_cached_dll = !no_cache && fs::exists(cached_dll);
+
+        auto link_start = Clock::now();
 
         if (!use_cached_dll) {
             // Link as shared library
@@ -1803,6 +2129,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             }
         }
 
+        link_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            Clock::now() - link_start).count();
+
         // Always save with source-only hash for early cache check on next run
         // This allows skipping typechecking entirely when source hasn't changed
         // Do this even when using cached_dll so we populate the source-hash cache
@@ -1826,6 +2155,25 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         result.dll_path = lib_output.string();
         result.compile_time_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+        // Print timing summary if verbose
+        if (verbose) {
+            int64_t total_us = result.compile_time_us;
+            std::cerr << "\n[DEBUG] Suite " << suite.name << " timing breakdown:\n"
+                      << "  Preprocess:     " << std::setw(6) << (preprocess_time_us / 1000) << " ms ("
+                      << std::fixed << std::setprecision(1)
+                      << (100.0 * preprocess_time_us / total_us) << "%)\n"
+                      << "  Phase 1 (code): " << std::setw(6) << (phase1_time_us / 1000) << " ms ("
+                      << (100.0 * phase1_time_us / total_us) << "%)\n"
+                      << "  Phase 2 (obj):  " << std::setw(6) << (phase2_time_us / 1000) << " ms ("
+                      << (100.0 * phase2_time_us / total_us) << "%)\n"
+                      << "  Runtime objs:   " << std::setw(6) << (runtime_time_us / 1000) << " ms ("
+                      << (100.0 * runtime_time_us / total_us) << "%)\n"
+                      << "  Linking:        " << std::setw(6) << (link_time_us / 1000) << " ms ("
+                      << (100.0 * link_time_us / total_us) << "%)\n"
+                      << "  TOTAL:          " << std::setw(6) << (total_us / 1000) << " ms\n"
+                      << std::flush;
+        }
 
         return result;
 
@@ -2133,9 +2481,12 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
     }
 
     // Phase: Set up output capture
+    // DISABLED: OutputCapture causes deadlocks in parallel/suite mode because it
+    // manipulates global stdout/stderr file descriptors. Use tml_set_output_suppressed
+    // at the TML runtime level instead.
     phase_start = Clock::now();
     OutputCapture capture;
-    bool capture_started = capture.start();
+    bool capture_started = false; // Disabled - causes deadlocks
     record_phase("exec.capture_start", phase_start);
 
     // Phase: Execute the test

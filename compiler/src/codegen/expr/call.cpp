@@ -2090,8 +2090,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                 // Queue method instantiation with behavior suffix
                 // The mangled_method key must match what impl.cpp generates
+                // NOTE: Do NOT insert into generated_impl_methods_ here!
+                // That set is for tracking ACTUALLY generated methods, not queued ones.
+                // The queue processing in generic.cpp handles deduplication via processed_impl_methods.
                 std::string mangled_method = "tml_" + type_name + "_" + method + behavior_suffix;
                 if (generated_impl_methods_.find(mangled_method) == generated_impl_methods_.end()) {
+                    TML_DEBUG_LN("[IMPL_INST] Queueing " << type_name << "::" << method
+                                                         << " suffix=" << arg_tml_type
+                                                         << " mangled=" << mangled_method);
                     pending_impl_method_instantiations_.push_back(PendingImplMethod{
                         type_name,
                         method,
@@ -2099,7 +2105,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         type_name,    // base_type_name
                         arg_tml_type, // Use as method_type_suffix (behavior param)
                         /*is_library_type=*/true});
-                    generated_impl_methods_.insert(mangled_method);
+                    // Don't insert into generated_impl_methods_ - that's done after actual generation
                 }
 
                 // Determine return type
@@ -2153,8 +2159,23 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             const auto& ident = call.args[i]->as<parser::IdentExpr>();
             auto it = locals_.find(ident.name);
             if (it != locals_.end()) {
-                // Pass the alloca address directly (pointer to the variable)
-                val = it->second.reg;
+                // Check if the local variable is already a ref (i.e., came from a ref parameter)
+                // In that case, the alloca holds a POINTER to the data, not the data itself.
+                // We need to LOAD the pointer value, not pass the alloca address.
+                bool local_is_ref = false;
+                if (it->second.semantic_type) {
+                    local_is_ref = it->second.semantic_type->is<types::RefType>();
+                }
+
+                if (local_is_ref) {
+                    // Local is already a ref - load the pointer value from the alloca
+                    std::string loaded_ptr = fresh_reg();
+                    emit_line("  " + loaded_ptr + " = load ptr, ptr " + it->second.reg);
+                    val = loaded_ptr;
+                } else {
+                    // Local is a value - pass the alloca address directly (pointer to the value)
+                    val = it->second.reg;
+                }
                 actual_type = "ptr";
             } else {
                 // Fallback to normal gen_expr

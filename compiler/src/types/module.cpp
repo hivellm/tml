@@ -233,4 +233,66 @@ auto ModuleRegistry::lookup_symbol(const std::string& module_path,
     return std::nullopt;
 }
 
+// ============================================================================
+// GlobalModuleCache Implementation
+// ============================================================================
+
+GlobalModuleCache& GlobalModuleCache::instance() {
+    static GlobalModuleCache cache;
+    return cache;
+}
+
+bool GlobalModuleCache::has(const std::string& module_path) const {
+    std::shared_lock lock(mutex_);
+    return cache_.find(module_path) != cache_.end();
+}
+
+std::optional<Module> GlobalModuleCache::get(const std::string& module_path) const {
+    std::shared_lock lock(mutex_);
+    auto it = cache_.find(module_path);
+    if (it != cache_.end()) {
+        ++hits_;
+        return it->second;
+    }
+    ++misses_;
+    return std::nullopt;
+}
+
+void GlobalModuleCache::put(const std::string& module_path, const Module& module) {
+    // Only cache library modules
+    if (!should_cache(module_path)) {
+        return;
+    }
+
+    std::unique_lock lock(mutex_);
+    cache_[module_path] = module;
+}
+
+void GlobalModuleCache::clear() {
+    std::unique_lock lock(mutex_);
+    cache_.clear();
+    hits_ = 0;
+    misses_ = 0;
+}
+
+GlobalModuleCache::Stats GlobalModuleCache::get_stats() const {
+    std::shared_lock lock(mutex_);
+    return Stats{
+        .total_entries = cache_.size(),
+        .cache_hits = hits_,
+        .cache_misses = misses_
+    };
+}
+
+bool GlobalModuleCache::should_cache(const std::string& module_path) {
+    // Cache library modules: core::*, std::*, test
+    if (module_path.starts_with("core::") ||
+        module_path.starts_with("std::") ||
+        module_path == "test" ||
+        module_path.starts_with("test::")) {
+        return true;
+    }
+    return false;
+}
+
 } // namespace tml::types

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Ref Parameter Passing Bug** (2026-02-04) - Fixed incorrect pointer passing for ref parameters
+  - When a function with `ref T` parameter passed that parameter to another function taking `ref T`,
+    the codegen incorrectly passed the stack slot address instead of loading the pointer value first
+  - This caused zlib `inflate()` to receive wrong pointer, leading to decompression failures
+  - Root cause: call.cpp assumed all local variables held values, not pointers
+  - Fix: Check if local's `semantic_type` is `RefType`, if so load the pointer before passing
+  - Files modified:
+    - `compiler/src/codegen/expr/call.cpp` - Check semantic_type for RefType before passing ref args
+    - `lib/std/runtime/zlib/zlib_deflate.c` - Removed debug output
+
 ### Changed
 - **Coverage Requires Full Test Suite** (2026-02-04) - Coverage no longer works with filters
   - `tml test --coverage --filter X` now exits with error

@@ -213,6 +213,12 @@ void TypeEnv::import_all_from(const std::string& module_path) {
             for (const auto& [name, type_ptr] : source_module->type_aliases) {
                 import_symbol(re_export.source_path, name, std::nullopt);
             }
+            // Import constants from glob re-exports
+            for (const auto& [name, const_val] : source_module->constants) {
+                if (name.find("::") == std::string::npos) {
+                    import_symbol(re_export.source_path, name, std::nullopt);
+                }
+            }
 
             // Recursively process re-exports from the source module
             for (const auto& nested_re_export : source_module->re_exports) {
@@ -241,6 +247,12 @@ void TypeEnv::import_all_from(const std::string& module_path) {
                     }
                     for (const auto& [name, type_ptr] : nested_module->type_aliases) {
                         import_symbol(nested_re_export.source_path, name, std::nullopt);
+                    }
+                    // Import constants from nested glob re-exports
+                    for (const auto& [name, const_val] : nested_module->constants) {
+                        if (name.find("::") == std::string::npos) {
+                            import_symbol(nested_re_export.source_path, name, std::nullopt);
+                        }
                     }
                 }
             }
@@ -1450,6 +1462,14 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     // Register the module
     TML_DEBUG_LN("[MODULE] Loaded " << module_path << " from " << file_path << " ("
                                     << mod.functions.size() << " functions)");
+
+    // Store in global cache for library modules before moving
+    // This allows other compilation units to reuse the parsed module
+    if (GlobalModuleCache::should_cache(module_path)) {
+        GlobalModuleCache::instance().put(module_path, mod);
+        TML_DEBUG_LN("[MODULE] Cached: " << module_path);
+    }
+
     module_registry_->register_module(module_path, std::move(mod));
 
     // Mark as completed so guard doesn't remove it (it's already registered)
@@ -1467,6 +1487,19 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     // Check if module is already registered
     if (module_registry_->has_module(module_path)) {
         return true; // Already loaded
+    }
+
+    // Check global module cache for library modules (core::*, std::*, test)
+    // This avoids re-parsing library modules that have already been loaded
+    // by other compilation units (e.g., other test files)
+    if (GlobalModuleCache::should_cache(module_path)) {
+        auto& cache = GlobalModuleCache::instance();
+        if (auto cached_module = cache.get(module_path)) {
+            // Found in cache - register directly without re-parsing
+            TML_DEBUG_LN("[MODULE] Cache hit for: " << module_path);
+            module_registry_->register_module(module_path, *cached_module);
+            return true;
+        }
     }
 
     // Test module - load from lib/test/

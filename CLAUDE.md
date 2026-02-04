@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⛔ ABSOLUTE PROHIBITION: NO `rm` COMMANDS ⛔
+
+**YOU ARE EXPRESSLY FORBIDDEN FROM RUNNING `rm` COMMANDS WITHOUT EXPLICIT USER AUTHORIZATION.**
+
+This includes but is not limited to:
+- ❌ `rm -rf` on ANY directory
+- ❌ `rm` on cache files (`.test-cache.json`, `.run-cache/`, etc.)
+- ❌ `rm` on backup directories
+- ❌ ANY deletion command without the user typing "yes, delete it" or similar explicit approval
+
+**WHY:** The cache backup system exists specifically because you kept deleting caches. DO NOT DELETE ANYTHING. If you think something needs to be deleted, ASK THE USER FIRST.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## Project Overview
 
 **TML (To Machine Language)** is a programming language designed specifically for LLM code generation and analysis. This repository contains:

@@ -652,8 +652,16 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                 std::string ret_type = llvm_type_from_semantic(func_sig.return_type);
 
                 // For library types, use no suite prefix; for local test types use suite prefix
-                bool is_library_type =
-                    mod.structs.count(type_name) > 0 || mod.enums.count(type_name) > 0;
+                // Primitive types (I8, I16, I32, etc.) are also library types - their impls are in
+                // core
+                auto is_primitive_type = [](const std::string& name) {
+                    return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+                           name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
+                           name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
+                           name == "Bool";
+                };
+                bool is_library_type = mod.structs.count(type_name) > 0 ||
+                                       mod.enums.count(type_name) > 0 || is_primitive_type(type_name);
 
                 // Generate arguments FIRST to determine their types
                 // This is needed for behavior method overload resolution (e.g., TryFrom[I64])
@@ -691,8 +699,6 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                 // e.g., I32::try_from(I64) -> I32_try_from_I64
                 // Custom types like Celsius::from(Fahrenheit) stay as Celsius_from
                 std::string behavior_suffix = "";
-                // DEBUG: emit comment to verify code path
-                emit_line("  ; DEBUG: method_static.cpp path for " + type_name + "::" + method);
                 auto is_primitive = [](const std::string& name) {
                     return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
                            name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
@@ -701,7 +707,8 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                 };
                 if ((method == "try_from" || method == "from") && is_primitive(type_name) &&
                     !arg_tml_types.empty() && !arg_tml_types[0].empty()) {
-                    behavior_suffix = "_" + arg_tml_types[0];
+                    // Use double underscore to match call.cpp's convention for behavior suffix
+                    behavior_suffix = "__" + arg_tml_types[0];
                 }
 
                 std::string fn_name = "@tml_" + (is_library_type ? "" : get_suite_prefix()) +
@@ -713,12 +720,18 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                         "tml_" + type_name + "_" + method + behavior_suffix;
                     if (generated_impl_methods_.find(mangled_method_name) ==
                         generated_impl_methods_.end()) {
+                        // For TryFrom/From, pass the argument type as method_type_suffix
+                        // so generic.cpp can find the correct impl block
+                        std::string method_type_suffix_for_queue =
+                            (!arg_tml_types.empty() && !arg_tml_types[0].empty())
+                                ? arg_tml_types[0]
+                                : "";
                         pending_impl_method_instantiations_.push_back(
                             PendingImplMethod{type_name,
                                               method,
                                               {},
                                               type_name,
-                                              "",
+                                              method_type_suffix_for_queue,
                                               /*is_library_type=*/true});
                         generated_impl_methods_.insert(mangled_method_name);
                     }

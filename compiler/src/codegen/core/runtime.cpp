@@ -864,26 +864,56 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             }
         }
 
-        // Re-parse the module source code
-        auto source = lexer::Source::from_string(module.source_code, module.file_path);
-        lexer::Lexer lex(source);
-        auto tokens = lex.tokenize();
-
-        if (lex.has_errors()) {
-            continue; // Skip modules with lexer errors
+        // Check global AST cache first to avoid re-parsing library modules
+        const parser::Module* cached_ast = nullptr;
+        if (GlobalASTCache::should_cache(module_name)) {
+            cached_ast = GlobalASTCache::instance().get(module_name);
         }
 
-        parser::Parser parser(std::move(tokens));
+        const parser::Module* parsed_module_ptr = nullptr;
         auto mod_name = std::filesystem::path(module.file_path).stem().string();
-        auto parse_result = parser.parse_module(mod_name);
 
-        if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-            continue; // Skip modules with parse errors
+        if (cached_ast) {
+            // Use cached AST directly
+            TML_DEBUG_LN("[CODEGEN] AST cache hit for: " << module_name);
+            parsed_module_ptr = cached_ast;
+        } else {
+            // Parse the module source code
+            auto source = lexer::Source::from_string(module.source_code, module.file_path);
+            lexer::Lexer lex(source);
+            auto tokens = lex.tokenize();
+
+            if (lex.has_errors()) {
+                continue; // Skip modules with lexer errors
+            }
+
+            parser::Parser parser(std::move(tokens));
+            auto parse_result = parser.parse_module(mod_name);
+
+            if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+                continue; // Skip modules with parse errors
+            }
+
+            auto parsed_mod = std::get<parser::Module>(std::move(parse_result));
+
+            // Store in global cache for library modules
+            if (GlobalASTCache::should_cache(module_name)) {
+                GlobalASTCache::instance().put(module_name, std::move(parsed_mod));
+                // Get pointer from cache (now owns the AST)
+                parsed_module_ptr = GlobalASTCache::instance().get(module_name);
+                TML_DEBUG_LN("[CODEGEN] AST cached: " << module_name);
+            } else {
+                // For non-library modules, store locally
+                imported_module_asts_.push_back(std::move(parsed_mod));
+                parsed_module_ptr = &imported_module_asts_.back();
+            }
         }
 
-        // Store the AST persistently so that pending_generic_funcs_ pointers remain valid
-        imported_module_asts_.push_back(std::get<parser::Module>(std::move(parse_result)));
-        const auto& parsed_module = imported_module_asts_.back();
+        if (!parsed_module_ptr) {
+            continue; // Failed to get AST
+        }
+
+        const auto& parsed_module = *parsed_module_ptr;
 
         emit_line("; Module: " + module_name);
 
@@ -987,6 +1017,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     // Look up the imported module and register its constants
                     auto imported_mod = registry->get_module(import_path);
                     if (imported_mod) {
+                        // Import constants directly from the module
                         for (const auto& [const_name, const_info] : imported_mod->constants) {
                             // Only import non-qualified constants (not Type::CONST)
                             if (const_name.find("::") == std::string::npos) {
@@ -996,6 +1027,29 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                                 TML_DEBUG_LN("[MODULE] Imported constant via wildcard: "
                                              << const_name << " = " << const_info.value << " from "
                                              << import_path);
+                            }
+                        }
+
+                        // Also follow re-exports (pub use) to import constants from
+                        // re-exported modules. This handles chains like:
+                        // std::zlib -> std::zlib::constants (via pub use zlib::constants::*)
+                        for (const auto& re_export : imported_mod->re_exports) {
+                            if (re_export.is_glob) {
+                                auto re_exported_mod = registry->get_module(re_export.source_path);
+                                if (re_exported_mod) {
+                                    for (const auto& [const_name, const_info] :
+                                         re_exported_mod->constants) {
+                                        if (const_name.find("::") == std::string::npos) {
+                                            std::string llvm_type =
+                                                llvm_type_name(const_info.tml_type);
+                                            global_constants_[const_name] = {const_info.value,
+                                                                             llvm_type};
+                                            TML_DEBUG_LN("[MODULE] Imported constant via re-export: "
+                                                         << const_name << " = " << const_info.value
+                                                         << " from " << re_export.source_path);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
