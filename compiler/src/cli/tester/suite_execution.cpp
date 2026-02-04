@@ -609,45 +609,58 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
             // Write HTML report with proper library coverage data ONLY if:
             // 1. All tests passed
-            // 2. Coverage PERCENTAGE is not regressing
+            // 2. Coverage is not zero
+            // 3. Coverage PERCENTAGE is not regressing from previous report
             if (!CompilerOptions::coverage_output.empty() && !has_failures) {
                 int current_covered = static_cast<int>(all_covered_functions.size());
-                auto previous = get_previous_coverage(CompilerOptions::coverage_output);
 
-                // Use the previous total as reference for calculating current percentage
-                // This ensures we compare apples to apples even if library grows
-                // If no previous report, allow any coverage
-                bool should_update = true;
-                double current_percent = 0.0;
-
-                if (previous.valid && previous.total > 0) {
-                    // Calculate current percentage using the SAME total as previous
-                    // This is the fair comparison: did we cover more or fewer functions?
-                    current_percent = (100.0 * current_covered) / previous.total;
-
-                    // Regression if current percentage is less than previous
-                    should_update = current_percent >= previous.percent;
-                }
-
-                if (should_update) {
-                    // No previous report or coverage improved/maintained
-                    write_library_coverage_html(all_covered_functions,
-                                                CompilerOptions::coverage_output, test_stats);
+                // Never update with zero coverage - something went wrong
+                if (current_covered == 0) {
+                    std::cout << c.red() << c.bold()
+                              << " [HTML report not updated - zero coverage detected]" << c.reset()
+                              << "\n";
+                    std::cout
+                        << c.dim()
+                        << "   No functions were tracked. Check if tests are running correctly."
+                        << c.reset() << "\n";
                 } else {
-                    // Coverage regression detected
-                    std::cout << c.yellow() << c.bold()
-                              << " [HTML report not updated - coverage regression detected]"
-                              << c.reset() << "\n";
-                    std::cout << c.dim() << "   Previous: " << previous.covered << "/"
-                              << previous.total << " functions (" << std::fixed
-                              << std::setprecision(1) << previous.percent << "%)" << c.reset()
-                              << "\n";
-                    std::cout << c.dim() << "   Current:  " << current_covered << "/"
-                              << previous.total << " functions (" << std::fixed
-                              << std::setprecision(1) << current_percent << "%)" << c.reset()
-                              << "\n";
-                    std::cout << c.dim() << "   Run with --force-coverage to update anyway"
-                              << c.reset() << "\n";
+                    auto previous = get_previous_coverage(CompilerOptions::coverage_output);
+
+                    // Use the previous total as reference for calculating current percentage
+                    // This ensures we compare apples to apples even if library grows
+                    // If no previous report, allow any coverage (as long as > 0)
+                    bool should_update = true;
+                    double current_percent = 0.0;
+
+                    if (previous.valid && previous.total > 0) {
+                        // Calculate current percentage using the SAME total as previous
+                        // This is the fair comparison: did we cover more or fewer functions?
+                        current_percent = (100.0 * current_covered) / previous.total;
+
+                        // Regression if current percentage is less than previous
+                        should_update = current_percent >= previous.percent;
+                    }
+
+                    if (should_update) {
+                        // No previous report or coverage improved/maintained
+                        write_library_coverage_html(all_covered_functions,
+                                                    CompilerOptions::coverage_output, test_stats);
+                    } else {
+                        // Coverage regression detected
+                        std::cout << c.yellow() << c.bold()
+                                  << " [HTML report not updated - coverage regression detected]"
+                                  << c.reset() << "\n";
+                        std::cout << c.dim() << "   Previous: " << previous.covered << "/"
+                                  << previous.total << " functions (" << std::fixed
+                                  << std::setprecision(1) << previous.percent << "%)" << c.reset()
+                                  << "\n";
+                        std::cout << c.dim() << "   Current:  " << current_covered << "/"
+                                  << previous.total << " functions (" << std::fixed
+                                  << std::setprecision(1) << current_percent << "%)" << c.reset()
+                                  << "\n";
+                        std::cout << c.dim() << "   Run with --force-coverage to update anyway"
+                                  << c.reset() << "\n";
+                    }
                 }
             } else if (has_failures && !CompilerOptions::coverage_output.empty()) {
                 std::cout << c.dim() << " [HTML report not updated - tests failed]" << c.reset()
