@@ -252,6 +252,15 @@ int run_test(int argc, char* argv[], bool verbose) {
         return 0;
     }
 
+    // Coverage cannot be used with filters - it requires full test suite
+    if (opts.coverage && !opts.patterns.empty()) {
+        std::cerr << c.red() << c.bold() << "Error: " << c.reset()
+                  << "Coverage cannot be used with test filters.\n"
+                  << "       Run " << c.cyan() << "tml test --coverage" << c.reset()
+                  << " without filters for accurate coverage data.\n";
+        return 1;
+    }
+
     // Print header
     if (!opts.quiet) {
         std::cout << "\n " << c.cyan() << c.bold() << "TML" << c.reset() << " " << c.dim()

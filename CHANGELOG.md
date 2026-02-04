@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Coverage Requires Full Test Suite** (2026-02-04) - Coverage no longer works with filters
+  - `tml test --coverage --filter X` now exits with error
+  - Coverage requires running the full test suite for accurate data
+  - Clear error message explains how to run coverage correctly
+  - Files modified: `compiler/src/cli/tester/run.cpp`, `compiler/src/cli/tester/suite_execution.cpp`
+
+- **Build Script Kills MCP Server** (2026-02-04) - Prevents link errors during build
+  - `scripts/build.bat` now kills `tml_mcp.exe` before building
+  - Fixes LNK1168 error when MCP server is running during build
+  - Files modified: `scripts/build.bat`
+
+### Fixed
+- **Windows Crypto Build** (2026-02-04) - Fixed include order in crypto.c
+  - `windows.h` must be included before `bcrypt.h` on Windows
+  - Files modified: `compiler/runtime/crypto.c`
+
+- **Reflect Behavior Syntax** (2026-02-04) - Fixed invalid `ref this` syntax
+  - Changed `func runtime_type_info(ref this)` to `func runtime_type_info(this)`
+  - Files modified: `lib/core/src/reflect.tml`
+
 ### Added
 - **Reflection: Enum Methods** (2026-02-04) - `variant_name()` and `variant_tag()` for reflected enums
   - Enums with `@derive(Reflect)` now have runtime variant introspection

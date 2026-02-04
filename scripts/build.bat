@@ -94,8 +94,9 @@ if "%CLEAN_BUILD%"=="1" (
 if not exist "%CACHE_DIR%" mkdir "%CACHE_DIR%"
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
-:: Kill any running tml.exe to prevent link errors (LNK1168)
+:: Kill any running tml.exe and tml_mcp.exe to prevent link errors (LNK1168)
 taskkill /F /IM tml.exe >nul 2>&1
+taskkill /F /IM tml_mcp.exe >nul 2>&1
 
 :: Set CMake build type
 set "CMAKE_BUILD_TYPE=Debug"
