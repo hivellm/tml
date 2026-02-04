@@ -1,0 +1,84 @@
+//! Tests for variant_count reflection intrinsic
+//!
+//! variant_count[T]() returns the number of variants in an enum type
+
+use test
+use core::intrinsics::variant_count
+
+// ============================================================================
+// Test enums with different variant counts
+// ============================================================================
+
+type EmptyStruct {}  // Not an enum - should return 0
+
+enum Single {
+    One
+}
+
+enum Pair {
+    A,
+    B
+}
+
+enum Triple {
+    X,
+    Y,
+    Z
+}
+
+enum Colors {
+    Red,
+    Green,
+    Blue,
+    Yellow
+}
+
+enum ManyVariants {
+    V1, V2, V3, V4, V5, V6, V7, V8
+}
+
+// ============================================================================
+// Tests (non-generic enums for now)
+// ============================================================================
+
+@test
+func test_variant_count_single_enum() -> I32 {
+    let count: I64 = variant_count[Single]()
+    assert(count == 1, "single enum should have 1 variant")
+    return 0
+}
+
+@test
+func test_variant_count_pair_enum() -> I32 {
+    let count: I64 = variant_count[Pair]()
+    assert(count == 2, "pair enum should have 2 variants")
+    return 0
+}
+
+@test
+func test_variant_count_triple_enum() -> I32 {
+    let count: I64 = variant_count[Triple]()
+    assert(count == 3, "triple enum should have 3 variants")
+    return 0
+}
+
+@test
+func test_variant_count_four_variants() -> I32 {
+    let count: I64 = variant_count[Colors]()
+    assert(count == 4, "Colors should have 4 variants")
+    return 0
+}
+
+@test
+func test_variant_count_many_variants() -> I32 {
+    let count: I64 = variant_count[ManyVariants]()
+    assert(count == 8, "ManyVariants should have 8 variants")
+    return 0
+}
+
+@test
+func test_variant_count_struct_returns_zero() -> I32 {
+    let count: I64 = variant_count[EmptyStruct]()
+    assert(count == 0, "struct should return 0 variants")
+    return 0
+}

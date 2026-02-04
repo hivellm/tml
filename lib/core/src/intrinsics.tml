@@ -453,3 +453,32 @@ pub func fabs[T](val: T) -> T
 /// Copy sign from b to a.
 @intrinsic
 pub func copysign[T](a: T, b: T) -> T
+
+// ============================================================================
+// Reflection Intrinsics
+// ============================================================================
+
+/// Returns the number of fields in a struct type.
+/// Returns 0 for primitives and enums without data fields.
+@intrinsic
+pub func field_count[T]() -> I64
+
+/// Returns the number of variants in an enum type.
+/// Returns 0 for structs and primitives.
+@intrinsic
+pub func variant_count[T]() -> I64
+
+/// Returns the name of the field at the given index.
+/// Index must be a compile-time constant less than field_count[T]().
+@intrinsic
+pub func field_name[T](index: I64) -> Str
+
+/// Returns the type ID of the field at the given index.
+/// Index must be a compile-time constant less than field_count[T]().
+@intrinsic
+pub func field_type_id[T](index: I64) -> U64
+
+/// Returns the byte offset of the field at the given index.
+/// Index must be a compile-time constant less than field_count[T]().
+@intrinsic
+pub func field_offset[T](index: I64) -> I64

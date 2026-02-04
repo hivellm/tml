@@ -1,0 +1,100 @@
+//! Tests for field_count intrinsic
+//!
+//! field_count[T]() returns the number of fields in a struct type
+
+use test
+use core::intrinsics::field_count
+
+// ============================================================================
+// Test structs with varying field counts
+// ============================================================================
+
+type Empty {}
+
+type Single {
+    value: I64
+}
+
+type Pair {
+    first: I32,
+    second: I32
+}
+
+type Triple {
+    a: I64,
+    b: I64,
+    c: I64
+}
+
+type Mixed {
+    flag: Bool,
+    count: I32,
+    value: I64,
+    data: *Unit
+}
+
+type Nested {
+    inner: Single,
+    extra: I32
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_field_count_empty() -> I32 {
+    let count: I64 = field_count[Empty]()
+    assert(count == 0, "Empty struct should have 0 fields")
+    return 0
+}
+
+@test
+func test_field_count_single() -> I32 {
+    let count: I64 = field_count[Single]()
+    assert(count == 1, "Single field struct should have 1 field")
+    return 0
+}
+
+@test
+func test_field_count_pair() -> I32 {
+    let count: I64 = field_count[Pair]()
+    assert(count == 2, "Pair struct should have 2 fields")
+    return 0
+}
+
+@test
+func test_field_count_triple() -> I32 {
+    let count: I64 = field_count[Triple]()
+    assert(count == 3, "Triple struct should have 3 fields")
+    return 0
+}
+
+@test
+func test_field_count_mixed() -> I32 {
+    let count: I64 = field_count[Mixed]()
+    assert(count == 4, "Mixed struct should have 4 fields")
+    return 0
+}
+
+@test
+func test_field_count_nested() -> I32 {
+    let count: I64 = field_count[Nested]()
+    assert(count == 2, "Nested struct should have 2 fields")
+    return 0
+}
+
+// Test with primitives (should return 0)
+@test
+func test_field_count_i32() -> I32 {
+    let count: I64 = field_count[I32]()
+    assert(count == 0, "I32 should have 0 fields")
+    return 0
+}
+
+@test
+func test_field_count_i64() -> I32 {
+    let count: I64 = field_count[I64]()
+    assert(count == 0, "I64 should have 0 fields")
+    return 0
+}

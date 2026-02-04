@@ -1,0 +1,91 @@
+//! Tests for field_name reflection intrinsic
+//!
+//! field_name[T](index) returns the name of the field at the given index
+
+use test
+use core::intrinsics::field_name
+
+// ============================================================================
+// Test structs
+// ============================================================================
+
+type Single {
+    value: I64
+}
+
+type Point {
+    x: I64,
+    y: I64
+}
+
+type Person {
+    name: Str,
+    age: I32,
+    active: Bool
+}
+
+type Mixed {
+    first_field: I64,
+    second_field: I32,
+    third_field: Bool,
+    fourth_field: *Unit
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_field_name_single() -> I32 {
+    let name: Str = field_name[Single](0)
+    assert(name == "value", "field 0 should be 'value'")
+    return 0
+}
+
+@test
+func test_field_name_point_x() -> I32 {
+    let name: Str = field_name[Point](0)
+    assert(name == "x", "field 0 should be 'x'")
+    return 0
+}
+
+@test
+func test_field_name_point_y() -> I32 {
+    let name: Str = field_name[Point](1)
+    assert(name == "y", "field 1 should be 'y'")
+    return 0
+}
+
+@test
+func test_field_name_person_first() -> I32 {
+    let name: Str = field_name[Person](0)
+    assert(name == "name", "field 0 should be 'name'")
+    return 0
+}
+
+@test
+func test_field_name_person_second() -> I32 {
+    let name: Str = field_name[Person](1)
+    assert(name == "age", "field 1 should be 'age'")
+    return 0
+}
+
+@test
+func test_field_name_person_third() -> I32 {
+    let name: Str = field_name[Person](2)
+    assert(name == "active", "field 2 should be 'active'")
+    return 0
+}
+
+@test
+func test_field_name_mixed_fields() -> I32 {
+    let f0: Str = field_name[Mixed](0)
+    let f1: Str = field_name[Mixed](1)
+    let f2: Str = field_name[Mixed](2)
+    let f3: Str = field_name[Mixed](3)
+    assert(f0 == "first_field", "field 0")
+    assert(f1 == "second_field", "field 1")
+    assert(f2 == "third_field", "field 2")
+    assert(f3 == "fourth_field", "field 3")
+    return 0
+}

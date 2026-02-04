@@ -69,6 +69,9 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     }
     def += " }";
     type_defs_buffer_ << def << "\n";
+
+    // Generate @derive(Reflect) support if decorated
+    gen_derive_reflect_struct(s);
 }
 
 // Generate a specialized version of a generic struct

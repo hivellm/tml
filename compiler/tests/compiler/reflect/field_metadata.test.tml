@@ -1,0 +1,117 @@
+//! Tests for field_type_id and field_offset reflection intrinsics
+//!
+//! field_type_id[T](index) returns the type ID hash for the field's type
+//! field_offset[T](index) returns the byte offset of the field
+
+use test
+use core::intrinsics::{field_type_id, field_offset, type_id}
+
+// ============================================================================
+// Test structs
+// ============================================================================
+
+type Simple {
+    value: I64
+}
+
+type TwoFields {
+    first: I32,
+    second: I64
+}
+
+type Aligned {
+    a: I8,
+    b: I64,  // Will be at offset 8 due to alignment
+    c: I8
+}
+
+type AllI64 {
+    x: I64,
+    y: I64,
+    z: I64
+}
+
+type Mixed {
+    flag: Bool,
+    count: I32,
+    value: I64
+}
+
+// ============================================================================
+// field_type_id tests
+// ============================================================================
+
+@test
+func test_field_type_id_i64() -> I32 {
+    let field_tid: U64 = field_type_id[Simple](0)
+    let i64_tid: U64 = type_id[I64]()
+    // Both should hash to the same value for I64
+    assert(field_tid == i64_tid, "field type_id should match I64 type_id")
+    return 0
+}
+
+@test
+func test_field_type_id_different_types() -> I32 {
+    let tid_first: U64 = field_type_id[TwoFields](0)  // I32
+    let tid_second: U64 = field_type_id[TwoFields](1) // I64
+    // Different types should have different IDs
+    assert(tid_first != tid_second, "I32 and I64 should have different type IDs")
+    return 0
+}
+
+@test
+func test_field_type_id_same_type() -> I32 {
+    let tid_x: U64 = field_type_id[AllI64](0)
+    let tid_y: U64 = field_type_id[AllI64](1)
+    let tid_z: U64 = field_type_id[AllI64](2)
+    // Same type should have same ID
+    assert(tid_x == tid_y, "x and y should have same type ID")
+    assert(tid_y == tid_z, "y and z should have same type ID")
+    return 0
+}
+
+// ============================================================================
+// field_offset tests
+// ============================================================================
+
+@test
+func test_field_offset_first_is_zero() -> I32 {
+    let offset: I64 = field_offset[Simple](0)
+    assert(offset == 0, "first field should be at offset 0")
+    return 0
+}
+
+@test
+func test_field_offset_sequential() -> I32 {
+    let off_x: I64 = field_offset[AllI64](0)
+    let off_y: I64 = field_offset[AllI64](1)
+    let off_z: I64 = field_offset[AllI64](2)
+    assert(off_x == 0, "x at offset 0")
+    assert(off_y == 8, "y at offset 8")
+    assert(off_z == 16, "z at offset 16")
+    return 0
+}
+
+@test
+func test_field_offset_alignment() -> I32 {
+    // Bool is 1 byte, I32 is 4 bytes, I64 is 8 bytes
+    // Layout: flag (1) + padding (3) + count (4) + value (8)
+    let off_flag: I64 = field_offset[Mixed](0)
+    let off_count: I64 = field_offset[Mixed](1)
+    let off_value: I64 = field_offset[Mixed](2)
+
+    assert(off_flag == 0, "flag at offset 0")
+    assert(off_count == 4, "count at offset 4 (after 3 bytes padding)")
+    assert(off_value == 8, "value at offset 8")
+    return 0
+}
+
+@test
+func test_field_offset_i32_then_i64() -> I32 {
+    let off_first: I64 = field_offset[TwoFields](0)
+    let off_second: I64 = field_offset[TwoFields](1)
+    assert(off_first == 0, "first at 0")
+    // I32 (4 bytes) + padding (4 bytes) = 8 for I64 alignment
+    assert(off_second == 8, "second at 8")
+    return 0
+}

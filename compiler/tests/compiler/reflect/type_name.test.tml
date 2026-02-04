@@ -1,0 +1,67 @@
+//! Tests for the type_name intrinsic
+//!
+//! Verifies that type_name[T]() returns the correct type name as a string.
+
+use test
+use core::intrinsics::type_name
+
+// ============================================================================
+// Primitive types
+// ============================================================================
+
+@test
+func test_type_name_i32() -> I32 {
+    let name: Str = type_name[I32]()
+    assert(name == "I32", "type_name[I32]")
+    return 0
+}
+
+@test
+func test_type_name_i64() -> I32 {
+    let name: Str = type_name[I64]()
+    assert(name == "I64", "type_name[I64]")
+    return 0
+}
+
+@test
+func test_type_name_bool() -> I32 {
+    let name: Str = type_name[Bool]()
+    assert(name == "Bool", "type_name[Bool]")
+    return 0
+}
+
+@test
+func test_type_name_str() -> I32 {
+    let name: Str = type_name[Str]()
+    assert(name == "Str", "type_name[Str]")
+    return 0
+}
+
+// ============================================================================
+// User-defined types
+// ============================================================================
+
+type Point {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_type_name_struct() -> I32 {
+    let name: Str = type_name[Point]()
+    assert(name == "Point", "type_name[Point]")
+    return 0
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+@test
+func test_type_name_enum() -> I32 {
+    let name: Str = type_name[Color]()
+    assert(name == "Color", "type_name[Color]")
+    return 0
+}

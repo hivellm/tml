@@ -1,0 +1,349 @@
+//! Fast non-cryptographic hash functions.
+//!
+//! This module provides fast hash functions suitable for checksums, ETags,
+//! hash tables, and data fingerprinting. These are **NOT** cryptographically
+//! secure and should not be used for passwords or security-sensitive hashing.
+//!
+//! # Supported Algorithms
+//!
+//! | Algorithm | Output Size | Speed | Use Case |
+//! |-----------|-------------|-------|----------|
+//! | FNV-1a (32-bit) | 32 bits | Very Fast | Short strings, hash tables |
+//! | FNV-1a (64-bit) | 64 bits | Very Fast | General purpose, ETags |
+//! | Murmur2 (32-bit) | 32 bits | Fast | Hash tables, checksums |
+//! | Murmur2 (64-bit) | 64 bits | Fast | ETags, fingerprinting |
+//!
+//! # Examples
+//!
+//! ## HTTP ETag Generation
+//!
+//! ```tml
+//! use std::hash::{fnv1a64, murmur2_64}
+//!
+//! let content = "Hello, World!"
+//! let etag = fnv1a64(content).to_hex()
+//! print("ETag: \"{etag}\"\n")
+//!
+//! // With Murmur2 (seeded for uniqueness)
+//! let etag2 = murmur2_64(content, 0).to_hex()
+//! print("ETag: \"{etag2}\"\n")
+//! ```
+//!
+//! ## Content Checksums
+//!
+//! ```tml
+//! use std::hash::fnv1a32
+//!
+//! let data = "Some data to checksum"
+//! let checksum = fnv1a32(data)
+//! print("Checksum: {checksum.to_hex()}\n")
+//! ```
+//!
+//! # Security Warning
+//!
+//! These hash functions are designed for speed, not security:
+//! - **Do NOT use for passwords** - use `std::crypto::kdf` instead
+//! - **Do NOT use for signatures** - use `std::crypto::sign` instead
+//! - **Do NOT use for MACs** - use `std::crypto::hmac` instead
+//!
+//! For cryptographic hashing, use `std::crypto::hash` (SHA-256, SHA-512, etc.)
+
+use std::collections::Buffer
+
+// ============================================================================
+// FFI Function Declarations
+// ============================================================================
+
+@extern("crypto_fnv1a32")
+func ffi_fnv1a32(data: Str) -> U32
+
+@extern("crypto_fnv1a32_bytes")
+func ffi_fnv1a32_bytes(handle: *Unit) -> U32
+
+@extern("crypto_fnv1a64")
+func ffi_fnv1a64(data: Str) -> U64
+
+@extern("crypto_fnv1a64_bytes")
+func ffi_fnv1a64_bytes(handle: *Unit) -> U64
+
+@extern("crypto_murmur2_32")
+func ffi_murmur2_32(data: Str, seed: U32) -> U32
+
+@extern("crypto_murmur2_32_bytes")
+func ffi_murmur2_32_bytes(handle: *Unit, seed: U32) -> U32
+
+@extern("crypto_murmur2_64")
+func ffi_murmur2_64(data: Str, seed: U64) -> U64
+
+@extern("crypto_murmur2_64_bytes")
+func ffi_murmur2_64_bytes(handle: *Unit, seed: U64) -> U64
+
+@extern("crypto_u32_to_hex")
+func ffi_u32_to_hex(value: U32) -> Str
+
+@extern("crypto_u64_to_hex")
+func ffi_u64_to_hex(value: U64) -> Str
+
+// ============================================================================
+// Hash32 - 32-bit hash result
+// ============================================================================
+
+/// A 32-bit hash value.
+///
+/// Provides conversion methods for different output formats.
+pub type Hash32 {
+    value: U32
+}
+
+impl Hash32 {
+    /// Returns the raw 32-bit hash value.
+    pub func raw(this) -> U32 {
+        return this.value
+    }
+
+    /// Returns the hash as an 8-character hexadecimal string.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let hash = fnv1a32("hello")
+    /// let hex = hash.to_hex()  // e.g., "4f9f2cab"
+    /// ```
+    pub func to_hex(this) -> Str {
+        return ffi_u32_to_hex(this.value)
+    }
+
+    /// Returns the hash as an I64 (for compatibility with Hash behavior).
+    pub func to_i64(this) -> I64 {
+        return this.value as I64
+    }
+}
+
+// ============================================================================
+// Hash64 - 64-bit hash result
+// ============================================================================
+
+/// A 64-bit hash value.
+///
+/// Provides conversion methods for different output formats.
+pub type Hash64 {
+    value: U64
+}
+
+impl Hash64 {
+    /// Returns the raw 64-bit hash value.
+    pub func raw(this) -> U64 {
+        return this.value
+    }
+
+    /// Returns the hash as a 16-character hexadecimal string.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let hash = fnv1a64("hello")
+    /// let hex = hash.to_hex()  // e.g., "a430d84680aabd0b"
+    /// ```
+    pub func to_hex(this) -> Str {
+        return ffi_u64_to_hex(this.value)
+    }
+
+    /// Returns the hash as an I64.
+    ///
+    /// Note: Large U64 values may become negative when cast to I64.
+    pub func to_i64(this) -> I64 {
+        return this.value as I64
+    }
+}
+
+// ============================================================================
+// FNV-1a Hash Functions
+// ============================================================================
+
+/// Computes the FNV-1a 32-bit hash of a string.
+///
+/// FNV-1a (Fowler-Noll-Vo) is a fast, non-cryptographic hash function
+/// with good distribution properties. The 32-bit variant is ideal for
+/// hash tables and short strings.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::hash::fnv1a32
+///
+/// let hash = fnv1a32("hello")
+/// print("Hash: {hash.to_hex()}\n")
+/// ```
+///
+/// # Algorithm
+///
+/// ```text
+/// hash = FNV_OFFSET_BASIS (2166136261)
+/// for each byte:
+///     hash = hash XOR byte
+///     hash = hash * FNV_PRIME (16777619)
+/// return hash
+/// ```
+pub func fnv1a32(data: Str) -> Hash32 {
+    return Hash32 { value: ffi_fnv1a32(data) }
+}
+
+/// Computes the FNV-1a 32-bit hash of binary data.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::hash::fnv1a32_bytes
+/// use std::collections::Buffer
+///
+/// let buf = Buffer::from_bytes([0x01, 0x02, 0x03])
+/// let hash = fnv1a32_bytes(ref buf)
+/// ```
+pub func fnv1a32_bytes(data: ref Buffer) -> Hash32 {
+    return Hash32 { value: ffi_fnv1a32_bytes(data.handle) }
+}
+
+/// Computes the FNV-1a 64-bit hash of a string.
+///
+/// The 64-bit variant provides better collision resistance and is
+/// recommended for ETags, content fingerprinting, and general use.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::hash::fnv1a64
+///
+/// // Generate an ETag for HTTP caching
+/// let content = read_file("index.html")
+/// let etag = fnv1a64(content).to_hex()
+/// set_header("ETag", "\"{etag}\"")
+/// ```
+///
+/// # Algorithm
+///
+/// ```text
+/// hash = FNV_OFFSET_BASIS (14695981039346656037)
+/// for each byte:
+///     hash = hash XOR byte
+///     hash = hash * FNV_PRIME (1099511628211)
+/// return hash
+/// ```
+pub func fnv1a64(data: Str) -> Hash64 {
+    return Hash64 { value: ffi_fnv1a64(data) }
+}
+
+/// Computes the FNV-1a 64-bit hash of binary data.
+pub func fnv1a64_bytes(data: ref Buffer) -> Hash64 {
+    return Hash64 { value: ffi_fnv1a64_bytes(data.handle) }
+}
+
+// ============================================================================
+// Murmur2 Hash Functions
+// ============================================================================
+
+/// Computes the MurmurHash2 32-bit hash of a string.
+///
+/// MurmurHash2 was designed by Austin Appleby and provides excellent
+/// distribution with good performance. It accepts a seed value for
+/// varying hash sequences.
+///
+/// # Arguments
+///
+/// * `data` - The string to hash
+/// * `seed` - A seed value (use 0 for default)
+///
+/// # Examples
+///
+/// ```tml
+/// use std::hash::murmur2_32
+///
+/// let hash1 = murmur2_32("hello", 0)
+/// let hash2 = murmur2_32("hello", 42)  // Different seed, different hash
+/// ```
+pub func murmur2_32(data: Str, seed: U32) -> Hash32 {
+    return Hash32 { value: ffi_murmur2_32(data, seed) }
+}
+
+/// Computes the MurmurHash2 32-bit hash of binary data.
+pub func murmur2_32_bytes(data: ref Buffer, seed: U32) -> Hash32 {
+    return Hash32 { value: ffi_murmur2_32_bytes(data.handle, seed) }
+}
+
+/// Computes the MurmurHash2 64-bit hash of a string.
+///
+/// This is MurmurHash64A, optimized for 64-bit platforms. It provides
+/// excellent distribution and is suitable for ETags and fingerprinting.
+///
+/// # Arguments
+///
+/// * `data` - The string to hash
+/// * `seed` - A seed value (use 0 for default)
+///
+/// # Examples
+///
+/// ```tml
+/// use std::hash::murmur2_64
+///
+/// // Generate an ETag with a server-specific seed
+/// let server_seed: U64 = 0xDEADBEEF
+/// let etag = murmur2_64(content, server_seed).to_hex()
+/// ```
+pub func murmur2_64(data: Str, seed: U64) -> Hash64 {
+    return Hash64 { value: ffi_murmur2_64(data, seed) }
+}
+
+/// Computes the MurmurHash2 64-bit hash of binary data.
+pub func murmur2_64_bytes(data: ref Buffer, seed: U64) -> Hash64 {
+    return Hash64 { value: ffi_murmur2_64_bytes(data.handle, seed) }
+}
+
+// ============================================================================
+// Convenience functions for ETags
+// ============================================================================
+
+/// Generates a weak ETag from content using FNV-1a.
+///
+/// Weak ETags (prefixed with W/) indicate semantic equivalence,
+/// not byte-for-byte equality.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::hash::etag_weak
+///
+/// let content = "<html>...</html>"
+/// let etag = etag_weak(content)  // e.g., "W/\"a430d84680aabd0b\""
+/// ```
+pub func etag_weak(content: Str) -> Str {
+    let hash: Str = fnv1a64(content).to_hex()
+    return "W/\"{hash}\""
+}
+
+/// Generates a strong ETag from content using FNV-1a.
+///
+/// Strong ETags indicate byte-for-byte equality.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::hash::etag_strong
+///
+/// let content = read_file_bytes("image.png")
+/// let etag = etag_strong_bytes(ref content)  // e.g., "\"a430d84680aabd0b\""
+/// ```
+pub func etag_strong(content: Str) -> Str {
+    let hash: Str = fnv1a64(content).to_hex()
+    return "\"{hash}\""
+}
+
+/// Generates a strong ETag from binary content using FNV-1a.
+pub func etag_strong_bytes(content: ref Buffer) -> Str {
+    let hash: Str = fnv1a64_bytes(content).to_hex()
+    return "\"{hash}\""
+}
+
+/// Generates a weak ETag from binary content using FNV-1a.
+pub func etag_weak_bytes(content: ref Buffer) -> Str {
+    let hash: Str = fnv1a64_bytes(content).to_hex()
+    return "W/\"{hash}\""
+}

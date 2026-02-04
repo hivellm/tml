@@ -31,6 +31,8 @@
 // - error: Error behavior and common error types
 // - alloc: Memory allocation (Layout, Allocator, GlobalAlloc)
 // - collections: Behavior implementations for List, HashMap
+// - any: TypeId, Any for runtime type identification
+// - reflect: TypeInfo, FieldInfo, Reflect behavior for runtime reflection
 // - net: (moved to std::net) Network types including TCP, UDP, HTTP
 
 pub mod clone    // Duplicate, Copy
@@ -71,4 +73,5 @@ pub mod async_iter // AsyncIterator for async streams
 pub mod time       // Duration
 pub mod tuple      // Tuple implementations (Default, Clone, PartialEq, Ord, etc.)
 pub mod any        // TypeId, Any for runtime type identification
+pub mod reflect    // TypeInfo, FieldInfo, Reflect behavior for runtime reflection
 pub mod sync       // Atomic operations, fences, spinlocks

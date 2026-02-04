@@ -110,10 +110,28 @@
 - [ ] 12.1.9 Add unit tests for instance field iteration
 - [ ] 12.1.10 Test struct-to-struct mapping without explicit field names
 
-## Phase 13: Final Validation
+## Phase 13: Union Types (C++ Style)
 
-- [ ] 13.1.1 Run full test suite
-- [ ] 13.1.2 Refactor cipher.tml to fully idiomatic code
-- [ ] 13.1.3 Update documentation with all new syntax
-- [ ] 13.1.4 Update CLAUDE.md with working patterns
-- [ ] 13.1.5 Create migration guide for existing code
+- [ ] 13.1.1 Add `union` keyword to lexer
+- [ ] 13.1.2 Parse union declarations with field list syntax
+- [ ] 13.1.3 Add UnionDecl AST node similar to StructDecl
+- [ ] 13.1.4 Implement type checking for union types
+- [ ] 13.1.5 Calculate union size as max of all field sizes
+- [ ] 13.1.6 Calculate union alignment as max of all field alignments
+- [ ] 13.1.7 Generate LLVM IR union type (single allocation, field access via bitcast)
+- [ ] 13.1.8 Implement field read codegen (load from union pointer)
+- [ ] 13.1.9 Implement field write codegen (store to union pointer)
+- [ ] 13.1.10 Mark union field access as `lowlevel` (unsafe - no type checking at runtime)
+- [ ] 13.1.11 Add `size_of[UnionType]()` intrinsic support
+- [ ] 13.1.12 Add unit tests for basic union declaration and access
+- [ ] 13.1.13 Add unit tests for union with different sized fields
+- [ ] 13.1.14 Add unit tests for union in struct (nested)
+- [ ] 13.1.15 Document union syntax and safety considerations
+
+## Phase 14: Final Validation
+
+- [ ] 14.1.1 Run full test suite
+- [ ] 14.1.2 Refactor cipher.tml to fully idiomatic code
+- [ ] 14.1.3 Update documentation with all new syntax
+- [ ] 14.1.4 Update CLAUDE.md with working patterns
+- [ ] 14.1.5 Create migration guide for existing code

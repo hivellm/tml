@@ -360,12 +360,21 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
     // Use qualified name for namespaced types
     std::string full_name = qualified_name(decl.name);
 
-    // Check for @interior_mutable decorator
+    // Check for decorators
     bool is_interior_mutable = false;
+    bool has_derive_reflect = false;
     for (const auto& decorator : decl.decorators) {
         if (decorator.name == "interior_mutable") {
             is_interior_mutable = true;
-            break;
+        } else if (decorator.name == "derive") {
+            // Check for @derive(Reflect)
+            for (const auto& arg : decorator.args) {
+                if (arg->is<parser::IdentExpr>()) {
+                    if (arg->as<parser::IdentExpr>().name == "Reflect") {
+                        has_derive_reflect = true;
+                    }
+                }
+            }
         }
     }
 
@@ -375,6 +384,28 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
                                  .fields = std::move(fields),
                                  .span = decl.span,
                                  .is_interior_mutable = is_interior_mutable});
+
+    // Handle @derive(Reflect) - register impl and type_info method
+    // Skip generic types - they need instantiation first
+    if (has_derive_reflect && decl.generics.empty()) {
+        // Register that this type implements Reflect behavior
+        env_.register_impl(full_name, "Reflect");
+
+        // Create return type: ref TypeInfo
+        auto type_info_type = std::make_shared<Type>();
+        type_info_type->kind = NamedType{"TypeInfo", "", {}};
+        auto ref_type_info = std::make_shared<Type>();
+        ref_type_info->kind = RefType{false, type_info_type, std::nullopt};
+
+        // Register TypeName::type_info() -> ref TypeInfo
+        std::string method_name = full_name + "::type_info";
+        env_.define_func(FuncSig{.name = method_name,
+                                 .params = {},
+                                 .return_type = ref_type_info,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
 }
 
 void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
@@ -407,11 +438,47 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
     // Extract const generic parameters
     std::vector<ConstGenericParam> const_params = extract_const_params(decl.generics);
 
+    // Check for @derive(Reflect) decorator
+    bool has_derive_reflect = false;
+    for (const auto& decorator : decl.decorators) {
+        if (decorator.name == "derive") {
+            for (const auto& arg : decorator.args) {
+                if (arg->is<parser::IdentExpr>()) {
+                    if (arg->as<parser::IdentExpr>().name == "Reflect") {
+                        has_derive_reflect = true;
+                    }
+                }
+            }
+        }
+    }
+
     env_.define_enum(EnumDef{.name = decl.name,
                              .type_params = std::move(type_params),
                              .const_params = std::move(const_params),
                              .variants = std::move(variants),
                              .span = decl.span});
+
+    // Handle @derive(Reflect) - register impl and type_info method
+    // Skip generic enums - they need instantiation first
+    if (has_derive_reflect && decl.generics.empty()) {
+        // Register that this type implements Reflect behavior
+        env_.register_impl(decl.name, "Reflect");
+
+        // Create return type: ref TypeInfo
+        auto type_info_type = std::make_shared<Type>();
+        type_info_type->kind = NamedType{"TypeInfo", "", {}};
+        auto ref_type_info = std::make_shared<Type>();
+        ref_type_info->kind = RefType{false, type_info_type, std::nullopt};
+
+        // Register EnumName::type_info() -> ref TypeInfo
+        std::string method_name = decl.name + "::type_info";
+        env_.define_func(FuncSig{.name = method_name,
+                                 .params = {},
+                                 .return_type = ref_type_info,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
 }
 
 void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {

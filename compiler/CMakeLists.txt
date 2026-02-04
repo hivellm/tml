@@ -359,6 +359,8 @@ add_library(tml_codegen STATIC
     src/codegen/decl/enum.cpp
     src/codegen/decl/func.cpp
     src/codegen/decl/impl.cpp
+    # Derive macro codegen
+    src/codegen/derive/reflect.cpp
     src/codegen/llvm_ir_gen_expr.cpp
     src/codegen/c_header_gen.cpp
     # Control flow codegen (split from llvm_ir_gen_control.cpp for maintainability)

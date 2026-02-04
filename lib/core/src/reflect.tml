@@ -1,0 +1,374 @@
+//! Runtime reflection types and utilities.
+//!
+//! This module provides comprehensive runtime type information through
+//! structured metadata types. Types that derive the `Reflect` behavior
+//! have their metadata generated at compile time and accessible at runtime.
+//!
+//! # Overview
+//!
+//! The key types in this module are:
+//!
+//! - `TypeKind`: Enum describing what kind of type (struct, enum, primitive, etc.)
+//! - `FieldInfo`: Metadata about a struct field (name, type, offset)
+//! - `VariantInfo`: Metadata about an enum variant (name, tag, payloads)
+//! - `TypeInfo`: Complete type metadata (name, kind, size, fields, etc.)
+//!
+//! # Usage
+//!
+//! Types opt-in to reflection via `@derive(Reflect)`:
+//!
+//! ```tml
+//! use core::reflect::*
+//!
+//! @derive(Reflect)
+//! type Person {
+//!     name: Str,
+//!     age: I32
+//! }
+//!
+//! func main() {
+//!     let info: ref TypeInfo = Person::type_info()
+//!     print("Type: {info.name}\n")
+//!     print("Fields: {info.fields.len()}\n")
+//! }
+//! ```
+
+use core::intrinsics::{field_count, field_name, field_type_id, field_offset, variant_count}
+
+// ============================================================================
+// TypeKind - Discriminates between different kinds of types
+// ============================================================================
+
+/// Describes the kind of a type for reflection purposes.
+pub enum TypeKind {
+    /// A struct type with named fields
+    Struct,
+    /// An enum type with variants
+    Enum,
+    /// A primitive type (I32, Bool, etc.)
+    Primitive,
+    /// A pointer type (*T)
+    Pointer,
+    /// A reference type (ref T, mut ref T)
+    Reference,
+    /// An array type ([T; N])
+    Array,
+    /// A slice type (Slice[T])
+    Slice,
+    /// A tuple type ((A, B, C))
+    Tuple,
+    /// A function pointer type
+    Function,
+    /// A class type (OOP)
+    Class,
+    /// An interface type (OOP)
+    Interface,
+    /// Unknown or unsupported type kind
+    Unknown
+}
+
+impl TypeKind {
+    /// Returns the discriminant tag for this variant
+    pub func tag(this) -> I32 {
+        when this {
+            TypeKind::Struct => return 0,
+            TypeKind::Enum => return 1,
+            TypeKind::Primitive => return 2,
+            TypeKind::Pointer => return 3,
+            TypeKind::Reference => return 4,
+            TypeKind::Array => return 5,
+            TypeKind::Slice => return 6,
+            TypeKind::Tuple => return 7,
+            TypeKind::Function => return 8,
+            TypeKind::Class => return 9,
+            TypeKind::Interface => return 10,
+            TypeKind::Unknown => return 11
+        }
+    }
+
+    /// Returns a string representation of the type kind
+    pub func to_string(this) -> Str {
+        when this {
+            TypeKind::Struct => return "struct",
+            TypeKind::Enum => return "enum",
+            TypeKind::Primitive => return "primitive",
+            TypeKind::Pointer => return "pointer",
+            TypeKind::Reference => return "reference",
+            TypeKind::Array => return "array",
+            TypeKind::Slice => return "slice",
+            TypeKind::Tuple => return "tuple",
+            TypeKind::Function => return "function",
+            TypeKind::Class => return "class",
+            TypeKind::Interface => return "interface",
+            TypeKind::Unknown => return "unknown"
+        }
+    }
+}
+
+impl PartialEq for TypeKind {
+    pub func eq(this, other: ref TypeKind) -> Bool {
+        // Compare variant tags
+        return this.tag() == other.tag()
+    }
+
+    pub func ne(this, other: ref TypeKind) -> Bool {
+        return this.tag() != other.tag()
+    }
+}
+
+// ============================================================================
+// FieldInfo - Metadata about a struct/class field
+// ============================================================================
+
+/// Metadata about a single field in a struct or class.
+///
+/// This provides runtime access to field name, type, and memory layout.
+pub type FieldInfo {
+    /// The name of the field as declared in source code
+    pub name: Str,
+    /// Unique identifier for the field's type (from type_id intrinsic)
+    pub type_id: U64,
+    /// The name of the field's type as a string
+    pub type_name: Str,
+    /// Byte offset of this field from the start of the struct
+    pub offset: I64,
+    /// Whether this field is publicly accessible
+    pub is_public: Bool
+}
+
+impl FieldInfo {
+    /// Creates a new FieldInfo with the given metadata
+    pub func new(name: Str, type_id: U64, type_name: Str, offset: I64, is_public: Bool) -> FieldInfo {
+        return FieldInfo {
+            name: name,
+            type_id: type_id,
+            type_name: type_name,
+            offset: offset,
+            is_public: is_public
+        }
+    }
+}
+
+impl Debug for FieldInfo {
+    pub func debug_string(this) -> Str {
+        let vis: Str = ""
+        if this.is_public {
+            vis = "pub "
+        }
+        return vis + this.name + ": " + this.type_name + " @ offset " + this.offset.to_string()
+    }
+}
+
+// ============================================================================
+// VariantInfo - Metadata about an enum variant
+// ============================================================================
+
+/// Metadata about a single variant in an enum type.
+///
+/// Enum variants can be unit variants, tuple variants, or struct variants.
+pub type VariantInfo {
+    /// The name of the variant as declared in source code
+    pub name: Str,
+    /// The discriminant tag value for this variant
+    pub tag: I64,
+    /// Number of payload fields (0 for unit variants)
+    pub payload_count: I64
+}
+
+impl VariantInfo {
+    /// Creates a new VariantInfo with the given metadata
+    pub func new(name: Str, tag: I64, payload_count: I64) -> VariantInfo {
+        return VariantInfo {
+            name: name,
+            tag: tag,
+            payload_count: payload_count
+        }
+    }
+
+    /// Returns true if this is a unit variant (no payload)
+    pub func is_unit(this) -> Bool {
+        return this.payload_count == 0
+    }
+}
+
+impl Debug for VariantInfo {
+    pub func debug_string(this) -> Str {
+        if this.payload_count == 0 {
+            return this.name + " (tag=" + this.tag.to_string() + ")"
+        } else {
+            return this.name + "(...) (tag=" + this.tag.to_string() + ", payloads=" + this.payload_count.to_string() + ")"
+        }
+    }
+}
+
+// ============================================================================
+// TypeInfo - Complete type metadata
+// ============================================================================
+
+/// Complete runtime metadata for a reflected type.
+///
+/// TypeInfo provides comprehensive information about a type including its
+/// name, kind, memory layout, and structural details (fields or variants).
+///
+/// TypeInfo instances are generated at compile time for types with
+/// `@derive(Reflect)` and stored in the binary's read-only data section.
+pub type TypeInfo {
+    /// Unique identifier for this type
+    pub id: U64,
+    /// The name of the type as declared in source code
+    pub name: Str,
+    /// What kind of type this is (struct, enum, primitive, etc.)
+    pub kind: TypeKind,
+    /// Size of the type in bytes
+    pub size: I64,
+    /// Alignment requirement in bytes
+    pub align: I64,
+    /// Number of fields (for structs/classes)
+    pub field_count: I64,
+    /// Number of variants (for enums)
+    pub variant_count: I64
+}
+
+impl TypeInfo {
+    /// Creates a new TypeInfo for a struct type
+    pub func for_struct(id: U64, name: Str, size: I64, align: I64, field_count: I64) -> TypeInfo {
+        return TypeInfo {
+            id: id,
+            name: name,
+            kind: TypeKind::Struct,
+            size: size,
+            align: align,
+            field_count: field_count,
+            variant_count: 0
+        }
+    }
+
+    /// Creates a new TypeInfo for an enum type
+    pub func for_enum(id: U64, name: Str, size: I64, align: I64, variant_count: I64) -> TypeInfo {
+        return TypeInfo {
+            id: id,
+            name: name,
+            kind: TypeKind::Enum,
+            size: size,
+            align: align,
+            field_count: 0,
+            variant_count: variant_count
+        }
+    }
+
+    /// Creates a new TypeInfo for a primitive type
+    pub func for_primitive(id: U64, name: Str, size: I64, align: I64) -> TypeInfo {
+        return TypeInfo {
+            id: id,
+            name: name,
+            kind: TypeKind::Primitive,
+            size: size,
+            align: align,
+            field_count: 0,
+            variant_count: 0
+        }
+    }
+
+    /// Returns true if this type is a struct
+    pub func is_struct(this) -> Bool {
+        return this.kind == TypeKind::Struct
+    }
+
+    /// Returns true if this type is an enum
+    pub func is_enum(this) -> Bool {
+        return this.kind == TypeKind::Enum
+    }
+
+    /// Returns true if this type is a primitive
+    pub func is_primitive(this) -> Bool {
+        return this.kind == TypeKind::Primitive
+    }
+}
+
+impl Debug for TypeInfo {
+    pub func debug_string(this) -> Str {
+        let result: Str = this.kind.to_string() + " " + this.name
+        result = result + " (size=" + this.size.to_string()
+        result = result + ", align=" + this.align.to_string()
+        if this.field_count > 0 {
+            result = result + ", fields=" + this.field_count.to_string()
+        }
+        if this.variant_count > 0 {
+            result = result + ", variants=" + this.variant_count.to_string()
+        }
+        result = result + ")"
+        return result
+    }
+}
+
+// ============================================================================
+// Reflect Behavior
+// ============================================================================
+
+/// Behavior for types that support runtime reflection.
+///
+/// Types implementing `Reflect` have their metadata available at runtime,
+/// enabling generic operations like serialization, debugging, and inspection.
+///
+/// # Deriving
+///
+/// The recommended way to implement `Reflect` is via the derive macro:
+///
+/// ```tml
+/// @derive(Reflect)
+/// type MyStruct {
+///     field1: I32,
+///     field2: Str
+/// }
+/// ```
+///
+/// # Manual Implementation
+///
+/// For custom reflection behavior, implement the behavior manually:
+///
+/// ```tml
+/// impl Reflect for MyType {
+///     pub func type_info() -> ref TypeInfo {
+///         // Return static TypeInfo
+///     }
+/// }
+/// ```
+pub behavior Reflect {
+    /// Returns the static TypeInfo for this type.
+    ///
+    /// This is a static method that doesn't require an instance.
+    func type_info() -> ref TypeInfo
+}
+
+// ============================================================================
+// Reflection Utilities
+// ============================================================================
+
+/// Gets the TypeInfo for a type using intrinsics.
+///
+/// This is a helper function that constructs TypeInfo from compiler intrinsics.
+/// It's primarily used by the `@derive(Reflect)` implementation.
+///
+/// Note: This function requires all intrinsics to be compile-time evaluated.
+// pub func get_type_info[T]() -> TypeInfo {
+//     let fc: I64 = field_count[T]()
+//     let vc: I64 = variant_count[T]()
+//
+//     if vc > 0 {
+//         return TypeInfo::for_enum(
+//             type_id[T](),
+//             type_name[T](),
+//             size_of[T](),
+//             align_of[T](),
+//             vc
+//         )
+//     } else {
+//         return TypeInfo::for_struct(
+//             type_id[T](),
+//             type_name[T](),
+//             size_of[T](),
+//             align_of[T](),
+//             fc
+//         )
+//     }
+// }

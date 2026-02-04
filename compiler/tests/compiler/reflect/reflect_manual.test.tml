@@ -1,0 +1,154 @@
+//! Tests for manually using reflection intrinsics
+//!
+//! This demonstrates how to use the reflection intrinsics to build TypeInfo
+//! before @derive(Reflect) is available.
+
+use test
+use core::reflect::{TypeKind, FieldInfo, TypeInfo}
+use core::intrinsics::{field_count, field_name, field_offset, field_type_id, variant_count}
+
+// ============================================================================
+// Test struct to reflect
+// ============================================================================
+
+type Person {
+    name: Str,
+    age: I32,
+    active: Bool
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_build_type_info_from_intrinsics() -> I32 {
+    // Build TypeInfo using intrinsics
+    let info: TypeInfo = TypeInfo::for_struct(
+        12345,  // type id
+        "Person",
+        24,     // size
+        8,      // align
+        field_count[Person]()
+    )
+
+    assert(info.name == "Person", "type name")
+    assert(info.is_struct(), "should be struct")
+    assert(info.field_count == 3, "field count from intrinsic")
+    return 0
+}
+
+@test
+func test_reflect_field_intrinsics() -> I32 {
+    // Verify the intrinsics work for Person
+    let fc: I64 = field_count[Person]()
+    assert(fc == 3, "Person should have 3 fields")
+
+    let f0: Str = field_name[Person](0)
+    let f1: Str = field_name[Person](1)
+    let f2: Str = field_name[Person](2)
+    assert(f0 == "name", "field 0 name")
+    assert(f1 == "age", "field 1 name")
+    assert(f2 == "active", "field 2 name")
+    return 0
+}
+
+@test
+func test_reflect_field_offsets() -> I32 {
+    let off0: I64 = field_offset[Person](0)
+    let off1: I64 = field_offset[Person](1)
+    let off2: I64 = field_offset[Person](2)
+
+    // name: Str (ptr) at offset 0
+    // age: I32 at offset 8 (after ptr)
+    // active: Bool at offset 12 (after I32)
+    assert(off0 == 0, "name offset")
+    assert(off1 == 8, "age offset")
+    assert(off2 == 12, "active offset")
+    return 0
+}
+
+@test
+func test_field_info_from_intrinsics() -> I32 {
+    // Build FieldInfo manually from intrinsics
+    let field0: FieldInfo = FieldInfo::new(
+        field_name[Person](0),
+        field_type_id[Person](0),
+        "Str",
+        field_offset[Person](0),
+        true
+    )
+
+    assert(field0.name == "name", "field name")
+    assert(field0.offset == 0, "field offset")
+    assert(field0.is_public, "is public")
+    return 0
+}
+
+@test
+func test_build_all_field_infos() -> I32 {
+    // Build all field infos for Person
+    let f0: FieldInfo = FieldInfo::new(
+        field_name[Person](0),
+        field_type_id[Person](0),
+        "Str",
+        field_offset[Person](0),
+        true
+    )
+    let f1: FieldInfo = FieldInfo::new(
+        field_name[Person](1),
+        field_type_id[Person](1),
+        "I32",
+        field_offset[Person](1),
+        true
+    )
+    let f2: FieldInfo = FieldInfo::new(
+        field_name[Person](2),
+        field_type_id[Person](2),
+        "Bool",
+        field_offset[Person](2),
+        true
+    )
+
+    assert(f0.name == "name", "f0 name")
+    assert(f1.name == "age", "f1 name")
+    assert(f2.name == "active", "f2 name")
+
+    assert(f0.offset == 0, "f0 offset")
+    assert(f1.offset == 8, "f1 offset")
+    assert(f2.offset == 12, "f2 offset")
+    return 0
+}
+
+// ============================================================================
+// Test enum reflection
+// ============================================================================
+
+enum Status {
+    Active,
+    Inactive,
+    Pending
+}
+
+@test
+func test_enum_variant_count_intrinsic() -> I32 {
+    let vc: I64 = variant_count[Status]()
+    assert(vc == 3, "Status should have 3 variants")
+    return 0
+}
+
+@test
+func test_build_enum_type_info() -> I32 {
+    let info: TypeInfo = TypeInfo::for_enum(
+        54321,  // type id
+        "Status",
+        4,      // size (enum tag)
+        4,      // align
+        variant_count[Status]()
+    )
+
+    assert(info.name == "Status", "enum name")
+    assert(info.is_enum(), "should be enum")
+    assert(info.variant_count == 3, "variant count from intrinsic")
+    return 0
+}

@@ -1,0 +1,124 @@
+//! Tests for TypeInfo and reflection types
+//!
+//! Tests the core reflection types: TypeKind, FieldInfo, VariantInfo, TypeInfo
+
+use test
+use core::reflect::{TypeKind, FieldInfo, VariantInfo, TypeInfo}
+
+// ============================================================================
+// TypeKind Tests
+// ============================================================================
+
+@test
+func test_type_kind_struct() -> I32 {
+    let kind: TypeKind = TypeKind::Struct
+    assert(kind.to_string() == "struct", "TypeKind::Struct string")
+    return 0
+}
+
+@test
+func test_type_kind_enum() -> I32 {
+    let kind: TypeKind = TypeKind::Enum
+    assert(kind.to_string() == "enum", "TypeKind::Enum string")
+    return 0
+}
+
+@test
+func test_type_kind_primitive() -> I32 {
+    let kind: TypeKind = TypeKind::Primitive
+    assert(kind.to_string() == "primitive", "TypeKind::Primitive string")
+    return 0
+}
+
+@test
+func test_type_kind_equality() -> I32 {
+    let k1: TypeKind = TypeKind::Struct
+    let k2: TypeKind = TypeKind::Struct
+    let k3: TypeKind = TypeKind::Enum
+    assert(k1 == k2, "same kinds should be equal")
+    assert(k1 != k3, "different kinds should not be equal")
+    return 0
+}
+
+// ============================================================================
+// FieldInfo Tests
+// ============================================================================
+
+@test
+func test_field_info_creation() -> I32 {
+    let field: FieldInfo = FieldInfo::new("name", 12345, "Str", 0, true)
+    assert(field.name == "name", "field name")
+    assert(field.type_id == 12345, "field type_id")
+    assert(field.type_name == "Str", "field type_name")
+    assert(field.offset == 0, "field offset")
+    assert(field.is_public, "field is_public")
+    return 0
+}
+
+@test
+func test_field_info_private() -> I32 {
+    let field: FieldInfo = FieldInfo::new("secret", 999, "I32", 8, false)
+    assert(not field.is_public, "private field")
+    assert(field.offset == 8, "private field offset")
+    return 0
+}
+
+// ============================================================================
+// VariantInfo Tests
+// ============================================================================
+
+@test
+func test_variant_info_unit() -> I32 {
+    let variant: VariantInfo = VariantInfo::new("None", 0, 0)
+    assert(variant.name == "None", "unit variant name")
+    assert(variant.tag == 0, "unit variant tag")
+    assert(variant.is_unit(), "should be unit variant")
+    return 0
+}
+
+@test
+func test_variant_info_with_payload() -> I32 {
+    let variant: VariantInfo = VariantInfo::new("Some", 1, 1)
+    assert(variant.name == "Some", "payload variant name")
+    assert(variant.tag == 1, "payload variant tag")
+    assert(not variant.is_unit(), "should not be unit variant")
+    assert(variant.payload_count == 1, "payload count")
+    return 0
+}
+
+// ============================================================================
+// TypeInfo Tests
+// ============================================================================
+
+@test
+func test_type_info_for_struct() -> I32 {
+    let info: TypeInfo = TypeInfo::for_struct(123, "Person", 24, 8, 3)
+    assert(info.name == "Person", "struct name")
+    assert(info.is_struct(), "should be struct")
+    assert(not info.is_enum(), "should not be enum")
+    assert(info.size == 24, "struct size")
+    assert(info.align == 8, "struct alignment")
+    assert(info.field_count == 3, "field count")
+    return 0
+}
+
+@test
+func test_type_info_for_enum() -> I32 {
+    let info: TypeInfo = TypeInfo::for_enum(456, "Status", 8, 4, 5)
+    assert(info.name == "Status", "enum name")
+    assert(info.is_enum(), "should be enum")
+    assert(not info.is_struct(), "should not be struct")
+    assert(info.variant_count == 5, "variant count")
+    return 0
+}
+
+@test
+func test_type_info_for_primitive() -> I32 {
+    let info: TypeInfo = TypeInfo::for_primitive(789, "I64", 8, 8)
+    assert(info.name == "I64", "primitive name")
+    assert(info.is_primitive(), "should be primitive")
+    assert(info.size == 8, "primitive size")
+    assert(info.field_count == 0, "no fields for primitive")
+    assert(info.variant_count == 0, "no variants for primitive")
+    return 0
+}

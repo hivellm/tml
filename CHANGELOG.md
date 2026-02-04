@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Fast Hash Module** (2026-02-04) - Non-cryptographic hash functions for ETags and checksums
+  - New `std::hash` module with fast hash algorithms optimized for speed (NOT security)
+  - FNV-1a: `fnv1a32()`, `fnv1a64()` - Fast, simple hash with good distribution
+  - MurmurHash2: `murmur2_32()`, `murmur2_64()` - Seeded hash for varied sequences
+  - All functions support both `Str` and `Buffer` inputs (`*_bytes` variants)
+  - `Hash32` and `Hash64` types with `.raw()`, `.to_hex()`, `.to_i64()` methods
+  - ETag helpers: `etag_weak()`, `etag_strong()` for HTTP caching
+  - Files added:
+    - `lib/std/src/hash.tml` - Fast hash API (FNV-1a, Murmur2, ETag helpers)
+    - `lib/std/tests/hash/fast_hash.test.tml` - 22 tests covering all functions
+  - Files modified:
+    - `compiler/runtime/crypto.c` - Added FNV-1a and Murmur2 C implementations
+    - `lib/std/src/mod.tml` - Export new hash module
+
 - **Crypto Module** (2026-02-02) - Cryptographically secure random number generation
   - New `std::crypto` module with CSPRNG support using native OS APIs
   - Windows: BCryptGenRandom (CNG), Linux: getrandom(), macOS: SecRandomCopyBytes

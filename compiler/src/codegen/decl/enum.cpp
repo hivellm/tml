@@ -156,6 +156,9 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
             enum_variants_[key] = tag++;
         }
     }
+
+    // Generate @derive(Reflect) support if decorated
+    gen_derive_reflect_enum(e);
 }
 
 // Generate a specialized version of a generic enum

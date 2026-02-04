@@ -759,6 +759,9 @@ private:
     // Used when processing directory modules that may have same-named functions
     std::unordered_set<std::string> generated_functions_;
 
+    // Generated TypeInfo globals for @derive(Reflect) types
+    std::unordered_set<std::string> generated_typeinfo_;
+
     // Pending impl method instantiation requests
     // Each entry: (mangled_type_name, method_name, type_subs, base_type_name, method_type_suffix)
     struct PendingImplMethod {
@@ -992,6 +995,11 @@ private:
     void gen_struct_decl(const parser::StructDecl& s);
     void gen_enum_decl(const parser::EnumDecl& e);
     void gen_namespace_decl(const parser::NamespaceDecl& ns);
+
+    // @derive(Reflect) support
+    void gen_derive_reflect_struct(const parser::StructDecl& s);
+    void gen_derive_reflect_enum(const parser::EnumDecl& e);
+    void gen_derive_reflect_impl(const std::string& type_name, const std::string& typeinfo_name);
 
     // Statement generation
     void gen_stmt(const parser::Stmt& stmt);

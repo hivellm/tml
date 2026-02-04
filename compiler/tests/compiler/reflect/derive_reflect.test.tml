@@ -1,0 +1,187 @@
+//! Tests for @derive(Reflect) macro infrastructure
+//!
+//! Note: Full @derive(Reflect) support requires type checker integration.
+//! These tests verify the underlying intrinsics work correctly for building
+//! TypeInfo structures that @derive(Reflect) will use.
+
+use test
+use core::reflect::{TypeInfo, TypeKind, FieldInfo}
+use core::intrinsics::{field_count, field_name, field_offset, field_type_id, variant_count, type_name, type_id, size_of, align_of}
+
+// ============================================================================
+// Test struct reflection with intrinsics (pattern for @derive(Reflect))
+// ============================================================================
+
+type Person {
+    name: Str,
+    age: I32,
+    active: Bool
+}
+
+@test
+func test_build_person_type_info() -> I32 {
+    // Build TypeInfo for Person using intrinsics
+    // This is the pattern @derive(Reflect) will use
+    let info: TypeInfo = TypeInfo::for_struct(
+        type_id[Person](),
+        type_name[Person](),
+        size_of[Person](),
+        align_of[Person](),
+        field_count[Person]()
+    )
+
+    assert(info.name == "Person", "type name should be Person")
+    assert(info.is_struct(), "should be struct kind")
+    assert(info.field_count == 3, "should have 3 fields")
+    assert(info.variant_count == 0, "struct should have 0 variants")
+    return 0
+}
+
+@test
+func test_build_person_field_infos() -> I32 {
+    // Build FieldInfo for each field (pattern for @derive(Reflect))
+    let f0: FieldInfo = FieldInfo::new(
+        field_name[Person](0),
+        field_type_id[Person](0),
+        "Str",
+        field_offset[Person](0),
+        true
+    )
+    let f1: FieldInfo = FieldInfo::new(
+        field_name[Person](1),
+        field_type_id[Person](1),
+        "I32",
+        field_offset[Person](1),
+        true
+    )
+    let f2: FieldInfo = FieldInfo::new(
+        field_name[Person](2),
+        field_type_id[Person](2),
+        "Bool",
+        field_offset[Person](2),
+        true
+    )
+
+    assert(f0.name == "name", "field 0 name")
+    assert(f1.name == "age", "field 1 name")
+    assert(f2.name == "active", "field 2 name")
+    return 0
+}
+
+// ============================================================================
+// Test enum reflection with intrinsics
+// ============================================================================
+
+enum Status {
+    Active,
+    Inactive,
+    Pending
+}
+
+@test
+func test_build_status_type_info() -> I32 {
+    let info: TypeInfo = TypeInfo::for_enum(
+        type_id[Status](),
+        type_name[Status](),
+        size_of[Status](),
+        align_of[Status](),
+        variant_count[Status]()
+    )
+
+    assert(info.name == "Status", "type name should be Status")
+    assert(info.is_enum(), "should be enum kind")
+    assert(info.field_count == 0, "enum should have 0 fields")
+    assert(info.variant_count == 3, "should have 3 variants")
+    return 0
+}
+
+// ============================================================================
+// Test type_name intrinsic for various types
+// ============================================================================
+
+type Point {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_type_name_intrinsic() -> I32 {
+    // Store in variables to ensure proper Str comparison (str_eq vs ptr cmp)
+    let person_name: Str = type_name[Person]()
+    let status_name: Str = type_name[Status]()
+    let point_name: Str = type_name[Point]()
+    let i32_name: Str = type_name[I32]()
+    let str_name: Str = type_name[Str]()
+
+    assert(person_name == "Person", "Person type name")
+    assert(status_name == "Status", "Status type name")
+    assert(point_name == "Point", "Point type name")
+    assert(i32_name == "I32", "I32 type name")
+    assert(str_name == "Str", "Str type name")
+    return 0
+}
+
+// ============================================================================
+// Test type_id uniqueness
+// ============================================================================
+
+@test
+func test_type_id_uniqueness() -> I32 {
+    let person_id: U64 = type_id[Person]()
+    let status_id: U64 = type_id[Status]()
+    let point_id: U64 = type_id[Point]()
+    let i32_id: U64 = type_id[I32]()
+
+    // Each type should have a unique ID
+    assert(person_id != status_id, "Person and Status have different IDs")
+    assert(person_id != point_id, "Person and Point have different IDs")
+    assert(person_id != i32_id, "Person and I32 have different IDs")
+    assert(status_id != point_id, "Status and Point have different IDs")
+    return 0
+}
+
+// ============================================================================
+// Test @derive(Reflect) - Type checker integration
+// ============================================================================
+
+@derive(Reflect)
+type Employee {
+    id: I64,
+    name: Str,
+    salary: F64
+}
+
+@derive(Reflect)
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+@test
+func test_derive_reflect_struct_type_info() -> I32 {
+    // Call the generated type_info() method
+    let info: ref TypeInfo = Employee::type_info()
+
+    // Verify the type info
+    let name: Str = info.name
+    assert(name == "Employee", "type name should be Employee")
+    assert(info.is_struct(), "should be struct kind")
+    assert(info.field_count == 3, "should have 3 fields")
+    assert(info.variant_count == 0, "struct should have 0 variants")
+    return 0
+}
+
+@test
+func test_derive_reflect_enum_type_info() -> I32 {
+    // Call the generated type_info() method
+    let info: ref TypeInfo = Color::type_info()
+
+    // Verify the type info
+    let name: Str = info.name
+    assert(name == "Color", "type name should be Color")
+    assert(info.is_enum(), "should be enum kind")
+    assert(info.field_count == 0, "enum should have 0 fields")
+    assert(info.variant_count == 3, "should have 3 variants")
+    return 0
+}
