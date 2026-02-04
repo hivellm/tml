@@ -1614,12 +1614,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                 sub_it->second->is<types::PrimitiveType>()) {
                                 // Check if this is an intrinsic primitive method
                                 static const std::unordered_set<std::string> primitive_intrinsics =
-                                    {"duplicate", "to_owned",     "borrow", "borrow_mut",
-                                     "to_string", "debug_string", "hash",   "cmp",
-                                     "add",       "sub",          "mul",    "div",
-                                     "rem",       "neg",          "abs",    "eq",
-                                     "ne",        "lt",           "le",     "gt",
-                                     "ge",        "min",          "max",    "clamp"};
+                                    {"duplicate",   "to_owned",     "borrow", "borrow_mut",
+                                     "to_string",   "debug_string", "hash",   "cmp",
+                                     "partial_cmp", "add",          "sub",    "mul",
+                                     "div",         "rem",          "neg",    "abs",
+                                     "eq",          "ne",           "lt",     "le",
+                                     "gt",          "ge",           "min",    "max",
+                                     "clamp"};
                                 if (primitive_intrinsics.count(method)) {
                                     TML_DEBUG_LN("[METHOD 4b] Delegating primitive method to "
                                                  "gen_primitive_method");
@@ -1785,11 +1786,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 if (sub_it != current_type_subs_.end() &&
                     sub_it->second->is<types::PrimitiveType>()) {
                     static const std::unordered_set<std::string> primitive_intrinsics = {
-                        "duplicate",    "to_owned", "borrow", "borrow_mut", "to_string",
-                        "debug_string", "hash",     "cmp",    "add",        "sub",
-                        "mul",          "div",      "rem",    "neg",        "abs",
-                        "eq",           "ne",       "lt",     "le",         "gt",
-                        "ge",           "min",      "max",    "clamp"};
+                        "duplicate",    "to_owned", "borrow", "borrow_mut",  "to_string",
+                        "debug_string", "hash",     "cmp",    "partial_cmp", "add",
+                        "sub",          "mul",      "div",    "rem",         "neg",
+                        "abs",          "eq",       "ne",     "lt",          "le",
+                        "gt",           "ge",       "min",    "max",         "clamp"};
                     if (primitive_intrinsics.count(method)) {
                         TML_DEBUG_LN("[METHOD 4b] Delegating primitive method to "
                                      "gen_primitive_method (required_behaviors)");

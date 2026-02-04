@@ -184,8 +184,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 emit_struct_init_inst(i, result_reg, result_type, inst);
 
             } else if constexpr (std::is_same_v<T, mir::EnumInitInst>) {
-                // Initialize enum: { tag, payload }
-                std::string enum_type = "%enum." + i.enum_name;
+                // Initialize enum: { tag }
+                // Note: Use %struct. prefix to be consistent with AST-based codegen
+                // imported enum types are emitted in emit_type_defs via used_enum_types_
+                std::string enum_type = "%struct." + i.enum_name;
                 // Insert tag
                 std::string with_tag = "%tmp" + std::to_string(temp_counter_++);
                 emitln("    " + with_tag + " = insertvalue " + enum_type + " undef, i32 " +
@@ -755,6 +757,152 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                                        const mir::InstructionData& inst) {
     std::string recv_type = i.receiver_type.empty() ? "Unknown" : i.receiver_type;
     std::string receiver = get_value_reg(i.receiver);
+
+    // ==========================================================================
+    // Inline primitive behavior methods (cmp, partial_cmp)
+    // ==========================================================================
+    static const std::unordered_set<std::string> signed_int_types = {"I8", "I16", "I32", "I64",
+                                                                     "I128"};
+    static const std::unordered_set<std::string> unsigned_int_types = {"U8", "U16", "U32", "U64",
+                                                                       "U128"};
+    static const std::unordered_set<std::string> float_types = {"F32", "F64"};
+
+    bool is_signed = signed_int_types.count(recv_type) > 0;
+    bool is_unsigned = unsigned_int_types.count(recv_type) > 0;
+    bool is_float = float_types.count(recv_type) > 0;
+    bool is_numeric = is_signed || is_unsigned || is_float;
+
+    // Handle partial_cmp inline for numeric types - returns Maybe[Ordering]
+    if (i.method_name == "partial_cmp" && is_numeric && i.args.size() == 1 && !result_reg.empty()) {
+        std::string id = std::to_string(temp_counter_++);
+
+        // Get the LLVM type for this primitive
+        std::string llvm_ty;
+        if (recv_type == "I8")
+            llvm_ty = "i8";
+        else if (recv_type == "I16")
+            llvm_ty = "i16";
+        else if (recv_type == "I32")
+            llvm_ty = "i32";
+        else if (recv_type == "I64")
+            llvm_ty = "i64";
+        else if (recv_type == "I128")
+            llvm_ty = "i128";
+        else if (recv_type == "U8")
+            llvm_ty = "i8";
+        else if (recv_type == "U16")
+            llvm_ty = "i16";
+        else if (recv_type == "U32")
+            llvm_ty = "i32";
+        else if (recv_type == "U64")
+            llvm_ty = "i64";
+        else if (recv_type == "U128")
+            llvm_ty = "i128";
+        else if (recv_type == "F32")
+            llvm_ty = "float";
+        else if (recv_type == "F64")
+            llvm_ty = "double";
+
+        // Load other value from ref
+        std::string other_ref = get_value_reg(i.args[0]);
+        emitln("    %other." + id + " = load " + llvm_ty + ", ptr " + other_ref);
+
+        // Compare and determine ordering
+        if (is_float) {
+            emitln("    %cmp_lt." + id + " = fcmp olt " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+            emitln("    %cmp_gt." + id + " = fcmp ogt " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+        } else if (is_signed) {
+            emitln("    %cmp_lt." + id + " = icmp slt " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+            emitln("    %cmp_gt." + id + " = icmp sgt " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+        } else {
+            emitln("    %cmp_lt." + id + " = icmp ult " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+            emitln("    %cmp_gt." + id + " = icmp ugt " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+        }
+
+        // Build Ordering value: Less=0, Equal=1, Greater=2
+        emitln("    %tag_1." + id + " = select i1 %cmp_lt." + id + ", i32 0, i32 1");
+        emitln("    %tag_2." + id + " = select i1 %cmp_gt." + id + ", i32 2, i32 %tag_1." + id);
+
+        // Build Ordering struct on stack
+        emitln("    %ordering_alloca." + id + " = alloca %struct.Ordering, align 4");
+        emitln("    %ordering_tag_ptr." + id +
+               " = getelementptr inbounds %struct.Ordering, ptr %ordering_alloca." + id +
+               ", i32 0, i32 0");
+        emitln("    store i32 %tag_2." + id + ", ptr %ordering_tag_ptr." + id);
+        emitln("    %ordering." + id + " = load %struct.Ordering, ptr %ordering_alloca." + id);
+
+        // Build Maybe[Ordering] = Just(ordering)
+        // Maybe[Ordering] layout: { i32 tag, [4 x i8] payload } where tag 0 = Just, 1 = Nothing
+        std::string maybe_type = "%struct.Maybe__Ordering";
+        emitln("    %maybe_alloca." + id + " = alloca " + maybe_type + ", align 8");
+        emitln("    %maybe_tag_ptr." + id + " = getelementptr inbounds " + maybe_type +
+               ", ptr %maybe_alloca." + id + ", i32 0, i32 0");
+        emitln("    store i32 0, ptr %maybe_tag_ptr." + id); // 0 = Just
+        emitln("    %maybe_payload_ptr." + id + " = getelementptr inbounds " + maybe_type +
+               ", ptr %maybe_alloca." + id + ", i32 0, i32 1");
+        emitln("    store %struct.Ordering %ordering." + id + ", ptr %maybe_payload_ptr." + id);
+        emitln("    " + result_reg + " = load " + maybe_type + ", ptr %maybe_alloca." + id);
+
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = maybe_type;
+        }
+        return;
+    }
+
+    // Handle cmp inline for integer types - returns Ordering directly
+    if (i.method_name == "cmp" && (is_signed || is_unsigned) && i.args.size() == 1 &&
+        !result_reg.empty()) {
+        std::string id = std::to_string(temp_counter_++);
+
+        // Get the LLVM type for this primitive
+        std::string llvm_ty;
+        if (recv_type == "I8" || recv_type == "U8")
+            llvm_ty = "i8";
+        else if (recv_type == "I16" || recv_type == "U16")
+            llvm_ty = "i16";
+        else if (recv_type == "I32" || recv_type == "U32")
+            llvm_ty = "i32";
+        else if (recv_type == "I64" || recv_type == "U64")
+            llvm_ty = "i64";
+        else if (recv_type == "I128" || recv_type == "U128")
+            llvm_ty = "i128";
+
+        // Load other value from ref
+        std::string other_ref = get_value_reg(i.args[0]);
+        emitln("    %other." + id + " = load " + llvm_ty + ", ptr " + other_ref);
+
+        // Compare and determine ordering
+        if (is_signed) {
+            emitln("    %cmp_lt." + id + " = icmp slt " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+            emitln("    %cmp_gt." + id + " = icmp sgt " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+        } else {
+            emitln("    %cmp_lt." + id + " = icmp ult " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+            emitln("    %cmp_gt." + id + " = icmp ugt " + llvm_ty + " " + receiver + ", %other." +
+                   id);
+        }
+
+        // Build Ordering value: Less=0, Equal=1, Greater=2
+        emitln("    %tag_1." + id + " = select i1 %cmp_lt." + id + ", i32 0, i32 1");
+        emitln("    %tag_2." + id + " = select i1 %cmp_gt." + id + ", i32 2, i32 %tag_1." + id);
+
+        // Build Ordering struct
+        emitln("    " + result_reg + " = insertvalue %struct.Ordering undef, i32 %tag_2." + id +
+               ", 0");
+
+        if (inst.result != mir::INVALID_VALUE) {
+            value_types_[inst.result] = "%struct.Ordering";
+        }
+        return;
+    }
 
     // V8-style optimization: Inline simple Text methods to avoid FFI overhead
     // This is critical for performance - each FFI call has ~10ns overhead

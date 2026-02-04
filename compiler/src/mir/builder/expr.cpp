@@ -533,6 +533,40 @@ auto MirBuilder::build_array(const parser::ArrayExpr& arr) -> Value {
 
 auto MirBuilder::build_path(const parser::PathExpr& path) -> Value {
     // Path could be a variable, enum variant, or module item
+
+    // Handle enum variants (e.g., Ordering::Less, Color::Red)
+    if (path.path.segments.size() >= 2) {
+        std::string enum_name = path.path.segments[path.path.segments.size() - 2];
+        std::string variant_name = path.path.segments.back();
+
+        // Look up the enum in the type environment
+        if (auto enum_def = env_.lookup_enum(enum_name)) {
+            // Find the variant index
+            int variant_index = -1;
+            for (size_t i = 0; i < enum_def->variants.size(); ++i) {
+                if (enum_def->variants[i].first == variant_name) {
+                    variant_index = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            if (variant_index >= 0) {
+                // Create an enum value with the variant tag
+                EnumInitInst inst;
+                inst.enum_name = enum_name;
+                inst.variant_name = variant_name;
+                inst.variant_index = variant_index;
+                // No payload for unit variants like Ordering::Less
+                inst.payload = {};
+                inst.payload_types = {};
+
+                MirTypePtr result_type = make_enum_type(enum_name);
+                return emit(inst, result_type);
+            }
+        }
+    }
+
+    // Fall back to variable lookup for single-segment paths
     auto name = path.path.segments.empty() ? "" : path.path.segments.back();
     return get_variable(name);
 }

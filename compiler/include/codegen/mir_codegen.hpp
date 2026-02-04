@@ -95,6 +95,9 @@ private:
     // Type definitions emitted (to avoid duplicates)
     std::set<std::string> emitted_types_;
 
+    // Enum types used (collected from EnumInitInst, for imported enums)
+    std::set<std::string> used_enum_types_;
+
     // String constants (value -> global name)
     std::unordered_map<std::string, std::string> string_constants_;
 
@@ -193,8 +196,8 @@ private:
     auto emit_inline_int_to_string(const std::string& id, const std::string& int_val,
                                    const std::string& dst_ptr, const std::string& len_ptr,
                                    const std::string& current_len, const std::string& receiver,
-                                   const std::string& done_label,
-                                   bool skip_store = false) -> std::string;
+                                   const std::string& done_label, bool skip_store = false)
+        -> std::string;
 };
 
 } // namespace tml::codegen

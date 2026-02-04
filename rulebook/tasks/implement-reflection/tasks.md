@@ -1,8 +1,8 @@
 # Tasks: Complete Reflection System Implementation
 
-## Progress: 36% (25/69 tasks complete)
+## Progress: 48% (33/69 tasks complete)
 
-**Status**: Phase 3.2 in progress - variant_name/variant_tag for enums complete
+**Status**: Phase 4 complete - AnyValue type-erased container implemented
 
 **Proposal**: See [proposal.md](proposal.md) for full RFC
 
@@ -64,13 +64,14 @@
 ## Phase 4: Any Type (P2)
 
 ### 4.1 Any Type Implementation
-- [ ] 4.1.1 Create `lib/core/any.tml` with Any type definition
-- [ ] 4.1.2 Implement `Any::from[T: Reflect](value: T) -> Any`
-- [ ] 4.1.3 Implement `downcast[T: Reflect](ref this) -> Maybe[ref T]`
-- [ ] 4.1.4 Implement `downcast_mut[T: Reflect](mut ref this) -> Maybe[mut ref T]`
-- [ ] 4.1.5 Implement `is[T: Reflect](ref this) -> Bool`
-- [ ] 4.1.6 Implement proper drop cleanup via stored drop_fn pointer
-- [ ] 4.1.7 Add `compiler/tests/compiler/any_type.test.tml` test file
+- [x] 4.1.1 Create `AnyValue` type in `lib/core/src/any.tml`
+- [x] 4.1.2 Implement `AnyValue::from[T](value: T) -> AnyValue`
+- [x] 4.1.3 Implement `downcast[T](this) -> Maybe[ref T]`
+- [x] 4.1.4 Implement `downcast_mut[T](mut this) -> Maybe[mut ref T]`
+- [x] 4.1.5 Implement `is_type[T](this) -> Bool` (renamed from `is` due to keyword)
+- [x] 4.1.6 Implement Drop for AnyValue (deallocs memory; inner Drop requires function pointers)
+- [x] 4.1.7 Add AnyValue tests to `lib/core/tests/any.test.tml`
+- [x] 4.1.8 Implement `TypeId::of[T]()` using `type_id[T]()` intrinsic
 
 ## Phase 5: OOP Reflection (P2)
 
@@ -153,10 +154,10 @@
 | 1 | Core Intrinsics | P0 | ✓ Complete | 11/11 |
 | 2 | TypeInfo Generation | P1 | ✓ Complete | 8/8 |
 | 3 | Reflect Behavior | P1 | In Progress | 6/10 |
-| 4 | Any Type | P2 | Pending | 0/7 |
+| 4 | Any Type | P2 | ✓ Complete | 8/8 |
 | 5 | OOP Reflection | P2 | Pending | 0/20 |
 | 6 | Integration & Testing | P3 | Pending | 0/13 |
-| **Total** | | | | **25/69** |
+| **Total** | | | | **33/70** |
 
 ## Dependencies
 

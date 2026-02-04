@@ -196,6 +196,71 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             return result;
         }
 
+        // partial_cmp - returns Maybe[Ordering] (Just(ordering) for numeric types)
+        if (method == "partial_cmp") {
+            emit_coverage("PartialOrd::partial_cmp");
+            if (call.args.empty()) {
+                report_error("partial_cmp() requires an argument", call.span, "C008");
+                return "0";
+            }
+            std::string other_ptr = gen_expr(*call.args[0]);
+            std::string other = fresh_reg();
+            emit_line("  " + other + " = load " + llvm_ty + ", ptr " + other_ptr);
+
+            // Compute comparison like cmp
+            std::string cmp_lt = fresh_reg();
+            std::string cmp_eq = fresh_reg();
+            if (is_float) {
+                emit_line("  " + cmp_lt + " = fcmp olt " + llvm_ty + " " + receiver + ", " + other);
+                emit_line("  " + cmp_eq + " = fcmp oeq " + llvm_ty + " " + receiver + ", " + other);
+            } else if (is_signed) {
+                emit_line("  " + cmp_lt + " = icmp slt " + llvm_ty + " " + receiver + ", " + other);
+                emit_line("  " + cmp_eq + " = icmp eq " + llvm_ty + " " + receiver + ", " + other);
+            } else {
+                emit_line("  " + cmp_lt + " = icmp ult " + llvm_ty + " " + receiver + ", " + other);
+                emit_line("  " + cmp_eq + " = icmp eq " + llvm_ty + " " + receiver + ", " + other);
+            }
+            std::string sel1 = fresh_reg();
+            emit_line("  " + sel1 + " = select i1 " + cmp_eq + ", i32 1, i32 2");
+            std::string tag = fresh_reg();
+            emit_line("  " + tag + " = select i1 " + cmp_lt + ", i32 0, i32 " + sel1);
+
+            // Build Ordering on stack
+            std::string ordering_alloca = fresh_reg();
+            emit_line("  " + ordering_alloca + " = alloca %struct.Ordering, align 4");
+            std::string ordering_tag_ptr = fresh_reg();
+            emit_line("  " + ordering_tag_ptr + " = getelementptr inbounds %struct.Ordering, ptr " +
+                      ordering_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 " + tag + ", ptr " + ordering_tag_ptr);
+            std::string ordering = fresh_reg();
+            emit_line("  " + ordering + " = load %struct.Ordering, ptr " + ordering_alloca);
+
+            // Build Maybe[Ordering] = Just(ordering)
+            // Maybe[Ordering] layout: { i32 tag, %struct.Ordering payload }
+            // tag 0 = Just, tag 1 = Nothing
+            std::string maybe_type = "%struct.Maybe__Ordering";
+            std::string maybe_alloca = fresh_reg();
+            emit_line("  " + maybe_alloca + " = alloca " + maybe_type + ", align 8");
+
+            // Set tag to 0 (Just)
+            std::string maybe_tag_ptr = fresh_reg();
+            emit_line("  " + maybe_tag_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 0, ptr " + maybe_tag_ptr);
+
+            // Set payload
+            std::string payload_ptr = fresh_reg();
+            emit_line("  " + payload_ptr + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      maybe_alloca + ", i32 0, i32 1");
+            emit_line("  store %struct.Ordering " + ordering + ", ptr " + payload_ptr);
+
+            // Load final result
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + maybe_type + ", ptr " + maybe_alloca);
+            last_expr_type_ = maybe_type;
+            return result;
+        }
+
         if (method == "max") {
             emit_coverage("Ord::max");
             if (call.args.empty()) {

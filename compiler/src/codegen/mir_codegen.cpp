@@ -70,8 +70,9 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     emitted_types_.clear();
     string_constants_.clear();
     value_string_contents_.clear();
+    used_enum_types_.clear();
 
-    // First pass: collect string constants from all functions
+    // First pass: collect string constants and enum types from all functions
     for (const auto& func : module.functions) {
         for (const auto& block : func.blocks) {
             for (const auto& inst : block.instructions) {
@@ -83,6 +84,10 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
                             string_constants_[str_const->value] = global_name;
                         }
                     }
+                }
+                // Collect enum types from EnumInitInst (for imported enums)
+                if (auto* enum_inst = std::get_if<mir::EnumInitInst>(&inst.inst)) {
+                    used_enum_types_.insert(enum_inst->enum_name);
                 }
             }
         }
@@ -250,12 +255,25 @@ void MirCodegen::emit_type_defs(const mir::Module& module) {
         emit_struct_def(s);
     }
 
-    // Emit enum definitions
+    // Emit enum definitions (local enums)
     for (const auto& e : module.enums) {
         emit_enum_def(e);
     }
 
-    if (!module.structs.empty() || !module.enums.empty()) {
+    // Emit definitions for imported enums used in EnumInitInst
+    // These are enums not defined in the current module but used via imports
+    // Note: Use %struct. prefix to be consistent with AST-based codegen
+    for (const auto& enum_name : used_enum_types_) {
+        std::string type_name = "%struct." + enum_name;
+        if (!emitted_types_.count(type_name)) {
+            // Emit a simple enum type (just tag) for imported enums
+            // Enums without payloads like Ordering use { i32 }
+            emitln(type_name + " = type { i32 }");
+            emitted_types_.insert(type_name);
+        }
+    }
+
+    if (!module.structs.empty() || !module.enums.empty() || !used_enum_types_.empty()) {
         emitln();
     }
 
@@ -298,7 +316,8 @@ void MirCodegen::emit_struct_def(const mir::StructDef& s) {
 void MirCodegen::emit_enum_def(const mir::EnumDef& e) {
     // Enums are represented as tagged unions
     // { i32 tag, [max_payload_size x i8] payload }
-    std::string type_name = "%enum." + e.name;
+    // Use %struct. prefix to be consistent with AST-based codegen
+    std::string type_name = "%struct." + e.name;
     if (emitted_types_.count(type_name)) {
         return;
     }
@@ -306,9 +325,11 @@ void MirCodegen::emit_enum_def(const mir::EnumDef& e) {
 
     // Calculate max payload size
     size_t max_payload_size = 0;
+    bool has_payload = false;
     for (const auto& v : e.variants) {
         size_t payload_size = 0;
         for (const auto& t : v.payload_types) {
+            has_payload = true;
             // Estimate size based on type
             if (t->is_integer()) {
                 payload_size += t->bit_width() / 8;
@@ -328,12 +349,16 @@ void MirCodegen::emit_enum_def(const mir::EnumDef& e) {
         max_payload_size = std::max(max_payload_size, payload_size);
     }
 
-    // Minimum 8 bytes for alignment
-    if (max_payload_size < 8) {
-        max_payload_size = 8;
+    // For simple enums without payloads (like Ordering), use just { i32 }
+    if (!has_payload) {
+        emitln(type_name + " = type { i32 }");
+    } else {
+        // Minimum 8 bytes for alignment
+        if (max_payload_size < 8) {
+            max_payload_size = 8;
+        }
+        emitln(type_name + " = type { i32, [" + std::to_string(max_payload_size) + " x i8] }");
     }
-
-    emitln(type_name + " = type { i32, [" + std::to_string(max_payload_size) + " x i8] }");
 }
 
 void MirCodegen::emit_function(const mir::Function& func) {

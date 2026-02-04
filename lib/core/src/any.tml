@@ -27,11 +27,13 @@
 //! }
 //! ```
 //!
-//! # Limitations
+//! # TypeId
 //!
-//! The `TypeId::of[T]()` function requires compiler support to generate
-//! unique type identifiers. Currently, a placeholder implementation is
-//! provided that uses type name hashing.
+//! The `TypeId::of[T]()` function uses the compiler's `type_id[T]()` intrinsic
+//! to generate unique type identifiers based on FNV-1a hashing of type names.
+
+use core::intrinsics::type_id
+use core::cmp::Ordering
 
 // ============================================================================
 // TypeId
@@ -54,13 +56,10 @@ pub type TypeId {
 }
 
 impl TypeId {
-    /// Returns the `TypeId` of the type this method is called on.
+    /// Returns the `TypeId` of the given type.
     ///
-    /// # Compiler Support Required
-    ///
-    /// This function requires the compiler to generate a unique ID for
-    /// each distinct type T. Without compiler support, this returns a
-    /// placeholder value.
+    /// This uses the compiler's `type_id[T]()` intrinsic to generate a
+    /// unique identifier for each distinct type.
     ///
     /// # Example
     ///
@@ -69,12 +68,9 @@ impl TypeId {
     /// let str_id: TypeId = TypeId::of[Str]()
     /// assert(int_id != str_id)
     /// ```
-    // NOTE: This requires compiler intrinsic support.
-    // The compiler should replace calls to TypeId::of[T]() with
-    // TypeId { id: <unique_hash_for_T> }
-    //
-    // For now, we cannot implement this without compiler support.
-    // Placeholder: pub func of[T]() -> TypeId { ... }
+    pub func of[T]() -> TypeId {
+        return TypeId { id: type_id[T]() }
+    }
 }
 
 impl PartialEq for TypeId {
@@ -222,7 +218,230 @@ pub behavior Any {
 // pub func type_name_of_val[T](val: ref T) -> Str { ... }
 
 // ============================================================================
-// Downcast Support (Future)
+// AnyValue - Type-erased Container
+// ============================================================================
+
+use core::intrinsics::{size_of, align_of, type_id, ptr_write, ptr_read}
+use core::ops::Drop
+
+/// A type-erased container for runtime type inspection and manipulation.
+///
+/// `AnyValue` allows storing a value of any type that implements `Reflect`,
+/// with the ability to recover the concrete type at runtime through downcasting.
+///
+/// # Design
+///
+/// Values are heap-allocated to enable type erasure. The type ID is stored
+/// alongside the data pointer to enable runtime type checking.
+///
+/// # Limitations
+///
+/// Currently, custom `Drop` implementations are not invoked when the AnyValue
+/// is dropped - only memory deallocation occurs. Use with types that don't
+/// require custom cleanup, or manually downcast and drop before the AnyValue
+/// goes out of scope.
+///
+/// # Example
+///
+/// ```tml
+/// use core::any::AnyValue
+/// use core::reflect::Reflect
+///
+/// @derive(Reflect)
+/// type Point { x: I32, y: I32 }
+///
+/// let point = Point { x: 10, y: 20 }
+/// let any_val = AnyValue::from(point)
+///
+/// if any_val.is[Point]() {
+///     when any_val.downcast[Point]() {
+///         Just(p) => print("Point: ({p.x}, {p.y})\n"),
+///         Nothing => {}
+///     }
+/// }
+/// ```
+pub type AnyValue {
+    /// Pointer to heap-allocated data
+    data: *Unit,
+    /// Type ID for runtime type checking
+    type_id: U64,
+    /// Size of the stored value (for deallocation)
+    size: I64,
+    /// Alignment of the stored value (for deallocation)
+    align: I64
+}
+
+impl AnyValue {
+    /// Creates a new `AnyValue` from a value implementing `Reflect`.
+    ///
+    /// The value is moved to heap storage and its type information is
+    /// captured for later downcast operations.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// @derive(Reflect)
+    /// type Data { value: I32 }
+    ///
+    /// let any = AnyValue::from(Data { value: 42 })
+    /// ```
+    pub func from[T](value: T) -> AnyValue {
+        let tid: U64 = type_id[T]()
+        let sz: I64 = size_of[T]()
+        let al: I64 = align_of[T]()
+
+        // Allocate memory for the value
+        let ptr: *Unit = alloc(sz)
+
+        // Copy value to allocated memory using lowlevel block
+        lowlevel {
+            ptr_write(ptr as *T, value)
+        }
+
+        return AnyValue {
+            data: ptr,
+            type_id: tid,
+            size: sz,
+            align: al
+        }
+    }
+
+    /// Attempts to downcast to a reference of type `T`.
+    ///
+    /// Returns `Just(ref T)` if the contained value is of type `T`,
+    /// or `Nothing` if the types don't match.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let any = AnyValue::from(42)
+    /// when any.downcast[I32]() {
+    ///     Just(n) => print("Got: {*n}\n"),
+    ///     Nothing => print("Not an I32\n")
+    /// }
+    /// ```
+    pub func downcast[T](this) -> Maybe[ref T] {
+        let tid: U64 = type_id[T]()
+        if this.type_id == tid {
+            lowlevel {
+                let typed_ptr: *T = this.data as *T
+                return Just(ref *typed_ptr)
+            }
+        }
+        return Nothing
+    }
+
+    /// Attempts to downcast to a mutable reference of type `T`.
+    ///
+    /// Returns `Just(mut ref T)` if the contained value is of type `T`,
+    /// or `Nothing` if the types don't match.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var any = AnyValue::from(42)
+    /// when any.downcast_mut[I32]() {
+    ///     Just(n) => { *n = 100 },
+    ///     Nothing => {}
+    /// }
+    /// ```
+    pub func downcast_mut[T](mut this) -> Maybe[mut ref T] {
+        let tid: U64 = type_id[T]()
+        if this.type_id == tid {
+            lowlevel {
+                let typed_ptr: *T = this.data as *T
+                return Just(mut ref *typed_ptr)
+            }
+        }
+        return Nothing
+    }
+
+    /// Checks if the contained value is of type `T`.
+    ///
+    /// This is a quick check that doesn't perform any casting.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let any = AnyValue::from("hello")
+    /// if any.is_type[Str]() {
+    ///     print("It's a string!\n")
+    /// }
+    /// ```
+    pub func is_type[T](this) -> Bool {
+        let tid: U64 = type_id[T]()
+        return this.type_id == tid
+    }
+
+    /// Returns the type ID of the contained value.
+    ///
+    /// This can be compared with type IDs obtained from `type_id[T]()` or
+    /// `T::type_info().id` to determine the concrete type.
+    pub func get_type_id(this) -> U64 {
+        return this.type_id
+    }
+
+    /// Returns the size of the contained value in bytes.
+    pub func get_size(this) -> I64 {
+        return this.size
+    }
+
+    /// Returns the alignment of the contained value in bytes.
+    pub func get_align(this) -> I64 {
+        return this.align
+    }
+
+    /// Consumes this AnyValue and returns the contained value if it matches type `T`.
+    ///
+    /// Returns `Just(T)` if the type matches, `Nothing` otherwise.
+    /// If the type doesn't match, the AnyValue is still consumed and its memory freed.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let any = AnyValue::from(Point { x: 1, y: 2 })
+    /// when any.into_inner[Point]() {
+    ///     Just(point) => print("Got point!\n"),
+    ///     Nothing => print("Type mismatch\n")
+    /// }
+    /// ```
+    pub func into_inner[T](this) -> Maybe[T] {
+        let tid: U64 = type_id[T]()
+        if this.type_id == tid {
+            lowlevel {
+                let typed_ptr: *T = this.data as *T
+                let value: T = ptr_read(typed_ptr)
+                dealloc(this.data)
+                return Just(value)
+            }
+        }
+        // Type mismatch - free memory and return Nothing
+        dealloc(this.data)
+        return Nothing
+    }
+}
+
+impl Drop for AnyValue {
+    /// Frees the heap-allocated memory.
+    ///
+    /// Note: This does NOT call the contained value's Drop implementation.
+    /// If the contained type needs cleanup, downcast and drop it manually
+    /// before the AnyValue goes out of scope.
+    pub func drop(mut this) {
+        if this.data != null {
+            dealloc(this.data)
+        }
+    }
+}
+
+impl Debug for AnyValue {
+    pub func debug_string(this) -> Str {
+        return "AnyValue(type_id=" + this.type_id.to_string() + ", size=" + this.size.to_string() + ")"
+    }
+}
+
+// ============================================================================
+// Downcast Support Notes
 // ============================================================================
 
 // The following functionality requires more advanced compiler support:
@@ -237,5 +456,4 @@ pub behavior Any {
 // - Runtime type checking via TypeId
 // - Safe casting between trait object and concrete type
 //
-// For now, Any can be implemented manually by user types, but the full
-// downcast API is not available without compiler support.
+// For now, use AnyValue for type-erased storage with runtime type checking.

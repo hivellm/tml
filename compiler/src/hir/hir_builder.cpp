@@ -959,6 +959,7 @@ auto HirBuilder::get_field_index(const std::string& struct_name, const std::stri
 
 auto HirBuilder::get_variant_index(const std::string& enum_name, const std::string& variant_name)
     -> int {
+    // First try current module
     if (current_module_) {
         if (auto* e = current_module_->find_enum(enum_name)) {
             for (const auto& v : e->variants) {
@@ -968,6 +969,16 @@ auto HirBuilder::get_variant_index(const std::string& enum_name, const std::stri
             }
         }
     }
+
+    // Then try imported enums from type environment
+    if (auto enum_def = type_env_.lookup_enum(enum_name)) {
+        for (size_t i = 0; i < enum_def->variants.size(); ++i) {
+            if (enum_def->variants[i].first == variant_name) {
+                return static_cast<int>(i);
+            }
+        }
+    }
+
     return -1;
 }
 

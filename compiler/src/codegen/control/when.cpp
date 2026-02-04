@@ -259,10 +259,15 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     }
     std::string label_end = fresh_label("when_end");
 
-    // Allocate temporary for result
+    // Allocate temporary for result - will track actual type during arm processing
     std::string result_ptr = fresh_reg();
-    std::string result_type = "i32"; // Will be updated by first arm
-    emit_line("  " + result_ptr + " = alloca i32");
+    std::string result_type = "i32"; // Default, will be updated
+    bool result_type_set = false;
+    bool all_arms_terminate = true;
+    emit_line("  " + result_ptr + " = alloca i64"); // Use i64 to hold most types
+
+    // Get scrutinee semantic type for pattern binding
+    types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
 
     // Generate switch based on pattern
     // For now, simplified: each arm is checked sequentially
@@ -335,7 +340,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                           ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
 
                 // Get the semantic type of the scrutinee to find the payload type
-                types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
+                // (scrutinee_semantic is already computed at the start of gen_when)
 
                 // Check if the payload pattern is a TuplePattern
                 if (enum_pat.payload->at(0)->is<parser::TuplePattern>()) {
@@ -549,7 +554,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             }
 
             // Get semantic type info for field types
-            types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
+            // (scrutinee_semantic is already computed at the start of gen_when)
 
             // Look up struct field info from struct_fields_
             auto struct_it = struct_fields_.find(struct_name);
@@ -610,18 +615,15 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         else if (arm.pattern->is<parser::TuplePattern>()) {
             const auto& tuple_pat = arm.pattern->as<parser::TuplePattern>();
 
-            // Get semantic type for the scrutinee
-            types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
-
             // Use the existing helper function for tuple pattern binding
+            // (scrutinee_semantic is already computed at the start of gen_when)
             gen_tuple_pattern_binding(tuple_pat, scrutinee, scrutinee_type, scrutinee_semantic);
         }
         // Bind array pattern variables: [a, b, c] or [head, ..rest]
         else if (arm.pattern->is<parser::ArrayPattern>()) {
             const auto& array_pat = arm.pattern->as<parser::ArrayPattern>();
 
-            // Get semantic type for the scrutinee
-            types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
+            // (scrutinee_semantic is already computed at the start of gen_when)
 
             // Parse element type from the array type string (e.g., "[5 x i32]" -> "i32")
             std::string elem_type = "i32"; // Default
@@ -731,9 +733,14 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         std::string arm_value = gen_expr(*arm.body);
         std::string arm_type = last_expr_type_;
 
-        // Update result_type from first arm
-        if (arm_idx == 0) {
-            result_type = arm_type;
+        // Track if this arm terminates (return/break/continue)
+        // and update result_type from the first non-terminating arm
+        if (!block_terminated_) {
+            all_arms_terminate = false;
+            if (!result_type_set && arm_type != "void") {
+                result_type = arm_type;
+                result_type_set = true;
+            }
         }
 
         // Store arm value to result (with type conversion if needed)
@@ -776,6 +783,14 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     emit_line(label_end + ":");
     current_block_ = label_end;
     block_terminated_ = false;
+
+    // If all arms terminate (return/break/continue), the when_end is unreachable
+    if (all_arms_terminate) {
+        emit_line("  unreachable");
+        block_terminated_ = true;
+        last_expr_type_ = "void";
+        return "0";
+    }
 
     // If result type is void, don't load anything
     if (result_type == "void") {
