@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **BoolLiteral Dangling Lexeme** (2026-02-05) - Fixed corrupted boolean constants from imported modules
+  - `BoolLiteral.token.lexeme` is a `string_view` pointing to original source text
+  - When source is freed after module extraction, lexeme comparisons fail with corrupted data
+  - This caused `AtomicBool::LOCK_FREE = true` to be registered as `= 0` instead of `= 1`
+  - All 85 atomic tests were failing due to this bug
+  - Fix: Replace `lexeme == "true"` with `bool_value()` which returns stored boolean value
+  - Also fixed type checker to look up constants from imported modules via module registry
+  - Files modified:
+    - `compiler/src/types/env_module_support.cpp` - Use `bool_value()` for constant extraction
+    - `compiler/src/codegen/core/generate.cpp` - Use `bool_value()` in codegen
+    - `compiler/src/codegen/core/runtime.cpp` - Use `bool_value()` for imported constants
+    - `compiler/src/codegen/core/class_codegen.cpp` - Use `bool_value()` for class attributes
+    - `compiler/src/codegen/expr/collections.cpp` - Simplified constant lookup
+    - `compiler/src/types/checker/types.cpp` - Module registry constant lookup
+
 - **Ref Parameter Passing Bug** (2026-02-04) - Fixed incorrect pointer passing for ref parameters
   - When a function with `ref T` parameter passed that parameter to another function taking `ref T`,
     the codegen incorrectly passed the stack slot address instead of loading the pointer value first
