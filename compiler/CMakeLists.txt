@@ -239,6 +239,8 @@ add_library(tml_types STATIC
     src/types/checker/control.cpp
     src/types/checker/types.cpp
     src/types/checker/resolve.cpp
+    src/types/checker/decl_struct.cpp
+    src/types/checker/expr_call.cpp
     # Builtin modules (moved from env_builtins*.cpp)
     src/types/builtins/register.cpp
     src/types/builtins/types.cpp
@@ -402,6 +404,10 @@ add_library(tml_codegen STATIC
     src/codegen/derive/default.cpp
     src/codegen/derive/partial_ord.cpp
     src/codegen/derive/debug.cpp
+    src/codegen/derive/display.cpp
+    src/codegen/derive/serialize.cpp
+    src/codegen/derive/deserialize.cpp
+    src/codegen/derive/fromstr.cpp
     src/codegen/llvm_ir_gen_expr.cpp
     src/codegen/c_header_gen.cpp
     # Control flow codegen (split from llvm_ir_gen_control.cpp for maintainability)

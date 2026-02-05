@@ -795,7 +795,8 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                            name == "Bool";
                 };
                 bool is_library_type = mod.structs.count(type_name) > 0 ||
-                                       mod.enums.count(type_name) > 0 || is_primitive_type(type_name);
+                                       mod.enums.count(type_name) > 0 ||
+                                       is_primitive_type(type_name);
 
                 // Generate arguments FIRST to determine their types
                 // This is needed for behavior method overload resolution (e.g., TryFrom[I64])
@@ -857,9 +858,8 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                         // For TryFrom/From, pass the argument type as method_type_suffix
                         // so generic.cpp can find the correct impl block
                         std::string method_type_suffix_for_queue =
-                            (!arg_tml_types.empty() && !arg_tml_types[0].empty())
-                                ? arg_tml_types[0]
-                                : "";
+                            (!arg_tml_types.empty() && !arg_tml_types[0].empty()) ? arg_tml_types[0]
+                                                                                  : "";
                         pending_impl_method_instantiations_.push_back(
                             PendingImplMethod{type_name,
                                               method,

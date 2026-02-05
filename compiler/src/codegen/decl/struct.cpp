@@ -79,6 +79,10 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     gen_derive_partial_ord_struct(s);
     gen_derive_ord_struct(s);
     gen_derive_debug_struct(s);
+    gen_derive_display_struct(s);
+    gen_derive_serialize_struct(s);
+    gen_derive_deserialize_struct(s);
+    gen_derive_fromstr_struct(s);
 }
 
 // Generate a specialized version of a generic struct

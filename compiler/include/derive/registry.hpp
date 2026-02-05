@@ -14,15 +14,32 @@ namespace tml::derive {
 
 /// Enumeration of all derivable traits/behaviors
 enum class DerivableTrait {
+    // Comparison traits
     PartialEq,  // Field-by-field equality: eq(this, other: ref Self) -> Bool
     Eq,         // Marker trait, implies PartialEq (reflexive equality)
     PartialOrd, // Lexicographic comparison: partial_cmp(this, other: ref Self) -> Maybe[Ordering]
     Ord,        // Total ordering: cmp(this, other: ref Self) -> Ordering
+
+    // Cloning traits
     Duplicate,  // Field-by-field clone: duplicate(this) -> Self
     Copy,       // Marker trait, implies Duplicate (bitwise copy)
+
+    // Utility traits
     Hash,       // Hash computation: hash(this) -> I64
     Default,    // Default construction: default() -> Self (static)
+
+    // String representation traits
     Debug,      // Debug string: debug_string(this) -> Str
+    Display,    // User-friendly string: to_string(this) -> Str
+
+    // Parsing traits
+    FromStr,    // Parse from string: from_str(s: Str) -> Outcome[Self, Str] (static)
+
+    // Serialization traits
+    Serialize,   // Serialize to JSON: to_json(this) -> Str
+    Deserialize, // Deserialize from JSON: from_json(s: Str) -> Outcome[Self, Str] (static)
+
+    // Reflection
     Reflect     // Reflection: type_info(), runtime_type_info(), variant_name(), variant_tag()
 };
 
@@ -47,6 +64,14 @@ inline std::optional<DerivableTrait> parse_trait_name(const std::string& name) {
         return DerivableTrait::Default;
     if (name == "Debug")
         return DerivableTrait::Debug;
+    if (name == "Display")
+        return DerivableTrait::Display;
+    if (name == "FromStr")
+        return DerivableTrait::FromStr;
+    if (name == "Serialize")
+        return DerivableTrait::Serialize;
+    if (name == "Deserialize")
+        return DerivableTrait::Deserialize;
     if (name == "Reflect")
         return DerivableTrait::Reflect;
     return std::nullopt;
@@ -73,6 +98,14 @@ inline std::string trait_name(DerivableTrait trait) {
         return "Default";
     case DerivableTrait::Debug:
         return "Debug";
+    case DerivableTrait::Display:
+        return "Display";
+    case DerivableTrait::FromStr:
+        return "FromStr";
+    case DerivableTrait::Serialize:
+        return "Serialize";
+    case DerivableTrait::Deserialize:
+        return "Deserialize";
     case DerivableTrait::Reflect:
         return "Reflect";
     }
@@ -101,8 +134,9 @@ inline bool is_marker_trait(DerivableTrait trait) {
 
 /// Get the set of all derivable trait names for error messages
 inline std::unordered_set<std::string> all_derivable_trait_names() {
-    return {"PartialEq", "Eq",      "PartialOrd", "Ord",   "Duplicate",
-            "Copy",      "Hash",    "Default",    "Debug", "Reflect"};
+    return {"PartialEq", "Eq",        "PartialOrd",  "Ord",    "Duplicate",
+            "Copy",      "Hash",      "Default",     "Debug",  "Display",
+            "FromStr",   "Serialize", "Deserialize", "Reflect"};
 }
 
 } // namespace tml::derive

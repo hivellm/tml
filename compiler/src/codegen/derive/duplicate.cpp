@@ -74,8 +74,8 @@ static bool has_derive_duplicate(const parser::EnumDecl& e) {
 /// Check if a type is a primitive that can be copied directly
 static bool is_primitive_copyable(const std::string& llvm_type) {
     // Integer types
-    if (llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" ||
-        llvm_type == "i32" || llvm_type == "i64" || llvm_type == "i128") {
+    if (llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32" ||
+        llvm_type == "i64" || llvm_type == "i128") {
         return true;
     }
     // Floating point types
@@ -163,10 +163,10 @@ void LLVMIRGen::gen_derive_duplicate_struct(const parser::StructDecl& s) {
         if (is_primitive_copyable(field.llvm_type)) {
             // Primitive type - direct copy
             std::string val = fresh_temp();
-            type_defs_buffer_ << "  " << val << " = load " << field.llvm_type
-                              << ", ptr " << src_ptr << "\n";
-            type_defs_buffer_ << "  store " << field.llvm_type << " " << val
-                              << ", ptr " << dst_ptr << "\n";
+            type_defs_buffer_ << "  " << val << " = load " << field.llvm_type << ", ptr " << src_ptr
+                              << "\n";
+            type_defs_buffer_ << "  store " << field.llvm_type << " " << val << ", ptr " << dst_ptr
+                              << "\n";
         } else {
             // Non-primitive type - call duplicate() on the field
             std::string field_type_name;
@@ -182,8 +182,8 @@ void LLVMIRGen::gen_derive_duplicate_struct(const parser::StructDecl& s) {
             std::string dup_result = fresh_temp();
             type_defs_buffer_ << "  " << dup_result << " = call " << field.llvm_type << " "
                               << field_dup_func << "(ptr " << src_ptr << ")\n";
-            type_defs_buffer_ << "  store " << field.llvm_type << " " << dup_result
-                              << ", ptr " << dst_ptr << "\n";
+            type_defs_buffer_ << "  store " << field.llvm_type << " " << dup_result << ", ptr "
+                              << dst_ptr << "\n";
         }
     }
 

@@ -1,20 +1,11 @@
-//! # LLVM IR Generator - @derive(Debug) Implementation
+//! # LLVM IR Generator - @derive(Display) Implementation
 //!
-//! This file implements the `@derive(Debug)` derive macro.
-//! Debug generates: `func debug_string(this) -> Str`
+//! This file implements the `@derive(Display)` derive macro.
+//! Display generates: `func to_string(this) -> Str`
 //!
-//! ## Generated Code Pattern
-//!
-//! For a struct like:
-//! ```tml
-//! @derive(Debug)
-//! type Point {
-//!     x: I32,
-//!     y: I32
-//! }
-//! ```
-//!
-//! We generate a function that returns "Point { x: <value>, y: <value> }"
+//! Display produces a user-friendly string representation (cleaner than Debug).
+//! For structs: "value1, value2, value3" or the struct name for single-field structs
+//! For enums: "VariantName"
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "derive/registry.hpp"
@@ -25,14 +16,14 @@ namespace tml::codegen {
 // Helper Functions
 // ============================================================================
 
-/// Check if a struct has @derive(Debug) decorator
-static bool has_derive_debug(const parser::StructDecl& s) {
+/// Check if a struct has @derive(Display) decorator
+static bool has_derive_display(const parser::StructDecl& s) {
     for (const auto& deco : s.decorators) {
         if (deco.name == "derive") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "Debug") {
+                    if (name == "Display") {
                         return true;
                     }
                 }
@@ -42,14 +33,14 @@ static bool has_derive_debug(const parser::StructDecl& s) {
     return false;
 }
 
-/// Check if an enum has @derive(Debug) decorator
-static bool has_derive_debug(const parser::EnumDecl& e) {
+/// Check if an enum has @derive(Display) decorator
+static bool has_derive_display(const parser::EnumDecl& e) {
     for (const auto& deco : e.decorators) {
         if (deco.name == "derive") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "Debug") {
+                    if (name == "Display") {
                         return true;
                     }
                 }
@@ -60,7 +51,7 @@ static bool has_derive_debug(const parser::EnumDecl& e) {
 }
 
 /// Get the appropriate to_string function for a primitive type
-static std::string get_to_string_func(const std::string& llvm_type) {
+static std::string get_display_func(const std::string& llvm_type) {
     if (llvm_type == "i1") {
         return "bool_to_string";
     } else if (llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32") {
@@ -74,19 +65,19 @@ static std::string get_to_string_func(const std::string& llvm_type) {
 }
 
 /// Check if a type is a primitive that can be converted to string
-static bool is_primitive_stringable(const std::string& llvm_type) {
+static bool is_primitive_displayable(const std::string& llvm_type) {
     return llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32" ||
            llvm_type == "i64" || llvm_type == "i128" || llvm_type == "float" ||
            llvm_type == "double" || llvm_type == "ptr";
 }
 
 // ============================================================================
-// Debug Generation for Structs
+// Display Generation for Structs
 // ============================================================================
 
-/// Generate debug_string() method for a struct with @derive(Debug)
-void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
-    if (!has_derive_debug(s)) {
+/// Generate to_string() method for a struct with @derive(Display)
+void LLVMIRGen::gen_derive_display_struct(const parser::StructDecl& s) {
+    if (!has_derive_display(s)) {
         return;
     }
 
@@ -105,7 +96,7 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
         suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
     }
 
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_debug_string";
+    std::string func_name = "@tml_" + suite_prefix + type_name + "_to_string";
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {
@@ -120,75 +111,38 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
     }
     const auto& fields = fields_it->second;
 
-    // Create string constant for the type name and braces
-    std::string type_name_const = "@.debug_" + suite_prefix + type_name + "_name";
-    std::string open_brace_const = "@.debug_" + suite_prefix + type_name + "_open";
-    std::string close_brace_const = "@.debug_" + suite_prefix + type_name + "_close";
-    std::string separator_const = "@.debug_" + suite_prefix + type_name + "_sep";
-    std::string colon_const = "@.debug_" + suite_prefix + type_name + "_colon";
+    // Create string constants
+    std::string separator_const = "@.display_" + suite_prefix + type_name + "_sep";
 
     // Emit string constants
-    type_defs_buffer_ << "; @derive(Debug) string constants for " << type_name << "\n";
-    type_defs_buffer_ << type_name_const << " = private constant [" << (type_name.size() + 1)
-                      << " x i8] c\"" << type_name << "\\00\"\n";
-    type_defs_buffer_ << open_brace_const << " = private constant [4 x i8] c\" { \\00\"\n";
-    type_defs_buffer_ << close_brace_const << " = private constant [3 x i8] c\" }\\00\"\n";
-    type_defs_buffer_ << separator_const << " = private constant [3 x i8] c\", \\00\"\n";
-    type_defs_buffer_ << colon_const << " = private constant [3 x i8] c\": \\00\"\n";
-
-    // Emit field name constants
-    for (const auto& field : fields) {
-        std::string field_const = "@.debug_" + suite_prefix + type_name + "_f_" + field.name;
-        type_defs_buffer_ << field_const << " = private constant [" << (field.name.size() + 1)
-                          << " x i8] c\"" << field.name << "\\00\"\n";
-    }
-    type_defs_buffer_ << "\n";
+    type_defs_buffer_ << "; @derive(Display) string constants for " << type_name << "\n";
+    type_defs_buffer_ << separator_const << " = private constant [3 x i8] c\", \\00\"\n\n";
 
     // Emit function definition
-    type_defs_buffer_ << "; @derive(Debug) for " << type_name << "\n";
+    type_defs_buffer_ << "; @derive(Display) for " << type_name << "\n";
     type_defs_buffer_ << "define ptr " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
+
+    if (fields.empty()) {
+        // Empty struct - return empty string
+        std::string empty_const = "@.display_" + suite_prefix + type_name + "_empty";
+        type_defs_buffer_ << "  ret ptr " << empty_const << "\n";
+        type_defs_buffer_ << "}\n";
+        // Add empty string constant
+        type_defs_buffer_ << empty_const << " = private constant [1 x i8] c\"\\00\"\n\n";
+        return;
+    }
 
     int temp_counter = 0;
     auto fresh_temp = [&temp_counter]() -> std::string {
         return "%t" + std::to_string(temp_counter++);
     };
 
-    // Start with type name
-    std::string current = fresh_temp();
-    type_defs_buffer_ << "  " << current << " = getelementptr [" << (type_name.size() + 1)
-                      << " x i8], ptr " << type_name_const << ", i32 0, i32 0\n";
+    std::string current = "";
 
-    // Add opening brace
-    std::string open = fresh_temp();
-    type_defs_buffer_ << "  " << open << " = getelementptr [4 x i8], ptr " << open_brace_const
-                      << ", i32 0, i32 0\n";
-    std::string with_open = fresh_temp();
-    type_defs_buffer_ << "  " << with_open << " = call ptr @str_concat_opt(ptr " << current
-                      << ", ptr " << open << ")\n";
-    current = with_open;
-
-    // Add each field
+    // Convert each field to string and concatenate
     for (size_t i = 0; i < fields.size(); ++i) {
         const auto& field = fields[i];
-
-        // Add field name
-        std::string field_const = "@.debug_" + suite_prefix + type_name + "_f_" + field.name;
-        std::string field_name = fresh_temp();
-        type_defs_buffer_ << "  " << field_name << " = getelementptr [" << (field.name.size() + 1)
-                          << " x i8], ptr " << field_const << ", i32 0, i32 0\n";
-
-        std::string with_name = fresh_temp();
-        type_defs_buffer_ << "  " << with_name << " = call ptr @str_concat_opt(ptr " << current
-                          << ", ptr " << field_name << ")\n";
-
-        // Add colon
-        std::string colon = fresh_temp();
-        type_defs_buffer_ << "  " << colon << " = getelementptr [3 x i8], ptr " << colon_const
-                          << ", i32 0, i32 0\n";
-        std::string with_colon = fresh_temp();
-        type_defs_buffer_ << "  " << with_colon << " = call ptr @str_concat_opt(ptr " << with_name
-                          << ", ptr " << colon << ")\n";
 
         // Get field value and convert to string
         std::string field_ptr = fresh_temp();
@@ -200,23 +154,21 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
             // String type - use directly
             value_str = fresh_temp();
             type_defs_buffer_ << "  " << value_str << " = load ptr, ptr " << field_ptr << "\n";
-        } else if (is_primitive_stringable(field.llvm_type)) {
+        } else if (is_primitive_displayable(field.llvm_type)) {
             // Primitive type - convert to string
             std::string val = fresh_temp();
             type_defs_buffer_ << "  " << val << " = load " << field.llvm_type << ", ptr "
                               << field_ptr << "\n";
 
-            std::string to_string_func = get_to_string_func(field.llvm_type);
+            std::string to_string_func = get_display_func(field.llvm_type);
             value_str = fresh_temp();
 
             if (field.llvm_type == "i1") {
-                // Bool needs extension to i32 for bool_to_string
                 std::string ext = fresh_temp();
                 type_defs_buffer_ << "  " << ext << " = zext i1 " << val << " to i32\n";
                 type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
                                   << "(i32 " << ext << ")\n";
             } else if (field.llvm_type == "i8" || field.llvm_type == "i16") {
-                // Smaller ints need extension to i32
                 std::string ext = fresh_temp();
                 type_defs_buffer_ << "  " << ext << " = sext " << field.llvm_type << " " << val
                                   << " to i32\n";
@@ -245,7 +197,7 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
                                   << "(double " << val << ")\n";
             }
         } else {
-            // Non-primitive type - call debug_string() on the field
+            // Non-primitive type - call to_string() on the field
             std::string field_type_name;
             if (field.llvm_type.substr(0, 8) == "%struct.") {
                 field_type_name = field.llvm_type.substr(8);
@@ -253,49 +205,41 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
                 field_type_name = field.llvm_type;
             }
 
-            std::string field_debug_func =
-                "@tml_" + suite_prefix + field_type_name + "_debug_string";
+            std::string field_display_func =
+                "@tml_" + suite_prefix + field_type_name + "_to_string";
             value_str = fresh_temp();
-            type_defs_buffer_ << "  " << value_str << " = call ptr " << field_debug_func << "(ptr "
-                              << field_ptr << ")\n";
+            type_defs_buffer_ << "  " << value_str << " = call ptr " << field_display_func
+                              << "(ptr " << field_ptr << ")\n";
         }
 
-        std::string with_value = fresh_temp();
-        type_defs_buffer_ << "  " << with_value << " = call ptr @str_concat_opt(ptr " << with_colon
-                          << ", ptr " << value_str << ")\n";
-        current = with_value;
-
-        // Add separator if not last field
-        if (i < fields.size() - 1) {
+        if (i == 0) {
+            current = value_str;
+        } else {
+            // Add separator and concatenate
             std::string sep = fresh_temp();
             type_defs_buffer_ << "  " << sep << " = getelementptr [3 x i8], ptr " << separator_const
                               << ", i32 0, i32 0\n";
             std::string with_sep = fresh_temp();
             type_defs_buffer_ << "  " << with_sep << " = call ptr @str_concat_opt(ptr " << current
                               << ", ptr " << sep << ")\n";
-            current = with_sep;
+            std::string with_value = fresh_temp();
+            type_defs_buffer_ << "  " << with_value << " = call ptr @str_concat_opt(ptr "
+                              << with_sep << ", ptr " << value_str << ")\n";
+            current = with_value;
         }
     }
 
-    // Add closing brace
-    std::string close = fresh_temp();
-    type_defs_buffer_ << "  " << close << " = getelementptr [3 x i8], ptr " << close_brace_const
-                      << ", i32 0, i32 0\n";
-    std::string result = fresh_temp();
-    type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << current << ", ptr "
-                      << close << ")\n";
-
-    type_defs_buffer_ << "  ret ptr " << result << "\n";
+    type_defs_buffer_ << "  ret ptr " << current << "\n";
     type_defs_buffer_ << "}\n\n";
 }
 
 // ============================================================================
-// Debug Generation for Enums
+// Display Generation for Enums
 // ============================================================================
 
-/// Generate debug_string() method for an enum with @derive(Debug)
-void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
-    if (!has_derive_debug(e)) {
+/// Generate to_string() method for an enum with @derive(Display)
+void LLVMIRGen::gen_derive_display_enum(const parser::EnumDecl& e) {
+    if (!has_derive_display(e)) {
         return;
     }
 
@@ -314,7 +258,7 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
         suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
     }
 
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_debug_string";
+    std::string func_name = "@tml_" + suite_prefix + type_name + "_to_string";
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {
@@ -322,18 +266,17 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
     }
     generated_functions_.insert(func_name);
 
-    // Emit variant name constants
-    type_defs_buffer_ << "; @derive(Debug) string constants for " << type_name << "\n";
+    // Emit variant name constants (just variant name, not type::variant)
+    type_defs_buffer_ << "; @derive(Display) string constants for " << type_name << "\n";
     for (const auto& variant : e.variants) {
-        std::string variant_const = "@.debug_" + suite_prefix + type_name + "_v_" + variant.name;
-        std::string full_name = type_name + "::" + variant.name;
-        type_defs_buffer_ << variant_const << " = private constant [" << (full_name.size() + 1)
-                          << " x i8] c\"" << full_name << "\\00\"\n";
+        std::string variant_const = "@.display_" + suite_prefix + type_name + "_v_" + variant.name;
+        type_defs_buffer_ << variant_const << " = private constant [" << (variant.name.size() + 1)
+                          << " x i8] c\"" << variant.name << "\\00\"\n";
     }
     type_defs_buffer_ << "\n";
 
     // For simple enums, just return the variant name
-    type_defs_buffer_ << "; @derive(Debug) for " << type_name << "\n";
+    type_defs_buffer_ << "; @derive(Display) for " << type_name << "\n";
     type_defs_buffer_ << "define ptr " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
@@ -352,12 +295,12 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
     // Generate labels for each variant
     int tag_idx = 0;
     for (const auto& variant : e.variants) {
-        std::string variant_const = "@.debug_" + suite_prefix + type_name + "_v_" + variant.name;
-        std::string full_name = type_name + "::" + variant.name;
+        std::string variant_const = "@.display_" + suite_prefix + type_name + "_v_" + variant.name;
 
         type_defs_buffer_ << "variant_" << tag_idx << ":\n";
-        type_defs_buffer_ << "  %name_" << tag_idx << " = getelementptr [" << (full_name.size() + 1)
-                          << " x i8], ptr " << variant_const << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  %name_" << tag_idx << " = getelementptr ["
+                          << (variant.name.size() + 1) << " x i8], ptr " << variant_const
+                          << ", i32 0, i32 0\n";
         type_defs_buffer_ << "  ret ptr %name_" << tag_idx << "\n\n";
         tag_idx++;
     }

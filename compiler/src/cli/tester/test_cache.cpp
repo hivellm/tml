@@ -647,7 +647,7 @@ bool TestCacheManager::has_temp_backup() {
 }
 
 bool TestCacheManager::backup_to_temp(const std::string& cache_file,
-                                       const std::string& run_cache_dir) {
+                                      const std::string& run_cache_dir) {
     try {
         fs::path backup_dir = get_temp_backup_dir();
 
@@ -686,7 +686,7 @@ bool TestCacheManager::backup_to_temp(const std::string& cache_file,
 }
 
 bool TestCacheManager::restore_from_temp(const std::string& cache_file,
-                                          const std::string& run_cache_dir) {
+                                         const std::string& run_cache_dir) {
     try {
         fs::path backup_dir = get_temp_backup_dir();
         fs::path cache_backup = backup_dir / ".test-cache.json";
@@ -753,8 +753,8 @@ std::vector<std::string> TestCacheManager::get_known_suite_hashes() const {
 }
 
 size_t TestCacheManager::cleanup_orphaned_files(const std::string& run_cache_dir,
-                                                 const std::vector<std::string>& known_suite_hashes,
-                                                 bool verbose) {
+                                                const std::vector<std::string>& known_suite_hashes,
+                                                bool verbose) {
     if (!fs::exists(run_cache_dir)) {
         return 0;
     }
@@ -819,8 +819,8 @@ size_t TestCacheManager::cleanup_orphaned_files(const std::string& run_cache_dir
 
         if (removed_count > 0) {
             double mb = static_cast<double>(removed_bytes) / (1024 * 1024);
-            std::cerr << "[CLEANUP] Removed " << removed_count << " orphaned files ("
-                      << std::fixed << std::setprecision(1) << mb << " MB)\n";
+            std::cerr << "[CLEANUP] Removed " << removed_count << " orphaned files (" << std::fixed
+                      << std::setprecision(1) << mb << " MB)\n";
         }
     } catch (const std::exception& e) {
         std::cerr << "[CLEANUP] Error during cleanup: " << e.what() << "\n";

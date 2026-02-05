@@ -77,8 +77,8 @@ static bool has_derive_hash(const parser::EnumDecl& e) {
 /// Check if a type is a primitive that can be hashed directly
 static bool is_primitive_hashable(const std::string& llvm_type) {
     // Integer types
-    if (llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" ||
-        llvm_type == "i32" || llvm_type == "i64" || llvm_type == "i128") {
+    if (llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32" ||
+        llvm_type == "i64" || llvm_type == "i128") {
         return true;
     }
     // Floating point types - convert to bits first
@@ -167,8 +167,8 @@ void LLVMIRGen::gen_derive_hash_struct(const parser::StructDecl& s) {
         if (is_primitive_hashable(field.llvm_type)) {
             // Primitive type - load and convert to i64
             std::string val = fresh_temp();
-            type_defs_buffer_ << "  " << val << " = load " << field.llvm_type
-                              << ", ptr " << field_ptr << "\n";
+            type_defs_buffer_ << "  " << val << " = load " << field.llvm_type << ", ptr "
+                              << field_ptr << "\n";
 
             // Convert to i64
             if (field.llvm_type == "i64") {
@@ -211,8 +211,8 @@ void LLVMIRGen::gen_derive_hash_struct(const parser::StructDecl& s) {
 
             std::string field_hash_func = "@tml_" + suite_prefix + field_type_name + "_hash";
             field_hash = fresh_temp();
-            type_defs_buffer_ << "  " << field_hash << " = call i64 " << field_hash_func
-                              << "(ptr " << field_ptr << ")\n";
+            type_defs_buffer_ << "  " << field_hash << " = call i64 " << field_hash_func << "(ptr "
+                              << field_ptr << ")\n";
         }
 
         // Combine hash: hash = (hash ^ field_hash) * FNV_PRIME
@@ -270,7 +270,8 @@ void LLVMIRGen::gen_derive_hash_enum(const parser::EnumDecl& e) {
     type_defs_buffer_ << "entry:\n";
 
     // Load tag
-    type_defs_buffer_ << "  %tag_ptr = getelementptr " << llvm_type << ", ptr %this, i32 0, i32 0\n";
+    type_defs_buffer_ << "  %tag_ptr = getelementptr " << llvm_type
+                      << ", ptr %this, i32 0, i32 0\n";
     type_defs_buffer_ << "  %tag = load i32, ptr %tag_ptr\n";
     type_defs_buffer_ << "  %tag_ext = sext i32 %tag to i64\n";
 

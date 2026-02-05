@@ -152,7 +152,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         }
 
         // Clean up orphaned cache files periodically
-        // This removes .ll, .obj, .dll files that are older than 24 hours and not from current suites
+        // This removes .ll, .obj, .dll files that are older than 24 hours and not from current
+        // suites
         if (!opts.no_cache && fs::exists(run_cache_dir)) {
             // Only clean up once per session to avoid overhead
             static bool cleanup_done = false;
@@ -162,11 +163,13 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 size_t removed_count = 0;
                 size_t removed_bytes = 0;
                 auto now = fs::file_time_type::clock::now();
-                std::vector<std::string> cleanup_extensions = {".ll", ".obj", ".pdb", ".exp", ".lib"};
+                std::vector<std::string> cleanup_extensions = {".ll", ".obj", ".pdb", ".exp",
+                                                               ".lib"};
 
                 try {
                     for (const auto& entry : fs::directory_iterator(run_cache_dir)) {
-                        if (!entry.is_regular_file()) continue;
+                        if (!entry.is_regular_file())
+                            continue;
 
                         std::string ext = entry.path().extension().string();
                         bool is_cleanup_target = false;
@@ -176,7 +179,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                 break;
                             }
                         }
-                        if (!is_cleanup_target) continue;
+                        if (!is_cleanup_target)
+                            continue;
 
                         // Check file age - remove files older than 24 hours
                         auto mod_time = fs::last_write_time(entry.path());
@@ -787,8 +791,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             try {
                 fs::create_directories(cache_file.parent_path());
                 test_cache.save(cache_file.string());
-            } catch (...) {
-            }
+            } catch (...) {}
         }
         std::cerr << "\n"
                   << c.red() << c.bold()
@@ -800,8 +803,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             try {
                 fs::create_directories(cache_file.parent_path());
                 test_cache.save(cache_file.string());
-            } catch (...) {
-            }
+            } catch (...) {}
         }
         std::cerr << "\n"
                   << c.red() << c.bold() << "[FATAL] Unknown exception in run_tests_suite_mode"

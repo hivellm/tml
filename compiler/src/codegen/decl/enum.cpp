@@ -166,6 +166,10 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
     gen_derive_partial_ord_enum(e);
     gen_derive_ord_enum(e);
     gen_derive_debug_enum(e);
+    gen_derive_display_enum(e);
+    gen_derive_serialize_enum(e);
+    gen_derive_deserialize_enum(e);
+    gen_derive_fromstr_enum(e);
 }
 
 // Generate a specialized version of a generic enum

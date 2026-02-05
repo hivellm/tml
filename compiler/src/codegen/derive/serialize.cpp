@@ -1,20 +1,11 @@
-//! # LLVM IR Generator - @derive(Debug) Implementation
+//! # LLVM IR Generator - @derive(Serialize) Implementation
 //!
-//! This file implements the `@derive(Debug)` derive macro.
-//! Debug generates: `func debug_string(this) -> Str`
+//! This file implements the `@derive(Serialize)` derive macro.
+//! Serialize generates: `func to_json(this) -> Str`
 //!
-//! ## Generated Code Pattern
-//!
-//! For a struct like:
-//! ```tml
-//! @derive(Debug)
-//! type Point {
-//!     x: I32,
-//!     y: I32
-//! }
-//! ```
-//!
-//! We generate a function that returns "Point { x: <value>, y: <value> }"
+//! Produces JSON representation of structs and enums.
+//! For structs: {"field1": value1, "field2": value2}
+//! For enums: {"variant": "VariantName"} or {"variant": "Name", "value": ...}
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "derive/registry.hpp"
@@ -25,14 +16,14 @@ namespace tml::codegen {
 // Helper Functions
 // ============================================================================
 
-/// Check if a struct has @derive(Debug) decorator
-static bool has_derive_debug(const parser::StructDecl& s) {
+/// Check if a struct has @derive(Serialize) decorator
+static bool has_derive_serialize(const parser::StructDecl& s) {
     for (const auto& deco : s.decorators) {
         if (deco.name == "derive") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "Debug") {
+                    if (name == "Serialize") {
                         return true;
                     }
                 }
@@ -42,14 +33,14 @@ static bool has_derive_debug(const parser::StructDecl& s) {
     return false;
 }
 
-/// Check if an enum has @derive(Debug) decorator
-static bool has_derive_debug(const parser::EnumDecl& e) {
+/// Check if an enum has @derive(Serialize) decorator
+static bool has_derive_serialize(const parser::EnumDecl& e) {
     for (const auto& deco : e.decorators) {
         if (deco.name == "derive") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "Debug") {
+                    if (name == "Serialize") {
                         return true;
                     }
                 }
@@ -59,10 +50,10 @@ static bool has_derive_debug(const parser::EnumDecl& e) {
     return false;
 }
 
-/// Get the appropriate to_string function for a primitive type
-static std::string get_to_string_func(const std::string& llvm_type) {
+/// Get the appropriate to_string function for a primitive type (for JSON values)
+static std::string get_json_value_func(const std::string& llvm_type) {
     if (llvm_type == "i1") {
-        return "bool_to_string";
+        return "bool_to_string"; // Will produce "true" or "false"
     } else if (llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32") {
         return "i32_to_string";
     } else if (llvm_type == "i64" || llvm_type == "i128") {
@@ -73,20 +64,20 @@ static std::string get_to_string_func(const std::string& llvm_type) {
     return "";
 }
 
-/// Check if a type is a primitive that can be converted to string
-static bool is_primitive_stringable(const std::string& llvm_type) {
+/// Check if a type is a primitive that can be serialized directly
+static bool is_primitive_serializable(const std::string& llvm_type) {
     return llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32" ||
            llvm_type == "i64" || llvm_type == "i128" || llvm_type == "float" ||
            llvm_type == "double" || llvm_type == "ptr";
 }
 
 // ============================================================================
-// Debug Generation for Structs
+// Serialize Generation for Structs
 // ============================================================================
 
-/// Generate debug_string() method for a struct with @derive(Debug)
-void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
-    if (!has_derive_debug(s)) {
+/// Generate to_json() method for a struct with @derive(Serialize)
+void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
+    if (!has_derive_serialize(s)) {
         return;
     }
 
@@ -105,7 +96,7 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
         suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
     }
 
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_debug_string";
+    std::string func_name = "@tml_" + suite_prefix + type_name + "_to_json";
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {
@@ -120,32 +111,31 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
     }
     const auto& fields = fields_it->second;
 
-    // Create string constant for the type name and braces
-    std::string type_name_const = "@.debug_" + suite_prefix + type_name + "_name";
-    std::string open_brace_const = "@.debug_" + suite_prefix + type_name + "_open";
-    std::string close_brace_const = "@.debug_" + suite_prefix + type_name + "_close";
-    std::string separator_const = "@.debug_" + suite_prefix + type_name + "_sep";
-    std::string colon_const = "@.debug_" + suite_prefix + type_name + "_colon";
+    // Create string constants for JSON formatting
+    std::string open_brace = "@.json_" + suite_prefix + type_name + "_open";
+    std::string close_brace = "@.json_" + suite_prefix + type_name + "_close";
+    std::string separator = "@.json_" + suite_prefix + type_name + "_sep";
+    std::string colon = "@.json_" + suite_prefix + type_name + "_colon";
+    std::string quote = "@.json_" + suite_prefix + type_name + "_quote";
 
-    // Emit string constants
-    type_defs_buffer_ << "; @derive(Debug) string constants for " << type_name << "\n";
-    type_defs_buffer_ << type_name_const << " = private constant [" << (type_name.size() + 1)
-                      << " x i8] c\"" << type_name << "\\00\"\n";
-    type_defs_buffer_ << open_brace_const << " = private constant [4 x i8] c\" { \\00\"\n";
-    type_defs_buffer_ << close_brace_const << " = private constant [3 x i8] c\" }\\00\"\n";
-    type_defs_buffer_ << separator_const << " = private constant [3 x i8] c\", \\00\"\n";
-    type_defs_buffer_ << colon_const << " = private constant [3 x i8] c\": \\00\"\n";
+    // Emit string constants (use \22 for double quote in LLVM IR)
+    type_defs_buffer_ << "; @derive(Serialize) string constants for " << type_name << "\n";
+    type_defs_buffer_ << open_brace << " = private constant [2 x i8] c\"{\\00\"\n";
+    type_defs_buffer_ << close_brace << " = private constant [2 x i8] c\"}\\00\"\n";
+    type_defs_buffer_ << separator << " = private constant [3 x i8] c\", \\00\"\n";
+    type_defs_buffer_ << colon << " = private constant [4 x i8] c\"\\22: \\00\"\n";
+    type_defs_buffer_ << quote << " = private constant [2 x i8] c\"\\22\\00\"\n";
 
-    // Emit field name constants
+    // Emit field name constants (use \22 for double quote)
     for (const auto& field : fields) {
-        std::string field_const = "@.debug_" + suite_prefix + type_name + "_f_" + field.name;
-        type_defs_buffer_ << field_const << " = private constant [" << (field.name.size() + 1)
-                          << " x i8] c\"" << field.name << "\\00\"\n";
+        std::string field_const = "@.json_" + suite_prefix + type_name + "_f_" + field.name;
+        type_defs_buffer_ << field_const << " = private constant [" << (field.name.size() + 2)
+                          << " x i8] c\"\\22" << field.name << "\\00\"\n";
     }
     type_defs_buffer_ << "\n";
 
     // Emit function definition
-    type_defs_buffer_ << "; @derive(Debug) for " << type_name << "\n";
+    type_defs_buffer_ << "; @derive(Serialize) for " << type_name << "\n";
     type_defs_buffer_ << "define ptr " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
@@ -154,28 +144,19 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
         return "%t" + std::to_string(temp_counter++);
     };
 
-    // Start with type name
+    // Start with opening brace
     std::string current = fresh_temp();
-    type_defs_buffer_ << "  " << current << " = getelementptr [" << (type_name.size() + 1)
-                      << " x i8], ptr " << type_name_const << ", i32 0, i32 0\n";
-
-    // Add opening brace
-    std::string open = fresh_temp();
-    type_defs_buffer_ << "  " << open << " = getelementptr [4 x i8], ptr " << open_brace_const
+    type_defs_buffer_ << "  " << current << " = getelementptr [2 x i8], ptr " << open_brace
                       << ", i32 0, i32 0\n";
-    std::string with_open = fresh_temp();
-    type_defs_buffer_ << "  " << with_open << " = call ptr @str_concat_opt(ptr " << current
-                      << ", ptr " << open << ")\n";
-    current = with_open;
 
     // Add each field
     for (size_t i = 0; i < fields.size(); ++i) {
         const auto& field = fields[i];
 
-        // Add field name
-        std::string field_const = "@.debug_" + suite_prefix + type_name + "_f_" + field.name;
+        // Add field name with quote
+        std::string field_const = "@.json_" + suite_prefix + type_name + "_f_" + field.name;
         std::string field_name = fresh_temp();
-        type_defs_buffer_ << "  " << field_name << " = getelementptr [" << (field.name.size() + 1)
+        type_defs_buffer_ << "  " << field_name << " = getelementptr [" << (field.name.size() + 2)
                           << " x i8], ptr " << field_const << ", i32 0, i32 0\n";
 
         std::string with_name = fresh_temp();
@@ -183,40 +164,41 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
                           << ", ptr " << field_name << ")\n";
 
         // Add colon
-        std::string colon = fresh_temp();
-        type_defs_buffer_ << "  " << colon << " = getelementptr [3 x i8], ptr " << colon_const
+        std::string colon_ptr = fresh_temp();
+        type_defs_buffer_ << "  " << colon_ptr << " = getelementptr [4 x i8], ptr " << colon
                           << ", i32 0, i32 0\n";
         std::string with_colon = fresh_temp();
         type_defs_buffer_ << "  " << with_colon << " = call ptr @str_concat_opt(ptr " << with_name
-                          << ", ptr " << colon << ")\n";
+                          << ", ptr " << colon_ptr << ")\n";
 
-        // Get field value and convert to string
+        // Get field value and convert to JSON
         std::string field_ptr = fresh_temp();
         type_defs_buffer_ << "  " << field_ptr << " = getelementptr " << llvm_type
                           << ", ptr %this, i32 0, i32 " << field.index << "\n";
 
         std::string value_str;
+        bool needs_quotes = false;
+
         if (field.llvm_type == "ptr") {
-            // String type - use directly
+            // String type - load and quote
             value_str = fresh_temp();
             type_defs_buffer_ << "  " << value_str << " = load ptr, ptr " << field_ptr << "\n";
-        } else if (is_primitive_stringable(field.llvm_type)) {
+            needs_quotes = true;
+        } else if (is_primitive_serializable(field.llvm_type)) {
             // Primitive type - convert to string
             std::string val = fresh_temp();
             type_defs_buffer_ << "  " << val << " = load " << field.llvm_type << ", ptr "
                               << field_ptr << "\n";
 
-            std::string to_string_func = get_to_string_func(field.llvm_type);
+            std::string to_string_func = get_json_value_func(field.llvm_type);
             value_str = fresh_temp();
 
             if (field.llvm_type == "i1") {
-                // Bool needs extension to i32 for bool_to_string
                 std::string ext = fresh_temp();
                 type_defs_buffer_ << "  " << ext << " = zext i1 " << val << " to i32\n";
                 type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
                                   << "(i32 " << ext << ")\n";
             } else if (field.llvm_type == "i8" || field.llvm_type == "i16") {
-                // Smaller ints need extension to i32
                 std::string ext = fresh_temp();
                 type_defs_buffer_ << "  " << ext << " = sext " << field.llvm_type << " " << val
                                   << " to i32\n";
@@ -245,7 +227,7 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
                                   << "(double " << val << ")\n";
             }
         } else {
-            // Non-primitive type - call debug_string() on the field
+            // Non-primitive type - call to_json() on the field
             std::string field_type_name;
             if (field.llvm_type.substr(0, 8) == "%struct.") {
                 field_type_name = field.llvm_type.substr(8);
@@ -253,22 +235,38 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
                 field_type_name = field.llvm_type;
             }
 
-            std::string field_debug_func =
-                "@tml_" + suite_prefix + field_type_name + "_debug_string";
+            std::string field_json_func = "@tml_" + suite_prefix + field_type_name + "_to_json";
             value_str = fresh_temp();
-            type_defs_buffer_ << "  " << value_str << " = call ptr " << field_debug_func << "(ptr "
+            type_defs_buffer_ << "  " << value_str << " = call ptr " << field_json_func << "(ptr "
                               << field_ptr << ")\n";
         }
 
-        std::string with_value = fresh_temp();
-        type_defs_buffer_ << "  " << with_value << " = call ptr @str_concat_opt(ptr " << with_colon
-                          << ", ptr " << value_str << ")\n";
+        std::string with_value;
+        if (needs_quotes) {
+            // Add quote, value, quote
+            std::string quote_ptr = fresh_temp();
+            type_defs_buffer_ << "  " << quote_ptr << " = getelementptr [2 x i8], ptr " << quote
+                              << ", i32 0, i32 0\n";
+            std::string with_open_quote = fresh_temp();
+            type_defs_buffer_ << "  " << with_open_quote << " = call ptr @str_concat_opt(ptr "
+                              << with_colon << ", ptr " << quote_ptr << ")\n";
+            std::string with_str = fresh_temp();
+            type_defs_buffer_ << "  " << with_str << " = call ptr @str_concat_opt(ptr "
+                              << with_open_quote << ", ptr " << value_str << ")\n";
+            with_value = fresh_temp();
+            type_defs_buffer_ << "  " << with_value << " = call ptr @str_concat_opt(ptr "
+                              << with_str << ", ptr " << quote_ptr << ")\n";
+        } else {
+            with_value = fresh_temp();
+            type_defs_buffer_ << "  " << with_value << " = call ptr @str_concat_opt(ptr "
+                              << with_colon << ", ptr " << value_str << ")\n";
+        }
         current = with_value;
 
         // Add separator if not last field
         if (i < fields.size() - 1) {
             std::string sep = fresh_temp();
-            type_defs_buffer_ << "  " << sep << " = getelementptr [3 x i8], ptr " << separator_const
+            type_defs_buffer_ << "  " << sep << " = getelementptr [3 x i8], ptr " << separator
                               << ", i32 0, i32 0\n";
             std::string with_sep = fresh_temp();
             type_defs_buffer_ << "  " << with_sep << " = call ptr @str_concat_opt(ptr " << current
@@ -279,7 +277,7 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
 
     // Add closing brace
     std::string close = fresh_temp();
-    type_defs_buffer_ << "  " << close << " = getelementptr [3 x i8], ptr " << close_brace_const
+    type_defs_buffer_ << "  " << close << " = getelementptr [2 x i8], ptr " << close_brace
                       << ", i32 0, i32 0\n";
     std::string result = fresh_temp();
     type_defs_buffer_ << "  " << result << " = call ptr @str_concat_opt(ptr " << current << ", ptr "
@@ -290,12 +288,12 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
 }
 
 // ============================================================================
-// Debug Generation for Enums
+// Serialize Generation for Enums
 // ============================================================================
 
-/// Generate debug_string() method for an enum with @derive(Debug)
-void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
-    if (!has_derive_debug(e)) {
+/// Generate to_json() method for an enum with @derive(Serialize)
+void LLVMIRGen::gen_derive_serialize_enum(const parser::EnumDecl& e) {
+    if (!has_derive_serialize(e)) {
         return;
     }
 
@@ -314,7 +312,7 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
         suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
     }
 
-    std::string func_name = "@tml_" + suite_prefix + type_name + "_debug_string";
+    std::string func_name = "@tml_" + suite_prefix + type_name + "_to_json";
 
     // Skip if already generated
     if (generated_functions_.count(func_name) > 0) {
@@ -322,18 +320,24 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
     }
     generated_functions_.insert(func_name);
 
-    // Emit variant name constants
-    type_defs_buffer_ << "; @derive(Debug) string constants for " << type_name << "\n";
+    // Emit variant name constants as JSON strings {"variant": "Name"}
+    // Use \22 for double quotes in LLVM IR
+    type_defs_buffer_ << "; @derive(Serialize) string constants for " << type_name << "\n";
     for (const auto& variant : e.variants) {
-        std::string variant_const = "@.debug_" + suite_prefix + type_name + "_v_" + variant.name;
-        std::string full_name = type_name + "::" + variant.name;
-        type_defs_buffer_ << variant_const << " = private constant [" << (full_name.size() + 1)
-                          << " x i8] c\"" << full_name << "\\00\"\n";
+        std::string variant_const = "@.json_" + suite_prefix + type_name + "_v_" + variant.name;
+        // Format: {"variant": "Name"} -> use \22 for quotes
+        std::string json_str = "{\\22variant\\22: \\22" + variant.name + "\\22}";
+        // Calculate length: {"variant": "Name"} where each " is 1 byte
+        // { + " + variant + " + : + space + " + name + " + } + null
+        // = 1 + 1 + 7 + 1 + 1 + 1 + 1 + name.size() + 1 + 1 + 1 = 16 + name.size()
+        size_t len = 16 + variant.name.size();
+        type_defs_buffer_ << variant_const << " = private constant [" << len << " x i8] c\""
+                          << json_str << "\\00\"\n";
     }
     type_defs_buffer_ << "\n";
 
-    // For simple enums, just return the variant name
-    type_defs_buffer_ << "; @derive(Debug) for " << type_name << "\n";
+    // For simple enums, return JSON object with variant
+    type_defs_buffer_ << "; @derive(Serialize) for " << type_name << "\n";
     type_defs_buffer_ << "define ptr " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
@@ -342,7 +346,7 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
                       << ", ptr %this, i32 0, i32 0\n";
     type_defs_buffer_ << "  %tag = load i32, ptr %tag_ptr\n";
 
-    // Switch on tag to get variant name
+    // Switch on tag to get variant JSON
     type_defs_buffer_ << "  switch i32 %tag, label %default [\n";
     for (size_t tag_value = 0; tag_value < e.variants.size(); ++tag_value) {
         type_defs_buffer_ << "    i32 " << tag_value << ", label %variant_" << tag_value << "\n";
@@ -352,17 +356,18 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
     // Generate labels for each variant
     int tag_idx = 0;
     for (const auto& variant : e.variants) {
-        std::string variant_const = "@.debug_" + suite_prefix + type_name + "_v_" + variant.name;
-        std::string full_name = type_name + "::" + variant.name;
+        std::string variant_const = "@.json_" + suite_prefix + type_name + "_v_" + variant.name;
+        // Calculate length: 16 + name.size()
+        size_t len = 16 + variant.name.size();
 
         type_defs_buffer_ << "variant_" << tag_idx << ":\n";
-        type_defs_buffer_ << "  %name_" << tag_idx << " = getelementptr [" << (full_name.size() + 1)
-                          << " x i8], ptr " << variant_const << ", i32 0, i32 0\n";
-        type_defs_buffer_ << "  ret ptr %name_" << tag_idx << "\n\n";
+        type_defs_buffer_ << "  %json_" << tag_idx << " = getelementptr [" << len << " x i8], ptr "
+                          << variant_const << ", i32 0, i32 0\n";
+        type_defs_buffer_ << "  ret ptr %json_" << tag_idx << "\n\n";
         tag_idx++;
     }
 
-    // Default case (should never happen)
+    // Default case
     type_defs_buffer_ << "default:\n";
     type_defs_buffer_ << "  ret ptr null\n";
     type_defs_buffer_ << "}\n\n";

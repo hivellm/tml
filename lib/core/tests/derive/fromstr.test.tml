@@ -1,0 +1,66 @@
+// Tests for @derive(FromStr) macro
+use test
+
+// ============================================================================
+// Simple Enum Tests
+// ============================================================================
+
+@derive(FromStr)
+type Color = Red | Green | Blue
+
+@test
+func test_fromstr_enum_red() -> I32 {
+    let result: Outcome[Color, Str] = Color::from_str("Red")
+    when result {
+        Ok(c) => {
+            // Successfully parsed
+            return 0
+        }
+        Err(e) => {
+            // Should not happen
+            return 1
+        }
+    }
+}
+
+@test
+func test_fromstr_enum_green() -> I32 {
+    let result: Outcome[Color, Str] = Color::from_str("Green")
+    when result {
+        Ok(c) => {
+            return 0
+        }
+        Err(e) => {
+            return 1
+        }
+    }
+}
+
+@test
+func test_fromstr_enum_blue() -> I32 {
+    let result: Outcome[Color, Str] = Color::from_str("Blue")
+    when result {
+        Ok(c) => {
+            return 0
+        }
+        Err(e) => {
+            return 1
+        }
+    }
+}
+
+@test
+func test_fromstr_enum_invalid() -> I32 {
+    let result: Outcome[Color, Str] = Color::from_str("Yellow")
+    when result {
+        Ok(c) => {
+            // Should not happen
+            return 1
+        }
+        Err(e) => {
+            // Expected error for invalid variant
+            assert(e.contains("Unknown"), "Error should mention unknown variant")
+            return 0
+        }
+    }
+}

@@ -84,8 +84,8 @@ static bool has_derive_partial_eq(const parser::EnumDecl& e) {
 /// Check if a type is a primitive that can be compared directly with icmp/fcmp
 static bool is_primitive_comparable(const std::string& llvm_type) {
     // Integer types
-    if (llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" ||
-        llvm_type == "i32" || llvm_type == "i64" || llvm_type == "i128") {
+    if (llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32" ||
+        llvm_type == "i64" || llvm_type == "i128") {
         return true;
     }
     // Floating point types
@@ -164,9 +164,8 @@ void LLVMIRGen::gen_derive_partial_eq_struct(const parser::StructDecl& s) {
     // Generate comparison for each field
     for (size_t i = 0; i < fields.size(); ++i) {
         const auto& field = fields[i];
-        std::string next_label = (i + 1 < fields.size())
-            ? "check_" + std::to_string(i + 1)
-            : "ret_true";
+        std::string next_label =
+            (i + 1 < fields.size()) ? "check_" + std::to_string(i + 1) : "ret_true";
 
         // Get field pointers
         std::string this_ptr = fresh_temp();
@@ -182,19 +181,19 @@ void LLVMIRGen::gen_derive_partial_eq_struct(const parser::StructDecl& s) {
             std::string other_val = fresh_temp();
             std::string eq_result = fresh_temp();
 
-            type_defs_buffer_ << "  " << this_val << " = load " << field.llvm_type
-                              << ", ptr " << this_ptr << "\n";
-            type_defs_buffer_ << "  " << other_val << " = load " << field.llvm_type
-                              << ", ptr " << other_ptr << "\n";
+            type_defs_buffer_ << "  " << this_val << " = load " << field.llvm_type << ", ptr "
+                              << this_ptr << "\n";
+            type_defs_buffer_ << "  " << other_val << " = load " << field.llvm_type << ", ptr "
+                              << other_ptr << "\n";
 
             if (is_float_type(field.llvm_type)) {
                 // Use fcmp oeq for floating point (ordered equal)
-                type_defs_buffer_ << "  " << eq_result << " = fcmp oeq " << field.llvm_type
-                                  << " " << this_val << ", " << other_val << "\n";
+                type_defs_buffer_ << "  " << eq_result << " = fcmp oeq " << field.llvm_type << " "
+                                  << this_val << ", " << other_val << "\n";
             } else {
                 // Use icmp eq for integers and pointers
-                type_defs_buffer_ << "  " << eq_result << " = icmp eq " << field.llvm_type
-                                  << " " << this_val << ", " << other_val << "\n";
+                type_defs_buffer_ << "  " << eq_result << " = icmp eq " << field.llvm_type << " "
+                                  << this_val << ", " << other_val << "\n";
             }
 
             type_defs_buffer_ << "  br i1 " << eq_result << ", label %" << next_label
@@ -215,8 +214,8 @@ void LLVMIRGen::gen_derive_partial_eq_struct(const parser::StructDecl& s) {
 
             std::string field_eq_func = "@tml_" + suite_prefix + field_type_name + "_eq";
 
-            type_defs_buffer_ << "  " << eq_result << " = call i1 " << field_eq_func
-                              << "(ptr " << this_ptr << ", ptr " << other_ptr << ")\n";
+            type_defs_buffer_ << "  " << eq_result << " = call i1 " << field_eq_func << "(ptr "
+                              << this_ptr << ", ptr " << other_ptr << ")\n";
             type_defs_buffer_ << "  br i1 " << eq_result << ", label %" << next_label
                               << ", label %ret_false\n";
         }
@@ -294,7 +293,8 @@ void LLVMIRGen::gen_derive_partial_eq_enum(const parser::EnumDecl& e) {
                       << ", ptr %other, i32 0, i32 0\n";
     type_defs_buffer_ << "  " << this_tag << " = load i32, ptr " << this_tag_ptr << "\n";
     type_defs_buffer_ << "  " << other_tag << " = load i32, ptr " << other_tag_ptr << "\n";
-    type_defs_buffer_ << "  " << tags_eq << " = icmp eq i32 " << this_tag << ", " << other_tag << "\n";
+    type_defs_buffer_ << "  " << tags_eq << " = icmp eq i32 " << this_tag << ", " << other_tag
+                      << "\n";
     type_defs_buffer_ << "  br i1 " << tags_eq << ", label %compare_payload, label %ret_false\n";
 
     // Compare payloads based on variant
@@ -319,8 +319,9 @@ void LLVMIRGen::gen_derive_partial_eq_enum(const parser::EnumDecl& e) {
 
         for (size_t i = 0; i < e.variants.size(); ++i) {
             const auto& variant = e.variants[i];
-            bool has_payload = (variant.tuple_fields.has_value() && !variant.tuple_fields->empty()) ||
-                               (variant.struct_fields.has_value() && !variant.struct_fields->empty());
+            bool has_payload =
+                (variant.tuple_fields.has_value() && !variant.tuple_fields->empty()) ||
+                (variant.struct_fields.has_value() && !variant.struct_fields->empty());
             if (has_payload) {
                 type_defs_buffer_ << "    i32 " << i << ", label %variant_" << i << "\n";
             }

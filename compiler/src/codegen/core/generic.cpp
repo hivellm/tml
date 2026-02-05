@@ -284,8 +284,9 @@ void LLVMIRGen::generate_pending_instantiations() {
                 }
 
                 // Also check if already generated (from previous compilation phases)
-                // Only check generated_impl_methods_output_ which tracks ACTUALLY generated methods.
-                // Don't check generated_impl_methods_ here - that's for queue deduplication only.
+                // Only check generated_impl_methods_output_ which tracks ACTUALLY generated
+                // methods. Don't check generated_impl_methods_ here - that's for queue
+                // deduplication only.
                 std::string generated_key = "tml_" + pim.mangled_type_name + "_" + pim.method_name;
                 if (!pim.method_type_suffix.empty()) {
                     generated_key += "__" + pim.method_type_suffix;
@@ -459,9 +460,10 @@ void LLVMIRGen::generate_pending_instantiations() {
                         if (struct_it == mod.structs.end() && !pim.is_library_type)
                             continue;
 
-                        TML_DEBUG_LN("[IMPL_INST]   Checking module: " << mod_name
-                                     << " has_source=" << (!mod.source_code.empty() ? "yes" : "no")
-                                     << " has_struct=" << (struct_it != mod.structs.end() ? "yes" : "no"));
+                        TML_DEBUG_LN("[IMPL_INST]   Checking module: "
+                                     << mod_name << " has_source="
+                                     << (!mod.source_code.empty() ? "yes" : "no") << " has_struct="
+                                     << (struct_it != mod.structs.end() ? "yes" : "no"));
 
                         // Get parsed AST from global cache or parse if not cached
                         if (mod.source_code.empty()) {
@@ -482,7 +484,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                         // If not in cache, parse the module
                         parser::Module local_parsed_mod;
                         if (!parsed_mod_ptr) {
-                            auto source = lexer::Source::from_string(mod.source_code, mod.file_path);
+                            auto source =
+                                lexer::Source::from_string(mod.source_code, mod.file_path);
                             lexer::Lexer lex(source);
                             auto tokens = lex.tokenize();
                             if (lex.has_errors())
@@ -501,7 +504,8 @@ void LLVMIRGen::generate_pending_instantiations() {
 
                             // Store in global cache for library modules
                             if (GlobalASTCache::should_cache(mod_name)) {
-                                GlobalASTCache::instance().put(mod_name, std::move(local_parsed_mod));
+                                GlobalASTCache::instance().put(mod_name,
+                                                               std::move(local_parsed_mod));
                                 parsed_mod_ptr = GlobalASTCache::instance().get(mod_name);
                                 TML_DEBUG_LN("[IMPL_INST]   AST cached: " << mod_name);
                             } else {

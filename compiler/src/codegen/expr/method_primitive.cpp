@@ -1015,12 +1015,11 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
     }
 
     if (method == "is_one" && call.args.empty()) {
-        bool is_one_int =
-            (kind == types::PrimitiveKind::I8 || kind == types::PrimitiveKind::I16 ||
-             kind == types::PrimitiveKind::I32 || kind == types::PrimitiveKind::I64 ||
-             kind == types::PrimitiveKind::I128 || kind == types::PrimitiveKind::U8 ||
-             kind == types::PrimitiveKind::U16 || kind == types::PrimitiveKind::U32 ||
-             kind == types::PrimitiveKind::U64 || kind == types::PrimitiveKind::U128);
+        bool is_one_int = (kind == types::PrimitiveKind::I8 || kind == types::PrimitiveKind::I16 ||
+                           kind == types::PrimitiveKind::I32 || kind == types::PrimitiveKind::I64 ||
+                           kind == types::PrimitiveKind::I128 || kind == types::PrimitiveKind::U8 ||
+                           kind == types::PrimitiveKind::U16 || kind == types::PrimitiveKind::U32 ||
+                           kind == types::PrimitiveKind::U64 || kind == types::PrimitiveKind::U128);
         bool is_one_float =
             (kind == types::PrimitiveKind::F32 || kind == types::PrimitiveKind::F64);
 

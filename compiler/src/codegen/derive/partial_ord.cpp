@@ -90,8 +90,8 @@ static bool has_derive_ord(const parser::EnumDecl& e) {
 /// Check if a type is a primitive that can be compared with icmp/fcmp
 static bool is_primitive_comparable(const std::string& llvm_type) {
     // Integer types
-    if (llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" ||
-        llvm_type == "i32" || llvm_type == "i64" || llvm_type == "i128") {
+    if (llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32" ||
+        llvm_type == "i64" || llvm_type == "i128") {
         return true;
     }
     // Floating point types
@@ -103,8 +103,8 @@ static bool is_primitive_comparable(const std::string& llvm_type) {
 
 /// Check if a type is an integer type (for signed comparison)
 static bool is_integer_type(const std::string& llvm_type) {
-    return llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" ||
-           llvm_type == "i32" || llvm_type == "i64" || llvm_type == "i128";
+    return llvm_type == "i1" || llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32" ||
+           llvm_type == "i64" || llvm_type == "i128";
 }
 
 // ============================================================================
@@ -149,8 +149,7 @@ void LLVMIRGen::gen_derive_ord_struct(const parser::StructDecl& s) {
 
     // Emit function definition - returns Ordering
     type_defs_buffer_ << "; @derive(Ord) for " << type_name << "\n";
-    type_defs_buffer_ << "define %struct.Ordering " << func_name
-                      << "(ptr %this, ptr %other) {\n";
+    type_defs_buffer_ << "define %struct.Ordering " << func_name << "(ptr %this, ptr %other) {\n";
     type_defs_buffer_ << "entry:\n";
 
     if (fields.empty()) {
@@ -205,10 +204,9 @@ void LLVMIRGen::gen_derive_ord_struct(const parser::StructDecl& s) {
             std::string label_less = "field" + std::to_string(field_idx) + "_less";
             std::string label_check_greater = "field" + std::to_string(field_idx) + "_check_gt";
             std::string label_greater = "field" + std::to_string(field_idx) + "_greater";
-            std::string label_next =
-                (field_idx < static_cast<int>(fields.size()) - 1)
-                    ? "field" + std::to_string(field_idx + 1)
-                    : "ret_equal";
+            std::string label_next = (field_idx < static_cast<int>(fields.size()) - 1)
+                                         ? "field" + std::to_string(field_idx + 1)
+                                         : "ret_equal";
 
             type_defs_buffer_ << "  br i1 " << is_less << ", label %" << label_less << ", label %"
                               << label_check_greater << "\n";
@@ -247,10 +245,9 @@ void LLVMIRGen::gen_derive_ord_struct(const parser::StructDecl& s) {
             type_defs_buffer_ << "  " << is_not_equal << " = icmp ne i32 " << tag << ", 1\n";
 
             std::string label_not_equal = "field" + std::to_string(field_idx) + "_not_eq";
-            std::string label_next =
-                (field_idx < static_cast<int>(fields.size()) - 1)
-                    ? "field" + std::to_string(field_idx + 1)
-                    : "ret_equal";
+            std::string label_next = (field_idx < static_cast<int>(fields.size()) - 1)
+                                         ? "field" + std::to_string(field_idx + 1)
+                                         : "ret_equal";
 
             type_defs_buffer_ << "  br i1 " << is_not_equal << ", label %" << label_not_equal
                               << ", label %" << label_next << "\n";
@@ -384,10 +381,9 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
             std::string label_less = "field" + std::to_string(field_idx) + "_less";
             std::string label_check_greater = "field" + std::to_string(field_idx) + "_check_gt";
             std::string label_greater = "field" + std::to_string(field_idx) + "_greater";
-            std::string label_next =
-                (field_idx < static_cast<int>(fields.size()) - 1)
-                    ? "field" + std::to_string(field_idx + 1)
-                    : "ret_equal";
+            std::string label_next = (field_idx < static_cast<int>(fields.size()) - 1)
+                                         ? "field" + std::to_string(field_idx + 1)
+                                         : "ret_equal";
 
             type_defs_buffer_ << "  br i1 " << is_less << ", label %" << label_less << ", label %"
                               << label_check_greater << "\n";
@@ -435,8 +431,7 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
                 field_type_name = field.llvm_type;
             }
 
-            std::string field_cmp_func =
-                "@tml_" + suite_prefix + field_type_name + "_partial_cmp";
+            std::string field_cmp_func = "@tml_" + suite_prefix + field_type_name + "_partial_cmp";
             std::string cmp_result = fresh_temp();
             type_defs_buffer_ << "  " << cmp_result << " = call " << maybe_type << " "
                               << field_cmp_func << "(ptr " << this_ptr << ", ptr " << other_ptr
@@ -479,10 +474,9 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
                               << ", 1\n";
 
             std::string label_not_equal = "field" + std::to_string(field_idx) + "_not_eq";
-            std::string label_next =
-                (field_idx < static_cast<int>(fields.size()) - 1)
-                    ? "field" + std::to_string(field_idx + 1)
-                    : "ret_equal";
+            std::string label_next = (field_idx < static_cast<int>(fields.size()) - 1)
+                                         ? "field" + std::to_string(field_idx + 1)
+                                         : "ret_equal";
 
             type_defs_buffer_ << "  br i1 " << is_not_equal << ", label %" << label_not_equal
                               << ", label %" << label_next << "\n";
@@ -546,8 +540,7 @@ void LLVMIRGen::gen_derive_ord_enum(const parser::EnumDecl& e) {
 
     // For simple enums (tag-only), just compare tags
     type_defs_buffer_ << "; @derive(Ord) for " << type_name << "\n";
-    type_defs_buffer_ << "define %struct.Ordering " << func_name
-                      << "(ptr %this, ptr %other) {\n";
+    type_defs_buffer_ << "define %struct.Ordering " << func_name << "(ptr %this, ptr %other) {\n";
     type_defs_buffer_ << "entry:\n";
 
     // Load tags

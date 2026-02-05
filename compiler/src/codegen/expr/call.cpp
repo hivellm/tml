@@ -2203,7 +2203,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 // The mangled_method key must match what impl.cpp generates
                 // NOTE: Do NOT insert into generated_impl_methods_ here!
                 // That set is for tracking ACTUALLY generated methods, not queued ones.
-                // The queue processing in generic.cpp handles deduplication via processed_impl_methods.
+                // The queue processing in generic.cpp handles deduplication via
+                // processed_impl_methods.
                 std::string mangled_method = "tml_" + type_name + "_" + method + behavior_suffix;
                 if (generated_impl_methods_.find(mangled_method) == generated_impl_methods_.end()) {
                     TML_DEBUG_LN("[IMPL_INST] Queueing " << type_name << "::" << method
@@ -2216,7 +2217,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         type_name,    // base_type_name
                         arg_tml_type, // Use as method_type_suffix (behavior param)
                         /*is_library_type=*/true});
-                    // Don't insert into generated_impl_methods_ - that's done after actual generation
+                    // Don't insert into generated_impl_methods_ - that's done after actual
+                    // generation
                 }
 
                 // Determine return type

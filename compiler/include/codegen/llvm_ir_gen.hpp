@@ -1190,6 +1190,22 @@ private:
     void gen_derive_debug_struct(const parser::StructDecl& s);
     void gen_derive_debug_enum(const parser::EnumDecl& e);
 
+    // @derive(Display) support
+    void gen_derive_display_struct(const parser::StructDecl& s);
+    void gen_derive_display_enum(const parser::EnumDecl& e);
+
+    // @derive(Serialize) support
+    void gen_derive_serialize_struct(const parser::StructDecl& s);
+    void gen_derive_serialize_enum(const parser::EnumDecl& e);
+
+    // @derive(Deserialize) support
+    void gen_derive_deserialize_struct(const parser::StructDecl& s);
+    void gen_derive_deserialize_enum(const parser::EnumDecl& e);
+
+    // @derive(FromStr) support
+    void gen_derive_fromstr_struct(const parser::StructDecl& s);
+    void gen_derive_fromstr_enum(const parser::EnumDecl& e);
+
     // Statement generation
     void gen_stmt(const parser::Stmt& stmt);
     void gen_let_stmt(const parser::LetStmt& let);
