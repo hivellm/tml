@@ -779,8 +779,14 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         }
     }
 
-    if (receiver_type->is<NamedType>()) {
-        auto& named = receiver_type->as<NamedType>();
+    // Handle impl method calls on NamedType
+    // Unwrap reference type if present for method lookup
+    TypePtr impl_receiver = receiver_type;
+    if (receiver_type->is<RefType>()) {
+        impl_receiver = receiver_type->as<RefType>().inner;
+    }
+    if (impl_receiver->is<NamedType>()) {
+        auto& named = impl_receiver->as<NamedType>();
         std::string qualified = named.name + "::" + call.method;
 
         auto func = env_.lookup_func(qualified);

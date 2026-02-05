@@ -1,0 +1,21 @@
+// Minimal let-else test
+use test
+
+func get_just() -> Maybe[I32] {
+    return Just(42)
+}
+
+func test_func() -> I32 {
+    let m: Maybe[I32] = get_just()
+    let Just(x): Maybe[I32] = m else {
+        return 0
+    }
+    return x
+}
+
+@test
+func test_let_else() -> I32 {
+    let result: I32 = test_func()
+    assert_eq(result, 42, "should unwrap")
+    return 0
+}

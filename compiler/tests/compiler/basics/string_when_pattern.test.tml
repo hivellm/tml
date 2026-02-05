@@ -1,0 +1,122 @@
+// Test: string pattern matching in when expressions
+
+use test
+
+// Simple string pattern matching
+func parse_color(name: Str) -> I64 {
+    when name {
+        "red" => 1,
+        "green" => 2,
+        "blue" => 3,
+        _ => 0
+    }
+}
+
+// Multiple patterns that return same value
+func is_primary_color(name: Str) -> Bool {
+    when name {
+        "red" => true,
+        "green" => true,
+        "blue" => true,
+        _ => false
+    }
+}
+
+// Pattern matching with expression body
+func color_rgb(name: Str) -> I64 {
+    when name {
+        "red" => {
+            let r: I64 = 255
+            r
+        },
+        "green" => {
+            let g: I64 = 255
+            g * 256
+        },
+        "blue" => {
+            let b: I64 = 255
+            b * 256 * 256
+        },
+        _ => 0
+    }
+}
+
+// Test cipher.tml-like pattern: algorithm name parsing
+type Algorithm {
+    Aes128,
+    Aes256,
+    ChaCha20,
+    Unknown,
+}
+
+func parse_algorithm(name: Str) -> Algorithm {
+    when name {
+        "aes-128" => Algorithm::Aes128,
+        "aes-256" => Algorithm::Aes256,
+        "chacha20" => Algorithm::ChaCha20,
+        _ => Algorithm::Unknown
+    }
+}
+
+@test
+func test_string_when_basic() -> I32 {
+    let r: I64 = parse_color("red")
+    let g: I64 = parse_color("green")
+    let b: I64 = parse_color("blue")
+    let u: I64 = parse_color("yellow")
+    assert_eq(r, 1, "red should return 1")
+    assert_eq(g, 2, "green should return 2")
+    assert_eq(b, 3, "blue should return 3")
+    assert_eq(u, 0, "unknown should return 0")
+    return 0
+}
+
+@test
+func test_string_when_bool() -> I32 {
+    assert_true(is_primary_color("red"), "red is primary")
+    assert_true(is_primary_color("green"), "green is primary")
+    assert_true(is_primary_color("blue"), "blue is primary")
+    assert_false(is_primary_color("yellow"), "yellow is not primary")
+    assert_false(is_primary_color(""), "empty is not primary")
+    return 0
+}
+
+@test
+func test_string_when_block_body() -> I32 {
+    let r: I64 = color_rgb("red")
+    let g: I64 = color_rgb("green")
+    let b: I64 = color_rgb("blue")
+    let u: I64 = color_rgb("unknown")
+    assert_eq(r, 255, "red RGB")
+    assert_eq(g, 65280, "green RGB (255 * 256)")
+    assert_eq(b, 16711680, "blue RGB (255 * 256 * 256)")
+    assert_eq(u, 0, "unknown RGB")
+    return 0
+}
+
+@test
+func test_string_when_enum_result() -> I32 {
+    let a1: Algorithm = parse_algorithm("aes-128")
+    let a2: Algorithm = parse_algorithm("aes-256")
+    let a3: Algorithm = parse_algorithm("chacha20")
+    let a4: Algorithm = parse_algorithm("unknown")
+
+    // Verify by checking enum variant tag
+    when a1 {
+        Algorithm::Aes128 => {},
+        _ => { assert(false, "aes-128 should parse to Aes128") }
+    }
+    when a2 {
+        Algorithm::Aes256 => {},
+        _ => { assert(false, "aes-256 should parse to Aes256") }
+    }
+    when a3 {
+        Algorithm::ChaCha20 => {},
+        _ => { assert(false, "chacha20 should parse to ChaCha20") }
+    }
+    when a4 {
+        Algorithm::Unknown => {},
+        _ => { assert(false, "unknown should parse to Unknown") }
+    }
+    return 0
+}

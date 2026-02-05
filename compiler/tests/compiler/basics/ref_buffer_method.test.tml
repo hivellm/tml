@@ -1,0 +1,106 @@
+// Test: method calls on ref Buffer parameters
+// This tests the same pattern used in cipher.tml
+
+use test
+
+// Minimal Buffer-like struct for testing
+type TestBuffer {
+    size: I64
+    capacity: I64
+}
+
+impl TestBuffer {
+    pub func new(cap: I64) -> TestBuffer {
+        return TestBuffer { size: 0, capacity: cap }
+    }
+
+    pub func len(this) -> I64 {
+        return this.size
+    }
+
+    pub func capacity(this) -> I64 {
+        return this.capacity
+    }
+
+    pub func is_empty(this) -> Bool {
+        return this.size == 0
+    }
+
+    pub func push(mut this, count: I64) {
+        this.size = this.size + count
+    }
+}
+
+// Function that takes ref TestBuffer and calls methods on it
+// This is the pattern from cipher.tml: key.len() on ref Buffer
+func get_length(buf: ref TestBuffer) -> I64 {
+    // This should auto-deref and call TestBuffer::len
+    return buf.len()
+}
+
+func get_capacity(buf: ref TestBuffer) -> I64 {
+    return buf.capacity()
+}
+
+func check_empty(buf: ref TestBuffer) -> Bool {
+    return buf.is_empty()
+}
+
+// Function that takes mut ref and calls mutating method
+func add_items(buf: mut ref TestBuffer, count: I64) {
+    buf.push(count)
+}
+
+// Test cipher.tml pattern: validate key size
+func validate_key_size(key: ref TestBuffer, expected: I64) -> Bool {
+    let key_len: I64 = key.len()  // This is the critical test
+    return key_len == expected
+}
+
+@test
+func test_ref_buffer_len() -> I32 {
+    let mut buf: TestBuffer = TestBuffer::new(64)
+    buf.push(10)
+
+    let len: I64 = get_length(ref buf)
+    assert_eq(len, 10, "len() on ref TestBuffer should work")
+    return 0
+}
+
+@test
+func test_ref_buffer_capacity() -> I32 {
+    let buf: TestBuffer = TestBuffer::new(128)
+    let cap: I64 = get_capacity(ref buf)
+    assert_eq(cap, 128, "capacity() on ref TestBuffer should work")
+    return 0
+}
+
+@test
+func test_ref_buffer_is_empty() -> I32 {
+    let buf: TestBuffer = TestBuffer::new(32)
+    let empty: Bool = check_empty(ref buf)
+    assert_true(empty, "is_empty() on ref TestBuffer should work")
+    return 0
+}
+
+@test
+func test_mut_ref_buffer_push() -> I32 {
+    let mut buf: TestBuffer = TestBuffer::new(64)
+    add_items(mut ref buf, 5)
+    assert_eq(buf.size, 5, "push() on mut ref TestBuffer should work")
+    return 0
+}
+
+@test
+func test_validate_key_size_pattern() -> I32 {
+    // This mimics the cipher.tml pattern for key validation
+    let mut key: TestBuffer = TestBuffer::new(32)
+    key.push(32)  // Key has 32 bytes
+
+    let valid: Bool = validate_key_size(ref key, 32)
+    assert_true(valid, "key.len() in validate function should work")
+
+    let invalid: Bool = validate_key_size(ref key, 16)
+    assert_false(invalid, "key.len() comparison should work")
+    return 0
+}

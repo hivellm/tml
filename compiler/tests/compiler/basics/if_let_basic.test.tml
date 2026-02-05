@@ -1,0 +1,54 @@
+// Test: basic if-let pattern matching
+// Tests that if let works with Maybe and Outcome types
+
+use test
+
+// Test if let with Maybe
+func unwrap_maybe(m: Maybe[I32]) -> I32 {
+    if let Just(x) = m {
+        return x
+    } else {
+        return 0
+    }
+}
+
+@test
+func test_if_let_just() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    let result: I32 = unwrap_maybe(m)
+    assert_eq(result, 42, "should unwrap Just value")
+    return 0
+}
+
+@test
+func test_if_let_nothing() -> I32 {
+    let m: Maybe[I32] = Nothing
+    let result: I32 = unwrap_maybe(m)
+    assert_eq(result, 0, "should return 0 for Nothing")
+    return 0
+}
+
+// Test if let with Outcome
+func unwrap_outcome(o: Outcome[I32, Str]) -> I32 {
+    if let Ok(x) = o {
+        return x
+    } else {
+        return -1
+    }
+}
+
+@test
+func test_if_let_ok() -> I32 {
+    let o: Outcome[I32, Str] = Ok(100)
+    let result: I32 = unwrap_outcome(o)
+    assert_eq(result, 100, "should unwrap Ok value")
+    return 0
+}
+
+@test
+func test_if_let_err() -> I32 {
+    let o: Outcome[I32, Str] = Err("error")
+    let result: I32 = unwrap_outcome(o)
+    assert_eq(result, -1, "should return -1 for Err")
+    return 0
+}

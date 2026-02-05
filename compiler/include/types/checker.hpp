@@ -193,6 +193,8 @@ private:
     auto check_stmt(const parser::Stmt& stmt) -> TypePtr;
     auto check_let(const parser::LetStmt& let) -> TypePtr;
     auto check_var(const parser::VarStmt& var) -> TypePtr;
+    auto check_let_else(const parser::LetElseStmt& let_else) -> TypePtr;
+    auto check_nested_decl(const parser::Decl& decl, SourceSpan span) -> TypePtr;
 
     // Pattern binding
     void bind_pattern(const parser::Pattern& pattern, TypePtr type);

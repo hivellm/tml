@@ -45,8 +45,12 @@ static std::string extract_type_name_for_drop(const std::string& llvm_type) {
 void LLVMIRGen::gen_stmt(const parser::Stmt& stmt) {
     if (stmt.is<parser::LetStmt>()) {
         gen_let_stmt(stmt.as<parser::LetStmt>());
+    } else if (stmt.is<parser::LetElseStmt>()) {
+        gen_let_else_stmt(stmt.as<parser::LetElseStmt>());
     } else if (stmt.is<parser::ExprStmt>()) {
         gen_expr_stmt(stmt.as<parser::ExprStmt>());
+    } else if (stmt.is<parser::DeclPtr>()) {
+        gen_nested_decl(*stmt.as<parser::DeclPtr>());
     }
 }
 
@@ -977,6 +981,223 @@ void LLVMIRGen::gen_tuple_pattern_binding(const parser::TuplePattern& pattern,
                                       semantic_elem);
         }
     }
+}
+
+void LLVMIRGen::gen_let_else_stmt(const parser::LetElseStmt& let_else) {
+    // let Pattern: Type = expr else { diverging_block }
+    //
+    // This is similar to if-let but with different control flow:
+    // - If pattern matches: bind variables and continue
+    // - If pattern doesn't match: execute else block (which must diverge)
+
+    // Evaluate scrutinee
+    std::string scrutinee = gen_expr(*let_else.init);
+    std::string scrutinee_type = last_expr_type_;
+
+    // Get semantic type for better payload handling
+    types::TypePtr scrutinee_semantic = infer_expr_type(*let_else.init);
+    if (scrutinee_type == "ptr" && scrutinee_semantic) {
+        scrutinee_type = llvm_type_from_semantic(scrutinee_semantic);
+    }
+
+    std::string label_match = fresh_label("letelse.match");
+    std::string label_else = fresh_label("letelse.else");
+    std::string label_cont = fresh_label("letelse.cont");
+
+    // Handle enum patterns (most common for let-else with Maybe/Outcome)
+    if (let_else.pattern->is<parser::EnumPattern>()) {
+        const auto& enum_pat = let_else.pattern->as<parser::EnumPattern>();
+        std::string variant_name = enum_pat.path.segments.back();
+
+        // Get pointer to scrutinee
+        std::string scrutinee_ptr;
+        if (last_expr_type_ == "ptr") {
+            scrutinee_ptr = scrutinee;
+        } else {
+            scrutinee_ptr = fresh_reg();
+            emit_line("  " + scrutinee_ptr + " = alloca " + scrutinee_type);
+            emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
+        }
+
+        // Extract tag
+        std::string tag_ptr = fresh_reg();
+        emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " +
+                  scrutinee_ptr + ", i32 0, i32 0");
+        std::string tag = fresh_reg();
+        emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
+
+        // Find variant index
+        int variant_tag = -1;
+        std::string scrutinee_enum_name;
+        if (scrutinee_type.starts_with("%struct.")) {
+            scrutinee_enum_name = scrutinee_type.substr(8);
+        }
+
+        if (!scrutinee_enum_name.empty()) {
+            std::string key = scrutinee_enum_name + "::" + variant_name;
+            auto it = enum_variants_.find(key);
+            if (it != enum_variants_.end()) {
+                variant_tag = it->second;
+            }
+        }
+
+        // Fallback to env lookup
+        if (variant_tag < 0) {
+            for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+                for (size_t v_idx = 0; v_idx < enum_def.variants.size(); ++v_idx) {
+                    if (enum_def.variants[v_idx].first == variant_name) {
+                        variant_tag = static_cast<int>(v_idx);
+                        break;
+                    }
+                }
+                if (variant_tag >= 0)
+                    break;
+            }
+        }
+
+        // Compare tag and branch
+        if (variant_tag >= 0) {
+            std::string cmp = fresh_reg();
+            emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " + std::to_string(variant_tag));
+            emit_line("  br i1 " + cmp + ", label %" + label_match + ", label %" + label_else);
+        } else {
+            emit_line("  br label %" + label_else);
+        }
+
+        // Match block - bind pattern variables
+        emit_line(label_match + ":");
+        block_terminated_ = false;
+
+        if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
+            std::string payload_ptr = fresh_reg();
+            emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type +
+                      ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
+
+            // Get payload type from semantic info
+            types::TypePtr payload_type = nullptr;
+            if (scrutinee_semantic && scrutinee_semantic->is<types::NamedType>()) {
+                const auto& named = scrutinee_semantic->as<types::NamedType>();
+                if (named.name == "Outcome" && named.type_args.size() >= 2) {
+                    if (variant_name == "Ok")
+                        payload_type = named.type_args[0];
+                    else if (variant_name == "Err")
+                        payload_type = named.type_args[1];
+                } else if (named.name == "Maybe" && !named.type_args.empty()) {
+                    if (variant_name == "Just")
+                        payload_type = named.type_args[0];
+                }
+            }
+
+            // Bind first payload element
+            if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
+                const auto& ident = enum_pat.payload->at(0)->as<parser::IdentPattern>();
+                std::string bound_type =
+                    payload_type ? llvm_type_from_semantic(payload_type, true) : "i64";
+
+                if (bound_type.starts_with("%struct.") || bound_type.starts_with("{")) {
+                    // Struct/tuple: variable is pointer to payload
+                    locals_[ident.name] =
+                        VarInfo{payload_ptr, bound_type, payload_type, std::nullopt};
+                } else {
+                    // Primitive: load and allocate
+                    std::string payload_raw = fresh_reg();
+                    emit_line("  " + payload_raw + " = load i64, ptr " + payload_ptr);
+
+                    std::string payload_val = payload_raw;
+                    // Truncate if needed (i64 -> i32)
+                    if (bound_type == "i32") {
+                        std::string trunc = fresh_reg();
+                        emit_line("  " + trunc + " = trunc i64 " + payload_raw + " to i32");
+                        payload_val = trunc;
+                    }
+
+                    std::string var_alloca = fresh_reg();
+                    emit_line("  " + var_alloca + " = alloca " + bound_type);
+                    emit_line("  store " + bound_type + " " + payload_val + ", ptr " + var_alloca);
+                    locals_[ident.name] =
+                        VarInfo{var_alloca, bound_type, payload_type, std::nullopt};
+                }
+            }
+        }
+
+        // Continue to rest of function
+        emit_line("  br label %" + label_cont);
+
+        // Else block - pattern didn't match, execute diverging block
+        emit_line(label_else + ":");
+        block_terminated_ = false;
+        gen_expr(*let_else.else_block);
+        // The else block should diverge (return/panic), but add branch just in case
+        if (!block_terminated_) {
+            emit_line("  br label %" + label_cont);
+        }
+
+        // Continue block
+        emit_line(label_cont + ":");
+        current_block_ = label_cont;
+        block_terminated_ = false;
+    } else {
+        // For non-enum patterns, just bind directly (fallback)
+        // This handles simple ident patterns that always match
+        emit_line("  br label %" + label_match);
+        emit_line(label_match + ":");
+        block_terminated_ = false;
+        emit_line("  br label %" + label_cont);
+        emit_line(label_cont + ":");
+        current_block_ = label_cont;
+        block_terminated_ = false;
+    }
+}
+
+void LLVMIRGen::gen_nested_decl(const parser::Decl& decl) {
+    // Handle nested declarations (const, func, type, etc.)
+    if (decl.is<parser::ConstDecl>()) {
+        const auto& const_decl = decl.as<parser::ConstDecl>();
+        // const NAME: TYPE = value is essentially the same as let NAME: TYPE = value
+        // Generate like a let statement
+
+        // Get LLVM type from annotation
+        std::string var_type = llvm_type(*const_decl.type);
+
+        // Generate initializer value
+        std::string init_val = gen_expr(*const_decl.value);
+
+        // Allocate on stack
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + var_type);
+
+        // Emit lifetime.start for LLVM stack slot optimization
+        int64_t type_size = get_type_size(var_type);
+        emit_lifetime_start(alloca_reg, type_size);
+        register_alloca_in_scope(alloca_reg, type_size);
+
+        // Store the value (with type conversions if needed)
+        if (var_type == "float" && last_expr_type_ == "double") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = fptrunc double " + init_val + " to float");
+            emit_line("  store float " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i64" && last_expr_type_ == "i32") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = sext i32 " + init_val + " to i64");
+            emit_line("  store i64 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i32" && last_expr_type_ == "i64") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = trunc i64 " + init_val + " to i32");
+            emit_line("  store i32 " + conv + ", ptr " + alloca_reg);
+        } else {
+            emit_line("  store " + var_type + " " + init_val + ", ptr " + alloca_reg);
+        }
+
+        // Map const name to alloca
+        types::TypePtr semantic_type =
+            resolve_parser_type_with_subs(*const_decl.type, current_type_subs_);
+        locals_[const_decl.name] = VarInfo{alloca_reg, var_type, semantic_type, std::nullopt};
+
+        // Register for drop if type implements Drop
+        std::string type_name = extract_type_name_for_drop(var_type);
+        register_for_drop(const_decl.name, alloca_reg, type_name, var_type);
+    }
+    // Other nested declarations (func, type, etc.) are handled elsewhere or ignored
 }
 
 } // namespace tml::codegen

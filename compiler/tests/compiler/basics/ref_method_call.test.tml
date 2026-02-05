@@ -1,0 +1,66 @@
+// Test: method calls on ref types
+
+use test
+
+type Counter {
+    value: I64
+}
+
+impl Counter {
+    pub func new(v: I64) -> Counter {
+        return Counter { value: v }
+    }
+
+    pub func get(this) -> I64 {
+        return this.value
+    }
+
+    pub func increment(mut this) {
+        this.value = this.value + 1
+    }
+
+    pub func add(this, n: I64) -> I64 {
+        return this.value + n
+    }
+}
+
+// Test calling method on ref parameter
+func get_value(c: ref Counter) -> I64 {
+    // Auto-deref: c.get() works on ref Counter
+    let val: I64 = c.get()
+    return val
+}
+
+// Test calling mut method on mut ref parameter
+func increment_value(c: mut ref Counter) {
+    c.increment()  // Auto-deref
+}
+
+// Test calling method with arguments on ref parameter
+func add_to_value(c: ref Counter, n: I64) -> I64 {
+    return c.add(n)  // Auto-deref with args
+}
+
+@test
+func test_ref_method_call() -> I32 {
+    let c: Counter = Counter::new(42)
+    let result: I64 = get_value(ref c)
+    assert_eq(result, 42, "get() on ref Counter should return 42")
+    return 0
+}
+
+@test
+func test_mut_ref_method_call() -> I32 {
+    let mut c: Counter = Counter::new(10)
+    increment_value(mut ref c)
+    assert_eq(c.value, 11, "increment() on mut ref Counter should work")
+    return 0
+}
+
+@test
+func test_ref_method_call_with_args() -> I32 {
+    let c: Counter = Counter::new(100)
+    let result: I64 = add_to_value(ref c, 50)
+    assert_eq(result, 150, "add() on ref Counter with args should work")
+    return 0
+}

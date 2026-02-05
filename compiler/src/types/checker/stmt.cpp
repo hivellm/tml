@@ -36,15 +36,19 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual);
 
 auto TypeChecker::check_stmt(const parser::Stmt& stmt) -> TypePtr {
     return std::visit(
-        [this](const auto& s) -> TypePtr {
+        [this, &stmt](const auto& s) -> TypePtr {
             using T = std::decay_t<decltype(s)>;
 
             if constexpr (std::is_same_v<T, parser::LetStmt>) {
                 return check_let(s);
             } else if constexpr (std::is_same_v<T, parser::VarStmt>) {
                 return check_var(s);
+            } else if constexpr (std::is_same_v<T, parser::LetElseStmt>) {
+                return check_let_else(s);
             } else if constexpr (std::is_same_v<T, parser::ExprStmt>) {
                 return check_expr(*s.expr);
+            } else if constexpr (std::is_same_v<T, parser::DeclPtr>) {
+                return check_nested_decl(*s, stmt.span);
             } else {
                 return make_unit();
             }
@@ -106,6 +110,89 @@ auto TypeChecker::check_var(const parser::VarStmt& var) -> TypePtr {
     // Type compatibility is checked during expression type checking
     env_.current_scope()->define(var.name, var_type, true, SourceSpan{});
     return make_unit();
+}
+
+auto TypeChecker::check_let_else(const parser::LetElseStmt& let_else) -> TypePtr {
+    // let Pattern: Type = expr else { diverging_block }
+    // The pattern must be refutable (can fail to match)
+    // The else block must diverge (return, panic, break, continue)
+
+    // TML requires explicit type annotation
+    if (!let_else.type_annotation.has_value()) {
+        error("TML requires explicit type annotation on 'let else' statements.", let_else.span,
+              "T011");
+        return make_unit();
+    }
+
+    TypePtr scrutinee_type = resolve_type(**let_else.type_annotation);
+
+    // Check the initializer expression
+    TypePtr init_type = check_expr(*let_else.init, scrutinee_type);
+
+    // Check type compatibility
+    TypePtr resolved_scrutinee = env_.resolve(scrutinee_type);
+    TypePtr resolved_init = env_.resolve(init_type);
+    if (!types_compatible(resolved_scrutinee, resolved_init)) {
+        error("Type mismatch in let-else: expected " + type_to_string(resolved_scrutinee) +
+                  ", found " + type_to_string(resolved_init),
+              let_else.span, "T001");
+    }
+
+    // Check the else block - it should diverge (have type Never)
+    // Push a scope for the else block
+    env_.push_scope();
+    TypePtr else_type = check_expr(*let_else.else_block);
+    env_.pop_scope();
+
+    // The else block should have Never type (diverges)
+    // We allow any type since we can't easily enforce divergence at type-check time
+    // The HIR lowering will create the proper control flow
+
+    // Bind the pattern variables in the current scope
+    // This makes them available after the let-else statement
+    bind_pattern(*let_else.pattern, scrutinee_type);
+
+    return make_unit();
+}
+
+auto TypeChecker::check_nested_decl(const parser::Decl& decl, SourceSpan span) -> TypePtr {
+    return std::visit(
+        [this, &span](const auto& d) -> TypePtr {
+            using T = std::decay_t<decltype(d)>;
+
+            if constexpr (std::is_same_v<T, parser::ConstDecl>) {
+                // const NAME: TYPE = value
+                // Type check and bind the constant in current scope
+                TypePtr const_type = resolve_type(*d.type);
+                TypePtr value_type = check_expr(*d.value, const_type);
+
+                // Check type compatibility
+                TypePtr resolved_const = env_.resolve(const_type);
+                TypePtr resolved_value = env_.resolve(value_type);
+                if (!types_compatible(resolved_const, resolved_value)) {
+                    error("Type mismatch in const declaration: expected " +
+                              type_to_string(resolved_const) + ", found " +
+                              type_to_string(resolved_value),
+                          d.span, "T001");
+                }
+
+                // Bind the constant name in current scope (immutable)
+                env_.current_scope()->define(d.name, const_type, false, d.span);
+                return make_unit();
+
+            } else if constexpr (std::is_same_v<T, parser::FuncDecl>) {
+                // Nested functions: register for lookup
+                // Full type checking would require capturing the function
+                // For now, just skip (placeholder behavior)
+                return make_unit();
+
+            } else {
+                // Other nested declarations (type, behavior, impl)
+                // These are typically handled during earlier passes
+                return make_unit();
+            }
+        },
+        decl.kind);
 }
 
 void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {

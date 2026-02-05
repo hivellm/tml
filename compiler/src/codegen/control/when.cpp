@@ -21,6 +21,20 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
             lit_val = lit_pat.literal.bool_value() ? "1" : "0";
         } else if (lit_pat.literal.kind == lexer::TokenKind::FloatLiteral) {
             lit_val = std::to_string(lit_pat.literal.float_value().value);
+        } else if (lit_pat.literal.kind == lexer::TokenKind::StringLiteral) {
+            // String pattern matching: use str_eq runtime function
+            std::string str_val = std::string(lit_pat.literal.string_value().value);
+            std::string pattern_str = add_string_literal(str_val);
+
+            // Call str_eq(scrutinee, pattern) - returns i32 (0 or 1)
+            std::string eq_i32 = fresh_reg();
+            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + scrutinee + ", ptr " +
+                      pattern_str + ")");
+
+            // Convert i32 to i1 for branch condition
+            std::string cmp = fresh_reg();
+            emit_line("  " + cmp + " = icmp ne i32 " + eq_i32 + ", 0");
+            return cmp;
         } else {
             // Unsupported literal type
             return "";
@@ -219,12 +233,20 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     std::string scrutinee = gen_expr(*when.scrutinee);
     std::string scrutinee_type = last_expr_type_;
 
+    // Check if scrutinee is a string (Str type) by examining semantic type
+    bool is_string_scrutinee = false;
+    types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
+    if (scrutinee_semantic && scrutinee_semantic->is<types::PrimitiveType>()) {
+        const auto& prim = scrutinee_semantic->as<types::PrimitiveType>();
+        is_string_scrutinee = (prim.kind == types::PrimitiveKind::Str);
+    }
+
     // If scrutinee_type is ptr, infer the actual struct type from the expression
+    // Exception: strings remain as ptr for string pattern matching
     std::string scrutinee_ptr;
     if (scrutinee_type == "ptr") {
-        types::TypePtr semantic_type = infer_expr_type(*when.scrutinee);
-        if (semantic_type) {
-            scrutinee_type = llvm_type_from_semantic(semantic_type);
+        if (!is_string_scrutinee && scrutinee_semantic) {
+            scrutinee_type = llvm_type_from_semantic(scrutinee_semantic);
         }
         // scrutinee is already a pointer, use it directly
         scrutinee_ptr = scrutinee;
@@ -236,12 +258,14 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     }
 
     // Check if scrutinee is a simple primitive type (not enum/struct)
+    // Strings are also treated as primitives for pattern matching (compared with str_eq)
     bool is_primitive_scrutinee =
+        is_string_scrutinee ||
         (scrutinee_type == "i8" || scrutinee_type == "i16" || scrutinee_type == "i32" ||
          scrutinee_type == "i64" || scrutinee_type == "i128" || scrutinee_type == "float" ||
          scrutinee_type == "double" || scrutinee_type == "i1");
 
-    // For enums/structs, extract tag; for primitives, we'll compare directly
+    // For enums/structs, extract tag; for primitives (including strings), we'll compare directly
     std::string tag;
     if (!is_primitive_scrutinee) {
         // Extract tag (assumes enum is { i32, i64 })
@@ -266,8 +290,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     bool all_arms_terminate = true;
     emit_line("  " + result_ptr + " = alloca i64"); // Use i64 to hold most types
 
-    // Get scrutinee semantic type for pattern binding
-    types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
+    // scrutinee_semantic already computed above for string detection
 
     // Generate switch based on pattern
     // For now, simplified: each arm is checked sequentially

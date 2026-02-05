@@ -305,7 +305,9 @@ private:
     /// Lower specific statement types.
     auto lower_let(const parser::LetStmt& let_stmt) -> HirStmtPtr;
     auto lower_var(const parser::VarStmt& var_stmt) -> HirStmtPtr;
+    auto lower_let_else(const parser::LetElseStmt& let_else) -> HirStmtPtr;
     auto lower_expr_stmt(const parser::ExprStmt& expr_stmt) -> HirStmtPtr;
+    auto lower_nested_decl(const parser::Decl& decl, SourceSpan span) -> HirStmtPtr;
 
     // ========================================================================
     // Pattern Lowering

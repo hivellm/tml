@@ -1,0 +1,36 @@
+// Test: nested const declarations inside functions
+use test
+
+@test
+func test_nested_const_basic() -> I32 {
+    const X: I32 = 42
+    assert_eq(X, 42, "nested const should equal 42")
+    return 0
+}
+
+@test
+func test_nested_const_in_block() -> I32 {
+    let result: I32 = {
+        const VALUE: I32 = 100
+        VALUE + 5
+    }
+    assert_eq(result, 105, "should use nested const in block")
+    return 0
+}
+
+@test
+func test_nested_const_with_expression() -> I32 {
+    const A: I32 = 5
+    const B: I32 = A * 2
+    assert_eq(B, 10, "const can reference earlier const")
+    return 0
+}
+
+@test
+func test_nested_const_multiple() -> I32 {
+    const X: I32 = 10
+    const Y: I32 = 20
+    const Z: I32 = X + Y
+    assert_eq(Z, 30, "const can combine multiple consts")
+    return 0
+}

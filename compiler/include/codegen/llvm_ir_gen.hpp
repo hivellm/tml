@@ -127,22 +127,22 @@ private:
 
 /// Type of cached IR entry.
 enum class CachedIRType {
-    StructDef,      ///< Struct type definition
-    EnumDef,        ///< Enum type definition
-    Function,       ///< Function implementation
-    ImplMethod,     ///< Impl method (behavior implementation)
-    GenericInst,    ///< Generic type instantiation
+    StructDef,   ///< Struct type definition
+    EnumDef,     ///< Enum type definition
+    Function,    ///< Function implementation
+    ImplMethod,  ///< Impl method (behavior implementation)
+    GenericInst, ///< Generic type instantiation
 };
 
 /// Cached IR entry information.
 struct CachedIREntry {
-    std::string key;               ///< Unique key (e.g., "tml_I32_try_from__I64")
-    CachedIRType type;             ///< Type of entry
-    std::string declaration;       ///< LLVM IR declaration (for extern refs)
-    std::string type_definition;   ///< LLVM IR type definition (for structs/enums)
-    std::string implementation;    ///< Full LLVM IR implementation (for functions)
-    bool is_library;               ///< True if from library (no suite prefix)
-    std::vector<std::string> dependencies;  ///< Other entries this depends on
+    std::string key;                       ///< Unique key (e.g., "tml_I32_try_from__I64")
+    CachedIRType type;                     ///< Type of entry
+    std::string declaration;               ///< LLVM IR declaration (for extern refs)
+    std::string type_definition;           ///< LLVM IR type definition (for structs/enums)
+    std::string implementation;            ///< Full LLVM IR implementation (for functions)
+    bool is_library;                       ///< True if from library (no suite prefix)
+    std::vector<std::string> dependencies; ///< Other entries this depends on
 };
 
 /// Global cache for pre-generated library LLVM IR.
@@ -205,7 +205,7 @@ private:
 
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, CachedIREntry> cache_;
-    std::unordered_set<std::string> in_progress_;  ///< Entries being generated
+    std::unordered_set<std::string> in_progress_; ///< Entries being generated
     mutable size_t hits_ = 0;
     mutable size_t misses_ = 0;
 };
@@ -1209,7 +1209,9 @@ private:
     // Statement generation
     void gen_stmt(const parser::Stmt& stmt);
     void gen_let_stmt(const parser::LetStmt& let);
+    void gen_let_else_stmt(const parser::LetElseStmt& let_else);
     void gen_expr_stmt(const parser::ExprStmt& expr);
+    void gen_nested_decl(const parser::Decl& decl);
 
     // Pattern binding for destructuring
     // Binds pattern elements to extracted values from a tuple/struct

@@ -342,11 +342,14 @@ bool TypeChecker::stmt_has_return(const parser::Stmt& stmt) {
             if constexpr (std::is_same_v<T, parser::ExprStmt>) {
                 return expr_has_return(*s.expr);
             } else if constexpr (std::is_same_v<T, parser::LetStmt>) {
-                // Let statements don't contain returns
-                return false;
+                // Let statements don't contain returns (unless in init)
+                return s.init ? expr_has_return(**s.init) : false;
             } else if constexpr (std::is_same_v<T, parser::VarStmt>) {
-                // Var statements don't contain returns
-                return false;
+                // Var statements may have returns in init
+                return expr_has_return(*s.init);
+            } else if constexpr (std::is_same_v<T, parser::LetElseStmt>) {
+                // Let-else: check both init and else block for returns
+                return expr_has_return(*s.init) || expr_has_return(*s.else_block);
             } else {
                 return false;
             }

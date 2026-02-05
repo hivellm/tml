@@ -1,0 +1,14 @@
+// Test: basic tuple destructuring in let
+use test
+
+func get_pair() -> (I32, I32) {
+    return (10, 20)
+}
+
+@test
+func test_tuple_destruct() -> I32 {
+    let (a, b): (I32, I32) = get_pair()
+    assert_eq(a, 10, "first element")
+    assert_eq(b, 20, "second element")
+    return 0
+}

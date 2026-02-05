@@ -9,7 +9,7 @@
 //! | Let       | `let x: T = expr`             | Immutable binding        |
 //! | Var       | `var x: T = expr`             | Mutable (= `let mut`)    |
 //! | Expr      | `expr`                        | Expression statement     |
-//! | Decl      | `func`, `type`, etc.          | Nested declarations      |
+//! | Decl      | `const`, `func`, `type`, etc. | Nested declarations      |
 //!
 //! ## TML Explicit Typing
 //!
@@ -45,10 +45,10 @@ auto Parser::parse_stmt() -> Result<StmtPtr, ParseError> {
         return parse_var_stmt();
     }
 
-    // Check if it's a declaration
+    // Check if it's a declaration (including const inside functions)
     if (check(lexer::TokenKind::KwPub) || check(lexer::TokenKind::KwFunc) ||
         check(lexer::TokenKind::KwType) || check(lexer::TokenKind::KwBehavior) ||
-        check(lexer::TokenKind::KwImpl)) {
+        check(lexer::TokenKind::KwImpl) || check(lexer::TokenKind::KwConst)) {
         auto decl = parse_decl();
         if (is_err(decl))
             return unwrap_err(decl);
@@ -96,6 +96,34 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
         if (is_err(expr))
             return unwrap_err(expr);
         init = std::move(unwrap(expr));
+    }
+
+    // Check for let-else syntax: let Pattern: T = expr else { block }
+    skip_newlines();
+    if (match(lexer::TokenKind::KwElse)) {
+        // Must have an initializer for let-else
+        if (!init) {
+            return ParseError{.message = "let-else requires an initializer expression",
+                              .span = peek().span,
+                              .notes = {"let Pattern: T = expr else { ... } requires '= expr'"},
+                              .code = "P009"};
+        }
+
+        // Parse the else block (must be a block expression)
+        auto else_block = parse_block_expr();
+        if (is_err(else_block))
+            return unwrap_err(else_block);
+
+        auto end_span = previous().span;
+
+        auto let_else_stmt = LetElseStmt{.pattern = std::move(unwrap(pattern)),
+                                         .type_annotation = std::move(type_annotation),
+                                         .init = std::move(*init),
+                                         .else_block = std::move(unwrap(else_block)),
+                                         .span = SourceSpan::merge(start_span, end_span)};
+
+        return make_box<Stmt>(Stmt{.kind = std::move(let_else_stmt),
+                                   .span = SourceSpan::merge(start_span, end_span)});
     }
 
     auto end_span = previous().span;

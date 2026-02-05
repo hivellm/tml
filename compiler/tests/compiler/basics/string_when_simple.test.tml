@@ -1,0 +1,17 @@
+// Minimal test for string when pattern
+
+use test
+
+func is_red(name: Str) -> Bool {
+    when name {
+        "red" => true,
+        _ => false
+    }
+}
+
+@test
+func test_is_red() -> I32 {
+    let result: Bool = is_red("red")
+    assert_true(result, "red should match")
+    return 0
+}

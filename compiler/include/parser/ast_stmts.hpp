@@ -77,6 +77,35 @@ struct VarStmt {
     bool is_volatile = false;               ///< Volatile modifier (prevents optimization).
 };
 
+/// Let-else statement: `let Pattern: T = expr else { diverging_block }`.
+///
+/// Attempts to match a refutable pattern and either binds the matched values
+/// or executes a diverging else block.
+///
+/// # Examples
+///
+/// ```tml
+/// let Ok(value): Outcome[I32, Str] = result else {
+///     return Err("failed")
+/// }
+///
+/// let Just(x): Maybe[I32] = maybe else {
+///     panic("expected value")
+/// }
+/// ```
+///
+/// # Requirements
+///
+/// - The else block MUST diverge (return, panic, break, continue)
+/// - The pattern must be refutable (can fail to match)
+struct LetElseStmt {
+    PatternPtr pattern;                     ///< Pattern to match (refutable).
+    std::optional<TypePtr> type_annotation; ///< Type annotation (required in TML).
+    ExprPtr init;                           ///< Expression to match against.
+    ExprPtr else_block;                     ///< Diverging block if pattern doesn't match.
+    SourceSpan span;                        ///< Source location.
+};
+
 // ============================================================================
 // Expression Statement
 // ============================================================================
@@ -110,7 +139,7 @@ struct ExprStmt {
 /// Uses `std::variant` for type-safe sum types with helper methods
 /// for type checking and casting.
 struct Stmt {
-    std::variant<LetStmt, VarStmt, ExprStmt,
+    std::variant<LetStmt, VarStmt, LetElseStmt, ExprStmt,
                  DeclPtr ///< Nested declaration (func, type, etc.).
                  >
         kind;        ///< The statement variant.

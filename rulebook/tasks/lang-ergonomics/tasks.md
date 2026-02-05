@@ -1,6 +1,6 @@
 # Tasks: Language Ergonomics Improvements
 
-**Status**: In Progress (17%)
+**Status**: In Progress (43%)
 
 ## Phase 1: Never Type Coercion ✓
 
@@ -17,43 +17,45 @@
 - [x] 2.1.3 Add unit tests for `ref_var.field1.field2` patterns
 - [x] 2.1.4 Test cipher.tml `tag.data.handle` works without workaround
 
-## Phase 3: Auto-Dereference for Method Calls
+## Phase 3: Auto-Dereference for Method Calls ✓
 
-- [ ] 3.1.1 Implement method resolution with auto-deref candidates
-- [ ] 3.1.2 Update codegen to insert deref when needed
-- [ ] 3.1.3 Add unit tests for `ref_var.method()` calls
-- [ ] 3.1.4 Test `key.len()` works on `ref Buffer` parameters
+- [x] 3.1.1 Implement method resolution with auto-deref candidates
+- [x] 3.1.2 Update codegen to insert deref when needed
+- [x] 3.1.3 Add unit tests for `ref_var.method()` calls
+- [x] 3.1.4 Test `key.len()` works on `ref Buffer` parameters
 
-## Phase 4: String Pattern Matching in When
+## Phase 4: String Pattern Matching in When ✓
 
-- [ ] 4.1.1 Detect string type in when expression patterns
-- [ ] 4.1.2 Implement desugaring to if-else chain in HIR
-- [ ] 4.1.3 Add unit tests for string when patterns
-- [ ] 4.1.4 Test cipher.tml `from_name` with when syntax
+- [x] 4.1.1 Detect string type in when expression patterns
+- [x] 4.1.2 Implement desugaring to if-else chain in HIR
+- [x] 4.1.3 Add unit tests for string when patterns
+- [x] 4.1.4 Test cipher.tml `from_name` with when syntax
 
-## Phase 5: Try Operator (?)
+## Phase 5: Try Operator (!) ✓
 
-- [ ] 5.1.1 Add `?` token to lexer
-- [ ] 5.1.2 Parse `?` as postfix operator in expressions
-- [ ] 5.1.3 Add TryExpr AST/HIR node
-- [ ] 5.1.4 Implement type checking for try expressions
-- [ ] 5.1.5 Implement HIR lowering for try expressions
-- [ ] 5.1.6 Implement codegen for try operator
-- [ ] 5.1.7 Add unit tests for `?` on Outcome
-- [ ] 5.1.8 Add unit tests for `?` on Maybe
-- [ ] 5.1.9 Add error for `?` in non-fallible function context
-- [ ] 5.1.10 Refactor cipher.tml to use `?` operator
+Note: TML uses `!` instead of `?` for better LLM visibility.
 
-## Phase 6: If Let / Let Else Patterns
+- [x] 5.1.1 Add `!` token to lexer (already existed)
+- [x] 5.1.2 Parse `!` as postfix operator in expressions
+- [x] 5.1.3 Add TryExpr AST/HIR node
+- [x] 5.1.4 Implement type checking for try expressions
+- [x] 5.1.5 Implement HIR lowering for try expressions
+- [x] 5.1.6 Implement codegen for try operator
+- [x] 5.1.7 Add unit tests for `!` on Outcome
+- [x] 5.1.8 Add unit tests for `!` on Maybe
+- [x] 5.1.9 Add error for `!` in non-fallible function context
+- [x] 5.1.10 Tests in try_operator.test.tml validate all features
 
-- [ ] 6.1.1 Parse `if let Pattern = expr` in parser
-- [ ] 6.1.2 Parse `let Pattern = expr else { ... }` in parser
-- [ ] 6.1.3 Add IfLetExpr and LetElseStmt to HIR nodes
-- [ ] 6.1.4 Implement type checking for pattern bindings
-- [ ] 6.1.5 Implement codegen for if let expressions
-- [ ] 6.1.6 Implement codegen for let else statements
-- [ ] 6.1.7 Add unit tests for if let patterns
-- [ ] 6.1.8 Add unit tests for let else early exit
+## Phase 6: If Let / Let Else Patterns ✓
+
+- [x] 6.1.1 Parse `if let Pattern = expr` in parser
+- [x] 6.1.2 Parse `let Pattern = expr else { ... }` in parser
+- [x] 6.1.3 Add IfLetExpr and LetElseStmt to HIR nodes
+- [x] 6.1.4 Implement type checking for pattern bindings
+- [x] 6.1.5 Implement codegen for if let expressions
+- [x] 6.1.6 Implement codegen for let else statements
+- [x] 6.1.7 Add unit tests for if let patterns (if_let_basic.test.tml)
+- [x] 6.1.8 Add unit tests for let else early exit (let_else_basic.test.tml)
 
 ## Phase 7: Better Type Inference
 
