@@ -587,6 +587,8 @@ struct ZstdDict {
     ZSTD_CDict* cdict;
     ZSTD_DDict* ddict;
     uint32_t dict_id;
+    uint8_t* raw_data;     // Store raw dictionary data for to_buffer()
+    size_t raw_data_len;
 };
 
 ZstdDict* zstd_dict_create(TmlBuffer* data) {
@@ -597,6 +599,15 @@ ZstdDict* zstd_dict_create(TmlBuffer* data) {
     if (!dict)
         return NULL;
 
+    // Store a copy of the raw dictionary data for to_buffer()
+    dict->raw_data = (uint8_t*)malloc(data->len);
+    if (!dict->raw_data) {
+        free(dict);
+        return NULL;
+    }
+    memcpy(dict->raw_data, data->data, data->len);
+    dict->raw_data_len = data->len;
+
     dict->cdict = ZSTD_createCDict(data->data, data->len, ZSTD_defaultCLevel());
     dict->ddict = ZSTD_createDDict(data->data, data->len);
     dict->dict_id = ZSTD_getDictID_fromDict(data->data, data->len);
@@ -606,6 +617,7 @@ ZstdDict* zstd_dict_create(TmlBuffer* data) {
             ZSTD_freeCDict(dict->cdict);
         if (dict->ddict)
             ZSTD_freeDDict(dict->ddict);
+        free(dict->raw_data);
         free(dict);
         return NULL;
     }
@@ -613,7 +625,20 @@ ZstdDict* zstd_dict_create(TmlBuffer* data) {
     return dict;
 }
 
-ZstdDict* zstd_dict_train(TmlBuffer** samples, size_t num_samples, size_t dict_size) {
+TmlBuffer* zstd_dict_export(ZstdDict* dict) {
+    if (!dict || !dict->raw_data || dict->raw_data_len == 0)
+        return NULL;
+
+    TmlBuffer* buf = tml_buffer_create(dict->raw_data_len);
+    if (!buf)
+        return NULL;
+
+    memcpy(buf->data, dict->raw_data, dict->raw_data_len);
+    buf->len = dict->raw_data_len;
+    return buf;
+}
+
+ZstdDict* zstd_dict_train_impl(TmlBuffer** samples, size_t num_samples, size_t dict_size) {
     if (!samples || num_samples == 0 || dict_size == 0)
         return NULL;
 
@@ -682,6 +707,8 @@ void zstd_dict_destroy(ZstdDict* dict) {
             ZSTD_freeCDict(dict->cdict);
         if (dict->ddict)
             ZSTD_freeDDict(dict->ddict);
+        if (dict->raw_data)
+            free(dict->raw_data);
         free(dict);
     }
 }

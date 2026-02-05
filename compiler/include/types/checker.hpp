@@ -154,7 +154,8 @@ private:
     auto check_expr(const parser::Expr& expr) -> TypePtr;
     auto check_expr(const parser::Expr& expr, TypePtr expected_type) -> TypePtr;
     auto check_literal(const parser::LiteralExpr& lit) -> TypePtr;
-    auto check_literal(const parser::LiteralExpr& lit, TypePtr expected_type) -> TypePtr;
+    auto check_literal(const parser::LiteralExpr& lit, TypePtr expected_type,
+                       bool is_negated = false) -> TypePtr;
     auto check_ident(const parser::IdentExpr& ident, SourceSpan span) -> TypePtr;
     auto check_binary(const parser::BinaryExpr& binary) -> TypePtr;
     auto check_unary(const parser::UnaryExpr& unary) -> TypePtr;

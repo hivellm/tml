@@ -1,0 +1,146 @@
+// Tests for @derive(PartialOrd, Ord) macros
+use test
+
+// ============================================================================
+// Simple Struct Tests - Ord (cmp)
+// ============================================================================
+
+@derive(Ord)
+type OrdPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_ord_same_values() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 1, y: 2 }
+    let p2: OrdPoint = OrdPoint { x: 1, y: 2 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Equal, "Same values should be Equal")
+    return 0
+}
+
+@test
+func test_ord_first_field_less() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 1, y: 2 }
+    let p2: OrdPoint = OrdPoint { x: 3, y: 2 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Less, "p1.x < p2.x should be Less")
+    return 0
+}
+
+@test
+func test_ord_first_field_greater() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 5, y: 2 }
+    let p2: OrdPoint = OrdPoint { x: 3, y: 2 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Greater, "p1.x > p2.x should be Greater")
+    return 0
+}
+
+@test
+func test_ord_second_field_less() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 1, y: 2 }
+    let p2: OrdPoint = OrdPoint { x: 1, y: 5 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Less, "p1.y < p2.y should be Less")
+    return 0
+}
+
+@test
+func test_ord_second_field_greater() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 1, y: 8 }
+    let p2: OrdPoint = OrdPoint { x: 1, y: 5 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Greater, "p1.y > p2.y should be Greater")
+    return 0
+}
+
+// ============================================================================
+// Multiple Field Types - Ord
+// ============================================================================
+
+@derive(Ord)
+type OrdRect {
+    x: I32,
+    y: I32,
+    width: I64,
+    height: I64
+}
+
+@test
+func test_ord_rect_equal() -> I32 {
+    let r1: OrdRect = OrdRect { x: 0, y: 0, width: 100, height: 50 }
+    let r2: OrdRect = OrdRect { x: 0, y: 0, width: 100, height: 50 }
+    let result: Ordering = r1.cmp(ref r2)
+    assert(result == Ordering::Equal, "Same rectangles should be Equal")
+    return 0
+}
+
+@test
+func test_ord_rect_different_height() -> I32 {
+    let r1: OrdRect = OrdRect { x: 0, y: 0, width: 100, height: 50 }
+    let r2: OrdRect = OrdRect { x: 0, y: 0, width: 100, height: 51 }
+    let result: Ordering = r1.cmp(ref r2)
+    assert(result == Ordering::Less, "r1.height < r2.height should be Less")
+    return 0
+}
+
+// ============================================================================
+// PartialOrd Tests (partial_cmp returning Maybe[Ordering])
+// ============================================================================
+
+@derive(PartialOrd)
+type PartialOrdPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_partial_ord_same_values() -> I32 {
+    let p1: PartialOrdPoint = PartialOrdPoint { x: 1, y: 2 }
+    let p2: PartialOrdPoint = PartialOrdPoint { x: 1, y: 2 }
+    let result: Maybe[Ordering] = p1.partial_cmp(ref p2)
+    when result {
+        Just(ord) => {
+            assert(ord == Ordering::Equal, "Same values should be Equal")
+        }
+        Nothing => {
+            assert(false, "Should return Just(Equal)")
+        }
+    }
+    return 0
+}
+
+@test
+func test_partial_ord_less() -> I32 {
+    let p1: PartialOrdPoint = PartialOrdPoint { x: 1, y: 2 }
+    let p2: PartialOrdPoint = PartialOrdPoint { x: 3, y: 2 }
+    let result: Maybe[Ordering] = p1.partial_cmp(ref p2)
+    when result {
+        Just(ord) => {
+            assert(ord == Ordering::Less, "p1.x < p2.x should be Less")
+        }
+        Nothing => {
+            assert(false, "Should return Just(Less)")
+        }
+    }
+    return 0
+}
+
+@test
+func test_partial_ord_greater() -> I32 {
+    let p1: PartialOrdPoint = PartialOrdPoint { x: 5, y: 2 }
+    let p2: PartialOrdPoint = PartialOrdPoint { x: 3, y: 2 }
+    let result: Maybe[Ordering] = p1.partial_cmp(ref p2)
+    when result {
+        Just(ord) => {
+            assert(ord == Ordering::Greater, "p1.x > p2.x should be Greater")
+        }
+        Nothing => {
+            assert(false, "Should return Just(Greater)")
+        }
+    }
+    return 0
+}
+

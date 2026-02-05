@@ -10,6 +10,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>   // For debug fprintf
 #include <stdlib.h>
 #include <string.h>
 
@@ -28,6 +29,14 @@ typedef struct GzipHeaderInfo {
     int32_t os;
     bool is_text;
 } GzipHeaderInfo;
+
+// Forward declare TmlList to access list elements for zstd_dict_train
+typedef struct TmlList {
+    void* data;
+    int64_t len;
+    int64_t capacity;
+    int64_t elem_size;
+} TmlList;
 
 // ============================================================================
 // Forward declarations for internal types and functions (defined in other .c files)
@@ -66,7 +75,9 @@ extern TmlBuffer* zstd_decompress_context_process(ZstdDecompressContext* ctx, Tm
 extern void zstd_decompress_context_destroy(ZstdDecompressContext* ctx);
 
 extern ZstdDict* zstd_dict_create(TmlBuffer* data);
+extern ZstdDict* zstd_dict_train_impl(TmlBuffer** samples, size_t num_samples, size_t dict_size);
 extern int32_t zstd_dict_id(ZstdDict* dict);
+extern TmlBuffer* zstd_dict_export(ZstdDict* dict);
 extern void zstd_dict_destroy(ZstdDict* dict);
 
 extern int64_t zstd_content_size(TmlBuffer* data);
@@ -423,17 +434,65 @@ int32_t zstd_dict_get_id(void* handle) {
 
 // TML: zstd_dict_to_buffer(handle) -> *Unit
 void* zstd_dict_to_buffer(void* handle) {
-    (void)handle;
-    // TODO: implement dictionary export
+    return (void*)zstd_dict_export((ZstdDict*)handle);
+}
+
+// Debug function to verify runtime linking
+void* zstd_dict_train_test(void) {
+    fprintf(stderr, "[ZSTD] zstd_dict_train_test called!\n");
+    fflush(stderr);
     return NULL;
 }
 
 // TML: zstd_dict_train(samples_handle, dict_size) -> *Unit
-void* zstd_dict_train_ext(void* samples_handle, int64_t dict_size) {
-    (void)samples_handle;
-    (void)dict_size;
-    // TODO: implement proper list handling
-    return NULL;
+// The samples_handle is a TmlList* containing pointers to Buffer structs.
+// Each Buffer struct has a single field 'handle' which is a TmlBuffer*.
+void* zstd_dict_train(void* samples_handle, int64_t dict_size) {
+    // Immediate debug output
+    fprintf(stderr, "[ZSTD_TRAIN] ENTER: samples=%p dict_size=%lld\n",
+            samples_handle, (long long)dict_size);
+    fflush(stderr);
+
+    if (!samples_handle || dict_size <= 0)
+        return NULL;
+
+    TmlList* list = (TmlList*)samples_handle;
+    if (!list->data || list->len == 0)
+        return NULL;
+
+    // In TML, List[Buffer] stores pointers to heap-allocated Buffer structs.
+    // The list->data array contains int64_t values, each being a pointer to a Buffer struct.
+    // Buffer struct = { handle: *Unit } where handle points to TmlBuffer.
+    int64_t* data = (int64_t*)list->data;
+    size_t num_samples = (size_t)list->len;
+
+    // Build array of TmlBuffer* pointers by extracting the handle from each Buffer struct
+    TmlBuffer** samples = (TmlBuffer**)malloc(num_samples * sizeof(TmlBuffer*));
+    if (!samples)
+        return NULL;
+
+    for (size_t i = 0; i < num_samples; i++) {
+        // data[i] is a pointer to a Buffer struct (which contains a handle field)
+        // The Buffer struct has handle as its first (and only) field
+        void** buffer_struct_ptr = (void**)data[i];
+        if (!buffer_struct_ptr) {
+            free(samples);
+            return NULL;
+        }
+        // The handle is the first field of the Buffer struct
+        TmlBuffer* buf = (TmlBuffer*)(*buffer_struct_ptr);
+        if (!buf || !buf->data || buf->len == 0) {
+            free(samples);
+            return NULL;  // Invalid sample, can't train
+        }
+        samples[i] = buf;
+    }
+
+    // Call the internal training function
+    ZstdDict* dict = zstd_dict_train_impl(samples, num_samples, (size_t)dict_size);
+
+    free(samples);
+    return (void*)dict;
 }
 
 // ============================================================================

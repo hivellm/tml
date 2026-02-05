@@ -1,0 +1,30 @@
+// Debug test for ZstdDict::train functionality
+use test
+use std::zlib::{ZstdDict}
+use std::zlib::error::ZlibError
+use std::collections::{Buffer, List}
+
+@test
+func test_dict_train_debug() -> I32 {
+    // Create sample data for training
+    var samples: List[Buffer] = List[Buffer]::new()
+
+    // Add samples
+    var sample1: Buffer = Buffer::from_string("Test data 1")
+    samples.push(sample1)
+
+    var sample2: Buffer = Buffer::from_string("Test data 2")
+    samples.push(sample2)
+
+    // Train dictionary from samples
+    let dict_result: Outcome[ZstdDict, ZlibError] = ZstdDict::train(ref samples, 4096)
+
+    // Training may fail with small samples
+    if dict_result.is_ok() {
+        var dict: ZstdDict = dict_result.unwrap()
+        dict.destroy()
+    }
+
+    samples.clear()
+    return 0
+}

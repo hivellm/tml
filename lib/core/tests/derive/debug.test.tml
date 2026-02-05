@@ -1,0 +1,81 @@
+// Tests for @derive(Debug) macro
+use test
+
+// ============================================================================
+// Simple Struct Tests
+// ============================================================================
+
+@derive(Debug)
+type DebugPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_debug_point() -> I32 {
+    let p: DebugPoint = DebugPoint { x: 10, y: 20 }
+    let s: Str = p.debug_string()
+    // Expected: "DebugPoint { x: 10, y: 20 }"
+    assert(s.contains("DebugPoint"), "Should contain type name")
+    assert(s.contains("x:"), "Should contain field name x")
+    assert(s.contains("y:"), "Should contain field name y")
+    assert(s.contains("10"), "Should contain value 10")
+    assert(s.contains("20"), "Should contain value 20")
+    return 0
+}
+
+// ============================================================================
+// Multiple Field Types
+// ============================================================================
+
+@derive(Debug)
+type DebugPerson {
+    age: I32,
+    height: I64,
+    active: Bool
+}
+
+@test
+func test_debug_person() -> I32 {
+    let p: DebugPerson = DebugPerson { age: 25, height: 180, active: true }
+    let s: Str = p.debug_string()
+    assert(s.contains("DebugPerson"), "Should contain type name")
+    assert(s.contains("age:"), "Should contain field age")
+    assert(s.contains("25"), "Should contain age value")
+    assert(s.contains("height:"), "Should contain field height")
+    assert(s.contains("180"), "Should contain height value")
+    assert(s.contains("active:"), "Should contain field active")
+    return 0
+}
+
+// ============================================================================
+// Simple Enum Tests
+// ============================================================================
+
+@derive(Debug)
+type DebugStatus = Active | Inactive | Pending
+
+@test
+func test_debug_enum_active() -> I32 {
+    let s: DebugStatus = DebugStatus::Active
+    let str: Str = s.debug_string()
+    assert(str.contains("Active"), "Should contain variant name Active")
+    return 0
+}
+
+@test
+func test_debug_enum_inactive() -> I32 {
+    let s: DebugStatus = DebugStatus::Inactive
+    let str: Str = s.debug_string()
+    assert(str.contains("Inactive"), "Should contain variant name Inactive")
+    return 0
+}
+
+@test
+func test_debug_enum_pending() -> I32 {
+    let s: DebugStatus = DebugStatus::Pending
+    let str: Str = s.debug_string()
+    assert(str.contains("Pending"), "Should contain variant name Pending")
+    return 0
+}
+

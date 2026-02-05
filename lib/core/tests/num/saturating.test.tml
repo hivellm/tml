@@ -1,0 +1,78 @@
+// Tests for core::num::saturating module
+use test
+use core::num::saturating::Saturating
+
+// ============================================================================
+// Saturating::new Tests
+// ============================================================================
+
+@test
+func test_saturating_new_i32() -> I32 {
+    let s: Saturating[I32] = Saturating::new[I32](42)
+    assert_eq(s.value(), 42, "Saturating::new(42).value() should return 42")
+    return 0
+}
+
+@test
+func test_saturating_new_negative() -> I32 {
+    let s: Saturating[I32] = Saturating::new[I32](-100)
+    assert_eq(s.value(), -100, "Saturating::new(-100).value() should return -100")
+    return 0
+}
+
+@test
+func test_saturating_new_zero() -> I32 {
+    let s: Saturating[I32] = Saturating::new[I32](0)
+    assert_eq(s.value(), 0, "Saturating::new(0).value() should return 0")
+    return 0
+}
+
+// ============================================================================
+// Saturating::into_inner Tests
+// ============================================================================
+
+@test
+func test_saturating_into_inner() -> I32 {
+    let s: Saturating[I32] = Saturating::new[I32](99)
+    let val: I32 = s.into_inner()
+    assert_eq(val, 99, "into_inner() should return the inner value")
+    return 0
+}
+
+// ============================================================================
+// Saturating with I64 Tests
+// ============================================================================
+
+@test
+func test_saturating_i64() -> I32 {
+    let s: Saturating[I64] = Saturating::new[I64](1000000i64)
+    assert_eq(s.value(), 1000000i64, "Saturating[I64] should work")
+    return 0
+}
+
+@test
+func test_saturating_i64_negative() -> I32 {
+    let s: Saturating[I64] = Saturating::new[I64](-999999i64)
+    assert_eq(s.value(), -999999i64, "Saturating[I64] with negative should work")
+    return 0
+}
+
+// ============================================================================
+// Saturating with I8 Tests (boundary type)
+// ============================================================================
+
+@test
+func test_saturating_i8_positive() -> I32 {
+    let s: Saturating[I8] = Saturating::new[I8](100i8)
+    let val: I8 = s.value()
+    assert_eq(val, 100i8, "Saturating[I8] positive value should work")
+    return 0
+}
+
+@test
+func test_saturating_i8_negative() -> I32 {
+    let s: Saturating[I8] = Saturating::new[I8](-50i8)
+    let val: I8 = s.value()
+    assert_eq(val, -50i8, "Saturating[I8] negative value should work")
+    return 0
+}

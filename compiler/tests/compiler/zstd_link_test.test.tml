@@ -1,0 +1,12 @@
+// Test to verify zstd runtime linking
+use test
+
+@extern("zstd_dict_train_test")
+func ffi_zstd_dict_train_test() -> *Unit
+
+@test
+func test_zstd_runtime_link() -> I32 {
+    let result: *Unit = ffi_zstd_dict_train_test()
+    // If we get here without crashing, the link works
+    return 0
+}

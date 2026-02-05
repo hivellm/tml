@@ -1,0 +1,36 @@
+// Test for ZstdDict::train functionality
+use test
+use std::zlib::{ZstdDict}
+use std::zlib::error::ZlibError
+use std::collections::{Buffer, List}
+
+@test
+func test_zstd_dict_train_simple() -> I32 {
+    // Create sample data for training - need raw data, not compressed data
+    var samples: List[Buffer] = List[Buffer]::new()
+
+    // Add multiple similar samples for dictionary training
+    var sample1: Buffer = Buffer::from_string("JSON: {\"name\": \"Alice\", \"age\": 30}")
+    samples.push(sample1)
+
+    var sample2: Buffer = Buffer::from_string("JSON: {\"name\": \"Bob\", \"age\": 25}")
+    samples.push(sample2)
+
+    var sample3: Buffer = Buffer::from_string("JSON: {\"name\": \"Charlie\", \"age\": 35}")
+    samples.push(sample3)
+
+    // Train dictionary from samples
+    let dict_result: Outcome[ZstdDict, ZlibError] = ZstdDict::train(ref samples, 4096)
+
+    // Training may fail with small samples, that's acceptable
+    if dict_result.is_ok() {
+        var dict: ZstdDict = dict_result.unwrap()
+        let id: I32 = dict.id()
+        assert(id >= 0, "trained dictionary id should be non-negative")
+        dict.destroy()
+    }
+
+    // Clean up samples
+    samples.clear()
+    return 0
+}

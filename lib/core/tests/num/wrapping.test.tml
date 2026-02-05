@@ -1,0 +1,78 @@
+// Tests for core::num::wrapping module
+use test
+use core::num::wrapping::Wrapping
+
+// ============================================================================
+// Wrapping::new Tests
+// ============================================================================
+
+@test
+func test_wrapping_new_i32() -> I32 {
+    let w: Wrapping[I32] = Wrapping::new[I32](42)
+    assert_eq(w.value(), 42, "Wrapping::new(42).value() should return 42")
+    return 0
+}
+
+@test
+func test_wrapping_new_negative() -> I32 {
+    let w: Wrapping[I32] = Wrapping::new[I32](-100)
+    assert_eq(w.value(), -100, "Wrapping::new(-100).value() should return -100")
+    return 0
+}
+
+@test
+func test_wrapping_new_zero() -> I32 {
+    let w: Wrapping[I32] = Wrapping::new[I32](0)
+    assert_eq(w.value(), 0, "Wrapping::new(0).value() should return 0")
+    return 0
+}
+
+// ============================================================================
+// Wrapping::into_inner Tests
+// ============================================================================
+
+@test
+func test_wrapping_into_inner() -> I32 {
+    let w: Wrapping[I32] = Wrapping::new[I32](99)
+    let val: I32 = w.into_inner()
+    assert_eq(val, 99, "into_inner() should return the inner value")
+    return 0
+}
+
+// ============================================================================
+// Wrapping with I64 Tests
+// ============================================================================
+
+@test
+func test_wrapping_i64() -> I32 {
+    let w: Wrapping[I64] = Wrapping::new[I64](1000000i64)
+    assert_eq(w.value(), 1000000i64, "Wrapping[I64] should work")
+    return 0
+}
+
+@test
+func test_wrapping_i64_negative() -> I32 {
+    let w: Wrapping[I64] = Wrapping::new[I64](-999999i64)
+    assert_eq(w.value(), -999999i64, "Wrapping[I64] with negative should work")
+    return 0
+}
+
+// ============================================================================
+// Wrapping with I8 Tests
+// ============================================================================
+
+@test
+func test_wrapping_i8_positive() -> I32 {
+    let w: Wrapping[I8] = Wrapping::new[I8](100i8)
+    let val: I8 = w.value()
+    assert_eq(val, 100i8, "Wrapping[I8] positive value should work")
+    return 0
+}
+
+@test
+func test_wrapping_i8_negative() -> I32 {
+    let w: Wrapping[I8] = Wrapping::new[I8](-50i8)
+    let val: I8 = w.value()
+    assert_eq(val, -50i8, "Wrapping[I8] negative value should work")
+    return 0
+}

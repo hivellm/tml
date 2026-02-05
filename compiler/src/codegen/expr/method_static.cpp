@@ -489,6 +489,140 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         }
     }
 
+    // Primitive type static methods: zero() from Zero behavior
+    if (method == "zero") {
+        // Integer types: zero is 0
+        if (type_name == "I8" || type_name == "I16" || type_name == "I32" || type_name == "I64" ||
+            type_name == "I128" || type_name == "U8" || type_name == "U16" || type_name == "U32" ||
+            type_name == "U64" || type_name == "U128") {
+            std::string llvm_ty;
+            if (type_name == "I8" || type_name == "U8")
+                llvm_ty = "i8";
+            else if (type_name == "I16" || type_name == "U16")
+                llvm_ty = "i16";
+            else if (type_name == "I32" || type_name == "U32")
+                llvm_ty = "i32";
+            else if (type_name == "I64" || type_name == "U64")
+                llvm_ty = "i64";
+            else
+                llvm_ty = "i128";
+            last_expr_type_ = llvm_ty;
+            return "0";
+        }
+        // Float types: zero is 0.0
+        if (type_name == "F32") {
+            last_expr_type_ = "float";
+            return "0.0";
+        }
+        if (type_name == "F64") {
+            last_expr_type_ = "double";
+            return "0.0";
+        }
+    }
+
+    // Primitive type static methods: one() from One behavior
+    if (method == "one") {
+        // Integer types: one is 1
+        if (type_name == "I8" || type_name == "I16" || type_name == "I32" || type_name == "I64" ||
+            type_name == "I128" || type_name == "U8" || type_name == "U16" || type_name == "U32" ||
+            type_name == "U64" || type_name == "U128") {
+            std::string llvm_ty;
+            if (type_name == "I8" || type_name == "U8")
+                llvm_ty = "i8";
+            else if (type_name == "I16" || type_name == "U16")
+                llvm_ty = "i16";
+            else if (type_name == "I32" || type_name == "U32")
+                llvm_ty = "i32";
+            else if (type_name == "I64" || type_name == "U64")
+                llvm_ty = "i64";
+            else
+                llvm_ty = "i128";
+            last_expr_type_ = llvm_ty;
+            return "1";
+        }
+        // Float types: one is 1.0
+        if (type_name == "F32") {
+            last_expr_type_ = "float";
+            return "1.0";
+        }
+        if (type_name == "F64") {
+            last_expr_type_ = "double";
+            return "1.0";
+        }
+    }
+
+    // Primitive type static methods: min_value() from Bounded behavior
+    if (method == "min_value") {
+        if (type_name == "I8") {
+            last_expr_type_ = "i8";
+            return "-128";
+        }
+        if (type_name == "I16") {
+            last_expr_type_ = "i16";
+            return "-32768";
+        }
+        if (type_name == "I32") {
+            last_expr_type_ = "i32";
+            return "-2147483648";
+        }
+        if (type_name == "I64") {
+            last_expr_type_ = "i64";
+            return "-9223372036854775808";
+        }
+        if (type_name == "U8") {
+            last_expr_type_ = "i8";
+            return "0";
+        }
+        if (type_name == "U16") {
+            last_expr_type_ = "i16";
+            return "0";
+        }
+        if (type_name == "U32") {
+            last_expr_type_ = "i32";
+            return "0";
+        }
+        if (type_name == "U64") {
+            last_expr_type_ = "i64";
+            return "0";
+        }
+    }
+
+    // Primitive type static methods: max_value() from Bounded behavior
+    if (method == "max_value") {
+        if (type_name == "I8") {
+            last_expr_type_ = "i8";
+            return "127";
+        }
+        if (type_name == "I16") {
+            last_expr_type_ = "i16";
+            return "32767";
+        }
+        if (type_name == "I32") {
+            last_expr_type_ = "i32";
+            return "2147483647";
+        }
+        if (type_name == "I64") {
+            last_expr_type_ = "i64";
+            return "9223372036854775807";
+        }
+        if (type_name == "U8") {
+            last_expr_type_ = "i8";
+            return "255";
+        }
+        if (type_name == "U16") {
+            last_expr_type_ = "i16";
+            return "65535";
+        }
+        if (type_name == "U32") {
+            last_expr_type_ = "i32";
+            return "4294967295";
+        }
+        if (type_name == "U64") {
+            last_expr_type_ = "i64";
+            return "18446744073709551615";
+        }
+    }
+
     // Primitive type static methods (from) - Type::from(value) conversions
     // Implements the From behavior for primitive type widening/narrowing
     if (method == "from" && !call.args.empty()) {

@@ -1,0 +1,62 @@
+// Tests for @derive(Default) macro
+use test
+
+// ============================================================================
+// Simple Struct Tests
+// ============================================================================
+
+@derive(Default)
+type DefaultPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_default_point() -> I32 {
+    let p: DefaultPoint = DefaultPoint::default()
+    assert(p.x == 0, "Default x should be 0")
+    assert(p.y == 0, "Default y should be 0")
+    return 0
+}
+
+// ============================================================================
+// Multiple Field Types
+// ============================================================================
+
+@derive(Default)
+type DefaultRect {
+    x: I32,
+    y: I32,
+    width: I64,
+    height: I64,
+    visible: Bool
+}
+
+@test
+func test_default_rect() -> I32 {
+    let r: DefaultRect = DefaultRect::default()
+    assert(r.x == 0, "Default x should be 0")
+    assert(r.y == 0, "Default y should be 0")
+    assert(r.width == 0, "Default width should be 0")
+    assert(r.height == 0, "Default height should be 0")
+    assert(not r.visible, "Default visible should be false")
+    return 0
+}
+
+// ============================================================================
+// Float Fields
+// ============================================================================
+
+@derive(Default)
+type DefaultVec2 {
+    x: F64,
+    y: F64
+}
+
+@test
+func test_default_vec2() -> I32 {
+    let v: DefaultVec2 = DefaultVec2::default()
+    assert(v.x == 0.0, "Default x should be 0.0")
+    assert(v.y == 0.0, "Default y should be 0.0")
+    return 0
+}

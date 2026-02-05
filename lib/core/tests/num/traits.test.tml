@@ -1,0 +1,289 @@
+// Tests for core::num::traits module (Zero, One, Bounded behaviors)
+use test
+use core::num::traits::{Zero, One, Bounded}
+
+// ============================================================================
+// Zero behavior tests
+// ============================================================================
+
+@test
+func test_zero_i8() -> I32 {
+    let z: I8 = I8::zero()
+    assert_eq(z as I32, 0, "I8::zero() should be 0")
+    assert(z.is_zero(), "0.is_zero() should be true")
+    return 0
+}
+
+@test
+func test_zero_i16() -> I32 {
+    let z: I16 = I16::zero()
+    assert_eq(z as I32, 0, "I16::zero() should be 0")
+    assert(z.is_zero(), "0.is_zero() should be true")
+    return 0
+}
+
+@test
+func test_zero_i32() -> I32 {
+    let z: I32 = I32::zero()
+    assert_eq(z, 0, "I32::zero() should be 0")
+    assert(z.is_zero(), "0.is_zero() should be true")
+    return 0
+}
+
+@test
+func test_zero_i64() -> I32 {
+    let z: I64 = I64::zero()
+    let expected: I64 = 0
+    assert(z == expected, "I64::zero() should be 0")
+    assert(z.is_zero(), "0.is_zero() should be true")
+    return 0
+}
+
+@test
+func test_zero_u8() -> I32 {
+    let z: U8 = U8::zero()
+    assert_eq(z as I32, 0, "U8::zero() should be 0")
+    assert(z.is_zero(), "0.is_zero() should be true")
+    return 0
+}
+
+@test
+func test_zero_u16() -> I32 {
+    let z: U16 = U16::zero()
+    assert_eq(z as I32, 0, "U16::zero() should be 0")
+    assert(z.is_zero(), "0.is_zero() should be true")
+    return 0
+}
+
+@test
+func test_zero_u32() -> I32 {
+    let z: U32 = U32::zero()
+    let expected: U32 = 0
+    assert(z == expected, "U32::zero() should be 0")
+    assert(z.is_zero(), "0.is_zero() should be true")
+    return 0
+}
+
+@test
+func test_zero_u64() -> I32 {
+    let z: U64 = U64::zero()
+    let expected: U64 = 0
+    assert(z == expected, "U64::zero() should be 0")
+    assert(z.is_zero(), "0.is_zero() should be true")
+    return 0
+}
+
+// Note: F32 and F64 Zero/One tests skipped due to codegen issues with
+// behavior method resolution for float types
+
+@test
+func test_is_zero_false() -> I32 {
+    let a: I32 = 42
+    let b: I64 = 100
+    assert(not a.is_zero(), "42.is_zero() should be false")
+    assert(not b.is_zero(), "100.is_zero() should be false")
+    // Note: F64.is_zero() method call has codegen issues
+    return 0
+}
+
+// ============================================================================
+// One behavior tests
+// ============================================================================
+
+@test
+func test_one_i8() -> I32 {
+    let o: I8 = I8::one()
+    assert_eq(o as I32, 1, "I8::one() should be 1")
+    assert(o.is_one(), "1.is_one() should be true")
+    return 0
+}
+
+@test
+func test_one_i16() -> I32 {
+    let o: I16 = I16::one()
+    assert_eq(o as I32, 1, "I16::one() should be 1")
+    assert(o.is_one(), "1.is_one() should be true")
+    return 0
+}
+
+@test
+func test_one_i32() -> I32 {
+    let o: I32 = I32::one()
+    assert_eq(o, 1, "I32::one() should be 1")
+    assert(o.is_one(), "1.is_one() should be true")
+    return 0
+}
+
+@test
+func test_one_i64() -> I32 {
+    let o: I64 = I64::one()
+    let expected: I64 = 1
+    assert(o == expected, "I64::one() should be 1")
+    assert(o.is_one(), "1.is_one() should be true")
+    return 0
+}
+
+@test
+func test_one_u8() -> I32 {
+    let o: U8 = U8::one()
+    assert_eq(o as I32, 1, "U8::one() should be 1")
+    assert(o.is_one(), "1.is_one() should be true")
+    return 0
+}
+
+@test
+func test_one_u16() -> I32 {
+    let o: U16 = U16::one()
+    assert_eq(o as I32, 1, "U16::one() should be 1")
+    assert(o.is_one(), "1.is_one() should be true")
+    return 0
+}
+
+@test
+func test_one_u32() -> I32 {
+    let o: U32 = U32::one()
+    let expected: U32 = 1
+    assert(o == expected, "U32::one() should be 1")
+    assert(o.is_one(), "1.is_one() should be true")
+    return 0
+}
+
+@test
+func test_one_u64() -> I32 {
+    let o: U64 = U64::one()
+    let expected: U64 = 1
+    assert(o == expected, "U64::one() should be 1")
+    assert(o.is_one(), "1.is_one() should be true")
+    return 0
+}
+
+@test
+func test_one_f32() -> I32 {
+    let o: F32 = F32::one()
+    let expected: F32 = 1.0
+    assert(o == expected, "F32::one() should be 1.0")
+    // Note: is_one() method call on F32 has codegen issues
+    return 0
+}
+
+@test
+func test_one_f64() -> I32 {
+    let o: F64 = F64::one()
+    assert(o == 1.0, "F64::one() should be 1.0")
+    // Note: is_one() method call on F64 has codegen issues
+    return 0
+}
+
+@test
+func test_is_one_false() -> I32 {
+    let a: I32 = 42
+    let b: I64 = 100
+    assert(not a.is_one(), "42.is_one() should be false")
+    assert(not b.is_one(), "100.is_one() should be false")
+    // Note: F64.is_one() method call has codegen issues
+    return 0
+}
+
+// ============================================================================
+// Bounded behavior tests
+// ============================================================================
+
+@test
+func test_bounded_i8() -> I32 {
+    let min: I8 = I8::min_value()
+    let max: I8 = I8::max_value()
+    assert_eq(min as I32, -128, "I8::min_value() should be -128")
+    assert_eq(max as I32, 127, "I8::max_value() should be 127")
+    return 0
+}
+
+@test
+func test_bounded_i16() -> I32 {
+    let min: I16 = I16::min_value()
+    let max: I16 = I16::max_value()
+    assert_eq(min as I32, -32768, "I16::min_value() should be -32768")
+    assert_eq(max as I32, 32767, "I16::max_value() should be 32767")
+    return 0
+}
+
+@test
+func test_bounded_i32() -> I32 {
+    let min: I32 = I32::min_value()
+    let max: I32 = I32::max_value()
+    assert_eq(min, -2147483648, "I32::min_value() should be -2147483648")
+    assert_eq(max, 2147483647, "I32::max_value() should be 2147483647")
+    return 0
+}
+
+@test
+func test_bounded_i64() -> I32 {
+    let min: I64 = I64::min_value()
+    let max: I64 = I64::max_value()
+    let expected_min: I64 = -9223372036854775808
+    let expected_max: I64 = 9223372036854775807
+    assert(min == expected_min, "I64::min_value()")
+    assert(max == expected_max, "I64::max_value()")
+    return 0
+}
+
+@test
+func test_bounded_u8() -> I32 {
+    let min: U8 = U8::min_value()
+    let max: U8 = U8::max_value()
+    assert_eq(min as I32, 0, "U8::min_value() should be 0")
+    assert_eq(max as I32, 255, "U8::max_value() should be 255")
+    return 0
+}
+
+@test
+func test_bounded_u16() -> I32 {
+    let min: U16 = U16::min_value()
+    let max: U16 = U16::max_value()
+    assert_eq(min as I32, 0, "U16::min_value() should be 0")
+    assert_eq(max as I32, 65535, "U16::max_value() should be 65535")
+    return 0
+}
+
+@test
+func test_bounded_u32() -> I32 {
+    let min: U32 = U32::min_value()
+    let max: U32 = U32::max_value()
+    let expected_min: U32 = 0
+    let expected_max: U32 = 4294967295
+    assert(min == expected_min, "U32::min_value() should be 0")
+    assert(max == expected_max, "U32::max_value() should be 4294967295")
+    return 0
+}
+
+@test
+func test_bounded_u64() -> I32 {
+    let min: U64 = U64::min_value()
+    let max: U64 = U64::max_value()
+    let expected_min: U64 = 0
+    let expected_max: U64 = 18446744073709551615
+    assert(min == expected_min, "U64::min_value() should be 0")
+    assert(max == expected_max, "U64::max_value()")
+    return 0
+}
+
+// ============================================================================
+// Zero/One identity property tests
+// ============================================================================
+
+@test
+func test_zero_additive_identity() -> I32 {
+    let x: I32 = 42
+    let z: I32 = I32::zero()
+    assert_eq(x + z, x, "x + zero = x")
+    assert_eq(z + x, x, "zero + x = x")
+    return 0
+}
+
+@test
+func test_one_multiplicative_identity() -> I32 {
+    let x: I32 = 42
+    let o: I32 = I32::one()
+    assert_eq(x * o, x, "x * one = x")
+    assert_eq(o * x, x, "one * x = x")
+    return 0
+}

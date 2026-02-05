@@ -67,6 +67,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `compiler/src/types/checker/core.cpp` - Register variant_name/variant_tag signatures
     - `compiler/tests/compiler/reflect/derive_reflect.test.tml` - Added 4 new tests
 
+- **Comprehensive @derive Macro System** (2026-02-05) - Automatic trait implementation for structs/enums
+  - New derive macros similar to Rust's `#[derive]` that generate method implementations:
+    - `@derive(PartialEq)` - `eq(ref this, other: ref Self) -> Bool` field-by-field equality
+    - `@derive(Duplicate)` - `duplicate(ref this) -> Self` field-by-field copy
+    - `@derive(Hash)` - `hash(ref this) -> I64` FNV-1a hash algorithm
+    - `@derive(Default)` - `default() -> Self` static method returning zero-initialized values
+    - `@derive(PartialOrd)` - `partial_cmp(ref this, other: ref Self) -> Maybe[Ordering]` partial ordering
+    - `@derive(Ord)` - `cmp(ref this, other: ref Self) -> Ordering` total ordering
+    - `@derive(Debug)` - `debug_string(ref this) -> Str` string representation
+  - All derives work for both structs and simple enums
+  - Lexicographic comparison for PartialOrd/Ord (compare fields in order)
+  - 40 tests covering all derive macros
+  - Files created:
+    - `compiler/include/derive/registry.hpp` - DerivableTrait enum
+    - `compiler/src/codegen/derive/partial_eq.cpp` - PartialEq codegen
+    - `compiler/src/codegen/derive/duplicate.cpp` - Duplicate codegen
+    - `compiler/src/codegen/derive/hash.cpp` - Hash codegen (FNV-1a)
+    - `compiler/src/codegen/derive/default.cpp` - Default codegen
+    - `compiler/src/codegen/derive/partial_ord.cpp` - PartialOrd/Ord codegen
+    - `compiler/src/codegen/derive/debug.cpp` - Debug codegen
+    - `lib/core/tests/derive/` - Test files for all derives
+  - Files modified:
+    - `compiler/include/codegen/llvm_ir_gen.hpp` - Derive method declarations
+    - `compiler/CMakeLists.txt` - Added new source files
+    - `compiler/src/codegen/decl/struct.cpp` - Call derive generators
+    - `compiler/src/codegen/decl/enum.cpp` - Call derive generators
+    - `compiler/src/types/checker/core.cpp` - Register impl blocks and method signatures
+
 - **Build Script Enforcement** (2026-02-04) - CMake direct builds are now blocked
   - Added build token verification in CMakeLists.txt to prevent direct cmake usage
   - Only `scripts/build.bat` (Windows) and `scripts/build.sh` (Linux) can build the project

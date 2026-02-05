@@ -1,0 +1,64 @@
+// Tests for Str built-in methods (no core::str import)
+use test
+
+// ============================================================================
+// Str method tests
+// ============================================================================
+
+@test
+func test_str_len() -> I32 {
+    let s: Str = "hello"
+    assert_eq(s.len(), 5, "Str.len()")
+    return 0
+}
+
+@test
+func test_str_is_empty_false() -> I32 {
+    let s: Str = "hello"
+    assert(not s.is_empty(), "hello is not empty")
+    return 0
+}
+
+@test
+func test_str_is_empty_true() -> I32 {
+    let s: Str = ""
+    assert(s.is_empty(), "empty string is empty")
+    return 0
+}
+
+@test
+func test_str_contains() -> I32 {
+    let s: Str = "hello world"
+    assert(s.contains("world"), "contains world")
+    return 0
+}
+
+@test
+func test_str_contains_false() -> I32 {
+    let s: Str = "hello"
+    assert(not s.contains("world"), "does not contain world")
+    return 0
+}
+
+@test
+func test_str_starts_with() -> I32 {
+    let s: Str = "hello world"
+    assert(s.starts_with("hello"), "starts with hello")
+    return 0
+}
+
+@test
+func test_str_ends_with() -> I32 {
+    let s: Str = "hello world"
+    assert(s.ends_with("world"), "ends with world")
+    return 0
+}
+
+@test
+func test_str_concat() -> I32 {
+    let a: Str = "Hello"
+    let b: Str = " World"
+    let result: Str = a + b
+    assert_eq(result, "Hello World", "string concat")
+    return 0
+}

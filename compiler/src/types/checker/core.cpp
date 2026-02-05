@@ -363,15 +363,37 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
     // Check for decorators
     bool is_interior_mutable = false;
     bool has_derive_reflect = false;
+    bool has_derive_partial_eq = false;
+    bool has_derive_duplicate = false;
+    bool has_derive_hash = false;
+    bool has_derive_default = false;
+    bool has_derive_partial_ord = false;
+    bool has_derive_ord = false;
+    bool has_derive_debug = false;
     for (const auto& decorator : decl.decorators) {
         if (decorator.name == "interior_mutable") {
             is_interior_mutable = true;
         } else if (decorator.name == "derive") {
-            // Check for @derive(Reflect)
+            // Check for @derive arguments
             for (const auto& arg : decorator.args) {
                 if (arg->is<parser::IdentExpr>()) {
-                    if (arg->as<parser::IdentExpr>().name == "Reflect") {
+                    const auto& name = arg->as<parser::IdentExpr>().name;
+                    if (name == "Reflect") {
                         has_derive_reflect = true;
+                    } else if (name == "PartialEq" || name == "Eq") {
+                        has_derive_partial_eq = true;
+                    } else if (name == "Duplicate" || name == "Copy") {
+                        has_derive_duplicate = true;
+                    } else if (name == "Hash") {
+                        has_derive_hash = true;
+                    } else if (name == "Default") {
+                        has_derive_default = true;
+                    } else if (name == "PartialOrd") {
+                        has_derive_partial_ord = true;
+                    } else if (name == "Ord") {
+                        has_derive_ord = true;
+                    } else if (name == "Debug") {
+                        has_derive_debug = true;
                     }
                 }
             }
@@ -421,6 +443,181 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
                                  .is_async = false,
                                  .span = decl.span});
     }
+
+    // Handle @derive(PartialEq) - register impl and eq method
+    // Skip generic types - they need instantiation first
+    if (has_derive_partial_eq && decl.generics.empty()) {
+        // Register that this type implements PartialEq behavior
+        env_.register_impl(full_name, "PartialEq");
+
+        // Create return type: Bool
+        auto bool_type = make_bool();
+
+        // Create self type: ref TypeName
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{full_name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Register TypeName::eq(ref this, other: ref Self) -> Bool (instance method)
+        std::string eq_method = full_name + "::eq";
+        env_.define_func(FuncSig{.name = eq_method,
+                                 .params = {ref_self, ref_self},
+                                 .return_type = bool_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Duplicate) - register impl and duplicate method
+    // Skip generic types - they need instantiation first
+    if (has_derive_duplicate && decl.generics.empty()) {
+        // Register that this type implements Duplicate behavior
+        env_.register_impl(full_name, "Duplicate");
+
+        // Create self type for return
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{full_name, "", {}};
+
+        // Create ref self type for parameter
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Register TypeName::duplicate(ref this) -> Self (instance method)
+        std::string dup_method = full_name + "::duplicate";
+        env_.define_func(FuncSig{.name = dup_method,
+                                 .params = {ref_self},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Hash) - register impl and hash method
+    // Skip generic types - they need instantiation first
+    if (has_derive_hash && decl.generics.empty()) {
+        // Register that this type implements Hash behavior
+        env_.register_impl(full_name, "Hash");
+
+        // Create ref self type for parameter
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{full_name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Create I64 return type
+        auto i64_type = types::make_i64();
+
+        // Register TypeName::hash(ref this) -> I64 (instance method)
+        std::string hash_method = full_name + "::hash";
+        env_.define_func(FuncSig{.name = hash_method,
+                                 .params = {ref_self},
+                                 .return_type = i64_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Default) - register impl and default static method
+    // Skip generic types - they need instantiation first
+    if (has_derive_default && decl.generics.empty()) {
+        // Register that this type implements Default behavior
+        env_.register_impl(full_name, "Default");
+
+        // Create self type for return
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{full_name, "", {}};
+
+        // Register TypeName::default() -> Self (static method, no params)
+        std::string default_method = full_name + "::default";
+        env_.define_func(FuncSig{.name = default_method,
+                                 .params = {},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(PartialOrd) - register impl and partial_cmp method
+    // Skip generic types - they need instantiation first
+    if (has_derive_partial_ord && decl.generics.empty()) {
+        // Register that this type implements PartialOrd behavior
+        env_.register_impl(full_name, "PartialOrd");
+
+        // Create ref self type for parameter
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{full_name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Create Ordering type
+        auto ordering_type = std::make_shared<Type>();
+        ordering_type->kind = NamedType{"Ordering", "", {}};
+
+        // Create Maybe[Ordering] return type
+        auto maybe_ordering_type = std::make_shared<Type>();
+        maybe_ordering_type->kind = NamedType{"Maybe", "", {ordering_type}};
+
+        // Register TypeName::partial_cmp(ref this, other: ref Self) -> Maybe[Ordering]
+        std::string partial_cmp_method = full_name + "::partial_cmp";
+        env_.define_func(FuncSig{.name = partial_cmp_method,
+                                 .params = {ref_self, ref_self},
+                                 .return_type = maybe_ordering_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Ord) - register impl and cmp method
+    // Skip generic types - they need instantiation first
+    if (has_derive_ord && decl.generics.empty()) {
+        // Register that this type implements Ord behavior
+        env_.register_impl(full_name, "Ord");
+
+        // Create ref self type for parameter
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{full_name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Create Ordering return type
+        auto ordering_type = std::make_shared<Type>();
+        ordering_type->kind = NamedType{"Ordering", "", {}};
+
+        // Register TypeName::cmp(ref this, other: ref Self) -> Ordering
+        std::string cmp_method = full_name + "::cmp";
+        env_.define_func(FuncSig{.name = cmp_method,
+                                 .params = {ref_self, ref_self},
+                                 .return_type = ordering_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Debug) - register impl and debug_string method
+    // Skip generic types - they need instantiation first
+    if (has_derive_debug && decl.generics.empty()) {
+        // Register that this type implements Debug behavior
+        env_.register_impl(full_name, "Debug");
+
+        // Create ref self type for parameter
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{full_name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Create Str return type
+        auto str_type = types::make_str();
+
+        // Register TypeName::debug_string(ref this) -> Str
+        std::string debug_method = full_name + "::debug_string";
+        env_.define_func(FuncSig{.name = debug_method,
+                                 .params = {ref_self},
+                                 .return_type = str_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
 }
 
 void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
@@ -453,14 +650,36 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
     // Extract const generic parameters
     std::vector<ConstGenericParam> const_params = extract_const_params(decl.generics);
 
-    // Check for @derive(Reflect) decorator
+    // Check for @derive decorators
     bool has_derive_reflect = false;
+    bool has_derive_partial_eq = false;
+    bool has_derive_duplicate = false;
+    bool has_derive_hash = false;
+    bool has_derive_default = false;
+    bool has_derive_partial_ord = false;
+    bool has_derive_ord = false;
+    bool has_derive_debug = false;
     for (const auto& decorator : decl.decorators) {
         if (decorator.name == "derive") {
             for (const auto& arg : decorator.args) {
                 if (arg->is<parser::IdentExpr>()) {
-                    if (arg->as<parser::IdentExpr>().name == "Reflect") {
+                    const auto& name = arg->as<parser::IdentExpr>().name;
+                    if (name == "Reflect") {
                         has_derive_reflect = true;
+                    } else if (name == "PartialEq" || name == "Eq") {
+                        has_derive_partial_eq = true;
+                    } else if (name == "Duplicate" || name == "Copy") {
+                        has_derive_duplicate = true;
+                    } else if (name == "Hash") {
+                        has_derive_hash = true;
+                    } else if (name == "Default") {
+                        has_derive_default = true;
+                    } else if (name == "PartialOrd") {
+                        has_derive_partial_ord = true;
+                    } else if (name == "Ord") {
+                        has_derive_ord = true;
+                    } else if (name == "Debug") {
+                        has_derive_debug = true;
                     }
                 }
             }
@@ -531,6 +750,181 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
         env_.define_func(FuncSig{.name = variant_tag_method,
                                  .params = {ref_self},
                                  .return_type = i64_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(PartialEq) - register impl and eq method
+    // Skip generic enums - they need instantiation first
+    if (has_derive_partial_eq && decl.generics.empty()) {
+        // Register that this type implements PartialEq behavior
+        env_.register_impl(decl.name, "PartialEq");
+
+        // Create return type: Bool
+        auto bool_type = make_bool();
+
+        // Create self type: ref EnumName
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{decl.name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Register EnumName::eq(ref this, other: ref Self) -> Bool (instance method)
+        std::string eq_method = decl.name + "::eq";
+        env_.define_func(FuncSig{.name = eq_method,
+                                 .params = {ref_self, ref_self},
+                                 .return_type = bool_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Duplicate) - register impl and duplicate method
+    // Skip generic enums - they need instantiation first
+    if (has_derive_duplicate && decl.generics.empty()) {
+        // Register that this type implements Duplicate behavior
+        env_.register_impl(decl.name, "Duplicate");
+
+        // Create self type for return
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{decl.name, "", {}};
+
+        // Create ref self type for parameter
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Register EnumName::duplicate(ref this) -> Self (instance method)
+        std::string dup_method = decl.name + "::duplicate";
+        env_.define_func(FuncSig{.name = dup_method,
+                                 .params = {ref_self},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Hash) - register impl and hash method
+    // Skip generic enums - they need instantiation first
+    if (has_derive_hash && decl.generics.empty()) {
+        // Register that this type implements Hash behavior
+        env_.register_impl(decl.name, "Hash");
+
+        // Create ref self type for parameter
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{decl.name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Create I64 return type
+        auto i64_type = types::make_i64();
+
+        // Register EnumName::hash(ref this) -> I64 (instance method)
+        std::string hash_method = decl.name + "::hash";
+        env_.define_func(FuncSig{.name = hash_method,
+                                 .params = {ref_self},
+                                 .return_type = i64_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Default) - register impl and default static method
+    // Skip generic enums - they need instantiation first
+    if (has_derive_default && decl.generics.empty()) {
+        // Register that this type implements Default behavior
+        env_.register_impl(decl.name, "Default");
+
+        // Create self type for return
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{decl.name, "", {}};
+
+        // Register EnumName::default() -> Self (static method, no params)
+        std::string default_method = decl.name + "::default";
+        env_.define_func(FuncSig{.name = default_method,
+                                 .params = {},
+                                 .return_type = self_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(PartialOrd) - register impl and partial_cmp method
+    // Skip generic enums - they need instantiation first
+    if (has_derive_partial_ord && decl.generics.empty()) {
+        // Register that this type implements PartialOrd behavior
+        env_.register_impl(decl.name, "PartialOrd");
+
+        // Create ref self type for parameter
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{decl.name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Create Ordering type
+        auto ordering_type = std::make_shared<Type>();
+        ordering_type->kind = NamedType{"Ordering", "", {}};
+
+        // Create Maybe[Ordering] return type
+        auto maybe_ordering_type = std::make_shared<Type>();
+        maybe_ordering_type->kind = NamedType{"Maybe", "", {ordering_type}};
+
+        // Register EnumName::partial_cmp(ref this, other: ref Self) -> Maybe[Ordering]
+        std::string partial_cmp_method = decl.name + "::partial_cmp";
+        env_.define_func(FuncSig{.name = partial_cmp_method,
+                                 .params = {ref_self, ref_self},
+                                 .return_type = maybe_ordering_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Ord) - register impl and cmp method
+    // Skip generic enums - they need instantiation first
+    if (has_derive_ord && decl.generics.empty()) {
+        // Register that this type implements Ord behavior
+        env_.register_impl(decl.name, "Ord");
+
+        // Create ref self type for parameter
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{decl.name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Create Ordering return type
+        auto ordering_type = std::make_shared<Type>();
+        ordering_type->kind = NamedType{"Ordering", "", {}};
+
+        // Register EnumName::cmp(ref this, other: ref Self) -> Ordering
+        std::string cmp_method = decl.name + "::cmp";
+        env_.define_func(FuncSig{.name = cmp_method,
+                                 .params = {ref_self, ref_self},
+                                 .return_type = ordering_type,
+                                 .type_params = {},
+                                 .is_async = false,
+                                 .span = decl.span});
+    }
+
+    // Handle @derive(Debug) - register impl and debug_string method
+    // Skip generic enums - they need instantiation first
+    if (has_derive_debug && decl.generics.empty()) {
+        // Register that this type implements Debug behavior
+        env_.register_impl(decl.name, "Debug");
+
+        // Create ref self type for parameter
+        auto self_type = std::make_shared<Type>();
+        self_type->kind = NamedType{decl.name, "", {}};
+        auto ref_self = std::make_shared<Type>();
+        ref_self->kind = RefType{false, self_type, std::nullopt};
+
+        // Create Str return type
+        auto str_type = types::make_str();
+
+        // Register EnumName::debug_string(ref this) -> Str
+        std::string debug_method = decl.name + "::debug_string";
+        env_.define_func(FuncSig{.name = debug_method,
+                                 .params = {ref_self},
+                                 .return_type = str_type,
                                  .type_params = {},
                                  .is_async = false,
                                  .span = decl.span});

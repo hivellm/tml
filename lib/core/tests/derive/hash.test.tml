@@ -1,0 +1,70 @@
+// Tests for @derive(Hash) macro
+use test
+
+// ============================================================================
+// Simple Struct Tests
+// ============================================================================
+
+@derive(Hash)
+type HashPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_hash_same_values_same_hash() -> I32 {
+    let p1: HashPoint = HashPoint { x: 1, y: 2 }
+    let p2: HashPoint = HashPoint { x: 1, y: 2 }
+    let h1: I64 = p1.hash()
+    let h2: I64 = p2.hash()
+    assert(h1 == h2, "Same values should produce same hash")
+    return 0
+}
+
+@test
+func test_hash_different_values_different_hash() -> I32 {
+    let p1: HashPoint = HashPoint { x: 1, y: 2 }
+    let p2: HashPoint = HashPoint { x: 3, y: 4 }
+    let h1: I64 = p1.hash()
+    let h2: I64 = p2.hash()
+    // Different values should typically produce different hashes
+    // (not guaranteed but extremely likely for FNV-1a)
+    assert(h1 != h2, "Different values should produce different hash")
+    return 0
+}
+
+@test
+func test_hash_nonzero() -> I32 {
+    let p: HashPoint = HashPoint { x: 0, y: 0 }
+    let h: I64 = p.hash()
+    // Hash should be non-zero even for zero values (due to FNV offset basis)
+    assert(h != 0, "Hash should be non-zero")
+    return 0
+}
+
+// ============================================================================
+// Multiple Fields Test
+// ============================================================================
+
+@derive(Hash)
+type HashRectangle {
+    x: I32,
+    y: I32,
+    width: I32,
+    height: I32
+}
+
+@test
+func test_hash_multiple_fields() -> I32 {
+    let r1: HashRectangle = HashRectangle { x: 0, y: 0, width: 100, height: 50 }
+    let r2: HashRectangle = HashRectangle { x: 0, y: 0, width: 100, height: 50 }
+    let r3: HashRectangle = HashRectangle { x: 0, y: 0, width: 100, height: 51 }
+
+    let h1: I64 = r1.hash()
+    let h2: I64 = r2.hash()
+    let h3: I64 = r3.hash()
+
+    assert(h1 == h2, "Same rectangles should have same hash")
+    assert(h1 != h3, "Different height should produce different hash")
+    return 0
+}

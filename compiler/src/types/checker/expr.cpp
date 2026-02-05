@@ -81,6 +81,70 @@ static std::string primitive_to_string(PrimitiveKind kind) {
     return "unknown";
 }
 
+// Helper to check if a primitive type is unsigned
+static bool is_unsigned_primitive(PrimitiveKind kind) {
+    return kind == PrimitiveKind::U8 || kind == PrimitiveKind::U16 ||
+           kind == PrimitiveKind::U32 || kind == PrimitiveKind::U64 ||
+           kind == PrimitiveKind::U128;
+}
+
+// Helper to get the maximum value for an integer type
+static uint64_t get_int_max_value(PrimitiveKind kind) {
+    switch (kind) {
+    case PrimitiveKind::I8:
+        return 127;
+    case PrimitiveKind::I16:
+        return 32767;
+    case PrimitiveKind::I32:
+        return 2147483647;
+    case PrimitiveKind::I64:
+        return 9223372036854775807ULL;
+    case PrimitiveKind::U8:
+        return 255;
+    case PrimitiveKind::U16:
+        return 65535;
+    case PrimitiveKind::U32:
+        return 4294967295ULL;
+    case PrimitiveKind::U64:
+        return 18446744073709551615ULL;
+    default:
+        return 18446744073709551615ULL; // Max for U64/I128/U128 (as much as uint64_t can hold)
+    }
+}
+
+// Helper to get the minimum value for an integer type (as positive magnitude)
+// For signed types, this returns the magnitude of the minimum value (e.g., 128 for I8)
+// For unsigned types, this returns 0
+// Note: kept for future use with signed overflow validation
+[[maybe_unused]] static uint64_t get_int_min_magnitude(PrimitiveKind kind) {
+    switch (kind) {
+    case PrimitiveKind::I8:
+        return 128;
+    case PrimitiveKind::I16:
+        return 32768;
+    case PrimitiveKind::I32:
+        return 2147483648ULL;
+    case PrimitiveKind::I64:
+        return 9223372036854775808ULL; // This is exactly 2^63
+    default:
+        return 0; // Unsigned types have min of 0
+    }
+}
+
+// Helper to check if a literal value is zero
+static bool is_literal_zero(const parser::Expr& expr) {
+    if (expr.is<parser::LiteralExpr>()) {
+        const auto& lit = expr.as<parser::LiteralExpr>();
+        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+            return lit.token.int_value().value == 0;
+        }
+        if (lit.token.kind == lexer::TokenKind::FloatLiteral) {
+            return lit.token.float_value().value == 0.0;
+        }
+    }
+    return false;
+}
+
 /// Extract type parameter bindings by matching parameter type against argument type.
 /// For example, matching `ManuallyDrop[T]` against `ManuallyDrop[I64]` extracts {T -> I64}.
 static void extract_type_params(const TypePtr& param_type, const TypePtr& arg_type,
@@ -270,8 +334,18 @@ auto TypeChecker::check_expr(const parser::Expr& expr, TypePtr expected_type) ->
             } else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
                 // For unary expressions like -5, propagate expected type to operand
                 if (e.op == parser::UnaryOp::Neg && e.operand->template is<parser::LiteralExpr>()) {
+                    // Check for negative literal assigned to unsigned type
+                    if (expected_type && std::holds_alternative<PrimitiveType>(expected_type->kind)) {
+                        auto prim = std::get<PrimitiveType>(expected_type->kind);
+                        if (is_unsigned_primitive(prim.kind)) {
+                            error("Cannot assign negative value to unsigned type " +
+                                      primitive_to_string(prim.kind),
+                                  expr.span, "T050");
+                            return expected_type; // Return expected type to continue checking
+                        }
+                    }
                     return check_literal(e.operand->template as<parser::LiteralExpr>(),
-                                         expected_type);
+                                         expected_type, true /* is_negated */);
                 }
                 return check_unary(e);
             } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
@@ -304,32 +378,60 @@ auto TypeChecker::check_literal(const parser::LiteralExpr& lit) -> TypePtr {
     return check_literal(lit, nullptr);
 }
 
-auto TypeChecker::check_literal(const parser::LiteralExpr& lit, TypePtr expected_type) -> TypePtr {
+auto TypeChecker::check_literal(const parser::LiteralExpr& lit, TypePtr expected_type,
+                                bool is_negated) -> TypePtr {
+    // Helper lambda to check integer overflow
+    // When is_negated is true, allow the minimum magnitude for signed types
+    // (e.g., -9223372036854775808 is valid for I64 even though the positive value overflows)
+    auto check_int_overflow = [this, &lit, is_negated](uint64_t value, PrimitiveKind kind) {
+        uint64_t max_val = get_int_max_value(kind);
+        // For negated signed types, allow up to the minimum magnitude
+        if (is_negated && !is_unsigned_primitive(kind)) {
+            uint64_t min_mag = get_int_min_magnitude(kind);
+            if (min_mag > 0 && value <= min_mag) {
+                return; // Valid: the negated value fits in the signed type
+            }
+        }
+        if (value > max_val) {
+            error("Integer literal " + std::to_string(value) + " overflows type " +
+                      primitive_to_string(kind) + " (max " + std::to_string(max_val) + ")",
+                  lit.token.span, "T051");
+        }
+    };
+
     switch (lit.token.kind) {
     case lexer::TokenKind::IntLiteral: {
         const auto& int_val = lit.token.int_value();
         if (!int_val.suffix.empty()) {
             const auto& suffix = int_val.suffix;
+            // Map suffix to PrimitiveKind and validate
+            PrimitiveKind target_kind;
             if (suffix == "i8")
-                return make_primitive(PrimitiveKind::I8);
-            if (suffix == "i16")
-                return make_primitive(PrimitiveKind::I16);
-            if (suffix == "i32")
-                return make_primitive(PrimitiveKind::I32);
-            if (suffix == "i64")
-                return make_primitive(PrimitiveKind::I64);
-            if (suffix == "i128")
-                return make_primitive(PrimitiveKind::I128);
-            if (suffix == "u8")
-                return make_primitive(PrimitiveKind::U8);
-            if (suffix == "u16")
-                return make_primitive(PrimitiveKind::U16);
-            if (suffix == "u32")
-                return make_primitive(PrimitiveKind::U32);
-            if (suffix == "u64")
-                return make_primitive(PrimitiveKind::U64);
-            if (suffix == "u128")
-                return make_primitive(PrimitiveKind::U128);
+                target_kind = PrimitiveKind::I8;
+            else if (suffix == "i16")
+                target_kind = PrimitiveKind::I16;
+            else if (suffix == "i32")
+                target_kind = PrimitiveKind::I32;
+            else if (suffix == "i64")
+                target_kind = PrimitiveKind::I64;
+            else if (suffix == "i128")
+                target_kind = PrimitiveKind::I128;
+            else if (suffix == "u8")
+                target_kind = PrimitiveKind::U8;
+            else if (suffix == "u16")
+                target_kind = PrimitiveKind::U16;
+            else if (suffix == "u32")
+                target_kind = PrimitiveKind::U32;
+            else if (suffix == "u64")
+                target_kind = PrimitiveKind::U64;
+            else if (suffix == "u128")
+                target_kind = PrimitiveKind::U128;
+            else
+                return make_i64(); // Unknown suffix, default to I64
+
+            // Check overflow for suffixed literals
+            check_int_overflow(int_val.value, target_kind);
+            return make_primitive(target_kind);
         }
         // If no suffix, use expected_type if it's an integer type
         if (expected_type && std::holds_alternative<PrimitiveType>(expected_type->kind)) {
@@ -345,6 +447,8 @@ auto TypeChecker::check_literal(const parser::LiteralExpr& lit, TypePtr expected
             case PrimitiveKind::U32:
             case PrimitiveKind::U64:
             case PrimitiveKind::U128:
+                // Check overflow for unsuffixed literals assigned to specific types
+                check_int_overflow(int_val.value, prim.kind);
                 return expected_type;
             default:
                 break;
@@ -605,10 +709,17 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
         return left;
     }
     case parser::BinaryOp::Mul:
-    case parser::BinaryOp::Div:
-    case parser::BinaryOp::Mod:
         check_binary_types("*");
         return left;
+    case parser::BinaryOp::Div:
+    case parser::BinaryOp::Mod: {
+        // Check for division by zero literal
+        if (is_literal_zero(*binary.right)) {
+            error("Division by zero", binary.right->span, "T052");
+        }
+        check_binary_types(binary.op == parser::BinaryOp::Div ? "/" : "%");
+        return left;
+    }
     case parser::BinaryOp::Lt:
     case parser::BinaryOp::Le:
     case parser::BinaryOp::Gt:
@@ -648,13 +759,19 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     case parser::BinaryOp::AddAssign:
     case parser::BinaryOp::SubAssign:
     case parser::BinaryOp::MulAssign:
-    case parser::BinaryOp::DivAssign:
-    case parser::BinaryOp::ModAssign:
     case parser::BinaryOp::BitAndAssign:
     case parser::BinaryOp::BitOrAssign:
     case parser::BinaryOp::BitXorAssign:
     case parser::BinaryOp::ShlAssign:
     case parser::BinaryOp::ShrAssign:
+        check_assignable();
+        return make_unit();
+    case parser::BinaryOp::DivAssign:
+    case parser::BinaryOp::ModAssign:
+        // Check for division by zero literal
+        if (is_literal_zero(*binary.right)) {
+            error("Division by zero", binary.right->span, "T052");
+        }
         check_assignable();
         return make_unit();
     }

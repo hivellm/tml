@@ -1,0 +1,35 @@
+// Isolated test for ZstdDict::train
+use test
+use std::zlib::{ZstdDict}
+use std::zlib::error::ZlibError
+use std::collections::{Buffer, List}
+
+@test
+func test_train_call() -> I32 {
+    // Create list with samples
+    var samples: List[Buffer] = List[Buffer]::new()
+
+    var sample1: Buffer = Buffer::from_string("Test data sample one")
+    samples.push(sample1)
+
+    var sample2: Buffer = Buffer::from_string("Test data sample two")
+    samples.push(sample2)
+
+    // Check list length before call
+    let len: I64 = samples.len()
+    if len != 2 {
+        return 1
+    }
+
+    // Call train - this is where we crash
+    let dict_result: Outcome[ZstdDict, ZlibError] = ZstdDict::train(ref samples, 4096)
+
+    // Clean up
+    if dict_result.is_ok() {
+        var dict: ZstdDict = dict_result.unwrap()
+        dict.destroy()
+    }
+
+    samples.clear()
+    return 0
+}

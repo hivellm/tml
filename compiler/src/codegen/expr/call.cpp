@@ -210,11 +210,12 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 type_name == "U128" || type_name == "F32" || type_name == "F64" ||
                 type_name == "Bool" || type_name == "Str";
 
-            if (is_primitive_type && method == "default") {
-                // Track coverage for inlined primitive default calls
-                emit_coverage(type_name + "::default");
+            // Handle default(), zero(), one(), min_value(), max_value() for primitive types
+            if (is_primitive_type && (method == "default" || method == "zero")) {
+                // Track coverage
+                emit_coverage(type_name + "::" + method);
 
-                // Integer types: default is 0
+                // Integer types: default/zero is 0
                 if (type_name == "I8" || type_name == "I16" || type_name == "I32" ||
                     type_name == "I64" || type_name == "I128" || type_name == "U8" ||
                     type_name == "U16" || type_name == "U32" || type_name == "U64" ||
@@ -233,7 +234,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     last_expr_type_ = llvm_ty;
                     return "0";
                 }
-                // Float types: default is 0.0
+                // Float types: default/zero is 0.0
                 if (type_name == "F32") {
                     last_expr_type_ = "float";
                     return "0.0";
@@ -252,6 +253,116 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     std::string empty_str = add_string_literal("");
                     last_expr_type_ = "ptr";
                     return empty_str;
+                }
+            }
+
+            // Handle one() for primitive types
+            if (is_primitive_type && method == "one") {
+                emit_coverage(type_name + "::one");
+
+                // Integer types: one is 1
+                if (type_name == "I8" || type_name == "I16" || type_name == "I32" ||
+                    type_name == "I64" || type_name == "I128" || type_name == "U8" ||
+                    type_name == "U16" || type_name == "U32" || type_name == "U64" ||
+                    type_name == "U128") {
+                    std::string llvm_ty;
+                    if (type_name == "I8" || type_name == "U8")
+                        llvm_ty = "i8";
+                    else if (type_name == "I16" || type_name == "U16")
+                        llvm_ty = "i16";
+                    else if (type_name == "I32" || type_name == "U32")
+                        llvm_ty = "i32";
+                    else if (type_name == "I64" || type_name == "U64")
+                        llvm_ty = "i64";
+                    else
+                        llvm_ty = "i128";
+                    last_expr_type_ = llvm_ty;
+                    return "1";
+                }
+                // Float types: one is 1.0
+                if (type_name == "F32") {
+                    last_expr_type_ = "float";
+                    return "1.0";
+                }
+                if (type_name == "F64") {
+                    last_expr_type_ = "double";
+                    return "1.0";
+                }
+            }
+
+            // Handle min_value() for bounded types
+            if (is_primitive_type && method == "min_value") {
+                emit_coverage(type_name + "::min_value");
+
+                if (type_name == "I8") {
+                    last_expr_type_ = "i8";
+                    return "-128";
+                }
+                if (type_name == "I16") {
+                    last_expr_type_ = "i16";
+                    return "-32768";
+                }
+                if (type_name == "I32") {
+                    last_expr_type_ = "i32";
+                    return "-2147483648";
+                }
+                if (type_name == "I64") {
+                    last_expr_type_ = "i64";
+                    return "-9223372036854775808";
+                }
+                if (type_name == "U8" || type_name == "U16" || type_name == "U32" ||
+                    type_name == "U64" || type_name == "U128") {
+                    std::string llvm_ty;
+                    if (type_name == "U8")
+                        llvm_ty = "i8";
+                    else if (type_name == "U16")
+                        llvm_ty = "i16";
+                    else if (type_name == "U32")
+                        llvm_ty = "i32";
+                    else if (type_name == "U64")
+                        llvm_ty = "i64";
+                    else
+                        llvm_ty = "i128";
+                    last_expr_type_ = llvm_ty;
+                    return "0";
+                }
+            }
+
+            // Handle max_value() for bounded types
+            if (is_primitive_type && method == "max_value") {
+                emit_coverage(type_name + "::max_value");
+
+                if (type_name == "I8") {
+                    last_expr_type_ = "i8";
+                    return "127";
+                }
+                if (type_name == "I16") {
+                    last_expr_type_ = "i16";
+                    return "32767";
+                }
+                if (type_name == "I32") {
+                    last_expr_type_ = "i32";
+                    return "2147483647";
+                }
+                if (type_name == "I64") {
+                    last_expr_type_ = "i64";
+                    return "9223372036854775807";
+                }
+                if (type_name == "U8") {
+                    last_expr_type_ = "i8";
+                    return "255";
+                }
+                if (type_name == "U16") {
+                    last_expr_type_ = "i16";
+                    return "65535";
+                }
+                if (type_name == "U32") {
+                    last_expr_type_ = "i32";
+                    return "4294967295";
+                }
+                if (type_name == "U64") {
+                    last_expr_type_ = "i64";
+                    return "18446744073709551615";
                 }
             }
 

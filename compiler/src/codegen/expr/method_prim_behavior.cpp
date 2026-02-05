@@ -13,6 +13,11 @@ auto LLVMIRGen::try_gen_primitive_behavior_method(
     const std::string& receiver_type_name, bool receiver_was_ref) -> std::optional<std::string> {
     const std::string& method = call.method;
 
+    // Apply type substitutions to handle generic types (e.g., T -> I32)
+    if (!current_type_subs_.empty() && receiver_type) {
+        receiver_type = apply_type_substitutions(receiver_type, current_type_subs_);
+    }
+
     if (!(receiver_type && receiver_type->is<types::PrimitiveType>() &&
           !receiver_type_name.empty())) {
         return std::nullopt;
@@ -172,6 +177,66 @@ auto LLVMIRGen::try_gen_primitive_behavior_method(
 
             last_expr_type_ = "%struct.Ordering";
             return ordering;
+        }
+    }
+
+    // Handle is_zero inline for numeric types - returns Bool
+    if (method == "is_zero" && call.args.empty()) {
+        bool is_int =
+            (prim.kind == types::PrimitiveKind::I8 || prim.kind == types::PrimitiveKind::I16 ||
+             prim.kind == types::PrimitiveKind::I32 || prim.kind == types::PrimitiveKind::I64 ||
+             prim.kind == types::PrimitiveKind::I128 || prim.kind == types::PrimitiveKind::U8 ||
+             prim.kind == types::PrimitiveKind::U16 || prim.kind == types::PrimitiveKind::U32 ||
+             prim.kind == types::PrimitiveKind::U64 || prim.kind == types::PrimitiveKind::U128);
+        bool is_float =
+            (prim.kind == types::PrimitiveKind::F32 || prim.kind == types::PrimitiveKind::F64);
+
+        if (is_int || is_float) {
+            // If receiver was originally a reference, we need to load through the pointer
+            std::string receiver_val = receiver;
+            if (receiver_was_ref) {
+                receiver_val = fresh_reg();
+                emit_line("  " + receiver_val + " = load " + llvm_ty + ", ptr " + receiver);
+            }
+
+            std::string result = fresh_reg();
+            if (is_float) {
+                emit_line("  " + result + " = fcmp oeq " + llvm_ty + " " + receiver_val + ", 0.0");
+            } else {
+                emit_line("  " + result + " = icmp eq " + llvm_ty + " " + receiver_val + ", 0");
+            }
+            last_expr_type_ = "i1";
+            return result;
+        }
+    }
+
+    // Handle is_one inline for numeric types - returns Bool
+    if (method == "is_one" && call.args.empty()) {
+        bool is_int =
+            (prim.kind == types::PrimitiveKind::I8 || prim.kind == types::PrimitiveKind::I16 ||
+             prim.kind == types::PrimitiveKind::I32 || prim.kind == types::PrimitiveKind::I64 ||
+             prim.kind == types::PrimitiveKind::I128 || prim.kind == types::PrimitiveKind::U8 ||
+             prim.kind == types::PrimitiveKind::U16 || prim.kind == types::PrimitiveKind::U32 ||
+             prim.kind == types::PrimitiveKind::U64 || prim.kind == types::PrimitiveKind::U128);
+        bool is_float =
+            (prim.kind == types::PrimitiveKind::F32 || prim.kind == types::PrimitiveKind::F64);
+
+        if (is_int || is_float) {
+            // If receiver was originally a reference, we need to load through the pointer
+            std::string receiver_val = receiver;
+            if (receiver_was_ref) {
+                receiver_val = fresh_reg();
+                emit_line("  " + receiver_val + " = load " + llvm_ty + ", ptr " + receiver);
+            }
+
+            std::string result = fresh_reg();
+            if (is_float) {
+                emit_line("  " + result + " = fcmp oeq " + llvm_ty + " " + receiver_val + ", 1.0");
+            } else {
+                emit_line("  " + result + " = icmp eq " + llvm_ty + " " + receiver_val + ", 1");
+            }
+            last_expr_type_ = "i1";
+            return result;
         }
     }
 

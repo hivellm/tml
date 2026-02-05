@@ -70,8 +70,15 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     def += " }";
     type_defs_buffer_ << def << "\n";
 
-    // Generate @derive(Reflect) support if decorated
+    // Generate @derive support if decorated
     gen_derive_reflect_struct(s);
+    gen_derive_partial_eq_struct(s);
+    gen_derive_duplicate_struct(s);
+    gen_derive_hash_struct(s);
+    gen_derive_default_struct(s);
+    gen_derive_partial_ord_struct(s);
+    gen_derive_ord_struct(s);
+    gen_derive_debug_struct(s);
 }
 
 // Generate a specialized version of a generic struct

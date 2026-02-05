@@ -188,8 +188,9 @@ void zstd_decompress_context_destroy(ZstdDecompressContext* ctx);
 // Zstd dictionary
 typedef struct ZstdDict ZstdDict;
 ZstdDict* zstd_dict_create(TmlBuffer* data);
-ZstdDict* zstd_dict_train(TmlBuffer** samples, size_t num_samples, size_t dict_size);
+ZstdDict* zstd_dict_train_impl(TmlBuffer** samples, size_t num_samples, size_t dict_size);
 int32_t zstd_dict_id(ZstdDict* dict);
+TmlBuffer* zstd_dict_export(ZstdDict* dict);  // Note: exported as zstd_dict_to_buffer
 void zstd_dict_destroy(ZstdDict* dict);
 
 // ============================================================================

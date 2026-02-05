@@ -36,6 +36,11 @@ namespace tml::codegen {
 auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
                                      const std::string& receiver, const std::string& receiver_ptr,
                                      types::TypePtr receiver_type) -> std::optional<std::string> {
+    // Apply type substitutions to handle generic types (e.g., T -> I32)
+    if (!current_type_subs_.empty() && receiver_type) {
+        receiver_type = apply_type_substitutions(receiver_type, current_type_subs_);
+    }
+
     // Unwrap reference type if present
     types::TypePtr inner_type = receiver_type;
     if (receiver_type && receiver_type->is<types::RefType>()) {
@@ -980,6 +985,56 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         break;
     default:
         return std::nullopt;
+    }
+
+    // =========================================================================
+    // Handle is_zero and is_one inline BEFORE the module lookup fallback.
+    // These methods exist in the module registry but should be inlined.
+    // =========================================================================
+    if (method == "is_zero" && call.args.empty()) {
+        bool is_zero_int =
+            (kind == types::PrimitiveKind::I8 || kind == types::PrimitiveKind::I16 ||
+             kind == types::PrimitiveKind::I32 || kind == types::PrimitiveKind::I64 ||
+             kind == types::PrimitiveKind::I128 || kind == types::PrimitiveKind::U8 ||
+             kind == types::PrimitiveKind::U16 || kind == types::PrimitiveKind::U32 ||
+             kind == types::PrimitiveKind::U64 || kind == types::PrimitiveKind::U128);
+        bool is_zero_float =
+            (kind == types::PrimitiveKind::F32 || kind == types::PrimitiveKind::F64);
+
+        if (is_zero_int || is_zero_float) {
+            emit_coverage(type_name + "::is_zero");
+            std::string result = fresh_reg();
+            if (is_zero_float) {
+                emit_line("  " + result + " = fcmp oeq " + llvm_ty + " " + receiver + ", 0.0");
+            } else {
+                emit_line("  " + result + " = icmp eq " + llvm_ty + " " + receiver + ", 0");
+            }
+            last_expr_type_ = "i1";
+            return result;
+        }
+    }
+
+    if (method == "is_one" && call.args.empty()) {
+        bool is_one_int =
+            (kind == types::PrimitiveKind::I8 || kind == types::PrimitiveKind::I16 ||
+             kind == types::PrimitiveKind::I32 || kind == types::PrimitiveKind::I64 ||
+             kind == types::PrimitiveKind::I128 || kind == types::PrimitiveKind::U8 ||
+             kind == types::PrimitiveKind::U16 || kind == types::PrimitiveKind::U32 ||
+             kind == types::PrimitiveKind::U64 || kind == types::PrimitiveKind::U128);
+        bool is_one_float =
+            (kind == types::PrimitiveKind::F32 || kind == types::PrimitiveKind::F64);
+
+        if (is_one_int || is_one_float) {
+            emit_coverage(type_name + "::is_one");
+            std::string result = fresh_reg();
+            if (is_one_float) {
+                emit_line("  " + result + " = fcmp oeq " + llvm_ty + " " + receiver + ", 1.0");
+            } else {
+                emit_line("  " + result + " = icmp eq " + llvm_ty + " " + receiver + ", 1");
+            }
+            last_expr_type_ = "i1";
+            return result;
+        }
     }
 
     std::string qualified_name = type_name + "::" + method;

@@ -1162,6 +1162,34 @@ private:
     void gen_derive_reflect_impl(const std::string& type_name, const std::string& typeinfo_name);
     void gen_derive_reflect_enum_methods(const parser::EnumDecl& e, const std::string& type_name);
 
+    // @derive(PartialEq, Eq) support
+    void gen_derive_partial_eq_struct(const parser::StructDecl& s);
+    void gen_derive_partial_eq_enum(const parser::EnumDecl& e);
+
+    // @derive(Duplicate, Copy) support
+    void gen_derive_duplicate_struct(const parser::StructDecl& s);
+    void gen_derive_duplicate_enum(const parser::EnumDecl& e);
+
+    // @derive(Hash) support
+    void gen_derive_hash_struct(const parser::StructDecl& s);
+    void gen_derive_hash_enum(const parser::EnumDecl& e);
+
+    // @derive(Default) support
+    void gen_derive_default_struct(const parser::StructDecl& s);
+    void gen_derive_default_enum(const parser::EnumDecl& e);
+
+    // @derive(PartialOrd) support
+    void gen_derive_partial_ord_struct(const parser::StructDecl& s);
+    void gen_derive_partial_ord_enum(const parser::EnumDecl& e);
+
+    // @derive(Ord) support
+    void gen_derive_ord_struct(const parser::StructDecl& s);
+    void gen_derive_ord_enum(const parser::EnumDecl& e);
+
+    // @derive(Debug) support
+    void gen_derive_debug_struct(const parser::StructDecl& s);
+    void gen_derive_debug_enum(const parser::EnumDecl& e);
+
     // Statement generation
     void gen_stmt(const parser::Stmt& stmt);
     void gen_let_stmt(const parser::LetStmt& let);

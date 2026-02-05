@@ -119,7 +119,8 @@ pub func is_empty(s: Str) -> Bool {
 /// assert(char_at("hello", 4) == 'o')
 /// ```
 pub func char_at(s: Str, index: I64) -> I32 {
-    return lowlevel { str_char_at(s, index) }
+    let idx32: I32 = index as I32
+    return lowlevel { str_char_at(s, idx32) }
 }
 
 /// Returns the first character of the string, or `Nothing` if empty.
@@ -172,7 +173,9 @@ pub func last_char(s: Str) -> Maybe[I32] {
 /// assert(substring("hello", 0, 5) == "hello")
 /// ```
 pub func substring(s: Str, start: I64, end: I64) -> Str {
-    return lowlevel { str_substring(s, start, end) }
+    let start32: I32 = start as I32
+    let end32: I32 = end as I32
+    return lowlevel { str_substring(s, start32, end32) }
 }
 
 /// Returns a substring from `start` to the end of the string.
@@ -412,8 +415,8 @@ pub func lines(s: Str) -> List[Str] {
 /// assert(replace("aaa", "a", "b") == "bbb")
 /// assert(replace("hello", "x", "y") == "hello")  // No match
 /// ```
-pub func replace(s: Str, from: Str, to: Str) -> Str {
-    return lowlevel { str_replace(s, from, to) }
+pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
+    return lowlevel { str_replace(s, pattern, replacement) }
 }
 
 /// Replaces only the first occurrence of a substring.
@@ -430,8 +433,8 @@ pub func replace(s: Str, from: Str, to: Str) -> Str {
 /// assert(replace_first("aaa", "a", "b") == "baa")
 /// assert(replace_first("hello hello", "hello", "hi") == "hi hello")
 /// ```
-pub func replace_first(s: Str, from: Str, to: Str) -> Str {
-    return lowlevel { str_replace_first(s, from, to) }
+pub func replace_first(s: Str, pattern: Str, replacement: Str) -> Str {
+    return lowlevel { str_replace_first(s, pattern, replacement) }
 }
 
 // ============================================================================
@@ -453,7 +456,8 @@ pub func replace_first(s: Str, from: Str, to: Str) -> Str {
 /// assert(repeat("hello", 0) == "")
 /// ```
 pub func repeat(s: Str, n: I64) -> Str {
-    return lowlevel { str_repeat(s, n) }
+    let n32: I32 = n as I32
+    return lowlevel { str_repeat(s, n32) }
 }
 
 /// Pads the string on the left to reach the given width.
@@ -718,17 +722,22 @@ impl Str {
 
     /// Returns the character at the given byte index.
     pub func char_at(this, index: I64) -> I32 {
-        return lowlevel { str_char_at(this, index) }
+        let idx32: I32 = index as I32
+        return lowlevel { str_char_at(this, idx32) }
     }
 
     /// Returns a substring from `start` to `end` (exclusive).
     pub func slice_str(this, start: I64, end: I64) -> Str {
-        return lowlevel { str_substring(this, start, end) }
+        let start32: I32 = start as I32
+        let end32: I32 = end as I32
+        return lowlevel { str_substring(this, start32, end32) }
     }
 
     /// Alias for slice_str
     pub func slice(this, start: I64, end: I64) -> Str {
-        return lowlevel { str_substring(this, start, end) }
+        let start32: I32 = start as I32
+        let end32: I32 = end as I32
+        return lowlevel { str_substring(this, start32, end32) }
     }
 
     /// Converts all characters to uppercase.
@@ -806,7 +815,7 @@ impl Str {
     }
 
     /// Replaces all occurrences of a substring.
-    pub func replace(this, from: Str, to: Str) -> Str {
-        return lowlevel { str_replace(this, from, to) }
+    pub func replace(this, pattern: Str, replacement: Str) -> Str {
+        return lowlevel { str_replace(this, pattern, replacement) }
     }
 }

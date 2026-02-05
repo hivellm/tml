@@ -157,8 +157,15 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
         }
     }
 
-    // Generate @derive(Reflect) support if decorated
+    // Generate @derive support if decorated
     gen_derive_reflect_enum(e);
+    gen_derive_partial_eq_enum(e);
+    gen_derive_duplicate_enum(e);
+    gen_derive_hash_enum(e);
+    gen_derive_default_enum(e);
+    gen_derive_partial_ord_enum(e);
+    gen_derive_ord_enum(e);
+    gen_derive_debug_enum(e);
 }
 
 // Generate a specialized version of a generic enum

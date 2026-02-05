@@ -558,7 +558,14 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         }
         return "%struct." + named.name;
     } else if (type->is<types::GenericType>()) {
-        // Uninstantiated generic type - this shouldn't happen in codegen normally
+        // Check if there's a substitution available for this generic type parameter
+        const auto& generic = type->as<types::GenericType>();
+        auto it = current_type_subs_.find(generic.name);
+        if (it != current_type_subs_.end() && it->second) {
+            // Substitute the generic with its concrete type
+            return llvm_type_from_semantic(it->second, for_data);
+        }
+        // Fallback: uninstantiated generic type - shouldn't happen in codegen normally
         // Return a placeholder (will cause error if actually used)
         return "i32";
     } else if (type->is<types::RefType>() || type->is<types::PtrType>()) {
@@ -794,8 +801,15 @@ auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
         }
         return result;
     } else if (type->is<types::GenericType>()) {
-        // Uninstantiated generic - shouldn't reach codegen normally
-        return type->as<types::GenericType>().name;
+        // Check if there's a substitution available for this generic type parameter
+        const auto& generic = type->as<types::GenericType>();
+        auto it = current_type_subs_.find(generic.name);
+        if (it != current_type_subs_.end() && it->second) {
+            // Substitute the generic with its concrete type and mangle that
+            return mangle_type(it->second);
+        }
+        // Fallback: uninstantiated generic - shouldn't reach codegen normally
+        return generic.name;
     }
 
     return "unknown";

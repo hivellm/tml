@@ -169,6 +169,27 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             type_name = types::type_to_string(type_sub_it->second);
         }
 
+        // Handle primitive type static methods FIRST - before class lookup
+        // This handles F32::zero(), I32::one(), U8::min_value(), etc.
+        {
+            auto is_primitive = [](const std::string& name) {
+                return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+                       name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
+                       name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
+                       name == "Bool";
+            };
+
+            if (is_primitive(type_name)) {
+                if (method == "from" || method == "zero" || method == "one" ||
+                    method == "min_value" || method == "max_value" || method == "default") {
+                    auto result = gen_static_method_call(call, type_name);
+                    if (result) {
+                        return *result;
+                    }
+                }
+            }
+        }
+
         // Check for class static method call (ClassName.staticMethod())
         auto class_def = env_.lookup_class(type_name);
         if (class_def.has_value()) {
@@ -239,10 +260,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             }
         }
 
-        // Handle primitive type From conversions early - before generic struct handling
-        // This intercepts calls like U16::from(u8_val) and generates inline LLVM conversions
-        if (method == "from" && !call.args.empty()) {
-            // Check if type_name is a primitive type
+        // Handle primitive type static methods early - before generic struct handling
+        // This intercepts calls like F32::zero(), I32::one(), I8::min_value(), etc.
+        {
             auto is_primitive = [](const std::string& name) {
                 return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
                        name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
@@ -250,11 +270,14 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                        name == "Bool";
             };
 
+            // Handle from(), zero(), one(), min_value(), max_value() for primitive types
             if (is_primitive(type_name)) {
-                // Delegate to gen_static_method_call which has the full From implementation
-                auto result = gen_static_method_call(call, type_name);
-                if (result) {
-                    return *result;
+                if (method == "from" || method == "zero" || method == "one" ||
+                    method == "min_value" || method == "max_value" || method == "default") {
+                    auto result = gen_static_method_call(call, type_name);
+                    if (result) {
+                        return *result;
+                    }
                 }
             }
         }
@@ -1620,7 +1643,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                      "div",         "rem",          "neg",    "abs",
                                      "eq",          "ne",           "lt",     "le",
                                      "gt",          "ge",           "min",    "max",
-                                     "clamp"};
+                                     "clamp",       "is_zero",      "is_one"};
                                 if (primitive_intrinsics.count(method)) {
                                     TML_DEBUG_LN("[METHOD 4b] Delegating primitive method to "
                                                  "gen_primitive_method");
@@ -1790,7 +1813,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         "debug_string", "hash",     "cmp",    "partial_cmp", "add",
                         "sub",          "mul",      "div",    "rem",         "neg",
                         "abs",          "eq",       "ne",     "lt",          "le",
-                        "gt",           "ge",       "min",    "max",         "clamp"};
+                        "gt",           "ge",       "min",    "max",         "clamp",
+                        "is_zero",      "is_one"};
                     if (primitive_intrinsics.count(method)) {
                         TML_DEBUG_LN("[METHOD 4b] Delegating primitive method to "
                                      "gen_primitive_method (required_behaviors)");
