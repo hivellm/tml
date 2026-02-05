@@ -705,6 +705,30 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
             return;
         }
 
+        // Load re-export source modules for imported symbols
+        // This ensures that when we look up re-exported enums/constants, the source module is
+        // loaded
+        for (const auto& re_export : module_opt->re_exports) {
+            bool needs_load = false;
+            if (re_export.is_glob) {
+                needs_load = true;
+            } else {
+                for (const auto& re_sym : re_export.symbols) {
+                    for (const auto& imported_sym : symbols) {
+                        if (re_sym == imported_sym) {
+                            needs_load = true;
+                            break;
+                        }
+                    }
+                    if (needs_load)
+                        break;
+                }
+            }
+            if (needs_load) {
+                env_.load_native_module(re_export.source_path, /*silent=*/true);
+            }
+        }
+
         // Import each symbol individually
         for (const auto& symbol : symbols) {
             env_.import_symbol(module_path, symbol, std::nullopt);
@@ -732,6 +756,25 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         if (module_opt.has_value()) {
             // Last segment is a symbol name - import only that symbol
             std::string symbol_name = use_decl.path.segments.back();
+
+            // Load re-export source modules for the imported symbol
+            for (const auto& re_export : module_opt->re_exports) {
+                bool needs_load = false;
+                if (re_export.is_glob) {
+                    needs_load = true;
+                } else {
+                    for (const auto& re_sym : re_export.symbols) {
+                        if (re_sym == symbol_name) {
+                            needs_load = true;
+                            break;
+                        }
+                    }
+                }
+                if (needs_load) {
+                    env_.load_native_module(re_export.source_path, /*silent=*/true);
+                }
+            }
+
             env_.import_symbol(base_module_path, symbol_name, use_decl.alias);
             return;
         }

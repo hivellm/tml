@@ -107,14 +107,57 @@ auto ModuleRegistry::lookup_struct(const std::string& module_path,
 
 auto ModuleRegistry::lookup_enum(const std::string& module_path,
                                  const std::string& symbol_name) const -> std::optional<EnumDef> {
+    // Track visited modules to prevent infinite recursion
+    std::unordered_set<std::string> visited;
+    return lookup_enum_impl(module_path, symbol_name, visited);
+}
+
+auto ModuleRegistry::lookup_enum_impl(const std::string& module_path,
+                                      const std::string& symbol_name,
+                                      std::unordered_set<std::string>& visited) const
+    -> std::optional<EnumDef> {
+    // Prevent infinite recursion
+    if (visited.count(module_path) > 0) {
+        return std::nullopt;
+    }
+    visited.insert(module_path);
+
     auto module = get_module(module_path);
     if (!module)
         return std::nullopt;
 
+    // First, try to find the enum directly in this module
     auto it = module->enums.find(symbol_name);
     if (it != module->enums.end()) {
         return it->second;
     }
+
+    // Not found directly - check re-exports
+    for (const auto& re_export : module->re_exports) {
+        bool should_follow = false;
+
+        if (re_export.is_glob) {
+            // Glob import - try to find the symbol in the source module
+            should_follow = true;
+        } else {
+            // Check if this specific symbol is in the re-export list
+            for (const auto& sym : re_export.symbols) {
+                if (sym == symbol_name) {
+                    should_follow = true;
+                    break;
+                }
+            }
+        }
+
+        if (should_follow) {
+            // Recursively look up in the source module
+            auto result = lookup_enum_impl(re_export.source_path, symbol_name, visited);
+            if (result) {
+                return result;
+            }
+        }
+    }
+
     return std::nullopt;
 }
 
@@ -149,14 +192,57 @@ auto ModuleRegistry::lookup_type_alias(const std::string& module_path,
 auto ModuleRegistry::lookup_constant(const std::string& module_path,
                                      const std::string& symbol_name) const
     -> std::optional<std::string> {
+    // Track visited modules to prevent infinite recursion
+    std::unordered_set<std::string> visited;
+    return lookup_constant_impl(module_path, symbol_name, visited);
+}
+
+auto ModuleRegistry::lookup_constant_impl(const std::string& module_path,
+                                          const std::string& symbol_name,
+                                          std::unordered_set<std::string>& visited) const
+    -> std::optional<std::string> {
+    // Prevent infinite recursion
+    if (visited.count(module_path) > 0) {
+        return std::nullopt;
+    }
+    visited.insert(module_path);
+
     auto module = get_module(module_path);
     if (!module)
         return std::nullopt;
 
+    // First, try to find the constant directly in this module
     auto it = module->constants.find(symbol_name);
     if (it != module->constants.end()) {
-        return it->second.value; // Return just the value for backward compatibility
+        return it->second.value;
     }
+
+    // Not found directly - check re-exports
+    for (const auto& re_export : module->re_exports) {
+        bool should_follow = false;
+
+        if (re_export.is_glob) {
+            // Glob import - try to find the symbol in the source module
+            should_follow = true;
+        } else {
+            // Check if this specific symbol is in the re-export list
+            for (const auto& sym : re_export.symbols) {
+                if (sym == symbol_name) {
+                    should_follow = true;
+                    break;
+                }
+            }
+        }
+
+        if (should_follow) {
+            // Recursively look up in the source module
+            auto result = lookup_constant_impl(re_export.source_path, symbol_name, visited);
+            if (result) {
+                return result;
+            }
+        }
+    }
+
     return std::nullopt;
 }
 
@@ -277,19 +363,13 @@ void GlobalModuleCache::clear() {
 
 GlobalModuleCache::Stats GlobalModuleCache::get_stats() const {
     std::shared_lock lock(mutex_);
-    return Stats{
-        .total_entries = cache_.size(),
-        .cache_hits = hits_,
-        .cache_misses = misses_
-    };
+    return Stats{.total_entries = cache_.size(), .cache_hits = hits_, .cache_misses = misses_};
 }
 
 bool GlobalModuleCache::should_cache(const std::string& module_path) {
     // Cache library modules: core::*, std::*, test
-    if (module_path.starts_with("core::") ||
-        module_path.starts_with("std::") ||
-        module_path == "test" ||
-        module_path.starts_with("test::")) {
+    if (module_path.starts_with("core::") || module_path.starts_with("std::") ||
+        module_path == "test" || module_path.starts_with("test::")) {
         return true;
     }
     return false;

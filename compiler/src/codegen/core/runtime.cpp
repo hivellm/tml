@@ -956,7 +956,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                         value = std::to_string(lit.token.int_value().value);
                     } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                        value = (lit.token.lexeme == "true") ? "1" : "0";
+                        value = lit.token.bool_value() ? "1" : "0";
                     } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
                         value = "null";
                     }
@@ -1044,9 +1044,10 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                                                 llvm_type_name(const_info.tml_type);
                                             global_constants_[const_name] = {const_info.value,
                                                                              llvm_type};
-                                            TML_DEBUG_LN("[MODULE] Imported constant via re-export: "
-                                                         << const_name << " = " << const_info.value
-                                                         << " from " << re_export.source_path);
+                                            TML_DEBUG_LN(
+                                                "[MODULE] Imported constant via re-export: "
+                                                << const_name << " = " << const_info.value
+                                                << " from " << re_export.source_path);
                                         }
                                     }
                                 }
@@ -1162,7 +1163,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                             if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                                 value = std::to_string(lit.token.int_value().value);
                             } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                                value = (lit.token.lexeme == "true") ? "1" : "0";
+                                value = lit.token.bool_value() ? "1" : "0";
                             }
                         }
                         // Support: cast expressions (e.g., -2147483648 as I32)

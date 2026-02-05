@@ -867,7 +867,9 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                             value = std::to_string(lit.token.int_value().value);
                         } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                            value = (lit.token.lexeme == "true") ? "1" : "0";
+                            // Use bool_value() instead of lexeme comparison because lexeme
+                            // is a string_view that may become invalid after source is freed
+                            value = lit.token.bool_value() ? "1" : "0";
                         } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
                             value = "null";
                         }
@@ -1246,15 +1248,35 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 // Only create re-export entry for public use declarations
                 if (use_decl.vis == parser::Visibility::Public) {
                     // Create re-export entry
-                    ReExport re_export{.source_path = use_path,
+                    std::string re_source_path = use_path;
+                    std::vector<std::string> re_symbols =
+                        use_decl.symbols.value_or(std::vector<std::string>{});
+
+                    // Handle single symbol re-export: `pub use foo::bar::SymbolName`
+                    // In this case, extract the symbol name and use the module path as source
+                    if (!use_decl.is_glob && re_symbols.empty()) {
+                        size_t last_sep = use_path.rfind("::");
+                        if (last_sep != std::string::npos) {
+                            std::string symbol_name = use_path.substr(last_sep + 2);
+                            re_source_path = use_path.substr(0, last_sep);
+                            re_symbols.push_back(symbol_name);
+                        }
+                    }
+
+                    ReExport re_export{.source_path = re_source_path,
                                        .is_glob = use_decl.is_glob,
-                                       .symbols =
-                                           use_decl.symbols.value_or(std::vector<std::string>{}),
+                                       .symbols = re_symbols,
                                        .alias = use_decl.alias};
 
                     mod.re_exports.push_back(std::move(re_export));
                     TML_DEBUG_LN("[MODULE] Registered re-export: "
                                  << use_path << (use_decl.is_glob ? "::*" : ""));
+                } else {
+                    // Track private use declarations for cache loading
+                    // This ensures transitive dependencies are loaded when the module is
+                    // retrieved from cache
+                    mod.private_imports.push_back(use_path);
+                    TML_DEBUG_LN("[MODULE] Registered private import: " << use_path);
                 }
             } else if (decl->is<parser::TraitDecl>()) {
                 const auto& trait_decl = decl->as<parser::TraitDecl>();
@@ -1470,11 +1492,23 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         TML_DEBUG_LN("[MODULE] Cached: " << module_path);
     }
 
+    // Capture re-export source paths before moving the module
+    std::vector<std::string> re_export_sources;
+    re_export_sources.reserve(mod.re_exports.size());
+    for (const auto& re_export : mod.re_exports) {
+        re_export_sources.push_back(re_export.source_path);
+    }
+
     module_registry_->register_module(module_path, std::move(mod));
 
     // Mark as completed so guard doesn't remove it (it's already registered)
     loading_guard.mark_completed();
     loading_modules_.erase(module_path);
+
+    // Load re-export source modules to ensure they're in the current registry
+    for (const auto& source_path : re_export_sources) {
+        load_native_module(source_path, /*silent=*/true);
+    }
 
     return true;
 }
@@ -1497,7 +1531,31 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
         if (auto cached_module = cache.get(module_path)) {
             // Found in cache - register directly without re-parsing
             TML_DEBUG_LN("[MODULE] Cache hit for: " << module_path);
+
+            // Copy re-export source paths before any operations that might invalidate iterators
+            std::vector<std::string> re_export_sources;
+            re_export_sources.reserve(cached_module->re_exports.size());
+            for (const auto& re_export : cached_module->re_exports) {
+                re_export_sources.push_back(re_export.source_path);
+            }
+
+            // Copy private import paths (for glob imports like `use std::zlib::constants::*`)
+            std::vector<std::string> private_import_sources = cached_module->private_imports;
+
             module_registry_->register_module(module_path, *cached_module);
+
+            // Load re-export source modules to ensure they're in the current registry
+            // This is needed because each TypeEnv has its own registry but the cache is global
+            for (const auto& source_path : re_export_sources) {
+                load_native_module(source_path, /*silent=*/true);
+            }
+
+            // Load private import modules to ensure transitive dependencies are available
+            // This handles cases like `use std::zlib::constants::*` in options.tml
+            for (const auto& import_path : private_import_sources) {
+                load_native_module(import_path, /*silent=*/true);
+            }
+
             return true;
         }
     }

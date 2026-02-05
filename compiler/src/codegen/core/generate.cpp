@@ -78,19 +78,13 @@ void GlobalASTCache::clear() {
 
 GlobalASTCache::Stats GlobalASTCache::get_stats() const {
     std::shared_lock lock(mutex_);
-    return Stats{
-        .total_entries = cache_.size(),
-        .cache_hits = hits_,
-        .cache_misses = misses_
-    };
+    return Stats{.total_entries = cache_.size(), .cache_hits = hits_, .cache_misses = misses_};
 }
 
 bool GlobalASTCache::should_cache(const std::string& module_path) {
     // Cache library modules: core::*, std::*, test
-    if (module_path.starts_with("core::") ||
-        module_path.starts_with("std::") ||
-        module_path == "test" ||
-        module_path.starts_with("test::")) {
+    if (module_path.starts_with("core::") || module_path.starts_with("std::") ||
+        module_path == "test" || module_path.starts_with("test::")) {
         return true;
     }
     return false;
@@ -167,11 +161,21 @@ GlobalLibraryIRCache::Stats GlobalLibraryIRCache::get_stats() const {
 
     for (const auto& [key, entry] : cache_) {
         switch (entry.type) {
-            case CachedIRType::StructDef: ++stats.struct_defs; break;
-            case CachedIRType::EnumDef: ++stats.enum_defs; break;
-            case CachedIRType::Function: ++stats.functions; break;
-            case CachedIRType::ImplMethod: ++stats.impl_methods; break;
-            case CachedIRType::GenericInst: ++stats.generic_insts; break;
+        case CachedIRType::StructDef:
+            ++stats.struct_defs;
+            break;
+        case CachedIRType::EnumDef:
+            ++stats.enum_defs;
+            break;
+        case CachedIRType::Function:
+            ++stats.functions;
+            break;
+        case CachedIRType::ImplMethod:
+            ++stats.impl_methods;
+            break;
+        case CachedIRType::GenericInst:
+            ++stats.generic_insts;
+            break;
         }
     }
     return stats;
@@ -426,7 +430,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                     value = std::to_string(lit.token.int_value().value);
                 } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                    value = (lit.token.lexeme == "true") ? "1" : "0";
+                    value = lit.token.bool_value() ? "1" : "0";
                 } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
                     value = "null";
                 }
@@ -467,7 +471,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                             value = std::to_string(lit.token.int_value().value);
                         } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                            value = (lit.token.lexeme == "true") ? "1" : "0";
+                            value = lit.token.bool_value() ? "1" : "0";
                         } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
                             value = "null";
                         }
@@ -1769,7 +1773,7 @@ void LLVMIRGen::gen_namespace_decl(const parser::NamespaceDecl& ns) {
                 if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                     value = std::to_string(lit.token.int_value().value);
                 } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                    value = (lit.token.lexeme == "true") ? "1" : "0";
+                    value = lit.token.bool_value() ? "1" : "0";
                 }
                 std::string llvm_type = get_const_llvm_type(const_decl.type);
                 global_constants_[qualified_name(const_decl.name)] = {value, llvm_type};

@@ -88,7 +88,7 @@ static bool has_decorator_bool_arg(const parser::ClassDecl& c, const std::string
                             if (bin.right->is<parser::LiteralExpr>()) {
                                 const auto& lit = bin.right->as<parser::LiteralExpr>();
                                 if (lit.token.kind == lexer::TokenKind::BoolLiteral &&
-                                    lit.token.lexeme == "true") {
+                                    lit.token.bool_value()) {
                                     return true;
                                 }
                             }

@@ -460,6 +460,56 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
             return constant_sym->type;
         }
 
+        // Check module registry for impl constants from imported modules
+        // This handles cases like AtomicBool::LOCK_FREE where the constant
+        // is defined in an impl block in the module
+        auto const_imported_path = env_.resolve_imported_symbol(segments[0]);
+        if (const_imported_path.has_value()) {
+            size_t const_pos = const_imported_path->rfind("::");
+            if (const_pos != std::string::npos) {
+                std::string const_module_path = const_imported_path->substr(0, const_pos);
+                auto const_module = env_.get_module(const_module_path);
+                if (const_module) {
+                    auto const_it = const_module->constants.find(qualified_name);
+                    if (const_it != const_module->constants.end()) {
+                        // Convert tml_type to TypePtr
+                        const std::string& tml_type = const_it->second.tml_type;
+                        if (tml_type == "Bool") {
+                            return make_primitive(PrimitiveKind::Bool);
+                        } else if (tml_type == "I8") {
+                            return make_primitive(PrimitiveKind::I8);
+                        } else if (tml_type == "I16") {
+                            return make_primitive(PrimitiveKind::I16);
+                        } else if (tml_type == "I32") {
+                            return make_primitive(PrimitiveKind::I32);
+                        } else if (tml_type == "I64") {
+                            return make_primitive(PrimitiveKind::I64);
+                        } else if (tml_type == "I128") {
+                            return make_primitive(PrimitiveKind::I128);
+                        } else if (tml_type == "U8") {
+                            return make_primitive(PrimitiveKind::U8);
+                        } else if (tml_type == "U16") {
+                            return make_primitive(PrimitiveKind::U16);
+                        } else if (tml_type == "U32") {
+                            return make_primitive(PrimitiveKind::U32);
+                        } else if (tml_type == "U64") {
+                            return make_primitive(PrimitiveKind::U64);
+                        } else if (tml_type == "U128") {
+                            return make_primitive(PrimitiveKind::U128);
+                        } else if (tml_type == "F32") {
+                            return make_primitive(PrimitiveKind::F32);
+                        } else if (tml_type == "F64") {
+                            return make_primitive(PrimitiveKind::F64);
+                        }
+                        // For other types, create a named type
+                        auto type = std::make_shared<Type>();
+                        type->kind = NamedType{tml_type, const_module_path, {}};
+                        return type;
+                    }
+                }
+            }
+        }
+
         // Also check for primitive type constants directly
         // This handles cases where the constant wasn't registered in scope
         // but the type is a known primitive

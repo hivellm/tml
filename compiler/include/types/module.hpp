@@ -76,14 +76,16 @@ struct Module {
     std::unordered_map<std::string, std::string> submodules;     ///< Submodule name -> path.
     /// Constant info with value and type.
     struct ConstantInfo {
-        std::string value;     ///< The constant value as string.
-        std::string tml_type;  ///< The TML type name (e.g., "I32", "I64").
+        std::string value;    ///< The constant value as string.
+        std::string tml_type; ///< The TML type name (e.g., "I32", "I64").
     };
-    std::unordered_map<std::string, ConstantInfo> constants;    ///< Constants name -> info.
-    std::unordered_map<std::string, ClassDef> classes;           ///< Class definitions.
-    std::unordered_map<std::string, InterfaceDef> interfaces;    ///< Interface definitions.
+    std::unordered_map<std::string, ConstantInfo> constants;  ///< Constants name -> info.
+    std::unordered_map<std::string, ClassDef> classes;        ///< Class definitions.
+    std::unordered_map<std::string, InterfaceDef> interfaces; ///< Interface definitions.
 
     std::vector<ReExport> re_exports; ///< Re-exported symbols.
+
+    std::vector<std::string> private_imports; ///< Module paths from private use declarations.
 
     std::string source_code;             ///< Source for pure TML modules.
     bool has_pure_tml_functions = false; ///< True if module has non-extern functions.
@@ -227,6 +229,15 @@ public:
 private:
     std::unordered_map<std::string, Module> modules_;             ///< Registered modules.
     std::unordered_map<std::string, std::string> file_to_module_; ///< File to module mapping.
+
+    /// Internal helper for lookup_enum that follows re-exports.
+    auto lookup_enum_impl(const std::string& module_path, const std::string& symbol_name,
+                          std::unordered_set<std::string>& visited) const -> std::optional<EnumDef>;
+
+    /// Internal helper for lookup_constant that follows re-exports.
+    auto lookup_constant_impl(const std::string& module_path, const std::string& symbol_name,
+                              std::unordered_set<std::string>& visited) const
+        -> std::optional<std::string>;
 };
 
 } // namespace tml::types

@@ -428,13 +428,20 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
         // First try env_.lookup_enum which handles local and imported enums
         auto enum_def = env_.lookup_enum(type_name);
 
-        // If not found, search all modules in the registry
+        // If not found, search all modules in the registry (including re-exports)
         if (!enum_def.has_value() && env_.module_registry()) {
             const auto& all_modules = env_.module_registry()->get_all_modules();
             for (const auto& [mod_name, mod] : all_modules) {
+                // First check direct enums
                 auto mod_enum_it = mod.enums.find(type_name);
                 if (mod_enum_it != mod.enums.end()) {
                     enum_def = mod_enum_it->second;
+                    break;
+                }
+                // Then check re-exports using lookup_enum which follows re-export chains
+                auto re_export_enum = env_.module_registry()->lookup_enum(mod_name, type_name);
+                if (re_export_enum.has_value()) {
+                    enum_def = re_export_enum;
                     break;
                 }
             }
