@@ -17,8 +17,11 @@
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN
-#include <bcrypt.h>
+// clang-format off
+// IMPORTANT: windows.h must come before bcrypt.h for ULONG definition
 #include <windows.h>
+#include <bcrypt.h>
+// clang-format on
 #pragma comment(lib, "bcrypt.lib")
 #elif defined(__APPLE__)
 #define TML_EXPORT __attribute__((visibility("default")))

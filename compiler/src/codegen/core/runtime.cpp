@@ -126,6 +126,11 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @tml_panic_message_contains(ptr)");
     emit_line("");
 
+    // Backtrace support (--backtrace flag enables printing stack trace on panic)
+    emit_line("; Backtrace support");
+    emit_line("declare void @tml_enable_backtrace_on_panic()");
+    emit_line("");
+
     // Note: TML test assertions are now provided by the test module's TML code
     // They call panic() internally and don't need external declarations
     emit_line("");

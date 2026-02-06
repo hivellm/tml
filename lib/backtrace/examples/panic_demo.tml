@@ -1,0 +1,17 @@
+// Demo: Run with `tml run --backtrace lib/backtrace/examples/panic_demo.tml`
+// to see a backtrace printed when panic occurs.
+
+func helper() {
+    panic("Something went wrong!")
+}
+
+func middle() {
+    helper()
+}
+
+func main() -> I32 {
+    print("Testing backtrace on panic...\n")
+    print("Run with --backtrace flag to see the stack trace.\n\n")
+    middle()
+    return 0
+}

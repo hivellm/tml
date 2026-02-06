@@ -43,6 +43,35 @@
 #define TML_EXPORT __attribute__((visibility("default")))
 #endif
 
+// Backtrace support for panic handlers
+#include "backtrace.h"
+
+// ============================================================================
+// Backtrace Configuration
+// ============================================================================
+
+/** @brief Flag to enable backtrace printing on panic (controlled by --backtrace flag). */
+static int32_t tml_backtrace_on_panic = 0;
+
+/** @brief Flag to prevent recursive backtrace during panic. */
+static int32_t tml_in_panic = 0;
+
+/**
+ * @brief Enables backtrace printing on panic.
+ *
+ * Called by the runtime when the --backtrace flag is set.
+ */
+TML_EXPORT void tml_enable_backtrace_on_panic(void) {
+    tml_backtrace_on_panic = 1;
+}
+
+/**
+ * @brief Disables backtrace printing on panic.
+ */
+TML_EXPORT void tml_disable_backtrace_on_panic(void) {
+    tml_backtrace_on_panic = 0;
+}
+
 // ============================================================================
 // Output Suppression (for test runner to suppress test output)
 // ============================================================================
@@ -148,6 +177,15 @@ void panic(const char* message) {
 
     // Normal panic behavior - print message and exit
     fprintf(stderr, "panic: %s\n", message ? message : "(null)");
+
+    // Print backtrace if enabled and not already in panic (avoid recursion)
+    if (tml_backtrace_on_panic && !tml_in_panic) {
+        tml_in_panic = 1;
+        fprintf(stderr, "\nBacktrace:\n");
+        backtrace_print(2); // Skip panic() and backtrace_print()
+        tml_in_panic = 0;
+    }
+
     exit(1);
 }
 
@@ -180,6 +218,15 @@ void assert_tml(int32_t condition, const char* message) {
 
         // Normal mode - print and exit
         fprintf(stderr, "%s\n", assert_msg);
+
+        // Print backtrace if enabled
+        if (tml_backtrace_on_panic && !tml_in_panic) {
+            tml_in_panic = 1;
+            fprintf(stderr, "\nBacktrace:\n");
+            backtrace_print(2);
+            tml_in_panic = 0;
+        }
+
         exit(1);
     }
 }
@@ -211,6 +258,15 @@ TML_EXPORT void assert_tml_loc(int32_t condition, const char* message, const cha
 
         // Normal mode - print and exit
         fprintf(stderr, "%s\n", assert_msg);
+
+        // Print backtrace if enabled
+        if (tml_backtrace_on_panic && !tml_in_panic) {
+            tml_in_panic = 1;
+            fprintf(stderr, "\nBacktrace:\n");
+            backtrace_print(2);
+            tml_in_panic = 0;
+        }
+
         exit(1);
     }
 }

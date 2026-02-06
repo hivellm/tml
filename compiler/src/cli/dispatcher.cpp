@@ -315,6 +315,8 @@ int tml_main(int argc, char* argv[]) {
                 tml::CompilerOptions::check_leaks = true;
             } else if (arg == "--no-check-leaks") {
                 tml::CompilerOptions::check_leaks = false;
+            } else if (arg == "--backtrace") {
+                tml::CompilerOptions::backtrace = true;
             } else if (arg.starts_with("-D")) {
                 // Preprocessor define: -DSYMBOL or -DSYMBOL=VALUE
                 if (arg.length() > 2) {
@@ -390,11 +392,13 @@ int tml_main(int argc, char* argv[]) {
         if (argc < 3) {
             std::cerr
                 << "Usage: tml run <file.tml> [args...] [--verbose] [--no-cache] [--coverage] "
-                   "[--coverage-output=<file>] [--profile[=<file>]]\n";
+                   "[--coverage-output=<file>] [--profile[=<file>]] [--backtrace]\n";
             std::cerr << "\nProfiling options:\n";
             std::cerr
                 << "  --profile           Enable runtime profiling (output: profile.cpuprofile)\n";
             std::cerr << "  --profile=<file>    Enable profiling with custom output path\n";
+            std::cerr << "\nDebugging options:\n";
+            std::cerr << "  --backtrace         Print stack trace on panic\n";
             std::cerr << "\nThe .cpuprofile file can be loaded in Chrome DevTools or VS Code.\n";
             return 1;
         }
@@ -436,6 +440,8 @@ int tml_main(int argc, char* argv[]) {
                 if (opts.profile_output.empty()) {
                     opts.profile_output = "profile.cpuprofile";
                 }
+            } else if (arg == "--backtrace") {
+                CompilerOptions::backtrace = true;
             } else {
                 opts.args.push_back(arg);
             }

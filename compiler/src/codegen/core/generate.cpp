@@ -25,6 +25,7 @@
 //! `infer_print_type()` determines the format specifier for print calls.
 
 #include "codegen/llvm_ir_gen.hpp"
+#include "common.hpp"
 
 #include <iomanip>
 #include <set>
@@ -1446,6 +1447,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
         } else {
             emit_line("define i32 @main(i32 %argc, ptr %argv) {");
             emit_line("entry:");
+            // Enable backtrace on panic if flag is set
+            if (CompilerOptions::backtrace) {
+                emit_line("  call void @tml_enable_backtrace_on_panic()");
+            }
             if (main_returns_void) {
                 emit_line("  call void @" + tml_main_fn + "()");
             } else {

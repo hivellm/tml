@@ -14,8 +14,11 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-#include <dbghelp.h>
+// clang-format off
+// IMPORTANT: windows.h must come before dbghelp.h for type definitions
 #include <windows.h>
+#include <dbghelp.h>
+// clang-format on
 #pragma comment(lib, "dbghelp.lib")
 #else
 #include <dlfcn.h>

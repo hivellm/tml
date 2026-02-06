@@ -147,6 +147,10 @@ struct CompilerOptions {
     /// Output path for the .cpuprofile file.
     /// Default: "profile.cpuprofile"
     static inline std::string profile_output = "profile.cpuprofile";
+
+    /// Enable backtrace printing on panic.
+    /// When enabled, the runtime prints a stack trace when panic() or assert() fails.
+    static inline bool backtrace = false;
 };
 
 // ============================================================================
