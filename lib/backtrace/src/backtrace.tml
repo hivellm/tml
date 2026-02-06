@@ -2,9 +2,6 @@
 //
 // Provides the main Backtrace type for capturing and formatting stack traces.
 
-use super::frame::BacktraceFrame
-use super::symbol::BacktraceSymbol
-
 // ============================================================================
 // FFI Declarations
 // ============================================================================
@@ -15,20 +12,8 @@ func ffi_backtrace_capture(skip: I32) -> *Unit
 @extern("ffi_backtrace_frame_count")
 func ffi_backtrace_frame_count(bt_handle: *Unit) -> I32
 
-@extern("ffi_backtrace_frame_ip")
-func ffi_backtrace_frame_ip(bt_handle: *Unit, index: I32) -> *Unit
-
 @extern("ffi_backtrace_resolve")
 func ffi_backtrace_resolve(bt_handle: *Unit)
-
-@extern("ffi_backtrace_frame_name")
-func ffi_backtrace_frame_name(bt_handle: *Unit, index: I32) -> *Unit
-
-@extern("ffi_backtrace_frame_filename")
-func ffi_backtrace_frame_filename(bt_handle: *Unit, index: I32) -> *Unit
-
-@extern("ffi_backtrace_frame_lineno")
-func ffi_backtrace_frame_lineno(bt_handle: *Unit, index: I32) -> U32
 
 @extern("ffi_backtrace_to_string")
 func ffi_backtrace_to_string(bt_handle: *Unit) -> *Unit
@@ -39,8 +24,8 @@ func ffi_backtrace_free(bt_handle: *Unit)
 @extern("tml_str_from_cstr")
 func tml_str_from_cstr(cstr: *Unit) -> Str
 
-@extern("tml_str_free")
-func tml_str_free(s: Str)
+@extern("tml_free")
+func tml_free(ptr: *Unit)
 
 // ============================================================================
 // Backtrace Type
@@ -64,28 +49,13 @@ func tml_str_free(s: Str)
 /// ## Resolving Symbols
 ///
 /// ```tml
-/// let bt = Backtrace::capture()
+/// let mut bt = Backtrace::capture()
 /// bt.resolve()  // Resolve all symbols
 /// print(bt.to_string())
-/// ```
-///
-/// ## Output Format
-///
-/// ```
-/// Backtrace:
-///    0: main::inner_function
-///              at src/main.tml:42
-///    1: main::outer_function
-///              at src/main.tml:23
-///    2: main::main
-///              at src/main.tml:10
 /// ```
 pub type Backtrace {
     /// Handle to the native backtrace structure
     handle: *Unit,
-
-    /// Cached frames (populated after resolve)
-    frames: List[BacktraceFrame],
 
     /// Whether symbols have been resolved
     resolved: Bool,
@@ -93,40 +63,18 @@ pub type Backtrace {
 
 impl Backtrace {
     /// Captures the current stack backtrace.
-    ///
-    /// This captures the call stack at the point of invocation.
-    /// By default, skips the capture function itself.
-    ///
-    /// ## Example
-    ///
-    /// ```tml
-    /// let bt = Backtrace::capture()
-    /// bt.resolve()
-    /// print(bt.to_string())
-    /// ```
     pub func capture() -> Backtrace {
-        return Backtrace::capture_from(1)  // Skip this function
+        // Skip 0: capture everything from here
+        return Backtrace::capture_from(0)
     }
 
     /// Captures the current stack backtrace, skipping initial frames.
-    ///
-    /// Use this to skip internal frames (e.g., panic handler internals).
-    ///
-    /// ## Parameters
-    ///
-    /// - `skip`: Number of frames to skip from the top of the stack
-    ///
-    /// ## Example
-    ///
-    /// ```tml
-    /// // Skip 3 frames (this function + 2 internal frames)
-    /// let bt = Backtrace::capture_from(3)
-    /// ```
+    /// The skip parameter indicates how many frames to skip from the caller.
     pub func capture_from(skip: I32) -> Backtrace {
-        let handle: *Unit = ffi_backtrace_capture(skip + 1)  // +1 for this function
+        // FFI function handles the internal frame skipping
+        let handle: *Unit = ffi_backtrace_capture(skip)
         return Backtrace {
             handle: handle,
-            frames: List::new(),
             resolved: false,
         }
     }
@@ -140,114 +88,38 @@ impl Backtrace {
     }
 
     /// Resolves symbol information for all frames.
-    ///
-    /// This performs lazy symbol resolution, converting instruction pointers
-    /// to function names, file paths, and line numbers.
-    ///
-    /// Resolution requires debug symbols to be present:
-    /// - Windows: PDB files
-    /// - Linux/macOS: DWARF debug info
-    ///
-    /// ## Example
-    ///
-    /// ```tml
-    /// let bt = Backtrace::capture()
-    /// bt.resolve()  // Now frames have symbol info
-    /// for frame in bt.frames() {
-    ///     print("{frame.to_string()}\n")
-    /// }
-    /// ```
     pub func resolve(mut this) {
         if this.handle == null or this.resolved {
             return
         }
-
-        // Call FFI to resolve symbols
         ffi_backtrace_resolve(this.handle)
-
-        // Build frame list
-        let count: I32 = ffi_backtrace_frame_count(this.handle)
-        this.frames = List::with_capacity(count as I64)
-
-        for i in 0 to count {
-            let ip: *Unit = ffi_backtrace_frame_ip(this.handle, i)
-            let name_ptr: *Unit = ffi_backtrace_frame_name(this.handle, i)
-            let filename_ptr: *Unit = ffi_backtrace_frame_filename(this.handle, i)
-            let lineno: U32 = ffi_backtrace_frame_lineno(this.handle, i)
-
-            let name: Maybe[Str] = if name_ptr != null {
-                Just(tml_str_from_cstr(name_ptr))
-            } else {
-                Nothing
-            }
-
-            let filename: Maybe[Str] = if filename_ptr != null {
-                Just(tml_str_from_cstr(filename_ptr))
-            } else {
-                Nothing
-            }
-
-            let sym: BacktraceSymbol = BacktraceSymbol::new(name, filename, lineno, 0)
-            let frame: BacktraceFrame = BacktraceFrame::with_symbol(ip, sym)
-            this.frames.push(frame)
-        }
-
         this.resolved = true
     }
 
-    /// Returns the list of captured frames.
-    ///
-    /// Call `resolve()` first to populate symbol information.
-    pub func frames(this) -> ref List[BacktraceFrame] {
-        return ref this.frames
-    }
-
     /// Formats the backtrace as a string.
-    ///
-    /// If symbols haven't been resolved, calls `resolve()` first.
-    ///
-    /// ## Format
-    ///
-    /// ```
-    ///    0: function_name
-    ///              at file:line
-    ///    1: another_function
-    ///              at file:line
-    /// ```
     pub func to_string(mut this) -> Str {
+        if this.handle == null {
+            return "  <no backtrace>\n"
+        }
+
         if not this.resolved {
             this.resolve()
         }
 
-        if this.frames.is_empty() {
-            return "  <empty backtrace>\n"
+        let cstr: *Unit = ffi_backtrace_to_string(this.handle)
+        if cstr == null {
+            return "  <format error>\n"
         }
 
-        var result: Str = ""
-        var i: I32 = 0
-        for frame in this.frames.iter() {
-            result = result + frame.format(i) + "\n"
-            i = i + 1
-        }
+        let result: Str = tml_str_from_cstr(cstr)
+        tml_free(cstr)
         return result
     }
 
     /// Prints the backtrace to stdout.
-    ///
-    /// Convenience method that resolves and prints the backtrace.
     pub func print(mut this) {
         let s: Str = this.to_string()
         print(s)
-    }
-
-    /// Releases resources associated with this backtrace.
-    ///
-    /// Called automatically when the backtrace goes out of scope.
-    pub func drop(mut this) {
-        if this.handle != null {
-            ffi_backtrace_free(this.handle)
-            this.handle = null
-        }
     }
 }
 
@@ -256,27 +128,14 @@ impl Backtrace {
 // ============================================================================
 
 /// Captures and prints the current backtrace.
-///
-/// This is a convenience function for quick debugging.
-///
-/// ## Example
-///
-/// ```tml
-/// func debug_here() {
-///     print("Debug point reached:\n")
-///     print_backtrace()
-/// }
-/// ```
 pub func print_backtrace() {
-    let mut bt: Backtrace = Backtrace::capture_from(1)  // Skip this function
+    let mut bt: Backtrace = Backtrace::capture_from(1)
     bt.resolve()
     print("Backtrace:\n")
     bt.print()
 }
 
 /// Captures and returns a backtrace, skipping the specified frames.
-///
-/// Shorthand for `Backtrace::capture_from(skip)`.
 pub func capture_backtrace(skip: I32) -> Backtrace {
-    return Backtrace::capture_from(skip + 1)  // +1 for this function
+    return Backtrace::capture_from(skip + 1)
 }

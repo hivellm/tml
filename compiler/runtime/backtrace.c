@@ -93,11 +93,19 @@ int32_t backtrace_capture(void** frames, int32_t max_frames, int32_t skip) {
     }
 
 #ifdef _WIN32
-    // RtlCaptureStackBackTrace requires skip >= 0
-    // Add 1 to skip this function itself
-    USHORT captured =
-        RtlCaptureStackBackTrace((ULONG)(skip + 1), // Skip this function + user-specified frames
-                                 (ULONG)max_frames, frames, NULL);
+    // First, capture all frames to know the total
+    void* temp_frames[128];
+    USHORT total_frames = RtlCaptureStackBackTrace(0, 128, temp_frames, NULL);
+
+    // Skip this function plus user-specified skip
+    int32_t total_skip = skip + 1;
+
+    // Ensure we don't skip more frames than available
+    if (total_skip >= (int32_t)total_frames) {
+        total_skip = total_frames > 0 ? total_frames - 1 : 0;
+    }
+
+    USHORT captured = RtlCaptureStackBackTrace((ULONG)total_skip, (ULONG)max_frames, frames, NULL);
     return (int32_t)captured;
 #else
     // Unix: use backtrace() from execinfo.h
@@ -141,8 +149,9 @@ Backtrace* backtrace_capture_full(int32_t skip) {
     }
 
     // Temporary array for raw addresses
+    // Skip internal C frames (backtrace_capture_full, ffi_backtrace_capture)
     void* raw_frames[BACKTRACE_MAX_FRAMES];
-    int32_t count = backtrace_capture(raw_frames, BACKTRACE_MAX_FRAMES, skip + 1);
+    int32_t count = backtrace_capture(raw_frames, BACKTRACE_MAX_FRAMES, skip);
 
     if (count < 0) {
         free(bt->frames);
@@ -365,7 +374,9 @@ void backtrace_free(Backtrace* bt) {
 // ============================================================================
 
 TML_EXPORT void* ffi_backtrace_capture(int32_t skip) {
-    return (void*)backtrace_capture_full(skip + 1); // +1 for this function
+    // The TML caller already accounts for its own frame skip.
+    // We just pass through to the C implementation which handles its own skipping.
+    return (void*)backtrace_capture_full(skip);
 }
 
 TML_EXPORT int32_t ffi_backtrace_frame_count(void* bt_handle) {

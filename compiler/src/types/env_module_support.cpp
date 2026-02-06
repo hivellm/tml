@@ -1588,6 +1588,74 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
         return false;
     }
 
+    // Backtrace module - load from lib/backtrace/
+    if (module_path == "backtrace") {
+        auto cwd = std::filesystem::current_path();
+        std::vector<std::filesystem::path> search_paths = {
+            std::filesystem::path("lib") / "backtrace" / "src" / "mod.tml",
+            std::filesystem::path("..") / ".." / "lib" / "backtrace" / "src" / "mod.tml",
+            std::filesystem::path("..") / "lib" / "backtrace" / "src" / "mod.tml",
+            cwd / "lib" / "backtrace" / "src" / "mod.tml",
+            std::filesystem::path("F:/Node/hivellm/tml/lib/backtrace/src/mod.tml"),
+        };
+
+        for (const auto& module_file : search_paths) {
+            if (std::filesystem::exists(module_file)) {
+                TML_DEBUG_LN("[MODULE] Found backtrace module at: " << module_file);
+                return load_module_from_file(module_path, module_file.string());
+            }
+        }
+
+        if (!silent) {
+            std::cerr << "error: Backtrace module file not found\n";
+        }
+        return false;
+    }
+
+    // Backtrace submodules - load from lib/backtrace/src/
+    if (module_path.substr(0, 11) == "backtrace::") {
+        std::string module_name = module_path.substr(11);
+        std::string fs_module_path = module_name;
+        size_t pos = 0;
+        while ((pos = fs_module_path.find("::", pos)) != std::string::npos) {
+            fs_module_path.replace(pos, 2, "/");
+            pos += 1;
+        }
+
+        auto cwd = std::filesystem::current_path();
+        std::vector<std::filesystem::path> search_paths = {
+            std::filesystem::path("lib") / "backtrace" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("lib") / "backtrace" / "src" / fs_module_path / "mod.tml",
+            std::filesystem::path("..") / ".." / "lib" / "backtrace" / "src" /
+                (fs_module_path + ".tml"),
+            std::filesystem::path("..") / ".." / "lib" / "backtrace" / "src" / fs_module_path /
+                "mod.tml",
+            std::filesystem::path("..") / "lib" / "backtrace" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("..") / "lib" / "backtrace" / "src" / fs_module_path / "mod.tml",
+            cwd / "lib" / "backtrace" / "src" / (fs_module_path + ".tml"),
+            cwd / "lib" / "backtrace" / "src" / fs_module_path / "mod.tml",
+            std::filesystem::path("F:/Node/hivellm/tml/lib/backtrace/src") /
+                (fs_module_path + ".tml"),
+            std::filesystem::path("F:/Node/hivellm/tml/lib/backtrace/src") / fs_module_path /
+                "mod.tml",
+        };
+
+        TML_DEBUG_LN("[MODULE] Looking for backtrace module: " << module_path << " (fs_path: "
+                                                               << fs_module_path << ")");
+        for (const auto& module_file : search_paths) {
+            TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
+            if (std::filesystem::exists(module_file)) {
+                TML_DEBUG_LN("[MODULE]   FOUND!");
+                return load_module_from_file(module_path, module_file.string());
+            }
+        }
+
+        if (!silent) {
+            std::cerr << "error: backtrace module file not found: " << module_path << "\n";
+        }
+        return false;
+    }
+
     // Core library modules - load from filesystem
     if (module_path.substr(0, 6) == "core::") {
         // Extract module name: "core::mem" -> "mem", "core::iter::traits" -> "iter::traits"

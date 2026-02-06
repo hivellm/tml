@@ -754,6 +754,35 @@ TML_EXPORT uint64_t tml_random_seed(void) {
 // - Sync functions (tml_mutex_*, tml_rwlock_*, tml_condvar_*, tml_thread_*) -> sync.c
 
 // ============================================================================
+// FFI Utility Functions
+// ============================================================================
+
+/**
+ * @brief Converts a C string to a TML Str.
+ *
+ * In TML, Str is represented as a pointer to a null-terminated string.
+ * This function simply returns the pointer unchanged.
+ *
+ * @param cstr Pointer to a null-terminated C string.
+ * @return The same pointer, suitable for use as TML Str.
+ */
+TML_EXPORT const char* tml_str_from_cstr(const char* cstr) {
+    return cstr;
+}
+
+/**
+ * @brief Frees memory allocated by FFI functions.
+ *
+ * This is a wrapper around free() for use from TML code when FFI
+ * functions return heap-allocated memory.
+ *
+ * @param ptr Pointer to memory to free.
+ */
+TML_EXPORT void tml_free(void* ptr) {
+    free(ptr);
+}
+
+// ============================================================================
 // Windows DLL Entry Point
 // ============================================================================
 

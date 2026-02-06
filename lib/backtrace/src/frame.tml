@@ -90,7 +90,8 @@ impl BacktraceFrame {
                 }
             },
             Nothing => {
-                return "  {index}: <unknown>\n             at {this.ip:?}"
+                let addr: I64 = this.ip as I64
+                return "  {index}: <unknown>\n             at 0x{addr}"
             }
         }
     }
@@ -99,7 +100,10 @@ impl BacktraceFrame {
     pub func to_string(this) -> Str {
         when this.symbol_info {
             Just(sym) => return sym.to_string(),
-            Nothing => return "<unknown> at {this.ip:?}"
+            Nothing => {
+                let addr: I64 = this.ip as I64
+                return "<unknown> at 0x{addr}"
+            }
         }
     }
 }

@@ -630,6 +630,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                     std::cout << "Including crypto runtime: " << crypto_obj << "\n";
                 }
             }
+
+            // Include backtrace.c for stack trace capture and symbol resolution
+            fs::path backtrace_c = runtime_dir / "backtrace.c";
+            if (fs::exists(backtrace_c)) {
+                std::string backtrace_obj = ensure_c_compiled(
+                    to_forward_slashes(backtrace_c.string()), deps_cache, clang, verbose);
+                objects.push_back(fs::path(backtrace_obj));
+                if (verbose) {
+                    std::cout << "Including backtrace runtime: " << backtrace_obj << "\n";
+                }
+            }
         }
     }
 
