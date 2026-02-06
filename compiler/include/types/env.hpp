@@ -150,12 +150,19 @@ struct FuncSig {
 ///     y: T,
 /// }
 /// ```
+/// A single field in a struct definition.
+struct StructFieldDef {
+    std::string name;         ///< Field name.
+    TypePtr type;             ///< Field type.
+    bool has_default = false; ///< True if this field has a default value.
+};
+
 struct StructDef {
-    std::string name;                                    ///< Struct name.
-    std::vector<std::string> type_params;                ///< Generic type parameter names.
-    std::vector<ConstGenericParam> const_params;         ///< Const generic parameters.
-    std::vector<std::pair<std::string, TypePtr>> fields; ///< Field name-type pairs.
-    SourceSpan span;                                     ///< Declaration location.
+    std::string name;                            ///< Struct name.
+    std::vector<std::string> type_params;        ///< Generic type parameter names.
+    std::vector<ConstGenericParam> const_params; ///< Const generic parameters.
+    std::vector<StructFieldDef> fields;          ///< Field definitions with optional defaults.
+    SourceSpan span;                             ///< Declaration location.
 
     /// Whether this type has interior mutability.
     ///
@@ -166,6 +173,13 @@ struct StructDef {
     ///
     /// Types can be marked interior mutable with the `@interior_mutable` decorator.
     bool is_interior_mutable = false;
+
+    /// Whether this is a C-style union rather than a struct.
+    ///
+    /// Unions have all fields sharing the same memory location. Only one field
+    /// can be meaningfully accessed at a time. Field access is `lowlevel` (unsafe)
+    /// as there's no runtime type checking.
+    bool is_union = false;
 };
 
 /// Enum (algebraic data type) definition.

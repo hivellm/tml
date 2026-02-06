@@ -670,7 +670,10 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     for (const auto& field_decl : decl->fields) {
                         // Resolve the field type - use empty subs since we'll apply them later
                         auto field_type = resolve_parser_type_with_subs(*field_decl.type, {});
-                        temp_struct_def.fields.push_back({field_decl.name, field_type});
+                        types::StructFieldDef fdef;
+                        fdef.name = field_decl.name;
+                        fdef.type = field_type;
+                        temp_struct_def.fields.push_back(std::move(fdef));
                     }
                     struct_def = temp_struct_def;
                 }
@@ -678,13 +681,13 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
 
             if (struct_def) {
                 TML_DEBUG_LN("[INFER] struct_def found, searching for field: " << field.field);
-                for (const auto& [field_name, field_type] : struct_def->fields) {
+                for (const auto& fld : struct_def->fields) {
                     TML_DEBUG_LN("[INFER]   field: "
-                                 << field_name << " type: "
-                                 << (field_type ? types::type_to_string(field_type) : "null"));
-                    if (field_name == field.field && field_type) {
+                                 << fld.name << " type: "
+                                 << (fld.type ? types::type_to_string(fld.type) : "null"));
+                    if (fld.name == field.field && fld.type) {
                         TML_DEBUG_LN(
-                            "[INFER] Returning field type: " << types::type_to_string(field_type));
+                            "[INFER] Returning field type: " << types::type_to_string(fld.type));
                         TML_DEBUG_LN("[INFER] named.type_args.size="
                                      << named.type_args.size() << " struct_def->type_params.size="
                                      << struct_def->type_params.size());
@@ -699,12 +702,12 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                              << struct_def->type_params[i] << " -> "
                                              << types::type_to_string(named.type_args[i]));
                             }
-                            auto substituted = types::substitute_type(field_type, subs);
+                            auto substituted = types::substitute_type(fld.type, subs);
                             TML_DEBUG_LN("[INFER] After substitution: "
                                          << types::type_to_string(substituted));
                             return substituted;
                         }
-                        return field_type;
+                        return fld.type;
                     }
                 }
 
@@ -742,16 +745,20 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                 }
                                 for (const auto& field_decl : decl->fields) {
                                     auto ft = resolve_parser_type_with_subs(*field_decl.type, {});
-                                    temp_struct_def.fields.push_back({field_decl.name, ft});
+                                    types::StructFieldDef fdef;
+                                    fdef.name = field_decl.name;
+                                    fdef.type = ft;
+                                    temp_struct_def.fields.push_back(std::move(fdef));
                                 }
                                 inner_struct_def = temp_struct_def;
                             }
                         }
                         if (inner_struct_def) {
                             TML_DEBUG_LN("[INFER] Found inner struct: " << inner_named.name);
-                            for (const auto& [fname, ftype] : inner_struct_def->fields) {
-                                if (fname == field.field && ftype) {
-                                    TML_DEBUG_LN("[INFER] Found field via auto-deref: " << fname);
+                            for (const auto& inner_fld : inner_struct_def->fields) {
+                                if (inner_fld.name == field.field && inner_fld.type) {
+                                    TML_DEBUG_LN(
+                                        "[INFER] Found field via auto-deref: " << inner_fld.name);
                                     // Apply type substitutions from the inner type
                                     if (!inner_named.type_args.empty() &&
                                         !inner_struct_def->type_params.empty()) {
@@ -763,9 +770,9 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                             subs[inner_struct_def->type_params[i]] =
                                                 inner_named.type_args[i];
                                         }
-                                        return types::substitute_type(ftype, subs);
+                                        return types::substitute_type(inner_fld.type, subs);
                                     }
-                                    return ftype;
+                                    return inner_fld.type;
                                 }
                             }
                         }
@@ -966,9 +973,9 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             const auto& named = obj_type->as<types::NamedType>();
             auto struct_def = env_.lookup_struct(named.name);
             if (struct_def) {
-                for (const auto& [fname, ftype] : struct_def->fields) {
-                    if (fname == field.field) {
-                        return ftype;
+                for (const auto& fld : struct_def->fields) {
+                    if (fld.name == field.field) {
+                        return fld.type;
                     }
                 }
             }
@@ -1772,8 +1779,8 @@ auto LLVMIRGen::struct_has_field(const std::string& struct_name, const std::stri
     // Check type environment
     auto struct_def = env_.lookup_struct(struct_name);
     if (struct_def) {
-        for (const auto& [fname, ftype] : struct_def->fields) {
-            if (fname == field_name) {
+        for (const auto& fld : struct_def->fields) {
+            if (fld.name == field_name) {
                 return true;
             }
         }
@@ -1785,8 +1792,8 @@ auto LLVMIRGen::struct_has_field(const std::string& struct_name, const std::stri
         for (const auto& [mod_name, mod] : all_modules) {
             auto mod_struct_it = mod.structs.find(struct_name);
             if (mod_struct_it != mod.structs.end()) {
-                for (const auto& [fname, ftype] : mod_struct_it->second.fields) {
-                    if (fname == field_name) {
+                for (const auto& fld : mod_struct_it->second.fields) {
+                    if (fld.name == field_name) {
                         return true;
                     }
                 }

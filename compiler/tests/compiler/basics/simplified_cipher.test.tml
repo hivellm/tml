@@ -1,0 +1,93 @@
+// Test: simplified cipher patterns with type inference
+// Demonstrates that cipher.tml code can be written more concisely
+
+use test
+
+// Mock types similar to cipher.tml
+type MockBuffer {
+    len: I64
+}
+
+impl MockBuffer {
+    pub func new(size: I64) -> MockBuffer {
+        return MockBuffer { len: size }
+    }
+
+    pub func len(this) -> I64 {
+        return this.len
+    }
+}
+
+type MockCipherError {
+    message: Str
+}
+
+impl MockCipherError {
+    pub func new(msg: Str) -> MockCipherError {
+        return MockCipherError { message: msg }
+    }
+}
+
+// Test type inference with Outcome types
+func mock_encrypt(key_len: I64) -> Outcome[MockBuffer, MockCipherError] {
+    if key_len < 16 {
+        return Err(MockCipherError::new("key too short"))
+    }
+    return Ok(MockBuffer::new(key_len * 2))
+}
+
+@test
+func test_simplified_let_inference() -> I32 {
+    // Old verbose style:
+    // let result: Outcome[MockBuffer, MockCipherError] = mock_encrypt(32)
+
+    // New simplified style with type inference:
+    let result = mock_encrypt(32)
+
+    when result {
+        Ok(buf) => assert_eq(buf.len, 64, "buffer should be double key len"),
+        Err(_) => assert_eq(0, 1, "should not be error")
+    }
+    return 0
+}
+
+@test
+func test_simplified_var_inference() -> I32 {
+    // Old verbose style:
+    // var count: I64 = 0
+
+    // New simplified style:
+    var count = 0
+    count = count + 10
+    assert_eq(count, 10, "count should be 10")
+    return 0
+}
+
+@test
+func test_chained_inference() -> I32 {
+    // Multiple lets with inference
+    let result = mock_encrypt(32)
+    let is_ok = result.is_ok()  // inferred as Bool
+    assert_eq(is_ok, true, "should be ok")
+    return 0
+}
+
+// Test that try operator (!) works with inferred types
+func fallible_op() -> Outcome[I32, Str] {
+    return Ok(42)
+}
+
+func use_try() -> Outcome[I32, Str] {
+    let value = fallible_op()!  // inferred as I32
+    return Ok(value * 2)
+}
+
+@test
+func test_try_with_inference() -> I32 {
+    let result = use_try()
+    when result {
+        Ok(v) => assert_eq(v, 84, "should be 84"),
+        Err(_) => assert_eq(0, 1, "should not be error")
+    }
+    return 0
+}

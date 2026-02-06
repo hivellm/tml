@@ -1677,11 +1677,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         auto struct_def = env_.lookup_struct(named.name);
         if (struct_def) {
             // Look for a field with the method name
-            for (const auto& [field_name, field_type] : struct_def->fields) {
-                if (field_name == call.method) {
+            for (const auto& fld : struct_def->fields) {
+                if (fld.name == call.method) {
                     // Check if the field is a function type
-                    if (field_type->is<FuncType>()) {
-                        const auto& func = field_type->as<FuncType>();
+                    if (fld.type->is<FuncType>()) {
+                        const auto& func = fld.type->as<FuncType>();
                         // Check argument count
                         if (call.args.size() != func.params.size()) {
                             error("Wrong number of arguments: expected " +

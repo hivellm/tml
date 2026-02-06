@@ -60,8 +60,8 @@ void MirBuilder::build_pattern_binding(const parser::Pattern& pattern, Value val
                 std::vector<std::string> field_order;
                 if (!struct_name.empty()) {
                     if (auto struct_def = env_.lookup_struct(struct_name)) {
-                        for (const auto& [fname, _] : struct_def->fields) {
-                            field_order.push_back(fname);
+                        for (const auto& fld : struct_def->fields) {
+                            field_order.push_back(fld.name);
                         }
                     }
                 }
@@ -76,8 +76,7 @@ void MirBuilder::build_pattern_binding(const parser::Pattern& pattern, Value val
                             field_index = static_cast<uint32_t>(i);
                             if (!struct_name.empty()) {
                                 if (auto struct_def = env_.lookup_struct(struct_name)) {
-                                    field_type =
-                                        convert_semantic_type(struct_def->fields[i].second);
+                                    field_type = convert_semantic_type(struct_def->fields[i].type);
                                 }
                             }
                             break;

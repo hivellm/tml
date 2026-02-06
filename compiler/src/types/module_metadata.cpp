@@ -231,8 +231,8 @@ auto ModuleMetadata::serialize(const Module& module) -> std::string {
         for (size_t i = 0; i < struct_def.fields.size(); ++i) {
             if (i > 0)
                 json << ",\n";
-            json << "        {\"name\": \"" << json_escape(struct_def.fields[i].first)
-                 << "\", \"type\": " << serialize_type(struct_def.fields[i].second) << "}";
+            json << "        {\"name\": \"" << json_escape(struct_def.fields[i].name)
+                 << "\", \"type\": " << serialize_type(struct_def.fields[i].type) << "}";
         }
         json << "\n      ]\n";
         json << "    }";
@@ -566,7 +566,10 @@ auto ModuleMetadata::deserialize(const std::string& json_content) -> std::option
                                         parser.match(',');
                                     }
                                     if (!field_name.empty()) {
-                                        def.fields.emplace_back(field_name, field_type);
+                                        StructFieldDef fdef;
+                                        fdef.name = field_name;
+                                        fdef.type = field_type;
+                                        def.fields.push_back(std::move(fdef));
                                     }
                                 }
                                 parser.match(',');

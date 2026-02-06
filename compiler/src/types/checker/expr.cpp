@@ -880,12 +880,12 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                             inner_subs[inner_struct->type_params[i]] = inner_named.type_args[i];
                         }
                     }
-                    for (const auto& [fname, ftype] : inner_struct->fields) {
-                        if (fname == field.field) {
+                    for (const auto& fld : inner_struct->fields) {
+                        if (fld.name == field.field) {
                             if (!inner_subs.empty()) {
-                                return substitute_type(ftype, inner_subs);
+                                return substitute_type(fld.type, inner_subs);
                             }
-                            return ftype;
+                            return fld.type;
                         }
                     }
                     error("Unknown field: " + field.field + " on Ptr[" + inner_named.name + "]",
@@ -906,12 +906,12 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                 }
             }
 
-            for (const auto& [fname, ftype] : struct_def->fields) {
-                if (fname == field.field) {
+            for (const auto& fld : struct_def->fields) {
+                if (fld.name == field.field) {
                     if (!subs.empty()) {
-                        return substitute_type(ftype, subs);
+                        return substitute_type(fld.type, subs);
                     }
-                    return ftype;
+                    return fld.type;
                 }
             }
 
@@ -950,12 +950,12 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
                             }
                         }
 
-                        for (const auto& [fname, ftype] : inner_struct->fields) {
-                            if (fname == field.field) {
+                        for (const auto& fld : inner_struct->fields) {
+                            if (fld.name == field.field) {
                                 if (!inner_subs.empty()) {
-                                    return substitute_type(ftype, inner_subs);
+                                    return substitute_type(fld.type, inner_subs);
                                 }
-                                return ftype;
+                                return fld.type;
                             }
                         }
                     }
@@ -1322,9 +1322,9 @@ bool TypeChecker::type_satisfies_lifetime_bound(TypePtr type, const std::string&
             // Check struct definition if available
             auto struct_def = env_.lookup_struct(named.name);
             if (struct_def.has_value()) {
-                // Recursively check all fields (fields are pair<name, type>)
+                // Recursively check all fields
                 for (const auto& field : struct_def->fields) {
-                    if (!type_satisfies_lifetime_bound(field.second, "static")) {
+                    if (!type_satisfies_lifetime_bound(field.type, "static")) {
                         return false;
                     }
                 }

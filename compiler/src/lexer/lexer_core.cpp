@@ -32,6 +32,7 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     {"func", TokenKind::KwFunc},
     {"type", TokenKind::KwType},
     {"enum", TokenKind::KwType}, // Alias for 'type' (enum declaration syntax)
+    {"union", TokenKind::KwUnion},
     {"behavior", TokenKind::KwBehavior},
     {"impl", TokenKind::KwImpl},
     {"mod", TokenKind::KwMod},

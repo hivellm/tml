@@ -7,19 +7,22 @@
 //! | Statement | Syntax                        | Notes                    |
 //! |-----------|-------------------------------|--------------------------|
 //! | Let       | `let x: T = expr`             | Immutable binding        |
+//! | Let       | `let x = expr`                | Type inferred from RHS   |
 //! | Var       | `var x: T = expr`             | Mutable (= `let mut`)    |
+//! | Var       | `var x = expr`                | Type inferred from RHS   |
 //! | Expr      | `expr`                        | Expression statement     |
 //! | Decl      | `const`, `func`, `type`, etc. | Nested declarations      |
 //!
-//! ## TML Explicit Typing
+//! ## Type Inference
 //!
-//! TML requires explicit type annotations for all variables:
+//! TML supports optional type annotations when the type can be inferred:
 //! ```tml
-//! let count: I32 = 0       // Required
-//! var total: F64 = 0.0     // Required
+//! let count: I32 = 0       // Explicit type
+//! let count = 0            // Inferred as I32 from literal
+//! let result = get_value() // Inferred from function return type
 //! ```
 //!
-//! This is by design for LLM clarity - no type inference on declarations.
+//! When type annotation is omitted, an initializer is REQUIRED.
 //!
 //! ## Var Desugaring
 //!
@@ -73,22 +76,14 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
     if (is_err(pattern))
         return unwrap_err(pattern);
 
-    // Type annotation is REQUIRED in TML (explicit typing for LLM clarity)
-    if (!check(lexer::TokenKind::Colon)) {
-        auto fix = make_insertion_fix(previous().span, ": Type", "add type annotation");
-        return ParseError{.message = "Expected ':' and type annotation after variable name (TML "
-                                     "requires explicit types)",
-                          .span = peek().span,
-                          .notes = {"TML requires explicit type annotations for all variables"},
-                          .fixes = {fix},
-                          .code = "P008"};
+    // Type annotation is optional - if omitted, initializer is required for inference
+    std::optional<TypePtr> type_annotation;
+    if (match(lexer::TokenKind::Colon)) {
+        auto type = parse_type();
+        if (is_err(type))
+            return unwrap_err(type);
+        type_annotation = std::move(unwrap(type));
     }
-    advance(); // consume ':'
-
-    auto type = parse_type();
-    if (is_err(type))
-        return unwrap_err(type);
-    std::optional<TypePtr> type_annotation = std::move(unwrap(type));
 
     std::optional<ExprPtr> init;
     if (match(lexer::TokenKind::Assign)) {
@@ -96,6 +91,14 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
         if (is_err(expr))
             return unwrap_err(expr);
         init = std::move(unwrap(expr));
+    }
+
+    // If no type annotation, initializer is required for type inference
+    if (!type_annotation && !init) {
+        return ParseError{.message = "Type annotation or initializer required",
+                          .span = peek().span,
+                          .notes = {"Add ': Type' or '= value' to declare the variable"},
+                          .code = "P008"};
     }
 
     // Check for let-else syntax: let Pattern: T = expr else { block }
@@ -156,22 +159,14 @@ auto Parser::parse_var_stmt() -> Result<StmtPtr, ParseError> {
 
     std::string_view name = unwrap(name_tok).lexeme;
 
-    // Type annotation is REQUIRED in TML
-    if (!check(lexer::TokenKind::Colon)) {
-        auto fix = make_insertion_fix(previous().span, ": Type", "add type annotation");
-        return ParseError{.message = "Expected ':' and type annotation after variable name (TML "
-                                     "requires explicit types)",
-                          .span = peek().span,
-                          .notes = {"TML requires explicit type annotations for all variables"},
-                          .fixes = {fix},
-                          .code = "P008"};
+    // Type annotation is optional - if omitted, initializer is required for inference
+    std::optional<TypePtr> type_annotation;
+    if (match(lexer::TokenKind::Colon)) {
+        auto type = parse_type();
+        if (is_err(type))
+            return unwrap_err(type);
+        type_annotation = std::move(unwrap(type));
     }
-    advance(); // consume ':'
-
-    auto type = parse_type();
-    if (is_err(type))
-        return unwrap_err(type);
-    std::optional<TypePtr> type_annotation = std::move(unwrap(type));
 
     std::optional<ExprPtr> init;
     if (match(lexer::TokenKind::Assign)) {
@@ -179,6 +174,14 @@ auto Parser::parse_var_stmt() -> Result<StmtPtr, ParseError> {
         if (is_err(expr))
             return unwrap_err(expr);
         init = std::move(unwrap(expr));
+    }
+
+    // If no type annotation, initializer is required for type inference
+    if (!type_annotation && !init) {
+        return ParseError{.message = "Type annotation or initializer required for 'var'",
+                          .span = peek().span,
+                          .notes = {"Add ': Type' or '= value' to declare the variable"},
+                          .code = "P008"};
     }
 
     auto end_span = previous().span;

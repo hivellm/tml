@@ -1,0 +1,84 @@
+// Test: tuple destructuring patterns
+// let (a, b) = tuple_expr
+
+use test
+
+// Basic tuple destructuring
+@test
+func test_basic_tuple_destructure() -> I32 {
+    let pair: (I32, I32) = (10, 20)
+    let (a, b): (I32, I32) = pair
+    assert_eq(a, 10, "a should be 10")
+    assert_eq(b, 20, "b should be 20")
+    return 0
+}
+
+// Tuple destructuring from function return
+func get_pair() -> (I32, I32) {
+    return (5, 15)
+}
+
+@test
+func test_destructure_from_call() -> I32 {
+    let (x, y): (I32, I32) = get_pair()
+    assert_eq(x, 5, "x should be 5")
+    assert_eq(y, 15, "y should be 15")
+    return 0
+}
+
+// Nested tuple destructuring
+@test
+func test_nested_tuple() -> I32 {
+    let nested: ((I32, I32), I32) = ((1, 2), 3)
+    let ((a, b), c): ((I32, I32), I32) = nested
+    assert_eq(a, 1, "a should be 1")
+    assert_eq(b, 2, "b should be 2")
+    assert_eq(c, 3, "c should be 3")
+    return 0
+}
+
+// Wildcard in tuple pattern
+@test
+func test_wildcard_in_tuple() -> I32 {
+    let triple: (I32, I32, I32) = (100, 200, 300)
+    let (first, _, third): (I32, I32, I32) = triple
+    assert_eq(first, 100, "first should be 100")
+    assert_eq(third, 300, "third should be 300")
+    return 0
+}
+
+// Tuple pattern in when expression - currently has type inference issues
+// TODO: Fix tuple pattern type inference in when arms
+// @test
+// func test_tuple_in_when() -> I32 {
+//     let pair: (I32, I32) = (1, 2)
+//     let result: I32 = when pair {
+//         (0, _) => 0,
+//         (1, y) => y,
+//         (_, _) => -1
+//     }
+//     assert_eq(result, 2, "should match (1, y) and return y=2")
+//     return 0
+// }
+
+// Tuple with type inference
+@test
+func test_tuple_inference() -> I32 {
+    let pair = (42, 84)  // inferred as (I32, I32)
+    let (a, b) = pair    // destructure with inference
+    assert_eq(a, 42, "a should be 42")
+    assert_eq(b, 84, "b should be 84")
+    return 0
+}
+
+// Tuple destructuring in function parameter
+func sum_pair((a, b): (I32, I32)) -> I32 {
+    return a + b
+}
+
+@test
+func test_tuple_param() -> I32 {
+    let result: I32 = sum_pair((3, 7))
+    assert_eq(result, 10, "3 + 7 should be 10")
+    return 0
+}

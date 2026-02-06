@@ -527,6 +527,12 @@ void BorrowChecker::move_value(PlaceId place, Location loc) {
 void BorrowChecker::check_can_use(PlaceId place, Location loc) {
     const auto& state = env_.get_state(place);
 
+    // Check for use of uninitialized variable (late initialization)
+    if (!state.is_initialized) {
+        error("use of possibly uninitialized variable: `" + state.name + "`", loc.span);
+        return;
+    }
+
     if (state.state == OwnershipState::Moved) {
         if (state.move_location) {
             errors_.push_back(

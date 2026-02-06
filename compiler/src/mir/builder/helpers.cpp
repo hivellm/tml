@@ -429,15 +429,15 @@ void MirBuilder::emit_drop_for_value(Value value, const MirTypePtr& type,
             size_t total_fields = struct_def->fields.size();
             for (size_t i = total_fields; i > 0; --i) {
                 size_t field_idx = i - 1;
-                const auto& [field_name, field_type] = struct_def->fields[field_idx];
+                const auto& fld = struct_def->fields[field_idx];
 
                 // Check if field type needs drop
-                if (!env_.type_needs_drop(field_type)) {
+                if (!env_.type_needs_drop(fld.type)) {
                     continue;
                 }
 
                 // Get the type name for the field
-                std::string field_type_name = get_type_name_from_semantic(field_type);
+                std::string field_type_name = get_type_name_from_semantic(fld.type);
 
                 // Convert semantic TypePtr to MirTypePtr for the field
                 MirTypePtr field_mir_type;

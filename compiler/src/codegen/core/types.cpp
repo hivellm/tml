@@ -112,6 +112,11 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
         return "ptr";
     }
 
+    // Check if this is a union type
+    if (union_types_.find(name) != union_types_.end()) {
+        return "%union." + name;
+    }
+
     // User-defined type - return struct type
     return "%struct." + name;
 }
@@ -469,11 +474,11 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                         std::string type_name = "%struct." + named.name;
                         std::string def = type_name + " = type { ";
                         bool first = true;
-                        for (const auto& [field_name, field_type] : struct_def.fields) {
+                        for (const auto& field : struct_def.fields) {
                             if (!first)
                                 def += ", ";
                             first = false;
-                            def += llvm_type_from_semantic(field_type, true);
+                            def += llvm_type_from_semantic(field.type, true);
                         }
                         def += " }";
                         type_defs_buffer_ << def << "\n";
@@ -483,9 +488,9 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                         std::vector<FieldInfo> fields;
                         for (size_t i = 0; i < struct_def.fields.size(); ++i) {
                             std::string ft =
-                                llvm_type_from_semantic(struct_def.fields[i].second, true);
-                            fields.push_back({struct_def.fields[i].first, static_cast<int>(i), ft,
-                                              struct_def.fields[i].second});
+                                llvm_type_from_semantic(struct_def.fields[i].type, true);
+                            fields.push_back({struct_def.fields[i].name, static_cast<int>(i), ft,
+                                              struct_def.fields[i].type});
                         }
                         struct_fields_[named.name] = fields;
                         found = true;
@@ -556,6 +561,12 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                 }
             }
         }
+
+        // Check if this is a union type
+        if (union_types_.find(named.name) != union_types_.end()) {
+            return "%union." + named.name;
+        }
+
         return "%struct." + named.name;
     } else if (type->is<types::GenericType>()) {
         // Check if there's a substitution available for this generic type parameter
@@ -671,11 +682,11 @@ void LLVMIRGen::ensure_type_defined(const parser::TypePtr& type) {
                     std::string type_name = "%struct." + base_name;
                     std::string def = type_name + " = type { ";
                     bool first = true;
-                    for (const auto& [field_name, field_type] : struct_it->second.fields) {
+                    for (const auto& fld : struct_it->second.fields) {
                         if (!first)
                             def += ", ";
                         first = false;
-                        def += llvm_type_from_semantic(field_type, true);
+                        def += llvm_type_from_semantic(fld.type, true);
                     }
                     def += " }";
                     type_defs_buffer_ << def << "\n";
@@ -685,9 +696,9 @@ void LLVMIRGen::ensure_type_defined(const parser::TypePtr& type) {
                     std::vector<FieldInfo> fields;
                     for (size_t i = 0; i < struct_it->second.fields.size(); ++i) {
                         std::string ft =
-                            llvm_type_from_semantic(struct_it->second.fields[i].second, true);
-                        fields.push_back({struct_it->second.fields[i].first, static_cast<int>(i),
-                                          ft, struct_it->second.fields[i].second});
+                            llvm_type_from_semantic(struct_it->second.fields[i].type, true);
+                        fields.push_back({struct_it->second.fields[i].name, static_cast<int>(i), ft,
+                                          struct_it->second.fields[i].type});
                     }
                     struct_fields_[base_name] = fields;
                     return;

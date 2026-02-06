@@ -239,6 +239,48 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
 }
 
 auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
+    // =========================================================================
+    // Compile-time loop unrolling for field_count[T]() intrinsic
+    // =========================================================================
+    // Check if this is a compile-time unrollable loop over struct fields
+    // Pattern: for i in 0 to field_count[T]() { ... }
+    if (for_expr.iter->is<parser::RangeExpr>()) {
+        const auto& range = for_expr.iter->as<parser::RangeExpr>();
+        if (range.end.has_value() && range.end.value()->is<parser::CallExpr>()) {
+            const auto& call = range.end.value()->as<parser::CallExpr>();
+            if (call.callee->is<parser::PathExpr>()) {
+                const auto& path_expr = call.callee->as<parser::PathExpr>();
+                if (path_expr.path.segments.size() == 1 &&
+                    path_expr.path.segments[0] == "field_count" && path_expr.generics &&
+                    !path_expr.generics->args.empty()) {
+                    // This is field_count[T]() - extract the type and unroll
+                    const auto& first_arg = path_expr.generics->args[0];
+                    if (first_arg.is_type()) {
+                        auto resolved =
+                            resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                        if (resolved->is<types::NamedType>()) {
+                            std::string type_name = resolved->as<types::NamedType>().name;
+                            auto it = struct_fields_.find(type_name);
+                            if (it != struct_fields_.end()) {
+                                size_t field_count = it->second.size();
+                                // Get loop variable name
+                                std::string var_name = "_for_idx";
+                                if (for_expr.pattern->is<parser::IdentPattern>()) {
+                                    var_name = for_expr.pattern->as<parser::IdentPattern>().name;
+                                }
+                                // Unroll the loop at compile time
+                                return gen_for_unrolled(for_expr, var_name, type_name, field_count);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Standard for loop codegen
+    // =========================================================================
     // Canonical LLVM loop form:
     //   preheader -> header -> body -> latch -> header (backedge)
     //                      \-> exit
@@ -423,6 +465,66 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     current_loop_end_ = saved_loop_end;
     current_loop_stack_save_ = saved_loop_stack_save;
     current_loop_metadata_id_ = saved_loop_metadata_id;
+
+    return "0";
+}
+
+auto LLVMIRGen::gen_for_unrolled(const parser::ForExpr& for_expr, const std::string& var_name,
+                                 const std::string& type_name, size_t iteration_count)
+    -> std::string {
+    // Compile-time loop unrolling for struct field iteration
+    // This generates code for each iteration with the loop variable as a constant literal
+    //
+    // Example: for i in 0 to field_count[Point]() { ... }
+    // Becomes: i=0: body_code; i=1: body_code; ...
+
+    // Save the original comptime_loop_var_ context
+    std::string saved_comptime_var = comptime_loop_var_;
+    std::string saved_comptime_type = comptime_loop_type_;
+    int64_t saved_comptime_value = comptime_loop_value_;
+
+    // Set up the compile-time loop variable context
+    comptime_loop_var_ = var_name;
+    comptime_loop_type_ = type_name;
+
+    for (size_t i = 0; i < iteration_count; ++i) {
+        // Set the current iteration value
+        comptime_loop_value_ = static_cast<int64_t>(i);
+
+        // Create an alloca for the loop variable with the constant value
+        // This allows the body to reference the variable normally
+        std::string var_alloca = fresh_reg();
+        emit_line("  " + var_alloca + " = alloca i64");
+        emit_line("  store i64 " + std::to_string(i) + ", ptr " + var_alloca);
+        locals_[var_name] = VarInfo{var_alloca, "i64", nullptr, std::nullopt};
+
+        // Push scopes for this iteration
+        push_drop_scope();
+        push_lifetime_scope();
+
+        // Generate the loop body for this iteration
+        gen_expr(*for_expr.body);
+
+        // Emit drops and lifetime ends
+        if (!block_terminated_) {
+            emit_scope_drops();
+            pop_lifetime_scope();
+        } else {
+            if (!scope_allocas_.empty()) {
+                scope_allocas_.pop_back();
+            }
+            block_terminated_ = false; // Reset for next iteration
+        }
+        pop_drop_scope();
+    }
+
+    // Restore the compile-time loop variable context
+    comptime_loop_var_ = saved_comptime_var;
+    comptime_loop_type_ = saved_comptime_type;
+    comptime_loop_value_ = saved_comptime_value;
+
+    // Remove the loop variable from locals
+    locals_.erase(var_name);
 
     return "0";
 }

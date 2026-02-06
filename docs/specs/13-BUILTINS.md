@@ -809,6 +809,62 @@ impl[T] Slice[T] {
 @intrinsic pub func unlikely(cond: Bool) -> Bool
 ```
 
+### 8.6 Reflection Intrinsics (Compile-Time)
+
+These intrinsics provide compile-time reflection over struct types:
+
+```tml
+use core::intrinsics::{field_count, field_name, field_offset, field_type_id, type_id}
+
+// Type identification
+type_id[T]() -> I64           // Unique hash for type T
+
+// Struct field introspection
+field_count[T]() -> I64       // Number of fields in struct T
+field_name[T](index) -> Str   // Name of field at index
+field_offset[T](index) -> I64 // Byte offset of field at index
+field_type_id[T](index) -> I64 // Type ID of field's type
+```
+
+**Compile-Time Field Iteration:**
+
+When iterating with `for i in 0 to field_count[T]()`, the compiler automatically unrolls the loop at compile time, allowing `field_name[T](i)` to work with the compile-time constant index:
+
+```tml
+type Point {
+    x: I32,
+    y: I32,
+}
+
+func print_field_names[T]() {
+    for i in 0 to field_count[T]() {
+        // Loop is unrolled at compile time
+        // Each iteration, i is a compile-time constant
+        let name: Str = field_name[T](i)
+        println(name)
+    }
+}
+
+// Usage:
+print_field_names[Point]()  // Prints "x", then "y"
+```
+
+**Example: Generic Debug Formatter:**
+
+```tml
+func debug_struct[T](value: ref T) -> Str {
+    var result: Str = type_name[T]() + " { "
+    for i in 0 to field_count[T]() {
+        if i > 0 {
+            result = result + ", "
+        }
+        result = result + field_name[T](i) + ": ..."
+    }
+    result = result + " }"
+    return result
+}
+```
+
 ## 9. Fundamental Behaviors
 
 ### 9.1 Equal

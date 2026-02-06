@@ -327,7 +327,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         semantic_var_type =
             resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
         var_type = llvm_type_from_semantic(semantic_var_type);
-        is_struct = var_type.starts_with("%struct.");
+        is_struct = var_type.starts_with("%struct.") || var_type.starts_with("%union.");
         is_ptr = (var_type == "ptr"); // Collection types like List[T] are pointers
     } else if (let.init.has_value()) {
         // Infer type from initializer
@@ -344,6 +344,9 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                     // Infer type from field values
                     types::TypePtr inferred = infer_expr_type(init);
                     var_type = llvm_type_from_semantic(inferred);
+                } else if (union_types_.find(base_name) != union_types_.end()) {
+                    // Union type
+                    var_type = "%union." + base_name;
                 } else {
                     var_type = "%struct." + base_name;
                 }
@@ -709,8 +712,12 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // If type wasn't explicitly annotated and expression has a known type, use it
         if (!let.type_annotation && last_expr_type_ != "i32") {
             if (last_expr_type_ == "double" || last_expr_type_ == "i64" ||
-                last_expr_type_ == "i1" || last_expr_type_ == "ptr") {
+                last_expr_type_ == "i1" || last_expr_type_ == "ptr" ||
+                last_expr_type_.starts_with("%struct.") || last_expr_type_.starts_with("%union.") ||
+                last_expr_type_.starts_with("%class.") || last_expr_type_.starts_with("{")) {
                 var_type = last_expr_type_;
+                is_struct = var_type.starts_with("%struct.") || var_type.starts_with("%union.") ||
+                            var_type.starts_with("%class.");
             }
         }
     }

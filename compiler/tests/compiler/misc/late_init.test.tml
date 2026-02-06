@@ -1,0 +1,45 @@
+// Test: Late variable initialization
+// Phase 10 of lang-ergonomics task
+
+// Test: Basic late initialization works
+@test
+func test_late_init_basic() {
+    let mut x: I32
+    x = 42
+    assert_eq(x, 42)
+}
+
+// Test: Late init with different types
+@test
+func test_late_init_bool() {
+    let mut flag: Bool
+    flag = true
+    assert_eq(flag, true)
+}
+
+// Test: Late init followed by reassignment
+@test
+func test_late_init_reassign() {
+    let mut x: I32
+    x = 10
+    x = 20
+    assert_eq(x, 20)
+}
+
+// Test: Multiple late-initialized variables
+@test
+func test_multiple_late_init() {
+    let mut a: I32
+    let mut b: I32
+    a = 1
+    b = 2
+    assert_eq(a + b, 3)
+}
+
+func main() {
+    test_late_init_basic()
+    test_late_init_bool()
+    test_late_init_reassign()
+    test_multiple_late_init()
+    print("Late initialization tests passed!\n")
+}

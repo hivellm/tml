@@ -152,8 +152,19 @@ void BorrowChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span)
 /// y = 10        // ERROR: cannot assign to 'y' while borrowed
 /// ```
 void BorrowChecker::check_binary(const parser::BinaryExpr& binary) {
-    check_expr(*binary.left);
-    check_expr(*binary.right);
+    // For assignment, don't check LHS as a use (it's being assigned to, not read)
+    // Only check RHS as a use
+    if (binary.op == parser::BinaryOp::Assign) {
+        // Don't call check_expr on LHS for simple assignment - we're writing, not reading
+        // But we do need to check for complex LHS expressions (field access, index, etc.)
+        if (!binary.left->template is<parser::IdentExpr>()) {
+            check_expr(*binary.left);
+        }
+        check_expr(*binary.right);
+    } else {
+        check_expr(*binary.left);
+        check_expr(*binary.right);
+    }
 
     // Assignment operators require mutable access to LHS
     if (binary.op == parser::BinaryOp::Assign || binary.op == parser::BinaryOp::AddAssign ||
@@ -166,6 +177,23 @@ void BorrowChecker::check_binary(const parser::BinaryExpr& binary) {
             auto place_id = env_.lookup(ident.name);
             if (place_id) {
                 auto loc = current_location(binary.span);
+
+                // For simple assignment (not compound), if variable is uninitialized,
+                // this is the initialization - allow it and mark as initialized
+                if (binary.op == parser::BinaryOp::Assign) {
+                    auto& state = env_.get_state_mut(*place_id);
+                    if (!state.is_initialized) {
+                        // First assignment initializes the variable
+                        state.is_initialized = true;
+                        // Still need to check mutability for the assignment itself
+                        if (!state.is_mutable) {
+                            // For late-initialized immutable variables, allow first assignment
+                            // (This is the initialization, not a re-assignment)
+                        }
+                        return; // Skip the normal mutation check
+                    }
+                }
+
                 check_can_mutate(*place_id, loc);
             }
         }

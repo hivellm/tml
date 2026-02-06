@@ -263,7 +263,103 @@ let opt: Maybe[I32] = Just(42)
 let msg: Message = Text { content: "hi", sender: "alice" }
 ```
 
-### 3.3 Tuples
+### 3.3 Unions (C-style)
+
+C-style unions where all fields share the same memory location. Only one field can meaningfully hold a value at a time.
+
+```tml
+// Declaration
+union IntOrPtr {
+    int_val: I32,
+    ptr_val: I64,
+}
+
+union Value {
+    a: I32,
+    b: I32,
+    c: I32,
+}
+```
+
+**Construction (Single Field Only):**
+```tml
+// Union literals initialize exactly one field
+let v1: IntOrPtr = IntOrPtr { int_val: 42 }
+let v2: IntOrPtr = IntOrPtr { ptr_val: 1000000 }
+
+// ERROR: cannot initialize multiple fields
+let bad: IntOrPtr = IntOrPtr { int_val: 42, ptr_val: 100 }  // error
+```
+
+**Field Access:**
+```tml
+let v: IntOrPtr = IntOrPtr { int_val: 42 }
+
+// Access the initialized field
+let x: I32 = v.int_val  // 42
+
+// Reading wrong field: bits reinterpreted (UNSAFE!)
+let ptr: I64 = v.ptr_val  // undefined - reads int_val bits as I64
+```
+
+**Memory Sharing:**
+All union fields overlap at offset 0. The union size equals the largest field:
+
+```tml
+union IntOrPtr {
+    int_val: I32,  // 4 bytes at offset 0
+    ptr_val: I64,  // 8 bytes at offset 0
+}
+// sizeof(IntOrPtr) = 8 (max of 4, 8)
+```
+
+**Function Parameters and Returns:**
+```tml
+func process_union(u: IntOrPtr) -> I32 {
+    u.int_val
+}
+
+func create_union(val: I32) -> IntOrPtr {
+    IntOrPtr { int_val: val }
+}
+
+let v: IntOrPtr = IntOrPtr { int_val: 100 }
+let result: I32 = process_union(v)  // 100
+```
+
+**Mutable Unions:**
+```tml
+var v: IntOrPtr = IntOrPtr { int_val: 10 }
+v = IntOrPtr { ptr_val: 2000 }  // switch to different field
+```
+
+**Safety Considerations:**
+
+| Aspect | Notes |
+|--------|-------|
+| **No tag** | Unlike enums, unions have no runtime discriminant |
+| **Wrong field read** | Reading uninitialized field returns garbage bits |
+| **Use case** | FFI interop, low-level memory layout, bit reinterpretation |
+| **Alternative** | For safe tagged unions, use `enum` with data variants |
+
+**When to Use:**
+- Interfacing with C code that uses unions
+- Memory-constrained scenarios where fields are mutually exclusive
+- Low-level bit manipulation (e.g., accessing float bits as integer)
+
+For type-safe alternatives, prefer enums:
+```tml
+// Preferred: safe tagged union
+type SafeValue = IntVal(I32) | PtrVal(I64)
+
+// C-style: when you need raw memory layout
+union IntOrPtr {
+    int_val: I32,
+    ptr_val: I64,
+}
+```
+
+### 3.4 Tuples
 
 ```tml
 let pair: (I32, String) = (42, "answer")
@@ -277,7 +373,7 @@ let second: String = pair.1   // "answer"
 let (x, y, z) = triple
 ```
 
-### 3.4 Arrays (Fixed Size)
+### 3.5 Arrays (Fixed Size)
 
 ```tml
 let arr: [I32; 5] = [1, 2, 3, 4, 5]

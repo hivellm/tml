@@ -1,0 +1,92 @@
+// Test: type inference from initializer expressions
+// When no type annotation is provided, the type is inferred from the RHS
+
+use test
+
+// Test basic type inference from function call
+func get_number() -> I32 {
+    return 42
+}
+
+@test
+func test_infer_from_call() -> I32 {
+    let x = get_number()  // inferred as I32
+    assert_eq(x, 42, "should infer I32 from function return")
+    return 0
+}
+
+// Test type inference from struct literal
+type Point {
+    x: I32
+    y: I32
+}
+
+@test
+func test_infer_from_struct() -> I32 {
+    let p = Point { x: 10, y: 20 }  // inferred as Point
+    assert_eq(p.x, 10, "should infer Point type")
+    assert_eq(p.y, 20, "y should be 20")
+    return 0
+}
+
+// Test type inference from method call
+impl Point {
+    pub func new(x: I32, y: I32) -> Point {
+        return Point { x: x, y: y }
+    }
+}
+
+@test
+func test_infer_from_method() -> I32 {
+    let p = Point::new(5, 15)  // inferred as Point
+    assert_eq(p.x, 5, "should infer Point from static method")
+    return 0
+}
+
+// Test var with type inference
+@test
+func test_var_inference() -> I32 {
+    var count = 0  // inferred as I32
+    count = count + 1
+    assert_eq(count, 1, "var should infer I32")
+    return 0
+}
+
+// Test explicit type still works
+@test
+func test_explicit_type() -> I32 {
+    let x: I64 = 100  // explicit I64
+    assert_eq(x, 100, "explicit type should work")
+    return 0
+}
+
+// Test inference from binary operation
+@test
+func test_infer_from_binary() -> I32 {
+    let a: I32 = 10
+    let b: I32 = 20
+    let sum = a + b  // inferred as I32
+    assert_eq(sum, 30, "should infer I32 from addition")
+    return 0
+}
+
+// Test inference from enum variant
+@test
+func test_infer_from_maybe() -> I32 {
+    let value = Just(42)  // inferred as Maybe[I32]
+    when value {
+        Just(x) => assert_eq(x, 42, "should infer Maybe[I32]"),
+        Nothing => assert_eq(0, 1, "should not be Nothing")
+    }
+    return 0
+}
+
+@test
+func test_infer_from_outcome() -> I32 {
+    let result = Ok(100)  // inferred as Outcome[I32, _]
+    when result {
+        Ok(x) => assert_eq(x, 100, "should infer Outcome"),
+        Err(_) => assert_eq(0, 1, "should not be Err")
+    }
+    return 0
+}

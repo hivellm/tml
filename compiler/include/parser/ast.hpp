@@ -82,8 +82,8 @@ namespace tml::parser {
 /// | `InterfaceDecl` | OOP interface |
 /// | `NamespaceDecl` | Namespace |
 struct Decl {
-    std::variant<FuncDecl, StructDecl, EnumDecl, TraitDecl, ImplDecl, TypeAliasDecl, ConstDecl,
-                 UseDecl, ModDecl, ClassDecl, InterfaceDecl, NamespaceDecl>
+    std::variant<FuncDecl, StructDecl, UnionDecl, EnumDecl, TraitDecl, ImplDecl, TypeAliasDecl,
+                 ConstDecl, UseDecl, ModDecl, ClassDecl, InterfaceDecl, NamespaceDecl>
         kind;        ///< The declaration variant.
     SourceSpan span; ///< Source location.
 

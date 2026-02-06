@@ -63,9 +63,19 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
         return;
     }
 
-    std::vector<std::pair<std::string, TypePtr>> fields;
+    std::vector<StructFieldDef> fields;
     for (const auto& field : decl.fields) {
-        fields.emplace_back(field.name, resolve_type(*field.type));
+        StructFieldDef field_def;
+        field_def.name = field.name;
+        field_def.type = resolve_type(*field.type);
+        field_def.has_default = field.default_value.has_value();
+
+        // Validate default value type if present - check_expr reports type mismatch errors
+        if (field.default_value.has_value()) {
+            check_expr(**field.default_value, field_def.type);
+        }
+
+        fields.push_back(std::move(field_def));
     }
 
     std::vector<std::string> type_params;
@@ -455,6 +465,41 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
                                  .is_async = false,
                                  .span = decl.span});
     }
+}
+
+void TypeChecker::register_union_decl(const parser::UnionDecl& decl) {
+    // Check if the type name is reserved (builtin type)
+    if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
+        error("Cannot redefine builtin type '" + decl.name +
+                  "'. Use the builtin type instead of defining your own.",
+              decl.span, "T038");
+        return;
+    }
+
+    std::vector<StructFieldDef> fields;
+    for (const auto& field : decl.fields) {
+        StructFieldDef field_def;
+        field_def.name = field.name;
+        field_def.type = resolve_type(*field.type);
+        field_def.has_default = false; // Unions don't support default values
+        fields.push_back(std::move(field_def));
+    }
+
+    // Use qualified name for namespaced types
+    std::string full_name = qualified_name(decl.name);
+
+    // Create StructDef with is_union = true
+    StructDef struct_def{
+        .name = full_name,
+        .type_params = {},  // Unions don't support generics
+        .const_params = {}, // Unions don't support const generics
+        .fields = std::move(fields),
+        .span = decl.span,
+        .is_interior_mutable = false,
+        .is_union = true,
+    };
+
+    env_.define_struct(std::move(struct_def));
 }
 
 void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {

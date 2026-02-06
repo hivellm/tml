@@ -283,7 +283,7 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                             auto struct_def = env_.lookup_struct(base_struct_name);
                             if (struct_def &&
                                 nested_idx < static_cast<int>(struct_def->fields.size())) {
-                                base_type = struct_def->fields[nested_idx].second;
+                                base_type = struct_def->fields[nested_idx].type;
 
                                 // Apply type substitution if we have type args from the outer
                                 // struct This substitutes T -> BarrierState in Mutex[T] to get
@@ -428,7 +428,7 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                         auto struct_def = env_.lookup_struct(lookup_name);
                         if (struct_def) {
                             for (size_t i = 0; i < struct_def->fields.size(); ++i) {
-                                if (struct_def->fields[i].first == field_expr.field) {
+                                if (struct_def->fields[i].name == field_expr.field) {
                                     field_idx = static_cast<int>(i);
                                     break;
                                 }
@@ -471,8 +471,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                             if (struct_it != mod.structs.end()) {
                                 const auto& imported_struct = struct_it->second;
                                 int idx = 0;
-                                for (const auto& [fname, ftype] : imported_struct.fields) {
-                                    if (fname == field_expr.field) {
+                                for (const auto& fld : imported_struct.fields) {
+                                    if (fld.name == field_expr.field) {
                                         field_idx = idx;
                                         break;
                                     }

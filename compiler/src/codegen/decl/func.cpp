@@ -14,9 +14,12 @@
 namespace tml::codegen {
 
 // Helper to extract name from FuncParam pattern
-static std::string get_param_name(const parser::FuncParam& param) {
+// For tuple patterns, returns a synthetic name like __tuple_param_0
+static std::string get_param_name(const parser::FuncParam& param, size_t param_index = 0) {
     if (param.pattern && param.pattern->is<parser::IdentPattern>()) {
         return param.pattern->as<parser::IdentPattern>().name;
+    } else if (param.pattern && param.pattern->is<parser::TuplePattern>()) {
+        return "__tuple_param_" + std::to_string(param_index);
     }
     return "_anon";
 }
@@ -305,7 +308,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             param_types += ", ";
         }
         std::string param_type = llvm_type_ptr(func.params[i].type);
-        std::string param_name = get_param_name(func.params[i]);
+        std::string param_name = get_param_name(func.params[i], i);
         params += param_type + " %" + param_name;
         param_types += param_type;
         param_types_vec.push_back(param_type);
@@ -511,7 +514,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Register function parameters in locals_ by creating allocas
     for (size_t i = 0; i < func.params.size(); ++i) {
         std::string param_type = llvm_type_ptr(func.params[i].type);
-        std::string param_name = get_param_name(func.params[i]);
+        std::string param_name = get_param_name(func.params[i], i);
         // Resolve semantic type for the parameter
         types::TypePtr semantic_type = resolve_parser_type_with_subs(*func.params[i].type, {});
         std::string alloca_reg = fresh_reg();
@@ -539,6 +542,61 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
             // Emit llvm.dbg.declare intrinsic
             emit_debug_declare(alloca_reg, param_debug_id, loc_id);
+        }
+    }
+
+    // Destructure tuple pattern parameters
+    for (size_t i = 0; i < func.params.size(); ++i) {
+        if (func.params[i].pattern && func.params[i].pattern->is<parser::TuplePattern>()) {
+            const auto& tuple_pat = func.params[i].pattern->as<parser::TuplePattern>();
+            std::string param_name = get_param_name(func.params[i], i);
+            std::string param_type = llvm_type_ptr(func.params[i].type);
+            types::TypePtr semantic_type = resolve_parser_type_with_subs(*func.params[i].type, {});
+
+            // Get the alloca for the tuple parameter
+            auto it = locals_.find(param_name);
+            if (it == locals_.end())
+                continue;
+            std::string tuple_ptr = it->second.reg;
+
+            // Parse tuple element types
+            std::vector<std::string> elem_types;
+            std::vector<types::TypePtr> semantic_elem_types;
+            if (semantic_type && semantic_type->is<types::TupleType>()) {
+                const auto& tup = semantic_type->as<types::TupleType>();
+                semantic_elem_types = tup.elements;
+                for (const auto& elem : tup.elements) {
+                    elem_types.push_back(llvm_type_from_semantic(elem));
+                }
+            }
+
+            // Destructure each element
+            for (size_t j = 0; j < tuple_pat.elements.size() && j < elem_types.size(); ++j) {
+                const auto& elem_pattern = *tuple_pat.elements[j];
+                if (elem_pattern.is<parser::IdentPattern>()) {
+                    const auto& ident = elem_pattern.as<parser::IdentPattern>();
+                    std::string elem_type = elem_types[j];
+                    types::TypePtr semantic_elem =
+                        j < semantic_elem_types.size() ? semantic_elem_types[j] : nullptr;
+
+                    // GEP to get element pointer
+                    std::string elem_ptr = fresh_reg();
+                    emit_line("  " + elem_ptr + " = getelementptr inbounds " + param_type +
+                              ", ptr " + tuple_ptr + ", i32 0, i32 " + std::to_string(j));
+
+                    // Load element value
+                    std::string elem_val = fresh_reg();
+                    emit_line("  " + elem_val + " = load " + elem_type + ", ptr " + elem_ptr);
+
+                    // Alloca and store for the named variable
+                    std::string var_alloca = fresh_reg();
+                    emit_line("  " + var_alloca + " = alloca " + elem_type);
+                    emit_line("  store " + elem_type + " " + elem_val + ", ptr " + var_alloca);
+                    locals_[ident.name] =
+                        VarInfo{var_alloca, elem_type, semantic_elem, std::nullopt};
+                }
+                // Wildcards are ignored, nested tuples would need recursive handling
+            }
         }
     }
 
@@ -801,7 +859,7 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
         // Resolve param type with substitution
         types::TypePtr resolved_param = resolve_parser_type_with_subs(*func.params[i].type, subs);
         std::string param_type = llvm_type_from_semantic(resolved_param);
-        std::string param_name = get_param_name(func.params[i]);
+        std::string param_name = get_param_name(func.params[i], i);
 
         params += param_type + " %" + param_name;
         param_types += param_type;

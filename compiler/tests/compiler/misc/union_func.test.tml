@@ -1,0 +1,18 @@
+// Test: Union in function parameters and returns
+
+union IntOrPtr {
+    int_val: I32,
+    ptr_val: I64,
+}
+
+// Test function that takes union parameter
+func process_union(u: IntOrPtr) -> I32 {
+    u.int_val
+}
+
+@test
+func test_union_param() {
+    let v = IntOrPtr { int_val: 100 }
+    let result = process_union(v)
+    assert_eq(result, 100)
+}

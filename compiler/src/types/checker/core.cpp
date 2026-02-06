@@ -208,6 +208,8 @@ auto TypeChecker::check_module(const parser::Module& module)
     for (const auto& decl : module.decls) {
         if (decl->is<parser::StructDecl>()) {
             register_struct_decl(decl->as<parser::StructDecl>());
+        } else if (decl->is<parser::UnionDecl>()) {
+            register_union_decl(decl->as<parser::UnionDecl>());
         } else if (decl->is<parser::EnumDecl>()) {
             register_enum_decl(decl->as<parser::EnumDecl>());
         } else if (decl->is<parser::TraitDecl>()) {
@@ -852,13 +854,10 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
         }
     }
 
-    // Add parameters to scope
+    // Add parameters to scope (supports all pattern types including tuple destructuring)
     for (const auto& p : func.params) {
-        if (p.pattern->is<parser::IdentPattern>()) {
-            auto& ident = p.pattern->as<parser::IdentPattern>();
-            env_.current_scope()->define(ident.name, resolve_type(*p.type), ident.is_mut,
-                                         p.pattern->span);
-        }
+        auto param_type = resolve_type(*p.type);
+        bind_pattern(*p.pattern, param_type);
     }
 
     if (func.body) {

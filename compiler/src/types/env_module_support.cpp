@@ -703,10 +703,13 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 const auto& struct_decl = decl->as<parser::StructDecl>();
 
                 // Convert fields
-                std::vector<std::pair<std::string, TypePtr>> fields;
+                std::vector<StructFieldDef> fields;
                 for (const auto& field : struct_decl.fields) {
                     if (field.type) {
-                        fields.emplace_back(field.name, resolve_simple_type(*field.type));
+                        StructFieldDef fdef;
+                        fdef.name = field.name;
+                        fdef.type = resolve_simple_type(*field.type);
+                        fields.push_back(std::move(fdef));
                     }
                 }
 

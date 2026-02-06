@@ -127,6 +127,7 @@ TML has its own identity, optimized for LLM comprehension with self-documenting 
 | `Clone` trait        | `Duplicate` behavior    | Consistent naming             |
 | `unsafe`             | `lowlevel`              | Less scary, accurate          |
 | Lifetimes `'a`       | Always inferred         | No syntax noise               |
+| No C-style unions    | `union { ... }`         | FFI interop, low-level memory |
 
 ## Project Structure
 

@@ -252,6 +252,8 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     }
     case lexer::TokenKind::KwBehavior:
         return parse_trait_decl(vis, std::move(decorators), std::move(doc));
+    case lexer::TokenKind::KwUnion:
+        return parse_union_decl(vis, std::move(decorators), std::move(doc));
     case lexer::TokenKind::KwImpl:
         return parse_impl_decl(std::move(doc));
     case lexer::TokenKind::KwConst:
@@ -505,11 +507,21 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
         if (is_err(field_type_result))
             return unwrap_err(field_type_result);
 
+        // Check for default value: `field: Type = default_expr`
+        std::optional<ExprPtr> default_value;
+        if (match(lexer::TokenKind::Assign)) {
+            auto default_expr_result = parse_expr();
+            if (is_err(default_expr_result))
+                return unwrap_err(default_expr_result);
+            default_value = std::move(unwrap(default_expr_result));
+        }
+
         fields.push_back(StructField{
             .doc = std::move(field_doc),
             .vis = field_vis,
             .name = std::move(field_name),
             .type = std::move(unwrap(field_type_result)),
+            .default_value = std::move(default_value),
             .span = SourceSpan::merge(unwrap(field_name_result).span, previous().span)});
 
         skip_newlines();
@@ -537,6 +549,82 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
 
     return make_box<Decl>(
         Decl{.kind = std::move(struct_decl), .span = SourceSpan::merge(start_span, end_span)});
+}
+
+auto Parser::parse_union_decl(Visibility vis, std::vector<Decorator> decorators,
+                              std::optional<std::string> doc) -> Result<DeclPtr, ParseError> {
+    auto start_span = peek().span;
+
+    auto union_result = expect(lexer::TokenKind::KwUnion, "Expected 'union'");
+    if (is_err(union_result))
+        return unwrap_err(union_result);
+
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected union name");
+    if (is_err(name_result))
+        return unwrap_err(name_result);
+    auto name = std::string(unwrap(name_result).lexeme);
+
+    skip_newlines();
+    auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for union body");
+    if (is_err(lbrace))
+        return unwrap_err(lbrace);
+
+    // Parse fields (same syntax as struct fields)
+    std::vector<StructField> fields;
+    skip_newlines();
+    while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        auto field_doc = collect_doc_comment();
+        auto field_vis = parse_visibility();
+
+        auto field_name_result = expect(lexer::TokenKind::Identifier, "Expected field name");
+        if (is_err(field_name_result))
+            return unwrap_err(field_name_result);
+        auto field_name = std::string(unwrap(field_name_result).lexeme);
+
+        if (!check(lexer::TokenKind::Colon)) {
+            auto fix = make_insertion_fix(previous().span, ": Type", "add type annotation");
+            return ParseError{.message = "Expected ':' after field name",
+                              .span = peek().span,
+                              .notes = {"Union fields require type annotations: field_name: Type"},
+                              .fixes = {fix},
+                              .code = "P045"};
+        }
+        advance(); // consume ':'
+
+        auto field_type_result = parse_type();
+        if (is_err(field_type_result))
+            return unwrap_err(field_type_result);
+
+        fields.push_back(StructField{
+            .doc = std::move(field_doc),
+            .vis = field_vis,
+            .name = std::move(field_name),
+            .type = std::move(unwrap(field_type_result)),
+            .default_value = std::nullopt, // Unions don't support default values
+            .span = SourceSpan::merge(unwrap(field_name_result).span, previous().span)});
+
+        skip_newlines();
+        if (!check(lexer::TokenKind::RBrace)) {
+            match(lexer::TokenKind::Comma);
+            skip_newlines();
+        }
+    }
+
+    auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after union fields");
+    if (is_err(rbrace))
+        return unwrap_err(rbrace);
+
+    auto end_span = previous().span;
+
+    auto union_decl = UnionDecl{.doc = std::move(doc),
+                                .decorators = std::move(decorators),
+                                .vis = vis,
+                                .name = std::move(name),
+                                .fields = std::move(fields),
+                                .span = SourceSpan::merge(start_span, end_span)};
+
+    return make_box<Decl>(
+        Decl{.kind = std::move(union_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
 auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators,
@@ -632,11 +720,21 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators,
                 if (is_err(field_type))
                     return unwrap_err(field_type);
 
+                // Check for default value in enum struct variant field
+                std::optional<ExprPtr> default_value;
+                if (match(lexer::TokenKind::Assign)) {
+                    auto default_expr_result = parse_expr();
+                    if (is_err(default_expr_result))
+                        return unwrap_err(default_expr_result);
+                    default_value = std::move(unwrap(default_expr_result));
+                }
+
                 fields.push_back(StructField{
                     .doc = std::move(field_doc),
                     .vis = field_vis,
                     .name = std::move(field_name),
                     .type = std::move(unwrap(field_type)),
+                    .default_value = std::move(default_value),
                     .span = SourceSpan::merge(unwrap(field_name_result).span, previous().span)});
 
                 skip_newlines();
@@ -1122,11 +1220,21 @@ auto Parser::parse_sum_type_variant() -> Result<EnumVariant, ParseError> {
             if (is_err(field_type))
                 return unwrap_err(field_type);
 
+            // Check for default value in enum struct variant field
+            std::optional<ExprPtr> default_value;
+            if (match(lexer::TokenKind::Assign)) {
+                auto default_expr_result = parse_expr();
+                if (is_err(default_expr_result))
+                    return unwrap_err(default_expr_result);
+                default_value = std::move(unwrap(default_expr_result));
+            }
+
             fields.push_back(StructField{
                 .doc = std::move(field_doc),
                 .vis = field_vis,
                 .name = std::move(field_name),
                 .type = std::move(unwrap(field_type)),
+                .default_value = std::move(default_value),
                 .span = SourceSpan::merge(unwrap(field_name_result).span, previous().span)});
 
             skip_newlines();

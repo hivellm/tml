@@ -7,6 +7,9 @@
 namespace tml::codegen {
 
 void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
+    // Store struct declaration for all structs (needed for default field values)
+    struct_decls_[s.name] = &s;
+
     // If struct has generic parameters, defer generation until instantiated
     if (!s.generics.empty()) {
         pending_generic_structs_[s.name] = &s;
@@ -246,11 +249,11 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
                 std::vector<FieldInfo> fields;
                 std::vector<std::string> field_types_vec;
                 int field_idx = 0;
-                for (const auto& [field_name, field_type] : struct_def.fields) {
+                for (const auto& field : struct_def.fields) {
                     // Apply type substitution to field type
-                    types::TypePtr resolved_type = apply_type_substitutions(field_type, subs);
+                    types::TypePtr resolved_type = apply_type_substitutions(field.type, subs);
                     std::string ft = llvm_type_from_semantic(resolved_type, true);
-                    fields.push_back({field_name, field_idx++, ft, resolved_type});
+                    fields.push_back({field.name, field_idx++, ft, resolved_type});
                     field_types_vec.push_back(ft);
                 }
                 struct_fields_[mangled] = fields;
@@ -364,6 +367,64 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
     }
 
     return mangled;
+}
+
+void LLVMIRGen::gen_union_decl(const parser::UnionDecl& u) {
+    // Union types are stored like structs but with is_union flag
+    // In LLVM, unions are represented as a byte array of the max field size
+
+    std::string type_name = "%union." + u.name;
+
+    // Check if already emitted
+    if (struct_types_.find(u.name) != struct_types_.end()) {
+        return;
+    }
+
+    // First pass: ensure all field types are defined and calculate max size
+    int64_t max_size = 0;
+    int64_t max_align = 1;
+    std::vector<std::string> field_llvm_types;
+
+    for (const auto& field : u.fields) {
+        ensure_type_defined(field.type);
+        std::string ft = llvm_type_ptr(field.type);
+        if (ft == "void")
+            ft = "{}";
+        field_llvm_types.push_back(ft);
+
+        // Calculate size of this field type
+        int64_t field_size = get_type_size(ft);
+        if (field_size > 0 && field_size > max_size) {
+            max_size = field_size;
+        }
+        // Track alignment (simplified - use same as size for primitives)
+        if (field_size > max_align) {
+            max_align = field_size;
+        }
+    }
+
+    // Minimum size of 1 byte for empty unions
+    if (max_size <= 0) {
+        max_size = 1;
+    }
+
+    // Register field info - all fields are at index 0 (they overlap)
+    std::vector<FieldInfo> fields;
+    for (size_t i = 0; i < u.fields.size(); ++i) {
+        types::TypePtr sem_type = resolve_parser_type_with_subs(*u.fields[i].type, {});
+        // All union fields are at "index 0" since they all start at the same memory location
+        fields.push_back({u.fields[i].name, 0, field_llvm_types[i], sem_type});
+    }
+
+    // Register first to prevent duplicates
+    struct_types_[u.name] = type_name;
+    struct_fields_[u.name] = fields;
+    union_types_.insert(u.name); // Mark as union for field access codegen
+
+    // Emit union type definition as a byte array
+    // The union is represented as { [N x i8] } where N is the max field size
+    std::string def = type_name + " = type { [" + std::to_string(max_size) + " x i8] }";
+    type_defs_buffer_ << def << "\n";
 }
 
 } // namespace tml::codegen

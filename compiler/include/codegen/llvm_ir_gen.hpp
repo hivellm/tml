@@ -309,6 +309,11 @@ private:
     std::string current_loop_stack_save_; // For stacksave/stackrestore in loops
     int current_loop_metadata_id_ = -1;   // Metadata ID for current loop (-1 = none)
 
+    // Compile-time loop context for field iteration unrolling
+    std::string comptime_loop_var_;   // Name of the compile-time loop variable
+    std::string comptime_loop_type_;  // Type name for field intrinsics (e.g., "Point")
+    int64_t comptime_loop_value_ = 0; // Current iteration value
+
     // Track last expression type for type-aware codegen
     std::string last_expr_type_ = "i32";
     bool last_expr_is_unsigned_ = false;          // Track if last expression was unsigned type
@@ -386,6 +391,7 @@ private:
 
     // Type mapping
     std::unordered_map<std::string, std::string> struct_types_;
+    std::unordered_set<std::string> union_types_; // Track which types are unions (for field access)
 
     // Enum variant values (EnumName::VariantName -> tag value)
     std::unordered_map<std::string, int> enum_variants_;
@@ -899,6 +905,9 @@ private:
     // These are registered but not generated until instantiated
     std::unordered_map<std::string, const parser::StructDecl*> pending_generic_structs_;
     std::unordered_map<std::string, const parser::EnumDecl*> pending_generic_enums_;
+
+    // All struct declarations (for accessing default field values during codegen)
+    std::unordered_map<std::string, const parser::StructDecl*> struct_decls_;
     std::unordered_map<std::string, const parser::FuncDecl*> pending_generic_funcs_;
     std::unordered_map<std::string, const parser::ClassDecl*> pending_generic_classes_;
 
@@ -1153,6 +1162,7 @@ private:
         const std::string& method_type_suffix = "", bool is_library_type = false,
         const std::string& base_type_name = "");
     void gen_struct_decl(const parser::StructDecl& s);
+    void gen_union_decl(const parser::UnionDecl& u);
     void gen_enum_decl(const parser::EnumDecl& e);
     void gen_namespace_decl(const parser::NamespaceDecl& ns);
 
@@ -1239,6 +1249,8 @@ private:
     auto gen_loop(const parser::LoopExpr& loop) -> std::string;
     auto gen_while(const parser::WhileExpr& while_expr) -> std::string;
     auto gen_for(const parser::ForExpr& for_expr) -> std::string;
+    auto gen_for_unrolled(const parser::ForExpr& for_expr, const std::string& var_name,
+                          const std::string& type_name, size_t iteration_count) -> std::string;
     auto gen_return(const parser::ReturnExpr& ret) -> std::string;
     auto gen_throw(const parser::ThrowExpr& thr) -> std::string;
     auto gen_when(const parser::WhenExpr& when) -> std::string;

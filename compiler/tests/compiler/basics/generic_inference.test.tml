@@ -1,0 +1,56 @@
+// Test: generic type parameter inference from arguments
+// Generic types should be inferred from call arguments
+
+use test
+
+// Test Just/Nothing without explicit type args
+@test
+func test_just_inference() -> I32 {
+    let value = Just(42)  // Maybe[I32] inferred from 42
+    when value {
+        Just(x) => assert_eq(x, 42, "should infer Maybe[I32]"),
+        Nothing => assert_eq(0, 1, "should not be Nothing")
+    }
+    return 0
+}
+
+// Test Ok/Err inference
+@test
+func test_ok_inference() -> I32 {
+    let result = Ok(100)  // inferred from argument
+    when result {
+        Ok(x) => assert_eq(x, 100, "should infer Ok value"),
+        Err(_) => assert_eq(0, 1, "should not be Err")
+    }
+    return 0
+}
+
+// Test with explicit type annotation still works
+@test
+func test_explicit_generic() -> I32 {
+    let x: I64 = 42  // explicit I64
+    let value: Maybe[I64] = Just(x)  // explicit Maybe[I64]
+    when value {
+        Just(v) => assert_eq(v, 42, "should have I64 value"),
+        Nothing => assert_eq(0, 1, "should not be Nothing")
+    }
+    return 0
+}
+
+// Test inference in function return context
+func make_maybe(n: I32) -> Maybe[I32] {
+    if n > 0 {
+        return Just(n)  // inferred from return type
+    }
+    return Nothing
+}
+
+@test
+func test_return_context_inference() -> I32 {
+    let result = make_maybe(10)
+    when result {
+        Just(x) => assert_eq(x, 10, "should return Just(10)"),
+        Nothing => assert_eq(0, 1, "should not be Nothing")
+    }
+    return 0
+}

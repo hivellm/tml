@@ -250,6 +250,11 @@ private:
                            std::optional<std::string> doc = std::nullopt)
         -> Result<DeclPtr, ParseError>;
 
+    /// Parses union declaration (C-style union).
+    auto parse_union_decl(Visibility vis, std::vector<Decorator> decorators = {},
+                          std::optional<std::string> doc = std::nullopt)
+        -> Result<DeclPtr, ParseError>;
+
     /// Parses enum declaration.
     auto parse_enum_decl(Visibility vis, std::vector<Decorator> decorators = {},
                          std::optional<std::string> doc = std::nullopt)

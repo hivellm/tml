@@ -251,6 +251,8 @@ auto HirBuilder::lower_function(const parser::FuncDecl& func) -> HirFunction {
     current_func_name_ = func.name;
 
     // Lower parameters
+    // For tuple patterns, use a synthetic parameter name - codegen handles destructuring
+    size_t tuple_param_counter = 0;
     for (const auto& param : func.params) {
         HirParam hir_param;
         // Extract name from pattern
@@ -258,6 +260,11 @@ auto HirBuilder::lower_function(const parser::FuncDecl& func) -> HirFunction {
             const auto& ident = param.pattern->as<parser::IdentPattern>();
             hir_param.name = ident.name;
             hir_param.is_mut = ident.is_mut;
+        } else if (param.pattern->is<parser::TuplePattern>()) {
+            // For tuple patterns, create a synthetic parameter name
+            // The actual destructuring is handled by codegen (see func.cpp)
+            hir_param.name = "__tuple_param_" + std::to_string(tuple_param_counter++);
+            hir_param.is_mut = false;
         } else {
             hir_param.name = "_"; // Anonymous parameter
             hir_param.is_mut = false;
@@ -284,6 +291,29 @@ auto HirBuilder::lower_function(const parser::FuncDecl& func) -> HirFunction {
             scopes_.back().insert(param.name);
             // Define parameter in type environment so we can look up its type later
             type_env_.current_scope()->define(param.name, param.type, param.is_mut, param.span);
+        }
+
+        // For tuple pattern parameters, also add the destructured names to scope
+        // This allows the HIR lowering to resolve variables that come from tuple destructuring
+        size_t tuple_idx = 0;
+        for (const auto& param : func.params) {
+            if (param.pattern->is<parser::TuplePattern>()) {
+                const auto& tuple_pat = param.pattern->as<parser::TuplePattern>();
+                auto param_type = resolve_type(*param.type);
+                if (param_type->is<types::TupleType>()) {
+                    const auto& tuple_type = param_type->as<types::TupleType>();
+                    for (size_t i = 0;
+                         i < tuple_pat.elements.size() && i < tuple_type.elements.size(); ++i) {
+                        if (tuple_pat.elements[i]->is<parser::IdentPattern>()) {
+                            const auto& ident = tuple_pat.elements[i]->as<parser::IdentPattern>();
+                            scopes_.back().insert(ident.name);
+                            type_env_.current_scope()->define(ident.name, tuple_type.elements[i],
+                                                              ident.is_mut, param.span);
+                        }
+                    }
+                }
+                ++tuple_idx;
+            }
         }
 
         hir_func.body = lower_block(*func.body);
@@ -847,9 +877,9 @@ auto HirBuilder::get_expr_type(const parser::Expr& expr) -> HirType {
                 if (object_type && object_type->is<types::NamedType>()) {
                     const auto& named = object_type->as<types::NamedType>();
                     if (auto struct_def = type_env_.lookup_struct(named.name)) {
-                        for (const auto& field : struct_def->fields) {
-                            if (field.first == e.field) {
-                                return type_env_.resolve(field.second);
+                        for (const auto& fld : struct_def->fields) {
+                            if (fld.name == e.field) {
+                                return type_env_.resolve(fld.type);
                             }
                         }
                     }

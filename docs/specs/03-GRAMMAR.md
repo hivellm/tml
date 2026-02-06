@@ -43,6 +43,7 @@ pub use types::*
 ```ebnf
 Item = Function
      | TypeDecl
+     | UnionDecl
      | BehaviorDecl
      | ExtendDecl
      | ConstDecl
@@ -120,6 +121,9 @@ VariantData = '(' Type (',' Type)* ')'
             | '{' Field (',' Field)* '}'
 
 AliasBody = '=' Type
+
+UnionDecl = Directive* Visibility? 'union' Ident StableId?
+            '{' (Field (',' Field)* ','?)? '}'
 ```
 
 > **Implementation Note (v0.4.0):** Generic types are fully implemented via
@@ -171,6 +175,15 @@ type JsonValue {
 // Alias
 type UserId = U64
 type Handler = func(Request) -> Response
+
+// Union (C-style, all fields share memory)
+union IntOrPtr {
+    int_val: I32,
+    ptr_val: I64,
+}
+
+// Union construction (single field only)
+let v: IntOrPtr = IntOrPtr { int_val: 42 }
 ```
 
 ### 3.3 Behaviors
@@ -1043,6 +1056,7 @@ DirectiveArg  = Ident (':' Value)?
 | `private` | Visibility + Item |
 | `func` | Function |
 | `type` | TypeDecl (struct or enum) |
+| `union` | UnionDecl (C-style union) |
 | `behavior` | BehaviorDecl |
 | `extend` | ExtendDecl |
 | `const` | ConstDecl |

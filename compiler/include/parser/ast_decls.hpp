@@ -190,13 +190,24 @@ struct FuncDecl {
 
 /// A struct field.
 ///
-/// Fields can have visibility modifiers and documentation.
+/// Fields can have visibility modifiers, documentation, and default values.
+///
+/// # Example
+///
+/// ```tml
+/// type Config {
+///     name: Str,
+///     port: I32 = 8080,      // default value
+///     debug: Bool = false,   // default value
+/// }
+/// ```
 struct StructField {
-    std::optional<std::string> doc; ///< Documentation comment (from `///`).
-    Visibility vis;                 ///< Field visibility.
-    std::string name;               ///< Field name.
-    TypePtr type;                   ///< Field type.
-    SourceSpan span;                ///< Source location.
+    std::optional<std::string> doc;       ///< Documentation comment (from `///`).
+    Visibility vis;                       ///< Field visibility.
+    std::string name;                     ///< Field name.
+    TypePtr type;                         ///< Field type.
+    std::optional<ExprPtr> default_value; ///< Optional default value expression.
+    SourceSpan span;                      ///< Source location.
 };
 
 /// Struct declaration.
@@ -220,6 +231,30 @@ struct StructDecl {
     std::vector<StructField> fields;         ///< Fields.
     std::optional<WhereClause> where_clause; ///< Where clause.
     SourceSpan span;                         ///< Source location.
+};
+
+/// Union declaration (C-style).
+///
+/// Defines a type where all fields share the same memory location.
+/// Only one field can be meaningfully accessed at a time.
+/// Field access is `lowlevel` (unsafe) as there's no runtime type checking.
+///
+/// # Example
+///
+/// ```tml
+/// union Value {
+///     int_val: I32,
+///     float_val: F32,
+///     ptr_val: *Unit,
+/// }
+/// ```
+struct UnionDecl {
+    std::optional<std::string> doc;    ///< Documentation comment.
+    std::vector<Decorator> decorators; ///< Decorators.
+    Visibility vis;                    ///< Visibility.
+    std::string name;                  ///< Union name.
+    std::vector<StructField> fields;   ///< Fields (share same memory).
+    SourceSpan span;                   ///< Source location.
 };
 
 /// An enum variant.

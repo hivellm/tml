@@ -439,6 +439,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
             }
         } else if (decl->is<parser::StructDecl>()) {
             gen_struct_decl(decl->as<parser::StructDecl>());
+        } else if (decl->is<parser::UnionDecl>()) {
+            gen_union_decl(decl->as<parser::UnionDecl>());
         } else if (decl->is<parser::EnumDecl>()) {
             gen_enum_decl(decl->as<parser::EnumDecl>());
         } else if (decl->is<parser::ClassDecl>()) {
@@ -1745,6 +1747,8 @@ void LLVMIRGen::gen_namespace_decl(const parser::NamespaceDecl& ns) {
     for (const auto& decl : ns.items) {
         if (decl->is<parser::StructDecl>()) {
             gen_struct_decl(decl->as<parser::StructDecl>());
+        } else if (decl->is<parser::UnionDecl>()) {
+            gen_union_decl(decl->as<parser::UnionDecl>());
         } else if (decl->is<parser::EnumDecl>()) {
             gen_enum_decl(decl->as<parser::EnumDecl>());
         } else if (decl->is<parser::ClassDecl>()) {

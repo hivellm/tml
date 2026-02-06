@@ -1471,12 +1471,12 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                             }
 
                             // Find the field
-                            for (const auto& [fname, ftype] : struct_def.fields) {
-                                if (fname == field_expr.field && ftype) {
+                            for (const auto& field : struct_def.fields) {
+                                if (field.name == field_expr.field && field.type) {
                                     if (!subs.empty()) {
-                                        receiver_type = types::substitute_type(ftype, subs);
+                                        receiver_type = types::substitute_type(field.type, subs);
                                     } else {
-                                        receiver_type = ftype;
+                                        receiver_type = field.type;
                                     }
                                     break;
                                 }
@@ -2373,11 +2373,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         if (struct_def) {
             // Look for a field with the method name
             int field_idx = 0;
-            for (const auto& [field_name, field_type] : struct_def->fields) {
-                if (field_name == method) {
+            for (const auto& fld : struct_def->fields) {
+                if (fld.name == method) {
                     // Check if the field is a function type
-                    if (field_type->is<types::FuncType>()) {
-                        const auto& func = field_type->as<types::FuncType>();
+                    if (fld.type->is<types::FuncType>()) {
+                        const auto& func = fld.type->as<types::FuncType>();
 
                         // Get pointer to the field
                         std::string field_ptr = fresh_reg();

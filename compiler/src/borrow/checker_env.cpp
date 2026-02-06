@@ -74,7 +74,7 @@ namespace tml::borrow {
 ///
 /// New variables start in `OwnershipState::Owned` with no active borrows.
 auto BorrowEnv::define(const std::string& name, types::TypePtr type, bool is_mut, Location loc,
-                       bool is_mut_ref) -> PlaceId {
+                       bool is_mut_ref, bool is_initialized) -> PlaceId {
     PlaceId id = next_id_++;
 
     PlaceState state{
@@ -88,7 +88,7 @@ auto BorrowEnv::define(const std::string& name, types::TypePtr type, bool is_mut
         .last_use = std::nullopt,
         .borrowed_from = std::nullopt,
         .moved_projections = {},
-        .is_initialized = true,
+        .is_initialized = is_initialized,
         .move_location = std::nullopt,
     };
 

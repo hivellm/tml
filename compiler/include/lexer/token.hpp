@@ -84,6 +84,7 @@ enum class TokenKind : uint8_t {
     // ========================================================================
     KwFunc,      ///< `func` - function declaration
     KwType,      ///< `type` - type/struct declaration
+    KwUnion,     ///< `union` - union declaration (C-style)
     KwBehavior,  ///< `behavior` - trait declaration (like Rust's `trait`)
     KwImpl,      ///< `impl` - implementation block
     KwMod,       ///< `mod` - module declaration

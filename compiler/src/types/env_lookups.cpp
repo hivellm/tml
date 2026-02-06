@@ -402,8 +402,8 @@ bool TypeEnv::type_implements(const std::string& type_name,
         auto struct_def = lookup_struct(type_name);
         if (struct_def) {
             // Struct is Send/Sync if all fields are Send/Sync
-            for (const auto& [field_name, field_type] : struct_def->fields) {
-                if (!type_implements(field_type, behavior_name)) {
+            for (const auto& field : struct_def->fields) {
+                if (!type_implements(field.type, behavior_name)) {
                     return false;
                 }
             }
@@ -598,8 +598,8 @@ bool TypeEnv::type_needs_drop(const std::string& type_name) const {
     // Check if it's a struct with fields that need drop
     auto struct_def = lookup_struct(type_name);
     if (struct_def) {
-        for (const auto& [field_name, field_type] : struct_def->fields) {
-            if (type_needs_drop(field_type)) {
+        for (const auto& field : struct_def->fields) {
+            if (type_needs_drop(field.type)) {
                 return true;
             }
         }
@@ -736,8 +736,8 @@ bool TypeEnv::is_trivially_destructible(const std::string& type_name) const {
     // Check if it's a struct - all fields must be trivially destructible
     auto struct_def = lookup_struct(type_name);
     if (struct_def) {
-        for (const auto& [field_name, field_type_ptr] : struct_def->fields) {
-            if (!is_trivially_destructible(field_type_ptr)) {
+        for (const auto& field : struct_def->fields) {
+            if (!is_trivially_destructible(field.type)) {
                 return false;
             }
         }

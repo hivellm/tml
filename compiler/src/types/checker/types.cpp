@@ -27,6 +27,7 @@
 #include "types/checker.hpp"
 
 #include <algorithm>
+#include <unordered_set>
 
 namespace tml::types {
 
@@ -93,17 +94,54 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
     auto struct_def = env_.lookup_struct(name);
 
     if (struct_def) {
+        // Build set of provided field names
+        std::unordered_set<std::string> provided_fields;
+        for (const auto& [field_name, field_expr] : struct_expr.fields) {
+            provided_fields.insert(field_name);
+        }
+
         // Check field expressions with expected field types for coercion
         for (const auto& [field_name, field_expr] : struct_expr.fields) {
             // Look up the expected field type
             TypePtr expected_field_type = nullptr;
-            for (const auto& [fname, ftype] : struct_def->fields) {
-                if (fname == field_name) {
-                    expected_field_type = ftype;
+            bool field_found = false;
+            for (const auto& fld : struct_def->fields) {
+                if (fld.name == field_name) {
+                    expected_field_type = fld.type;
+                    field_found = true;
                     break;
                 }
             }
+            if (!field_found) {
+                std::string type_kind = struct_def->is_union ? "union" : "struct";
+                error("Unknown field '" + field_name + "' in " + type_kind + " '" + name + "'",
+                      struct_expr.span, "T005");
+            }
             check_expr(*field_expr, expected_field_type);
+        }
+
+        // For unions: exactly one field must be provided
+        // For structs: all fields without defaults must be provided
+        if (struct_def->is_union) {
+            if (provided_fields.empty()) {
+                error("Union literal requires exactly one field initializer", struct_expr.span,
+                      "T005");
+            } else if (provided_fields.size() > 1) {
+                error("Union literal can only initialize one field at a time", struct_expr.span,
+                      "T005");
+            }
+        } else {
+            // Regular struct - check all fields without defaults are provided
+            for (const auto& fld : struct_def->fields) {
+                if (provided_fields.find(fld.name) == provided_fields.end()) {
+                    // Field is missing - check if it has a default
+                    if (!fld.has_default) {
+                        error("Missing field '" + fld.name +
+                                  "' in struct literal (no default value)",
+                              struct_expr.span, "T005");
+                    }
+                }
+            }
         }
 
         // Struct type

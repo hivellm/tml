@@ -1,0 +1,84 @@
+// Test: Basic union type functionality
+
+union IntOrPtr {
+    int_val: I32,
+    ptr_val: I64,  // Use I64 as pointer-like value
+}
+
+union Value {
+    a: I32,
+    b: I32,
+    c: I32,
+}
+
+// Test basic union initialization and field access
+@test
+func test_union_first_field() {
+    let v = IntOrPtr { int_val: 42 }
+    assert_eq(v.int_val, 42)
+}
+
+@test
+func test_union_second_field() {
+    let v = IntOrPtr { ptr_val: 1000000 }
+    assert_eq(v.ptr_val, 1000000)
+}
+
+// Test multiple same-type fields
+@test
+func test_union_field_a() {
+    let v = Value { a: 100 }
+    assert_eq(v.a, 100)
+}
+
+@test
+func test_union_field_b() {
+    let v = Value { b: 200 }
+    assert_eq(v.b, 200)
+}
+
+@test
+func test_union_field_c() {
+    let v = Value { c: 300 }
+    assert_eq(v.c, 300)
+}
+
+// Test that union fields share memory (reading wrong field gives same bits reinterpreted)
+@test
+func test_union_memory_sharing() {
+    // Write to ptr_val field and verify we can read part of it as int_val
+    let v = IntOrPtr { ptr_val: 0x0000000012345678 }
+    // On little-endian, the low 32 bits should be visible in int_val
+    assert_eq(v.int_val, 0x12345678)
+}
+
+// Test union in function parameter
+func process_union(u: IntOrPtr) -> I32 {
+    u.int_val
+}
+
+@test
+func test_union_as_parameter() {
+    let v = IntOrPtr { int_val: 555 }
+    let result = process_union(v)
+    assert_eq(result, 555)
+}
+
+// Test union in function return
+func create_union(val: I32) -> IntOrPtr {
+    IntOrPtr { int_val: val }
+}
+
+@test
+func test_union_as_return() {
+    let v = create_union(777)
+    assert_eq(v.int_val, 777)
+}
+
+// Test mutable union
+@test
+func test_mutable_union() {
+    var v = IntOrPtr { int_val: 10 }
+    v = IntOrPtr { int_val: 20 }
+    assert_eq(v.int_val, 20)
+}

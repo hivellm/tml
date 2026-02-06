@@ -69,6 +69,8 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "func";
     case TokenKind::KwType:
         return "type";
+    case TokenKind::KwUnion:
+        return "union";
     case TokenKind::KwBehavior:
         return "behavior";
     case TokenKind::KwImpl:

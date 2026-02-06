@@ -498,8 +498,8 @@ auto HirBuilder::lower_field(const parser::FieldExpr& field) -> HirExprPtr {
     if (!type_name.empty()) {
         if (auto struct_def = type_env_.lookup_struct(type_name)) {
             for (const auto& f : struct_def->fields) {
-                if (f.first == field.field) {
-                    field_type = type_env_.resolve(f.second);
+                if (f.name == field.field) {
+                    field_type = type_env_.resolve(f.type);
                     break;
                 }
             }

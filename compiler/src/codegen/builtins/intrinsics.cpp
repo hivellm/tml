@@ -1588,18 +1588,29 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             }
         }
 
-        // Get the index argument (must be a compile-time constant)
+        // Get the index argument (must be a compile-time constant or comptime loop variable)
         size_t index = 0;
-        if (!call.args.empty() && call.args[0]->is<parser::LiteralExpr>()) {
-            const auto& lit = call.args[0]->as<parser::LiteralExpr>();
-            if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
-                index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+        bool has_index = false;
+        if (!call.args.empty()) {
+            if (call.args[0]->is<parser::LiteralExpr>()) {
+                const auto& lit = call.args[0]->as<parser::LiteralExpr>();
+                if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
+                    index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+                    has_index = true;
+                }
+            } else if (call.args[0]->is<parser::IdentExpr>()) {
+                // Check if this is the compile-time loop variable
+                const auto& ident = call.args[0]->as<parser::IdentExpr>();
+                if (!comptime_loop_var_.empty() && ident.name == comptime_loop_var_) {
+                    index = static_cast<size_t>(comptime_loop_value_);
+                    has_index = true;
+                }
             }
         }
 
         // Look up the field name
         std::string field_name = "";
-        if (!type_name.empty()) {
+        if (!type_name.empty() && has_index) {
             auto it = struct_fields_.find(type_name);
             if (it != struct_fields_.end() && index < it->second.size()) {
                 field_name = it->second[index].name;
@@ -1632,18 +1643,29 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             }
         }
 
-        // Get the index argument
+        // Get the index argument (must be a compile-time constant or comptime loop variable)
         size_t index = 0;
-        if (!call.args.empty() && call.args[0]->is<parser::LiteralExpr>()) {
-            const auto& lit = call.args[0]->as<parser::LiteralExpr>();
-            if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
-                index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+        bool has_index = false;
+        if (!call.args.empty()) {
+            if (call.args[0]->is<parser::LiteralExpr>()) {
+                const auto& lit = call.args[0]->as<parser::LiteralExpr>();
+                if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
+                    index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+                    has_index = true;
+                }
+            } else if (call.args[0]->is<parser::IdentExpr>()) {
+                // Check if this is the compile-time loop variable
+                const auto& ident = call.args[0]->as<parser::IdentExpr>();
+                if (!comptime_loop_var_.empty() && ident.name == comptime_loop_var_) {
+                    index = static_cast<size_t>(comptime_loop_value_);
+                    has_index = true;
+                }
             }
         }
 
         // Look up the field's semantic type and compute its type ID
         uint64_t type_id = 0;
-        if (!type_name.empty()) {
+        if (!type_name.empty() && has_index) {
             auto it = struct_fields_.find(type_name);
             if (it != struct_fields_.end() && index < it->second.size()) {
                 const auto& field = it->second[index];
@@ -1785,12 +1807,20 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             }
         }
 
-        // Get the index argument
+        // Get the index argument (must be a compile-time constant or comptime loop variable)
         size_t index = 0;
-        if (!call.args.empty() && call.args[0]->is<parser::LiteralExpr>()) {
-            const auto& lit = call.args[0]->as<parser::LiteralExpr>();
-            if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
-                index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+        if (!call.args.empty()) {
+            if (call.args[0]->is<parser::LiteralExpr>()) {
+                const auto& lit = call.args[0]->as<parser::LiteralExpr>();
+                if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
+                    index = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
+                }
+            } else if (call.args[0]->is<parser::IdentExpr>()) {
+                // Check if this is the compile-time loop variable
+                const auto& ident = call.args[0]->as<parser::IdentExpr>();
+                if (!comptime_loop_var_.empty() && ident.name == comptime_loop_var_) {
+                    index = static_cast<size_t>(comptime_loop_value_);
+                }
             }
         }
 

@@ -1,0 +1,52 @@
+// Test: Default field values in struct definitions
+// Phase 9 of lang-ergonomics task
+
+// Simple struct with default value
+type Config {
+    name: Str,
+    port: I32 = 8080,
+    debug: Bool = false,
+}
+
+// Test: basic struct creation with all fields
+@test
+func test_all_fields_explicit() {
+    let config = Config {
+        name: "test",
+        port: 3000,
+        debug: true,
+    }
+    assert_eq(config.port, 3000)
+    assert_eq(config.debug, true)
+}
+
+// Test: struct with missing fields that have defaults
+@test
+func test_omit_fields_with_defaults() {
+    let config = Config {
+        name: "minimal",
+    }
+    // port should be 8080 (default), debug should be false (default)
+    assert_eq(config.port, 8080)
+    assert_eq(config.debug, false)
+}
+
+// Test: provide only some defaults
+@test
+func test_partial_defaults() {
+    let config = Config {
+        name: "partial",
+        port: 9000,
+        // debug uses default = false
+    }
+    assert_eq(config.port, 9000)
+    assert_eq(config.debug, false)
+}
+
+// Entry point
+func main() {
+    test_all_fields_explicit()
+    test_omit_fields_with_defaults()
+    test_partial_defaults()
+    print("Default field values tests passed!\n")
+}

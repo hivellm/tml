@@ -650,7 +650,7 @@ public:
     ///
     /// Returns the unique `PlaceId` assigned to this variable.
     auto define(const std::string& name, types::TypePtr type, bool is_mut, Location loc,
-                bool is_mut_ref = false) -> PlaceId;
+                bool is_mut_ref = false, bool is_initialized = true) -> PlaceId;
 
     /// Looks up a place by name in the current and enclosing scopes.
     ///

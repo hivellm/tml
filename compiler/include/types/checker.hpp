@@ -114,6 +114,7 @@ private:
 
     // Declaration registration (first pass)
     void register_struct_decl(const parser::StructDecl& decl);
+    void register_union_decl(const parser::UnionDecl& decl);
     void register_enum_decl(const parser::EnumDecl& decl);
     void register_trait_decl(const parser::TraitDecl& decl);
     void register_type_alias(const parser::TypeAliasDecl& decl);

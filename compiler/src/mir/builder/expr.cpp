@@ -372,9 +372,9 @@ auto MirBuilder::build_field(const parser::FieldExpr& field) -> Value {
     if (!struct_name.empty()) {
         if (auto struct_def = env_.lookup_struct(struct_name)) {
             for (size_t i = 0; i < struct_def->fields.size(); ++i) {
-                if (struct_def->fields[i].first == field.field) {
+                if (struct_def->fields[i].name == field.field) {
                     field_index = static_cast<uint32_t>(i);
-                    field_type = convert_semantic_type(struct_def->fields[i].second);
+                    field_type = convert_semantic_type(struct_def->fields[i].type);
                     break;
                 }
             }

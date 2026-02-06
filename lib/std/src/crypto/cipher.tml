@@ -322,27 +322,30 @@ impl CipherAlgorithm {
 
     /// Parses an algorithm from a string name.
     pub func from_name(name: Str) -> Maybe[CipherAlgorithm] {
-        if name == "aes-128-cbc" { return Just(CipherAlgorithm::Aes128Cbc) }
-        if name == "aes-192-cbc" { return Just(CipherAlgorithm::Aes192Cbc) }
-        if name == "aes-256-cbc" { return Just(CipherAlgorithm::Aes256Cbc) }
-        if name == "aes-128-ctr" { return Just(CipherAlgorithm::Aes128Ctr) }
-        if name == "aes-192-ctr" { return Just(CipherAlgorithm::Aes192Ctr) }
-        if name == "aes-256-ctr" { return Just(CipherAlgorithm::Aes256Ctr) }
-        if name == "aes-128-gcm" { return Just(CipherAlgorithm::Aes128Gcm) }
-        if name == "aes-192-gcm" { return Just(CipherAlgorithm::Aes192Gcm) }
-        if name == "aes-256-gcm" { return Just(CipherAlgorithm::Aes256Gcm) }
-        if name == "aes-128-ccm" { return Just(CipherAlgorithm::Aes128Ccm) }
-        if name == "aes-256-ccm" { return Just(CipherAlgorithm::Aes256Ccm) }
-        if name == "aes-128-ocb" { return Just(CipherAlgorithm::Aes128Ocb) }
-        if name == "aes-256-ocb" { return Just(CipherAlgorithm::Aes256Ocb) }
-        if name == "chacha20" { return Just(CipherAlgorithm::ChaCha20) }
-        if name == "chacha20-poly1305" { return Just(CipherAlgorithm::ChaCha20Poly1305) }
-        if name == "xchacha20-poly1305" { return Just(CipherAlgorithm::XChaCha20Poly1305) }
-        if name == "aes-128-ecb" { return Just(CipherAlgorithm::Aes128Ecb) }
-        if name == "aes-256-ecb" { return Just(CipherAlgorithm::Aes256Ecb) }
-        if name == "des-ede3-cbc" { return Just(CipherAlgorithm::Des3Cbc) }
-        if name == "bf-cbc" { return Just(CipherAlgorithm::BlowfishCbc) }
-        return Nothing
+        // Using string pattern matching in when expression (Phase 4)
+        when name {
+            "aes-128-cbc" => Just(CipherAlgorithm::Aes128Cbc),
+            "aes-192-cbc" => Just(CipherAlgorithm::Aes192Cbc),
+            "aes-256-cbc" => Just(CipherAlgorithm::Aes256Cbc),
+            "aes-128-ctr" => Just(CipherAlgorithm::Aes128Ctr),
+            "aes-192-ctr" => Just(CipherAlgorithm::Aes192Ctr),
+            "aes-256-ctr" => Just(CipherAlgorithm::Aes256Ctr),
+            "aes-128-gcm" => Just(CipherAlgorithm::Aes128Gcm),
+            "aes-192-gcm" => Just(CipherAlgorithm::Aes192Gcm),
+            "aes-256-gcm" => Just(CipherAlgorithm::Aes256Gcm),
+            "aes-128-ccm" => Just(CipherAlgorithm::Aes128Ccm),
+            "aes-256-ccm" => Just(CipherAlgorithm::Aes256Ccm),
+            "aes-128-ocb" => Just(CipherAlgorithm::Aes128Ocb),
+            "aes-256-ocb" => Just(CipherAlgorithm::Aes256Ocb),
+            "chacha20" => Just(CipherAlgorithm::ChaCha20),
+            "chacha20-poly1305" => Just(CipherAlgorithm::ChaCha20Poly1305),
+            "xchacha20-poly1305" => Just(CipherAlgorithm::XChaCha20Poly1305),
+            "aes-128-ecb" => Just(CipherAlgorithm::Aes128Ecb),
+            "aes-256-ecb" => Just(CipherAlgorithm::Aes256Ecb),
+            "des-ede3-cbc" => Just(CipherAlgorithm::Des3Cbc),
+            "bf-cbc" => Just(CipherAlgorithm::BlowfishCbc),
+            _ => Nothing
+        }
     }
 }
 
@@ -705,41 +708,14 @@ pub func aes_gcm_encrypt(
     aad: ref Buffer,
 ) -> Outcome[(Buffer, AuthTag), CryptoError] {
     let key_len: I64 = ffi_buffer_len(key.handle)
-    let algorithm_result: Outcome[CipherAlgorithm, CryptoError] = CipherAlgorithm::aes_gcm_for_key_len(key_len)
-    let mut algorithm: CipherAlgorithm = CipherAlgorithm::Aes128Gcm
-    when algorithm_result {
-        Err(e) => return Err(e),
-        Ok(a) => algorithm = a
-    }
+    let algorithm: CipherAlgorithm = CipherAlgorithm::aes_gcm_for_key_len(key_len)!
 
-    let cipher_result: Outcome[Cipher, CryptoError] = Cipher::new(algorithm, key, nonce)
-    let mut cipher: Cipher = Cipher { handle: null, algorithm: CipherAlgorithm::Aes128Gcm, finalized: false, output: Buffer::new(0) }
-    when cipher_result {
-        Err(e) => return Err(e),
-        Ok(c) => cipher = c
-    }
-
-    let aad_result: Outcome[ref Cipher, CryptoError] = cipher.set_aad(aad)
-    when aad_result {
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-
+    let mut cipher: Cipher = Cipher::new(algorithm, key, nonce)!
+    cipher.set_aad(aad)!
     cipher.update_bytes(plaintext)
 
-    let ciphertext_result: Outcome[Buffer, CryptoError] = cipher.finalize()
-    let mut ct: Buffer = Buffer::new(0)
-    when ciphertext_result {
-        Err(e) => return Err(e),
-        Ok(c) => ct = c
-    }
-
-    let tag_result: Outcome[AuthTag, CryptoError] = cipher.get_auth_tag()
-    let mut tag: AuthTag = AuthTag { data: Buffer::new(0) }
-    when tag_result {
-        Err(e) => return Err(e),
-        Ok(t) => tag = t
-    }
+    let ct: Buffer = cipher.finalize()!
+    let tag: AuthTag = cipher.get_auth_tag()!
 
     return Ok((ct, tag))
 }
@@ -755,33 +731,13 @@ pub func aes_gcm_decrypt(
     tag: ref AuthTag,
 ) -> Outcome[Buffer, CryptoError] {
     let key_len: I64 = ffi_buffer_len(key.handle)
-    let algorithm_result: Outcome[CipherAlgorithm, CryptoError] = CipherAlgorithm::aes_gcm_for_key_len(key_len)
-    let mut algorithm: CipherAlgorithm = CipherAlgorithm::Aes128Gcm
-    when algorithm_result {
-        Err(e) => return Err(e),
-        Ok(a) => algorithm = a
-    }
+    let algorithm: CipherAlgorithm = CipherAlgorithm::aes_gcm_for_key_len(key_len)!
 
-    let decipher_result: Outcome[Decipher, CryptoError] = Decipher::new(algorithm, key, nonce)
-    let mut decipher: Decipher = Decipher { handle: null, algorithm: CipherAlgorithm::Aes128Gcm, finalized: false, output: Buffer::new(0) }
-    when decipher_result {
-        Err(e) => return Err(e),
-        Ok(d) => decipher = d
-    }
-
-    let aad_result: Outcome[ref Decipher, CryptoError] = decipher.set_aad(aad)
-    when aad_result {
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-
-    let tag_result: Outcome[ref Decipher, CryptoError] = decipher.set_auth_tag(tag)
-    when tag_result {
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-
+    let mut decipher: Decipher = Decipher::new(algorithm, key, nonce)!
+    decipher.set_aad(aad)!
+    decipher.set_auth_tag(tag)!
     decipher.update_bytes(ciphertext)
+
     return decipher.finalize()
 }
 
@@ -807,34 +763,12 @@ pub func chacha20_poly1305_encrypt(
         ))
     }
 
-    let cipher_result: Outcome[Cipher, CryptoError] = Cipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)
-    let mut cipher: Cipher = Cipher { handle: null, algorithm: CipherAlgorithm::ChaCha20Poly1305, finalized: false, output: Buffer::new(0) }
-    when cipher_result {
-        Err(e) => return Err(e),
-        Ok(c) => cipher = c
-    }
-
-    let aad_result: Outcome[ref Cipher, CryptoError] = cipher.set_aad(aad)
-    when aad_result {
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)!
+    cipher.set_aad(aad)!
     cipher.update_bytes(plaintext)
 
-    let ciphertext_result: Outcome[Buffer, CryptoError] = cipher.finalize()
-    let mut ct: Buffer = Buffer::new(0)
-    when ciphertext_result {
-        Err(e) => return Err(e),
-        Ok(c) => ct = c
-    }
-
-    let tag_result: Outcome[AuthTag, CryptoError] = cipher.get_auth_tag()
-    let mut tag: AuthTag = AuthTag { data: Buffer::new(0) }
-    when tag_result {
-        Err(e) => return Err(e),
-        Ok(t) => tag = t
-    }
+    let ct: Buffer = cipher.finalize()!
+    let tag: AuthTag = cipher.get_auth_tag()!
 
     return Ok((ct, tag))
 }
@@ -860,26 +794,11 @@ pub func chacha20_poly1305_decrypt(
         ))
     }
 
-    let decipher_result: Outcome[Decipher, CryptoError] = Decipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)
-    let mut decipher: Decipher = Decipher { handle: null, algorithm: CipherAlgorithm::ChaCha20Poly1305, finalized: false, output: Buffer::new(0) }
-    when decipher_result {
-        Err(e) => return Err(e),
-        Ok(d) => decipher = d
-    }
-
-    let aad_result: Outcome[ref Decipher, CryptoError] = decipher.set_aad(aad)
-    when aad_result {
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-
-    let tag_result: Outcome[ref Decipher, CryptoError] = decipher.set_auth_tag(tag)
-    when tag_result {
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::ChaCha20Poly1305, key, nonce)!
+    decipher.set_aad(aad)!
+    decipher.set_auth_tag(tag)!
     decipher.update_bytes(ciphertext)
+
     return decipher.finalize()
 }
 
@@ -903,34 +822,12 @@ pub func xchacha20_poly1305_encrypt(
         ))
     }
 
-    let cipher_result: Outcome[Cipher, CryptoError] = Cipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)
-    let mut cipher: Cipher = Cipher { handle: null, algorithm: CipherAlgorithm::XChaCha20Poly1305, finalized: false, output: Buffer::new(0) }
-    when cipher_result {
-        Err(e) => return Err(e),
-        Ok(c) => cipher = c
-    }
-
-    let aad_result: Outcome[ref Cipher, CryptoError] = cipher.set_aad(aad)
-    when aad_result {
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)!
+    cipher.set_aad(aad)!
     cipher.update_bytes(plaintext)
 
-    let ciphertext_result: Outcome[Buffer, CryptoError] = cipher.finalize()
-    let mut ct: Buffer = Buffer::new(0)
-    when ciphertext_result {
-        Err(e) => return Err(e),
-        Ok(c) => ct = c
-    }
-
-    let tag_result: Outcome[AuthTag, CryptoError] = cipher.get_auth_tag()
-    let mut tag: AuthTag = AuthTag { data: Buffer::new(0) }
-    when tag_result {
-        Err(e) => return Err(e),
-        Ok(t) => tag = t
-    }
+    let ct: Buffer = cipher.finalize()!
+    let tag: AuthTag = cipher.get_auth_tag()!
 
     return Ok((ct, tag))
 }
@@ -956,26 +853,11 @@ pub func xchacha20_poly1305_decrypt(
         ))
     }
 
-    let decipher_result: Outcome[Decipher, CryptoError] = Decipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)
-    let mut decipher: Decipher = Decipher { handle: null, algorithm: CipherAlgorithm::XChaCha20Poly1305, finalized: false, output: Buffer::new(0) }
-    when decipher_result {
-        Err(e) => return Err(e),
-        Ok(d) => decipher = d
-    }
-
-    let aad_result: Outcome[ref Decipher, CryptoError] = decipher.set_aad(aad)
-    when aad_result {
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-
-    let tag_result: Outcome[ref Decipher, CryptoError] = decipher.set_auth_tag(tag)
-    when tag_result {
-        Err(e) => return Err(e),
-        Ok(_) => {}
-    }
-
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::XChaCha20Poly1305, key, nonce)!
+    decipher.set_aad(aad)!
+    decipher.set_auth_tag(tag)!
     decipher.update_bytes(ciphertext)
+
     return decipher.finalize()
 }
 
@@ -992,20 +874,10 @@ pub func encrypt_string(key: ref Buffer, plaintext: Str) -> Outcome[Str, CryptoE
     let plaintext_buf: Buffer = Buffer { handle: plaintext_buf_handle }
 
     let aad: Buffer = Buffer::new(0)
-    let encrypt_result: Outcome[(Buffer, AuthTag), CryptoError] = aes_gcm_encrypt(key, ref iv, ref plaintext_buf, ref aad)
-    let mut ct: Buffer = Buffer::new(0)
-    let mut tag: AuthTag = AuthTag { data: Buffer::new(0) }
-    when encrypt_result {
-        Err(e) => return Err(e),
-        Ok(r) => {
-            ct = r.0
-            tag = r.1
-        }
-    }
+    let (ct, tag): (Buffer, AuthTag) = aes_gcm_encrypt(key, ref iv, ref plaintext_buf, ref aad)!
 
     // Combine IV + ciphertext + tag
-    let ciphertext: Buffer = ct
-    let result_handle: *Unit = ffi_crypto_concat_buffers3(iv.handle, ciphertext.handle, tag.data.handle)
+    let result_handle: *Unit = ffi_crypto_concat_buffers3(iv.handle, ct.handle, tag.data.handle)
     let result: Buffer = Buffer { handle: result_handle }
 
     // Return base64
@@ -1018,14 +890,14 @@ pub func decrypt_string(key: ref Buffer, encrypted_base64: Str) -> Outcome[Str, 
     // Decode base64
     let data_handle: *Unit = ffi_crypto_base64_to_bytes(encrypted_base64)
     if data_handle == null {
-        return Err(CryptoError::invalid_parameter( "invalid base64"))
+        return Err(CryptoError::invalid_parameter("invalid base64"))
     }
     let data: Buffer = Buffer { handle: data_handle }
 
     // Extract IV (12 bytes), ciphertext, and tag (16 bytes)
     let data_len: I64 = ffi_buffer_len(data.handle)
     if data_len < 28 {  // 12 + 16 minimum
-        return Err(CryptoError::invalid_parameter( "encrypted data too short"))
+        return Err(CryptoError::invalid_parameter("encrypted data too short"))
     }
 
     let iv_handle: *Unit = ffi_crypto_buffer_slice(data.handle, 0, 12)
@@ -1039,12 +911,7 @@ pub func decrypt_string(key: ref Buffer, encrypted_base64: Str) -> Outcome[Str, 
     let tag: AuthTag = AuthTag { data: Buffer { handle: tag_handle } }
 
     let aad: Buffer = Buffer::new(0)
-    let decrypt_result: Outcome[Buffer, CryptoError] = aes_gcm_decrypt(key, ref iv, ref ciphertext, ref aad, ref tag)
-    let mut plaintext: Buffer = Buffer::new(0)
-    when decrypt_result {
-        Err(e) => return Err(e),
-        Ok(p) => plaintext = p
-    }
+    let plaintext: Buffer = aes_gcm_decrypt(key, ref iv, ref ciphertext, ref aad, ref tag)!
 
     let result: Str = ffi_crypto_bytes_to_str(plaintext.handle)
     return Ok(result)

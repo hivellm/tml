@@ -12,8 +12,8 @@
 //!
 //! ## Type Annotations
 //!
-//! TML requires explicit type annotations on `let` and `var` statements.
-//! Unlike Rust, type inference is limited to the initializer expression.
+//! TML supports optional type annotations on `let` and `var` statements.
+//! When omitted, the type is inferred from the initializer expression.
 //!
 //! ## Pattern Binding
 //!
@@ -58,33 +58,41 @@ auto TypeChecker::check_stmt(const parser::Stmt& stmt) -> TypePtr {
 
 auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
     TML_DEBUG_LN("[check_let] Processing let statement");
-    // TML requires explicit type annotations on all let statements
-    if (!let.type_annotation.has_value()) {
-        error("TML requires explicit type annotation on 'let' statements. Add ': Type' after the "
-              "variable name.",
-              let.span, "T011");
-        // Continue with unit type to allow further error checking
-        bind_pattern(*let.pattern, make_unit());
-        return make_unit();
-    }
 
-    TML_DEBUG_LN("[check_let] Has type annotation, calling resolve_type...");
-    TML_DEBUG_LN(
-        "[check_let] Type annotation variant index: " << (*let.type_annotation)->kind.index());
-    TypePtr var_type = resolve_type(**let.type_annotation);
-    TML_DEBUG_LN("[check_let] resolved var_type: " << type_to_string(var_type));
+    TypePtr var_type;
 
-    if (let.init) {
-        // Pass var_type as expected type for numeric/tuple literal coercion
-        TypePtr init_type = check_expr(**let.init, var_type);
-        // Check that init type is compatible with declared type
-        TypePtr resolved_var = env_.resolve(var_type);
-        TypePtr resolved_init = env_.resolve(init_type);
-        if (!types_compatible(resolved_var, resolved_init)) {
-            error("Type mismatch: expected " + type_to_string(resolved_var) + ", found " +
-                      type_to_string(resolved_init),
-                  let.span, "T001");
+    if (let.type_annotation.has_value()) {
+        // Explicit type annotation provided
+        TML_DEBUG_LN("[check_let] Has type annotation, calling resolve_type...");
+        TML_DEBUG_LN(
+            "[check_let] Type annotation variant index: " << (*let.type_annotation)->kind.index());
+        var_type = resolve_type(**let.type_annotation);
+        TML_DEBUG_LN("[check_let] resolved var_type: " << type_to_string(var_type));
+
+        if (let.init) {
+            // Pass var_type as expected type for numeric/tuple literal coercion
+            TypePtr init_type = check_expr(**let.init, var_type);
+            // Check that init type is compatible with declared type
+            TypePtr resolved_var = env_.resolve(var_type);
+            TypePtr resolved_init = env_.resolve(init_type);
+            if (!types_compatible(resolved_var, resolved_init)) {
+                error("Type mismatch: expected " + type_to_string(resolved_var) + ", found " +
+                          type_to_string(resolved_init),
+                      let.span, "T001");
+            }
         }
+    } else {
+        // No type annotation - infer from initializer
+        if (!let.init) {
+            // Parser should have caught this, but double-check
+            error("Type annotation or initializer required", let.span, "T011");
+            bind_pattern(*let.pattern, make_unit());
+            return make_unit();
+        }
+
+        TML_DEBUG_LN("[check_let] No type annotation, inferring from initializer");
+        var_type = check_expr(**let.init);
+        TML_DEBUG_LN("[check_let] inferred var_type: " << type_to_string(var_type));
     }
 
     bind_pattern(*let.pattern, var_type);
@@ -92,22 +100,34 @@ auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
 }
 
 auto TypeChecker::check_var(const parser::VarStmt& var) -> TypePtr {
-    // TML requires explicit type annotations on all var statements
-    if (!var.type_annotation.has_value()) {
-        error("TML requires explicit type annotation on 'var' statements. Add ': Type' after the "
-              "variable name.",
-              var.span, "T011");
-        // Continue with inferred type to allow further error checking
-        TypePtr init_type = check_expr(*var.init);
-        env_.current_scope()->define(var.name, init_type, true, SourceSpan{});
-        return make_unit();
+    TypePtr var_type;
+
+    if (var.type_annotation.has_value()) {
+        // Explicit type annotation provided
+        var_type = resolve_type(**var.type_annotation);
+        // Pass var_type as expected type for numeric/tuple literal coercion
+        TypePtr init_type = check_expr(*var.init, var_type);
+
+        // Check type compatibility
+        TypePtr resolved_var = env_.resolve(var_type);
+        TypePtr resolved_init = env_.resolve(init_type);
+        if (!types_compatible(resolved_var, resolved_init)) {
+            error("Type mismatch: expected " + type_to_string(resolved_var) + ", found " +
+                      type_to_string(resolved_init),
+                  var.span, "T001");
+        }
+    } else {
+        // No type annotation - infer from initializer
+        if (!var.init) {
+            // Parser should have caught this, but double-check
+            error("Type annotation or initializer required", var.span, "T011");
+            env_.current_scope()->define(var.name, make_unit(), true, SourceSpan{});
+            return make_unit();
+        }
+
+        var_type = check_expr(*var.init);
     }
 
-    TypePtr var_type = resolve_type(**var.type_annotation);
-    // Pass var_type as expected type for numeric/tuple literal coercion
-    TypePtr init_type = check_expr(*var.init, var_type);
-
-    // Type compatibility is checked during expression type checking
     env_.current_scope()->define(var.name, var_type, true, SourceSpan{});
     return make_unit();
 }
@@ -317,7 +337,7 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 // Build field type map from struct definition
                 std::unordered_map<std::string, TypePtr> field_types;
                 for (const auto& field : struct_def->fields) {
-                    field_types[field.first] = field.second;
+                    field_types[field.name] = field.type;
                 }
 
                 // Bind each field pattern

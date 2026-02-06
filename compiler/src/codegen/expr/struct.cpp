@@ -30,6 +30,7 @@
 
 #include <cctype>
 #include <iostream>
+#include <unordered_set>
 
 namespace tml::codegen {
 
@@ -136,6 +137,45 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
 auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string {
     std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
     std::string struct_type;
+
+    // Check if this is a union type - unions have special initialization
+    // Union literals only have one field set, and we bitcast to store it
+    if (union_types_.find(base_name) != union_types_.end()) {
+        std::string union_type = "%union." + base_name;
+
+        // Allocate the union
+        std::string ptr = fresh_reg();
+        emit_line("  " + ptr + " = alloca " + union_type);
+
+        // Unions only have one field provided - bitcast and store it
+        if (!s.fields.empty()) {
+            const std::string& field_name = s.fields[0].first;
+
+            // Get the field type from struct_fields_ registry
+            std::string field_type_llvm;
+            auto fields_it = struct_fields_.find(base_name);
+            if (fields_it != struct_fields_.end()) {
+                for (const auto& finfo : fields_it->second) {
+                    if (finfo.name == field_name) {
+                        field_type_llvm = finfo.llvm_type;
+                        break;
+                    }
+                }
+            }
+
+            // Generate the field value
+            std::string field_val = gen_expr(*s.fields[0].second);
+            if (field_type_llvm.empty()) {
+                field_type_llvm = last_expr_type_;
+            }
+
+            // Store directly to the union pointer (all fields start at offset 0)
+            emit_line("  store " + field_type_llvm + " " + field_val + ", ptr " + ptr);
+        }
+
+        last_expr_type_ = union_type;
+        return ptr;
+    }
 
     // Handle Self type - resolve to current_impl_type_ if set
     // This handles cases like `Self { ptr: addr }` inside impl blocks
@@ -635,6 +675,81 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         emit_line("  store " + field_type + " " + field_val + ", ptr " + field_ptr);
     }
 
+    // Generate default values for fields not explicitly provided in the literal
+    // Build set of provided field names
+    std::unordered_set<std::string> provided_fields;
+    for (const auto& [fname, fexpr] : s.fields) {
+        provided_fields.insert(fname);
+    }
+
+    // Look up struct declaration for default values
+    const parser::StructDecl* decl = nullptr;
+    auto decl_it = struct_decls_.find(base_name);
+    if (decl_it != struct_decls_.end()) {
+        decl = decl_it->second;
+    } else {
+        // Check pending_generic_structs_ for generic structs
+        auto pending_decl_it = pending_generic_structs_.find(base_name);
+        if (pending_decl_it != pending_generic_structs_.end()) {
+            decl = pending_decl_it->second;
+        }
+    }
+
+    // If we found the declaration, generate default values for missing fields
+    if (decl) {
+        for (const auto& field : decl->fields) {
+            // Skip fields that were explicitly provided
+            if (provided_fields.find(field.name) != provided_fields.end()) {
+                continue;
+            }
+            // Generate default value if present
+            if (field.default_value.has_value()) {
+                int field_idx = get_field_index(struct_name_for_lookup, field.name);
+                std::string target_field_type = get_field_type(struct_name_for_lookup, field.name);
+
+                // Set expected types for literals
+                std::string saved_expected_literal = expected_literal_type_;
+                bool saved_unsigned = expected_literal_is_unsigned_;
+                if (target_field_type == "i8" || target_field_type == "i16" ||
+                    target_field_type == "i64") {
+                    expected_literal_type_ = target_field_type;
+                    expected_literal_is_unsigned_ = false;
+                }
+
+                std::string default_val = gen_expr(**field.default_value);
+                std::string actual_type = last_expr_type_;
+
+                // Restore expected types
+                expected_literal_type_ = saved_expected_literal;
+                expected_literal_is_unsigned_ = saved_unsigned;
+
+                // Handle type coercions if needed
+                if (!target_field_type.empty() && target_field_type != actual_type) {
+                    if ((actual_type == "i32" || actual_type == "i64") &&
+                        (target_field_type == "i64" || target_field_type == "i32")) {
+                        if (actual_type == "i32" && target_field_type == "i64") {
+                            std::string casted = fresh_reg();
+                            emit_line("  " + casted + " = sext i32 " + default_val + " to i64");
+                            default_val = casted;
+                        } else if (actual_type == "i64" && target_field_type == "i32") {
+                            std::string casted = fresh_reg();
+                            emit_line("  " + casted + " = trunc i64 " + default_val + " to i32");
+                            default_val = casted;
+                        }
+                        actual_type = target_field_type;
+                    }
+                }
+
+                std::string field_ptr = fresh_reg();
+                emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
+                          ", i32 0, i32 " + std::to_string(field_idx));
+                emit_line("  store " +
+                          (target_field_type.empty() ? actual_type : target_field_type) + " " +
+                          default_val + ", ptr " + field_ptr);
+            }
+        }
+    }
+
     return ptr;
 }
 
@@ -642,6 +757,17 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
     std::string ptr = gen_struct_expr_ptr(s);
     std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
     std::string struct_type;
+
+    // Check if this is a union type
+    if (union_types_.find(base_name) != union_types_.end()) {
+        std::string union_type = "%union." + base_name;
+
+        // Load the union value
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + union_type + ", ptr " + ptr);
+        last_expr_type_ = union_type;
+        return result;
+    }
 
     // Handle Self type - resolve to current_impl_type_
     if (base_name == "Self" && !current_impl_type_.empty()) {
@@ -1375,12 +1501,21 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         }
     }
 
-    // Get struct/class type name
+    // Get struct/class/union type name
     std::string type_name = struct_type;
+    bool is_union_type = false;
     if (type_name.starts_with("%struct.")) {
         type_name = type_name.substr(8);
     } else if (type_name.starts_with("%class.")) {
         type_name = type_name.substr(7);
+    } else if (type_name.starts_with("%union.")) {
+        type_name = type_name.substr(7);
+        is_union_type = true;
+    }
+
+    // Check if this is a union type (also check registry in case type was set differently)
+    if (!is_union_type && union_types_.find(type_name) != union_types_.end()) {
+        is_union_type = true;
     }
 
     // Check for auto-deref on smart pointer types (Arc, Box, etc.)
@@ -1517,6 +1652,14 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     // Get field index and type
     int field_idx = get_field_index(type_name, field.field);
     std::string field_type = get_field_type(type_name, field.field);
+
+    // Union field access - load directly from union pointer (all fields at offset 0)
+    if (is_union_type) {
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + field_type + ", ptr " + struct_ptr);
+        last_expr_type_ = field_type;
+        return result;
+    }
 
     std::string field_ptr;
 

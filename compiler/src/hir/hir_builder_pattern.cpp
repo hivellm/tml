@@ -223,8 +223,8 @@ auto HirBuilder::lower_struct_pattern(const parser::StructPattern& pattern, HirT
         if (!struct_name.empty()) {
             if (auto struct_def = type_env_.lookup_struct(struct_name)) {
                 for (const auto& f : struct_def->fields) {
-                    if (f.first == field_name) {
-                        field_type = type_env_.resolve(f.second);
+                    if (f.name == field_name) {
+                        field_type = type_env_.resolve(f.type);
                         break;
                     }
                 }
