@@ -57,11 +57,11 @@ type SharedInner[T] {
 /// print(clone1.get())    // 100
 /// print(clone2.get())    // 100
 /// ```
-pub type Shared {
+pub type Shared[T] {
     ptr: *SharedInner[T],
 }
 
-impl[T] Shared {
+impl[T] Shared[T] {
     /// Creates a new `Shared[T]` with reference count of 1.
     ///
     /// ## Examples
@@ -70,7 +70,7 @@ impl[T] Shared {
     /// let shared = Shared::new(42)
     /// assert_eq(shared.strong_count(), 1)
     /// ```
-    pub func new(value: T) -> Shared {
+    pub func new(value: T) -> Shared[T] {
         let size: I64 = size_of[SharedInner[T]]()
         let ptr: *Unit = mem_alloc(size)
 
@@ -205,19 +205,19 @@ impl[T] Shared {
     ///
     /// The pointer must have been created by `Shared::into_raw` or similar.
     /// This does NOT increment the reference count.
-    pub func from_raw(ptr: *SharedInner[T]) -> Shared {
+    pub func from_raw(ptr: *SharedInner[T]) -> Shared[T] {
         return Shared { ptr: ptr }
     }
 
     /// Increments the reference count (used internally by duplicate).
-    func increment_count(this) {
+    pub func increment_count(this) {
         if this.ptr != null {
             (*this.ptr).strong_count = (*this.ptr).strong_count + 1
         }
     }
 
     /// Decrements the reference count and frees if zero.
-    func decrement_count(this) {
+    pub func decrement_count(this) {
         if this.ptr == null {
             return
         }
@@ -230,7 +230,7 @@ impl[T] Shared {
     }
 }
 
-impl[T] Duplicate for Shared {
+impl[T] Duplicate for Shared[T] {
     /// Creates a new reference to the same data, incrementing the count.
     ///
     /// ## Examples
@@ -240,13 +240,13 @@ impl[T] Duplicate for Shared {
     /// let clone = original.duplicate()
     /// assert_eq(original.strong_count(), 2)
     /// ```
-    func duplicate(this) -> Shared {
+    pub func duplicate(this) -> Shared[T] {
         this.increment_count()
         return Shared { ptr: this.ptr }
     }
 }
 
-impl[T] Drop for Shared {
+impl[T] Drop for Shared[T] {
     func drop(mut this) {
         this.decrement_count()
     }
@@ -272,6 +272,6 @@ impl[T] Debug for Shared[T] where T: Debug {
 /// let shared = shared(42)
 /// assert_eq(shared.get(), 42)
 /// ```
-pub func shared[T](value: T) -> Shared {
+pub func shared[T](value: T) -> Shared[T] {
     return Shared::new(value)
 }

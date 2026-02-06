@@ -68,7 +68,7 @@ impl[T] Heap[T] {
         let typed_ptr: *T = ptr as *T
 
         // Store value on heap
-        lowlevel { *(ptr as Ptr[T]) = value }
+        lowlevel { *typed_ptr = value }
 
         return Heap { ptr: typed_ptr }
     }
@@ -98,7 +98,7 @@ impl[T] Heap[T] {
         if this.ptr == null {
             panic("Heap::get: null pointer")
         }
-        return lowlevel { *(this.ptr as Ptr[T]) }
+        return lowlevel { *this.ptr }
     }
 
     /// Returns a mutable reference to the value in the box.
@@ -114,7 +114,7 @@ impl[T] Heap[T] {
         if this.ptr == null {
             panic("Heap::set: null pointer")
         }
-        lowlevel { *(this.ptr as Ptr[T]) = value }
+        lowlevel { *this.ptr = value }
     }
 
     /// Consumes the `Heap[T]` and returns the inner value.
@@ -133,7 +133,7 @@ impl[T] Heap[T] {
             panic("Heap::into_inner: null pointer")
         }
 
-        let value: T = lowlevel { *(this.ptr as Ptr[T]) }
+        let value: T = lowlevel { *this.ptr }
         mem_free(this.ptr as *Unit)
 
         // Mark as consumed (in real implementation, this would use move semantics)
@@ -198,7 +198,7 @@ impl[T] Duplicate for Heap[T] where T: Duplicate {
     /// let copy = original.duplicate()
     /// assert_eq(copy.get(), 42)
     /// ```
-    func duplicate(this) -> Heap[T] {
+    pub func duplicate(this) -> Heap[T] {
         return Heap::new(this.get().duplicate())
     }
 }
