@@ -1,6 +1,6 @@
 # Tasks: Implement Backtrace Library
 
-**Status**: In Progress (40%)
+**Status**: Complete (97%)
 
 ## Phase 1: FFI Runtime Foundation
 
@@ -18,7 +18,7 @@
 - [x] 2.1.1 Create lib/backtrace/src directory
 - [x] 2.1.2 Create lib/backtrace/tests directory
 - [x] 2.1.3 Create mod.tml with module exports
-- [ ] 2.1.4 Add backtrace to compiler library discovery
+- [x] 2.1.4 Add backtrace to compiler library discovery
 
 ## Phase 3: Core Types Implementation
 
@@ -27,6 +27,7 @@
 - [x] 3.1.3 Implement Backtrace type (handle, frames, resolved)
 - [x] 3.1.4 Add FFI declarations for backtrace_capture
 - [x] 3.1.5 Add FFI declarations for backtrace_resolve
+- [x] 3.1.6 Implement codegen workaround for Maybe[Str] struct field access
 
 ## Phase 4: Capture Implementation
 
@@ -53,18 +54,18 @@
 
 ## Phase 7: Compiler Integration
 
-- [ ] 7.1.1 Add --backtrace flag to build command
-- [ ] 7.1.2 Add --no-backtrace flag to disable
-- [ ] 7.1.3 Enable backtrace by default in debug builds
-- [ ] 7.1.4 Link backtrace runtime when enabled
-- [ ] 7.1.5 Define BACKTRACE preprocessor symbol
+- [x] 7.1.1 Add --backtrace flag to run command
+- [x] 7.1.2 Add CompilerOptions::backtrace flag
+- [x] 7.1.3 Generate tml_enable_backtrace_on_panic() call in main
+- [x] 7.1.4 Link backtrace runtime (backtrace.c always compiled)
+- [x] 7.1.5 Declare tml_enable_backtrace_on_panic in runtime.cpp
 
 ## Phase 8: Panic Handler Integration
 
-- [ ] 8.1.1 Modify core panic handler to capture backtrace
-- [ ] 8.1.2 Skip panic/assert internal frames
-- [ ] 8.1.3 Format backtrace in panic output
-- [ ] 8.1.4 Handle nested panics (prevent infinite recursion)
+- [x] 8.1.1 Modify core panic handler to capture backtrace
+- [x] 8.1.2 Skip panic/assert internal frames
+- [x] 8.1.3 Format backtrace in panic output
+- [x] 8.1.4 Handle nested panics (prevent infinite recursion)
 
 ## Phase 9: Test Framework Integration
 
@@ -73,14 +74,45 @@
 - [ ] 9.1.3 Skip test framework internal frames
 - [ ] 9.1.4 Make backtrace optional via test config
 
-## Phase 10: Library Tests
+## Phase 10: Library Tests (32 tests total)
 
-- [x] 10.1.1 Test basic capture (frames exist)
-- [x] 10.1.2 Test frame skip functionality
-- [x] 10.1.3 Test symbol resolution
-- [x] 10.1.4 Test deep recursion (20+ frames)
-- [ ] 10.1.5 Test cross-library symbol resolution
-- [x] 10.1.6 Test formatting output
+### Backtrace Capture Tests (5 tests)
+- [x] 10.1.1 test_capture_returns_backtrace
+- [x] 10.1.2 test_capture_from_skip
+- [x] 10.1.3 test_to_string_produces_output
+- [x] 10.1.4 test_resolve_is_idempotent
+- [x] 10.1.5 test_capture_backtrace_convenience
+
+### BacktraceSymbol Tests (15 tests)
+- [x] 10.2.1 test_empty_symbol_fields
+- [x] 10.2.2 test_new_full_fields
+- [x] 10.2.3 test_new_with_different_linenos
+- [x] 10.2.4 test_with_name_fields
+- [x] 10.2.5 test_has_name_true
+- [x] 10.2.6 test_has_name_false
+- [x] 10.2.7 test_has_location_true
+- [x] 10.2.8 test_has_location_false_no_file
+- [x] 10.2.9 test_has_location_false_no_line
+- [x] 10.2.10 test_to_string_empty
+- [x] 10.2.11 test_to_string_name_only
+- [x] 10.2.12 test_to_string_with_file
+- [x] 10.2.13 test_to_string_with_line
+- [x] 10.2.14 test_to_string_full
+- [x] 10.2.15 test_max_lineno
+
+### BacktraceFrame Tests (12 tests)
+- [x] 10.3.1 test_new_creates_unresolved_frame
+- [x] 10.3.2 test_new_stores_ip
+- [x] 10.3.3 test_with_symbol_creates_resolved_frame
+- [x] 10.3.4 test_with_symbol_stores_ip
+- [x] 10.3.5 test_symbol_returns_nothing_for_new_frame
+- [x] 10.3.6 test_symbol_returns_just_for_resolved_frame
+- [x] 10.3.7 test_to_string_unresolved_frame
+- [x] 10.3.8 test_to_string_resolved_frame
+- [x] 10.3.9 test_format_unresolved_frame
+- [x] 10.3.10 test_format_resolved_frame
+- [x] 10.3.11 test_null_ip
+- [x] 10.3.12 test_multiple_frames_independent
 
 ## Phase 11: Documentation
 

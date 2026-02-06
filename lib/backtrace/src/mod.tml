@@ -1,10 +1,10 @@
 // TML Backtrace Library
 // Runtime stack trace capture and symbol resolution for debugging
 //
-// This module provides:
+// This module provides a complete backtrace API inspired by Rust's backtrace-rs:
 // - backtrace: Stack trace capture and formatting
 // - frame: Stack frame type with symbol information
-// - symbol: Resolved symbol information (name, file, line)
+// - symbol: Resolved symbol information (name, file, line, address)
 //
 // ## Usage
 //
@@ -12,9 +12,22 @@
 // use backtrace::Backtrace
 //
 // func example() {
-//     let bt = Backtrace::capture()
+//     let mut bt = Backtrace::capture()
 //     bt.resolve()
 //     print(bt.to_string())
+// }
+// ```
+//
+// ## Accessing Individual Frames
+//
+// ```tml
+// use backtrace::{Backtrace, BacktraceFrame}
+//
+// let bt = Backtrace::capture()
+// let count = bt.frame_count()
+// for i in 0 to count {
+//     let frame = bt.frame(i)
+//     // process frame...
 // }
 // ```
 //
@@ -26,8 +39,8 @@
 // ## Integration
 //
 // Backtrace is automatically captured on:
-// - panic() calls (when BACKTRACE symbol is defined)
-// - assert_eq() failures (when BACKTRACE symbol is defined)
+// - panic() calls (when --backtrace flag is used)
+// - assert_eq() failures (when --backtrace flag is used)
 
 pub mod backtrace   // Main Backtrace type and capture functions
 pub mod frame       // BacktraceFrame type
@@ -35,5 +48,15 @@ pub mod symbol      // BacktraceSymbol type
 
 // Re-export main types at module level
 pub use backtrace::Backtrace
+pub use backtrace::BacktraceStatus
+pub use backtrace::PrintFmt
 pub use frame::BacktraceFrame
 pub use symbol::BacktraceSymbol
+pub use symbol::SymbolName
+
+// Re-export convenience functions
+pub use backtrace::print_backtrace
+pub use backtrace::capture_backtrace
+pub use backtrace::trace_frames
+pub use backtrace::resolve_frame
+pub use backtrace::clear_symbol_cache

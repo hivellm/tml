@@ -1,0 +1,194 @@
+// Tests for BacktraceFrame type
+//
+// BacktraceFrame represents a single stack frame with an instruction
+// pointer and optionally resolved symbol information.
+
+use test
+use backtrace::frame::BacktraceFrame
+use backtrace::symbol::BacktraceSymbol
+
+// ============================================================================
+// Constructor Tests
+// ============================================================================
+
+@test
+func test_new_creates_unresolved_frame() -> I32 {
+    let ip: *Unit = 0x1234 as *Unit
+    let frame: BacktraceFrame = BacktraceFrame::new(ip)
+
+    assert(not frame.is_resolved(), "new frame should not be resolved")
+    return 0
+}
+
+@test
+func test_new_stores_ip() -> I32 {
+    let ip: *Unit = 0xABCD as *Unit
+    let frame: BacktraceFrame = BacktraceFrame::new(ip)
+
+    let stored_ip: *Unit = frame.instruction_pointer()
+    assert(stored_ip == ip, "ip should be stored correctly")
+    return 0
+}
+
+@test
+func test_with_symbol_creates_resolved_frame() -> I32 {
+    let ip: *Unit = 0x5678 as *Unit
+    let sym: BacktraceSymbol = BacktraceSymbol::with_name("test_func")
+    let frame: BacktraceFrame = BacktraceFrame::with_symbol(ip, sym)
+
+    assert(frame.is_resolved(), "frame with symbol should be resolved")
+    return 0
+}
+
+@test
+func test_with_symbol_stores_ip() -> I32 {
+    let ip: *Unit = 0x9ABC as *Unit
+    let sym: BacktraceSymbol = BacktraceSymbol::empty()
+    let frame: BacktraceFrame = BacktraceFrame::with_symbol(ip, sym)
+
+    let stored_ip: *Unit = frame.instruction_pointer()
+    assert(stored_ip == ip, "ip should be stored correctly")
+    return 0
+}
+
+// ============================================================================
+// Symbol Access Tests
+// ============================================================================
+
+@test
+func test_symbol_returns_nothing_for_new_frame() -> I32 {
+    let frame: BacktraceFrame = BacktraceFrame::new(null)
+    let sym_opt: Maybe[BacktraceSymbol] = frame.symbol()
+
+    when sym_opt {
+        Just(_) => assert(false, "new frame should have no symbol"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_symbol_returns_just_for_resolved_frame() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::with_name("my_func")
+    let frame: BacktraceFrame = BacktraceFrame::with_symbol(null, sym)
+    let sym_opt: Maybe[BacktraceSymbol] = frame.symbol()
+
+    when sym_opt {
+        Just(_) => {},
+        Nothing => assert(false, "resolved frame should have symbol")
+    }
+    return 0
+}
+
+// ============================================================================
+// Formatting Tests
+// ============================================================================
+
+@test
+func test_to_string_unresolved_frame() -> I32 {
+    let ip: *Unit = 0x1000 as *Unit
+    let frame: BacktraceFrame = BacktraceFrame::new(ip)
+    let s: Str = frame.to_string()
+
+    // Unresolved frame should show "<unknown> at 0x..."
+    let len: I64 = s.len()
+    assert(len > 0, "to_string should produce output")
+    return 0
+}
+
+@test
+func test_to_string_resolved_frame() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::with_name("test_function")
+    let frame: BacktraceFrame = BacktraceFrame::with_symbol(null, sym)
+    let s: Str = frame.to_string()
+
+    assert(s == "test_function", "should format with function name")
+    return 0
+}
+
+@test
+func test_format_unresolved_frame() -> I32 {
+    let ip: *Unit = 0x2000 as *Unit
+    let frame: BacktraceFrame = BacktraceFrame::new(ip)
+    let s: Str = frame.format(0)
+
+    // Should start with frame index
+    let len: I64 = s.len()
+    assert(len > 0, "format should produce output")
+    return 0
+}
+
+@test
+func test_format_resolved_frame() -> I32 {
+    let name: Maybe[Str] = Just("my_function")
+    let file: Maybe[Str] = Just("src/main.tml")
+    let sym: BacktraceSymbol = BacktraceSymbol::new(name, file, 42, 0)
+    let frame: BacktraceFrame = BacktraceFrame::with_symbol(null, sym)
+    let s: Str = frame.format(5)
+
+    // Should contain frame number, function name, file, and line
+    let len: I64 = s.len()
+    assert(len > 20, "formatted frame should have content")
+    return 0
+}
+
+// ============================================================================
+// Edge Cases
+// ============================================================================
+
+@test
+func test_null_ip() -> I32 {
+    let frame: BacktraceFrame = BacktraceFrame::new(null)
+    let ip: *Unit = frame.instruction_pointer()
+    assert(ip == null, "null ip should be stored")
+    return 0
+}
+
+@test
+func test_multiple_frames_independent() -> I32 {
+    let frame1: BacktraceFrame = BacktraceFrame::new(0x1000 as *Unit)
+    let frame2: BacktraceFrame = BacktraceFrame::new(0x2000 as *Unit)
+
+    let ip1: *Unit = frame1.instruction_pointer()
+    let ip2: *Unit = frame2.instruction_pointer()
+
+    assert(ip1 != ip2, "frames should have different IPs")
+    assert(ip1 == (0x1000 as *Unit), "frame1 should have correct IP")
+    assert(ip2 == (0x2000 as *Unit), "frame2 should have correct IP")
+    return 0
+}
+
+// ============================================================================
+// Symbol Address and Offset Tests
+// ============================================================================
+
+@test
+func test_offset_unresolved_frame() -> I32 {
+    let frame: BacktraceFrame = BacktraceFrame::new(0x1000 as *Unit)
+    let off: U64 = frame.offset()
+
+    assert(off == 0, "unresolved frame offset should be 0")
+    return 0
+}
+
+@test
+func test_offset_resolved_no_offset() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::with_name("func")
+    let frame: BacktraceFrame = BacktraceFrame::with_symbol(0x1000 as *Unit, sym)
+    let off: U64 = frame.offset()
+
+    assert(off == 0, "symbol without offset should return 0")
+    return 0
+}
+
+@test
+func test_offset_resolved_with_offset() -> I32 {
+    let name: Maybe[Str] = Just("main")
+    let no_file: Maybe[Str] = Nothing
+    let sym: BacktraceSymbol = BacktraceSymbol::full(name, no_file, 0, 0, 0x1000 as *Unit, 256)
+    let frame: BacktraceFrame = BacktraceFrame::with_symbol(0x1100 as *Unit, sym)
+    let off: U64 = frame.offset()
+
+    assert(off == 256, "should return correct offset")
+    return 0
+}

@@ -654,12 +654,14 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
                     std::string wrapped = wrap_in_poll_ready(result, last_expr_type_);
                     emit_line("  ret " + current_poll_type_ + " " + wrapped);
                 } else {
-                    // Fix: if returning ptr type with "0" placeholder (from loops), use null
-                    if (ret_type == "ptr" && result == "0") {
+                    // Fix: Unit type always uses zeroinitializer (can't use bool/int values)
+                    if (ret_type == "{}") {
+                        emit_line("  ret {} zeroinitializer");
+                    } else if (ret_type == "ptr" && result == "0") {
+                        // Fix: if returning ptr type with "0" placeholder (from loops), use null
                         emit_line("  ret ptr null");
                     } else if (result == "0" && ret_type.find("%struct.") == 0) {
-                        // Fix: if returning struct type with "0" placeholder (from loops), use
-                        // zeroinitializer
+                        // Fix: if returning struct type with "0" placeholder, use zeroinitializer
                         emit_line("  ret " + ret_type + " zeroinitializer");
                     } else {
                         // Handle integer type extension when actual differs from expected
@@ -984,12 +986,14 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
             if (ret_type != "void" && !block_terminated_) {
                 // Emit drops before returning
                 emit_all_drops();
-                // Fix: if returning ptr type with "0" placeholder (from loops), use null
-                if (ret_type == "ptr" && result == "0") {
+                // Fix: Unit type always uses zeroinitializer (can't use bool/int values)
+                if (ret_type == "{}") {
+                    emit_line("  ret {} zeroinitializer");
+                } else if (ret_type == "ptr" && result == "0") {
+                    // Fix: if returning ptr type with "0" placeholder (from loops), use null
                     emit_line("  ret ptr null");
                 } else if (result == "0" && ret_type.find("%struct.") == 0) {
-                    // Fix: if returning struct type with "0" placeholder (from loops), use
-                    // zeroinitializer
+                    // Fix: if returning struct type with "0" placeholder, use zeroinitializer
                     emit_line("  ret " + ret_type + " zeroinitializer");
                 } else {
                     // Handle integer type extension when actual differs from expected

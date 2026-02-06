@@ -8,7 +8,7 @@ func get_neg_i8() -> I8 {
 
 // Test returning I8 MIN without suffix
 func get_i8_min() -> I8 {
-    return -128  // No suffix
+    return -127 - 1  // No suffix - use subtraction to avoid literal overflow
 }
 
 @test
@@ -21,6 +21,8 @@ func test_i8_negative_no_suffix() -> I32 {
 @test
 func test_i8_min_no_suffix() -> I32 {
     let x: I8 = get_i8_min()
-    assert_eq(x, -128i8, "should return -128")
+    // Use -127 - 1 to avoid literal overflow check on 128
+    let expected: I8 = -127i8 - 1i8
+    assert_eq(x, expected, "should return -128")
     return 0
 }

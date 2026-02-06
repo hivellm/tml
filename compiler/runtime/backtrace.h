@@ -275,6 +275,21 @@ TML_EXPORT char* ffi_backtrace_to_string(void* bt_handle);
 /** FFI: Free backtrace handle */
 TML_EXPORT void ffi_backtrace_free(void* bt_handle);
 
+/** FFI: Get column number for frame (0 if unknown) */
+TML_EXPORT uint32_t ffi_backtrace_frame_colno(void* bt_handle, int32_t index);
+
+/** FFI: Get symbol address for frame (start of function) */
+TML_EXPORT void* ffi_backtrace_frame_symbol_address(void* bt_handle, int32_t index);
+
+/** FFI: Get offset from symbol start for frame */
+TML_EXPORT uint64_t ffi_backtrace_frame_offset(void* bt_handle, int32_t index);
+
+/** FFI: Check if backtrace is fully resolved */
+TML_EXPORT int32_t ffi_backtrace_is_resolved(void* bt_handle);
+
+/** FFI: Clear symbol cache (re-initializes symbol handler) */
+TML_EXPORT void ffi_backtrace_clear_cache(void);
+
 #ifdef __cplusplus
 }
 #endif

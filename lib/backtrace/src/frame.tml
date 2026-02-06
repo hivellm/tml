@@ -72,21 +72,58 @@ impl BacktraceFrame {
         return this.resolved
     }
 
-    /// Formats the frame as a string.
-    ///
-    /// Format: "  N: function_name\n           at file:line"
-    pub func format(this, index: I32) -> Str {
-        when this.symbol_info {
+    /// Returns the symbol address (start of function) if available.
+    pub func symbol_address(this) -> Maybe[*Unit] {
+        let sym_opt: Maybe[BacktraceSymbol] = this.symbol_info
+        when sym_opt {
             Just(sym) => {
-                let name: Str = sym.name.unwrap_or("<unknown>")
-                if sym.filename.is_just() and sym.lineno > 0 {
-                    let file: Str = sym.filename.unwrap()
-                    return "  {index}: {name}\n             at {file}:{sym.lineno}"
-                } else if sym.filename.is_just() {
-                    let file: Str = sym.filename.unwrap()
-                    return "  {index}: {name}\n             at {file}"
+                let addr: *Unit = sym.addr
+                if addr != null {
+                    let result: Maybe[*Unit] = Just(addr)
+                    return result
                 } else {
-                    return "  {index}: {name}"
+                    let result: Maybe[*Unit] = Nothing
+                    return result
+                }
+            },
+            Nothing => {
+                let result: Maybe[*Unit] = Nothing
+                return result
+            }
+        }
+    }
+
+    /// Returns the offset from the symbol start to the instruction pointer.
+    pub func offset(this) -> U64 {
+        let sym_opt: Maybe[BacktraceSymbol] = this.symbol_info
+        when sym_opt {
+            Just(sym) => return sym.offset,
+            Nothing => return 0
+        }
+    }
+
+    /// Formats the frame as a string.
+    pub func format(this, index: I32) -> Str {
+        let sym_opt: Maybe[BacktraceSymbol] = this.symbol_info
+        when sym_opt {
+            Just(sym) => {
+                let name_opt: Maybe[Str] = sym.name
+                let file_opt: Maybe[Str] = sym.filename
+
+                let name: Str = when name_opt {
+                    Just(n) => n,
+                    Nothing => "<unknown>"
+                }
+
+                when file_opt {
+                    Just(file) => {
+                        if sym.lineno > 0 {
+                            return "  {index}: {name}\n             at {file}:{sym.lineno}"
+                        } else {
+                            return "  {index}: {name}\n             at {file}"
+                        }
+                    },
+                    Nothing => return "  {index}: {name}"
                 }
             },
             Nothing => {
@@ -98,8 +135,30 @@ impl BacktraceFrame {
 
     /// Formats the frame as a single line.
     pub func to_string(this) -> Str {
-        when this.symbol_info {
-            Just(sym) => return sym.to_string(),
+        let sym_opt: Maybe[BacktraceSymbol] = this.symbol_info
+        when sym_opt {
+            Just(sym) => {
+                let name_opt: Maybe[Str] = sym.name
+                let file_opt: Maybe[Str] = sym.filename
+                let name_str: Str = when name_opt {
+                    Just(n) => n,
+                    Nothing => "<unknown>"
+                }
+                when file_opt {
+                    Just(file) => {
+                        if sym.lineno > 0 {
+                            if sym.colno > 0 {
+                                return "{name_str} at {file}:{sym.lineno}:{sym.colno}"
+                            } else {
+                                return "{name_str} at {file}:{sym.lineno}"
+                            }
+                        } else {
+                            return "{name_str} at {file}"
+                        }
+                    },
+                    Nothing => return name_str
+                }
+            },
             Nothing => {
                 let addr: I64 = this.ip as I64
                 return "<unknown> at 0x{addr}"

@@ -785,6 +785,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         if (!block_terminated_) {
                             if (ret_type == "void") {
                                 emit_line("  ret void");
+                            } else if (ret_type == "{}") {
+                                // Unit type always uses zeroinitializer
+                                emit_line("  ret {} zeroinitializer");
                             } else if (ret_type == "ptr") {
                                 // Use null only if result is "0" (placeholder)
                                 emit_line("  ret ptr " + (result == "0" ? "null" : result));

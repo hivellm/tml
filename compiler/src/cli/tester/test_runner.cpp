@@ -1871,8 +1871,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                          static_cast<int64_t>(avg_time_us * SLOW_TASK_THRESHOLD));
 
                             if (task_duration_us > threshold_us) {
+                                // Log slow task as warning (doesn't fail the test)
                                 std::lock_guard<std::mutex> lock(error_mutex);
-                                std::cerr << "\n[SLOW TASK PANIC] " << task.file_path << "\n"
+                                std::cerr << "\n[SLOW TASK WARNING] " << task.file_path << "\n"
                                           << "  Duration: " << (task_duration_us / 1000) << " ms\n"
                                           << "  Average:  " << (avg_time_us / 1000) << " ms\n"
                                           << "  Threshold: " << (threshold_us / 1000) << " ms ("
@@ -1885,19 +1886,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                           << "  This task took " << std::fixed
                                           << std::setprecision(1)
                                           << (static_cast<double>(task_duration_us) / avg_time_us)
-                                          << "x longer than average!\n"
-                                          << "\n*** ABORTING: Task exceeded slow threshold ***\n"
+                                          << "x longer than average.\n"
                                           << std::flush;
-                                // Signal error to stop other threads gracefully
-                                if (!has_error.load()) {
-                                    has_error.store(true);
-                                    first_error_msg =
-                                        "SLOW TASK PANIC: " + task.file_path + " took " +
-                                        std::to_string(task_duration_us / 1000) + "ms" +
-                                        " (threshold: " + std::to_string(threshold_us / 1000) +
-                                        "ms)";
-                                    first_error_file = task.file_path;
-                                }
+                                // Don't abort - slow tasks still generate valid cache
                             }
                         }
 

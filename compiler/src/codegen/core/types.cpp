@@ -188,7 +188,10 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
                 }
             }
 
-            return llvm_type_name(base_name);
+            // For non-generic named types, ensure the type is defined
+            // This handles structs imported from other modules
+            auto sem_type = std::make_shared<types::Type>(types::NamedType{base_name, "", {}});
+            return llvm_type_from_semantic(sem_type, true);
         }
     } else if (type.is<parser::RefType>()) {
         return "ptr";
@@ -498,7 +501,42 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                     }
                 }
 
-                // If not found in public structs, try re-parsing module source to find
+                // If not found in public structs, try internal_structs
+                if (!found) {
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        auto internal_it = mod.internal_structs.find(named.name);
+                        if (internal_it != mod.internal_structs.end()) {
+                            const auto& struct_def = internal_it->second;
+                            // Emit the struct type definition
+                            std::string type_name = "%struct." + named.name;
+                            std::string def = type_name + " = type { ";
+                            bool first = true;
+                            for (const auto& field : struct_def.fields) {
+                                if (!first)
+                                    def += ", ";
+                                first = false;
+                                def += llvm_type_from_semantic(field.type, true);
+                            }
+                            def += " }";
+                            type_defs_buffer_ << def << "\n";
+                            struct_types_[named.name] = type_name;
+
+                            // Also register fields
+                            std::vector<FieldInfo> fields;
+                            for (size_t i = 0; i < struct_def.fields.size(); ++i) {
+                                std::string ft =
+                                    llvm_type_from_semantic(struct_def.fields[i].type, true);
+                                fields.push_back({struct_def.fields[i].name, static_cast<int>(i), ft,
+                                                  struct_def.fields[i].type});
+                            }
+                            struct_fields_[named.name] = fields;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+
+                // If still not found, try re-parsing module source to find
                 // private structs (needed for types like RawRwLock used as field types)
                 if (!found) {
                     for (const auto& [mod_name, mod] : all_modules) {

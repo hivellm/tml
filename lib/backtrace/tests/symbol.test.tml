@@ -1,0 +1,287 @@
+// Tests for BacktraceSymbol type
+//
+// BacktraceSymbol holds resolved symbol information including
+// function name, filename, line number, and column number.
+
+use test
+use backtrace::symbol::BacktraceSymbol
+use backtrace::symbol::SymbolName
+
+// ============================================================================
+// Constructor Tests
+// ============================================================================
+
+@test
+func test_empty_symbol_fields() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::empty()
+
+    // Test direct field access for primitive fields
+    assert(sym.lineno == 0, "empty symbol lineno should be 0")
+    assert(sym.colno == 0, "empty symbol colno should be 0")
+    return 0
+}
+
+@test
+func test_new_full_fields() -> I32 {
+    let name: Maybe[Str] = Just("test_func")
+    let file: Maybe[Str] = Just("src/main.tml")
+    let sym: BacktraceSymbol = BacktraceSymbol::new(name, file, 42, 10)
+
+    // Test direct field access for primitive fields
+    assert(sym.lineno == 42, "lineno should be 42")
+    assert(sym.colno == 10, "colno should be 10")
+    return 0
+}
+
+@test
+func test_new_with_different_linenos() -> I32 {
+    // Use typed Nothing to avoid type inference issues
+    let no_name: Maybe[Str] = Nothing
+    let no_file: Maybe[Str] = Nothing
+
+    let sym1: BacktraceSymbol = BacktraceSymbol::new(no_name, no_file, 0, 0)
+    let sym2: BacktraceSymbol = BacktraceSymbol::new(no_name, no_file, 100, 0)
+    let sym3: BacktraceSymbol = BacktraceSymbol::new(no_name, no_file, 999, 50)
+
+    assert(sym1.lineno == 0, "sym1 lineno should be 0")
+    assert(sym2.lineno == 100, "sym2 lineno should be 100")
+    assert(sym3.lineno == 999, "sym3 lineno should be 999")
+    assert(sym3.colno == 50, "sym3 colno should be 50")
+    return 0
+}
+
+@test
+func test_with_name_fields() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::with_name("my_function")
+
+    // with_name sets lineno and colno to 0
+    assert(sym.lineno == 0, "lineno should be 0")
+    assert(sym.colno == 0, "colno should be 0")
+    return 0
+}
+
+// ============================================================================
+// Method Tests
+// ============================================================================
+
+@test
+func test_has_name_true() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::with_name("test")
+    assert(sym.has_name(), "should have name")
+    return 0
+}
+
+@test
+func test_has_name_false() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::empty()
+    assert(not sym.has_name(), "should not have name")
+    return 0
+}
+
+@test
+func test_has_location_true() -> I32 {
+    let name: Maybe[Str] = Just("func")
+    let file: Maybe[Str] = Just("file.tml")
+    let sym: BacktraceSymbol = BacktraceSymbol::new(name, file, 10, 0)
+    assert(sym.has_location(), "should have location")
+    return 0
+}
+
+@test
+func test_has_location_false_no_file() -> I32 {
+    let name: Maybe[Str] = Just("func")
+    let no_file: Maybe[Str] = Nothing
+    let sym: BacktraceSymbol = BacktraceSymbol::new(name, no_file, 10, 0)
+    assert(not sym.has_location(), "should not have location without file")
+    return 0
+}
+
+@test
+func test_has_location_false_no_line() -> I32 {
+    let name: Maybe[Str] = Just("func")
+    let file: Maybe[Str] = Just("file.tml")
+    let sym: BacktraceSymbol = BacktraceSymbol::new(name, file, 0, 0)
+    assert(not sym.has_location(), "should not have location without line")
+    return 0
+}
+
+// ============================================================================
+// to_string Tests
+// ============================================================================
+
+@test
+func test_to_string_empty() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::empty()
+    let s: Str = sym.to_string()
+    assert(s == "<unknown>", "empty should be <unknown>")
+    return 0
+}
+
+@test
+func test_to_string_name_only() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::with_name("my_func")
+    let s: Str = sym.to_string()
+    assert(s == "my_func", "name only should be just name")
+    return 0
+}
+
+@test
+func test_to_string_with_file() -> I32 {
+    let name: Maybe[Str] = Just("test_func")
+    let file: Maybe[Str] = Just("src/test.tml")
+    let sym: BacktraceSymbol = BacktraceSymbol::new(name, file, 0, 0)
+    let s: Str = sym.to_string()
+    assert(s == "test_func at src/test.tml", "should have file")
+    return 0
+}
+
+@test
+func test_to_string_with_line() -> I32 {
+    let name: Maybe[Str] = Just("test_func")
+    let file: Maybe[Str] = Just("src/test.tml")
+    let sym: BacktraceSymbol = BacktraceSymbol::new(name, file, 42, 0)
+    let s: Str = sym.to_string()
+    assert(s == "test_func at src/test.tml:42", "should have line")
+    return 0
+}
+
+@test
+func test_to_string_full() -> I32 {
+    let name: Maybe[Str] = Just("test_func")
+    let file: Maybe[Str] = Just("src/test.tml")
+    let sym: BacktraceSymbol = BacktraceSymbol::new(name, file, 42, 15)
+    let s: Str = sym.to_string()
+    assert(s == "test_func at src/test.tml:42:15", "should have col")
+    return 0
+}
+
+// ============================================================================
+// Edge Case Tests
+// ============================================================================
+
+@test
+func test_max_lineno() -> I32 {
+    let no_name: Maybe[Str] = Nothing
+    let no_file: Maybe[Str] = Nothing
+    let sym: BacktraceSymbol = BacktraceSymbol::new(no_name, no_file, 65535, 1000)
+
+    assert(sym.lineno == 65535, "should handle large line numbers")
+    assert(sym.colno == 1000, "should handle large column numbers")
+    return 0
+}
+
+// ============================================================================
+// Address and Offset Field Tests
+// ============================================================================
+
+@test
+func test_empty_symbol_has_null_addr() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::empty()
+    assert(sym.addr == null, "empty symbol addr should be null")
+    assert(sym.offset == 0, "empty symbol offset should be 0")
+    return 0
+}
+
+@test
+func test_new_symbol_has_null_addr() -> I32 {
+    let name: Maybe[Str] = Just("func")
+    let file: Maybe[Str] = Just("file.tml")
+    let sym: BacktraceSymbol = BacktraceSymbol::new(name, file, 10, 5)
+    // new() doesn't set addr or offset
+    assert(sym.addr == null, "new symbol addr should be null")
+    assert(sym.offset == 0, "new symbol offset should be 0")
+    return 0
+}
+
+@test
+func test_full_constructor() -> I32 {
+    let addr: *Unit = 0x1000 as *Unit
+    let name: Maybe[Str] = Just("my_function")
+    let file: Maybe[Str] = Just("src/main.tml")
+    let sym: BacktraceSymbol = BacktraceSymbol::full(name, file, 42, 10, addr, 128)
+
+    assert(sym.lineno == 42, "lineno should be 42")
+    assert(sym.colno == 10, "colno should be 10")
+    assert(sym.addr == addr, "addr should match")
+    assert(sym.offset == 128, "offset should be 128")
+    return 0
+}
+
+@test
+func test_full_constructor_with_null_addr() -> I32 {
+    let no_name: Maybe[Str] = Nothing
+    let no_file: Maybe[Str] = Nothing
+    let sym: BacktraceSymbol = BacktraceSymbol::full(no_name, no_file, 0, 0, null, 0)
+
+    assert(sym.addr == null, "addr should be null")
+    assert(sym.offset == 0, "offset should be 0")
+    return 0
+}
+
+@test
+func test_has_addr_true() -> I32 {
+    let name: Maybe[Str] = Just("func")
+    let no_file: Maybe[Str] = Nothing
+    let sym: BacktraceSymbol = BacktraceSymbol::full(name, no_file, 0, 0, 0x5000 as *Unit, 64)
+    assert(sym.has_addr(), "should have addr")
+    return 0
+}
+
+@test
+func test_has_addr_false() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::empty()
+    assert(not sym.has_addr(), "should not have addr")
+    return 0
+}
+
+@test
+func test_with_name_has_no_addr() -> I32 {
+    let sym: BacktraceSymbol = BacktraceSymbol::with_name("test")
+    assert(not sym.has_addr(), "with_name should not have addr")
+    assert(sym.offset == 0, "with_name should have offset 0")
+    return 0
+}
+
+// ============================================================================
+// SymbolName Tests
+// ============================================================================
+
+@test
+func test_symbol_name_new() -> I32 {
+    let name: SymbolName = SymbolName::new("my_function")
+    let s: Str = name.to_string()
+    assert(s == "my_function", "to_string should return name")
+    return 0
+}
+
+@test
+func test_symbol_name_as_str() -> I32 {
+    let name: SymbolName = SymbolName::new("test_func")
+    let s: Str = name.as_str()
+    assert(s == "test_func", "as_str should return name")
+    return 0
+}
+
+@test
+func test_symbol_name_as_bytes() -> I32 {
+    let name: SymbolName = SymbolName::new("hello")
+    let s: Str = name.as_bytes()
+    assert(s == "hello", "as_bytes should return name")
+    return 0
+}
+
+@test
+func test_symbol_name_empty() -> I32 {
+    let name: SymbolName = SymbolName::new("")
+    let s: Str = name.to_string()
+    assert(s == "", "empty name should work")
+    return 0
+}
+
+@test
+func test_symbol_name_special_chars() -> I32 {
+    let name: SymbolName = SymbolName::new("std::vec::Vec::push")
+    let s: Str = name.to_string()
+    assert(s == "std::vec::Vec::push", "should handle special chars")
+    return 0
+}

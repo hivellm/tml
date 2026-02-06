@@ -1,6 +1,10 @@
 // Backtrace - Stack trace capture and formatting
 //
 // Provides the main Backtrace type for capturing and formatting stack traces.
+// This module is inspired by Rust's backtrace-rs library.
+
+use super::frame::BacktraceFrame
+use super::symbol::BacktraceSymbol
 
 // ============================================================================
 // FFI Declarations
@@ -12,8 +16,32 @@ func ffi_backtrace_capture(skip: I32) -> *Unit
 @extern("ffi_backtrace_frame_count")
 func ffi_backtrace_frame_count(bt_handle: *Unit) -> I32
 
+@extern("ffi_backtrace_frame_ip")
+func ffi_backtrace_frame_ip(bt_handle: *Unit, index: I32) -> *Unit
+
 @extern("ffi_backtrace_resolve")
 func ffi_backtrace_resolve(bt_handle: *Unit)
+
+@extern("ffi_backtrace_frame_name")
+func ffi_backtrace_frame_name(bt_handle: *Unit, index: I32) -> *Unit
+
+@extern("ffi_backtrace_frame_filename")
+func ffi_backtrace_frame_filename(bt_handle: *Unit, index: I32) -> *Unit
+
+@extern("ffi_backtrace_frame_lineno")
+func ffi_backtrace_frame_lineno(bt_handle: *Unit, index: I32) -> U32
+
+@extern("ffi_backtrace_frame_colno")
+func ffi_backtrace_frame_colno(bt_handle: *Unit, index: I32) -> U32
+
+@extern("ffi_backtrace_frame_symbol_address")
+func ffi_backtrace_frame_symbol_address(bt_handle: *Unit, index: I32) -> *Unit
+
+@extern("ffi_backtrace_frame_offset")
+func ffi_backtrace_frame_offset(bt_handle: *Unit, index: I32) -> U64
+
+@extern("ffi_backtrace_is_resolved")
+func ffi_backtrace_is_resolved(bt_handle: *Unit) -> I32
 
 @extern("ffi_backtrace_to_string")
 func ffi_backtrace_to_string(bt_handle: *Unit) -> *Unit
@@ -21,11 +49,40 @@ func ffi_backtrace_to_string(bt_handle: *Unit) -> *Unit
 @extern("ffi_backtrace_free")
 func ffi_backtrace_free(bt_handle: *Unit)
 
+@extern("ffi_backtrace_clear_cache")
+func ffi_backtrace_clear_cache()
+
 @extern("tml_str_from_cstr")
 func tml_str_from_cstr(cstr: *Unit) -> Str
 
 @extern("tml_free")
 func tml_free(ptr: *Unit)
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+/// The status of a backtrace capture.
+///
+/// This enum represents the state of a Backtrace object.
+pub enum BacktraceStatus {
+    /// Backtrace has not been captured (empty/null handle)
+    Unsupported,
+    /// Backtrace was captured but symbols not yet resolved
+    Captured,
+    /// Backtrace was captured and all symbols resolved
+    Resolved,
+}
+
+/// Formatting style for backtraces.
+///
+/// Controls how backtraces are printed/formatted.
+pub enum PrintFmt {
+    /// Short format: just function names
+    Short,
+    /// Full format: function names with file:line info
+    Full,
+}
 
 // ============================================================================
 // Backtrace Type
@@ -53,6 +110,17 @@ func tml_free(ptr: *Unit)
 /// bt.resolve()  // Resolve all symbols
 /// print(bt.to_string())
 /// ```
+///
+/// ## Accessing Individual Frames
+///
+/// ```tml
+/// let bt = Backtrace::capture()
+/// let count = bt.frame_count()
+/// for i in 0 to count {
+///     let frame = bt.frame(i)
+///     // process frame...
+/// }
+/// ```
 pub type Backtrace {
     /// Handle to the native backtrace structure
     handle: *Unit,
@@ -79,12 +147,74 @@ impl Backtrace {
         }
     }
 
+    /// Returns the status of this backtrace.
+    pub func status(this) -> BacktraceStatus {
+        if this.handle == null {
+            return BacktraceStatus::Unsupported
+        }
+        if this.resolved {
+            return BacktraceStatus::Resolved
+        }
+        return BacktraceStatus::Captured
+    }
+
     /// Returns the number of captured frames.
     pub func frame_count(this) -> I32 {
         if this.handle == null {
             return 0
         }
         return ffi_backtrace_frame_count(this.handle)
+    }
+
+    /// Returns the frame at the given index.
+    ///
+    /// The frame contains the instruction pointer and, if resolved,
+    /// symbol information.
+    pub func frame(this, index: I32) -> Maybe[BacktraceFrame] {
+        if this.handle == null {
+            return Nothing
+        }
+        let count: I32 = ffi_backtrace_frame_count(this.handle)
+        if index < 0 or index >= count {
+            return Nothing
+        }
+
+        let ip: *Unit = ffi_backtrace_frame_ip(this.handle, index)
+
+        if this.resolved {
+            // Get resolved symbol information
+            let name_ptr: *Unit = ffi_backtrace_frame_name(this.handle, index)
+            let file_ptr: *Unit = ffi_backtrace_frame_filename(this.handle, index)
+            let lineno: U32 = ffi_backtrace_frame_lineno(this.handle, index)
+            let colno: U32 = ffi_backtrace_frame_colno(this.handle, index)
+            let sym_addr: *Unit = ffi_backtrace_frame_symbol_address(this.handle, index)
+            let offset: U64 = ffi_backtrace_frame_offset(this.handle, index)
+
+            let name: Maybe[Str] = if name_ptr != null {
+                Just(tml_str_from_cstr(name_ptr))
+            } else {
+                Nothing
+            }
+
+            let filename: Maybe[Str] = if file_ptr != null {
+                Just(tml_str_from_cstr(file_ptr))
+            } else {
+                Nothing
+            }
+
+            let sym: BacktraceSymbol = BacktraceSymbol {
+                name: name,
+                filename: filename,
+                lineno: lineno,
+                colno: colno,
+                addr: sym_addr,
+                offset: offset,
+            }
+
+            return Just(BacktraceFrame::with_symbol(ip, sym))
+        } else {
+            return Just(BacktraceFrame::new(ip))
+        }
     }
 
     /// Resolves symbol information for all frames.
@@ -116,11 +246,106 @@ impl Backtrace {
         return result
     }
 
+    /// Formats the backtrace with the specified style.
+    ///
+    /// - `PrintFmt::Short`: Shows just function names
+    /// - `PrintFmt::Full`: Shows full information with file:line
+    pub func format(mut this, fmt: PrintFmt) -> Str {
+        if this.handle == null {
+            return "  <no backtrace>\n"
+        }
+
+        if not this.resolved {
+            this.resolve()
+        }
+
+        when fmt {
+            PrintFmt::Short => {
+                // Short format: just function names
+                let mut result: Str = ""
+                let count: I32 = this.frame_count()
+                let mut i: I32 = 0
+                loop (i < count) {
+                    let frame_opt: Maybe[BacktraceFrame] = this.frame(i)
+                    when frame_opt {
+                        Just(frame) => {
+                            let sym_opt: Maybe[BacktraceSymbol] = frame.symbol()
+                            when sym_opt {
+                                Just(sym) => {
+                                    let name_opt: Maybe[Str] = sym.name
+                                    let name: Str = when name_opt {
+                                        Just(n) => n,
+                                        Nothing => "<unknown>"
+                                    }
+                                    result = "{result}  {i}: {name}\n"
+                                },
+                                Nothing => {
+                                    result = "{result}  {i}: <unknown>\n"
+                                }
+                            }
+                        },
+                        Nothing => {}
+                    }
+                    i = i + 1
+                }
+                return result
+            },
+            PrintFmt::Full => {
+                // Full format: use the FFI-provided formatter
+                return this.to_string()
+            }
+        }
+    }
+
     /// Prints the backtrace to stdout.
     pub func print(mut this) {
         let s: Str = this.to_string()
         print(s)
     }
+}
+
+// ============================================================================
+// Low-Level Functions
+// ============================================================================
+
+/// Resolves a single address to symbol information.
+///
+/// This is a standalone function for resolving individual addresses
+/// without capturing a full backtrace.
+///
+/// ## Example
+///
+/// ```tml
+/// let sym = resolve_frame(some_address)
+/// when sym {
+///     Just(s) => print("Symbol: {s.to_string()}\n"),
+///     Nothing => print("No symbol found\n")
+/// }
+/// ```
+pub func resolve_frame(addr: *Unit) -> Maybe[BacktraceSymbol] {
+    if addr == null {
+        return Nothing
+    }
+
+    // Create a temporary backtrace with just this address
+    // This is a simplified approach - in a full implementation,
+    // we would call the FFI directly for single-address resolution
+    let bt: Backtrace = Backtrace::capture_from(0)
+    if bt.handle == null {
+        return Nothing
+    }
+
+    // For now, return Nothing as single-frame resolution
+    // would require additional FFI support
+    return Nothing
+}
+
+/// Clears any cached symbol information.
+///
+/// This function releases cached debug symbol data. It may be useful
+/// after loading/unloading dynamic libraries to refresh symbol tables.
+pub func clear_symbol_cache() {
+    ffi_backtrace_clear_cache()
 }
 
 // ============================================================================
@@ -138,4 +363,27 @@ pub func print_backtrace() {
 /// Captures and returns a backtrace, skipping the specified frames.
 pub func capture_backtrace(skip: I32) -> Backtrace {
     return Backtrace::capture_from(skip + 1)
+}
+
+/// Iterates through the current call stack, invoking the callback for each frame.
+///
+/// This is a low-level function that allows processing frames without
+/// capturing a full backtrace. The callback receives the instruction pointer
+/// for each frame.
+///
+/// Note: In TML, this is implemented by capturing a backtrace and iterating,
+/// since we don't have closure callbacks like Rust's trace().
+///
+/// ## Example
+///
+/// ```tml
+/// let bt = Backtrace::capture()
+/// let count = bt.frame_count()
+/// for i in 0 to count {
+///     let frame = bt.frame(i)
+///     // Process each frame...
+/// }
+/// ```
+pub func trace_frames() -> Backtrace {
+    return Backtrace::capture_from(1)
 }

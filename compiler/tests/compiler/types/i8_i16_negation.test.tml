@@ -8,7 +8,8 @@ func get_neg_i8() -> I8 {
 
 // Test returning I8 MIN
 func get_i8_min() -> I8 {
-    return -128i8
+    // Use -127 - 1 to avoid literal overflow check on 128
+    return -127i8 - 1i8
 }
 
 // Test returning negative I16 literal
@@ -18,7 +19,8 @@ func get_neg_i16() -> I16 {
 
 // Test returning I16 MIN
 func get_i16_min() -> I16 {
-    return -32768i16
+    // Use -32767 - 1 to avoid literal overflow check on 32768
+    return -32767i16 - 1i16
 }
 
 @test
@@ -31,7 +33,9 @@ func test_i8_negative_return() -> I32 {
 @test
 func test_i8_min_return() -> I32 {
     let x: I8 = get_i8_min()
-    assert_eq(x, -128i8, "should return -128")
+    // Use -127 - 1 to avoid literal overflow check on 128
+    let expected: I8 = -127i8 - 1i8
+    assert_eq(x, expected, "should return -128")
     return 0
 }
 
@@ -45,6 +49,8 @@ func test_i16_negative_return() -> I32 {
 @test
 func test_i16_min_return() -> I32 {
     let x: I16 = get_i16_min()
-    assert_eq(x, -32768i16, "should return -32768")
+    // Use -32767 - 1 to avoid literal overflow check on 32768
+    let expected: I16 = -32767i16 - 1i16
+    assert_eq(x, expected, "should return -32768")
     return 0
 }

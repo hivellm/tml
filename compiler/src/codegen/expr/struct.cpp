@@ -845,7 +845,11 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
                 if (class_def.has_value()) {
                     struct_type = "%class." + base_name;
                 } else {
-                    struct_type = "%struct." + base_name;
+                    // Non-generic struct - ensure type is defined (handles imported structs)
+                    // Use llvm_type_from_semantic to trigger type emission if needed
+                    auto sem_type =
+                        std::make_shared<types::Type>(types::NamedType{base_name, "", {}});
+                    struct_type = llvm_type_from_semantic(sem_type, true);
                 }
             }
         }

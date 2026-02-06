@@ -475,12 +475,14 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         if (method.body->expr.has_value() && !block_terminated_) {
             std::string result = gen_expr(*method.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
-                // Fix: if returning ptr type with "0" placeholder (from loops), use null
-                if (ret_type == "ptr" && result == "0") {
+                // Fix: Unit type always uses zeroinitializer (can't use bool/int values)
+                if (ret_type == "{}") {
+                    emit_line("  ret {} zeroinitializer");
+                } else if (ret_type == "ptr" && result == "0") {
+                    // Fix: if returning ptr type with "0" placeholder (from loops), use null
                     emit_line("  ret ptr null");
                 } else if (result == "0" && ret_type.find("%struct.") == 0) {
-                    // Fix: if returning struct type with "0" placeholder (from loops), use
-                    // zeroinitializer
+                    // Fix: if returning struct type with "0" placeholder, use zeroinitializer
                     emit_line("  ret " + ret_type + " zeroinitializer");
                 } else {
                     // Handle integer type extension when actual differs from expected
@@ -868,12 +870,14 @@ void LLVMIRGen::gen_impl_method_instantiation(
             if (ret_type != "void" && !block_terminated_) {
                 // Emit drops before returning
                 emit_all_drops();
-                // Fix: if returning ptr type with "0" placeholder (from loops), use null
-                if (ret_type == "ptr" && result == "0") {
+                // Fix: Unit type always uses zeroinitializer (can't use bool/int values)
+                if (ret_type == "{}") {
+                    emit_line("  ret {} zeroinitializer");
+                } else if (ret_type == "ptr" && result == "0") {
+                    // Fix: if returning ptr type with "0" placeholder (from loops), use null
                     emit_line("  ret ptr null");
                 } else if (result == "0" && ret_type.find("%struct.") == 0) {
-                    // Fix: if returning struct type with "0" placeholder (from loops), use
-                    // zeroinitializer
+                    // Fix: if returning struct type with "0" placeholder, use zeroinitializer
                     emit_line("  ret " + ret_type + " zeroinitializer");
                 } else {
                     // Handle integer type extension when actual differs from expected

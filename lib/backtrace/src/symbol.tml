@@ -15,6 +15,8 @@
 /// - `filename`: The source file path (e.g., "src/main.tml")
 /// - `lineno`: Line number in the source file (0 if unknown)
 /// - `colno`: Column number in the source file (0 if unknown)
+/// - `addr`: Symbol address (start of function)
+/// - `offset`: Offset from symbol start to instruction pointer
 ///
 /// ## Example
 ///
@@ -42,6 +44,12 @@ pub type BacktraceSymbol {
 
     /// Column number (0 if unknown)
     colno: U32,
+
+    /// Symbol address (start of function), or null if unknown
+    addr: *Unit,
+
+    /// Offset from symbol start to instruction pointer
+    offset: U64,
 }
 
 impl BacktraceSymbol {
@@ -52,6 +60,8 @@ impl BacktraceSymbol {
             filename: Nothing,
             lineno: 0,
             colno: 0,
+            addr: null,
+            offset: 0,
         }
     }
 
@@ -62,6 +72,8 @@ impl BacktraceSymbol {
             filename: Nothing,
             lineno: 0,
             colno: 0,
+            addr: null,
+            offset: 0,
         }
     }
 
@@ -72,37 +84,116 @@ impl BacktraceSymbol {
             filename: filename,
             lineno: lineno,
             colno: colno,
+            addr: null,
+            offset: 0,
+        }
+    }
+
+    /// Creates a symbol with all fields including address information.
+    pub func full(
+        name: Maybe[Str],
+        filename: Maybe[Str],
+        lineno: U32,
+        colno: U32,
+        addr: *Unit,
+        offset: U64
+    ) -> BacktraceSymbol {
+        return BacktraceSymbol {
+            name: name,
+            filename: filename,
+            lineno: lineno,
+            colno: colno,
+            addr: addr,
+            offset: offset,
         }
     }
 
     /// Returns true if this symbol has a name.
     pub func has_name(this) -> Bool {
-        return this.name.is_just()
+        // Copy to local variable to avoid codegen bug with Maybe[Str] struct field access
+        let name_opt: Maybe[Str] = this.name
+        when name_opt {
+            Just(_) => return true,
+            Nothing => return false
+        }
     }
 
     /// Returns true if this symbol has file/line information.
     pub func has_location(this) -> Bool {
-        return this.filename.is_just() and this.lineno > 0
+        // Copy to local variable to avoid codegen bug
+        let file_opt: Maybe[Str] = this.filename
+        when file_opt {
+            Just(_) => return this.lineno > 0,
+            Nothing => return false
+        }
+    }
+
+    /// Returns true if this symbol has an address.
+    pub func has_addr(this) -> Bool {
+        return this.addr != null
     }
 
     /// Formats the symbol as a string.
     ///
     /// Format: "function_name at file:line:col"
     pub func to_string(this) -> Str {
-        let name_str: Str = this.name.unwrap_or("<unknown>")
+        // Copy Maybe[Str] fields to local variables to avoid codegen bug
+        let name_opt: Maybe[Str] = this.name
+        let file_opt: Maybe[Str] = this.filename
 
-        if this.filename.is_just() and this.lineno > 0 {
-            let file: Str = this.filename.unwrap()
-            if this.colno > 0 {
-                return "{name_str} at {file}:{this.lineno}:{this.colno}"
-            } else {
-                return "{name_str} at {file}:{this.lineno}"
-            }
-        } else if this.filename.is_just() {
-            let file: Str = this.filename.unwrap()
-            return "{name_str} at {file}"
-        } else {
-            return name_str
+        let name_str: Str = when name_opt {
+            Just(n) => n,
+            Nothing => "<unknown>"
         }
+
+        when file_opt {
+            Just(file) => {
+                if this.lineno > 0 {
+                    if this.colno > 0 {
+                        return "{name_str} at {file}:{this.lineno}:{this.colno}"
+                    } else {
+                        return "{name_str} at {file}:{this.lineno}"
+                    }
+                } else {
+                    return "{name_str} at {file}"
+                }
+            },
+            Nothing => return name_str
+        }
+    }
+}
+
+// ============================================================================
+// SymbolName - Wrapper for symbol names with display options
+// ============================================================================
+
+/// A wrapper around a symbol name to provide ergonomic accessors.
+///
+/// This type provides methods to access the raw and demangled versions
+/// of a symbol name, similar to backtrace-rs's SymbolName.
+pub type SymbolName {
+    /// The raw symbol name bytes
+    raw: Str,
+}
+
+impl SymbolName {
+    /// Creates a new SymbolName from a string.
+    pub func new(name: Str) -> SymbolName {
+        return SymbolName { raw: name }
+    }
+
+    /// Returns the raw symbol name as bytes/string.
+    pub func as_bytes(this) -> Str {
+        return this.raw
+    }
+
+    /// Returns the symbol name as a string.
+    pub func as_str(this) -> Str {
+        return this.raw
+    }
+
+    /// Formats the symbol name for display.
+    pub func to_string(this) -> Str {
+        return this.raw
     }
 }

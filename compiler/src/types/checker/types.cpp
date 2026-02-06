@@ -132,13 +132,28 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
             }
         } else {
             // Regular struct - check all fields without defaults are provided
-            for (const auto& fld : struct_def->fields) {
-                if (provided_fields.find(fld.name) == provided_fields.end()) {
-                    // Field is missing - check if it has a default
-                    if (!fld.has_default) {
-                        error("Missing field '" + fld.name +
-                                  "' in struct literal (no default value)",
-                              struct_expr.span, "T005");
+            // (unless struct update syntax is used with ..base)
+            bool has_base = struct_expr.base.has_value();
+
+            if (has_base) {
+                // Check the base expression type matches
+                auto base_type = check_expr(*struct_expr.base.value());
+                auto base_name = type_to_string(base_type);
+                if (base_name != name) {
+                    error("Struct update base has type '" + base_name + "' but expected '" + name +
+                              "'",
+                          struct_expr.span, "T005");
+                }
+            } else {
+                // No base - all fields without defaults must be provided
+                for (const auto& fld : struct_def->fields) {
+                    if (provided_fields.find(fld.name) == provided_fields.end()) {
+                        // Field is missing - check if it has a default
+                        if (!fld.has_default) {
+                            error("Missing field '" + fld.name +
+                                      "' in struct literal (no default value)",
+                                  struct_expr.span, "T005");
+                        }
                     }
                 }
             }

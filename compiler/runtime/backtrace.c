@@ -449,3 +449,55 @@ TML_EXPORT char* ffi_backtrace_to_string(void* bt_handle) {
 TML_EXPORT void ffi_backtrace_free(void* bt_handle) {
     backtrace_free((Backtrace*)bt_handle);
 }
+
+TML_EXPORT uint32_t ffi_backtrace_frame_colno(void* bt_handle, int32_t index) {
+    Backtrace* bt = (Backtrace*)bt_handle;
+    if (!bt || index < 0 || index >= bt->frame_count) {
+        return 0;
+    }
+    if (!bt->frames[index].resolved) {
+        return 0;
+    }
+    return bt->frames[index].symbol.colno;
+}
+
+TML_EXPORT void* ffi_backtrace_frame_symbol_address(void* bt_handle, int32_t index) {
+    Backtrace* bt = (Backtrace*)bt_handle;
+    if (!bt || index < 0 || index >= bt->frame_count) {
+        return NULL;
+    }
+    if (!bt->frames[index].resolved) {
+        return NULL;
+    }
+    return bt->frames[index].symbol.symbol_address;
+}
+
+TML_EXPORT uint64_t ffi_backtrace_frame_offset(void* bt_handle, int32_t index) {
+    Backtrace* bt = (Backtrace*)bt_handle;
+    if (!bt || index < 0 || index >= bt->frame_count) {
+        return 0;
+    }
+    if (!bt->frames[index].resolved) {
+        return 0;
+    }
+    return bt->frames[index].symbol.offset;
+}
+
+TML_EXPORT int32_t ffi_backtrace_is_resolved(void* bt_handle) {
+    Backtrace* bt = (Backtrace*)bt_handle;
+    if (!bt) {
+        return 0;
+    }
+    return bt->fully_resolved;
+}
+
+TML_EXPORT void ffi_backtrace_clear_cache(void) {
+#ifdef _WIN32
+    // Re-initialize symbol handler to clear any cached data
+    if (g_initialized) {
+        backtrace_cleanup();
+        backtrace_init();
+    }
+#endif
+    // On Unix, dladdr doesn't have a cache to clear
+}

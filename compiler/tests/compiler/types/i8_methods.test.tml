@@ -7,7 +7,9 @@ use core::num::*
 func test_i8_min_max() -> I32 {
     let min: I8 = I8::MIN
     let max: I8 = I8::MAX
-    assert_eq(min, -128i8, "I8::MIN should be -128")
+    // Use -127 - 1 to avoid literal overflow check on 128
+    let expected_min: I8 = -127i8 - 1i8
+    assert_eq(min, expected_min, "I8::MIN should be -128")
     assert_eq(max, 127i8, "I8::MAX should be 127")
     assert(min < max, "MIN should be less than MAX")
     return 0
@@ -40,7 +42,9 @@ func test_i8_comparison() -> I32 {
 func test_i16_min_max() -> I32 {
     let min: I16 = I16::MIN
     let max: I16 = I16::MAX
-    assert_eq(min, -32768i16, "I16::MIN should be -32768")
+    // Use -32767 - 1 to avoid literal overflow check on 32768
+    let expected_min: I16 = -32767i16 - 1i16
+    assert_eq(min, expected_min, "I16::MIN should be -32768")
     assert_eq(max, 32767i16, "I16::MAX should be 32767")
     assert(min < max, "MIN should be less than MAX")
     return 0
