@@ -117,6 +117,9 @@ static int32_t tml_catching_panic = 0;
 /** @brief Buffer to store the panic message when caught. */
 static char tml_panic_msg[1024] = {0};
 
+/** @brief Buffer to store backtrace when panic is caught (for DLL test mode). */
+static char tml_panic_backtrace[8192] = {0};
+
 // ============================================================================
 // I/O Functions
 // ============================================================================
@@ -172,6 +175,20 @@ void panic(const char* message) {
         } else {
             tml_panic_msg[0] = '\0';
         }
+        // Capture backtrace before longjmp (stack will be unwound)
+        tml_panic_backtrace[0] = '\0';
+        if (tml_backtrace_on_panic) {
+            Backtrace* bt = backtrace_capture_full(2); // Skip internal frames
+            if (bt) {
+                backtrace_resolve_all(bt);
+                char* formatted = backtrace_format(bt);
+                if (formatted) {
+                    snprintf(tml_panic_backtrace, sizeof(tml_panic_backtrace), "%s", formatted);
+                    free(formatted);
+                }
+                backtrace_free(bt);
+            }
+        }
         longjmp(tml_panic_jmp_buf, 1);
     }
 
@@ -213,6 +230,20 @@ void assert_tml(int32_t condition, const char* message) {
         // This properly longjmps back instead of calling exit()
         if (tml_catching_panic) {
             snprintf(tml_panic_msg, sizeof(tml_panic_msg), "%s", assert_msg);
+            // Capture backtrace before longjmp (stack will be unwound)
+            tml_panic_backtrace[0] = '\0';
+            if (tml_backtrace_on_panic) {
+                Backtrace* bt = backtrace_capture_full(2); // Skip internal frames
+                if (bt) {
+                    backtrace_resolve_all(bt);
+                    char* formatted = backtrace_format(bt);
+                    if (formatted) {
+                        snprintf(tml_panic_backtrace, sizeof(tml_panic_backtrace), "%s", formatted);
+                        free(formatted);
+                    }
+                    backtrace_free(bt);
+                }
+            }
             longjmp(tml_panic_jmp_buf, 1);
         }
 
@@ -253,6 +284,20 @@ TML_EXPORT void assert_tml_loc(int32_t condition, const char* message, const cha
         // Use panic mechanism if catching is enabled (DLL test context)
         if (tml_catching_panic) {
             snprintf(tml_panic_msg, sizeof(tml_panic_msg), "%s", assert_msg);
+            // Capture backtrace before longjmp (stack will be unwound)
+            tml_panic_backtrace[0] = '\0';
+            if (tml_backtrace_on_panic) {
+                Backtrace* bt = backtrace_capture_full(3); // Skip internal frames
+                if (bt) {
+                    backtrace_resolve_all(bt);
+                    char* formatted = backtrace_format(bt);
+                    if (formatted) {
+                        snprintf(tml_panic_backtrace, sizeof(tml_panic_backtrace), "%s", formatted);
+                        free(formatted);
+                    }
+                    backtrace_free(bt);
+                }
+            }
             longjmp(tml_panic_jmp_buf, 1);
         }
 
@@ -366,8 +411,21 @@ int32_t tml_run_should_panic(tml_test_fn test_fn) {
  *
  * @return The panic message string.
  */
-const char* tml_get_panic_message(void) {
+TML_EXPORT const char* tml_get_panic_message(void) {
     return tml_panic_msg;
+}
+
+/**
+ * @brief Gets the backtrace from the last caught panic.
+ *
+ * Returns the formatted backtrace string captured at the panic site.
+ * Only valid after `tml_run_should_panic` returns 1 and if backtrace
+ * was enabled via `tml_enable_backtrace_on_panic`.
+ *
+ * @return The backtrace string, or empty string if not available.
+ */
+TML_EXPORT const char* tml_get_panic_backtrace(void) {
+    return tml_panic_backtrace;
 }
 
 /** @brief Callback type for test functions that return int (int -> void args). */

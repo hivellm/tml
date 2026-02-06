@@ -2300,6 +2300,9 @@ SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimi
 
 // Function pointer type for tml_run_test_with_catch from runtime
 using TmlRunTestWithCatch = int32_t (*)(TestMainFunc);
+using TmlGetPanicMessage = const char* (*)();
+using TmlGetPanicBacktrace = const char* (*)();
+using TmlEnableBacktrace = void (*)();
 
 SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose,
                                int timeout_seconds, const std::string& test_name) {
@@ -2326,6 +2329,16 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
     VERBOSE_LOG(verbose, "[DEBUG]   tml_run_test_with_catch: "
                              << (run_with_catch ? "found" : "NOT FOUND") << "\n");
+
+    // Get panic message and backtrace functions
+    auto get_panic_msg = lib.get_function<TmlGetPanicMessage>("tml_get_panic_message");
+    auto get_panic_bt = lib.get_function<TmlGetPanicBacktrace>("tml_get_panic_backtrace");
+    auto enable_bt = lib.get_function<TmlEnableBacktrace>("tml_enable_backtrace_on_panic");
+
+    // Enable backtrace for test failures (if available)
+    if (enable_bt) {
+        enable_bt();
+    }
 
     // Get output suppression function from runtime (to suppress test output when not verbose)
     using TmlSetOutputSuppressed = void (*)(int32_t);
@@ -2465,7 +2478,22 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         if (result.exit_code == -1) {
             // Panic was caught
             result.success = false;
-            result.error = "Test panicked";
+            std::string error_msg = "Test panicked";
+            if (get_panic_msg) {
+                const char* panic_msg = get_panic_msg();
+                if (panic_msg && panic_msg[0] != '\0') {
+                    error_msg += ": ";
+                    error_msg += panic_msg;
+                }
+            }
+            if (get_panic_bt) {
+                const char* backtrace = get_panic_bt();
+                if (backtrace && backtrace[0] != '\0') {
+                    error_msg += "\n\nBacktrace:\n";
+                    error_msg += backtrace;
+                }
+            }
+            result.error = error_msg;
         } else if (result.exit_code == -2) {
             // Crash was caught
             result.success = false;
@@ -2555,6 +2583,16 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
     // Try to get the panic-catching wrapper from the runtime
     auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
 
+    // Get panic message and backtrace functions
+    auto get_panic_msg = lib.get_function<TmlGetPanicMessage>("tml_get_panic_message");
+    auto get_panic_bt = lib.get_function<TmlGetPanicBacktrace>("tml_get_panic_backtrace");
+    auto enable_bt = lib.get_function<TmlEnableBacktrace>("tml_enable_backtrace_on_panic");
+
+    // Enable backtrace for test failures (if available)
+    if (enable_bt) {
+        enable_bt();
+    }
+
     // Get output suppression function from runtime
     using TmlSetOutputSuppressed = void (*)(int32_t);
     auto set_output_suppressed =
@@ -2583,7 +2621,22 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
         result.exit_code = run_with_catch(test_func);
         if (result.exit_code == -1) {
             result.success = false;
-            result.error = "Test panicked";
+            std::string error_msg = "Test panicked";
+            if (get_panic_msg) {
+                const char* panic_msg = get_panic_msg();
+                if (panic_msg && panic_msg[0] != '\0') {
+                    error_msg += ": ";
+                    error_msg += panic_msg;
+                }
+            }
+            if (get_panic_bt) {
+                const char* backtrace = get_panic_bt();
+                if (backtrace && backtrace[0] != '\0') {
+                    error_msg += "\n\nBacktrace:\n";
+                    error_msg += backtrace;
+                }
+            }
+            result.error = error_msg;
         } else if (result.exit_code == -2) {
             result.success = false;
             result.error = "Test crashed";

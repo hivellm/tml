@@ -424,6 +424,17 @@ int32_t tml_run_should_panic(tml_test_fn test_fn);
 const char* tml_get_panic_message(void);
 
 /**
+ * @brief Gets the backtrace from the last caught panic.
+ *
+ * Returns the formatted backtrace string captured at the panic site.
+ * Only valid after `tml_run_should_panic` returns 1 and if backtrace
+ * was enabled via `tml_enable_backtrace_on_panic`.
+ *
+ * @return The backtrace string, or empty string if not available.
+ */
+const char* tml_get_panic_backtrace(void);
+
+/**
  * @brief Checks if the panic message contains expected text.
  * @param expected The substring to search for.
  * @return 1 if found or expected is empty, 0 if not found.
