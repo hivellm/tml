@@ -16,6 +16,42 @@ This includes but is not limited to:
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
+## ⛔ MANDATORY: Analyze Before Executing ⛔
+
+**YOU MUST ANALYZE PROJECT PATTERNS AND CONVENTIONS BEFORE EXECUTING ANY TASK.**
+
+This is a HARD REQUIREMENT because rushing to execute tasks without analysis leads to:
+- ❌ Wrong folder structures (e.g., creating `archived/` instead of using existing `archive/`)
+- ❌ Wrong naming conventions (e.g., missing date prefixes like `YYYY-MM-DD-task-name`)
+- ❌ Wrong file formats (e.g., not following test patterns)
+- ❌ Wasted tokens fixing your own mistakes
+- ❌ Frustrated users
+
+**BEFORE executing any task that involves project conventions, you MUST:**
+
+1. **Check existing examples first** - Look at how similar tasks were done before
+   ```bash
+   # Example: Before archiving a task, check the archive folder structure
+   ls rulebook/tasks/archive/
+   # Learn: Tasks are named YYYY-MM-DD-task-name
+   ```
+
+2. **Read relevant documentation** - Check RULEBOOK.md, AGENTS.md, or related docs
+
+3. **Identify patterns** - Note naming conventions, folder structures, file formats
+
+4. **Only then execute** - After understanding the correct approach
+
+**Examples of tasks that REQUIRE analysis first:**
+- Archiving tasks → Check `archive/` folder naming pattern
+- Creating tests → Check existing test file patterns (`use test`, return types, etc.)
+- Creating tasks → Check `rulebook/RULEBOOK.md` for format
+- Adding new modules → Check existing module structures
+
+**WHY:** Executing quickly without analysis causes MORE errors, which requires MORE fixes, which wastes MORE tokens and time. Taking 30 seconds to analyze saves minutes of corrections.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## Project Overview
 
 **TML (To Machine Language)** is a programming language designed specifically for LLM code generation and analysis. This repository contains:

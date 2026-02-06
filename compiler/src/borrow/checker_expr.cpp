@@ -387,23 +387,63 @@ void BorrowChecker::check_block(const parser::BlockExpr& block) {
     env_.pop_scope();
 }
 
-/// Checks an if expression.
+/// Checks an if expression with dataflow analysis for initialization tracking.
 ///
-/// Both branches are checked independently. Variables defined in one branch
-/// are not visible in the other.
+/// Both branches are checked independently with initialization state tracking.
+/// At the merge point, a variable is considered initialized only if it is
+/// initialized in ALL possible paths:
+///
+/// - If-else: Variable must be initialized in BOTH branches
+/// - If-only: Variable must have been initialized BEFORE the if (since then
+///   branch might not execute)
+///
+/// ## Example
+///
+/// ```tml
+/// let mut x: I32
+/// if cond {
+///     x = 42      // Initialized in then
+/// } else {
+///     x = 99      // Initialized in else
+/// }
+/// let y = x       // OK: x is definitely initialized
+/// ```
 void BorrowChecker::check_if(const parser::IfExpr& if_expr) {
+    // Check condition first (may have side effects)
     check_expr(*if_expr.condition);
+
+    // Save initialization state before entering branches
+    auto pre_branch_state = env_.save_init_state();
+
+    // Check then branch
     check_expr(*if_expr.then_branch);
+    auto then_state = env_.save_init_state();
 
     if (if_expr.else_branch) {
+        // Restore to pre-branch state before checking else
+        env_.restore_init_state(pre_branch_state);
+
+        // Check else branch
         check_expr(**if_expr.else_branch);
+        auto else_state = env_.save_init_state();
+
+        // Merge: variable is initialized only if initialized in BOTH branches
+        auto merged = BorrowEnv::merge_init_states(then_state, else_state);
+        env_.apply_init_state(merged);
+    } else {
+        // No else branch: variable is initialized only if it was initialized
+        // BEFORE the if (because the then branch might not execute)
+        env_.apply_init_state(pre_branch_state);
     }
 }
 
-/// Checks a when (match) expression.
+/// Checks a when (match) expression with dataflow analysis.
 ///
 /// Each arm creates a new scope for pattern bindings. The scrutinee may be
 /// moved or borrowed depending on the pattern.
+///
+/// At the merge point after the when, a variable is initialized only if it
+/// is initialized in ALL arms.
 ///
 /// ## Pattern Binding
 ///
@@ -413,10 +453,30 @@ void BorrowChecker::check_if(const parser::IfExpr& if_expr) {
 ///     Nothing => {},
 /// }
 /// ```
+///
+/// ## Initialization Example
+///
+/// ```tml
+/// let mut result: I32
+/// when option {
+///     Just(v) => { result = v },
+///     Nothing => { result = 0 },
+/// }
+/// let x = result   // OK: result initialized in all arms
+/// ```
 void BorrowChecker::check_when(const parser::WhenExpr& when) {
     check_expr(*when.scrutinee);
 
+    // Save state before any arms
+    auto pre_when_state = env_.save_init_state();
+
+    // Track merged state across all arms
+    std::optional<BorrowEnv::InitState> merged_state;
+
     for (const auto& arm : when.arms) {
+        // Restore to pre-when state before checking each arm
+        env_.restore_init_state(pre_when_state);
+
         // Each arm creates a new scope for pattern bindings
         env_.push_scope();
 
@@ -438,14 +498,35 @@ void BorrowChecker::check_when(const parser::WhenExpr& when) {
 
         drop_scope_places();
         env_.pop_scope();
+
+        // Save this arm's state and merge with previous arms
+        auto arm_state = env_.save_init_state();
+        if (!merged_state) {
+            merged_state = arm_state;
+        } else {
+            merged_state = BorrowEnv::merge_init_states(*merged_state, arm_state);
+        }
+    }
+
+    // Apply merged state (initialized only if initialized in ALL arms)
+    if (merged_state) {
+        env_.apply_init_state(*merged_state);
     }
 }
 
-/// Checks a loop expression.
+/// Checks a loop expression with dataflow analysis.
 ///
 /// Loop bodies create a scope that is entered repeatedly. The loop depth
 /// is tracked for break/continue analysis.
+///
+/// For initialization tracking, we're conservative: a variable is considered
+/// initialized after the loop only if it was initialized BEFORE the loop.
+/// This is because the loop body might not execute at all (e.g., while condition
+/// is false, or loop with immediate break).
 void BorrowChecker::check_loop(const parser::LoopExpr& loop) {
+    // Save pre-loop state
+    auto pre_loop_state = env_.save_init_state();
+
     loop_depth_++;
     env_.push_scope();
 
@@ -454,12 +535,19 @@ void BorrowChecker::check_loop(const parser::LoopExpr& loop) {
     drop_scope_places();
     env_.pop_scope();
     loop_depth_--;
+
+    // Restore pre-loop initialization state (conservative: loop might not execute)
+    env_.apply_init_state(pre_loop_state);
 }
 
-/// Checks a for expression.
+/// Checks a for expression with dataflow analysis.
 ///
 /// The iterator expression is checked first, then the loop body is checked
 /// with the loop variable bound.
+///
+/// For initialization tracking, we're conservative: a variable is considered
+/// initialized after the for loop only if it was initialized BEFORE the loop.
+/// This is because the loop body might not execute at all (empty iterator).
 ///
 /// ## Loop Variable
 ///
@@ -474,6 +562,9 @@ void BorrowChecker::check_loop(const parser::LoopExpr& loop) {
 void BorrowChecker::check_for(const parser::ForExpr& for_expr) {
     // Check iterator expression
     check_expr(*for_expr.iter);
+
+    // Save pre-loop state
+    auto pre_loop_state = env_.save_init_state();
 
     loop_depth_++;
     env_.push_scope();
@@ -490,6 +581,9 @@ void BorrowChecker::check_for(const parser::ForExpr& for_expr) {
     drop_scope_places();
     env_.pop_scope();
     loop_depth_--;
+
+    // Restore pre-loop initialization state (conservative: loop might not execute)
+    env_.apply_init_state(pre_loop_state);
 }
 
 /// Checks a return expression for dangling references.

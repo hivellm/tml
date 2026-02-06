@@ -788,6 +788,30 @@ public:
     /// Finds reborrows that outlive their origin borrow.
     auto find_invalid_reborrows() const -> std::vector<std::pair<size_t, size_t>>;
 
+    // ========================================================================
+    // Initialization State Tracking (Dataflow Analysis)
+    // ========================================================================
+
+    /// Type alias for initialization state snapshot.
+    using InitState = std::unordered_map<PlaceId, bool>;
+
+    /// Saves the current initialization state for all places.
+    /// Used before entering a branch to snapshot the state.
+    auto save_init_state() const -> InitState;
+
+    /// Restores initialization state from a saved snapshot.
+    /// Used when switching to check a different branch.
+    void restore_init_state(const InitState& state);
+
+    /// Merges two initialization states using AND logic.
+    /// A variable is initialized in result only if initialized in BOTH states.
+    /// Used at control flow merge points (after if-else, when arms, etc.)
+    static auto merge_init_states(const InitState& a, const InitState& b) -> InitState;
+
+    /// Applies a merged initialization state to the environment.
+    /// For variables that exist in the environment, updates their is_initialized flag.
+    void apply_init_state(const InitState& state);
+
 private:
     /// Maps variable names to their PlaceIds (supports shadowing via vector).
     std::unordered_map<std::string, std::vector<PlaceId>> name_to_place_;

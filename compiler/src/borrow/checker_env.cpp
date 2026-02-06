@@ -244,4 +244,87 @@ void BorrowEnv::release_borrows_at_depth(size_t depth, Location loc) {
     }
 }
 
+// ============================================================================
+// Initialization State Tracking (Dataflow Analysis)
+// ============================================================================
+
+/// Saves the current initialization state for all places.
+///
+/// Returns a snapshot of the is_initialized flag for each place.
+/// Used before entering a branch to preserve the pre-branch state.
+auto BorrowEnv::save_init_state() const -> InitState {
+    InitState state;
+    for (const auto& [id, place] : places_) {
+        state[id] = place.is_initialized;
+    }
+    return state;
+}
+
+/// Restores initialization state from a saved snapshot.
+///
+/// Used when switching to check an alternative branch (e.g., else after then).
+/// Only updates places that exist in both the current environment and the snapshot.
+void BorrowEnv::restore_init_state(const InitState& state) {
+    for (const auto& [id, is_init] : state) {
+        if (places_.count(id)) {
+            places_[id].is_initialized = is_init;
+        }
+    }
+}
+
+/// Merges two initialization states using AND logic.
+///
+/// A variable is considered initialized in the result only if it is initialized
+/// in BOTH input states. This is used at control flow merge points.
+///
+/// For example, after an if-else:
+/// - then branch initializes x
+/// - else branch does NOT initialize x
+/// - Result: x is NOT initialized (must be init in ALL paths)
+///
+/// ## Parameters
+///
+/// - `a`: Initialization state from one branch
+/// - `b`: Initialization state from another branch
+///
+/// ## Returns
+///
+/// Merged state where each place is initialized only if initialized in both inputs.
+auto BorrowEnv::merge_init_states(const InitState& a, const InitState& b) -> InitState {
+    InitState result;
+
+    // For each place in a, check if it's initialized in both
+    for (const auto& [id, is_init_a] : a) {
+        auto it = b.find(id);
+        if (it != b.end()) {
+            // Place exists in both - initialized only if BOTH are initialized
+            result[id] = is_init_a && it->second;
+        } else {
+            // Place only in a - keep its state
+            result[id] = is_init_a;
+        }
+    }
+
+    // Add places that are only in b
+    for (const auto& [id, is_init_b] : b) {
+        if (a.find(id) == a.end()) {
+            result[id] = is_init_b;
+        }
+    }
+
+    return result;
+}
+
+/// Applies a merged initialization state to the environment.
+///
+/// For variables that exist in the environment, updates their is_initialized flag
+/// based on the merged state. Used after computing the merged state at a join point.
+void BorrowEnv::apply_init_state(const InitState& state) {
+    for (const auto& [id, is_init] : state) {
+        if (places_.count(id)) {
+            places_[id].is_initialized = is_init;
+        }
+    }
+}
+
 } // namespace tml::borrow

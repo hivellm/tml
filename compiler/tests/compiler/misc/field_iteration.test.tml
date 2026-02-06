@@ -1,6 +1,7 @@
-// Test: Compile-time struct field iteration
-// Uses field_count[T]() with automatic loop unrolling
+// Tests for compile-time struct field iteration
+// Phase 12 of lang-ergonomics task - uses field_count[T]() with automatic loop unrolling
 
+use test
 use core::intrinsics::{field_count, field_name, field_offset}
 
 type Point {
@@ -14,30 +15,36 @@ type Person {
     active: Bool,
 }
 
-// Test basic field count
+// ============================================================================
+// Basic field intrinsics
+// ============================================================================
+
 @test
-func test_field_count() {
+func test_field_count() -> I32 {
     let count: I64 = field_count[Point]()
-    assert_eq(count, 2)
+    assert_eq(count, 2, "Point should have 2 fields")
 
     let person_count: I64 = field_count[Person]()
-    assert_eq(person_count, 3)
+    assert_eq(person_count, 3, "Person should have 3 fields")
+    return 0
 }
 
-// Test field name access with literal index
 @test
-func test_field_name_literal() {
+func test_field_name_literal() -> I32 {
     let name0: Str = field_name[Point](0)
     let name1: Str = field_name[Point](1)
 
-    // Field names should be "x" and "y"
-    assert_eq(name0, "x")
-    assert_eq(name1, "y")
+    assert_eq(name0, "x", "first field of Point is x")
+    assert_eq(name1, "y", "second field of Point is y")
+    return 0
 }
 
-// Test field iteration with compile-time loop unrolling
+// ============================================================================
+// Compile-time loop unrolling with field_count
+// ============================================================================
+
 @test
-func test_field_iteration_point() {
+func test_field_iteration_point() -> I32 {
     // This loop is unrolled at compile time because the bound is field_count[Point]()
     var count: I64 = 0
     for i in 0 to field_count[Point]() {
@@ -45,59 +52,60 @@ func test_field_iteration_point() {
         count = count + 1
     }
     // Point has 2 fields, so loop should run twice
-    assert_eq(count, 2)
+    assert_eq(count, 2, "unrolled loop should run field_count times")
+    return 0
 }
 
-// Test field iteration collecting names - simplified
 @test
-func test_field_iteration_names() {
+func test_field_iteration_names() -> I32 {
     // Test that field_name returns correct values in unrolled loop
     let name0: Str = field_name[Point](0)
     let name1: Str = field_name[Point](1)
 
-    // Verify the names are correct
-    assert_eq(name0, "x")
-    assert_eq(name1, "y")
+    assert_eq(name0, "x", "field 0 is x")
+    assert_eq(name1, "y", "field 1 is y")
 
     // Now test in unrolled loop context
     var count: I64 = 0
     for i in 0 to field_count[Point]() {
         let name: Str = field_name[Point](i)
-        // Just verify we got a non-empty string
         count = count + 1
     }
-    assert_eq(count, 2)
+    assert_eq(count, 2, "loop with field_name should unroll")
+    return 0
 }
 
-// Test person struct iteration
 @test
-func test_person_field_iteration() {
+func test_person_field_iteration() -> I32 {
     var field_count_sum: I64 = 0
 
     for i in 0 to field_count[Person]() {
         let name: Str = field_name[Person](i)
-        // Just count to verify loop runs 3 times
         field_count_sum = field_count_sum + 1
     }
 
-    assert_eq(field_count_sum, 3)
+    assert_eq(field_count_sum, 3, "Person iteration should run 3 times")
+    return 0
 }
 
-// Test field names in Person struct
 @test
-func test_person_field_names() {
+func test_person_field_names() -> I32 {
     let name0: Str = field_name[Person](0)
     let name1: Str = field_name[Person](1)
     let name2: Str = field_name[Person](2)
 
-    assert_eq(name0, "name")
-    assert_eq(name1, "age")
-    assert_eq(name2, "active")
+    assert_eq(name0, "name", "Person field 0 is name")
+    assert_eq(name1, "age", "Person field 1 is age")
+    assert_eq(name2, "active", "Person field 2 is active")
+    return 0
 }
 
-// Test field offset intrinsic in unrolled loop
+// ============================================================================
+// Field offset intrinsic
+// ============================================================================
+
 @test
-func test_field_offset_iteration() {
+func test_field_offset_iteration() -> I32 {
     var total_offset: I64 = 0
 
     for i in 0 to field_count[Point]() {
@@ -107,5 +115,6 @@ func test_field_offset_iteration() {
 
     // Point has x at offset 0, y at offset 4
     // Total should be 0 + 4 = 4
-    assert_eq(total_offset, 4)
+    assert_eq(total_offset, 4, "sum of field offsets for Point")
+    return 0
 }

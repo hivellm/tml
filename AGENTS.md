@@ -142,6 +142,7 @@ This project uses @hivellm/rulebook standards.
    - ✅ ALL temporary files MUST be removed immediately after use (MANDATORY)
    - ❌ NEVER create temporary files in project root or outside `/scripts`
    - ❌ NEVER leave temporary files after use - clean up before committing
+9. **⛔ MANDATORY: Analyze project patterns BEFORE executing any task** - Do NOT rush to execute. FIRST check existing examples (e.g., `ls rulebook/tasks/archive/` before archiving), read relevant docs, and identify naming conventions/folder structures. Rushing causes wrong structures (e.g., `archived/` vs `archive/`), wrong naming (missing `YYYY-MM-DD-` prefix), and wastes tokens fixing mistakes. 30 seconds of analysis saves minutes of corrections.
 
 ## Detailed Rules
 

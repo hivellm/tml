@@ -1,45 +1,123 @@
-// Test: Late variable initialization
-// Phase 10 of lang-ergonomics task
+// Tests for late variable initialization
+// Phase 10 of lang-ergonomics task - definite assignment analysis
 
-// Test: Basic late initialization works
+use test
+
+// ============================================================================
+// Basic late initialization
+// ============================================================================
+
 @test
-func test_late_init_basic() {
+func test_late_init_basic() -> I32 {
     let mut x: I32
     x = 42
-    assert_eq(x, 42)
+    assert_eq(x, 42, "late initialized variable should hold value")
+    return 0
 }
 
-// Test: Late init with different types
 @test
-func test_late_init_bool() {
+func test_late_init_bool() -> I32 {
     let mut flag: Bool
     flag = true
-    assert_eq(flag, true)
+    assert_eq(flag, true, "late initialized bool should work")
+    return 0
 }
 
-// Test: Late init followed by reassignment
 @test
-func test_late_init_reassign() {
+func test_late_init_reassign() -> I32 {
     let mut x: I32
     x = 10
     x = 20
-    assert_eq(x, 20)
+    assert_eq(x, 20, "reassignment after late init should work")
+    return 0
 }
 
-// Test: Multiple late-initialized variables
 @test
-func test_multiple_late_init() {
+func test_multiple_late_init() -> I32 {
     let mut a: I32
     let mut b: I32
     a = 1
     b = 2
-    assert_eq(a + b, 3)
+    assert_eq(a + b, 3, "multiple late init variables should work")
+    return 0
 }
 
-func main() {
-    test_late_init_basic()
-    test_late_init_bool()
-    test_late_init_reassign()
-    test_multiple_late_init()
-    print("Late initialization tests passed!\n")
+// ============================================================================
+// Dataflow analysis: if-else branches
+// ============================================================================
+
+@test
+func test_if_else_both_init() -> I32 {
+    let mut x: I32
+    let cond: Bool = true
+    if cond {
+        x = 42
+    } else {
+        x = 99
+    }
+    // x is definitely initialized because both branches assign
+    assert_eq(x, 42, "variable initialized in both branches")
+    return 0
+}
+
+@test
+func test_if_else_different_values() -> I32 {
+    let mut result: I32
+    let flag: Bool = false
+    if flag {
+        result = 100
+    } else {
+        result = 200
+    }
+    assert_eq(result, 200, "should take else branch value")
+    return 0
+}
+
+@test
+func test_nested_if_else_init() -> I32 {
+    let mut x: I32
+    let a: Bool = true
+    let b: Bool = false
+    if a {
+        if b {
+            x = 1
+        } else {
+            x = 2
+        }
+    } else {
+        x = 3
+    }
+    // x is initialized in all paths
+    assert_eq(x, 2, "nested branches all initialize")
+    return 0
+}
+
+// ============================================================================
+// Dataflow analysis: when expressions
+// ============================================================================
+
+@test
+func test_when_all_arms_init() -> I32 {
+    let mut result: I32
+    let opt: Maybe[I32] = Just(42)
+    when opt {
+        Just(v) => { result = v },
+        Nothing => { result = 0 }
+    }
+    // result is initialized in all arms
+    assert_eq(result, 42, "when arms all initialize")
+    return 0
+}
+
+@test
+func test_when_enum_all_init() -> I32 {
+    let mut x: I32
+    let val: I32 = 2
+    when val {
+        1 => { x = 10 },
+        2 => { x = 20 },
+        _ => { x = 30 }
+    }
+    assert_eq(x, 20, "integer when with wildcard initializes")
+    return 0
 }
