@@ -1,0 +1,39 @@
+// TML Backtrace Library
+// Runtime stack trace capture and symbol resolution for debugging
+//
+// This module provides:
+// - backtrace: Stack trace capture and formatting
+// - frame: Stack frame type with symbol information
+// - symbol: Resolved symbol information (name, file, line)
+//
+// ## Usage
+//
+// ```tml
+// use backtrace::Backtrace
+//
+// func example() {
+//     let bt = Backtrace::capture()
+//     bt.resolve()
+//     print(bt.to_string())
+// }
+// ```
+//
+// ## Platform Support
+//
+// - Windows: RtlCaptureStackBackTrace + DbgHelp
+// - Linux/macOS: backtrace() + dladdr (future)
+//
+// ## Integration
+//
+// Backtrace is automatically captured on:
+// - panic() calls (when BACKTRACE symbol is defined)
+// - assert_eq() failures (when BACKTRACE symbol is defined)
+
+pub mod backtrace   // Main Backtrace type and capture functions
+pub mod frame       // BacktraceFrame type
+pub mod symbol      // BacktraceSymbol type
+
+// Re-export main types at module level
+pub use backtrace::Backtrace
+pub use frame::BacktraceFrame
+pub use symbol::BacktraceSymbol

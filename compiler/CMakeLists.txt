@@ -140,6 +140,7 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/pool.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/backtrace.c
 )
 
 # Create static library

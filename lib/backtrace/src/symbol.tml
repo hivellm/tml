@@ -1,0 +1,108 @@
+// BacktraceSymbol - Resolved symbol information for a stack frame
+//
+// Contains the function name, source file path, and line/column numbers
+// when debug information is available.
+
+/// Resolved symbol information for a single stack frame.
+///
+/// This type contains the demangled function name, source file path,
+/// and line/column numbers extracted from debug symbols (PDB on Windows,
+/// DWARF on Unix).
+///
+/// ## Fields
+///
+/// - `name`: The demangled function name (e.g., "std::vec::Vec::push")
+/// - `filename`: The source file path (e.g., "src/main.tml")
+/// - `lineno`: Line number in the source file (0 if unknown)
+/// - `colno`: Column number in the source file (0 if unknown)
+///
+/// ## Example
+///
+/// ```tml
+/// let sym = frame.symbol()
+/// when sym {
+///     Just(s) => {
+///         print("Function: {s.name.unwrap_or(\"<unknown>\")}\n")
+///         if s.lineno > 0 {
+///             print("  at {s.filename.unwrap_or(\"?\")}}:{s.lineno}\n")
+///         }
+///     },
+///     Nothing => print("<no symbol info>\n")
+/// }
+/// ```
+pub type BacktraceSymbol {
+    /// Demangled function name, or Nothing if not available
+    name: Maybe[Str],
+
+    /// Source file path, or Nothing if not available
+    filename: Maybe[Str],
+
+    /// Line number (0 if unknown)
+    lineno: U32,
+
+    /// Column number (0 if unknown)
+    colno: U32,
+}
+
+impl BacktraceSymbol {
+    /// Creates an empty symbol with no information.
+    pub func empty() -> BacktraceSymbol {
+        return BacktraceSymbol {
+            name: Nothing,
+            filename: Nothing,
+            lineno: 0,
+            colno: 0,
+        }
+    }
+
+    /// Creates a symbol with just a name.
+    pub func with_name(name: Str) -> BacktraceSymbol {
+        return BacktraceSymbol {
+            name: Just(name),
+            filename: Nothing,
+            lineno: 0,
+            colno: 0,
+        }
+    }
+
+    /// Creates a symbol with full information.
+    pub func new(name: Maybe[Str], filename: Maybe[Str], lineno: U32, colno: U32) -> BacktraceSymbol {
+        return BacktraceSymbol {
+            name: name,
+            filename: filename,
+            lineno: lineno,
+            colno: colno,
+        }
+    }
+
+    /// Returns true if this symbol has a name.
+    pub func has_name(this) -> Bool {
+        return this.name.is_just()
+    }
+
+    /// Returns true if this symbol has file/line information.
+    pub func has_location(this) -> Bool {
+        return this.filename.is_just() and this.lineno > 0
+    }
+
+    /// Formats the symbol as a string.
+    ///
+    /// Format: "function_name at file:line:col"
+    pub func to_string(this) -> Str {
+        let name_str: Str = this.name.unwrap_or("<unknown>")
+
+        if this.filename.is_just() and this.lineno > 0 {
+            let file: Str = this.filename.unwrap()
+            if this.colno > 0 {
+                return "{name_str} at {file}:{this.lineno}:{this.colno}"
+            } else {
+                return "{name_str} at {file}:{this.lineno}"
+            }
+        } else if this.filename.is_just() {
+            let file: Str = this.filename.unwrap()
+            return "{name_str} at {file}"
+        } else {
+            return name_str
+        }
+    }
+}

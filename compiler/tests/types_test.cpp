@@ -146,8 +146,8 @@ TEST_F(TypeCheckerTest, StructDecl) {
     EXPECT_TRUE(struct_def.has_value());
     EXPECT_EQ(struct_def->name, "Point");
     EXPECT_EQ(struct_def->fields.size(), 2);
-    EXPECT_EQ(struct_def->fields[0].first, "x");
-    EXPECT_EQ(struct_def->fields[1].first, "y");
+    EXPECT_EQ(struct_def->fields[0].name, "x");
+    EXPECT_EQ(struct_def->fields[1].name, "y");
 }
 
 TEST_F(TypeCheckerTest, GenericStruct) {

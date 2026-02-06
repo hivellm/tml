@@ -1,0 +1,105 @@
+// BacktraceFrame - A single stack frame
+//
+// Represents one frame in a stack backtrace, containing the instruction
+// pointer and optionally resolved symbol information.
+
+use super::symbol::BacktraceSymbol
+
+/// A single frame in a stack backtrace.
+///
+/// Each frame represents a return address on the call stack. The frame
+/// can be resolved to obtain symbol information (function name, file, line).
+///
+/// ## Fields
+///
+/// - `ip`: Instruction pointer (return address)
+/// - `symbol`: Resolved symbol information (if available)
+/// - `resolved`: Whether symbol resolution has been attempted
+///
+/// ## Example
+///
+/// ```tml
+/// for frame in bt.frames() {
+///     print("  at {frame.ip:?}\n")
+///     when frame.symbol() {
+///         Just(sym) => print("     {sym.to_string()}\n"),
+///         Nothing => print("     <no symbol>\n")
+///     }
+/// }
+/// ```
+pub type BacktraceFrame {
+    /// Instruction pointer (return address on the stack)
+    ip: *Unit,
+
+    /// Resolved symbol information
+    symbol_info: Maybe[BacktraceSymbol],
+
+    /// Whether resolution has been attempted
+    resolved: Bool,
+}
+
+impl BacktraceFrame {
+    /// Creates a new unresolved frame from an instruction pointer.
+    pub func new(ip: *Unit) -> BacktraceFrame {
+        return BacktraceFrame {
+            ip: ip,
+            symbol_info: Nothing,
+            resolved: false,
+        }
+    }
+
+    /// Creates a new frame with symbol information.
+    pub func with_symbol(ip: *Unit, symbol: BacktraceSymbol) -> BacktraceFrame {
+        return BacktraceFrame {
+            ip: ip,
+            symbol_info: Just(symbol),
+            resolved: true,
+        }
+    }
+
+    /// Returns the instruction pointer for this frame.
+    pub func instruction_pointer(this) -> *Unit {
+        return this.ip
+    }
+
+    /// Returns the symbol information if available.
+    pub func symbol(this) -> Maybe[BacktraceSymbol] {
+        return this.symbol_info
+    }
+
+    /// Returns true if this frame has been resolved.
+    pub func is_resolved(this) -> Bool {
+        return this.resolved
+    }
+
+    /// Formats the frame as a string.
+    ///
+    /// Format: "  N: function_name\n           at file:line"
+    pub func format(this, index: I32) -> Str {
+        when this.symbol_info {
+            Just(sym) => {
+                let name: Str = sym.name.unwrap_or("<unknown>")
+                if sym.filename.is_just() and sym.lineno > 0 {
+                    let file: Str = sym.filename.unwrap()
+                    return "  {index}: {name}\n             at {file}:{sym.lineno}"
+                } else if sym.filename.is_just() {
+                    let file: Str = sym.filename.unwrap()
+                    return "  {index}: {name}\n             at {file}"
+                } else {
+                    return "  {index}: {name}"
+                }
+            },
+            Nothing => {
+                return "  {index}: <unknown>\n             at {this.ip:?}"
+            }
+        }
+    }
+
+    /// Formats the frame as a single line.
+    pub func to_string(this) -> Str {
+        when this.symbol_info {
+            Just(sym) => return sym.to_string(),
+            Nothing => return "<unknown> at {this.ip:?}"
+        }
+    }
+}
