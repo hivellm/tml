@@ -57,11 +57,11 @@ type SharedInner[T] {
 /// print(clone1.get())    // 100
 /// print(clone2.get())    // 100
 /// ```
-pub type Shared[T] {
+pub type Shared {
     ptr: *SharedInner[T],
 }
 
-impl[T] Shared[T] {
+impl[T] Shared {
     /// Creates a new `Shared[T]` with reference count of 1.
     ///
     /// ## Examples
@@ -70,7 +70,7 @@ impl[T] Shared[T] {
     /// let shared = Shared::new(42)
     /// assert_eq(shared.strong_count(), 1)
     /// ```
-    pub func new(value: T) -> Shared[T] {
+    pub func new(value: T) -> Shared {
         let size: I64 = size_of[SharedInner[T]]()
         let ptr: *Unit = mem_alloc(size)
 
@@ -81,17 +81,12 @@ impl[T] Shared[T] {
         let typed_ptr: *SharedInner[T] = ptr as *SharedInner[T]
 
         // Initialize the inner structure
-        @extern("memcpy")
-        func memcpy(dest: *Unit, src: *Unit, n: I64) -> *Unit
-
-        let inner: SharedInner[T] = SharedInner[T] {
+        *typed_ptr = SharedInner[T] {
             value: value,
             strong_count: 1,
         }
 
-        memcpy(typed_ptr as *Unit, &inner as *Unit, size)
-
-        return Shared[T] { ptr: typed_ptr }
+        return Shared { ptr: typed_ptr }
     }
 
     /// Creates a new `Shared[T]` with a default value.
@@ -210,8 +205,8 @@ impl[T] Shared[T] {
     ///
     /// The pointer must have been created by `Shared::into_raw` or similar.
     /// This does NOT increment the reference count.
-    pub func from_raw(ptr: *SharedInner[T]) -> Shared[T] {
-        return Shared[T] { ptr: ptr }
+    pub func from_raw(ptr: *SharedInner[T]) -> Shared {
+        return Shared { ptr: ptr }
     }
 
     /// Increments the reference count (used internally by duplicate).
@@ -235,7 +230,7 @@ impl[T] Shared[T] {
     }
 }
 
-impl[T] Duplicate for Shared[T] {
+impl[T] Duplicate for Shared {
     /// Creates a new reference to the same data, incrementing the count.
     ///
     /// ## Examples
@@ -245,13 +240,13 @@ impl[T] Duplicate for Shared[T] {
     /// let clone = original.duplicate()
     /// assert_eq(original.strong_count(), 2)
     /// ```
-    func duplicate(this) -> Shared[T] {
+    func duplicate(this) -> Shared {
         this.increment_count()
-        return Shared[T] { ptr: this.ptr }
+        return Shared { ptr: this.ptr }
     }
 }
 
-impl[T] Drop for Shared[T] {
+impl[T] Drop for Shared {
     func drop(mut this) {
         this.decrement_count()
     }
@@ -277,6 +272,6 @@ impl[T] Debug for Shared[T] where T: Debug {
 /// let shared = shared(42)
 /// assert_eq(shared.get(), 42)
 /// ```
-pub func shared[T](value: T) -> Shared[T] {
+pub func shared[T](value: T) -> Shared {
     return Shared::new(value)
 }

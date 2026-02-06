@@ -68,11 +68,11 @@ type SyncInner[T] {
 /// print(original.get())  // 100
 /// print(clone1.get())    // 100
 /// ```
-pub type Sync[T] {
+pub type Sync {
     ptr: *SyncInner[T],
 }
 
-impl[T] Sync[T] {
+impl[T] Sync {
     /// Creates a new `Sync[T]` with atomic reference count of 1.
     ///
     /// ## Examples
@@ -81,7 +81,7 @@ impl[T] Sync[T] {
     /// let sync = Sync::new(42)
     /// assert_eq(sync.strong_count(), 1)
     /// ```
-    pub func new(value: T) -> Sync[T] {
+    pub func new(value: T) -> Sync {
         let size: I64 = size_of[SyncInner[T]]()
         let ptr: *Unit = mem_alloc(size)
 
@@ -92,17 +92,12 @@ impl[T] Sync[T] {
         let typed_ptr: *SyncInner[T] = ptr as *SyncInner[T]
 
         // Initialize the inner structure
-        @extern("memcpy")
-        func memcpy(dest: *Unit, src: *Unit, n: I64) -> *Unit
-
-        let inner: SyncInner[T] = SyncInner[T] {
+        *typed_ptr = SyncInner[T] {
             value: value,
             strong_count: 1,
         }
 
-        memcpy(typed_ptr as *Unit, &inner as *Unit, size)
-
-        return Sync[T] { ptr: typed_ptr }
+        return Sync { ptr: typed_ptr }
     }
 
     /// Creates a new `Sync[T]` with a default value.
@@ -226,8 +221,8 @@ impl[T] Sync[T] {
     ///
     /// The pointer must have been created by `Sync::into_raw` or similar.
     /// This does NOT increment the reference count.
-    pub func from_raw(ptr: *SyncInner[T]) -> Sync[T] {
-        return Sync[T] { ptr: ptr }
+    pub func from_raw(ptr: *SyncInner[T]) -> Sync {
+        return Sync { ptr: ptr }
     }
 
     /// Atomically increments the reference count (used internally by duplicate).
@@ -263,7 +258,7 @@ impl[T] Sync[T] {
     // }
 }
 
-impl[T] Duplicate for Sync[T] {
+impl[T] Duplicate for Sync {
     /// Creates a new reference to the same data, atomically incrementing the count.
     ///
     /// This operation is thread-safe and can be called from multiple threads.
@@ -275,13 +270,13 @@ impl[T] Duplicate for Sync[T] {
     /// let clone = original.duplicate()
     /// assert_eq(original.strong_count(), 2)
     /// ```
-    func duplicate(this) -> Sync[T] {
+    func duplicate(this) -> Sync {
         this.increment_count()
-        return Sync[T] { ptr: this.ptr }
+        return Sync { ptr: this.ptr }
     }
 }
 
-impl[T] Drop for Sync[T] {
+impl[T] Drop for Sync {
     func drop(mut this) {
         this.decrement_count()
     }
@@ -312,6 +307,6 @@ impl[T] Debug for Sync[T] where T: Debug {
 /// let synced = sync(42)
 /// assert_eq(synced.get(), 42)
 /// ```
-pub func sync[T](value: T) -> Sync[T] {
+pub func sync[T](value: T) -> Sync {
     return Sync::new(value)
 }

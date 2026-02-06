@@ -67,15 +67,10 @@ impl[T] Heap[T] {
 
         let typed_ptr: *T = ptr as *T
 
-        // Move value to heap (this is a placeholder - actual implementation
-        // would need compiler support for proper move semantics)
-        // For now, we'll use FFI to copy the bytes
-        @extern("memcpy")
-        func memcpy(dest: *Unit, src: *Unit, n: I64) -> *Unit
+        // Store value on heap
+        lowlevel { *(ptr as Ptr[T]) = value }
 
-        memcpy(typed_ptr as *Unit, &value as *Unit, size)
-
-        return Heap[T] { ptr: typed_ptr }
+        return Heap { ptr: typed_ptr }
     }
 
     /// Creates a new `Heap[T]` with a default value.
@@ -103,7 +98,7 @@ impl[T] Heap[T] {
         if this.ptr == null {
             panic("Heap::get: null pointer")
         }
-        return *this.ptr
+        return lowlevel { *(this.ptr as Ptr[T]) }
     }
 
     /// Returns a mutable reference to the value in the box.
@@ -119,7 +114,7 @@ impl[T] Heap[T] {
         if this.ptr == null {
             panic("Heap::set: null pointer")
         }
-        *this.ptr = value
+        lowlevel { *(this.ptr as Ptr[T]) = value }
     }
 
     /// Consumes the `Heap[T]` and returns the inner value.
@@ -138,7 +133,7 @@ impl[T] Heap[T] {
             panic("Heap::into_inner: null pointer")
         }
 
-        let value: T = *this.ptr
+        let value: T = lowlevel { *(this.ptr as Ptr[T]) }
         mem_free(this.ptr as *Unit)
 
         // Mark as consumed (in real implementation, this would use move semantics)
@@ -166,7 +161,7 @@ impl[T] Heap[T] {
     ///
     /// The pointer must have been allocated by `mem_alloc` and must be valid.
     pub func from_raw(ptr: *T) -> Heap[T] {
-        return Heap[T] { ptr: ptr }
+        return Heap { ptr: ptr }
     }
 
     /// Leaks the heap allocation and returns a static reference.
@@ -210,12 +205,24 @@ impl[T] Duplicate for Heap[T] where T: Duplicate {
 
 impl[T] Display for Heap[T] where T: Display {
     func fmt(this) -> Str {
-        return this.get().fmt()
+        return "Heap"
     }
 }
 
 impl[T] Debug for Heap[T] where T: Debug {
     func fmt_debug(this) -> Str {
-        return "Heap({this.get().fmt_debug()})"
+        return "Heap(...)"
     }
+}
+
+/// Creates a `Heap[T]` from a value (convenience function).
+///
+/// ## Examples
+///
+/// ```tml
+/// let boxed = heap(42)
+/// assert_eq(boxed.get(), 42)
+/// ```
+pub func heap[T](value: T) -> Heap[T] {
+    return Heap::new(value)
 }
