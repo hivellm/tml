@@ -215,11 +215,14 @@ SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimi
 // verbose: Enable debug logging for test execution
 // timeout_seconds: Timeout in seconds (0 = no timeout)
 // test_name: Name of the test (for timeout messages)
+// backtrace: Enable backtrace capture on test failures (default: true)
 SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose = false,
-                               int timeout_seconds = 0, const std::string& test_name = "");
+                               int timeout_seconds = 0, const std::string& test_name = "",
+                               bool backtrace = true);
 
 // Run a specific test with profiling
+// backtrace: Enable backtrace capture on test failures (default: true)
 SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, PhaseTimings* timings,
-                                        bool verbose = false);
+                                        bool verbose = false, bool backtrace = true);
 
 } // namespace tml::cli

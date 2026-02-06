@@ -2305,7 +2305,7 @@ using TmlGetPanicBacktrace = const char* (*)();
 using TmlEnableBacktrace = void (*)();
 
 SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose,
-                               int timeout_seconds, const std::string& test_name) {
+                               int timeout_seconds, const std::string& test_name, bool backtrace) {
     SuiteTestResult result;
 
     // Flush output to help debug crashes
@@ -2332,11 +2332,13 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 
     // Get panic message and backtrace functions
     auto get_panic_msg = lib.get_function<TmlGetPanicMessage>("tml_get_panic_message");
-    auto get_panic_bt = lib.get_function<TmlGetPanicBacktrace>("tml_get_panic_backtrace");
-    auto enable_bt = lib.get_function<TmlEnableBacktrace>("tml_enable_backtrace_on_panic");
+    auto get_panic_bt =
+        backtrace ? lib.get_function<TmlGetPanicBacktrace>("tml_get_panic_backtrace") : nullptr;
+    auto enable_bt =
+        backtrace ? lib.get_function<TmlEnableBacktrace>("tml_enable_backtrace_on_panic") : nullptr;
 
-    // Enable backtrace for test failures (if available)
-    if (enable_bt) {
+    // Enable backtrace for test failures (if available and enabled)
+    if (backtrace && enable_bt) {
         enable_bt();
     }
 
@@ -2487,10 +2489,10 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
                 }
             }
             if (get_panic_bt) {
-                const char* backtrace = get_panic_bt();
-                if (backtrace && backtrace[0] != '\0') {
+                const char* bt_str = get_panic_bt();
+                if (bt_str && bt_str[0] != '\0') {
                     error_msg += "\n\nBacktrace:\n";
-                    error_msg += backtrace;
+                    error_msg += bt_str;
                 }
             }
             result.error = error_msg;
@@ -2557,7 +2559,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 }
 
 SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, PhaseTimings* timings,
-                                        bool /*verbose*/) {
+                                        bool /*verbose*/, bool backtrace) {
     // Note: verbose is unused here - profiled version just times, no debug output
     using Clock = std::chrono::high_resolution_clock;
     auto record_phase = [&](const std::string& phase, Clock::time_point start) {
@@ -2585,11 +2587,13 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
 
     // Get panic message and backtrace functions
     auto get_panic_msg = lib.get_function<TmlGetPanicMessage>("tml_get_panic_message");
-    auto get_panic_bt = lib.get_function<TmlGetPanicBacktrace>("tml_get_panic_backtrace");
-    auto enable_bt = lib.get_function<TmlEnableBacktrace>("tml_enable_backtrace_on_panic");
+    auto get_panic_bt =
+        backtrace ? lib.get_function<TmlGetPanicBacktrace>("tml_get_panic_backtrace") : nullptr;
+    auto enable_bt =
+        backtrace ? lib.get_function<TmlEnableBacktrace>("tml_enable_backtrace_on_panic") : nullptr;
 
-    // Enable backtrace for test failures (if available)
-    if (enable_bt) {
+    // Enable backtrace for test failures (if available and enabled)
+    if (backtrace && enable_bt) {
         enable_bt();
     }
 
@@ -2630,10 +2634,10 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
                 }
             }
             if (get_panic_bt) {
-                const char* backtrace = get_panic_bt();
-                if (backtrace && backtrace[0] != '\0') {
+                const char* bt_str = get_panic_bt();
+                if (bt_str && bt_str[0] != '\0') {
                     error_msg += "\n\nBacktrace:\n";
-                    error_msg += backtrace;
+                    error_msg += bt_str;
                 }
             }
             result.error = error_msg;

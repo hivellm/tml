@@ -264,6 +264,79 @@ int32_t backtrace_resolve_all(Backtrace* bt) {
 }
 
 // ============================================================================
+// Internal Frame Detection
+// ============================================================================
+
+/**
+ * @brief Check if a frame should be filtered out as internal/runtime frame.
+ *
+ * Filters out:
+ * - Runtime panic/assert functions (panic, assert_tml, assert_tml_loc)
+ * - Test framework internals (tml_run_test_with_catch, tml_test_)
+ * - Backtrace capture internals (backtrace_capture, backtrace_format)
+ * - System functions (longjmp, setjmp, RaiseException)
+ *
+ * @param frame The frame to check.
+ * @return 1 if frame should be filtered, 0 otherwise.
+ */
+static int32_t is_internal_frame(const BacktraceFrame* frame) {
+    if (!frame || !frame->resolved || !frame->symbol.name) {
+        // Don't filter unknown frames - they might be user code without symbols
+        return 0;
+    }
+
+    const char* name = frame->symbol.name;
+
+    // Runtime panic/assert functions
+    if (strstr(name, "panic") != NULL)
+        return 1;
+    if (strstr(name, "assert_tml") != NULL)
+        return 1;
+
+    // Test framework internals
+    if (strstr(name, "tml_run_test") != NULL)
+        return 1;
+    if (strncmp(name, "tml_test_", 9) == 0)
+        return 1;
+
+    // Backtrace internals
+    if (strstr(name, "backtrace_capture") != NULL)
+        return 1;
+    if (strstr(name, "backtrace_resolve") != NULL)
+        return 1;
+    if (strstr(name, "backtrace_format") != NULL)
+        return 1;
+
+    // System/runtime functions
+    if (strstr(name, "longjmp") != NULL)
+        return 1;
+    if (strstr(name, "setjmp") != NULL)
+        return 1;
+    if (strstr(name, "_setjmpex") != NULL)
+        return 1;
+#ifdef _WIN32
+    if (strstr(name, "RaiseException") != NULL)
+        return 1;
+    if (strstr(name, "RtlRaiseException") != NULL)
+        return 1;
+    if (strstr(name, "RtlCaptureStackBackTrace") != NULL)
+        return 1;
+#endif
+
+    // CRT startup/main wrappers
+    if (strcmp(name, "__scrt_common_main_seh") == 0)
+        return 1;
+    if (strcmp(name, "invoke_main") == 0)
+        return 1;
+    if (strcmp(name, "__libc_start_main") == 0)
+        return 1;
+    if (strcmp(name, "_start") == 0)
+        return 1;
+
+    return 0;
+}
+
+// ============================================================================
 // Formatting Functions
 // ============================================================================
 
@@ -307,17 +380,31 @@ char* backtrace_format(const Backtrace* bt) {
 
     char* ptr = result;
     size_t remaining = buffer_size;
+    int32_t display_index = 0; // Separate counter for displayed frames
 
     for (int32_t i = 0; i < bt->frame_count; i++) {
+        // Skip internal/runtime frames
+        if (is_internal_frame(&bt->frames[i])) {
+            continue;
+        }
+
         char frame_buf[512];
-        int32_t len = backtrace_frame_format(&bt->frames[i], i, frame_buf, sizeof(frame_buf));
+        int32_t len =
+            backtrace_frame_format(&bt->frames[i], display_index, frame_buf, sizeof(frame_buf));
         if (len > 0) {
             int written = snprintf(ptr, remaining, "%s\n", frame_buf);
             if (written > 0 && (size_t)written < remaining) {
                 ptr += written;
                 remaining -= written;
+                display_index++;
             }
         }
+    }
+
+    // If all frames were filtered, show a message
+    if (display_index == 0) {
+        free(result);
+        return _strdup("  <all frames filtered as internal>\n");
     }
 
     return result;

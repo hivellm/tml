@@ -140,6 +140,7 @@ struct TestOptions {
     std::string crashes_dir;           // Directory to save crash inputs
     bool check_leaks = true;           // Memory leak detection (enabled by default)
     bool fail_fast = false;            // Stop on first test failure
+    bool backtrace = true;             // Show backtrace on test failures (enabled by default)
 };
 
 // Parse test command arguments

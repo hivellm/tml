@@ -69,10 +69,10 @@
 
 ## Phase 9: Test Framework Integration
 
-- [ ] 9.1.1 Add backtrace to assert_eq failure output
-- [ ] 9.1.2 Add backtrace to assert failure output
-- [ ] 9.1.3 Skip test framework internal frames
-- [ ] 9.1.4 Make backtrace optional via test config
+- [x] 9.1.1 Add backtrace to assert_eq failure output
+- [x] 9.1.2 Add backtrace to assert failure output
+- [x] 9.1.3 Skip test framework internal frames
+- [x] 9.1.4 Make backtrace optional via test config
 
 ## Phase 10: Library Tests (32 tests total)
 

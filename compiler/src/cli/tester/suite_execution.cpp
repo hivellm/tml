@@ -515,8 +515,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     auto test_start = Clock::now();
 
-                    auto run_result = run_suite_test(lib, static_cast<int>(i), opts.verbose,
-                                                     opts.timeout_seconds, test_info.test_name);
+                    auto run_result =
+                        run_suite_test(lib, static_cast<int>(i), opts.verbose, opts.timeout_seconds,
+                                       test_info.test_name, opts.backtrace);
                     int run_exit_code = run_result.exit_code;
                     bool run_success = run_result.success;
 

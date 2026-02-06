@@ -151,6 +151,10 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.suite_mode = false; // Disable suite mode (one DLL per test file)
         } else if (arg == "--fail-fast" || arg == "-x") {
             opts.fail_fast = true; // Stop on first test failure
+        } else if (arg == "--backtrace") {
+            opts.backtrace = true; // Enable backtrace on test failures (default)
+        } else if (arg == "--no-backtrace") {
+            opts.backtrace = false; // Disable backtrace on test failures
         } else if (arg.starts_with("--test-threads=")) {
             opts.test_threads = std::stoi(arg.substr(15));
         } else if (arg.starts_with("--timeout=")) {
