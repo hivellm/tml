@@ -1,0 +1,317 @@
+// Sync[T] - Atomic reference-counted pointer for thread-safe shared ownership
+//
+// Sync[T] provides thread-safe shared ownership of heap-allocated data using
+// atomic reference counting. Similar to Rust's Arc[T].
+//
+// ## Examples
+//
+// ```tml
+// let sync1 = Sync::new(42)
+// let sync2 = sync1.duplicate()  // Atomically increments ref count
+// print(sync1.strong_count())  // 2
+// print(sync2.get())  // 42
+// // Can be safely shared across threads
+// ```
+
+use core::mem::{mem_alloc, mem_free, size_of}
+use core::ops::Deref
+use core::clone::Duplicate
+use core::fmt::{Display, Debug}
+use core::default::Default
+
+/// FFI declarations for atomic operations
+@extern("atomic_fetch_add_i32")
+func atomic_fetch_add_i32(ptr: *I32, val: I32) -> I32
+
+@extern("atomic_fetch_sub_i32")
+func atomic_fetch_sub_i32(ptr: *I32, val: I32) -> I32
+
+@extern("atomic_load_i32")
+func atomic_load_i32(ptr: *I32) -> I32
+
+/// Inner structure holding the value and atomic reference count.
+type SyncInner[T] {
+    value: T,
+    strong_count: I32,  // Accessed atomically
+}
+
+/// An atomic reference-counted pointer for thread-safe shared ownership.
+///
+/// `Sync[T]` allows multiple owners of the same heap-allocated value across
+/// multiple threads. When the last owner is dropped, the memory is freed.
+///
+/// ## Atomic Reference Counting
+///
+/// - Each `duplicate()` atomically increments the reference count
+/// - Each drop atomically decrements the reference count
+/// - Memory is freed when the count reaches zero
+/// - All operations are thread-safe
+///
+/// ## Thread Safety
+///
+/// `Sync[T]` uses atomic operations for reference counting, making it safe
+/// to share across threads. The type `T` must be `Send` and `Sync` to be
+/// used with `Sync[T]`.
+///
+/// ## Examples
+///
+/// ```tml
+/// // Create a thread-safe shared integer
+/// let original = Sync::new(100)
+/// print(original.strong_count())  // 1
+///
+/// // Clone can be sent to another thread
+/// let clone1 = original.duplicate()
+/// print(original.strong_count())  // 2
+///
+/// // All clones point to the same data
+/// print(original.get())  // 100
+/// print(clone1.get())    // 100
+/// ```
+pub type Sync[T] {
+    ptr: *SyncInner[T],
+}
+
+impl[T] Sync[T] {
+    /// Creates a new `Sync[T]` with atomic reference count of 1.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let sync = Sync::new(42)
+    /// assert_eq(sync.strong_count(), 1)
+    /// ```
+    pub func new(value: T) -> Sync[T] {
+        let size: I64 = size_of[SyncInner[T]]()
+        let ptr: *Unit = mem_alloc(size)
+
+        if ptr == null {
+            panic("Sync::new: allocation failed")
+        }
+
+        let typed_ptr: *SyncInner[T] = ptr as *SyncInner[T]
+
+        // Initialize the inner structure
+        @extern("memcpy")
+        func memcpy(dest: *Unit, src: *Unit, n: I64) -> *Unit
+
+        let inner: SyncInner[T] = SyncInner[T] {
+            value: value,
+            strong_count: 1,
+        }
+
+        memcpy(typed_ptr as *Unit, &inner as *Unit, size)
+
+        return Sync[T] { ptr: typed_ptr }
+    }
+
+    /// Creates a new `Sync[T]` with a default value.
+    pub func new_default() -> Sync[T] where T: Default {
+        return Sync::new(T::default())
+    }
+
+    /// Returns a reference to the inner value.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let sync = Sync::new(42)
+    /// assert_eq(sync.get(), 42)
+    /// ```
+    pub func get(this) -> T {
+        if this.ptr == null {
+            panic("Sync::get: null pointer")
+        }
+        return (*this.ptr).value
+    }
+
+    /// Returns the current atomic reference count.
+    ///
+    /// Note: This value may change immediately after being read in
+    /// multithreaded scenarios.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let sync = Sync::new(42)
+    /// assert_eq(sync.strong_count(), 1)
+    ///
+    /// let clone = sync.duplicate()
+    /// assert_eq(sync.strong_count(), 2)
+    /// ```
+    pub func strong_count(this) -> I32 {
+        if this.ptr == null {
+            return 0
+        }
+        return atomic_load_i32(&(*this.ptr).strong_count)
+    }
+
+    /// Returns `true` if this is the only reference to the data.
+    ///
+    /// Note: In multithreaded scenarios, this may be immediately outdated.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let sync = Sync::new(42)
+    /// assert(sync.is_unique())
+    ///
+    /// let clone = sync.duplicate()
+    /// assert(not sync.is_unique())
+    /// ```
+    pub func is_unique(this) -> Bool {
+        return this.strong_count() == 1
+    }
+
+    /// Attempts to get a mutable reference if this is the only owner.
+    ///
+    /// Returns `Just(value)` if unique, `Nothing` otherwise.
+    ///
+    /// Note: This is only safe if you can guarantee no other threads
+    /// are accessing the data.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut sync = Sync::new(42)
+    /// when sync.get_mut() {
+    ///     Just(val) => *val = 100,
+    ///     Nothing => print("Not unique")
+    /// }
+    /// ```
+    pub func get_mut(mut this) -> Maybe[*T] {
+        if this.is_unique() {
+            return Just(&mut (*this.ptr).value)
+        } else {
+            return Nothing
+        }
+    }
+
+    /// Attempts to unwrap and return the inner value if this is the only owner.
+    ///
+    /// Returns `Just(value)` if unique, `Nothing` otherwise.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let sync = Sync::new(42)
+    /// when Sync::try_unwrap(sync) {
+    ///     Just(val) => print("Got: {val}"),
+    ///     Nothing => print("Still has multiple owners")
+    /// }
+    /// ```
+    pub func try_unwrap(this) -> Maybe[T] {
+        if this.is_unique() {
+            let value: T = (*this.ptr).value
+            mem_free(this.ptr as *Unit)
+            return Just(value)
+        } else {
+            return Nothing
+        }
+    }
+
+    /// Returns the raw pointer (for FFI or advanced usage).
+    ///
+    /// **Warning**: Does not change reference count!
+    pub func as_ptr(this) -> *T {
+        if this.ptr == null {
+            return null
+        }
+        return &(*this.ptr).value
+    }
+
+    /// Creates a `Sync[T]` from a raw pointer.
+    ///
+    /// ## Safety
+    ///
+    /// The pointer must have been created by `Sync::into_raw` or similar.
+    /// This does NOT increment the reference count.
+    pub func from_raw(ptr: *SyncInner[T]) -> Sync[T] {
+        return Sync[T] { ptr: ptr }
+    }
+
+    /// Atomically increments the reference count (used internally by duplicate).
+    func increment_count(this) {
+        if this.ptr != null {
+            atomic_fetch_add_i32(&mut (*this.ptr).strong_count, 1)
+        }
+    }
+
+    /// Atomically decrements the reference count and frees if zero.
+    func decrement_count(this) {
+        if this.ptr == null {
+            return
+        }
+
+        // Atomically decrement and get the previous value
+        let prev: I32 = atomic_fetch_sub_i32(&mut (*this.ptr).strong_count, 1)
+
+        // If previous value was 1, we're now at 0 and should free
+        if prev == 1 {
+            mem_free(this.ptr as *Unit)
+        }
+    }
+
+    /// Creates a weak reference to this `Sync[T]`.
+    ///
+    /// Weak references don't keep the value alive, but can be upgraded
+    /// to a strong reference if the value still exists.
+    ///
+    /// TODO: Implement Weak[T] type
+    // pub func downgrade(this) -> Weak[T] {
+    //     // Not implemented yet
+    // }
+}
+
+impl[T] Duplicate for Sync[T] {
+    /// Creates a new reference to the same data, atomically incrementing the count.
+    ///
+    /// This operation is thread-safe and can be called from multiple threads.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let original = Sync::new(42)
+    /// let clone = original.duplicate()
+    /// assert_eq(original.strong_count(), 2)
+    /// ```
+    func duplicate(this) -> Sync[T] {
+        this.increment_count()
+        return Sync[T] { ptr: this.ptr }
+    }
+}
+
+impl[T] Drop for Sync[T] {
+    func drop(mut this) {
+        this.decrement_count()
+    }
+}
+
+impl[T] Display for Sync[T] where T: Display {
+    func fmt(this) -> Str {
+        return this.get().fmt()
+    }
+}
+
+impl[T] Debug for Sync[T] where T: Debug {
+    func fmt_debug(this) -> Str {
+        return "Sync(strong={this.strong_count()}, {this.get().fmt_debug()})"
+    }
+}
+
+// Mark Sync[T] as Send and Sync when T is Send and Sync
+// TODO: Requires marker trait support
+// impl[T] marker::Send for Sync[T] where T: marker::Send + marker::Sync {}
+// impl[T] marker::Sync for Sync[T] where T: marker::Send + marker::Sync {}
+
+/// Creates a `Sync[T]` from a value.
+///
+/// ## Examples
+///
+/// ```tml
+/// let synced = sync(42)
+/// assert_eq(synced.get(), 42)
+/// ```
+pub func sync[T](value: T) -> Sync[T] {
+    return Sync::new(value)
+}

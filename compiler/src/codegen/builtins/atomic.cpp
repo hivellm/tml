@@ -167,6 +167,179 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
         return "0";
     }
 
+    // ============ Typed Atomic Operations via FFI ============
+    // These call runtime functions for cross-platform atomic operations
+
+    // atomic_fetch_add_i32(ptr: *I32, val: I32) -> I32
+    if (fn_name == "atomic_fetch_add_i32") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @atomic_fetch_add_i32(ptr " + ptr + ", i32 " +
+                      val + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // atomic_fetch_sub_i32(ptr: *I32, val: I32) -> I32
+    if (fn_name == "atomic_fetch_sub_i32") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @atomic_fetch_sub_i32(ptr " + ptr + ", i32 " +
+                      val + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // atomic_load_i32(ptr: *I32) -> I32
+    if (fn_name == "atomic_load_i32") {
+        if (!call.args.empty()) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @atomic_load_i32(ptr " + ptr + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // atomic_store_i32(ptr: *I32, val: I32) -> Unit
+    if (fn_name == "atomic_store_i32") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            emit_line("  call void @atomic_store_i32(ptr " + ptr + ", i32 " + val + ")");
+        }
+        return "0";
+    }
+
+    // atomic_compare_exchange_i32(ptr: *I32, expected: I32, desired: I32) -> I32
+    if (fn_name == "atomic_compare_exchange_i32") {
+        if (call.args.size() >= 3) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string expected = gen_expr(*call.args[1]);
+            std::string desired = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @atomic_compare_exchange_i32(ptr " + ptr +
+                      ", i32 " + expected + ", i32 " + desired + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // atomic_swap_i32(ptr: *I32, val: I32) -> I32
+    if (fn_name == "atomic_swap_i32") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @atomic_swap_i32(ptr " + ptr + ", i32 " + val +
+                      ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // I64 versions
+
+    // atomic_fetch_add_i64(ptr: *I64, val: I64) -> I64
+    if (fn_name == "atomic_fetch_add_i64") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @atomic_fetch_add_i64(ptr " + ptr + ", i64 " +
+                      val + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // atomic_fetch_sub_i64(ptr: *I64, val: I64) -> I64
+    if (fn_name == "atomic_fetch_sub_i64") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @atomic_fetch_sub_i64(ptr " + ptr + ", i64 " +
+                      val + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // atomic_load_i64(ptr: *I64) -> I64
+    if (fn_name == "atomic_load_i64") {
+        if (!call.args.empty()) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @atomic_load_i64(ptr " + ptr + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // atomic_store_i64(ptr: *I64, val: I64) -> Unit
+    if (fn_name == "atomic_store_i64") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            emit_line("  call void @atomic_store_i64(ptr " + ptr + ", i64 " + val + ")");
+        }
+        return "0";
+    }
+
+    // atomic_compare_exchange_i64(ptr: *I64, expected: I64, desired: I64) -> I64
+    if (fn_name == "atomic_compare_exchange_i64") {
+        if (call.args.size() >= 3) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string expected = gen_expr(*call.args[1]);
+            std::string desired = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @atomic_compare_exchange_i64(ptr " + ptr +
+                      ", i64 " + expected + ", i64 " + desired + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // atomic_swap_i64(ptr: *I64, val: I64) -> I64
+    if (fn_name == "atomic_swap_i64") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @atomic_swap_i64(ptr " + ptr + ", i64 " + val +
+                      ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // Atomic fence functions
+
+    // atomic_fence() -> Unit
+    if (fn_name == "atomic_fence") {
+        emit_line("  call void @atomic_fence()");
+        return "0";
+    }
+
+    // atomic_fence_acquire() -> Unit
+    if (fn_name == "atomic_fence_acquire") {
+        emit_line("  call void @atomic_fence_acquire()");
+        return "0";
+    }
+
+    // atomic_fence_release() -> Unit
+    if (fn_name == "atomic_fence_release") {
+        emit_line("  call void @atomic_fence_release()");
+        return "0";
+    }
+
     return std::nullopt;
 }
 

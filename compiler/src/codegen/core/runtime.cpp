@@ -307,6 +307,33 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @atomic_counter_destroy(ptr)");
     emit_line("");
 
+    // Atomic operations runtime declarations (I32)
+    emit_line("; Atomic operations (I32)");
+    emit_line("declare i32 @atomic_fetch_add_i32(ptr, i32)");
+    emit_line("declare i32 @atomic_fetch_sub_i32(ptr, i32)");
+    emit_line("declare i32 @atomic_load_i32(ptr)");
+    emit_line("declare void @atomic_store_i32(ptr, i32)");
+    emit_line("declare i32 @atomic_compare_exchange_i32(ptr, i32, i32)");
+    emit_line("declare i32 @atomic_swap_i32(ptr, i32)");
+    emit_line("");
+
+    // Atomic operations runtime declarations (I64)
+    emit_line("; Atomic operations (I64)");
+    emit_line("declare i64 @atomic_fetch_add_i64(ptr, i64)");
+    emit_line("declare i64 @atomic_fetch_sub_i64(ptr, i64)");
+    emit_line("declare i64 @atomic_load_i64(ptr)");
+    emit_line("declare void @atomic_store_i64(ptr, i64)");
+    emit_line("declare i64 @atomic_compare_exchange_i64(ptr, i64, i64)");
+    emit_line("declare i64 @atomic_swap_i64(ptr, i64)");
+    emit_line("");
+
+    // Memory fence operations
+    emit_line("; Memory fences");
+    emit_line("declare void @atomic_fence()");
+    emit_line("declare void @atomic_fence_acquire()");
+    emit_line("declare void @atomic_fence_release()");
+    emit_line("");
+
     // List runtime declarations
     emit_line("; List (dynamic array) runtime");
     emit_line("declare ptr @list_create(i64)");

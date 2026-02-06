@@ -72,6 +72,15 @@
 | [18-RLIB-FORMAT.md](./18-RLIB-FORMAT.md) | RLIB library format and metadata |
 | [19-MANIFEST.md](./19-MANIFEST.md) | Package manifest (tml.toml) |
 
+### Standard Library
+
+| Library | Description |
+|---------|-------------|
+| `core` | Core types, iterators, slices, numeric operations |
+| `std` | Collections, file I/O, networking, JSON |
+| `test` | Testing framework (`assert`, `assert_eq`, `@test`) |
+| `backtrace` | Stack trace capture and symbol resolution |
+
 ### Reference
 
 | Document | Description |
@@ -342,9 +351,42 @@ Box<LargeData>        // Box = ?
 tml new myproject      # create project
 tml build              # compile
 tml run                # execute
-tml test               # run tests
+tml run --backtrace    # execute with stack traces on panic
+tml test               # run tests (backtraces enabled by default)
+tml test --no-backtrace # run tests without backtraces
 tml check              # check without compiling
 tml fmt                # format code
+```
+
+## Debugging
+
+### Stack Traces
+
+Capture stack traces programmatically:
+
+```tml
+use backtrace::Backtrace
+
+func debug_point() {
+    let mut bt: Backtrace = Backtrace::capture()
+    bt.resolve()
+    print("Stack trace:\n{bt.to_string()}")
+}
+```
+
+### Panic Backtraces
+
+Run with `--backtrace` to see stack traces on panic:
+
+```bash
+$ tml run main.tml --backtrace
+panic: assertion failed at main.tml:42: expected positive number
+
+Backtrace:
+   0: process_data
+             at src/main.tml:42
+   1: main
+             at src/main.tml:10
 ```
 
 ## Type Summary
@@ -388,6 +430,7 @@ tml fmt                # format code
 | Mid-level IR (MIR) | ✅ Complete (SSA, 6 optimization passes) |
 | **C#-Style OOP** | ✅ Complete (classes, inheritance, interfaces, vtables) |
 | Package Management | ✅ Complete (`tml add`, `tml update`) |
+| Backtrace Library | ✅ Complete (stack capture, symbol resolution, panic integration) |
 
 ## License
 

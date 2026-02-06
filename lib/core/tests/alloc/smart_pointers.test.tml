@@ -1,0 +1,228 @@
+// Tests for smart pointers: Heap[T], Shared[T], Sync[T]
+use test
+use core::alloc::{Heap, Shared, Sync, heap, shared, sync}
+
+// ============================================================================
+// Heap[T] Tests
+// ============================================================================
+
+@test
+func test_heap_new() -> I32 {
+    let boxed: Heap[I32] = Heap::new(42)
+    assert_eq(boxed.get(), 42, "Heap should store value")
+    return 0
+}
+
+@test
+func test_heap_set() -> I32 {
+    let mut boxed: Heap[I32] = Heap::new(10)
+    assert_eq(boxed.get(), 10, "Initial value")
+
+    boxed.set(100)
+    assert_eq(boxed.get(), 100, "Updated value")
+    return 0
+}
+
+@test
+func test_heap_helper() -> I32 {
+    let boxed: Heap[I32] = heap(999)
+    assert_eq(boxed.get(), 999, "Helper function should work")
+    return 0
+}
+
+@test
+func test_heap_struct() -> I32 {
+    type Point { x: I32, y: I32 }
+
+    let boxed: Heap[Point] = Heap::new(Point { x: 5, y: 10 })
+    let p: Point = boxed.get()
+
+    assert_eq(p.x, 5, "Point x coordinate")
+    assert_eq(p.y, 10, "Point y coordinate")
+    return 0
+}
+
+// ============================================================================
+// Shared[T] Tests
+// ============================================================================
+
+@test
+func test_shared_new() -> I32 {
+    let shared: Shared[I32] = Shared::new(42)
+    assert_eq(shared.get(), 42, "Shared should store value")
+    assert_eq(shared.strong_count(), 1, "Initial count is 1")
+    return 0
+}
+
+@test
+func test_shared_duplicate() -> I32 {
+    let original: Shared[I32] = Shared::new(100)
+    assert_eq(original.strong_count(), 1, "Count starts at 1")
+
+    let clone1: Shared[I32] = original.duplicate()
+    assert_eq(original.strong_count(), 2, "Count after first clone")
+    assert_eq(clone1.strong_count(), 2, "Both refs see same count")
+
+    let clone2: Shared[I32] = original.duplicate()
+    assert_eq(original.strong_count(), 3, "Count after second clone")
+
+    // All should see the same value
+    assert_eq(original.get(), 100, "Original value")
+    assert_eq(clone1.get(), 100, "Clone1 value")
+    assert_eq(clone2.get(), 100, "Clone2 value")
+    return 0
+}
+
+@test
+func test_shared_is_unique() -> I32 {
+    let original: Shared[I32] = Shared::new(50)
+    assert(original.is_unique(), "Should be unique initially")
+
+    let clone: Shared[I32] = original.duplicate()
+    assert(not original.is_unique(), "Should not be unique after clone")
+    assert(not clone.is_unique(), "Clone should not be unique")
+    return 0
+}
+
+@test
+func test_shared_helper() -> I32 {
+    let s: Shared[I32] = shared(777)
+    assert_eq(s.get(), 777, "Helper function should work")
+    assert_eq(s.strong_count(), 1, "Count is 1")
+    return 0
+}
+
+// ============================================================================
+// Sync[T] Tests (Atomic Reference Counting)
+// ============================================================================
+
+@test
+func test_sync_new() -> I32 {
+    let synced: Sync[I32] = Sync::new(42)
+    assert_eq(synced.get(), 42, "Sync should store value")
+    assert_eq(synced.strong_count(), 1, "Initial atomic count is 1")
+    return 0
+}
+
+@test
+func test_sync_duplicate() -> I32 {
+    let original: Sync[I32] = Sync::new(200)
+    assert_eq(original.strong_count(), 1, "Count starts at 1")
+
+    let clone1: Sync[I32] = original.duplicate()
+    assert_eq(original.strong_count(), 2, "Atomic count after first clone")
+    assert_eq(clone1.strong_count(), 2, "Both refs see same atomic count")
+
+    let clone2: Sync[I32] = original.duplicate()
+    assert_eq(original.strong_count(), 3, "Atomic count after second clone")
+
+    // All should see the same value
+    assert_eq(original.get(), 200, "Original value")
+    assert_eq(clone1.get(), 200, "Clone1 value")
+    assert_eq(clone2.get(), 200, "Clone2 value")
+    return 0
+}
+
+@test
+func test_sync_is_unique() -> I32 {
+    let original: Sync[I32] = Sync::new(75)
+    assert(original.is_unique(), "Should be unique initially")
+
+    let clone: Sync[I32] = original.duplicate()
+    assert(not original.is_unique(), "Should not be unique after clone")
+    assert(not clone.is_unique(), "Clone should not be unique")
+    return 0
+}
+
+@test
+func test_sync_helper() -> I32 {
+    let s: Sync[I32] = sync(888)
+    assert_eq(s.get(), 888, "Helper function should work")
+    assert_eq(s.strong_count(), 1, "Atomic count is 1")
+    return 0
+}
+
+// ============================================================================
+// Complex Scenarios
+// ============================================================================
+
+@test
+func test_heap_nested_in_shared() -> I32 {
+    // Shared reference to a Heap-allocated value
+    let inner: Heap[I32] = Heap::new(123)
+    let outer: Shared[Heap[I32]] = Shared::new(inner)
+
+    assert_eq(outer.get().get(), 123, "Nested smart pointers")
+    assert_eq(outer.strong_count(), 1, "Outer count")
+    return 0
+}
+
+@test
+func test_shared_multiple_clones() -> I32 {
+    let original: Shared[I32] = Shared::new(500)
+
+    let clone1: Shared[I32] = original.duplicate()
+    let clone2: Shared[I32] = original.duplicate()
+    let clone3: Shared[I32] = clone1.duplicate()
+    let clone4: Shared[I32] = clone2.duplicate()
+
+    // All should have count of 5
+    assert_eq(original.strong_count(), 5, "All refs have same count")
+    assert_eq(clone1.strong_count(), 5, "Clone1 count")
+    assert_eq(clone2.strong_count(), 5, "Clone2 count")
+    assert_eq(clone3.strong_count(), 5, "Clone3 count")
+    assert_eq(clone4.strong_count(), 5, "Clone4 count")
+
+    // All see same value
+    assert_eq(original.get(), 500, "Original value")
+    assert_eq(clone4.get(), 500, "Clone4 value")
+    return 0
+}
+
+@test
+func test_sync_multiple_clones() -> I32 {
+    let original: Sync[I32] = Sync::new(600)
+
+    let clone1: Sync[I32] = original.duplicate()
+    let clone2: Sync[I32] = original.duplicate()
+    let clone3: Sync[I32] = clone1.duplicate()
+
+    // All should have atomic count of 4
+    assert_eq(original.strong_count(), 4, "All refs have same atomic count")
+    assert_eq(clone1.strong_count(), 4, "Clone1 count")
+    assert_eq(clone2.strong_count(), 4, "Clone2 count")
+    assert_eq(clone3.strong_count(), 4, "Clone3 count")
+
+    // All see same value
+    assert_eq(original.get(), 600, "Original value")
+    assert_eq(clone3.get(), 600, "Clone3 value")
+    return 0
+}
+
+@test
+func test_heap_with_string() -> I32 {
+    let boxed: Heap[Str] = Heap::new("Hello, Heap!")
+    let s: Str = boxed.get()
+
+    assert(s.len() > 0, "String should have length")
+    return 0
+}
+
+@test
+func test_shared_with_struct() -> I32 {
+    type Person {
+        name: Str,
+        age: I32,
+    }
+
+    let person: Person = Person {
+        name: "Alice",
+        age: 30,
+    }
+
+    let shared: Shared[Person] = Shared::new(person)
+    let p: Person = shared.get()
+
+    assert_eq(p.age, 30, "Person age")
+    return 0
+}

@@ -554,3 +554,193 @@ TML_EXPORT uint32_t tml_thread_available_parallelism(void) {
 }
 
 #endif // _WIN32
+
+// ============================================================================
+// Atomic Operations
+// ============================================================================
+
+/**
+ * @brief Atomically add to an I32 and return the previous value.
+ * @param ptr Pointer to the I32 variable
+ * @param val Value to add
+ * @return Previous value before addition
+ */
+TML_EXPORT int32_t atomic_fetch_add_i32(int32_t* ptr, int32_t val) {
+#ifdef _WIN32
+    return (int32_t)InterlockedExchangeAdd((LONG*)ptr, (LONG)val);
+#else
+    return __sync_fetch_and_add(ptr, val);
+#endif
+}
+
+/**
+ * @brief Atomically subtract from an I32 and return the previous value.
+ * @param ptr Pointer to the I32 variable
+ * @param val Value to subtract
+ * @return Previous value before subtraction
+ */
+TML_EXPORT int32_t atomic_fetch_sub_i32(int32_t* ptr, int32_t val) {
+#ifdef _WIN32
+    return (int32_t)InterlockedExchangeAdd((LONG*)ptr, -(LONG)val);
+#else
+    return __sync_fetch_and_sub(ptr, val);
+#endif
+}
+
+/**
+ * @brief Atomically load an I32 value.
+ * @param ptr Pointer to the I32 variable
+ * @return Current value
+ */
+TML_EXPORT int32_t atomic_load_i32(const int32_t* ptr) {
+#ifdef _WIN32
+    return (int32_t)InterlockedCompareExchange((LONG*)ptr, 0, 0);
+#else
+    return __sync_fetch_and_add((int32_t*)ptr, 0);
+#endif
+}
+
+/**
+ * @brief Atomically store an I32 value.
+ * @param ptr Pointer to the I32 variable
+ * @param val Value to store
+ */
+TML_EXPORT void atomic_store_i32(int32_t* ptr, int32_t val) {
+#ifdef _WIN32
+    InterlockedExchange((LONG*)ptr, (LONG)val);
+#else
+    __sync_lock_test_and_set(ptr, val);
+#endif
+}
+
+/**
+ * @brief Atomically compare and swap an I32 value.
+ * @param ptr Pointer to the I32 variable
+ * @param expected Expected current value
+ * @param desired Value to set if current == expected
+ * @return Previous value (equal to expected if swap succeeded)
+ */
+TML_EXPORT int32_t atomic_compare_exchange_i32(int32_t* ptr, int32_t expected, int32_t desired) {
+#ifdef _WIN32
+    return (int32_t)InterlockedCompareExchange((LONG*)ptr, (LONG)desired, (LONG)expected);
+#else
+    return __sync_val_compare_and_swap(ptr, expected, desired);
+#endif
+}
+
+/**
+ * @brief Atomically swap an I32 value.
+ * @param ptr Pointer to the I32 variable
+ * @param val New value
+ * @return Previous value
+ */
+TML_EXPORT int32_t atomic_swap_i32(int32_t* ptr, int32_t val) {
+#ifdef _WIN32
+    return (int32_t)InterlockedExchange((LONG*)ptr, (LONG)val);
+#else
+    return __sync_lock_test_and_set(ptr, val);
+#endif
+}
+
+// 64-bit atomic operations
+
+/**
+ * @brief Atomically add to an I64 and return the previous value.
+ */
+TML_EXPORT int64_t atomic_fetch_add_i64(int64_t* ptr, int64_t val) {
+#ifdef _WIN32
+    return (int64_t)InterlockedExchangeAdd64((LONG64*)ptr, (LONG64)val);
+#else
+    return __sync_fetch_and_add(ptr, val);
+#endif
+}
+
+/**
+ * @brief Atomically subtract from an I64 and return the previous value.
+ */
+TML_EXPORT int64_t atomic_fetch_sub_i64(int64_t* ptr, int64_t val) {
+#ifdef _WIN32
+    return (int64_t)InterlockedExchangeAdd64((LONG64*)ptr, -(LONG64)val);
+#else
+    return __sync_fetch_and_sub(ptr, val);
+#endif
+}
+
+/**
+ * @brief Atomically load an I64 value.
+ */
+TML_EXPORT int64_t atomic_load_i64(const int64_t* ptr) {
+#ifdef _WIN32
+    return (int64_t)InterlockedCompareExchange64((LONG64*)ptr, 0, 0);
+#else
+    return __sync_fetch_and_add((int64_t*)ptr, 0);
+#endif
+}
+
+/**
+ * @brief Atomically store an I64 value.
+ */
+TML_EXPORT void atomic_store_i64(int64_t* ptr, int64_t val) {
+#ifdef _WIN32
+    InterlockedExchange64((LONG64*)ptr, (LONG64)val);
+#else
+    __sync_lock_test_and_set(ptr, val);
+#endif
+}
+
+/**
+ * @brief Atomically compare and swap an I64 value.
+ */
+TML_EXPORT int64_t atomic_compare_exchange_i64(int64_t* ptr, int64_t expected, int64_t desired) {
+#ifdef _WIN32
+    return (int64_t)InterlockedCompareExchange64((LONG64*)ptr, (LONG64)desired, (LONG64)expected);
+#else
+    return __sync_val_compare_and_swap(ptr, expected, desired);
+#endif
+}
+
+/**
+ * @brief Atomically swap an I64 value.
+ */
+TML_EXPORT int64_t atomic_swap_i64(int64_t* ptr, int64_t val) {
+#ifdef _WIN32
+    return (int64_t)InterlockedExchange64((LONG64*)ptr, (LONG64)val);
+#else
+    return __sync_lock_test_and_set(ptr, val);
+#endif
+}
+
+// Atomic fence operations
+
+/**
+ * @brief Full memory barrier (acquire + release).
+ */
+TML_EXPORT void atomic_fence(void) {
+#ifdef _WIN32
+    MemoryBarrier();
+#else
+    __sync_synchronize();
+#endif
+}
+
+/**
+ * @brief Acquire barrier (prevents reordering of loads).
+ */
+TML_EXPORT void atomic_fence_acquire(void) {
+#ifdef _WIN32
+    MemoryBarrier();
+#else
+    __sync_synchronize();
+#endif
+}
+
+/**
+ * @brief Release barrier (prevents reordering of stores).
+ */
+TML_EXPORT void atomic_fence_release(void) {
+#ifdef _WIN32
+    MemoryBarrier();
+#else
+    __sync_synchronize();
+#endif
+}

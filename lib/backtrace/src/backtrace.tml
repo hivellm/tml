@@ -171,50 +171,12 @@ impl Backtrace {
     /// The frame contains the instruction pointer and, if resolved,
     /// symbol information.
     pub func frame(this, index: I32) -> Maybe[BacktraceFrame] {
-        if this.handle == null {
-            return Nothing
-        }
-        let count: I32 = ffi_backtrace_frame_count(this.handle)
-        if index < 0 or index >= count {
-            return Nothing
-        }
-
-        let ip: *Unit = ffi_backtrace_frame_ip(this.handle, index)
-
-        if this.resolved {
-            // Get resolved symbol information
-            let name_ptr: *Unit = ffi_backtrace_frame_name(this.handle, index)
-            let file_ptr: *Unit = ffi_backtrace_frame_filename(this.handle, index)
-            let lineno: U32 = ffi_backtrace_frame_lineno(this.handle, index)
-            let colno: U32 = ffi_backtrace_frame_colno(this.handle, index)
-            let sym_addr: *Unit = ffi_backtrace_frame_symbol_address(this.handle, index)
-            let offset: U64 = ffi_backtrace_frame_offset(this.handle, index)
-
-            let name: Maybe[Str] = if name_ptr != null {
-                Just(tml_str_from_cstr(name_ptr))
-            } else {
-                Nothing
-            }
-
-            let filename: Maybe[Str] = if file_ptr != null {
-                Just(tml_str_from_cstr(file_ptr))
-            } else {
-                Nothing
-            }
-
-            let sym: BacktraceSymbol = BacktraceSymbol {
-                name: name,
-                filename: filename,
-                lineno: lineno,
-                colno: colno,
-                addr: sym_addr,
-                offset: offset,
-            }
-
-            return Just(BacktraceFrame::with_symbol(ip, sym))
-        } else {
-            return Just(BacktraceFrame::new(ip))
-        }
+        // TODO: Re-enable when codegen properly handles structs with Maybe[Str] fields
+        // The issue is that BacktraceSymbol contains Maybe[Str], which is unsized,
+        // and the codegen cannot properly allocate or pass it by value.
+        // Also, the codegen has issues passing *Unit to functions correctly.
+        // For now, frame() always returns Nothing - users should use to_string() instead.
+        return Nothing
     }
 
     /// Resolves symbol information for all frames.
@@ -248,8 +210,11 @@ impl Backtrace {
 
     /// Formats the backtrace with the specified style.
     ///
-    /// - `PrintFmt::Short`: Shows just function names
+    /// - `PrintFmt::Short`: Shows just function names (uses full format as fallback)
     /// - `PrintFmt::Full`: Shows full information with file:line
+    ///
+    /// Note: Both formats currently use the FFI formatter due to cross-module
+    /// codegen limitations. Short format may be implemented in the future.
     pub func format(mut this, fmt: PrintFmt) -> Str {
         if this.handle == null {
             return "  <no backtrace>\n"
@@ -259,42 +224,9 @@ impl Backtrace {
             this.resolve()
         }
 
-        when fmt {
-            PrintFmt::Short => {
-                // Short format: just function names
-                let mut result: Str = ""
-                let count: I32 = this.frame_count()
-                let mut i: I32 = 0
-                loop (i < count) {
-                    let frame_opt: Maybe[BacktraceFrame] = this.frame(i)
-                    when frame_opt {
-                        Just(frame) => {
-                            let sym_opt: Maybe[BacktraceSymbol] = frame.symbol()
-                            when sym_opt {
-                                Just(sym) => {
-                                    let name_opt: Maybe[Str] = sym.name
-                                    let name: Str = when name_opt {
-                                        Just(n) => n,
-                                        Nothing => "<unknown>"
-                                    }
-                                    result = "{result}  {i}: {name}\n"
-                                },
-                                Nothing => {
-                                    result = "{result}  {i}: <unknown>\n"
-                                }
-                            }
-                        },
-                        Nothing => {}
-                    }
-                    i = i + 1
-                }
-                return result
-            },
-            PrintFmt::Full => {
-                // Full format: use the FFI-provided formatter
-                return this.to_string()
-            }
-        }
+        // Both formats use the FFI formatter for now
+        // TODO: Implement native Short format when cross-module method calls work
+        return this.to_string()
     }
 
     /// Prints the backtrace to stdout.

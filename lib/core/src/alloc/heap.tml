@@ -1,0 +1,221 @@
+// Heap[T] - Unique pointer to heap-allocated data
+//
+// Heap[T] provides unique ownership of heap-allocated memory,
+// similar to Rust's Box[T]. When Heap[T] goes out of scope,
+// the memory is automatically deallocated.
+//
+// ## Examples
+//
+// ```tml
+// let boxed = Heap::new(42)
+// print(boxed.get())  // 42
+// // Memory automatically freed when boxed goes out of scope
+// ```
+
+use core::mem::{mem_alloc, mem_free, size_of}
+use core::ops::{Deref, DerefMut}
+use core::clone::Duplicate
+use core::fmt::{Display, Debug}
+use core::default::Default
+
+/// A unique pointer to heap-allocated data.
+///
+/// `Heap[T]` provides ownership of a value on the heap. When the `Heap[T]`
+/// is dropped, the memory is automatically freed.
+///
+/// ## Memory Layout
+///
+/// The `Heap[T]` stores a single pointer to the heap-allocated value.
+/// The value itself is stored on the heap.
+///
+/// ## Drop Behavior
+///
+/// When a `Heap[T]` goes out of scope, it automatically calls `mem_free`
+/// on the pointer. This ensures no memory leaks.
+///
+/// ## Examples
+///
+/// ```tml
+/// // Allocate an integer on the heap
+/// let num = Heap::new(100)
+/// print(num.get())  // 100
+///
+/// // Allocate a struct on the heap
+/// let point = Heap::new(Point { x: 10, y: 20 })
+/// print(point.get().x)  // 10
+/// ```
+pub type Heap[T] {
+    ptr: *T,
+}
+
+impl[T] Heap[T] {
+    /// Creates a new `Heap[T]` by allocating memory and moving `value` to the heap.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let boxed = Heap::new(42)
+    /// assert_eq(boxed.get(), 42)
+    /// ```
+    pub func new(value: T) -> Heap[T] {
+        let size: I64 = size_of[T]()
+        let ptr: *Unit = mem_alloc(size)
+
+        if ptr == null {
+            panic("Heap::new: allocation failed")
+        }
+
+        let typed_ptr: *T = ptr as *T
+
+        // Move value to heap (this is a placeholder - actual implementation
+        // would need compiler support for proper move semantics)
+        // For now, we'll use FFI to copy the bytes
+        @extern("memcpy")
+        func memcpy(dest: *Unit, src: *Unit, n: I64) -> *Unit
+
+        memcpy(typed_ptr as *Unit, &value as *Unit, size)
+
+        return Heap[T] { ptr: typed_ptr }
+    }
+
+    /// Creates a new `Heap[T]` with a default value.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let boxed = Heap::new_default[I32]()
+    /// assert_eq(boxed.get(), 0)
+    /// ```
+    pub func new_default() -> Heap[T] where T: Default {
+        return Heap::new(T::default())
+    }
+
+    /// Returns a reference to the value in the box.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let boxed = Heap::new(42)
+    /// let value = boxed.get()
+    /// assert_eq(value, 42)
+    /// ```
+    pub func get(this) -> T {
+        if this.ptr == null {
+            panic("Heap::get: null pointer")
+        }
+        return *this.ptr
+    }
+
+    /// Returns a mutable reference to the value in the box.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut boxed = Heap::new(42)
+    /// boxed.set(100)
+    /// assert_eq(boxed.get(), 100)
+    /// ```
+    pub func set(mut this, value: T) {
+        if this.ptr == null {
+            panic("Heap::set: null pointer")
+        }
+        *this.ptr = value
+    }
+
+    /// Consumes the `Heap[T]` and returns the inner value.
+    ///
+    /// The memory is still freed, but the value is moved out first.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let boxed = Heap::new(42)
+    /// let value = boxed.into_inner()
+    /// assert_eq(value, 42)
+    /// ```
+    pub func into_inner(this) -> T {
+        if this.ptr == null {
+            panic("Heap::into_inner: null pointer")
+        }
+
+        let value: T = *this.ptr
+        mem_free(this.ptr as *Unit)
+
+        // Mark as consumed (in real implementation, this would use move semantics)
+        // For now, we just return the value
+        return value
+    }
+
+    /// Returns the raw pointer without freeing memory.
+    ///
+    /// **Warning**: You are responsible for freeing this memory manually!
+    ///
+    /// ## Safety
+    ///
+    /// After calling this function, the `Heap[T]` no longer owns the memory,
+    /// and you must call `mem_free` manually.
+    pub func into_raw(this) -> *T {
+        let ptr: *T = this.ptr
+        // In real implementation, we'd mark this as moved/consumed
+        return ptr
+    }
+
+    /// Creates a `Heap[T]` from a raw pointer.
+    ///
+    /// ## Safety
+    ///
+    /// The pointer must have been allocated by `mem_alloc` and must be valid.
+    pub func from_raw(ptr: *T) -> Heap[T] {
+        return Heap[T] { ptr: ptr }
+    }
+
+    /// Leaks the heap allocation and returns a static reference.
+    ///
+    /// The memory will never be freed (memory leak).
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let leaked = Heap::leak(Heap::new(42))
+    /// // leaked now points to memory that will never be freed
+    /// ```
+    pub func leak(this) -> *T {
+        return this.into_raw()
+    }
+}
+
+// Automatic cleanup when Heap[T] goes out of scope
+impl[T] Drop for Heap[T] {
+    func drop(mut this) {
+        if this.ptr != null {
+            mem_free(this.ptr as *Unit)
+        }
+    }
+}
+
+impl[T] Duplicate for Heap[T] where T: Duplicate {
+    /// Creates a deep copy of the heap-allocated value.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let original = Heap::new(42)
+    /// let copy = original.duplicate()
+    /// assert_eq(copy.get(), 42)
+    /// ```
+    func duplicate(this) -> Heap[T] {
+        return Heap::new(this.get().duplicate())
+    }
+}
+
+impl[T] Display for Heap[T] where T: Display {
+    func fmt(this) -> Str {
+        return this.get().fmt()
+    }
+}
+
+impl[T] Debug for Heap[T] where T: Debug {
+    func fmt_debug(this) -> Str {
+        return "Heap({this.get().fmt_debug()})"
+    }
+}

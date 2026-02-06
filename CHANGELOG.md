@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Smart Pointers** (2026-02-06) - Complete Rust-style smart pointer implementations
+  - `Heap[T]` - Unique pointer with ownership semantics (like Rust's `Box[T]`)
+    - Methods: `new()`, `get()`, `set()`, `into_inner()`, `as_ptr()`, `from_raw()`, `leak()`
+    - Automatic memory deallocation via Drop trait
+    - Deep copy via Duplicate trait
+  - `Shared[T]` - Non-atomic reference-counted pointer (like Rust's `Rc[T]`)
+    - Methods: `new()`, `get()`, `strong_count()`, `is_unique()`, `get_mut()`, `try_unwrap()`
+    - Automatic reference counting with Drop
+    - Share ownership across multiple owners (single-threaded)
+  - `Sync[T]` - Atomic reference-counted pointer (like Rust's `Arc[T]`)
+    - Thread-safe atomic reference counting
+    - Uses `atomic_fetch_add_i32`/`atomic_fetch_sub_i32` for safety
+    - Safe for cross-thread sharing
+  - All smart pointers implement Drop, Display, Debug behaviors
+  - 15 comprehensive tests in `lib/core/tests/alloc/smart_pointers.test.tml`
+  - Files created:
+    - `lib/core/src/alloc/heap.tml` - Heap[T] implementation (222 lines)
+    - `lib/core/src/alloc/shared.tml` - Shared[T] implementation (283 lines)
+    - `lib/core/src/alloc/sync.tml` - Sync[T] implementation (318 lines)
+    - `lib/core/tests/alloc/smart_pointers.test.tml` - 15 tests
+  - Files modified:
+    - `lib/core/src/alloc/mod.tml` - Added smart pointer exports
+
+- **Atomic Operations** (2026-02-06) - Cross-platform atomic primitives for lock-free programming
+  - **I32/I64 Operations**: fetch_add, fetch_sub, load, store, compare_exchange, swap
+  - **Memory Fences**: acquire, release, seq_cst barriers
+  - **Platform Support**: Windows (InterlockedX) and Unix (__sync_fetch_and_X)
+  - Runtime implementation (180+ lines in `compiler/runtime/sync.c`):
+    - `atomic_fetch_add_i32/i64` - Atomic fetch-and-add
+    - `atomic_fetch_sub_i32/i64` - Atomic fetch-and-subtract
+    - `atomic_load_i32/i64` - Thread-safe read
+    - `atomic_store_i32/i64` - Thread-safe write
+    - `atomic_compare_exchange_i32/i64` - Compare-and-swap
+    - `atomic_swap_i32/i64` - Atomic exchange
+    - `atomic_fence`, `atomic_fence_acquire`, `atomic_fence_release` - Memory barriers
+  - Type system integration (126 lines in `compiler/src/types/builtins/atomic.cpp`)
+  - Codegen integration (187 lines in `compiler/src/codegen/builtins/atomic.cpp`)
+  - LLVM IR declarations in `compiler/src/codegen/core/runtime.cpp`
+  - 18 comprehensive tests in `lib/core/tests/ops/atomic.test.tml`
+  - Files modified:
+    - `compiler/runtime/sync.c` - Added 180+ lines of atomic operations
+    - `compiler/src/types/builtins/atomic.cpp` - Added 126 lines of type signatures
+    - `compiler/src/codegen/builtins/atomic.cpp` - Added 187 lines of LLVM IR codegen
+    - `compiler/src/codegen/core/runtime.cpp` - Added atomic function declarations
+  - Files created:
+    - `lib/core/tests/ops/atomic.test.tml` - 18 tests (I32 operations, fences, edge cases)
+
+- **Drop Trait Enabled** (2026-02-06) - Automatic cleanup for smart pointers
+  - Drop behavior was already implemented in compiler, now enabled for smart pointers
+  - Heap[T], Shared[T], Sync[T] all have Drop implementations
+  - Automatic RAII-style resource cleanup at scope exit
+  - LIFO drop order (last declared, first dropped)
+  - Move semantics support (consumed variables skip drop)
+
 ### Fixed
 - **BoolLiteral Dangling Lexeme** (2026-02-05) - Fixed corrupted boolean constants from imported modules
   - `BoolLiteral.token.lexeme` is a `string_view` pointing to original source text

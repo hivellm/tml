@@ -37,6 +37,103 @@ static int32_t g_lock_initialized = 0;
 #endif
 
 // ============================================================================
+// Global Symbol Cache
+// ============================================================================
+
+/** Cache entry mapping instruction pointer to resolved symbol */
+typedef struct SymbolCacheEntry {
+    void* ip;                          /** Instruction pointer (key) */
+    BacktraceSymbol symbol;            /** Resolved symbol data */
+    struct SymbolCacheEntry* next;     /** Chaining for collisions */
+} SymbolCacheEntry;
+
+/** Simple hash table for symbol caching */
+#define SYMBOL_CACHE_SIZE 256
+static SymbolCacheEntry* g_symbol_cache[SYMBOL_CACHE_SIZE] = {NULL};
+static int32_t g_cache_enabled = 1;  /** Enable/disable caching */
+
+/** Hash function for instruction pointers */
+static uint32_t symbol_cache_hash(void* ip) {
+    uintptr_t addr = (uintptr_t)ip;
+    // Simple hash: mix upper and lower bits
+    return (uint32_t)((addr >> 8) ^ addr) % SYMBOL_CACHE_SIZE;
+}
+
+/** Lookup symbol in cache, returns NULL if not found */
+static BacktraceSymbol* symbol_cache_lookup(void* ip) {
+    if (!g_cache_enabled || !ip) {
+        return NULL;
+    }
+
+    uint32_t hash = symbol_cache_hash(ip);
+    SymbolCacheEntry* entry = g_symbol_cache[hash];
+
+    while (entry) {
+        if (entry->ip == ip) {
+            return &entry->symbol;
+        }
+        entry = entry->next;
+    }
+
+    return NULL;
+}
+
+/** Insert symbol into cache (makes copies of strings) */
+static void symbol_cache_insert(void* ip, const BacktraceSymbol* symbol) {
+    if (!g_cache_enabled || !ip || !symbol) {
+        return;
+    }
+
+    uint32_t hash = symbol_cache_hash(ip);
+
+    // Check if already exists
+    SymbolCacheEntry* existing = g_symbol_cache[hash];
+    while (existing) {
+        if (existing->ip == ip) {
+            return; // Already cached
+        }
+        existing = existing->next;
+    }
+
+    // Allocate new entry
+    SymbolCacheEntry* entry = (SymbolCacheEntry*)malloc(sizeof(SymbolCacheEntry));
+    if (!entry) {
+        return; // Cache insertion failure is non-fatal
+    }
+
+    entry->ip = ip;
+    entry->symbol.name = symbol->name ? _strdup(symbol->name) : NULL;
+    entry->symbol.filename = symbol->filename ? _strdup(symbol->filename) : NULL;
+    entry->symbol.lineno = symbol->lineno;
+    entry->symbol.colno = symbol->colno;
+    entry->symbol.symbol_address = symbol->symbol_address;
+    entry->symbol.offset = symbol->offset;
+
+    // Insert at head of chain
+    entry->next = g_symbol_cache[hash];
+    g_symbol_cache[hash] = entry;
+}
+
+/** Clear entire symbol cache */
+static void symbol_cache_clear(void) {
+    for (int i = 0; i < SYMBOL_CACHE_SIZE; i++) {
+        SymbolCacheEntry* entry = g_symbol_cache[i];
+        while (entry) {
+            SymbolCacheEntry* next = entry->next;
+            if (entry->symbol.name) {
+                free(entry->symbol.name);
+            }
+            if (entry->symbol.filename) {
+                free(entry->symbol.filename);
+            }
+            free(entry);
+            entry = next;
+        }
+        g_symbol_cache[i] = NULL;
+    }
+}
+
+// ============================================================================
 // Initialization
 // ============================================================================
 
@@ -82,6 +179,9 @@ void backtrace_cleanup(void) {
         g_lock_initialized = 0;
     }
 #endif
+
+    // Clear global symbol cache
+    symbol_cache_clear();
 
     g_initialized = 0;
 }
@@ -139,30 +239,30 @@ Backtrace* backtrace_capture_full(int32_t skip) {
         }
     }
 
-    Backtrace* bt = (Backtrace*)calloc(1, sizeof(Backtrace));
-    if (!bt) {
-        return NULL;
-    }
-
-    bt->capacity = BACKTRACE_MAX_FRAMES;
-    bt->frames = (BacktraceFrame*)calloc(bt->capacity, sizeof(BacktraceFrame));
-    if (!bt->frames) {
-        free(bt);
-        return NULL;
-    }
-
     // Temporary array for raw addresses
     // Skip internal C frames (backtrace_capture_full, ffi_backtrace_capture)
     void* raw_frames[BACKTRACE_MAX_FRAMES];
     int32_t count = backtrace_capture(raw_frames, BACKTRACE_MAX_FRAMES, skip);
 
     if (count < 0) {
-        free(bt->frames);
+        return NULL;
+    }
+
+    Backtrace* bt = (Backtrace*)calloc(1, sizeof(Backtrace));
+    if (!bt) {
+        return NULL;
+    }
+
+    // Lazy allocation: only allocate the exact number of frames needed
+    // This saves memory compared to always allocating BACKTRACE_MAX_FRAMES (128)
+    bt->capacity = count;
+    bt->frame_count = count;
+    bt->frames = (BacktraceFrame*)calloc(count, sizeof(BacktraceFrame));
+    if (!bt->frames) {
         free(bt);
         return NULL;
     }
 
-    bt->frame_count = count;
     for (int32_t i = 0; i < count; i++) {
         bt->frames[i].ip = raw_frames[i];
         bt->frames[i].sp = NULL;
@@ -190,6 +290,19 @@ int32_t backtrace_resolve(void* addr, BacktraceSymbol* out) {
     }
 
     memset(out, 0, sizeof(BacktraceSymbol));
+
+    // Check global cache first (major performance optimization)
+    BacktraceSymbol* cached = symbol_cache_lookup(addr);
+    if (cached) {
+        // Copy cached data (caller expects to own the strings)
+        out->name = cached->name ? _strdup(cached->name) : NULL;
+        out->filename = cached->filename ? _strdup(cached->filename) : NULL;
+        out->lineno = cached->lineno;
+        out->colno = cached->colno;
+        out->symbol_address = cached->symbol_address;
+        out->offset = cached->offset;
+        return (out->name != NULL) ? 0 : -1;
+    }
 
 #ifdef _WIN32
     EnterCriticalSection(&g_symbol_lock);
@@ -221,6 +334,11 @@ int32_t backtrace_resolve(void* addr, BacktraceSymbol* out) {
 
     LeaveCriticalSection(&g_symbol_lock);
 
+    // Cache the result for future lookups
+    if (out->name) {
+        symbol_cache_insert(addr, out);
+    }
+
     return (out->name != NULL) ? 0 : -1;
 #else
     // Unix: use dladdr for basic symbol info
@@ -236,6 +354,12 @@ int32_t backtrace_resolve(void* addr, BacktraceSymbol* out) {
         if (info.dli_saddr) {
             out->offset = (uint64_t)addr - (uint64_t)info.dli_saddr;
         }
+
+        // Cache the result for future lookups
+        if (out->name) {
+            symbol_cache_insert(addr, out);
+        }
+
         return (out->name != NULL) ? 0 : -1;
     }
     return -1;
@@ -371,8 +495,10 @@ char* backtrace_format(const Backtrace* bt) {
         return _strdup("  <empty backtrace>\n");
     }
 
-    // Estimate buffer size: ~200 bytes per frame
-    size_t buffer_size = (size_t)bt->frame_count * 256 + 64;
+    // Optimized: More accurate size estimation
+    // Average frame: "  NN: function_name\n             at file:line\n" = ~150 bytes
+    // Account for filtered frames by using actual count
+    size_t buffer_size = (size_t)bt->frame_count * 180 + 128;
     char* result = (char*)malloc(buffer_size);
     if (!result) {
         return NULL;
@@ -388,16 +514,29 @@ char* backtrace_format(const Backtrace* bt) {
             continue;
         }
 
-        char frame_buf[512];
-        int32_t len =
-            backtrace_frame_format(&bt->frames[i], display_index, frame_buf, sizeof(frame_buf));
-        if (len > 0) {
-            int written = snprintf(ptr, remaining, "%s\n", frame_buf);
-            if (written > 0 && (size_t)written < remaining) {
-                ptr += written;
-                remaining -= written;
-                display_index++;
-            }
+        // Optimized: Write directly to result buffer, eliminating intermediate copy
+        const BacktraceFrame* frame = &bt->frames[i];
+        const char* name = frame->resolved && frame->symbol.name ? frame->symbol.name : "<unknown>";
+        const char* filename =
+            frame->resolved && frame->symbol.filename ? frame->symbol.filename : "<unknown>";
+        uint32_t lineno = frame->resolved ? frame->symbol.lineno : 0;
+
+        int written;
+        if (lineno > 0) {
+            written = snprintf(ptr, remaining, "  %2d: %s\n             at %s:%u\n",
+                             display_index, name, filename, lineno);
+        } else if (frame->symbol.filename) {
+            written = snprintf(ptr, remaining, "  %2d: %s\n             at %s\n",
+                             display_index, name, filename);
+        } else {
+            written = snprintf(ptr, remaining, "  %2d: %s\n             at %p\n",
+                             display_index, name, frame->ip);
+        }
+
+        if (written > 0 && (size_t)written < remaining) {
+            ptr += written;
+            remaining -= written;
+            display_index++;
         }
     }
 
@@ -579,6 +718,9 @@ TML_EXPORT int32_t ffi_backtrace_is_resolved(void* bt_handle) {
 }
 
 TML_EXPORT void ffi_backtrace_clear_cache(void) {
+    // Clear global symbol cache
+    symbol_cache_clear();
+
 #ifdef _WIN32
     // Re-initialize symbol handler to clear any cached data
     if (g_initialized) {

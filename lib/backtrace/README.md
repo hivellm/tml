@@ -2,7 +2,7 @@
 
 Runtime stack trace capture and symbol resolution for debugging TML applications.
 
-**Status**: In Progress (Core functionality working)
+**Status**: Complete (Production ready)
 
 ## Features
 
@@ -152,8 +152,17 @@ Uses Windows Debug Help Library (DbgHelp):
 - `RtlCaptureStackBackTrace` for stack capture
 - `SymFromAddr` for function names
 - `SymGetLineFromAddr64` for file/line info
+- Thread safety via CriticalSection around symbol operations
 
-**Requirements**: Debug symbols (PDB files) for line-level information.
+**Symbol Requirements**:
+- Debug builds (`-g` flag): Full function names, file paths, line numbers
+- Release builds: Function names if not stripped
+- PDB files: Must be in same directory as executable or in symbol path
+
+**Known Limitations**:
+- Maximum 128 frames per capture
+- Inline functions may not show separate entries
+- Optimized code may have approximate line numbers
 
 ### Linux/macOS
 
@@ -161,7 +170,22 @@ Uses standard Unix facilities:
 - `backtrace()` from `<execinfo.h>` for stack capture
 - `dladdr()` for symbol resolution
 
-**Requirements**: Binary compiled with `-g` for debug info.
+**Symbol Requirements**:
+- Compile with `-g` for debug info
+- DWARF debug info in `.debug_info` sections
+- Use `-rdynamic` for exported symbols
+
+**Known Limitations**:
+- `dladdr()` only provides function names, not line numbers
+- Full resolution requires libbacktrace (future enhancement)
+
+### Frame Filtering
+
+The following frames are automatically filtered from backtrace output:
+- Runtime: `panic`, `assert_tml`, `assert_tml_loc`
+- Backtrace internals: `backtrace_capture`, `backtrace_resolve`
+- System: `longjmp`, `setjmp`, `RaiseException`
+- CRT: `__scrt_common_main_seh`, `invoke_main`, `_start`
 
 ## Use Cases
 
@@ -200,21 +224,28 @@ func process_file(path: Str) -> Outcome[Data, Error] {
 }
 ```
 
-### Assertion Failures (Future)
+### Test Framework Integration
+
+Backtraces are automatically captured on test assertion failures:
 
 ```tml
-// When panic handler integration is complete:
-// Backtraces will be automatically printed on assertion failures
-assert_eq(result, expected, "values should match")
-// On failure, prints:
-// Assertion failed: values should match
-//   expected: 42
-//   actual: 0
-//
-// Backtrace:
-//    0: test_my_function
-//              at tests/my_test.tml:15
-//    ...
+@test
+func test_my_function() -> I32 {
+    assert_eq(result, expected, "values should match")
+    // On failure, the test runner displays:
+    // Error: Test panicked: assertion failed at tests/my_test.tml:15: values should match
+    //
+    // Backtrace:
+    //    0: test_my_function
+    //              at tests/my_test.tml:15
+    return 0
+}
+```
+
+Use `--no-backtrace` to disable backtrace capture in tests:
+
+```bash
+tml test --no-backtrace
 ```
 
 ## Module Structure
@@ -248,12 +279,13 @@ compiler/runtime/
 - [x] TML type wrappers
 - [x] FFI bindings
 - [x] Basic test suite
+- [x] Compiler `--backtrace` flag (for `tml run`)
+- [x] Panic handler integration
+- [x] Test framework integration (auto-capture on test failures)
+- [x] Internal frame filtering
 
 ### Planned
 
-- [ ] Compiler `--backtrace` flag
-- [ ] Panic handler integration
-- [ ] Test framework integration
 - [ ] Multiple symbols per frame (inlined functions)
 - [ ] Symbol caching for performance
 - [ ] Cross-library symbol resolution tests

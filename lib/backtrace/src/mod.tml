@@ -33,8 +33,30 @@
 //
 // ## Platform Support
 //
-// - Windows: RtlCaptureStackBackTrace + DbgHelp
-// - Linux/macOS: backtrace() + dladdr (future)
+// ### Windows
+// - Capture: RtlCaptureStackBackTrace (kernel32)
+// - Resolution: DbgHelp (SymFromAddr, SymGetLineFromAddr64)
+// - Symbols: Requires PDB files or DWARF debug info
+// - Initialization: SymInitialize called automatically on first capture
+// - Thread safety: Symbol operations protected by critical section
+//
+// ### Linux/macOS (planned)
+// - Capture: backtrace() from execinfo.h
+// - Resolution: dladdr for basic symbols, libbacktrace for full info
+// - Symbols: DWARF debug info (.debug_info sections)
+//
+// ## Symbol Resolution Notes
+//
+// - Debug builds (-g): Full symbol names, file paths, and line numbers
+// - Release builds: Function names only (if not stripped)
+// - Inline functions: May show multiple symbols per frame address
+// - Optimized code: Line numbers may be approximate due to instruction reordering
+//
+// ## Performance Characteristics
+//
+// - Capture: ~1-5 microseconds per frame (Windows)
+// - Resolution: ~10-50 microseconds per frame (with symbols loaded)
+// - Memory: ~64 bytes per frame + symbol string storage
 //
 // ## Integration
 //

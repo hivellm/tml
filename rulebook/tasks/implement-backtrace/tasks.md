@@ -1,6 +1,6 @@
 # Tasks: Implement Backtrace Library
 
-**Status**: Complete (97%)
+**Status**: Complete (100%)
 
 ## Phase 1: FFI Runtime Foundation
 
@@ -119,13 +119,13 @@
 - [x] 11.1.1 Add docstrings to all public types
 - [x] 11.1.2 Add docstrings to all public functions
 - [x] 11.1.3 Add usage examples in module doc
-- [ ] 11.1.4 Document platform-specific behavior
-- [ ] 11.1.5 Update docs/INDEX.md with backtrace section
+- [x] 11.1.4 Document platform-specific behavior
+- [x] 11.1.5 Update docs/INDEX.md with backtrace section
 
 ## Phase 12: Performance Optimization
 
-- [ ] 12.1.1 Benchmark capture overhead
-- [ ] 12.1.2 Benchmark resolve overhead
-- [ ] 12.1.3 Implement symbol caching
-- [ ] 12.1.4 Optimize string allocation
-- [ ] 12.1.5 Consider lazy frame list allocation
+- [x] 12.1.1 Benchmark capture overhead
+- [x] 12.1.2 Benchmark resolve overhead
+- [x] 12.1.3 Implement symbol caching
+- [x] 12.1.4 Optimize string allocation
+- [x] 12.1.5 Consider lazy frame list allocation

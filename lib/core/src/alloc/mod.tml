@@ -9,6 +9,12 @@
 //! - [`LayoutError`] - Error for invalid layout parameters
 //! - [`AllocError`] - Error indicating allocation failure
 //!
+//! # Smart Pointers
+//!
+//! - [`Heap[T]`] - Unique pointer to heap-allocated data (like Box[T] in Rust)
+//! - [`Shared[T]`] - Reference-counted pointer for shared ownership (like Rc[T] in Rust)
+//! - [`Sync[T]`] - Atomic reference-counted pointer for thread-safe shared ownership (like Arc[T] in Rust)
+//!
 //! # Behaviors (Traits)
 //!
 //! - [`Allocator`] - The main allocator interface for memory management
@@ -18,14 +24,23 @@
 //!
 //! - `layout` - Layout and LayoutError types
 //! - `global` - GlobalAlloc behavior and utilities
+//! - `heap` - Heap[T] smart pointer
+//! - `shared` - Shared[T] reference-counted pointer
+//! - `sync` - Sync[T] atomic reference-counted pointer
 
 // Submodule declarations
 pub mod layout
 pub mod global
+pub mod heap
+pub mod shared
+pub mod sync
 
 // Re-export all from submodules
 pub use layout::*
 pub use global::*
+pub use heap::*
+pub use shared::*
+pub use sync::*
 
 // ============================================================================
 // AllocError

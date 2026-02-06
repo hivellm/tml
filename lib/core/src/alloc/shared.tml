@@ -1,0 +1,282 @@
+// Shared[T] - Reference-counted pointer for shared ownership
+//
+// Shared[T] provides shared ownership of heap-allocated data using
+// reference counting. Similar to Rust's Rc[T].
+//
+// ## Examples
+//
+// ```tml
+// let shared1 = Shared::new(42)
+// let shared2 = shared1.duplicate()  // Increments ref count
+// print(shared1.strong_count())  // 2
+// print(shared2.get())  // 42
+// ```
+
+use core::mem::{mem_alloc, mem_free, size_of}
+use core::ops::Deref
+use core::clone::Duplicate
+use core::fmt::{Display, Debug}
+use core::default::Default
+
+/// Inner structure holding the value and reference count.
+type SharedInner[T] {
+    value: T,
+    strong_count: I32,
+}
+
+/// A reference-counted pointer for shared ownership.
+///
+/// `Shared[T]` allows multiple owners of the same heap-allocated value.
+/// When the last owner is dropped, the memory is freed.
+///
+/// ## Reference Counting
+///
+/// - Each `duplicate()` increments the reference count
+/// - Each drop decrements the reference count
+/// - Memory is freed when the count reaches zero
+///
+/// ## Non-Thread-Safe
+///
+/// `Shared[T]` uses non-atomic reference counting and is NOT thread-safe.
+/// For thread-safe reference counting, use `Sync[T]` (Arc).
+///
+/// ## Examples
+///
+/// ```tml
+/// let original = Shared::new(100)
+/// print(original.strong_count())  // 1
+///
+/// let clone1 = original.duplicate()
+/// print(original.strong_count())  // 2
+///
+/// let clone2 = original.duplicate()
+/// print(original.strong_count())  // 3
+///
+/// // All clones point to the same data
+/// print(original.get())  // 100
+/// print(clone1.get())    // 100
+/// print(clone2.get())    // 100
+/// ```
+pub type Shared[T] {
+    ptr: *SharedInner[T],
+}
+
+impl[T] Shared[T] {
+    /// Creates a new `Shared[T]` with reference count of 1.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let shared = Shared::new(42)
+    /// assert_eq(shared.strong_count(), 1)
+    /// ```
+    pub func new(value: T) -> Shared[T] {
+        let size: I64 = size_of[SharedInner[T]]()
+        let ptr: *Unit = mem_alloc(size)
+
+        if ptr == null {
+            panic("Shared::new: allocation failed")
+        }
+
+        let typed_ptr: *SharedInner[T] = ptr as *SharedInner[T]
+
+        // Initialize the inner structure
+        @extern("memcpy")
+        func memcpy(dest: *Unit, src: *Unit, n: I64) -> *Unit
+
+        let inner: SharedInner[T] = SharedInner[T] {
+            value: value,
+            strong_count: 1,
+        }
+
+        memcpy(typed_ptr as *Unit, &inner as *Unit, size)
+
+        return Shared[T] { ptr: typed_ptr }
+    }
+
+    /// Creates a new `Shared[T]` with a default value.
+    pub func new_default() -> Shared[T] where T: Default {
+        return Shared::new(T::default())
+    }
+
+    /// Returns a reference to the inner value.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let shared = Shared::new(42)
+    /// assert_eq(shared.get(), 42)
+    /// ```
+    pub func get(this) -> T {
+        if this.ptr == null {
+            panic("Shared::get: null pointer")
+        }
+        return (*this.ptr).value
+    }
+
+    /// Returns the current reference count.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let shared = Shared::new(42)
+    /// assert_eq(shared.strong_count(), 1)
+    ///
+    /// let clone = shared.duplicate()
+    /// assert_eq(shared.strong_count(), 2)
+    /// ```
+    pub func strong_count(this) -> I32 {
+        if this.ptr == null {
+            return 0
+        }
+        return (*this.ptr).strong_count
+    }
+
+    /// Returns `true` if this is the only reference to the data.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let shared = Shared::new(42)
+    /// assert(shared.is_unique())
+    ///
+    /// let clone = shared.duplicate()
+    /// assert(not shared.is_unique())
+    /// ```
+    pub func is_unique(this) -> Bool {
+        return this.strong_count() == 1
+    }
+
+    /// Attempts to get a mutable reference if this is the only owner.
+    ///
+    /// Returns `Just(value)` if unique, `Nothing` otherwise.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let mut shared = Shared::new(42)
+    /// assert(shared.is_unique())
+    ///
+    /// // Can get mutable access when unique
+    /// when shared.get_mut() {
+    ///     Just(val) => *val = 100,
+    ///     Nothing => panic("Not unique!")
+    /// }
+    /// ```
+    pub func get_mut(mut this) -> Maybe[*T] {
+        if this.is_unique() {
+            return Just(&mut (*this.ptr).value)
+        } else {
+            return Nothing
+        }
+    }
+
+    /// Attempts to unwrap and return the inner value if this is the only owner.
+    ///
+    /// Returns `Just(value)` if unique, `Nothing` otherwise.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let shared = Shared::new(42)
+    /// when Shared::try_unwrap(shared) {
+    ///     Just(val) => print("Got: {val}"),
+    ///     Nothing => print("Still has multiple owners")
+    /// }
+    /// ```
+    pub func try_unwrap(this) -> Maybe[T] {
+        if this.is_unique() {
+            let value: T = (*this.ptr).value
+            mem_free(this.ptr as *Unit)
+            return Just(value)
+        } else {
+            return Nothing
+        }
+    }
+
+    /// Returns the raw pointer (for FFI or advanced usage).
+    ///
+    /// **Warning**: Does not change reference count!
+    pub func as_ptr(this) -> *T {
+        if this.ptr == null {
+            return null
+        }
+        return &(*this.ptr).value
+    }
+
+    /// Creates a `Shared[T]` from a raw pointer.
+    ///
+    /// ## Safety
+    ///
+    /// The pointer must have been created by `Shared::into_raw` or similar.
+    /// This does NOT increment the reference count.
+    pub func from_raw(ptr: *SharedInner[T]) -> Shared[T] {
+        return Shared[T] { ptr: ptr }
+    }
+
+    /// Increments the reference count (used internally by duplicate).
+    func increment_count(this) {
+        if this.ptr != null {
+            (*this.ptr).strong_count = (*this.ptr).strong_count + 1
+        }
+    }
+
+    /// Decrements the reference count and frees if zero.
+    func decrement_count(this) {
+        if this.ptr == null {
+            return
+        }
+
+        (*this.ptr).strong_count = (*this.ptr).strong_count - 1
+
+        if (*this.ptr).strong_count == 0 {
+            mem_free(this.ptr as *Unit)
+        }
+    }
+}
+
+impl[T] Duplicate for Shared[T] {
+    /// Creates a new reference to the same data, incrementing the count.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let original = Shared::new(42)
+    /// let clone = original.duplicate()
+    /// assert_eq(original.strong_count(), 2)
+    /// ```
+    func duplicate(this) -> Shared[T] {
+        this.increment_count()
+        return Shared[T] { ptr: this.ptr }
+    }
+}
+
+impl[T] Drop for Shared[T] {
+    func drop(mut this) {
+        this.decrement_count()
+    }
+}
+
+impl[T] Display for Shared[T] where T: Display {
+    func fmt(this) -> Str {
+        return this.get().fmt()
+    }
+}
+
+impl[T] Debug for Shared[T] where T: Debug {
+    func fmt_debug(this) -> Str {
+        return "Shared(strong={this.strong_count()}, {this.get().fmt_debug()})"
+    }
+}
+
+/// Creates a `Shared[T]` from a value.
+///
+/// ## Examples
+///
+/// ```tml
+/// let shared = shared(42)
+/// assert_eq(shared.get(), 42)
+/// ```
+pub func shared[T](value: T) -> Shared[T] {
+    return Shared::new(value)
+}
