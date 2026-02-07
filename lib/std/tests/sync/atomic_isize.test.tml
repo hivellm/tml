@@ -1,0 +1,60 @@
+// AtomicIsize tests (pointer-sized signed)
+use test::{assert, assert_eq}
+use std::sync::{AtomicIsize, Ordering}
+
+// ============================================================================
+// AtomicIsize Tests
+// ============================================================================
+
+@test
+func test_atomic_isize_new() -> I32 {
+    let counter: AtomicIsize = AtomicIsize::new(42 as Isize)
+    assert_eq(counter.load(Ordering::Relaxed), 42 as Isize, "new isize should be 42")
+    return 0
+}
+
+@test
+func test_atomic_isize_negative() -> I32 {
+    let counter: AtomicIsize = AtomicIsize::new(-100 as Isize)
+    assert_eq(counter.load(Ordering::Relaxed), -100 as Isize, "should handle negative values")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_add() -> I32 {
+    var counter: AtomicIsize = AtomicIsize::new(5 as Isize)
+    let old: I64 = counter.fetch_add(3 as Isize, Ordering::Relaxed)
+    assert_eq(old, 5 as I64, "fetch_add should return old value 5")
+    assert_eq(counter.load(Ordering::Relaxed), 8 as Isize, "5 + 3 = 8")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_sub() -> I32 {
+    var counter: AtomicIsize = AtomicIsize::new(10 as Isize)
+    let old: I64 = counter.fetch_sub(3 as Isize, Ordering::Relaxed)
+    assert_eq(old, 10 as I64, "fetch_sub should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 7 as Isize, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_atomic_isize_swap() -> I32 {
+    var counter: AtomicIsize = AtomicIsize::new(-50 as Isize)
+    let old: I64 = counter.swap(50 as Isize, Ordering::Relaxed)
+    assert_eq(old, -50 as I64, "swap should return old value -50")
+    assert_eq(counter.load(Ordering::Relaxed), 50 as Isize, "new value should be 50")
+    return 0
+}
+
+@test
+func test_atomic_isize_compare_exchange_success() -> I32 {
+    var counter: AtomicIsize = AtomicIsize::new(10 as Isize)
+    let result: Outcome[Isize, Isize] = counter.compare_exchange(10 as Isize, 20 as Isize, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert_eq(v, 10 as Isize, "Ok should contain old value"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 20 as Isize, "value should now be 20")
+    return 0
+}

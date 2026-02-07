@@ -14,12 +14,11 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-// clang-format off
-// IMPORTANT: windows.h must come before dbghelp.h for type definitions
 #include <windows.h>
-#include <dbghelp.h>
-// clang-format on
-#pragma comment(lib, "dbghelp.lib")
+// NOTE: dbghelp.h intentionally NOT included. DbgHelp APIs (SymFromAddr,
+// SymGetLineFromAddr64, SymInitialize) can hang indefinitely in processes
+// that load/unload many DLLs (e.g., test suites). We use only
+// RtlCaptureStackBackTrace for frame capture and format addresses as hex.
 #else
 #include <dlfcn.h>
 #include <execinfo.h>
@@ -32,8 +31,9 @@
 static int32_t g_initialized = 0;
 #ifdef _WIN32
 static HANDLE g_process = NULL;
-static CRITICAL_SECTION g_symbol_lock;
-static int32_t g_lock_initialized = 0;
+// NOTE: DbgHelp symbol resolution (SymFromAddr etc.) has been disabled because
+// it hangs in test suites with many DLL load/unload cycles. We only use
+// RtlCaptureStackBackTrace for frame capture and format addresses as hex.
 #endif
 
 // ============================================================================
@@ -42,15 +42,15 @@ static int32_t g_lock_initialized = 0;
 
 /** Cache entry mapping instruction pointer to resolved symbol */
 typedef struct SymbolCacheEntry {
-    void* ip;                          /** Instruction pointer (key) */
-    BacktraceSymbol symbol;            /** Resolved symbol data */
-    struct SymbolCacheEntry* next;     /** Chaining for collisions */
+    void* ip;                      /** Instruction pointer (key) */
+    BacktraceSymbol symbol;        /** Resolved symbol data */
+    struct SymbolCacheEntry* next; /** Chaining for collisions */
 } SymbolCacheEntry;
 
 /** Simple hash table for symbol caching */
 #define SYMBOL_CACHE_SIZE 256
 static SymbolCacheEntry* g_symbol_cache[SYMBOL_CACHE_SIZE] = {NULL};
-static int32_t g_cache_enabled = 1;  /** Enable/disable caching */
+static int32_t g_cache_enabled = 1; /** Enable/disable caching */
 
 /** Hash function for instruction pointers */
 static uint32_t symbol_cache_hash(void* ip) {
@@ -145,20 +145,11 @@ int32_t backtrace_init(void) {
 #ifdef _WIN32
     g_process = GetCurrentProcess();
 
-    // Initialize critical section for thread-safe symbol operations
-    if (!g_lock_initialized) {
-        InitializeCriticalSection(&g_symbol_lock);
-        g_lock_initialized = 1;
-    }
-
-    // Initialize symbol handler
-    // SYMOPT_LOAD_LINES enables line number information
-    // SYMOPT_DEFERRED_LOADS improves startup time
-    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME);
-
-    if (!SymInitialize(g_process, NULL, TRUE)) {
-        return -1;
-    }
+    // NOTE: We intentionally do NOT call SymInitialize/SymSetOptions here.
+    // DbgHelp symbol resolution (SymFromAddr, SymGetLineFromAddr64) has been
+    // disabled because it can hang indefinitely in test suites that load/unload
+    // hundreds of DLLs. Stack capture via RtlCaptureStackBackTrace works without
+    // DbgHelp initialization.
 #endif
 
     g_initialized = 1;
@@ -171,13 +162,8 @@ void backtrace_cleanup(void) {
     }
 
 #ifdef _WIN32
-    SymCleanup(g_process);
     g_process = NULL;
-
-    if (g_lock_initialized) {
-        DeleteCriticalSection(&g_symbol_lock);
-        g_lock_initialized = 0;
-    }
+    // No SymCleanup needed since we don't call SymInitialize
 #endif
 
     // Clear global symbol cache
@@ -305,41 +291,29 @@ int32_t backtrace_resolve(void* addr, BacktraceSymbol* out) {
     }
 
 #ifdef _WIN32
-    EnterCriticalSection(&g_symbol_lock);
-
-    // Allocate buffer for SYMBOL_INFO
-    char symbol_buffer[sizeof(SYMBOL_INFO) + BACKTRACE_MAX_SYMBOL_NAME];
-    SYMBOL_INFO* symbol = (SYMBOL_INFO*)symbol_buffer;
-    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-    symbol->MaxNameLen = BACKTRACE_MAX_SYMBOL_NAME;
-
-    DWORD64 displacement64 = 0;
-    if (SymFromAddr(g_process, (DWORD64)addr, &displacement64, symbol)) {
-        out->name = _strdup(symbol->Name);
-        out->symbol_address = (void*)symbol->Address;
-        out->offset = displacement64;
+    // IMPORTANT: We intentionally skip DbgHelp symbol resolution (SymFromAddr,
+    // SymGetLineFromAddr64) entirely. These APIs can hang indefinitely when
+    // the process has loaded/unloaded many DLLs (e.g., test suite running
+    // 300+ test DLLs). Even with SYMOPT_DEFERRED_LOADS, SymFromAddr triggers
+    // lazy PDB loading which can block on disk I/O or symbol server access.
+    //
+    // Instead, we provide address-only information. The backtrace still captures
+    // all stack frames via RtlCaptureStackBackTrace (which is fast and safe),
+    // and formatting shows hex addresses instead of function names.
+    {
+        char addr_buf[32];
+        snprintf(addr_buf, sizeof(addr_buf), "0x%llX", (unsigned long long)(uintptr_t)addr);
+        out->name = _strdup(addr_buf);
+        out->symbol_address = addr;
+        out->offset = 0;
     }
 
-    // Get line information
-    IMAGEHLP_LINE64 line;
-    memset(&line, 0, sizeof(line));
-    line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
-
-    DWORD displacement32 = 0;
-    if (SymGetLineFromAddr64(g_process, (DWORD64)addr, &displacement32, &line)) {
-        out->filename = _strdup(line.FileName);
-        out->lineno = line.LineNumber;
-        out->colno = 0; // DbgHelp doesn't provide column info
-    }
-
-    LeaveCriticalSection(&g_symbol_lock);
-
-    // Cache the result for future lookups
+    // Cache the result
     if (out->name) {
         symbol_cache_insert(addr, out);
     }
 
-    return (out->name != NULL) ? 0 : -1;
+    return 0;
 #else
     // Unix: use dladdr for basic symbol info
     Dl_info info;
@@ -523,14 +497,14 @@ char* backtrace_format(const Backtrace* bt) {
 
         int written;
         if (lineno > 0) {
-            written = snprintf(ptr, remaining, "  %2d: %s\n             at %s:%u\n",
-                             display_index, name, filename, lineno);
+            written = snprintf(ptr, remaining, "  %2d: %s\n             at %s:%u\n", display_index,
+                               name, filename, lineno);
         } else if (frame->symbol.filename) {
-            written = snprintf(ptr, remaining, "  %2d: %s\n             at %s\n",
-                             display_index, name, filename);
+            written = snprintf(ptr, remaining, "  %2d: %s\n             at %s\n", display_index,
+                               name, filename);
         } else {
-            written = snprintf(ptr, remaining, "  %2d: %s\n             at %p\n",
-                             display_index, name, frame->ip);
+            written = snprintf(ptr, remaining, "  %2d: %s\n             at %p\n", display_index,
+                               name, frame->ip);
         }
 
         if (written > 0 && (size_t)written < remaining) {
@@ -720,13 +694,6 @@ TML_EXPORT int32_t ffi_backtrace_is_resolved(void* bt_handle) {
 TML_EXPORT void ffi_backtrace_clear_cache(void) {
     // Clear global symbol cache
     symbol_cache_clear();
-
-#ifdef _WIN32
-    // Re-initialize symbol handler to clear any cached data
-    if (g_initialized) {
-        backtrace_cleanup();
-        backtrace_init();
-    }
-#endif
+    // On Windows, no DbgHelp state to reset (DbgHelp is disabled)
     // On Unix, dladdr doesn't have a cache to clear
 }

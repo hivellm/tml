@@ -1,0 +1,68 @@
+// Basic and Generic Pointer Operations Tests
+use test::{assert, assert_eq}
+
+// ============================================================================
+// Section 1: Basic Pointer Operations
+// ============================================================================
+
+type Point {
+    x: I32,
+    y: I32,
+}
+
+type Target {
+    value: I32,
+}
+
+type Container {
+    x: I32,
+    ptr: Ptr[Target],
+}
+
+@test
+func test_ptr_field() -> I32 {
+    var t: Target = Target { value: 100 }
+    var c: Container = Container { x: 42, ptr: ref t as Ptr[Target] }
+    assert_eq(c.x, 42)
+    return 0
+}
+
+@test
+func test_double_deref() -> I32 {
+    var point: Point = Point { x: 10, y: 20 }
+    let ptr: Ptr[Point] = ref point as Ptr[Point]
+    var ptr_ptr: Ptr[Ptr[Point]] = ref ptr as Ptr[Ptr[Point]]
+
+    lowlevel {
+        (*(*ptr_ptr)).x = 99
+    }
+
+    assert_eq(point.x, 99)
+    return 0
+}
+
+// ============================================================================
+// Section 2: Generic Pointer Operations
+// ============================================================================
+
+type Node[T] {
+    value: T,
+    next: Ptr[Node[T]],
+}
+
+func test_ptr_deref[T](ptr: Ptr[Node[T]], value: T) {
+    lowlevel {
+        (*ptr).value = value
+    }
+}
+
+@test
+func test_lowlevel_ptr_generic() -> I32 {
+    var node: Node[I32] = Node { value: 0, next: null }
+    let ptr: Ptr[Node[I32]] = ref node as Ptr[Node[I32]]
+
+    test_ptr_deref[I32](ptr, 42)
+
+    assert_eq(node.value, 42)
+    return 0
+}

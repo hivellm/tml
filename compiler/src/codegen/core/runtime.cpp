@@ -93,6 +93,15 @@ void LLVMIRGen::emit_runtime_decls() {
     // Register Buffer fields for field access codegen
     struct_types_["Buffer"] = "%struct.Buffer";
     struct_fields_["Buffer"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+
+    // Thread types (from std::thread) - needed for @extern function declarations
+    emit_line("%struct.RawThread = type { i64 }"); // _handle: U64
+    struct_types_["RawThread"] = "%struct.RawThread";
+    struct_fields_["RawThread"] = {
+        {"_handle", 0, "i64", types::make_primitive(types::PrimitiveKind::U64)}};
+    emit_line("%struct.RawPtr = type { i64 }"); // addr: I64
+    struct_types_["RawPtr"] = "%struct.RawPtr";
+    struct_fields_["RawPtr"] = {{"addr", 0, "i64", types::make_i64()}};
     emit_line("");
 
     // External C functions
@@ -135,13 +144,15 @@ void LLVMIRGen::emit_runtime_decls() {
     // They call panic() internally and don't need external declarations
     emit_line("");
 
-    // TML code coverage functions
-    emit_line("; TML code coverage");
-    emit_line("declare void @tml_cover_func(ptr)");
-    emit_line("declare void @print_coverage_report()");
-    emit_line("declare void @write_coverage_json(ptr)");
-    emit_line("declare void @write_coverage_html(ptr)");
-    emit_line("");
+    // TML code coverage functions (only when coverage is enabled)
+    if (options_.coverage_enabled) {
+        emit_line("; TML code coverage");
+        emit_line("declare void @tml_cover_func(ptr)");
+        emit_line("declare void @print_coverage_report()");
+        emit_line("declare void @write_coverage_json(ptr)");
+        emit_line("declare void @write_coverage_html(ptr)");
+        emit_line("");
+    }
 
     // Debug intrinsics (for DWARF debug info)
     if (options_.emit_debug_info) {
@@ -307,8 +318,30 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @atomic_counter_destroy(ptr)");
     emit_line("");
 
-    // Atomic operations are now declared in sync.tml with @extern
-    // Removed duplicate declarations to prevent LLVM redefinition errors
+    // Typed atomic operations runtime (also declared in sync.tml with @extern)
+    // We declare them here AND register in declared_externals_ so that:
+    // 1. Tests using atomics directly work without importing sync.tml
+    // 2. When sync.tml is imported, its @extern won't cause redefinition errors
+    emit_line("; Typed atomic operations runtime");
+    emit_line("declare i32 @atomic_fetch_add_i32(ptr, i32)");
+    declared_externals_.insert("atomic_fetch_add_i32");
+    emit_line("declare i32 @atomic_fetch_sub_i32(ptr, i32)");
+    declared_externals_.insert("atomic_fetch_sub_i32");
+    emit_line("declare i32 @atomic_load_i32(ptr)");
+    declared_externals_.insert("atomic_load_i32");
+    emit_line("declare void @atomic_store_i32(ptr, i32)");
+    declared_externals_.insert("atomic_store_i32");
+    emit_line("declare i32 @atomic_compare_exchange_i32(ptr, i32, i32)");
+    declared_externals_.insert("atomic_compare_exchange_i32");
+    emit_line("declare i32 @atomic_swap_i32(ptr, i32)");
+    declared_externals_.insert("atomic_swap_i32");
+    emit_line("declare void @atomic_fence()");
+    declared_externals_.insert("atomic_fence");
+    emit_line("declare void @atomic_fence_acquire()");
+    declared_externals_.insert("atomic_fence_acquire");
+    emit_line("declare void @atomic_fence_release()");
+    declared_externals_.insert("atomic_fence_release");
+    emit_line("");
 
     // List runtime declarations
     emit_line("; List (dynamic array) runtime");
@@ -807,6 +840,102 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         }
     }
 
+    // Pre-scan: collect types imported by modules that will be processed.
+    // This enriches imported_types with transitive dependencies, allowing
+    // the impl block filter to skip unused types more precisely.
+    for (const auto& [module_name, module] : all_modules) {
+        if (!module.has_pure_tml_functions || module.source_code.empty()) {
+            continue;
+        }
+        // Check if this module will be processed (same logic as main loop)
+        bool will_process = false;
+        for (const auto& imported_path : imported_module_paths) {
+            if (module_name == imported_path || imported_path.find(module_name + "::") == 0 ||
+                module_name.find(imported_path + "::") == 0) {
+                will_process = true;
+                break;
+            }
+        }
+        if (!will_process) {
+            static const std::unordered_set<std::string> essential = {
+                "core::ordering",    "core::alloc",      "core::option",       "core::types",
+                "std::sync::atomic", "std::sync::mutex", "std::sync::condvar",
+            };
+            will_process = essential.count(module_name) > 0;
+            if (!will_process) {
+                std::string last_seg = module_name;
+                auto sep = module_name.rfind("::");
+                if (sep != std::string::npos)
+                    last_seg = module_name.substr(sep + 2);
+                static const std::unordered_set<std::string> essential_segs = {
+                    "ordering",
+                    "alloc",
+                    "option",
+                };
+                will_process = essential_segs.count(last_seg) > 0;
+            }
+        }
+        if (!will_process)
+            continue;
+
+        // Quick scan: extract type names from use declarations in module source
+        // Look for patterns like: use std::sync::atomic::{AtomicBool, AtomicUsize}
+        // and: use std::sync::arc::Arc
+        const auto& src = module.source_code;
+        size_t pos = 0;
+        while ((pos = src.find("use ", pos)) != std::string::npos) {
+            // Make sure this is at line start (preceded by newline or start of file)
+            if (pos > 0 && src[pos - 1] != '\n' && src[pos - 1] != '\r') {
+                pos += 4;
+                continue;
+            }
+            size_t line_end = src.find('\n', pos);
+            if (line_end == std::string::npos)
+                line_end = src.size();
+            std::string line = src.substr(pos, line_end - pos);
+
+            // Handle grouped imports: use foo::{Bar, Baz}
+            auto brace_start = line.find('{');
+            if (brace_start != std::string::npos) {
+                auto brace_end = line.find('}', brace_start);
+                if (brace_end != std::string::npos) {
+                    std::string symbols = line.substr(brace_start + 1, brace_end - brace_start - 1);
+                    // Split by comma
+                    size_t s = 0;
+                    while (s < symbols.size()) {
+                        while (s < symbols.size() && (symbols[s] == ' ' || symbols[s] == ','))
+                            ++s;
+                        size_t e = s;
+                        while (e < symbols.size() && symbols[e] != ',' && symbols[e] != ' ')
+                            ++e;
+                        if (e > s) {
+                            std::string sym = symbols.substr(s, e - s);
+                            // Only add type-like names (start with uppercase)
+                            if (!sym.empty() && std::isupper(sym[0])) {
+                                imported_types.insert(sym);
+                            }
+                        }
+                        s = e;
+                    }
+                }
+            } else {
+                // Handle simple imports: use foo::bar::Baz
+                auto last_sep = line.rfind("::");
+                if (last_sep != std::string::npos && last_sep + 2 < line.size()) {
+                    std::string sym = line.substr(last_sep + 2);
+                    // Trim trailing whitespace
+                    while (!sym.empty() &&
+                           (sym.back() == '\r' || sym.back() == '\n' || sym.back() == ' '))
+                        sym.pop_back();
+                    if (!sym.empty() && std::isupper(sym[0])) {
+                        imported_types.insert(sym);
+                    }
+                }
+            }
+            pos = line_end;
+        }
+    }
+
     emit_line("; Pure TML functions from imported modules");
 
     for (const auto& [module_name, module] : all_modules) {
@@ -1134,15 +1263,12 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                         "RwLockReadGuard",
                         "RwLockWriteGuard",
                         "Weak", // Arc uses Weak
-                        // Atomic types - needed by Arc, Mutex, and other sync primitives
-                        "AtomicUsize",
-                        "AtomicIsize",
-                        "AtomicBool",
-                        "AtomicI32",
-                        "AtomicI64",
-                        "AtomicU32",
-                        "AtomicU64",
-                        "AtomicPtr",
+                        // Only atomic types actually used as transitive deps:
+                        "AtomicUsize", // Used by Arc for ref counting
+                        "AtomicBool",  // Used by thread module
+                        "AtomicPtr",   // Used by thread_local
+                        // Note: AtomicI32, AtomicI64, AtomicU32, AtomicU64, AtomicIsize
+                        // are only generated when explicitly imported by user code
                         // Internal types used by sync primitives
                         "ArcInner",
                         "Layout",

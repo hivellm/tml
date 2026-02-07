@@ -146,7 +146,7 @@ void LLVMIRGen::gen_derive_debug_struct(const parser::StructDecl& s) {
 
     // Emit function definition
     type_defs_buffer_ << "; @derive(Debug) for " << type_name << "\n";
-    type_defs_buffer_ << "define ptr " << func_name << "(ptr %this) {\n";
+    type_defs_buffer_ << "define internal ptr " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
     int temp_counter = 0;
@@ -334,7 +334,7 @@ void LLVMIRGen::gen_derive_debug_enum(const parser::EnumDecl& e) {
 
     // For simple enums, just return the variant name
     type_defs_buffer_ << "; @derive(Debug) for " << type_name << "\n";
-    type_defs_buffer_ << "define ptr " << func_name << "(ptr %this) {\n";
+    type_defs_buffer_ << "define internal ptr " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
     // Load tag

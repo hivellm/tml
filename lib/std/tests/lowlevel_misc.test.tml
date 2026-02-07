@@ -1,0 +1,51 @@
+// Generic Wrapper and Drop Semantics Tests
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+use core::mem::drop
+
+// ============================================================================
+// Section 7: Generic Wrapper with Ptr[T] Type Arguments
+// ============================================================================
+
+type Wrapper[T] {
+    value: T,
+}
+
+impl[T] Wrapper[T] {
+    func new(value: T) -> Wrapper[T] {
+        return Wrapper { value: value }
+    }
+}
+
+@test
+func test_wrapper_i32() -> I32 {
+    let w: Wrapper[I32] = Wrapper::new[I32](42)
+    return 0
+}
+
+@test
+func test_wrapper_ptr_i32() -> I32 {
+    var x: I32 = 100
+    let p: Ptr[I32] = ref x as Ptr[I32]
+    let w: Wrapper[Ptr[I32]] = Wrapper::new[Ptr[I32]](p)
+    return 0
+}
+
+// ============================================================================
+// Section 8: Drop and Consume Semantics
+// ============================================================================
+
+@test
+func test_drop_prevents_double_drop() -> I32 {
+    var x: I32 = 42
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ref x as Ptr[I32])
+
+    let guard: MutexGuard[Ptr[I32]] = mutex.lock()
+
+    // Explicitly drop the guard
+    drop(guard)
+
+    // If drop() correctly marks as consumed,
+    // the automatic drop at function exit should NOT drop guard again
+    return 0
+}

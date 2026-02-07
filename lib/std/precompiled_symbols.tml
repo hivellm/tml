@@ -1,0 +1,41 @@
+// ============================================================================
+// Precompiled Standard Library Symbols
+// ============================================================================
+// This file forces monomorphization of commonly-used generic types.
+// It is compiled once at the start of test execution and the resulting
+// object file is linked into all test suites, avoiding redundant codegen.
+//
+// This dramatically reduces compilation time for test suites that use
+// these types, as the LLVM IR and object code is generated only once.
+
+use std::sync::{Mutex, MutexGuard, Arc}
+use core::mem::drop
+
+// Export a dummy function to force compilation
+@export
+func tml_precompiled_symbols_init() -> I32 {
+    // This function forces instantiation of common generic types
+    // by actually using them. The compiler will generate full
+    // implementations which will be available to all linked test suites.
+
+    // Mutex[I32] + MutexGuard[I32]
+    var m1: Mutex[I32] = Mutex::new(42)
+    let g1: MutexGuard[I32] = m1.lock()
+    drop(g1)
+
+    // Mutex[Ptr[I32]] + MutexGuard[Ptr[I32]]
+    var x: I32 = 100
+    var m2: Mutex[Ptr[I32]] = Mutex::new(ref x as Ptr[I32])
+    let g2: MutexGuard[Ptr[I32]] = m2.lock()
+    drop(g2)
+
+    // Arc[I32]
+    let a1: Arc[I32] = Arc::new(42)
+    drop(a1)
+
+    // Arc[Ptr[I32]]
+    let a2: Arc[Ptr[I32]] = Arc::new(ref x as Ptr[I32])
+    drop(a2)
+
+    return 0
+}

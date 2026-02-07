@@ -76,19 +76,57 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
     emit_all_drops();
 
     if (is_outcome) {
-        // For Outcome, extract the error value and wrap it in Err
-        // Get pointer to the data field (union)
-        std::string err_data_ptr = fresh_reg();
-        emit_line("  " + err_data_ptr + " = getelementptr inbounds " + expr_type + ", ptr " +
-                  alloca_reg + ", i32 0, i32 1");
+        // Check if we need to convert between different Outcome types
+        // e.g., Outcome[CipherAlgorithm, CryptoError] -> Outcome[(Buffer, AuthTag), CryptoError]
+        bool needs_conversion = !current_ret_type_.empty() &&
+                                current_ret_type_.find("Outcome") != std::string::npos &&
+                                expr_type != current_ret_type_;
 
-        // For now, we propagate by returning the entire Outcome as-is
-        // This works because the error type should be compatible with the function's return type
-        // In a more complete implementation, we'd need to convert between error types
+        if (needs_conversion) {
+            // Extract the error value from the inner Outcome's data field
+            std::string err_data_ptr = fresh_reg();
+            emit_line("  " + err_data_ptr + " = getelementptr inbounds " + expr_type + ", ptr " +
+                      alloca_reg + ", i32 0, i32 1");
 
-        // Generate return with the original value (it's already an Err)
-        // Note: This assumes the function's return type is compatible
-        emit_line("  ret " + expr_type + " " + expr_val);
+            // Determine the error type from semantic analysis
+            std::string error_type = "i64"; // fallback
+            auto semantic_type = infer_expr_type(*try_expr.expr);
+            if (semantic_type && semantic_type->is<types::NamedType>()) {
+                const auto& named = semantic_type->as<types::NamedType>();
+                if (named.name == "Outcome" && named.type_args.size() >= 2) {
+                    error_type = llvm_type_from_semantic(named.type_args[1]);
+                }
+            }
+
+            // Load the error value
+            std::string err_val = fresh_reg();
+            emit_line("  " + err_val + " = load " + error_type + ", ptr " + err_data_ptr);
+
+            // Construct a new Outcome of the function's return type with Err variant
+            std::string ret_alloc = fresh_reg();
+            emit_line("  " + ret_alloc + " = alloca " + current_ret_type_);
+            emit_line("  store " + current_ret_type_ + " zeroinitializer, ptr " + ret_alloc);
+
+            // Set tag = 1 (Err)
+            std::string ret_tag_ptr = fresh_reg();
+            emit_line("  " + ret_tag_ptr + " = getelementptr inbounds " + current_ret_type_ +
+                      ", ptr " + ret_alloc + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + ret_tag_ptr);
+
+            // Store error value into the data field
+            std::string ret_data_ptr = fresh_reg();
+            emit_line("  " + ret_data_ptr + " = getelementptr inbounds " + current_ret_type_ +
+                      ", ptr " + ret_alloc + ", i32 0, i32 1");
+            emit_line("  store " + error_type + " " + err_val + ", ptr " + ret_data_ptr);
+
+            // Load the complete return value and return
+            std::string ret_val = fresh_reg();
+            emit_line("  " + ret_val + " = load " + current_ret_type_ + ", ptr " + ret_alloc);
+            emit_line("  ret " + current_ret_type_ + " " + ret_val);
+        } else {
+            // Same Outcome type - return as-is
+            emit_line("  ret " + expr_type + " " + expr_val);
+        }
     } else {
         // For Maybe, we return Nothing
         // Create a Nothing value (tag = 1, data = undef)

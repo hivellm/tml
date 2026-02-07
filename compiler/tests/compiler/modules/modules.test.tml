@@ -104,13 +104,13 @@ func test_test_module_assert() -> I32 {
 }
 
 @test
-func test_test_module_assert_eq() -> I32 {
+func test_test_module_assert_eq_i32() -> I32 {
     assert_eq(42, 42, "42 should equal 42")
     return 0
 }
 
 @test
-func test_test_module_assert_eq() -> I32 {
+func test_test_module_assert_eq_bool() -> I32 {
     assert_eq(true, true, "true should equal true")
     assert_eq(false, false, "false should equal false")
     return 0

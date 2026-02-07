@@ -146,7 +146,7 @@ void LLVMIRGen::gen_derive_partial_eq_struct(const parser::StructDecl& s) {
 
     // Emit function definition to type_defs_buffer_ (ensures type is defined before use)
     type_defs_buffer_ << "; @derive(PartialEq) for " << type_name << "\n";
-    type_defs_buffer_ << "define i1 " << func_name << "(ptr %this, ptr %other) {\n";
+    type_defs_buffer_ << "define internal i1 " << func_name << "(ptr %this, ptr %other) {\n";
     type_defs_buffer_ << "entry:\n";
 
     if (fields.empty()) {
@@ -277,7 +277,7 @@ void LLVMIRGen::gen_derive_partial_eq_enum(const parser::EnumDecl& e) {
 
     // Emit function definition
     type_defs_buffer_ << "; @derive(PartialEq) for " << type_name << "\n";
-    type_defs_buffer_ << "define i1 " << func_name << "(ptr %this, ptr %other) {\n";
+    type_defs_buffer_ << "define internal i1 " << func_name << "(ptr %this, ptr %other) {\n";
     type_defs_buffer_ << "entry:\n";
 
     // First, compare tags

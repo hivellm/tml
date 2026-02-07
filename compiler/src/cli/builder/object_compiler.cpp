@@ -697,22 +697,24 @@ static LinkResult link_objects_with_lld(const std::vector<fs::path>& object_file
         lld_opts.extra_flags.push_back("/EXPORT:__llvm_profile_write_file");
     }
 
-    // For DLLs (test suites), export TML runtime coverage functions
+    // For DLLs (test suites), export core test functions
     // LLD on Windows requires explicit exports even for __declspec(dllexport) symbols
     if (options.output_type == LinkOptions::OutputType::DynamicLib) {
-        // Core test functions
+        // Core test functions - always exported
         lld_opts.extra_flags.push_back("/EXPORT:tml_run_test_with_catch");
         lld_opts.extra_flags.push_back("/EXPORT:tml_set_output_suppressed");
-        // Coverage functions
-        lld_opts.extra_flags.push_back("/EXPORT:tml_print_coverage_report");
-        lld_opts.extra_flags.push_back("/EXPORT:print_coverage_report");
-        lld_opts.extra_flags.push_back("/EXPORT:write_coverage_html");
-        lld_opts.extra_flags.push_back("/EXPORT:write_coverage_json");
-        lld_opts.extra_flags.push_back("/EXPORT:tml_cover_func");
-        lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_count");
-        lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_name");
-        lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_hits");
-        lld_opts.extra_flags.push_back("/EXPORT:tml_get_covered_func_count");
+        // Coverage functions - only exported when coverage is enabled
+        if (CompilerOptions::coverage) {
+            lld_opts.extra_flags.push_back("/EXPORT:tml_print_coverage_report");
+            lld_opts.extra_flags.push_back("/EXPORT:print_coverage_report");
+            lld_opts.extra_flags.push_back("/EXPORT:write_coverage_html");
+            lld_opts.extra_flags.push_back("/EXPORT:write_coverage_json");
+            lld_opts.extra_flags.push_back("/EXPORT:tml_cover_func");
+            lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_count");
+            lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_name");
+            lld_opts.extra_flags.push_back("/EXPORT:tml_get_func_hits");
+            lld_opts.extra_flags.push_back("/EXPORT:tml_get_covered_func_count");
+        }
     }
 
     // Link

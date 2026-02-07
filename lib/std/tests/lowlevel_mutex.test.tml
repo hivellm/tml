@@ -1,0 +1,103 @@
+// MutexGuard and Mutex[Ptr[T]] Operations Tests
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+// ============================================================================
+// Section 3: MutexGuard Dereference Operations
+// ============================================================================
+
+func read_guarded[T](guard: ref MutexGuard[T]) -> T {
+    return *guard
+}
+
+@test
+func test_mutexguard_deref_i32() -> I32 {
+    var mutex: Mutex[I32] = Mutex::new(42)
+    let guard: MutexGuard[I32] = mutex.lock()
+
+    let value: I32 = *guard
+
+    assert_eq(value, 42)
+    return 0
+}
+
+@test
+func test_mutexguard_deref_i64() -> I32 {
+    var mutex: Mutex[I64] = Mutex::new(1234567890123)
+    let guard: MutexGuard[I64] = mutex.lock()
+
+    let value: I64 = *guard
+
+    assert_eq(value, 1234567890123)
+    return 0
+}
+
+@test
+func test_mutexguard_deref_bool() -> I32 {
+    var mutex: Mutex[Bool] = Mutex::new(true)
+    let guard: MutexGuard[Bool] = mutex.lock()
+
+    let value: Bool = *guard
+
+    assert(value)
+    return 0
+}
+
+@test
+func test_mutexguard_deref_ptr() -> I32 {
+    var x: I32 = 100
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ref x as Ptr[I32])
+    let guard: MutexGuard[Ptr[I32]] = mutex.lock()
+
+    let ptr: Ptr[I32] = *guard
+    lowlevel {
+        let value: I32 = *ptr
+        assert_eq(value, 100)
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Section 4: Mutex[Ptr[T]] Operations
+// ============================================================================
+
+type Point {
+    x: I32,
+    y: I32,
+}
+
+@test
+func test_mutex_ptr_deref() -> I32 {
+    var x: I32 = 42
+    let ptr: Ptr[I32] = ref x as Ptr[I32]
+
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ptr)
+    let guard: MutexGuard[Ptr[I32]] = mutex.lock()
+
+    let inner_ptr: Ptr[I32] = *guard
+
+    lowlevel {
+        let val: I32 = *inner_ptr
+        assert_eq(val, 42)
+    }
+
+    return 0
+}
+
+@test
+func test_mutex_ptr_field_access() -> I32 {
+    var pt: Point = Point { x: 10, y: 20 }
+    let ptr: Ptr[Point] = ref pt as Ptr[Point]
+
+    var mutex: Mutex[Ptr[Point]] = Mutex::new(ptr)
+    let guard: MutexGuard[Ptr[Point]] = mutex.lock()
+
+    lowlevel {
+        let inner_ptr: Ptr[Point] = *guard
+        let val: I32 = (*inner_ptr).x
+        assert_eq(val, 10)
+    }
+
+    return 0
+}

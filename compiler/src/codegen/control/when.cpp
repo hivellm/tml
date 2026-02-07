@@ -767,8 +767,8 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         }
 
         // Store arm value to result (with type conversion if needed)
-        // Don't store void types - they don't produce values
-        if (!block_terminated_ && arm_type != "void") {
+        // Don't store void or Unit types - they don't produce storable values
+        if (!block_terminated_ && arm_type != "void" && arm_type != "{}") {
             std::string store_value = arm_value;
             std::string store_type = arm_type;
 
@@ -815,9 +815,9 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         return "0";
     }
 
-    // If result type is void, don't load anything
-    if (result_type == "void") {
-        last_expr_type_ = "void";
+    // If result type is void or Unit, don't load anything
+    if (result_type == "void" || result_type == "{}") {
+        last_expr_type_ = result_type;
         return "0";
     }
 

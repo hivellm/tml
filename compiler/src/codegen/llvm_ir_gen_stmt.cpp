@@ -531,7 +531,10 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                     // Allocate storage for the variable
                     std::string alloca_reg = fresh_reg();
                     emit_line("  " + alloca_reg + " = alloca " + var_type);
-                    emit_line("  store " + var_type + " " + result + ", ptr " + alloca_reg);
+                    // Skip store for Unit enum types - "{}" is zero-sized
+                    if (var_type != "{}") {
+                        emit_line("  store " + var_type + " " + result + ", ptr " + alloca_reg);
+                    }
 
                     locals_[var_name] = VarInfo{alloca_reg, var_type, nullptr, std::nullopt};
 
@@ -752,8 +755,12 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
     // Store the value
     if (let.init.has_value()) {
+        // Skip store for empty structs (unit type) - "{}" has no data to store
+        if (var_type == "{}") {
+            // No-op: unit type has no data
+        }
         // Handle float/double type mismatch - need to convert if storing double to float
-        if (var_type == "float" && last_expr_type_ == "double") {
+        else if (var_type == "float" && last_expr_type_ == "double") {
             std::string conv = fresh_reg();
             emit_line("  " + conv + " = fptrunc double " + init_val + " to float");
             emit_line("  store float " + conv + ", ptr " + alloca_reg);

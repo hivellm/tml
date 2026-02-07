@@ -149,7 +149,8 @@ void LLVMIRGen::gen_derive_ord_struct(const parser::StructDecl& s) {
 
     // Emit function definition - returns Ordering
     type_defs_buffer_ << "; @derive(Ord) for " << type_name << "\n";
-    type_defs_buffer_ << "define %struct.Ordering " << func_name << "(ptr %this, ptr %other) {\n";
+    type_defs_buffer_ << "define internal %struct.Ordering " << func_name
+                      << "(ptr %this, ptr %other) {\n";
     type_defs_buffer_ << "entry:\n";
 
     if (fields.empty()) {
@@ -317,7 +318,7 @@ void LLVMIRGen::gen_derive_partial_ord_struct(const parser::StructDecl& s) {
 
     // Emit function definition - returns Maybe[Ordering]
     type_defs_buffer_ << "; @derive(PartialOrd) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << maybe_type << " " << func_name
+    type_defs_buffer_ << "define internal " << maybe_type << " " << func_name
                       << "(ptr %this, ptr %other) {\n";
     type_defs_buffer_ << "entry:\n";
 
@@ -540,7 +541,8 @@ void LLVMIRGen::gen_derive_ord_enum(const parser::EnumDecl& e) {
 
     // For simple enums (tag-only), just compare tags
     type_defs_buffer_ << "; @derive(Ord) for " << type_name << "\n";
-    type_defs_buffer_ << "define %struct.Ordering " << func_name << "(ptr %this, ptr %other) {\n";
+    type_defs_buffer_ << "define internal %struct.Ordering " << func_name
+                      << "(ptr %this, ptr %other) {\n";
     type_defs_buffer_ << "entry:\n";
 
     // Load tags
@@ -605,7 +607,7 @@ void LLVMIRGen::gen_derive_partial_ord_enum(const parser::EnumDecl& e) {
 
     // For simple enums (tag-only), just compare tags and wrap in Just
     type_defs_buffer_ << "; @derive(PartialOrd) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << maybe_type << " " << func_name
+    type_defs_buffer_ << "define internal " << maybe_type << " " << func_name
                       << "(ptr %this, ptr %other) {\n";
     type_defs_buffer_ << "entry:\n";
 

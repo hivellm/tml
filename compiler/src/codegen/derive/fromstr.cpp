@@ -102,7 +102,7 @@ void LLVMIRGen::gen_derive_fromstr_struct(const parser::StructDecl& s) {
 
     // Emit function definition - just returns error
     type_defs_buffer_ << "; @derive(FromStr) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << outcome_type << " " << func_name << "(ptr %s) {\n";
+    type_defs_buffer_ << "define internal " << outcome_type << " " << func_name << "(ptr %s) {\n";
     type_defs_buffer_ << "entry:\n";
 
     // Return Err with error message
@@ -177,7 +177,7 @@ void LLVMIRGen::gen_derive_fromstr_enum(const parser::EnumDecl& e) {
 
     // Emit function definition
     type_defs_buffer_ << "; @derive(FromStr) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << outcome_type << " " << func_name << "(ptr %s) {\n";
+    type_defs_buffer_ << "define internal " << outcome_type << " " << func_name << "(ptr %s) {\n";
     type_defs_buffer_ << "entry:\n";
 
     int temp_counter = 0;

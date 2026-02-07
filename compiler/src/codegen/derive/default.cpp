@@ -137,7 +137,7 @@ void LLVMIRGen::gen_derive_default_struct(const parser::StructDecl& s) {
 
     // Emit function definition - default() is a static method, no 'this' parameter
     type_defs_buffer_ << "; @derive(Default) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << llvm_type << " " << func_name << "() {\n";
+    type_defs_buffer_ << "define internal " << llvm_type << " " << func_name << "() {\n";
     type_defs_buffer_ << "entry:\n";
 
     if (fields.empty()) {
@@ -230,7 +230,7 @@ void LLVMIRGen::gen_derive_default_enum(const parser::EnumDecl& e) {
     // For enums, default returns a zeroinitializer (first variant, tag=0)
     // This works for unit variants and variants with defaultable payloads
     type_defs_buffer_ << "; @derive(Default) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << llvm_type << " " << func_name << "() {\n";
+    type_defs_buffer_ << "define internal " << llvm_type << " " << func_name << "() {\n";
     type_defs_buffer_ << "entry:\n";
     type_defs_buffer_ << "  ret " << llvm_type << " zeroinitializer\n";
     type_defs_buffer_ << "}\n\n";

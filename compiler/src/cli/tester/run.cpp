@@ -432,7 +432,14 @@ int run_test(int argc, char* argv[], bool verbose) {
     // Single-threaded mode for verbose/nocapture or if only 1 test
     else if (opts.verbose || opts.nocapture || opts.profile || test_files.size() == 1 ||
              num_threads == 1) {
-        for (const auto& file : test_files) {
+        for (size_t fi = 0; fi < test_files.size(); ++fi) {
+            const auto& file = test_files[fi];
+            if (opts.verbose) {
+                std::cout << c.dim() << "[" << (fi + 1) << "/" << test_files.size() << "] "
+                          << c.reset() << fs::path(file).filename().string() << " ..."
+                          << std::flush;
+            }
+            auto test_start = std::chrono::high_resolution_clock::now();
             TestResult result;
             if (opts.profile) {
                 PhaseTimings timings;
@@ -440,6 +447,18 @@ int run_test(int argc, char* argv[], bool verbose) {
                 collector.add_timings(timings);
             } else {
                 result = compile_and_run_test_with_result(file, opts);
+            }
+            if (opts.verbose) {
+                auto test_end = std::chrono::high_resolution_clock::now();
+                auto ms =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(test_end - test_start)
+                        .count();
+                if (result.passed) {
+                    std::cout << " " << c.green() << "OK" << c.reset();
+                } else {
+                    std::cout << " " << c.red() << "FAIL" << c.reset();
+                }
+                std::cout << c.dim() << " " << ms << "ms" << c.reset() << std::endl;
             }
             collector.add(std::move(result));
             // Continue running other tests even if this one failed to compile

@@ -1,0 +1,141 @@
+// AtomicU32 tests
+use test::{assert, assert_eq}
+use std::sync::{AtomicU32, Ordering}
+
+// ============================================================================
+// AtomicU32 Tests
+// ============================================================================
+
+@test
+func test_atomic_u32_new() -> I32 {
+    let counter: AtomicU32 = AtomicU32::new(42 as U32)
+    assert_eq(counter.load(Ordering::Relaxed), 42 as U32, "new u32 should be 42")
+    return 0
+}
+
+@test
+func test_atomic_u32_store_load() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0 as U32)
+    counter.store(100 as U32, Ordering::Relaxed)
+    assert_eq(counter.load(Ordering::Relaxed), 100 as U32, "loaded value should be 100")
+    return 0
+}
+
+@test
+func test_atomic_u32_swap() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let old: U32 = counter.swap(20 as U32, Ordering::Relaxed)
+    assert_eq(old, 10 as U32, "swap should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 20 as U32, "new value should be 20")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_add() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(5 as U32)
+    let old: U32 = counter.fetch_add(3 as U32, Ordering::Relaxed)
+    assert_eq(old, 5 as U32, "fetch_add should return old value 5")
+    assert_eq(counter.load(Ordering::Relaxed), 8 as U32, "5 + 3 = 8")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_sub() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let old: U32 = counter.fetch_sub(3 as U32, Ordering::Relaxed)
+    assert_eq(old, 10 as U32, "fetch_sub should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 7 as U32, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_and() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0b1111 as U32)
+    let old: U32 = counter.fetch_and(0b1010 as U32, Ordering::Relaxed)
+    assert_eq(old, 0b1111 as U32, "fetch_and should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 0b1010 as U32, "1111 & 1010 = 1010")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_or() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0b1010 as U32)
+    let old: U32 = counter.fetch_or(0b0101 as U32, Ordering::Relaxed)
+    assert_eq(old, 0b1010 as U32, "fetch_or should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 0b1111 as U32, "1010 | 0101 = 1111")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_xor() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0b1111 as U32)
+    let old: U32 = counter.fetch_xor(0b1010 as U32, Ordering::Relaxed)
+    assert_eq(old, 0b1111 as U32, "fetch_xor should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 0b0101 as U32, "1111 ^ 1010 = 0101")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_max() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let old1: U32 = counter.fetch_max(5 as U32, Ordering::Relaxed)
+    assert_eq(old1, 10 as U32, "fetch_max(10, 5) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 10 as U32, "max(10, 5) = 10")
+
+    let old2: U32 = counter.fetch_max(20 as U32, Ordering::Relaxed)
+    assert_eq(old2, 10 as U32, "fetch_max(10, 20) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 20 as U32, "max(10, 20) = 20")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_min() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let old1: U32 = counter.fetch_min(20 as U32, Ordering::Relaxed)
+    assert_eq(old1, 10 as U32, "fetch_min(10, 20) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 10 as U32, "min(10, 20) = 10")
+
+    let old2: U32 = counter.fetch_min(5 as U32, Ordering::Relaxed)
+    assert_eq(old2, 10 as U32, "fetch_min(10, 5) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 5 as U32, "min(10, 5) = 5")
+    return 0
+}
+
+@test
+func test_atomic_u32_compare_exchange_success() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let result: Outcome[U32, U32] = counter.compare_exchange(10 as U32, 20 as U32, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert_eq(v, 10 as U32, "Ok should contain old value"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 20 as U32, "value should now be 20")
+    return 0
+}
+
+@test
+func test_atomic_u32_compare_exchange_fail() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let result: Outcome[U32, U32] = counter.compare_exchange(5 as U32, 20 as U32, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(_) => assert(false, "compare_exchange should fail"),
+        Err(v) => assert_eq(v, 10 as U32, "Err should contain actual value"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 10 as U32, "value should still be 10")
+    return 0
+}
+
+@test
+func test_atomic_u32_into_inner() -> I32 {
+    let counter: AtomicU32 = AtomicU32::new(42 as U32)
+    let value: U32 = counter.into_inner()
+    assert_eq(value, 42 as U32, "into_inner should return 42")
+    return 0
+}
+
+@test
+func test_atomic_u32_is_lock_free() -> I32 {
+    let counter: AtomicU32 = AtomicU32::new(0 as U32)
+    assert(counter.is_lock_free(), "AtomicU32 should be lock-free")
+    return 0
+}

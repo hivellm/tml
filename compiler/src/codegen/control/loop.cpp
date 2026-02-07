@@ -62,7 +62,9 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
         // Allocate and initialize to 0
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + var_type);
-        emit_line("  store " + var_type + " 0, ptr " + alloca_reg);
+        if (var_type != "{}") {
+            emit_line("  store " + var_type + " 0, ptr " + alloca_reg);
+        }
 
         // Register in locals_
         locals_[var_decl.name] = VarInfo{alloca_reg, var_type, semantic_type, std::nullopt};

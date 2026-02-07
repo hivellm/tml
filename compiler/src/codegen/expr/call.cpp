@@ -611,15 +611,18 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         if (has_payload && !call.args.empty()) {
                             std::string payload = gen_expr(*call.args[0]);
 
-                            std::string payload_ptr = fresh_reg();
-                            emit_line("  " + payload_ptr + " = getelementptr inbounds " +
-                                      enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+                            // Skip store for Unit payload - "{}" is zero-sized
+                            if (last_expr_type_ != "{}") {
+                                std::string payload_ptr = fresh_reg();
+                                emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                          enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
 
-                            std::string payload_typed_ptr = fresh_reg();
-                            emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
-                                      " to ptr");
-                            emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
-                                      payload_typed_ptr);
+                                std::string payload_typed_ptr = fresh_reg();
+                                emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
+                                          payload_ptr + " to ptr");
+                                emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                          payload_typed_ptr);
+                            }
                         }
 
                         // Load the complete enum value
@@ -654,15 +657,18 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         if (!payload_types.empty() && !call.args.empty()) {
                             std::string payload = gen_expr(*call.args[0]);
 
-                            std::string payload_ptr = fresh_reg();
-                            emit_line("  " + payload_ptr + " = getelementptr inbounds " +
-                                      enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+                            // Skip store for Unit payload - "{}" is zero-sized
+                            if (last_expr_type_ != "{}") {
+                                std::string payload_ptr = fresh_reg();
+                                emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                          enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
 
-                            std::string payload_typed_ptr = fresh_reg();
-                            emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
-                                      " to ptr");
-                            emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
-                                      payload_typed_ptr);
+                                std::string payload_typed_ptr = fresh_reg();
+                                emit_line("  " + payload_typed_ptr + " = bitcast ptr " +
+                                          payload_ptr + " to ptr");
+                                emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                          payload_typed_ptr);
+                            }
                         }
 
                         emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
@@ -777,17 +783,20 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         std::string payload = gen_expr(*call.args[0]);
                         expected_enum_type_ = saved_expected;
 
-                        // Get pointer to payload field ([N x i8])
-                        std::string payload_ptr = fresh_reg();
-                        emit_line("  " + payload_ptr + " = getelementptr inbounds " + enum_type +
-                                  ", ptr " + enum_val + ", i32 0, i32 1");
+                        // Skip store for Unit payload - "{}" is zero-sized
+                        if (last_expr_type_ != "{}") {
+                            // Get pointer to payload field ([N x i8])
+                            std::string payload_ptr = fresh_reg();
+                            emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                      enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
 
-                        // Cast payload to bytes and store
-                        std::string payload_typed_ptr = fresh_reg();
-                        emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
-                                  " to ptr");
-                        emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
-                                  payload_typed_ptr);
+                            // Cast payload to bytes and store
+                            std::string payload_typed_ptr = fresh_reg();
+                            emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
+                                      " to ptr");
+                            emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                      payload_typed_ptr);
+                        }
                     }
 
                     // Load the complete enum value
@@ -825,18 +834,20 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     if (!payload_types.empty() && !call.args.empty()) {
                         std::string payload = gen_expr(*call.args[0]);
 
-                        // Get pointer to payload field ([N x i8])
-                        std::string payload_ptr = fresh_reg();
-                        emit_line("  " + payload_ptr + " = getelementptr inbounds " + enum_type +
-                                  ", ptr " + enum_val + ", i32 0, i32 1");
+                        // Skip store for Unit payload - "{}" is zero-sized
+                        if (last_expr_type_ != "{}") {
+                            // Get pointer to payload field ([N x i8])
+                            std::string payload_ptr = fresh_reg();
+                            emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                      enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
 
-                        // Cast payload to bytes and store
-                        // For simplicity, bitcast the i8 array pointer to the payload type pointer
-                        std::string payload_typed_ptr = fresh_reg();
-                        emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
-                                  " to ptr");
-                        emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
-                                  payload_typed_ptr);
+                            // Cast payload to bytes and store
+                            std::string payload_typed_ptr = fresh_reg();
+                            emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
+                                      " to ptr");
+                            emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                      payload_typed_ptr);
+                        }
                     }
 
                     // Load the complete enum value

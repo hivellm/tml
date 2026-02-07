@@ -7,23 +7,26 @@ use test
 // ============================================================================
 
 @test
-func test_assert_gt_i32() {
+func test_assert_gt_i32() -> I32 {
     // 10 > 5 should pass
     assert_gt(10, 5, "10 should be greater than 5")
+    return 0
 }
 
 @test
-func test_assert_gt_i64() {
+func test_assert_gt_i64() -> I32 {
     // Large numbers
     let big: I64 = 1000000000 as I64
     let small: I64 = 999999999 as I64
     assert_gt(big, small, "big should be greater than small")
+    return 0
 }
 
 @test
-func test_assert_gt_negative() {
+func test_assert_gt_negative() -> I32 {
     // -5 > -10 should pass
     assert_gt(-5, -10, "-5 should be greater than -10")
+    return 0
 }
 
 // ============================================================================
@@ -31,22 +34,25 @@ func test_assert_gt_negative() {
 // ============================================================================
 
 @test
-func test_assert_gte_greater() {
+func test_assert_gte_greater() -> I32 {
     // 10 >= 5 should pass
     assert_gte(10, 5, "10 should be >= 5")
+    return 0
 }
 
 @test
-func test_assert_gte_equal() {
+func test_assert_gte_equal() -> I32 {
     // 5 >= 5 should pass
     assert_gte(5, 5, "5 should be >= 5")
+    return 0
 }
 
 @test
-func test_assert_gte_i64() {
+func test_assert_gte_i64() -> I32 {
     let val: I64 = 100 as I64
     assert_gte(val, 100 as I64, "100 should be >= 100")
     assert_gte(val, 50 as I64, "100 should be >= 50")
+    return 0
 }
 
 // ============================================================================
@@ -54,22 +60,25 @@ func test_assert_gte_i64() {
 // ============================================================================
 
 @test
-func test_assert_lt_i32() {
+func test_assert_lt_i32() -> I32 {
     // 5 < 10 should pass
     assert_lt(5, 10, "5 should be less than 10")
+    return 0
 }
 
 @test
-func test_assert_lt_i64() {
+func test_assert_lt_i64() -> I32 {
     let small: I64 = 1 as I64
     let big: I64 = 1000 as I64
     assert_lt(small, big, "1 should be less than 1000")
+    return 0
 }
 
 @test
-func test_assert_lt_negative() {
+func test_assert_lt_negative() -> I32 {
     // -10 < -5 should pass
     assert_lt(-10, -5, "-10 should be less than -5")
+    return 0
 }
 
 // ============================================================================
@@ -77,22 +86,25 @@ func test_assert_lt_negative() {
 // ============================================================================
 
 @test
-func test_assert_lte_less() {
+func test_assert_lte_less() -> I32 {
     // 5 <= 10 should pass
     assert_lte(5, 10, "5 should be <= 10")
+    return 0
 }
 
 @test
-func test_assert_lte_equal() {
+func test_assert_lte_equal() -> I32 {
     // 5 <= 5 should pass
     assert_lte(5, 5, "5 should be <= 5")
+    return 0
 }
 
 @test
-func test_assert_lte_i64() {
+func test_assert_lte_i64() -> I32 {
     let val: I64 = 100 as I64
     assert_lte(val, 100 as I64, "100 should be <= 100")
     assert_lte(val, 200 as I64, "100 should be <= 200")
+    return 0
 }
 
 // ============================================================================
@@ -100,27 +112,31 @@ func test_assert_lte_i64() {
 // ============================================================================
 
 @test
-func test_assert_in_range_middle() {
+func test_assert_in_range_middle() -> I32 {
     // 5 is in [1, 10]
     assert_in_range(5, 1, 10, "5 should be in range [1, 10]")
+    return 0
 }
 
 @test
-func test_assert_in_range_min() {
+func test_assert_in_range_min() -> I32 {
     // 1 is in [1, 10]
     assert_in_range(1, 1, 10, "1 should be in range [1, 10]")
+    return 0
 }
 
 @test
-func test_assert_in_range_max() {
+func test_assert_in_range_max() -> I32 {
     // 10 is in [1, 10]
     assert_in_range(10, 1, 10, "10 should be in range [1, 10]")
+    return 0
 }
 
 @test
-func test_assert_in_range_negative() {
+func test_assert_in_range_negative() -> I32 {
     // -5 is in [-10, 0]
     assert_in_range(-5, -10, 0, "-5 should be in range [-10, 0]")
+    return 0
 }
 
 // ============================================================================
@@ -128,21 +144,24 @@ func test_assert_in_range_negative() {
 // ============================================================================
 
 @test
-func test_assert_true_simple() {
+func test_assert_true_simple() -> I32 {
     assert_true(true, "true should be true")
+    return 0
 }
 
 @test
-func test_assert_true_expression() {
+func test_assert_true_expression() -> I32 {
     let x: I32 = 10
     assert_true(x > 5, "10 > 5 should be true")
+    return 0
 }
 
 @test
-func test_assert_true_equality() {
+func test_assert_true_equality() -> I32 {
     let a: I32 = 42
     let b: I32 = 42
     assert_true(a == b, "42 == 42 should be true")
+    return 0
 }
 
 // ============================================================================
@@ -150,21 +169,24 @@ func test_assert_true_equality() {
 // ============================================================================
 
 @test
-func test_assert_false_simple() {
+func test_assert_false_simple() -> I32 {
     assert_false(false, "false should be false")
+    return 0
 }
 
 @test
-func test_assert_false_expression() {
+func test_assert_false_expression() -> I32 {
     let x: I32 = 10
     assert_false(x < 5, "10 < 5 should be false")
+    return 0
 }
 
 @test
-func test_assert_false_inequality() {
+func test_assert_false_inequality() -> I32 {
     let a: I32 = 42
     let b: I32 = 24
     assert_false(a == b, "42 == 24 should be false")
+    return 0
 }
 
 // ============================================================================
@@ -172,18 +194,21 @@ func test_assert_false_inequality() {
 // ============================================================================
 
 @test
-func test_assert_str_len_hello() {
+func test_assert_str_len_hello() -> I32 {
     assert_str_len("hello", 5, "hello has 5 characters")
+    return 0
 }
 
 @test
-func test_assert_str_len_empty() {
+func test_assert_str_len_empty() -> I32 {
     assert_str_len("", 0, "empty string has 0 characters")
+    return 0
 }
 
 @test
-func test_assert_str_len_space() {
+func test_assert_str_len_space() -> I32 {
     assert_str_len(" ", 1, "space has 1 character")
+    return 0
 }
 
 // ============================================================================
@@ -191,8 +216,9 @@ func test_assert_str_len_space() {
 // ============================================================================
 
 @test
-func test_assert_str_empty() {
+func test_assert_str_empty_basic() -> I32 {
     assert_str_empty("", "empty string should be empty")
+    return 0
 }
 
 // ============================================================================
@@ -200,16 +226,19 @@ func test_assert_str_empty() {
 // ============================================================================
 
 @test
-func test_assert_str_not_empty_hello() {
+func test_assert_str_not_empty_hello() -> I32 {
     assert_str_not_empty("hello", "hello is not empty")
+    return 0
 }
 
 @test
-func test_assert_str_not_empty_space() {
+func test_assert_str_not_empty_space() -> I32 {
     assert_str_not_empty(" ", "space is not empty")
+    return 0
 }
 
 @test
-func test_assert_str_not_empty_newline() {
+func test_assert_str_not_empty_newline() -> I32 {
     assert_str_not_empty("\n", "newline is not empty")
+    return 0
 }

@@ -3,6 +3,12 @@
 // that cause deadlocks or infinite waits.
 use test::{assert, assert_eq}
 use std::sync::mpsc::{channel, Sender, Receiver}
+use std::sync::mutex::Mutex
+use std::sync::condvar::Condvar
+use std::sync::arc::Arc
+use std::sync::{MutexGuard}
+use std::sync::atomic::{AtomicUsize, AtomicBool}
+use core::alloc::{Layout, alloc_global}
 
 @test
 func test_channel_creation() -> I32 {

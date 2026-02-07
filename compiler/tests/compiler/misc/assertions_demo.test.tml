@@ -13,7 +13,7 @@ func test_assert_basic() -> I32 {
 }
 
 @test
-func test_assert_eq() -> I32 {
+func test_assert_eq_integers() -> I32 {
     assert_eq(0, 0, "zero equals zero")
     assert_eq(42, 42, "42 equals 42")
     assert_eq(-10, -10, "negative equals negative")
@@ -39,7 +39,7 @@ func test_assert_ne() -> I32 {
 }
 
 @test
-func test_assert_eq() -> I32 {
+func test_assert_eq_booleans() -> I32 {
     assert_eq(true, true, "true == true")
     assert_eq(false, false, "false == false")
 
@@ -56,7 +56,7 @@ func test_assert_eq() -> I32 {
 }
 
 @test
-func test_assert_eq() -> I32 {
+func test_assert_eq_strings() -> I32 {
     assert_eq("hello", "hello", "hello == hello")
     assert_eq("", "", "empty == empty")
     assert_eq("test", "test", "test == test")

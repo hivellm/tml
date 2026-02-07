@@ -1,5 +1,6 @@
 // Test to verify zstd runtime linking
 use test
+use std::zlib
 
 @extern("zstd_dict_train_test")
 func ffi_zstd_dict_train_test() -> *Unit

@@ -1,0 +1,63 @@
+// AtomicUsize tests (pointer-sized unsigned)
+use test::{assert, assert_eq}
+use std::sync::{AtomicUsize, Ordering}
+
+// ============================================================================
+// AtomicUsize Tests
+// Note: On 64-bit platforms, lowlevel returns U64 which needs casting
+// ============================================================================
+
+@test
+func test_atomic_usize_new() -> I32 {
+    let counter: AtomicUsize = AtomicUsize::new(42 as Usize)
+    assert_eq(counter.load(Ordering::Relaxed), 42 as Usize, "new usize should be 42")
+    return 0
+}
+
+@test
+func test_atomic_usize_store_load() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(0 as Usize)
+    counter.store(100 as Usize, Ordering::Relaxed)
+    assert_eq(counter.load(Ordering::Relaxed), 100 as Usize, "loaded value should be 100")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_add() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(5 as Usize)
+    // Return is U64 on 64-bit platforms due to lowlevel block
+    let old: U64 = counter.fetch_add(3 as Usize, Ordering::Relaxed)
+    assert_eq(old, 5 as U64, "fetch_add should return old value 5")
+    assert_eq(counter.load(Ordering::Relaxed), 8 as Usize, "5 + 3 = 8")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_sub() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(10 as Usize)
+    let old: U64 = counter.fetch_sub(3 as Usize, Ordering::Relaxed)
+    assert_eq(old, 10 as U64, "fetch_sub should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 7 as Usize, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_atomic_usize_swap() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(10 as Usize)
+    let old: U64 = counter.swap(20 as Usize, Ordering::Relaxed)
+    assert_eq(old, 10 as U64, "swap should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 20 as Usize, "new value should be 20")
+    return 0
+}
+
+@test
+func test_atomic_usize_compare_exchange_success() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(10 as Usize)
+    let result: Outcome[Usize, Usize] = counter.compare_exchange(10 as Usize, 20 as Usize, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert_eq(v, 10 as Usize, "Ok should contain old value"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 20 as Usize, "value should now be 20")
+    return 0
+}

@@ -1,0 +1,39 @@
+use test
+
+@test
+func test_assert_gt_i32() -> I32 {
+    assert_gt(10, 5, "10 > 5")
+    return 0
+}
+
+@test
+func test_assert_gt_i64() -> I32 {
+    let big: I64 = 1000000000 as I64
+    let small: I64 = 999999999 as I64
+    assert_gt(big, small, "big > small")
+    return 0
+}
+
+@test
+func test_assert_true_first() -> I32 {
+    assert_true(true, "true should be true")
+    return 0
+}
+
+@test
+func test_assert_false_second() -> I32 {
+    assert_false(false, "false should be false")
+    return 0
+}
+
+@test
+func test_str_len() -> I32 {
+    assert_str_len("hello", 5, "hello has 5 chars")
+    return 0
+}
+
+@test
+func test_in_range() -> I32 {
+    assert_in_range(5, 1, 10, "5 in [1,10]")
+    return 0
+}

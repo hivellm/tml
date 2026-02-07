@@ -136,7 +136,7 @@ void LLVMIRGen::gen_derive_serialize_struct(const parser::StructDecl& s) {
 
     // Emit function definition
     type_defs_buffer_ << "; @derive(Serialize) for " << type_name << "\n";
-    type_defs_buffer_ << "define ptr " << func_name << "(ptr %this) {\n";
+    type_defs_buffer_ << "define internal ptr " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
     int temp_counter = 0;
@@ -338,7 +338,7 @@ void LLVMIRGen::gen_derive_serialize_enum(const parser::EnumDecl& e) {
 
     // For simple enums, return JSON object with variant
     type_defs_buffer_ << "; @derive(Serialize) for " << type_name << "\n";
-    type_defs_buffer_ << "define ptr " << func_name << "(ptr %this) {\n";
+    type_defs_buffer_ << "define internal ptr " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
     // Load tag

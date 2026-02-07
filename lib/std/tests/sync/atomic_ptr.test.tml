@@ -1,0 +1,64 @@
+// AtomicPtr tests
+use test::{assert, assert_eq}
+use std::sync::{AtomicPtr, Ordering}
+
+// ============================================================================
+// AtomicPtr Tests
+// ============================================================================
+
+@test
+func test_atomic_ptr_new() -> I32 {
+    var x: I32 = 42
+    let ptr: AtomicPtr[I32] = AtomicPtr::new(ref x as Ptr[I32])
+    let loaded: Ptr[I32] = ptr.load(Ordering::Relaxed)
+    assert(loaded != null, "loaded ptr should not be null")
+    return 0
+}
+
+@test
+func test_atomic_ptr_new_null() -> I32 {
+    let ptr: AtomicPtr[I32] = AtomicPtr::new_null[I32]()
+    let loaded: Ptr[I32] = ptr.load(Ordering::Relaxed)
+    assert(loaded == null, "loaded ptr should be null")
+    return 0
+}
+
+@test
+func test_atomic_ptr_store_load() -> I32 {
+    var x: I32 = 42
+    var y: I32 = 100
+    var ptr: AtomicPtr[I32] = AtomicPtr::new(ref x as Ptr[I32])
+    ptr.store(ref y as Ptr[I32], Ordering::Relaxed)
+    let loaded: Ptr[I32] = ptr.load(Ordering::Relaxed)
+    assert(loaded == ref y as Ptr[I32], "loaded ptr should be y's address")
+    return 0
+}
+
+@test
+func test_atomic_ptr_swap() -> I32 {
+    var x: I32 = 42
+    var y: I32 = 100
+    var ptr: AtomicPtr[I32] = AtomicPtr::new(ref x as Ptr[I32])
+    let old: Ptr[I32] = ptr.swap(ref y as Ptr[I32], Ordering::Relaxed)
+    assert(old == ref x as Ptr[I32], "swap should return old ptr")
+    assert(ptr.load(Ordering::Relaxed) == ref y as Ptr[I32], "new ptr should be y")
+    return 0
+}
+
+@test
+func test_atomic_ptr_compare_and_swap() -> I32 {
+    var x: I32 = 42
+    var y: I32 = 100
+    var ptr: AtomicPtr[I32] = AtomicPtr::new(ref x as Ptr[I32])
+    let old: Ptr[I32] = ptr.compare_and_swap(ref x as Ptr[I32], ref y as Ptr[I32], Ordering::SeqCst)
+    assert(old == ref x as Ptr[I32], "compare_and_swap should return old ptr")
+    assert(ptr.load(Ordering::Relaxed) == ref y as Ptr[I32], "new ptr should be y")
+    return 0
+}
+
+@test
+func test_atomic_ptr_is_lock_free() -> I32 {
+    let ptr: AtomicPtr[I32] = AtomicPtr::new_null[I32]()
+    assert(ptr.is_lock_free(), "AtomicPtr should be lock-free")
+    return 0
+}

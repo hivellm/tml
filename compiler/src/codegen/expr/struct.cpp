@@ -480,8 +480,11 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         // Generate the base expression to get a struct value
         std::string base_val = gen_expr(**s.base);
 
-        // Store the base value into our new struct (copies all fields)
-        emit_line("  store " + struct_type + " " + base_val + ", ptr " + ptr);
+        // Skip store for empty structs (unit types) - "{}" has no data to copy
+        if (struct_type != "{}") {
+            // Store the base value into our new struct (copies all fields)
+            emit_line("  store " + struct_type + " " + base_val + ", ptr " + ptr);
+        }
     }
 
     for (size_t i = 0; i < s.fields.size(); ++i) {

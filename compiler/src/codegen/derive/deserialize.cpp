@@ -116,7 +116,8 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
 
     // Emit function definition - static method returning Outcome[Self, Str]
     type_defs_buffer_ << "; @derive(Deserialize) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << outcome_type << " " << func_name << "(ptr %json_str) {\n";
+    type_defs_buffer_ << "define internal " << outcome_type << " " << func_name
+                      << "(ptr %json_str) {\n";
     type_defs_buffer_ << "entry:\n";
 
     int temp_counter = 0;
@@ -332,7 +333,8 @@ void LLVMIRGen::gen_derive_deserialize_enum(const parser::EnumDecl& e) {
 
     // Emit function definition
     type_defs_buffer_ << "; @derive(Deserialize) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << outcome_type << " " << func_name << "(ptr %json_str) {\n";
+    type_defs_buffer_ << "define internal " << outcome_type << " " << func_name
+                      << "(ptr %json_str) {\n";
     type_defs_buffer_ << "entry:\n";
 
     int temp_counter = 0;

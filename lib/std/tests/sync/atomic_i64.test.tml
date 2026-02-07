@@ -1,0 +1,45 @@
+// AtomicI64 tests
+use test::{assert, assert_eq}
+use std::sync::{AtomicI64, Ordering}
+
+// ============================================================================
+// AtomicI64 Tests
+// ============================================================================
+
+@test
+func test_atomic_i64_new() -> I32 {
+    let counter: AtomicI64 = AtomicI64::new(1000000000000 as I64)
+    assert_eq(counter.load(Ordering::Relaxed), 1000000000000 as I64, "new i64 should be 1T")
+    return 0
+}
+
+@test
+func test_atomic_i64_negative() -> I32 {
+    let counter: AtomicI64 = AtomicI64::new(-1000000000000 as I64)
+    assert_eq(counter.load(Ordering::Relaxed), -1000000000000 as I64, "should handle negative")
+    return 0
+}
+
+@test
+func test_atomic_i64_fetch_add() -> I32 {
+    var counter: AtomicI64 = AtomicI64::new(100 as I64)
+    let old: I64 = counter.fetch_add(50 as I64, Ordering::Relaxed)
+    assert_eq(old, 100 as I64, "fetch_add should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 150 as I64, "100 + 50 = 150")
+    return 0
+}
+
+@test
+func test_atomic_i64_compare_and_swap() -> I32 {
+    var counter: AtomicI64 = AtomicI64::new(100 as I64)
+    let old: I64 = counter.compare_and_swap(100 as I64, 200 as I64, Ordering::SeqCst)
+    assert_eq(old, 100 as I64, "compare_and_swap should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 200 as I64, "value should now be 200")
+    return 0
+}
+
+@test
+func test_atomic_i64_lock_free_constant() -> I32 {
+    assert(AtomicI64::LOCK_FREE, "AtomicI64::LOCK_FREE should be true")
+    return 0
+}

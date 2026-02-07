@@ -50,6 +50,29 @@ std::string format_duration(int64_t ms) {
 }
 
 // ============================================================================
+// Debug Timestamp
+// ============================================================================
+
+std::string get_debug_timestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto now_c = std::chrono::system_clock::to_time_t(now);
+    auto now_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+    std::tm tm_buf;
+#ifdef _WIN32
+    localtime_s(&tm_buf, &now_c);
+#else
+    localtime_r(&now_c, &tm_buf);
+#endif
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm_buf, "%H:%M:%S") << '.' << std::setfill('0') << std::setw(3)
+        << now_ms.count();
+    return oss.str();
+}
+
+// ============================================================================
 // Count @test Functions in File
 // ============================================================================
 

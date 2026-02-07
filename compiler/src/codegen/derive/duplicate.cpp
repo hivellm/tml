@@ -131,7 +131,7 @@ void LLVMIRGen::gen_derive_duplicate_struct(const parser::StructDecl& s) {
 
     // Emit function definition with direct struct return
     type_defs_buffer_ << "; @derive(Duplicate) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << llvm_type << " " << func_name << "(ptr %this) {\n";
+    type_defs_buffer_ << "define internal " << llvm_type << " " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
     if (fields.empty()) {
@@ -230,7 +230,7 @@ void LLVMIRGen::gen_derive_duplicate_enum(const parser::EnumDecl& e) {
     // For now, do a simple load/return copy for enums
     // This works for Copy types but may need refinement for complex payloads
     type_defs_buffer_ << "; @derive(Duplicate) for " << type_name << "\n";
-    type_defs_buffer_ << "define " << llvm_type << " " << func_name << "(ptr %this) {\n";
+    type_defs_buffer_ << "define internal " << llvm_type << " " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
     // Load and return the entire enum struct

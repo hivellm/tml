@@ -138,7 +138,7 @@ void LLVMIRGen::gen_derive_hash_struct(const parser::StructDecl& s) {
 
     // Emit function definition
     type_defs_buffer_ << "; @derive(Hash) for " << type_name << "\n";
-    type_defs_buffer_ << "define i64 " << func_name << "(ptr %this) {\n";
+    type_defs_buffer_ << "define internal i64 " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
     if (fields.empty()) {
@@ -266,7 +266,7 @@ void LLVMIRGen::gen_derive_hash_enum(const parser::EnumDecl& e) {
     // For simple enums (tag-only), just hash the tag
     // For complex enums, we'd need to switch on tag and hash payloads
     type_defs_buffer_ << "; @derive(Hash) for " << type_name << "\n";
-    type_defs_buffer_ << "define i64 " << func_name << "(ptr %this) {\n";
+    type_defs_buffer_ << "define internal i64 " << func_name << "(ptr %this) {\n";
     type_defs_buffer_ << "entry:\n";
 
     // Load tag

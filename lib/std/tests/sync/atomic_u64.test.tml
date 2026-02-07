@@ -1,0 +1,53 @@
+// AtomicU64 tests
+use test::{assert, assert_eq}
+use std::sync::{AtomicU64, Ordering}
+
+// ============================================================================
+// AtomicU64 Tests
+// ============================================================================
+
+@test
+func test_atomic_u64_new() -> I32 {
+    let counter: AtomicU64 = AtomicU64::new(1000000000000 as U64)
+    assert_eq(counter.load(Ordering::Relaxed), 1000000000000 as U64, "new u64 should be 1T")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_add() -> I32 {
+    var counter: AtomicU64 = AtomicU64::new(100 as U64)
+    let old: U64 = counter.fetch_add(50 as U64, Ordering::Relaxed)
+    assert_eq(old, 100 as U64, "fetch_add should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 150 as U64, "100 + 50 = 150")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_sub() -> I32 {
+    var counter: AtomicU64 = AtomicU64::new(100 as U64)
+    let old: U64 = counter.fetch_sub(30 as U64, Ordering::Relaxed)
+    assert_eq(old, 100 as U64, "fetch_sub should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 70 as U64, "100 - 30 = 70")
+    return 0
+}
+
+@test
+func test_atomic_u64_swap() -> I32 {
+    var counter: AtomicU64 = AtomicU64::new(111 as U64)
+    let old: U64 = counter.swap(222 as U64, Ordering::Relaxed)
+    assert_eq(old, 111 as U64, "swap should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 222 as U64, "new value should be 222")
+    return 0
+}
+
+@test
+func test_atomic_u64_compare_exchange_success() -> I32 {
+    var counter: AtomicU64 = AtomicU64::new(50 as U64)
+    let result: Outcome[U64, U64] = counter.compare_exchange(50 as U64, 100 as U64, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert_eq(v, 50 as U64, "Ok should contain old value"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 100 as U64, "value should now be 100")
+    return 0
+}

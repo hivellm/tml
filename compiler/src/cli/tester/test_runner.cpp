@@ -79,13 +79,22 @@ namespace tml::cli {
 // Defined here, declared extern in test_runner.hpp
 std::mutex g_verbose_output_mutex;
 
-// Helper macro for synchronized verbose output
+// Helper macro for synchronized verbose output with timestamp
 #define VERBOSE_LOG(verbose, msg)                                                                  \
     do {                                                                                           \
         if (verbose) {                                                                             \
             std::lock_guard<std::mutex> _lock(g_verbose_output_mutex);                             \
-            std::cerr << msg << std::flush;                                                        \
+            std::cerr << "[" << tml::cli::tester::get_debug_timestamp() << "] " << msg             \
+                      << std::flush;                                                               \
         }                                                                                          \
+    } while (0)
+
+// Helper macro for DEBUG output with timestamp (always prints)
+#define DEBUG_LOG(msg)                                                                             \
+    do {                                                                                           \
+        std::lock_guard<std::mutex> _lock(g_verbose_output_mutex);                                 \
+        std::cerr << "[" << tml::cli::tester::get_debug_timestamp() << "] [DEBUG] " << msg         \
+                  << std::flush;                                                                   \
     } while (0)
 
 // ============================================================================
@@ -440,6 +449,7 @@ void* DynamicLibrary::get_symbol(const std::string& name) const {
 
 CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file, bool verbose,
                                                     bool no_cache) {
+    (void)verbose;
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
@@ -585,7 +595,7 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
     object_files.push_back(obj_output);
 
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
-    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
+    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, false);
     object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
     // Link as shared library
@@ -791,6 +801,7 @@ InProcessTestResult compile_and_run_test_in_process(const std::string& test_file
 
 CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file, bool verbose,
                                                     bool no_cache) {
+    (void)verbose;
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
@@ -918,7 +929,7 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
     object_files.push_back(obj_output);
 
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
-    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
+    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, false);
     object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
     // Link as shared library
@@ -959,6 +970,7 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
 CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& test_file,
                                                              PhaseTimings* timings, bool verbose,
                                                              bool no_cache) {
+    (void)verbose;
     using Clock = std::chrono::high_resolution_clock;
     auto record_phase = [&](const std::string& phase, Clock::time_point start) {
         if (timings) {
@@ -1112,7 +1124,7 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
     object_files.push_back(obj_output);
 
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
-    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
+    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, false);
     object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
     // Generate hash for cached DLL (like run_profiled does for exe)
@@ -1312,7 +1324,10 @@ std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& t
     // Maximum tests per suite - balance between fewer DLLs and parallel compilation
     // Lower = more suites that compile faster in parallel
     // Higher = fewer DLLs but sequential within each suite
-    constexpr size_t MAX_TESTS_PER_SUITE = 15;
+    // CRITICAL: Lowered from 15 → 8 to prevent O(n²) codegen slowdown
+    // Cannot go lower than 8 without breaking atomic function dependencies
+    // TODO: Fix codegen context accumulation bug (lowlevel_misc: 2.2s alone vs 98s in suite)
+    constexpr size_t MAX_TESTS_PER_SUITE = 8;
 
     // Group files by suite key
     std::map<std::string, std::vector<std::string>> groups;
@@ -1369,6 +1384,140 @@ constexpr double SLOW_TASK_THRESHOLD = 5.0;
 // Increased to 45s to accommodate complex tests with heavy imports (std::sync, std::thread)
 // on slower machines where compilation can take 20-30 seconds
 constexpr int64_t MIN_SLOW_THRESHOLD_US = 45000000; // 45 seconds
+
+// ============================================================================
+// Precompiled Symbols Cache - DISABLED
+// ============================================================================
+// DISABLED: Causes linkage conflicts (see line 2305 for details)
+// This code is kept for reference but commented out to avoid unused function warnings.
+//
+// Compiles lib/std/precompiled_symbols.tml once and caches the object file.
+// This object contains common generic instantiations (Mutex[I32], Arc[I32], etc.)
+// and is linked into all test suites to avoid regenerating the same LLVM IR.
+
+#if 0  // DISABLED - see comment above
+static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
+    fs::path cache_dir = get_run_cache_dir();
+    fs::path precompiled_obj = cache_dir / ("precompiled_symbols" + get_object_extension());
+
+    // If cached and not forcing rebuild, return existing
+    if (!no_cache && fs::exists(precompiled_obj)) {
+        return precompiled_obj.string();
+    }
+
+    VERBOSE_LOG(verbose, "[PRECOMPILE] Compiling precompiled_symbols.tml...\n");
+
+    // Find the source file
+    fs::path source = "lib/std/precompiled_symbols.tml";
+    if (!fs::exists(source)) {
+        // Precompiled symbols are optional - if not found, just skip
+        return "";
+    }
+
+    try {
+        // Read and preprocess source
+        std::string source_code = read_file(source.string());
+        auto pp_config = preprocessor::Preprocessor::host_config();
+        preprocessor::Preprocessor pp(pp_config);
+        auto pp_result = pp.process(source_code, source.string());
+
+        if (!pp_result.success()) {
+            std::cerr << "[PRECOMPILE] Warning: Preprocessor errors in precompiled_symbols.tml\n";
+            return "";
+        }
+
+        std::string preprocessed = pp_result.output;
+
+        // Lex
+        auto lex_source = lexer::Source::from_string(preprocessed, source.string());
+        lexer::Lexer lex(lex_source);
+        auto tokens = lex.tokenize();
+        if (lex.has_errors()) {
+            std::cerr << "[PRECOMPILE] Warning: Lexer errors in precompiled_symbols.tml\n";
+            return "";
+        }
+
+        // Parse
+        parser::Parser parser(std::move(tokens));
+        auto parse_result = parser.parse_module("precompiled_symbols");
+        if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+            std::cerr << "[PRECOMPILE] Warning: Parser errors in precompiled_symbols.tml\n";
+            return "";
+        }
+        const auto& module = std::get<parser::Module>(parse_result);
+
+        // Type check
+        types::TypeChecker checker;
+        auto check_result = checker.check_module(module);
+        if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
+            std::cerr << "[PRECOMPILE] Warning: Type errors in precompiled_symbols.tml\n";
+            return "";
+        }
+        const auto& env = std::get<types::TypeEnv>(check_result);
+
+        // Borrow check
+        borrow::BorrowChecker borrow_checker(env);
+        auto borrow_result = borrow_checker.check_module(module);
+        if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+            std::cerr << "[PRECOMPILE] Warning: Borrow check errors in precompiled_symbols.tml\n";
+            return "";
+        }
+
+        // Codegen
+        codegen::LLVMGenOptions options;
+        options.emit_comments = false;
+        options.generate_dll_entry = false; // No test entry
+        options.dll_export = false;
+        options.force_internal_linkage = false; // Allow linking
+        options.emit_debug_info = false;
+        codegen::LLVMIRGen llvm_gen(env, options);
+
+        auto gen_result = llvm_gen.generate(module);
+        if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
+            std::cerr << "[PRECOMPILE] Warning: Codegen errors in precompiled_symbols.tml\n";
+            return "";
+        }
+
+        const auto& llvm_ir = std::get<std::string>(gen_result);
+
+        // Write LLVM IR
+        fs::path ll_path = cache_dir / "precompiled_symbols.ll";
+        std::ofstream ll_file(ll_path);
+        if (!ll_file) {
+            std::cerr << "[PRECOMPILE] Warning: Cannot write LLVM IR\n";
+            return "";
+        }
+        ll_file << llvm_ir;
+        ll_file.close();
+
+        // Compile to object
+        std::string clang = find_clang();
+        ObjectCompileOptions obj_options;
+        obj_options.optimization_level = tml::CompilerOptions::optimization_level;
+        obj_options.debug_info = false; // No debug info for precompiled symbols
+        obj_options.verbose = false;
+        obj_options.target_triple = tml::CompilerOptions::target_triple;
+        obj_options.sysroot = tml::CompilerOptions::sysroot;
+        obj_options.coverage = false; // No coverage for precompiled symbols
+
+        auto obj_result = compile_ll_to_object(ll_path, precompiled_obj, clang, obj_options);
+        if (!obj_result.success) {
+            std::cerr << "[PRECOMPILE] Warning: Object compilation failed: "
+                      << obj_result.error_message << "\n";
+            fs::remove(ll_path);
+            return "";
+        }
+        fs::remove(ll_path); // Clean up LLVM IR file
+
+        VERBOSE_LOG(verbose, "[PRECOMPILE] Successfully compiled precompiled_symbols.obj\n");
+        return precompiled_obj.string();
+
+    } catch (const std::exception& e) {
+        std::cerr << "[PRECOMPILE] Warning: Exception during compilation: " << e.what() << "\n";
+        return "";
+    }
+}
+#endif // DISABLED precompiled symbols
 
 SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool no_cache) {
     using Clock = std::chrono::high_resolution_clock;
@@ -1471,9 +1620,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
         if (!no_cache && fs::exists(cached_dll_by_source)) {
             // Cache hit! Skip all typechecking and compilation
-            if (verbose) {
-                std::cerr << "[DEBUG] EARLY CACHE HIT - skipping compilation\n";
-            }
+            VERBOSE_LOG(verbose, "EARLY CACHE HIT - skipping compilation\n");
             if (!fast_copy_file(cached_dll_by_source, lib_output)) {
                 result.error_message = "Failed to copy cached DLL";
                 return result;
@@ -1639,12 +1786,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     auto& task = tasks[task_idx];
                     auto task_start = Clock::now();
 
-                    if (verbose) {
-                        std::lock_guard<std::mutex> lock(error_mutex);
-                        std::cerr << "[DEBUG]   Processing test " << (task_idx + 1) << "/"
-                                  << tasks.size() << ": " << task.file_path << "\n"
-                                  << std::flush;
-                    }
+                    VERBOSE_LOG(verbose, "  Processing test " << (task_idx + 1) << "/"
+                                                              << tasks.size() << ": "
+                                                              << task.file_path << "\n");
 
                     // Sub-phase timing for detailed profiling
                     int64_t lex_us = 0, parse_us = 0, typecheck_us = 0, borrow_us = 0,
@@ -1919,11 +2063,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             };
 
-            if (verbose) {
-                std::cerr << "[DEBUG]   Generating " << tasks.size() << " LLVM IR files with "
-                          << num_threads << " threads...\n"
-                          << std::flush;
-            }
+            VERBOSE_LOG(verbose, "  Generating " << tasks.size() << " LLVM IR files with "
+                                                 << num_threads << " threads...\n");
 
             // Launch worker threads
             std::vector<std::thread> threads;
@@ -1952,7 +2093,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 // Print aggregate sub-phase breakdown
                 int64_t total_us = total_task_time_us.load();
                 if (total_us > 0) {
-                    std::cerr << "[DEBUG] Phase 1 sub-phase breakdown:\n"
+                    DEBUG_LOG("Phase 1 sub-phase breakdown:\n"
                               << "  Lex:       " << std::setw(6) << (total_lex_us.load() / 1000)
                               << " ms (" << std::fixed << std::setprecision(1)
                               << (100.0 * total_lex_us.load() / total_us) << "%)\n"
@@ -1964,20 +2105,23 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                               << "  Borrow:    " << std::setw(6) << (total_borrow_us.load() / 1000)
                               << " ms (" << (100.0 * total_borrow_us.load() / total_us) << "%)\n"
                               << "  Codegen:   " << std::setw(6) << (total_codegen_us.load() / 1000)
-                              << " ms (" << (100.0 * total_codegen_us.load() / total_us) << "%)\n";
+                              << " ms (" << (100.0 * total_codegen_us.load() / total_us) << "%)\n");
                 }
 
-                std::cerr << "[DEBUG] Phase 1 slowest files (top 5):\n";
-                for (size_t i = 0; i < std::min(size_t(5), task_timings.size()); ++i) {
-                    const auto& t = task_timings[i];
-                    std::cerr << "  " << std::setw(5) << (t.duration_us / 1000)
-                              << " ms: " << fs::path(t.file_path).filename().string()
-                              << " [lex=" << (t.lex_us / 1000) << ", parse=" << (t.parse_us / 1000)
-                              << ", tc=" << (t.typecheck_us / 1000)
-                              << ", borrow=" << (t.borrow_us / 1000)
-                              << ", cg=" << (t.codegen_us / 1000) << "]\n";
+                {
+                    std::ostringstream oss;
+                    oss << "Phase 1 slowest files (top 5):\n";
+                    for (size_t i = 0; i < std::min(size_t(5), task_timings.size()); ++i) {
+                        const auto& t = task_timings[i];
+                        oss << "  " << std::setw(5) << (t.duration_us / 1000)
+                            << " ms: " << fs::path(t.file_path).filename().string()
+                            << " [lex=" << (t.lex_us / 1000) << ", parse=" << (t.parse_us / 1000)
+                            << ", tc=" << (t.typecheck_us / 1000)
+                            << ", borrow=" << (t.borrow_us / 1000)
+                            << ", cg=" << (t.codegen_us / 1000) << "]\n";
+                    }
+                    DEBUG_LOG(oss.str());
                 }
-                std::cerr << std::flush;
             }
         }
 
@@ -2079,11 +2223,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             };
 
-            if (verbose) {
-                std::cerr << "[DEBUG]   Compiling " << pending_compiles.size() << " objects with "
-                          << num_threads << " threads...\n"
-                          << std::flush;
-            }
+            VERBOSE_LOG(verbose, "  Compiling " << pending_compiles.size() << " objects with "
+                                                << num_threads << " threads...\n");
 
             std::vector<std::thread> threads;
             for (unsigned int t = 0;
@@ -2101,13 +2242,14 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                               return a.duration_us > b.duration_us;
                           });
 
-                std::cerr << "[DEBUG] Phase 2 timing summary (top 5 slowest .obj):\n";
+                std::ostringstream oss;
+                oss << "Phase 2 timing summary (top 5 slowest .obj):\n";
                 for (size_t i = 0; i < std::min(size_t(5), obj_timings.size()); ++i) {
                     const auto& t = obj_timings[i];
-                    std::cerr << "  " << (t.duration_us / 1000)
-                              << " ms: " << fs::path(t.test_path).filename().string() << "\n";
+                    oss << "  " << (t.duration_us / 1000)
+                        << " ms: " << fs::path(t.test_path).filename().string() << "\n";
                 }
-                std::cerr << std::flush;
+                VERBOSE_LOG(verbose, oss.str());
             }
 
             if (compile_error.load()) {
@@ -2162,17 +2304,28 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
         std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
-        if (verbose)
-            std::cerr << "[DEBUG]   Getting runtime objects...\n" << std::flush;
+        VERBOSE_LOG(verbose, "  Getting runtime objects...\n");
         // Note: Pass verbose=false to avoid repeated "Including runtime:" messages
         // when compiling multiple suites in parallel. The runtime objects are the
         // same for all suites and would spam the output.
         auto runtime_objects =
             get_runtime_objects(shared_registry, module, deps_cache, clang, false);
-        if (verbose)
-            std::cerr << "[DEBUG]   Got " << runtime_objects.size() << " runtime objects\n"
-                      << std::flush;
+        VERBOSE_LOG(verbose, "  Got " << runtime_objects.size() << " runtime objects\n");
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
+
+        // DISABLED: Precompiled symbols cause linkage conflicts with force_internal_linkage
+        // Symptoms: "use of undefined value '@atomic_compare_exchange_i32'" errors
+        // Root cause: precompiled_symbols uses external linkage, test suites use internal linkage
+        // TODO: Fix by:
+        //   1. Using same linkage mode in both (but defeats purpose of sharing)
+        //   2. LLVM module linking instead of object file linking
+        //   3. Weak symbols or link-once semantics
+        //
+        // static std::string precompiled_obj = get_precompiled_symbols_obj(verbose, no_cache);
+        // if (!precompiled_obj.empty() && fs::exists(precompiled_obj)) {
+        //     object_files.push_back(fs::path(precompiled_obj));
+        //     VERBOSE_LOG(verbose, "  Using precompiled symbols: " << precompiled_obj << "\n");
+        // }
 
         runtime_time_us =
             std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - runtime_start)
@@ -2203,11 +2356,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             }
 
-            if (verbose)
-                std::cerr << "[DEBUG]   Starting link...\n" << std::flush;
+            VERBOSE_LOG(verbose, "  Starting link...\n");
             auto link_result = link_objects(object_files, cached_dll, clang, link_options);
-            if (verbose)
-                std::cerr << "[DEBUG]   Link complete\n" << std::flush;
+            VERBOSE_LOG(verbose, "  Link complete\n");
             if (!link_result.success) {
                 result.error_message = "Linking failed: " + link_result.error_message;
                 return result;
@@ -2245,20 +2396,21 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         // Print timing summary if verbose
         if (verbose) {
             int64_t total_us = result.compile_time_us;
-            std::cerr << "\n[DEBUG] Suite " << suite.name << " timing breakdown:\n"
-                      << "  Preprocess:     " << std::setw(6) << (preprocess_time_us / 1000)
-                      << " ms (" << std::fixed << std::setprecision(1)
-                      << (100.0 * preprocess_time_us / total_us) << "%)\n"
-                      << "  Phase 1 (code): " << std::setw(6) << (phase1_time_us / 1000) << " ms ("
-                      << (100.0 * phase1_time_us / total_us) << "%)\n"
-                      << "  Phase 2 (obj):  " << std::setw(6) << (phase2_time_us / 1000) << " ms ("
-                      << (100.0 * phase2_time_us / total_us) << "%)\n"
-                      << "  Runtime objs:   " << std::setw(6) << (runtime_time_us / 1000) << " ms ("
-                      << (100.0 * runtime_time_us / total_us) << "%)\n"
-                      << "  Linking:        " << std::setw(6) << (link_time_us / 1000) << " ms ("
-                      << (100.0 * link_time_us / total_us) << "%)\n"
-                      << "  TOTAL:          " << std::setw(6) << (total_us / 1000) << " ms\n"
-                      << std::flush;
+            std::ostringstream oss;
+            oss << "\nSuite " << suite.name << " timing breakdown:\n"
+                << "  Preprocess:     " << std::setw(6) << (preprocess_time_us / 1000) << " ms ("
+                << std::fixed << std::setprecision(1) << (100.0 * preprocess_time_us / total_us)
+                << "%)\n"
+                << "  Phase 1 (code): " << std::setw(6) << (phase1_time_us / 1000) << " ms ("
+                << (100.0 * phase1_time_us / total_us) << "%)\n"
+                << "  Phase 2 (obj):  " << std::setw(6) << (phase2_time_us / 1000) << " ms ("
+                << (100.0 * phase2_time_us / total_us) << "%)\n"
+                << "  Runtime objs:   " << std::setw(6) << (runtime_time_us / 1000) << " ms ("
+                << (100.0 * runtime_time_us / total_us) << "%)\n"
+                << "  Linking:        " << std::setw(6) << (link_time_us / 1000) << " ms ("
+                << (100.0 * link_time_us / total_us) << "%)\n"
+                << "  TOTAL:          " << std::setw(6) << (total_us / 1000) << " ms\n";
+            VERBOSE_LOG(verbose, oss.str());
         }
 
         return result;
@@ -2316,7 +2468,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 
     // Get the indexed test function
     std::string func_name = "tml_test_" + std::to_string(test_index);
-    VERBOSE_LOG(verbose, "[DEBUG]   Looking up symbol: " << func_name << "\n");
+    VERBOSE_LOG(verbose, "  Looking up symbol: " << func_name << "\n");
     auto test_func = lib.get_function<TestMainFunc>(func_name.c_str());
     if (!test_func) {
         result.error = "Failed to find " + func_name + " in suite DLL";
@@ -2327,8 +2479,8 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 
     // Try to get the panic-catching wrapper from the runtime
     auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
-    VERBOSE_LOG(verbose, "[DEBUG]   tml_run_test_with_catch: "
-                             << (run_with_catch ? "found" : "NOT FOUND") << "\n");
+    VERBOSE_LOG(verbose,
+                "  tml_run_test_with_catch: " << (run_with_catch ? "found" : "NOT FOUND") << "\n");
 
     // Get panic message and backtrace functions
     auto get_panic_msg = lib.get_function<TmlGetPanicMessage>("tml_get_panic_message");
@@ -2346,7 +2498,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     using TmlSetOutputSuppressed = void (*)(int32_t);
     auto set_output_suppressed =
         lib.get_function<TmlSetOutputSuppressed>("tml_set_output_suppressed");
-    VERBOSE_LOG(verbose, "[DEBUG]   tml_set_output_suppressed: "
+    VERBOSE_LOG(verbose, "  tml_set_output_suppressed: "
                              << (set_output_suppressed ? "found" : "NOT FOUND") << "\n");
 
     // Suppress output when not in verbose mode
@@ -2378,7 +2530,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
-    VERBOSE_LOG(verbose, "[DEBUG]   Executing test function...\n");
+    VERBOSE_LOG(verbose, "  Executing test function...\n");
 
     // Ensure output is flushed before test execution in case of crash
     std::cout << std::flush;
@@ -2475,7 +2627,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     // because combining SEH with setjmp/longjmp causes BAD_STACK (0xC0000028).
     // The runtime's exception filter handles crashes, so SEH is not needed.
     if (run_with_catch) {
-        VERBOSE_LOG(verbose, "[DEBUG]   Calling tml_run_test_with_catch wrapper...\n");
+        VERBOSE_LOG(verbose, "  Calling tml_run_test_with_catch wrapper...\n");
         result.exit_code = run_with_catch(test_func);
         if (result.exit_code == -1) {
             // Panic was caught
@@ -2508,7 +2660,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     } else {
         // Fallback: direct call with platform-specific crash protection
 #ifdef _WIN32
-        VERBOSE_LOG(verbose, "[DEBUG]   Calling test function with SEH protection...\n");
+        VERBOSE_LOG(verbose, "  Calling test function with SEH protection...\n");
         result.exit_code = call_test_with_seh(test_func);
         if (g_crash_occurred) {
             result.success = false;
@@ -2521,7 +2673,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         result.exit_code = test_func();
         result.success = (result.exit_code == 0);
 #endif
-        VERBOSE_LOG(verbose, "[DEBUG]   Test returned: " << result.exit_code << "\n");
+        VERBOSE_LOG(verbose, "  Test returned: " << result.exit_code << "\n");
     }
 
     // Signal watchdog that test completed
@@ -2533,8 +2685,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         watchdog_thread.join();
     }
 
-    VERBOSE_LOG(verbose,
-                "[DEBUG]   Test execution complete, exit_code=" << result.exit_code << "\n");
+    VERBOSE_LOG(verbose, "  Test execution complete, exit_code=" << result.exit_code << "\n");
 
     auto end = Clock::now();
     result.duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();

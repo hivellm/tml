@@ -408,6 +408,15 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Skip if this function was already generated (handles duplicates in directory modules)
     std::string llvm_name = "@tml_" + suite_prefix + full_func_name;
     if (generated_functions_.count(llvm_name)) {
+        // Warn if a file-level function collides with a module-imported function.
+        // This can happen when e.g. test function "test_assert_str_empty" collides with
+        // module "test" function "assert_str_empty" (both mangle to "tml_test_assert_str_empty").
+        if (current_module_prefix_.empty()) {
+            std::fprintf(stderr,
+                         "warning: function '%s' has LLVM name collision with '%s' "
+                         "(already generated). The function body will be skipped.\n",
+                         func.name.c_str(), llvm_name.c_str());
+        }
         return;
     }
     generated_functions_.insert(llvm_name);
