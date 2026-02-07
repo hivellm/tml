@@ -526,8 +526,8 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                             for (size_t i = 0; i < struct_def.fields.size(); ++i) {
                                 std::string ft =
                                     llvm_type_from_semantic(struct_def.fields[i].type, true);
-                                fields.push_back({struct_def.fields[i].name, static_cast<int>(i), ft,
-                                                  struct_def.fields[i].type});
+                                fields.push_back({struct_def.fields[i].name, static_cast<int>(i),
+                                                  ft, struct_def.fields[i].type});
                             }
                             struct_fields_[named.name] = fields;
                             found = true;
@@ -538,7 +538,8 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
 
                 // If still not found, try re-parsing module source to find
                 // private structs (needed for types like RawRwLock used as field types)
-                if (!found) {
+                // Skip if we already know this type can't be found (negative cache)
+                if (!found && not_found_struct_types_.count(named.name) == 0) {
                     for (const auto& [mod_name, mod] : all_modules) {
                         if (mod.source_code.empty())
                             continue;
@@ -595,6 +596,11 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                         }
                         if (found)
                             break;
+                    }
+                    // Cache negative result to avoid re-parsing for this type again
+                    // (e.g., enum types like "Ordering" will never be found as structs)
+                    if (!found) {
+                        not_found_struct_types_.insert(named.name);
                     }
                 }
             }

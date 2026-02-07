@@ -8,6 +8,8 @@
 
 #include "mem_track.h"
 
+#include "log.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,8 +90,7 @@ static void tml_mem_track_atexit(void) {
     if (g_track.check_at_exit) {
         int32_t leaks = tml_mem_check_leaks();
         if (leaks > 0) {
-            fprintf(g_track.output ? g_track.output : stderr,
-                    "\n[TML Memory] Program exited with %d memory leak(s)\n", leaks);
+            RT_WARN("memory", "Program exited with %d memory leak(s)", leaks);
         }
     }
     tml_mem_track_shutdown();
@@ -373,7 +374,7 @@ void tml_mem_get_stats(TmlMemStats* stats) {
 
 void tml_mem_print_stats(void) {
     if (!g_track.initialized) {
-        fprintf(stderr, "[TML Memory] Tracking not initialized\n");
+        RT_WARN("memory", "Tracking not initialized");
         return;
     }
 

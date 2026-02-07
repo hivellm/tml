@@ -40,6 +40,7 @@
 #include "parser/ast.hpp"
 #include "types/checker.hpp"
 
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -392,6 +393,7 @@ private:
     // Type mapping
     std::unordered_map<std::string, std::string> struct_types_;
     std::unordered_set<std::string> union_types_; // Track which types are unions (for field access)
+    std::unordered_set<std::string> not_found_struct_types_; // Negative cache for struct lookups
 
     // Enum variant values (EnumName::VariantName -> tag value)
     std::unordered_map<std::string, int> enum_variants_;
@@ -970,8 +972,9 @@ private:
     std::unordered_map<std::string, std::string> impl_behavior_concrete_types_;
 
     // Storage for imported module ASTs (keeps AST alive so pointers in pending_generic_* remain
-    // valid)
-    std::vector<parser::Module> imported_module_asts_;
+    // valid). Uses deque instead of vector to prevent pointer invalidation on push_back,
+    // since eligible_modules stores raw pointers into this container.
+    std::deque<parser::Module> imported_module_asts_;
 
     // Storage for builtin generic enum declarations (keeps AST alive)
     std::vector<std::unique_ptr<parser::EnumDecl>> builtin_enum_decls_;

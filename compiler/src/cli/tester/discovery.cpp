@@ -20,6 +20,7 @@
 //! Test file discovery is cached for 1 hour in `build/debug/.test-cache`
 //! to speed up repeated test runs.
 
+#include "log/log.hpp"
 #include "tester_internal.hpp"
 
 namespace tml::cli::tester {
@@ -54,7 +55,7 @@ std::vector<std::string> discover_bench_files(const std::string& root_dir) {
             }
         }
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "Error discovering benchmark files: " << e.what() << "\n";
+        TML_LOG_ERROR("test", "Error discovering benchmark files: " << e.what());
     }
 
     // Sort by name
@@ -100,7 +101,7 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
             }
         }
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "Error discovering test files: " << e.what() << "\n";
+        TML_LOG_ERROR("test", "Error discovering test files: " << e.what());
     }
 
     // Remove duplicates and sort

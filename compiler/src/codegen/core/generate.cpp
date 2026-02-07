@@ -979,7 +979,6 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // Save function code (non-generic functions)
     func_output.str(output_.str());
     output_.str("");
-
     // Generate pending generic instantiations (types go to type_defs_buffer_, funcs go to output_)
     generate_pending_instantiations();
 

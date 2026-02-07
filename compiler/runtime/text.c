@@ -15,6 +15,8 @@
  * - Bit 0: 0 = heap, 1 = inline
  */
 
+#include "log.h"
+
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -107,7 +109,7 @@ static void text_ensure_heap(TmlText* t, uint64_t required_cap) {
         uint64_t new_cap = grow_capacity(TEXT_SSO_CAPACITY, required_cap);
         uint8_t* new_data = (uint8_t*)malloc(new_cap + 1); // +1 for null terminator
         if (!new_data) {
-            fprintf(stderr, "Text: out of memory\n");
+            RT_FATAL("text", "out of memory");
             exit(1);
         }
 
@@ -129,7 +131,7 @@ static void text_ensure_heap(TmlText* t, uint64_t required_cap) {
         uint64_t new_cap = grow_capacity(t->heap.cap, required_cap);
         uint8_t* new_data = (uint8_t*)realloc(t->heap.data, new_cap + 1);
         if (!new_data) {
-            fprintf(stderr, "Text: out of memory\n");
+            RT_FATAL("text", "out of memory");
             exit(1);
         }
 
@@ -148,7 +150,7 @@ static void text_ensure_heap(TmlText* t, uint64_t required_cap) {
 TML_EXPORT TmlText* tml_text_new(void) {
     TmlText* t = (TmlText*)calloc(1, sizeof(TmlText));
     if (!t) {
-        fprintf(stderr, "Text: out of memory\n");
+        RT_FATAL("text", "out of memory");
         exit(1);
     }
     t->flags = TEXT_FLAG_INLINE;
@@ -162,7 +164,7 @@ TML_EXPORT TmlText* tml_text_new(void) {
 static TmlText* text_from_bytes(const uint8_t* data, uint64_t len) {
     TmlText* t = (TmlText*)calloc(1, sizeof(TmlText));
     if (!t) {
-        fprintf(stderr, "Text: out of memory\n");
+        RT_FATAL("text", "out of memory");
         exit(1);
     }
 
@@ -178,7 +180,7 @@ static TmlText* text_from_bytes(const uint8_t* data, uint64_t len) {
         t->heap.data = (uint8_t*)malloc(t->heap.cap + 1);
         if (!t->heap.data) {
             free(t);
-            fprintf(stderr, "Text: out of memory\n");
+            RT_FATAL("text", "out of memory");
             exit(1);
         }
         memcpy(t->heap.data, data, len);
@@ -204,7 +206,7 @@ TML_EXPORT TmlText* tml_text_from_str(const char* data) {
 TML_EXPORT TmlText* tml_text_with_capacity(uint64_t cap) {
     TmlText* t = (TmlText*)calloc(1, sizeof(TmlText));
     if (!t) {
-        fprintf(stderr, "Text: out of memory\n");
+        RT_FATAL("text", "out of memory");
         exit(1);
     }
 
@@ -217,7 +219,7 @@ TML_EXPORT TmlText* tml_text_with_capacity(uint64_t cap) {
         t->heap.data = (uint8_t*)malloc(cap + 1);
         if (!t->heap.data) {
             free(t);
-            fprintf(stderr, "Text: out of memory\n");
+            RT_FATAL("text", "out of memory");
             exit(1);
         }
         t->heap.data[0] = '\0';

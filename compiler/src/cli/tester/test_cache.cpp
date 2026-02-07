@@ -680,7 +680,7 @@ bool TestCacheManager::backup_to_temp(const std::string& cache_file,
 
         return true;
     } catch (const std::exception& e) {
-        std::cerr << "[WARN] Failed to backup cache to temp: " << e.what() << "\n";
+        TML_LOG_WARN("test", "Failed to backup cache to temp: " << e.what());
         return false;
     }
 }
@@ -722,13 +722,13 @@ bool TestCacheManager::restore_from_temp(const std::string& cache_file,
                 }
             }
 
-            std::cerr << "[INFO] Restored " << restored_count << " cached test DLLs from backup\n";
+            TML_LOG_INFO("test", "Restored " << restored_count << " cached test DLLs from backup");
         }
 
-        std::cerr << "[INFO] Restored test cache from backup at: " << backup_dir.string() << "\n";
+        TML_LOG_INFO("test", "Restored test cache from backup at: " << backup_dir.string());
         return true;
     } catch (const std::exception& e) {
-        std::cerr << "[WARN] Failed to restore cache from temp: " << e.what() << "\n";
+        TML_LOG_WARN("test", "Failed to restore cache from temp: " << e.what());
         return false;
     }
 }
@@ -754,7 +754,7 @@ std::vector<std::string> TestCacheManager::get_known_suite_hashes() const {
 
 size_t TestCacheManager::cleanup_orphaned_files(const std::string& run_cache_dir,
                                                 const std::vector<std::string>& known_suite_hashes,
-                                                bool verbose) {
+                                                bool /*verbose*/) {
     if (!fs::exists(run_cache_dir)) {
         return 0;
     }
@@ -805,25 +805,22 @@ size_t TestCacheManager::cleanup_orphaned_files(const std::string& run_cache_dir
                     ++removed_count;
                     removed_bytes += file_size;
 
-                    if (verbose) {
-                        std::cerr << "[CLEANUP] Removed orphaned file: " << filename << "\n";
-                    }
+                    TML_LOG_DEBUG("test", "[CLEANUP] Removed orphaned file: " << filename);
                 } catch (const std::exception& e) {
-                    if (verbose) {
-                        std::cerr << "[CLEANUP] Failed to remove " << filename << ": " << e.what()
-                                  << "\n";
-                    }
+                    TML_LOG_WARN("test",
+                                 "[CLEANUP] Failed to remove " << filename << ": " << e.what());
                 }
             }
         }
 
         if (removed_count > 0) {
             double mb = static_cast<double>(removed_bytes) / (1024 * 1024);
-            std::cerr << "[CLEANUP] Removed " << removed_count << " orphaned files (" << std::fixed
-                      << std::setprecision(1) << mb << " MB)\n";
+            TML_LOG_INFO("test", "[CLEANUP] Removed " << removed_count << " orphaned files ("
+                                                      << std::fixed << std::setprecision(1) << mb
+                                                      << " MB)");
         }
     } catch (const std::exception& e) {
-        std::cerr << "[CLEANUP] Error during cleanup: " << e.what() << "\n";
+        TML_LOG_WARN("test", "[CLEANUP] Error during cleanup: " << e.what());
     }
 
     return removed_count;

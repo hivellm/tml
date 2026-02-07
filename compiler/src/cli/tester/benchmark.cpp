@@ -26,6 +26,7 @@
 //! - `--save-baseline=<name>`: Save results to baseline file
 //! - `--compare=<name>`: Compare against saved baseline
 
+#include "log/log.hpp"
 #include "tester_internal.hpp"
 
 namespace tml::cli::tester {
@@ -205,8 +206,7 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
     if (!opts.compare_baseline.empty()) {
         baseline = load_benchmark_baseline(opts.compare_baseline);
         if (baseline.empty()) {
-            std::cerr << c.yellow() << "Warning: Could not load baseline from "
-                      << opts.compare_baseline << c.reset() << "\n";
+            TML_LOG_WARN("test", "Could not load baseline from " << opts.compare_baseline);
         }
     }
 

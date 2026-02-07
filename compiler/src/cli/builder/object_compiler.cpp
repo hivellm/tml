@@ -174,14 +174,10 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
 
     // Route to appropriate backend
     if (use_llvm_backend) {
-        if (options.verbose) {
-            std::cout << "[object_compiler] Using LLVM backend\n";
-        }
+        TML_LOG_DEBUG("build", "[object_compiler] Using LLVM backend");
         return compile_ll_with_llvm(ll_file, obj_file, options);
     } else {
-        if (options.verbose) {
-            std::cout << "[object_compiler] Using clang backend\n";
-        }
+        TML_LOG_DEBUG("build", "[object_compiler] Using clang backend");
         return compile_ll_with_clang(ll_file, obj_file, clang_path, options);
     }
 }
@@ -345,9 +341,7 @@ static ObjectCompileResult compile_ll_with_clang(const fs::path& ll_file,
 
     std::string command = cmd.str();
 
-    if (options.verbose) {
-        std::cout << "[clang] " << command << "\n";
-    }
+    TML_LOG_DEBUG("build", "[clang] " << command);
 
     // Execute compilation
     int ret = std::system(command.c_str());
@@ -418,9 +412,7 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
 
     // Use LLD for direct linking (self-contained)
     if (use_lld) {
-        if (options.verbose) {
-            std::cout << "[linker] Using LLD backend\n";
-        }
+        TML_LOG_DEBUG("build", "[linker] Using LLD backend");
         return link_objects_with_lld(object_files, output_file, options);
     }
 
@@ -612,9 +604,7 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
 
     std::string command = cmd.str();
 
-    if (options.verbose) {
-        std::cout << "[linker] " << command << "\n";
-    }
+    TML_LOG_DEBUG("build", "[linker] " << command);
 
     // Execute linking
     int ret = std::system(command.c_str());
@@ -652,9 +642,7 @@ static LinkResult link_objects_with_lld(const std::vector<fs::path>& object_file
         return result;
     }
 
-    if (options.verbose) {
-        std::cout << "[lld_linker] Using LLD at: " << linker.get_lld_path() << "\n";
-    }
+    TML_LOG_DEBUG("build", "[lld_linker] Using LLD at: " << linker.get_lld_path());
 
     // Convert LinkOptions to LLDLinkOptions
     backend::LLDLinkOptions lld_opts;

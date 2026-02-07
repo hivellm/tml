@@ -29,6 +29,7 @@
 #include "rlib.hpp"
 
 #include "cli/utils.hpp"
+#include "log/log.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -516,9 +517,7 @@ RlibResult create_rlib(const std::vector<fs::path>& object_files, const RlibMeta
 #endif
         }
 
-        if (options.verbose) {
-            std::cout << "Creating RLIB: " << cmd.str() << "\n";
-        }
+        TML_LOG_DEBUG("build", "Creating RLIB: " << cmd.str());
 
         int result = std::system(cmd.str().c_str());
 

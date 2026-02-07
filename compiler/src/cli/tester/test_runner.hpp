@@ -38,10 +38,6 @@
 
 namespace tml::cli {
 
-// Global mutex for synchronized verbose output in parallel test execution
-// Use this when printing debug output from test runner threads
-extern std::mutex g_verbose_output_mutex;
-
 // Get the platform-specific shared library extension
 // Windows: .dll, macOS: .dylib, Linux: .so
 inline std::string get_shared_lib_extension() {

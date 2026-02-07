@@ -19,6 +19,7 @@
 //! - Writes responses to stdout (newline-delimited JSON)
 //! - Writes logs to stderr
 
+#include "log/log.hpp"
 #include "mcp/mcp_server.hpp"
 #include "mcp/mcp_tools.hpp"
 
@@ -38,12 +39,11 @@ namespace tml::cli {
 ///
 /// Exit code (0 for success, non-zero for error).
 auto cmd_mcp(const std::vector<std::string>& args) -> int {
-    bool verbose = false;
-
     // Parse arguments
     for (const auto& arg : args) {
         if (arg == "--verbose" || arg == "-v") {
-            verbose = true;
+            // Adjust logger level for this subcommand
+            tml::log::Logger::instance().set_level(tml::log::LogLevel::Debug);
         } else if (arg == "--help" || arg == "-h") {
             std::cerr << R"(
 Usage: tml mcp [options]
@@ -75,11 +75,9 @@ Available tools:
         }
     }
 
-    if (verbose) {
-        std::cerr << "[MCP] Starting TML MCP server...\n";
-        std::cerr << "[MCP] Transport: stdio\n";
-        std::cerr << "[MCP] Protocol version: " << mcp::MCP_PROTOCOL_VERSION << "\n";
-    }
+    TML_LOG_INFO("mcp", "Starting TML MCP server...");
+    TML_LOG_INFO("mcp", "Transport: stdio");
+    TML_LOG_INFO("mcp", "Protocol version: " << mcp::MCP_PROTOCOL_VERSION);
 
     // Create and configure server
     mcp::McpServer server("tml-compiler", "0.1.0");
@@ -87,16 +85,12 @@ Available tools:
     // Register compiler tools
     mcp::register_compiler_tools(server);
 
-    if (verbose) {
-        std::cerr << "[MCP] Server ready, waiting for requests...\n";
-    }
+    TML_LOG_INFO("mcp", "Server ready, waiting for requests...");
 
     // Run server (blocks until shutdown)
     server.run();
 
-    if (verbose) {
-        std::cerr << "[MCP] Server shutdown complete.\n";
-    }
+    TML_LOG_INFO("mcp", "Server shutdown complete.");
 
     return 0;
 }

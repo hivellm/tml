@@ -1,0 +1,405 @@
+//! Structured logging for TML programs.
+//!
+//! This module provides structured logging with level-based filtering,
+//! module tags, multiple output formats, file sinks, and structured
+//! key-value fields.
+//!
+//! # Log Levels
+//!
+//! | Level | Value | Description |
+//! |-------|-------|-------------|
+//! | Trace | 0 | Fine-grained internal tracing |
+//! | Debug | 1 | Debugging information |
+//! | Info | 2 | General informational messages |
+//! | Warn | 3 | Potential issues |
+//! | Error | 4 | Recoverable errors |
+//! | Fatal | 5 | Unrecoverable errors |
+//!
+//! # Output Formats
+//!
+//! | Format  | Value | Description |
+//! |---------|-------|-------------|
+//! | Text    | 0     | Human-readable text (default) |
+//! | JSON    | 1     | Machine-parseable JSON lines |
+//! | Compact | 2     | Short-form with 2-char levels |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::log
+//!
+//! // Basic logging
+//! log::info("app", "Server started on port 8080")
+//! log::warn("app", "Connection pool is 80% full")
+//! log::error("db", "Failed to connect to database")
+//!
+//! // Structured logging with key-value fields
+//! log::structured(log::INFO, "http", "Request handled", "method=GET;status=200;ms=42")
+//!
+//! // Module-level filtering
+//! log::set_filter("server=debug,db=trace,*=warn")
+//!
+//! // File logging
+//! log::open_file("app.log")
+//! log::info("app", "This goes to stderr AND app.log")
+//! log::close_file()
+//!
+//! // JSON output format
+//! log::set_format(log::FORMAT_JSON)
+//!
+//! // Auto-configure from TML_LOG environment variable
+//! log::init_from_env()
+//! ```
+
+// ============================================================================
+// Log Level Constants
+// ============================================================================
+
+/// Finest-grained tracing information.
+pub const TRACE: I32 = 0
+
+/// Debugging information useful during development.
+pub const DEBUG: I32 = 1
+
+/// General informational messages about program progress.
+pub const INFO: I32 = 2
+
+/// Potential issues that deserve attention.
+pub const WARN: I32 = 3
+
+/// Recoverable errors that allow the program to continue.
+pub const ERROR: I32 = 4
+
+/// Unrecoverable errors that will cause the program to stop.
+pub const FATAL: I32 = 5
+
+// ============================================================================
+// Output Format Constants
+// ============================================================================
+
+/// Human-readable text format (default).
+pub const FORMAT_TEXT: I32 = 0
+
+/// Machine-parseable JSON format (one object per line).
+pub const FORMAT_JSON: I32 = 1
+
+/// Compact format with 2-character level names.
+pub const FORMAT_COMPACT: I32 = 2
+
+// ============================================================================
+// Core Logging Functions
+// ============================================================================
+
+/// Log a message at the given level with a module tag.
+///
+/// This is the core logging function. Prefer the level-specific
+/// convenience functions (`trace`, `debug`, `info`, etc.) for clarity.
+///
+/// # Parameters
+///
+/// - `level`: Log level (use the constants TRACE through FATAL)
+/// - `module`: Module tag for filtering (e.g., "app", "db", "server")
+/// - `message`: The log message
+///
+/// # Example
+///
+/// ```tml
+/// log::msg(log::INFO, "app", "Server started")
+/// ```
+pub func msg(level: I32, module: Str, message: Str) {
+    lowlevel { rt_log_msg(level, module, message) }
+}
+
+/// Log a message at TRACE level.
+///
+/// Use for fine-grained debugging information that is typically
+/// only enabled during development.
+///
+/// # Example
+///
+/// ```tml
+/// log::trace("parser", "Entering parse_expression()")
+/// ```
+pub func trace(module: Str, message: Str) {
+    lowlevel { rt_log_msg(0, module, message) }
+}
+
+/// Log a message at DEBUG level.
+///
+/// Use for information useful during debugging but not needed
+/// in production.
+///
+/// # Example
+///
+/// ```tml
+/// log::debug("cache", "Cache miss for key: users")
+/// ```
+pub func debug(module: Str, message: Str) {
+    lowlevel { rt_log_msg(1, module, message) }
+}
+
+/// Log a message at INFO level.
+///
+/// Use for general progress information about the program.
+///
+/// # Example
+///
+/// ```tml
+/// log::info("server", "Listening on port 8080")
+/// ```
+pub func info(module: Str, message: Str) {
+    lowlevel { rt_log_msg(2, module, message) }
+}
+
+/// Log a message at WARN level.
+///
+/// Use for conditions that might cause problems but don't prevent
+/// the program from functioning.
+///
+/// # Example
+///
+/// ```tml
+/// log::warn("pool", "Connection pool utilization at 90%")
+/// ```
+pub func warn(module: Str, message: Str) {
+    lowlevel { rt_log_msg(3, module, message) }
+}
+
+/// Log a message at ERROR level.
+///
+/// Use for errors that are recoverable but indicate something
+/// went wrong.
+///
+/// # Example
+///
+/// ```tml
+/// log::error("db", "Query failed, retrying...")
+/// ```
+pub func error(module: Str, message: Str) {
+    lowlevel { rt_log_msg(4, module, message) }
+}
+
+/// Log a message at FATAL level.
+///
+/// Use for unrecoverable errors. The program should typically
+/// exit after logging at this level.
+///
+/// # Example
+///
+/// ```tml
+/// log::fatal("app", "Cannot open configuration file")
+/// ```
+pub func fatal(module: Str, message: Str) {
+    lowlevel { rt_log_msg(5, module, message) }
+}
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+/// Set the minimum log level.
+///
+/// Messages below this level will be silently discarded.
+/// Default is WARN (3).
+///
+/// # Example
+///
+/// ```tml
+/// // Show all messages including debug
+/// log::set_level(log::DEBUG)
+///
+/// // Only show errors and fatal
+/// log::set_level(log::ERROR)
+/// ```
+pub func set_level(level: I32) {
+    lowlevel { rt_log_set_level(level) }
+}
+
+/// Get the current minimum log level.
+///
+/// # Example
+///
+/// ```tml
+/// let current = log::get_level()
+/// ```
+pub func get_level() -> I32 {
+    let r: I32 = lowlevel { rt_log_get_level() }
+    return r
+}
+
+/// Check if a message at the given level would be logged.
+///
+/// Use this before constructing expensive log messages to avoid
+/// unnecessary work when the level is filtered out.
+///
+/// # Example
+///
+/// ```tml
+/// if log::enabled(log::TRACE) {
+///     // Only build the message if TRACE is enabled
+///     let details = build_request_details()
+///     log::trace("http", details)
+/// }
+/// ```
+pub func enabled(level: I32) -> Bool {
+    let r: I32 = lowlevel { rt_log_enabled(level) }
+    return r != 0
+}
+
+// ============================================================================
+// Module-Level Filtering (4.4.3)
+// ============================================================================
+
+/// Set a module-level filter specification.
+///
+/// Format: "module1=level,module2=level,*=default_level"
+///
+/// Each module can have its own log level. The wildcard `*` sets the
+/// default level for modules not explicitly listed. Module names
+/// without `=level` are set to TRACE (show everything).
+///
+/// # Example
+///
+/// ```tml
+/// // Only show debug from server, trace from db, warn for everything else
+/// log::set_filter("server=debug,db=trace,*=warn")
+///
+/// // Show everything from a specific module
+/// log::set_filter("mymodule")
+/// ```
+pub func set_filter(filter_spec: Str) {
+    lowlevel { rt_log_set_filter(filter_spec) }
+}
+
+/// Check if a message at the given level from a specific module would be logged.
+///
+/// Unlike `enabled()`, this respects per-module filter overrides set
+/// via `set_filter()`.
+///
+/// # Example
+///
+/// ```tml
+/// log::set_filter("db=trace,*=warn")
+/// assert(log::module_enabled(log::TRACE, "db"))   // true
+/// assert(not log::module_enabled(log::TRACE, "app"))  // false (default=warn)
+/// ```
+pub func module_enabled(level: I32, module: Str) -> Bool {
+    let r: I32 = lowlevel { rt_log_module_enabled(level, module) }
+    return r != 0
+}
+
+// ============================================================================
+// Structured Logging (4.4.4)
+// ============================================================================
+
+/// Log a structured message with key-value fields.
+///
+/// Fields are passed as a semicolon-separated string of key=value pairs.
+/// When the output format is JSON, fields become JSON properties.
+/// In text format, fields are appended after a ` | ` separator.
+///
+/// # Parameters
+///
+/// - `level`: Log level
+/// - `module`: Module tag
+/// - `message`: The log message
+/// - `fields`: Semicolon-separated key=value pairs
+///
+/// # Example
+///
+/// ```tml
+/// log::structured(log::INFO, "http", "Request handled", "method=GET;status=200;ms=42")
+///
+/// // Text output:  INFO [http] Request handled | method=GET;status=200;ms=42
+/// // JSON output:  {"level":"INFO","module":"http","msg":"Request handled","method":"GET","status":"200","ms":"42"}
+/// ```
+pub func structured(level: I32, module: Str, message: Str, fields: Str) {
+    lowlevel { rt_log_structured(level, module, message, fields) }
+}
+
+// ============================================================================
+// Output Format (4.4.2)
+// ============================================================================
+
+/// Set the log output format.
+///
+/// - `FORMAT_TEXT` (0): Human-readable text (default)
+/// - `FORMAT_JSON` (1): Machine-parseable JSON lines
+/// - `FORMAT_COMPACT` (2): Compact format with 2-char levels
+///
+/// # Example
+///
+/// ```tml
+/// log::set_format(log::FORMAT_JSON)
+/// log::info("app", "This will be JSON")
+/// // Output: {"level":"INFO","module":"app","msg":"This will be JSON"}
+/// ```
+pub func set_format(format: I32) {
+    lowlevel { rt_log_set_format(format) }
+}
+
+/// Get the current log output format.
+///
+/// Returns FORMAT_TEXT (0), FORMAT_JSON (1), or FORMAT_COMPACT (2).
+pub func get_format() -> I32 {
+    let r: I32 = lowlevel { rt_log_get_format() }
+    return r
+}
+
+// ============================================================================
+// File Sink (4.4.6)
+// ============================================================================
+
+/// Open a file for log output.
+///
+/// All subsequent log messages will be written to both stderr and the
+/// specified file. The file is opened in append mode.
+///
+/// Returns `true` on success, `false` on failure (e.g., invalid path).
+///
+/// # Example
+///
+/// ```tml
+/// if log::open_file("app.log") {
+///     log::info("app", "Logging to file")
+///     log::close_file()
+/// }
+/// ```
+pub func open_file(path: Str) -> Bool {
+    let r: I32 = lowlevel { rt_log_open_file(path) }
+    return r != 0
+}
+
+/// Close the file sink, if one is open.
+///
+/// After calling this, log messages will only go to stderr
+/// (or through the callback if one is set).
+pub func close_file() {
+    lowlevel { rt_log_close_file() }
+}
+
+// ============================================================================
+// Environment Variable Configuration (4.4.7)
+// ============================================================================
+
+/// Configure logging from the TML_LOG environment variable.
+///
+/// Reads the `TML_LOG` environment variable and applies it:
+/// - If it contains a simple level name (e.g., "debug"), sets the global level
+/// - If it contains a filter spec (e.g., "server=debug,*=warn"), applies module filters
+///
+/// Returns `true` if `TML_LOG` was found and applied, `false` otherwise.
+///
+/// # Example
+///
+/// ```tml
+/// // At program startup:
+/// log::init_from_env()
+///
+/// // If TML_LOG=debug is set, all modules show debug and above
+/// // If TML_LOG=server=trace,*=warn is set, per-module filtering is applied
+/// ```
+pub func init_from_env() -> Bool {
+    let r: I32 = lowlevel { rt_log_init_from_env() }
+    return r != 0
+}

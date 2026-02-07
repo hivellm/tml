@@ -27,6 +27,7 @@
 //! - `--crashes=<dir>`: Save crash-inducing inputs
 //! - `--fuzz-max-len=<n>`: Maximum input size in bytes
 
+#include "log/log.hpp"
 #include "tester_internal.hpp"
 
 #include <cstdlib>
@@ -64,7 +65,7 @@ std::vector<std::string> discover_fuzz_files(const std::string& root_dir) {
             }
         }
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "Error discovering fuzz files: " << e.what() << "\n";
+        TML_LOG_ERROR("test", "Error discovering fuzz files: " << e.what());
     }
 
     // Sort by name
@@ -215,6 +216,7 @@ static void save_crash_input(const std::string& crashes_dir, const std::string& 
     if (out) {
         out.write(reinterpret_cast<const char*>(input.data()), input.size());
         std::cout << "  Crash input saved to: " << ss.str() << "\n";
+        TML_LOG_INFO("test", "Crash input saved to: " << ss.str());
     }
 }
 

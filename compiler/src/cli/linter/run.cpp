@@ -111,9 +111,7 @@ int run_lint(int argc, char* argv[]) {
     // Lint all files
     LintResult result;
     for (const auto& file : files) {
-        if (verbose) {
-            std::cout << "  Checking: " << file.string() << "\n";
-        }
+        TML_LOG_INFO("lint", "Checking: " << file.string());
         lint_file(file, result, config, fix_mode, semantic);
     }
 

@@ -46,6 +46,9 @@
 // Backtrace support for panic handlers
 #include "backtrace.h"
 
+// Structured logging API
+#include "log.h"
+
 // ============================================================================
 // Backtrace Configuration
 // ============================================================================
@@ -114,11 +117,23 @@ static jmp_buf tml_panic_jmp_buf;
 /** @brief Flag indicating whether panic catching is active. */
 static int32_t tml_catching_panic = 0;
 
+/**
+ * @brief Flag to temporarily suppress VEH interception.
+ *
+ * Set to 1 by code that uses its own SEH __try/__except (e.g., backtrace.c)
+ * to prevent the VEH handler from intercepting exceptions that the SEH
+ * handler should catch instead. Exported so runtime components can set it.
+ */
+volatile int32_t tml_veh_suppressed = 0;
+
 /** @brief Buffer to store the panic message when caught. */
 static char tml_panic_msg[1024] = {0};
 
 /** @brief Buffer to store backtrace when panic is caught (for DLL test mode). */
 static char tml_panic_backtrace[8192] = {0};
+
+/** @brief Buffer to store JSON-formatted backtrace when panic is caught. */
+static char tml_panic_backtrace_json[16384] = {0};
 
 // ============================================================================
 // I/O Functions
@@ -177,6 +192,7 @@ void panic(const char* message) {
         }
         // Capture backtrace before longjmp (stack will be unwound)
         tml_panic_backtrace[0] = '\0';
+        tml_panic_backtrace_json[0] = '\0';
         if (tml_backtrace_on_panic) {
             Backtrace* bt = backtrace_capture_full(2); // Skip internal frames
             if (bt) {
@@ -186,6 +202,12 @@ void panic(const char* message) {
                     snprintf(tml_panic_backtrace, sizeof(tml_panic_backtrace), "%s", formatted);
                     free(formatted);
                 }
+                char* json = backtrace_format_json(bt);
+                if (json) {
+                    snprintf(tml_panic_backtrace_json, sizeof(tml_panic_backtrace_json), "%s",
+                             json);
+                    free(json);
+                }
                 backtrace_free(bt);
             }
         }
@@ -193,12 +215,12 @@ void panic(const char* message) {
     }
 
     // Normal panic behavior - print message and exit
-    fprintf(stderr, "panic: %s\n", message ? message : "(null)");
+    RT_FATAL("runtime", "panic: %s", message ? message : "(null)");
 
     // Print backtrace if enabled and not already in panic (avoid recursion)
     if (tml_backtrace_on_panic && !tml_in_panic) {
         tml_in_panic = 1;
-        fprintf(stderr, "\nBacktrace:\n");
+        RT_ERROR("runtime", "Backtrace:");
         backtrace_print(2); // Skip panic() and backtrace_print()
         tml_in_panic = 0;
     }
@@ -232,6 +254,7 @@ void assert_tml(int32_t condition, const char* message) {
             snprintf(tml_panic_msg, sizeof(tml_panic_msg), "%s", assert_msg);
             // Capture backtrace before longjmp (stack will be unwound)
             tml_panic_backtrace[0] = '\0';
+            tml_panic_backtrace_json[0] = '\0';
             if (tml_backtrace_on_panic) {
                 Backtrace* bt = backtrace_capture_full(2); // Skip internal frames
                 if (bt) {
@@ -241,6 +264,12 @@ void assert_tml(int32_t condition, const char* message) {
                         snprintf(tml_panic_backtrace, sizeof(tml_panic_backtrace), "%s", formatted);
                         free(formatted);
                     }
+                    char* json = backtrace_format_json(bt);
+                    if (json) {
+                        snprintf(tml_panic_backtrace_json, sizeof(tml_panic_backtrace_json), "%s",
+                                 json);
+                        free(json);
+                    }
                     backtrace_free(bt);
                 }
             }
@@ -248,12 +277,12 @@ void assert_tml(int32_t condition, const char* message) {
         }
 
         // Normal mode - print and exit
-        fprintf(stderr, "%s\n", assert_msg);
+        RT_FATAL("runtime", "%s", assert_msg);
 
         // Print backtrace if enabled
         if (tml_backtrace_on_panic && !tml_in_panic) {
             tml_in_panic = 1;
-            fprintf(stderr, "\nBacktrace:\n");
+            RT_ERROR("runtime", "Backtrace:");
             backtrace_print(2);
             tml_in_panic = 0;
         }
@@ -286,6 +315,7 @@ TML_EXPORT void assert_tml_loc(int32_t condition, const char* message, const cha
             snprintf(tml_panic_msg, sizeof(tml_panic_msg), "%s", assert_msg);
             // Capture backtrace before longjmp (stack will be unwound)
             tml_panic_backtrace[0] = '\0';
+            tml_panic_backtrace_json[0] = '\0';
             if (tml_backtrace_on_panic) {
                 Backtrace* bt = backtrace_capture_full(3); // Skip internal frames
                 if (bt) {
@@ -295,6 +325,12 @@ TML_EXPORT void assert_tml_loc(int32_t condition, const char* message, const cha
                         snprintf(tml_panic_backtrace, sizeof(tml_panic_backtrace), "%s", formatted);
                         free(formatted);
                     }
+                    char* json = backtrace_format_json(bt);
+                    if (json) {
+                        snprintf(tml_panic_backtrace_json, sizeof(tml_panic_backtrace_json), "%s",
+                                 json);
+                        free(json);
+                    }
                     backtrace_free(bt);
                 }
             }
@@ -302,12 +338,12 @@ TML_EXPORT void assert_tml_loc(int32_t condition, const char* message, const cha
         }
 
         // Normal mode - print and exit
-        fprintf(stderr, "%s\n", assert_msg);
+        RT_FATAL("runtime", "%s", assert_msg);
 
         // Print backtrace if enabled
         if (tml_backtrace_on_panic && !tml_in_panic) {
             tml_in_panic = 1;
-            fprintf(stderr, "\nBacktrace:\n");
+            RT_ERROR("runtime", "Backtrace:");
             backtrace_print(2);
             tml_in_panic = 0;
         }
@@ -428,6 +464,10 @@ TML_EXPORT const char* tml_get_panic_backtrace(void) {
     return tml_panic_backtrace;
 }
 
+TML_EXPORT const char* tml_get_panic_backtrace_json(void) {
+    return tml_panic_backtrace_json;
+}
+
 /** @brief Callback type for test functions that return int (int -> void args). */
 typedef int32_t (*tml_test_entry_fn)(void);
 
@@ -486,7 +526,7 @@ static void tml_signal_handler(int sig) {
     }
 
     // Otherwise, print and exit
-    fprintf(stderr, "FATAL: %s\n", sig_name);
+    RT_FATAL("runtime", "FATAL: %s", sig_name);
     fflush(stderr);
     _exit(128 + sig);
 }
@@ -555,21 +595,51 @@ static const char* tml_get_exception_name(DWORD code) {
     }
 }
 
-/** @brief Previous unhandled exception filter. */
-static LPTOP_LEVEL_EXCEPTION_FILTER tml_prev_filter = NULL;
+/** @brief VEH handler handle (returned by AddVectoredExceptionHandler). */
+static PVOID tml_veh_handle = NULL;
 
-/** @brief Reference count for exception filter - thread-safe. */
+/** @brief Reference count for VEH handler - thread-safe. */
 static volatile LONG tml_filter_refcount = 0;
 
-/** @brief Flag indicating if the filter is installed. */
-static volatile LONG tml_filter_installed = 0;
-
-/** @brief Top-level exception filter for crash catching. */
-static LONG WINAPI tml_exception_filter(EXCEPTION_POINTERS* info) {
+/**
+ * @brief Vectored Exception Handler (VEH) for crash catching.
+ *
+ * Uses VEH instead of SetUnhandledExceptionFilter because:
+ * 1. VEH runs BEFORE SEH frame unwinding, so the stack is still intact
+ * 2. longjmp is safe from VEH because the stack hasn't been unwound
+ * 3. SetUnhandledExceptionFilter runs AFTER SEH unwinding, making
+ *    longjmp cause STATUS_BAD_STACK (0xC0000028)
+ *
+ * Only handles fatal exceptions (ACCESS_VIOLATION, etc.) and only when
+ * tml_catching_panic is set (i.e., we're inside tml_run_test_with_catch).
+ */
+static LONG WINAPI tml_veh_handler(EXCEPTION_POINTERS* info) {
     DWORD code = info->ExceptionRecord->ExceptionCode;
 
+    // Only intercept fatal hardware exceptions when we're actively catching
+    // and VEH is not suppressed (e.g., by backtrace.c's own SEH protection)
+    if (!tml_catching_panic || tml_veh_suppressed) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
+    // Only handle fatal exceptions - skip C++ exceptions, breakpoints, etc.
+    switch (code) {
+    case EXCEPTION_ACCESS_VIOLATION:
+    case EXCEPTION_STACK_OVERFLOW:
+    case EXCEPTION_INT_DIVIDE_BY_ZERO:
+    case EXCEPTION_INT_OVERFLOW:
+    case EXCEPTION_ILLEGAL_INSTRUCTION:
+    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+    case EXCEPTION_FLT_INVALID_OPERATION:
+    case EXCEPTION_FLT_OVERFLOW:
+    case EXCEPTION_FLT_UNDERFLOW:
+    case EXCEPTION_FLT_STACK_CHECK:
+        break;
+    default:
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
     // Format and print the crash message immediately to stderr
-    // Using WriteFile for reliability in exception context
     char msg[256];
     int len = snprintf(msg, sizeof(msg), "CRASH: %s (0x%08lX)\n", tml_get_exception_name(code),
                        (unsigned long)code);
@@ -583,41 +653,33 @@ static LONG WINAPI tml_exception_filter(EXCEPTION_POINTERS* info) {
     snprintf(tml_panic_msg, sizeof(tml_panic_msg), "CRASH: %s (0x%08lX)",
              tml_get_exception_name(code), (unsigned long)code);
 
-    // NOTE: Do NOT call longjmp from exception filter!
-    // longjmp from a Windows exception handler causes STATUS_BAD_STACK (0xC0000028)
-    // because the stack state is undefined during exception handling.
-    // Instead, let the test runner's SEH (__try/__except) handle the exception.
+    // VEH runs before SEH frame unwinding, so longjmp is safe here.
+    // The stack is still intact because no unwinding has occurred.
+    tml_catching_panic = 0;
+    longjmp(tml_panic_jmp_buf, 2);
 
-    // Let the default handler run
-    if (tml_prev_filter) {
-        return tml_prev_filter(info);
-    }
+    // Should never reach here
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-/** @brief Install the unhandled exception filter (thread-safe, ref-counted). */
+/** @brief Install the VEH crash handler (thread-safe, ref-counted). */
 static void tml_install_exception_filter(void) {
-    // Increment ref count and install filter only once
     if (InterlockedIncrement(&tml_filter_refcount) == 1) {
-        // First reference - actually install the filter
-        if (InterlockedCompareExchange(&tml_filter_installed, 1, 0) == 0) {
-            tml_prev_filter = SetUnhandledExceptionFilter(tml_exception_filter);
-            // Also disable Windows Error Reporting popup
-            SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
-        }
+        // First reference - install VEH as first handler (1 = first in chain)
+        tml_veh_handle = AddVectoredExceptionHandler(1, tml_veh_handler);
+        // Disable Windows Error Reporting popup
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     }
 }
 
-/** @brief Remove the unhandled exception filter (thread-safe, ref-counted). */
+/** @brief Remove the VEH crash handler (thread-safe, ref-counted). */
 static void tml_remove_exception_filter(void) {
-    // Decrement ref count but don't actually remove the filter
-    // The filter stays installed for the lifetime of the process to avoid
-    // race conditions in parallel test execution
-    if (tml_filter_refcount > 0) {
-        InterlockedDecrement(&tml_filter_refcount);
+    if (InterlockedDecrement(&tml_filter_refcount) == 0) {
+        if (tml_veh_handle) {
+            RemoveVectoredExceptionHandler(tml_veh_handle);
+            tml_veh_handle = NULL;
+        }
     }
-    // NOTE: We intentionally don't remove the filter to avoid race conditions.
-    // The filter is harmless when not actively catching panics.
 }
 #endif
 
@@ -652,7 +714,7 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
         // Got here via longjmp from panic()
         tml_catching_panic = 0;
         tml_remove_exception_filter();
-        fprintf(stderr, "panic: %s\n", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
+        RT_FATAL("runtime", "panic: %s", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
         fflush(stderr);
         return -1;
     } else {
@@ -678,14 +740,14 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
         // Got here via longjmp from panic()
         tml_catching_panic = 0;
         tml_restore_signal_handlers();
-        fprintf(stderr, "panic: %s\n", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
+        RT_FATAL("runtime", "panic: %s", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
         fflush(stderr);
         return -1;
     } else {
         // Got here via longjmp from signal handler (jmp_result == 2)
         tml_catching_panic = 0;
         tml_restore_signal_handlers();
-        fprintf(stderr, "%s\n", tml_panic_msg[0] ? tml_panic_msg : "CRASH: Unknown");
+        RT_FATAL("runtime", "%s", tml_panic_msg[0] ? tml_panic_msg : "CRASH: Unknown");
         fflush(stderr);
         return -2;
     }

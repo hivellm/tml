@@ -24,6 +24,7 @@
 
 #include "cli/builder/builder_internal.hpp"
 #include "coverage.hpp"
+#include "log/log.hpp"
 #include "tester_internal.hpp"
 
 #ifdef _WIN32
@@ -112,6 +113,7 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
         } else if (arg == "--no-cache") {
             // Require explicit confirmation for --no-cache
             // This prevents accidental full recompilation which is slow
+            TML_LOG_WARN("test", "--no-cache flag used, requesting confirmation");
             std::cerr << "\033[1;33mWarning:\033[0m --no-cache will force full recompilation of "
                          "ALL test DLLs.\n";
             std::cerr
@@ -120,9 +122,10 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             std::string response;
             std::getline(std::cin, response);
             if (response != "y" && response != "Y" && response != "yes" && response != "Yes") {
-                std::cerr << "Aborted. Running with cache enabled.\n";
+                TML_LOG_INFO("test", "--no-cache aborted by user");
             } else {
                 opts.no_cache = true;
+                TML_LOG_INFO("test", "--no-cache confirmed, forcing full recompilation");
             }
         } else if (arg.starts_with("--save-baseline=")) {
             opts.save_baseline = arg.substr(16);
@@ -211,6 +214,39 @@ int run_test(int argc, char* argv[], bool verbose) {
     // Set memory leak checking option
     tml::CompilerOptions::check_leaks = opts.check_leaks;
 
+    // When --verbose is active, add a filtered JSON file sink to the logger
+    // so test log output goes to build/debug/test_log.json.
+    // Only "test" and "build" modules at INFO+ are written to avoid bloating
+    // the file with compiler DEBUG spam (234k+ entries, 26MB+).
+    if (opts.verbose) {
+        fs::path log_dir = fs::path("build") / "debug";
+        fs::create_directories(log_dir);
+        fs::path log_path = log_dir / "test_log.json";
+
+        // Filtered sink: wraps a FileSink and only writes test/build module messages
+        class TestLogSink : public tml::log::LogSink {
+        public:
+            TestLogSink(const std::string& path) : inner_(path, /*append=*/false) {
+                inner_.set_format(tml::log::LogFormat::JSON);
+            }
+            void write(const tml::log::LogRecord& record) override {
+                // Only write test-related modules, skip compiler/codegen noise
+                if (record.module == "test" || record.module == "build" ||
+                    record.level >= tml::log::LogLevel::Error) {
+                    inner_.write(record);
+                }
+            }
+            void flush() override {
+                inner_.flush();
+            }
+
+        private:
+            tml::log::FileSink inner_;
+        };
+
+        tml::log::Logger::instance().add_sink(std::make_unique<TestLogSink>(log_path.string()));
+    }
+
     ColorOutput c(!opts.no_color);
 
     // If --bench flag is set, run benchmarks instead of tests
@@ -256,12 +292,18 @@ int run_test(int argc, char* argv[], bool verbose) {
         return 0;
     }
 
+    // Coverage requires suite mode for accurate aggregate coverage data.
+    // In non-suite mode, each test runs as a separate process and only tracks
+    // its own functions, making the last test overwrite coverage.html with
+    // partial data. Suite mode collects coverage from ALL DLLs and generates
+    // the comprehensive library coverage report.
+    if (opts.coverage && !opts.suite_mode) {
+        opts.suite_mode = true;
+    }
+
     // Coverage cannot be used with filters - it requires full test suite
     if (opts.coverage && !opts.patterns.empty()) {
-        std::cerr << c.red() << c.bold() << "Error: " << c.reset()
-                  << "Coverage cannot be used with test filters.\n"
-                  << "       Run " << c.cyan() << "tml test --coverage" << c.reset()
-                  << " without filters for accurate coverage data.\n";
+        TML_LOG_ERROR("test", "Coverage cannot be used with test filters");
         return 1;
     }
 
@@ -280,8 +322,8 @@ int run_test(int argc, char* argv[], bool verbose) {
     if (opts.coverage_source) {
         coverage_collector = std::make_unique<tester::CoverageCollector>();
         if (!coverage_collector->initialize()) {
-            std::cerr << c.red() << "Coverage Error: " << c.reset()
-                      << coverage_collector->get_last_error() << "\n";
+            TML_LOG_ERROR(
+                "test", "Coverage initialization error: " << coverage_collector->get_last_error());
             return 1;
         }
 
@@ -383,6 +425,13 @@ int run_test(int argc, char* argv[], bool verbose) {
 
         // Process LLVM source coverage
         process_coverage();
+
+        // Flush log file and notify user
+        if (opts.verbose) {
+            tml::log::Logger::instance().flush();
+            fs::path log_path = fs::path("build") / "debug" / "test_log.json";
+            std::cout << "\n " << c.dim() << "Test log: " << c.reset() << log_path.string() << "\n";
+        }
 
         int failed = 0;
         for (const auto& result : collector.results) {
@@ -500,6 +549,13 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     // Process coverage
     process_coverage();
+
+    // Flush log file and notify user
+    if (opts.verbose) {
+        tml::log::Logger::instance().flush();
+        fs::path log_path = fs::path("build") / "debug" / "test_log.json";
+        std::cout << "\n " << c.dim() << "Test log: " << c.reset() << log_path.string() << "\n";
+    }
 
     // Count failures
     int failed = 0;

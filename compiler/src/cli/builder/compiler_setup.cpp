@@ -210,7 +210,7 @@ bool is_precompiled_runtime_available() {
 }
 
 std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std::string& clang,
-                                    bool verbose) {
+                                    bool /*verbose*/) {
     fs::path c_path = runtime_c_path;
     fs::path obj_path = c_path.parent_path() / "essential";
 #ifdef _WIN32
@@ -227,9 +227,7 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
     }
 
     if (needs_compile) {
-        if (verbose) {
-            std::cout << "Pre-compiling runtime: " << c_path << "\n";
-        }
+        TML_LOG_INFO("build", "Pre-compiling runtime: " << c_path);
         // Build compile command with appropriate flags
         // -fms-extensions: Enable MSVC extensions (SEH __try/__except) on Windows
         std::string compile_cmd = quote_command(clang) +
@@ -252,7 +250,7 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
 }
 
 std::string ensure_c_compiled(const std::string& c_path_str, const std::string& cache_dir,
-                              const std::string& clang, bool verbose,
+                              const std::string& clang, bool /*verbose*/,
                               const std::string& extra_flags) {
     fs::path c_path = c_path_str;
 
@@ -304,14 +302,10 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
     }
 
     if (should_compile) {
-        if (verbose) {
-            std::cout << "Compiling: " << c_path.filename().string() << " -> "
-                      << obj_path.filename().string();
-            if (!extra_flags.empty()) {
-                std::cout << " (flags: " << extra_flags << ")";
-            }
-            std::cout << "\n";
-        }
+        TML_LOG_INFO("build",
+                     "Compiling: " << c_path.filename().string() << " -> "
+                                   << obj_path.filename().string()
+                                   << (extra_flags.empty() ? "" : " (flags: " + extra_flags + ")"));
         // Build compile command with appropriate flags
         // -fms-extensions: Enable MSVC extensions (SEH __try/__except) on Windows
         // -D_CRT_SECURE_NO_WARNINGS: Suppress MSVC CRT deprecation warnings (strncpy, fopen, etc.)

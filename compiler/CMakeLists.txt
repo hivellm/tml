@@ -141,6 +141,7 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/backtrace.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/log.c
 )
 
 # Create static library
@@ -187,6 +188,13 @@ add_library(tml_common STATIC
     src/common/crc32c.cpp
 )
 target_include_directories(tml_common PUBLIC include src)
+
+# Logging library (structured logging with levels, sinks, filters)
+add_library(tml_log STATIC
+    src/log/logger.cpp
+    src/log/log_init.cpp
+)
+target_include_directories(tml_log PUBLIC include src)
 
 # Preprocessor library (C-style conditional compilation)
 add_library(tml_preprocessor STATIC
@@ -991,7 +999,7 @@ add_library(tml_cli STATIC
     src/cli/linter/semantic.cpp
     src/cli/linter/style.cpp
 )
-target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc tml_mcp_lib tml_lld tml_common ${TML_BACKEND_LIB})
+target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc tml_mcp_lib tml_lld tml_common tml_log ${TML_BACKEND_LIB})
 target_include_directories(tml_cli PUBLIC include src)
 
 # OpenSSL for SHA256 hashing (non-Windows)
@@ -1015,7 +1023,7 @@ endif()
 # MCP server executable (separate from main tml to avoid file locking issues)
 # When MCP server is running, tml.exe can still be rebuilt independently
 add_executable(tml_mcp src/main_mcp.cpp)
-target_link_libraries(tml_mcp PRIVATE tml_mcp_lib tml_codegen)
+target_link_libraries(tml_mcp PRIVATE tml_mcp_lib tml_codegen tml_log)
 target_include_directories(tml_mcp PRIVATE include src)
 
 # Tests
@@ -1058,6 +1066,7 @@ if(TML_BUILD_TESTS)
         tests/integration/cache_test.cpp
         tests/integration/ffi_test.cpp
         tests/integration/memory_test.cpp
+        tests/log_test.cpp
     )
     target_link_libraries(tml_tests PRIVATE
         tml_cli

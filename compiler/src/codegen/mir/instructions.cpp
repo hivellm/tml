@@ -1902,8 +1902,8 @@ void MirCodegen::emit_phi_inst(const mir::PhiInst& i, const std::string& result_
                 label = label_it->second;
             } else {
                 label = "MISSING_BLOCK_" + std::to_string(block_id);
-                std::cerr << "[CODEGEN] PHI references block " << block_id
-                          << " which is not in block_labels_\n";
+                TML_LOG_WARN("codegen", "[CODEGEN] PHI references block "
+                                            << block_id << " which is not in block_labels_");
             }
             emit("[ " + val + ", %" + label + " ]");
         }

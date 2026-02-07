@@ -2100,11 +2100,55 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         func_it = functions_.find(sanitized_name);
     }
 
+    // If function not found in functions_ map but we have an @extern func_sig,
+    // emit a late 'declare' and register it. This handles cases where module
+    // re-parsing fails (e.g., due to 'use super::') but the function signature
+    // is available from the module registry.
+    if (func_it == functions_.end() && func_sig.has_value() && func_sig->is_extern() &&
+        func_sig->return_type) {
+        std::string symbol_name = func_sig->extern_name.value_or(func_sig->name);
+        std::string ext_ret_type = llvm_type_from_semantic(func_sig->return_type);
+
+        // Build parameter types
+        std::string param_types;
+        std::vector<std::string> param_types_vec;
+        for (size_t i = 0; i < func_sig->params.size(); ++i) {
+            std::string pt =
+                func_sig->params[i] ? llvm_type_from_semantic(func_sig->params[i]) : "i32";
+            if (i > 0)
+                param_types += ", ";
+            param_types += pt;
+            param_types_vec.push_back(pt);
+        }
+
+        // Emit declare if not already declared
+        if (declared_externals_.find(symbol_name) == declared_externals_.end()) {
+            declared_externals_.insert(symbol_name);
+            emit_line("");
+            emit_line("; @extern (late-emitted) " + func_sig->name);
+            emit_line("declare " + ext_ret_type + " @" + symbol_name + "(" + param_types + ")");
+        }
+
+        // Register in functions_ map so future calls find it immediately
+        std::string func_type = ext_ret_type + " (" + param_types + ")";
+        functions_[fn_name] = FuncInfo{"@" + symbol_name, func_type, ext_ret_type,
+                                       param_types_vec,   true,      func_sig->name};
+
+        // Re-find in the map so the normal path picks it up
+        func_it = functions_.find(fn_name);
+    }
+
     std::string mangled;
     if (func_it != functions_.end()) {
         // Use the registered LLVM name (handles @extern functions correctly)
         mangled = func_it->second.llvm_name;
+        TML_DEBUG_LN("[CALL] Found func_it for fn_name=" << fn_name << " -> llvm_name=" << mangled
+                                                         << " ret=" << func_it->second.ret_type);
     } else {
+        TML_DEBUG_LN("[CALL] NOT found func_it for fn_name="
+                     << fn_name << " sanitized=" << sanitized_name
+                     << " module_prefix=" << current_module_prefix_);
+
         // In suite mode, add suite prefix for test-local functions (forward references)
         // This handles mutual recursion where called function isn't yet in functions_ map
         // BUT: Don't add suite prefix for library functions (they don't have prefixes)
@@ -2321,7 +2365,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             }
         }
 
-        std::string expected_type = "i32"; // Default
+        std::string expected_type = actual_type; // Default to actual type from expression
 
         // If we have function signature from TypeEnv, use parameter type
         if (func_sig.has_value() && i < func_sig->params.size()) {
@@ -2330,19 +2374,6 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         // Otherwise, try to get parameter type from registered functions (codegen's FuncInfo)
         else if (func_it != functions_.end() && i < func_it->second.param_types.size()) {
             expected_type = func_it->second.param_types[i];
-        } else {
-            // Fallback to inference
-            // Check if it's a string constant
-            if (val.starts_with("@.str.")) {
-                expected_type = "ptr";
-            } else if (call.args[i]->is<parser::LiteralExpr>()) {
-                const auto& lit = call.args[i]->as<parser::LiteralExpr>();
-                if (lit.token.kind == lexer::TokenKind::StringLiteral) {
-                    expected_type = "ptr";
-                } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                    expected_type = "i1";
-                }
-            }
         }
 
         // Insert type conversion if needed

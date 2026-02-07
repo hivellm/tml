@@ -3,6 +3,7 @@
 //! Scans library source files to find all function definitions,
 //! then compares against runtime coverage data to report what's NOT covered.
 
+#include "log/log.hpp"
 #include "tester_internal.hpp"
 
 #include <fstream>
@@ -636,7 +637,7 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
     // Open file
     std::ofstream f(output_path);
     if (!f.is_open()) {
-        std::cerr << "Error: Cannot write coverage to " << output_path << "\n";
+        TML_LOG_ERROR("test", "Cannot write coverage HTML to " << output_path);
         return;
     }
 

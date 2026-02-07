@@ -38,8 +38,114 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <shared_mutex>
 
 namespace tml::types {
+
+// ============================================================================
+// Module Path Resolution Cache
+// ============================================================================
+// Caches resolved filesystem paths for module paths to avoid repeated
+// filesystem probing (each module tries 10-12 paths before finding the file).
+// This is critical for performance: without caching, importing std::thread
+// triggers ~1365 fs::exists() calls across ~40 transitive module dependencies.
+
+static std::shared_mutex s_path_cache_mutex;
+static std::unordered_map<std::string, std::string> s_resolved_paths; // module_path -> fs_path
+static std::unordered_set<std::string> s_not_found_paths;             // module_path -> not found
+
+// Cached library root directory (determined once, reused for all lookups)
+static std::mutex s_lib_root_mutex;
+static std::string s_lib_root; // e.g., "F:/Node/hivellm/tml/lib"
+static bool s_lib_root_resolved = false;
+
+static std::string find_lib_root() {
+    std::lock_guard<std::mutex> lock(s_lib_root_mutex);
+    if (s_lib_root_resolved) {
+        return s_lib_root;
+    }
+    s_lib_root_resolved = true;
+
+    auto cwd = std::filesystem::current_path();
+
+    // Try common locations in order of likelihood
+    std::vector<std::filesystem::path> candidates = {
+        cwd / "lib",                                      // Running from project root
+        std::filesystem::path("lib"),                     // Relative to CWD
+        std::filesystem::path("F:/Node/hivellm/tml/lib"), // Hardcoded fallback
+        cwd.parent_path() / "lib",                        // Running from build/
+        cwd.parent_path().parent_path() / "lib",          // Running from build/debug/
+    };
+
+    for (const auto& candidate : candidates) {
+        if (std::filesystem::exists(candidate / "core" / "src") &&
+            std::filesystem::exists(candidate / "std" / "src")) {
+            s_lib_root = std::filesystem::canonical(candidate).string();
+            TML_DEBUG_LN("[MODULE] Library root resolved: " << s_lib_root);
+            return s_lib_root;
+        }
+    }
+
+    // Fallback: empty string means use old search behavior
+    TML_DEBUG_LN("[MODULE] WARNING: Could not determine library root");
+    return "";
+}
+
+// Look up a resolved path from the cache. Returns empty string on miss.
+static std::string get_cached_path(const std::string& module_path) {
+    std::shared_lock<std::shared_mutex> lock(s_path_cache_mutex);
+    auto it = s_resolved_paths.find(module_path);
+    if (it != s_resolved_paths.end()) {
+        return it->second;
+    }
+    return "";
+}
+
+// Check if a module is known to not exist on disk.
+static bool is_known_not_found(const std::string& module_path) {
+    std::shared_lock<std::shared_mutex> lock(s_path_cache_mutex);
+    return s_not_found_paths.count(module_path) > 0;
+}
+
+// Cache a successful resolution.
+static void cache_resolved_path(const std::string& module_path, const std::string& fs_path) {
+    std::unique_lock<std::shared_mutex> lock(s_path_cache_mutex);
+    s_resolved_paths[module_path] = fs_path;
+}
+
+// Cache a failed resolution (module doesn't exist on disk).
+static void cache_not_found(const std::string& module_path) {
+    std::unique_lock<std::shared_mutex> lock(s_path_cache_mutex);
+    s_not_found_paths.insert(module_path);
+}
+
+// Resolve a module path to a filesystem path using the cached library root.
+// Returns the resolved path or empty string if not found.
+// lib_subdir is "core", "std", "backtrace", or "test".
+static std::string resolve_lib_module_path(const std::string& lib_subdir,
+                                           const std::string& src_subdir,
+                                           const std::string& fs_module_path) {
+    const std::string& lib_root = find_lib_root();
+    if (lib_root.empty()) {
+        return ""; // Fallback to old behavior
+    }
+
+    namespace fs = std::filesystem;
+    fs::path base = fs::path(lib_root) / lib_subdir / src_subdir;
+
+    // Try name.tml first, then name/mod.tml
+    fs::path candidate1 = base / (fs_module_path + ".tml");
+    if (fs::exists(candidate1)) {
+        return candidate1.string();
+    }
+
+    fs::path candidate2 = base / fs_module_path / "mod.tml";
+    if (fs::exists(candidate2)) {
+        return candidate2.string();
+    }
+
+    return "";
+}
 
 // Helper: Extract the TML type name from a parser::TypePtr (for constants)
 static std::string get_tml_type_name(const parser::TypePtr& type) {
@@ -416,30 +522,31 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         std::make_pair(std::move(parsed.decls), std::move(parsed.source_code)));
                 } else {
                     had_errors = true;
-                    std::cerr << "\n=== MODULE PARSE ERROR ===\n";
-                    std::cerr << "Failed to parse: " << entry_path << "\n";
+                    TML_LOG_ERROR("types", "=== MODULE PARSE ERROR ===");
+                    TML_LOG_ERROR("types", "Failed to parse: " << entry_path);
 
                     // Print lexer errors
                     for (const auto& err : parsed.lex_errors) {
-                        std::cerr << entry_path << ":" << err.span.start.line << ":"
-                                  << err.span.start.column << ": lexer error: " << err.message
-                                  << "\n";
+                        TML_LOG_ERROR("types", entry_path << ":" << err.span.start.line << ":"
+                                                          << err.span.start.column
+                                                          << ": lexer error: " << err.message);
                     }
 
                     // Print parser errors (limit to first 5 to avoid spam)
                     int error_count = 0;
                     for (const auto& err : parsed.errors) {
-                        std::cerr << entry_path << ":" << err.span.start.line << ":"
-                                  << err.span.start.column << ": error: " << err.message << "\n";
+                        TML_LOG_ERROR("types", entry_path << ":" << err.span.start.line << ":"
+                                                          << err.span.start.column
+                                                          << ": error: " << err.message);
                         if (++error_count >= 5) {
                             if (parsed.errors.size() > 5) {
-                                std::cerr << "... and " << (parsed.errors.size() - 5)
-                                          << " more errors\n";
+                                TML_LOG_ERROR("types", "... and " << (parsed.errors.size() - 5)
+                                                                  << " more errors");
                             }
                             break;
                         }
                     }
-                    std::cerr << "=========================\n\n";
+                    TML_LOG_ERROR("types", "=========================");
                 }
             }
         }
@@ -447,33 +554,36 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         // Single file module
         auto parsed = parse_tml_file(file_path);
         if (!parsed.success) {
-            std::cerr << "\n=== MODULE PARSE ERROR ===\n";
-            std::cerr << "Failed to parse: " << file_path << "\n";
+            TML_LOG_ERROR("types", "=== MODULE PARSE ERROR ===");
+            TML_LOG_ERROR("types", "Failed to parse: " << file_path);
 
             // Print lexer errors
             for (const auto& err : parsed.lex_errors) {
-                std::cerr << file_path << ":" << err.span.start.line << ":" << err.span.start.column
-                          << ": lexer error: " << err.message << "\n";
+                TML_LOG_ERROR("types", file_path << ":" << err.span.start.line << ":"
+                                                 << err.span.start.column
+                                                 << ": lexer error: " << err.message);
             }
 
             // Print parser errors
             int error_count = 0;
             for (const auto& err : parsed.errors) {
-                std::cerr << file_path << ":" << err.span.start.line << ":" << err.span.start.column
-                          << ": error: " << err.message << "\n";
+                TML_LOG_ERROR("types", file_path << ":" << err.span.start.line << ":"
+                                                 << err.span.start.column
+                                                 << ": error: " << err.message);
                 if (++error_count >= 5) {
                     if (parsed.errors.size() > 5) {
-                        std::cerr << "... and " << (parsed.errors.size() - 5) << " more errors\n";
+                        TML_LOG_ERROR("types",
+                                      "... and " << (parsed.errors.size() - 5) << " more errors");
                     }
                     break;
                 }
             }
-            std::cerr << "=========================\n\n";
+            TML_LOG_ERROR("types", "=========================");
 
             if (abort_on_module_error_) {
                 // Panic - abort compilation
-                std::cerr << "FATAL: Cannot continue - module '" << module_path
-                          << "' failed to parse\n";
+                TML_LOG_FATAL("types",
+                              "Cannot continue - module '" << module_path << "' failed to parse");
                 std::exit(1);
             }
             return false;
@@ -485,8 +595,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     // If any file in a directory module failed to parse, abort (unless in non-fatal mode)
     if (had_errors) {
         if (abort_on_module_error_) {
-            std::cerr << "FATAL: Cannot continue - module '" << module_path
-                      << "' has parse errors\n";
+            TML_LOG_FATAL("types",
+                          "Cannot continue - module '" << module_path << "' has parse errors");
             std::exit(1);
         }
         // In non-fatal mode, continue with successfully parsed files if any
@@ -499,8 +609,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
     if (all_parsed.empty()) {
         if (abort_on_module_error_) {
-            std::cerr << "FATAL: Module '" << module_path
-                      << "' is empty or all files failed to parse\n";
+            TML_LOG_FATAL("types",
+                          "Module '" << module_path << "' is empty or all files failed to parse");
             std::exit(1);
         }
         return false;
@@ -657,8 +767,10 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
 
-                // Only include public functions
-                if (func.vis != parser::Visibility::Public) {
+                // Include public functions and @extern functions (even non-public).
+                // @extern functions need to be registered so codegen can emit
+                // proper 'declare' statements and use correct return types.
+                if (func.vis != parser::Visibility::Public && !func.extern_abi.has_value()) {
                     continue;
                 }
 
@@ -697,6 +809,12 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                             .since_version = "1.0",
                             .where_constraints = {},
                             .is_lowlevel = func.is_unsafe};
+
+                // Preserve @extern information for codegen
+                if (func.extern_abi.has_value()) {
+                    sig.extern_abi = func.extern_abi;
+                    sig.extern_name = func.extern_name;
+                }
 
                 mod.functions[func.name] = sig;
             } else if (decl->is<parser::StructDecl>()) {
@@ -1567,29 +1685,71 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     // Note: We prioritize assertions/mod.tml since mod.tml uses `pub use` re-exports
     // which aren't fully supported yet
     if (module_path == "test") {
+        // Check path resolution cache first
+        std::string cached = get_cached_path(module_path);
+        if (!cached.empty()) {
+            TML_DEBUG_LN("[MODULE] Path cache hit for: " << module_path << " -> " << cached);
+            return load_module_from_file(module_path, cached);
+        }
+
+        // Try cached library root first (2 probes instead of 5)
+        const std::string& lib_root = find_lib_root();
+        if (!lib_root.empty()) {
+            namespace fs = std::filesystem;
+            fs::path assertions_mod =
+                fs::path(lib_root) / "test" / "src" / "assertions" / "mod.tml";
+            if (fs::exists(assertions_mod)) {
+                std::string resolved = assertions_mod.string();
+                cache_resolved_path(module_path, resolved);
+                TML_DEBUG_LN("[MODULE] Found test module at: " << resolved);
+                return load_module_from_file(module_path, resolved);
+            }
+            fs::path test_mod = fs::path(lib_root) / "test" / "src" / "mod.tml";
+            if (fs::exists(test_mod)) {
+                std::string resolved = test_mod.string();
+                cache_resolved_path(module_path, resolved);
+                TML_DEBUG_LN("[MODULE] Found test module at: " << resolved);
+                return load_module_from_file(module_path, resolved);
+            }
+        }
+
+        // Fallback: try all relative paths
         std::vector<std::filesystem::path> search_paths = {
             std::filesystem::path("lib") / "test" / "src" / "assertions" / "mod.tml",
             std::filesystem::path("lib") / "test" / "src" / "mod.tml",
-            std::filesystem::path("..") / ".." / "lib" / "test" / "src" / "assertions" /
-                "mod.tml", // From build/
-            std::filesystem::path("..") / "lib" / "test" / "src" / "assertions" /
-                "mod.tml", // From tests/
+            std::filesystem::path("..") / ".." / "lib" / "test" / "src" / "assertions" / "mod.tml",
+            std::filesystem::path("..") / "lib" / "test" / "src" / "assertions" / "mod.tml",
             std::filesystem::path("F:/Node/hivellm/tml/lib/test/src/assertions/mod.tml"),
         };
 
         for (const auto& module_file : search_paths) {
             if (std::filesystem::exists(module_file)) {
-                TML_DEBUG_LN("[MODULE] Found test module at: " << module_file);
-                return load_module_from_file(module_path, module_file.string());
+                std::string resolved = module_file.string();
+                cache_resolved_path(module_path, resolved);
+                TML_DEBUG_LN("[MODULE] Found test module at: " << resolved);
+                return load_module_from_file(module_path, resolved);
             }
         }
 
-        std::cerr << "error: Test module file not found\n";
+        TML_LOG_ERROR("types", "Test module file not found");
         return false;
     }
 
     // Backtrace module - load from lib/backtrace/
     if (module_path == "backtrace") {
+        std::string cached = get_cached_path(module_path);
+        if (!cached.empty()) {
+            return load_module_from_file(module_path, cached);
+        }
+
+        // Try cached library root first
+        std::string resolved = resolve_lib_module_path("backtrace", "src", "mod");
+        if (!resolved.empty()) {
+            cache_resolved_path(module_path, resolved);
+            return load_module_from_file(module_path, resolved);
+        }
+
+        // Fallback: try all relative paths
         auto cwd = std::filesystem::current_path();
         std::vector<std::filesystem::path> search_paths = {
             std::filesystem::path("lib") / "backtrace" / "src" / "mod.tml",
@@ -1601,19 +1761,28 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
 
         for (const auto& module_file : search_paths) {
             if (std::filesystem::exists(module_file)) {
-                TML_DEBUG_LN("[MODULE] Found backtrace module at: " << module_file);
-                return load_module_from_file(module_path, module_file.string());
+                std::string res = module_file.string();
+                cache_resolved_path(module_path, res);
+                return load_module_from_file(module_path, res);
             }
         }
 
         if (!silent) {
-            std::cerr << "error: Backtrace module file not found\n";
+            TML_LOG_ERROR("types", "Backtrace module file not found");
         }
         return false;
     }
 
     // Backtrace submodules - load from lib/backtrace/src/
     if (module_path.substr(0, 11) == "backtrace::") {
+        std::string cached = get_cached_path(module_path);
+        if (!cached.empty()) {
+            return load_module_from_file(module_path, cached);
+        }
+        if (is_known_not_found(module_path)) {
+            return false;
+        }
+
         std::string module_name = module_path.substr(11);
         std::string fs_module_path = module_name;
         size_t pos = 0;
@@ -1622,6 +1791,14 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             pos += 1;
         }
 
+        // Try cached library root first (2 probes instead of 10)
+        std::string resolved = resolve_lib_module_path("backtrace", "src", fs_module_path);
+        if (!resolved.empty()) {
+            cache_resolved_path(module_path, resolved);
+            return load_module_from_file(module_path, resolved);
+        }
+
+        // Fallback: try all relative paths
         auto cwd = std::filesystem::current_path();
         std::vector<std::filesystem::path> search_paths = {
             std::filesystem::path("lib") / "backtrace" / "src" / (fs_module_path + ".tml"),
@@ -1646,22 +1823,35 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
             if (std::filesystem::exists(module_file)) {
                 TML_DEBUG_LN("[MODULE]   FOUND!");
-                return load_module_from_file(module_path, module_file.string());
+                std::string res = module_file.string();
+                cache_resolved_path(module_path, res);
+                return load_module_from_file(module_path, res);
             }
         }
 
         if (!silent) {
-            std::cerr << "error: backtrace module file not found: " << module_path << "\n";
+            TML_LOG_ERROR("types", "backtrace module file not found: " << module_path);
         }
+        cache_not_found(module_path);
         return false;
     }
 
     // Core library modules - load from filesystem
     if (module_path.substr(0, 6) == "core::") {
-        // Extract module name: "core::mem" -> "mem", "core::iter::traits" -> "iter::traits"
-        std::string module_name = module_path.substr(6);
+        // Check path resolution cache first
+        std::string cached = get_cached_path(module_path);
+        if (!cached.empty()) {
+            TML_DEBUG_LN("[MODULE] Path cache hit: " << module_path);
+            return load_module_from_file(module_path, cached);
+        }
+        if (is_known_not_found(module_path)) {
+            if (!silent) {
+                TML_LOG_ERROR("types", "core module file not found: " << module_path);
+            }
+            return false;
+        }
 
-        // Convert module path to filesystem path: "iter::traits" -> "iter/traits"
+        std::string module_name = module_path.substr(6);
         std::string fs_module_path = module_name;
         size_t pos = 0;
         while ((pos = fs_module_path.find("::", pos)) != std::string::npos) {
@@ -1669,24 +1859,26 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             pos += 1;
         }
 
-        // Get current working directory for reference
-        auto cwd = std::filesystem::current_path();
+        // Try cached library root first (2 probes instead of 12)
+        std::string resolved = resolve_lib_module_path("core", "src", fs_module_path);
+        if (!resolved.empty()) {
+            cache_resolved_path(module_path, resolved);
+            TML_DEBUG_LN("[MODULE] Resolved core module: " << module_path << " -> " << resolved);
+            return load_module_from_file(module_path, resolved);
+        }
 
-        // Try multiple possible paths for the module file
+        // Fallback: try all relative paths
+        auto cwd = std::filesystem::current_path();
         std::vector<std::filesystem::path> search_paths = {
             std::filesystem::path("lib") / "core" / "src" / (fs_module_path + ".tml"),
             std::filesystem::path("lib") / "core" / "src" / fs_module_path / "mod.tml",
-            std::filesystem::path("..") / ".." / "lib" / "core" / "src" /
-                (fs_module_path + ".tml"), // From build/
+            std::filesystem::path("..") / ".." / "lib" / "core" / "src" / (fs_module_path + ".tml"),
             std::filesystem::path("..") / ".." / "lib" / "core" / "src" / fs_module_path /
-                "mod.tml", // From build/
-            std::filesystem::path("..") / "lib" / "core" / "src" /
-                (fs_module_path + ".tml"), // From tests/
-            std::filesystem::path("..") / "lib" / "core" / "src" / fs_module_path /
-                "mod.tml",                                                      // From tests/
-            std::filesystem::path("core") / "src" / (fs_module_path + ".tml"),  // From lib/
-            std::filesystem::path("core") / "src" / fs_module_path / "mod.tml", // From lib/
-            // Add absolute paths based on CWD
+                "mod.tml",
+            std::filesystem::path("..") / "lib" / "core" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("..") / "lib" / "core" / "src" / fs_module_path / "mod.tml",
+            std::filesystem::path("core") / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("core") / "src" / fs_module_path / "mod.tml",
             cwd / "lib" / "core" / "src" / (fs_module_path + ".tml"),
             cwd / "lib" / "core" / "src" / fs_module_path / "mod.tml",
             std::filesystem::path("F:/Node/hivellm/tml/lib/core/src") / (fs_module_path + ".tml"),
@@ -1699,24 +1891,35 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
             if (std::filesystem::exists(module_file)) {
                 TML_DEBUG_LN("[MODULE]   FOUND!");
-                return load_module_from_file(module_path, module_file.string());
+                std::string res = module_file.string();
+                cache_resolved_path(module_path, res);
+                return load_module_from_file(module_path, res);
             }
         }
 
-        // Module file not found
         if (!silent) {
-            std::cerr << "error: core module file not found: " << module_path << "\n";
+            TML_LOG_ERROR("types", "core module file not found: " << module_path);
         }
+        cache_not_found(module_path);
         return false;
     }
 
     // Standard library modules - load from filesystem
     if (module_path.substr(0, 5) == "std::") {
-        // Extract module name: "std::math" -> "math", "std::collections::hash" ->
-        // "collections::hash"
-        std::string module_name = module_path.substr(5);
+        // Check path resolution cache first
+        std::string cached = get_cached_path(module_path);
+        if (!cached.empty()) {
+            TML_DEBUG_LN("[MODULE] Path cache hit: " << module_path);
+            return load_module_from_file(module_path, cached);
+        }
+        if (is_known_not_found(module_path)) {
+            if (!silent) {
+                TML_LOG_ERROR("types", "std module file not found: " << module_path);
+            }
+            return false;
+        }
 
-        // Convert module path to filesystem path: "collections::hash" -> "collections/hash"
+        std::string module_name = module_path.substr(5);
         std::string fs_module_path = module_name;
         size_t pos = 0;
         while ((pos = fs_module_path.find("::", pos)) != std::string::npos) {
@@ -1724,27 +1927,27 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             pos += 1;
         }
 
-        // Get current working directory for reference
-        auto cwd = std::filesystem::current_path();
+        // Try cached library root first (2 probes instead of 12)
+        std::string resolved = resolve_lib_module_path("std", "src", fs_module_path);
+        if (!resolved.empty()) {
+            cache_resolved_path(module_path, resolved);
+            TML_DEBUG_LN("[MODULE] Resolved std module: " << module_path << " -> " << resolved);
+            return load_module_from_file(module_path, resolved);
+        }
 
-        // Try multiple possible paths for the module file
+        // Fallback: try all relative paths
+        auto cwd = std::filesystem::current_path();
         std::vector<std::filesystem::path> search_paths = {
             std::filesystem::path("lib") / "std" / "src" / (fs_module_path + ".tml"),
             std::filesystem::path("lib") / "std" / "src" / fs_module_path / "mod.tml",
-            std::filesystem::path("..") / ".." / "lib" / "std" / "src" /
-                (fs_module_path + ".tml"), // From build/
-            std::filesystem::path("..") / ".." / "lib" / "std" / "src" / fs_module_path /
-                "mod.tml", // From build/
-            std::filesystem::path("..") / "lib" / "std" / "src" /
-                (fs_module_path + ".tml"), // From tests/
-            std::filesystem::path("..") / "lib" / "std" / "src" / fs_module_path /
-                "mod.tml",                                                     // From tests/
-            std::filesystem::path("std") / "src" / (fs_module_path + ".tml"),  // From lib/
-            std::filesystem::path("std") / "src" / fs_module_path / "mod.tml", // From lib/
-            // Add absolute paths based on CWD
+            std::filesystem::path("..") / ".." / "lib" / "std" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("..") / ".." / "lib" / "std" / "src" / fs_module_path / "mod.tml",
+            std::filesystem::path("..") / "lib" / "std" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("..") / "lib" / "std" / "src" / fs_module_path / "mod.tml",
+            std::filesystem::path("std") / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("std") / "src" / fs_module_path / "mod.tml",
             cwd / "lib" / "std" / "src" / (fs_module_path + ".tml"),
             cwd / "lib" / "std" / "src" / fs_module_path / "mod.tml",
-            // Absolute fallback
             std::filesystem::path("F:/Node/hivellm/tml/lib/std/src") / (fs_module_path + ".tml"),
             std::filesystem::path("F:/Node/hivellm/tml/lib/std/src") / fs_module_path / "mod.tml",
         };
@@ -1755,14 +1958,16 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
             if (std::filesystem::exists(module_file)) {
                 TML_DEBUG_LN("[MODULE]   FOUND!");
-                return load_module_from_file(module_path, module_file.string());
+                std::string res = module_file.string();
+                cache_resolved_path(module_path, res);
+                return load_module_from_file(module_path, res);
             }
         }
 
-        // Module file not found
         if (!silent) {
-            std::cerr << "error: std module file not found: " << module_path << "\n";
+            TML_LOG_ERROR("types", "std module file not found: " << module_path);
         }
+        cache_not_found(module_path);
         return false;
     }
 

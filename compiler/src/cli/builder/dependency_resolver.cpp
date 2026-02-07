@@ -41,6 +41,7 @@
 
 #include "cli/builder/rlib.hpp"
 #include "cli/commands/cmd_build.hpp"
+#include "log/log.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -214,9 +215,7 @@ DependencyResolver::resolve_path_dependency(const Dependency& dep, const fs::pat
 
     // Build if needed
     if (!fs::exists(rlib_path)) {
-        if (options_.verbose) {
-            std::cout << "Building dependency: " << dep.name << " from " << dep_path << "\n";
-        }
+        TML_LOG_INFO("build", "Building dependency: " << dep.name << " from " << dep_path);
 
         fs::path output_dir = dep_path / "build" / "debug";
         auto built = build_dependency(dep_path, output_dir, options_.verbose);
@@ -302,10 +301,8 @@ DependencyResolver::resolve_version_dependency(const Dependency& dep) {
                     size_t end = json_content.find('"', start);
                     std::string download_url = json_content.substr(start, end - start);
 
-                    if (options_.verbose) {
-                        std::cout << "Downloading " << dep.name << " v" << dep.version
-                                  << " from registry...\n";
-                    }
+                    TML_LOG_INFO("build", "Downloading " << dep.name << " v" << dep.version
+                                                         << " from registry...");
 
                     // Download would happen here using curl or similar
                     // For now, skip actual download
@@ -384,9 +381,7 @@ DependencyResolver::resolve_git_dependency(const Dependency& dep) {
 
     if (!fs::exists(source_dir / ".git")) {
         // Clone the repository
-        if (options_.verbose) {
-            std::cout << "Cloning " << dep.git << "...\n";
-        }
+        TML_LOG_INFO("build", "Cloning " << dep.git << "...");
 
         git_cmd = "git clone --depth 1";
         if (!dep.branch.empty()) {
@@ -426,9 +421,7 @@ DependencyResolver::resolve_git_dependency(const Dependency& dep) {
     }
 
     // Build the dependency
-    if (options_.verbose) {
-        std::cout << "Building git dependency: " << dep.name << "\n";
-    }
+    TML_LOG_INFO("build", "Building git dependency: " << dep.name);
 
     auto built = build_dependency(source_dir, build_dir, options_.verbose);
     if (!built) {

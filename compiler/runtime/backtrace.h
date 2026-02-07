@@ -207,6 +207,21 @@ int32_t backtrace_frame_format(const BacktraceFrame* frame, int32_t index, char*
 char* backtrace_format(const Backtrace* bt);
 
 /**
+ * @brief Format a complete backtrace as a JSON string.
+ *
+ * Returns a JSON array of frame objects, each with:
+ * - "index": frame index (int)
+ * - "name": function/symbol name (string)
+ * - "file": source file path (string or null)
+ * - "line": line number (int or 0)
+ * - "addr": instruction pointer as hex string
+ *
+ * @param bt The backtrace to format
+ * @return Heap-allocated JSON string (caller must free), or NULL on failure
+ */
+char* backtrace_format_json(const Backtrace* bt);
+
+/**
  * @brief Print a backtrace to stderr.
  *
  * Convenience function that captures, resolves, and prints a backtrace.

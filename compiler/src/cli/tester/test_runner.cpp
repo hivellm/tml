@@ -75,27 +75,17 @@ namespace fs = std::filesystem;
 
 namespace tml::cli {
 
-// Global mutex for synchronized verbose output in parallel test execution
-// Defined here, declared extern in test_runner.hpp
-std::mutex g_verbose_output_mutex;
+// ============================================================================
+// C Runtime Logger Bridge
+// ============================================================================
 
-// Helper macro for synchronized verbose output with timestamp
-#define VERBOSE_LOG(verbose, msg)                                                                  \
-    do {                                                                                           \
-        if (verbose) {                                                                             \
-            std::lock_guard<std::mutex> _lock(g_verbose_output_mutex);                             \
-            std::cerr << "[" << tml::cli::tester::get_debug_timestamp() << "] " << msg             \
-                      << std::flush;                                                               \
-        }                                                                                          \
-    } while (0)
-
-// Helper macro for DEBUG output with timestamp (always prints)
-#define DEBUG_LOG(msg)                                                                             \
-    do {                                                                                           \
-        std::lock_guard<std::mutex> _lock(g_verbose_output_mutex);                                 \
-        std::cerr << "[" << tml::cli::tester::get_debug_timestamp() << "] [DEBUG] " << msg         \
-                  << std::flush;                                                                   \
-    } while (0)
+/// Callback that routes C runtime log messages through the C++ Logger.
+/// Set via rt_log_set_callback() when loading test DLLs.
+static void rt_log_bridge_callback(int level, const char* module, const char* message) {
+    auto cpp_level = static_cast<tml::log::LogLevel>(level);
+    tml::log::Logger::instance().log(cpp_level, module ? module : "runtime", message ? message : "",
+                                     nullptr, 0);
+}
 
 // ============================================================================
 // Windows Crash Handler (at test runner level)
@@ -447,9 +437,8 @@ void* DynamicLibrary::get_symbol(const std::string& name) const {
 // Compile Test to Shared Library
 // ============================================================================
 
-CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file, bool verbose,
+CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file, bool /*verbose*/,
                                                     bool no_cache) {
-    (void)verbose;
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
@@ -651,6 +640,18 @@ InProcessTestResult run_test_in_process(const std::string& lib_path) {
         return result;
     }
 
+    // Route C runtime log messages through the C++ Logger
+    using RtLogSetCallback = void (*)(void (*)(int, const char*, const char*));
+    auto set_log_callback = lib.get_function<RtLogSetCallback>("rt_log_set_callback");
+    if (set_log_callback) {
+        set_log_callback(rt_log_bridge_callback);
+    }
+    using RtLogSetLevel = void (*)(int);
+    auto set_log_level = lib.get_function<RtLogSetLevel>("rt_log_set_level");
+    if (set_log_level) {
+        set_log_level(static_cast<int>(tml::log::Logger::instance().level()));
+    }
+
     // Set up output capture
     OutputCapture capture;
     bool capture_started = capture.start();
@@ -713,6 +714,20 @@ InProcessTestResult run_test_in_process_profiled(const std::string& lib_path,
         return result;
     }
     record_phase("exec.get_symbol", phase_start);
+
+    // Route C runtime log messages through the C++ Logger
+    {
+        using RtLogSetCallback = void (*)(void (*)(int, const char*, const char*));
+        auto set_log_callback = lib.get_function<RtLogSetCallback>("rt_log_set_callback");
+        if (set_log_callback) {
+            set_log_callback(rt_log_bridge_callback);
+        }
+        using RtLogSetLevel = void (*)(int);
+        auto set_log_level = lib.get_function<RtLogSetLevel>("rt_log_set_level");
+        if (set_log_level) {
+            set_log_level(static_cast<int>(tml::log::Logger::instance().level()));
+        }
+    }
 
     // Phase: Set up output capture
     phase_start = Clock::now();
@@ -799,9 +814,8 @@ InProcessTestResult compile_and_run_test_in_process(const std::string& test_file
 // Compile Fuzz Target to Shared Library
 // ============================================================================
 
-CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file, bool verbose,
+CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file, bool /*verbose*/,
                                                     bool no_cache) {
-    (void)verbose;
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
@@ -968,9 +982,8 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
 // ============================================================================
 
 CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& test_file,
-                                                             PhaseTimings* timings, bool verbose,
-                                                             bool no_cache) {
-    (void)verbose;
+                                                             PhaseTimings* timings,
+                                                             bool /*verbose*/, bool no_cache) {
     using Clock = std::chrono::high_resolution_clock;
     auto record_phase = [&](const std::string& phase, Clock::time_point start) {
         if (timings) {
@@ -1060,7 +1073,17 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);
+    auto codegen_us =
+        std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - phase_start).count();
     record_phase("codegen", phase_start);
+
+    // Debug: print per-file codegen timing to identify progressive slowdown
+    TML_LOG_DEBUG("test", "[CODEGEN] " << fs::path(test_file).filename().string()
+                                       << " codegen=" << (codegen_us / 1000) << "ms"
+                                       << " ir_size="
+                                       << (std::holds_alternative<std::string>(gen_result)
+                                               ? std::get<std::string>(gen_result).size()
+                                               : 0));
 
     if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
         result.error_message = "Codegen errors";
@@ -1405,7 +1428,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         return precompiled_obj.string();
     }
 
-    VERBOSE_LOG(verbose, "[PRECOMPILE] Compiling precompiled_symbols.tml...\n");
+    TML_LOG_INFO("test", "[PRECOMPILE] Compiling precompiled_symbols.tml...");
 
     // Find the source file
     fs::path source = "lib/std/precompiled_symbols.tml";
@@ -1422,7 +1445,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         auto pp_result = pp.process(source_code, source.string());
 
         if (!pp_result.success()) {
-            std::cerr << "[PRECOMPILE] Warning: Preprocessor errors in precompiled_symbols.tml\n";
+            TML_LOG_WARN("test", "[PRECOMPILE] Preprocessor errors in precompiled_symbols.tml");
             return "";
         }
 
@@ -1433,7 +1456,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         lexer::Lexer lex(lex_source);
         auto tokens = lex.tokenize();
         if (lex.has_errors()) {
-            std::cerr << "[PRECOMPILE] Warning: Lexer errors in precompiled_symbols.tml\n";
+            TML_LOG_WARN("test", "[PRECOMPILE] Lexer errors in precompiled_symbols.tml");
             return "";
         }
 
@@ -1441,7 +1464,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         parser::Parser parser(std::move(tokens));
         auto parse_result = parser.parse_module("precompiled_symbols");
         if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-            std::cerr << "[PRECOMPILE] Warning: Parser errors in precompiled_symbols.tml\n";
+            TML_LOG_WARN("test", "[PRECOMPILE] Parser errors in precompiled_symbols.tml");
             return "";
         }
         const auto& module = std::get<parser::Module>(parse_result);
@@ -1450,7 +1473,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         types::TypeChecker checker;
         auto check_result = checker.check_module(module);
         if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
-            std::cerr << "[PRECOMPILE] Warning: Type errors in precompiled_symbols.tml\n";
+            TML_LOG_WARN("test", "[PRECOMPILE] Type errors in precompiled_symbols.tml");
             return "";
         }
         const auto& env = std::get<types::TypeEnv>(check_result);
@@ -1459,7 +1482,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         borrow::BorrowChecker borrow_checker(env);
         auto borrow_result = borrow_checker.check_module(module);
         if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
-            std::cerr << "[PRECOMPILE] Warning: Borrow check errors in precompiled_symbols.tml\n";
+            TML_LOG_WARN("test", "[PRECOMPILE] Borrow check errors in precompiled_symbols.tml");
             return "";
         }
 
@@ -1474,7 +1497,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
 
         auto gen_result = llvm_gen.generate(module);
         if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
-            std::cerr << "[PRECOMPILE] Warning: Codegen errors in precompiled_symbols.tml\n";
+            TML_LOG_WARN("test", "[PRECOMPILE] Codegen errors in precompiled_symbols.tml");
             return "";
         }
 
@@ -1484,7 +1507,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         fs::path ll_path = cache_dir / "precompiled_symbols.ll";
         std::ofstream ll_file(ll_path);
         if (!ll_file) {
-            std::cerr << "[PRECOMPILE] Warning: Cannot write LLVM IR\n";
+            TML_LOG_WARN("test", "[PRECOMPILE] Cannot write LLVM IR");
             return "";
         }
         ll_file << llvm_ir;
@@ -1502,18 +1525,18 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
 
         auto obj_result = compile_ll_to_object(ll_path, precompiled_obj, clang, obj_options);
         if (!obj_result.success) {
-            std::cerr << "[PRECOMPILE] Warning: Object compilation failed: "
-                      << obj_result.error_message << "\n";
+            TML_LOG_WARN("test", "[PRECOMPILE] Object compilation failed: "
+                      << obj_result.error_message);
             fs::remove(ll_path);
             return "";
         }
         fs::remove(ll_path); // Clean up LLVM IR file
 
-        VERBOSE_LOG(verbose, "[PRECOMPILE] Successfully compiled precompiled_symbols.obj\n");
+        TML_LOG_INFO("test", "[PRECOMPILE] Successfully compiled precompiled_symbols.obj");
         return precompiled_obj.string();
 
     } catch (const std::exception& e) {
-        std::cerr << "[PRECOMPILE] Warning: Exception during compilation: " << e.what() << "\n";
+        TML_LOG_WARN("test", "[PRECOMPILE] Exception during compilation: " << e.what());
         return "";
     }
 }
@@ -1620,7 +1643,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
         if (!no_cache && fs::exists(cached_dll_by_source)) {
             // Cache hit! Skip all typechecking and compilation
-            VERBOSE_LOG(verbose, "EARLY CACHE HIT - skipping compilation\n");
+            TML_LOG_INFO("test", "EARLY CACHE HIT - skipping compilation");
             if (!fast_copy_file(cached_dll_by_source, lib_output)) {
                 result.error_message = "Failed to copy cached DLL";
                 return result;
@@ -1786,9 +1809,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     auto& task = tasks[task_idx];
                     auto task_start = Clock::now();
 
-                    VERBOSE_LOG(verbose, "  Processing test " << (task_idx + 1) << "/"
+                    TML_LOG_INFO("test", "  Processing test " << (task_idx + 1) << "/"
                                                               << tasks.size() << ": "
-                                                              << task.file_path << "\n");
+                                                              << task.file_path);
 
                     // Sub-phase timing for detailed profiling
                     int64_t lex_us = 0, parse_us = 0, typecheck_us = 0, borrow_us = 0,
@@ -2017,21 +2040,22 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                             if (task_duration_us > threshold_us) {
                                 // Log slow task as warning (doesn't fail the test)
                                 std::lock_guard<std::mutex> lock(error_mutex);
-                                std::cerr << "\n[SLOW TASK WARNING] " << task.file_path << "\n"
-                                          << "  Duration: " << (task_duration_us / 1000) << " ms\n"
-                                          << "  Average:  " << (avg_time_us / 1000) << " ms\n"
-                                          << "  Threshold: " << (threshold_us / 1000) << " ms ("
-                                          << SLOW_TASK_THRESHOLD << "x average)\n"
-                                          << "  Sub-phases: lex=" << (lex_us / 1000)
-                                          << "ms, parse=" << (parse_us / 1000)
-                                          << "ms, typecheck=" << (typecheck_us / 1000)
-                                          << "ms, borrow=" << (borrow_us / 1000)
-                                          << "ms, codegen=" << (codegen_us / 1000) << "ms\n"
-                                          << "  This task took " << std::fixed
-                                          << std::setprecision(1)
-                                          << (static_cast<double>(task_duration_us) / avg_time_us)
-                                          << "x longer than average.\n"
-                                          << std::flush;
+                                TML_LOG_WARN(
+                                    "test",
+                                    "[SLOW TASK] "
+                                        << task.file_path
+                                        << " Duration: " << (task_duration_us / 1000) << " ms"
+                                        << " Average: " << (avg_time_us / 1000) << " ms"
+                                        << " Threshold: " << (threshold_us / 1000) << " ms ("
+                                        << SLOW_TASK_THRESHOLD << "x average)"
+                                        << " Sub-phases: lex=" << (lex_us / 1000)
+                                        << "ms, parse=" << (parse_us / 1000)
+                                        << "ms, typecheck=" << (typecheck_us / 1000)
+                                        << "ms, borrow=" << (borrow_us / 1000)
+                                        << "ms, codegen=" << (codegen_us / 1000) << "ms"
+                                        << " This task took " << std::fixed << std::setprecision(1)
+                                        << (static_cast<double>(task_duration_us) / avg_time_us)
+                                        << "x longer than average.");
                                 // Don't abort - slow tasks still generate valid cache
                             }
                         }
@@ -2063,8 +2087,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             };
 
-            VERBOSE_LOG(verbose, "  Generating " << tasks.size() << " LLVM IR files with "
-                                                 << num_threads << " threads...\n");
+            TML_LOG_INFO("test", "  Generating " << tasks.size() << " LLVM IR files with "
+                                                 << num_threads << " threads...");
 
             // Launch worker threads
             std::vector<std::thread> threads;
@@ -2090,37 +2114,33 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                               return a.duration_us > b.duration_us;
                           });
 
-                // Print aggregate sub-phase breakdown
+                // Print aggregate sub-phase breakdown (single line)
                 int64_t total_us = total_task_time_us.load();
                 if (total_us > 0) {
-                    DEBUG_LOG("Phase 1 sub-phase breakdown:\n"
-                              << "  Lex:       " << std::setw(6) << (total_lex_us.load() / 1000)
-                              << " ms (" << std::fixed << std::setprecision(1)
-                              << (100.0 * total_lex_us.load() / total_us) << "%)\n"
-                              << "  Parse:     " << std::setw(6) << (total_parse_us.load() / 1000)
-                              << " ms (" << (100.0 * total_parse_us.load() / total_us) << "%)\n"
-                              << "  TypeCheck: " << std::setw(6)
-                              << (total_typecheck_us.load() / 1000) << " ms ("
-                              << (100.0 * total_typecheck_us.load() / total_us) << "%)\n"
-                              << "  Borrow:    " << std::setw(6) << (total_borrow_us.load() / 1000)
-                              << " ms (" << (100.0 * total_borrow_us.load() / total_us) << "%)\n"
-                              << "  Codegen:   " << std::setw(6) << (total_codegen_us.load() / 1000)
-                              << " ms (" << (100.0 * total_codegen_us.load() / total_us) << "%)\n");
+                    TML_LOG_DEBUG("test",
+                                  "Phase 1 sub-phases:"
+                                      << " lex=" << (total_lex_us.load() / 1000) << "ms"
+                                      << " parse=" << (total_parse_us.load() / 1000) << "ms"
+                                      << " typecheck=" << (total_typecheck_us.load() / 1000) << "ms"
+                                      << " borrow=" << (total_borrow_us.load() / 1000) << "ms"
+                                      << " codegen=" << (total_codegen_us.load() / 1000) << "ms"
+                                      << " total=" << (total_us / 1000) << "ms");
                 }
 
                 {
-                    std::ostringstream oss;
-                    oss << "Phase 1 slowest files (top 5):\n";
+                    // Log each slow file as a separate single-line entry
                     for (size_t i = 0; i < std::min(size_t(5), task_timings.size()); ++i) {
                         const auto& t = task_timings[i];
-                        oss << "  " << std::setw(5) << (t.duration_us / 1000)
-                            << " ms: " << fs::path(t.file_path).filename().string()
-                            << " [lex=" << (t.lex_us / 1000) << ", parse=" << (t.parse_us / 1000)
-                            << ", tc=" << (t.typecheck_us / 1000)
-                            << ", borrow=" << (t.borrow_us / 1000)
-                            << ", cg=" << (t.codegen_us / 1000) << "]\n";
+                        TML_LOG_DEBUG("test", "Phase 1 slow #"
+                                                  << i << ": "
+                                                  << fs::path(t.file_path).filename().string()
+                                                  << " " << (t.duration_us / 1000) << "ms"
+                                                  << " [lex=" << (t.lex_us / 1000)
+                                                  << " parse=" << (t.parse_us / 1000)
+                                                  << " tc=" << (t.typecheck_us / 1000)
+                                                  << " borrow=" << (t.borrow_us / 1000)
+                                                  << " cg=" << (t.codegen_us / 1000) << "]");
                     }
-                    DEBUG_LOG(oss.str());
                 }
             }
         }
@@ -2195,14 +2215,15 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
                         if (obj_duration_us > threshold_us) {
                             std::lock_guard<std::mutex> lock(error_mutex);
-                            std::cerr << "\n[SLOW OBJ PANIC] " << pc.test_path << "\n"
-                                      << "  Duration: " << (obj_duration_us / 1000) << " ms\n"
-                                      << "  Average:  " << (avg_us / 1000) << " ms\n"
-                                      << "  This .obj compilation took " << std::fixed
-                                      << std::setprecision(1)
-                                      << (static_cast<double>(obj_duration_us) / avg_us)
-                                      << "x longer than average!\n"
-                                      << std::flush;
+                            TML_LOG_WARN("test",
+                                         "[SLOW OBJ] "
+                                             << pc.test_path
+                                             << " Duration: " << (obj_duration_us / 1000) << " ms"
+                                             << " Average: " << (avg_us / 1000) << " ms"
+                                             << " This .obj compilation took " << std::fixed
+                                             << std::setprecision(1)
+                                             << (static_cast<double>(obj_duration_us) / avg_us)
+                                             << "x longer than average!");
                         }
                     }
 
@@ -2223,8 +2244,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             };
 
-            VERBOSE_LOG(verbose, "  Compiling " << pending_compiles.size() << " objects with "
-                                                << num_threads << " threads...\n");
+            TML_LOG_INFO("test", "  Compiling " << pending_compiles.size() << " objects with "
+                                                << num_threads << " threads...");
 
             std::vector<std::thread> threads;
             for (unsigned int t = 0;
@@ -2242,14 +2263,13 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                               return a.duration_us > b.duration_us;
                           });
 
-                std::ostringstream oss;
-                oss << "Phase 2 timing summary (top 5 slowest .obj):\n";
                 for (size_t i = 0; i < std::min(size_t(5), obj_timings.size()); ++i) {
                     const auto& t = obj_timings[i];
-                    oss << "  " << (t.duration_us / 1000)
-                        << " ms: " << fs::path(t.test_path).filename().string() << "\n";
+                    TML_LOG_INFO("test", "Phase 2 slow #"
+                                             << i << ": "
+                                             << fs::path(t.test_path).filename().string() << " "
+                                             << (t.duration_us / 1000) << "ms");
                 }
-                VERBOSE_LOG(verbose, oss.str());
             }
 
             if (compile_error.load()) {
@@ -2304,13 +2324,13 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
         std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
-        VERBOSE_LOG(verbose, "  Getting runtime objects...\n");
+        TML_LOG_INFO("test", "  Getting runtime objects...");
         // Note: Pass verbose=false to avoid repeated "Including runtime:" messages
         // when compiling multiple suites in parallel. The runtime objects are the
         // same for all suites and would spam the output.
         auto runtime_objects =
             get_runtime_objects(shared_registry, module, deps_cache, clang, false);
-        VERBOSE_LOG(verbose, "  Got " << runtime_objects.size() << " runtime objects\n");
+        TML_LOG_INFO("test", "  Got " << runtime_objects.size() << " runtime objects");
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
         // DISABLED: Precompiled symbols cause linkage conflicts with force_internal_linkage
@@ -2324,7 +2344,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         // static std::string precompiled_obj = get_precompiled_symbols_obj(verbose, no_cache);
         // if (!precompiled_obj.empty() && fs::exists(precompiled_obj)) {
         //     object_files.push_back(fs::path(precompiled_obj));
-        //     VERBOSE_LOG(verbose, "  Using precompiled symbols: " << precompiled_obj << "\n");
+        //     TML_LOG_INFO("test", "  Using precompiled symbols: " << precompiled_obj);
         // }
 
         runtime_time_us =
@@ -2356,9 +2376,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             }
 
-            VERBOSE_LOG(verbose, "  Starting link...\n");
+            TML_LOG_INFO("test", "  Starting link...");
             auto link_result = link_objects(object_files, cached_dll, clang, link_options);
-            VERBOSE_LOG(verbose, "  Link complete\n");
+            TML_LOG_INFO("test", "  Link complete");
             if (!link_result.success) {
                 result.error_message = "Linking failed: " + link_result.error_message;
                 return result;
@@ -2393,24 +2413,16 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         result.compile_time_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
-        // Print timing summary if verbose
+        // Print timing summary if verbose (single line for clean log output)
         if (verbose) {
             int64_t total_us = result.compile_time_us;
-            std::ostringstream oss;
-            oss << "\nSuite " << suite.name << " timing breakdown:\n"
-                << "  Preprocess:     " << std::setw(6) << (preprocess_time_us / 1000) << " ms ("
-                << std::fixed << std::setprecision(1) << (100.0 * preprocess_time_us / total_us)
-                << "%)\n"
-                << "  Phase 1 (code): " << std::setw(6) << (phase1_time_us / 1000) << " ms ("
-                << (100.0 * phase1_time_us / total_us) << "%)\n"
-                << "  Phase 2 (obj):  " << std::setw(6) << (phase2_time_us / 1000) << " ms ("
-                << (100.0 * phase2_time_us / total_us) << "%)\n"
-                << "  Runtime objs:   " << std::setw(6) << (runtime_time_us / 1000) << " ms ("
-                << (100.0 * runtime_time_us / total_us) << "%)\n"
-                << "  Linking:        " << std::setw(6) << (link_time_us / 1000) << " ms ("
-                << (100.0 * link_time_us / total_us) << "%)\n"
-                << "  TOTAL:          " << std::setw(6) << (total_us / 1000) << " ms\n";
-            VERBOSE_LOG(verbose, oss.str());
+            TML_LOG_INFO("test", "Suite " << suite.name << " timing: preprocess="
+                                          << (preprocess_time_us / 1000) << "ms"
+                                          << " phase1=" << (phase1_time_us / 1000) << "ms"
+                                          << " phase2=" << (phase2_time_us / 1000) << "ms"
+                                          << " runtime=" << (runtime_time_us / 1000) << "ms"
+                                          << " link=" << (link_time_us / 1000) << "ms"
+                                          << " total=" << (total_us / 1000) << "ms");
         }
 
         return result;
@@ -2420,14 +2432,14 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         if (!suite.tests.empty()) {
             result.failed_test = suite.tests[0].file_path;
         }
-        std::cerr << "\n[FATAL] Exception in compile_test_suite: " << e.what() << "\n";
+        TML_LOG_FATAL("test", "Exception in compile_test_suite: " << e.what());
         return result;
     } catch (...) {
         result.error_message = "FATAL UNKNOWN EXCEPTION during suite compilation";
         if (!suite.tests.empty()) {
             result.failed_test = suite.tests[0].file_path;
         }
-        std::cerr << "\n[FATAL] Unknown exception in compile_test_suite\n";
+        TML_LOG_FATAL("test", "Unknown exception in compile_test_suite");
         return result;
     }
 }
@@ -2454,6 +2466,7 @@ SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimi
 using TmlRunTestWithCatch = int32_t (*)(TestMainFunc);
 using TmlGetPanicMessage = const char* (*)();
 using TmlGetPanicBacktrace = const char* (*)();
+using TmlGetPanicBacktraceJson = const char* (*)();
 using TmlEnableBacktrace = void (*)();
 
 SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose,
@@ -2468,24 +2481,25 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 
     // Get the indexed test function
     std::string func_name = "tml_test_" + std::to_string(test_index);
-    VERBOSE_LOG(verbose, "  Looking up symbol: " << func_name << "\n");
+    TML_LOG_INFO("test", "  Looking up symbol: " << func_name);
     auto test_func = lib.get_function<TestMainFunc>(func_name.c_str());
     if (!test_func) {
         result.error = "Failed to find " + func_name + " in suite DLL";
-        std::lock_guard<std::mutex> lock(g_verbose_output_mutex);
-        std::cerr << "[ERROR] " << result.error << "\n" << std::flush;
+        TML_LOG_ERROR("test", result.error);
         return result;
     }
 
     // Try to get the panic-catching wrapper from the runtime
     auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
-    VERBOSE_LOG(verbose,
-                "  tml_run_test_with_catch: " << (run_with_catch ? "found" : "NOT FOUND") << "\n");
+    TML_LOG_INFO("test", "  tml_run_test_with_catch: " << (run_with_catch ? "found" : "NOT FOUND"));
 
     // Get panic message and backtrace functions
     auto get_panic_msg = lib.get_function<TmlGetPanicMessage>("tml_get_panic_message");
     auto get_panic_bt =
         backtrace ? lib.get_function<TmlGetPanicBacktrace>("tml_get_panic_backtrace") : nullptr;
+    auto get_panic_bt_json =
+        backtrace ? lib.get_function<TmlGetPanicBacktraceJson>("tml_get_panic_backtrace_json")
+                  : nullptr;
     auto enable_bt =
         backtrace ? lib.get_function<TmlEnableBacktrace>("tml_enable_backtrace_on_panic") : nullptr;
 
@@ -2498,8 +2512,8 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     using TmlSetOutputSuppressed = void (*)(int32_t);
     auto set_output_suppressed =
         lib.get_function<TmlSetOutputSuppressed>("tml_set_output_suppressed");
-    VERBOSE_LOG(verbose, "  tml_set_output_suppressed: "
-                             << (set_output_suppressed ? "found" : "NOT FOUND") << "\n");
+    TML_LOG_INFO(
+        "test", "  tml_set_output_suppressed: " << (set_output_suppressed ? "found" : "NOT FOUND"));
 
     // Suppress output when not in verbose mode
     if (!verbose) {
@@ -2509,6 +2523,20 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         // Also flush to ensure no buffered output appears
         std::fflush(stdout);
         std::fflush(stderr);
+    }
+
+    // Route C runtime log messages through the C++ Logger
+    using RtLogSetCallback = void (*)(void (*)(int, const char*, const char*));
+    auto set_log_callback = lib.get_function<RtLogSetCallback>("rt_log_set_callback");
+    if (set_log_callback) {
+        set_log_callback(rt_log_bridge_callback);
+    }
+
+    // Sync C runtime log level with C++ Logger level
+    using RtLogSetLevel = void (*)(int);
+    auto set_log_level = lib.get_function<RtLogSetLevel>("rt_log_set_level");
+    if (set_log_level) {
+        set_log_level(static_cast<int>(tml::log::Logger::instance().level()));
     }
 
     // Save reference to original stderr BEFORE capture for timeout messages
@@ -2530,7 +2558,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
-    VERBOSE_LOG(verbose, "  Executing test function...\n");
+    TML_LOG_INFO("test", "  Executing test function...");
 
     // Ensure output is flushed before test execution in case of crash
     std::cout << std::flush;
@@ -2627,7 +2655,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     // because combining SEH with setjmp/longjmp causes BAD_STACK (0xC0000028).
     // The runtime's exception filter handles crashes, so SEH is not needed.
     if (run_with_catch) {
-        VERBOSE_LOG(verbose, "  Calling tml_run_test_with_catch wrapper...\n");
+        TML_LOG_INFO("test", "  Calling tml_run_test_with_catch wrapper...");
         result.exit_code = run_with_catch(test_func);
         if (result.exit_code == -1) {
             // Panic was caught
@@ -2647,6 +2675,13 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
                     error_msg += bt_str;
                 }
             }
+            // Log JSON backtrace for structured debugging
+            if (get_panic_bt_json) {
+                const char* bt_json = get_panic_bt_json();
+                if (bt_json && bt_json[0] != '\0' && bt_json[0] != ']') {
+                    TML_LOG_ERROR("test", "PANIC backtrace (JSON): " << bt_json);
+                }
+            }
             result.error = error_msg;
         } else if (result.exit_code == -2) {
             // Crash was caught
@@ -2655,12 +2690,11 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         } else {
             result.success = (result.exit_code == 0);
         }
-        VERBOSE_LOG(verbose,
-                    "[DEBUG]   tml_run_test_with_catch returned: " << result.exit_code << "\n");
+        TML_LOG_INFO("test", "[DEBUG]   tml_run_test_with_catch returned: " << result.exit_code);
     } else {
         // Fallback: direct call with platform-specific crash protection
 #ifdef _WIN32
-        VERBOSE_LOG(verbose, "  Calling test function with SEH protection...\n");
+        TML_LOG_INFO("test", "  Calling test function with SEH protection...");
         result.exit_code = call_test_with_seh(test_func);
         if (g_crash_occurred) {
             result.success = false;
@@ -2673,7 +2707,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         result.exit_code = test_func();
         result.success = (result.exit_code == 0);
 #endif
-        VERBOSE_LOG(verbose, "  Test returned: " << result.exit_code << "\n");
+        TML_LOG_INFO("test", "  Test returned: " << result.exit_code);
     }
 
     // Signal watchdog that test completed
@@ -2685,7 +2719,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         watchdog_thread.join();
     }
 
-    VERBOSE_LOG(verbose, "  Test execution complete, exit_code=" << result.exit_code << "\n");
+    TML_LOG_INFO("test", "  Test execution complete, exit_code=" << result.exit_code);
 
     auto end = Clock::now();
     result.duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();

@@ -25,6 +25,7 @@
 
 #include "types/module_metadata.hpp"
 
+#include "log/log.hpp"
 #include "types/env.hpp"
 
 #include <fstream>
@@ -678,14 +679,14 @@ bool ModuleMetadata::save_to_file(const Module& module, const std::filesystem::p
 
     std::ofstream file(meta_file);
     if (!file) {
-        std::cerr << "[METADATA] Failed to create: " << meta_file << "\n";
+        TML_LOG_WARN("types", "[METADATA] Failed to create: " << meta_file);
         return false;
     }
 
     file << serialize(module);
     file.close();
 
-    std::cerr << "[METADATA] Saved: " << meta_file << "\n";
+    TML_LOG_DEBUG("types", "[METADATA] Saved: " << meta_file);
     return true;
 }
 

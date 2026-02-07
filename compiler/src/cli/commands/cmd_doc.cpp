@@ -9,6 +9,7 @@
 #include "doc/extractor.hpp"
 #include "doc/generators.hpp"
 #include "lexer/lexer.hpp"
+#include "log/log.hpp"
 #include "parser/parser.hpp"
 
 #include <filesystem>
@@ -85,22 +86,20 @@ int run_doc(const DocOptions& options) {
     }
 
     if (files.empty()) {
-        std::cerr << "Error: No .tml files found\n";
+        TML_LOG_ERROR("doc", "No .tml files found");
         return 1;
     }
 
     // Parse each file
     for (const auto& file : files) {
-        if (options.verbose) {
-            std::cout << "Processing: " << file << "\n";
-        }
+        TML_LOG_INFO("doc", "Processing: " << file);
 
         // Read file
         std::string source_code;
         try {
             source_code = read_file(file);
         } catch (const std::exception& e) {
-            std::cerr << "Error: Could not read file '" << file << "': " << e.what() << "\n";
+            TML_LOG_ERROR("doc", "Could not read file '" << file << "': " << e.what());
             continue;
         }
 
@@ -165,7 +164,7 @@ int run_doc(const DocOptions& options) {
     }
 
     if (modules.empty()) {
-        std::cerr << "Error: No modules parsed successfully\n";
+        TML_LOG_ERROR("doc", "No modules parsed successfully");
         return 1;
     }
 
@@ -191,9 +190,7 @@ int run_doc(const DocOptions& options) {
         doc::JsonGenerator generator(gen_config);
         fs::path output_file = fs::path(options.output_dir) / "docs.json";
         generator.generate_file(doc_index, output_file);
-        if (options.verbose) {
-            std::cout << "Generated: " << output_file << "\n";
-        }
+        TML_LOG_INFO("doc", "Generated: " << output_file);
         std::cout << "Documentation written to " << output_file << "\n";
         break;
     }
@@ -201,9 +198,7 @@ int run_doc(const DocOptions& options) {
     case DocFormat::Html: {
         doc::HtmlGenerator generator(gen_config);
         generator.generate_site(doc_index, options.output_dir);
-        if (options.verbose) {
-            std::cout << "Generated HTML documentation in " << options.output_dir << "\n";
-        }
+        TML_LOG_INFO("doc", "Generated HTML documentation in " << options.output_dir);
         fs::path index_file = fs::path(options.output_dir) / "index.html";
         std::cout << "Documentation written to " << index_file << "\n";
 
@@ -224,9 +219,7 @@ int run_doc(const DocOptions& options) {
     case DocFormat::Markdown: {
         doc::MarkdownGenerator generator(gen_config);
         generator.generate_directory(doc_index, options.output_dir);
-        if (options.verbose) {
-            std::cout << "Generated Markdown documentation in " << options.output_dir << "\n";
-        }
+        TML_LOG_INFO("doc", "Generated Markdown documentation in " << options.output_dir);
         fs::path index_file = fs::path(options.output_dir) / "README.md";
         std::cout << "Documentation written to " << index_file << "\n";
         break;

@@ -27,6 +27,7 @@
 #include "cmd_cache.hpp"
 
 #include "cli/utils.hpp"
+#include "log/log.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -221,7 +222,7 @@ int run_cache_info(bool verbose) {
     return 0;
 }
 
-int run_cache_clean(bool clean_all, int max_age_days, bool verbose) {
+int run_cache_clean(bool clean_all, int max_age_days, bool /*verbose*/) {
     fs::path cache_dir = get_cache_dir();
 
     if (!fs::exists(cache_dir)) {
@@ -265,10 +266,8 @@ int run_cache_clean(bool clean_all, int max_age_days, bool verbose) {
         for (const auto& file : to_remove) {
             uintmax_t size = fs::file_size(file);
 
-            if (verbose) {
-                std::cout << "  Removing: " << file.filename().string() << " (" << format_size(size)
-                          << ")\n";
-            }
+            TML_LOG_DEBUG("cache", "Removing: " << file.filename().string() << " ("
+                                                << format_size(size) << ")");
 
             fs::remove(file);
             removed_count++;
@@ -286,7 +285,7 @@ int run_cache_clean(bool clean_all, int max_age_days, bool verbose) {
     return 0;
 }
 
-int enforce_cache_limit(uintmax_t max_size_mb, bool verbose) {
+int enforce_cache_limit(uintmax_t max_size_mb, bool /*verbose*/) {
     fs::path cache_dir = get_cache_dir();
 
     if (!fs::exists(cache_dir)) {
@@ -327,10 +326,9 @@ int enforce_cache_limit(uintmax_t max_size_mb, bool verbose) {
         return 0; // Under limit, nothing to do
     }
 
-    if (verbose) {
-        std::cout << "Cache size (" << format_size(total_size) << ") exceeds limit ("
-                  << format_size(max_size_bytes) << "), evicting old files...\n";
-    }
+    TML_LOG_INFO("cache", "Cache size (" << format_size(total_size) << ") exceeds limit ("
+                                         << format_size(max_size_bytes)
+                                         << "), evicting old files...");
 
     // Sort files by last access time (oldest first) - LRU eviction
     std::sort(files.begin(), files.end(),
@@ -346,10 +344,8 @@ int enforce_cache_limit(uintmax_t max_size_mb, bool verbose) {
         }
 
         try {
-            if (verbose) {
-                std::cout << "  Evicting: " << file_info.path.filename().string() << " ("
-                          << format_size(file_info.size) << ")\n";
-            }
+            TML_LOG_DEBUG("cache", "Evicting: " << file_info.path.filename().string() << " ("
+                                                << format_size(file_info.size) << ")");
 
             fs::remove(file_info.path);
             removed_count++;
@@ -360,15 +356,15 @@ int enforce_cache_limit(uintmax_t max_size_mb, bool verbose) {
         }
     }
 
-    if (verbose && removed_count > 0) {
-        std::cout << "Evicted " << removed_count << " files (" << format_size(removed_size)
-                  << "), cache size now: " << format_size(total_size) << "\n";
+    if (removed_count > 0) {
+        TML_LOG_INFO("cache", "Evicted " << removed_count << " files (" << format_size(removed_size)
+                                         << "), cache size now: " << format_size(total_size));
     }
 
     return removed_count;
 }
 
-int run_cache_invalidate(const std::vector<std::string>& files, bool verbose) {
+int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/) {
     if (files.empty()) {
         std::cerr << "Error: No files specified for invalidation.\n";
         std::cerr << "Usage: tml cache invalidate <file1> [file2] ...\n";
@@ -401,10 +397,8 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool verbose) {
         std::string file_stem = file_path.stem().string();
         std::string file_name = file_path.filename().string();
 
-        if (verbose) {
-            std::cout << "  Processing: " << file << "\n";
-            std::cout << "    Stem: " << file_stem << "\n";
-        }
+        TML_LOG_DEBUG("cache", "Processing: " << file);
+        TML_LOG_DEBUG("cache", "  Stem: " << file_stem);
 
         bool found_any = false;
 
@@ -418,18 +412,13 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool verbose) {
                     std::string entry_name = entry.path().stem().string();
                     // Match files that start with or contain the file stem
                     if (entry_name.find(file_stem) != std::string::npos) {
-                        if (verbose) {
-                            std::cout << "    Removing: " << entry.path().filename().string()
-                                      << "\n";
-                        }
+                        TML_LOG_DEBUG("cache", "Removing: " << entry.path().filename().string());
                         fs::remove(entry.path());
                         found_any = true;
                     }
                 }
             } catch (const std::exception& e) {
-                if (verbose) {
-                    std::cerr << "    Warning: Error accessing run cache: " << e.what() << "\n";
-                }
+                TML_LOG_WARN("cache", "Error accessing run cache: " << e.what());
             }
         }
 
@@ -451,10 +440,7 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool verbose) {
                         // Check if file content references this source
                         // For simplicity, we'll check if the entry filename contains the hash
                         // A more robust approach would parse the index files
-                        if (verbose) {
-                            std::cout << "    Checking: " << entry.path().filename().string()
-                                      << "\n";
-                        }
+                        TML_LOG_DEBUG("cache", "Checking: " << entry.path().filename().string());
                         // For now, mark that we found cache directory
                         found_any = true;
                     }
@@ -463,9 +449,7 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool verbose) {
                 // Also update index files to remove this source entry
                 // This requires parsing and rewriting the index, which we'll do in a robust way
             } catch (const std::exception& e) {
-                if (verbose) {
-                    std::cerr << "    Warning: Error accessing MIR cache: " << e.what() << "\n";
-                }
+                TML_LOG_WARN("cache", "Error accessing MIR cache: " << e.what());
             }
         }
 
@@ -478,18 +462,13 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool verbose) {
 
                     std::string entry_name = entry.path().stem().string();
                     if (entry_name.find(file_stem) != std::string::npos) {
-                        if (verbose) {
-                            std::cout << "    Removing: " << entry.path().filename().string()
-                                      << "\n";
-                        }
+                        TML_LOG_DEBUG("cache", "Removing: " << entry.path().filename().string());
                         fs::remove(entry.path());
                         found_any = true;
                     }
                 }
             } catch (const std::exception& e) {
-                if (verbose) {
-                    std::cerr << "    Warning: Error accessing test cache: " << e.what() << "\n";
-                }
+                TML_LOG_WARN("cache", "Error accessing test cache: " << e.what());
             }
         }
 
@@ -516,9 +495,7 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool verbose) {
                     if (content.find(cache_key) != std::string::npos ||
                         content.find(file_name) != std::string::npos) {
                         found_any = true;
-                        if (verbose) {
-                            std::cout << "    Found in .test-cache.json\n";
-                        }
+                        TML_LOG_DEBUG("cache", "Found in .test-cache.json");
 
                         // Remove the entry by rewriting without this file
                         // For simplicity, we'll just mark that invalidation is needed
@@ -526,9 +503,7 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool verbose) {
                     }
                 }
             } catch (const std::exception& e) {
-                if (verbose) {
-                    std::cerr << "    Warning: Error processing test cache: " << e.what() << "\n";
-                }
+                TML_LOG_WARN("cache", "Error processing test cache: " << e.what());
             }
         }
 
@@ -536,9 +511,7 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool verbose) {
             invalidated_count++;
             std::cout << "  Invalidated: " << file << "\n";
         } else {
-            if (verbose) {
-                std::cout << "  No cache entries found for: " << file << "\n";
-            }
+            TML_LOG_DEBUG("cache", "No cache entries found for: " << file);
         }
     }
 

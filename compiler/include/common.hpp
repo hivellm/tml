@@ -25,6 +25,8 @@
 #ifndef TML_COMMON_HPP
 #define TML_COMMON_HPP
 
+#include "log/log.hpp"
+
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -89,6 +91,7 @@ enum class DiagnosticFormat {
 /// ```
 struct CompilerOptions {
     /// Enable verbose/debug output to stderr.
+    /// @deprecated Use the logging system (log/log.hpp) instead.
     static inline bool verbose = false;
 
     /// Optimization level: 0-3 for O0-O3, 4 for Os, 5 for Oz.
@@ -154,26 +157,16 @@ struct CompilerOptions {
 };
 
 // ============================================================================
-// Debug Macros
+// Debug Macros (backward compatibility — delegates to unified logger)
 // ============================================================================
 
-/// Outputs a debug message to stderr if verbose mode is enabled.
-///
-/// This macro is a no-op when `CompilerOptions::verbose` is false.
-#define TML_DEBUG(msg)                                                                             \
-    do {                                                                                           \
-        if (::tml::CompilerOptions::verbose) {                                                     \
-            std::cerr << msg;                                                                      \
-        }                                                                                          \
-    } while (0)
+/// Outputs a debug message via the unified logging system.
+/// @deprecated Use TML_LOG_DEBUG("module", msg) directly.
+#define TML_DEBUG(msg) TML_LOG_DEBUG("compiler", msg)
 
-/// Outputs a debug message with newline to stderr if verbose mode is enabled.
-#define TML_DEBUG_LN(msg)                                                                          \
-    do {                                                                                           \
-        if (::tml::CompilerOptions::verbose) {                                                     \
-            std::cerr << msg << "\n";                                                              \
-        }                                                                                          \
-    } while (0)
+/// Outputs a debug message with newline via the unified logging system.
+/// @deprecated Use TML_LOG_DEBUG("module", msg) directly.
+#define TML_DEBUG_LN(msg) TML_LOG_DEBUG("compiler", msg)
 
 // ============================================================================
 // Source Location Types

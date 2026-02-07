@@ -455,9 +455,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string obj = ensure_c_compiled(to_forward_slashes(fs::absolute(path).string()),
                                                     deps_cache, clang, verbose);
                 objects.push_back(fs::path(obj));
-                if (verbose) {
-                    std::cout << "Including " << name << ": " << obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including " << name << ": " << obj);
                 return;
             }
         }
@@ -473,9 +471,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     if (use_precompiled) {
         // Use pre-compiled runtime library (no clang needed)
         objects.push_back(fs::path(runtime_lib));
-        if (verbose) {
-            std::cout << "Using pre-compiled runtime: " << runtime_lib << "\n";
-        }
+        TML_LOG_DEBUG("build", "Using pre-compiled runtime: " << runtime_lib);
     } else {
         // Fall back to compiling individual C files with clang
         // Essential runtime (IO functions)
@@ -483,21 +479,25 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
         if (!runtime_path.empty()) {
             std::string obj = ensure_c_compiled(runtime_path, deps_cache, clang, verbose);
             objects.push_back(fs::path(obj));
-            if (verbose) {
-                std::cout << "Including runtime: " << obj << "\n";
-            }
+            TML_LOG_DEBUG("build", "Including runtime: " << obj);
 
-            // Also include string.c and mem.c by default (commonly used)
+            // Also include log.c (required by essential.c, text.c, backtrace.c)
             fs::path runtime_dir = fs::path(runtime_path).parent_path();
+
+            fs::path log_c = runtime_dir / "log.c";
+            if (fs::exists(log_c)) {
+                std::string log_obj = ensure_c_compiled(to_forward_slashes(log_c.string()),
+                                                        deps_cache, clang, verbose);
+                objects.push_back(fs::path(log_obj));
+                TML_LOG_DEBUG("build", "Including log runtime: " << log_obj);
+            }
 
             fs::path string_c = runtime_dir / "string.c";
             if (fs::exists(string_c)) {
                 std::string string_obj = ensure_c_compiled(to_forward_slashes(string_c.string()),
                                                            deps_cache, clang, verbose);
                 objects.push_back(fs::path(string_obj));
-                if (verbose) {
-                    std::cout << "Including string runtime: " << string_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including string runtime: " << string_obj);
             }
 
             // Determine if memory tracking is enabled
@@ -511,9 +511,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string mem_obj = ensure_c_compiled(to_forward_slashes(mem_c.string()),
                                                         deps_cache, clang, verbose, mem_flags);
                 objects.push_back(fs::path(mem_obj));
-                if (verbose) {
-                    std::cout << "Including mem runtime: " << mem_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including mem runtime: " << mem_obj);
             }
 
             // Include memory tracking runtime when leak checking is enabled
@@ -524,10 +522,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                         ensure_c_compiled(to_forward_slashes(mem_track_c.string()), deps_cache,
                                           clang, verbose, mem_flags);
                     objects.push_back(fs::path(mem_track_obj));
-                    if (verbose) {
-                        std::cout << "Including mem_track runtime (leak checking): "
-                                  << mem_track_obj << "\n";
-                    }
+                    TML_LOG_DEBUG("build",
+                                  "Including mem_track runtime (leak checking): " << mem_track_obj);
                 }
             }
 
@@ -537,9 +533,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string time_obj = ensure_c_compiled(to_forward_slashes(time_c.string()),
                                                          deps_cache, clang, verbose);
                 objects.push_back(fs::path(time_obj));
-                if (verbose) {
-                    std::cout << "Including time runtime: " << time_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including time runtime: " << time_obj);
             }
 
             // Include async.c for async/await executor support
@@ -548,9 +542,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string async_obj = ensure_c_compiled(to_forward_slashes(async_c.string()),
                                                           deps_cache, clang, verbose);
                 objects.push_back(fs::path(async_obj));
-                if (verbose) {
-                    std::cout << "Including async runtime: " << async_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including async runtime: " << async_obj);
             }
 
             // Include math.c for math builtins (sqrt, pow, int_to_float, etc.)
@@ -559,9 +551,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string math_obj = ensure_c_compiled(to_forward_slashes(math_c.string()),
                                                          deps_cache, clang, verbose);
                 objects.push_back(fs::path(math_obj));
-                if (verbose) {
-                    std::cout << "Including math runtime: " << math_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including math runtime: " << math_obj);
             }
 
             // Include text.c for Text type (used by template literals $"...")
@@ -570,9 +560,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string text_obj = ensure_c_compiled(to_forward_slashes(text_c.string()),
                                                          deps_cache, clang, verbose);
                 objects.push_back(fs::path(text_obj));
-                if (verbose) {
-                    std::cout << "Including text runtime: " << text_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including text runtime: " << text_obj);
             }
 
             // Include net.c by default (commonly used by std::net, and needed for test suites)
@@ -582,9 +570,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string net_obj = ensure_c_compiled(to_forward_slashes(net_c.string()),
                                                         deps_cache, clang, verbose);
                 objects.push_back(fs::path(net_obj));
-                if (verbose) {
-                    std::cout << "Including net runtime: " << net_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including net runtime: " << net_obj);
             }
 
             // Include collections.c (needed by string.c for list_* functions)
@@ -593,9 +579,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string collections_obj = ensure_c_compiled(
                     to_forward_slashes(collections_c.string()), deps_cache, clang, verbose);
                 objects.push_back(fs::path(collections_obj));
-                if (verbose) {
-                    std::cout << "Including collections runtime: " << collections_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including collections runtime: " << collections_obj);
             }
 
             // Include sync.c for Mutex, RwLock, Condvar runtime functions
@@ -604,9 +588,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string sync_obj = ensure_c_compiled(to_forward_slashes(sync_c.string()),
                                                          deps_cache, clang, verbose);
                 objects.push_back(fs::path(sync_obj));
-                if (verbose) {
-                    std::cout << "Including sync runtime: " << sync_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including sync runtime: " << sync_obj);
             }
 
             // Include thread.c for thread management functions
@@ -615,9 +597,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string thread_obj = ensure_c_compiled(to_forward_slashes(thread_c.string()),
                                                            deps_cache, clang, verbose);
                 objects.push_back(fs::path(thread_obj));
-                if (verbose) {
-                    std::cout << "Including thread runtime: " << thread_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including thread runtime: " << thread_obj);
             }
 
             // Include crypto.c for cryptographic functions (CSPRNG, etc.)
@@ -626,9 +606,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string crypto_obj = ensure_c_compiled(to_forward_slashes(crypto_c.string()),
                                                            deps_cache, clang, verbose);
                 objects.push_back(fs::path(crypto_obj));
-                if (verbose) {
-                    std::cout << "Including crypto runtime: " << crypto_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including crypto runtime: " << crypto_obj);
             }
 
             // Include backtrace.c for stack trace capture and symbol resolution
@@ -637,9 +615,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::string backtrace_obj = ensure_c_compiled(
                     to_forward_slashes(backtrace_c.string()), deps_cache, clang, verbose);
                 objects.push_back(fs::path(backtrace_obj));
-                if (verbose) {
-                    std::cout << "Including backtrace runtime: " << backtrace_obj << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including backtrace runtime: " << backtrace_obj);
             }
         }
     }
@@ -794,9 +770,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
 
         if (auto json_lib = find_json_runtime()) {
             objects.push_back(*json_lib);
-            if (verbose) {
-                std::cout << "Including JSON runtime library: " << json_lib->string() << "\n";
-            }
+            TML_LOG_DEBUG("build", "Including JSON runtime library: " << json_lib->string());
 
             // Also need to link tml_json.lib which contains the actual JSON parser
             // (tml_json_runtime.lib depends on it)
@@ -808,15 +782,12 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
 #endif
             if (fs::exists(tml_json_lib)) {
                 objects.push_back(tml_json_lib);
-                if (verbose) {
-                    std::cout << "Including JSON parser library: " << tml_json_lib.string() << "\n";
-                }
-            } else if (verbose) {
-                std::cout << "Warning: tml_json library not found at " << tml_json_lib.string()
-                          << "\n";
+                TML_LOG_DEBUG("build", "Including JSON parser library: " << tml_json_lib.string());
+            } else {
+                TML_LOG_WARN("build", "tml_json library not found at " << tml_json_lib.string());
             }
-        } else if (verbose) {
-            std::cout << "Warning: std::json imported but tml_json_runtime library not found\n";
+        } else {
+            TML_LOG_WARN("build", "std::json imported but tml_json_runtime library not found");
         }
     }
 
@@ -876,9 +847,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
 
         if (auto zlib_lib = find_zlib_runtime()) {
             objects.push_back(*zlib_lib);
-            if (verbose) {
-                std::cout << "Including zlib runtime library: " << zlib_lib->string() << "\n";
-            }
+            TML_LOG_DEBUG("build", "Including zlib runtime library: " << zlib_lib->string());
 
             // Also need to link the underlying compression libraries
             // (zstd, brotli, zlib) which are dependencies of tml_zlib_runtime
@@ -901,9 +870,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             // Add zstd library
             if (auto zstd_lib = find_vcpkg_lib("zstd")) {
                 objects.push_back(*zstd_lib);
-                if (verbose) {
-                    std::cout << "Including zstd library: " << zstd_lib->string() << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including zstd library: " << zstd_lib->string());
             }
 
             // Add brotli libraries
@@ -912,21 +879,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                   "brotlidec-static", "brotlienc-static"}) {
                 if (auto brotli_lib = find_vcpkg_lib(brotli_lib_name)) {
                     objects.push_back(*brotli_lib);
-                    if (verbose) {
-                        std::cout << "Including brotli library: " << brotli_lib->string() << "\n";
-                    }
+                    TML_LOG_DEBUG("build", "Including brotli library: " << brotli_lib->string());
                 }
             }
 
             // Add zlib library
             if (auto zlib_base_lib = find_vcpkg_lib("zlib")) {
                 objects.push_back(*zlib_base_lib);
-                if (verbose) {
-                    std::cout << "Including zlib base library: " << zlib_base_lib->string() << "\n";
-                }
+                TML_LOG_DEBUG("build", "Including zlib base library: " << zlib_base_lib->string());
             }
-        } else if (verbose) {
-            std::cout << "Warning: std::zlib imported but tml_zlib_runtime library not found\n";
+        } else {
+            TML_LOG_WARN("build", "std::zlib imported but tml_zlib_runtime library not found");
         }
     }
 
@@ -976,12 +939,10 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
 
         if (auto profiler_lib = find_profiler_runtime()) {
             objects.push_back(*profiler_lib);
-            if (verbose) {
-                std::cout << "Including profiler runtime library: " << profiler_lib->string()
-                          << "\n";
-            }
-        } else if (verbose) {
-            std::cout << "Warning: std::profiler imported but tml_profiler library not found\n";
+            TML_LOG_DEBUG("build",
+                          "Including profiler runtime library: " << profiler_lib->string());
+        } else {
+            TML_LOG_WARN("build", "std::profiler imported but tml_profiler library not found");
         }
     }
 

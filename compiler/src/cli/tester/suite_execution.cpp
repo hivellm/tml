@@ -33,6 +33,7 @@
 //! When a test file hasn't changed and previously passed, it can be skipped.
 
 #include "cli/tester/test_cache.hpp"
+#include "log/log.hpp"
 #include "tester_internal.hpp"
 
 #include <fstream>
@@ -122,13 +123,13 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             if (TestCacheManager::restore_from_temp(cache_file.string(), run_cache_dir.string())) {
                 cache_loaded = test_cache.load(cache_file.string());
                 if (cache_loaded && opts.verbose) {
-                    std::cerr << "[DEBUG] Cache restored from backup\n";
+                    TML_LOG_DEBUG("test", "Cache restored from backup");
                 }
             }
         }
         if (opts.verbose && cache_loaded) {
             auto stats = test_cache.get_stats();
-            std::cerr << "[DEBUG] Loaded test cache with " << stats.total_entries << " entries\n";
+            TML_LOG_DEBUG("test", "Loaded test cache with " << stats.total_entries << " entries");
         }
     }
 
@@ -192,8 +193,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                 ++removed_count;
                                 removed_bytes += file_size;
                                 if (opts.verbose) {
-                                    std::cerr << "[CLEANUP] Removed old file: "
-                                              << entry.path().filename().string() << "\n";
+                                    TML_LOG_DEBUG("test", "[CLEANUP] Removed old file: "
+                                                              << entry.path().filename().string());
                                 }
                             } catch (...) {
                                 // Skip files that can't be removed
@@ -203,12 +204,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     if (removed_count > 0 && !opts.quiet) {
                         double mb = static_cast<double>(removed_bytes) / (1024 * 1024);
-                        std::cerr << "[CLEANUP] Removed " << removed_count << " old cache files ("
-                                  << std::fixed << std::setprecision(1) << mb << " MB)\n";
+                        TML_LOG_INFO("test", "[CLEANUP] Removed "
+                                                 << removed_count << " old cache files ("
+                                                 << std::fixed << std::setprecision(1) << mb
+                                                 << " MB)");
                     }
                 } catch (const std::exception& e) {
                     if (opts.verbose) {
-                        std::cerr << "[CLEANUP] Error: " << e.what() << "\n";
+                        TML_LOG_WARN("test", "[CLEANUP] Error: " << e.what());
                     }
                 }
             }
@@ -271,7 +274,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 skipped_count.fetch_add(1);
             }
             if (opts.verbose) {
-                std::cerr << "[DEBUG] Suite fully cached, skipped: " << suite.name << "\n";
+                TML_LOG_DEBUG("test", "Suite fully cached, skipped: " << suite.name);
             }
         }
 
@@ -372,12 +375,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     collector.add(std::move(error_result));
 
-                    // Log the error immediately so user sees it
-                    std::cerr << c.red() << c.bold() << "COMPILATION FAILED: " << c.reset()
-                              << error_result.test_name << "\n";
-                    if (!compile_result.error_message.empty()) {
-                        std::cerr << c.dim() << compile_result.error_message << c.reset() << "\n";
-                    }
+                    TML_LOG_ERROR("build", "COMPILATION FAILED suite="
+                                               << suite.name
+                                               << " file=" << compile_result.failed_test
+                                               << " error=" << compile_result.error_message);
 
                     continue; // Continue with other suites instead of stopping
                 }
@@ -404,10 +405,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                     collector.add(std::move(error_result));
 
-                    // Log the error immediately
-                    std::cerr << c.red() << c.bold() << "DLL LOAD FAILED: " << c.reset()
-                              << suite.name << "\n";
-                    std::cerr << c.dim() << lib.get_error() << c.reset() << "\n";
+                    TML_LOG_ERROR("build", "DLL LOAD FAILED suite=" << suite.name << " error="
+                                                                    << lib.get_error());
 
                     continue; // Continue with other suites instead of stopping
                 }
@@ -418,8 +417,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
         // Run all tests from loaded suites IN PARALLEL
         // Each suite runs in its own thread with its own DLL
-        // Use global mutex from test_runner.hpp for synchronized console output
-        std::mutex& output_mutex = g_verbose_output_mutex;
+        // Mutex for synchronized console output in parallel execution
+        std::mutex output_mutex;
         std::mutex cache_mutex;    // For synchronized cache updates
         std::mutex coverage_mutex; // For synchronized coverage collection
         std::atomic<bool> fail_fast_triggered{false};
@@ -449,12 +448,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                 auto& [suite, lib] = loaded_suites[idx];
 
-                if (opts.verbose) {
-                    std::lock_guard<std::mutex> lock(output_mutex);
-                    std::cerr << "[DEBUG] Thread running suite: " << suite.name << " ("
-                              << suite.tests.size() << " test files)\n"
-                              << std::flush;
-                }
+                TML_LOG_DEBUG("test", "Thread running suite: " << suite.name << " ("
+                                                               << suite.tests.size()
+                                                               << " test files)");
 
                 for (size_t i = 0; i < suite.tests.size(); ++i) {
                     // Check fail-fast before each test
@@ -487,25 +483,17 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                 collector.add(std::move(result));
                                 skipped_count.fetch_add(1);
 
-                                if (opts.verbose) {
-                                    std::lock_guard<std::mutex> out_lock(output_mutex);
-                                    std::cerr << "[DEBUG] Skipped (cached): " << test_info.test_name
-                                              << "\n"
-                                              << std::flush;
-                                }
+                                TML_LOG_DEBUG("test", "Skipped (cached): " << test_info.test_name);
                                 continue;
                             }
                         }
                     }
 
                     // Show which test is running
-                    if (opts.verbose) {
-                        std::lock_guard<std::mutex> lock(output_mutex);
-                        std::cerr << "[DEBUG] Starting test " << (i + 1) << "/"
-                                  << suite.tests.size() << ": " << test_info.test_name << " ("
-                                  << test_info.test_count << " sub-tests)\n"
-                                  << std::flush;
-                    }
+                    TML_LOG_DEBUG("test", "Starting test " << (i + 1) << "/" << suite.tests.size()
+                                                           << ": " << test_info.test_name << " ("
+                                                           << test_info.test_count
+                                                           << " sub-tests)");
 
                     TestResult result;
                     result.file_path = test_info.file_path;
@@ -554,6 +542,16 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                             }
                         }
                         result.error_message += "\n";
+
+                        // Log structured failure info for JSON log file
+                        TML_LOG_ERROR("test",
+                                      "FAILED test=" << test_info.test_name
+                                                     << " file=" << test_info.file_path
+                                                     << " exit=" << result.exit_code
+                                                     << " duration_ms=" << result.duration_ms);
+                        if (!run_result.error.empty()) {
+                            TML_LOG_ERROR("test", "Error: " << run_result.error);
+                        }
                     }
 
                     // Update cache with result (synchronized)
@@ -571,9 +569,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     // Handle fail-fast
                     if (opts.fail_fast && !run_success) {
                         fail_fast_triggered.store(true);
-                        std::lock_guard<std::mutex> lock(output_mutex);
-                        std::cerr << "\n\033[1;31m✗ Test failed - stopping (--fail-fast)\033[0m\n";
-                        std::cerr << result.error_message << std::flush;
+                        TML_LOG_WARN("test", "Test failed, stopping due to --fail-fast");
                         return;
                     }
                 }
@@ -767,14 +763,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             if (test_cache.save(cache_file.string())) {
                 if (opts.verbose) {
                     auto stats = test_cache.get_stats();
-                    std::cerr << "[DEBUG] Saved test cache with " << stats.total_entries
-                              << " entries\n";
+                    TML_LOG_DEBUG("test",
+                                  "Saved test cache with " << stats.total_entries << " entries");
                 }
                 // Backup cache to temp directory for recovery if cache is deleted
                 TestCacheManager::backup_to_temp(cache_file.string(), run_cache_dir.string());
             }
         } else if (opts.verbose && !opts.patterns.empty()) {
-            std::cerr << "[DEBUG] Cache not updated (filter active)\n";
+            TML_LOG_DEBUG("test", "Cache not updated (filter active)");
         }
 
         // Report skipped tests
@@ -794,9 +790,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 test_cache.save(cache_file.string());
             } catch (...) {}
         }
-        std::cerr << "\n"
-                  << c.red() << c.bold()
-                  << "[FATAL] Exception in run_tests_suite_mode: " << e.what() << c.reset() << "\n";
+        TML_LOG_FATAL("test", "Exception in run_tests_suite_mode: " << e.what());
         return 1;
     } catch (...) {
         // Save cache before exit to preserve progress
@@ -806,9 +800,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 test_cache.save(cache_file.string());
             } catch (...) {}
         }
-        std::cerr << "\n"
-                  << c.red() << c.bold() << "[FATAL] Unknown exception in run_tests_suite_mode"
-                  << c.reset() << "\n";
+        TML_LOG_FATAL("test", "Unknown exception in run_tests_suite_mode");
         return 1;
     }
 }

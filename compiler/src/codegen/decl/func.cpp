@@ -318,6 +318,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     if (func.extern_abi.has_value()) {
         // Get the actual symbol name (extern_name or func.name)
         std::string symbol_name = func.extern_name.value_or(func.name);
+        TML_DEBUG_LN("[EXTERN] Processing @extern: func.name="
+                     << func.name << " symbol=" << symbol_name << " ret=" << ret_type);
 
         // Skip if already declared (prevents duplicate declarations when module is imported
         // multiple times)
@@ -412,10 +414,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         // This can happen when e.g. test function "test_assert_str_empty" collides with
         // module "test" function "assert_str_empty" (both mangle to "tml_test_assert_str_empty").
         if (current_module_prefix_.empty()) {
-            std::fprintf(stderr,
-                         "warning: function '%s' has LLVM name collision with '%s' "
-                         "(already generated). The function body will be skipped.\n",
-                         func.name.c_str(), llvm_name.c_str());
+            TML_LOG_WARN("codegen",
+                         "function '"
+                             << func.name << "' has LLVM name collision with '" << llvm_name
+                             << "' (already generated). The function body will be skipped.");
         }
         return;
     }

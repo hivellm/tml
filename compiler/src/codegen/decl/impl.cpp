@@ -8,7 +8,6 @@
 #include "types/type.hpp"
 
 #include <functional>
-#include <iostream>
 #include <sstream>
 
 namespace tml::codegen {

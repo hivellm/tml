@@ -44,14 +44,15 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
     // Try to load tml.toml manifest
     auto manifest_opt = Manifest::load_from_current_dir();
-    if (manifest_opt && verbose) {
-        std::cout << "Found tml.toml manifest for project: " << manifest_opt->package.name << "\n";
+    if (manifest_opt) {
+        TML_LOG_INFO("build",
+                     "Found tml.toml manifest for project: " << manifest_opt->package.name);
     }
 
     // Apply manifest settings if available (command-line flags override)
     // Note: Command-line parameters are already set, so we only apply defaults from manifest
     if (manifest_opt && !manifest_opt->build.validate()) {
-        std::cerr << "Warning: Invalid build settings in tml.toml, using defaults\n";
+        TML_LOG_WARN("build", "Invalid build settings in tml.toml, using defaults");
     }
 
     // Initialize diagnostic emitter for Rust-style error output
@@ -61,7 +62,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     try {
         source_code = read_file(path);
     } catch (const std::exception& e) {
-        std::cerr << "error: " << e.what() << "\n";
+        TML_LOG_ERROR("build", e.what());
         return 1;
     }
 
@@ -144,11 +145,9 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         hir::HirBuilder hir_builder(env_copy);
         auto hir_module = hir_builder.lower_module(module);
 
-        if (verbose) {
-            std::cout << "  HIR: Built " << hir_module.functions.size() << " functions, "
-                      << hir_module.structs.size() << " structs, " << hir_module.enums.size()
-                      << " enums\n";
-        }
+        TML_LOG_INFO("build", "HIR: Built " << hir_module.functions.size() << " functions, "
+                                            << hir_module.structs.size() << " structs, "
+                                            << hir_module.enums.size() << " enums");
 
         mir::HirMirBuilder hir_mir_builder(env);
         mir_module = hir_mir_builder.build(hir_module);
@@ -160,11 +159,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         if (loop_check.has_warnings()) {
             // Print errors (not warnings) for infinite loops
             for (const auto& warning : loop_check.get_warnings()) {
-                std::cerr << "\033[1;31merror:\033[0m potential infinite loop in function '"
-                          << warning.function_name << "' at block '" << warning.block_name
-                          << "': " << warning.reason << "\n";
-                std::cerr << "  \033[36mnote:\033[0m infinite loops are not allowed - add a break "
-                             "condition or return statement\n";
+                TML_LOG_ERROR("build", "potential infinite loop in function '"
+                                           << warning.function_name << "' at block '"
+                                           << warning.block_name << "': " << warning.reason
+                                           << " -- infinite loops are not allowed - add a break "
+                                              "condition or return statement");
             }
             return 1; // Fail compilation
         }
@@ -196,16 +195,14 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             if (options.profile_generate) {
                 mir::ProfileInstrumentationPass inst_pass;
                 inst_pass.run(mir_module);
-                if (verbose) {
-                    auto stats = inst_pass.get_stats();
-                    std::cout << "  PGO instrumentation: " << stats.functions_profiled
-                              << " functions instrumented\n";
-                }
+                auto stats = inst_pass.get_stats();
+                TML_LOG_INFO("build", "PGO instrumentation: " << stats.functions_profiled
+                                                              << " functions instrumented");
             }
 
             int passes_changed = pm.run(mir_module);
-            if (verbose && passes_changed > 0) {
-                std::cout << "  MIR optimization: " << passes_changed << " passes applied\n";
+            if (passes_changed > 0) {
+                TML_LOG_INFO("build", "MIR optimization: " << passes_changed << " passes applied");
             }
 
             // Apply PGO when using profile data
@@ -226,7 +223,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         fs::path mir_output = build_dir / (module_name + ".mir");
         std::ofstream mir_file(mir_output);
         if (!mir_file) {
-            std::cerr << "error: Cannot write to " << mir_output << "\n";
+            TML_LOG_ERROR("build", "Cannot write to " << mir_output);
             return 1;
         }
         mir_file << mir::print_module(mir_module);
@@ -292,11 +289,9 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         hir::HirBuilder hir_builder(env_copy);
         auto hir_module = hir_builder.lower_module(module);
 
-        if (verbose) {
-            std::cout << "  HIR: Built " << hir_module.functions.size() << " functions, "
-                      << hir_module.structs.size() << " structs, " << hir_module.enums.size()
-                      << " enums\n";
-        }
+        TML_LOG_INFO("build", "HIR: Built " << hir_module.functions.size() << " functions, "
+                                            << hir_module.structs.size() << " structs, "
+                                            << hir_module.enums.size() << " enums");
 
         mir::HirMirBuilder hir_mir_builder(env);
         auto mir_module = hir_mir_builder.build(hir_module);
@@ -308,11 +303,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         if (loop_check.has_warnings()) {
             // Print errors (not warnings) for infinite loops
             for (const auto& warning : loop_check.get_warnings()) {
-                std::cerr << "\033[1;31merror:\033[0m potential infinite loop in function '"
-                          << warning.function_name << "' at block '" << warning.block_name
-                          << "': " << warning.reason << "\n";
-                std::cerr << "  \033[36mnote:\033[0m infinite loops are not allowed - add a break "
-                             "condition or return statement\n";
+                TML_LOG_ERROR("build", "potential infinite loop in function '"
+                                           << warning.function_name << "' at block '"
+                                           << warning.block_name << "': " << warning.reason
+                                           << " -- infinite loops are not allowed - add a break "
+                                              "condition or return statement");
             }
             return 1; // Infinite loop detected - compilation aborted
         }
@@ -342,11 +337,9 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         if (options.profile_generate) {
             mir::ProfileInstrumentationPass inst_pass;
             inst_pass.run(mir_module);
-            if (verbose) {
-                auto stats = inst_pass.get_stats();
-                std::cout << "  PGO instrumentation: " << stats.functions_profiled
-                          << " functions instrumented\n";
-            }
+            auto stats = inst_pass.get_stats();
+            TML_LOG_INFO("build", "PGO instrumentation: " << stats.functions_profiled
+                                                          << " functions instrumented");
         }
 
         // Profile-Guided Optimization: Load profile data and pass to InliningPass
@@ -354,20 +347,18 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         if (!options.profile_use.empty()) {
             loaded_profile = mir::ProfileData::load(options.profile_use);
             if (loaded_profile) {
-                if (verbose) {
-                    std::cout << "  PGO: Loaded profile from " << options.profile_use << "\n";
-                }
+                TML_LOG_INFO("build", "PGO: Loaded profile from " << options.profile_use);
                 // Pass profile data to InliningPass in the pipeline
                 pm.set_profile_data(&*loaded_profile);
             } else {
-                std::cerr << "error: Cannot load profile data from " << options.profile_use << "\n";
+                TML_LOG_ERROR("build", "Cannot load profile data from " << options.profile_use);
                 return 1;
             }
         }
 
         int passes_changed = pm.run(mir_module);
-        if (verbose && passes_changed > 0) {
-            std::cout << "  MIR optimization: " << passes_changed << " passes applied\n";
+        if (passes_changed > 0) {
+            TML_LOG_INFO("build", "MIR optimization: " << passes_changed << " passes applied");
         }
 
         // Apply additional PGO passes (branch hints, block layout) after inlining
@@ -375,12 +366,10 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             mir::PgoPass pgo_pass(*loaded_profile);
             if (pgo_pass.run(mir_module)) {
                 auto stats = pgo_pass.get_stats();
-                if (verbose) {
-                    std::cout << "  PGO applied: " << stats.branch_hints_applied
-                              << " branch hints, " << stats.blocks_reordered
-                              << " blocks reordered, " << stats.hot_functions
-                              << " hot functions identified\n";
-                }
+                TML_LOG_INFO("build",
+                             "PGO applied: " << stats.branch_hints_applied << " branch hints, "
+                                             << stats.blocks_reordered << " blocks reordered, "
+                                             << stats.hot_functions << " hot functions identified");
             }
         }
 
@@ -400,10 +389,8 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         codegen::MirCodegen mir_codegen(mir_opts);
         llvm_ir = mir_codegen.generate(mir_module);
 
-        if (verbose) {
-            std::cout << "  Generated LLVM IR from optimized MIR (" << mir_module.functions.size()
-                      << " functions)\n";
-        }
+        TML_LOG_INFO("build", "Generated LLVM IR from optimized MIR ("
+                                  << mir_module.functions.size() << " functions)");
 
         // Extract link_libs from AST @extern/@link decorated functions
         // MIR codegen doesn't track these, so we extract them directly from AST
@@ -460,15 +447,13 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
     std::ofstream ll_file(ll_output);
     if (!ll_file) {
-        std::cerr << "error: Cannot write to " << ll_output << "\n";
+        TML_LOG_ERROR("build", "Cannot write to " << ll_output);
         return 1;
     }
     ll_file << llvm_ir;
     ll_file.close();
 
-    if (verbose) {
-        std::cout << "Generated: " << ll_output << "\n";
-    }
+    TML_LOG_INFO("build", "Generated: " << ll_output);
 
     if (emit_ir_only) {
         std::cout << "emit-ir: " << ll_output << "\n";
@@ -504,9 +489,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             auto obj_time = fs::last_write_time(obj_output);
             if (obj_time >= src_time) {
                 use_cached_obj = true;
-                if (verbose) {
-                    std::cout << "Using cached object file: " << obj_output << "\n";
-                }
+                TML_LOG_INFO("build", "Using cached object file: " << obj_output);
             }
         } catch (...) {
             // If we can't check timestamps, recompile
@@ -520,13 +503,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     } else {
         obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
         if (!obj_result.success) {
-            std::cerr << "error: " << obj_result.error_message << "\n";
+            TML_LOG_ERROR("build", obj_result.error_message);
             return 1;
         }
 
-        if (verbose) {
-            std::cout << "Generated: " << obj_result.object_file << "\n";
-        }
+        TML_LOG_INFO("build", "Generated: " << obj_result.object_file);
     }
 
     // Step 2: Collect all object files to link (main .o + runtime .o files)
@@ -661,7 +642,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
         auto rlib_result = create_rlib(object_files, metadata, final_output, rlib_opts);
         if (!rlib_result.success) {
-            std::cerr << "error: " << rlib_result.message << "\n";
+            TML_LOG_ERROR("build", rlib_result.message);
             return rlib_result.exit_code;
         }
     } else {
@@ -695,7 +676,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
         auto link_result = link_objects(object_files, final_output, clang, link_options);
         if (!link_result.success) {
-            std::cerr << "error: " << link_result.error_message << "\n";
+            TML_LOG_ERROR("build", link_result.error_message);
             return 1;
         }
     }
@@ -712,7 +693,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         auto header_result = header_gen.generate(module);
 
         if (!header_result.success) {
-            std::cerr << "error: Header generation failed: " << header_result.error_message << "\n";
+            TML_LOG_ERROR("build", "Header generation failed: " << header_result.error_message);
             return 1;
         }
 
@@ -721,7 +702,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
         std::ofstream header_file(header_output);
         if (!header_file) {
-            std::cerr << "error: Cannot write to " << header_output << "\n";
+            TML_LOG_ERROR("build", "Cannot write to " << header_output);
             return 1;
         }
         header_file << header_result.header_content;

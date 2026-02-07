@@ -8,6 +8,8 @@
 
 #include "backtrace.h"
 
+#include "log.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +21,10 @@
 // SymGetLineFromAddr64, SymInitialize) can hang indefinitely in processes
 // that load/unload many DLLs (e.g., test suites). We use only
 // RtlCaptureStackBackTrace for frame capture and format addresses as hex.
+
+// Defined in essential.c - suppresses VEH interception so our SEH
+// __try/__except around RtlCaptureStackBackTrace works correctly.
+extern volatile int32_t tml_veh_suppressed;
 #else
 #include <dlfcn.h>
 #include <execinfo.h>
@@ -182,20 +188,36 @@ int32_t backtrace_capture(void** frames, int32_t max_frames, int32_t skip) {
     }
 
 #ifdef _WIN32
-    // First, capture all frames to know the total
-    void* temp_frames[128];
-    USHORT total_frames = RtlCaptureStackBackTrace(0, 128, temp_frames, NULL);
+    // Wrap RtlCaptureStackBackTrace in SEH (__try/__except) because it can
+    // cause ACCESS_VIOLATION if the stack is corrupted, frame pointers are
+    // invalid, or guard pages are hit. This is especially common in DLL-based
+    // test execution where stack state may be unusual.
+    //
+    // Suppress VEH interception so the exception is handled by our SEH
+    // rather than being caught by the VEH handler in essential.c.
+    tml_veh_suppressed = 1;
+    __try {
+        // First, capture all frames to know the total
+        void* temp_frames[128];
+        USHORT total_frames = RtlCaptureStackBackTrace(0, 128, temp_frames, NULL);
 
-    // Skip this function plus user-specified skip
-    int32_t total_skip = skip + 1;
+        // Skip this function plus user-specified skip
+        int32_t total_skip = skip + 1;
 
-    // Ensure we don't skip more frames than available
-    if (total_skip >= (int32_t)total_frames) {
-        total_skip = total_frames > 0 ? total_frames - 1 : 0;
+        // Ensure we don't skip more frames than available
+        if (total_skip >= (int32_t)total_frames) {
+            total_skip = total_frames > 0 ? total_frames - 1 : 0;
+        }
+
+        USHORT captured =
+            RtlCaptureStackBackTrace((ULONG)total_skip, (ULONG)max_frames, frames, NULL);
+        tml_veh_suppressed = 0;
+        return (int32_t)captured;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        // Stack walking failed - return empty backtrace instead of crashing
+        tml_veh_suppressed = 0;
+        return 0;
     }
-
-    USHORT captured = RtlCaptureStackBackTrace((ULONG)total_skip, (ULONG)max_frames, frames, NULL);
-    return (int32_t)captured;
 #else
     // Unix: use backtrace() from execinfo.h
     int captured = backtrace(frames, max_frames);
@@ -230,8 +252,16 @@ Backtrace* backtrace_capture_full(int32_t skip) {
     void* raw_frames[BACKTRACE_MAX_FRAMES];
     int32_t count = backtrace_capture(raw_frames, BACKTRACE_MAX_FRAMES, skip);
 
-    if (count < 0) {
-        return NULL;
+    if (count <= 0) {
+        // Return an empty but valid Backtrace instead of NULL when count is 0.
+        // This prevents callers from getting NULL which could cascade errors.
+        Backtrace* empty = (Backtrace*)calloc(1, sizeof(Backtrace));
+        if (!empty)
+            return NULL;
+        empty->capacity = 0;
+        empty->frame_count = 0;
+        empty->frames = NULL;
+        return empty;
     }
 
     Backtrace* bt = (Backtrace*)calloc(1, sizeof(Backtrace));
@@ -523,10 +553,115 @@ char* backtrace_format(const Backtrace* bt) {
     return result;
 }
 
+char* backtrace_format_json(const Backtrace* bt) {
+    if (!bt || bt->frame_count == 0) {
+        return _strdup("[]");
+    }
+
+    // Estimate buffer size: each JSON frame object ~256 bytes
+    size_t buffer_size = (size_t)bt->frame_count * 300 + 64;
+    char* result = (char*)malloc(buffer_size);
+    if (!result) {
+        return NULL;
+    }
+
+    char* ptr = result;
+    size_t remaining = buffer_size;
+    int written = snprintf(ptr, remaining, "[");
+    if (written > 0) {
+        ptr += written;
+        remaining -= written;
+    }
+
+    int32_t display_index = 0;
+
+    for (int32_t i = 0; i < bt->frame_count; i++) {
+        if (is_internal_frame(&bt->frames[i])) {
+            continue;
+        }
+
+        const BacktraceFrame* frame = &bt->frames[i];
+        const char* name = frame->resolved && frame->symbol.name ? frame->symbol.name : "<unknown>";
+        const char* filename =
+            frame->resolved && frame->symbol.filename ? frame->symbol.filename : NULL;
+        uint32_t lineno = frame->resolved ? frame->symbol.lineno : 0;
+
+        // Add comma separator between frames
+        if (display_index > 0) {
+            written = snprintf(ptr, remaining, ",");
+            if (written > 0) {
+                ptr += written;
+                remaining -= written;
+            }
+        }
+
+        // Escape JSON strings (name, filename)
+        // Simple approach: just escape backslashes and quotes
+        char escaped_name[512];
+        char escaped_file[512];
+        {
+            size_t j = 0;
+            for (const char* s = name; *s && j < sizeof(escaped_name) - 2; s++) {
+                if (*s == '"' || *s == '\\') {
+                    escaped_name[j++] = '\\';
+                }
+                escaped_name[j++] = *s;
+            }
+            escaped_name[j] = '\0';
+        }
+        if (filename) {
+            size_t j = 0;
+            for (const char* s = filename; *s && j < sizeof(escaped_file) - 2; s++) {
+                if (*s == '"' || *s == '\\') {
+                    escaped_file[j++] = '\\';
+                }
+                escaped_file[j++] = *s;
+            }
+            escaped_file[j] = '\0';
+        }
+
+        if (filename && lineno > 0) {
+            written = snprintf(
+                ptr, remaining,
+                "{\"index\":%d,\"name\":\"%s\",\"file\":\"%s\",\"line\":%u,\"addr\":\"%p\"}",
+                display_index, escaped_name, escaped_file, lineno, frame->ip);
+        } else if (filename) {
+            written = snprintf(
+                ptr, remaining,
+                "{\"index\":%d,\"name\":\"%s\",\"file\":\"%s\",\"line\":0,\"addr\":\"%p\"}",
+                display_index, escaped_name, escaped_file, frame->ip);
+        } else {
+            written =
+                snprintf(ptr, remaining,
+                         "{\"index\":%d,\"name\":\"%s\",\"file\":null,\"line\":0,\"addr\":\"%p\"}",
+                         display_index, escaped_name, frame->ip);
+        }
+
+        if (written > 0 && (size_t)written < remaining) {
+            ptr += written;
+            remaining -= written;
+            display_index++;
+        }
+    }
+
+    written = snprintf(ptr, remaining, "]");
+    if (written > 0) {
+        ptr += written;
+        remaining -= written;
+    }
+
+    if (display_index == 0) {
+        free(result);
+        return _strdup("[]");
+    }
+
+    return result;
+}
+
 void backtrace_print(int32_t skip) {
     Backtrace* bt = backtrace_capture_full(skip + 1); // +1 for this function
     if (!bt) {
-        fprintf(stderr, "  <failed to capture backtrace>\n");
+        RT_WARN("runtime", "Failed to capture backtrace");
         return;
     }
 
@@ -534,7 +669,7 @@ void backtrace_print(int32_t skip) {
 
     char* formatted = backtrace_format(bt);
     if (formatted) {
-        fprintf(stderr, "%s", formatted);
+        RT_ERROR("runtime", "%s", formatted);
         free(formatted);
     }
 

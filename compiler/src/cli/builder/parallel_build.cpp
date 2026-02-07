@@ -370,7 +370,7 @@ void ParallelBuilder::resolve_dependencies() {
 
     // Check for circular dependencies
     if (dep_graph.has_cycles()) {
-        std::cerr << "Warning: Circular dependencies detected, falling back to sequential build\n";
+        TML_LOG_WARN("build", "Circular dependencies detected, falling back to sequential build");
         // Queue all files anyway
         for (auto& job : jobs) {
             if (!job->queued) {
@@ -439,10 +439,8 @@ bool ParallelBuilder::build(bool verbose) {
     std::vector<std::thread> workers;
     int actual_threads = std::min(static_cast<int>(jobs.size()), num_threads);
 
-    if (verbose) {
-        std::cout << "Compiling " << jobs.size() << " files with " << actual_threads
-                  << " threads...\n";
-    }
+    TML_LOG_INFO("build",
+                 "Compiling " << jobs.size() << " files with " << actual_threads << " threads...");
 
     for (int i = 0; i < actual_threads; ++i) {
         workers.emplace_back(&ParallelBuilder::worker_thread, this, verbose);
@@ -490,9 +488,7 @@ void ParallelBuilder::worker_thread(bool verbose) {
             stats.cached++;
             stats.completed++;
 
-            if (verbose) {
-                std::cout << "[cached] " << job->source_file.filename().string() << "\n";
-            }
+            TML_LOG_DEBUG("build", "[cached] " << job->source_file.filename().string());
 
             notify_dependents(job);
             continue;
@@ -537,10 +533,8 @@ void ParallelBuilder::notify_dependents(std::shared_ptr<BuildJob> job) {
 ///
 /// Thread-safe: Uses unique temporary filenames per thread.
 bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
-    if (verbose) {
-        std::cout << "[" << (stats.completed + stats.failed + 1) << "/" << stats.total_files
-                  << "] Compiling " << job->source_file.filename().string() << "\n";
-    }
+    TML_LOG_DEBUG("build", "[" << (stats.completed + stats.failed + 1) << "/" << stats.total_files
+                               << "] Compiling " << job->source_file.filename().string());
 
     try {
         // Read source file
@@ -558,9 +552,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
                     << error.span.start.column << ": error: " << error.message << "\n";
             }
             job->error_message = err.str();
-            if (verbose) {
-                std::cerr << job->error_message;
-            }
+            TML_LOG_ERROR("build", job->error_message);
             return false;
         }
 
@@ -577,9 +569,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
                     << error.span.start.column << ": error: " << error.message << "\n";
             }
             job->error_message = err.str();
-            if (verbose) {
-                std::cerr << job->error_message;
-            }
+            TML_LOG_ERROR("build", job->error_message);
             return false;
         }
 
@@ -606,9 +596,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
                     << error.span.start.column << ": error: " << error.message << "\n";
             }
             job->error_message = err.str();
-            if (verbose) {
-                std::cerr << job->error_message;
-            }
+            TML_LOG_ERROR("build", job->error_message);
             return false;
         }
 
@@ -626,9 +614,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
                     << error.span.start.column << ": borrow error: " << error.message << "\n";
             }
             job->error_message = err.str();
-            if (verbose) {
-                std::cerr << job->error_message;
-            }
+            TML_LOG_ERROR("build", job->error_message);
             return false;
         }
 
@@ -664,9 +650,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
                         << error.span.start.column << ": codegen error: " << error.message << "\n";
                 }
                 job->error_message = err.str();
-                if (verbose) {
-                    std::cerr << job->error_message;
-                }
+                TML_LOG_ERROR("build", job->error_message);
                 return false;
             }
 
@@ -712,9 +696,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
 
     } catch (const std::exception& e) {
         job->error_message = std::string("Exception: ") + e.what();
-        if (verbose) {
-            std::cerr << job->error_message << "\n";
-        }
+        TML_LOG_ERROR("build", job->error_message);
         return false;
     }
 }
@@ -758,7 +740,7 @@ std::vector<fs::path> discover_source_files(const fs::path& root_dir) {
             }
         }
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "Error discovering source files: " << e.what() << "\n";
+        TML_LOG_ERROR("build", "Error discovering source files: " << e.what());
     }
 
     std::sort(files.begin(), files.end());
@@ -822,18 +804,14 @@ int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
         return 0;
     }
 
-    if (verbose) {
-        std::cout << "Found " << source_files.size() << " source files\n";
-    }
+    TML_LOG_INFO("build", "Found " << source_files.size() << " source files");
 
     // Clean build directory if requested
     if (clean) {
         fs::path build_dir = cwd / "build" / "debug" / ".cache";
         if (fs::exists(build_dir)) {
             fs::remove_all(build_dir);
-            if (verbose) {
-                std::cout << "Cleaned build cache\n";
-            }
+            TML_LOG_INFO("build", "Cleaned build cache");
         }
     }
 

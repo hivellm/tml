@@ -56,6 +56,7 @@
 #include "commands/cmd_rlib.hpp"
 #include "commands/cmd_test.hpp"
 #include "common.hpp"
+#include "log/log.hpp"
 #include "utils.hpp"
 
 #include <filesystem>
@@ -103,8 +104,17 @@ int tml_main(int argc, char* argv[]) {
         }
     }
 
-    // Set global verbose flag for debug output
+    // Set global verbose flag for debug output (backward compat)
     tml::CompilerOptions::verbose = verbose;
+
+    // Initialize unified logging system from CLI flags and TML_LOG env var
+    auto log_config = tml::log::parse_log_options(argc, argv);
+    // If only the old --verbose/-v flag was used (no new --log-level),
+    // map verbose=true to Info level for backward compatibility
+    if (verbose && log_config.level > tml::log::LogLevel::Info) {
+        log_config.level = tml::log::LogLevel::Info;
+    }
+    tml::log::Logger::init(log_config);
 
     if (command == "--help" || command == "-h") {
         print_usage();

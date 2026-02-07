@@ -4,8 +4,9 @@
 
 #include "mir/passes/memory_leak_check.hpp"
 
+#include "log/log.hpp"
+
 #include <algorithm>
-#include <iostream>
 
 namespace tml::mir {
 
@@ -36,14 +37,16 @@ auto MemoryLeakCheckPass::has_errors() const -> bool {
 void MemoryLeakCheckPass::print_warnings() const {
     for (const auto& warning : warnings_) {
         if (warning.is_error) {
-            std::cerr << "\033[1;31merror:\033[0m ";
+            TML_LOG_ERROR("mir", "potential memory leak in function '"
+                                     << warning.function_name << "' at " << warning.allocation_site
+                                     << ": " << warning.reason);
         } else {
-            std::cerr << "\033[1;33mwarning:\033[0m ";
+            TML_LOG_WARN("mir", "potential memory leak in function '"
+                                    << warning.function_name << "' at " << warning.allocation_site
+                                    << ": " << warning.reason);
         }
-        std::cerr << "potential memory leak in function '" << warning.function_name << "' at "
-                  << warning.allocation_site << ": " << warning.reason << "\n";
-        std::cerr << "  \033[36mnote:\033[0m ensure all heap allocations are freed or "
-                     "ownership is properly transferred\n";
+        TML_LOG_INFO("mir", "  note: ensure all heap allocations are freed or "
+                            "ownership is properly transferred");
     }
 }
 

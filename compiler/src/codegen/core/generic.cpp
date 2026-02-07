@@ -330,17 +330,17 @@ void LLVMIRGen::generate_pending_instantiations() {
                         }
                     }
 
-                    // DEBUG: Log method lookup result
+                    // DEBUG: Log method lookup result for Range types
                     if (pim.base_type_name == "RangeInclusive" || pim.base_type_name == "Range") {
-                        std::cerr << "[DEBUG GENERIC] " << pim.base_type_name
-                                  << "::" << pim.method_name << " - local impl has "
-                                  << impl.methods.size()
-                                  << " methods, has_method=" << (has_method ? "yes" : "no")
-                                  << ", generics=";
+                        std::ostringstream dbg;
+                        dbg << "[DEBUG GENERIC] " << pim.base_type_name << "::" << pim.method_name
+                            << " - local impl has " << impl.methods.size()
+                            << " methods, has_method=" << (has_method ? "yes" : "no")
+                            << ", generics=";
                         for (const auto& g : impl.generics) {
-                            std::cerr << g.name << " ";
+                            dbg << g.name << " ";
                         }
-                        std::cerr << "\n";
+                        TML_LOG_TRACE("codegen", dbg.str());
                     }
 
                     if (has_method) {

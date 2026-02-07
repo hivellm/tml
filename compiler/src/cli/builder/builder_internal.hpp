@@ -40,6 +40,7 @@
 #include "hir/hir_builder.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
+#include "log/log.hpp"
 #include "mir/hir_mir_builder.hpp"
 #include "mir/mir.hpp"
 #include "mir/mir_builder.hpp"

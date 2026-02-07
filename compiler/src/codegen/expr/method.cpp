@@ -304,12 +304,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         bool is_local_generic = pending_generic_structs_.count(type_name) > 0 ||
                                 pending_generic_enums_.count(type_name) > 0 ||
                                 pending_generic_impls_.count(type_name) > 0;
-        // DEBUG: always print type_name when handling generic struct calls
+        // DEBUG: log type_name when handling generic struct calls for Range types
         if (type_name == "Range" || type_name == "RangeInclusive") {
-            std::cerr << "[DEBUG] type_name=" << type_name
-                      << " is_local_generic=" << is_local_generic
-                      << " is_runtime_collection=" << is_runtime_collection
-                      << " has_registry=" << (env_.module_registry() ? "yes" : "no") << "\n";
+            TML_LOG_TRACE("codegen",
+                          "[DEBUG] type_name="
+                              << type_name << " is_local_generic=" << is_local_generic
+                              << " is_runtime_collection=" << is_runtime_collection
+                              << " has_registry=" << (env_.module_registry() ? "yes" : "no"));
         }
         if (!is_local_generic && !is_runtime_collection && env_.module_registry()) {
             TML_DEBUG_LN("[STATIC_METHOD] Looking for " << type_name << " in module registry");

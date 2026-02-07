@@ -31,7 +31,6 @@
 #include "parser/parser.hpp"
 
 #include <filesystem>
-#include <iostream>
 #include <unordered_set>
 
 namespace tml::codegen {
@@ -423,6 +422,55 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i1 @file_write_all(ptr, ptr)");
     emit_line("declare i1 @file_append_all(ptr, ptr)");
     emit_line("");
+
+    // Log runtime declarations (matches runtime/log.c)
+    emit_line("; Log runtime");
+    emit_line("declare void @rt_log_msg(i32, ptr, ptr)");
+    declared_externals_.insert("rt_log_msg");
+    emit_line("declare void @rt_log_set_level(i32)");
+    declared_externals_.insert("rt_log_set_level");
+    emit_line("declare i32 @rt_log_get_level()");
+    declared_externals_.insert("rt_log_get_level");
+    emit_line("declare i32 @rt_log_enabled(i32)");
+    declared_externals_.insert("rt_log_enabled");
+    emit_line("");
+
+    // Phase 4.4: Advanced log runtime declarations
+    emit_line("declare void @rt_log_set_filter(ptr)");
+    declared_externals_.insert("rt_log_set_filter");
+    emit_line("declare i32 @rt_log_module_enabled(i32, ptr)");
+    declared_externals_.insert("rt_log_module_enabled");
+    emit_line("declare void @rt_log_structured(i32, ptr, ptr, ptr)");
+    declared_externals_.insert("rt_log_structured");
+    emit_line("declare void @rt_log_set_format(i32)");
+    declared_externals_.insert("rt_log_set_format");
+    emit_line("declare i32 @rt_log_get_format()");
+    declared_externals_.insert("rt_log_get_format");
+    emit_line("declare i32 @rt_log_open_file(ptr)");
+    declared_externals_.insert("rt_log_open_file");
+    emit_line("declare void @rt_log_close_file()");
+    declared_externals_.insert("rt_log_close_file");
+    emit_line("declare i32 @rt_log_init_from_env()");
+    declared_externals_.insert("rt_log_init_from_env");
+    emit_line("");
+
+    // Register log functions in functions_ map for lowlevel calls
+    functions_["rt_log_msg"] =
+        FuncInfo{"@rt_log_msg", "void (i32, ptr, ptr)", "void", {"i32", "ptr", "ptr"}};
+    functions_["rt_log_set_level"] = FuncInfo{"@rt_log_set_level", "void (i32)", "void", {"i32"}};
+    functions_["rt_log_get_level"] = FuncInfo{"@rt_log_get_level", "i32 ()", "i32", {}};
+    functions_["rt_log_enabled"] = FuncInfo{"@rt_log_enabled", "i32 (i32)", "i32", {"i32"}};
+    // Phase 4.4 function registrations
+    functions_["rt_log_set_filter"] = FuncInfo{"@rt_log_set_filter", "void (ptr)", "void", {"ptr"}};
+    functions_["rt_log_module_enabled"] =
+        FuncInfo{"@rt_log_module_enabled", "i32 (i32, ptr)", "i32", {"i32", "ptr"}};
+    functions_["rt_log_structured"] = FuncInfo{
+        "@rt_log_structured", "void (i32, ptr, ptr, ptr)", "void", {"i32", "ptr", "ptr", "ptr"}};
+    functions_["rt_log_set_format"] = FuncInfo{"@rt_log_set_format", "void (i32)", "void", {"i32"}};
+    functions_["rt_log_get_format"] = FuncInfo{"@rt_log_get_format", "i32 ()", "i32", {}};
+    functions_["rt_log_open_file"] = FuncInfo{"@rt_log_open_file", "i32 (ptr)", "i32", {"ptr"}};
+    functions_["rt_log_close_file"] = FuncInfo{"@rt_log_close_file", "void ()", "void", {}};
+    functions_["rt_log_init_from_env"] = FuncInfo{"@rt_log_init_from_env", "i32 ()", "i32", {}};
 
     // Path utilities runtime declarations
     emit_line("; Path utilities runtime");
@@ -840,6 +888,91 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         }
     }
 
+    // --- Compute conditional sync module requirements ---
+    // Only include sync essential modules when sync/thread is actually imported.
+    // This avoids processing ~1400 lines of atomic.tml + mutex/condvar for non-sync tests.
+    bool needs_sync_atomic_essential = false;
+    bool needs_sync_mutex_essential = false;
+    bool needs_sync_condvar_essential = false;
+
+    for (const auto& imported_path : imported_module_paths) {
+        // Any sync/thread import needs atomic (for Ordering used by all sync types)
+        if (imported_path.find("std::sync") == 0 || imported_path.find("std::thread") == 0) {
+            needs_sync_atomic_essential = true;
+        }
+        // Mutex module needed when mutex/mpsc/barrier/once/rwlock is used
+        if (imported_path.find("std::sync::mutex") == 0 ||
+            imported_path.find("std::sync::mpsc") == 0 ||
+            imported_path.find("std::sync::barrier") == 0 ||
+            imported_path.find("std::sync::once") == 0 ||
+            imported_path.find("std::sync::rwlock") == 0 || imported_path == "std::sync") {
+            needs_sync_mutex_essential = true;
+        }
+        // Condvar module needed when condvar/mpsc/barrier is used
+        if (imported_path.find("std::sync::condvar") == 0 ||
+            imported_path.find("std::sync::mpsc") == 0 ||
+            imported_path.find("std::sync::barrier") == 0 || imported_path == "std::sync") {
+            needs_sync_condvar_essential = true;
+        }
+    }
+    // Also check direct type imports
+    if (imported_types.count("Mutex") || imported_types.count("MutexGuard")) {
+        needs_sync_mutex_essential = true;
+        needs_sync_atomic_essential = true;
+    }
+    if (imported_types.count("Condvar")) {
+        needs_sync_condvar_essential = true;
+        needs_sync_atomic_essential = true;
+    }
+    if (imported_types.count("Arc") || imported_types.count("Weak")) {
+        needs_sync_atomic_essential = true;
+    }
+
+    // Build dynamic always_generate set based on actual import needs
+    // This replaces the static set that generated ALL sync types unconditionally
+    std::unordered_set<std::string> dynamic_always_generate = {
+        "Ordering",
+        "Layout",
+        "LayoutError",
+    };
+    // Arc dependencies
+    if (imported_types.count("Arc") || imported_types.count("Weak") ||
+        imported_types.count("ArcInner")) {
+        dynamic_always_generate.insert("AtomicUsize");
+        dynamic_always_generate.insert("Weak");
+        dynamic_always_generate.insert("ArcInner");
+    }
+    // Mutex dependencies
+    if (needs_sync_mutex_essential) {
+        dynamic_always_generate.insert("Mutex");
+        dynamic_always_generate.insert("RawMutex");
+        dynamic_always_generate.insert("MutexGuard");
+    }
+    // Condvar dependencies
+    if (needs_sync_condvar_essential) {
+        dynamic_always_generate.insert("Condvar");
+        dynamic_always_generate.insert("RawCondvar");
+    }
+    // Thread module dependencies
+    bool has_thread_import = false;
+    for (const auto& p : imported_module_paths) {
+        if (p.find("std::thread") == 0) {
+            has_thread_import = true;
+            break;
+        }
+    }
+    if (has_thread_import) {
+        dynamic_always_generate.insert("AtomicBool");
+        dynamic_always_generate.insert("AtomicPtr");
+        dynamic_always_generate.insert("AtomicUsize");
+    }
+    // RwLock dependencies
+    if (imported_types.count("RwLock") || imported_types.count("RwLockReadGuard") ||
+        imported_types.count("RwLockWriteGuard")) {
+        dynamic_always_generate.insert("RwLockReadGuard");
+        dynamic_always_generate.insert("RwLockWriteGuard");
+    }
+
     // Pre-scan: collect types imported by modules that will be processed.
     // This enriches imported_types with transitive dependencies, allowing
     // the impl block filter to skip unused types more precisely.
@@ -857,11 +990,22 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             }
         }
         if (!will_process) {
-            static const std::unordered_set<std::string> essential = {
-                "core::ordering",    "core::alloc",      "core::option",       "core::types",
-                "std::sync::atomic", "std::sync::mutex", "std::sync::condvar",
+            static const std::unordered_set<std::string> core_essential = {
+                "core::ordering",
+                "core::alloc",
+                "core::option",
+                "core::types",
             };
-            will_process = essential.count(module_name) > 0;
+            will_process = core_essential.count(module_name) > 0;
+            // Conditionally add sync essential modules
+            if (!will_process) {
+                if (module_name == "std::sync::atomic" && needs_sync_atomic_essential)
+                    will_process = true;
+                else if (module_name == "std::sync::mutex" && needs_sync_mutex_essential)
+                    will_process = true;
+                else if (module_name == "std::sync::condvar" && needs_sync_condvar_essential)
+                    will_process = true;
+            }
             if (!will_process) {
                 std::string last_seg = module_name;
                 auto sep = module_name.rfind("::");
@@ -938,6 +1082,16 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
 
     emit_line("; Pure TML functions from imported modules");
 
+    // Collect eligible modules: filter, parse ASTs, store per-module info
+    struct ModuleInfo {
+        std::string module_name;
+        std::string mod_name; // stem of file path
+        std::string sanitized_prefix;
+        const types::Module* module_ptr;
+        const parser::Module* parsed_module_ptr;
+    };
+    std::vector<ModuleInfo> eligible_modules;
+
     for (const auto& [module_name, module] : all_modules) {
         // Check if module has pure TML functions
         if (!module.has_pure_tml_functions || module.source_code.empty()) {
@@ -950,37 +1104,39 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             bool should_process = false;
 
             // Check if this module path matches or is a parent of an imported module
-            // e.g., if "std::sync::arc" is imported, process both "std::sync::arc" and "std::sync"
             for (const auto& imported_path : imported_module_paths) {
-                // Exact match
                 if (module_name == imported_path) {
                     should_process = true;
                     break;
                 }
-                // This module is a parent of an imported module
-                // e.g., module_name="std::sync" and imported_path="std::sync::arc"
                 if (imported_path.find(module_name + "::") == 0) {
                     should_process = true;
                     break;
                 }
-                // This module is a submodule of an imported module (rarely needed)
-                // e.g., module_name="std::sync::arc::internal" and imported_path="std::sync::arc"
                 if (module_name.find(imported_path + "::") == 0) {
                     should_process = true;
                     break;
                 }
             }
 
-            // Essential modules that are always needed (ordering, alloc, option)
+            // Essential modules: core always needed, sync conditionally
             if (!should_process) {
-                static const std::unordered_set<std::string> essential_modules = {
-                    "core::ordering",    "core::alloc",      "core::option",       "core::types",
-                    "std::sync::atomic", "std::sync::mutex", "std::sync::condvar",
+                static const std::unordered_set<std::string> core_essential_modules = {
+                    "core::ordering",
+                    "core::alloc",
+                    "core::option",
+                    "core::types",
                 };
-                // Check both full path and last segment for core modules
-                should_process = essential_modules.count(module_name) > 0;
+                should_process = core_essential_modules.count(module_name) > 0;
                 if (!should_process) {
-                    // Also check last segment for backwards compat with non-prefixed modules
+                    if (module_name == "std::sync::atomic" && needs_sync_atomic_essential)
+                        should_process = true;
+                    else if (module_name == "std::sync::mutex" && needs_sync_mutex_essential)
+                        should_process = true;
+                    else if (module_name == "std::sync::condvar" && needs_sync_condvar_essential)
+                        should_process = true;
+                }
+                if (!should_process) {
                     std::string last_segment = module_name;
                     auto last_sep = module_name.rfind("::");
                     if (last_sep != std::string::npos) {
@@ -1001,7 +1157,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             }
         }
 
-        // Check global AST cache first to avoid re-parsing library modules
+        // Parse or retrieve cached AST
         const parser::Module* cached_ast = nullptr;
         if (GlobalASTCache::should_cache(module_name)) {
             cached_ast = GlobalASTCache::instance().get(module_name);
@@ -1011,62 +1167,62 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         auto mod_name = std::filesystem::path(module.file_path).stem().string();
 
         if (cached_ast) {
-            // Use cached AST directly
             TML_DEBUG_LN("[CODEGEN] AST cache hit for: " << module_name);
             parsed_module_ptr = cached_ast;
         } else {
-            // Parse the module source code
             auto source = lexer::Source::from_string(module.source_code, module.file_path);
             lexer::Lexer lex(source);
             auto tokens = lex.tokenize();
 
             if (lex.has_errors()) {
-                continue; // Skip modules with lexer errors
+                continue;
             }
 
             parser::Parser parser(std::move(tokens));
             auto parse_result = parser.parse_module(mod_name);
 
             if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-                continue; // Skip modules with parse errors
+                continue;
             }
 
             auto parsed_mod = std::get<parser::Module>(std::move(parse_result));
 
-            // Store in global cache for library modules
             if (GlobalASTCache::should_cache(module_name)) {
                 GlobalASTCache::instance().put(module_name, std::move(parsed_mod));
-                // Get pointer from cache (now owns the AST)
                 parsed_module_ptr = GlobalASTCache::instance().get(module_name);
                 TML_DEBUG_LN("[CODEGEN] AST cached: " << module_name);
             } else {
-                // For non-library modules, store locally
                 imported_module_asts_.push_back(std::move(parsed_mod));
                 parsed_module_ptr = &imported_module_asts_.back();
             }
         }
 
         if (!parsed_module_ptr) {
-            continue; // Failed to get AST
+            continue;
         }
 
-        const auto& parsed_module = *parsed_module_ptr;
-
-        emit_line("; Module: " + module_name);
-
-        // Set module prefix for function name generation
-        // Replace :: with _ to create valid LLVM identifiers (e.g., core::alloc -> core_alloc)
+        // Compute sanitized module prefix
         std::string sanitized_prefix = module_name;
         size_t pos = 0;
         while ((pos = sanitized_prefix.find("::", pos)) != std::string::npos) {
             sanitized_prefix.replace(pos, 2, "_");
             pos += 1;
         }
-        current_module_prefix_ = sanitized_prefix;
 
-        // Set submodule name for cross-module function lookups
-        // For files like "unicode_data.tml", this allows lookups with "unicode_data::func"
-        current_submodule_name_ = mod_name;
+        eligible_modules.push_back(
+            {module_name, mod_name, sanitized_prefix, &module, parsed_module_ptr});
+    }
+
+    // ========================================================================
+    // PHASE 1: Register ALL types (structs, enums, constants, function signatures)
+    // from ALL modules BEFORE generating any code. This ensures types like
+    // "Ordering" are registered before any impl method tries to use them,
+    // regardless of unordered_map iteration order.
+    // ========================================================================
+    for (const auto& info : eligible_modules) {
+        const auto& parsed_module = *info.parsed_module_ptr;
+        current_module_prefix_ = info.sanitized_prefix;
+        current_submodule_name_ = info.mod_name;
 
         // First pass: register struct/enum declarations (including generic ones)
         // IMPORTANT: Register ALL structs/enums, not just public ones!
@@ -1136,7 +1292,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     // Register both with and without module prefix
                     global_constants_[const_decl.name] = {value, llvm_type};
                     // Also register with qualified name for explicit lookups
-                    std::string qualified_name = module_name + "::" + const_decl.name;
+                    std::string qualified_name = info.module_name + "::" + const_decl.name;
                     global_constants_[qualified_name] = {value, llvm_type};
                 }
             } else if (decl->is<parser::UseDecl>()) {
@@ -1195,27 +1351,44 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             }
         }
 
-        // 1.5 pass: pre-register ALL function signatures before generating any code
+        // Pre-register ALL function signatures before generating any code
         // This ensures intra-module calls (like mod.tml calling unicode_data::func) resolve
         // correctly. Includes PRIVATE functions to support same-module calls.
         for (const auto& decl : parsed_module.decls) {
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
-                // Pre-register both public AND private functions with bodies
-                // This fixes intra-module calls to private helper functions
                 if (!func.is_unsafe && func.body.has_value()) {
                     pre_register_func(func);
                 }
             }
         }
+    }
+    current_module_prefix_.clear();
 
-        // Second pass: generate code for each function (both public AND private)
+    // ========================================================================
+    // PHASE 2: Generate code for functions and impl methods.
+    // All types are now registered from Phase 1, so type lookups
+    // (like "Ordering") will always find their definitions.
+    // ========================================================================
+    for (const auto& info : eligible_modules) {
+        const auto& parsed_module = *info.parsed_module_ptr;
+        const auto& module_name = info.module_name;
+        current_module_prefix_ = info.sanitized_prefix;
+        current_submodule_name_ = info.mod_name;
+
+        emit_line("; Module: " + module_name);
+
+        // Generate code for each function (both public AND private)
+        TML_DEBUG_LN("[MODULE] Processing " << parsed_module.decls.size() << " decls for "
+                                            << module_name);
         for (const auto& decl : parsed_module.decls) {
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
 
                 // Process extern functions - emit declarations
                 if (func.extern_abi.has_value()) {
+                    TML_DEBUG_LN("[MODULE] Found @extern func: " << func.name
+                                                                 << " abi=" << *func.extern_abi);
                     gen_func_decl(func);
                     continue;
                 }
@@ -1252,34 +1425,10 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
 
                 // Skip impl blocks for types that aren't actually imported
                 // This dramatically reduces codegen time (e.g., don't generate AtomicBool when only
-                // Arc is used)
+                // Arc is used). Uses dynamic_always_generate computed based on actual imports.
                 if (!type_name.empty() && !imported_types.empty() &&
                     imported_types.find(type_name) == imported_types.end()) {
-                    // Also check if it's a dependency type (e.g., Ordering is used by atomics)
-                    // Skip filtering for common dependency types and primitive behaviors
-                    static const std::unordered_set<std::string> always_generate = {
-                        "Ordering",
-                        "MutexGuard",
-                        "RwLockReadGuard",
-                        "RwLockWriteGuard",
-                        "Weak", // Arc uses Weak
-                        // Only atomic types actually used as transitive deps:
-                        "AtomicUsize", // Used by Arc for ref counting
-                        "AtomicBool",  // Used by thread module
-                        "AtomicPtr",   // Used by thread_local
-                        // Note: AtomicI32, AtomicI64, AtomicU32, AtomicU64, AtomicIsize
-                        // are only generated when explicitly imported by user code
-                        // Internal types used by sync primitives
-                        "ArcInner",
-                        "Layout",
-                        "LayoutError",
-                        // Sync primitives - needed by MPSC channels
-                        "Mutex",
-                        "Condvar",
-                        "RawMutex",
-                        "RawCondvar",
-                    };
-                    if (always_generate.find(type_name) == always_generate.end()) {
+                    if (dynamic_always_generate.find(type_name) == dynamic_always_generate.end()) {
                         TML_DEBUG_LN("[MODULE] Skipping impl for non-imported type: " << type_name);
                         continue;
                     }
@@ -1404,7 +1553,6 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                         // Generate code for public, non-lowlevel methods with bodies
                         if (method.vis == parser::Visibility::Public && !method.is_unsafe &&
                             method.body.has_value()) {
-                            // Generate impl method with qualified name
                             gen_impl_method(type_name, method);
                         }
                     }

@@ -45,7 +45,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     try {
         source_code = read_file(path);
     } catch (const std::exception& e) {
-        std::cerr << "error: " << e.what() << "\n";
+        TML_LOG_ERROR("build", "Failed to read file: " << e.what());
         return 1;
     }
 
@@ -160,22 +160,18 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     bool use_cached_obj = fs::exists(obj_output);
 
     if (use_cached_obj) {
-        if (verbose) {
-            std::cout << "Using cached object: " << obj_output << "\n";
-        }
+        TML_LOG_DEBUG("build", "Using cached object: " << obj_output);
     } else {
         // Write LLVM IR to file
         std::ofstream ll_file(ll_output);
         if (!ll_file) {
-            std::cerr << "error: Cannot write to " << ll_output << "\n";
+            TML_LOG_ERROR("build", "Cannot write to " << ll_output);
             return 1;
         }
         ll_file << llvm_ir;
         ll_file.close();
 
-        if (verbose) {
-            std::cout << "Generated: " << ll_output << "\n";
-        }
+        TML_LOG_DEBUG("build", "Generated: " << ll_output);
 
         // Compile LLVM IR to object file
         ObjectCompileOptions obj_options;
@@ -187,14 +183,12 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
         if (!obj_result.success) {
-            std::cerr << "error: " << obj_result.error_message << "\n";
+            TML_LOG_ERROR("build", "Object compilation failed: " << obj_result.error_message);
             fs::remove(ll_output);
             return 1;
         }
 
-        if (verbose) {
-            std::cout << "Compiled to: " << obj_result.object_file << "\n";
-        }
+        TML_LOG_DEBUG("build", "Compiled to: " << obj_result.object_file);
 
         // Clean up .ll file (keep .obj for caching)
         fs::remove(ll_output);
@@ -216,9 +210,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     bool use_cached_exe = !no_cache && fs::exists(cached_exe);
 
     if (use_cached_exe) {
-        if (verbose) {
-            std::cout << "Using cached executable: " << cached_exe << "\n";
-        }
+        TML_LOG_DEBUG("build", "Using cached executable: " << cached_exe);
     } else {
         // Link all object files to create executable
         LinkOptions link_options;
@@ -241,13 +233,11 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
         auto link_result = link_objects(object_files, temp_exe, clang, link_options);
         if (!link_result.success) {
-            std::cerr << "error: " << link_result.error_message << "\n";
+            TML_LOG_ERROR("build", "Linking failed: " << link_result.error_message);
             return 1;
         }
 
-        if (verbose) {
-            std::cout << "Linked executable: " << temp_exe << "\n";
-        }
+        TML_LOG_DEBUG("build", "Linked executable: " << temp_exe);
 
         // Try to move to cached location (atomic on same filesystem)
         try {
@@ -267,7 +257,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     // Copy cached exe to final location (use hard link for speed)
     if (!fast_copy_file(cached_exe, exe_output)) {
-        std::cerr << "error: Failed to copy cached exe to " << exe_output << "\n";
+        TML_LOG_ERROR("build", "Failed to copy cached exe to " << exe_output);
         return 1;
     }
 
@@ -287,18 +277,14 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     }
 #endif
 
-    if (verbose) {
-        std::cout << "Running: " << run_cmd << "\n";
-    }
+    TML_LOG_DEBUG("build", "Running: " << run_cmd);
 
     int run_ret = std::system(run_cmd.c_str());
 
     // Clean up temporary executable (keep .obj in cache for reuse)
     fs::remove(exe_output);
 
-    if (verbose) {
-        std::cout << "Cleaned up temporary executable\n";
-    }
+    TML_LOG_DEBUG("build", "Cleaned up temporary executable");
 
 #ifdef _WIN32
     return run_ret;
@@ -612,10 +598,10 @@ int run_run_ex(const std::string& path, const RunOptions& opts) {
         CompilerOptions::profile = true;
         CompilerOptions::profile_output = opts.profile_output;
 
-        std::cerr << "[TML] Runtime profiling enabled. Output: " << opts.profile_output << "\n";
-        std::cerr << "[TML] Note: Automatic instrumentation requires recompilation with --profile "
-                     "flag.\n";
-        std::cerr << "[TML] For manual profiling, use std::profiler module in your code.\n";
+        TML_LOG_INFO("build", "Runtime profiling enabled. Output: " << opts.profile_output);
+        TML_LOG_INFO("build",
+                     "Note: Automatic instrumentation requires recompilation with --profile flag.");
+        TML_LOG_INFO("build", "For manual profiling, use std::profiler module in your code.");
     }
 
     return run_run(path, opts.args, opts.verbose, opts.coverage, opts.no_cache);

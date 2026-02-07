@@ -435,6 +435,17 @@ const char* tml_get_panic_message(void);
 const char* tml_get_panic_backtrace(void);
 
 /**
+ * @brief Gets the backtrace from the last caught panic in JSON format.
+ *
+ * Returns the backtrace as a JSON array of frame objects.
+ * Only valid after a panic was caught and if backtrace
+ * was enabled via `tml_enable_backtrace_on_panic`.
+ *
+ * @return The JSON backtrace string, or "[]" if not available.
+ */
+const char* tml_get_panic_backtrace_json(void);
+
+/**
  * @brief Checks if the panic message contains expected text.
  * @param expected The substring to search for.
  * @return 1 if found or expected is empty, 0 if not found.
