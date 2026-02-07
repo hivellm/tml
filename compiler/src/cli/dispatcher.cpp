@@ -294,8 +294,7 @@ int tml_main(int argc, char* argv[]) {
                 } else if (crate_type == "rlib") {
                     output_type = BuildOutputType::RlibLib;
                 } else {
-                    std::cerr << "error: unknown crate type '" << crate_type << "'\n";
-                    std::cerr << "  valid types: bin, lib, dylib, rlib\n";
+                    TML_LOG_ERROR("build", "Unknown crate type '" << crate_type << "'. Valid types: bin, lib, dylib, rlib");
                     return 1;
                 }
             } else if (arg.starts_with("--out-dir=")) {
@@ -533,8 +532,7 @@ int tml_main(int argc, char* argv[]) {
         return cmd_mcp(args);
     }
 
-    std::cerr << "Error: Unknown command '" << command << "'\n";
-    std::cerr << "Run 'tml --help' for usage information.\n";
+    TML_LOG_ERROR("cli", "Unknown command '" << command << "'. Run 'tml --help' for usage information.");
     return 1;
 }
 

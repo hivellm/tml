@@ -28,6 +28,7 @@
 //! ```
 
 #include "cmd_pkg.hpp"
+#include "log/log.hpp"
 
 #include "cli/builder/build_config.hpp"
 #include "cli/builder/dependency_resolver.hpp"
@@ -171,8 +172,7 @@ int run_add(int argc, char* argv[]) {
 
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (!fs::exists(manifest_path)) {
-        std::cerr << "error: No tml.toml found in current directory\n";
-        std::cerr << "hint: Run 'tml init' to create a new project\n";
+        TML_LOG_ERROR("pkg", "No tml.toml found in current directory. Run 'tml init' to create a new project");
         return 1;
     }
 
@@ -201,27 +201,24 @@ int run_add(int argc, char* argv[]) {
         dep_spec = "{ git = \"" + git_dep + "\" }";
     } else if (!version_dep.empty()) {
         // Version dependencies require registry support
-        std::cerr << "error: Version dependencies require a package registry\n";
-        std::cerr << "hint: Use --path or --git instead\n";
+        TML_LOG_ERROR("pkg", "Version dependencies require a package registry. Use --path or --git instead");
         return 1;
     } else {
-        std::cerr << "error: Must specify --path, --git, or --version\n";
-        std::cerr << "hint: Use 'tml add <package> --path <dir>' for local dependencies\n";
+        TML_LOG_ERROR("pkg", "Must specify --path, --git, or --version. Use 'tml add <package> --path <dir>' for local dependencies");
         return 1;
     }
 
     // Read current manifest
     std::string content = read_manifest_file(manifest_path);
     if (content.empty()) {
-        std::cerr << "error: Could not read tml.toml\n";
+        TML_LOG_ERROR("pkg", "Could not read tml.toml");
         return 1;
     }
 
     // Check if dependency already exists
     if (content.find(package_name + " =") != std::string::npos ||
         content.find(package_name + "=") != std::string::npos) {
-        std::cerr << "error: Dependency '" << package_name << "' already exists\n";
-        std::cerr << "hint: Use 'tml remove " << package_name << "' first to replace it\n";
+        TML_LOG_ERROR("pkg", "Dependency '" << package_name << "' already exists. Use 'tml remove " << package_name << "' first to replace it");
         return 1;
     }
 
@@ -230,7 +227,7 @@ int run_add(int argc, char* argv[]) {
 
     // Write updated manifest
     if (!write_manifest_file(manifest_path, new_content)) {
-        std::cerr << "error: Could not write tml.toml\n";
+        TML_LOG_ERROR("pkg", "Could not write tml.toml");
         return 1;
     }
 
@@ -245,15 +242,14 @@ int run_update(int argc, char* argv[]) {
 
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (!fs::exists(manifest_path)) {
-        std::cerr << "error: No tml.toml found in current directory\n";
-        std::cerr << "hint: Run 'tml init' to create a new project\n";
+        TML_LOG_ERROR("pkg", "No tml.toml found in current directory. Run 'tml init' to create a new project");
         return 1;
     }
 
     // Load manifest
     auto manifest = Manifest::load(manifest_path);
     if (!manifest) {
-        std::cerr << "error: Could not parse tml.toml\n";
+        TML_LOG_ERROR("pkg", "Could not parse tml.toml");
         return 1;
     }
 
@@ -273,12 +269,10 @@ int run_update(int argc, char* argv[]) {
             // Check if path dependency exists
             fs::path dep_path = fs::current_path() / dep.path;
             if (!fs::exists(dep_path)) {
-                std::cerr << colors::red << "  error" << colors::reset << ": " << name
-                          << " path not found: " << dep.path << "\n";
+                TML_LOG_ERROR("pkg", name << " path not found: " << dep.path);
                 any_issues = true;
             } else if (!fs::exists(dep_path / "tml.toml")) {
-                std::cerr << colors::yellow << "  warning" << colors::reset << ": " << name
-                          << " has no tml.toml\n";
+                TML_LOG_WARN("pkg", name << " has no tml.toml");
             } else {
                 std::cout << colors::green << "  ok" << colors::reset << ": " << name
                           << " (path: " << dep.path << ")\n";
@@ -298,7 +292,7 @@ int run_update(int argc, char* argv[]) {
     std::cout << "\nChecked " << checked << " dependencies.\n";
 
     if (any_issues) {
-        std::cerr << "Some dependencies have issues. See above for details.\n";
+        TML_LOG_ERROR("pkg", "Some dependencies have issues. See above for details.");
         return 1;
     }
 
@@ -311,7 +305,7 @@ int run_publish(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
 
-    std::cerr << "error: 'tml publish' is not yet implemented\n";
+    TML_LOG_ERROR("pkg", "'tml publish' is not yet implemented");
     std::cerr << "\n";
     std::cerr << "There is no TML package registry available yet.\n";
     std::cerr << "To share your library, consider:\n";
@@ -331,8 +325,7 @@ int run_remove(int argc, char* argv[]) {
 
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (!fs::exists(manifest_path)) {
-        std::cerr << "error: No tml.toml found in current directory\n";
-        std::cerr << "hint: Run 'tml init' to create a new project\n";
+        TML_LOG_ERROR("pkg", "No tml.toml found in current directory. Run 'tml init' to create a new project");
         return 1;
     }
 
@@ -341,14 +334,14 @@ int run_remove(int argc, char* argv[]) {
     // Read current manifest
     std::string content = read_manifest_file(manifest_path);
     if (content.empty()) {
-        std::cerr << "error: Could not read tml.toml\n";
+        TML_LOG_ERROR("pkg", "Could not read tml.toml");
         return 1;
     }
 
     // Check if dependency exists
     if (content.find(package_name + " =") == std::string::npos &&
         content.find(package_name + "=") == std::string::npos) {
-        std::cerr << "error: Dependency '" << package_name << "' not found\n";
+        TML_LOG_ERROR("pkg", "Dependency '" << package_name << "' not found");
         return 1;
     }
 
@@ -357,7 +350,7 @@ int run_remove(int argc, char* argv[]) {
 
     // Write updated manifest
     if (!write_manifest_file(manifest_path, new_content)) {
-        std::cerr << "error: Could not write tml.toml\n";
+        TML_LOG_ERROR("pkg", "Could not write tml.toml");
         return 1;
     }
 
@@ -368,8 +361,7 @@ int run_remove(int argc, char* argv[]) {
 int run_deps(int argc, char* argv[]) {
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (!fs::exists(manifest_path)) {
-        std::cerr << "error: No tml.toml found in current directory\n";
-        std::cerr << "hint: Run 'tml init' to create a new project\n";
+        TML_LOG_ERROR("pkg", "No tml.toml found in current directory. Run 'tml init' to create a new project");
         return 1;
     }
 
@@ -383,7 +375,7 @@ int run_deps(int argc, char* argv[]) {
     // Load manifest
     auto manifest = Manifest::load(manifest_path);
     if (!manifest) {
-        std::cerr << "error: Could not parse tml.toml\n";
+        TML_LOG_ERROR("pkg", "Could not parse tml.toml");
         return 1;
     }
 
@@ -404,7 +396,7 @@ int run_deps(int argc, char* argv[]) {
         auto result = resolver.resolve(*manifest, fs::current_path());
 
         if (!result.success) {
-            std::cerr << "error: " << result.error_message << "\n";
+            TML_LOG_ERROR("pkg", result.error_message);
             return 1;
         }
 

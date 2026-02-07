@@ -25,6 +25,7 @@
 //! 3. Write formatted output (or check for differences)
 
 #include "cmd_format.hpp"
+#include "log/log.hpp"
 
 #include "cli/diagnostic.hpp"
 #include "cli/utils.hpp"
@@ -83,7 +84,7 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
     try {
         source_code = read_file(path);
     } catch (const std::exception& e) {
-        std::cerr << "error: " << e.what() << "\n";
+        TML_LOG_ERROR("fmt", "Failed to read file: " << e.what());
         return 1;
     }
 
@@ -116,7 +117,7 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
 
     if (check_only) {
         if (formatted != source_code) {
-            std::cerr << path << " would be reformatted\n";
+            TML_LOG_WARN("fmt", path << " would be reformatted");
             return 1;
         }
         if (verbose) {
@@ -127,7 +128,7 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
 
     std::ofstream out(path);
     if (!out) {
-        std::cerr << "error: Cannot write to " << path << "\n";
+        TML_LOG_ERROR("fmt", "Cannot write to " << path);
         return 1;
     }
     out << formatted;

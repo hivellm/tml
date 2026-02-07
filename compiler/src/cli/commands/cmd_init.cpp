@@ -30,6 +30,7 @@
 //! - `[build]`: default build options
 
 #include "cmd_init.hpp"
+#include "log/log.hpp"
 
 #include "cli/utils.hpp"
 
@@ -172,7 +173,7 @@ int run_init(int argc, char* argv[]) {
             if (i + 1 < argc) {
                 project_name = argv[++i];
             } else {
-                std::cerr << "Error: --name requires a value\n";
+                TML_LOG_ERROR("init", "--name requires a value");
                 return 1;
             }
         } else if (arg == "--no-src") {
@@ -196,8 +197,7 @@ int run_init(int argc, char* argv[]) {
             std::cout << "  tml init --bin src/app.tml  # Custom binary path\n";
             return 0;
         } else {
-            std::cerr << "Unknown argument: " << arg << "\n";
-            std::cerr << "Use 'tml init --help' for usage information\n";
+            TML_LOG_ERROR("init", "Unknown argument: " << arg << ". Use 'tml init --help' for usage information");
             return 1;
         }
     }
@@ -210,8 +210,7 @@ int run_init(int argc, char* argv[]) {
     // Check if tml.toml already exists
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (fs::exists(manifest_path)) {
-        std::cerr << "Error: tml.toml already exists in current directory\n";
-        std::cerr << "Remove it or run 'tml init' in a different directory\n";
+        TML_LOG_ERROR("init", "tml.toml already exists in current directory. Remove it or run 'tml init' in a different directory");
         return 1;
     }
 
@@ -220,7 +219,7 @@ int run_init(int argc, char* argv[]) {
 
     std::ofstream manifest_file(manifest_path);
     if (!manifest_file) {
-        std::cerr << "Error: Cannot create tml.toml\n";
+        TML_LOG_ERROR("init", "Cannot create tml.toml");
         return 1;
     }
     manifest_file << manifest_content;
@@ -237,14 +236,14 @@ int run_init(int argc, char* argv[]) {
             if (create_source_file(lib_file, true)) {
                 std::cout << "Created " << to_forward_slashes(lib_file.string()) << "\n";
             } else {
-                std::cerr << "Warning: Could not create " << lib_file << "\n";
+                TML_LOG_WARN("init", "Could not create " << lib_file);
             }
         } else {
             fs::path main_file = bin_path.empty() ? src_dir / "main.tml" : fs::path(bin_path);
             if (create_source_file(main_file, false)) {
                 std::cout << "Created " << to_forward_slashes(main_file.string()) << "\n";
             } else {
-                std::cerr << "Warning: Could not create " << main_file << "\n";
+                TML_LOG_WARN("init", "Could not create " << main_file);
             }
         }
 

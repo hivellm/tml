@@ -36,9 +36,7 @@ static void emit_parser_errors(DiagnosticEmitter& emitter,
 
 int run_doc(const DocOptions& options) {
     if (options.input_files.empty() && !options.all_modules) {
-        std::cerr << "Error: No input files specified\n";
-        std::cerr << "Usage: tml doc <file.tml> [options]\n";
-        std::cerr << "       tml doc --all [options]\n";
+        TML_LOG_ERROR("doc", "No input files specified. Usage: tml doc <file.tml> [options] or tml doc --all [options]");
         return 1;
     }
 
@@ -265,7 +263,7 @@ DocOptions parse_doc_args(int argc, char* argv[]) {
             } else if (format == "md" || format == "markdown") {
                 options.format = DocFormat::Markdown;
             } else {
-                std::cerr << "Warning: Unknown format '" << format << "', using html\n";
+                TML_LOG_WARN("doc", "Unknown format '" << format << "', using html");
                 options.format = DocFormat::Html;
             }
         } else if (arg.starts_with("--output=") || arg.starts_with("-o=")) {
@@ -274,7 +272,7 @@ DocOptions parse_doc_args(int argc, char* argv[]) {
             // Input file
             options.input_files.push_back(arg);
         } else {
-            std::cerr << "Warning: Unknown option '" << arg << "'\n";
+            TML_LOG_WARN("doc", "Unknown option '" << arg << "'");
         }
     }
 

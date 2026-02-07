@@ -1334,6 +1334,78 @@ tml build platform.tml --target=aarch64-unknown-linux-gnu
 # Defines: LINUX, ARM64, UNIX, POSIX, PTR_64, LITTLE_ENDIAN, GNU
 ```
 
+## 12. Structured Logging
+
+This section demonstrates TML's built-in structured logging via `std::log`.
+
+### 12.1 Basic Logging
+
+```tml
+use std::log
+use std::log::{TRACE, DEBUG, INFO, WARN, ERROR, FATAL}
+
+func main() -> I32 {
+    // Log at various levels
+    log::info("app", "Application starting")
+    log::debug("config", "Loaded 42 settings")
+    log::warn("pool", "Connection pool at 90% capacity")
+    log::error("db", "Query timeout after 30s")
+
+    // Check before expensive formatting
+    if log::enabled(TRACE) {
+        log::trace("app", "Detailed request payload: ...")
+    }
+
+    return 0
+}
+```
+
+### 12.2 Runtime Level Control
+
+```tml
+use std::log
+use std::log::{TRACE, DEBUG, INFO, WARN}
+
+func main() -> I32 {
+    // Default level is WARN — only warnings and above are shown
+    log::info("app", "This is hidden by default")
+    log::warn("app", "This is visible by default")
+
+    // Lower the level to see more messages
+    log::set_level(DEBUG)
+    log::debug("app", "Now debug messages are visible")
+    log::info("app", "Info messages too")
+
+    // Query the current level
+    let level: I32 = log::get_level()
+
+    // Raise the level to suppress noise
+    log::set_level(WARN)
+    log::debug("app", "This is hidden again")
+
+    return 0
+}
+```
+
+### 12.3 Module Tags for Filtering
+
+```tml
+use std::log
+
+// Use short, descriptive module tags
+func handle_request() {
+    log::info("http", "GET /api/users")
+    log::debug("auth", "Validating token")
+    log::debug("cache", "Cache miss for key: users")
+    log::info("db", "SELECT * FROM users (12ms)")
+    log::info("http", "200 OK (45ms)")
+}
+
+// Run with filtering:
+//   tml run app.tml --log-filter=db=trace,http=info,*=warn
+// This shows all DB queries and HTTP requests but hides auth/cache noise.
+```
+
 ---
 
 *Previous: [13-BUILTINS.md](./13-BUILTINS.md)*

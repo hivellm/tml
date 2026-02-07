@@ -59,6 +59,3 @@ packages/compiler/build/
 coverage.html
 coverage.json
 build/coverage/
-
-# Test artifacts
-_tml_test_log.tmp

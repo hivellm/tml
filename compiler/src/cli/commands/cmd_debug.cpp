@@ -23,6 +23,7 @@
 //! how code is tokenized, and verifying type inference results.
 
 #include "cmd_debug.hpp"
+#include "log/log.hpp"
 
 #include "cli/diagnostic.hpp"
 #include "cli/utils.hpp"
@@ -89,7 +90,7 @@ int run_lex(const std::string& path, bool verbose) {
     try {
         source_code = read_file(path);
     } catch (const std::exception& e) {
-        std::cerr << "error: " << e.what() << "\n";
+        TML_LOG_ERROR("debug", e.what());
         return 1;
     }
 
@@ -132,7 +133,7 @@ int run_parse(const std::string& path, bool verbose) {
     try {
         source_code = read_file(path);
     } catch (const std::exception& e) {
-        std::cerr << "error: " << e.what() << "\n";
+        TML_LOG_ERROR("debug", e.what());
         return 1;
     }
 
@@ -204,7 +205,7 @@ int run_check(const std::string& path, bool verbose) {
     try {
         source_code = read_file(path);
     } catch (const std::exception& e) {
-        std::cerr << "error: " << e.what() << "\n";
+        TML_LOG_ERROR("debug", e.what());
         return 1;
     }
 

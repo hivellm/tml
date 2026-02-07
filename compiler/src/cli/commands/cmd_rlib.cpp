@@ -28,6 +28,7 @@
 //! ```
 
 #include "cmd_rlib.hpp"
+#include "log/log.hpp"
 
 #include "cli/builder/rlib.hpp"
 
@@ -50,15 +51,14 @@ int run_rlib_info(int argc, char* argv[]) {
     fs::path rlib_file = argv[3];
 
     if (!fs::exists(rlib_file)) {
-        std::cerr << "Error: RLIB file not found: " << rlib_file << "\n";
+        TML_LOG_ERROR("rlib", "RLIB file not found: " << rlib_file);
         return 1;
     }
 
     // Read metadata
     auto metadata_opt = read_rlib_metadata(rlib_file);
     if (!metadata_opt) {
-        std::cerr << "Error: Failed to read RLIB metadata from " << rlib_file << "\n";
-        std::cerr << "This may not be a valid TML library file.\n";
+        TML_LOG_ERROR("rlib", "Failed to read RLIB metadata from " << rlib_file << ". This may not be a valid TML library file.");
         return 1;
     }
 
@@ -117,14 +117,14 @@ int run_rlib_exports(int argc, char* argv[]) {
     }
 
     if (!fs::exists(rlib_file)) {
-        std::cerr << "Error: RLIB file not found: " << rlib_file << "\n";
+        TML_LOG_ERROR("rlib", "RLIB file not found: " << rlib_file);
         return 1;
     }
 
     // Read metadata
     auto metadata_opt = read_rlib_metadata(rlib_file);
     if (!metadata_opt) {
-        std::cerr << "Error: Failed to read RLIB metadata from " << rlib_file << "\n";
+        TML_LOG_ERROR("rlib", "Failed to read RLIB metadata from " << rlib_file);
         return 1;
     }
 
@@ -177,7 +177,7 @@ int run_rlib_validate(int argc, char* argv[]) {
     fs::path rlib_file = argv[3];
 
     if (!fs::exists(rlib_file)) {
-        std::cerr << "Error: RLIB file not found: " << rlib_file << "\n";
+        TML_LOG_ERROR("rlib", "RLIB file not found: " << rlib_file);
         return 1;
     }
 
@@ -186,7 +186,7 @@ int run_rlib_validate(int argc, char* argv[]) {
     // Check if it's a valid archive
     auto members = list_rlib_members(rlib_file);
     if (members.empty()) {
-        std::cerr << "Error: Not a valid archive file\n";
+        TML_LOG_ERROR("rlib", "Not a valid archive file");
         return 1;
     }
 
@@ -196,8 +196,7 @@ int run_rlib_validate(int argc, char* argv[]) {
     // Check for metadata.json
     bool has_metadata = std::find(members.begin(), members.end(), "metadata.json") != members.end();
     if (!has_metadata) {
-        std::cerr << "Error: Missing metadata.json\n";
-        std::cerr << "This is not a valid TML library file.\n";
+        TML_LOG_ERROR("rlib", "Missing metadata.json. This is not a valid TML library file.");
         return 1;
     }
 
@@ -206,7 +205,7 @@ int run_rlib_validate(int argc, char* argv[]) {
     // Read and validate metadata
     auto metadata_opt = read_rlib_metadata(rlib_file);
     if (!metadata_opt) {
-        std::cerr << "Error: Failed to parse metadata.json\n";
+        TML_LOG_ERROR("rlib", "Failed to parse metadata.json");
         return 1;
     }
 
@@ -215,8 +214,7 @@ int run_rlib_validate(int argc, char* argv[]) {
 
     // Check format version
     if (metadata.format_version != "1.0") {
-        std::cerr << "Warning: Unexpected format version: " << metadata.format_version << "\n";
-        std::cerr << "Expected: 1.0\n";
+        TML_LOG_WARN("rlib", "Unexpected format version: " << metadata.format_version << ". Expected: 1.0");
     } else {
         std::cout << "✓ Format version: " << metadata.format_version << "\n";
     }
@@ -228,7 +226,7 @@ int run_rlib_validate(int argc, char* argv[]) {
         if (has_module) {
             std::cout << "  ✓ " << module.name << " (" << module.file << ")\n";
         } else {
-            std::cerr << "  ✗ " << module.name << " (" << module.file << ") - NOT FOUND\n";
+            TML_LOG_ERROR("rlib", "Module " << module.name << " (" << module.file << ") not found in archive");
             return 1;
         }
     }
@@ -263,8 +261,7 @@ int run_rlib(int argc, char* argv[]) {
     } else if (subcommand == "validate") {
         return run_rlib_validate(argc, argv);
     } else {
-        std::cerr << "Unknown rlib subcommand: " << subcommand << "\n";
-        std::cerr << "Use 'tml rlib info', 'tml rlib exports', or 'tml rlib validate'\n";
+        TML_LOG_ERROR("rlib", "Unknown rlib subcommand: " << subcommand << ". Use 'tml rlib info', 'tml rlib exports', or 'tml rlib validate'");
         return 1;
     }
 }

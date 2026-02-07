@@ -18,6 +18,7 @@
 //! ```
 
 #include "linter_internal.hpp"
+#include "log/log.hpp"
 
 namespace tml::cli::linter {
 
@@ -30,7 +31,7 @@ void lint_file(const fs::path& filepath, LintResult& result, const LintConfig& c
                bool fix_mode, bool semantic) {
     std::ifstream file(filepath);
     if (!file) {
-        std::cerr << "Error: Cannot open file: " << filepath << "\n";
+        TML_LOG_ERROR("lint", "Cannot open file: " << filepath);
         return;
     }
 
@@ -102,7 +103,7 @@ void find_tml_files(const fs::path& dir, std::vector<fs::path>& files) {
             }
         }
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "Warning: Cannot access " << dir << ": " << e.what() << "\n";
+        TML_LOG_WARN("lint", "Cannot access " << dir << ": " << e.what());
     }
 }
 

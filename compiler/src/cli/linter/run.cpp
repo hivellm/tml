@@ -24,6 +24,7 @@
 //! - Missing final newline
 
 #include "linter_internal.hpp"
+#include "log/log.hpp"
 
 namespace tml::cli {
 
@@ -97,9 +98,9 @@ int run_lint(int argc, char* argv[]) {
         } else if (fs::is_regular_file(p) && p.extension() == ".tml") {
             files.push_back(p);
         } else if (fs::is_regular_file(p)) {
-            std::cerr << "Warning: " << path << " is not a .tml file, skipping\n";
+            TML_LOG_WARN("lint", path << " is not a .tml file, skipping");
         } else {
-            std::cerr << "Warning: " << path << " does not exist\n";
+            TML_LOG_WARN("lint", path << " does not exist");
         }
     }
 

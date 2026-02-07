@@ -278,7 +278,7 @@ int run_cache_clean(bool clean_all, int max_age_days, bool /*verbose*/) {
                   << ")\n";
 
     } catch (const std::exception& e) {
-        std::cerr << "Error cleaning cache: " << e.what() << "\n";
+        TML_LOG_ERROR("cache", "Error cleaning cache: " << e.what());
         return 1;
     }
 
@@ -366,8 +366,7 @@ int enforce_cache_limit(uintmax_t max_size_mb, bool /*verbose*/) {
 
 int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/) {
     if (files.empty()) {
-        std::cerr << "Error: No files specified for invalidation.\n";
-        std::cerr << "Usage: tml cache invalidate <file1> [file2] ...\n";
+        TML_LOG_ERROR("cache", "No files specified for invalidation. Usage: tml cache invalidate <file1> [file2] ...");
         return 1;
     }
 
@@ -560,7 +559,7 @@ int run_cache(int argc, char* argv[]) {
                 max_age_days = std::stoi(argv[i + 1]);
                 i++; // Skip next arg
             } else {
-                std::cerr << "Error: --days requires a number\n";
+                TML_LOG_ERROR("cache", "--days requires a number");
                 return 1;
             }
         } else if (!arg.starts_with("-")) {
@@ -576,8 +575,7 @@ int run_cache(int argc, char* argv[]) {
     } else if (subcommand == "invalidate") {
         return run_cache_invalidate(files, verbose);
     } else {
-        std::cerr << "Unknown cache subcommand: " << subcommand << "\n";
-        std::cerr << "Use 'tml cache info', 'tml cache clean', or 'tml cache invalidate'\n";
+        TML_LOG_ERROR("cache", "Unknown cache subcommand: " << subcommand << ". Use 'tml cache info', 'tml cache clean', or 'tml cache invalidate'");
         return 1;
     }
 }
