@@ -1369,6 +1369,10 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
     // PHASE 2: Generate code for functions and impl methods.
     // All types are now registered from Phase 1, so type lookups
     // (like "Ordering") will always find their definitions.
+    //
+    // In library_decls_only mode, gen_func_decl and gen_impl_method emit
+    // `declare` statements instead of full function definitions. The
+    // implementations come from a shared library object compiled once per suite.
     // ========================================================================
     for (const auto& info : eligible_modules) {
         const auto& parsed_module = *info.parsed_module_ptr;

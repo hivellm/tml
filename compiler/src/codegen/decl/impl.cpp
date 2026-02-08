@@ -257,8 +257,22 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     std::string func_type = ret_type + " (" + param_types + ")";
     functions_[method_name] = FuncInfo{"@" + func_llvm_name, func_type, ret_type, param_types_vec};
 
+    // In library_decls_only mode, emit a declare statement for library methods
+    // instead of the full definition. The implementations come from the shared library object.
+    if (options_.library_decls_only) {
+        emit_line("");
+        emit_line("declare " + ret_type + " @" + func_llvm_name + "(" + param_types + ")");
+        current_func_.clear();
+        current_impl_type_.clear();
+        return;
+    }
+
     emit_line("");
-    emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
+    // In library_ir_only mode, use external linkage so the shared library object
+    // can export symbols for test objects to link against.
+    std::string impl_linkage = options_.library_ir_only ? "" : "internal ";
+    emit_line("define " + impl_linkage + ret_type + " @" + func_llvm_name + "(" + params +
+              ") #0 {");
     emit_line("entry:");
 
     // Register 'this'/'self' in locals only for instance methods
@@ -735,8 +749,11 @@ void LLVMIRGen::gen_impl_method_instantiation(
     emit_line("");
     // Use internal linkage for all methods to avoid duplicate symbol warnings
     // Each object file gets its own copy of library methods - slight code bloat
-    // but avoids complex COMDAT merging issues with LLD on Windows
-    emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
+    // but avoids complex COMDAT merging issues with LLD on Windows.
+    // In library_ir_only mode, use external linkage for the shared library object.
+    std::string inst_linkage = options_.library_ir_only ? "" : "internal ";
+    emit_line("define " + inst_linkage + ret_type + " @" + func_llvm_name + "(" + params +
+              ") #0 {");
     emit_line("entry:");
 
     // Register 'this' in locals with proper semantic type for method resolution

@@ -1714,6 +1714,10 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         std::vector<CompileTask> tasks;
         tasks.reserve(suite.tests.size());
 
+        // Track per-file import sets to determine if shared library is safe
+        std::vector<std::set<std::string>> per_file_imports;
+        per_file_imports.reserve(suite.tests.size());
+
         for (size_t i = 0; i < suite.tests.size(); ++i) {
             const auto& pp_source = preprocessed_sources[i];
             std::string obj_name = pp_source.content_hash + "_suite_" + std::to_string(i);
@@ -1731,6 +1735,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             // Collect module imports from ALL files (even cached ones)
             // This is needed for get_runtime_objects to know which runtimes to link
             // Use quick lex/parse to extract use declarations without type-checking
+            std::set<std::string> file_imports;
             auto source = lexer::Source::from_string(pp_source.preprocessed, pp_source.file_path);
             lexer::Lexer lex(source);
             auto tokens = lex.tokenize();
@@ -1748,6 +1753,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                             use_path += use_decl.path.segments[j];
                         }
                         imported_module_paths.insert(use_path);
+                        file_imports.insert(use_path);
                         // Also add parent paths
                         std::string parent = use_path;
                         while (true) {
@@ -1756,8 +1762,133 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                 break;
                             parent = parent.substr(0, pos);
                             imported_module_paths.insert(parent);
+                            file_imports.insert(parent);
                         }
                     }
+                }
+            }
+            per_file_imports.push_back(std::move(file_imports));
+        }
+
+        // Check if all files in the suite have the same import set.
+        // The shared library is only safe when all files import the same modules,
+        // because the library IR is generated from a single file's type environment.
+        bool all_imports_match = true;
+        if (per_file_imports.size() >= 2) {
+            const auto& first_imports = per_file_imports[0];
+            for (size_t i = 1; i < per_file_imports.size(); ++i) {
+                if (per_file_imports[i] != first_imports) {
+                    all_imports_match = false;
+                    break;
+                }
+            }
+        }
+
+        // ======================================================================
+        // SHARED LIBRARY OBJECT: Generate library IR once, compile to .obj
+        // ======================================================================
+        // When there are multiple test files to compile, generate the library IR
+        // once from the first test file, compile it to a shared .obj, and have
+        // all other test files use library_decls_only mode (emit only declarations).
+        // This avoids re-generating and re-compiling identical library IR for each test.
+        fs::path shared_lib_obj;
+        bool use_shared_lib = false;
+
+        if (tasks.size() >= 2 && all_imports_match) {
+            // Use a hash of all imported module paths to identify the shared library
+            std::string import_hash;
+            for (const auto& path : imported_module_paths) {
+                import_hash += path + ";";
+            }
+            std::string lib_hash = build::generate_content_hash(import_hash);
+            shared_lib_obj = cache_dir / (lib_hash + "_sharedlib" + get_object_extension());
+
+            if (!no_cache && fs::exists(shared_lib_obj)) {
+                // Cache hit - reuse previously compiled shared library
+                use_shared_lib = true;
+                TML_LOG_INFO("test", "  Shared library cache hit: " << shared_lib_obj.filename());
+            } else {
+                // Generate shared library from the first task
+                TML_LOG_INFO("test", "  Generating shared library IR...");
+                auto& first_task = tasks[0];
+
+                try {
+                    auto source =
+                        lexer::Source::from_string(first_task.preprocessed, first_task.file_path);
+                    lexer::Lexer lex(source);
+                    auto tokens = lex.tokenize();
+
+                    if (!lex.has_errors()) {
+                        parser::Parser parser(std::move(tokens));
+                        auto module_name = fs::path(first_task.file_path).stem().string();
+                        auto parse_result = parser.parse_module(module_name);
+
+                        if (std::holds_alternative<parser::Module>(parse_result)) {
+                            const auto& module = std::get<parser::Module>(parse_result);
+
+                            auto lib_registry = std::make_shared<types::ModuleRegistry>();
+                            types::TypeChecker checker;
+                            checker.set_module_registry(lib_registry);
+                            auto check_result = checker.check_module(module);
+
+                            if (std::holds_alternative<types::TypeEnv>(check_result)) {
+                                const auto& env = std::get<types::TypeEnv>(check_result);
+
+                                // Generate library-only IR
+                                codegen::LLVMGenOptions lib_options;
+                                lib_options.emit_comments = false;
+                                lib_options.generate_dll_entry = false;
+                                lib_options.dll_export = false;
+                                lib_options.force_internal_linkage = false;
+                                lib_options.library_ir_only = true;
+                                lib_options.emit_debug_info = false;
+                                lib_options.coverage_enabled = false;
+                                codegen::LLVMIRGen lib_gen(env, lib_options);
+
+                                auto gen_result = lib_gen.generate(module);
+
+                                if (std::holds_alternative<std::string>(gen_result)) {
+                                    const auto& lib_ir = std::get<std::string>(gen_result);
+
+                                    // Write IR to file
+                                    fs::path lib_ll = cache_dir / (lib_hash + "_sharedlib.ll");
+                                    {
+                                        std::ofstream ll_file(lib_ll);
+                                        if (ll_file) {
+                                            ll_file << lib_ir;
+                                            ll_file.close();
+
+                                            // Compile to object
+                                            ObjectCompileOptions obj_options;
+                                            obj_options.optimization_level =
+                                                CompilerOptions::optimization_level;
+                                            obj_options.debug_info = false;
+                                            obj_options.verbose = false;
+                                            obj_options.coverage = false;
+
+                                            auto obj_result = compile_ll_to_object(
+                                                lib_ll, shared_lib_obj, clang, obj_options);
+                                            fs::remove(lib_ll);
+
+                                            if (obj_result.success) {
+                                                use_shared_lib = true;
+                                                TML_LOG_INFO("test",
+                                                             "  Shared library compiled: "
+                                                                 << shared_lib_obj.filename());
+                                            } else {
+                                                TML_LOG_WARN("test",
+                                                             "  Shared library compilation failed: "
+                                                                 << obj_result.error_message);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    TML_LOG_WARN("test", "  Shared library generation failed: "
+                                             << e.what() << " (falling back)");
                 }
             }
         }
@@ -1812,13 +1943,10 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             unsigned int num_threads =
                 calc_codegen_threads(static_cast<unsigned int>(tasks.size()));
 
-            // TEMPORARILY DISABLED for baseline comparison
             // Pre-load all library modules from .tml.meta binary cache.
             // This MUST complete before any test compilation starts.
             // It either loads existing .tml.meta files or generates them from source.
-            // TML_LOG_INFO("test", ">>> Pre-loading library modules (blocking until complete)...");
-            // types::preload_all_meta_caches();
-            // TML_LOG_INFO("test", ">>> Pre-load complete. Starting test compilation...");
+            types::preload_all_meta_caches();
 
             auto compile_task_worker = [&]() {
                 auto thread_registry = std::make_shared<types::ModuleRegistry>();
@@ -1965,6 +2093,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                         options.suite_total_tests = static_cast<int>(suite.tests.size());
                         options.dll_export = true;
                         options.force_internal_linkage = true;
+                        options.library_decls_only = use_shared_lib;
                         options.emit_debug_info = CompilerOptions::debug_info;
                         options.debug_level = CompilerOptions::debug_level;
                         options.source_file = task.file_path;
@@ -2357,19 +2486,13 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         TML_LOG_INFO("test", "  Got " << runtime_objects.size() << " runtime objects");
         object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
-        // DISABLED: Precompiled symbols cause linkage conflicts with force_internal_linkage
-        // Symptoms: "use of undefined value '@atomic_compare_exchange_i32'" errors
-        // Root cause: precompiled_symbols uses external linkage, test suites use internal linkage
-        // TODO: Fix by:
-        //   1. Using same linkage mode in both (but defeats purpose of sharing)
-        //   2. LLVM module linking instead of object file linking
-        //   3. Weak symbols or link-once semantics
-        //
-        // static std::string precompiled_obj = get_precompiled_symbols_obj(verbose, no_cache);
-        // if (!precompiled_obj.empty() && fs::exists(precompiled_obj)) {
-        //     object_files.push_back(fs::path(precompiled_obj));
-        //     TML_LOG_INFO("test", "  Using precompiled symbols: " << precompiled_obj);
-        // }
+        // Add shared library object if we generated one
+        // This contains all library function implementations (compiled once per suite).
+        // Test objects only have `declare` stubs that the linker resolves from this object.
+        if (use_shared_lib && fs::exists(shared_lib_obj)) {
+            object_files.push_back(shared_lib_obj);
+            TML_LOG_INFO("test", "  Using shared library: " << shared_lib_obj.filename());
+        }
 
         runtime_time_us =
             std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - runtime_start)

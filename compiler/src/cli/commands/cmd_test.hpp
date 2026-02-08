@@ -135,7 +135,7 @@ struct TestOptions {
     bool coverage_source = false;      // Enable LLVM source code coverage
     std::string coverage_source_dir;   // Directory to write coverage reports
     bool profile = false;              // Show detailed phase timings
-    bool suite_mode = false;           // TEMPORARILY DISABLED - debugging individual test slowness
+    bool suite_mode = true;            // Suite mode: compile multiple tests per DLL
     std::string corpus_dir;            // Directory for fuzz corpus (inputs)
     std::string crashes_dir;           // Directory to save crash inputs
     bool check_leaks = true;           // Memory leak detection (enabled by default)

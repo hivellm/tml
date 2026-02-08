@@ -268,6 +268,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 result.passed = true;
                 result.duration_ms = cached_info ? cached_info->duration_ms : 0;
                 result.exit_code = 0;
+                if (opts.profile) {
+                    collector.profile_stats.total_tests++;
+                }
                 collector.add(std::move(result));
                 skipped_count.fetch_add(1);
             }
@@ -479,6 +482,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                 result.passed = true;
                                 result.duration_ms = cached_info->duration_ms;
                                 result.exit_code = 0;
+
+                                if (opts.profile) {
+                                    collector.profile_stats.total_tests++;
+                                }
 
                                 collector.add(std::move(result));
                                 skipped_count.fetch_add(1);

@@ -230,6 +230,8 @@ struct LLVMGenOptions {
     bool generate_dll_entry = false;     ///< Generate tml_test_entry (no main).
     bool generate_fuzz_entry = false;    ///< Generate tml_fuzz_target (no main).
     bool force_internal_linkage = false; ///< Force internal linkage (suite mode).
+    bool library_decls_only = false;     ///< Only emit declarations for library functions.
+    bool library_ir_only = false;        ///< Generate ONLY library IR (no user code).
     int debug_level = 2;                 ///< Debug level: 1=minimal, 2=standard, 3=full.
     int suite_test_index = -1;           ///< Suite test index (-1 = tml_test_entry).
     int suite_total_tests = -1;          ///< Total tests in suite (for coverage aggregation).

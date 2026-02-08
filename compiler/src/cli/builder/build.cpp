@@ -35,11 +35,9 @@ using namespace build;
 
 // Internal implementation that takes BuildOptions
 static int run_build_impl(const std::string& path, const BuildOptions& options) {
-    // TEMPORARILY DISABLED for baseline comparison
     // Pre-load all library modules from .tml.meta binary cache
-    // TML_LOG_INFO("build", ">>> Pre-loading library modules (blocking until complete)...");
-    // types::preload_all_meta_caches();
-    // TML_LOG_INFO("build", ">>> Pre-load complete. Starting build...");
+    types::preload_all_meta_caches();
+
     bool verbose = options.verbose;
     bool emit_ir_only = options.emit_ir_only;
     bool emit_mir = options.emit_mir;

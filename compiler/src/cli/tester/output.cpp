@@ -1,19 +1,20 @@
 //! # Test Output Formatting
 //!
-//! This file implements test result formatting in Vitest/Jest style.
+//! This file implements test result formatting in Go/Rust style.
 //!
 //! ## Output Format
 //!
 //! ```text
-//!  + compiler_tests (542 tests) 201ms
-//!  + lib/core (272 tests) 0ms
-//!  x lib/broken (1 test) 5ms
-//!    └─ broken.test.tml: assertion failed
+//! running 363 test files
 //!
-//!  Tests       906 passed (906 tests, 102 files)
-//!  Duration    292ms
+//! test compiler_tests::borrow_library ... ok (1ms)
+//! test compiler_tests::closure_capture ... ok (0ms)
+//! test lib/broken::broken ... FAILED
 //!
-//!  All tests passed!
+//! failures:
+//!     lib/broken::broken.test.tml: assertion failed
+//!
+//! test result: ok. 3632 passed; 0 failed; 363 files; finished in 0.62s
 //! ```
 //!
 //! ## Profile Stats Output
@@ -30,15 +31,15 @@
 namespace tml::cli::tester {
 
 // ============================================================================
-// Print Results in Vitest Style
+// Print Results in Go/Rust Style
 // ============================================================================
 
-/// Prints test results in Vitest/Jest style with colored output.
+/// Prints test results in Go/Rust style with colored output.
 void print_results_vitest_style(const std::vector<TestResult>& results, const TestOptions& opts,
                                 int64_t total_duration_ms) {
     ColorOutput c(!opts.no_color);
 
-    // Group results by directory and count individual tests
+    // Group results by directory
     std::map<std::string, TestGroup> groups;
     int total_test_count = 0;
 
@@ -64,87 +65,97 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
     }
     std::sort(group_names.begin(), group_names.end());
 
-    // Print each group
-    for (const auto& group_name : group_names) {
-        const auto& group = groups[group_name];
+    // Collect failures for summary at end
+    std::vector<std::pair<std::string, std::string>> failures; // (qualified name, error)
 
-        // Group header with icon
-        bool all_passed = (group.failed == 0);
-        const char* icon = all_passed ? "+" : "x";
-        const char* icon_color = all_passed ? c.green() : c.red();
-
-        // Count tests in this group
-        int group_test_count = 0;
-        for (const auto& r : group.results) {
-            group_test_count += r.test_count;
-        }
-
-        TML_LOG_INFO("test", icon_color << icon << c.reset() << " " << c.bold() << group.name
-                                        << c.reset() << " " << c.gray() << "(" << group_test_count
-                                        << " test" << (group_test_count != 1 ? "s" : "") << ")"
-                                        << c.reset() << " " << c.dim()
-                                        << format_duration(group.total_duration_ms) << c.reset());
-
-        // Print individual tests in group (only if verbose or there are failures)
-        if (opts.verbose || group.failed > 0) {
+    // Print per-test results (verbose) or per-group summary (non-verbose)
+    if (opts.verbose) {
+        // Rust-style: "test group::name ... ok"
+        for (const auto& group_name : group_names) {
+            const auto& group = groups[group_name];
             for (const auto& result : group.results) {
-                const char* test_icon = result.passed ? "+" : "x";
-                const char* test_color = result.passed ? c.green() : c.red();
-
+                std::string qualified = group.name + "::" + result.test_name;
                 std::ostringstream oss;
-                oss << "   " << test_color << test_icon << c.reset() << " " << result.test_name;
-
-                if (!result.passed) {
-                    oss << " " << c.red() << "[" << result.error_message << "]" << c.reset();
+                oss << "test " << qualified << " ... ";
+                if (result.passed) {
+                    oss << c.green() << "ok" << c.reset();
+                } else {
+                    oss << c.red() << "FAILED" << c.reset();
+                    failures.push_back({qualified, result.error_message});
                 }
-
-                if (opts.verbose) {
-                    oss << " " << c.dim() << format_duration(result.duration_ms) << c.reset();
-                }
-
+                oss << " " << c.dim() << "(" << format_duration(result.duration_ms) << ")"
+                    << c.reset();
                 TML_LOG_INFO("test", oss.str());
             }
         }
+    } else {
+        // Go-style: "ok  group  0.24s" or "FAIL  group  0.05s"
+        for (const auto& group_name : group_names) {
+            const auto& group = groups[group_name];
+            bool all_passed = (group.failed == 0);
+
+            // Collect failures even in non-verbose
+            if (!all_passed) {
+                for (const auto& result : group.results) {
+                    if (!result.passed) {
+                        std::string qualified = group.name + "::" + result.test_name;
+                        failures.push_back({qualified, result.error_message});
+                    }
+                }
+            }
+
+            int group_test_count = 0;
+            for (const auto& r : group.results) {
+                group_test_count += r.test_count;
+            }
+
+            std::ostringstream oss;
+            if (all_passed) {
+                oss << c.green() << "ok" << c.reset();
+            } else {
+                oss << c.red() << "FAIL" << c.reset();
+            }
+            oss << "  " << c.bold() << group.name << c.reset() << "  " << c.dim()
+                << group_test_count << " test" << (group_test_count != 1 ? "s" : "") << "  "
+                << format_duration(group.total_duration_ms) << c.reset();
+            TML_LOG_INFO("test", oss.str());
+        }
     }
 
-    // Count totals (files and individual tests)
-    int files_passed = 0;
-    int files_failed = 0;
+    // Print failures section (like Rust)
+    if (!failures.empty()) {
+        TML_LOG_INFO("test", "");
+        TML_LOG_INFO("test", c.red() << c.bold() << "failures:" << c.reset());
+        for (const auto& [name, err] : failures) {
+            TML_LOG_INFO("test", "    " << name << ": " << err);
+        }
+        TML_LOG_INFO("test", "");
+    }
+
+    // Count totals
     int tests_passed = 0;
     int tests_failed = 0;
     for (const auto& result : results) {
         if (result.passed) {
-            files_passed++;
             tests_passed += result.test_count;
         } else {
-            files_failed++;
             tests_failed += result.test_count;
         }
     }
-    (void)files_passed; // May be used for detailed file-level output later
-    (void)files_failed;
 
-    // Print summary box
+    // Rust-style summary: "test result: ok. 3632 passed; 0 failed; 363 files; finished in 0.62s"
     {
         std::ostringstream summary;
-        summary << c.bold() << "Tests       " << c.reset();
-        if (tests_failed > 0) {
-            summary << c.red() << c.bold() << tests_failed << " failed" << c.reset() << " | ";
+        summary << c.bold() << "test result: " << c.reset();
+        if (tests_failed == 0) {
+            summary << c.green() << c.bold() << "ok" << c.reset() << ". ";
+        } else {
+            summary << c.red() << c.bold() << "FAILED" << c.reset() << ". ";
         }
-        summary << c.green() << c.bold() << tests_passed << " passed" << c.reset() << " "
-                << c.gray() << "(" << total_test_count << " tests, " << results.size() << " file"
-                << (results.size() != 1 ? "s" : "") << ")" << c.reset();
+        summary << tests_passed << " passed; " << tests_failed << " failed; " << results.size()
+                << " file" << (results.size() != 1 ? "s" : "") << "; finished in "
+                << format_duration(total_duration_ms);
         TML_LOG_INFO("test", summary.str());
-    }
-
-    TML_LOG_INFO("test",
-                 c.bold() << "Duration    " << c.reset() << format_duration(total_duration_ms));
-
-    // Print final status line
-    if (tests_failed == 0) {
-        TML_LOG_INFO("test", c.green() << c.bold() << "All tests passed!" << c.reset());
-    } else {
-        TML_LOG_INFO("test", c.red() << c.bold() << "Some tests failed." << c.reset());
     }
 }
 
@@ -224,20 +235,22 @@ void print_profile_stats(const ProfileStats& stats, const TestOptions& opts) {
         double slowest_pct = total_us > 0 ? (100.0 * slowest_us / total_us) : 0.0;
 
         if (slowest_pct > 30.0) {
-            TML_LOG_INFO("test", c.yellow() << "Bottleneck: " << c.reset() << c.bold() << slowest
-                                            << c.reset() << " is using " << std::fixed
-                                            << std::setprecision(1) << slowest_pct << "% of total time");
+            TML_LOG_INFO("test", c.yellow()
+                                     << "Bottleneck: " << c.reset() << c.bold() << slowest
+                                     << c.reset() << " is using " << std::fixed
+                                     << std::setprecision(1) << slowest_pct << "% of total time");
 
             // Give specific recommendations based on phase
             if (slowest == "clang_compile") {
-                TML_LOG_INFO("test",
-                             c.dim() << "  -> Consider: Enable build cache, use -O0 for tests" << c.reset());
+                TML_LOG_INFO("test", c.dim()
+                                         << "  -> Consider: Enable build cache, use -O0 for tests"
+                                         << c.reset());
             } else if (slowest == "link") {
                 TML_LOG_INFO("test",
                              c.dim() << "  -> Consider: Enable LTO cache, fewer deps" << c.reset());
             } else if (slowest == "type_check") {
-                TML_LOG_INFO("test",
-                             c.dim() << "  -> Consider: Smaller test files, less imports" << c.reset());
+                TML_LOG_INFO("test", c.dim() << "  -> Consider: Smaller test files, less imports"
+                                             << c.reset());
             } else if (slowest == "codegen") {
                 TML_LOG_INFO("test",
                              c.dim() << "  -> Consider: Simpler code, fewer generics" << c.reset());

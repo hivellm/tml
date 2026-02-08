@@ -10,17 +10,12 @@
 //!   ├─ parse_test_args()     → TestOptions
 //!   ├─ discover_test_files() → List of *.test.tml files
 //!   ├─ Filter by pattern(s)
-//!   ├─ Execution:
-//!   │     ├─ Suite mode:   run_tests_suite_mode() (parallel DLL compilation)
-//!   │     ├─ Profile mode: Sequential with timing collection
-//!   │     └─ Normal mode:  Parallel worker threads
+//!   ├─ run_tests_suite_mode()  (parallel DLL compilation)
 //!   └─ print_results_vitest_style()
 //! ```
 //!
-//! ## Threading Model
-//!
-//! By default, tests run in parallel using N/2 threads where N is the
-//! hardware thread count. This can be overridden with `--test-threads=N`.
+//! All tests use the unified suite mode pipeline. Use `--no-suite` to
+//! disable suite bundling (one DLL per test file).
 
 #include "cli/builder/builder_internal.hpp"
 #include "coverage.hpp"
@@ -147,7 +142,6 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.check_leaks = false;
         } else if (arg == "--profile") {
             opts.profile = true;
-            opts.test_threads = 1; // Force single-threaded for accurate profiling
         } else if (arg == "--suite") {
             opts.suite_mode = true; // Use suite-based DLL compilation (default)
         } else if (arg == "--no-suite") {
@@ -292,27 +286,16 @@ int run_test(int argc, char* argv[], bool verbose) {
         return 0;
     }
 
-    // Coverage requires suite mode for accurate aggregate coverage data.
-    // In non-suite mode, each test runs as a separate process and only tracks
-    // its own functions, making the last test overwrite coverage.html with
-    // partial data. Suite mode collects coverage from ALL DLLs and generates
-    // the comprehensive library coverage report.
-    if (opts.coverage && !opts.suite_mode) {
-        opts.suite_mode = true;
-    }
-
     // Coverage cannot be used with filters - it requires full test suite
     if (opts.coverage && !opts.patterns.empty()) {
         TML_LOG_ERROR("test", "Coverage cannot be used with test filters");
         return 1;
     }
 
-    // Print header
+    // Print header (Rust-style)
     if (!opts.quiet) {
-        TML_LOG_INFO("test", c.cyan() << c.bold() << "TML" << c.reset() << " " << c.dim()
-                                      << "v0.1.0" << c.reset());
-        TML_LOG_INFO("test", c.dim() << "Running " << test_files.size() << " test file"
-                                     << (test_files.size() != 1 ? "s" : "") << "..." << c.reset());
+        TML_LOG_INFO("test", "running " << test_files.size() << " test file"
+                                        << (test_files.size() != 1 ? "s" : ""));
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -348,18 +331,6 @@ int run_test(int argc, char* argv[], bool verbose) {
     }
 
     TestResultCollector collector;
-
-    // Determine number of threads
-    // Default to half of available cores for better resource usage
-    unsigned int num_threads = opts.test_threads;
-    if (num_threads == 0) {
-        unsigned int hw_threads = std::thread::hardware_concurrency();
-        if (hw_threads == 0) {
-            num_threads = 4; // Fallback
-        } else {
-            num_threads = std::max(1u, hw_threads / 2);
-        }
-    }
 
     // Helper to process coverage after tests complete
     auto process_coverage = [&]() {
@@ -411,147 +382,12 @@ int run_test(int argc, char* argv[], bool verbose) {
         }
     }
 
-    // Suite mode: compile multiple test files into single DLLs per suite
-    // This is now the default behavior as internal linkage prevents duplicate symbols
-    if (opts.suite_mode) {
-        run_tests_suite_mode(test_files, opts, collector, c);
-
-        // Note: We no longer abort on compilation errors - they are recorded and
-        // reported at the end, allowing other suites to continue running
-
-        auto end_time = std::chrono::high_resolution_clock::now();
-        int64_t total_duration_ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-
-        if (!opts.quiet) {
-            print_results_vitest_style(collector.results, opts, total_duration_ms);
-
-            // Print profiling stats if enabled
-            if (opts.profile && collector.profile_stats.total_tests > 0) {
-                print_profile_stats(collector.profile_stats, opts);
-            }
-
-            // Print TML runtime coverage summary
-            if (opts.coverage && !CompilerOptions::coverage_output.empty()) {
-                TML_LOG_INFO("test", c.dim() << "Coverage report: " << c.reset()
-                                             << CompilerOptions::coverage_output);
-            }
-        }
-
-        // Process LLVM source coverage
-        process_coverage();
-
-        // Flush log file and notify user
-        if (opts.verbose) {
-            tml::log::Logger::instance().flush();
-            fs::path log_path = fs::path("build") / "debug" / "test_log.json";
-            TML_LOG_INFO("test", c.dim() << "Test log: " << c.reset() << log_path.string());
-        }
-
-        int failed = 0;
-        for (const auto& result : collector.results) {
-            if (!result.passed) {
-                failed++;
-            }
-        }
-
-        return failed > 0 ? 1 : 0;
-    }
-
-    // Profile mode: parallel warm-up, then sequential profiled execution
-    if (opts.profile && test_files.size() > 1 && num_threads > 1) {
-        // Phase 1: Parallel warm-up (compile all DLLs to populate cache)
-        if (!opts.quiet) {
-            TML_LOG_INFO("test", c.dim() << "Warming up cache..." << c.reset());
-        }
-
-        std::atomic<size_t> warmup_index{0};
-        std::atomic<bool> warmup_error{false};
-        std::vector<std::thread> warmup_threads;
-
-        unsigned int warmup_threads_count =
-            std::min(num_threads, static_cast<unsigned int>(test_files.size()));
-        for (unsigned int i = 0; i < warmup_threads_count; ++i) {
-            warmup_threads.emplace_back(warmup_worker, std::ref(test_files), std::ref(warmup_index),
-                                        std::ref(warmup_error), std::ref(opts));
-        }
-
-        for (auto& thread : warmup_threads) {
-            thread.join();
-        }
-
-        if (!opts.quiet) {
-            TML_LOG_DEBUG("test", "Cache warm-up complete");
-        }
-
-        // Phase 2: Sequential profiled execution (with warm cache)
-        for (const auto& file : test_files) {
-            PhaseTimings timings;
-            TestResult result = compile_and_run_test_profiled(file, opts, &timings);
-            collector.add_timings(timings);
-            collector.add(std::move(result));
-            // Continue running other tests even if this one failed to compile
-        }
-    }
-    // Single-threaded mode for verbose/nocapture or if only 1 test
-    else if (opts.verbose || opts.nocapture || opts.profile || test_files.size() == 1 ||
-             num_threads == 1) {
-        for (size_t fi = 0; fi < test_files.size(); ++fi) {
-            const auto& file = test_files[fi];
-            if (opts.verbose) {
-                TML_LOG_INFO("test", c.dim() << "[" << (fi + 1) << "/" << test_files.size() << "] "
-                                             << c.reset() << fs::path(file).filename().string()
-                                             << " ...");
-            }
-            auto test_start = std::chrono::high_resolution_clock::now();
-            TestResult result;
-            if (opts.profile) {
-                PhaseTimings timings;
-                result = compile_and_run_test_profiled(file, opts, &timings);
-                collector.add_timings(timings);
-            } else {
-                result = compile_and_run_test_with_result(file, opts);
-            }
-            if (opts.verbose) {
-                auto test_end = std::chrono::high_resolution_clock::now();
-                auto ms =
-                    std::chrono::duration_cast<std::chrono::milliseconds>(test_end - test_start)
-                        .count();
-                if (result.passed) {
-                    TML_LOG_INFO("test", c.green() << "OK" << c.reset() << c.dim() << " " << ms
-                                                   << "ms" << c.reset());
-                } else {
-                    TML_LOG_INFO("test", c.red() << "FAIL" << c.reset() << c.dim() << " " << ms
-                                                 << "ms" << c.reset());
-                }
-            }
-            collector.add(std::move(result));
-            // Continue running other tests even if this one failed to compile
-        }
-    } else {
-        // Parallel execution
-        std::atomic<size_t> current_index{0};
-        std::vector<std::thread> threads;
-
-        // Limit threads to number of tests
-        num_threads = std::min(num_threads, static_cast<unsigned int>(test_files.size()));
-
-        for (unsigned int i = 0; i < num_threads; ++i) {
-            threads.emplace_back(test_worker, std::ref(test_files), std::ref(current_index),
-                                 std::ref(collector), std::ref(opts));
-        }
-
-        for (auto& thread : threads) {
-            thread.join();
-        }
-    }
+    // Unified execution: all tests go through suite mode
+    run_tests_suite_mode(test_files, opts, collector, c);
 
     auto end_time = std::chrono::high_resolution_clock::now();
     int64_t total_duration_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-
-    // Note: Compilation errors are now recorded as failed tests and printed in the
-    // normal results output. We no longer abort the test run early.
 
     // Print results
     if (!opts.quiet) {
@@ -561,9 +397,15 @@ int run_test(int argc, char* argv[], bool verbose) {
         if (opts.profile && collector.profile_stats.total_tests > 0) {
             print_profile_stats(collector.profile_stats, opts);
         }
+
+        // Print TML runtime coverage summary
+        if (opts.coverage && !CompilerOptions::coverage_output.empty()) {
+            TML_LOG_INFO("test", c.dim() << "Coverage report: " << c.reset()
+                                         << CompilerOptions::coverage_output);
+        }
     }
 
-    // Process coverage
+    // Process LLVM source coverage
     process_coverage();
 
     // Flush log file and notify user

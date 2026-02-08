@@ -484,8 +484,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // In suite mode (force_internal_linkage), all functions including main get internal linkage
     // to avoid duplicate symbols when linking multiple test objects into one DLL.
     // Only @should_panic tests need external linkage (called via function pointer).
+    // In library_ir_only mode, all functions need external linkage so they can be
+    // linked from test objects that only have `declare` stubs.
     std::string linkage =
-        ((!options_.force_internal_linkage && func.name == "main") ||
+        (options_.library_ir_only || (!options_.force_internal_linkage && func.name == "main") ||
          (func.vis == parser::Visibility::Public && !options_.force_internal_linkage) ||
          has_should_panic)
             ? ""
@@ -502,6 +504,15 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // - willreturn: function will return (helps with dead code elimination)
     std::string attrs = " #0";
     emit_line("");
+
+    // In library_decls_only mode, emit a declare statement for library functions
+    // instead of the full definition. The function info is already registered above.
+    // Library functions have a non-empty current_module_prefix_.
+    if (options_.library_decls_only && !current_module_prefix_.empty()) {
+        emit_line("declare " + ret_type + " @" + func_llvm_name + "(" + param_types + ")");
+        current_func_.clear();
+        return;
+    }
 
     // Create debug scope for function (if debug info enabled)
     int func_scope_id = 0;

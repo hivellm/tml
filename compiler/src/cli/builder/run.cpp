@@ -39,11 +39,8 @@ using namespace build;
 /// Returns the exit code of the executed program.
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage, bool no_cache) {
-    // TEMPORARILY DISABLED for baseline comparison
     // Pre-load all library modules from .tml.meta binary cache
-    // TML_LOG_INFO("run", ">>> Pre-loading library modules (blocking until complete)...");
-    // types::preload_all_meta_caches();
-    // TML_LOG_INFO("run", ">>> Pre-load complete. Starting run...");
+    types::preload_all_meta_caches();
 
     // Initialize diagnostic emitter for Rust-style error output
     auto& diag = get_diagnostic_emitter();

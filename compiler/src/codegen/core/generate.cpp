@@ -413,6 +413,20 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // Emit imported module functions AFTER their type dependencies
     output_ << imported_func_code;
 
+    // In library_ir_only mode, we only want the library IR (headers + types + library functions).
+    // Skip all user code generation. This is used to produce a shared library object that
+    // can be linked into multiple test files.
+    if (options_.library_ir_only) {
+        // Emit attributes section (needed for function definitions)
+        emit_line("");
+        emit_line("attributes #0 = { nounwind }");
+        std::string result = output_.str();
+        if (!errors_.empty()) {
+            return errors_;
+        }
+        return result;
+    }
+
     // First pass: collect const declarations and struct/enum declarations
     for (const auto& decl : module.decls) {
         if (decl->is<parser::ConstDecl>()) {
