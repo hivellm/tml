@@ -215,7 +215,6 @@ static void save_crash_input(const std::string& crashes_dir, const std::string& 
     std::ofstream out(ss.str(), std::ios::binary);
     if (out) {
         out.write(reinterpret_cast<const char*>(input.data()), input.size());
-        std::cout << "  Crash input saved to: " << ss.str() << "\n";
         TML_LOG_INFO("test", "Crash input saved to: " << ss.str());
     }
 }
@@ -262,8 +261,9 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
 
     if (fuzz_files.empty()) {
         if (!opts.quiet) {
-            std::cout << c.yellow() << "No fuzz files found" << c.reset()
-                      << " (looking for *.fuzz.tml)\n";
+            TML_LOG_INFO("test",
+                         c.yellow() << "No fuzz files found" << c.reset()
+                                    << " (looking for *.fuzz.tml)");
         }
         return 0;
     }
@@ -284,19 +284,19 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
 
     if (fuzz_files.empty()) {
         if (!opts.quiet) {
-            std::cout << c.yellow() << "No fuzz tests matched the specified pattern(s)" << c.reset()
-                      << "\n";
+            TML_LOG_INFO("test",
+                         c.yellow() << "No fuzz tests matched the specified pattern(s)" << c.reset());
         }
         return 0;
     }
 
     // Print header
     if (!opts.quiet) {
-        std::cout << "\n " << c.cyan() << c.bold() << "TML Fuzzer" << c.reset() << " " << c.dim()
-                  << "v0.1.0" << c.reset() << "\n";
-        std::cout << "\n " << c.dim() << "Running " << fuzz_files.size() << " fuzz target"
-                  << (fuzz_files.size() != 1 ? "s" : "") << " for " << opts.fuzz_duration
-                  << "s each..." << c.reset() << "\n\n";
+        TML_LOG_INFO("test", c.cyan() << c.bold() << "TML Fuzzer" << c.reset() << " " << c.dim()
+                                      << "v0.1.0" << c.reset());
+        TML_LOG_INFO("test", c.dim() << "Running " << fuzz_files.size() << " fuzz target"
+                                     << (fuzz_files.size() != 1 ? "s" : "") << " for "
+                                     << opts.fuzz_duration << "s each..." << c.reset());
     }
 
     auto overall_start = std::chrono::high_resolution_clock::now();
@@ -318,9 +318,8 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
         }
 
         if (!opts.quiet) {
-            std::cout << " " << c.magenta() << "~" << c.reset() << " " << c.bold() << fuzz_name
-                      << c.reset() << " ";
-            std::cout.flush();
+            TML_LOG_INFO("test", c.magenta() << "~" << c.reset() << " " << c.bold() << fuzz_name
+                                             << c.reset());
         }
 
         FuzzResult result;
@@ -342,9 +341,9 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
             all_results.push_back(result);
 
             if (!opts.quiet) {
-                std::cout << c.red() << "[COMPILE ERROR]" << c.reset() << "\n";
+                TML_LOG_ERROR("test", c.red() << "[COMPILE ERROR]" << c.reset());
                 if (opts.verbose) {
-                    std::cout << compile_result.error_message << "\n";
+                    TML_LOG_ERROR("test", compile_result.error_message);
                 }
             }
             crashes_found++;
@@ -359,7 +358,7 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
             all_results.push_back(result);
 
             if (!opts.quiet) {
-                std::cout << c.red() << "[LOAD ERROR]" << c.reset() << "\n";
+                TML_LOG_ERROR("test", c.red() << "[LOAD ERROR]" << c.reset());
             }
             crashes_found++;
             continue;
@@ -373,7 +372,7 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
             all_results.push_back(result);
 
             if (!opts.quiet) {
-                std::cout << c.yellow() << "[NO FUZZ TARGET]" << c.reset() << "\n";
+                TML_LOG_WARN("test", c.yellow() << "[NO FUZZ TARGET]" << c.reset());
             }
             continue;
         }
@@ -449,12 +448,14 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
         // Print result
         if (!opts.quiet) {
             if (found_crash) {
-                std::cout << c.red() << "[CRASH]" << c.reset();
+                TML_LOG_INFO("test", c.red() << "[CRASH]" << c.reset() << " " << c.dim()
+                                             << iterations << " iterations in "
+                                             << format_duration(result.duration_ms) << c.reset());
             } else {
-                std::cout << c.green() << "[OK]" << c.reset();
+                TML_LOG_INFO("test", c.green() << "[OK]" << c.reset() << " " << c.dim()
+                                               << iterations << " iterations in "
+                                               << format_duration(result.duration_ms) << c.reset());
             }
-            std::cout << " " << c.dim() << iterations << " iterations in "
-                      << format_duration(result.duration_ms) << c.reset() << "\n";
         }
     }
 
@@ -464,28 +465,29 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
 
     // Print summary
     if (!opts.quiet) {
-        std::cout << "\n " << c.bold() << "Fuzz Targets  " << c.reset();
+        std::ostringstream summary;
+        summary << c.bold() << "Fuzz Targets  " << c.reset();
         if (crashes_found > 0) {
-            std::cout << c.red() << c.bold() << crashes_found << " crashed" << c.reset() << " | ";
+            summary << c.red() << c.bold() << crashes_found << " crashed" << c.reset() << " | ";
         }
-        std::cout << c.green() << c.bold() << (fuzz_files.size() - crashes_found) << " ok"
-                  << c.reset() << " " << c.gray() << "(" << fuzz_files.size() << ")" << c.reset()
-                  << "\n";
-        std::cout << " " << c.bold() << "Duration      " << c.reset()
-                  << format_duration(total_duration_ms) << "\n";
+        summary << c.green() << c.bold() << (fuzz_files.size() - crashes_found) << " ok"
+                << c.reset() << " " << c.gray() << "(" << fuzz_files.size() << ")" << c.reset();
+        TML_LOG_INFO("test", summary.str());
+        TML_LOG_INFO("test",
+                     c.bold() << "Duration      " << c.reset() << format_duration(total_duration_ms));
 
         // Print total iterations
         int64_t total_iterations = 0;
         for (const auto& r : all_results) {
             total_iterations += r.iterations;
         }
-        std::cout << " " << c.bold() << "Iterations    " << c.reset() << total_iterations << "\n\n";
+        TML_LOG_INFO("test", c.bold() << "Iterations    " << c.reset() << total_iterations);
 
         if (crashes_found > 0) {
-            std::cout << " " << c.red() << c.bold() << "Crashes saved to: " << crashes_dir
-                      << c.reset() << "\n\n";
+            TML_LOG_INFO("test",
+                         c.red() << c.bold() << "Crashes saved to: " << crashes_dir << c.reset());
         } else {
-            std::cout << " " << c.green() << c.bold() << "No crashes found!" << c.reset() << "\n\n";
+            TML_LOG_INFO("test", c.green() << c.bold() << "No crashes found!" << c.reset());
         }
     }
 

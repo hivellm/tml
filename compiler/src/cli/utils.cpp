@@ -41,35 +41,35 @@ std::string read_file(const std::string& path) {
 }
 
 void print_usage() {
-    std::cout << "TML Compiler " << VERSION << "\n\n";
-    std::cout << "Usage: tml <command> [options] [files]\n\n";
-    std::cout << "Commands:\n";
-    std::cout << "  build     Compile the project\n";
-    std::cout << "  run       Build and run the project\n";
-    std::cout << "  check     Type-check without generating code\n";
-    std::cout << "  test      Run tests\n";
-    std::cout << "  fmt       Format source files\n";
-    std::cout << "  lint      Check files for style issues\n";
-    std::cout << "  doc       Generate documentation\n";
-    std::cout << "  cache     Manage build cache\n";
-    std::cout << "  rlib      Inspect RLIB libraries\n";
-    std::cout << "  init      Initialize a new project\n";
-    std::cout << "  deps      List project dependencies\n";
-    std::cout << "  remove    Remove a dependency from tml.toml\n";
-    std::cout << "  lex       Tokenize a file (debug)\n";
-    std::cout << "  parse     Parse a file (debug)\n";
-    std::cout << "\nOptions:\n";
-    std::cout << "  --help, -h       Show this help\n";
-    std::cout << "  --version, -V    Show version\n";
-    std::cout << "  --release        Build with optimizations (-O3)\n";
-    std::cout << "  --debug, -g      Include debug info (DWARF)\n";
-    std::cout << "  -O0...-O3        Set optimization level\n";
-    std::cout << "  -Os, -Oz         Optimize for size\n";
-    std::cout << "  --verbose        Show detailed output\n";
+    std::cerr << "TML Compiler " << VERSION << "\n\n"
+              << "Usage: tml <command> [options] [files]\n\n"
+              << "Commands:\n"
+              << "  build     Compile the project\n"
+              << "  run       Build and run the project\n"
+              << "  check     Type-check without generating code\n"
+              << "  test      Run tests\n"
+              << "  fmt       Format source files\n"
+              << "  lint      Check files for style issues\n"
+              << "  doc       Generate documentation\n"
+              << "  cache     Manage build cache\n"
+              << "  rlib      Inspect RLIB libraries\n"
+              << "  init      Initialize a new project\n"
+              << "  deps      List project dependencies\n"
+              << "  remove    Remove a dependency from tml.toml\n"
+              << "  lex       Tokenize a file (debug)\n"
+              << "  parse     Parse a file (debug)\n"
+              << "\nOptions:\n"
+              << "  --help, -h       Show this help\n"
+              << "  --version, -V    Show version\n"
+              << "  --release        Build with optimizations (-O3)\n"
+              << "  --debug, -g      Include debug info (DWARF)\n"
+              << "  -O0...-O3        Set optimization level\n"
+              << "  -Os, -Oz         Optimize for size\n"
+              << "  --verbose        Show detailed output\n";
 }
 
 void print_version() {
-    std::cout << "tml " << VERSION << "\n";
+    std::cerr << "tml " << VERSION << "\n";
 }
 
 } // namespace tml::cli

@@ -262,6 +262,9 @@ add_library(tml_types STATIC
     src/types/builtins/math.cpp
     src/types/builtins/collections.cpp
     src/types/builtins/async.cpp
+    # Caching
+    src/types/builtins_cache.cpp
+    src/types/module_binary.cpp
 )
 target_link_libraries(tml_types PUBLIC tml_parser)
 target_include_directories(tml_types PUBLIC include src)

@@ -34,6 +34,8 @@
 #include "mcp/mcp_server.hpp"
 #include "mcp/mcp_tools.hpp"
 
+#include "log/log.hpp"
+
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -96,9 +98,9 @@ to avoid file locking issues during development.
     }
 
     if (verbose) {
-        std::cerr << "[MCP] Starting TML MCP server (standalone)...\n";
-        std::cerr << "[MCP] Transport: stdio\n";
-        std::cerr << "[MCP] Protocol version: " << tml::mcp::MCP_PROTOCOL_VERSION << "\n";
+        TML_LOG_INFO("mcp", "Starting TML MCP server (standalone)...");
+        TML_LOG_INFO("mcp", "Transport: stdio");
+        TML_LOG_INFO("mcp", "Protocol version: " << tml::mcp::MCP_PROTOCOL_VERSION);
     }
 
     // Create and configure server
@@ -108,14 +110,14 @@ to avoid file locking issues during development.
     tml::mcp::register_compiler_tools(server);
 
     if (verbose) {
-        std::cerr << "[MCP] Server ready, waiting for requests...\n";
+        TML_LOG_INFO("mcp", "Server ready, waiting for requests...");
     }
 
     // Run server (blocks until shutdown)
     server.run();
 
     if (verbose) {
-        std::cerr << "[MCP] Server shutdown complete.\n";
+        TML_LOG_INFO("mcp", "Server shutdown complete.");
     }
 
     return 0;

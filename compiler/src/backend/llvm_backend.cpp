@@ -4,8 +4,9 @@
 
 #include "backend/llvm_backend.hpp"
 
+#include "log/log.hpp"
+
 #include <fstream>
-#include <iostream>
 #include <sstream>
 
 // LLVM C API headers
@@ -233,7 +234,7 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
     }
 
     if (options.verbose) {
-        std::cout << "[llvm_backend] Compiled to: " << output_path << "\n";
+        TML_LOG_DEBUG("backend", "Compiled to: " << output_path);
     }
 
     // Cleanup

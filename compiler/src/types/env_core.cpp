@@ -93,4 +93,27 @@ auto TypeEnv::builtin_types() const -> const std::unordered_map<std::string, Typ
     return builtins_;
 }
 
+// ============================================================================
+// Snapshot Support
+// ============================================================================
+
+TypeEnv::TypeEnv(SnapshotTag, const TypeEnv& source)
+    : structs_(source.structs_),
+      enums_(source.enums_),
+      behaviors_(source.behaviors_),
+      functions_(source.functions_),
+      behavior_impls_(source.behavior_impls_),
+      type_aliases_(source.type_aliases_),
+      builtins_(source.builtins_),
+      classes_(source.classes_),
+      interfaces_(source.interfaces_),
+      class_interfaces_(source.class_interfaces_),
+      // Fresh per-file state:
+      current_scope_(std::make_shared<Scope>()),
+      type_var_counter_(0) {}
+
+TypeEnv TypeEnv::snapshot() const {
+    return TypeEnv(SnapshotTag{}, *this);
+}
+
 } // namespace tml::types

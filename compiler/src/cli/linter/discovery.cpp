@@ -76,8 +76,8 @@ void lint_file(const fs::path& filepath, LintResult& result, const LintConfig& c
         std::ofstream out(filepath, std::ios::trunc);
         if (out) {
             out << fixed_content;
-            std::cout << "  " << GREEN << "[FIXED]" << RESET << " " << filepath.filename().string()
-                      << "\n";
+            TML_LOG_INFO("lint",
+                         GREEN << "[FIXED]" << RESET << " " << filepath.filename().string());
         }
     }
 }

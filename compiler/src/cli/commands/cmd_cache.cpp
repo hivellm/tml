@@ -158,34 +158,30 @@ int run_cache_info(bool verbose) {
     fs::path cache_dir = get_cache_dir();
 
     if (!fs::exists(cache_dir)) {
-        std::cout << "Cache directory does not exist: " << cache_dir << "\n";
-        std::cout << "Cache is empty.\n";
+        TML_LOG_INFO("cache", "Cache directory does not exist: " << cache_dir);
+        TML_LOG_INFO("cache", "Cache is empty.");
         return 0;
     }
 
-    std::cout << "TML Build Cache Information\n";
-    std::cout << "===========================\n\n";
-
-    std::cout << "Cache location: " << cache_dir << "\n\n";
+    TML_LOG_INFO("cache", "TML Build Cache Information");
+    TML_LOG_INFO("cache", "===========================");
+    TML_LOG_INFO("cache", "Cache location: " << cache_dir);
 
     // Gather statistics
     CacheStats stats = gather_cache_stats(cache_dir);
 
-    std::cout << "Cache statistics:\n";
-    std::cout << "  Object files (.obj):     " << stats.object_files << "\n";
-    std::cout << "  Executable files (.exe): " << stats.executable_files << "\n";
-    std::cout << "  Cache metadata files:    " << stats.cache_files << "\n";
-    std::cout << "  Other files:             " << stats.other_files << "\n";
-    std::cout << "  --------------------------------\n";
-    std::cout << "  Total files:             "
-              << (stats.object_files + stats.executable_files + stats.cache_files +
-                  stats.other_files)
-              << "\n";
-    std::cout << "  Total size:              " << format_size(stats.total_size) << "\n\n";
+    int total_files = stats.object_files + stats.executable_files + stats.cache_files +
+                      stats.other_files;
+    TML_LOG_INFO("cache", "Cache statistics:");
+    TML_LOG_INFO("cache", "  Object files (.obj):     " << stats.object_files);
+    TML_LOG_INFO("cache", "  Executable files (.exe): " << stats.executable_files);
+    TML_LOG_INFO("cache", "  Cache metadata files:    " << stats.cache_files);
+    TML_LOG_INFO("cache", "  Other files:             " << stats.other_files);
+    TML_LOG_INFO("cache", "  Total files:             " << total_files);
+    TML_LOG_INFO("cache", "  Total size:              " << format_size(stats.total_size));
 
     if (verbose) {
-        std::cout << "Cache contents:\n";
-        std::cout << "---------------\n";
+        TML_LOG_INFO("cache", "Cache contents:");
 
         std::vector<fs::directory_entry> entries;
         for (const auto& entry : fs::directory_iterator(cache_dir)) {
@@ -204,20 +200,19 @@ int run_cache_info(bool verbose) {
             auto size = fs::file_size(entry.path());
             auto age_days = get_file_age_days(entry.path());
 
-            std::cout << "  " << entry.path().filename().string() << " (" << format_size(size)
-                      << ", " << age_days << " days old)\n";
+            TML_LOG_INFO("cache", "  " << entry.path().filename().string() << " ("
+                                       << format_size(size) << ", " << age_days << " days old)");
 
             count++;
             if (count >= 20 && !verbose) {
-                std::cout << "  ... (" << (entries.size() - 20) << " more files)\n";
+                TML_LOG_INFO("cache", "  ... (" << (entries.size() - 20) << " more files)");
                 break;
             }
         }
-        std::cout << "\n";
     }
 
-    std::cout << "Use 'tml cache clean' to remove cached files.\n";
-    std::cout << "Use 'tml cache clean --all' to remove all cached files.\n";
+    TML_LOG_INFO("cache", "Use 'tml cache clean' to remove cached files.");
+    TML_LOG_INFO("cache", "Use 'tml cache clean --all' to remove all cached files.");
 
     return 0;
 }
@@ -226,18 +221,18 @@ int run_cache_clean(bool clean_all, int max_age_days, bool /*verbose*/) {
     fs::path cache_dir = get_cache_dir();
 
     if (!fs::exists(cache_dir)) {
-        std::cout << "Cache directory does not exist: " << cache_dir << "\n";
-        std::cout << "Nothing to clean.\n";
+        TML_LOG_INFO("cache", "Cache directory does not exist: " << cache_dir);
+        TML_LOG_INFO("cache", "Nothing to clean.");
         return 0;
     }
 
-    std::cout << "Cleaning build cache...\n";
+    TML_LOG_INFO("cache", "Cleaning build cache...");
 
     if (clean_all) {
-        std::cout << "Removing all cached files from: " << cache_dir << "\n";
+        TML_LOG_INFO("cache", "Removing all cached files from: " << cache_dir);
     } else {
-        std::cout << "Removing files older than " << max_age_days << " days from: " << cache_dir
-                  << "\n";
+        TML_LOG_INFO("cache", "Removing files older than " << max_age_days
+                                                           << " days from: " << cache_dir);
     }
 
     int removed_count = 0;
@@ -274,8 +269,8 @@ int run_cache_clean(bool clean_all, int max_age_days, bool /*verbose*/) {
             removed_size += size;
         }
 
-        std::cout << "\nCleaned " << removed_count << " files (" << format_size(removed_size)
-                  << ")\n";
+        TML_LOG_INFO("cache", "Cleaned " << removed_count << " files ("
+                                        << format_size(removed_size) << ")");
 
     } catch (const std::exception& e) {
         TML_LOG_ERROR("cache", "Error cleaning cache: " << e.what());
@@ -379,7 +374,7 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/
     int invalidated_count = 0;
     int errors = 0;
 
-    std::cout << "Invalidating cache for " << files.size() << " file(s)...\n";
+    TML_LOG_INFO("cache", "Invalidating cache for " << files.size() << " file(s)...");
 
     for (const auto& file : files) {
         fs::path file_path = fs::path(file);
@@ -508,20 +503,62 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/
 
         if (found_any) {
             invalidated_count++;
-            std::cout << "  Invalidated: " << file << "\n";
+            TML_LOG_INFO("cache", "  Invalidated: " << file);
         } else {
             TML_LOG_DEBUG("cache", "No cache entries found for: " << file);
         }
     }
 
-    std::cout << "\nInvalidated cache for " << invalidated_count << " of " << files.size()
-              << " file(s).\n";
+    TML_LOG_INFO("cache", "Invalidated cache for " << invalidated_count << " of " << files.size()
+                                                   << " file(s).");
 
     if (invalidated_count > 0) {
-        std::cout << "These files will be fully recompiled on the next build.\n";
+        TML_LOG_INFO("cache", "These files will be fully recompiled on the next build.");
     }
 
     return errors > 0 ? 1 : 0;
+}
+
+int run_cache_clear_meta() {
+    // Find project root (walk up looking for lib/)
+    fs::path project_root;
+    for (auto dir = fs::current_path(); !dir.empty() && dir.has_parent_path();
+         dir = dir.parent_path()) {
+        if (fs::exists(dir / "lib") && fs::exists(dir / "build")) {
+            project_root = dir;
+            break;
+        }
+    }
+
+    if (project_root.empty()) {
+        TML_LOG_ERROR("cache", "Could not find project root (no lib/ + build/ found)");
+        return 1;
+    }
+
+    // Clear meta cache in all build configurations
+    int total_removed = 0;
+    for (const auto& config : {"debug", "release"}) {
+        fs::path meta_dir = project_root / "build" / config / "cache" / "meta";
+        if (!fs::exists(meta_dir)) {
+            continue;
+        }
+
+        std::error_code ec;
+        auto count = fs::remove_all(meta_dir, ec);
+        if (!ec && count > 0) {
+            total_removed += static_cast<int>(count);
+            TML_LOG_INFO("cache", "Removed " << count << " files from " << meta_dir);
+        }
+    }
+
+    if (total_removed == 0) {
+        TML_LOG_INFO("cache", "No module metadata cache files found.");
+    } else {
+        TML_LOG_INFO("cache", "Cleared " << total_removed
+                     << " module metadata cache entries. Next build will re-parse all modules.");
+    }
+
+    return 0;
 }
 
 int run_cache(int argc, char* argv[]) {
@@ -534,6 +571,7 @@ int run_cache(int argc, char* argv[]) {
         std::cerr << "  clean --all              Remove all cache files\n";
         std::cerr << "  clean --days <N>         Remove files older than N days\n";
         std::cerr << "  invalidate <file> ...    Invalidate cache for specific files\n";
+        std::cerr << "  clear-meta               Remove all module metadata (.tml.meta) caches\n";
         std::cerr << "\n";
         std::cerr << "Options:\n";
         std::cerr << "  --verbose, -v            Show detailed information\n";
@@ -574,8 +612,10 @@ int run_cache(int argc, char* argv[]) {
         return run_cache_clean(clean_all, max_age_days, verbose);
     } else if (subcommand == "invalidate") {
         return run_cache_invalidate(files, verbose);
+    } else if (subcommand == "clear-meta") {
+        return run_cache_clear_meta();
     } else {
-        TML_LOG_ERROR("cache", "Unknown cache subcommand: " << subcommand << ". Use 'tml cache info', 'tml cache clean', or 'tml cache invalidate'");
+        TML_LOG_ERROR("cache", "Unknown cache subcommand: " << subcommand << ". Use 'tml cache info', 'tml cache clean', 'tml cache invalidate', or 'tml cache clear-meta'");
         return 1;
     }
 }

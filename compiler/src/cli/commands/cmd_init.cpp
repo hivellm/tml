@@ -179,22 +179,22 @@ int run_init(int argc, char* argv[]) {
         } else if (arg == "--no-src") {
             create_src = false;
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: tml init [options]\n";
-            std::cout << "\n";
-            std::cout << "Initialize a new TML project in the current directory.\n";
-            std::cout << "\n";
-            std::cout << "Options:\n";
-            std::cout << "  --lib              Create a library project (default: binary)\n";
-            std::cout << "  --bin [path]       Create a binary project with optional path\n";
-            std::cout << "  --name <name>      Set project name (default: directory name)\n";
-            std::cout << "  --no-src           Don't create src/ directory or source files\n";
-            std::cout << "  --help, -h         Show this help message\n";
-            std::cout << "\n";
-            std::cout << "Examples:\n";
-            std::cout << "  tml init                    # Create binary project\n";
-            std::cout << "  tml init --lib              # Create library project\n";
-            std::cout << "  tml init --name my_app      # Set custom name\n";
-            std::cout << "  tml init --bin src/app.tml  # Custom binary path\n";
+            std::cerr << "Usage: tml init [options]\n"
+                      << "\n"
+                      << "Initialize a new TML project in the current directory.\n"
+                      << "\n"
+                      << "Options:\n"
+                      << "  --lib              Create a library project (default: binary)\n"
+                      << "  --bin [path]       Create a binary project with optional path\n"
+                      << "  --name <name>      Set project name (default: directory name)\n"
+                      << "  --no-src           Don't create src/ directory or source files\n"
+                      << "  --help, -h         Show this help message\n"
+                      << "\n"
+                      << "Examples:\n"
+                      << "  tml init                    # Create binary project\n"
+                      << "  tml init --lib              # Create library project\n"
+                      << "  tml init --name my_app      # Set custom name\n"
+                      << "  tml init --bin src/app.tml  # Custom binary path\n";
             return 0;
         } else {
             TML_LOG_ERROR("init", "Unknown argument: " << arg << ". Use 'tml init --help' for usage information");
@@ -225,7 +225,7 @@ int run_init(int argc, char* argv[]) {
     manifest_file << manifest_content;
     manifest_file.close();
 
-    std::cout << "Created tml.toml\n";
+    TML_LOG_INFO("init", "Created tml.toml");
 
     // Create source directory and files if requested
     if (create_src) {
@@ -234,14 +234,14 @@ int run_init(int argc, char* argv[]) {
         if (is_lib) {
             fs::path lib_file = src_dir / "lib.tml";
             if (create_source_file(lib_file, true)) {
-                std::cout << "Created " << to_forward_slashes(lib_file.string()) << "\n";
+                TML_LOG_INFO("init", "Created " << to_forward_slashes(lib_file.string()));
             } else {
                 TML_LOG_WARN("init", "Could not create " << lib_file);
             }
         } else {
             fs::path main_file = bin_path.empty() ? src_dir / "main.tml" : fs::path(bin_path);
             if (create_source_file(main_file, false)) {
-                std::cout << "Created " << to_forward_slashes(main_file.string()) << "\n";
+                TML_LOG_INFO("init", "Created " << to_forward_slashes(main_file.string()));
             } else {
                 TML_LOG_WARN("init", "Could not create " << main_file);
             }
@@ -250,23 +250,21 @@ int run_init(int argc, char* argv[]) {
         // Create build directory
         fs::path build_dir = fs::current_path() / "build";
         fs::create_directories(build_dir);
-        std::cout << "Created build/\n";
+        TML_LOG_INFO("init", "Created build/");
     }
 
-    std::cout << "\n";
-    std::cout << "Initialized TML project: " << project_name << "\n";
-    std::cout << "\n";
+    TML_LOG_INFO("init", "Initialized TML project: " << project_name);
 
     if (is_lib) {
-        std::cout << "Next steps:\n";
-        std::cout << "  1. Edit src/lib.tml\n";
-        std::cout << "  2. Build: tml build\n";
-        std::cout << "  3. Run tests: tml test\n";
+        TML_LOG_INFO("init", "Next steps:");
+        TML_LOG_INFO("init", "  1. Edit src/lib.tml");
+        TML_LOG_INFO("init", "  2. Build: tml build");
+        TML_LOG_INFO("init", "  3. Run tests: tml test");
     } else {
-        std::cout << "Next steps:\n";
-        std::cout << "  1. Edit " << (bin_path.empty() ? "src/main.tml" : bin_path) << "\n";
-        std::cout << "  2. Build and run: tml run\n";
-        std::cout << "  3. Build only: tml build\n";
+        TML_LOG_INFO("init", "Next steps:");
+        TML_LOG_INFO("init", "  1. Edit " << (bin_path.empty() ? "src/main.tml" : bin_path));
+        TML_LOG_INFO("init", "  2. Build and run: tml run");
+        TML_LOG_INFO("init", "  3. Build only: tml build");
     }
 
     return 0;

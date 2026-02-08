@@ -22,7 +22,10 @@
 //! - Lexing, Parsing, Type Checking, Borrow Checking
 //! - MIR Generation, LLVM Codegen, Object Compilation
 
+#include "log/log.hpp"
 #include "tester_internal.hpp"
+
+#include <sstream>
 
 namespace tml::cli::tester {
 
@@ -61,9 +64,6 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
     }
     std::sort(group_names.begin(), group_names.end());
 
-    // Print header
-    std::cout << "\n";
-
     // Print each group
     for (const auto& group_name : group_names) {
         const auto& group = groups[group_name];
@@ -79,10 +79,11 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
             group_test_count += r.test_count;
         }
 
-        std::cout << " " << icon_color << icon << c.reset() << " " << c.bold() << group.name
-                  << c.reset() << " " << c.gray() << "(" << group_test_count << " test"
-                  << (group_test_count != 1 ? "s" : "") << ")" << c.reset() << " " << c.dim()
-                  << format_duration(group.total_duration_ms) << c.reset() << "\n";
+        TML_LOG_INFO("test", icon_color << icon << c.reset() << " " << c.bold() << group.name
+                                        << c.reset() << " " << c.gray() << "(" << group_test_count
+                                        << " test" << (group_test_count != 1 ? "s" : "") << ")"
+                                        << c.reset() << " " << c.dim()
+                                        << format_duration(group.total_duration_ms) << c.reset());
 
         // Print individual tests in group (only if verbose or there are failures)
         if (opts.verbose || group.failed > 0) {
@@ -90,18 +91,18 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
                 const char* test_icon = result.passed ? "+" : "x";
                 const char* test_color = result.passed ? c.green() : c.red();
 
-                std::cout << "   " << test_color << test_icon << c.reset() << " "
-                          << result.test_name;
+                std::ostringstream oss;
+                oss << "   " << test_color << test_icon << c.reset() << " " << result.test_name;
 
                 if (!result.passed) {
-                    std::cout << " " << c.red() << "[" << result.error_message << "]" << c.reset();
+                    oss << " " << c.red() << "[" << result.error_message << "]" << c.reset();
                 }
 
                 if (opts.verbose) {
-                    std::cout << " " << c.dim() << format_duration(result.duration_ms) << c.reset();
+                    oss << " " << c.dim() << format_duration(result.duration_ms) << c.reset();
                 }
 
-                std::cout << "\n";
+                TML_LOG_INFO("test", oss.str());
             }
         }
     }
@@ -124,26 +125,27 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
     (void)files_failed;
 
     // Print summary box
-    std::cout << "\n";
-    std::cout << " " << c.bold() << "Tests       " << c.reset();
-    if (tests_failed > 0) {
-        std::cout << c.red() << c.bold() << tests_failed << " failed" << c.reset() << " | ";
+    {
+        std::ostringstream summary;
+        summary << c.bold() << "Tests       " << c.reset();
+        if (tests_failed > 0) {
+            summary << c.red() << c.bold() << tests_failed << " failed" << c.reset() << " | ";
+        }
+        summary << c.green() << c.bold() << tests_passed << " passed" << c.reset() << " "
+                << c.gray() << "(" << total_test_count << " tests, " << results.size() << " file"
+                << (results.size() != 1 ? "s" : "") << ")" << c.reset();
+        TML_LOG_INFO("test", summary.str());
     }
-    std::cout << c.green() << c.bold() << tests_passed << " passed" << c.reset() << " " << c.gray()
-              << "(" << total_test_count << " tests, " << results.size() << " file"
-              << (results.size() != 1 ? "s" : "") << ")" << c.reset() << "\n";
 
-    std::cout << " " << c.bold() << "Duration    " << c.reset()
-              << format_duration(total_duration_ms) << "\n";
+    TML_LOG_INFO("test",
+                 c.bold() << "Duration    " << c.reset() << format_duration(total_duration_ms));
 
     // Print final status line
-    std::cout << "\n";
     if (tests_failed == 0) {
-        std::cout << " " << c.green() << c.bold() << "All tests passed!" << c.reset() << "\n";
+        TML_LOG_INFO("test", c.green() << c.bold() << "All tests passed!" << c.reset());
     } else {
-        std::cout << " " << c.red() << c.bold() << "Some tests failed." << c.reset() << "\n";
+        TML_LOG_INFO("test", c.red() << c.bold() << "Some tests failed." << c.reset());
     }
-    std::cout << "\n";
 }
 
 // ============================================================================
@@ -153,10 +155,9 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
 void print_profile_stats(const ProfileStats& stats, const TestOptions& opts) {
     ColorOutput c(!opts.no_color);
 
-    std::cout << "\n";
-    std::cout << " " << c.cyan() << c.bold() << "Phase Profiling" << c.reset() << " " << c.dim()
-              << "(" << stats.total_tests << " tests)" << c.reset() << "\n";
-    std::cout << " " << c.dim() << std::string(60, '-') << c.reset() << "\n";
+    TML_LOG_INFO("test", c.cyan() << c.bold() << "Phase Profiling" << c.reset() << " " << c.dim()
+                                  << "(" << stats.total_tests << " tests)" << c.reset());
+    TML_LOG_INFO("test", c.dim() << std::string(60, '-') << c.reset());
 
     // Calculate total time
     int64_t total_us = 0;
@@ -201,20 +202,21 @@ void print_profile_stats(const ProfileStats& stats, const TestOptions& opts) {
                        " s";
         };
 
-        std::cout << " " << c.bold() << phase_name << c.reset() << "  " << pct_color << std::fixed
-                  << std::setprecision(1) << std::setw(5) << pct << "%" << c.reset() << "  "
-                  << c.dim() << "total: " << c.reset() << std::setw(8) << format_us(us) << "  "
-                  << c.dim() << "avg: " << c.reset() << std::setw(8) << format_us(avg_us) << "  "
-                  << c.dim() << "max: " << c.reset() << std::setw(8) << format_us(max_us) << "\n";
+        std::ostringstream phase_line;
+        phase_line << c.bold() << phase_name << c.reset() << "  " << pct_color << std::fixed
+                   << std::setprecision(1) << std::setw(5) << pct << "%" << c.reset() << "  "
+                   << c.dim() << "total: " << c.reset() << std::setw(8) << format_us(us) << "  "
+                   << c.dim() << "avg: " << c.reset() << std::setw(8) << format_us(avg_us) << "  "
+                   << c.dim() << "max: " << c.reset() << std::setw(8) << format_us(max_us);
+        TML_LOG_INFO("test", phase_line.str());
     }
 
-    std::cout << " " << c.dim() << std::string(60, '-') << c.reset() << "\n";
-    std::cout << " " << c.bold() << "Total          " << c.reset() << "         "
-              << (total_us < 1000000 ? std::to_string(total_us / 1000) + " ms"
-                                     : std::to_string(total_us / 1000000) + "." +
-                                           std::to_string((total_us / 100000) % 10) + " s")
-              << "\n";
-    std::cout << "\n";
+    TML_LOG_INFO("test", c.dim() << std::string(60, '-') << c.reset());
+    TML_LOG_INFO("test", c.bold() << "Total          " << c.reset() << "         "
+                                  << (total_us < 1000000
+                                          ? std::to_string(total_us / 1000) + " ms"
+                                          : std::to_string(total_us / 1000000) + "." +
+                                                std::to_string((total_us / 100000) % 10) + " s"));
 
     // Recommendations
     if (!phases.empty()) {
@@ -222,26 +224,24 @@ void print_profile_stats(const ProfileStats& stats, const TestOptions& opts) {
         double slowest_pct = total_us > 0 ? (100.0 * slowest_us / total_us) : 0.0;
 
         if (slowest_pct > 30.0) {
-            std::cout << " " << c.yellow() << "Bottleneck: " << c.reset() << c.bold() << slowest
-                      << c.reset() << " is using " << std::fixed << std::setprecision(1)
-                      << slowest_pct << "% of total time\n";
+            TML_LOG_INFO("test", c.yellow() << "Bottleneck: " << c.reset() << c.bold() << slowest
+                                            << c.reset() << " is using " << std::fixed
+                                            << std::setprecision(1) << slowest_pct << "% of total time");
 
             // Give specific recommendations based on phase
             if (slowest == "clang_compile") {
-                std::cout << " " << c.dim()
-                          << "  -> Consider: Enable build cache, use -O0 for tests" << c.reset()
-                          << "\n";
+                TML_LOG_INFO("test",
+                             c.dim() << "  -> Consider: Enable build cache, use -O0 for tests" << c.reset());
             } else if (slowest == "link") {
-                std::cout << " " << c.dim() << "  -> Consider: Enable LTO cache, fewer deps"
-                          << c.reset() << "\n";
+                TML_LOG_INFO("test",
+                             c.dim() << "  -> Consider: Enable LTO cache, fewer deps" << c.reset());
             } else if (slowest == "type_check") {
-                std::cout << " " << c.dim() << "  -> Consider: Smaller test files, less imports"
-                          << c.reset() << "\n";
+                TML_LOG_INFO("test",
+                             c.dim() << "  -> Consider: Smaller test files, less imports" << c.reset());
             } else if (slowest == "codegen") {
-                std::cout << " " << c.dim() << "  -> Consider: Simpler code, fewer generics"
-                          << c.reset() << "\n";
+                TML_LOG_INFO("test",
+                             c.dim() << "  -> Consider: Simpler code, fewer generics" << c.reset());
             }
-            std::cout << "\n";
         }
     }
 }

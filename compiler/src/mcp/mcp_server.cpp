@@ -19,7 +19,7 @@
 #include "mcp/mcp_server.hpp"
 
 #include "json/json_parser.hpp"
-#include <iostream>
+#include "log/log.hpp"
 
 namespace tml::mcp {
 
@@ -144,7 +144,7 @@ void McpServer::send_error(json::JsonValue id, json::JsonRpcErrorCode code,
 }
 
 void McpServer::log(const std::string& message) {
-    std::cerr << "[MCP] " << message << std::endl;
+    TML_LOG_DEBUG("mcp", message);
 }
 
 // ============================================================================

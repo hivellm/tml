@@ -231,8 +231,7 @@ int run_add(int argc, char* argv[]) {
         return 1;
     }
 
-    std::cout << colors::green << "+" << colors::reset << " Added " << package_name << " "
-              << dep_spec << "\n";
+    TML_LOG_INFO("pkg", "+ Added " << package_name << " " << dep_spec);
     return 0;
 }
 
@@ -254,14 +253,14 @@ int run_update(int argc, char* argv[]) {
     }
 
     if (manifest->dependencies.empty()) {
-        std::cout << "No dependencies to update.\n";
+        TML_LOG_INFO("pkg", "No dependencies to update.");
         return 0;
     }
 
     bool any_issues = false;
     int checked = 0;
 
-    std::cout << "Checking dependencies...\n";
+    TML_LOG_INFO("pkg", "Checking dependencies...");
     for (const auto& [name, dep] : manifest->dependencies) {
         checked++;
 
@@ -274,30 +273,26 @@ int run_update(int argc, char* argv[]) {
             } else if (!fs::exists(dep_path / "tml.toml")) {
                 TML_LOG_WARN("pkg", name << " has no tml.toml");
             } else {
-                std::cout << colors::green << "  ok" << colors::reset << ": " << name
-                          << " (path: " << dep.path << ")\n";
+                TML_LOG_INFO("pkg", "  ok: " << name << " (path: " << dep.path << ")");
             }
         } else if (!dep.git.empty()) {
-            // Git dependencies - note that they need manual update
-            std::cout << colors::cyan << "  git" << colors::reset << ": " << name << " - "
-                      << dep.git << "\n";
-            std::cout << "       (run 'git pull' in dependency directory to update)\n";
+            TML_LOG_INFO("pkg", "  git: " << name << " - " << dep.git);
+            TML_LOG_INFO("pkg", "       (run 'git pull' in dependency directory to update)");
         } else if (!dep.version.empty()) {
-            // Version dependencies - require registry
-            std::cout << colors::yellow << "  skip" << colors::reset << ": " << name << " "
-                      << dep.version << " (registry not available)\n";
+            TML_LOG_WARN("pkg", "  skip: " << name << " " << dep.version
+                                           << " (registry not available)");
         }
     }
 
-    std::cout << "\nChecked " << checked << " dependencies.\n";
+    TML_LOG_INFO("pkg", "Checked " << checked << " dependencies.");
 
     if (any_issues) {
         TML_LOG_ERROR("pkg", "Some dependencies have issues. See above for details.");
         return 1;
     }
 
-    std::cout << "All path dependencies are valid.\n";
-    std::cout << "Note: For git dependencies, run 'git pull' in each dependency's directory.\n";
+    TML_LOG_INFO("pkg", "All path dependencies are valid.");
+    TML_LOG_INFO("pkg", "Note: For git dependencies, run 'git pull' in each dependency's directory.");
     return 0;
 }
 
@@ -306,11 +301,10 @@ int run_publish(int argc, char* argv[]) {
     (void)argv;
 
     TML_LOG_ERROR("pkg", "'tml publish' is not yet implemented");
-    std::cerr << "\n";
-    std::cerr << "There is no TML package registry available yet.\n";
-    std::cerr << "To share your library, consider:\n";
-    std::cerr << "  - Publishing to GitHub/GitLab\n";
-    std::cerr << "  - Using git dependencies (coming soon)\n";
+    TML_LOG_INFO("pkg", "There is no TML package registry available yet.");
+    TML_LOG_INFO("pkg", "To share your library, consider:");
+    TML_LOG_INFO("pkg", "  - Publishing to GitHub/GitLab");
+    TML_LOG_INFO("pkg", "  - Using git dependencies (coming soon)");
 
     return 1;
 }
@@ -354,7 +348,7 @@ int run_remove(int argc, char* argv[]) {
         return 1;
     }
 
-    std::cout << colors::red << "-" << colors::reset << " Removed " << package_name << "\n";
+    TML_LOG_INFO("pkg", "- Removed " << package_name);
     return 0;
 }
 
@@ -380,14 +374,12 @@ int run_deps(int argc, char* argv[]) {
     }
 
     if (manifest->dependencies.empty()) {
-        std::cout << colors::bold << manifest->package.name << colors::reset << " v"
-                  << manifest->package.version << "\n";
-        std::cout << "No dependencies.\n";
+        TML_LOG_INFO("pkg", manifest->package.name << " v" << manifest->package.version);
+        TML_LOG_INFO("pkg", "No dependencies.");
         return 0;
     }
 
-    std::cout << colors::bold << manifest->package.name << colors::reset << " v"
-              << manifest->package.version << "\n";
+    TML_LOG_INFO("pkg", manifest->package.name << " v" << manifest->package.version);
 
     if (show_tree) {
         // Resolve dependencies for tree view
@@ -408,18 +400,15 @@ int run_deps(int argc, char* argv[]) {
                 return;
 
             std::string indent(depth * 2, ' ');
-            std::cout << indent << "|-- " << name;
-
             if (visited.count(name)) {
-                std::cout << " (*)";
+                TML_LOG_INFO("pkg", indent << "|-- " << name << " (*)");
             } else {
-                std::cout << " v" << it->second.version;
+                TML_LOG_INFO("pkg", indent << "|-- " << name << " v" << it->second.version);
                 visited.insert(name);
                 for (const auto& child : it->second.dependencies) {
                     print_tree(child, depth + 1, visited);
                 }
             }
-            std::cout << "\n";
         };
 
         std::set<std::string> visited;
@@ -429,15 +418,15 @@ int run_deps(int argc, char* argv[]) {
     } else {
         // Simple list view
         for (const auto& [name, dep] : manifest->dependencies) {
-            std::cout << "  " << name;
             if (!dep.version.empty()) {
-                std::cout << " " << colors::green << dep.version << colors::reset;
+                TML_LOG_INFO("pkg", "  " << name << " " << dep.version);
             } else if (!dep.path.empty()) {
-                std::cout << " " << colors::cyan << "(path: " << dep.path << ")" << colors::reset;
+                TML_LOG_INFO("pkg", "  " << name << " (path: " << dep.path << ")");
             } else if (!dep.git.empty()) {
-                std::cout << " " << colors::yellow << "(git: " << dep.git << ")" << colors::reset;
+                TML_LOG_INFO("pkg", "  " << name << " (git: " << dep.git << ")");
+            } else {
+                TML_LOG_INFO("pkg", "  " << name);
             }
-            std::cout << "\n";
         }
     }
 

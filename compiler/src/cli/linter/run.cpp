@@ -26,6 +26,8 @@
 #include "linter_internal.hpp"
 #include "log/log.hpp"
 
+#include <sstream>
+
 namespace tml::cli {
 
 // Using linter namespace for internal functions
@@ -70,23 +72,22 @@ int run_lint(int argc, char* argv[]) {
     // Load config from tml.toml
     LintConfig config = load_lint_config(fs::current_path());
 
-    std::cout << CYAN << "TML" << RESET << " " << DIM << "v" << VERSION << RESET << "\n\n";
+    TML_LOG_INFO("lint", CYAN << "TML" << RESET << " " << DIM << "v" << VERSION << RESET);
 
     if (fix_mode) {
-        std::cout << YELLOW << "Linting and fixing TML files..." << RESET << "\n";
+        TML_LOG_INFO("lint", YELLOW << "Linting and fixing TML files..." << RESET);
 
         // First, run the formatter on all paths
-        std::cout << "\n" << YELLOW << "Running formatter..." << RESET << "\n";
+        TML_LOG_INFO("lint", YELLOW << "Running formatter..." << RESET);
         for (const auto& path : paths) {
             run_fmt(path, false /* check_only */, verbose);
         }
-        std::cout << "\n";
     } else {
-        std::cout << "Linting TML files";
         if (semantic) {
-            std::cout << " (with semantic checks)";
+            TML_LOG_INFO("lint", "Linting TML files (with semantic checks)...");
+        } else {
+            TML_LOG_INFO("lint", "Linting TML files...");
         }
-        std::cout << "...\n";
     }
 
     // Collect all .tml files
@@ -105,7 +106,7 @@ int run_lint(int argc, char* argv[]) {
     }
 
     if (files.empty()) {
-        std::cout << "No .tml files found\n";
+        TML_LOG_INFO("lint", "No .tml files found");
         return 0;
     }
 
@@ -133,11 +134,9 @@ int run_lint(int argc, char* argv[]) {
 
             // Print file header if changed
             if (issue.file != current_file) {
-                if (!current_file.empty()) {
-                    std::cout << "\n";
-                }
                 current_file = issue.file;
-                std::cout << BOLD << fs::path(issue.file).filename().string() << RESET << "\n";
+                TML_LOG_INFO("lint",
+                             BOLD << fs::path(issue.file).filename().string() << RESET);
             }
 
             const char* color = RED;
@@ -157,45 +156,46 @@ int run_lint(int argc, char* argv[]) {
                 break;
             }
 
-            std::cout << "  " << DIM << issue.line << ":" << issue.column << RESET << "  " << color
-                      << severity_str << RESET << "  " << DIM << "[" << issue.code << "]" << RESET
-                      << " " << issue.message;
+            std::ostringstream oss;
+            oss << "  " << DIM << issue.line << ":" << issue.column << RESET << "  " << color
+                << severity_str << RESET << "  " << DIM << "[" << issue.code << "]" << RESET
+                << " " << issue.message;
 
             // Print fix hint if available
             if (!issue.fix_hint.empty()) {
-                std::cout << " " << DIM << "(" << issue.fix_hint << ")" << RESET;
+                oss << " " << DIM << "(" << issue.fix_hint << ")" << RESET;
             }
-            std::cout << "\n";
+            TML_LOG_INFO("lint", oss.str());
         }
     }
 
     // Print summary
-    std::cout << "\n";
-    std::cout << "Checked " << result.files_checked << " files\n";
+    TML_LOG_INFO("lint", "Checked " << result.files_checked << " files");
 
     if (fix_mode) {
-        std::cout << GREEN << "Lint fix complete" << RESET << "\n";
+        TML_LOG_INFO("lint", GREEN << "Lint fix complete" << RESET);
         return 0;
     }
 
     if (result.errors > 0 || result.warnings > 0) {
+        std::ostringstream summary;
         if (result.errors > 0) {
-            std::cout << RED << result.errors << " error(s)" << RESET;
+            summary << RED << result.errors << " error(s)" << RESET;
         }
         if (result.warnings > 0) {
             if (result.errors > 0)
-                std::cout << ", ";
-            std::cout << YELLOW << result.warnings << " warning(s)" << RESET;
+                summary << ", ";
+            summary << YELLOW << result.warnings << " warning(s)" << RESET;
         }
-        std::cout << "\n";
+        TML_LOG_INFO("lint", summary.str());
 
         if (result.errors > 0) {
-            std::cout << "Run " << CYAN << "tml lint --fix" << RESET
-                      << " to auto-fix style errors\n";
+            TML_LOG_INFO("lint",
+                         "Run " << CYAN << "tml lint --fix" << RESET << " to auto-fix style errors");
             return 1;
         }
     } else {
-        std::cout << GREEN << "All files passed lint checks" << RESET << "\n";
+        TML_LOG_INFO("lint", GREEN << "All files passed lint checks" << RESET);
     }
 
     return 0;

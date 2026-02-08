@@ -455,15 +455,11 @@ bool ParallelBuilder::build(bool verbose) {
     bool success = (stats.failed == 0);
 
     if (verbose || !success) {
-        // Print summary
-        std::cout << "\nBuild summary:\n";
-        std::cout << "  Total: " << stats.total_files << " files\n";
-        std::cout << "  Compiled: " << stats.completed << " files\n";
-        std::cout << "  Cached: " << stats.cached << " files\n";
-        if (stats.failed > 0) {
-            std::cout << "  Failed: " << stats.failed << " files\n";
-        }
-        std::cout << "  Time: " << (stats.elapsed_ms() / 1000.0) << "s\n";
+        TML_LOG_INFO("build", "Build summary: total=" << stats.total_files
+                                                       << " compiled=" << stats.completed
+                                                       << " cached=" << stats.cached
+                                                       << " failed=" << stats.failed
+                                                       << " time=" << (stats.elapsed_ms() / 1000.0) << "s");
     }
 
     return success;
@@ -800,7 +796,7 @@ int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
     auto source_files = discover_source_files(cwd);
 
     if (source_files.empty()) {
-        std::cout << "No source files found to build\n";
+        TML_LOG_WARN("build", "No source files found to build");
         return 0;
     }
 

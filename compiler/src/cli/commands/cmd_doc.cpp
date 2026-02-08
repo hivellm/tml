@@ -189,7 +189,7 @@ int run_doc(const DocOptions& options) {
         fs::path output_file = fs::path(options.output_dir) / "docs.json";
         generator.generate_file(doc_index, output_file);
         TML_LOG_INFO("doc", "Generated: " << output_file);
-        std::cout << "Documentation written to " << output_file << "\n";
+        TML_LOG_INFO("doc", "Documentation written to " << output_file);
         break;
     }
 
@@ -198,7 +198,7 @@ int run_doc(const DocOptions& options) {
         generator.generate_site(doc_index, options.output_dir);
         TML_LOG_INFO("doc", "Generated HTML documentation in " << options.output_dir);
         fs::path index_file = fs::path(options.output_dir) / "index.html";
-        std::cout << "Documentation written to " << index_file << "\n";
+        TML_LOG_INFO("doc", "Documentation written to " << index_file);
 
         // Open in browser if requested
         if (options.open_browser) {
@@ -219,7 +219,7 @@ int run_doc(const DocOptions& options) {
         generator.generate_directory(doc_index, options.output_dir);
         TML_LOG_INFO("doc", "Generated Markdown documentation in " << options.output_dir);
         fs::path index_file = fs::path(options.output_dir) / "README.md";
-        std::cout << "Documentation written to " << index_file << "\n";
+        TML_LOG_INFO("doc", "Documentation written to " << index_file);
         break;
     }
     }
@@ -229,8 +229,8 @@ int run_doc(const DocOptions& options) {
     for (const auto& module : doc_index.modules) {
         total_items += module.items.size();
     }
-    std::cout << "Documented " << doc_index.modules.size() << " modules, " << total_items
-              << " items\n";
+    TML_LOG_INFO("doc", "Documented " << doc_index.modules.size() << " modules, " << total_items
+                                     << " items");
 
     return 0;
 }
@@ -280,7 +280,7 @@ DocOptions parse_doc_args(int argc, char* argv[]) {
 }
 
 void print_doc_help() {
-    std::cout << R"(
+    std::cerr << R"(
 TML Documentation Generator
 
 Usage: tml doc [file.tml...] [options]

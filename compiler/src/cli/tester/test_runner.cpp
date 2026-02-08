@@ -44,6 +44,7 @@
 #include "cli/commands/cmd_build.hpp"
 #include "cli/tester/tester_internal.hpp"
 #include "preprocessor/preprocessor.hpp"
+#include "types/module_binary.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -1797,8 +1798,15 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             // simultaneously. Force sequential compilation for stability.
             unsigned int num_threads = 1;
 
+            // TEMPORARILY DISABLED for baseline comparison
+            // Pre-load all library modules from .tml.meta binary cache.
+            // This MUST complete before any test compilation starts.
+            // It either loads existing .tml.meta files or generates them from source.
+            // TML_LOG_INFO("test", ">>> Pre-loading library modules (blocking until complete)...");
+            // types::preload_all_meta_caches();
+            // TML_LOG_INFO("test", ">>> Pre-load complete. Starting test compilation...");
+
             auto compile_task_worker = [&]() {
-                // Each thread gets its own registry for imports (merged later if needed)
                 auto thread_registry = std::make_shared<types::ModuleRegistry>();
 
                 while (!has_error.load()) {

@@ -173,8 +173,9 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
 
     if (bench_files.empty()) {
         if (!opts.quiet) {
-            std::cout << c.yellow() << "No benchmark files found" << c.reset()
-                      << " (looking for *.bench.tml)\n";
+            TML_LOG_INFO("test",
+                         c.yellow() << "No benchmark files found" << c.reset()
+                                    << " (looking for *.bench.tml)");
         }
         return 0;
     }
@@ -195,8 +196,8 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
 
     if (bench_files.empty()) {
         if (!opts.quiet) {
-            std::cout << c.yellow() << "No benchmarks matched the specified pattern(s)" << c.reset()
-                      << "\n";
+            TML_LOG_INFO("test",
+                         c.yellow() << "No benchmarks matched the specified pattern(s)" << c.reset());
         }
         return 0;
     }
@@ -212,10 +213,10 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
 
     // Print header
     if (!opts.quiet) {
-        std::cout << "\n " << c.cyan() << c.bold() << "TML Benchmarks" << c.reset() << " "
-                  << c.dim() << "v0.1.0" << c.reset() << "\n";
-        std::cout << "\n " << c.dim() << "Running " << bench_files.size() << " benchmark file"
-                  << (bench_files.size() != 1 ? "s" : "") << "..." << c.reset() << "\n\n";
+        TML_LOG_INFO("test", c.cyan() << c.bold() << "TML Benchmarks" << c.reset() << " "
+                                      << c.dim() << "v0.1.0" << c.reset());
+        TML_LOG_INFO("test", c.dim() << "Running " << bench_files.size() << " benchmark file"
+                                     << (bench_files.size() != 1 ? "s" : "") << "..." << c.reset());
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -227,8 +228,8 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
         std::string bench_name = fs::path(file).stem().string();
 
         if (!opts.quiet) {
-            std::cout << " " << c.magenta() << "+" << c.reset() << " " << c.bold() << bench_name
-                      << c.reset() << "\n";
+            TML_LOG_INFO("test", c.magenta() << "+" << c.reset() << " " << c.bold() << bench_name
+                                             << c.reset());
         }
 
         std::vector<std::string> empty_args;
@@ -252,7 +253,8 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
                 std::istringstream iss(captured_output);
                 std::string line;
                 while (std::getline(iss, line)) {
-                    std::cout << line;
+                    std::ostringstream oss;
+                    oss << line;
 
                     // Check if this is a benchmark result line
                     for (const auto& r : results) {
@@ -265,35 +267,35 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
                                 if (old_ns > 0) {
                                     double change = ((double)(new_ns - old_ns) / old_ns) * 100.0;
                                     if (change < -5.0) {
-                                        std::cout << " " << c.green() << "(" << std::fixed
-                                                  << std::setprecision(1) << change << "%)"
-                                                  << c.reset();
+                                        oss << " " << c.green() << "(" << std::fixed
+                                            << std::setprecision(1) << change << "%)"
+                                            << c.reset();
                                     } else if (change > 5.0) {
-                                        std::cout << " " << c.red() << "(+" << std::fixed
-                                                  << std::setprecision(1) << change << "%)"
-                                                  << c.reset();
+                                        oss << " " << c.red() << "(+" << std::fixed
+                                            << std::setprecision(1) << change << "%)"
+                                            << c.reset();
                                     } else {
-                                        std::cout << " " << c.dim() << "(~" << std::fixed
-                                                  << std::setprecision(1) << change << "%)"
-                                                  << c.reset();
+                                        oss << " " << c.dim() << "(~" << std::fixed
+                                            << std::setprecision(1) << change << "%)"
+                                            << c.reset();
                                     }
                                 }
                             }
                             break;
                         }
                     }
-                    std::cout << "\n";
+                    TML_LOG_INFO("test", oss.str());
                 }
             } else if (!captured_output.empty()) {
-                std::cout << captured_output;
+                TML_LOG_INFO("test", captured_output);
             }
         }
 
         if (exit_code != 0) {
             failed++;
             if (!opts.quiet) {
-                std::cout << "   " << c.red() << "x" << c.reset() << " Failed with exit code "
-                          << exit_code << "\n";
+                TML_LOG_INFO("test",
+                             "   " << c.red() << "x" << c.reset() << " Failed with exit code " << exit_code);
             }
         }
     }
@@ -306,22 +308,23 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
     if (!opts.save_baseline.empty() && !all_results.empty()) {
         save_benchmark_baseline(opts.save_baseline, all_results);
         if (!opts.quiet) {
-            std::cout << "\n " << c.dim() << "Saved baseline to " << opts.save_baseline << c.reset()
-                      << "\n";
+            TML_LOG_INFO("test",
+                         c.dim() << "Saved baseline to " << opts.save_baseline << c.reset());
         }
     }
 
     // Print summary
     if (!opts.quiet) {
-        std::cout << "\n " << c.bold() << "Bench Files " << c.reset();
+        std::ostringstream summary;
+        summary << c.bold() << "Bench Files " << c.reset();
         if (failed > 0) {
-            std::cout << c.red() << c.bold() << failed << " failed" << c.reset() << " | ";
+            summary << c.red() << c.bold() << failed << " failed" << c.reset() << " | ";
         }
-        std::cout << c.green() << c.bold() << (bench_files.size() - failed) << " passed"
-                  << c.reset() << " " << c.gray() << "(" << bench_files.size() << ")" << c.reset()
-                  << "\n";
-        std::cout << " " << c.bold() << "Duration    " << c.reset()
-                  << format_duration(total_duration_ms) << "\n\n";
+        summary << c.green() << c.bold() << (bench_files.size() - failed) << " passed"
+                << c.reset() << " " << c.gray() << "(" << bench_files.size() << ")" << c.reset();
+        TML_LOG_INFO("test", summary.str());
+        TML_LOG_INFO("test",
+                     c.bold() << "Duration    " << c.reset() << format_duration(total_duration_ms));
     }
 
     return failed > 0 ? 1 : 0;

@@ -9,11 +9,12 @@
 #include "cli/commands/cmd_test.hpp"
 #include "cli/utils.hpp"
 
+#include "log/log.hpp"
+
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
-#include <iostream>
 #include <map>
 #include <regex>
 #include <set>
@@ -302,11 +303,15 @@ void CoverageCollector::print_console_report(const CoverageReport& report) {
     using namespace colors;
 
     // Header
-    std::cout << "\n" << bold << " Coverage Report" << reset << "\n";
-    std::cout << " " << std::string(60, '-') << "\n";
-    std::cout << std::left << std::setw(40) << " File" << std::right << std::setw(8) << "Lines"
-              << std::setw(8) << "Branch" << std::setw(8) << "Funcs" << "\n";
-    std::cout << " " << std::string(60, '-') << "\n";
+    TML_LOG_INFO("test", bold << " Coverage Report" << reset);
+    TML_LOG_INFO("test", " " << std::string(60, '-'));
+    {
+        std::ostringstream hdr;
+        hdr << std::left << std::setw(40) << " File" << std::right << std::setw(8) << "Lines"
+            << std::setw(8) << "Branch" << std::setw(8) << "Funcs";
+        TML_LOG_INFO("test", hdr.str());
+    }
+    TML_LOG_INFO("test", " " << std::string(60, '-'));
 
     // Helper to colorize percentage
     auto colorize_percent = [](double pct) -> std::string {
@@ -330,49 +335,41 @@ void CoverageCollector::print_console_report(const CoverageReport& report) {
             display_path = "..." + display_path.substr(display_path.length() - 34);
         }
 
-        std::cout << " " << std::left << std::setw(40) << display_path;
-
-        // Lines
-        std::cout << colorize_percent(fc.line_percent()) << std::right << std::setw(6) << std::fixed
-                  << std::setprecision(1) << fc.line_percent() << "%" << reset;
-
-        // Branches
-        std::cout << colorize_percent(fc.branch_percent()) << std::setw(6) << std::fixed
-                  << std::setprecision(1) << fc.branch_percent() << "%" << reset;
-
-        // Functions
-        std::cout << colorize_percent(fc.function_percent()) << std::setw(6) << std::fixed
-                  << std::setprecision(1) << fc.function_percent() << "%" << reset;
-
-        std::cout << "\n";
+        std::ostringstream row;
+        row << " " << std::left << std::setw(40) << display_path;
+        row << colorize_percent(fc.line_percent()) << std::right << std::setw(6) << std::fixed
+            << std::setprecision(1) << fc.line_percent() << "%" << reset;
+        row << colorize_percent(fc.branch_percent()) << std::setw(6) << std::fixed
+            << std::setprecision(1) << fc.branch_percent() << "%" << reset;
+        row << colorize_percent(fc.function_percent()) << std::setw(6) << std::fixed
+            << std::setprecision(1) << fc.function_percent() << "%" << reset;
+        TML_LOG_INFO("test", row.str());
     }
 
     // Total row
-    std::cout << " " << std::string(60, '-') << "\n";
-    std::cout << bold << " " << std::left << std::setw(40) << "Total" << reset;
-
-    std::cout << colorize_percent(report.summary.line_percent()) << std::right << std::setw(6)
-              << std::fixed << std::setprecision(1) << report.summary.line_percent() << "%"
-              << reset;
-
-    std::cout << colorize_percent(report.summary.branch_percent()) << std::setw(6) << std::fixed
-              << std::setprecision(1) << report.summary.branch_percent() << "%" << reset;
-
-    std::cout << colorize_percent(report.summary.function_percent()) << std::setw(6) << std::fixed
-              << std::setprecision(1) << report.summary.function_percent() << "%" << reset;
-
-    std::cout << "\n";
-    std::cout << " " << std::string(60, '-') << "\n";
+    TML_LOG_INFO("test", " " << std::string(60, '-'));
+    {
+        std::ostringstream total_row;
+        total_row << bold << " " << std::left << std::setw(40) << "Total" << reset;
+        total_row << colorize_percent(report.summary.line_percent()) << std::right << std::setw(6)
+                  << std::fixed << std::setprecision(1) << report.summary.line_percent() << "%"
+                  << reset;
+        total_row << colorize_percent(report.summary.branch_percent()) << std::setw(6) << std::fixed
+                  << std::setprecision(1) << report.summary.branch_percent() << "%" << reset;
+        total_row << colorize_percent(report.summary.function_percent()) << std::setw(6)
+                  << std::fixed << std::setprecision(1) << report.summary.function_percent() << "%"
+                  << reset;
+        TML_LOG_INFO("test", total_row.str());
+    }
+    TML_LOG_INFO("test", " " << std::string(60, '-'));
 
     // Uncovered files
     if (!report.uncovered_files.empty()) {
-        std::cout << "\n" << dim << " Uncovered files:" << reset << "\n";
+        TML_LOG_INFO("test", dim << " Uncovered files:" << reset);
         for (const auto& f : report.uncovered_files) {
-            std::cout << "   " << red << f << " (0%)" << reset << "\n";
+            TML_LOG_INFO("test", "   " << red << f << " (0%)" << reset);
         }
     }
-
-    std::cout << "\n";
 }
 
 CoverageReport CoverageCollector::generate_function_report(const fs::path& profdata) {
@@ -539,7 +536,7 @@ void CoverageCollector::print_function_report(const CoverageReport& report) {
     using namespace colors;
 
     if (!report.success) {
-        std::cout << red << "Error: " << reset << report.error_message << "\n";
+        TML_LOG_ERROR("test", report.error_message);
         return;
     }
 
@@ -580,11 +577,11 @@ void CoverageCollector::print_function_report(const CoverageReport& report) {
     };
 
     // Header - vitest style
-    std::cout << "\n" << bold << " Coverage Report" << reset << "\n";
-    std::cout << " " << std::string(72, '-') << "\n";
-    std::cout << dim << " Module                        " << "│ Funcs     │ Coverage" << reset
-              << "\n";
-    std::cout << " " << std::string(72, '-') << "\n";
+    TML_LOG_INFO("test", bold << " Coverage Report" << reset);
+    TML_LOG_INFO("test", " " << std::string(72, '-'));
+    TML_LOG_INFO("test", dim << " Module                        "
+                             << "│ Funcs     │ Coverage" << reset);
+    TML_LOG_INFO("test", " " << std::string(72, '-'));
 
     // Sort modules: library first, then tests
     std::vector<std::pair<std::string, ModuleCoverage>> sorted_modules(modules.begin(),
@@ -612,22 +609,28 @@ void CoverageCollector::print_function_report(const CoverageReport& report) {
             display_module = "..." + display_module.substr(display_module.length() - 25);
         }
 
-        std::cout << " " << std::left << std::setw(30) << display_module << "│ " << std::right
-                  << std::setw(4) << cov.covered << "/" << std::left << std::setw(4) << cov.total
-                  << " │ " << colorize_percent(pct) << std::right << std::setw(5) << std::fixed
-                  << std::setprecision(1) << pct << "%" << reset << " " << dim
-                  << format_bar(pct, 15) << reset << "\n";
+        std::ostringstream mod_row;
+        mod_row << " " << std::left << std::setw(30) << display_module << "│ " << std::right
+                << std::setw(4) << cov.covered << "/" << std::left << std::setw(4) << cov.total
+                << " │ " << colorize_percent(pct) << std::right << std::setw(5) << std::fixed
+                << std::setprecision(1) << pct << "%" << reset << " " << dim
+                << format_bar(pct, 15) << reset;
+        TML_LOG_INFO("test", mod_row.str());
     }
 
     // Total line
     double total_pct = total_funcs > 0 ? (100.0 * total_covered / total_funcs) : 0.0;
-    std::cout << " " << std::string(72, '-') << "\n";
-    std::cout << bold << " " << std::left << std::setw(30) << "Total"
-              << "│ " << std::right << std::setw(4) << total_covered << "/" << std::left
-              << std::setw(4) << total_funcs << " │ " << colorize_percent(total_pct) << std::right
-              << std::setw(5) << std::fixed << std::setprecision(1) << total_pct << "%" << reset
-              << " " << dim << format_bar(total_pct, 15) << reset << "\n";
-    std::cout << " " << std::string(72, '-') << "\n";
+    TML_LOG_INFO("test", " " << std::string(72, '-'));
+    {
+        std::ostringstream total_row;
+        total_row << bold << " " << std::left << std::setw(30) << "Total"
+                  << "│ " << std::right << std::setw(4) << total_covered << "/" << std::left
+                  << std::setw(4) << total_funcs << " │ " << colorize_percent(total_pct)
+                  << std::right << std::setw(5) << std::fixed << std::setprecision(1) << total_pct
+                  << "%" << reset << " " << dim << format_bar(total_pct, 15) << reset;
+        TML_LOG_INFO("test", total_row.str());
+    }
+    TML_LOG_INFO("test", " " << std::string(72, '-'));
 
     // Show modules with low coverage (< 50%)
     std::vector<std::pair<std::string, ModuleCoverage>> low_coverage;
@@ -641,18 +644,20 @@ void CoverageCollector::print_function_report(const CoverageReport& report) {
     }
 
     if (!low_coverage.empty()) {
-        std::cout << "\n" << yellow << bold << " Low Coverage Modules:" << reset << "\n";
+        TML_LOG_INFO("test", yellow << bold << " Low Coverage Modules:" << reset);
         for (const auto& [module, cov] : low_coverage) {
             double pct = 100.0 * cov.covered / cov.total;
-            std::cout << "   " << red << module << reset << " - " << cov.covered << "/" << cov.total
-                      << " (" << std::fixed << std::setprecision(0) << pct << "%)\n";
+            TML_LOG_INFO("test", "   " << red << module << reset << " - " << cov.covered << "/"
+                                       << cov.total << " (" << std::fixed << std::setprecision(0)
+                                       << pct << "%)");
 
             // Show up to 5 uncovered functions per module
             int shown = 0;
             for (const auto& fn : cov.uncovered_funcs) {
                 if (shown >= 5) {
-                    std::cout << dim << "      ... and " << (cov.uncovered_funcs.size() - 5)
-                              << " more" << reset << "\n";
+                    TML_LOG_INFO("test", dim << "      ... and "
+                                             << (cov.uncovered_funcs.size() - 5) << " more"
+                                             << reset);
                     break;
                 }
                 // Extract just function name from mangled name
@@ -666,15 +671,13 @@ void CoverageCollector::print_function_report(const CoverageReport& report) {
                         short_name = fn;
                     }
                 }
-                std::cout << dim << "      - " << short_name << reset << "\n";
+                TML_LOG_INFO("test", dim << "      - " << short_name << reset);
                 shown++;
             }
         }
     }
 
-    std::cout << "\n";
-
-    std::cout << " " << std::string(60, '-') << "\n\n";
+    TML_LOG_INFO("test", " " << std::string(60, '-'));
 }
 
 } // namespace tml::cli::tester

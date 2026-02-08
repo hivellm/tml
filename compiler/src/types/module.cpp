@@ -375,4 +375,15 @@ bool GlobalModuleCache::should_cache(const std::string& module_path) {
     return false;
 }
 
+// ============================================================================
+// ModuleRegistry::clone
+// ============================================================================
+
+ModuleRegistry ModuleRegistry::clone() const {
+    ModuleRegistry copy;
+    copy.modules_ = modules_;
+    copy.file_to_module_ = file_to_module_;
+    return copy;
+}
+
 } // namespace tml::types

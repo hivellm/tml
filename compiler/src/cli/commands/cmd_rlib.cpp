@@ -34,8 +34,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <iomanip>
-#include <iostream>
 
 namespace fs = std::filesystem;
 
@@ -65,35 +63,32 @@ int run_rlib_info(int argc, char* argv[]) {
     const auto& metadata = *metadata_opt;
 
     // Display information
-    std::cout << "TML Library Information\n";
-    std::cout << "=======================\n\n";
-
-    std::cout << "Library: " << metadata.library.name << " v" << metadata.library.version << "\n";
-    std::cout << "TML Version: " << metadata.library.tml_version << "\n";
-    std::cout << "Format Version: " << metadata.format_version << "\n";
-    std::cout << "File: " << rlib_file << "\n";
-    std::cout << "Size: " << fs::file_size(rlib_file) << " bytes\n";
-    std::cout << "\n";
+    TML_LOG_INFO("rlib", "TML Library Information");
+    TML_LOG_INFO("rlib", "=======================");
+    TML_LOG_INFO("rlib", "Library: " << metadata.library.name << " v" << metadata.library.version);
+    TML_LOG_INFO("rlib", "TML Version: " << metadata.library.tml_version);
+    TML_LOG_INFO("rlib", "Format Version: " << metadata.format_version);
+    TML_LOG_INFO("rlib", "File: " << rlib_file);
+    TML_LOG_INFO("rlib", "Size: " << fs::file_size(rlib_file) << " bytes");
 
     // Modules
-    std::cout << "Modules: " << metadata.modules.size() << "\n";
+    TML_LOG_INFO("rlib", "Modules: " << metadata.modules.size());
     for (const auto& module : metadata.modules) {
-        std::cout << "  - " << module.name << "\n";
-        std::cout << "    File: " << module.file << "\n";
-        std::cout << "    Hash: " << module.hash << "\n";
-        std::cout << "    Exports: " << module.exports.size() << " items\n";
+        TML_LOG_INFO("rlib", "  - " << module.name);
+        TML_LOG_INFO("rlib", "    File: " << module.file);
+        TML_LOG_INFO("rlib", "    Hash: " << module.hash);
+        TML_LOG_INFO("rlib", "    Exports: " << module.exports.size() << " items");
     }
-    std::cout << "\n";
 
     // Dependencies
-    std::cout << "Dependencies: " << metadata.dependencies.size() << "\n";
+    TML_LOG_INFO("rlib", "Dependencies: " << metadata.dependencies.size());
     for (const auto& dep : metadata.dependencies) {
-        std::cout << "  - " << dep.name << " " << dep.version << "\n";
-        std::cout << "    Hash: " << dep.hash << "\n";
+        TML_LOG_INFO("rlib", "  - " << dep.name << " " << dep.version);
+        TML_LOG_INFO("rlib", "    Hash: " << dep.hash);
     }
 
     if (metadata.dependencies.empty()) {
-        std::cout << "  (none)\n";
+        TML_LOG_INFO("rlib", "  (none)");
     }
 
     return 0;
@@ -131,39 +126,39 @@ int run_rlib_exports(int argc, char* argv[]) {
     const auto& metadata = *metadata_opt;
 
     // Display exports
-    std::cout << "Public exports from " << metadata.library.name << " v" << metadata.library.version
-              << ":\n";
-    std::cout << std::string(60, '=') << "\n";
+    TML_LOG_INFO("rlib",
+                 "Public exports from " << metadata.library.name << " v" << metadata.library.version);
+    TML_LOG_INFO("rlib", std::string(60, '='));
 
     auto exports = metadata.get_all_exports();
 
     if (exports.empty()) {
-        std::cout << "(no public exports)\n";
+        TML_LOG_INFO("rlib", "(no public exports)");
         return 0;
     }
 
     for (const auto& exp : exports) {
         if (verbose) {
-            std::cout << "\nName: " << exp.name << "\n";
-            std::cout << "Symbol: " << exp.symbol << "\n";
-            std::cout << "Type: " << exp.type << "\n";
-            std::cout << "Public: " << (exp.is_public ? "yes" : "no") << "\n";
+            TML_LOG_INFO("rlib", "Name: " << exp.name);
+            TML_LOG_INFO("rlib", "Symbol: " << exp.symbol);
+            TML_LOG_INFO("rlib", "Type: " << exp.type);
+            TML_LOG_INFO("rlib", "Public: " << (exp.is_public ? "yes" : "no"));
         } else {
             // Parse type to make it more readable
             std::string type_str = exp.type;
 
             // Simple formatting: if it's a function, show it nicely
             if (type_str.find("func") == 0) {
-                std::cout << "  func " << exp.name << type_str.substr(4) << "\n";
+                TML_LOG_INFO("rlib", "  func " << exp.name << type_str.substr(4));
             } else if (type_str.find("struct") == 0) {
-                std::cout << "  struct " << exp.name << " " << type_str.substr(6) << "\n";
+                TML_LOG_INFO("rlib", "  struct " << exp.name << " " << type_str.substr(6));
             } else {
-                std::cout << "  " << exp.name << ": " << type_str << "\n";
+                TML_LOG_INFO("rlib", "  " << exp.name << ": " << type_str);
             }
         }
     }
 
-    std::cout << "\nTotal: " << exports.size() << " public exports\n";
+    TML_LOG_INFO("rlib", "Total: " << exports.size() << " public exports");
 
     return 0;
 }
@@ -181,7 +176,7 @@ int run_rlib_validate(int argc, char* argv[]) {
         return 1;
     }
 
-    std::cout << "Validating RLIB: " << rlib_file << "\n";
+    TML_LOG_INFO("rlib", "Validating RLIB: " << rlib_file);
 
     // Check if it's a valid archive
     auto members = list_rlib_members(rlib_file);
@@ -190,8 +185,8 @@ int run_rlib_validate(int argc, char* argv[]) {
         return 1;
     }
 
-    std::cout << "✓ Valid archive format\n";
-    std::cout << "  Members: " << members.size() << "\n";
+    TML_LOG_INFO("rlib", "Valid archive format");
+    TML_LOG_INFO("rlib", "  Members: " << members.size());
 
     // Check for metadata.json
     bool has_metadata = std::find(members.begin(), members.end(), "metadata.json") != members.end();
@@ -200,7 +195,7 @@ int run_rlib_validate(int argc, char* argv[]) {
         return 1;
     }
 
-    std::cout << "✓ Found metadata.json\n";
+    TML_LOG_INFO("rlib", "Found metadata.json");
 
     // Read and validate metadata
     auto metadata_opt = read_rlib_metadata(rlib_file);
@@ -210,30 +205,29 @@ int run_rlib_validate(int argc, char* argv[]) {
     }
 
     const auto& metadata = *metadata_opt;
-    std::cout << "✓ Valid metadata format\n";
+    TML_LOG_INFO("rlib", "Valid metadata format");
 
     // Check format version
     if (metadata.format_version != "1.0") {
         TML_LOG_WARN("rlib", "Unexpected format version: " << metadata.format_version << ". Expected: 1.0");
     } else {
-        std::cout << "✓ Format version: " << metadata.format_version << "\n";
+        TML_LOG_INFO("rlib", "Format version: " << metadata.format_version);
     }
 
     // Check that all modules exist
-    std::cout << "Checking modules:\n";
+    TML_LOG_INFO("rlib", "Checking modules:");
     for (const auto& module : metadata.modules) {
         bool has_module = std::find(members.begin(), members.end(), module.file) != members.end();
         if (has_module) {
-            std::cout << "  ✓ " << module.name << " (" << module.file << ")\n";
+            TML_LOG_INFO("rlib", "  " << module.name << " (" << module.file << ")");
         } else {
             TML_LOG_ERROR("rlib", "Module " << module.name << " (" << module.file << ") not found in archive");
             return 1;
         }
     }
 
-    std::cout << "\n";
-    std::cout << "✓ RLIB validation passed\n";
-    std::cout << "Library: " << metadata.library.name << " v" << metadata.library.version << "\n";
+    TML_LOG_INFO("rlib", "RLIB validation passed");
+    TML_LOG_INFO("rlib", "Library: " << metadata.library.name << " v" << metadata.library.version);
 
     return 0;
 }

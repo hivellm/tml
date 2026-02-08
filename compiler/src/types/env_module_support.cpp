@@ -31,6 +31,7 @@
 #include "preprocessor/preprocessor.hpp"
 #include "types/env.hpp"
 #include "types/module.hpp"
+#include "types/module_binary.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -522,31 +523,37 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         std::make_pair(std::move(parsed.decls), std::move(parsed.source_code)));
                 } else {
                     had_errors = true;
-                    TML_LOG_ERROR("types", "=== MODULE PARSE ERROR ===");
-                    TML_LOG_ERROR("types", "Failed to parse: " << entry_path);
+                    // Only log parse errors if in fatal mode (normal compilation).
+                    // In non-fatal mode (meta preload), these are expected for some
+                    // library files that use unsupported syntax and would spam the output.
+                    if (abort_on_module_error_) {
+                        TML_LOG_ERROR("types", "=== MODULE PARSE ERROR ===");
+                        TML_LOG_ERROR("types", "Failed to parse: " << entry_path);
 
-                    // Print lexer errors
-                    for (const auto& err : parsed.lex_errors) {
-                        TML_LOG_ERROR("types", entry_path << ":" << err.span.start.line << ":"
-                                                          << err.span.start.column
-                                                          << ": lexer error: " << err.message);
-                    }
-
-                    // Print parser errors (limit to first 5 to avoid spam)
-                    int error_count = 0;
-                    for (const auto& err : parsed.errors) {
-                        TML_LOG_ERROR("types", entry_path << ":" << err.span.start.line << ":"
-                                                          << err.span.start.column
-                                                          << ": error: " << err.message);
-                        if (++error_count >= 5) {
-                            if (parsed.errors.size() > 5) {
-                                TML_LOG_ERROR("types", "... and " << (parsed.errors.size() - 5)
-                                                                  << " more errors");
-                            }
-                            break;
+                        for (const auto& err : parsed.lex_errors) {
+                            TML_LOG_ERROR("types", entry_path << ":" << err.span.start.line << ":"
+                                                              << err.span.start.column
+                                                              << ": lexer error: " << err.message);
                         }
+
+                        int error_count = 0;
+                        for (const auto& err : parsed.errors) {
+                            TML_LOG_ERROR("types", entry_path << ":" << err.span.start.line << ":"
+                                                              << err.span.start.column
+                                                              << ": error: " << err.message);
+                            if (++error_count >= 5) {
+                                if (parsed.errors.size() > 5) {
+                                    TML_LOG_ERROR("types", "... and " << (parsed.errors.size() - 5)
+                                                                      << " more errors");
+                                }
+                                break;
+                            }
+                        }
+                        TML_LOG_ERROR("types", "=========================");
+                    } else {
+                        TML_DEBUG_LN("[MODULE] Parse error in " << entry_path
+                                     << " (" << parsed.errors.size() << " errors, skipping)");
                     }
-                    TML_LOG_ERROR("types", "=========================");
                 }
             }
         }
@@ -554,37 +561,38 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         // Single file module
         auto parsed = parse_tml_file(file_path);
         if (!parsed.success) {
-            TML_LOG_ERROR("types", "=== MODULE PARSE ERROR ===");
-            TML_LOG_ERROR("types", "Failed to parse: " << file_path);
-
-            // Print lexer errors
-            for (const auto& err : parsed.lex_errors) {
-                TML_LOG_ERROR("types", file_path << ":" << err.span.start.line << ":"
-                                                 << err.span.start.column
-                                                 << ": lexer error: " << err.message);
-            }
-
-            // Print parser errors
-            int error_count = 0;
-            for (const auto& err : parsed.errors) {
-                TML_LOG_ERROR("types", file_path << ":" << err.span.start.line << ":"
-                                                 << err.span.start.column
-                                                 << ": error: " << err.message);
-                if (++error_count >= 5) {
-                    if (parsed.errors.size() > 5) {
-                        TML_LOG_ERROR("types",
-                                      "... and " << (parsed.errors.size() - 5) << " more errors");
-                    }
-                    break;
-                }
-            }
-            TML_LOG_ERROR("types", "=========================");
-
             if (abort_on_module_error_) {
+                TML_LOG_ERROR("types", "=== MODULE PARSE ERROR ===");
+                TML_LOG_ERROR("types", "Failed to parse: " << file_path);
+
+                for (const auto& err : parsed.lex_errors) {
+                    TML_LOG_ERROR("types", file_path << ":" << err.span.start.line << ":"
+                                                     << err.span.start.column
+                                                     << ": lexer error: " << err.message);
+                }
+
+                int error_count = 0;
+                for (const auto& err : parsed.errors) {
+                    TML_LOG_ERROR("types", file_path << ":" << err.span.start.line << ":"
+                                                     << err.span.start.column
+                                                     << ": error: " << err.message);
+                    if (++error_count >= 5) {
+                        if (parsed.errors.size() > 5) {
+                            TML_LOG_ERROR("types",
+                                          "... and " << (parsed.errors.size() - 5) << " more errors");
+                        }
+                        break;
+                    }
+                }
+                TML_LOG_ERROR("types", "=========================");
+
                 // Panic - abort compilation
                 TML_LOG_FATAL("types",
                               "Cannot continue - module '" << module_path << "' failed to parse");
                 std::exit(1);
+            } else {
+                TML_DEBUG_LN("[MODULE] Parse error in " << file_path
+                             << " (" << parsed.errors.size() << " errors, skipping)");
             }
             return false;
         }
@@ -1611,6 +1619,9 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     if (GlobalModuleCache::should_cache(module_path)) {
         GlobalModuleCache::instance().put(module_path, mod);
         TML_DEBUG_LN("[MODULE] Cached: " << module_path);
+
+        // Write binary metadata cache (.tml.meta) for faster loading next run
+        save_module_to_cache(module_path, mod, file_path);
     }
 
     // Capture re-export source paths before moving the module
@@ -1677,6 +1688,17 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                 load_native_module(import_path, /*silent=*/true);
             }
 
+            return true;
+        }
+    }
+
+    // Check binary metadata cache (.tml.meta) for library modules
+    // Loads pre-serialized Module structs without file resolution or parsing
+    if (GlobalModuleCache::should_cache(module_path)) {
+        if (auto cached = load_module_from_cache(module_path)) {
+            TML_DEBUG_LN("[MODULE] Binary meta cache hit for: " << module_path);
+            GlobalModuleCache::instance().put(module_path, *cached);
+            module_registry_->register_module(module_path, std::move(*cached));
             return true;
         }
     }

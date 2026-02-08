@@ -7,12 +7,13 @@
 
 #include "profiler/profiler.hpp"
 
+#include "log/log.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
-#include <iostream>
 #include <sstream>
 
 namespace tml::profiler {
@@ -98,7 +99,7 @@ void Profiler::start() {
 
     active_.store(true, std::memory_order_release);
 
-    std::cerr << "[TML Profiler] Started profiling. Output: " << output_path_ << "\n";
+    TML_LOG_INFO("profiler", "Started profiling. Output: " << output_path_);
 }
 
 void Profiler::stop() {
@@ -131,11 +132,11 @@ void Profiler::stop() {
     // Export the profile
     export_cpuprofile(output_path_);
 
-    std::cerr << "[TML Profiler] Stopped. Profile written to: " << output_path_ << "\n";
-    std::cerr << "[TML Profiler] Total time: " << (data_.end_time - data_.start_time) / 1000.0
-              << " ms\n";
-    std::cerr << "[TML Profiler] Nodes: " << data_.nodes.size() << "\n";
-    std::cerr << "[TML Profiler] Samples: " << data_.samples.size() << "\n";
+    TML_LOG_INFO("profiler", "Stopped. Profile written to: " << output_path_);
+    TML_LOG_INFO("profiler",
+                 "Total time: " << (data_.end_time - data_.start_time) / 1000.0 << " ms");
+    TML_LOG_DEBUG("profiler", "Nodes: " << data_.nodes.size());
+    TML_LOG_DEBUG("profiler", "Samples: " << data_.samples.size());
 }
 
 // ============================================================================
@@ -286,7 +287,7 @@ void Profiler::export_cpuprofile(const std::string& path) {
 
     std::ofstream file(path);
     if (!file.is_open()) {
-        std::cerr << "[TML Profiler] ERROR: Could not write to " << path << "\n";
+        TML_LOG_ERROR("profiler", "Could not write to " << path);
         return;
     }
 

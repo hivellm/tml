@@ -226,6 +226,10 @@ public:
     auto lookup_symbol(const std::string& module_path, const std::string& symbol_name) const
         -> std::optional<ModuleSymbol>;
 
+    /// Creates a deep copy of this registry.
+    /// Used to pre-populate registries with commonly-imported modules.
+    [[nodiscard]] ModuleRegistry clone() const;
+
 private:
     std::unordered_map<std::string, Module> modules_;             ///< Registered modules.
     std::unordered_map<std::string, std::string> file_to_module_; ///< File to module mapping.

@@ -101,17 +101,18 @@ int run_lex(const std::string& path, bool verbose) {
     auto tokens = lex.tokenize();
 
     if (verbose) {
-        std::cout << "Tokens (" << tokens.size() << "):\n";
+        TML_LOG_INFO("lexer", "Tokens (" << tokens.size() << "):");
         for (const auto& token : tokens) {
-            std::cout << "  " << token.span.start.line << ":" << token.span.start.column << " "
-                      << lexer::token_kind_to_string(token.kind);
+            std::ostringstream tok;
+            tok << "  " << token.span.start.line << ":" << token.span.start.column << " "
+                << lexer::token_kind_to_string(token.kind);
             if (token.kind == lexer::TokenKind::Identifier ||
                 token.kind == lexer::TokenKind::IntLiteral ||
                 token.kind == lexer::TokenKind::FloatLiteral ||
                 token.kind == lexer::TokenKind::StringLiteral) {
-                std::cout << " `" << token.lexeme << "`";
+                tok << " `" << token.lexeme << "`";
             }
-            std::cout << "\n";
+            TML_LOG_INFO("lexer", tok.str());
         }
     }
 
@@ -121,7 +122,7 @@ int run_lex(const std::string& path, bool verbose) {
     }
 
     if (!verbose) {
-        std::cout << "Lexed " << tokens.size() << " tokens from " << path << "\n";
+        TML_LOG_INFO("lexer", "Lexed " << tokens.size() << " tokens from " << path);
     }
     return 0;
 }
@@ -161,38 +162,40 @@ int run_parse(const std::string& path, bool verbose) {
     const auto& module = std::get<parser::Module>(result);
 
     if (verbose) {
-        std::cout << "Module: " << module.name << "\n";
-        std::cout << "Declarations: " << module.decls.size() << "\n";
+        TML_LOG_INFO("parser", "Module: " << module.name);
+        TML_LOG_INFO("parser", "Declarations: " << module.decls.size());
         for (const auto& decl : module.decls) {
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
-                std::cout << "  func " << func.name << "(";
+                std::ostringstream sig;
+                sig << "  func " << func.name << "(";
                 for (size_t i = 0; i < func.params.size(); ++i) {
                     if (i > 0)
-                        std::cout << ", ";
+                        sig << ", ";
                     const auto& param = func.params[i];
                     if (param.pattern && param.pattern->is<parser::IdentPattern>()) {
-                        std::cout << param.pattern->as<parser::IdentPattern>().name;
+                        sig << param.pattern->as<parser::IdentPattern>().name;
                     } else {
-                        std::cout << "_";
+                        sig << "_";
                     }
                 }
-                std::cout << ")\n";
+                sig << ")";
+                TML_LOG_INFO("parser", sig.str());
             } else if (decl->is<parser::StructDecl>()) {
                 const auto& s = decl->as<parser::StructDecl>();
-                std::cout << "  type " << s.name << " { ... }\n";
+                TML_LOG_INFO("parser", "  type " << s.name << " { ... }");
             } else if (decl->is<parser::EnumDecl>()) {
                 const auto& e = decl->as<parser::EnumDecl>();
-                std::cout << "  type " << e.name << " = ...\n";
+                TML_LOG_INFO("parser", "  type " << e.name << " = ...");
             } else if (decl->is<parser::TraitDecl>()) {
                 const auto& t = decl->as<parser::TraitDecl>();
-                std::cout << "  behavior " << t.name << " { ... }\n";
+                TML_LOG_INFO("parser", "  behavior " << t.name << " { ... }");
             } else if (decl->is<parser::ImplDecl>()) {
-                std::cout << "  impl ...\n";
+                TML_LOG_INFO("parser", "  impl ...");
             }
         }
     } else {
-        std::cout << "Parsed " << module.decls.size() << " declarations from " << path << "\n";
+        TML_LOG_INFO("parser", "Parsed " << module.decls.size() << " declarations from " << path);
     }
 
     return 0;
@@ -246,12 +249,12 @@ int run_check(const std::string& path, bool verbose) {
 
     if (verbose) {
         const auto& env = std::get<types::TypeEnv>(check_result);
-        std::cout << "Type check passed for " << path << "\n";
-        std::cout << "Module: " << module.name << "\n";
-        std::cout << "Declarations: " << module.decls.size() << "\n";
+        TML_LOG_INFO("types", "Type check passed for " << path);
+        TML_LOG_INFO("types", "Module: " << module.name);
+        TML_LOG_INFO("types", "Declarations: " << module.decls.size());
         (void)env;
     } else {
-        std::cout << "check: " << path << " ok\n";
+        TML_LOG_INFO("types", "check: " << path << " ok");
     }
 
     return 0;

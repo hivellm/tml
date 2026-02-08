@@ -113,33 +113,33 @@ std::string get_pattern_name(const parser::Pattern& pattern) {
 // ============================================================================
 
 void print_lint_help() {
-    std::cout << "Usage: tml lint [options] [paths...]\n\n";
-    std::cout << "Lint TML source files for style, naming, and complexity issues.\n\n";
-    std::cout << "Options:\n";
-    std::cout << "  --fix           Automatically fix style issues\n";
-    std::cout << "  --semantic      Enable semantic checks (naming, unused, complexity)\n";
-    std::cout << "  --quiet, -q     Only show errors (no warnings)\n";
-    std::cout << "  --verbose, -v   Show all files being checked\n";
-    std::cout << "  --help, -h      Show this help\n\n";
-    std::cout << "If no paths are specified, lints the current directory.\n\n";
-    std::cout << "Configuration:\n";
-    std::cout << "  Add a [lint] section to tml.toml to customize settings.\n\n";
-    std::cout << "Style Rules (S):\n";
-    std::cout << "  S001  Tabs instead of spaces (error)\n";
-    std::cout << "  S002  Trailing whitespace (error)\n";
-    std::cout << "  S003  Line exceeds max length (warning)\n";
-    std::cout << "  S010  Function naming (snake_case)\n";
-    std::cout << "  S011  Type naming (PascalCase)\n";
-    std::cout << "  S012  Constant naming (UPPER_SNAKE_CASE)\n";
-    std::cout << "  S013  Variable naming (snake_case)\n\n";
-    std::cout << "Semantic Rules (W):\n";
-    std::cout << "  W001  Unused variable\n";
-    std::cout << "  W002  Unused import\n";
-    std::cout << "  W004  Unused parameter\n\n";
-    std::cout << "Complexity Rules (C):\n";
-    std::cout << "  C001  Function too long\n";
-    std::cout << "  C002  High cyclomatic complexity\n";
-    std::cout << "  C003  Deep nesting\n";
+    std::cerr << "Usage: tml lint [options] [paths...]\n\n"
+              << "Lint TML source files for style, naming, and complexity issues.\n\n"
+              << "Options:\n"
+              << "  --fix           Automatically fix style issues\n"
+              << "  --semantic      Enable semantic checks (naming, unused, complexity)\n"
+              << "  --quiet, -q     Only show errors (no warnings)\n"
+              << "  --verbose, -v   Show all files being checked\n"
+              << "  --help, -h      Show this help\n\n"
+              << "If no paths are specified, lints the current directory.\n\n"
+              << "Configuration:\n"
+              << "  Add a [lint] section to tml.toml to customize settings.\n\n"
+              << "Style Rules (S):\n"
+              << "  S001  Tabs instead of spaces (error)\n"
+              << "  S002  Trailing whitespace (error)\n"
+              << "  S003  Line exceeds max length (warning)\n"
+              << "  S010  Function naming (snake_case)\n"
+              << "  S011  Type naming (PascalCase)\n"
+              << "  S012  Constant naming (UPPER_SNAKE_CASE)\n"
+              << "  S013  Variable naming (snake_case)\n\n"
+              << "Semantic Rules (W):\n"
+              << "  W001  Unused variable\n"
+              << "  W002  Unused import\n"
+              << "  W004  Unused parameter\n\n"
+              << "Complexity Rules (C):\n"
+              << "  C001  Function too long\n"
+              << "  C002  High cyclomatic complexity\n"
+              << "  C003  Deep nesting\n";
 }
 
 } // namespace tml::cli::linter

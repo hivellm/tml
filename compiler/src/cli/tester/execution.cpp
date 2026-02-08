@@ -16,6 +16,7 @@
 //! 3. Add results to the thread-safe collector
 //! 4. Stop on first compilation error (fail-fast)
 
+#include "log/log.hpp"
 #include "tester_internal.hpp"
 
 namespace tml::cli::tester {
@@ -214,8 +215,8 @@ void test_worker(const std::vector<std::string>& test_files, std::atomic<size_t>
 
         const auto& file = test_files[index];
         if (opts.verbose) {
-            std::cout << colors::dim << "[" << (index + 1) << "/" << test_files.size() << "] "
-                      << colors::reset << fs::path(file).filename().string() << std::endl;
+            TML_LOG_INFO("test", colors::dim << "[" << (index + 1) << "/" << test_files.size() << "] "
+                                             << colors::reset << fs::path(file).filename().string());
         }
         TestResult result = compile_and_run_test_with_result(file, opts);
         collector.add(std::move(result));
@@ -246,8 +247,8 @@ void warmup_worker(const std::vector<std::string>& test_files, std::atomic<size_
 
         const auto& file = test_files[index];
         if (opts.verbose) {
-            std::cout << colors::dim << "[warmup " << (index + 1) << "/" << test_files.size()
-                      << "] " << colors::reset << fs::path(file).filename().string() << std::endl;
+            TML_LOG_INFO("test", colors::dim << "[warmup " << (index + 1) << "/" << test_files.size()
+                                             << "] " << colors::reset << fs::path(file).filename().string());
         }
 
         // Just compile to shared library (populates cache), don't run

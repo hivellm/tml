@@ -121,7 +121,7 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
             return 1;
         }
         if (verbose) {
-            std::cout << path << " is correctly formatted\n";
+            TML_LOG_INFO("fmt", path << " is correctly formatted");
         }
         return 0;
     }
@@ -135,9 +135,9 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
     out.close();
 
     if (verbose) {
-        std::cout << "Formatted " << path << "\n";
+        TML_LOG_INFO("fmt", "Formatted " << path);
     } else {
-        std::cout << "fmt: " << path << "\n";
+        TML_LOG_INFO("fmt", "fmt: " << path);
     }
 
     return 0;

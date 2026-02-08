@@ -7,11 +7,12 @@
 
 #include "backend/lld_linker.hpp"
 
+#include "log/log.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <sstream>
 
 #ifdef _WIN32
@@ -36,7 +37,7 @@ static std::string quote_path(const fs::path& path) {
 /// Execute a command and return the exit code.
 static int execute_command(const std::string& cmd, bool verbose) {
     if (verbose) {
-        std::cout << "[lld_linker] " << cmd << "\n";
+        TML_LOG_DEBUG("linker", cmd);
     }
     return std::system(cmd.c_str());
 }
@@ -175,7 +176,7 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
 
     // Print command only in verbose mode
     if (options.verbose) {
-        std::cerr << "[DEBUG LLD] Command: " << cmd << "\n";
+        TML_LOG_DEBUG("linker", "LLD command: " << cmd);
     }
 
     // Execute the command

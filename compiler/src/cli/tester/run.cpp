@@ -264,8 +264,8 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     if (test_files.empty()) {
         if (!opts.quiet) {
-            std::cout << c.yellow() << "No test files found" << c.reset()
-                      << " (looking for *.test.tml)\n";
+            TML_LOG_INFO("test",
+                         c.yellow() << "No test files found" << c.reset() << " (looking for *.test.tml)");
         }
         return 0;
     }
@@ -286,8 +286,8 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     if (test_files.empty()) {
         if (!opts.quiet) {
-            std::cout << c.yellow() << "No tests matched the specified pattern(s)" << c.reset()
-                      << "\n";
+            TML_LOG_INFO("test",
+                         c.yellow() << "No tests matched the specified pattern(s)" << c.reset());
         }
         return 0;
     }
@@ -309,10 +309,10 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     // Print header
     if (!opts.quiet) {
-        std::cout << "\n " << c.cyan() << c.bold() << "TML" << c.reset() << " " << c.dim()
-                  << "v0.1.0" << c.reset() << "\n";
-        std::cout << "\n " << c.dim() << "Running " << test_files.size() << " test file"
-                  << (test_files.size() != 1 ? "s" : "") << "..." << c.reset() << "\n";
+        TML_LOG_INFO("test",
+                     c.cyan() << c.bold() << "TML" << c.reset() << " " << c.dim() << "v0.1.0" << c.reset());
+        TML_LOG_INFO("test", c.dim() << "Running " << test_files.size() << " test file"
+                                     << (test_files.size() != 1 ? "s" : "") << "..." << c.reset());
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -342,8 +342,8 @@ int run_test(int argc, char* argv[], bool verbose) {
 #endif
 
         if (!opts.quiet) {
-            std::cout << c.dim() << " Source coverage enabled (output: " << coverage_dir.string()
-                      << ")" << c.reset() << "\n";
+            TML_LOG_INFO("test", c.dim() << "Source coverage enabled (output: "
+                                         << coverage_dir.string() << ")" << c.reset());
         }
     }
 
@@ -372,14 +372,10 @@ int run_test(int argc, char* argv[], bool verbose) {
         coverage_collector->collect_profraw_files();
 
         if (!opts.quiet) {
-            std::cout << c.dim() << "\n Generating coverage report..." << c.reset() << std::flush;
+            TML_LOG_INFO("test", c.dim() << "Generating coverage report..." << c.reset());
         }
 
         if (coverage_collector->merge_profiles(profdata)) {
-            if (!opts.quiet) {
-                std::cout << "\r" << std::string(40, ' ') << "\r" << std::flush;
-            }
-
             // Generate function-level coverage report from profdata
             // (Line-level coverage requires coverage mapping data which we don't generate yet)
             auto report = coverage_collector->generate_function_report(profdata);
@@ -387,12 +383,10 @@ int run_test(int argc, char* argv[], bool verbose) {
             if (!opts.quiet && report.success) {
                 coverage_collector->print_function_report(report);
             } else if (!opts.quiet && !report.success) {
-                std::cout << c.yellow() << "Warning: " << c.reset() << report.error_message << "\n";
+                TML_LOG_WARN("test", report.error_message);
             }
         } else if (!opts.quiet) {
-            std::cout << "\n"
-                      << c.red() << "Coverage Error: " << c.reset()
-                      << coverage_collector->get_last_error() << "\n";
+            TML_LOG_ERROR("test", "Coverage Error: " << coverage_collector->get_last_error());
         }
     };
 
@@ -418,8 +412,8 @@ int run_test(int argc, char* argv[], bool verbose) {
 
             // Print TML runtime coverage summary
             if (opts.coverage && !CompilerOptions::coverage_output.empty()) {
-                std::cout << "\n " << c.dim() << "Coverage report: " << c.reset()
-                          << CompilerOptions::coverage_output << "\n";
+                TML_LOG_INFO("test", c.dim() << "Coverage report: " << c.reset()
+                                             << CompilerOptions::coverage_output);
             }
         }
 
@@ -430,7 +424,7 @@ int run_test(int argc, char* argv[], bool verbose) {
         if (opts.verbose) {
             tml::log::Logger::instance().flush();
             fs::path log_path = fs::path("build") / "debug" / "test_log.json";
-            std::cout << "\n " << c.dim() << "Test log: " << c.reset() << log_path.string() << "\n";
+            TML_LOG_INFO("test", c.dim() << "Test log: " << c.reset() << log_path.string());
         }
 
         int failed = 0;
@@ -447,7 +441,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     if (opts.profile && test_files.size() > 1 && num_threads > 1) {
         // Phase 1: Parallel warm-up (compile all DLLs to populate cache)
         if (!opts.quiet) {
-            std::cout << c.dim() << " Warming up cache..." << c.reset() << std::flush;
+            TML_LOG_INFO("test", c.dim() << "Warming up cache..." << c.reset());
         }
 
         std::atomic<size_t> warmup_index{0};
@@ -466,7 +460,7 @@ int run_test(int argc, char* argv[], bool verbose) {
         }
 
         if (!opts.quiet) {
-            std::cout << "\r" << std::string(30, ' ') << "\r" << std::flush;
+            TML_LOG_DEBUG("test", "Cache warm-up complete");
         }
 
         // Phase 2: Sequential profiled execution (with warm cache)
@@ -484,9 +478,8 @@ int run_test(int argc, char* argv[], bool verbose) {
         for (size_t fi = 0; fi < test_files.size(); ++fi) {
             const auto& file = test_files[fi];
             if (opts.verbose) {
-                std::cout << c.dim() << "[" << (fi + 1) << "/" << test_files.size() << "] "
-                          << c.reset() << fs::path(file).filename().string() << " ..."
-                          << std::flush;
+                TML_LOG_INFO("test", c.dim() << "[" << (fi + 1) << "/" << test_files.size() << "] "
+                                             << c.reset() << fs::path(file).filename().string() << " ...");
             }
             auto test_start = std::chrono::high_resolution_clock::now();
             TestResult result;
@@ -503,11 +496,10 @@ int run_test(int argc, char* argv[], bool verbose) {
                     std::chrono::duration_cast<std::chrono::milliseconds>(test_end - test_start)
                         .count();
                 if (result.passed) {
-                    std::cout << " " << c.green() << "OK" << c.reset();
+                    TML_LOG_INFO("test", c.green() << "OK" << c.reset() << c.dim() << " " << ms << "ms" << c.reset());
                 } else {
-                    std::cout << " " << c.red() << "FAIL" << c.reset();
+                    TML_LOG_INFO("test", c.red() << "FAIL" << c.reset() << c.dim() << " " << ms << "ms" << c.reset());
                 }
-                std::cout << c.dim() << " " << ms << "ms" << c.reset() << std::endl;
             }
             collector.add(std::move(result));
             // Continue running other tests even if this one failed to compile
@@ -554,7 +546,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     if (opts.verbose) {
         tml::log::Logger::instance().flush();
         fs::path log_path = fs::path("build") / "debug" / "test_log.json";
-        std::cout << "\n " << c.dim() << "Test log: " << c.reset() << log_path.string() << "\n";
+        TML_LOG_INFO("test", c.dim() << "Test log: " << c.reset() << log_path.string());
     }
 
     // Count failures

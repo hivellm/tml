@@ -626,6 +626,10 @@ public:
     /// Sets the source directory for local module resolution.
     void set_source_directory(const std::string& dir_path);
 
+    /// Sets whether to abort (exit) on module parse errors.
+    /// Use false for best-effort pre-loading (e.g., warmup).
+    void set_abort_on_module_error(bool abort) { abort_on_module_error_ = abort; }
+
     /// Returns the module registry.
     [[nodiscard]] auto module_registry() const -> std::shared_ptr<ModuleRegistry>;
 
@@ -684,7 +688,22 @@ public:
     /// Returns true if two types are structurally equal.
     [[nodiscard]] static bool types_match(const TypePtr& a, const TypePtr& b);
 
+    // ========================================================================
+    // Snapshot Support
+    // ========================================================================
+
+    /// Creates a snapshot of the current type definitions.
+    /// The snapshot contains all registered types, behaviors, and behavior
+    /// implementations, but resets per-file state (scope, inference, imports).
+    /// Used to avoid re-running init_builtins() for every compilation unit.
+    [[nodiscard]] TypeEnv snapshot() const;
+
 private:
+    /// Tag type for snapshot constructor.
+    struct SnapshotTag {};
+
+    /// Private constructor used by snapshot() - copies type tables, resets per-file state.
+    TypeEnv(SnapshotTag, const TypeEnv& source);
     /// Internal resolve helper with cycle detection.
     [[nodiscard]] auto resolve_impl(TypePtr type, std::unordered_set<uint64_t>& visited) -> TypePtr;
 

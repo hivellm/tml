@@ -26,6 +26,7 @@
 //! Use `--no-cache` to force recompilation.
 
 #include "builder_internal.hpp"
+#include "types/module_binary.hpp"
 
 namespace tml::cli {
 
@@ -34,6 +35,11 @@ using namespace build;
 
 // Internal implementation that takes BuildOptions
 static int run_build_impl(const std::string& path, const BuildOptions& options) {
+    // TEMPORARILY DISABLED for baseline comparison
+    // Pre-load all library modules from .tml.meta binary cache
+    // TML_LOG_INFO("build", ">>> Pre-loading library modules (blocking until complete)...");
+    // types::preload_all_meta_caches();
+    // TML_LOG_INFO("build", ">>> Pre-load complete. Starting build...");
     bool verbose = options.verbose;
     bool emit_ir_only = options.emit_ir_only;
     bool emit_mir = options.emit_mir;
@@ -229,7 +235,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         mir_file << mir::print_module(mir_module);
         mir_file.close();
 
-        std::cout << "emit-mir: " << to_forward_slashes(mir_output.string()) << "\n";
+        TML_LOG_INFO("build", "emit-mir: " << to_forward_slashes(mir_output.string()));
         return 0;
     }
 
@@ -456,7 +462,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     TML_LOG_INFO("build", "Generated: " << ll_output);
 
     if (emit_ir_only) {
-        std::cout << "emit-ir: " << ll_output << "\n";
+        TML_LOG_INFO("build", "emit-ir: " << ll_output);
         return 0;
     }
 
@@ -684,7 +690,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     // Clean up .ll file (keep .o file in cache for potential reuse)
     fs::remove(ll_output);
 
-    std::cout << "build: " << to_forward_slashes(final_output.string()) << "\n";
+    TML_LOG_INFO("build", "build: " << to_forward_slashes(final_output.string()));
 
     // Generate C header if requested (after successful build)
     if (emit_header) {
@@ -708,7 +714,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         header_file << header_result.header_content;
         header_file.close();
 
-        std::cout << "emit-header: " << to_forward_slashes(header_output.string()) << "\n";
+        TML_LOG_INFO("build", "emit-header: " << to_forward_slashes(header_output.string()));
     }
 
     return 0;
