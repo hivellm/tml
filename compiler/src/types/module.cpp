@@ -357,13 +357,14 @@ void GlobalModuleCache::put(const std::string& module_path, const Module& module
 void GlobalModuleCache::clear() {
     std::unique_lock lock(mutex_);
     cache_.clear();
-    hits_ = 0;
-    misses_ = 0;
+    hits_.store(0);
+    misses_.store(0);
 }
 
 GlobalModuleCache::Stats GlobalModuleCache::get_stats() const {
     std::shared_lock lock(mutex_);
-    return Stats{.total_entries = cache_.size(), .cache_hits = hits_, .cache_misses = misses_};
+    return Stats{
+        .total_entries = cache_.size(), .cache_hits = hits_.load(), .cache_misses = misses_.load()};
 }
 
 bool GlobalModuleCache::should_cache(const std::string& module_path) {

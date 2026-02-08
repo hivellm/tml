@@ -34,6 +34,7 @@
 #include "types/env_stability.hpp"
 #include "types/type.hpp"
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -151,8 +152,8 @@ private:
 
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, Module> cache_;
-    mutable size_t hits_ = 0;
-    mutable size_t misses_ = 0;
+    mutable std::atomic<size_t> hits_{0};
+    mutable std::atomic<size_t> misses_{0};
 };
 
 /// Central registry for all modules in the program.

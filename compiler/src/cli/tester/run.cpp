@@ -264,8 +264,8 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     if (test_files.empty()) {
         if (!opts.quiet) {
-            TML_LOG_INFO("test",
-                         c.yellow() << "No test files found" << c.reset() << " (looking for *.test.tml)");
+            TML_LOG_INFO("test", c.yellow() << "No test files found" << c.reset()
+                                            << " (looking for *.test.tml)");
         }
         return 0;
     }
@@ -286,8 +286,8 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     if (test_files.empty()) {
         if (!opts.quiet) {
-            TML_LOG_INFO("test",
-                         c.yellow() << "No tests matched the specified pattern(s)" << c.reset());
+            TML_LOG_INFO("test", c.yellow()
+                                     << "No tests matched the specified pattern(s)" << c.reset());
         }
         return 0;
     }
@@ -309,8 +309,8 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     // Print header
     if (!opts.quiet) {
-        TML_LOG_INFO("test",
-                     c.cyan() << c.bold() << "TML" << c.reset() << " " << c.dim() << "v0.1.0" << c.reset());
+        TML_LOG_INFO("test", c.cyan() << c.bold() << "TML" << c.reset() << " " << c.dim()
+                                      << "v0.1.0" << c.reset());
         TML_LOG_INFO("test", c.dim() << "Running " << test_files.size() << " test file"
                                      << (test_files.size() != 1 ? "s" : "") << "..." << c.reset());
     }
@@ -389,6 +389,27 @@ int run_test(int argc, char* argv[], bool verbose) {
             TML_LOG_ERROR("test", "Coverage Error: " << coverage_collector->get_last_error());
         }
     };
+
+    // When --no-cache is used, clean the .run-cache directory to remove accumulated
+    // DLLs, object files, and other artifacts from previous test runs
+    if (opts.no_cache) {
+        fs::path run_cache_dir = build::get_run_cache_dir();
+        if (fs::exists(run_cache_dir)) {
+            TML_LOG_INFO("test", "Cleaning .run-cache directory...");
+            std::error_code ec;
+            size_t removed = 0;
+            for (const auto& entry : fs::directory_iterator(run_cache_dir, ec)) {
+                if (entry.is_regular_file()) {
+                    fs::remove(entry.path(), ec);
+                    if (!ec)
+                        ++removed;
+                }
+            }
+            if (removed > 0) {
+                TML_LOG_INFO("test", "Removed " << removed << " cached files from .run-cache");
+            }
+        }
+    }
 
     // Suite mode: compile multiple test files into single DLLs per suite
     // This is now the default behavior as internal linkage prevents duplicate symbols
@@ -479,7 +500,8 @@ int run_test(int argc, char* argv[], bool verbose) {
             const auto& file = test_files[fi];
             if (opts.verbose) {
                 TML_LOG_INFO("test", c.dim() << "[" << (fi + 1) << "/" << test_files.size() << "] "
-                                             << c.reset() << fs::path(file).filename().string() << " ...");
+                                             << c.reset() << fs::path(file).filename().string()
+                                             << " ...");
             }
             auto test_start = std::chrono::high_resolution_clock::now();
             TestResult result;
@@ -496,9 +518,11 @@ int run_test(int argc, char* argv[], bool verbose) {
                     std::chrono::duration_cast<std::chrono::milliseconds>(test_end - test_start)
                         .count();
                 if (result.passed) {
-                    TML_LOG_INFO("test", c.green() << "OK" << c.reset() << c.dim() << " " << ms << "ms" << c.reset());
+                    TML_LOG_INFO("test", c.green() << "OK" << c.reset() << c.dim() << " " << ms
+                                                   << "ms" << c.reset());
                 } else {
-                    TML_LOG_INFO("test", c.red() << "FAIL" << c.reset() << c.dim() << " " << ms << "ms" << c.reset());
+                    TML_LOG_INFO("test", c.red() << "FAIL" << c.reset() << c.dim() << " " << ms
+                                                 << "ms" << c.reset());
                 }
             }
             collector.add(std::move(result));

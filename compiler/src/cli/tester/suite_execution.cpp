@@ -147,7 +147,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
         if (!opts.quiet) {
             TML_LOG_DEBUG("test", "Grouped into " << suites.size() << " test suite"
-                                                   << (suites.size() != 1 ? "s" : ""));
+                                                  << (suites.size() != 1 ? "s" : ""));
         }
 
         // Clean up orphaned cache files periodically
@@ -285,10 +285,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                              << " suites cached, skipping compilation");
             }
         } else {
-            // Determine number of compilation threads
-            // Force sequential compilation to avoid CPU overload
-            unsigned int hw_threads = std::thread::hardware_concurrency();
-            (void)hw_threads; // Unused - sequential mode
+            // Suite compilation is sequential because compile_test_suite() already
+            // parallelizes internally (Phase 1 codegen + Phase 2 obj compile use
+            // calc_codegen_threads). Running multiple suites * internal threads
+            // would exceed the 50% core cap.
             unsigned int num_compile_threads = 1;
 
             // Structure to hold compilation results
@@ -321,7 +321,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     if (!opts.quiet && opts.verbose) {
                         std::lock_guard<std::mutex> lock(output_mutex);
                         TML_LOG_DEBUG("test", "Compiling suite: " << job.suite.name << " ("
-                                                                  << job.suite.tests.size() << " tests)");
+                                                                  << job.suite.tests.size()
+                                                                  << " tests)");
                     }
 
                     job.result = compile_test_suite(job.suite, opts.verbose, opts.no_cache);
@@ -419,11 +420,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         std::mutex coverage_mutex; // For synchronized coverage collection
         std::atomic<bool> fail_fast_triggered{false};
 
-        // Determine number of execution threads
-        // Force single thread temporarily for debugging
+        // Determine number of execution threads for running test functions.
+        // Test execution is I/O-bound (DLL function calls + output capture).
         unsigned int hw_threads = std::thread::hardware_concurrency();
-        unsigned int num_exec_threads = 1; // DEBUG: force single thread
-        (void)hw_threads;
+        if (hw_threads == 0)
+            hw_threads = 8;
+        unsigned int num_exec_threads = std::clamp(hw_threads / 4, 1u, 4u);
+        num_exec_threads =
+            std::min(num_exec_threads, static_cast<unsigned int>(loaded_suites.size()));
 
         // Job queue for parallel suite execution
         std::atomic<size_t> suite_index{0};
@@ -700,12 +704,15 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                 // Never update with zero coverage - something went wrong
                 if (current_covered == 0) {
-                    TML_LOG_WARN("test", c.red() << c.bold()
-                                                 << "[HTML report not updated - zero coverage detected]"
-                                                 << c.reset());
-                    TML_LOG_WARN("test", c.dim()
-                                            << "   No functions were tracked. Check if tests are running correctly."
-                                            << c.reset());
+                    TML_LOG_WARN("test", c.red()
+                                             << c.bold()
+                                             << "[HTML report not updated - zero coverage detected]"
+                                             << c.reset());
+                    TML_LOG_WARN(
+                        "test",
+                        c.dim()
+                            << "   No functions were tracked. Check if tests are running correctly."
+                            << c.reset());
                 } else {
                     auto previous = get_previous_coverage(CompilerOptions::coverage_output);
 
@@ -730,23 +737,27 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                     CompilerOptions::coverage_output, test_stats);
                     } else {
                         // Coverage regression detected
-                        TML_LOG_WARN("test", c.yellow() << c.bold()
-                                                        << "[HTML report not updated - coverage regression detected]"
-                                                        << c.reset());
+                        TML_LOG_WARN(
+                            "test",
+                            c.yellow() << c.bold()
+                                       << "[HTML report not updated - coverage regression detected]"
+                                       << c.reset());
                         TML_LOG_WARN("test", c.dim() << "   Previous: " << previous.covered << "/"
-                                                     << previous.total << " functions (" << std::fixed
-                                                     << std::setprecision(1) << previous.percent << "%)"
-                                                     << c.reset());
+                                                     << previous.total << " functions ("
+                                                     << std::fixed << std::setprecision(1)
+                                                     << previous.percent << "%)" << c.reset());
                         TML_LOG_WARN("test", c.dim() << "   Current:  " << current_covered << "/"
-                                                     << previous.total << " functions (" << std::fixed
-                                                     << std::setprecision(1) << current_percent << "%)"
-                                                     << c.reset());
-                        TML_LOG_WARN("test", c.dim() << "   Run with --force-coverage to update anyway"
-                                                     << c.reset());
+                                                     << previous.total << " functions ("
+                                                     << std::fixed << std::setprecision(1)
+                                                     << current_percent << "%)" << c.reset());
+                        TML_LOG_WARN("test", c.dim()
+                                                 << "   Run with --force-coverage to update anyway"
+                                                 << c.reset());
                     }
                 }
             } else if (has_failures && !CompilerOptions::coverage_output.empty()) {
-                TML_LOG_INFO("test", c.dim() << "[HTML report not updated - tests failed]" << c.reset());
+                TML_LOG_INFO("test",
+                             c.dim() << "[HTML report not updated - tests failed]" << c.reset());
             }
         }
 

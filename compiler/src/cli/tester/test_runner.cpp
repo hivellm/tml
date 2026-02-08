@@ -46,6 +46,7 @@
 #include "preprocessor/preprocessor.hpp"
 #include "types/module_binary.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -75,6 +76,17 @@
 namespace fs = std::filesystem;
 
 namespace tml::cli {
+
+/// Calculate thread count for internal compilation parallelism.
+/// Returns 4-8 threads based on hardware cores, never exceeding 50% of total cores.
+static unsigned int calc_codegen_threads(unsigned int task_count) {
+    unsigned int hw = std::thread::hardware_concurrency();
+    if (hw == 0)
+        hw = 8; // Fallback for unknown hardware
+    unsigned int half_cores = hw / 2;
+    unsigned int clamped = std::clamp(half_cores, 4u, 8u);
+    return std::min(clamped, task_count);
+}
 
 // ============================================================================
 // C Runtime Logger Bridge
@@ -1793,10 +1805,12 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             std::atomic<int64_t> total_task_time_us{0};
             std::atomic<size_t> completed_tasks{0};
 
-            // DISABLED: Internal parallelism causes ACCESS_VIOLATION crashes due to
-            // race conditions in GlobalModuleCache when multiple threads load modules
-            // simultaneously. Force sequential compilation for stability.
-            unsigned int num_threads = 1;
+            // Phase 1 internal parallelism: lex/parse/typecheck/codegen per test file.
+            // Thread-safe: GlobalModuleCache uses shared_mutex, ModuleRegistry is per-thread,
+            // path cache uses shared_mutex, TypeEnv is per-thread.
+            // Capped at 50% of cores, range [4, 8].
+            unsigned int num_threads =
+                calc_codegen_threads(static_cast<unsigned int>(tasks.size()));
 
             // TEMPORARILY DISABLED for baseline comparison
             // Pre-load all library modules from .tml.meta binary cache.
@@ -2189,8 +2203,10 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             std::atomic<int64_t> total_obj_time_us{0};
             std::atomic<size_t> completed_objs{0};
 
-            // Limit internal parallelism - suites are already compiled in parallel
-            unsigned int num_threads = std::min(2u, (unsigned int)pending_compiles.size());
+            // Phase 2: compile .ll -> .obj using clang subprocesses.
+            // Each subprocess is independent (unique file paths). Thread-safe by design.
+            unsigned int num_threads =
+                calc_codegen_threads(static_cast<unsigned int>(pending_compiles.size()));
 
             auto compile_worker = [&]() {
                 while (!compile_error.load()) {
