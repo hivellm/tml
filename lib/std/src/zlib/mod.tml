@@ -118,10 +118,10 @@ pub mod crc32
 pub mod stream
 
 // Re-export error types
-pub use zlib::error::{ZlibError, ZlibErrorKind}
+pub use std::zlib::error::{ZlibError, ZlibErrorKind}
 
 // Re-export all constants
-pub use zlib::constants::{
+pub use std::zlib::constants::{
     // Zlib flush modes
     Z_NO_FLUSH,
     Z_PARTIAL_FLUSH,
@@ -231,10 +231,10 @@ pub use zlib::constants::{
 }
 
 // Re-export options types
-pub use zlib::options::{ZlibOptions, BrotliOptions, ZstdOptions}
+pub use std::zlib::options::{ZlibOptions, BrotliOptions, ZstdOptions}
 
 // Re-export deflate functions
-pub use zlib::deflate::{
+pub use std::zlib::deflate::{
     deflate,
     deflate_with_options,
     deflate_buffer,
@@ -268,7 +268,7 @@ pub use zlib::deflate::{
 }
 
 // Re-export gzip functions
-pub use zlib::gzip::{
+pub use std::zlib::gzip::{
     gzip,
     gzip_with_options,
     gzip_buffer,
@@ -286,7 +286,7 @@ pub use zlib::gzip::{
 }
 
 // Re-export brotli functions
-pub use zlib::brotli::{
+pub use std::zlib::brotli::{
     brotli_compress,
     brotli_compress_with_options,
     brotli_compress_buffer,
@@ -304,7 +304,7 @@ pub use zlib::brotli::{
 }
 
 // Re-export zstd functions
-pub use zlib::zstd::{
+pub use std::zlib::zstd::{
     zstd_compress,
     zstd_compress_with_options,
     zstd_compress_buffer,
@@ -330,7 +330,7 @@ pub use zlib::zstd::{
 }
 
 // Re-export CRC32 functions
-pub use zlib::crc32::{
+pub use std::zlib::crc32::{
     crc32,
     crc32_buffer,
     crc32_update,
@@ -344,7 +344,7 @@ pub use zlib::crc32::{
 }
 
 // Re-export streaming classes
-pub use zlib::stream::{
+pub use std::zlib::stream::{
     Deflate,
     DeflateRaw,
     Gzip,

@@ -98,19 +98,25 @@ auto TypeEnv::builtin_types() const -> const std::unordered_map<std::string, Typ
 // ============================================================================
 
 TypeEnv::TypeEnv(SnapshotTag, const TypeEnv& source)
-    : structs_(source.structs_),
-      enums_(source.enums_),
-      behaviors_(source.behaviors_),
-      functions_(source.functions_),
-      behavior_impls_(source.behavior_impls_),
-      type_aliases_(source.type_aliases_),
-      builtins_(source.builtins_),
-      classes_(source.classes_),
-      interfaces_(source.interfaces_),
+    : // Type definition tables (shared across all compilation units)
+      structs_(source.structs_), enums_(source.enums_), behaviors_(source.behaviors_),
+      functions_(source.functions_), behavior_impls_(source.behavior_impls_),
+      type_aliases_(source.type_aliases_), builtins_(source.builtins_),
+      // OOP type definition tables
+      classes_(source.classes_), interfaces_(source.interfaces_),
       class_interfaces_(source.class_interfaces_),
-      // Fresh per-file state:
-      current_scope_(std::make_shared<Scope>()),
-      type_var_counter_(0) {}
+      // Fresh per-file state
+      current_scope_(std::make_shared<Scope>()), type_var_counter_(0),
+      // substitutions_ - default empty (fresh inference state)
+      // Module system - fresh registry, per-file paths reset
+      module_registry_(std::make_shared<ModuleRegistry>()),
+      // current_module_path_ - default empty
+      // source_directory_ - default empty
+      // imported_symbols_ - default empty
+      // import_conflicts_ - default empty
+      abort_on_module_error_(source.abort_on_module_error_)
+// loading_modules_ - default empty
+{}
 
 TypeEnv TypeEnv::snapshot() const {
     return TypeEnv(SnapshotTag{}, *this);

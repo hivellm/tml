@@ -135,23 +135,23 @@
 //! ```
 
 // Re-export submodules
-pub use sync::ordering
-pub use sync::atomic
-pub use sync::mutex
-pub use sync::rwlock
-pub use sync::condvar
-pub use sync::barrier
-pub use sync::once
-pub use sync::arc
-pub use sync::queue
-pub use sync::stack
-pub use sync::mpsc
+pub use std::sync::ordering
+pub use std::sync::atomic
+pub use std::sync::mutex
+pub use std::sync::rwlock
+pub use std::sync::condvar
+pub use std::sync::barrier
+pub use std::sync::once
+pub use std::sync::arc
+pub use std::sync::queue
+pub use std::sync::stack
+pub use std::sync::mpsc
 
 // Re-export commonly used types at sync level
-pub use sync::ordering::Ordering
-pub use sync::ordering::{fence, compiler_fence}
+pub use std::sync::ordering::Ordering
+pub use std::sync::ordering::{fence, compiler_fence}
 
-pub use sync::atomic::{
+pub use std::sync::atomic::{
     AtomicBool,
     AtomicI32,
     AtomicI64,
@@ -163,24 +163,24 @@ pub use sync::atomic::{
     spin_loop_hint,
 }
 
-pub use sync::mutex::{Mutex, MutexGuard, Lock}
+pub use std::sync::mutex::{Mutex, MutexGuard, Lock}
 
-pub use sync::rwlock::{
+pub use std::sync::rwlock::{
     RwLock,
     RwLockReadGuard,
     RwLockWriteGuard,
 }
 
-pub use sync::condvar::Condvar
+pub use std::sync::condvar::Condvar
 
-pub use sync::barrier::{Barrier, BarrierWaitResult}
+pub use std::sync::barrier::{Barrier, BarrierWaitResult}
 
-pub use sync::once::{Once, OnceLock}
+pub use std::sync::once::{Once, OnceLock}
 
-pub use sync::arc::{Arc, Weak}
+pub use std::sync::arc::{Arc, Weak}
 
-pub use sync::queue::LockFreeQueue
+pub use std::sync::queue::LockFreeQueue
 
-pub use sync::stack::LockFreeStack
+pub use std::sync::stack::LockFreeStack
 
-pub use sync::mpsc::{Sender, Receiver, channel, SendError, RecvError, TryRecvError, RecvTimeoutError}
+pub use std::sync::mpsc::{Sender, Receiver, channel, SendError, RecvError, TryRecvError, RecvTimeoutError}

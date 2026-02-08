@@ -121,39 +121,91 @@ fs::path get_module_cache_path(const std::string& module_path, const fs::path& b
 // Type Deserialization (string -> TypePtr)
 // ============================================================================
 
+// Helper to split comma-separated type arguments respecting bracket nesting
+static std::vector<std::string> split_type_args(const std::string& str) {
+    std::vector<std::string> args;
+    int depth = 0;
+    size_t start = 0;
+    for (size_t i = 0; i < str.size(); ++i) {
+        if (str[i] == '[' || str[i] == '(')
+            depth++;
+        else if (str[i] == ']' || str[i] == ')')
+            depth--;
+        else if (str[i] == ',' && depth == 0) {
+            std::string arg = str.substr(start, i - start);
+            // Trim whitespace
+            size_t s = arg.find_first_not_of(' ');
+            size_t e = arg.find_last_not_of(' ');
+            if (s != std::string::npos) {
+                args.push_back(arg.substr(s, e - s + 1));
+            }
+            start = i + 1;
+        }
+    }
+    // Last argument
+    if (start < str.size()) {
+        std::string arg = str.substr(start);
+        size_t s = arg.find_first_not_of(' ');
+        size_t e = arg.find_last_not_of(' ');
+        if (s != std::string::npos) {
+            args.push_back(arg.substr(s, e - s + 1));
+        }
+    }
+    return args;
+}
+
 static TypePtr deserialize_type_string(const std::string& str) {
     if (str.empty() || str == "<null>" || str == "Unit" || str == "()")
         return make_unit();
 
     // Primitive types
-    if (str == "I8") return make_primitive(PrimitiveKind::I8);
-    if (str == "I16") return make_primitive(PrimitiveKind::I16);
-    if (str == "I32") return make_primitive(PrimitiveKind::I32);
-    if (str == "I64") return make_primitive(PrimitiveKind::I64);
-    if (str == "I128") return make_primitive(PrimitiveKind::I128);
-    if (str == "U8") return make_primitive(PrimitiveKind::U8);
-    if (str == "U16") return make_primitive(PrimitiveKind::U16);
-    if (str == "U32") return make_primitive(PrimitiveKind::U32);
-    if (str == "U64") return make_primitive(PrimitiveKind::U64);
-    if (str == "U128") return make_primitive(PrimitiveKind::U128);
-    if (str == "F32") return make_primitive(PrimitiveKind::F32);
-    if (str == "F64") return make_primitive(PrimitiveKind::F64);
-    if (str == "Bool") return make_primitive(PrimitiveKind::Bool);
-    if (str == "Char") return make_primitive(PrimitiveKind::Char);
-    if (str == "Str") return make_primitive(PrimitiveKind::Str);
+    if (str == "I8")
+        return make_primitive(PrimitiveKind::I8);
+    if (str == "I16")
+        return make_primitive(PrimitiveKind::I16);
+    if (str == "I32")
+        return make_primitive(PrimitiveKind::I32);
+    if (str == "I64")
+        return make_primitive(PrimitiveKind::I64);
+    if (str == "I128")
+        return make_primitive(PrimitiveKind::I128);
+    if (str == "U8")
+        return make_primitive(PrimitiveKind::U8);
+    if (str == "U16")
+        return make_primitive(PrimitiveKind::U16);
+    if (str == "U32")
+        return make_primitive(PrimitiveKind::U32);
+    if (str == "U64")
+        return make_primitive(PrimitiveKind::U64);
+    if (str == "U128")
+        return make_primitive(PrimitiveKind::U128);
+    if (str == "F32")
+        return make_primitive(PrimitiveKind::F32);
+    if (str == "F64")
+        return make_primitive(PrimitiveKind::F64);
+    if (str == "Bool")
+        return make_primitive(PrimitiveKind::Bool);
+    if (str == "Char")
+        return make_primitive(PrimitiveKind::Char);
+    if (str == "Str")
+        return make_primitive(PrimitiveKind::Str);
+    if (str == "Usize")
+        return make_primitive(PrimitiveKind::U64);
+    if (str == "Isize")
+        return make_primitive(PrimitiveKind::I64);
 
     // Reference types
-    if (str.substr(0, 8) == "mut ref ") {
+    if (str.starts_with("mut ref ")) {
         auto inner = deserialize_type_string(str.substr(8));
         return std::make_shared<Type>(Type{RefType{true, inner}});
     }
-    if (str.substr(0, 4) == "ref ") {
+    if (str.starts_with("ref ")) {
         auto inner = deserialize_type_string(str.substr(4));
         return std::make_shared<Type>(Type{RefType{false, inner}});
     }
 
-    // Pointer types
-    if (str.substr(0, 5) == "*mut ") {
+    // Pointer types (raw pointer syntax: *T, *mut T)
+    if (str.starts_with("*mut ")) {
         auto inner = deserialize_type_string(str.substr(5));
         return std::make_shared<Type>(Type{PtrType{true, inner}});
     }
@@ -162,18 +214,95 @@ static TypePtr deserialize_type_string(const std::string& str) {
         return std::make_shared<Type>(Type{PtrType{false, inner}});
     }
 
-    // Generic type parameters (single uppercase letter or short name without special chars)
-    if (str.size() <= 3 && std::isupper(str[0]) &&
-        str.find('[') == std::string::npos &&
-        str.find('(') == std::string::npos &&
-        str != "I8" && str != "I16" && str != "I32" && str != "I64" && str != "I128" &&
-        str != "U8" && str != "U16" && str != "U32" && str != "U64" && str != "U128" &&
-        str != "F32" && str != "F64" && str != "Str") {
-        // Could be a generic param like T, U, K, V, E, etc.
-        // Treat as NamedType — the type checker will resolve it
+    // Tuple types: (A, B, C)
+    if (str.size() > 2 && str.front() == '(' && str.back() == ')') {
+        std::string inner = str.substr(1, str.size() - 2);
+        auto args = split_type_args(inner);
+        std::vector<TypePtr> elements;
+        for (const auto& arg : args) {
+            elements.push_back(deserialize_type_string(arg));
+        }
+        return make_tuple(std::move(elements));
     }
 
-    // Default: create NamedType (handles generics, user types, etc.)
+    // Function types: func(A, B) -> C
+    if (str.starts_with("func(")) {
+        // Find the closing paren
+        int depth = 0;
+        size_t close_paren = std::string::npos;
+        for (size_t i = 4; i < str.size(); ++i) {
+            if (str[i] == '(')
+                depth++;
+            else if (str[i] == ')') {
+                depth--;
+                if (depth == 0) {
+                    close_paren = i;
+                    break;
+                }
+            }
+        }
+        if (close_paren != std::string::npos) {
+            std::string params_str = str.substr(5, close_paren - 5);
+            auto param_strs = split_type_args(params_str);
+            std::vector<TypePtr> params;
+            for (const auto& p : param_strs) {
+                params.push_back(deserialize_type_string(p));
+            }
+            TypePtr ret = make_unit();
+            if (close_paren + 4 < str.size() && str.substr(close_paren + 1, 4) == " -> ") {
+                ret = deserialize_type_string(str.substr(close_paren + 5));
+            }
+            return std::make_shared<Type>(Type{FuncType{std::move(params), ret, false}});
+        }
+    }
+
+    // Array types: [T; N]
+    if (str.size() > 2 && str.front() == '[' && str.back() == ']') {
+        std::string inner = str.substr(1, str.size() - 2);
+        auto semi_pos = inner.find(';');
+        if (semi_pos != std::string::npos) {
+            std::string elem_str = inner.substr(0, semi_pos);
+            // Trim
+            while (!elem_str.empty() && elem_str.back() == ' ')
+                elem_str.pop_back();
+            std::string size_str = inner.substr(semi_pos + 1);
+            while (!size_str.empty() && size_str.front() == ' ')
+                size_str = size_str.substr(1);
+            auto elem = deserialize_type_string(elem_str);
+            size_t arr_size = 0;
+            try {
+                arr_size = std::stoull(size_str);
+            } catch (...) {}
+            return std::make_shared<Type>(Type{ArrayType{elem, arr_size}});
+        }
+        // Slice types: [T]
+        auto elem = deserialize_type_string(inner);
+        return std::make_shared<Type>(Type{SliceType{elem}});
+    }
+
+    // Named types with generic args: Name[Arg1, Arg2]
+    // Find the first '[' that starts the type arguments
+    auto bracket_pos = str.find('[');
+    if (bracket_pos != std::string::npos && str.back() == ']') {
+        std::string name = str.substr(0, bracket_pos);
+        std::string args_str = str.substr(bracket_pos + 1, str.size() - bracket_pos - 2);
+        auto arg_strs = split_type_args(args_str);
+        std::vector<TypePtr> type_args;
+        for (const auto& arg : arg_strs) {
+            type_args.push_back(deserialize_type_string(arg));
+        }
+
+        // Special case: Ptr[T] -> PtrType (builtin pointer type)
+        // Note: RawPtr[T] is NOT special-cased - it's a user-defined struct
+        // with field {addr: I64}, and must remain as NamedType for correct codegen.
+        if (name == "Ptr" && type_args.size() == 1) {
+            return std::make_shared<Type>(Type{PtrType{false, type_args[0]}});
+        }
+
+        return std::make_shared<Type>(Type{NamedType{name, "", std::move(type_args)}});
+    }
+
+    // Simple named type (no generics)
     return std::make_shared<Type>(Type{NamedType{str, "", {}}});
 }
 
@@ -596,28 +725,32 @@ void ModuleBinaryReader::set_error(const std::string& msg) {
 uint8_t ModuleBinaryReader::read_u8() {
     uint8_t value = 0;
     in_.read(reinterpret_cast<char*>(&value), 1);
-    if (!in_) set_error("Unexpected end of data");
+    if (!in_)
+        set_error("Unexpected end of data");
     return value;
 }
 
 uint16_t ModuleBinaryReader::read_u16() {
     uint16_t value = 0;
     in_.read(reinterpret_cast<char*>(&value), 2);
-    if (!in_) set_error("Unexpected end of data");
+    if (!in_)
+        set_error("Unexpected end of data");
     return value;
 }
 
 uint32_t ModuleBinaryReader::read_u32() {
     uint32_t value = 0;
     in_.read(reinterpret_cast<char*>(&value), 4);
-    if (!in_) set_error("Unexpected end of data");
+    if (!in_)
+        set_error("Unexpected end of data");
     return value;
 }
 
 uint64_t ModuleBinaryReader::read_u64() {
     uint64_t value = 0;
     in_.read(reinterpret_cast<char*>(&value), 8);
-    if (!in_) set_error("Unexpected end of data");
+    if (!in_)
+        set_error("Unexpected end of data");
     return value;
 }
 
@@ -627,15 +760,18 @@ bool ModuleBinaryReader::read_bool() {
 
 std::string ModuleBinaryReader::read_string() {
     uint32_t len = read_u32();
-    if (has_error_) return "";
-    if (len == 0) return "";
+    if (has_error_)
+        return "";
+    if (len == 0)
+        return "";
     if (len > 10 * 1024 * 1024) { // 10MB sanity check
         set_error("String length too large: " + std::to_string(len));
         return "";
     }
     std::string str(len, '\0');
     in_.read(str.data(), len);
-    if (!in_) set_error("Unexpected end of data reading string");
+    if (!in_)
+        set_error("Unexpected end of data reading string");
     return str;
 }
 
@@ -653,7 +789,8 @@ TypePtr ModuleBinaryReader::read_type() {
 
 bool ModuleBinaryReader::verify_header() {
     uint32_t magic = read_u32();
-    if (has_error_) return false;
+    if (has_error_)
+        return false;
     if (magic != MODULE_META_MAGIC) {
         set_error("Invalid module meta magic number");
         return false;
@@ -672,7 +809,8 @@ bool ModuleBinaryReader::verify_header() {
 }
 
 uint64_t ModuleBinaryReader::read_header_hash() {
-    if (!verify_header()) return 0;
+    if (!verify_header())
+        return 0;
     uint64_t source_hash = read_u64();
     // Skip timestamp
     read_u64();
@@ -681,7 +819,8 @@ uint64_t ModuleBinaryReader::read_header_hash() {
 
 std::vector<std::string> ModuleBinaryReader::read_string_array() {
     uint32_t count = read_u32();
-    if (has_error_) return {};
+    if (has_error_)
+        return {};
     std::vector<std::string> result;
     result.reserve(count);
     for (uint32_t i = 0; i < count && !has_error_; ++i) {
@@ -980,14 +1119,16 @@ ReExport ModuleBinaryReader::read_re_export() {
 Module ModuleBinaryReader::read_module() {
     Module module;
 
-    if (!verify_header()) return module;
+    if (!verify_header())
+        return module;
 
     // Skip source_hash and timestamp (already read by verify_header or read_header_hash)
     // Actually verify_header only reads magic + version, so read the rest
     read_u64(); // source_hash
     read_u64(); // timestamp
 
-    if (has_error_) return module;
+    if (has_error_)
+        return module;
 
     // Module metadata
     module.name = read_string();
@@ -1114,8 +1255,8 @@ std::optional<Module> load_module_from_cache(const std::string& module_path,
     uint64_t cached_hash = header_reader.read_header_hash();
 
     if (header_reader.has_error() || cached_hash != current_hash) {
-        TML_DEBUG_LN("[META] Cache miss for " << module_path
-                     << " (hash: " << current_hash << " vs " << cached_hash << ")");
+        TML_DEBUG_LN("[META] Cache miss for " << module_path << " (hash: " << current_hash << " vs "
+                                              << cached_hash << ")");
         return std::nullopt;
     }
 
@@ -1125,8 +1266,8 @@ std::optional<Module> load_module_from_cache(const std::string& module_path,
     Module module = reader.read_module();
 
     if (reader.has_error()) {
-        TML_LOG_WARN("types", "[META] Failed to read cache for " << module_path
-                     << ": " << reader.error_message());
+        TML_LOG_WARN("types", "[META] Failed to read cache for " << module_path << ": "
+                                                                 << reader.error_message());
         return std::nullopt;
     }
 
@@ -1151,8 +1292,8 @@ std::optional<Module> load_module_from_cache(const std::string& module_path) {
     Module module = reader.read_module();
 
     if (reader.has_error()) {
-        TML_DEBUG_LN("[META] Failed to read cache for " << module_path
-                     << ": " << reader.error_message());
+        TML_DEBUG_LN("[META] Failed to read cache for " << module_path << ": "
+                                                        << reader.error_message());
         return std::nullopt;
     }
 
@@ -1200,8 +1341,7 @@ static fs::path find_lib_root_for_meta() {
         cwd.parent_path().parent_path() / "lib",
     };
     for (const auto& candidate : candidates) {
-        if (fs::exists(candidate / "core" / "src") &&
-            fs::exists(candidate / "std" / "src")) {
+        if (fs::exists(candidate / "core" / "src") && fs::exists(candidate / "std" / "src")) {
             return fs::canonical(candidate);
         }
     }
@@ -1212,16 +1352,19 @@ static fs::path find_lib_root_for_meta() {
 static std::vector<std::string> extract_pub_mod_names(const fs::path& mod_file) {
     std::vector<std::string> names;
     std::ifstream in(mod_file);
-    if (!in) return names;
+    if (!in)
+        return names;
 
     std::string line;
     while (std::getline(in, line)) {
         // Match "pub mod <name>" — skip comments
         size_t pos = line.find("pub mod ");
-        if (pos == std::string::npos) continue;
+        if (pos == std::string::npos)
+            continue;
         // Ensure it's not inside a comment
         size_t comment_pos = line.find("//");
-        if (comment_pos != std::string::npos && comment_pos < pos) continue;
+        if (comment_pos != std::string::npos && comment_pos < pos)
+            continue;
 
         std::string rest = line.substr(pos + 8);
         // Extract the module name (first word)
@@ -1275,14 +1418,15 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
         }
 
         std::ifstream in(entry.path(), std::ios::binary);
-        if (!in) continue;
+        if (!in)
+            continue;
 
         ModuleBinaryReader reader(in);
         Module module = reader.read_module();
 
         if (reader.has_error()) {
-            TML_LOG_WARN("meta", "  [LOAD FAILED] " << module_path
-                         << " - " << reader.error_message());
+            TML_LOG_WARN("meta",
+                         "  [LOAD FAILED] " << module_path << " - " << reader.error_message());
             continue;
         }
 
@@ -1306,13 +1450,13 @@ static int generate_all_meta_from_source() {
 
     // Discover all library submodules from mod.tml files
     struct LibInfo {
-        std::string prefix;  // "core", "std"
+        std::string prefix; // "core", "std"
         fs::path mod_file;
     };
 
     std::vector<LibInfo> libs = {
         {"core", lib_root / "core" / "src" / "mod.tml"},
-        {"std",  lib_root / "std" / "src" / "mod.tml"},
+        {"std", lib_root / "std" / "src" / "mod.tml"},
     };
 
     // Collect all module paths to load
@@ -1333,7 +1477,7 @@ static int generate_all_meta_from_source() {
     }
 
     TML_LOG_INFO("meta", "  Discovered " << module_paths.size()
-                 << " library modules to generate from source:");
+                                         << " library modules to generate from source:");
     for (const auto& mp : module_paths) {
         TML_LOG_INFO("meta", "    - " << mp);
     }
@@ -1342,7 +1486,7 @@ static int generate_all_meta_from_source() {
     auto registry = std::make_shared<ModuleRegistry>();
     TypeEnv env;
     env.set_module_registry(registry);
-    env.set_abort_on_module_error(false);  // Don't crash on parse errors
+    env.set_abort_on_module_error(false); // Don't crash on parse errors
 
     int generated = 0;
     int skipped = 0;
@@ -1359,7 +1503,8 @@ static int generate_all_meta_from_source() {
         auto start = std::chrono::steady_clock::now();
         bool ok = env.load_native_module(mod_path, /*silent=*/true);
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - start).count();
+                           std::chrono::steady_clock::now() - start)
+                           .count();
 
         if (ok) {
             ++generated;
@@ -1370,9 +1515,9 @@ static int generate_all_meta_from_source() {
         }
     }
 
-    TML_LOG_INFO("meta", "  Summary: " << generated << " generated, "
-                 << skipped << " already cached, " << failed << " failed"
-                 << " (total: " << module_paths.size() << ")");
+    TML_LOG_INFO("meta", "  Summary: " << generated << " generated, " << skipped
+                                       << " already cached, " << failed << " failed"
+                                       << " (total: " << module_paths.size() << ")");
 
     return generated;
 }
@@ -1403,7 +1548,8 @@ int preload_all_meta_caches() {
 
     if (loaded > 0) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - preload_start).count();
+                           std::chrono::steady_clock::now() - preload_start)
+                           .count();
         TML_LOG_INFO("meta", "========================================");
         TML_LOG_INFO("meta", " META PRELOAD COMPLETE (Phase 1: binary cache)");
         TML_LOG_INFO("meta", "  Loaded: " << loaded << " modules from .tml.meta files");
@@ -1420,7 +1566,8 @@ int preload_all_meta_caches() {
     int generated = generate_all_meta_from_source();
 
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - preload_start).count();
+                       std::chrono::steady_clock::now() - preload_start)
+                       .count();
     TML_LOG_INFO("meta", "========================================");
     TML_LOG_INFO("meta", " META PRELOAD COMPLETE (Phase 2: generated from source)");
     TML_LOG_INFO("meta", "  Generated: " << generated << " modules");

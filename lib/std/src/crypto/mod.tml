@@ -184,10 +184,10 @@ pub mod rsa
 pub mod constants
 
 // Re-export error types
-pub use crypto::error::{CryptoError, CryptoErrorKind}
+pub use std::crypto::error::{CryptoError, CryptoErrorKind}
 
 // Re-export hash types and functions
-pub use crypto::hash::{
+pub use std::crypto::hash::{
     Hash,
     HashAlgorithm,
     Digest,
@@ -205,7 +205,7 @@ pub use crypto::hash::{
 }
 
 // Re-export HMAC types
-pub use crypto::hmac::{
+pub use std::crypto::hmac::{
     Hmac,
     hmac_sha256,
     hmac_sha384,
@@ -213,7 +213,7 @@ pub use crypto::hmac::{
 }
 
 // Re-export cipher types
-pub use crypto::cipher::{
+pub use std::crypto::cipher::{
     Cipher,
     Decipher,
     CipherAlgorithm,
@@ -228,7 +228,7 @@ pub use crypto::cipher::{
 }
 
 // Re-export signature types
-pub use crypto::sign::{
+pub use std::crypto::sign::{
     Signer,
     Verifier,
     SignatureAlgorithm,
@@ -237,7 +237,7 @@ pub use crypto::sign::{
 }
 
 // Re-export key types
-pub use crypto::key::{
+pub use std::crypto::key::{
     SecretKey,
     PrivateKey,
     PublicKey,
@@ -253,7 +253,7 @@ pub use crypto::key::{
 }
 
 // Re-export KDF functions
-pub use crypto::kdf::{
+pub use std::crypto::kdf::{
     pbkdf2,
     scrypt,
     ScryptParams,
@@ -266,7 +266,7 @@ pub use crypto::kdf::{
 }
 
 // Re-export random functions
-pub use crypto::random::{
+pub use std::crypto::random::{
     SecureRandom,
     random_bytes,
     random_fill,
@@ -276,7 +276,7 @@ pub use crypto::random::{
 }
 
 // Re-export X.509 types
-pub use crypto::x509::{
+pub use std::crypto::x509::{
     X509Certificate,
     X509Chain,
     X509Name,
@@ -285,7 +285,7 @@ pub use crypto::x509::{
 }
 
 // Re-export DH types
-pub use crypto::dh::{
+pub use std::crypto::dh::{
     DiffieHellman,
     DhGroup,
     create_dh,
@@ -293,14 +293,14 @@ pub use crypto::dh::{
 }
 
 // Re-export ECDH types
-pub use crypto::ecdh::{
+pub use std::crypto::ecdh::{
     Ecdh,
     EcCurve,
     create_ecdh,
 }
 
 // Re-export RSA functions
-pub use crypto::rsa::{
+pub use std::crypto::rsa::{
     public_encrypt,
     public_decrypt,
     private_encrypt,
@@ -309,7 +309,7 @@ pub use crypto::rsa::{
 }
 
 // Re-export constants
-pub use crypto::constants::{
+pub use std::crypto::constants::{
     SUPPORTED_CIPHERS,
     SUPPORTED_HASHES,
     SUPPORTED_CURVES,

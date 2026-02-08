@@ -1566,23 +1566,38 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     }
                 }
 
-                for (const auto& [mod_name, mod] : all_modules) {
-                    // If we resolved a specific module path, only check that module
-                    if (!resolved_module_path.empty() && mod_name != resolved_module_path) {
-                        continue;
-                    }
+                // Search with resolved_module_path filter first, then without
+                for (int pass = 0; pass < 2 && imported_type_params.empty(); ++pass) {
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        // First pass: only check resolved module; second pass: check all
+                        if (pass == 0 && !resolved_module_path.empty() &&
+                            mod_name != resolved_module_path) {
+                            continue;
+                        }
+                        // Skip second pass if we had no filter
+                        if (pass == 1 && resolved_module_path.empty()) {
+                            break;
+                        }
 
-                    // Check structs
-                    auto struct_it = mod.structs.find(type_name);
-                    if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
-                        imported_type_params = struct_it->second.type_params;
-                        break;
-                    }
-                    // Check enums
-                    auto enum_it = mod.enums.find(type_name);
-                    if (enum_it != mod.enums.end() && !enum_it->second.type_params.empty()) {
-                        imported_type_params = enum_it->second.type_params;
-                        break;
+                        // Check structs (public and internal)
+                        auto struct_it = mod.structs.find(type_name);
+                        if (struct_it != mod.structs.end() &&
+                            !struct_it->second.type_params.empty()) {
+                            imported_type_params = struct_it->second.type_params;
+                            break;
+                        }
+                        auto internal_it = mod.internal_structs.find(type_name);
+                        if (internal_it != mod.internal_structs.end() &&
+                            !internal_it->second.type_params.empty()) {
+                            imported_type_params = internal_it->second.type_params;
+                            break;
+                        }
+                        // Check enums
+                        auto enum_it = mod.enums.find(type_name);
+                        if (enum_it != mod.enums.end() && !enum_it->second.type_params.empty()) {
+                            imported_type_params = enum_it->second.type_params;
+                            break;
+                        }
                     }
                 }
             }

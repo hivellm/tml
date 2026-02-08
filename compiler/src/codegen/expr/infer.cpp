@@ -623,6 +623,12 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                         struct_def = mod_struct_it->second;
                         break;
                     }
+                    // Also check internal_structs for module-internal types (e.g., ArcInner)
+                    auto internal_it = mod.internal_structs.find(named.name);
+                    if (internal_it != mod.internal_structs.end()) {
+                        struct_def = internal_it->second;
+                        break;
+                    }
                 }
             }
 
@@ -645,6 +651,20 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                  struct_name[struct_name.size() - named.name.size() - 2] == ':')) {
                                 struct_def = sdef;
                                 break;
+                            }
+                        }
+                        // Also check internal_structs with prefix matching
+                        if (!struct_def) {
+                            for (const auto& [struct_name, sdef] : mod.internal_structs) {
+                                if (struct_name == named.name ||
+                                    (struct_name.size() > named.name.size() + 2 &&
+                                     struct_name.substr(struct_name.size() - named.name.size()) ==
+                                         named.name &&
+                                     struct_name[struct_name.size() - named.name.size() - 2] ==
+                                         ':')) {
+                                    struct_def = sdef;
+                                    break;
+                                }
                             }
                         }
                     } else {
@@ -729,6 +749,12 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                 auto mod_struct_it = mod.structs.find(inner_named.name);
                                 if (mod_struct_it != mod.structs.end()) {
                                     inner_struct_def = mod_struct_it->second;
+                                    break;
+                                }
+                                // Also check internal_structs for module-internal types
+                                auto internal_it = mod.internal_structs.find(inner_named.name);
+                                if (internal_it != mod.internal_structs.end()) {
+                                    inner_struct_def = internal_it->second;
                                     break;
                                 }
                             }
@@ -831,6 +857,11 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                             auto struct_it = mod.structs.find(base_name);
                             if (struct_it != mod.structs.end()) {
                                 expected_type_params = struct_it->second.type_params.size();
+                                break;
+                            }
+                            auto internal_it = mod.internal_structs.find(base_name);
+                            if (internal_it != mod.internal_structs.end()) {
+                                expected_type_params = internal_it->second.type_params.size();
                                 break;
                             }
                         }
@@ -1465,8 +1496,14 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     const auto& all_modules = env_.module_registry()->get_all_modules();
                     for (const auto& [mod_name, mod] : all_modules) {
                         auto struct_it = mod.structs.find(named.name);
-                        if (struct_it != mod.structs.end() &&
-                            !struct_it->second.type_params.empty()) {
+                        if (struct_it == mod.structs.end()) {
+                            // Also check internal_structs
+                            struct_it = mod.internal_structs.find(named.name);
+                            if (struct_it == mod.internal_structs.end()) {
+                                continue;
+                            }
+                        }
+                        if (!struct_it->second.type_params.empty()) {
                             for (size_t i = 0; i < struct_it->second.type_params.size() &&
                                                i < named.type_args.size();
                                  ++i) {
@@ -1793,6 +1830,15 @@ auto LLVMIRGen::struct_has_field(const std::string& struct_name, const std::stri
             auto mod_struct_it = mod.structs.find(struct_name);
             if (mod_struct_it != mod.structs.end()) {
                 for (const auto& fld : mod_struct_it->second.fields) {
+                    if (fld.name == field_name) {
+                        return true;
+                    }
+                }
+            }
+            // Also check internal_structs
+            auto internal_it = mod.internal_structs.find(struct_name);
+            if (internal_it != mod.internal_structs.end()) {
+                for (const auto& fld : internal_it->second.fields) {
                     if (fld.name == field_name) {
                         return true;
                     }

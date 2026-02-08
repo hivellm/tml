@@ -551,8 +551,9 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         }
                         TML_LOG_ERROR("types", "=========================");
                     } else {
-                        TML_DEBUG_LN("[MODULE] Parse error in " << entry_path
-                                     << " (" << parsed.errors.size() << " errors, skipping)");
+                        TML_DEBUG_LN("[MODULE] Parse error in " << entry_path << " ("
+                                                                << parsed.errors.size()
+                                                                << " errors, skipping)");
                     }
                 }
             }
@@ -578,8 +579,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                                                      << ": error: " << err.message);
                     if (++error_count >= 5) {
                         if (parsed.errors.size() > 5) {
-                            TML_LOG_ERROR("types",
-                                          "... and " << (parsed.errors.size() - 5) << " more errors");
+                            TML_LOG_ERROR("types", "... and " << (parsed.errors.size() - 5)
+                                                              << " more errors");
                         }
                         break;
                     }
@@ -591,8 +592,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                               "Cannot continue - module '" << module_path << "' failed to parse");
                 std::exit(1);
             } else {
-                TML_DEBUG_LN("[MODULE] Parse error in " << file_path
-                             << " (" << parsed.errors.size() << " errors, skipping)");
+                TML_DEBUG_LN("[MODULE] Parse error in " << file_path << " (" << parsed.errors.size()
+                                                        << " errors, skipping)");
             }
             return false;
         }
@@ -1684,8 +1685,17 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
 
             // Load private import modules to ensure transitive dependencies are available
             // This handles cases like `use std::zlib::constants::*` in options.tml
+            // Private imports may be stored as full paths including symbol names
+            // (e.g., "core::option::Maybe"), so we also try the base module path
             for (const auto& import_path : private_import_sources) {
-                load_native_module(import_path, /*silent=*/true);
+                bool loaded = load_native_module(import_path, /*silent=*/true);
+                if (!loaded) {
+                    // Strip last segment (symbol name) and try as module path
+                    auto last_sep = import_path.rfind("::");
+                    if (last_sep != std::string::npos) {
+                        load_native_module(import_path.substr(0, last_sep), /*silent=*/true);
+                    }
+                }
             }
 
             return true;
@@ -1697,8 +1707,35 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     if (GlobalModuleCache::should_cache(module_path)) {
         if (auto cached = load_module_from_cache(module_path)) {
             TML_DEBUG_LN("[MODULE] Binary meta cache hit for: " << module_path);
+
+            // Copy re-export and private import paths before moving the cached module
+            std::vector<std::string> re_export_sources;
+            re_export_sources.reserve(cached->re_exports.size());
+            for (const auto& re_export : cached->re_exports) {
+                re_export_sources.push_back(re_export.source_path);
+            }
+            std::vector<std::string> private_import_sources = cached->private_imports;
+
             GlobalModuleCache::instance().put(module_path, *cached);
             module_registry_->register_module(module_path, std::move(*cached));
+
+            // Load re-export source modules to ensure transitive dependencies are available
+            for (const auto& source_path : re_export_sources) {
+                load_native_module(source_path, /*silent=*/true);
+            }
+
+            // Load private import modules for transitive dependencies
+            for (const auto& import_path : private_import_sources) {
+                bool loaded = load_native_module(import_path, /*silent=*/true);
+                if (!loaded) {
+                    // Strip last segment (symbol name) and try as module path
+                    auto last_sep = import_path.rfind("::");
+                    if (last_sep != std::string::npos) {
+                        load_native_module(import_path.substr(0, last_sep), /*silent=*/true);
+                    }
+                }
+            }
+
             return true;
         }
     }
