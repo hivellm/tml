@@ -26,6 +26,7 @@
 //! Use `--no-cache` to force recompilation.
 
 #include "builder_internal.hpp"
+#include "codegen/codegen_partitioner.hpp"
 #include "query/query_context.hpp"
 #include "types/module_binary.hpp"
 
@@ -240,6 +241,9 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
     std::string llvm_ir;
     std::set<std::string> link_libs; // FFI libraries to link
+    bool used_mir_codegen = false;
+    std::optional<mir::Module> saved_mir_module;
+    codegen::MirCodegenOptions saved_mir_opts;
 
     // Check if there are imported TML modules that need codegen
     // MIR codegen doesn't support imported module functions yet, so we need to use AST codegen
@@ -397,6 +401,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         TML_LOG_INFO("build", "Generated LLVM IR from optimized MIR ("
                                   << mir_module.functions.size() << " functions)");
 
+        // Save MIR for CGU partitioning in object compilation stage
+        used_mir_codegen = true;
+        saved_mir_opts = mir_opts;
+        saved_mir_module = std::move(mir_module);
+
         // Extract link_libs from AST @extern/@link decorated functions
         // MIR codegen doesn't track these, so we extract them directly from AST
         for (const auto& decl : module.decls) {
@@ -474,7 +483,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     fs::path cache_dir = build_dir / ".cache";
     fs::create_directories(cache_dir);
 
-    // Step 1: Compile LLVM IR (.ll) to object file (.o/.obj)
+    // Step 1: Compile LLVM IR (.ll) to object file(s) (.o/.obj)
     ObjectCompileOptions obj_options;
     obj_options.optimization_level = tml::CompilerOptions::optimization_level;
     obj_options.debug_info = tml::CompilerOptions::debug_info;
@@ -482,40 +491,97 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     obj_options.target_triple = tml::CompilerOptions::target_triple;
     obj_options.sysroot = tml::CompilerOptions::sysroot;
 
-    fs::path obj_output = cache_dir / (module_name + get_object_extension());
+    // Collect all object files to link
+    std::vector<fs::path> object_files;
 
-    // Check if cached object file is valid (unless --no-cache is set)
-    bool use_cached_obj = false;
-    if (!no_cache && fs::exists(obj_output)) {
-        try {
-            auto src_time = fs::last_write_time(fs::path(path));
-            auto obj_time = fs::last_write_time(obj_output);
-            if (obj_time >= src_time) {
-                use_cached_obj = true;
-                TML_LOG_INFO("build", "Using cached object file: " << obj_output);
-            }
-        } catch (...) {
-            // If we can't check timestamps, recompile
-        }
-    }
+    // CGU partitioning: split into N codegen units for incremental object caching
+    bool use_cgu = used_mir_codegen && saved_mir_module.has_value() &&
+                   saved_mir_module->functions.size() >= 2 && !no_cache;
 
-    ObjectCompileResult obj_result;
-    if (use_cached_obj) {
-        obj_result.success = true;
-        obj_result.object_file = obj_output;
-    } else {
-        obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
-        if (!obj_result.success) {
-            TML_LOG_ERROR("build", obj_result.error_message);
+    if (use_cgu) {
+        // Partition MIR into codegen units
+        bool is_release = (opt_level >= 2);
+        codegen::PartitionOptions part_opts;
+        part_opts.num_cgus = is_release ? 4 : 16;
+        part_opts.codegen_opts = saved_mir_opts;
+
+        codegen::CodegenPartitioner partitioner(part_opts);
+        auto partition_result = partitioner.partition(*saved_mir_module);
+
+        if (!partition_result.success) {
+            TML_LOG_ERROR("build", "CGU partitioning failed: " << partition_result.error_message);
             return 1;
         }
 
-        TML_LOG_INFO("build", "Generated: " << obj_result.object_file);
-    }
+        TML_LOG_INFO("build",
+                     "CGU: Partitioned into " << partition_result.cgus.size() << " codegen units");
 
-    // Step 2: Collect all object files to link (main .o + runtime .o files)
-    std::vector<fs::path> object_files;
-    object_files.push_back(obj_result.object_file);
+        int cache_hits = 0;
+        int compiled = 0;
+        std::string obj_ext = get_object_extension();
+
+        for (const auto& cgu : partition_result.cgus) {
+            // Cache path: .cache/<module>.cgu<N>.<fingerprint_12chars>.obj
+            std::string fp12 = cgu.fingerprint.substr(0, 12);
+            std::string cgu_name =
+                module_name + ".cgu" + std::to_string(cgu.cgu_index) + "." + fp12 + obj_ext;
+            fs::path cgu_obj_path = cache_dir / cgu_name;
+
+            if (fs::exists(cgu_obj_path)) {
+                // Cache hit — reuse existing object file
+                object_files.push_back(cgu_obj_path);
+                cache_hits++;
+                TML_LOG_INFO("build", "CGU " << cgu.cgu_index << ": cache hit (" << fp12 << ")");
+            } else {
+                // Cache miss — compile this CGU's IR to object
+                auto obj_result =
+                    compile_ir_string_to_object(cgu.llvm_ir, cgu_obj_path, clang, obj_options);
+                if (!obj_result.success) {
+                    TML_LOG_ERROR("build", "CGU " << cgu.cgu_index << " compilation failed: "
+                                                  << obj_result.error_message);
+                    return 1;
+                }
+                object_files.push_back(obj_result.object_file);
+                compiled++;
+                TML_LOG_INFO("build", "CGU " << cgu.cgu_index << ": compiled (" << fp12 << ")");
+            }
+        }
+
+        TML_LOG_INFO("build", "CGU: " << cache_hits << " cached, " << compiled << " compiled");
+    } else {
+        // Monolithic path (AST codegen, single function, or --no-cache)
+        fs::path obj_output = cache_dir / (module_name + get_object_extension());
+
+        // Check if cached object file is valid (unless --no-cache is set)
+        bool use_cached_obj = false;
+        if (!no_cache && fs::exists(obj_output)) {
+            try {
+                auto src_time = fs::last_write_time(fs::path(path));
+                auto obj_time = fs::last_write_time(obj_output);
+                if (obj_time >= src_time) {
+                    use_cached_obj = true;
+                    TML_LOG_INFO("build", "Using cached object file: " << obj_output);
+                }
+            } catch (...) {
+                // If we can't check timestamps, recompile
+            }
+        }
+
+        ObjectCompileResult obj_result;
+        if (use_cached_obj) {
+            obj_result.success = true;
+            obj_result.object_file = obj_output;
+        } else {
+            obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
+            if (!obj_result.success) {
+                TML_LOG_ERROR("build", obj_result.error_message);
+                return 1;
+            }
+            TML_LOG_INFO("build", "Generated: " << obj_result.object_file);
+        }
+
+        object_files.push_back(obj_result.object_file);
+    }
 
     // Add runtime object files only for executables (not for libraries)
     if (output_type == BuildOutputType::Executable) {
@@ -869,16 +935,87 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     obj_options.target_triple = tml::CompilerOptions::target_triple;
     obj_options.sysroot = tml::CompilerOptions::sysroot;
 
-    fs::path obj_output = cache_dir / (module_name + get_object_extension());
+    std::vector<fs::path> object_files;
 
-    auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
-    if (!obj_result.success) {
-        TML_LOG_ERROR("build", obj_result.error_message);
-        return 1;
+    // Try CGU partitioning if MIR is available from query cache
+    bool use_cgu = false;
+    if (!options.no_cache) {
+        auto mir =
+            qctx.cache().lookup<query::MirBuildResult>(query::MirBuildKey{path, module_name});
+        if (mir && mir->success && mir->mir_module && mir->mir_module->functions.size() >= 2) {
+            use_cgu = true;
+
+            bool is_release = (tml::CompilerOptions::optimization_level >= 2);
+            codegen::PartitionOptions part_opts;
+            part_opts.num_cgus = is_release ? 4 : 16;
+            part_opts.codegen_opts.emit_comments = verbose;
+#ifdef _WIN32
+            part_opts.codegen_opts.dll_export = (output_type == BuildOutputType::DynamicLib);
+            part_opts.codegen_opts.target_triple = "x86_64-pc-windows-msvc";
+#else
+            part_opts.codegen_opts.target_triple = "x86_64-unknown-linux-gnu";
+#endif
+            if (!tml::CompilerOptions::target_triple.empty()) {
+                part_opts.codegen_opts.target_triple = tml::CompilerOptions::target_triple;
+            }
+
+            codegen::CodegenPartitioner partitioner(part_opts);
+            auto partition_result = partitioner.partition(*mir->mir_module);
+
+            if (partition_result.success) {
+                TML_LOG_INFO("build", "CGU: Partitioned into " << partition_result.cgus.size()
+                                                               << " codegen units");
+
+                int cache_hits = 0;
+                int compiled = 0;
+                std::string obj_ext = get_object_extension();
+
+                for (const auto& cgu : partition_result.cgus) {
+                    std::string fp12 = cgu.fingerprint.substr(0, 12);
+                    std::string cgu_name =
+                        module_name + ".cgu" + std::to_string(cgu.cgu_index) + "." + fp12 + obj_ext;
+                    fs::path cgu_obj_path = cache_dir / cgu_name;
+
+                    if (fs::exists(cgu_obj_path)) {
+                        object_files.push_back(cgu_obj_path);
+                        cache_hits++;
+                        TML_LOG_INFO("build",
+                                     "CGU " << cgu.cgu_index << ": cache hit (" << fp12 << ")");
+                    } else {
+                        auto obj_result = compile_ir_string_to_object(cgu.llvm_ir, cgu_obj_path,
+                                                                      clang, obj_options);
+                        if (!obj_result.success) {
+                            TML_LOG_ERROR("build", "CGU " << cgu.cgu_index
+                                                          << " compilation failed: "
+                                                          << obj_result.error_message);
+                            return 1;
+                        }
+                        object_files.push_back(obj_result.object_file);
+                        compiled++;
+                        TML_LOG_INFO("build",
+                                     "CGU " << cgu.cgu_index << ": compiled (" << fp12 << ")");
+                    }
+                }
+
+                TML_LOG_INFO("build",
+                             "CGU: " << cache_hits << " cached, " << compiled << " compiled");
+            } else {
+                use_cgu = false; // Fall through to monolithic
+                TML_LOG_INFO("build", "CGU partitioning failed, using monolithic path");
+            }
+        }
     }
 
-    std::vector<fs::path> object_files;
-    object_files.push_back(obj_result.object_file);
+    if (!use_cgu) {
+        // Monolithic path
+        fs::path obj_output = cache_dir / (module_name + get_object_extension());
+        auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
+        if (!obj_result.success) {
+            TML_LOG_ERROR("build", obj_result.error_message);
+            return 1;
+        }
+        object_files.push_back(obj_result.object_file);
+    }
 
     if (output_type == BuildOutputType::Executable && parsed && parsed->success) {
         auto runtime_objects =

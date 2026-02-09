@@ -461,6 +461,7 @@ add_library(tml_codegen STATIC
     src/codegen/control/return.cpp
     src/codegen/control/when.cpp
     src/codegen/mir_codegen.cpp
+    src/codegen/codegen_partitioner.cpp
     # Core codegen (split from llvm_ir_gen.cpp for maintainability)
     src/codegen/core/utils.cpp
     src/codegen/core/types.cpp
@@ -1231,26 +1232,43 @@ if(TML_BUILD_TESTS)
 
     # Test executable
     add_executable(tml_tests
-        tests/lexer_test.cpp
-        tests/parser_test.cpp
-        tests/types_test.cpp
-        tests/borrow_test.cpp
-        tests/ir_test.cpp
-        tests/hir_test.cpp
-        tests/mir_test.cpp
-        tests/escape_analysis_test.cpp
-        tests/devirtualization_test.cpp
-        tests/format_test.cpp
-        tests/codegen_test.cpp
-        tests/codegen_builtins_test.cpp
-        tests/oop_test.cpp
-        tests/json_test.cpp
+        # Frontend
+        tests/frontend/lexer_test.cpp
+        tests/frontend/parser_test.cpp
+        tests/frontend/types_test.cpp
+        tests/frontend/borrow_test.cpp
+        tests/frontend/format_test.cpp
+        # IR
+        tests/ir/ir_test.cpp
+        tests/ir/hir_test.cpp
+        tests/ir/mir_test.cpp
+        # Codegen
+        tests/codegen/codegen_test.cpp
+        tests/codegen/codegen_builtins_test.cpp
+        tests/codegen/text_test.cpp
+        tests/codegen/oop_test.cpp
+        # Analysis
+        tests/analysis/escape_analysis_test.cpp
+        tests/analysis/devirtualization_test.cpp
+        # Foundational infrastructure
+        tests/foundational/query_fingerprint_test.cpp
+        tests/foundational/query_deps_test.cpp
+        tests/foundational/query_cache_test.cpp
+        tests/foundational/query_system_test.cpp
+        tests/foundational/incremental_cache_test.cpp
+        tests/foundational/codegen_partitioner_test.cpp
+        tests/foundational/mir_codegen_cgu_test.cpp
+        tests/foundational/llvm_backend_test.cpp
+        tests/foundational/lld_linker_test.cpp
+        # CLI
         tests/cli/object_compiler_test.cpp
         tests/cli/parallel_build_test.cpp
+        # Integration
         tests/integration/cache_test.cpp
         tests/integration/ffi_test.cpp
         tests/integration/memory_test.cpp
-        tests/log_test.cpp
+        tests/integration/json_test.cpp
+        tests/integration/log_test.cpp
     )
     target_link_libraries(tml_tests PRIVATE
         tml_cli

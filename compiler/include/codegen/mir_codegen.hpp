@@ -43,6 +43,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace tml::codegen {
@@ -67,6 +68,12 @@ public:
 
     /// Generates LLVM IR from a MIR module.
     auto generate(const mir::Module& module) -> std::string;
+
+    /// Generates LLVM IR for a subset of functions (CGU mode).
+    /// Functions at the given indices are emitted as `define` (full body).
+    /// All other functions are emitted as `declare` (external stub).
+    auto generate_cgu(const mir::Module& module, const std::vector<size_t>& function_indices)
+        -> std::string;
 
 private:
     MirCodegenOptions options_;
@@ -119,6 +126,7 @@ private:
     void emit_struct_def(const mir::StructDef& s);
     void emit_enum_def(const mir::EnumDef& e);
     void emit_function(const mir::Function& func);
+    void emit_function_declaration(const mir::Function& func);
     void emit_block(const mir::BasicBlock& block);
     void emit_instruction(const mir::InstructionData& inst);
     void emit_terminator(const mir::Terminator& term);
