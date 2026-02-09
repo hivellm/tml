@@ -90,6 +90,9 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
 // Extended build command with all options
 int run_build_ex(const std::string& path, const BuildOptions& options);
 
+// Query-based build (uses QueryContext for memoized, demand-driven compilation)
+int run_build_with_queries(const std::string& path, const BuildOptions& options);
+
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage = false, bool no_cache = false);
 

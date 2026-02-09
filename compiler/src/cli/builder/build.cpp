@@ -26,6 +26,7 @@
 //! Use `--no-cache` to force recompilation.
 
 #include "builder_internal.hpp"
+#include "query/query_context.hpp"
 #include "types/module_binary.hpp"
 
 namespace tml::cli {
@@ -734,6 +735,174 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
 
 int run_build_ex(const std::string& path, const BuildOptions& options) {
     return run_build_impl(path, options);
+}
+
+// ============================================================================
+// Query-based build (Phase 3: Query System Foundation)
+// ============================================================================
+
+int run_build_with_queries(const std::string& path, const BuildOptions& options) {
+    // Set up query options from build options
+    query::QueryOptions qopts;
+    qopts.verbose = options.verbose;
+    qopts.debug_info = tml::CompilerOptions::debug_info;
+    qopts.coverage = tml::CompilerOptions::coverage;
+    qopts.optimization_level = tml::CompilerOptions::optimization_level;
+    qopts.target_triple = tml::CompilerOptions::target_triple;
+    qopts.sysroot = tml::CompilerOptions::sysroot;
+    qopts.defines = options.defines;
+    qopts.profile_generate = options.profile_generate;
+    qopts.profile_use = options.profile_use;
+
+    auto source_dir = fs::path(path).parent_path();
+    if (source_dir.empty()) {
+        source_dir = fs::current_path();
+    }
+    qopts.source_directory = source_dir.string();
+
+    query::QueryContext qctx(qopts);
+    auto module_name = fs::path(path).stem().string();
+
+    // Run the full front-end pipeline via queries
+    auto codegen_result = qctx.codegen_unit(path, module_name);
+
+    if (!codegen_result.success) {
+        // Emit errors from the first failing stage
+        auto tok = qctx.cache().lookup<query::TokenizeResult>(query::TokenizeKey{path});
+        if (tok && !tok->success) {
+            for (const auto& err : tok->errors)
+                TML_LOG_ERROR("build", err);
+            return 1;
+        }
+
+        auto parsed =
+            qctx.cache().lookup<query::ParseModuleResult>(query::ParseModuleKey{path, module_name});
+        if (parsed && !parsed->success) {
+            for (const auto& err : parsed->errors)
+                TML_LOG_ERROR("build", err);
+            return 1;
+        }
+
+        auto tc = qctx.cache().lookup<query::TypecheckResult>(
+            query::TypecheckModuleKey{path, module_name});
+        if (tc && !tc->success) {
+            for (const auto& err : tc->errors)
+                TML_LOG_ERROR("build", err);
+            return 1;
+        }
+
+        auto bc = qctx.cache().lookup<query::BorrowcheckResult>(
+            query::BorrowcheckModuleKey{path, module_name});
+        if (bc && !bc->success) {
+            for (const auto& err : bc->errors)
+                TML_LOG_ERROR("build", err);
+            return 1;
+        }
+
+        TML_LOG_ERROR("build", codegen_result.error_message);
+        return 1;
+    }
+
+    const auto& llvm_ir = codegen_result.llvm_ir;
+    const auto& link_libs = codegen_result.link_libs;
+
+    // Extract intermediate results for post-codegen steps
+    auto tc =
+        qctx.cache().lookup<query::TypecheckResult>(query::TypecheckModuleKey{path, module_name});
+    auto parsed =
+        qctx.cache().lookup<query::ParseModuleResult>(query::ParseModuleKey{path, module_name});
+
+    auto registry = (tc && tc->success) ? tc->registry : std::make_shared<types::ModuleRegistry>();
+
+    // Log cache stats
+    auto stats = qctx.cache_stats();
+    TML_LOG_INFO("build", "Query cache: " << stats.total_entries << " entries, " << stats.hits
+                                          << " hits, " << stats.misses << " misses");
+
+    // Post-codegen: object compile + link (same as run_build_impl)
+    bool verbose = options.verbose;
+    bool emit_ir_only = options.emit_ir_only;
+    BuildOutputType output_type = options.output_type;
+    const std::string& output_dir = options.output_dir;
+
+    fs::path build_dir =
+        output_dir.empty() ? get_build_dir(false /* debug */) : fs::path(output_dir);
+    fs::create_directories(build_dir);
+
+    fs::path exe_output = build_dir / module_name;
+#ifdef _WIN32
+    exe_output += ".exe";
+#endif
+
+    if (emit_ir_only) {
+        fs::path ll_output = build_dir / (module_name + ".ll");
+        std::ofstream ll_file(ll_output);
+        if (!ll_file) {
+            TML_LOG_ERROR("build", "Cannot write to " << ll_output);
+            return 1;
+        }
+        ll_file << llvm_ir;
+        ll_file.close();
+        TML_LOG_INFO("build", "emit-ir: " << ll_output);
+        return 0;
+    }
+
+    std::string clang = find_clang();
+
+    fs::path deps_dir = build_dir / "deps";
+    fs::create_directories(deps_dir);
+    std::string deps_cache = to_forward_slashes(deps_dir.string());
+
+    fs::path cache_dir = build_dir / ".cache";
+    fs::create_directories(cache_dir);
+
+    ObjectCompileOptions obj_options;
+    obj_options.optimization_level = tml::CompilerOptions::optimization_level;
+    obj_options.debug_info = tml::CompilerOptions::debug_info;
+    obj_options.verbose = verbose;
+    obj_options.target_triple = tml::CompilerOptions::target_triple;
+    obj_options.sysroot = tml::CompilerOptions::sysroot;
+
+    fs::path obj_output = cache_dir / (module_name + get_object_extension());
+
+    auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
+    if (!obj_result.success) {
+        TML_LOG_ERROR("build", obj_result.error_message);
+        return 1;
+    }
+
+    std::vector<fs::path> object_files;
+    object_files.push_back(obj_result.object_file);
+
+    if (output_type == BuildOutputType::Executable && parsed && parsed->success) {
+        auto runtime_objects =
+            get_runtime_objects(registry, *parsed->module, deps_cache, clang, verbose);
+        object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
+    }
+
+    // Link
+    LinkOptions link_options;
+    link_options.output_type = LinkOptions::OutputType::Executable;
+    link_options.verbose = verbose;
+    link_options.target_triple = tml::CompilerOptions::target_triple;
+    link_options.sysroot = tml::CompilerOptions::sysroot;
+
+    for (const auto& lib : link_libs) {
+        if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
+            link_options.link_flags.push_back("\"" + lib + "\"");
+        } else {
+            link_options.link_flags.push_back("-l" + lib);
+        }
+    }
+
+    auto link_result = link_objects(object_files, exe_output, clang, link_options);
+    if (!link_result.success) {
+        TML_LOG_ERROR("build", link_result.error_message);
+        return 1;
+    }
+
+    TML_LOG_INFO("build", "build: " << to_forward_slashes(exe_output.string()));
+    return 0;
 }
 
 } // namespace tml::cli

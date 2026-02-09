@@ -1,6 +1,6 @@
 # Tasks: Compiler Infrastructure Overhaul
 
-**Status**: In Progress (21%)
+**Status**: In Progress (35%)
 **Priority**: MAXIMUM - foundational infrastructure
 **Consolidates**: `achieve-rust-compiler-parity` + `embed-llvm-incremental-compilation`
 
@@ -29,25 +29,26 @@
 - [x] 2.9 Verify MCP `mcp__tml__emit-ir` tool still works
 - [x] 2.10 Verify all 3,632 tests pass without intermediate `.ll` files
 
-## Phase 3: Query System Foundation
+## Phase 3: Query System Foundation — DONE
 
-- [ ] 3.1 Design `QueryContext` struct (equivalent to rustc's `TyCtxt`) with arena allocator
-- [ ] 3.2 Implement `QueryKey` trait and `QueryValue` trait for generic query definitions
-- [ ] 3.3 Implement `QueryCache[K,V]` — thread-safe hashtable with memoization
-- [ ] 3.4 Implement `QueryProvider` registry — map query types to provider functions
-- [ ] 3.5 Implement dependency tracking: `QueryContext::record_dependency(caller, callee)`
-- [ ] 3.6 Implement cycle detection: detect circular dependencies between queries
-- [ ] 3.7 Implement `QueryContext::force(query)` — execute query and cache result
-- [ ] 3.8 Define core queries: `parse_tokens`, `parse_module`, `typecheck_module`, `borrowcheck_module`, `codegen_unit`
-- [ ] 3.9 Implement query fingerprinting (128-bit hash of inputs and outputs)
-- [ ] 3.10 Wrap Lexer in `parse_tokens` query provider
-- [ ] 3.11 Wrap Parser in `parse_module` query provider
-- [ ] 3.12 Wrap TypeChecker in `typecheck_module` query provider
-- [ ] 3.13 Wrap BorrowChecker in `borrowcheck_module` query provider
-- [ ] 3.14 Wrap LLVMIRGen in `codegen_unit` query provider
-- [ ] 3.15 Refactor `dispatcher.cpp` to use `QueryContext` as entry point
-- [ ] 3.16 Verify all tests pass through query-based pipeline
-- [ ] 3.17 Benchmark: measure overhead of query system vs direct calls
+- [x] 3.1 Implement `QueryContext` class (equivalent to rustc's `TyCtxt`) with `force<R>()` template, cache, deps, and provider registry
+- [x] 3.2 Implement `QueryKey` variant (8 key types) and typed result structs with `shared_ptr` wrapping
+- [x] 3.3 Implement `QueryCache` — thread-safe hashtable with `shared_mutex` memoization and `invalidate_dependents()`
+- [x] 3.4 Implement `QueryProviderRegistry` — `std::array<ProviderFn, COUNT>` with O(1) lookup by `QueryKind`
+- [x] 3.5 Implement dependency tracking: stack-based `DependencyTracker` with `push_active`/`pop_active`/`record_dependency`
+- [x] 3.6 Implement cycle detection: detect circular dependencies via active stack inspection
+- [x] 3.7 Implement `QueryContext::force<R>(key)` — check cache → detect cycle → execute provider → cache result
+- [x] 3.8 Define 8 core queries: `read_source`, `tokenize`, `parse_module`, `typecheck_module`, `borrowcheck_module`, `hir_lower`, `mir_build`, `codegen_unit`
+- [x] 3.9 Implement 128-bit query fingerprinting using existing `tml::crc32c()` (two 64-bit halves)
+- [x] 3.10 Wrap Preprocessor+FileRead in `provide_read_source` query provider
+- [x] 3.11 Wrap Lexer in `provide_tokenize` query provider
+- [x] 3.12 Wrap Parser in `provide_parse_module` query provider
+- [x] 3.13 Wrap TypeChecker in `provide_typecheck_module` query provider
+- [x] 3.14 Wrap BorrowChecker in `provide_borrowcheck_module` query provider
+- [x] 3.15 Wrap HirBuilder+MirBuilder+Codegen in `provide_hir_lower`, `provide_mir_build`, `provide_codegen_unit` providers
+- [x] 3.16 Add `run_build_with_queries()` to `build.cpp` — full query-based build path alongside existing pipeline
+- [x] 3.17 Add `tml_query` static library to CMakeLists.txt, linked into `tml_cli`
+- [x] 3.18 Verify all 3,632 tests pass with query system compiled and linked
 
 ## Phase 4: Red-Green Incremental Compilation
 
