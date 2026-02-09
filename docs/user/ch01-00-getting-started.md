@@ -9,8 +9,9 @@ starts somewhere. In this chapter, we'll:
 
 ## Installing TML
 
-The first step is to install TML. You'll need a C++ compiler and LLVM/Clang
-to build TML programs.
+The first step is to install TML. The TML compiler is **self-contained** — it
+includes an embedded LLVM backend and LLD linker, so you don't need to install
+any external tools to compile and link TML programs.
 
 ## Writing Your First Program
 

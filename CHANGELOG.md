@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Query-Based Build Pipeline (Default)** (2026-02-09) - Query system is now the default `tml build` pipeline
+  - `tml build file.tml` uses the demand-driven query pipeline with incremental compilation
+  - `tml build file.tml --legacy` falls back to the traditional sequential pipeline
+  - Matches rustc architecture where queries are the standard compilation model
+
+- **Red-Green Incremental Compilation** (2026-02-09) - Cross-session persistence for near-instant rebuilds
+  - Binary cache format (`build/{profile}/.incr-cache/incr.bin`) persists fingerprints and dependency edges
+  - LLVM IR cached per compilation unit in `.incr-cache/ir/<hash>.ll`
+  - GREEN path: if no source files changed, loads cached IR and skips entire pipeline (lex → parse → typecheck → borrowcheck → HIR → MIR → codegen)
+  - RED path: file changes detected via 128-bit CRC32C fingerprints, only affected queries recomputed
+  - Recursive color propagation through dependency graph with memoization
+  - Library environment fingerprint detects `.tml.meta` changes
+  - Enabled by default; disabled with `--no-cache`
+  - New files: `query_incr.hpp/cpp` (PrevSessionCache, IncrCacheWriter, binary serialization)
+
+- **Query System Foundation** (2026-02-09) - Demand-driven compilation architecture (like rustc's `TyCtxt`)
+  - `QueryContext` class with `force<R>()` template for memoized, demand-driven execution
+  - 8 core queries: `read_source`, `tokenize`, `parse_module`, `typecheck_module`, `borrowcheck_module`, `hir_lower`, `mir_build`, `codegen_unit`
+  - `QueryCache` — thread-safe hashtable with `shared_mutex` memoization
+  - `QueryProviderRegistry` — O(1) provider lookup by `QueryKind`
+  - `DependencyTracker` — stack-based dependency recording with cycle detection
+  - 128-bit query fingerprinting using CRC32C (two 64-bit halves)
+  - `tml_query` static library linked into `tml_cli`
+  - New files: `query_context.hpp/cpp`, `query_cache.hpp/cpp`, `query_key.hpp`, `query_core.hpp/cpp`, `query_deps.hpp/cpp`, `query_fingerprint.hpp/cpp`, `query_provider.hpp/cpp`
+
+- **Embedded LLD Linker** (2026-02-09) - In-process linking eliminates linker subprocess
+  - LLD libraries linked as CMake dependencies (lldCOFF, lldCommon, lldELF, lldMachO, lldMinGW, lldWasm)
+  - In-process API via `lld::lldMain()` — zero subprocess spawning for linking
+  - COFF linking for Windows, ELF for Linux, Mach-O for macOS
+  - System linker fallback when `TML_HAS_LLD_EMBEDDED` not defined
+  - Command builders refactored from string to argv vector for dual in-process/subprocess use
+  - New file: `compiler/src/backend/lld_linker.cpp`
+
 - **Embedded LLVM Backend** (2026-02-09) - Eliminated clang subprocess and .ll intermediate files
   - Compiler now links ~55 LLVM static libraries directly (LLVMCore, LLVMX86CodeGen, LLVMAArch64CodeGen, LLVMPasses, etc.)
   - New `compile_ir_string_to_object()` function compiles IR strings directly to .obj via LLVM C API — zero disk I/O, zero subprocess spawning

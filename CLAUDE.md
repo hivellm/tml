@@ -183,6 +183,8 @@ tml/
 │   │   ├── hir/       # High-level IR
 │   │   ├── mir/       # Mid-level IR (SSA)
 │   │   ├── codegen/   # LLVM IR generation
+│   │   ├── query/     # Query system (demand-driven compilation)
+│   │   ├── backend/   # LLVM backend + LLD linker (in-process)
 │   │   └── format/    # Code formatter
 │   ├── include/       # Header files
 │   ├── runtime/       # Essential runtime (essential.c)
@@ -287,9 +289,10 @@ TML source files use `.tml` extension.
 The TML compiler (`tml`) supports these build flags:
 
 ```bash
-# Basic build
+# Basic build (uses query-based pipeline with incremental compilation by default)
 tml build file.tml                # Build executable
 tml build file.tml --verbose      # Show detailed output
+tml build file.tml --legacy       # Use traditional sequential pipeline (fallback)
 
 # Output types
 tml build file.tml --crate-type=bin      # Executable (default)
@@ -303,8 +306,8 @@ tml build file.tml -O0/-O1/-O2/-O3  # Set optimization level
 tml build file.tml --lto          # Enable Link-Time Optimization
 tml build file.tml --debug/-g     # Include debug info
 
-# Caching
-tml build file.tml --no-cache     # Force full recompilation
+# Caching & Incremental
+tml build file.tml --no-cache     # Force full recompilation (disables incremental)
 
 # Diagnostics
 tml build file.tml --emit-ir      # Emit LLVM IR (.ll files)
@@ -318,6 +321,31 @@ tml build file.tml -DVERSION=1.0  # Define symbol with value
 tml build file.tml --define=FEAT  # Alternative syntax
 tml build file.tml --target=x86_64-unknown-linux-gnu  # Cross-compile
 ```
+
+## Compilation Architecture
+
+The TML compiler uses a **demand-driven query system** (like rustc) as the default build pipeline:
+
+```
+Source (.tml) → [QueryContext] → ReadSource → Tokenize → Parse → Typecheck
+             → Borrowcheck → HirLower → MirBuild → CodegenUnit → [LLVM] → .obj → [LLD] → .exe
+```
+
+**Key components:**
+- **Query System**: Each compilation stage is a memoized query with dependency tracking
+- **Incremental Compilation**: Fingerprints + dependency edges persisted to `.incr-cache/incr.bin`
+- **GREEN path**: No source changes → cached LLVM IR loaded from disk, entire pipeline skipped
+- **RED path**: Source changed → affected queries recomputed, downstream checked for changes
+- **Embedded LLVM**: IR compiled to .obj in-process (no clang subprocess)
+- **Embedded LLD**: Linking done in-process (no linker subprocess)
+
+**Key files:**
+- `compiler/include/query/query_context.hpp` - QueryContext with `force<R>()` template
+- `compiler/include/query/query_key.hpp` - 8 query key/result types
+- `compiler/include/query/query_incr.hpp` - PrevSessionCache, IncrCacheWriter, binary format
+- `compiler/src/query/query_core.cpp` - Provider implementations (8 stage wrappers)
+- `compiler/src/backend/llvm_backend.cpp` - LLVM C API for in-memory compilation
+- `compiler/src/backend/lld_linker.cpp` - LLD in-process linker (COFF/ELF/MachO)
 ````
 
 ## Conditional Compilation
@@ -446,14 +474,30 @@ The CLI is organized into subfolders:
 
 ### Builder (`compiler/src/cli/builder/`)
 
-- `build.cpp` - Main build orchestration
+- `build.cpp` - Main build orchestration (`run_build_with_queries()` default, `run_build_impl()` legacy)
 - `parallel_build.cpp/.hpp` - Multi-threaded compilation
-- `object_compiler.cpp/.hpp` - LLVM IR to object file compilation
+- `object_compiler.cpp/.hpp` - LLVM IR to object file compilation (in-process via LLVM C API)
 - `build_cache.cpp/.hpp` - MIR cache for incremental compilation
 - `build_config.cpp/.hpp` - Build configuration
 - `compiler_setup.cpp/.hpp` - Toolchain discovery (clang, MSVC)
 - `dependency_resolver.cpp/.hpp` - Module dependency resolution
 - `rlib.cpp/.hpp` - TML library format (.rlib)
+
+### Query System (`compiler/src/query/`)
+
+- `query_context.hpp/cpp` - QueryContext with `force<R>()`, incremental load/save, green checking
+- `query_key.hpp` - 8 query key types + result types (ReadSource through CodegenUnit)
+- `query_cache.hpp/cpp` - Thread-safe memoization cache with fingerprints
+- `query_core.hpp/cpp` - Provider implementations wrapping each compilation stage
+- `query_deps.hpp/cpp` - DependencyTracker with cycle detection
+- `query_fingerprint.hpp/cpp` - 128-bit CRC32C fingerprinting
+- `query_incr.hpp/cpp` - PrevSessionCache, IncrCacheWriter, binary serialization
+- `query_provider.hpp/cpp` - Provider registry with O(1) lookup
+
+### Backend (`compiler/src/backend/`)
+
+- `llvm_backend.cpp` - LLVM C API wrapper (in-memory IR→obj compilation)
+- `lld_linker.cpp` - LLD in-process linker (COFF/ELF/MachO)
 
 ### Tester (`compiler/src/cli/tester/`)
 
@@ -466,7 +510,7 @@ The CLI is organized into subfolders:
 
 ### Core
 
-- `compiler/src/cli/dispatcher.cpp` - CLI argument parsing
+- `compiler/src/cli/dispatcher.cpp` - CLI argument parsing (routes to query or legacy pipeline)
 - `compiler/src/cli/utils.cpp/.hpp` - Shared utilities
 - `compiler/src/cli/diagnostic.cpp/.hpp` - Error formatting
 

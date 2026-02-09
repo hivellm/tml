@@ -58,64 +58,90 @@ After self-hosting, the native compiler MUST support:
 
 ### 2.1 Phases
 
+The compiler uses a **demand-driven query system** (analogous to rustc's `TyCtxt`).
+Each phase is a memoized query; results are cached in-memory and persisted to disk
+for incremental compilation across sessions.
+
 ```
 Source (.tml)
     │
     ▼
-┌─────────────┐
-│   Lexer     │  → Token stream
-└─────────────┘
+┌──────────────────┐
+│  Preprocessor    │  → Conditional compilation, #if/#ifdef
+│  + ReadSource    │     (Query: read_source)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│   Parser    │  → AST (untyped)
-└─────────────┘
+┌──────────────────┐
+│     Lexer        │  → Token stream
+│                  │     (Query: tokenize)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│  Resolver   │  → AST (names resolved)
-└─────────────┘
+┌──────────────────┐
+│     Parser       │  → AST (untyped)
+│                  │     (Query: parse_module)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│ Type Check  │  → TAST (typed AST)
-└─────────────┘
+┌──────────────────┐
+│   Type Check     │  → TAST (typed AST)
+│   + Resolver     │     (Query: typecheck_module)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│Borrow Check │  → TAST (ownership verified)
-└─────────────┘
+┌──────────────────┐
+│  Borrow Check    │  → TAST (ownership verified)
+│                  │     (Query: borrowcheck_module)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│Effect Check │  → TAST (effects verified)
-└─────────────┘
+┌──────────────────┐
+│   HIR Builder    │  → High-level IR (type-resolved, desugared)
+│                  │     (Query: hir_lower)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│     HIR     │  → High-level IR (type-resolved, desugared)
-└─────────────┘
+┌──────────────────┐
+│   MIR Builder    │  → Mid-level IR (SSA form, control flow)
+│   + LLVM Codegen │     (Query: mir_build + codegen_unit)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│    MIR      │  → Mid-level IR (SSA form, control flow)
-└─────────────┘
+┌──────────────────┐
+│  Embedded LLVM   │  → Object files (in-process, no clang subprocess)
+│  (IR → .obj)     │     via LLVMParseIRInContext + LLVMTargetMachineEmit
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│   LLVM IR   │  → LLVM module
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│   Codegen   │  → Object files
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│   Linker    │  → Executable / Library
-└─────────────┘
+┌──────────────────┐
+│  Embedded LLD    │  → Executable / Library (in-process, no linker subprocess)
+│  (COFF/ELF/MachO)│     via lld::lldMain()
+└──────────────────┘
 ```
+
+#### Query System
+
+All 8 compilation stages are wrapped as queries in a `QueryContext`:
+
+| Query | Input | Output |
+|-------|-------|--------|
+| `read_source` | file path | preprocessed source |
+| `tokenize` | file path | token stream |
+| `parse_module` | file path + module name | AST |
+| `typecheck_module` | file path + module name | typed AST |
+| `borrowcheck_module` | file path + module name | verified AST |
+| `hir_lower` | file path + module name | HIR |
+| `mir_build` | file path + module name | MIR |
+| `codegen_unit` | file path + module name + options | LLVM IR string |
+
+Each query is executed via `QueryContext::force<R>(key)`:
+1. Check in-memory cache → return if hit
+2. For `codegen_unit`: try incremental reuse from previous session (GREEN path)
+3. Detect dependency cycles
+4. Execute the query provider
+5. Record dependencies, compute fingerprints, cache result
+6. Persist fingerprints to disk for next session
 
 ### 2.2 Phase Details
 
@@ -290,27 +316,31 @@ src/hir/                     # Implementation
 
 ### 2.3 Object File and Build Pipeline
 
-The TML compiler uses a modern build system with content-based caching and parallel compilation.
+The TML compiler uses a fully self-contained build pipeline with embedded LLVM and LLD.
+No external tools (clang, system linker) are required at runtime.
 
 #### Build Stages
 
 ```
-Source (.tml) → LLVM IR (.ll) → Object File (.obj/.o) → Executable/Library
-     │                │                  │                      │
-     │                │                  │                      │
-     ▼                ▼                  ▼                      ▼
-  Compiler        Compiler           Clang                  Linker
-  Frontend        Backend                              (clang/lld/link)
+Source (.tml) → [Query Pipeline] → LLVM IR (in-memory) → Object File (.obj/.o) → Executable/Library
+     │                │                    │                       │
+     │                │                    │                       │
+     ▼                ▼                    ▼                       ▼
+  QueryContext     8 memoized         Embedded LLVM           Embedded LLD
+  (demand-driven)  query stages      (in-process)            (in-process)
 ```
 
-#### Object File Generation
+#### Embedded LLVM Backend
+
+The compiler links ~55 LLVM static libraries directly into the `tml` binary. LLVM IR
+is compiled to object files **in-process** — no intermediate `.ll` files are written
+to disk (unless `--emit-ir` is specified).
 
 ```cpp
-// Compile LLVM IR to object file
-ObjectCompileResult compile_ll_to_object(
-    const fs::path& ll_file,          // Input: LLVM IR file
-    const std::optional<fs::path>& output_file,  // Output: .obj/.o
-    const std::string& clang_path,
+// Compile LLVM IR string directly to object file (no disk I/O for IR)
+ObjectCompileResult compile_ir_string_to_object(
+    const std::string& llvm_ir,                    // In-memory IR string
+    const std::optional<fs::path>& output_file,    // Output: .obj/.o
     const ObjectCompileOptions& options
 );
 
@@ -322,16 +352,42 @@ struct ObjectCompileOptions {
 };
 ```
 
+The pipeline: `LLVMParseIRInContext()` → `LLVMRunPasses()` → `LLVMTargetMachineEmitToFile()`
+
 **Platform-Specific Extensions:**
 - Windows: `.obj` (COFF format)
 - Unix/Linux: `.o` (ELF format)
 - macOS: `.o` (Mach-O format)
 
+#### Embedded LLD Linker
+
+The compiler embeds LLD (LLVM's linker) for in-process linking via `lld::lldMain()`.
+Supports all major platforms:
+
+| Platform | Driver | Format |
+|----------|--------|--------|
+| Windows | `lld::coff::link` | COFF/PE |
+| Linux | `lld::elf::link` | ELF |
+| macOS | `lld::macho::link` | Mach-O |
+
+Falls back to system linker via subprocess when `TML_HAS_LLD_EMBEDDED` is not defined.
+
 #### Build Cache System
 
-The compiler implements a two-level cache for fast incremental builds:
+The compiler implements a multi-level cache for fast incremental builds:
 
-**Level 1: Object File Cache**
+**Level 1: Incremental Query Cache (Red-Green)**
+```
+build/debug/.incr-cache/incr.bin      # Binary fingerprint/dependency cache
+build/debug/.incr-cache/ir/<hash>.ll  # Cached LLVM IR per compilation unit
+build/debug/.incr-cache/ir/<hash>.libs # Cached link libraries
+```
+- 128-bit CRC32C fingerprints for all 8 query stages
+- Dependency edges persisted across sessions
+- GREEN path: skip entire compilation pipeline if source unchanged
+- No-op rebuild: < 100ms
+
+**Level 2: Object File Cache**
 ```
 build/debug/.run-cache/<content-hash>.obj
 ```
@@ -339,7 +395,7 @@ build/debug/.run-cache/<content-hash>.obj
 - Instant reuse if IR unchanged
 - Shared across all builds
 
-**Level 2: Executable Cache**
+**Level 3: Executable Cache**
 ```
 build/debug/.run-cache/<combined-hash>.exe
 ```
@@ -348,19 +404,22 @@ build/debug/.run-cache/<combined-hash>.exe
 - Includes runtime libraries in hash
 
 **Cache Hit Performance:**
+- No-op rebuild (incremental GREEN): < 100ms
 - Full rebuild: ~3 seconds (compile + link)
 - Cache hit (object files): ~0.5 seconds (link only)
 - Cache hit (executable): ~0.075 seconds (no work)
-- **91% speedup** for `tml run` on unchanged code
-- **52% speedup** for `tml test` with parallel compilation
 
 **File Organization:**
 ```
 build/
 ├── debug/
-│   ├── .run-cache/           # Cached artifacts
-│   │   ├── a1b2c3d4.obj      # Object files (content hash)
-│   │   ├── e5f6g7h8.obj
+│   ├── .incr-cache/          # Incremental compilation cache
+│   │   ├── incr.bin          # Binary fingerprint/dep cache
+│   │   └── ir/               # Cached LLVM IR strings
+│   │       ├── a1b2c3d4.ll
+│   │       └── a1b2c3d4.libs
+│   ├── .run-cache/           # Cached build artifacts
+│   │   ├── e5f6g7h8.obj      # Object files (content hash)
 │   │   └── 9i0j1k2l.exe      # Executables (combined hash)
 │   ├── tml.exe               # Main compiler
 │   └── tml_tests.exe         # Test executable
@@ -374,9 +433,8 @@ build/
 For test suites and multi-file projects, the compiler supports parallel object file generation:
 
 ```cpp
-BatchCompileResult compile_ll_batch(
-    const std::vector<fs::path>& ll_files,
-    const std::string& clang_path,
+BatchCompileResult compile_ir_string_batch(
+    const std::vector<std::string>& ir_strings,
     const ObjectCompileOptions& options,
     int num_threads = 0  // 0 = auto-detect (hardware_concurrency)
 );
@@ -386,12 +444,12 @@ BatchCompileResult compile_ll_batch(
 - Uses `std::thread` for parallelism
 - Auto-detects CPU cores with `std::thread::hardware_concurrency()`
 - Thread-safe compilation with mutex-protected shared state
-- Each thread compiles independent `.ll` files
+- Each thread compiles independent IR strings via embedded LLVM
 - Achieves 52% speedup for test suite compilation
 
 #### Linking Strategies
 
-The linker supports three output types:
+The embedded LLD linker supports three output types:
 
 ```cpp
 enum class OutputType {
@@ -403,33 +461,11 @@ enum class OutputType {
 LinkResult link_objects(
     const std::vector<fs::path>& object_files,
     const fs::path& output_file,
-    const std::string& clang_path,
     const LinkOptions& options
 );
 ```
 
-**Static Libraries:**
-```bash
-# Windows
-lib.exe /OUT:mylib.lib file1.obj file2.obj
-
-# Unix
-ar rcs libmylib.a file1.o file2.o
-```
-
-**Dynamic Libraries:**
-```bash
-# Windows
-clang -shared -o mylib.dll file1.obj file2.obj
-
-# Unix
-clang -shared -fPIC -o libmylib.so file1.o file2.o
-```
-
-**Executables:**
-```bash
-clang -o myapp.exe file1.obj file2.obj essential.obj -lruntime
-```
+All linking is performed in-process via embedded LLD. No external linker is required.
 
 #### FFI Integration
 
@@ -477,10 +513,10 @@ int main() {
 
 **Build Commands:**
 ```bash
-# Compile TML to library
+# Compile TML to library (self-contained, no external tools needed)
 tml build mylib.tml --crate-type dylib --emit-header --out-dir .
 
-# Compile C code
+# Compile C code linking against TML library
 clang use_mylib.c mylib.dll -o use_mylib.exe
 
 # Run
@@ -488,6 +524,12 @@ clang use_mylib.c mylib.dll -o use_mylib.exe
 ```
 
 #### Build Optimization Techniques
+
+**Query-Based Incremental Compilation:**
+- Demand-driven pipeline skips unchanged stages entirely
+- 128-bit fingerprints detect changes at query granularity
+- GREEN path: reuse cached LLVM IR from previous session
+- No-op rebuild completes in < 100ms
 
 **Hard Link Optimization:**
 - Cache uses hard links instead of file copies
@@ -497,20 +539,26 @@ clang use_mylib.c mylib.dll -o use_mylib.exe
 
 **Incremental Linking:**
 - Detects which object files changed
-- Only recompiles modified modules
+- Only recompiles modified modules via embedded LLVM
 - Reuses cached objects for unchanged code
 - Combined hash prevents unnecessary relinking
 
 **Compiler Flags:**
 ```bash
-# Debug build (default)
-tml build main.tml              # -O0, keep .ll files
+# Debug build (default) — query pipeline with incremental compilation
+tml build main.tml              # -O0, incremental enabled
 
 # Release build
-tml build main.tml --release    # -O3, delete intermediates
+tml build main.tml --release    # -O3, optimized
 
 # Custom optimization
 tml build main.tml --opt-level 2  # -O2
+
+# Legacy pipeline (bypass query system)
+tml build main.tml --legacy     # Use traditional sequential pipeline
+
+# Force full recompilation (skip incremental cache)
+tml build main.tml --no-cache
 
 # Verbose mode
 tml build main.tml --verbose    # Print all commands
@@ -899,64 +947,129 @@ platform = "x86_64-linux"
 
 ## 9. Incremental Compilation
 
-### 9.1 Dependency Graph
+TML implements a **Red-Green incremental compilation** system, inspired by rustc's
+query-based architecture. Fingerprints and dependency edges are persisted to disk
+between compilation sessions, enabling near-instant rebuilds when source is unchanged.
+
+### 9.1 Red-Green Model
+
+Each query result is assigned a **color**:
+
+- **GREEN**: All inputs unchanged from previous session → reuse cached result
+- **RED**: One or more inputs changed → must recompute
+
+```
+Session N (first build):
+  Execute all queries → save fingerprints + deps + IR to .incr-cache/
+
+Session N+1 (rebuild):
+  Load .incr-cache/incr.bin → for each CodegenUnit query:
+    ReadSource input_fp == file hash on disk? → GREEN
+    All deps GREEN? → this query is GREEN
+    CodegenUnit GREEN? → load cached .ll → skip entire pipeline!
+    Any dep RED? → recompute from that point
+```
+
+### 9.2 Fingerprinting
+
+Every query has an **input fingerprint** (what goes in) and an **output fingerprint** (what comes out). Both are 128-bit values computed via CRC32C.
+
+**Input fingerprints:**
+
+| Query | Input Fingerprint |
+|-------|-------------------|
+| `read_source` | `fingerprint_source(file_path)` + defines |
+| `tokenize` | output_fp of ReadSource dependency |
+| `parse_module` | output_fp of Tokenize dependency |
+| `typecheck_module` | combine(output_fp of ParseModule, lib_env_fingerprint) |
+| `borrowcheck_module` | combine(output_fp of TypecheckModule, output_fp of ParseModule) |
+| `hir_lower` | combine(output_fp of TypecheckModule, output_fp of ParseModule) |
+| `mir_build` | combine(output_fp of HirLower, output_fp of TypecheckModule) |
+| `codegen_unit` | combine(deps' output_fps, target_triple, opt_level, coverage) |
+
+**Output fingerprints:**
+
+| Query | Output Fingerprint |
+|-------|-------------------|
+| `read_source` | `fingerprint_string(preprocessed_source)` |
+| `tokenize` – `mir_build` | Same as input_fp (deterministic stages) |
+| `codegen_unit` | `fingerprint_string(llvm_ir)` |
+
+### 9.3 Dependency Graph
+
+Dependencies are tracked at query granularity (not module level). Each query records
+which other queries it depends on during execution via a stack-based `DependencyTracker`.
 
 ```cpp
-// Track dependencies at module level
-struct ModuleDeps {
-    ModuleId module;
-    Vec<ModuleId> imports;
-    Hash source_hash;
-    Hash interface_hash;
+struct PrevSessionEntry {
+    QueryKey key;
+    Fingerprint input_fingerprint;    // 128-bit
+    Fingerprint output_fingerprint;   // 128-bit
+    std::vector<QueryKey> dependencies;
 };
-
-// Recompile if:
-// 1. Source changed (source_hash differs)
-// 2. Any import's interface changed
 ```
 
-### 9.2 Caching
+### 9.4 Binary Cache Format
+
+The incremental cache is stored as a binary file at `build/{debug|release}/.incr-cache/incr.bin`:
 
 ```
-target/
-├── cache/
-│   ├── <module_hash>.ast    # Parsed AST
-│   ├── <module_hash>.tast   # Typed AST
-│   └── <module_hash>.o      # Object file
-├── deps/
-│   └── <dep_name>/
-│       └── <version>/
-└── <target>/
-    └── debug|release/
+Header (24 bytes):
+  magic: u32          = 0x544D4943 ("TMIC")
+  version_major: u16  = 1
+  version_minor: u16  = 0
+  entry_count: u32    = N
+  session_timestamp: u64
+  options_hash: u32   = hash(opt_level, debug_info, target, defines, coverage)
+
+Per-entry:
+  query_kind: u8
+  key_len: u16
+  key_data: [u8; key_len]
+  input_fp: {u64 high, u64 low}   # 16 bytes
+  output_fp: {u64 high, u64 low}  # 16 bytes
+  dep_count: u16
+  deps: [dep_count × {kind: u8, key_len: u16, key_data: bytes}]
 ```
 
-### 9.3 Invalidation
+LLVM IR cached separately: `build/{debug|release}/.incr-cache/ir/<hash>.ll`
 
-```cpp
-func needs_recompile(module: ModuleId) -> bool {
-    let cached: Maybe[ModuleInfo] = cache.get(module);
+### 9.5 Green Checking
 
-    if cached.is_none() {
-        return true;
-    }
+On rebuild, `verify_all_inputs_green(key)` recursively checks the dependency tree:
 
-    let info: ModuleInfo = cached.unwrap();
-
-    // Source changed?
-    if hash(source(module)) != info.source_hash {
-        return true;
-    }
-
-    // Any dependency interface changed?
-    for dep in info.imports {
-        if interface_hash(dep) != info.dep_hashes[dep] {
-            return true;
-        }
-    }
-
-    false
-}
 ```
+verify_all_inputs_green(CodegenUnit):
+  └─ verify_all_inputs_green(MirBuild):
+       └─ verify_all_inputs_green(HirLower):
+            └─ verify_all_inputs_green(TypecheckModule):
+                 └─ verify_all_inputs_green(ParseModule):
+                      └─ verify_all_inputs_green(Tokenize):
+                           └─ verify_all_inputs_green(ReadSource):
+                                → compare file hash to prev input_fp
+                                → GREEN if unchanged
+```
+
+A color cache (`color_map_`) prevents redundant checking of shared dependencies.
+
+### 9.6 Cache Invalidation
+
+The cache is automatically invalidated when:
+- Build options change (optimization level, debug info, target triple, defines, coverage)
+- Source file content changes (detected by fingerprinting file on disk)
+- Library environment changes (`.tml.meta` files modified)
+- Cache format version mismatch
+
+Force full rebuild: `tml build --no-cache`
+
+### 9.7 Performance
+
+| Scenario | Time |
+|----------|------|
+| No-op rebuild (all GREEN) | < 100ms |
+| Single function change | < 500ms |
+| Full rebuild (no cache) | ~3 seconds |
+| Test suite (3,632 tests) | ~17 seconds |
 
 ## 10. Error Recovery
 

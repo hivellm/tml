@@ -220,6 +220,7 @@ int tml_main(int argc, char* argv[]) {
         // Additional options for extended build
         bool show_timings = false;
         bool lto = false;
+        bool use_legacy = false;          // Use legacy (non-query) build pipeline
         std::vector<std::string> defines; // Preprocessor defines (-D)
 
         // PGO options
@@ -343,6 +344,8 @@ int tml_main(int argc, char* argv[]) {
                 profile_use = arg.substr(14);
             } else if (arg == "--use-external-tools") {
                 tml::CompilerOptions::use_external_tools = true;
+            } else if (arg == "--legacy") {
+                use_legacy = true;
             }
         }
 
@@ -360,30 +363,31 @@ int tml_main(int argc, char* argv[]) {
         tml::CompilerOptions::target_triple = target_triple;
         tml::CompilerOptions::sysroot = sysroot;
 
-        // Use extended build if new features are requested or if defines are present
-        if (show_timings || lto || !defines.empty() || profile_generate || !profile_use.empty()) {
-            BuildOptions opts;
-            opts.verbose = verbose;
-            opts.emit_ir_only = emit_ir_only;
-            opts.emit_mir = emit_mir;
-            opts.no_cache = no_cache;
-            opts.emit_header = emit_header;
-            opts.show_timings = show_timings;
-            opts.lto = lto;
-            opts.output_type = output_type;
-            opts.output_dir = output_dir;
-            opts.debug = debug_info;
-            opts.release = (opt_level >= 2);
-            opts.optimization_level = opt_level;
-            opts.target = target_triple;
-            opts.defines = std::move(defines);
-            opts.profile_generate = profile_generate;
-            opts.profile_use = std::move(profile_use);
+        // Build options (shared by both query and legacy paths)
+        BuildOptions opts;
+        opts.verbose = verbose;
+        opts.emit_ir_only = emit_ir_only;
+        opts.emit_mir = emit_mir;
+        opts.no_cache = no_cache;
+        opts.emit_header = emit_header;
+        opts.show_timings = show_timings;
+        opts.lto = lto;
+        opts.output_type = output_type;
+        opts.output_dir = output_dir;
+        opts.debug = debug_info;
+        opts.release = (opt_level >= 2);
+        opts.optimization_level = opt_level;
+        opts.target = target_triple;
+        opts.defines = std::move(defines);
+        opts.profile_generate = profile_generate;
+        opts.profile_use = std::move(profile_use);
+
+        // Default: query-based build (demand-driven with incremental compilation)
+        // Use --legacy to fall back to the traditional pipeline
+        if (use_legacy) {
             return run_build_ex(argv[2], opts);
         }
-
-        return run_build(argv[2], verbose, emit_ir_only, emit_mir, no_cache, output_type,
-                         emit_header, output_dir);
+        return run_build_with_queries(argv[2], opts);
     }
 
     if (command == "fmt") {

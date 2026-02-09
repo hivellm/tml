@@ -12,7 +12,7 @@ This RFC specifies the Mid-level Intermediate Representation (MIR), an SSA-form 
 
 ### Problem
 
-The current compilation pipeline goes directly from type-checked AST to LLVM IR:
+Without MIR, the compilation pipeline goes directly from type-checked AST to LLVM IR:
 
 ```
 AST → Type Check → LLVM IR → Machine Code
@@ -29,8 +29,17 @@ This has limitations:
 Insert a Mid-level IR between type checking and LLVM generation:
 
 ```
-AST → Type Check → MIR → Optimize → LLVM IR → Machine Code
+AST → Type Check → HIR → MIR → Optimize → LLVM IR → Machine Code
 ```
+
+In the current compiler, MIR is wrapped as the `mir_build` query in the demand-driven
+query system. The full pipeline is:
+
+```
+ReadSource → Tokenize → Parse → Typecheck → Borrowcheck → HIR → MIR → CodegenUnit
+```
+
+Each stage is a memoized query with 128-bit fingerprints for incremental compilation.
 
 MIR provides:
 1. **SSA form** - Clean representation for dataflow analysis

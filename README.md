@@ -444,6 +444,8 @@ tml/
 │   │   ├── hir/       # High-level IR (type-resolved, desugared)
 │   │   ├── mir/       # Mid-level IR (SSA form)
 │   │   ├── codegen/   # LLVM IR generation
+│   │   ├── query/     # Query system (demand-driven compilation)
+│   │   ├── backend/   # LLVM backend + LLD linker (in-process)
 │   │   └── cli/       # Command-line interface
 │   └── include/       # Headers
 ├── lib/               # TML standard libraries
@@ -455,23 +457,32 @@ tml/
 
 ## Compiler Pipeline
 
+The TML compiler uses a **demand-driven query system** (like rustc) with **red-green incremental compilation**:
+
 ```
-Source (.tml) → Lexer → Parser → Type Check → Borrow Check → HIR → MIR → LLVM IR → Executable
+Source (.tml) → [QueryContext] → ReadSource → Tokenize → Parse → Typecheck
+             → Borrowcheck → HirLower → MirBuild → CodegenUnit
+             → [Embedded LLVM] → .obj → [Embedded LLD] → .exe
 ```
 
 | Stage | Description |
 |-------|-------------|
-| Lexer | Tokenizes source into token stream |
-| Parser | Builds AST using LL(1) grammar |
-| Type Check | Type inference and generic resolution |
-| Borrow Check | Ownership and lifetime verification |
-| **HIR** | High-level IR: type-resolved, desugared AST |
-| **MIR** | Mid-level IR: SSA form for optimization |
-| LLVM IR | Target-independent code generation |
+| ReadSource | Read and preprocess source file |
+| Tokenize | Tokenize preprocessed source |
+| Parse | Build AST using LL(1) grammar |
+| Typecheck | Type inference, generic resolution, module imports |
+| Borrowcheck | Ownership and lifetime verification |
+| HirLower | Lower AST to High-level IR (type-resolved, desugared) |
+| MirBuild | Build Mid-level IR (SSA form, optimization passes) |
+| CodegenUnit | Generate LLVM IR from MIR |
+| **LLVM** | In-process IR → .obj compilation (embedded, no clang subprocess) |
+| **LLD** | In-process linking (embedded, no linker subprocess) |
+
+Each stage is a **memoized query** with dependency tracking. On rebuild, unchanged queries are marked **GREEN** and skipped entirely — cached LLVM IR is loaded from disk.
 
 ## Current Status
 
-**Bootstrap Compiler** - Core features working
+**Bootstrap Compiler** - Core features working, query-based pipeline with incremental compilation
 
 | Component | Status |
 |-----------|--------|
@@ -481,7 +492,10 @@ Source (.tml) → Lexer → Parser → Type Check → Borrow Check → HIR → M
 | Borrow Checker | Complete (integrated with Rust-style diagnostics) |
 | HIR | Complete (type-resolved, desugared AST) |
 | MIR | Complete (SSA form, optimization passes) |
-| LLVM Backend | Complete (via text IR) |
+| LLVM Backend | Complete (embedded, in-process compilation) |
+| LLD Linker | Complete (embedded, in-process COFF/ELF/MachO) |
+| Query System | Complete (demand-driven, 8 memoized stages) |
+| Incremental Compilation | Complete (red-green, cross-session persistence) |
 | Arrays | Complete (fixed-size with full method suite) |
 | Slices | Complete (Slice[T], MutSlice[T] fat pointers) |
 | Maybe/Outcome | Complete |
@@ -491,9 +505,16 @@ Source (.tml) → Lexer → Parser → Type Check → Borrow Check → HIR → M
 | Trait Objects | Complete (dyn Behavior, multiple methods) |
 | Error Propagation | Complete (`!` operator) |
 | FFI | Complete (@extern, @link) |
-| Test Framework | Complete (@test, 242 test files, 2604 tests) |
+| Test Framework | Complete (@test, 363 test files, 3632 tests) |
 
-### Recent Features (Jan-Feb 2026)
+### Recent Features (Feb 2026)
+
+- **Query-Based Build Pipeline (Default)** - Demand-driven compilation using memoized queries (like rustc's TyCtxt)
+- **Red-Green Incremental Compilation** - Cross-session persistence of fingerprints; no-op rebuild skips entire pipeline
+- **Embedded LLVM Backend** - ~55 LLVM static libraries linked directly; in-process IR→obj (50x faster)
+- **Embedded LLD Linker** - In-process linking for Windows (COFF), Linux (ELF), macOS (MachO)
+
+### Features (Jan 2026)
 
 - **HashMap String Keys** - Fixed string key hashing to use content-based `str_hash()` instead of pointer addresses
 - **HIR (High-level IR)** - New compiler IR layer between type-checked AST and MIR for type-resolved desugaring and monomorphization

@@ -64,7 +64,8 @@ compiler/
 │   ├── borrow/         # Borrow checker headers
 │   ├── hir/            # High-level IR
 │   ├── mir/            # Mid-level IR (SSA, passes)
-│   └── codegen/        # LLVM codegen headers
+│   ├── codegen/        # LLVM codegen headers
+│   └── query/          # Query system headers (QueryContext, cache, keys, incremental)
 ├── src/
 │   ├── lexer/          # Tokenizer
 │   ├── parser/         # AST generation
@@ -75,6 +76,8 @@ compiler/
 │   ├── mir/            # MIR passes (devirtualization, etc.)
 │   ├── codegen/        # LLVM IR backend
 │   │   └── core/       # Core codegen (classes, generics)
+│   ├── query/          # Query system (demand-driven compilation)
+│   ├── backend/        # LLVM backend + LLD linker (in-process)
 │   ├── cli/            # Command line interface
 │   │   ├── commands/   # CLI commands (build, test, etc.)
 │   │   ├── builder/    # Build system
@@ -101,7 +104,10 @@ compiler/
 | Borrow Checker | Basic |
 | HIR Generator | Complete |
 | MIR Passes | Complete |
-| LLVM Backend | Complete |
+| **LLVM Backend** | Complete (embedded, in-process) |
+| **LLD Linker** | Complete (embedded COFF/ELF/MachO) |
+| **Query System** | Complete (demand-driven, 8 stages) |
+| **Incremental Compilation** | Complete (red-green, cross-session) |
 | CLI | Complete |
 | Test Framework | Complete |
 
@@ -140,6 +146,10 @@ compiler/
 - **Devirtualization pass**
 - **Dead method elimination**
 - **Escape analysis**
+- **Demand-driven query system** (like rustc's TyCtxt) with 8 memoized stages
+- **Red-green incremental compilation** with cross-session persistence
+- **Embedded LLVM backend** (~55 static libs, in-process IR→obj, no clang subprocess)
+- **Embedded LLD linker** (in-process COFF/ELF/MachO, no linker subprocess)
 - LLVM IR code generation
 - Enum codegen (struct-based tagged unions)
 - Pattern matching codegen
@@ -237,6 +247,16 @@ func my_test() -> I32 {
 ```
 
 ## Recent Updates
+
+### v0.7.0 (2026-02)
+- **Query-based build pipeline** - Default `tml build` uses demand-driven queries (like rustc)
+- **Red-green incremental compilation** - Cross-session persistence, GREEN path skips entire pipeline
+- **Embedded LLVM backend** - ~55 static libs linked, in-process IR→obj (50x faster)
+- **Embedded LLD linker** - In-process linking (COFF/ELF/MachO, no subprocess)
+- **Query system foundation** - 8 memoized stages with dependency tracking and cycle detection
+- **128-bit fingerprinting** - CRC32C-based fingerprints for incremental cache validation
+- `--legacy` flag to fall back to traditional pipeline
+- All 3,632 tests pass across 363 test files
 
 ### v0.6.0 (2026-01)
 - **@value classes** - Value semantics with no vtable

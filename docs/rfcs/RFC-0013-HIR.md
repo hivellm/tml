@@ -12,7 +12,7 @@ This RFC specifies the High-level Intermediate Representation (HIR), a type-reso
 
 ### Problem
 
-The current compilation pipeline has a large semantic gap:
+Without HIR, the compilation pipeline has a large semantic gap:
 
 ```
 AST → Type Check → MIR → LLVM IR
@@ -32,6 +32,16 @@ Insert HIR between type checking and MIR:
 AST → Type Check → HIR → MIR → LLVM IR → Machine Code
 ```
 
+In the current compiler, HIR lowering is wrapped as the `hir_lower` query in the
+demand-driven query system. The full query pipeline is:
+
+```
+ReadSource → Tokenize → Parse → Typecheck → Borrowcheck → HIR → MIR → CodegenUnit
+                                                           ^^^
+```
+
+Each stage is a memoized query with fingerprints for incremental compilation.
+
 HIR provides:
 1. **Type-resolved AST** - All types fully resolved, using semantic `TypePtr`
 2. **Desugaring layer** - `var` → `let mut`, method desugaring, etc.
@@ -47,34 +57,46 @@ HIR provides:
 Source (.tml)
     │
     ▼
-┌─────────────┐
-│   Lexer     │  → Token stream
-└─────────────┘
+┌──────────────────┐
+│  Preprocessor    │  → Conditional compilation      (query: read_source)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│   Parser    │  → AST (untyped)
-└─────────────┘
+┌──────────────────┐
+│     Lexer        │  → Token stream                 (query: tokenize)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│ Type Check  │  → TAST (typed AST)
-└─────────────┘
+┌──────────────────┐
+│     Parser       │  → AST (untyped)                (query: parse_module)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│ HIR Builder │  → HIR (type-resolved, desugared)  ◄── NEW
-└─────────────┘
+┌──────────────────┐
+│   Type Check     │  → TAST (typed AST)             (query: typecheck_module)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│ MIR Builder │  → MIR (SSA form)
-└─────────────┘
+┌──────────────────┐
+│  Borrow Check    │  → TAST (ownership verified)    (query: borrowcheck_module)
+└──────────────────┘
     │
     ▼
-┌─────────────┐
-│   LLVM IR   │  → LLVM module
-└─────────────┘
+┌──────────────────┐
+│   HIR Builder    │  → HIR (type-resolved)          (query: hir_lower)
+└──────────────────┘
+    │
+    ▼
+┌──────────────────┐
+│   MIR Builder    │  → MIR (SSA form)               (query: mir_build)
+│   + LLVM Codegen │  → LLVM IR string               (query: codegen_unit)
+└──────────────────┘
+    │
+    ▼
+┌──────────────────┐
+│  Embedded LLVM   │  → Object files (in-process)
+│  Embedded LLD    │  → Executable / Library (in-process)
+└──────────────────┘
 ```
 
 ### 2. HIR Types

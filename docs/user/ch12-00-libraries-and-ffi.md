@@ -374,9 +374,7 @@ The exact setup depends on your host and target platforms.
 
 #### Windows Host → Linux Target
 
-1. **Install LLVM/Clang** with cross-compilation support
-
-2. **Get a Linux sysroot** - Options:
+1. **Get a Linux sysroot** (TML has embedded LLVM+LLD, so no external toolchain needed) - Options:
    - Extract from a Linux Docker image
    - Use a pre-built toolchain (e.g., from musl.cc)
    - Copy from a Linux machine

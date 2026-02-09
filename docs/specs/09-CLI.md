@@ -80,6 +80,7 @@ tml build --emit-header          # Generate .h file from public functions
 tml build --emit-ir              # Emit LLVM IR (.ll files)
 tml build --emit-mir             # Emit MIR (Mid-level IR) for debugging
 tml build --no-cache             # Disable build cache (force full recompilation)
+tml build --legacy               # Use legacy sequential pipeline (bypass query system)
 tml build --out-dir=path         # Specify output directory
 tml build --verbose              # Show detailed build output
 tml build --time                 # Show detailed compiler phase timings
@@ -582,14 +583,17 @@ path = "src/main.tml"
 
 ### 8.2 Build Cache
 
-TML uses incremental compilation with hash-based caching:
+TML uses a multi-level cache system for fast incremental builds:
 
 ```bash
-# Build with cache (default)
+# Build with cache (default — query pipeline + incremental compilation)
 tml build
 
-# Rebuild without cache
+# Rebuild without cache (force full recompilation)
 tml build --no-cache
+
+# Use legacy pipeline (bypass query system)
+tml build --legacy
 
 # Clean cache
 tml cache clean
@@ -597,54 +601,69 @@ tml cache clean
 # Show cache statistics
 tml cache info
 # Output:
-# Cache: build/debug/.cache/
+# Cache: build/debug/.run-cache/
 # Size: 45.2 MB
 # Entries: 127
 # Hit rate: 87%
-# Last cleaned: 2025-12-27
 ```
 
-**How it works:**
-1. Hash = `hash(source_content + compiler_version + flags)`
-2. Check if `build/debug/.cache/{hash}.o` exists
-3. If exists → reuse (cache hit, ~10x faster)
-4. If not → compile and cache
+**How it works (query-based pipeline):**
+
+1. **Incremental query cache** (Level 1): 128-bit fingerprints for all 8 compilation stages.
+   On rebuild, the RED-GREEN system detects unchanged queries and reuses cached LLVM IR.
+   - Cache: `build/debug/.incr-cache/incr.bin` + `ir/<hash>.ll`
+   - No-op rebuild: < 100ms
+
+2. **Object file cache** (Level 2): Content-based hashing of LLVM IR.
+   - Cache: `build/debug/.run-cache/<hash>.obj`
+   - Skip LLVM compilation if IR unchanged
+
+3. **Executable cache** (Level 3): Combined hash of all object files.
+   - Cache: `build/debug/.run-cache/<hash>.exe`
+   - Skip linking if nothing changed
 
 **Cache location:**
-- Debug: `build/debug/.cache/`
-- Release: `build/release/.cache/`
-- Shared deps: `build/debug/deps/`
+- Debug: `build/debug/.incr-cache/` (incremental) + `build/debug/.run-cache/` (objects)
+- Release: `build/release/.incr-cache/` + `build/release/.run-cache/`
 
 ### 8.3 Object Files and Linking
 
-TML compiles through object files for faster incremental builds:
+TML compiles through a fully self-contained pipeline with embedded LLVM and LLD:
 
 ```
-Pipeline:
-  .tml → Parse → Type Check → LLVM IR (.ll)
-                                  ↓
-                          Object File (.o)
-                                  ↓
-                         Link (based on mode)
-                                  ↓
-                    Output (.exe, .dll, .a, .rlib)
+Pipeline (default — query-based):
+  .tml → [QueryContext: 8 memoized stages] → LLVM IR (in-memory)
+                                                  ↓
+                                          Embedded LLVM (in-process)
+                                                  ↓
+                                          Object File (.obj/.o)
+                                                  ↓
+                                          Embedded LLD (in-process)
+                                                  ↓
+                                    Output (.exe, .dll, .a, .rlib)
 ```
+
+No intermediate `.ll` files are written to disk. No external tools (clang, linker) are needed.
 
 **Build artifacts:**
 ```
 build/debug/
-├── .cache/              # Object file cache
-│   ├── abc123.o        # Cached object
-│   ├── abc123.meta     # Metadata
-│   └── index.json      # Cache index
-├── deps/               # Compiled dependencies
+├── .incr-cache/         # Incremental compilation cache
+│   ├── incr.bin         # Fingerprints + dependency edges
+│   └── ir/              # Cached LLVM IR strings
+│       ├── a1b2c3d4.ll
+│       └── a1b2c3d4.libs
+├── .run-cache/          # Object file + executable cache
+│   ├── abc123.obj       # Cached object files
+│   └── def456.exe       # Cached executables
+├── deps/                # Compiled dependencies
 │   ├── essential.obj
 │   └── std.rlib
-├── myapp.exe           # Executable
-├── libmylib.a          # Static library
-├── mylib.dll           # Dynamic library
-├── mylib.h             # C header
-└── mylib.rlib          # TML library
+├── myapp.exe            # Executable
+├── libmylib.a           # Static library
+├── mylib.dll            # Dynamic library
+├── mylib.h              # C header
+└── mylib.rlib           # TML library
 ```
 
 ### 8.4 C FFI Export
@@ -834,31 +853,43 @@ Object Compilation  :    31.23 ms (13.4%)
 Total               :   232.93 ms
 ```
 
-### 8.9 MIR Cache for Incremental Compilation
+### 8.9 Incremental Compilation (Red-Green Query System)
 
-TML caches MIR (Mid-level IR) for faster incremental builds:
+TML uses a demand-driven query system with Red-Green incremental compilation,
+inspired by rustc's architecture. All 8 compilation stages are memoized queries
+with 128-bit fingerprints persisted to disk between sessions.
 
 ```bash
-# Normal build (uses cache)
+# Normal build (query pipeline + incremental, default)
 tml build
 
-# Force full recompilation (skip cache)
+# Force full recompilation (skip incremental cache)
 tml build --no-cache
 
-# Inspect cached MIR
-tml build --emit-mir
+# Use legacy sequential pipeline (bypass query system)
+tml build --legacy
+
+# Inspect intermediate representations
+tml build --emit-mir           # Emit MIR
+tml build --emit-ir            # Emit LLVM IR
 ```
 
+**How incremental compilation works:**
+1. On first build, all 8 queries execute and their fingerprints + dependency edges are saved to `build/debug/.incr-cache/incr.bin`
+2. On rebuild, the compiler loads the previous session's cache and checks each query:
+   - **GREEN**: File unchanged (fingerprint matches) → reuse cached LLVM IR
+   - **RED**: File changed → recompute from that point, but downstream may still be GREEN
+3. The CodegenUnit query's LLVM IR is cached to disk as `build/debug/.incr-cache/ir/<hash>.ll`
+
 **Cache invalidation triggers:**
-- Source file content changed (hash mismatch)
-- Optimization level changed
-- Debug info setting changed
-- Compiler version changed
-- Preprocessor defines changed
+- Source file content changed (fingerprint mismatch)
+- Build options changed (optimization level, debug info, target triple, defines, coverage)
+- Library environment changed (`.tml.meta` files modified)
+- Cache format version mismatch
 
 **Cache location:**
-- `build/debug/.cache/` - MIR and object file cache
-- Index file tracks: source hash, optimization level, debug info
+- `build/debug/.incr-cache/` — Incremental query cache (fingerprints + LLVM IR)
+- `build/debug/.run-cache/` — Object file and executable cache
 
 ### 8.10 Conditional Compilation
 

@@ -753,6 +753,7 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     qopts.defines = options.defines;
     qopts.profile_generate = options.profile_generate;
     qopts.profile_use = options.profile_use;
+    qopts.incremental = !options.no_cache;
 
     auto source_dir = fs::path(path).parent_path();
     if (source_dir.empty()) {
@@ -763,7 +764,14 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     query::QueryContext qctx(qopts);
     auto module_name = fs::path(path).stem().string();
 
-    // Run the full front-end pipeline via queries
+    // Load incremental cache from previous session
+    fs::path build_dir = options.output_dir.empty() ? get_build_dir(false /* debug */)
+                                                    : fs::path(options.output_dir);
+    if (qopts.incremental) {
+        qctx.load_incremental_cache(build_dir);
+    }
+
+    // Run the full front-end pipeline via queries (with incremental reuse)
     auto codegen_result = qctx.codegen_unit(path, module_name);
 
     if (!codegen_result.success) {
@@ -823,10 +831,8 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     bool verbose = options.verbose;
     bool emit_ir_only = options.emit_ir_only;
     BuildOutputType output_type = options.output_type;
-    const std::string& output_dir = options.output_dir;
 
-    fs::path build_dir =
-        output_dir.empty() ? get_build_dir(false /* debug */) : fs::path(output_dir);
+    // build_dir already computed above for incremental cache
     fs::create_directories(build_dir);
 
     fs::path exe_output = build_dir / module_name;
@@ -899,6 +905,11 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     if (!link_result.success) {
         TML_LOG_ERROR("build", link_result.error_message);
         return 1;
+    }
+
+    // Save incremental cache for next session
+    if (qopts.incremental) {
+        qctx.save_incremental_cache(build_dir);
     }
 
     TML_LOG_INFO("build", "build: " << to_forward_slashes(exe_output.string()));

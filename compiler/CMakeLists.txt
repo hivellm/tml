@@ -528,6 +528,7 @@ add_library(tml_query STATIC
     src/query/query_provider.cpp
     src/query/query_context.cpp
     src/query/query_core.cpp
+    src/query/query_incr.cpp
 )
 target_link_libraries(tml_query PUBLIC tml_codegen tml_common tml_log)
 target_include_directories(tml_query PUBLIC include src)

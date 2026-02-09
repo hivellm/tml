@@ -1,0 +1,5 @@
+func main() -> I32 {
+    let x: I32 = 100
+    let y: I32 = x + 8
+    return y - 108
+}

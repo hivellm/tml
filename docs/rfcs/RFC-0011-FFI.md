@@ -179,7 +179,7 @@ func main() -> I32 {
 | `src/parser/parser_decl.cpp` | Process @extern/@link decorators |
 | `src/types/checker.cpp` | Validate @extern functions (no body, valid ABI) |
 | `src/codegen/llvm_ir_gen_decl.cpp` | Emit LLVM `declare` with calling conventions |
-| `src/cli/cmd_build.cpp` | Pass link flags to clang |
+| `src/cli/cmd_build.cpp` | Pass link flags to linker (embedded LLD or fallback) |
 
 ### Type Checker Validation
 

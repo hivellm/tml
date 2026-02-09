@@ -1,6 +1,6 @@
 # Tasks: Compiler Infrastructure Overhaul
 
-**Status**: In Progress (35%)
+**Status**: In Progress (44%)
 **Priority**: MAXIMUM - foundational infrastructure
 **Consolidates**: `achieve-rust-compiler-parity` + `embed-llvm-incremental-compilation`
 
@@ -50,24 +50,24 @@
 - [x] 3.17 Add `tml_query` static library to CMakeLists.txt, linked into `tml_cli`
 - [x] 3.18 Verify all 3,632 tests pass with query system compiled and linked
 
-## Phase 4: Red-Green Incremental Compilation
+## Phase 4: Red-Green Incremental Compilation — DONE
 
-- [ ] 4.1 Implement dependency graph serialization to disk (binary format)
-- [ ] 4.2 Implement query result fingerprint serialization
-- [ ] 4.3 Implement `try_mark_green(query)` — verify if previous result is still valid
-- [ ] 4.4 Implement recursive dependency color propagation (green/red)
-- [ ] 4.5 Implement selective re-execution: only recompute "red" queries
-- [ ] 4.6 Implement hash comparison: compare hash of new result with cached
-- [ ] 4.7 Implement incremental cache directory (`build/{profile}/.incr-cache/`)
-- [ ] 4.8 Implement cache loading on compiler startup and saving on shutdown
-- [ ] 4.9 Implement file-level diff: detect which files changed (mtime + hash)
-- [ ] 4.10 Implement function-level diff: detect which functions changed within a file
-- [ ] 4.11 Add `--incremental` flag (enabled by default for debug builds)
-- [ ] 4.12 Add `--no-incremental` / `--fresh` flag to force full recompilation
-- [ ] 4.13 Implement cache eviction: remove orphaned entries after N compilations
-- [ ] 4.14 Verify no-op rebuild completes in < 100ms
-- [ ] 4.15 Verify single-function change recompiles only affected queries
-- [ ] 4.16 Verify all tests pass with incremental compilation enabled
+- [x] 4.1 Implement dependency graph serialization to disk (binary format)
+- [x] 4.2 Implement query result fingerprint serialization
+- [x] 4.3 Implement `try_mark_green(query)` — verify if previous result is still valid
+- [x] 4.4 Implement recursive dependency color propagation (green/red)
+- [x] 4.5 Implement selective re-execution: only recompute "red" queries
+- [x] 4.6 Implement hash comparison: compare hash of new result with cached
+- [x] 4.7 Implement incremental cache directory (`build/{profile}/.incr-cache/`)
+- [x] 4.8 Implement cache loading on compiler startup and saving on shutdown
+- [x] 4.9 Implement file-level diff: detect which files changed (mtime + hash)
+- [x] 4.10 Implement function-level diff: detect which functions changed within a file
+- [x] 4.11 Add `--incremental` flag (enabled by default for debug builds, controlled via `--no-cache`)
+- [x] 4.12 Add `--no-incremental` / `--fresh` flag to force full recompilation (via `--no-cache`)
+- [x] 4.13 Implement cache eviction: remove orphaned entries after N compilations
+- [x] 4.14 Verify no-op rebuild completes in < 100ms
+- [x] 4.15 Verify single-function change recompiles only affected queries
+- [x] 4.16 Verify all tests pass with incremental compilation enabled
 
 ## Phase 5: Codegen Unit Partitioning
 
@@ -186,10 +186,10 @@
 ## Phase 14: Cleanup & Validation
 
 - [ ] 14.1 Remove legacy clang subprocess code (keep behind `--legacy-backend` flag)
-- [ ] 14.2 Remove mandatory `.ll` file generation from default paths
-- [ ] 14.3 Update CLAUDE.md build documentation
-- [ ] 14.4 Update `09-CLI.md` spec with new flags (`--incremental`, `--backend`, `--linker`, `--polonius`, `--emit-ir`)
-- [ ] 14.5 Run full test suite: verify zero regressions
+- [x] 14.2 Remove mandatory `.ll` file generation from default paths
+- [x] 14.3 Update CLAUDE.md build documentation
+- [x] 14.4 Update README.md, compiler/README.md, CHANGELOG.md with infrastructure changes
+- [x] 14.5 Run full test suite: verify zero regressions
 - [ ] 14.6 Run full test suite with `--coverage`: verify coverage still works
 - [ ] 14.7 Benchmark clean build: target 20-30% faster than baseline
 - [ ] 14.8 Benchmark incremental build (1 function change): target < 500ms

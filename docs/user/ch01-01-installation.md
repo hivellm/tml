@@ -79,18 +79,24 @@ scripts/build.sh
 scripts/build.sh release
 ```
 
-### Building with LLVM Backend (Optional)
+### Building with Embedded LLVM + LLD (Default)
 
-For self-contained compilation without external tools, build with LLVM support:
+The default build configuration embeds LLVM (~55 static libraries) and LLD
+(LLVM's linker) directly into the TML compiler binary. This makes the compiler
+fully self-contained — no external tools needed at runtime.
 
 ```bash
-# Build with LLVM backend
-cmake -B build -DTML_USE_LLVM_BACKEND=ON
-cmake --build build --config Release
+# Default build includes embedded LLVM + LLD
+scripts\build.bat          # Windows
+scripts/build.sh           # Linux/macOS
 ```
 
-This embeds the LLVM backend directly into the TML compiler, allowing it to
-compile code without needing clang or any external tools.
+To build without the embedded LLVM backend (uses clang subprocess as fallback):
+
+```bash
+# Build without LLVM backend (not recommended)
+scripts\build.bat --no-llvm
+```
 
 ## Verifying Installation
 
@@ -109,20 +115,21 @@ echo 'func main() { println("Hello from TML!"); }' > hello.tml
 tml run hello.tml
 ```
 
-## Self-Contained Mode
+## Self-Contained Compiler
 
-The TML compiler is designed to be self-contained. When built with the LLVM
-backend, it includes:
+The TML compiler is fully self-contained by default. It includes:
 
-- **Built-in LLVM IR compiler**: No need for clang to compile IR to object files
-- **Built-in LLD linker**: No need for system linkers
-- **Pre-compiled runtime**: No need to compile C runtime files
+- **Embedded LLVM backend**: Compiles LLVM IR to object files in-process (no clang needed)
+- **Embedded LLD linker**: Links object files in-process for COFF/ELF/Mach-O (no system linker needed)
+- **Pre-compiled runtime**: Essential C runtime is pre-built
+- **Query-based pipeline**: Demand-driven compilation with 8 memoized stages
+- **Incremental compilation**: Red-Green fingerprint system for near-instant rebuilds
 
-If you encounter issues, you can use the `--use-external-tools` flag to fall
-back to external tools for debugging:
+The compiler uses the `--legacy` flag to fall back to the traditional sequential
+pipeline if needed:
 
 ```bash
-tml build myfile.tml --use-external-tools
+tml build myfile.tml --legacy
 ```
 
 ## Updating TML

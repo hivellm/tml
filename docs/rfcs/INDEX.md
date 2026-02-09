@@ -17,7 +17,11 @@ TML uses a **layered architecture**:
 │     types, effects, ownership           │
 │     SSA form, stable IDs                │
 ├─────────────────────────────────────────┤
-│      Target Backends (LLVM/WASM)        │
+│    Query-Based Pipeline (8 stages)      │  RFC-0012, RFC-0013
+│    Incremental compilation (Red-Green)  │
+├─────────────────────────────────────────┤
+│    Embedded LLVM + LLD (in-process)     │
+│    Target Backends (LLVM/Cranelift)     │
 └─────────────────────────────────────────┘
 ```
 
@@ -115,3 +119,14 @@ Related work, inspiration, prior art.
     - ✅ Fluent builder API
     - ✅ JSON-RPC 2.0 support
     - ✅ Schema validation
+
+## Compiler Infrastructure (v0.7.0)
+
+The following infrastructure is implemented in the compiler:
+
+- ✅ **Embedded LLVM Backend** — ~55 LLVM static libraries linked into compiler; in-process IR→obj compilation (no clang subprocess)
+- ✅ **Embedded LLD Linker** — In-process COFF/ELF/Mach-O linking (no external linker needed)
+- ✅ **Query System** — Demand-driven compilation with 8 memoized stages (analogous to rustc's TyCtxt)
+- ✅ **Red-Green Incremental Compilation** — 128-bit fingerprints + dependency edges persisted to disk; GREEN path skips pipeline; no-op rebuild < 100ms
+- ✅ **No intermediate .ll files** — LLVM IR stays in-memory (written to disk only with `--emit-ir`)
+- ✅ **Test suite**: 3,632 tests passing in ~17 seconds (down from ~15 minutes before embedded LLVM)
