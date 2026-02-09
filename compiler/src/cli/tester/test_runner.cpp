@@ -551,7 +551,6 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
     std::string content_hash = generate_content_hash(source_code);
     std::string cache_key = generate_cache_key(test_file);
 
-    fs::path ll_output = cache_dir / (content_hash + "_shlib.ll");
     fs::path obj_output = cache_dir / (content_hash + "_shlib" + get_object_extension());
 
     // Use platform-specific extension for the shared library
@@ -565,16 +564,7 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
     bool use_cached_obj = !no_cache && fs::exists(obj_output);
 
     if (!use_cached_obj) {
-        // Write LLVM IR
-        std::ofstream ll_file(ll_output);
-        if (!ll_file) {
-            result.error_message = "Cannot write LLVM IR";
-            return result;
-        }
-        ll_file << llvm_ir;
-        ll_file.close();
-
-        // Compile to object
+        // Compile LLVM IR string directly to object (no .ll on disk)
         ObjectCompileOptions obj_options;
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
         obj_options.debug_info = tml::CompilerOptions::debug_info;
@@ -583,13 +573,11 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
         obj_options.sysroot = tml::CompilerOptions::sysroot;
         obj_options.coverage = tml::CompilerOptions::coverage_source; // LLVM source coverage
 
-        auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+        auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
         if (!obj_result.success) {
             result.error_message = "Compilation failed: " + obj_result.error_message;
-            fs::remove(ll_output);
             return result;
         }
-        fs::remove(ll_output);
     }
 
     // Collect objects to link
@@ -910,7 +898,6 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
     std::string content_hash = generate_content_hash(source_code);
     std::string cache_key = generate_cache_key(fuzz_file);
 
-    fs::path ll_output = cache_dir / (content_hash + "_fuzz.ll");
     fs::path obj_output = cache_dir / (content_hash + "_fuzz" + get_object_extension());
 
     // Use platform-specific extension for the shared library
@@ -924,16 +911,7 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
     bool use_cached_obj = !no_cache && fs::exists(obj_output);
 
     if (!use_cached_obj) {
-        // Write LLVM IR
-        std::ofstream ll_file(ll_output);
-        if (!ll_file) {
-            result.error_message = "Cannot write LLVM IR";
-            return result;
-        }
-        ll_file << llvm_ir;
-        ll_file.close();
-
-        // Compile to object
+        // Compile LLVM IR string directly to object (no .ll on disk)
         ObjectCompileOptions obj_options;
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
         obj_options.debug_info = tml::CompilerOptions::debug_info;
@@ -942,13 +920,11 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
         obj_options.sysroot = tml::CompilerOptions::sysroot;
         obj_options.coverage = tml::CompilerOptions::coverage_source; // LLVM source coverage
 
-        auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+        auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
         if (!obj_result.success) {
             result.error_message = "Compilation failed: " + obj_result.error_message;
-            fs::remove(ll_output);
             return result;
         }
-        fs::remove(ll_output);
     }
 
     // Collect objects to link
@@ -1111,7 +1087,6 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
     std::string content_hash = generate_content_hash(source_code);
     std::string cache_key = generate_cache_key(test_file);
 
-    fs::path ll_output = cache_dir / (content_hash + "_shlib.ll");
     fs::path obj_output = cache_dir / (content_hash + "_shlib" + get_object_extension());
 
     std::string lib_ext = get_shared_lib_extension();
@@ -1126,15 +1101,6 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
     bool use_cached_obj = !no_cache && fs::exists(obj_output);
 
     if (!use_cached_obj) {
-        std::ofstream ll_file(ll_output);
-        if (!ll_file) {
-            result.error_message = "Cannot write LLVM IR";
-            record_phase("clang_compile", phase_start);
-            return result;
-        }
-        ll_file << llvm_ir;
-        ll_file.close();
-
         ObjectCompileOptions obj_options;
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
         obj_options.debug_info = tml::CompilerOptions::debug_info;
@@ -1143,16 +1109,14 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
         obj_options.sysroot = tml::CompilerOptions::sysroot;
         obj_options.coverage = tml::CompilerOptions::coverage_source; // LLVM source coverage
 
-        auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+        auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
         if (!obj_result.success) {
             result.error_message = "Compilation failed: " + obj_result.error_message;
-            fs::remove(ll_output);
-            record_phase("clang_compile", phase_start);
+            record_phase("llvm_compile", phase_start);
             return result;
         }
-        fs::remove(ll_output);
     }
-    record_phase("clang_compile", phase_start);
+    record_phase("llvm_compile", phase_start);
 
     // Phase: Link (with cache support)
     phase_start = Clock::now();
@@ -1516,17 +1480,7 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
 
         const auto& llvm_ir = std::get<std::string>(gen_result);
 
-        // Write LLVM IR
-        fs::path ll_path = cache_dir / "precompiled_symbols.ll";
-        std::ofstream ll_file(ll_path);
-        if (!ll_file) {
-            TML_LOG_WARN("test", "[PRECOMPILE] Cannot write LLVM IR");
-            return "";
-        }
-        ll_file << llvm_ir;
-        ll_file.close();
-
-        // Compile to object
+        // Compile LLVM IR string directly to object (no .ll on disk)
         std::string clang = find_clang();
         ObjectCompileOptions obj_options;
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
@@ -1536,14 +1490,12 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         obj_options.sysroot = tml::CompilerOptions::sysroot;
         obj_options.coverage = false; // No coverage for precompiled symbols
 
-        auto obj_result = compile_ll_to_object(ll_path, precompiled_obj, clang, obj_options);
+        auto obj_result = compile_ir_string_to_object(llvm_ir, precompiled_obj, clang, obj_options);
         if (!obj_result.success) {
             TML_LOG_WARN("test", "[PRECOMPILE] Object compilation failed: "
                       << obj_result.error_message);
-            fs::remove(ll_path);
             return "";
         }
-        fs::remove(ll_path); // Clean up LLVM IR file
 
         TML_LOG_INFO("test", "[PRECOMPILE] Successfully compiled precompiled_symbols.obj");
         return precompiled_obj.string();
@@ -1679,7 +1631,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
         // Structure to hold pending object compilations
         struct PendingCompile {
-            fs::path ll_path;
+            std::string ir_content; // LLVM IR string (in-memory, no .ll file)
             fs::path obj_path;
             std::string test_path;
             bool needs_compile = false;
@@ -1850,36 +1802,26 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                 if (std::holds_alternative<std::string>(gen_result)) {
                                     const auto& lib_ir = std::get<std::string>(gen_result);
 
-                                    // Write IR to file
-                                    fs::path lib_ll = cache_dir / (lib_hash + "_sharedlib.ll");
+                                    // Compile IR string directly to object (no .ll on disk)
                                     {
-                                        std::ofstream ll_file(lib_ll);
-                                        if (ll_file) {
-                                            ll_file << lib_ir;
-                                            ll_file.close();
+                                        ObjectCompileOptions obj_options;
+                                        obj_options.optimization_level =
+                                            CompilerOptions::optimization_level;
+                                        obj_options.debug_info = false;
+                                        obj_options.verbose = false;
+                                        obj_options.coverage = false;
 
-                                            // Compile to object
-                                            ObjectCompileOptions obj_options;
-                                            obj_options.optimization_level =
-                                                CompilerOptions::optimization_level;
-                                            obj_options.debug_info = false;
-                                            obj_options.verbose = false;
-                                            obj_options.coverage = false;
+                                        auto obj_result = compile_ir_string_to_object(
+                                            lib_ir, shared_lib_obj, clang, obj_options);
 
-                                            auto obj_result = compile_ll_to_object(
-                                                lib_ll, shared_lib_obj, clang, obj_options);
-                                            fs::remove(lib_ll);
-
-                                            if (obj_result.success) {
-                                                use_shared_lib = true;
-                                                TML_LOG_INFO("test",
-                                                             "  Shared library compiled: "
-                                                                 << shared_lib_obj.filename());
-                                            } else {
-                                                TML_LOG_WARN("test",
-                                                             "  Shared library compilation failed: "
-                                                                 << obj_result.error_message);
-                                            }
+                                        if (obj_result.success) {
+                                            use_shared_lib = true;
+                                            TML_LOG_INFO("test", "  Shared library compiled: "
+                                                                     << shared_lib_obj.filename());
+                                        } else {
+                                            TML_LOG_WARN("test",
+                                                         "  Shared library compilation failed: "
+                                                             << obj_result.error_message);
                                         }
                                     }
                                 }
@@ -2140,28 +2082,11 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                             }
                         }
 
-                        // Write IR for later parallel compilation
-                        std::string obj_name =
-                            task.content_hash + "_suite_" + std::to_string(task.index);
-                        fs::path ll_output = cache_dir / (obj_name + ".ll");
-                        std::ofstream ll_file(ll_output);
-                        if (!ll_file) {
-                            std::lock_guard<std::mutex> lock(error_mutex);
-                            if (!has_error.load()) {
-                                has_error.store(true);
-                                first_error_msg = "Cannot write LLVM IR";
-                                first_error_file = task.file_path;
-                            }
-                            continue;
-                        }
-                        ll_file << llvm_ir;
-                        ll_file.close();
-
-                        // Add to pending compiles (thread-safe)
+                        // Store IR string for later parallel compilation (no .ll on disk)
                         {
                             std::lock_guard<std::mutex> lock(pending_mutex);
                             pending_compiles.push_back(
-                                {ll_output, task.obj_output, task.file_path, true});
+                                {std::move(llvm_ir), task.obj_output, task.file_path, true});
                         }
 
                         // Track task timing and check for slow tasks
@@ -2347,8 +2272,7 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     auto obj_start = Clock::now();
 
                     auto obj_result =
-                        compile_ll_to_object(pc.ll_path, pc.obj_path, clang, obj_options);
-                    fs::remove(pc.ll_path);
+                        compile_ir_string_to_object(pc.ir_content, pc.obj_path, clang, obj_options);
 
                     auto obj_end = Clock::now();
                     int64_t obj_duration_us =

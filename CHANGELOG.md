@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Embedded LLVM Backend** (2026-02-09) - Eliminated clang subprocess and .ll intermediate files
+  - Compiler now links ~55 LLVM static libraries directly (LLVMCore, LLVMX86CodeGen, LLVMAArch64CodeGen, LLVMPasses, etc.)
+  - New `compile_ir_string_to_object()` function compiles IR strings directly to .obj via LLVM C API — zero disk I/O, zero subprocess spawning
+  - Pipeline changed from: codegen → write .ll → spawn clang → .obj → delete .ll
+  - To: codegen → in-memory IR → LLVMParseIRInContext → LLVMRunPasses → LLVMTargetMachineEmitToFile → .obj
+  - `--emit-ir` flag still writes .ll files when explicitly requested
+  - `--no-llvm` build flag falls back to clang subprocess if needed
+  - MSVC CRT mismatch resolved (LLVM libs built with /MD, forced consistent runtime across debug/release)
+  - **Performance**: full test suite dropped from ~15 minutes to ~17 seconds (50x+ improvement)
+  - 16 call sites updated across 8 files (build, run, test_runner, exe_test_runner, parallel_build)
+  - All 3,632 tests pass across 363 test files
+
 ### Known Issues
 - **Smart Pointer Generic Tests** (2026-02-06) - @test framework has type inference issues with generic types
   - Smart pointers (Heap[T], Shared[T], Sync[T]) work correctly in production code

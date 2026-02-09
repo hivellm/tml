@@ -389,21 +389,173 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
     // Save headers before generating imported module code
     std::string headers = output_.str();
+    cached_preamble_headers_ = headers; // Save for capture_library_state()
     output_.str("");
 
-    // Generate code for pure TML imported functions (like std::math)
-    // This may add types to type_defs_buffer_
-    emit_module_pure_tml_functions();
+    std::string imported_func_code;
+    std::string imported_type_defs;
 
-    // Save imported module code (functions)
-    std::string imported_func_code = output_.str();
-    output_.str("");
+    if (options_.cached_library_state && options_.cached_library_state->valid) {
+        // FAST PATH: Restore pre-computed library state instead of regenerating.
+        // This skips emit_module_pure_tml_functions() entirely (~9 seconds for zlib).
+        const auto& state = *options_.cached_library_state;
+
+        // Type definitions are the same regardless of library_decls_only
+        imported_type_defs = state.imported_type_defs;
+
+        // For function IR: if library_decls_only is true, use pre-computed declarations.
+        // If false, use the full definitions.
+        if (options_.library_decls_only) {
+            // Use pre-computed declarations extracted from full library IR
+            // (contains define→declare conversions for TML functions defined in the shared lib)
+            std::ostringstream func_code;
+            func_code << state.imported_func_decls;
+
+            // imported_func_decls already includes both:
+            // 1. define→declare conversions for TML library functions
+            // 2. FFI declare lines (brotli_*, zlib_*, etc.) NOT in preamble
+            imported_func_code = func_code.str();
+        } else {
+            // Use full definitions (for library_ir_only mode)
+            imported_func_code = state.imported_func_code;
+            // Restore string literals referenced by function definitions
+            for (const auto& sl : state.string_literals) {
+                string_literals_.push_back(sl);
+            }
+        }
+
+        // Restore internal registries
+        for (const auto& [k, v] : state.struct_types) {
+            if (struct_types_.find(k) == struct_types_.end()) {
+                struct_types_[k] = v;
+            }
+        }
+        for (const auto& k : state.union_types) {
+            union_types_.insert(k);
+        }
+        for (const auto& [k, v] : state.enum_variants) {
+            if (enum_variants_.find(k) == enum_variants_.end()) {
+                enum_variants_[k] = v;
+            }
+        }
+        for (const auto& [k, v] : state.global_constants) {
+            if (global_constants_.find(k) == global_constants_.end()) {
+                global_constants_[k] = ConstInfo{v.first, v.second};
+            }
+        }
+        for (const auto& [struct_name, fields] : state.struct_fields) {
+            if (struct_fields_.find(struct_name) == struct_fields_.end()) {
+                std::vector<FieldInfo> fi;
+                fi.reserve(fields.size());
+                for (const auto& f : fields) {
+                    fi.push_back(FieldInfo{f.name, f.index, f.llvm_type, nullptr});
+                }
+                struct_fields_[struct_name] = std::move(fi);
+            }
+        }
+        for (const auto& [k, v] : state.functions) {
+            if (functions_.find(k) == functions_.end()) {
+                functions_[k] =
+                    FuncInfo{v.llvm_name, v.llvm_func_type, v.ret_type, v.param_types, v.is_extern};
+            }
+        }
+        for (const auto& [k, v] : state.func_return_types) {
+            if (func_return_types_.find(k) == func_return_types_.end()) {
+                func_return_types_[k] = v;
+            }
+        }
+        for (const auto& name : state.generated_functions) {
+            generated_functions_.insert(name);
+        }
+        // Restore declared externals to prevent duplicate declarations
+        // when user code has @extern functions with the same symbol names
+        for (const auto& name : state.declared_externals) {
+            declared_externals_.insert(name);
+        }
+
+        // Re-parse library module ASTs for pending generic registration.
+        // We need the AST pointers to be valid for pending_generic_structs_ etc.
+        // The GlobalASTCache already has these cached, so this is just pointer lookups.
+        if (env_.module_registry()) {
+            const auto& registry = env_.module_registry();
+            const auto& all_modules = registry->get_all_modules();
+            for (const auto& [mod_name, mod_info] : all_modules) {
+                if (!mod_info.has_pure_tml_functions || mod_info.source_code.empty())
+                    continue;
+                if (!GlobalASTCache::should_cache(mod_name))
+                    continue;
+                const parser::Module* cached_ast = GlobalASTCache::instance().get(mod_name);
+                if (!cached_ast)
+                    continue;
+
+                // Re-register generic structs/enums/funcs/impls from cached ASTs
+                for (const auto& decl : cached_ast->decls) {
+                    if (decl->is<parser::StructDecl>()) {
+                        const auto& s = decl->as<parser::StructDecl>();
+                        if (!s.generics.empty() && pending_generic_structs_.find(s.name) ==
+                                                       pending_generic_structs_.end()) {
+                            pending_generic_structs_[s.name] = &s;
+                        }
+                        if (struct_decls_.find(s.name) == struct_decls_.end()) {
+                            struct_decls_[s.name] = &s;
+                        }
+                    } else if (decl->is<parser::EnumDecl>()) {
+                        const auto& e = decl->as<parser::EnumDecl>();
+                        if (!e.generics.empty() &&
+                            pending_generic_enums_.find(e.name) == pending_generic_enums_.end()) {
+                            pending_generic_enums_[e.name] = &e;
+                        }
+                    } else if (decl->is<parser::FuncDecl>()) {
+                        const auto& func = decl->as<parser::FuncDecl>();
+                        if (!func.generics.empty() && pending_generic_funcs_.find(func.name) ==
+                                                          pending_generic_funcs_.end()) {
+                            pending_generic_funcs_[func.name] = &func;
+                        }
+                    } else if (decl->is<parser::ImplDecl>()) {
+                        const auto& impl = decl->as<parser::ImplDecl>();
+                        if (!impl.generics.empty()) {
+                            std::string type_name;
+                            if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
+                                type_name =
+                                    impl.self_type->as<parser::NamedType>().path.segments.back();
+                            }
+                            if (!type_name.empty() && pending_generic_impls_.find(type_name) ==
+                                                          pending_generic_impls_.end()) {
+                                pending_generic_impls_[type_name] = &impl;
+                            }
+                        }
+                        // Register for vtable generation
+                        register_impl(&impl);
+                    } else if (decl->is<parser::TraitDecl>()) {
+                        const auto& trait = decl->as<parser::TraitDecl>();
+                        if (trait_decls_.find(trait.name) == trait_decls_.end()) {
+                            trait_decls_[trait.name] = &trait;
+                        }
+                    }
+                }
+            }
+        }
+
+        TML_DEBUG_LN("[CODEGEN] Restored library state: "
+                     << state.struct_types.size() << " struct types, " << state.functions.size()
+                     << " functions, " << state.enum_variants.size() << " enum variants");
+    } else {
+        // SLOW PATH: Generate library IR from scratch
+        emit_module_pure_tml_functions();
+
+        imported_func_code = output_.str();
+        output_.str("");
+
+        imported_type_defs = type_defs_buffer_.str();
+
+        // Save for capture_library_state() (used when library_ir_only=true)
+        cached_imported_func_code_ = imported_func_code;
+        cached_imported_type_defs_ = imported_type_defs;
+    }
 
     // Now reassemble with types before functions
     output_ << headers;
 
-    // Emit any generic types discovered during imported module processing
-    std::string imported_type_defs = type_defs_buffer_.str();
     if (!imported_type_defs.empty()) {
         emit_line("; Generic types from imported modules");
         output_ << imported_type_defs;
@@ -417,9 +569,40 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // Skip all user code generation. This is used to produce a shared library object that
     // can be linked into multiple test files.
     if (options_.library_ir_only) {
+        // Save the output position before generating instantiations.
+        // We need to capture the instantiation code for cached_imported_func_code_
+        // so that workers using library_decls_only=false get the complete library IR.
+        std::string pre_instantiation_output = output_.str();
+
+        // Generate pending generic instantiations triggered by library functions
+        generate_pending_instantiations();
+
+        // Update cached_imported_func_code_ to include instantiation-generated code.
+        // Without this, workers using library_decls_only=false would miss instantiations
+        // that were only generated by generate_pending_instantiations().
+        {
+            std::string post_output = output_.str();
+            // The new code is everything after the pre-instantiation position
+            if (post_output.size() > pre_instantiation_output.size()) {
+                cached_imported_func_code_ += post_output.substr(pre_instantiation_output.size());
+            }
+            // Also update type defs (instantiations may generate new struct types)
+            std::string new_type_defs = type_defs_buffer_.str();
+            if (!new_type_defs.empty()) {
+                cached_imported_type_defs_ += new_type_defs;
+            }
+        }
+
+        // Emit string constants collected during library codegen
+        emit_string_constants();
+
         // Emit attributes section (needed for function definitions)
         emit_line("");
         emit_line("attributes #0 = { nounwind }");
+
+        // Emit loop metadata (generic instantiations may contain loops)
+        emit_loop_metadata();
+
         std::string result = output_.str();
         if (!errors_.empty()) {
             return errors_;
@@ -1821,6 +2004,151 @@ void LLVMIRGen::gen_namespace_decl(const parser::NamespaceDecl& ns) {
 
     // Restore namespace
     current_namespace_ = saved_namespace;
+}
+
+// ============================================================================
+// Library State Capture
+// ============================================================================
+
+/// Generate declaration-only IR from full library IR text.
+/// Scans for `define` lines and converts them to `declare` statements.
+/// Only converts TML-generated functions (tml_ prefix), skipping C runtime functions
+/// that are already declared in the preamble.
+/// Extract a set of function names declared in the preamble headers.
+/// Used to filter out preamble declarations when generating library decls.
+static std::set<std::string> extract_preamble_func_names(const std::string& headers) {
+    std::set<std::string> names;
+    std::istringstream stream(headers);
+    std::string line;
+    while (std::getline(stream, line)) {
+        // Match "declare ... @funcname(...)"
+        if (line.size() > 8 && line.substr(0, 8) == "declare ") {
+            auto at_pos = line.find('@');
+            if (at_pos != std::string::npos) {
+                auto paren_pos = line.find('(', at_pos);
+                if (paren_pos != std::string::npos) {
+                    names.insert(line.substr(at_pos, paren_pos - at_pos));
+                }
+            }
+        }
+    }
+    return names;
+}
+
+/// Generate declaration-only IR from the full library IR.
+/// Converts `define` to `declare` for TML library functions.
+/// Also includes `declare` lines for FFI functions that are NOT in the preamble.
+static std::string generate_decls_from_ir(const std::string& full_ir,
+                                          const std::set<std::string>& preamble_funcs) {
+    std::ostringstream decls;
+    decls << "; Declarations extracted from shared library IR\n";
+
+    std::istringstream stream(full_ir);
+    std::string line;
+    while (std::getline(stream, line)) {
+        // Match lines starting with "define " (function definitions) → convert to declare
+        if (line.size() > 7 && line.substr(0, 7) == "define ") {
+            auto brace_pos = line.find('{');
+            if (brace_pos != std::string::npos) {
+                std::string signature = line.substr(7, brace_pos - 7);
+                // Trim trailing whitespace
+                while (!signature.empty() && (signature.back() == ' ' || signature.back() == '\t'))
+                    signature.pop_back();
+                // Remove attributes like #0
+                auto hash_pos = signature.rfind(" #");
+                if (hash_pos != std::string::npos)
+                    signature = signature.substr(0, hash_pos);
+                decls << "declare " << signature << "\n";
+            }
+        }
+        // Include `declare` lines for FFI functions NOT already in preamble.
+        // This is needed for FFI bindings like brotli_*, zlib_* that are declared
+        // during emit_module_pure_tml_functions() but not in the preamble.
+        else if (line.size() > 8 && line.substr(0, 8) == "declare ") {
+            // Extract function name (@funcname) to check against preamble
+            auto at_pos = line.find('@');
+            if (at_pos != std::string::npos) {
+                auto paren_pos = line.find('(', at_pos);
+                if (paren_pos != std::string::npos) {
+                    std::string func_ref = line.substr(at_pos, paren_pos - at_pos);
+                    if (preamble_funcs.count(func_ref) == 0) {
+                        decls << line << "\n";
+                    }
+                }
+            }
+        }
+    }
+    return decls.str();
+}
+
+auto LLVMIRGen::capture_library_state(const std::string& full_ir,
+                                      const std::string& /*preamble_headers*/) const
+    -> std::shared_ptr<CodegenLibraryState> {
+    auto state = std::make_shared<CodegenLibraryState>();
+
+    // Capture library IR text (saved during generate())
+    state->imported_func_code = cached_imported_func_code_;
+    state->imported_type_defs = cached_imported_type_defs_;
+
+    // Generate declarations-only IR from the full library IR.
+    // Includes define→declare conversions AND non-preamble declare lines (FFI functions).
+    if (!full_ir.empty()) {
+        auto preamble_funcs = extract_preamble_func_names(cached_preamble_headers_);
+        state->imported_func_decls = generate_decls_from_ir(full_ir, preamble_funcs);
+    }
+
+    // Capture struct types
+    state->struct_types = struct_types_;
+    state->union_types = union_types_;
+
+    // Capture enum variants
+    state->enum_variants = enum_variants_;
+
+    // Capture global constants
+    for (const auto& [k, v] : global_constants_) {
+        state->global_constants[k] = {v.value, v.llvm_type};
+    }
+
+    // Capture struct fields
+    for (const auto& [struct_name, fields] : struct_fields_) {
+        std::vector<CodegenLibraryState::FieldInfoData> field_data;
+        field_data.reserve(fields.size());
+        for (const auto& f : fields) {
+            field_data.push_back({f.name, f.index, f.llvm_type});
+        }
+        state->struct_fields[struct_name] = std::move(field_data);
+    }
+
+    // Capture function signatures
+    for (const auto& [k, v] : functions_) {
+        state->functions[k] = {v.llvm_name, v.llvm_func_type, v.ret_type, v.param_types,
+                               v.is_extern};
+    }
+
+    // Capture function return types
+    state->func_return_types = func_return_types_;
+
+    // Capture trait declaration names
+    for (const auto& [name, _] : trait_decls_) {
+        state->trait_decl_names.insert(name);
+    }
+
+    // Capture generated functions
+    state->generated_functions = generated_functions_;
+
+    // Capture string literals (needed when restoring full function definitions)
+    state->string_literals = string_literals_;
+
+    // Capture declared externals (to prevent duplicate declarations in worker threads)
+    state->declared_externals = declared_externals_;
+
+    state->valid = true;
+
+    TML_DEBUG_LN("[CODEGEN] Captured library state: "
+                 << state->struct_types.size() << " struct types, " << state->functions.size()
+                 << " functions, " << state->enum_variants.size() << " enum variants");
+
+    return state;
 }
 
 } // namespace tml::codegen

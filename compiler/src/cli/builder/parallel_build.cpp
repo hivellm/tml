@@ -455,11 +455,10 @@ bool ParallelBuilder::build(bool verbose) {
     bool success = (stats.failed == 0);
 
     if (verbose || !success) {
-        TML_LOG_INFO("build", "Build summary: total=" << stats.total_files
-                                                       << " compiled=" << stats.completed
-                                                       << " cached=" << stats.cached
-                                                       << " failed=" << stats.failed
-                                                       << " time=" << (stats.elapsed_ms() / 1000.0) << "s");
+        TML_LOG_INFO("build", "Build summary: total="
+                                  << stats.total_files << " compiled=" << stats.completed
+                                  << " cached=" << stats.cached << " failed=" << stats.failed
+                                  << " time=" << (stats.elapsed_ms() / 1000.0) << "s");
     }
 
     return success;
@@ -653,22 +652,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
             llvm_ir = std::get<std::string>(gen_result);
         }
 
-        // Write LLVM IR to temporary file with unique thread ID suffix to avoid race conditions
-        std::ostringstream tid_suffix;
-        tid_suffix << "." << std::this_thread::get_id() << ".ll";
-        fs::path unique_ll_file = job->output_file;
-        unique_ll_file.replace_extension(tid_suffix.str());
-
-        {
-            std::ofstream out(unique_ll_file);
-            if (!out) {
-                job->error_message = "Cannot write to " + unique_ll_file.string();
-                return false;
-            }
-            out << llvm_ir;
-        }
-
-        // Compile to object file (uses LLVM backend if available, otherwise clang)
+        // Compile LLVM IR string directly to object file (no .ll on disk)
         // Note: clang may be empty if LLVM backend is available (self-contained mode)
         std::string clang = find_clang();
 
@@ -678,10 +662,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
         obj_options.verbose = verbose;
 
         auto obj_result =
-            compile_ll_to_object(unique_ll_file, job->output_file, clang, obj_options);
-
-        // Clean up unique .ll file
-        fs::remove(unique_ll_file);
+            compile_ir_string_to_object(llvm_ir, job->output_file, clang, obj_options);
 
         if (!obj_result.success) {
             job->error_message = obj_result.error_message;

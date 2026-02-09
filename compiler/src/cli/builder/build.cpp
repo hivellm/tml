@@ -449,17 +449,15 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     exe_output += ".exe";
 #endif
 
-    std::ofstream ll_file(ll_output);
-    if (!ll_file) {
-        TML_LOG_ERROR("build", "Cannot write to " << ll_output);
-        return 1;
-    }
-    ll_file << llvm_ir;
-    ll_file.close();
-
-    TML_LOG_INFO("build", "Generated: " << ll_output);
-
+    // Only write .ll file if explicitly requested via --emit-ir
     if (emit_ir_only) {
+        std::ofstream ll_file(ll_output);
+        if (!ll_file) {
+            TML_LOG_ERROR("build", "Cannot write to " << ll_output);
+            return 1;
+        }
+        ll_file << llvm_ir;
+        ll_file.close();
         TML_LOG_INFO("build", "emit-ir: " << ll_output);
         return 0;
     }
@@ -505,7 +503,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         obj_result.success = true;
         obj_result.object_file = obj_output;
     } else {
-        obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+        obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
         if (!obj_result.success) {
             TML_LOG_ERROR("build", obj_result.error_message);
             return 1;
@@ -684,9 +682,6 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             return 1;
         }
     }
-
-    // Clean up .ll file (keep .o file in cache for potential reuse)
-    fs::remove(ll_output);
 
     TML_LOG_INFO("build", "build: " << to_forward_slashes(final_output.string()));
 

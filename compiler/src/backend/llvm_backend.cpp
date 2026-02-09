@@ -18,6 +18,21 @@
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/Transforms/PassBuilder.h>
 
+// Per-target initialization functions (declared here to avoid InitializeAllTargets overhead)
+extern "C" {
+void LLVMInitializeX86TargetInfo(void);
+void LLVMInitializeX86Target(void);
+void LLVMInitializeX86TargetMC(void);
+void LLVMInitializeX86AsmParser(void);
+void LLVMInitializeX86AsmPrinter(void);
+
+void LLVMInitializeAArch64TargetInfo(void);
+void LLVMInitializeAArch64Target(void);
+void LLVMInitializeAArch64TargetMC(void);
+void LLVMInitializeAArch64AsmParser(void);
+void LLVMInitializeAArch64AsmPrinter(void);
+}
+
 namespace tml::backend {
 
 // ============================================================================
@@ -68,12 +83,18 @@ auto LLVMBackend::initialize() -> bool {
         return true;
     }
 
-    // Initialize all targets
-    LLVMInitializeAllTargetInfos();
-    LLVMInitializeAllTargets();
-    LLVMInitializeAllTargetMCs();
-    LLVMInitializeAllAsmParsers();
-    LLVMInitializeAllAsmPrinters();
+    // Initialize X86 and AArch64 targets only (avoids linking all target backends)
+    LLVMInitializeX86TargetInfo();
+    LLVMInitializeX86Target();
+    LLVMInitializeX86TargetMC();
+    LLVMInitializeX86AsmParser();
+    LLVMInitializeX86AsmPrinter();
+
+    LLVMInitializeAArch64TargetInfo();
+    LLVMInitializeAArch64Target();
+    LLVMInitializeAArch64TargetMC();
+    LLVMInitializeAArch64AsmParser();
+    LLVMInitializeAArch64AsmPrinter();
 
     // Create LLVM context
     context_ = LLVMContextCreate();

@@ -122,6 +122,9 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
                 opts.no_cache = true;
                 TML_LOG_INFO("test", "--no-cache confirmed, forcing full recompilation");
             }
+        } else if (arg == "--no-cache!" || arg == "--force-no-cache") {
+            // Skip confirmation prompt (for scripting / CI)
+            opts.no_cache = true;
         } else if (arg.starts_with("--save-baseline=")) {
             opts.save_baseline = arg.substr(16);
         } else if (arg.starts_with("--compare=")) {

@@ -55,6 +55,7 @@
 #include "commands/cmd_pkg.hpp"
 #include "commands/cmd_rlib.hpp"
 #include "commands/cmd_test.hpp"
+#include "commands/cmd_test_v2.hpp"
 #include "common.hpp"
 #include "log/log.hpp"
 #include "utils.hpp"
@@ -294,7 +295,9 @@ int tml_main(int argc, char* argv[]) {
                 } else if (crate_type == "rlib") {
                     output_type = BuildOutputType::RlibLib;
                 } else {
-                    TML_LOG_ERROR("build", "Unknown crate type '" << crate_type << "'. Valid types: bin, lib, dylib, rlib");
+                    TML_LOG_ERROR("build", "Unknown crate type '"
+                                               << crate_type
+                                               << "'. Valid types: bin, lib, dylib, rlib");
                     return 1;
                 }
             } else if (arg.starts_with("--out-dir=")) {
@@ -473,6 +476,10 @@ int tml_main(int argc, char* argv[]) {
         return run_test(argc, argv, verbose);
     }
 
+    if (command == "test-v2") {
+        return run_test_v2(argc, argv, verbose);
+    }
+
     if (command == "cache") {
         return run_cache(argc, argv);
     }
@@ -532,7 +539,8 @@ int tml_main(int argc, char* argv[]) {
         return cmd_mcp(args);
     }
 
-    TML_LOG_ERROR("cli", "Unknown command '" << command << "'. Run 'tml --help' for usage information.");
+    TML_LOG_ERROR("cli",
+                  "Unknown command '" << command << "'. Run 'tml --help' for usage information.");
     return 1;
 }
 

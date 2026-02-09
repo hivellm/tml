@@ -43,6 +43,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <sstream>
@@ -229,6 +230,96 @@ compile_ll_with_llvm([[maybe_unused]] const fs::path& ll_file,
     result.error_message = "LLVM backend not available (TML_HAS_LLVM_BACKEND not defined)";
     return result;
 #endif
+}
+
+// ============================================================================
+// In-Memory IR String Compilation
+// ============================================================================
+
+/// Compiles LLVM IR from an in-memory string directly to an object file.
+///
+/// When the LLVM backend is available, this avoids all disk I/O for the IR —
+/// the string goes directly to LLVM's IR parser → optimizer → codegen → .obj.
+/// When LLVM is not available, falls back to writing a temp .ll and using clang.
+ObjectCompileResult compile_ir_string_to_object(const std::string& ir_content,
+                                                const fs::path& output_file,
+                                                const std::string& clang_path,
+                                                const ObjectCompileOptions& options) {
+    ObjectCompileResult result;
+    result.success = false;
+
+    // Determine which backend to use
+    bool use_llvm_backend = false;
+    if (CompilerOptions::use_external_tools) {
+        use_llvm_backend = false;
+    } else if (options.compiler_backend == CompilerBackend::LLVM) {
+        use_llvm_backend = true;
+    } else if (options.compiler_backend == CompilerBackend::Auto) {
+        if (!options.lto && is_llvm_backend_available()) {
+            use_llvm_backend = true;
+        }
+    }
+
+    if (use_llvm_backend) {
+#ifdef TML_HAS_LLVM_BACKEND
+        TML_LOG_DEBUG("build", "[object_compiler] Using LLVM backend (in-memory IR)");
+
+        backend::LLVMBackend llvm_backend;
+        if (!llvm_backend.initialize()) {
+            result.error_message =
+                "Failed to initialize LLVM backend: " + llvm_backend.get_last_error();
+            return result;
+        }
+
+        // Convert options
+        backend::LLVMCompileOptions llvm_opts;
+        llvm_opts.optimization_level = options.optimization_level;
+        llvm_opts.debug_info = options.debug_info;
+        llvm_opts.target_triple = options.target_triple;
+        llvm_opts.position_independent = options.position_independent;
+        llvm_opts.verbose = options.verbose;
+        llvm_opts.cpu = "native";
+
+        auto llvm_result = llvm_backend.compile_ir_to_object(ir_content, output_file, llvm_opts);
+
+        if (!llvm_result.success) {
+            result.error_message = "LLVM backend compilation failed: " + llvm_result.error_message;
+            return result;
+        }
+
+        result.success = true;
+        result.object_file = llvm_result.object_file;
+        return result;
+#else
+        // Should not reach here, but fall through to clang
+        (void)use_llvm_backend;
+#endif
+    }
+
+    // Fallback: write temp .ll file and use compile_ll_to_object
+    TML_LOG_DEBUG("build", "[object_compiler] Falling back to temp .ll + clang");
+
+    fs::path temp_ll = output_file;
+    temp_ll.replace_extension(".ll");
+
+    // Write IR to temp file
+    {
+        std::ofstream ofs(temp_ll);
+        if (!ofs) {
+            result.error_message = "Failed to write temporary IR file: " + temp_ll.string();
+            return result;
+        }
+        ofs << ir_content;
+    }
+
+    // Compile via the file-based path
+    result = compile_ll_to_object(temp_ll, output_file, clang_path, options);
+
+    // Clean up temp file
+    std::error_code ec;
+    fs::remove(temp_ll, ec);
+
+    return result;
 }
 
 // ============================================================================

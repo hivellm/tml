@@ -219,6 +219,58 @@ struct LLVMGenError {
     std::string code;               ///< Error code (e.g., "C001"). Empty uses default.
 };
 
+/// Captured codegen library state from emit_module_pure_tml_functions().
+/// This allows worker threads to skip the expensive library IR generation
+/// by restoring pre-computed state from the shared lib codegen pass.
+struct CodegenLibraryState {
+    // IR text output from library codegen
+    std::string imported_func_code;  ///< Full function definitions (for library_ir_only)
+    std::string imported_func_decls; ///< Declaration-only IR (for library_decls_only workers)
+    std::string imported_type_defs;  ///< Type definition IR text
+
+    // Internal registries populated by the function
+    std::unordered_map<std::string, std::string> struct_types;
+    std::unordered_set<std::string> union_types;
+    std::unordered_map<std::string, int> enum_variants;
+    std::unordered_map<std::string, std::pair<std::string, std::string>>
+        global_constants; // name -> {value, llvm_type}
+
+    // Struct field info
+    struct FieldInfoData {
+        std::string name;
+        int index;
+        std::string llvm_type;
+    };
+    std::unordered_map<std::string, std::vector<FieldInfoData>> struct_fields;
+
+    // Function signatures
+    struct FuncInfoData {
+        std::string llvm_name;
+        std::string llvm_func_type;
+        std::string ret_type;
+        std::vector<std::string> param_types;
+        bool is_extern = false;
+    };
+    std::unordered_map<std::string, FuncInfoData> functions;
+
+    // Function return types for type inference
+    std::unordered_map<std::string, types::TypePtr> func_return_types;
+
+    // Trait/behavior declarations — stored as names only (AST pointers are in GlobalASTCache)
+    std::unordered_set<std::string> trait_decl_names;
+
+    // Generated function names (to avoid duplicates)
+    std::unordered_set<std::string> generated_functions;
+
+    // String literals collected during library codegen (name -> value)
+    std::vector<std::pair<std::string, std::string>> string_literals;
+
+    // External function names declared during library codegen (prevents duplicate declarations)
+    std::set<std::string> declared_externals;
+
+    bool valid = false; ///< True if state has been captured
+};
+
 /// Options for LLVM IR generation.
 struct LLVMGenOptions {
     bool emit_comments = true;           ///< Include source comments in IR.
@@ -238,6 +290,10 @@ struct LLVMGenOptions {
     std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
     std::string source_file;                              ///< Source file path for debug info.
     std::string coverage_output_file;                     ///< Coverage output path.
+
+    /// Pre-computed library state to restore instead of calling emit_module_pure_tml_functions().
+    /// When set, the generate() function restores this state and skips the expensive codegen.
+    std::shared_ptr<const CodegenLibraryState> cached_library_state;
 };
 
 /// LLVM IR text generator.
@@ -255,6 +311,13 @@ public:
     /// Generates LLVM IR for a complete module.
     auto generate(const parser::Module& module) -> Result<std::string, std::vector<LLVMGenError>>;
 
+    /// Captures the library state after generate() with library_ir_only=true.
+    /// The returned state can be passed to other LLVMIRGen instances via
+    /// LLVMGenOptions::cached_library_state to skip emit_module_pure_tml_functions().
+    auto capture_library_state(const std::string& full_ir = "",
+                               const std::string& preamble_headers = "") const
+        -> std::shared_ptr<CodegenLibraryState>;
+
     /// Returns external libraries to link (from `@link` decorators).
     auto get_link_libs() const -> const std::set<std::string>& {
         return extern_link_libs_;
@@ -269,6 +332,11 @@ private:
     int temp_counter_ = 0;
     int label_counter_ = 0;
     std::vector<LLVMGenError> errors_;
+
+    // Cached library IR text (saved during generate() for capture_library_state())
+    std::string cached_imported_func_code_;
+    std::string cached_imported_type_defs_;
+    std::string cached_preamble_headers_; ///< Preamble IR (for filtering declarations)
 
     // Current function context
     std::string current_func_;

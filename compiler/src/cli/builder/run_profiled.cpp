@@ -199,7 +199,6 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
     std::string cache_key = generate_cache_key(path);
     std::string unique_name = module_name + "_" + cache_key;
 
-    fs::path ll_output = cache_dir / (content_hash + ".ll");
     fs::path obj_output = cache_dir / (content_hash + get_object_extension());
     fs::path exe_output = cache_dir / unique_name;
     fs::path out_file = cache_dir / (unique_name + "_output.txt");
@@ -217,15 +216,6 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
     bool use_cached_obj = fs::exists(obj_output);
 
     if (!use_cached_obj) {
-        std::ofstream ll_file(ll_output);
-        if (!ll_file) {
-            if (output)
-                *output = "compilation error: Cannot write to " + ll_output.string();
-            return EXIT_COMPILATION_ERROR;
-        }
-        ll_file << llvm_ir;
-        ll_file.close();
-
         ObjectCompileOptions obj_options;
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
         obj_options.debug_info = tml::CompilerOptions::debug_info;
@@ -233,16 +223,14 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
         obj_options.target_triple = tml::CompilerOptions::target_triple;
         obj_options.sysroot = tml::CompilerOptions::sysroot;
 
-        auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+        auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
         if (!obj_result.success) {
             if (output)
                 *output = "compilation error: " + obj_result.error_message;
-            fs::remove(ll_output);
             return EXIT_COMPILATION_ERROR;
         }
-        fs::remove(ll_output);
     }
-    record_phase("clang_compile", phase_start);
+    record_phase("llvm_compile", phase_start);
 
     // Phase 8: Link
     phase_start = Clock::now();

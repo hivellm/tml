@@ -123,6 +123,23 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
                                          const ObjectCompileOptions& options);
 
 /**
+ * Compile LLVM IR string directly to object file (no .ll file on disk).
+ *
+ * Uses the embedded LLVM backend when available, otherwise falls back to
+ * writing a temporary .ll file and calling compile_ll_to_object().
+ *
+ * @param ir_content The LLVM IR text content
+ * @param output_file Path for the output object file
+ * @param clang_path Path to clang executable (fallback only)
+ * @param options Compilation options
+ * @return Compilation result with object file path or error
+ */
+ObjectCompileResult compile_ir_string_to_object(const std::string& ir_content,
+                                                const fs::path& output_file,
+                                                const std::string& clang_path,
+                                                const ObjectCompileOptions& options);
+
+/**
  * Batch compilation result
  */
 struct BatchCompileResult {

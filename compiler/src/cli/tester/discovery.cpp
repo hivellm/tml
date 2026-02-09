@@ -34,27 +34,52 @@ std::vector<std::string> discover_bench_files(const std::string& root_dir) {
     std::vector<std::string> bench_files;
 
     try {
-        for (const auto& entry : fs::recursive_directory_iterator(root_dir)) {
-            if (entry.is_regular_file()) {
-                auto path = entry.path();
-                auto filename = path.filename().string();
-                std::string path_str = path.string();
-
-                // Skip files in errors/ or pending/ directories
-                if (path_str.find("\\errors\\") != std::string::npos ||
-                    path_str.find("/errors/") != std::string::npos ||
-                    path_str.find("\\pending\\") != std::string::npos ||
-                    path_str.find("/pending/") != std::string::npos) {
-                    continue;
+        auto options = fs::directory_options::skip_permission_denied;
+        for (auto it = fs::recursive_directory_iterator(root_dir, options);
+             it != fs::recursive_directory_iterator();) {
+            try {
+                const auto& entry = *it;
+                if (entry.is_directory()) {
+                    std::string dirname;
+                    try {
+                        dirname = entry.path().filename().string();
+                    } catch (...) {
+                        it.disable_recursion_pending();
+                        ++it;
+                        continue;
+                    }
+                    if (dirname == ".git" || dirname == "node_modules" || dirname == "build" ||
+                        dirname == "gcc" || dirname == "llvm-project" || dirname == ".hg") {
+                        it.disable_recursion_pending();
+                        ++it;
+                        continue;
+                    }
                 }
+                if (entry.is_regular_file()) {
+                    auto path = entry.path();
+                    auto filename = path.filename().string();
+                    std::string path_str = path.string();
 
-                // Include .bench.tml files
-                if (filename.ends_with(".bench.tml")) {
-                    bench_files.push_back(path_str);
+                    // Skip files in errors/ or pending/ directories
+                    if (path_str.find("\\errors\\") != std::string::npos ||
+                        path_str.find("/errors/") != std::string::npos ||
+                        path_str.find("\\pending\\") != std::string::npos ||
+                        path_str.find("/pending/") != std::string::npos) {
+                        ++it;
+                        continue;
+                    }
+
+                    // Include .bench.tml files
+                    if (filename.ends_with(".bench.tml")) {
+                        bench_files.push_back(path_str);
+                    }
                 }
+                ++it;
+            } catch (const std::exception&) {
+                ++it;
             }
         }
-    } catch (const fs::filesystem_error& e) {
+    } catch (const std::exception& e) {
         TML_LOG_ERROR("test", "Error discovering benchmark files: " << e.what());
     }
 
@@ -73,34 +98,65 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
     std::vector<std::string> test_files;
 
     try {
-        for (const auto& entry : fs::recursive_directory_iterator(root_dir)) {
-            if (entry.is_regular_file()) {
+        auto options = fs::directory_options::skip_permission_denied;
+        for (auto it = fs::recursive_directory_iterator(root_dir, options);
+             it != fs::recursive_directory_iterator();) {
+            try {
+                const auto& entry = *it;
                 auto path = entry.path();
-                auto filename = path.filename().string();
-                std::string path_str = path.string();
 
-                // Skip files in errors/ or pending/ directories
-                if (path_str.find("\\errors\\") != std::string::npos ||
-                    path_str.find("/errors/") != std::string::npos ||
-                    path_str.find("\\pending\\") != std::string::npos ||
-                    path_str.find("/pending/") != std::string::npos) {
-                    continue;
+                // Skip known irrelevant directories to avoid Unicode conversion errors
+                // in submodules like src/llvm-project or src/gcc
+                if (entry.is_directory()) {
+                    std::string dirname;
+                    try {
+                        dirname = path.filename().string();
+                    } catch (...) {
+                        it.disable_recursion_pending();
+                        ++it;
+                        continue;
+                    }
+                    if (dirname == ".git" || dirname == "node_modules" || dirname == "build" ||
+                        dirname == "gcc" || dirname == "llvm-project" || dirname == ".hg") {
+                        it.disable_recursion_pending();
+                        ++it;
+                        continue;
+                    }
                 }
 
-                // Include .test.tml files or .tml files in tests/ directory
-                // But exclude .bench.tml files (those are for --bench)
-                if (filename.ends_with(".bench.tml")) {
-                    continue;
+                if (entry.is_regular_file()) {
+                    auto filename = path.filename().string();
+                    std::string path_str = path.string();
+
+                    // Skip files in errors/ or pending/ directories
+                    if (path_str.find("\\errors\\") != std::string::npos ||
+                        path_str.find("/errors/") != std::string::npos ||
+                        path_str.find("\\pending\\") != std::string::npos ||
+                        path_str.find("/pending/") != std::string::npos) {
+                        ++it;
+                        continue;
+                    }
+
+                    // Include .test.tml files or .tml files in tests/ directory
+                    // But exclude .bench.tml files (those are for --bench)
+                    if (filename.ends_with(".bench.tml")) {
+                        ++it;
+                        continue;
+                    }
+                    if (filename.ends_with(".test.tml") ||
+                        (path.extension() == ".tml" &&
+                         (path_str.find("\\tests\\") != std::string::npos ||
+                          path_str.find("/tests/") != std::string::npos))) {
+                        test_files.push_back(path_str);
+                    }
                 }
-                if (filename.ends_with(".test.tml") ||
-                    (path.extension() == ".tml" &&
-                     (path_str.find("\\tests\\") != std::string::npos ||
-                      path_str.find("/tests/") != std::string::npos))) {
-                    test_files.push_back(path_str);
-                }
+                ++it;
+            } catch (const std::exception&) {
+                // Skip entries with Unicode conversion errors or other issues
+                ++it;
             }
         }
-    } catch (const fs::filesystem_error& e) {
+    } catch (const std::exception& e) {
         TML_LOG_ERROR("test", "Error discovering test files: " << e.what());
     }
 

@@ -288,11 +288,16 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                              << " suites cached, skipping compilation");
             }
         } else {
-            // Suite compilation is sequential because compile_test_suite() already
-            // parallelizes internally (Phase 1 codegen + Phase 2 obj compile use
-            // calc_codegen_threads). Running multiple suites * internal threads
-            // would exceed the 50% core cap.
-            unsigned int num_compile_threads = 1;
+            // Parallel suite compilation (Rust-style).
+            // compile_test_suite() parallelizes internally but each suite still has
+            // significant sequential overhead (typecheck, linking). Running N suites
+            // in parallel (N = num_cpus) overlaps these serial phases, similar to
+            // how Rust's cargo test compiles multiple crates concurrently.
+            unsigned int hw = std::thread::hardware_concurrency();
+            if (hw == 0)
+                hw = 8;
+            unsigned int num_compile_threads =
+                std::min(hw, static_cast<unsigned int>(suites_to_compile.size()));
 
             // Structure to hold compilation results
             struct CompileJob {

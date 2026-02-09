@@ -4,10 +4,10 @@
 
 ## Why
 
-TML has a **production-quality compiler** (~100K lines C++, 48 MIR optimization passes, full borrow checker) and a **comprehensive language specification** (32 documents). However, the language cannot be used for real-world applications due to critical gaps in the standard library, runtime, tooling, and ecosystem.
+TML has a **production-quality compiler** (~182K lines C++, 50 MIR optimization passes, full borrow checker) and a **comprehensive language specification** (32 documents). However, the language cannot be used for real-world applications due to critical gaps in the standard library, runtime, tooling, and ecosystem.
 
 Current state assessment:
-- **Compiler**: 9/10 - Mature, all phases working (lexer → parser → types → borrow → HIR → MIR → LLVM IR)
+- **Compiler**: 9/10 - Mature, all phases working (lexer -> parser -> types -> borrow -> HIR -> MIR -> LLVM IR)
 - **Specification**: 9/10 - 32 docs, LL(1) grammar, complete type system
 - **Core Library**: 7/10 - 136 modules exist but only 35.9% tested (1359/3790 functions)
 - **Standard Library**: 5/10 - 70 modules, missing collections, path, env, datetime
@@ -15,7 +15,7 @@ Current state assessment:
 - **Networking**: 1/10 - Stubs only in net/pending/
 - **Ecosystem**: 1/10 - No IDE support, no doc generation, no package registry
 
-This roadmap organizes ALL missing implementations into a dependency-ordered execution plan across 6 milestones, referencing existing rulebook tasks where applicable.
+This roadmap organizes ALL missing implementations into a dependency-ordered execution plan across 6 milestones, referencing consolidated rulebook tasks.
 
 ## What Changes
 
@@ -25,69 +25,73 @@ This is a **meta-task** that orchestrates the execution order of all pending wor
 3. Establishes milestone gates (what must be done before proceeding)
 4. Tracks overall language completeness percentage
 
-### Dependency Graph
+### Dependency Graph (Updated after task consolidation)
 
 ```
+Milestone 0: Compiler Infrastructure (no dependencies, MAXIMUM priority)
+├── compiler-infrastructure (embed LLVM, query system, red-green, cranelift, diagnostics, LLD)
+└── go-style-test-system (75% done - EXE-based tests, subprocess execution)
+
 Milestone 1: Foundation (no dependencies)
-├── increase-library-coverage (35.9% → 70%)
+├── increase-library-coverage (35.9% -> 70%)
 ├── stdlib-essentials (collections, env, path, datetime)
 ├── NEW: error-context-chains (anyhow-style errors)
 ├── NEW: buffered-io (BufReader, BufWriter)
 └── NEW: regex-engine
 
 Milestone 2: Documentation & Reflection (depends on M1)
-├── implement-tml-doc (doc generation)
+├── developer-tooling (doc generation + VSCode extension + LSP server)
 ├── implement-reflection (TypeInfo, @derive(Reflect))
 ├── NEW: logging-framework (structured logging)
 └── NEW: serialization-framework (beyond JSON)
 
 Milestone 3: Async & Networking (depends on M1)
-├── multi-threaded-runtime (work-stealing executor)
-├── add-network-stdlib (TCP, UDP, sockets)
-└── thread-safe-native (99% done, close out)
+└── async-network-stack (runtime + TCP/UDP + HTTP + TLS + Promise/Observable)
 
-Milestone 4: Web & HTTP (depends on M3)
-├── async-http-runtime (HTTP/1.1, HTTP/2)
-├── promises-reactivity (Observable, Promise)
-└── NEW: tls-integration (SSL/TLS for networking)
-
-Milestone 5: Tooling & IDE (depends on M2)
-├── create-vscode-extension (syntax, snippets)
-├── developer-tooling (LSP server)
+Milestone 4: Tooling & Ecosystem (depends on M2)
 ├── compiler-mcp-integration (AI integration)
 └── package-manager (registry, publish)
 
-Milestone 6: Advanced (depends on M3, M5)
+Milestone 5: Advanced (depends on M3, M4)
 ├── cross-compilation (multi-target)
 ├── auto-parallel (automatic parallelization)
 └── NEW: database-drivers (SQL, connection pooling)
 ```
 
-### Existing Tasks Referenced (15)
-- increase-library-coverage
-- stdlib-essentials
-- implement-tml-doc
-- implement-reflection
-- multi-threaded-runtime
-- add-network-stdlib
-- thread-safe-native
-- async-http-runtime
-- promises-reactivity
-- create-vscode-extension
-- developer-tooling
-- compiler-mcp-integration
-- package-manager
-- cross-compilation
-- auto-parallel
+### Active Tasks Referenced (11)
 
-### NEW Work Identified (6 items not covered by existing tasks)
+| Task | Status | Milestone |
+|------|--------|-----------|
+| `compiler-infrastructure` | 0% | M0 |
+| `go-style-test-system` | 75% | M0 |
+| `increase-library-coverage` | 0% | M1 |
+| `stdlib-essentials` | 0% | M1 |
+| `developer-tooling` | 0% | M2 |
+| `implement-reflection` | 0% | M2 |
+| `async-network-stack` | 0% | M3 |
+| `compiler-mcp-integration` | 0% | M4 |
+| `package-manager` | Partial | M4 |
+| `cross-compilation` | 0% | M5 |
+| `auto-parallel` | 0% | M5 |
+
+### Consolidated Tasks (removed, content merged into active tasks)
+- `achieve-rust-compiler-parity` -> merged into `compiler-infrastructure`
+- `embed-llvm-incremental-compilation` -> merged into `compiler-infrastructure`
+- `add-network-stdlib` -> merged into `async-network-stack`
+- `async-http-runtime` -> merged into `async-network-stack`
+- `multi-threaded-runtime` -> merged into `async-network-stack`
+- `promises-reactivity` -> merged into `async-network-stack`
+- `create-vscode-extension` -> merged into `developer-tooling`
+- `implement-tml-doc` -> merged into `developer-tooling`
+- `thread-safe-native` -> removed (99% complete, work absorbed)
+
+### NEW Work Identified (not covered by existing tasks)
 1. **error-context-chains** - anyhow/thiserror-style error wrapping with context
 2. **buffered-io** - BufReader, BufWriter, LineWriter for performant I/O
 3. **regex-engine** - Regular expression engine for text processing
 4. **logging-framework** - Structured logging with levels, formatters, sinks
 5. **serialization-framework** - YAML, TOML, MessagePack, Protobuf support
-6. **tls-integration** - SSL/TLS layer for secure networking
-7. **database-drivers** - SQL drivers, connection pooling, basic ORM
+6. **database-drivers** - SQL drivers, connection pooling, basic ORM
 
 ## Impact
 
@@ -100,9 +104,9 @@ Milestone 6: Advanced (depends on M3, M5)
 
 | Milestone | Gate Criteria | Target |
 |-----------|--------------|--------|
-| M1: Foundation | Library coverage ≥70%, collections + env + path + datetime working | Q1/2026 |
-| M2: Docs & Reflection | `tml doc` generates HTML, @derive(Reflect) works, logging available | Q2/2026 |
-| M3: Async & Network | TCP echo server runs, async/await compiles, 10K concurrent connections | Q2/2026 |
-| M4: Web & HTTP | HTTP server handles routes with decorators, TLS works | Q3/2026 |
-| M5: Tooling | VSCode extension published, LSP autocomplete works, MCP server running | Q3/2026 |
-| M6: Advanced | Cross-compile to Linux from Windows, auto-parallel loops, SQL queries | Q4/2026 |
+| M0: Compiler Infra | Embedded LLVM, incremental < 500ms, Go-style tests done | Q2/2026 |
+| M1: Foundation | Library coverage >= 70%, collections + env + path + datetime working | Q2/2026 |
+| M2: Docs & Reflection | `tml doc` generates HTML, LSP works, @derive(Reflect) works | Q3/2026 |
+| M3: Async & Network | TCP echo server runs, HTTP with decorators, TLS, 10K connections | Q3/2026 |
+| M4: Tooling | MCP server running, package registry available | Q4/2026 |
+| M5: Advanced | Cross-compile to Linux from Windows, auto-parallel loops, SQL queries | Q1/2027 |

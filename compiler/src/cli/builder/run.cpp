@@ -147,7 +147,6 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     // Calculate content hash for caching
     std::string content_hash = generate_content_hash(source_code);
 
-    fs::path ll_output = cache_dir / (content_hash + ".ll");
     fs::path obj_output = cache_dir / (content_hash + get_object_extension());
     fs::path exe_output = cache_dir / module_name;
 #ifdef _WIN32
@@ -166,18 +165,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     if (use_cached_obj) {
         TML_LOG_DEBUG("build", "Using cached object: " << obj_output);
     } else {
-        // Write LLVM IR to file
-        std::ofstream ll_file(ll_output);
-        if (!ll_file) {
-            TML_LOG_ERROR("build", "Cannot write to " << ll_output);
-            return 1;
-        }
-        ll_file << llvm_ir;
-        ll_file.close();
-
-        TML_LOG_DEBUG("build", "Generated: " << ll_output);
-
-        // Compile LLVM IR to object file
+        // Compile LLVM IR string directly to object file (no .ll on disk)
         ObjectCompileOptions obj_options;
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
         obj_options.debug_info = tml::CompilerOptions::debug_info;
@@ -185,17 +173,13 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         obj_options.target_triple = tml::CompilerOptions::target_triple;
         obj_options.sysroot = tml::CompilerOptions::sysroot;
 
-        auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+        auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
         if (!obj_result.success) {
             TML_LOG_ERROR("build", "Object compilation failed: " << obj_result.error_message);
-            fs::remove(ll_output);
             return 1;
         }
 
         TML_LOG_DEBUG("build", "Compiled to: " << obj_result.object_file);
-
-        // Clean up .ll file (keep .obj for caching)
-        fs::remove(ll_output);
     }
 
     // Collect all object files to link
@@ -436,7 +420,6 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     std::string cache_key = generate_cache_key(path);
     std::string unique_name = module_name + "_" + cache_key;
 
-    fs::path ll_output = cache_dir / (content_hash + ".ll");
     fs::path obj_output = cache_dir / (content_hash + get_object_extension());
     fs::path exe_output = cache_dir / unique_name;
     fs::path out_file = cache_dir / (unique_name + "_output.txt");
@@ -454,17 +437,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     bool use_cached_obj = fs::exists(obj_output);
 
     if (!use_cached_obj) {
-        // Write LLVM IR to file
-        std::ofstream ll_file(ll_output);
-        if (!ll_file) {
-            if (output)
-                *output = "compilation error: Cannot write to " + ll_output.string();
-            return EXIT_COMPILATION_ERROR;
-        }
-        ll_file << llvm_ir;
-        ll_file.close();
-
-        // Compile LLVM IR to object file
+        // Compile LLVM IR string directly to object file (no .ll on disk)
         ObjectCompileOptions obj_options;
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
         obj_options.debug_info = tml::CompilerOptions::debug_info;
@@ -472,16 +445,12 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         obj_options.target_triple = tml::CompilerOptions::target_triple;
         obj_options.sysroot = tml::CompilerOptions::sysroot;
 
-        auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+        auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
         if (!obj_result.success) {
             if (output)
                 *output = "compilation error: " + obj_result.error_message;
-            fs::remove(ll_output);
             return EXIT_COMPILATION_ERROR;
         }
-
-        // Clean up .ll file (keep .obj for caching)
-        fs::remove(ll_output);
     }
 
     // Collect all object files to link

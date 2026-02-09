@@ -20,6 +20,7 @@ set "CLEAN_BUILD=0"
 set "BUILD_TESTS=ON"
 set "ENABLE_ASAN=OFF"
 set "ENABLE_UBSAN=OFF"
+set "ENABLE_LLVM_BACKEND=ON"
 
 :: Parse arguments
 :parse_args
@@ -32,6 +33,7 @@ if /i "%~1"=="--tests" set "BUILD_TESTS=ON" & shift & goto :parse_args
 if /i "%~1"=="--asan" set "ENABLE_ASAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--ubsan" set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--sanitize" set "ENABLE_ASAN=ON" & set "ENABLE_UBSAN=ON" & shift & goto :parse_args
+if /i "%~1"=="--no-llvm" set "ENABLE_LLVM_BACKEND=OFF" & shift & goto :parse_args
 if /i "%~1"=="--help" goto :show_help
 if /i "%~1"=="-h" goto :show_help
 echo Unknown argument: %~1
@@ -112,6 +114,7 @@ cmake "%ROOT_DIR%\compiler" ^
     -DTML_BUILD_TESTS=%BUILD_TESTS% ^
     -DTML_ENABLE_ASAN=%ENABLE_ASAN% ^
     -DTML_ENABLE_UBSAN=%ENABLE_UBSAN% ^
+    -DTML_USE_LLVM_BACKEND=%ENABLE_LLVM_BACKEND% ^
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
     -DTML_OUTPUT_DIR="%OUTPUT_DIR%"
 
