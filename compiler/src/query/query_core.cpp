@@ -39,21 +39,16 @@ std::any provide_read_source(QueryContext& ctx, const QueryKey& key) {
     const auto& rk = std::get<ReadSourceKey>(key);
     ReadSourceResult result;
 
-    // Read the source file
+    // Read the source file (text mode for proper \r\n -> \n translation on Windows)
     try {
-        std::ifstream file(rk.file_path, std::ios::binary | std::ios::ate);
+        std::ifstream file(rk.file_path);
         if (!file) {
             result.error_message = "Cannot open file: " + rk.file_path;
             return result;
         }
-        auto size = file.tellg();
-        if (size < 0) {
-            result.error_message = "Cannot determine file size: " + rk.file_path;
-            return result;
-        }
-        file.seekg(0);
-        result.source_code.resize(static_cast<size_t>(size));
-        file.read(result.source_code.data(), size);
+        std::ostringstream ss;
+        ss << file.rdbuf();
+        result.source_code = ss.str();
     } catch (const std::exception& e) {
         result.error_message = e.what();
         return result;

@@ -21,6 +21,9 @@ std/
 ├── error/              - Error handling utilities
 ├── sync/               - Synchronization primitives
 ├── net/                - Networking
+├── crypto/             - Cryptographic primitives (hash, cipher, sign)
+├── zlib/               - Compression (deflate, gzip, brotli, zstd)
+├── json/               - JSON parsing and serialization
 ├── process/            - Process management
 ├── path/               - Path manipulation
 └── env/                - Environment variables
@@ -536,3 +539,6 @@ use std::io::{Read, Write}
 - [Appendix C - Builtin Functions](appendix-03-builtins.md)
 - [Chapter 11 - Testing](ch11-00-testing.md)
 - [Collections Chapter](ch08-00-collections.md)
+- [Cryptography Chapter](ch16-00-crypto.md)
+- [Compression Chapter](ch17-00-compression.md)
+- [JSON Chapter](ch14-00-json.md)

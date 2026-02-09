@@ -485,3 +485,8 @@ impl Printable for Widget {
 - [Structs](ch03-00-structs.md) - Lightweight data types
 - [Enums](ch09-00-enums.md) - Sum types and pattern matching
 - [Standard Library](ch10-00-standard-library.md) - Built-in classes and interfaces
+
+---
+
+*Previous: [ch14-00-json.md](ch14-00-json.md)*
+*Next: [ch16-00-crypto.md](ch16-00-crypto.md)*

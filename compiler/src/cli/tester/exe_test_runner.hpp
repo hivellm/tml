@@ -20,7 +20,8 @@
 //! ## Function Signatures
 //!
 //! - `compile_test_suite_exe()`: Compile a TestSuite to an EXE
-//! - `run_test_subprocess()`: Execute a test via subprocess
+//! - `run_test_subprocess()`: Execute a single test via subprocess (legacy)
+//! - `run_suite_all_subprocess()`: Execute ALL tests in one subprocess (optimized)
 //! - `generate_dispatcher_ir()`: Generate dispatcher main() LLVM IR
 //! - `run_tests_exe_mode()`: Top-level orchestration
 
@@ -54,17 +55,38 @@ struct SubprocessTestResult {
     bool timed_out = false;
 };
 
+// Result of running all tests in a suite via --run-all subprocess
+struct SuiteSubprocessResult {
+    bool process_ok = false; // Did the process launch and complete?
+    bool timed_out = false;
+    std::string stderr_output;
+    int64_t total_duration_us = 0;
+
+    // Per-test results parsed from TML_RESULT lines
+    struct TestOutcome {
+        int test_index = -1;
+        bool passed = false;
+        int exit_code = 0;
+    };
+    std::vector<TestOutcome> outcomes;
+};
+
 // Compile a test suite to an EXE (adapts compile_test_suite for EXE output)
 ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose = false,
                                         bool no_cache = false);
 
-// Run a single test from a compiled suite EXE via subprocess
+// Run a single test from a compiled suite EXE via subprocess (legacy, 1 process per test)
 // The EXE is invoked with --test-index=N to run a specific test
 SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_index,
                                          int timeout_seconds = 60,
                                          const std::string& test_name = "");
 
-// Generate LLVM IR for a dispatcher main() that routes --test-index=N to tml_test_N()
+// Run ALL tests in a suite via a single subprocess with --run-all (optimized)
+// Parses structured TML_RESULT lines from stdout for per-test pass/fail
+SuiteSubprocessResult run_suite_all_subprocess(const std::string& exe_path, int expected_tests,
+                                               int timeout_seconds = 300);
+
+// Generate LLVM IR for a dispatcher main() that routes --test-index=N or --run-all
 std::string generate_dispatcher_ir(int total_tests, const std::string& module_name);
 
 } // namespace tml::cli

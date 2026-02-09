@@ -32,8 +32,12 @@ namespace tml::query {
 
 /// Magic number for incremental cache files: "TMIC" (TML Incremental Cache)
 constexpr uint32_t INCR_CACHE_MAGIC = 0x544D4943;
-constexpr uint16_t INCR_CACHE_VERSION_MAJOR = 1;
+constexpr uint16_t INCR_CACHE_VERSION_MAJOR = 2;
 constexpr uint16_t INCR_CACHE_VERSION_MINOR = 0;
+
+/// Compile-time build hash — changes every time the compiler is recompiled.
+/// When the compiler binary changes, the old incremental cache is invalidated.
+uint32_t compiler_build_hash();
 
 /// Color for a query in the red-green system.
 enum class QueryColor : uint8_t {
@@ -82,6 +86,7 @@ public:
 private:
     std::unordered_map<QueryKey, PrevSessionEntry, QueryKeyHash, QueryKeyEqual> entries_;
     uint32_t options_hash_ = 0;
+    uint32_t build_hash_ = 0;
     uint64_t session_timestamp_ = 0;
 };
 

@@ -2,672 +2,632 @@
 
 ## 1. Overview
 
-The \x60std::crypto` package provides cryptographic primitives: hashing, encryption, signatures, and random number generation.
+The `std::crypto` module provides comprehensive cryptographic functionality: hashing, HMAC, symmetric encryption, digital signatures, key management, key derivation, and cryptographically secure random number generation.
 
 ```tml
-use std::crypto
-use std::crypto.{sha256, aes, rsa}
+use std::crypto::hash::{sha256, sha512, md5, Digest}
+use std::crypto::hmac::{hmac_sha256, Hmac}
+use std::crypto::cipher::{Cipher, Decipher, CipherAlgorithm}
+use std::crypto::sign::{sign, verify}
+use std::crypto::key::{generate_key, generate_key_pair}
+use std::crypto::kdf::{pbkdf2, hkdf}
+use std::crypto::random::{random_bytes, random_int, random_uuid}
 ```
 
-## 2. Capabilities
+**Module path:** `std::crypto`
 
-```tml
-caps: [io.random]  // Only for secure random generation
-// Most crypto operations require no capabilities
-```
+**Runtime:** Backed by platform-native cryptography (Windows BCRYPT/CNG, macOS SecFramework, OpenSSL on Linux) via FFI.
+
+## 2. Submodules
+
+| Module | Description |
+|--------|-------------|
+| `std::crypto::hash` | Cryptographic hash functions (MD5, SHA-1, SHA-2) |
+| `std::crypto::hmac` | Hash-based Message Authentication Codes |
+| `std::crypto::cipher` | Symmetric encryption/decryption (AES, ChaCha20) |
+| `std::crypto::sign` | Digital signatures (RSA, ECDSA, Ed25519) |
+| `std::crypto::key` | Key generation and management |
+| `std::crypto::kdf` | Key derivation (PBKDF2, scrypt, HKDF, Argon2) |
+| `std::crypto::random` | Cryptographically secure random generation |
+| `std::crypto::rsa` | RSA encryption/decryption |
+| `std::crypto::dh` | Diffie-Hellman key exchange |
+| `std::crypto::ecdh` | Elliptic Curve Diffie-Hellman |
+| `std::crypto::x509` | X.509 certificate parsing |
+| `std::crypto::error` | Error types (CryptoError, CryptoErrorKind) |
+| `std::crypto::constants` | Cryptographic constants |
 
 ## 3. Hash Functions
 
-### 3.1 Common Interface
+### 3.1 One-Shot Hashing
 
 ```tml
-pub behaviorHasher {
-    /// Update with data
-    func update(this, data: ref [U8])
+use std::crypto::hash::{md5, sha1, sha256, sha384, sha512, sha512_256, Digest}
 
-    /// Finalize and return digest
-    func finalize(this) -> List[U8]
+// Hash a string — returns a Digest object
+let mut d: Digest = sha256("Hello, TML!")
+println(d.to_hex())    // hex-encoded hash string
+println(d.to_base64()) // base64-encoded hash string
+d.destroy()            // free resources
 
-    /// Reset to initial state
-    func reset(this)
-
-    /// Get output size in bytes
-    func output_size(this) -> U64
-}
-
-/// One-shot hash function
-pub func hash[H: Hasher + Default](data: ref [U8]) -> List[U8] {
-    var hasher = H.default()
-    hasher.update(data)
-    return hasher.finalize()
-}
+// Other algorithms
+let mut d_md5: Digest = md5("data")
+let mut d_sha1: Digest = sha1("data")
+let mut d_sha384: Digest = sha384("data")
+let mut d_sha512: Digest = sha512("data")
+let mut d_sha512_256: Digest = sha512_256("data")
 ```
 
-### 3.2 SHA-2 Family
+### 3.2 Buffer Hashing
 
 ```tml
-mod sha2
+use std::crypto::hash::{sha256_bytes, md5_bytes}
 
-pub type Sha256 {
-    state: [U32; 8],
-    buffer: [U8; 64],
-    buffer_len: U64,
-    total_len: U64,
-}
-
-extend Sha256 {
-    pub const OUTPUT_SIZE: U64 = 32
-    pub const BLOCK_SIZE: U64 = 64
-
-    pub func new() -> This
-    pub func update(this, data: ref [U8])
-    pub func finalize(this) -> [U8; 32]
-    pub func finalize_reset(this) -> [U8; 32]
-    pub func reset(this)
-}
-
-extend Sha256 with Hasher { ... }
-extend Sha256 with Default { ... }
-
-pub type Sha384 { ... }
-pub type Sha512 { ... }
-
-/// Convenience functions
-pub func sha256(data: ref [U8]) -> [U8; 32] {
-    var hasher = Sha256.new()
-    hasher.update(data)
-    return hasher.finalize()
-}
-
-pub func sha384(data: ref [U8]) -> [U8; 48]
-pub func sha512(data: ref [U8]) -> [U8; 64]
+let buf = Buffer::from("binary data")
+let mut d: Digest = sha256_bytes(ref buf)
+println(d.to_hex())
+d.destroy()
 ```
 
-### 3.3 SHA-3 Family
+### 3.3 Streaming Hash (Incremental)
 
 ```tml
-mod sha3
+use std::crypto::hash::{Hash, HashAlgorithm}
 
-pub type Sha3_256 { ... }
-pub type Sha3_384 { ... }
-pub type Sha3_512 { ... }
-pub type Keccak256 { ... }
+// Create a streaming hasher
+let mut hasher = Hash::create(HashAlgorithm::Sha256)
 
-pub func sha3_256(data: ref [U8]) -> [U8; 32]
-pub func sha3_384(data: ref [U8]) -> [U8; 48]
-pub func sha3_512(data: ref [U8]) -> [U8; 64]
-pub func keccak256(data: ref [U8]) -> [U8; 32]
+// Feed data incrementally
+hasher.update("Hello, ")
+hasher.update("world!")
+
+// Or feed binary data
+let buf = Buffer::from("more data")
+hasher.update_bytes(ref buf)
+
+// Finalize (can only call once)
+let mut digest: Digest = hasher.digest()
+println(digest.to_hex())
+digest.destroy()
+hasher.destroy()
 ```
 
-### 3.4 BLAKE Family
+### 3.4 Copy for Parallel Computation
 
 ```tml
-mod blake
+use std::crypto::hash::{Hash, HashAlgorithm}
 
-pub type Blake2b {
-    output_size: U64,
-    key: Maybe[List[U8]],
-    ...
-}
+let mut hasher = Hash::create(HashAlgorithm::Sha256)
+hasher.update("common prefix")
 
-extend Blake2b {
-    pub func new(output_size: U64) -> This
-    pub func with_key(output_size: U64, key: ref [U8]) -> Outcome[This, Error]
-}
+// Fork the hasher state
+let mut branch1 = hasher.copy()
+let mut branch2 = hasher.copy()
 
-pub type Blake2s { ... }
-pub type Blake3 { ... }
+branch1.update(" suffix A")
+branch2.update(" suffix B")
 
-pub func blake2b(data: ref [U8], output_size: U64) -> List[U8]
-pub func blake2s(data: ref [U8], output_size: U64) -> List[U8]
-pub func blake3(data: ref [U8]) -> [U8; 32]
+let mut d1 = branch1.digest()
+let mut d2 = branch2.digest()
+// d1 and d2 are different hashes with the same prefix
 ```
 
-### 3.5 Legacy Hashes (Not for Security)
+### 3.5 Digest Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `to_hex` | `(self) -> Str` | Hex-encoded hash string |
+| `to_base64` | `(self) -> Str` | Base64-encoded hash string |
+| `bytes` | `(self) -> ref Buffer` | Raw hash bytes |
+| `destroy` | `(mut self)` | Free resources |
+
+### 3.6 Supported Algorithms
+
+| Algorithm | Output Size | `HashAlgorithm` Variant | Notes |
+|-----------|-------------|------------------------|-------|
+| MD5 | 128-bit (16 bytes) | `Md5` | Legacy only, not secure |
+| SHA-1 | 160-bit (20 bytes) | `Sha1` | Deprecated for security |
+| SHA-256 | 256-bit (32 bytes) | `Sha256` | **Recommended** |
+| SHA-384 | 384-bit (48 bytes) | `Sha384` | Higher security margin |
+| SHA-512 | 512-bit (64 bytes) | `Sha512` | Best for 64-bit platforms |
+| SHA-512/256 | 256-bit (32 bytes) | `Sha512_256` | Truncated SHA-512 |
+
+### 3.7 Function Reference
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `md5` | `(data: Str) -> Digest` | MD5 hash of string |
+| `md5_bytes` | `(data: ref Buffer) -> Digest` | MD5 hash of buffer |
+| `sha1` | `(data: Str) -> Digest` | SHA-1 hash |
+| `sha256` | `(data: Str) -> Digest` | SHA-256 hash |
+| `sha256_bytes` | `(data: ref Buffer) -> Digest` | SHA-256 hash of buffer |
+| `sha384` | `(data: Str) -> Digest` | SHA-384 hash |
+| `sha512` | `(data: Str) -> Digest` | SHA-512 hash |
+| `sha512_256` | `(data: Str) -> Digest` | SHA-512/256 hash |
+| `Hash::create` | `(algorithm: HashAlgorithm) -> Hash` | Create streaming hasher |
+
+## 4. HMAC (Message Authentication)
+
+### 4.1 One-Shot HMAC
 
 ```tml
-mod md5
+use std::crypto::hmac::{hmac_sha256, hmac_sha512, HmacDigest}
 
-pub type Md5 { ... }
-pub func md5(data: ref [U8]) -> [U8; 16]
+let mut mac: HmacDigest = hmac_sha256("secret-key", "message to authenticate")
+println(mac.to_hex())
+mac.destroy()
 
-mod sha1
-
-pub type Sha1 { ... }
-pub func sha1(data: ref [U8]) -> [U8; 20]
+// Other variants
+let mut mac_512 = hmac_sha512("key", "message")
 ```
 
-## 4. Message Authentication Codes
-
-### 4.1 HMAC
+### 4.2 Streaming HMAC
 
 ```tml
-mod hmac
+use std::crypto::hmac::{Hmac, HashAlgorithm}
 
-pub type Hmac[H: Hasher] {
-    inner: H,
-    outer: H,
-    key_block: List[U8],
-}
-
-extend Hmac[H: Hasher] {
-    pub func new(key: ref [U8]) -> This
-    pub func update(this, data: ref [U8])
-    pub func finalize(this) -> List[U8]
-    pub func verify(this, tag: ref [U8]) -> Bool
-    pub func reset(this)
-}
-
-/// Convenience types
-pub type HmacSha256 = Hmac[Sha256]
-pub type HmacSha384 = Hmac[Sha384]
-pub type HmacSha512 = Hmac[Sha512]
-
-/// One-shot HMAC
-pub func hmac_sha256(key: ref [U8], data: ref [U8]) -> [U8; 32] {
-    var h = HmacSha256.new(key)
-    h.update(data)
-    return h.finalize()
-}
+let mut hmac = Hmac::create(HashAlgorithm::Sha256, "my-secret-key")
+hmac.update("chunk 1")
+hmac.update("chunk 2")
+let mut digest: HmacDigest = hmac.digest()
+println(digest.to_hex())
+digest.destroy()
+hmac.destroy()
 ```
 
-### 4.2 Poly1305
+### 4.3 Function Reference
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `hmac_md5` | `(key: Str, data: Str) -> HmacDigest` | HMAC-MD5 |
+| `hmac_sha1` | `(key: Str, data: Str) -> HmacDigest` | HMAC-SHA1 |
+| `hmac_sha256` | `(key: Str, data: Str) -> HmacDigest` | HMAC-SHA256 (recommended) |
+| `hmac_sha384` | `(key: Str, data: Str) -> HmacDigest` | HMAC-SHA384 |
+| `hmac_sha512` | `(key: Str, data: Str) -> HmacDigest` | HMAC-SHA512 |
+| `Hmac::create` | `(algo: HashAlgorithm, key: Str) -> Hmac` | Create streaming HMAC |
+
+## 5. Symmetric Encryption (AES, ChaCha20)
+
+### 5.1 Cipher Algorithms
 
 ```tml
-mod poly1305
+use std::crypto::cipher::CipherAlgorithm
 
-pub type Poly1305 {
-    r: [U32; 5],
-    h: [U32; 5],
-    pad: [U32; 4],
-    ...
-}
+// AES modes
+CipherAlgorithm::Aes128Cbc    // AES-128 CBC
+CipherAlgorithm::Aes256Cbc    // AES-256 CBC
+CipherAlgorithm::Aes128Gcm    // AES-128 GCM (AEAD)
+CipherAlgorithm::Aes256Gcm    // AES-256 GCM (AEAD)
+CipherAlgorithm::Aes128Ctr    // AES-128 CTR (stream)
+CipherAlgorithm::Aes256Ctr    // AES-256 CTR (stream)
 
-extend Poly1305 {
-    pub func new(key: ref [U8; 32]) -> This
-    pub func update(this, data: ref [U8])
-    pub func finalize(this) -> [U8; 16]
-    pub func verify(this, tag: ref [U8; 16]) -> Bool
-}
+// ChaCha20 variants
+CipherAlgorithm::ChaCha20Poly1305   // ChaCha20-Poly1305 (AEAD)
+CipherAlgorithm::XChaCha20Poly1305  // XChaCha20-Poly1305 (extended nonce)
 ```
 
-## 5. Symmetric Encryption
+### 5.2 CipherAlgorithm Methods
 
-### 5.1 AES
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `name` | `(self) -> Str` | Algorithm name |
+| `key_size` | `(self) -> I64` | Required key size in bytes |
+| `iv_size` | `(self) -> I64` | Required IV/nonce size |
+| `block_size` | `(self) -> I64` | Block size |
+| `is_aead` | `(self) -> Bool` | Whether it supports authenticated encryption |
+| `tag_size` | `(self) -> I64` | Authentication tag size (AEAD only) |
+
+### 5.3 Encryption / Decryption
 
 ```tml
-mod aes
+use std::crypto::cipher::{Cipher, Decipher, CipherAlgorithm}
 
-pub type AesKey = Aes128 | Aes192 | Aes256
+// Encrypt
+let mut cipher = Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref iv).unwrap()
+cipher.set_aad_str("additional authenticated data").unwrap()  // AEAD only
+cipher.update("plaintext")
+let ciphertext: Buffer = cipher.finalize().unwrap()
+let tag: AuthTag = cipher.get_auth_tag().unwrap()  // AEAD only
+cipher.destroy()
 
-pub type Aes128 { round_keys: [[U8; 16]; 11] }
-pub type Aes192 { round_keys: [[U8; 16]; 13] }
-pub type Aes256 { round_keys: [[U8; 16]; 15] }
-
-extend Aes128 {
-    pub func new(key: ref [U8; 16]) -> This
-    pub func encrypt_block(this, block: mut ref [U8; 16])
-    pub func decrypt_block(this, block: mut ref [U8; 16])
-}
-
-// Similar for Aes192, Aes256
+// Decrypt
+let mut decipher = Decipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref iv).unwrap()
+decipher.set_aad_str("additional authenticated data").unwrap()
+decipher.set_auth_tag(ref tag).unwrap()  // AEAD only
+decipher.update_bytes(ref ciphertext)
+let plaintext: Buffer = decipher.finalize().unwrap()
+decipher.destroy()
 ```
 
-### 5.2 AES-GCM (AEAD)
+### 5.4 Convenience Functions
 
 ```tml
-mod aes_gcm
-
-pub type AesGcm {
-    key: AesKey,
+use std::crypto::cipher::{
+    aes_encrypt, aes_decrypt,
+    aes_gcm_encrypt, aes_gcm_decrypt,
+    encrypt_string, decrypt_string
 }
 
-pub type Nonce = [U8; 12]
-pub type Tag = [U8; 16]
+// Simple AES-CBC encrypt/decrypt
+let ciphertext = aes_encrypt(ref key, ref iv, ref plaintext).unwrap()
+let plaintext = aes_decrypt(ref key, ref iv, ref ciphertext).unwrap()
 
-extend AesGcm {
-    pub func new(key: ref [U8]) -> Outcome[This, Error]
+// AES-GCM with authentication
+let (ciphertext, tag) = aes_gcm_encrypt(ref key, ref nonce, ref plaintext, ref aad).unwrap()
+let plaintext = aes_gcm_decrypt(ref key, ref nonce, ref ciphertext, ref aad, ref tag).unwrap()
 
-    /// Encrypt with associated data
-    pub func encrypt(
-        this,
-        nonce: ref Nonce,
-        plaintext: ref [U8],
-        associated_data: ref [U8]
-    ) -> (List[U8], Tag)
-
-    /// Decrypt and verify
-    pub func decrypt(
-        this,
-        nonce: ref Nonce,
-        ciphertext: ref [U8],
-        associated_data: ref [U8],
-        tag: ref Tag
-    ) -> Outcome[List[U8], AuthError]
-
-    /// Encrypt in place
-    pub func encrypt_in_place(
-        this,
-        nonce: ref Nonce,
-        associated_data: ref [U8],
-        buffer: mut ref List[U8]
-    ) -> Tag
-
-    /// Decrypt in place
-    pub func decrypt_in_place(
-        this,
-        nonce: ref Nonce,
-        associated_data: ref [U8],
-        buffer: mut ref List[U8],
-        tag: ref Tag
-    ) -> Outcome[Unit, AuthError]
-}
-
-pub type AuthError { message: String }
+// String convenience (auto-generates IV, base64 output)
+let encrypted_b64: Str = encrypt_string(ref key, "secret message").unwrap()
+let decrypted: Str = decrypt_string(ref key, encrypted_b64).unwrap()
 ```
 
-### 5.3 ChaCha20-Poly1305
+### 5.5 Supported Cipher Algorithms
+
+| Algorithm | Key Size | IV/Nonce | AEAD | Notes |
+|-----------|----------|----------|------|-------|
+| AES-128-CBC | 16 | 16 | No | Standard block cipher |
+| AES-192-CBC | 24 | 16 | No | Extended key |
+| AES-256-CBC | 32 | 16 | No | Maximum security |
+| AES-128-CTR | 16 | 16 | No | Stream mode |
+| AES-256-CTR | 32 | 16 | No | Stream mode |
+| AES-128-GCM | 16 | 12 | Yes | **Recommended** |
+| AES-256-GCM | 32 | 12 | Yes | **Recommended** |
+| AES-128-CCM | 16 | 12 | Yes | Constrained environments |
+| AES-256-CCM | 32 | 12 | Yes | Constrained environments |
+| ChaCha20-Poly1305 | 32 | 12 | Yes | Fast on platforms without AES-NI |
+| XChaCha20-Poly1305 | 32 | 24 | Yes | Extended nonce (safer) |
+
+## 6. Digital Signatures
+
+### 6.1 Signing and Verification
 
 ```tml
-mod chacha20poly1305
+use std::crypto::sign::{sign, verify, SignatureAlgorithm}
+use std::crypto::key::{generate_key_pair, KeyType}
 
-pub type ChaCha20Poly1305 {
-    key: [U8; 32],
-}
+// Generate key pair
+let pair = generate_key_pair(KeyType::Ed25519, 0).unwrap()
 
-pub type Nonce = [U8; 12]
-pub type Tag = [U8; 16]
+// Sign
+let signature: Buffer = sign(
+    SignatureAlgorithm::Ed25519,
+    ref pair.private_key,
+    "message to sign"
+).unwrap()
 
-extend ChaCha20Poly1305 {
-    pub func new(key: ref [U8; 32]) -> This
-
-    pub func encrypt(
-        this,
-        nonce: ref Nonce,
-        plaintext: ref [U8],
-        associated_data: ref [U8]
-    ) -> (List[U8], Tag)
-
-    pub func decrypt(
-        this,
-        nonce: ref Nonce,
-        ciphertext: ref [U8],
-        associated_data: ref [U8],
-        tag: ref Tag
-    ) -> Outcome[List[U8], AuthError]
-}
-
-// XChaCha20-Poly1305 with extended nonce
-pub type XChaCha20Poly1305 { ... }
-pub type XNonce = [U8; 24]
+// Verify
+let valid: Bool = verify(
+    SignatureAlgorithm::Ed25519,
+    ref pair.public_key,
+    "message to sign",
+    ref signature
+).unwrap()
 ```
 
-## 6. Asymmetric Encryption
+### 6.2 Signature Algorithms
 
-### 6.1 RSA
+| Algorithm | `SignatureAlgorithm` | Notes |
+|-----------|---------------------|-------|
+| RSA PKCS#1 v1.5 + SHA-256 | `RsaSha256` | Traditional RSA |
+| RSA PKCS#1 v1.5 + SHA-512 | `RsaSha512` | |
+| RSA-PSS + SHA-256 | `RsaPssSha256` | Recommended RSA |
+| RSA-PSS + SHA-512 | `RsaPssSha512` | |
+| ECDSA + SHA-256 | `EcdsaSha256` | Elliptic curve |
+| ECDSA + SHA-384 | `EcdsaSha384` | |
+| Ed25519 | `Ed25519` | **Recommended** |
+| Ed448 | `Ed448` | Higher security margin |
+
+## 7. Key Management
+
+### 7.1 Symmetric Keys
 
 ```tml
-mod rsa
+use std::crypto::key::{generate_key, create_secret_key, SecretKey}
 
-pub type RsaPublicKey {
-    n: BigUint,  // Modulus
-    e: BigUint,  // Public exponent
-}
+// Generate random symmetric key (32 bytes for AES-256)
+let key: SecretKey = generate_key(32).unwrap()
 
-pub type RsaPrivateKey {
-    public_key: RsaPublicKey,
-    d: BigUint,  // Private exponent
-    p: BigUint,  // Prime 1
-    q: BigUint,  // Prime 2
-}
-
-extend RsaPrivateKey {
-    /// Generate new key pair
-    pub func generate(bits: U32) -> Outcome[This, Error]
-    effects: [io.random]
-
-    /// Get public key
-    pub func public_key(this) -> ref RsaPublicKey
-
-    /// Sign message (PKCS#1 v1.5)
-    pub func sign_pkcs1v15(this, hash: ref [U8], hash_algo: HashAlgo) -> Outcome[List[U8], Error]
-
-    /// Sign message (PSS)
-    pub func sign_pss(this, hash: ref [U8], hash_algo: HashAlgo) -> Outcome[List[U8], Error]
-    effects: [io.random]
-
-    /// Decrypt (OAEP)
-    pub func decrypt_oaep(this, ciphertext: ref [U8], hash_algo: HashAlgo) -> Outcome[List[U8], Error]
-
-    /// Decrypt (PKCS#1 v1.5)
-    pub func decrypt_pkcs1v15(this, ciphertext: ref [U8]) -> Outcome[List[U8], Error]
-}
-
-extend RsaPublicKey {
-    /// Verify signature (PKCS#1 v1.5)
-    pub func verify_pkcs1v15(this, hash: ref [U8], signature: ref [U8], hash_algo: HashAlgo) -> Bool
-
-    /// Verify signature (PSS)
-    pub func verify_pss(this, hash: ref [U8], signature: ref [U8], hash_algo: HashAlgo) -> Bool
-
-    /// Encrypt (OAEP)
-    pub func encrypt_oaep(this, plaintext: ref [U8], hash_algo: HashAlgo) -> Outcome[List[U8], Error]
-    effects: [io.random]
-
-    /// Encrypt (PKCS#1 v1.5)
-    pub func encrypt_pkcs1v15(this, plaintext: ref [U8]) -> Outcome[List[U8], Error]
-    effects: [io.random]
-}
-
-pub type HashAlgo = Sha256 | Sha384 | Sha512
+// Create from existing bytes
+let key: SecretKey = create_secret_key(ref my_buffer)
 ```
 
-### 6.2 ECDSA
+### 7.2 Asymmetric Key Pairs
 
 ```tml
-mod ecdsa
+use std::crypto::key::{generate_key_pair, KeyType, KeyPair}
 
-pub type Curve = P256 | P384 | P521 | Secp256k1
+// Generate RSA key pair
+let rsa_pair: KeyPair = generate_key_pair(KeyType::Rsa, 2048).unwrap()
 
-pub type EcdsaPublicKey {
-    curve: Curve,
-    point: (BigUint, BigUint),
-}
+// Generate Ed25519 key pair (key_size ignored)
+let ed_pair: KeyPair = generate_key_pair(KeyType::Ed25519, 0).unwrap()
 
-pub type EcdsaPrivateKey {
-    curve: Curve,
-    scalar: BigUint,
-    public_key: EcdsaPublicKey,
-}
-
-extend EcdsaPrivateKey {
-    pub func generate(curve: Curve) -> Outcome[This, Error]
-    effects: [io.random]
-
-    pub func from_bytes(curve: Curve, bytes: ref [U8]) -> Outcome[This, Error]
-    pub func to_bytes(this) -> List[U8]
-    pub func public_key(this) -> ref EcdsaPublicKey
-    pub func sign(this, message_hash: ref [U8]) -> Outcome[Signature, Error]
-    effects: [io.random]
-}
-
-extend EcdsaPublicKey {
-    pub func from_bytes(curve: Curve, bytes: ref [U8]) -> Outcome[This, Error]
-    pub func to_bytes(this, compressed: Bool) -> List[U8]
-    pub func verify(this, message_hash: ref [U8], signature: ref Signature) -> Bool
-}
-
-pub type Signature {
-    r: BigUint,
-    s: BigUint,
-}
-
-extend Signature {
-    pub func from_der(bytes: ref [U8]) -> Outcome[This, Error]
-    pub func to_der(this) -> List[U8]
-    pub func from_bytes(bytes: ref [U8]) -> Outcome[This, Error]
-    pub func to_bytes(this) -> List[U8]
-}
+// Generate EC P-256 key pair
+let ec_pair: KeyPair = generate_key_pair(KeyType::Ec, 256).unwrap()
 ```
 
-### 6.3 Ed25519
+### 7.3 Key Import
 
 ```tml
-mod ed25519
+use std::crypto::key::{create_private_key, create_public_key, KeyFormat}
 
-pub type PublicKey = [U8; 32]
-pub type PrivateKey = [U8; 32]
-pub type Signature = [U8; 64]
-
-/// Generate key pair
-pub func generate_keypair() -> (PrivateKey, PublicKey)
-effects: [io.random]
-
-/// Derive public key from private key
-pub func public_key(private_key: ref PrivateKey) -> PublicKey
-
-/// Sign message
-pub func sign(private_key: ref PrivateKey, message: ref [U8]) -> Signature
-
-/// Verify signature
-pub func verify(public_key: ref PublicKey, message: ref [U8], signature: ref Signature) -> Bool
+let private_key = create_private_key(pem_string, KeyFormat::Pem).unwrap()
+let public_key = create_public_key(pem_string, KeyFormat::Pem).unwrap()
 ```
 
-## 7. Key Exchange
+### 7.4 Key Types
 
-### 7.1 X25519
+| `KeyType` | Description | Typical Sizes |
+|-----------|-------------|---------------|
+| `Rsa` | RSA | 2048, 3072, 4096 bits |
+| `RsaPss` | RSA-PSS | 2048, 3072, 4096 bits |
+| `Ec` | Elliptic Curve (P-256, P-384, P-521) | 256, 384, 521 bits |
+| `Ed25519` | Edwards curve 25519 | Fixed 256-bit |
+| `Ed448` | Edwards curve 448 | Fixed 448-bit |
+| `X25519` | X25519 key exchange | Fixed 256-bit |
+| `X448` | X448 key exchange | Fixed 448-bit |
+| `Dh` | Diffie-Hellman | 2048+ bits |
+| `Dsa` | DSA (legacy) | 2048+ bits |
+
+## 8. Key Derivation Functions
+
+### 8.1 PBKDF2
 
 ```tml
-mod x25519
+use std::crypto::kdf::{pbkdf2}
+use std::crypto::hash::HashAlgorithm
 
-pub type PublicKey = [U8; 32]
-pub type PrivateKey = [U8; 32]
-pub type SharedSecret = [U8; 32]
-
-/// Generate key pair
-pub func generate_keypair() -> (PrivateKey, PublicKey)
-effects: [io.random]
-
-/// Derive public key from private key
-pub func public_key(private_key: ref PrivateKey) -> PublicKey
-
-/// Compute shared secret
-pub func diffie_hellman(private_key: ref PrivateKey, peer_public: ref PublicKey) -> SharedSecret
+let salt = Buffer::from("random-salt-value")
+let derived_key: Buffer = pbkdf2(
+    "user-password",       // password
+    ref salt,              // salt
+    100000,                // iterations (100K+ recommended)
+    32,                    // output key length
+    HashAlgorithm::Sha256  // digest algorithm
+).unwrap()
 ```
 
-### 7.2 ECDH
+### 8.2 HKDF (Extract-and-Expand)
 
 ```tml
-mod ecdh
+use std::crypto::kdf::{hkdf, hkdf_extract, hkdf_expand}
+use std::crypto::hash::HashAlgorithm
 
-pub func diffie_hellman(
-    private_key: ref EcdsaPrivateKey,
-    peer_public: ref EcdsaPublicKey
-) -> Outcome[List[U8], Error]
+let salt = Buffer::from("salt")
+let ikm = Buffer::from("input key material")
+
+// Combined extract + expand
+let derived: Buffer = hkdf(
+    HashAlgorithm::Sha256,
+    ref ikm,
+    ref salt,
+    "context info",  // info string
+    32               // output length
+).unwrap()
+
+// Or separately
+let prk: Buffer = hkdf_extract(HashAlgorithm::Sha256, ref ikm, ref salt).unwrap()
+let output: Buffer = hkdf_expand(HashAlgorithm::Sha256, ref prk, "info", 32).unwrap()
 ```
 
-## 8. Key Derivation
+### 8.3 KDF Comparison
 
-### 8.1 HKDF
+| KDF | Use Case | Notes |
+|-----|----------|-------|
+| **PBKDF2** | Password hashing | FIPS compliant, use 100K+ iterations |
+| **scrypt** | Password hashing | Memory-hard, GPU resistant |
+| **HKDF** | Key derivation from DH | Not for passwords |
+| **Argon2** | Password hashing | **Recommended** for new applications |
 
-```tml
-mod hkdf
+## 9. Cryptographically Secure Random
 
-/// Extract pseudorandom key from input key material
-pub func extract[H: Hasher](salt: ref [U8], ikm: ref [U8]) -> List[U8]
-
-/// Expand pseudorandom key to desired length
-pub func expand[H: Hasher](prk: ref [U8], info: ref [U8], length: U64) -> Outcome[List[U8], Error]
-
-/// Combined extract and expand
-pub func derive[H: Hasher](
-    salt: ref [U8],
-    ikm: ref [U8],
-    info: ref [U8],
-    length: U64
-) -> Outcome[List[U8], Error]
-
-/// HKDF-SHA256
-pub func hkdf_sha256(salt: ref [U8], ikm: ref [U8], info: ref [U8], length: U64) -> Outcome[List[U8], Error]
-```
-
-### 8.2 PBKDF2
+### 9.1 Random Generation
 
 ```tml
-mod pbkdf2
-
-/// Derive key from password
-pub func derive[H: Hasher](
-    password: ref [U8],
-    salt: ref [U8],
-    iterations: U32,
-    output_len: U64
-) -> List[U8]
-
-/// PBKDF2-HMAC-SHA256
-pub func pbkdf2_sha256(
-    password: ref [U8],
-    salt: ref [U8],
-    iterations: U32,
-    output_len: U64
-) -> List[U8]
-```
-
-### 8.3 Argon2 (Password Hashing)
-
-```tml
-mod argon2
-
-pub type Variant = Argon2d | Argon2i | Argon2id
-
-pub type Params {
-    variant: Variant,
-    memory_kib: U32,     // Memory cost in KiB
-    iterations: U32,     // Time cost
-    parallelism: U32,    // Parallel lanes
-    output_len: U32,     // Output length
+use std::crypto::random::{
+    random_bytes, random_fill, random_int, random_uuid, timing_safe_equal
 }
 
-pub const DEFAULT_PARAMS: Params = Params {
-    variant: Argon2id,
-    memory_kib: 65536,   // 64 MiB
-    iterations: 3,
-    parallelism: 4,
-    output_len: 32,
-}
+// Generate random bytes
+let buf: Buffer = random_bytes(32)
 
-/// Hash password
-pub func hash_password(password: ref [U8], salt: ref [U8], params: Params) -> List[U8]
+// Fill existing buffer with random data
+let mut buf = Buffer::new(64)
+random_fill(mut ref buf)
 
-/// Hash password to PHC string format
-pub func hash_password_string(password: ref [U8]) -> String
-effects: [io.random]
+// Random integer in range
+let n: I64 = random_int(1, 100)  // [1, 100]
 
-/// Verify password against PHC string
-pub func verify_password(password: ref [U8], hash_string: ref str) -> Bool
+// Random UUID v4
+let uuid: Str = random_uuid()  // e.g., "550e8400-e29b-41d4-a716-446655440000"
+
+// Constant-time comparison (prevents timing attacks)
+let equal: Bool = timing_safe_equal(ref buf_a, ref buf_b)
 ```
 
-## 9. Random Number Generation
+### 9.2 Platform Implementation
+
+| Platform | CSPRNG Source |
+|----------|--------------|
+| Windows | BCryptGenRandom (CNG) |
+| Linux | getrandom() syscall |
+| macOS | SecRandomCopyBytes |
+| Unix | /dev/urandom |
+
+## 10. RSA Encryption
 
 ```tml
-mod random
+use std::crypto::rsa::{
+    public_encrypt, private_decrypt, RsaPadding
+}
+use std::crypto::key::{generate_key_pair, KeyType}
 
-/// Cryptographically secure random bytes
-pub func bytes(buf: mut ref [U8])
-effects: [io.random]
+let pair = generate_key_pair(KeyType::Rsa, 2048).unwrap()
 
-/// Generate random bytes as new buffer
-pub func random_bytes(len: U64) -> List[U8]
-effects: [io.random]
+// Encrypt with public key
+let ciphertext = public_encrypt(
+    ref pair.public_key,
+    ref plaintext_buffer,
+    RsaPadding::OaepSha256
+).unwrap()
 
-/// Generate random U32
-pub func u32() -> U32
-effects: [io.random]
-
-/// Generate random U64
-pub func u64() -> U64
-effects: [io.random]
-
-/// Generate random in range [0, max)
-pub func range(max: U64) -> U64
-effects: [io.random]
-
-/// Generate random in range [min, max)
-pub func range_between(min: U64, max: U64) -> U64
-effects: [io.random]
+// Decrypt with private key
+let plaintext = private_decrypt(
+    ref pair.private_key,
+    ref ciphertext,
+    RsaPadding::OaepSha256
+).unwrap()
 ```
 
-## 10. Constant-Time Operations
+### 10.1 RSA Padding Modes
+
+| `RsaPadding` | Description | Notes |
+|--------------|-------------|-------|
+| `Pkcs1` | PKCS#1 v1.5 | Legacy, avoid for new code |
+| `OaepSha256` | OAEP with SHA-256 | **Recommended** |
+| `OaepSha384` | OAEP with SHA-384 | Higher security margin |
+| `OaepSha512` | OAEP with SHA-512 | Maximum security |
+
+## 11. Key Exchange
+
+### 11.1 ECDH (Elliptic Curve Diffie-Hellman)
 
 ```tml
-mod constant_time
+use std::crypto::ecdh::{create_ecdh, EcCurve}
 
-/// Constant-time comparison
-pub func compare(a: ref [U8], b: ref [U8]) -> Bool
+let alice = create_ecdh(EcCurve::X25519).unwrap()
+let bob = create_ecdh(EcCurve::X25519).unwrap()
 
-/// Constant-time select
-pub func select(condition: Bool, a: U8, b: U8) -> U8
-
-/// Constant-time conditional copy
-pub func conditional_copy(condition: Bool, dst: mut ref [U8], src: ref [U8])
+// Exchange public keys and compute shared secret
+// (The shared secret is the same for both parties)
 ```
 
-## 11. Examples
+### 11.2 Supported Curves
 
-### 11.1 Password Hashing
+| `EcCurve` | Description | Key Size |
+|-----------|-------------|----------|
+| `P256` | NIST P-256 | 32 bytes |
+| `P384` | NIST P-384 | 48 bytes |
+| `P521` | NIST P-521 | 66 bytes |
+| `X25519` | Curve25519 | 32 bytes |
+| `X448` | Curve448 | 56 bytes |
 
-```tml
-mod auth
-use std::crypto.argon2
+## 12. Error Handling
 
-func hash_password(password: ref str) -> String {
-    return argon2.hash_password_string(password.as_bytes())
-}
-
-func verify_password(password: ref str, hash: ref str) -> Bool {
-    return argon2.verify_password(password.as_bytes(), hash)
-}
-```
-
-### 11.2 AEAD Encryption
+### 12.1 CryptoError
 
 ```tml
-mod secure_storage
-caps: [io.random]
+use std::crypto::error::CryptoError
 
-use std::crypto.{aes_gcm, random}
-use std::crypto.aes_gcm.{AesGcm, Nonce, Tag}
-
-func encrypt_data(key: ref [U8; 32], plaintext: ref [U8]) -> Outcome[(List[U8], Nonce, Tag), Error] {
-    let cipher = AesGcm.new(key)!
-
-    // Generate random nonce
-    var nonce: Nonce = [0; 12]
-    random.bytes(mut ref nonce)
-
-    let (ciphertext, tag) = cipher.encrypt(ref nonce, plaintext, b"")
-    return Ok((ciphertext, nonce, tag))
-}
-
-func decrypt_data(
-    key: ref [U8; 32],
-    ciphertext: ref [U8],
-    nonce: ref Nonce,
-    tag: ref Tag
-) -> Outcome[List[U8], Error] {
-    let cipher = AesGcm.new(key)!
-    return cipher.decrypt(nonce, ciphertext, b"", tag).map_err(Error.from)
-}
-```
-
-### 11.3 Digital Signatures
-
-```tml
-mod signing
-caps: [io.random]
-
-use std::crypto.ed25519
-
-type KeyPair {
-    private_key: ed25519.PrivateKey,
-    public_key: ed25519.PublicKey,
-}
-
-extend KeyPair {
-    func generate() -> This {
-        let (sk, pk) = ed25519.generate_keypair()
-        return This { private_key: sk, public_key: pk }
-    }
-
-    func sign(this, message: ref [U8]) -> ed25519.Signature {
-        return ed25519.sign(&this.private_key, message)
-    }
-
-    func verify(this, message: ref [U8], signature: &ed25519.Signature) -> Bool {
-        return ed25519.verify(&this.public_key, message, signature)
+let result = generate_key_pair(KeyType::Rsa, 512)
+when result {
+    Ok(pair) => println("Key generated")
+    Err(e) => {
+        println("Error: " + e.get_message())
+        println("Details: " + e.get_details())
     }
 }
 ```
+
+### 12.2 Error Factory Methods
+
+```tml
+// Create specific error types
+CryptoError::new("general error message")
+CryptoError::with_details("message", "technical details")
+CryptoError::invalid_parameter("key must be 32 bytes")
+CryptoError::invalid_key("key format not recognized")
+CryptoError::invalid_iv("IV must be 12 bytes for GCM")
+CryptoError::auth_failed()
+CryptoError::verification_failed()
+CryptoError::unsupported_algorithm("SHA-3")
+CryptoError::operation_failed("decryption failed")
+```
+
+### 12.3 Error Kinds
+
+| Kind | Description |
+|------|-------------|
+| `InvalidKey` | Key is wrong size or format |
+| `InvalidIv` | IV/nonce is wrong size |
+| `InvalidAuthTag` | Authentication tag is invalid |
+| `AuthenticationFailed` | AEAD authentication failed |
+| `InvalidSignature` | Signature format is invalid |
+| `VerificationFailed` | Signature verification failed |
+| `UnsupportedAlgorithm` | Algorithm not available |
+| `InvalidParameter` | Generic invalid parameter |
+| `InvalidPadding` | Padding is invalid |
+| `KeyDerivationFailed` | KDF operation failed |
+| `RandomGenerationFailed` | CSPRNG failure |
+| `CertificateParseError` | X.509 parse error |
+| `KeyExchangeFailed` | DH/ECDH failure |
+| `OperationFailed` | Generic operation failure |
+
+## 13. Complete Example
+
+```tml
+// Hash Table Generator — CRC32 + MD5 + SHA-256 + SHA-512
+use std::crypto::hash::{sha256, sha512, md5, Digest}
+use std::zlib::crc32::{crc32}
+
+func hash_message(label: Str, msg: Str) {
+    println("-------------------------------------------")
+    print("Input:   \"")
+    print(msg)
+    println("\"")
+    print("Label:   ")
+    println(label)
+
+    // CRC32 (from std::zlib)
+    let checksum: I64 = crc32(msg)
+    print("CRC32:   ")
+    println(checksum.to_string())
+
+    // MD5
+    let mut d_md5: Digest = md5(msg)
+    print("MD5:     ")
+    println(d_md5.to_hex())
+    d_md5.destroy()
+
+    // SHA-256
+    let mut d_sha256: Digest = sha256(msg)
+    print("SHA-256: ")
+    println(d_sha256.to_hex())
+    d_sha256.destroy()
+
+    // SHA-512
+    let mut d_sha512: Digest = sha512(msg)
+    print("SHA-512: ")
+    println(d_sha512.to_hex())
+    d_sha512.destroy()
+}
+
+func main() -> I32 {
+    println("===========================================")
+    println("  TML Hash Table Generator")
+    println("===========================================")
+
+    hash_message("empty string", "")
+    hash_message("pangram", "The quick brown fox jumps over the lazy dog")
+    hash_message("numeric", "1234567890")
+
+    return 0
+}
+```
+
+## 14. Security Recommendations
+
+| Task | Recommended Algorithm |
+|------|----------------------|
+| Hashing | SHA-256 or SHA-512 |
+| HMAC | HMAC-SHA256 |
+| Symmetric encryption | AES-256-GCM or ChaCha20-Poly1305 |
+| Asymmetric encryption | RSA-OAEP-SHA256 (2048+ bits) |
+| Signatures | Ed25519 or RSA-PSS-SHA256 |
+| Password hashing | Argon2id, then scrypt, then PBKDF2 |
+| Key exchange | X25519 or ECDH P-256 |
+| Random generation | `random_bytes()` (uses OS CSPRNG) |
+
+**Avoid for security:** MD5, SHA-1, DES, ECB mode, RSA PKCS#1 v1.5 padding.
 
 ---
 

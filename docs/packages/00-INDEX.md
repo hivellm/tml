@@ -38,14 +38,14 @@ This directory contains specifications for TML's standard library packages. Thes
 |---------|-------------|----------------------|
 | [std::encoding](./04-ENCODING.md) | Text and binary encodings | None |
 | [std::json](./09-JSON.md) | JSON parsing and serialization | None |
-| [std::compress](./08-COMPRESS.md) | Compression algorithms | None |
+| [std::zlib](./08-COMPRESS.md) | Compression & checksums (deflate, gzip, brotli, zstd, CRC32) | None |
 | [std::regex](./15-REGEX.md) | Regular expressions | None |
 
 ### Security Packages
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
-| [std::crypto](./05-CRYPTO.md) | Cryptographic primitives | None |
+| [std::crypto](./05-CRYPTO.md) | Cryptographic primitives (hash, HMAC, cipher, sign, KDF, CSPRNG) | None |
 | [std::uuid](./17-UUID.md) | UUID generation | `io::random` |
 
 ### Utility Packages
@@ -157,6 +157,8 @@ use std::fmt::{format, Display}
 | `Box[T]` | std::alloc | Heap allocation |
 | `Arc[T]` | std::sync | Atomic reference counted |
 | `Mutex[T]` | std::sync | Mutual exclusion lock |
+| `Digest` | std::crypto::hash | Cryptographic hash result |
+| `Cipher` | std::crypto::cipher | Symmetric encryption context |
 
 ### Most Used Functions
 
@@ -170,3 +172,7 @@ use std::fmt::{format, Display}
 | `Regex.new()` | std::regex | Compile regex |
 | `DateTime.now()` | std::datetime | Current time |
 | `Uuid.v4()` | std::uuid | Random UUID |
+| `sha256()` | std::crypto::hash | SHA-256 hash |
+| `crc32()` | std::zlib::crc32 | CRC32 checksum |
+| `gzip()` | std::zlib::gzip | Gzip compression |
+| `random_bytes()` | std::crypto::random | Secure random bytes |

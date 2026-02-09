@@ -1,7 +1,7 @@
 # Tasks: Go-Style Test System
 
-**Status**: In Progress (75%)
-**Priority**: MAXIMUM - blocks all other development
+**Status**: Archived (76%)
+**Note**: Archived 2026-02-07. v2 EXE runner works but v1 DLL remains default (3.7x faster). Optimized v2 to use --run-all (1 subprocess per suite instead of 1 per test). Phase 5 cleanup skipped — DLL infrastructure kept as primary runner.
 
 ## Phase 1: Single Codegen Pass Per Package
 
@@ -36,7 +36,7 @@
 - [x] 4.3 Cache test results alongside binary (skip execution when inputs unchanged)
 - [x] 4.4 Invalidate cache when source files, library files, or compiler changes
 
-## Phase 5: Cleanup & Polish
+## Phase 5: Cleanup & Polish (SKIPPED — DLL v1 kept as default)
 
 - [ ] 5.1 Remove legacy DLL-based test infrastructure
 - [ ] 5.2 Remove shared library mechanism (no longer needed)

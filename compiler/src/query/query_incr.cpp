@@ -15,6 +15,17 @@ namespace fs = std::filesystem;
 namespace tml::query {
 
 // ============================================================================
+// Compiler Build Hash
+// ============================================================================
+
+uint32_t compiler_build_hash() {
+    // Changes every time the compiler is recompiled (__DATE__ + __TIME__ are compile-time
+    // constants)
+    static const uint32_t hash = tml::crc32c(std::string(__DATE__) + " " + __TIME__);
+    return hash;
+}
+
+// ============================================================================
 // Binary Helpers
 // ============================================================================
 
@@ -68,8 +79,17 @@ static bool read_string(std::istream& in, std::string& str) {
     uint16_t len = 0;
     if (!read_u16(in, len))
         return false;
+    if (len > 32768) // Sanity check: no single string should exceed 32KB
+        return false;
     str.resize(len);
-    return !!in.read(str.data(), len);
+    if (len == 0)
+        return true;
+    if (!in.read(str.data(), len))
+        return false;
+    // Validate we actually read the expected number of bytes
+    if (in.gcount() != static_cast<std::streamsize>(len))
+        return false;
+    return true;
 }
 
 // ============================================================================
@@ -213,6 +233,20 @@ bool PrevSessionCache::load(const fs::path& cache_file) {
             return false;
         if (!read_u32(in, options_hash_))
             return false;
+        // V2+: read compiler build hash
+        if (!read_u32(in, build_hash_))
+            return false;
+        // Reject cache if compiled by a different compiler build
+        if (build_hash_ != compiler_build_hash()) {
+            TML_LOG_DEBUG("incr", "Compiler build hash mismatch (cache="
+                                      << build_hash_ << " current=" << compiler_build_hash()
+                                      << "), invalidating cache");
+            return false;
+        }
+
+        // Sanity check: a single compilation should not have more than 10K entries
+        if (entry_count > 10000)
+            return false;
 
         // Read entries
         entries_.reserve(entry_count);
@@ -313,6 +347,7 @@ bool IncrCacheWriter::write(const fs::path& cache_file, uint32_t options_hash) {
                                           .count());
             write_u64(out, timestamp);
             write_u32(out, options_hash);
+            write_u32(out, compiler_build_hash());
 
             // Entries
             for (const auto& entry : entries_) {

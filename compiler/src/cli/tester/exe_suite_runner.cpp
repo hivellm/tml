@@ -7,8 +7,15 @@
 //! ## Flow
 //!
 //! ```text
-//! discover tests → group into suites → compile EXEs → run subprocesses → report
+//! discover tests → group into suites → compile EXEs → run 1 subprocess per suite → report
 //! ```
+//!
+//! ## Optimization: --run-all mode
+//!
+//! Instead of spawning 1 CreateProcess per test file (~3,632 spawns at ~16ms each),
+//! we spawn 1 subprocess per suite with `--run-all` (~454 spawns). The subprocess
+//! runs all tests sequentially and prints structured TML_RESULT lines to stdout.
+//! This reduces subprocess overhead from ~58s to ~7s.
 
 #include "cli/tester/exe_test_runner.hpp"
 #include "cli/tester/test_cache.hpp"
@@ -202,10 +209,9 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
         }
 
         // ======================================================================
-        // Run tests via subprocess IN PARALLEL
+        // Run tests via --run-all subprocess (1 process per suite)
         // ======================================================================
 
-        std::mutex output_mutex;
         std::mutex cache_mutex;
         std::atomic<bool> fail_fast_triggered{false};
 
@@ -232,26 +238,24 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
 
                 auto& [suite, exe_path] = compiled_suites[idx];
 
-                TML_LOG_DEBUG("test", "[exe] Thread running suite: " << suite.name << " ("
-                                                                     << suite.tests.size()
-                                                                     << " test files)");
+                TML_LOG_DEBUG("test", "[exe] Running suite via --run-all: " << suite.name << " ("
+                                                                            << suite.tests.size()
+                                                                            << " test files)");
+
+                // Check per-file cache — skip individual cached files
+                // Build a map of which tests actually need to run
+                std::vector<bool> needs_run(suite.tests.size(), true);
+                std::vector<std::string> file_hashes(suite.tests.size());
 
                 for (size_t i = 0; i < suite.tests.size(); ++i) {
-                    if (fail_fast_triggered.load()) {
-                        return;
-                    }
-
                     const auto& test_info = suite.tests[i];
 
                     // Compute file hash
-                    std::string file_hash;
-                    {
-                        auto it = file_hash_cache.find(test_info.file_path);
-                        if (it != file_hash_cache.end()) {
-                            file_hash = it->second;
-                        } else {
-                            file_hash = TestCacheManager::compute_file_hash(test_info.file_path);
-                        }
+                    auto it = file_hash_cache.find(test_info.file_path);
+                    if (it != file_hash_cache.end()) {
+                        file_hashes[i] = it->second;
+                    } else {
+                        file_hashes[i] = TestCacheManager::compute_file_hash(test_info.file_path);
                     }
 
                     // Check cache
@@ -259,7 +263,7 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
                         std::lock_guard<std::mutex> lock(cache_mutex);
                         if (test_cache.can_skip(test_info.file_path)) {
                             auto cached_info = test_cache.get_cached_info(test_info.file_path);
-                            if (cached_info && cached_info->sha512 == file_hash) {
+                            if (cached_info && cached_info->sha512 == file_hashes[i]) {
                                 TestResult result;
                                 result.file_path = test_info.file_path;
                                 result.test_name = test_info.test_name;
@@ -275,86 +279,172 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
 
                                 collector.add(std::move(result));
                                 skipped_count.fetch_add(1);
+                                needs_run[i] = false;
 
                                 TML_LOG_DEBUG("test",
                                               "[exe] Skipped (cached): " << test_info.test_name);
-                                continue;
                             }
                         }
                     }
+                }
 
-                    TML_LOG_DEBUG("test", "[exe] Starting test " << (i + 1) << "/"
-                                                                 << suite.tests.size() << ": "
-                                                                 << test_info.test_name);
-
-                    auto test_start = Clock::now();
-
-                    // Run via subprocess
-                    auto run_result = run_test_subprocess(
-                        exe_path, static_cast<int>(i), opts.timeout_seconds, test_info.test_name);
-
-                    auto run_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                                               Clock::now() - test_start)
-                                               .count();
-
-                    if (opts.profile) {
-                        collector.profile_stats.add("exe.test_run", run_duration_us);
-                        collector.profile_stats.total_tests++;
+                // Check if any tests actually need to run
+                bool any_need_run = false;
+                for (bool b : needs_run) {
+                    if (b) {
+                        any_need_run = true;
+                        break;
                     }
+                }
 
-                    TestResult result;
-                    result.file_path = test_info.file_path;
-                    result.test_name = test_info.test_name;
-                    result.group = suite.group;
-                    result.test_count = test_info.test_count;
-                    result.duration_ms = run_duration_us / 1000;
-                    result.passed = run_result.success;
-                    result.exit_code = run_result.exit_code;
-                    result.timeout = run_result.timed_out;
-
-                    if (!result.passed) {
-                        result.error_message = "\n  FAILED: " + test_info.test_name;
-                        result.error_message += "\n  File:   " + test_info.file_path;
-                        result.error_message += "\n  Exit:   " + std::to_string(result.exit_code);
-
-                        if (!run_result.stderr_output.empty()) {
-                            result.error_message += "\n  Stderr: " + run_result.stderr_output;
-                        }
-                        if (!run_result.stdout_output.empty()) {
-                            std::string output = run_result.stdout_output;
-                            while (!output.empty() &&
-                                   (output.back() == '\n' || output.back() == '\r')) {
-                                output.pop_back();
-                            }
-                            if (!output.empty()) {
-                                result.error_message += "\n  Stdout: " + output;
-                            }
-                        }
-                        result.error_message += "\n";
-
-                        TML_LOG_ERROR("test", "[exe] FAILED test="
-                                                  << test_info.test_name
-                                                  << " file=" << test_info.file_path
-                                                  << " exit=" << result.exit_code
-                                                  << " duration_ms=" << result.duration_ms);
-                    }
-
-                    // Update cache
+                if (!any_need_run) {
+                    TML_LOG_DEBUG("test", "[exe] Suite fully cached: " << suite.name);
                     if (should_update_cache) {
                         std::lock_guard<std::mutex> lock(cache_mutex);
-                        std::vector<std::string> test_functions;
-                        test_cache.update(
-                            test_info.file_path, file_hash, suite.name, test_functions,
-                            result.passed ? CachedTestStatus::Pass : CachedTestStatus::Fail,
-                            result.duration_ms, {}, opts.coverage, opts.profile);
+                        fs::create_directories(cache_file.parent_path());
+                        test_cache.save(cache_file.string());
+                    }
+                    continue;
+                }
+
+                // Run ALL tests in this suite with a single subprocess
+                auto suite_start = Clock::now();
+
+                auto suite_result = run_suite_all_subprocess(
+                    exe_path, static_cast<int>(suite.tests.size()),
+                    opts.timeout_seconds > 0
+                        ? opts.timeout_seconds * static_cast<int>(suite.tests.size())
+                        : 300);
+
+                auto suite_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                             Clock::now() - suite_start)
+                                             .count();
+                int64_t per_test_ms =
+                    suite.tests.size() > 0
+                        ? (suite_duration_us / 1000) / static_cast<int64_t>(suite.tests.size())
+                        : 0;
+
+                if (opts.profile) {
+                    collector.profile_stats.add("exe.suite_run", suite_duration_us);
+                }
+
+                if (suite_result.timed_out) {
+                    // Entire suite timed out — mark all unfinished tests as failed
+                    for (size_t i = 0; i < suite.tests.size(); ++i) {
+                        if (!needs_run[i])
+                            continue;
+                        const auto& test_info = suite.tests[i];
+                        TestResult result;
+                        result.file_path = test_info.file_path;
+                        result.test_name = test_info.test_name;
+                        result.group = suite.group;
+                        result.test_count = test_info.test_count;
+                        result.passed = false;
+                        result.timeout = true;
+                        result.exit_code = -1;
+                        result.duration_ms = per_test_ms;
+                        result.error_message = "\n  TIMEOUT: " + test_info.test_name +
+                                               "\n  Suite: " + suite.name + "\n";
+                        if (opts.profile) {
+                            collector.profile_stats.total_tests++;
+                        }
+                        collector.add(std::move(result));
+                    }
+                    if (opts.fail_fast) {
+                        fail_fast_triggered.store(true);
+                    }
+                } else if (!suite_result.process_ok) {
+                    // Process failed to launch — mark all as failed
+                    for (size_t i = 0; i < suite.tests.size(); ++i) {
+                        if (!needs_run[i])
+                            continue;
+                        const auto& test_info = suite.tests[i];
+                        TestResult result;
+                        result.file_path = test_info.file_path;
+                        result.test_name = test_info.test_name;
+                        result.group = suite.group;
+                        result.test_count = test_info.test_count;
+                        result.passed = false;
+                        result.exit_code = -1;
+                        result.duration_ms = 0;
+                        result.error_message = "\n  LAUNCH FAILED: " + test_info.test_name +
+                                               "\n  Stderr: " + suite_result.stderr_output + "\n";
+                        if (opts.profile) {
+                            collector.profile_stats.total_tests++;
+                        }
+                        collector.add(std::move(result));
+                    }
+                } else {
+                    // Process completed — map outcomes to test results
+                    // Build a lookup by test_index
+                    std::map<int, const SuiteSubprocessResult::TestOutcome*> outcome_map;
+                    for (const auto& o : suite_result.outcomes) {
+                        outcome_map[o.test_index] = &o;
                     }
 
-                    collector.add(std::move(result));
+                    for (size_t i = 0; i < suite.tests.size(); ++i) {
+                        if (!needs_run[i])
+                            continue;
 
-                    if (opts.fail_fast && !run_result.success) {
-                        fail_fast_triggered.store(true);
-                        TML_LOG_WARN("test", "[exe] Test failed, stopping due to --fail-fast");
-                        return;
+                        const auto& test_info = suite.tests[i];
+                        auto it = outcome_map.find(static_cast<int>(i));
+
+                        TestResult result;
+                        result.file_path = test_info.file_path;
+                        result.test_name = test_info.test_name;
+                        result.group = suite.group;
+                        result.test_count = test_info.test_count;
+                        result.duration_ms = per_test_ms;
+
+                        if (it != outcome_map.end()) {
+                            result.passed = it->second->passed;
+                            result.exit_code = it->second->exit_code;
+                        } else {
+                            // Missing result — process crashed before this test ran
+                            result.passed = false;
+                            result.exit_code = -1;
+                            result.error_message = "\n  CRASHED: " + test_info.test_name +
+                                                   "\n  Suite " + suite.name +
+                                                   " crashed before this test completed\n";
+                        }
+
+                        if (!result.passed && result.error_message.empty()) {
+                            result.error_message = "\n  FAILED: " + test_info.test_name;
+                            result.error_message += "\n  File:   " + test_info.file_path;
+                            result.error_message +=
+                                "\n  Exit:   " + std::to_string(result.exit_code);
+                            if (!suite_result.stderr_output.empty()) {
+                                result.error_message += "\n  Stderr: " + suite_result.stderr_output;
+                            }
+                            result.error_message += "\n";
+
+                            TML_LOG_ERROR("test",
+                                          "[exe] FAILED test=" << test_info.test_name
+                                                               << " file=" << test_info.file_path
+                                                               << " exit=" << result.exit_code);
+                        }
+
+                        if (opts.profile) {
+                            collector.profile_stats.total_tests++;
+                        }
+
+                        // Update cache
+                        if (should_update_cache) {
+                            std::lock_guard<std::mutex> lock(cache_mutex);
+                            std::vector<std::string> test_functions;
+                            test_cache.update(
+                                test_info.file_path, file_hashes[i], suite.name, test_functions,
+                                result.passed ? CachedTestStatus::Pass : CachedTestStatus::Fail,
+                                result.duration_ms, {}, opts.coverage, opts.profile);
+                        }
+
+                        collector.add(std::move(result));
+
+                        if (opts.fail_fast && !result.passed) {
+                            fail_fast_triggered.store(true);
+                            TML_LOG_WARN("test", "[exe] Test failed, stopping due to --fail-fast");
+                            break;
+                        }
                     }
                 }
 
@@ -370,7 +460,8 @@ int run_tests_exe_mode(const std::vector<std::string>& test_files, const TestOpt
         // Launch parallel execution threads
         if (!compiled_suites.empty()) {
             if (!opts.quiet) {
-                TML_LOG_DEBUG("test", "[exe] Running " << compiled_suites.size() << " suites with "
+                TML_LOG_DEBUG("test", "[exe] Running " << compiled_suites.size()
+                                                       << " suites (--run-all mode) with "
                                                        << num_exec_threads << " threads...");
             }
 

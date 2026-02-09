@@ -1,8 +1,9 @@
 //! # EXE Test Subprocess Execution
 //!
-//! Runs test functions by invoking the compiled suite EXE as a subprocess
-//! with --test-index=N. Captures stdout/stderr via platform-specific pipes
-//! and enforces timeouts.
+//! Runs test functions by invoking the compiled suite EXE as a subprocess.
+//! Supports two modes:
+//! - `--test-index=N` — Run a single test (legacy, 1 process per test)
+//! - `--run-all` — Run ALL tests in one process (optimized, 1 process per suite)
 //!
 //! ## Platform Support
 //!
@@ -15,6 +16,7 @@
 #include <chrono>
 #include <cstring>
 #include <filesystem>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -33,6 +35,59 @@
 namespace fs = std::filesystem;
 
 namespace tml::cli {
+
+// ============================================================================
+// Parse TML_RESULT lines from --run-all stdout
+// Format: TML_RESULT:<index>:<PASS|FAIL>:<exit_code>
+// ============================================================================
+
+static std::vector<SuiteSubprocessResult::TestOutcome>
+parse_run_all_output(const std::string& stdout_output) {
+    std::vector<SuiteSubprocessResult::TestOutcome> outcomes;
+    std::istringstream stream(stdout_output);
+    std::string line;
+
+    while (std::getline(stream, line)) {
+        // Strip trailing \r
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+
+        // Look for TML_RESULT: prefix
+        const std::string prefix = "TML_RESULT:";
+        if (line.size() < prefix.size() || line.substr(0, prefix.size()) != prefix) {
+            continue;
+        }
+
+        // Parse: TML_RESULT:<index>:<PASS|FAIL>:<exit_code>
+        std::string rest = line.substr(prefix.size());
+
+        // Parse index
+        auto colon1 = rest.find(':');
+        if (colon1 == std::string::npos)
+            continue;
+        int index = std::atoi(rest.substr(0, colon1).c_str());
+
+        // Parse PASS/FAIL
+        std::string after_idx = rest.substr(colon1 + 1);
+        auto colon2 = after_idx.find(':');
+        if (colon2 == std::string::npos)
+            continue;
+        std::string status = after_idx.substr(0, colon2);
+        bool passed = (status == "PASS");
+
+        // Parse exit_code
+        int exit_code = std::atoi(after_idx.substr(colon2 + 1).c_str());
+
+        SuiteSubprocessResult::TestOutcome outcome;
+        outcome.test_index = index;
+        outcome.passed = passed;
+        outcome.exit_code = exit_code;
+        outcomes.push_back(outcome);
+    }
+
+    return outcomes;
+}
 
 #ifdef _WIN32
 
@@ -75,15 +130,11 @@ static std::string build_env_with_dll_paths() {
         }
     }
 
-    // Also add the exe's own directory
-    // (handled by Windows automatically, but explicit is safer)
-
     if (extra_paths.empty()) {
         return {}; // No vcpkg found, use default environment
     }
 
     // Get current environment block
-    // Format: VAR1=VALUE1\0VAR2=VALUE2\0...\0\0
     char* env_block = GetEnvironmentStringsA();
     if (!env_block) {
         return {};
@@ -129,12 +180,22 @@ static const std::string& get_cached_env_block() {
     return cached;
 }
 
-SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_index,
-                                         int timeout_seconds, const std::string& test_name) {
+// Helper: launch a subprocess with given arguments, capture stdout/stderr
+struct RawSubprocessResult {
+    bool launched = false;
+    bool timed_out = false;
+    int exit_code = 0;
+    std::string stdout_output;
+    std::string stderr_output;
+    int64_t duration_us = 0;
+};
+
+static RawSubprocessResult launch_subprocess(const std::string& exe_path,
+                                             const std::string& args_str, int timeout_seconds) {
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
-    SubprocessTestResult result;
+    RawSubprocessResult result;
 
     // Create pipes for stdout and stderr
     SECURITY_ATTRIBUTES sa;
@@ -160,7 +221,7 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
     SetHandleInformation(stderr_read, HANDLE_FLAG_INHERIT, 0);
 
     // Build command line
-    std::string cmd = "\"" + exe_path + "\" --test-index=" + std::to_string(test_index);
+    std::string cmd = "\"" + exe_path + "\" " + args_str;
 
     // Create process
     STARTUPINFOA si;
@@ -174,27 +235,15 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
 
     ZeroMemory(&pi, sizeof(pi));
 
-    // Need a mutable copy for CreateProcessA
     std::vector<char> cmd_buf(cmd.begin(), cmd.end());
     cmd_buf.push_back('\0');
 
-    // Use cached environment block with vcpkg DLL paths in PATH
     const std::string& env_block = get_cached_env_block();
     LPVOID env_ptr = env_block.empty() ? NULL : (LPVOID)env_block.data();
 
-    BOOL created = CreateProcessA(NULL,           // lpApplicationName
-                                  cmd_buf.data(), // lpCommandLine
-                                  NULL,           // lpProcessAttributes
-                                  NULL,           // lpThreadAttributes
-                                  TRUE,           // bInheritHandles
-                                  0,              // dwCreationFlags
-                                  env_ptr,        // lpEnvironment (with vcpkg PATH)
-                                  NULL,           // lpCurrentDirectory
-                                  &si,            // lpStartupInfo
-                                  &pi             // lpProcessInformation
-    );
+    BOOL created =
+        CreateProcessA(NULL, cmd_buf.data(), NULL, NULL, TRUE, 0, env_ptr, NULL, &si, &pi);
 
-    // Close write ends of pipes (parent doesn't need them)
     CloseHandle(stdout_write);
     CloseHandle(stderr_write);
 
@@ -205,31 +254,26 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
         return result;
     }
 
-    // Wait for process with timeout
+    result.launched = true;
+
     DWORD timeout_ms = (timeout_seconds > 0) ? (timeout_seconds * 1000) : INFINITE;
     DWORD wait_result = WaitForSingleObject(pi.hProcess, timeout_ms);
 
     if (wait_result == WAIT_TIMEOUT) {
-        // Kill the process
         TerminateProcess(pi.hProcess, 1);
-        WaitForSingleObject(pi.hProcess, 5000); // Wait up to 5s for termination
+        WaitForSingleObject(pi.hProcess, 5000);
         result.timed_out = true;
         result.exit_code = -1;
-        result.stderr_output = "Test timed out after " + std::to_string(timeout_seconds) + "s" +
-                               (test_name.empty() ? "" : " (" + test_name + ")");
+        result.stderr_output = "Suite timed out after " + std::to_string(timeout_seconds) + "s";
     } else {
-        // Get exit code
         DWORD exit_code = 0;
         GetExitCodeProcess(pi.hProcess, &exit_code);
         result.exit_code = static_cast<int>(exit_code);
-        result.success = (exit_code == 0);
     }
 
-    // Read captured output
     result.stdout_output = read_pipe(stdout_read);
     result.stderr_output += read_pipe(stderr_read);
 
-    // Cleanup
     CloseHandle(stdout_read);
     CloseHandle(stderr_read);
     CloseHandle(pi.hProcess);
@@ -241,16 +285,74 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
     return result;
 }
 
-#else // Unix
-
 SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_index,
                                          int timeout_seconds, const std::string& test_name) {
+    auto raw =
+        launch_subprocess(exe_path, "--test-index=" + std::to_string(test_index), timeout_seconds);
+
+    SubprocessTestResult result;
+    result.success = raw.launched && !raw.timed_out && raw.exit_code == 0;
+    result.exit_code = raw.exit_code;
+    result.stdout_output = std::move(raw.stdout_output);
+    result.stderr_output = std::move(raw.stderr_output);
+    result.duration_us = raw.duration_us;
+    result.timed_out = raw.timed_out;
+
+    if (raw.timed_out && !test_name.empty()) {
+        result.stderr_output =
+            "Test timed out after " + std::to_string(timeout_seconds) + "s (" + test_name + ")";
+    }
+
+    return result;
+}
+
+SuiteSubprocessResult run_suite_all_subprocess(const std::string& exe_path, int expected_tests,
+                                               int timeout_seconds) {
+    auto raw = launch_subprocess(exe_path, "--run-all", timeout_seconds);
+
+    SuiteSubprocessResult result;
+    result.process_ok = raw.launched && !raw.timed_out;
+    result.timed_out = raw.timed_out;
+    result.stderr_output = std::move(raw.stderr_output);
+    result.total_duration_us = raw.duration_us;
+
+    if (result.process_ok) {
+        result.outcomes = parse_run_all_output(raw.stdout_output);
+
+        // If the process crashed mid-suite, some tests may not have results.
+        // Mark missing tests as failed.
+        if (static_cast<int>(result.outcomes.size()) < expected_tests) {
+            std::vector<bool> seen(expected_tests, false);
+            for (const auto& o : result.outcomes) {
+                if (o.test_index >= 0 && o.test_index < expected_tests) {
+                    seen[o.test_index] = true;
+                }
+            }
+            for (int i = 0; i < expected_tests; ++i) {
+                if (!seen[i]) {
+                    SuiteSubprocessResult::TestOutcome missing;
+                    missing.test_index = i;
+                    missing.passed = false;
+                    missing.exit_code = -1;
+                    result.outcomes.push_back(missing);
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+#else // Unix
+
+static RawSubprocessResult launch_subprocess_unix(const std::string& exe_path,
+                                                  const std::vector<std::string>& args,
+                                                  int timeout_seconds) {
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
-    SubprocessTestResult result;
+    RawSubprocessResult result;
 
-    // Create pipes for stdout and stderr
     int stdout_pipe[2], stderr_pipe[2];
     if (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0) {
         result.stderr_output = "Failed to create pipes";
@@ -269,7 +371,7 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
 
     if (pid == 0) {
         // Child process
-        close(stdout_pipe[0]); // Close read ends
+        close(stdout_pipe[0]);
         close(stderr_pipe[0]);
 
         dup2(stdout_pipe[1], STDOUT_FILENO);
@@ -277,22 +379,25 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
         close(stdout_pipe[1]);
         close(stderr_pipe[1]);
 
-        std::string index_arg = "--test-index=" + std::to_string(test_index);
-        char* args[] = {const_cast<char*>(exe_path.c_str()), const_cast<char*>(index_arg.c_str()),
-                        nullptr};
-        execvp(exe_path.c_str(), args);
-        _exit(127); // exec failed
+        std::vector<char*> c_args;
+        c_args.push_back(const_cast<char*>(exe_path.c_str()));
+        for (const auto& a : args) {
+            c_args.push_back(const_cast<char*>(a.c_str()));
+        }
+        c_args.push_back(nullptr);
+
+        execvp(exe_path.c_str(), c_args.data());
+        _exit(127);
     }
 
-    // Parent process
-    close(stdout_pipe[1]); // Close write ends
+    result.launched = true;
+
+    close(stdout_pipe[1]);
     close(stderr_pipe[1]);
 
-    // Set pipes to non-blocking for timeout support
     fcntl(stdout_pipe[0], F_SETFL, O_NONBLOCK);
     fcntl(stderr_pipe[0], F_SETFL, O_NONBLOCK);
 
-    // Wait with timeout
     auto deadline = Clock::now() + std::chrono::seconds(timeout_seconds > 0 ? timeout_seconds : 60);
 
     int status = 0;
@@ -304,8 +409,7 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
             finished = true;
             break;
         }
-        // Sleep briefly between checks
-        usleep(1000); // 1ms
+        usleep(1000);
     }
 
     if (!finished) {
@@ -313,22 +417,18 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
         waitpid(pid, &status, 0);
         result.timed_out = true;
         result.exit_code = -1;
-        result.stderr_output = "Test timed out after " + std::to_string(timeout_seconds) + "s" +
-                               (test_name.empty() ? "" : " (" + test_name + ")");
+        result.stderr_output = "Suite timed out after " + std::to_string(timeout_seconds) + "s";
     } else {
         if (WIFEXITED(status)) {
             result.exit_code = WEXITSTATUS(status);
         } else {
             result.exit_code = -1;
         }
-        result.success = (result.exit_code == 0);
     }
 
-    // Read all output from pipes
     auto read_all = [](int fd) -> std::string {
         std::string out;
         char buf[4096];
-        // Restore blocking mode for final read
         fcntl(fd, F_SETFL, 0);
         ssize_t n;
         while ((n = read(fd, buf, sizeof(buf))) > 0) {
@@ -345,6 +445,63 @@ SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_i
 
     auto end = Clock::now();
     result.duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    return result;
+}
+
+SubprocessTestResult run_test_subprocess(const std::string& exe_path, int test_index,
+                                         int timeout_seconds, const std::string& test_name) {
+    std::vector<std::string> args = {"--test-index=" + std::to_string(test_index)};
+    auto raw = launch_subprocess_unix(exe_path, args, timeout_seconds);
+
+    SubprocessTestResult result;
+    result.success = raw.launched && !raw.timed_out && raw.exit_code == 0;
+    result.exit_code = raw.exit_code;
+    result.stdout_output = std::move(raw.stdout_output);
+    result.stderr_output = std::move(raw.stderr_output);
+    result.duration_us = raw.duration_us;
+    result.timed_out = raw.timed_out;
+
+    if (raw.timed_out && !test_name.empty()) {
+        result.stderr_output =
+            "Test timed out after " + std::to_string(timeout_seconds) + "s (" + test_name + ")";
+    }
+
+    return result;
+}
+
+SuiteSubprocessResult run_suite_all_subprocess(const std::string& exe_path, int expected_tests,
+                                               int timeout_seconds) {
+    std::vector<std::string> args = {"--run-all"};
+    auto raw = launch_subprocess_unix(exe_path, args, timeout_seconds);
+
+    SuiteSubprocessResult result;
+    result.process_ok = raw.launched && !raw.timed_out;
+    result.timed_out = raw.timed_out;
+    result.stderr_output = std::move(raw.stderr_output);
+    result.total_duration_us = raw.duration_us;
+
+    if (result.process_ok) {
+        result.outcomes = parse_run_all_output(raw.stdout_output);
+
+        if (static_cast<int>(result.outcomes.size()) < expected_tests) {
+            std::vector<bool> seen(expected_tests, false);
+            for (const auto& o : result.outcomes) {
+                if (o.test_index >= 0 && o.test_index < expected_tests) {
+                    seen[o.test_index] = true;
+                }
+            }
+            for (int i = 0; i < expected_tests; ++i) {
+                if (!seen[i]) {
+                    SuiteSubprocessResult::TestOutcome missing;
+                    missing.test_index = i;
+                    missing.passed = false;
+                    missing.exit_code = -1;
+                    result.outcomes.push_back(missing);
+                }
+            }
+        }
+    }
 
     return result;
 }
