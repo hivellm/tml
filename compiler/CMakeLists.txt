@@ -1029,6 +1029,40 @@ add_library(tml_lld STATIC
 )
 target_include_directories(tml_lld PUBLIC include src)
 
+# Embed LLD libraries for in-process linking (no subprocess needed)
+if(TML_USE_LLVM_BACKEND AND LLVM_FOUND)
+    # LLD source headers (lld/Common/Driver.h)
+    set(LLD_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../src/llvm-project/lld/include")
+    # LLD generated headers (lld/Common/Version.inc)
+    set(LLD_GENERATED_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../build/llvm/tools/lld/include")
+
+    if(EXISTS "${LLD_INCLUDE_DIR}/lld/Common/Driver.h")
+        # Use SYSTEM to suppress warnings from LLVM/LLD headers (C4245, C4458 etc.)
+        target_include_directories(tml_lld SYSTEM PUBLIC
+            ${LLD_INCLUDE_DIR} ${LLD_GENERATED_INCLUDE_DIR} ${LLVM_ALL_INCLUDE_DIRS})
+        target_link_directories(tml_lld PUBLIC ${LLVM_LIBRARY_DIRS})
+
+        target_link_libraries(tml_lld PUBLIC
+            # LLD flavor libraries
+            lldCOFF lldCommon lldELF lldMachO lldMinGW lldWasm
+            # LLVM libraries required by LLD (transitive dependencies)
+            LLVMLTO LLVMDTLTO LLVMOption LLVMLibDriver LLVMPlugins
+            LLVMWindowsManifest LLVMWindowsDriver
+            # Core deps shared with tml_backend (needed for link resolution)
+            LLVMPasses LLVMipo LLVMBitWriter LLVMLinker LLVMTransformUtils
+            LLVMCodeGen LLVMTarget LLVMAnalysis LLVMObject LLVMCore
+            LLVMIRReader LLVMAsmParser LLVMBitReader LLVMProfileData
+            LLVMMC LLVMMCParser LLVMMCDisassembler LLVMBinaryFormat
+            LLVMDebugInfoDWARF LLVMDebugInfoCodeView LLVMDebugInfoMSF LLVMDebugInfoPDB
+            LLVMSupport LLVMDemangle LLVMTargetParser LLVMRemarks
+        )
+        target_compile_definitions(tml_lld PUBLIC TML_HAS_LLD_EMBEDDED=1)
+        message(STATUS "LLD Embedded: Enabled (in-process linking)")
+    else()
+        message(STATUS "LLD Embedded: Disabled (headers not found at ${LLD_INCLUDE_DIR})")
+    endif()
+endif()
+
 if(TML_USE_ZIG_LINKER)
     # Search for Zig installation
     find_program(ZIG_EXECUTABLE zig

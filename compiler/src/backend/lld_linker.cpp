@@ -1,6 +1,8 @@
 //! # LLD Linker Implementation
 //!
-//! Wraps LLD executables for cross-platform linking.
+//! Wraps LLD for cross-platform linking. When TML_HAS_LLD_EMBEDDED is defined,
+//! uses the in-process LLD library API (no subprocess). Otherwise falls back to
+//! spawning lld-link.exe / ld.lld as a subprocess.
 
 // Suppress MSVC warnings about getenv
 #define _CRT_SECURE_NO_WARNINGS
@@ -15,6 +17,28 @@
 #include <fstream>
 #include <sstream>
 
+#ifdef TML_HAS_LLD_EMBEDDED
+#include "lld/Common/Driver.h"
+
+#include "llvm/Support/raw_ostream.h"
+
+// Declare the LLD drivers we link against
+LLD_HAS_DRIVER(coff)
+LLD_HAS_DRIVER(elf)
+LLD_HAS_DRIVER(mingw)
+LLD_HAS_DRIVER(macho)
+LLD_HAS_DRIVER(wasm)
+
+#include <atomic>
+#include <mutex>
+
+// Global state: LLD uses global mutable state internally (CommonLinkerContext).
+// If canRunAgain=false is ever returned, subsequent calls may crash.
+// We also serialize calls because LLD is NOT re-entrant.
+static std::atomic<bool> g_lld_poisoned{false};
+static std::mutex g_lld_mutex;
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -25,7 +49,7 @@ namespace tml::backend {
 // Helper Functions
 // ============================================================================
 
-/// Quote a path if it contains spaces.
+/// Quote a path if it contains spaces (for subprocess command lines).
 static std::string quote_path(const fs::path& path) {
     std::string str = path.string();
     if (str.find(' ') != std::string::npos) {
@@ -59,12 +83,22 @@ auto LLDLinker::initialize() -> bool {
         return true;
     }
 
+#ifdef TML_HAS_LLD_EMBEDDED
+    // With embedded LLD, we don't strictly need the executable.
+    // But we still search for llvm-ar (needed for static libraries).
+    // Mark as initialized even if find_lld fails — in-process linking
+    // doesn't need the executable path.
+    find_lld();
+    initialized_ = true;
+    return true;
+#else
     if (!find_lld()) {
         return false;
     }
 
     initialized_ = true;
     return true;
+#endif
 }
 
 auto LLDLinker::find_lld() -> bool {
@@ -139,6 +173,254 @@ auto LLDLinker::find_lld() -> bool {
     return false;
 }
 
+// ============================================================================
+// Argument Builders (produce argv vectors)
+// ============================================================================
+
+auto LLDLinker::build_windows_args(const std::vector<fs::path>& object_files,
+                                   const fs::path& output_path, const LLDLinkOptions& options)
+    -> std::vector<std::string> {
+    std::vector<std::string> args;
+
+    // argv[0]: program name (LLD expects this even in-process)
+    args.push_back("lld-link");
+
+    // Output file
+    args.push_back("/OUT:" + output_path.string());
+
+    // Subsystem
+    if (!options.subsystem.empty()) {
+        args.push_back("/SUBSYSTEM:" + options.subsystem);
+    }
+
+    // Debug info
+    if (options.debug_info) {
+        args.push_back("/DEBUG");
+    }
+
+    // DLL-specific options
+    if (options.output_type == LLDOutputType::SharedLib) {
+        args.push_back("/DLL");
+
+        if (options.generate_import_lib) {
+            fs::path import_lib = output_path;
+            import_lib.replace_extension(".lib");
+            args.push_back("/IMPLIB:" + import_lib.string());
+        }
+    }
+
+    // Entry point
+    if (!options.entry_point.empty()) {
+        args.push_back("/ENTRY:" + options.entry_point);
+    } else if (options.output_type != LLDOutputType::SharedLib) {
+        args.push_back("/ENTRY:mainCRTStartup");
+    }
+
+    // Library paths
+    for (const auto& lib_path : options.library_paths) {
+        args.push_back("/LIBPATH:" + lib_path.string());
+    }
+
+    // Default library paths for Windows CRT
+    args.push_back("/DEFAULTLIB:libcmt");
+    args.push_back("/DEFAULTLIB:oldnames");
+
+    // Libraries
+    for (const auto& lib : options.libraries) {
+        if (lib.find('.') != std::string::npos) {
+            args.push_back(lib);
+        } else {
+            args.push_back(lib + ".lib");
+        }
+    }
+
+    // Object files and static libraries
+    for (const auto& obj : object_files) {
+        std::string ext = obj.extension().string();
+        std::string path_str = obj.string();
+        bool is_external_lib = (path_str.find("x64-windows") != std::string::npos ||
+                                path_str.find("vcpkg") != std::string::npos ||
+                                path_str.find("zstd.lib") != std::string::npos ||
+                                path_str.find("brotli") != std::string::npos ||
+                                path_str.find("zlib.lib") != std::string::npos);
+        if (ext == ".lib" && !is_external_lib) {
+            args.push_back("/WHOLEARCHIVE:" + obj.string());
+        } else {
+            args.push_back(obj.string());
+        }
+    }
+
+    // Extra flags
+    for (const auto& flag : options.extra_flags) {
+        args.push_back(flag);
+    }
+
+    // Suppress logo
+    args.push_back("/NOLOGO");
+
+    return args;
+}
+
+auto LLDLinker::build_unix_args(const std::vector<fs::path>& object_files,
+                                const fs::path& output_path, const LLDLinkOptions& options)
+    -> std::vector<std::string> {
+    std::vector<std::string> args;
+
+    // argv[0]: program name
+    args.push_back("ld.lld");
+
+    // Output file
+    args.push_back("-o");
+    args.push_back(output_path.string());
+
+    // Shared library
+    if (options.output_type == LLDOutputType::SharedLib) {
+        args.push_back("-shared");
+        if (options.export_all_symbols) {
+            args.push_back("--export-dynamic");
+        }
+    }
+
+    // Entry point
+    if (!options.entry_point.empty()) {
+        args.push_back("-e");
+        args.push_back(options.entry_point);
+    }
+
+    // Library paths
+    for (const auto& lib_path : options.library_paths) {
+        args.push_back("-L" + lib_path.string());
+    }
+
+    // Libraries
+    for (const auto& lib : options.libraries) {
+        args.push_back("-l" + lib);
+    }
+
+    // Object files
+    for (const auto& obj : object_files) {
+        args.push_back(obj.string());
+    }
+
+    // Extra flags
+    for (const auto& flag : options.extra_flags) {
+        args.push_back(flag);
+    }
+
+    // Link against C library
+    args.push_back("-lc");
+
+    return args;
+}
+
+auto LLDLinker::join_args(const std::vector<std::string>& args) -> std::string {
+    std::ostringstream cmd;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (i > 0)
+            cmd << ' ';
+        // Quote args with spaces for subprocess
+        if (args[i].find(' ') != std::string::npos) {
+            cmd << '"' << args[i] << '"';
+        } else {
+            cmd << args[i];
+        }
+    }
+    return cmd.str();
+}
+
+// ============================================================================
+// In-Process LLD Linking
+// ============================================================================
+
+#ifdef TML_HAS_LLD_EMBEDDED
+auto LLDLinker::link_in_process(const std::vector<std::string>& args, const LLDLinkOptions& options)
+    -> LLDLinkResult {
+    LLDLinkResult result;
+    result.success = false;
+
+    // Check if a previous call poisoned LLD's global state
+    if (g_lld_poisoned.load(std::memory_order_acquire)) {
+        result.error_message = "LLD in-process unavailable (previous call corrupted global state)";
+        return result;
+    }
+
+    // LLD is NOT re-entrant — serialize all calls
+    std::lock_guard<std::mutex> lock(g_lld_mutex);
+
+    // Double-check after acquiring the lock
+    if (g_lld_poisoned.load(std::memory_order_acquire)) {
+        result.error_message = "LLD in-process unavailable (previous call corrupted global state)";
+        return result;
+    }
+
+    // Build const char* argv from string storage
+    std::vector<const char*> argv;
+    argv.reserve(args.size());
+    for (const auto& arg : args) {
+        argv.push_back(arg.c_str());
+    }
+
+    if (options.verbose) {
+        TML_LOG_DEBUG("linker", "[in-process] " << join_args(args));
+    }
+
+    // Capture LLD stdout/stderr
+    std::string stdout_str, stderr_str;
+    llvm::raw_string_ostream stdout_os(stdout_str);
+    llvm::raw_string_ostream stderr_os(stderr_str);
+
+    // Select drivers based on platform
+    std::vector<lld::DriverDef> drivers = {
+#ifdef _WIN32
+        {lld::WinLink, &lld::coff::link},
+#else
+        {lld::Gnu, &lld::elf::link},
+        {lld::Darwin, &lld::macho::link},
+#endif
+    };
+
+    lld::Result lld_result = lld::lldMain(argv, stdout_os, stderr_os, drivers);
+
+    stdout_os.flush();
+    stderr_os.flush();
+
+    // Check canRunAgain — if false, LLD's global state is corrupted
+    if (!lld_result.canRunAgain) {
+        g_lld_poisoned.store(true, std::memory_order_release);
+        TML_LOG_WARN("linker",
+                     "LLD reported canRunAgain=false; switching to subprocess for future calls");
+    }
+
+    if (lld_result.retCode != 0) {
+        result.error_message =
+            "In-process LLD linking failed (exit code " + std::to_string(lld_result.retCode) + ")";
+        if (!stderr_str.empty()) {
+            result.error_message += ":\n" + stderr_str;
+        }
+        return result;
+    }
+
+    // Capture any warnings from stderr even on success
+    if (!stderr_str.empty()) {
+        // Split stderr into individual warnings
+        std::istringstream iss(stderr_str);
+        std::string line;
+        while (std::getline(iss, line)) {
+            if (!line.empty()) {
+                result.warnings.push_back(line);
+            }
+        }
+    }
+
+    result.success = true;
+    return result;
+}
+#endif
+
+// ============================================================================
+// Main Link Method
+// ============================================================================
+
 auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& output_path,
                      const LLDLinkOptions& options) -> LLDLinkResult {
     LLDLinkResult result;
@@ -162,202 +444,109 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
         return result;
     }
 
-    // Build command based on output type
-    std::string cmd;
+    // Static libraries use llvm-ar (LLD doesn't do archiving)
     if (options.output_type == LLDOutputType::StaticLib) {
-        cmd = build_static_lib_command(object_files, output_path);
-    } else {
-#ifdef _WIN32
-        cmd = build_windows_command(object_files, output_path, options);
-#else
-        cmd = build_unix_command(object_files, output_path, options);
-#endif
+        std::string cmd = build_static_lib_command(object_files, output_path);
+        if (options.verbose) {
+            TML_LOG_DEBUG("linker", "Static lib command: " << cmd);
+        }
+        int ret = execute_command(cmd, options.verbose);
+        if (ret != 0) {
+            result.error_message =
+                "Static library creation failed with exit code " + std::to_string(ret);
+            return result;
+        }
+        if (!file_exists(output_path)) {
+            result.error_message = "Output file was not created: " + output_path.string();
+            return result;
+        }
+        result.success = true;
+        result.output_file = output_path;
+        return result;
     }
 
-    // Print command only in verbose mode
+    // Build argument list
+    std::vector<std::string> args;
+#ifdef _WIN32
+    args = build_windows_args(object_files, output_path, options);
+#else
+    args = build_unix_args(object_files, output_path, options);
+#endif
+
+#ifdef TML_HAS_LLD_EMBEDDED
+    // Try in-process LLD linking first (fastest path, no subprocess)
+    if (!g_lld_poisoned.load(std::memory_order_acquire)) {
+        TML_LOG_DEBUG("linker", "[lld] Using in-process LLD");
+        result = link_in_process(args, options);
+
+        // If in-process succeeded, we're done
+        if (result.success) {
+            // Fall through to output verification below
+        } else if (!g_lld_poisoned.load(std::memory_order_acquire)) {
+            // In-process failed but state is still good — return the error
+            return result;
+        }
+        // If poisoned, fall through to subprocess below
+    }
+
+    // Subprocess fallback (when in-process is poisoned or unavailable)
+    if (!result.success && !lld_path_.empty() && file_exists(lld_path_)) {
+        TML_LOG_DEBUG("linker", "[lld] Falling back to subprocess LLD");
+        args[0] = lld_path_.string();
+        std::string cmd = join_args(args);
+        if (options.verbose) {
+            TML_LOG_DEBUG("linker", "LLD command: " << cmd);
+        }
+        int ret = execute_command(cmd, options.verbose);
+        if (ret != 0) {
+            result.error_message = "Linking failed with exit code " + std::to_string(ret);
+            return result;
+        }
+        result.success = true;
+    } else if (!result.success) {
+        // No subprocess available either
+        return result;
+    }
+#else
+    // Subprocess only (no embedded LLD)
+    args[0] = lld_path_.string();
+    std::string cmd = join_args(args);
     if (options.verbose) {
         TML_LOG_DEBUG("linker", "LLD command: " << cmd);
     }
-
-    // Execute the command
     int ret = execute_command(cmd, options.verbose);
-
     if (ret != 0) {
         result.error_message = "Linking failed with exit code " + std::to_string(ret);
         return result;
     }
-
-    // Verify output was created
-    if (!file_exists(output_path)) {
-        result.error_message = "Output file was not created: " + output_path.string();
-        return result;
-    }
-
     result.success = true;
-    result.output_file = output_path;
+#endif
 
-    // Check for import library (Windows DLLs)
-    if (options.output_type == LLDOutputType::SharedLib && options.generate_import_lib) {
-        fs::path import_lib = output_path;
-        import_lib.replace_extension(".lib");
-        if (file_exists(import_lib)) {
-            result.import_lib = import_lib;
+    if (result.success) {
+        // Verify output was created
+        if (!file_exists(output_path)) {
+            result.error_message = "Output file was not created: " + output_path.string();
+            result.success = false;
+            return result;
+        }
+        result.output_file = output_path;
+
+        // Check for import library (Windows DLLs)
+        if (options.output_type == LLDOutputType::SharedLib && options.generate_import_lib) {
+            fs::path import_lib = output_path;
+            import_lib.replace_extension(".lib");
+            if (file_exists(import_lib)) {
+                result.import_lib = import_lib;
+            }
         }
     }
 
     return result;
 }
 
-auto LLDLinker::build_windows_command(const std::vector<fs::path>& object_files,
-                                      const fs::path& output_path, const LLDLinkOptions& options)
-    -> std::string {
-    std::ostringstream cmd;
-
-    cmd << quote_path(lld_path_);
-
-    // Output file
-    cmd << " /OUT:" << quote_path(output_path);
-
-    // Subsystem
-    if (!options.subsystem.empty()) {
-        cmd << " /SUBSYSTEM:" << options.subsystem;
-    }
-
-    // Debug info
-    if (options.debug_info) {
-        cmd << " /DEBUG";
-    }
-
-    // DLL-specific options
-    if (options.output_type == LLDOutputType::SharedLib) {
-        cmd << " /DLL";
-
-        if (options.export_all_symbols) {
-            // lld-link doesn't have export-all-symbols directly
-            // We'd need to use a .def file or /EXPORT directives
-            // For now, export common C runtime symbols
-        }
-
-        if (options.generate_import_lib) {
-            fs::path import_lib = output_path;
-            import_lib.replace_extension(".lib");
-            cmd << " /IMPLIB:" << quote_path(import_lib);
-        }
-    }
-
-    // Entry point
-    if (!options.entry_point.empty()) {
-        cmd << " /ENTRY:" << options.entry_point;
-    } else if (options.output_type == LLDOutputType::SharedLib) {
-        // DLLs don't need entry point
-    } else {
-        // Default entry point for executables
-        cmd << " /ENTRY:mainCRTStartup";
-    }
-
-    // Library paths
-    for (const auto& lib_path : options.library_paths) {
-        cmd << " /LIBPATH:" << quote_path(lib_path);
-    }
-
-    // Default library paths for Windows CRT
-    // These are needed for linking standard C library functions
-    cmd << " /DEFAULTLIB:libcmt";
-    cmd << " /DEFAULTLIB:oldnames";
-
-    // Libraries
-    for (const auto& lib : options.libraries) {
-        if (lib.find('.') != std::string::npos) {
-            // Full filename provided
-            cmd << " " << quote_path(fs::path(lib));
-        } else {
-            // Just library name
-            cmd << " " << lib << ".lib";
-        }
-    }
-
-    // Object files and static libraries
-    for (const auto& obj : object_files) {
-        // For static libraries (.lib), use /WHOLEARCHIVE to include all objects
-        // This is needed for FFI functions that may not be referenced until runtime
-        // EXCEPTION: Don't use /WHOLEARCHIVE for external libraries (vcpkg, etc.)
-        // which are import libraries for DLLs, not static libraries
-        std::string ext = obj.extension().string();
-        std::string path_str = obj.string();
-        bool is_external_lib = (path_str.find("x64-windows") != std::string::npos || // vcpkg
-                                path_str.find("vcpkg") != std::string::npos ||
-                                path_str.find("zstd.lib") != std::string::npos ||
-                                path_str.find("brotli") != std::string::npos ||
-                                path_str.find("zlib.lib") != std::string::npos);
-        if (ext == ".lib" && !is_external_lib) {
-            cmd << " /WHOLEARCHIVE:" << quote_path(obj);
-        } else {
-            cmd << " " << quote_path(obj);
-        }
-    }
-
-    // Extra flags
-    for (const auto& flag : options.extra_flags) {
-        cmd << " " << flag;
-    }
-
-    // Suppress logo
-    cmd << " /NOLOGO";
-
-    return cmd.str();
-}
-
-auto LLDLinker::build_unix_command(const std::vector<fs::path>& object_files,
-                                   const fs::path& output_path, const LLDLinkOptions& options)
-    -> std::string {
-    std::ostringstream cmd;
-
-    cmd << quote_path(lld_path_);
-
-    // Output file
-    cmd << " -o " << quote_path(output_path);
-
-    // Shared library
-    if (options.output_type == LLDOutputType::SharedLib) {
-        cmd << " -shared";
-        if (options.export_all_symbols) {
-            cmd << " --export-dynamic";
-        }
-    }
-
-    // Debug info (for separate debug file)
-    // Note: debug info is typically in the object files already
-
-    // Entry point
-    if (!options.entry_point.empty()) {
-        cmd << " -e " << options.entry_point;
-    }
-
-    // Library paths
-    for (const auto& lib_path : options.library_paths) {
-        cmd << " -L" << quote_path(lib_path);
-    }
-
-    // Libraries
-    for (const auto& lib : options.libraries) {
-        cmd << " -l" << lib;
-    }
-
-    // Object files
-    for (const auto& obj : object_files) {
-        cmd << " " << quote_path(obj);
-    }
-
-    // Extra flags
-    for (const auto& flag : options.extra_flags) {
-        cmd << " " << flag;
-    }
-
-    // Link against C library
-    cmd << " -lc";
-
-    return cmd.str();
-}
+// ============================================================================
+// Static Library Command (subprocess only — LLD doesn't do archiving)
+// ============================================================================
 
 auto LLDLinker::build_static_lib_command(const std::vector<fs::path>& object_files,
                                          const fs::path& output_path) -> std::string {
@@ -401,15 +590,15 @@ auto is_lld_available() -> bool {
 }
 
 auto get_lld_version() -> std::string {
+#ifdef TML_HAS_LLD_EMBEDDED
+    return "LLD (embedded, LLVM)";
+#else
     LLDLinker linker;
     if (!linker.initialize()) {
         return "unknown";
     }
-
-    // Run lld --version
-    std::string cmd = linker.get_lld_path().string() + " --version";
-    // This would require capturing output, for now return placeholder
     return "LLD (compatible with LLVM)";
+#endif
 }
 
 } // namespace tml::backend

@@ -121,6 +121,10 @@ public:
 
     /// Link object files into an output.
     ///
+    /// When TML_HAS_LLD_EMBEDDED is defined, uses in-process LLD for
+    /// executables and shared libraries (no subprocess). Falls back to
+    /// subprocess for static libraries (which need llvm-ar).
+    ///
     /// @param object_files List of object files to link
     /// @param output_path Path for the output file
     /// @param options Link options
@@ -147,18 +151,26 @@ private:
     /// Find LLD executables.
     auto find_lld() -> bool;
 
-    /// Build link command for Windows (COFF).
-    auto build_windows_command(const std::vector<fs::path>& object_files,
-                               const fs::path& output_path, const LLDLinkOptions& options)
-        -> std::string;
+    /// Build linker arguments as argv vector for Windows (COFF).
+    auto build_windows_args(const std::vector<fs::path>& object_files, const fs::path& output_path,
+                            const LLDLinkOptions& options) -> std::vector<std::string>;
 
-    /// Build link command for Unix (ELF).
-    auto build_unix_command(const std::vector<fs::path>& object_files, const fs::path& output_path,
-                            const LLDLinkOptions& options) -> std::string;
+    /// Build linker arguments as argv vector for Unix (ELF).
+    auto build_unix_args(const std::vector<fs::path>& object_files, const fs::path& output_path,
+                         const LLDLinkOptions& options) -> std::vector<std::string>;
 
     /// Build static library command using llvm-ar.
     auto build_static_lib_command(const std::vector<fs::path>& object_files,
                                   const fs::path& output_path) -> std::string;
+
+    /// Join argv into a single command string for subprocess execution.
+    static auto join_args(const std::vector<std::string>& args) -> std::string;
+
+#ifdef TML_HAS_LLD_EMBEDDED
+    /// Link using in-process LLD library API (no subprocess).
+    auto link_in_process(const std::vector<std::string>& args, const LLDLinkOptions& options)
+        -> LLDLinkResult;
+#endif
 };
 
 /// Check if LLD is available on this system.
