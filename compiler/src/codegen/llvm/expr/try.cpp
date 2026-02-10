@@ -75,15 +75,17 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
     // Emit drops for all locals before early return (RAII)
     emit_all_drops();
 
-    if (is_outcome) {
-        // Check if we need to convert between different Outcome types
-        // e.g., Outcome[CipherAlgorithm, CryptoError] -> Outcome[(Buffer, AuthTag), CryptoError]
-        bool needs_conversion = !current_ret_type_.empty() &&
-                                current_ret_type_.find("Outcome") != std::string::npos &&
-                                expr_type != current_ret_type_;
+    bool ret_is_outcome =
+        !current_ret_type_.empty() && current_ret_type_.find("Outcome") != std::string::npos;
+    bool ret_is_maybe =
+        !current_ret_type_.empty() && current_ret_type_.find("Maybe") != std::string::npos;
 
-        if (needs_conversion) {
-            // Extract the error value from the inner Outcome's data field
+    if (is_outcome && ret_is_outcome) {
+        // Propagate error from Outcome to Outcome-returning function
+        if (expr_type != current_ret_type_) {
+            // Different Outcome types - need to convert error
+            // e.g., Outcome[CipherAlgorithm, CryptoError] -> Outcome[(Buffer, AuthTag),
+            // CryptoError]
             std::string err_data_ptr = fresh_reg();
             emit_line("  " + err_data_ptr + " = getelementptr inbounds " + expr_type + ", ptr " +
                       alloca_reg + ", i32 0, i32 1");
@@ -98,9 +100,14 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
                 }
             }
 
-            // Load the error value
-            std::string err_val = fresh_reg();
-            emit_line("  " + err_val + " = load " + error_type + ", ptr " + err_data_ptr);
+            // Load the error value (skip if void)
+            std::string err_val;
+            if (error_type == "void" || error_type == "{}") {
+                err_val = "zeroinitializer";
+            } else {
+                err_val = fresh_reg();
+                emit_line("  " + err_val + " = load " + error_type + ", ptr " + err_data_ptr);
+            }
 
             // Construct a new Outcome of the function's return type with Err variant
             std::string ret_alloc = fresh_reg();
@@ -113,11 +120,13 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
                       ", ptr " + ret_alloc + ", i32 0, i32 0");
             emit_line("  store i32 1, ptr " + ret_tag_ptr);
 
-            // Store error value into the data field
-            std::string ret_data_ptr = fresh_reg();
-            emit_line("  " + ret_data_ptr + " = getelementptr inbounds " + current_ret_type_ +
-                      ", ptr " + ret_alloc + ", i32 0, i32 1");
-            emit_line("  store " + error_type + " " + err_val + ", ptr " + ret_data_ptr);
+            // Store error value into the data field (skip if void)
+            if (error_type != "void" && error_type != "{}") {
+                std::string ret_data_ptr = fresh_reg();
+                emit_line("  " + ret_data_ptr + " = getelementptr inbounds " + current_ret_type_ +
+                          ", ptr " + ret_alloc + ", i32 0, i32 1");
+                emit_line("  store " + error_type + " " + err_val + ", ptr " + ret_data_ptr);
+            }
 
             // Load the complete return value and return
             std::string ret_val = fresh_reg();
@@ -127,11 +136,33 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
             // Same Outcome type - return as-is
             emit_line("  ret " + expr_type + " " + expr_val);
         }
+    } else if (is_maybe && ret_is_maybe) {
+        // Propagate Nothing from Maybe to Maybe-returning function
+        if (expr_type != current_ret_type_) {
+            // Different Maybe types - construct Nothing of the return type
+            std::string ret_alloc = fresh_reg();
+            emit_line("  " + ret_alloc + " = alloca " + current_ret_type_);
+            emit_line("  store " + current_ret_type_ + " zeroinitializer, ptr " + ret_alloc);
+
+            std::string ret_tag_ptr = fresh_reg();
+            emit_line("  " + ret_tag_ptr + " = getelementptr inbounds " + current_ret_type_ +
+                      ", ptr " + ret_alloc + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + ret_tag_ptr);
+
+            std::string ret_val = fresh_reg();
+            emit_line("  " + ret_val + " = load " + current_ret_type_ + ", ptr " + ret_alloc);
+            emit_line("  ret " + current_ret_type_ + " " + ret_val);
+        } else {
+            // Same Maybe type - return as-is
+            emit_line("  ret " + expr_type + " " + expr_val);
+        }
     } else {
-        // For Maybe, we return Nothing
-        // Create a Nothing value (tag = 1, data = undef)
-        // For now, just return the Nothing as-is
-        emit_line("  ret " + expr_type + " " + expr_val);
+        // Function does not return Outcome/Maybe - panic on error
+        // This handles cases like using ! in a function returning I32
+        std::string panic_msg =
+            add_string_literal("try operator (!) failed: unwrap on error value");
+        emit_line("  call void @panic(ptr " + panic_msg + ")");
+        emit_line("  unreachable");
     }
 
     // Ok/Just block - extract the value and continue
@@ -188,9 +219,17 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
                 inner_type = "i1";
             else if (type_name == "Str")
                 inner_type = "ptr";
+            else if (type_name == "Unit")
+                inner_type = "void";
             else
                 inner_type = "%struct." + type_name; // User-defined type
         }
+    }
+
+    // If inner type is void/unit, don't load anything
+    if (inner_type == "void" || inner_type == "{}") {
+        last_expr_type_ = inner_type;
+        return "0";
     }
 
     std::string result = fresh_reg();

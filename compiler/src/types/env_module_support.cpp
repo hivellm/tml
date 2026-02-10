@@ -459,6 +459,10 @@ static ParseResult parse_tml_file(const std::string& file_path) {
         return result;
     }
 
+    // Store the preprocessed source (not raw) so codegen can re-lex it
+    // without needing to run the preprocessor again.
+    result.source_code = pp_result.output;
+
     auto parsed_module = std::get<parser::Module>(std::move(parse_result));
     result.decls = std::move(parsed_module.decls);
     result.success = true;
@@ -1314,6 +1318,30 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 mod.classes[class_decl.name] = std::move(class_def);
                 TML_DEBUG_LN("[MODULE] Registered class: " << class_decl.name << " in module "
                                                            << module_path);
+            } else if (decl->is<parser::TypeAliasDecl>()) {
+                const auto& alias_decl = decl->as<parser::TypeAliasDecl>();
+
+                // Only include public type aliases
+                if (alias_decl.vis != parser::Visibility::Public) {
+                    continue;
+                }
+
+                // Resolve the alias target type
+                if (alias_decl.type) {
+                    auto resolved = resolve_simple_type(*alias_decl.type);
+                    mod.type_aliases[alias_decl.name] = resolved;
+
+                    // Store generic parameter names
+                    std::vector<std::string> generic_params;
+                    for (const auto& gp : alias_decl.generics) {
+                        generic_params.push_back(gp.name);
+                    }
+                    if (!generic_params.empty()) {
+                        mod.type_alias_generics[alias_decl.name] = std::move(generic_params);
+                    }
+                    TML_DEBUG_LN("[MODULE] Registered type alias: "
+                                 << alias_decl.name << " in module " << module_path);
+                }
             } else if (decl->is<parser::ModDecl>()) {
                 const auto& mod_decl = decl->as<parser::ModDecl>();
 

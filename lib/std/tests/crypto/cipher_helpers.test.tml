@@ -1,0 +1,37 @@
+//! Additional encrypt_string/decrypt_string edge case tests
+
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::crypto::cipher::{encrypt_string, decrypt_string}
+use std::crypto::random::random_bytes
+
+@test
+func test_decrypt_string_invalid_base64() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+
+    let result = decrypt_string(ref key, "not-valid-base64!!!")
+    assert(result.is_err(), "invalid base64 should fail")
+
+    key.destroy()
+    return 0
+}
+
+@test
+func test_encrypt_decrypt_long_string() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+
+    let encrypted: Str = when encrypt_string(ref key, "this is a longer test message with more than 16 bytes") {
+        Err(e) => return 1,
+        Ok(s) => s
+    }
+
+    let decrypted: Str = when decrypt_string(ref key, encrypted) {
+        Err(e) => return 1,
+        Ok(s) => s
+    }
+
+    assert_eq(decrypted, "this is a longer test message with more than 16 bytes", "long string roundtrip")
+
+    key.destroy()
+    return 0
+}

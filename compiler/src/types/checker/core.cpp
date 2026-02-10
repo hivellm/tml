@@ -459,7 +459,11 @@ void TypeChecker::register_type_alias(const parser::TypeAliasDecl& decl) {
         return;
     }
 
-    env_.define_type_alias(decl.name, resolve_type(*decl.type));
+    std::vector<std::string> generic_params;
+    for (const auto& gp : decl.generics) {
+        generic_params.push_back(gp.name);
+    }
+    env_.define_type_alias(decl.name, resolve_type(*decl.type), std::move(generic_params));
 }
 
 void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {

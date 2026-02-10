@@ -1,0 +1,213 @@
+// Tests for lowlevel func declarations and lowlevel blocks
+// Verifies that lowlevel features work correctly.
+
+use test
+
+// ============================================================================
+// Basic lowlevel block with pointer operations
+// ============================================================================
+
+@test
+func test_lowlevel_block_ptr_read() {
+    let mut x: I32 = 42
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        result = p.read()
+    }
+
+    assert_eq(result, 42, "lowlevel block ptr read should work")
+}
+
+@test
+func test_lowlevel_block_ptr_write() {
+    let mut x: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        p.write(99)
+    }
+
+    assert_eq(x, 99, "lowlevel block ptr write should work")
+}
+
+@test
+func test_lowlevel_block_ptr_read_write_cycle() {
+    let mut val: I32 = 10
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &val
+        let old: I32 = p.read()
+        p.write(old + 5)
+        result = p.read()
+    }
+
+    assert_eq(result, 15, "read-modify-write should produce 15")
+    assert_eq(val, 15, "original variable should be updated")
+}
+
+// ============================================================================
+// Multiple lowlevel blocks in sequence
+// ============================================================================
+
+@test
+func test_multiple_lowlevel_blocks() {
+    let mut a: I32 = 1
+    let mut b: I32 = 2
+
+    lowlevel {
+        let pa: *I32 = &a
+        pa.write(10)
+    }
+
+    lowlevel {
+        let pb: *I32 = &b
+        pb.write(20)
+    }
+
+    assert_eq(a, 10, "first lowlevel block should set a=10")
+    assert_eq(b, 20, "second lowlevel block should set b=20")
+}
+
+@test
+func test_lowlevel_block_swap_values() {
+    let mut x: I32 = 100
+    let mut y: I32 = 200
+
+    lowlevel {
+        let px: *I32 = &x
+        let py: *I32 = &y
+        let tmp: I32 = px.read()
+        px.write(py.read())
+        py.write(tmp)
+    }
+
+    assert_eq(x, 200, "after swap x should be 200")
+    assert_eq(y, 100, "after swap y should be 100")
+}
+
+// ============================================================================
+// lowlevel block with different types
+// ============================================================================
+
+@test
+func test_lowlevel_block_bool_ptr() {
+    let mut flag: Bool = false
+    let mut read_val: Bool = true
+
+    lowlevel {
+        let p: *Bool = &flag
+        read_val = p.read()
+        p.write(true)
+    }
+
+    assert_eq(read_val, false, "initial read should be false")
+    assert_eq(flag, true, "flag should be set to true")
+}
+
+@test
+func test_lowlevel_block_i64_ptr() {
+    let mut big: I64 = 1000000000
+    let mut result: I64 = 0
+
+    lowlevel {
+        let p: *I64 = &big
+        result = p.read()
+    }
+
+    assert_eq(result, 1000000000, "I64 ptr read should work")
+}
+
+@test
+func test_lowlevel_block_mixed_types() {
+    let mut num: I32 = 0
+    let mut flag: Bool = false
+    let mut big: I64 = 0
+
+    lowlevel {
+        let pn: *I32 = &num
+        let pf: *Bool = &flag
+        let pb: *I64 = &big
+
+        pn.write(42)
+        pf.write(true)
+        pb.write(999999)
+    }
+
+    assert_eq(num, 42, "I32 should be 42")
+    assert_eq(flag, true, "Bool should be true")
+    assert_eq(big, 999999, "I64 should be 999999")
+}
+
+// ============================================================================
+// lowlevel block with is_null and offset
+// ============================================================================
+
+@test
+func test_lowlevel_block_is_null() {
+    let mut x: I32 = 5
+    let mut not_null: Bool = false
+
+    lowlevel {
+        let p: *I32 = &x
+        not_null = not p.is_null()
+    }
+
+    assert_eq(not_null, true, "pointer to stack var should not be null")
+}
+
+@test
+func test_lowlevel_block_offset_roundtrip() {
+    let mut x: I32 = 777
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        let p_fwd: *I32 = p.offset(1)
+        let p_back: *I32 = p_fwd.offset(-1)
+        result = p_back.read()
+    }
+
+    assert_eq(result, 777, "offset(1).offset(-1) should return original value")
+}
+
+// ============================================================================
+// Calling C runtime functions from lowlevel blocks
+// ============================================================================
+
+@test
+func test_lowlevel_block_call_runtime_alloc() {
+    let mut result: I32 = -1
+
+    lowlevel {
+        let ptr: *Unit = mem_alloc(16)
+        let ptr2: *Unit = mem_alloc(16)
+        mem_set(ptr, 42, 16)
+        mem_set(ptr2, 42, 16)
+        result = mem_compare(ptr, ptr2, 16)
+        mem_free(ptr)
+        mem_free(ptr2)
+    }
+
+    assert_eq(result, 0, "runtime functions inside lowlevel block should work")
+}
+
+@test
+func test_lowlevel_block_call_runtime_copy() {
+    let mut cmp_result: I32 = -1
+
+    lowlevel {
+        let src: *Unit = mem_alloc(8)
+        let dst: *Unit = mem_alloc(8)
+        mem_set(src, 99, 8)
+        mem_zero(dst, 8)
+        mem_copy(dst, src, 8)
+        cmp_result = mem_compare(src, dst, 8)
+        mem_free(src)
+        mem_free(dst)
+    }
+
+    assert_eq(cmp_result, 0, "mem_copy inside lowlevel block should work")
+}

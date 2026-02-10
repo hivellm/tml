@@ -8,7 +8,7 @@
 
 #include "mem_track.h"
 
-#include "log.h"
+#include "../diagnostics/log.h"
 
 #include <stdint.h>
 #include <stdio.h>

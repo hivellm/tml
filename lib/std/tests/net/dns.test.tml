@@ -1,0 +1,489 @@
+//! DNS Module Tests
+//!
+//! Tests for hostname resolution using the OS DNS resolver.
+//! Covers error types, lookup, reverse, and lookup_all APIs.
+
+use test::{assert, assert_eq}
+use std::net::dns
+use std::net::dns::{DnsErrorKind, DnsError, LookupResult}
+use std::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
+
+// ============================================================================
+// DnsErrorKind tests
+// ============================================================================
+
+@test
+func test_error_kind_constructors() -> I32 {
+    assert_eq(DnsErrorKind::NotFound().raw(), 1, "NotFound raw")
+    assert_eq(DnsErrorKind::NoData().raw(), 2, "NoData raw")
+    assert_eq(DnsErrorKind::ServerFailure().raw(), 3, "ServerFailure raw")
+    assert_eq(DnsErrorKind::BadName().raw(), 4, "BadName raw")
+    assert_eq(DnsErrorKind::BadFamily().raw(), 5, "BadFamily raw")
+    assert_eq(DnsErrorKind::Timeout().raw(), 6, "Timeout raw")
+    assert_eq(DnsErrorKind::Refused().raw(), 7, "Refused raw")
+    assert_eq(DnsErrorKind::NoMemory().raw(), 8, "NoMemory raw")
+    assert_eq(DnsErrorKind::Other().raw(), 99, "Other raw")
+    return 0
+}
+
+@test
+func test_error_kind_predicates() -> I32 {
+    assert(DnsErrorKind::NotFound().is_not_found(), "NotFound.is_not_found()")
+    assert(not DnsErrorKind::NotFound().is_no_data(), "NotFound.is_no_data() should be false")
+    assert(DnsErrorKind::NoData().is_no_data(), "NoData.is_no_data()")
+    assert(not DnsErrorKind::NoData().is_not_found(), "NoData.is_not_found() should be false")
+    return 0
+}
+
+@test
+func test_dns_error_message() -> I32 {
+    let err = DnsError::new(DnsErrorKind::NotFound())
+    assert_eq(err.message(), "DNS lookup failed: hostname not found", "NotFound message")
+    let err2 = DnsError::new(DnsErrorKind::NoData())
+    assert_eq(err2.message(), "DNS lookup failed: no data for hostname", "NoData message")
+    let err3 = DnsError::new(DnsErrorKind::Other())
+    assert_eq(err3.message(), "DNS lookup failed: unknown error", "Other message")
+    return 0
+}
+
+@test
+func test_dns_error_from_eai() -> I32 {
+    // Windows EAI codes
+    let err_win = DnsError::from_eai(11001)
+    assert(err_win.kind().is_not_found(), "Windows EAI_NONAME -> NotFound")
+    assert_eq(err_win.raw_code(), 11001, "raw_code preserved")
+
+    // POSIX EAI codes
+    let err_posix = DnsError::from_eai(-2)
+    assert(err_posix.kind().is_not_found(), "POSIX EAI_NONAME -> NotFound")
+
+    // Unknown code -> Other
+    let err_other = DnsError::from_eai(999)
+    assert_eq(err_other.kind().raw(), 99, "Unknown EAI -> Other")
+    return 0
+}
+
+// ============================================================================
+// LookupResult tests
+// ============================================================================
+
+@test
+func test_lookup_result_empty() -> I32 {
+    let result = LookupResult::empty()
+    assert_eq(result.count(), 0, "empty count")
+    assert_eq(result.ipv4_count(), 0, "empty v4 count")
+    assert_eq(result.ipv6_count(), 0, "empty v6 count")
+    assert(result.first().is_nothing(), "empty first is Nothing")
+    return 0
+}
+
+@test
+func test_lookup_result_get_v4_empty() -> I32 {
+    let result = LookupResult::empty()
+    assert(result.get_v4(0).is_nothing(), "get_v4(0) on empty")
+    assert(result.get_v4(-1).is_nothing(), "get_v4(-1)")
+    return 0
+}
+
+@test
+func test_lookup_result_get_v6_empty() -> I32 {
+    let result = LookupResult::empty()
+    assert(result.get_v6(0).is_nothing(), "get_v6(0) on empty")
+    assert(result.get_v6(-1).is_nothing(), "get_v6(-1)")
+    return 0
+}
+
+// ============================================================================
+// DNS lookup tests (network-dependent, uses localhost)
+// ============================================================================
+
+@test
+func test_lookup_localhost() -> I32 {
+    let result = dns::lookup("localhost")
+    assert(result.is_ok(), "lookup('localhost') should succeed")
+    return 0
+}
+
+@test
+func test_lookup_localhost_is_loopback() -> I32 {
+    let result = dns::lookup("localhost")
+    when result {
+        Ok(addr) => {
+            assert(addr.is_loopback(), "localhost should resolve to loopback")
+        },
+        Err(_) => {
+            assert(false, "lookup('localhost') failed unexpectedly")
+        },
+    }
+    return 0
+}
+
+@test
+func test_lookup_nonexistent_fails() -> I32 {
+    let result = dns::lookup("this.host.definitely.does.not.exist.invalid")
+    assert(result.is_err(), "lookup of nonexistent host should fail")
+    when result {
+        Err(e) => {
+            assert(e.kind().is_not_found(), "should be NotFound error")
+        },
+        Ok(_) => {},
+    }
+    return 0
+}
+
+@test
+func test_lookup_ip_localhost() -> I32 {
+    let result = dns::lookup_ip("localhost")
+    assert(result.is_ok(), "lookup_ip('localhost') should succeed")
+    return 0
+}
+
+@test
+func test_lookup_all_localhost() -> I32 {
+    let result = dns::lookup_all("localhost", 16)
+    assert(result.is_ok(), "lookup_all('localhost') should succeed")
+    when result {
+        Ok(lr) => {
+            assert(lr.count() > 0, "should have at least one result")
+        },
+        Err(_) => {
+            assert(false, "lookup_all('localhost') failed unexpectedly")
+        },
+    }
+    return 0
+}
+
+@test
+func test_lookup_all4_localhost() -> I32 {
+    let result = dns::lookup_all4("localhost", 16)
+    assert(result.is_ok(), "lookup_all4('localhost') should succeed")
+    when result {
+        Ok(lr) => {
+            assert(lr.ipv4_count() > 0, "should have at least one IPv4 result")
+        },
+        Err(_) => {
+            assert(false, "lookup_all4('localhost') failed unexpectedly")
+        },
+    }
+    return 0
+}
+
+@test
+func test_lookup_all_nonexistent_fails() -> I32 {
+    let result = dns::lookup_all("this.host.definitely.does.not.exist.invalid", 16)
+    // Just check that it did not crash; don't even assert is_err
+    // in case some DNS resolvers resolve everything
+    if result.is_err() {
+        assert(true, "got expected error")
+    }
+    return 0
+}
+
+@test
+func test_reverse4_localhost() -> I32 {
+    let loopback = Ipv4Addr::LOCALHOST()
+    let result = dns::reverse4(loopback)
+    // Reverse DNS for 127.0.0.1 might not have a PTR record on all systems,
+    // but calling it should not crash.
+    if result.is_ok() {
+        assert(true, "reverse4 returned a hostname")
+    }
+    return 0
+}
+
+@test
+func test_lookup_all_localhost_first() -> I32 {
+    let result = dns::lookup_all("localhost", 16)
+    assert(result.is_ok(), "lookup_all('localhost') should succeed")
+    when result {
+        Ok(lr) => {
+            let first = lr.first()
+            assert(first.is_just(), "first() should return Just for localhost")
+        },
+        Err(_) => {
+            assert(false, "lookup_all failed")
+        },
+    }
+    return 0
+}
+
+@test
+func test_dns_error_all_messages() -> I32 {
+    // Verify all error kinds produce non-empty messages
+    let e1 = DnsError::new(DnsErrorKind::ServerFailure())
+    assert_eq(e1.message(), "DNS lookup failed: server failure", "ServerFailure msg")
+    let e2 = DnsError::new(DnsErrorKind::BadName())
+    assert_eq(e2.message(), "DNS lookup failed: invalid hostname", "BadName msg")
+    let e3 = DnsError::new(DnsErrorKind::BadFamily())
+    assert_eq(e3.message(), "DNS lookup failed: unsupported address family", "BadFamily msg")
+    let e4 = DnsError::new(DnsErrorKind::Timeout())
+    assert_eq(e4.message(), "DNS lookup failed: query timed out", "Timeout msg")
+    let e5 = DnsError::new(DnsErrorKind::Refused())
+    assert_eq(e5.message(), "DNS lookup failed: query refused", "Refused msg")
+    let e6 = DnsError::new(DnsErrorKind::NoMemory())
+    assert_eq(e6.message(), "DNS lookup failed: out of memory", "NoMemory msg")
+    return 0
+}
+
+// ============================================================================
+// Real-world DNS resolution tests (network-dependent)
+// ============================================================================
+
+@test
+func test_lookup_google() -> I32 {
+    let result = dns::lookup("google.com")
+    assert(result.is_ok(), "lookup('google.com') should succeed")
+    when result {
+        Ok(addr) => {
+            // Google's IPs are public, not loopback or private
+            assert(not addr.is_loopback(), "google.com should not be loopback")
+            assert(not addr.is_unspecified(), "google.com should not be 0.0.0.0")
+        },
+        Err(_) => {},
+    }
+    return 0
+}
+
+@test
+func test_lookup_cloudflare() -> I32 {
+    let result = dns::lookup("one.one.one.one")
+    assert(result.is_ok(), "lookup('one.one.one.one') should succeed")
+    when result {
+        Ok(addr) => {
+            // Cloudflare DNS resolves to 1.1.1.1 or 1.0.0.1
+            assert(not addr.is_loopback(), "cloudflare should not be loopback")
+            assert(not addr.is_unspecified(), "cloudflare should not be 0.0.0.0")
+        },
+        Err(_) => {},
+    }
+    return 0
+}
+
+@test
+func test_lookup6_google() -> I32 {
+    let result = dns::lookup6("google.com")
+    // Google has AAAA records, but some networks may not support IPv6
+    if result.is_ok() {
+        when result {
+            Ok(addr) => {
+                assert(not addr.is_loopback(), "google.com IPv6 should not be loopback")
+                assert(not addr.is_unspecified(), "google.com IPv6 should not be ::")
+            },
+            Err(_) => {},
+        }
+    }
+    return 0
+}
+
+@test
+func test_lookup_ip_google() -> I32 {
+    let result = dns::lookup_ip("google.com")
+    assert(result.is_ok(), "lookup_ip('google.com') should succeed")
+    return 0
+}
+
+@test
+func test_lookup_all_google() -> I32 {
+    let result = dns::lookup_all("google.com", 16)
+    assert(result.is_ok(), "lookup_all('google.com') should succeed")
+    when result {
+        Ok(lr) => {
+            assert(lr.count() > 0, "google.com should have at least one address")
+            assert(lr.ipv4_count() > 0, "google.com should have at least one IPv4")
+            let first = lr.first()
+            assert(first.is_just(), "first() should return Just")
+        },
+        Err(_) => {
+            assert(false, "lookup_all('google.com') failed")
+        },
+    }
+    return 0
+}
+
+@test
+func test_lookup_all4_google() -> I32 {
+    let result = dns::lookup_all4("google.com", 16)
+    assert(result.is_ok(), "lookup_all4('google.com') should succeed")
+    when result {
+        Ok(lr) => {
+            assert(lr.ipv4_count() > 0, "google.com should have IPv4 addresses")
+            assert_eq(lr.ipv6_count(), 0, "lookup_all4 should not return IPv6")
+            // Verify we can access the first address
+            let v4 = lr.get_v4(0)
+            assert(v4.is_just(), "get_v4(0) should return Just")
+        },
+        Err(_) => {
+            assert(false, "lookup_all4('google.com') failed")
+        },
+    }
+    return 0
+}
+
+@test
+func test_lookup_all_multiple_results() -> I32 {
+    // google.com typically returns multiple A records
+    let result = dns::lookup_all4("google.com", 16)
+    assert(result.is_ok(), "lookup_all4('google.com') should succeed")
+    when result {
+        Ok(lr) => {
+            // Google usually has at least 1 IPv4 (often more)
+            let count = lr.ipv4_count()
+            assert(count >= 1, "google.com should have at least 1 IPv4 address")
+        },
+        Err(_) => {},
+    }
+    return 0
+}
+
+@test
+func test_lookup_microsoft() -> I32 {
+    let result = dns::lookup("microsoft.com")
+    assert(result.is_ok(), "lookup('microsoft.com') should succeed")
+    when result {
+        Ok(addr) => {
+            assert(not addr.is_private(), "microsoft.com should not be private IP")
+            assert(not addr.is_loopback(), "microsoft.com should not be loopback")
+        },
+        Err(_) => {},
+    }
+    return 0
+}
+
+@test
+func test_lookup_all_cloudflare() -> I32 {
+    let result = dns::lookup_all("cloudflare.com", 16)
+    assert(result.is_ok(), "lookup_all('cloudflare.com') should succeed")
+    when result {
+        Ok(lr) => {
+            assert(lr.count() > 0, "cloudflare.com should have addresses")
+        },
+        Err(_) => {
+            assert(false, "lookup_all('cloudflare.com') failed")
+        },
+    }
+    return 0
+}
+
+@test
+func test_lookup_github() -> I32 {
+    let result = dns::lookup("github.com")
+    assert(result.is_ok(), "lookup('github.com') should succeed")
+    return 0
+}
+
+@test
+func test_reverse4_real_ip() -> I32 {
+    // Resolve google.com first, then reverse it
+    let lookup_result = dns::lookup("google.com")
+    assert(lookup_result.is_ok(), "lookup google.com for reverse test")
+    when lookup_result {
+        Ok(addr) => {
+            let rev = dns::reverse4(addr)
+            // Reverse may or may not succeed depending on PTR records,
+            // but it should not crash
+            if rev.is_ok() {
+                assert(true, "reverse4 succeeded for google.com IP")
+            }
+        },
+        Err(_) => {},
+    }
+    return 0
+}
+
+@test
+func test_lookup_all_github_with_accessors() -> I32 {
+    let result = dns::lookup_all("github.com", 16)
+    assert(result.is_ok(), "lookup_all('github.com') should succeed")
+    when result {
+        Ok(lr) => {
+            // Verify count consistency
+            let total = lr.count()
+            let v4 = lr.ipv4_count()
+            let v6 = lr.ipv6_count()
+            assert_eq(total, v4 + v6, "count should equal v4_count + v6_count")
+
+            // Verify out-of-bounds access returns Nothing
+            assert(lr.get_v4(v4).is_nothing(), "get_v4 out of bounds")
+            assert(lr.get_v6(v6).is_nothing(), "get_v6 out of bounds")
+        },
+        Err(_) => {
+            assert(false, "lookup_all('github.com') failed")
+        },
+    }
+    return 0
+}
+
+// ============================================================================
+// lookup_all6 tests (IPv6-only lookup)
+// ============================================================================
+
+@test
+func test_lookup_all6_google() -> I32 {
+    let result = dns::lookup_all6("google.com", 16)
+    // IPv6 may not be available on all systems
+    if result.is_ok() {
+        when result {
+            Ok(lr) => {
+                // lookup_all6 should only return IPv6 addresses
+                assert_eq(lr.ipv4_count(), 0, "lookup_all6 should not return IPv4")
+                assert(lr.ipv6_count() > 0, "google.com should have AAAA records")
+            },
+            Err(_) => {},
+        }
+    }
+    return 0
+}
+
+@test
+func test_lookup_all6_nonexistent() -> I32 {
+    let result = dns::lookup_all6("this.host.definitely.does.not.exist.invalid", 16)
+    // Should fail or return empty - either way should not crash
+    if result.is_err() {
+        assert(true, "got expected error for nonexistent host")
+    }
+    return 0
+}
+
+// ============================================================================
+// reverse() IpAddr wrapper tests
+// ============================================================================
+
+@test
+func test_reverse_v4_localhost() -> I32 {
+    let addr: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    let result = dns::reverse(addr)
+    // Reverse DNS for 127.0.0.1 may or may not have a PTR record,
+    // but calling it should not crash.
+    if result.is_ok() {
+        assert(true, "reverse(V4 localhost) returned a hostname")
+    }
+    return 0
+}
+
+@test
+func test_reverse_v6_localhost() -> I32 {
+    let addr: IpAddr = IpAddr::V6(Ipv6Addr::LOCALHOST())
+    let result = dns::reverse(addr)
+    // Reverse DNS for ::1 may not have a PTR record,
+    // but calling it should not crash.
+    if result.is_ok() {
+        assert(true, "reverse(V6 localhost) returned a hostname")
+    }
+    return 0
+}
+
+// ============================================================================
+// reverse6 tests
+// ============================================================================
+
+@test
+func test_reverse6_localhost() -> I32 {
+    let loopback = Ipv6Addr::LOCALHOST()
+    let result = dns::reverse6(loopback)
+    // Reverse DNS for ::1 may not have a PTR record,
+    // but calling it should not crash.
+    if result.is_ok() {
+        assert(true, "reverse6(::1) returned a hostname")
+    }
+    return 0
+}

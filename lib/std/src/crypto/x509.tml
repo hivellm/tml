@@ -12,53 +12,184 @@
 //! - Validate hostname/IP/email
 //! - Certificate chain verification
 //! - Access certificate fields (subject, issuer, extensions)
-//!
-//! # Examples
-//!
-//! ## Parse and Inspect Certificate
-//!
-//! ```tml
-//! use std::crypto::{X509Certificate}
-//!
-//! let cert = X509Certificate::from_pem(pem_string)?
-//!
-//! print("Subject: {cert.subject()}\n")
-//! print("Issuer: {cert.issuer()}\n")
-//! print("Valid from: {cert.valid_from()}\n")
-//! print("Valid to: {cert.valid_to()}\n")
-//! print("Serial: {cert.serial_number()}\n")
-//! ```
-//!
-//! ## Verify Certificate
-//!
-//! ```tml
-//! use std::crypto::{X509Certificate}
-//!
-//! let cert = X509Certificate::from_pem(cert_pem)?
-//! let ca_cert = X509Certificate::from_pem(ca_pem)?
-//!
-//! // Verify signature
-//! let valid = cert.verify(ca_cert.public_key())?
-//!
-//! // Check hostname
-//! let matches = cert.check_host("example.com")?
-//! ```
-//!
-//! ## Certificate Chain
-//!
-//! ```tml
-//! use std::crypto::{X509Chain}
-//!
-//! let chain = X509Chain::new()
-//! chain.add_cert(root_ca)
-//! chain.add_cert(intermediate_ca)
-//!
-//! let valid = chain.verify(end_entity_cert)?
-//! ```
 
 use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
 use std::crypto::key::{PublicKey, KeyType}
 use std::collections::{Buffer, List}
+
+// ============================================================================
+// FFI declarations for crypto_x509.c functions
+// ============================================================================
+
+// Certificate parsing
+@extern("crypto_x509_from_pem")
+func ffi_x509_from_pem(pem: Str) -> *Unit
+
+@extern("crypto_x509_from_der")
+func ffi_x509_from_der(buf_handle: *Unit) -> *Unit
+
+// Subject field extraction
+@extern("crypto_x509_get_subject")
+func ffi_x509_get_subject(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_subject_cn")
+func ffi_x509_get_subject_cn(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_subject_o")
+func ffi_x509_get_subject_o(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_subject_ou")
+func ffi_x509_get_subject_ou(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_subject_c")
+func ffi_x509_get_subject_c(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_subject_st")
+func ffi_x509_get_subject_st(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_subject_l")
+func ffi_x509_get_subject_l(handle: *Unit) -> Str
+
+// Issuer field extraction
+@extern("crypto_x509_get_issuer")
+func ffi_x509_get_issuer(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_issuer_cn")
+func ffi_x509_get_issuer_cn(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_issuer_o")
+func ffi_x509_get_issuer_o(handle: *Unit) -> Str
+
+// Serial, dates
+@extern("crypto_x509_get_serial")
+func ffi_x509_get_serial(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_not_before")
+func ffi_x509_get_not_before(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_not_after")
+func ffi_x509_get_not_after(handle: *Unit) -> Str
+
+@extern("crypto_x509_get_not_before_ts")
+func ffi_x509_get_not_before_ts(handle: *Unit) -> I64
+
+@extern("crypto_x509_get_not_after_ts")
+func ffi_x509_get_not_after_ts(handle: *Unit) -> I64
+
+// Fingerprints
+@extern("crypto_x509_fingerprint_sha1")
+func ffi_x509_fingerprint_sha1(handle: *Unit) -> Str
+
+@extern("crypto_x509_fingerprint_sha256")
+func ffi_x509_fingerprint_sha256(handle: *Unit) -> Str
+
+@extern("crypto_x509_fingerprint_sha512")
+func ffi_x509_fingerprint_sha512(handle: *Unit) -> Str
+
+// Public key, signature, CA, key usage
+@extern("crypto_x509_get_public_key")
+func ffi_x509_get_public_key(handle: *Unit) -> *Unit
+
+@extern("crypto_x509_get_sig_alg")
+func ffi_x509_get_sig_alg(handle: *Unit) -> Str
+
+@extern("crypto_x509_is_ca")
+func ffi_x509_is_ca(handle: *Unit) -> Bool
+
+@extern("crypto_x509_get_key_usage")
+func ffi_x509_get_key_usage(handle: *Unit) -> I64
+
+@extern("crypto_x509_get_san")
+func ffi_x509_get_san(handle: *Unit) -> *Unit
+
+// Verification
+@extern("crypto_x509_verify")
+func ffi_x509_verify(cert_handle: *Unit, key_handle: *Unit) -> Bool
+
+@extern("crypto_x509_check_issued")
+func ffi_x509_check_issued(cert_handle: *Unit, issuer_handle: *Unit) -> Bool
+
+@extern("crypto_x509_check_host")
+func ffi_x509_check_host(handle: *Unit, hostname: Str) -> Bool
+
+@extern("crypto_x509_check_email")
+func ffi_x509_check_email(handle: *Unit, email: Str) -> Bool
+
+@extern("crypto_x509_check_ip")
+func ffi_x509_check_ip(handle: *Unit, ip: Str) -> Bool
+
+@extern("crypto_x509_check_private_key")
+func ffi_x509_check_private_key(cert_handle: *Unit, key_handle: *Unit) -> Bool
+
+@extern("crypto_x509_is_valid_now")
+func ffi_x509_is_valid_now(handle: *Unit) -> Bool
+
+// Export
+@extern("crypto_x509_to_pem")
+func ffi_x509_to_pem(handle: *Unit) -> Str
+
+@extern("crypto_x509_to_der")
+func ffi_x509_to_der(handle: *Unit) -> *Unit
+
+@extern("crypto_x509_to_text")
+func ffi_x509_to_text(handle: *Unit) -> Str
+
+// Destroy
+@extern("crypto_x509_destroy")
+func ffi_x509_destroy(handle: *Unit)
+
+// Store operations
+@extern("crypto_x509_store_create")
+func ffi_x509_store_create() -> *Unit
+
+@extern("crypto_x509_store_system")
+func ffi_x509_store_system() -> *Unit
+
+@extern("crypto_x509_store_add_cert")
+func ffi_x509_store_add_cert(store: *Unit, cert: *Unit) -> Bool
+
+@extern("crypto_x509_store_add_pem_file")
+func ffi_x509_store_add_pem_file(store: *Unit, path: Str) -> I64
+
+@extern("crypto_x509_store_verify")
+func ffi_x509_store_verify(store: *Unit, cert: *Unit) -> Bool
+
+@extern("crypto_x509_store_verify_chain")
+func ffi_x509_store_verify_chain(store: *Unit, cert: *Unit, chain: *Unit) -> Bool
+
+@extern("crypto_x509_store_destroy")
+func ffi_x509_store_destroy(store: *Unit)
+
+// PEM bundle helpers
+@extern("crypto_x509_count_pem_certs")
+func ffi_x509_count_pem_certs(pem: Str) -> I64
+
+@extern("crypto_x509_extract_pem_cert")
+func ffi_x509_extract_pem_cert(pem: Str, index: I64) -> Str
+
+// List operations (from collections.c)
+@extern("list_new")
+func ffi_list_new(capacity: I64) -> *Unit
+
+@extern("list_push")
+func ffi_list_push(handle: *Unit, value: I64)
+
+@extern("list_get")
+func ffi_list_get(handle: *Unit, index: I64) -> I64
+
+@extern("list_len")
+func ffi_list_len(handle: *Unit) -> I64
+
+@extern("list_destroy")
+func ffi_list_destroy(handle: *Unit)
+
+// Key type helper (from crypto_key.c or crypto.c)
+@extern("crypto_key_get_type")
+func ffi_key_get_type(handle: *Unit) -> Str
+
+// ============================================================================
+// Types
+// ============================================================================
 
 /// X.509 Distinguished Name (subject or issuer).
 pub type X509Name {
@@ -153,6 +284,10 @@ pub type X509Extension {
     pub value: Buffer
 }
 
+// ============================================================================
+// X509Certificate
+// ============================================================================
+
 /// X.509 certificate.
 pub type X509Certificate {
     handle: *Unit
@@ -161,7 +296,7 @@ pub type X509Certificate {
 impl X509Certificate {
     /// Parses a certificate from PEM format.
     pub func from_pem(pem: Str) -> CryptoResult[X509Certificate] {
-        let handle: *Unit = lowlevel { crypto_x509_from_pem(pem) }
+        let handle: *Unit = ffi_x509_from_pem(pem)
         if handle == null {
             return Err(CryptoError::new(CryptoErrorKind::CertificateParseError))
         }
@@ -170,7 +305,7 @@ impl X509Certificate {
 
     /// Parses a certificate from DER format.
     pub func from_der(der: ref Buffer) -> CryptoResult[X509Certificate] {
-        let handle: *Unit = lowlevel { crypto_x509_from_der(der.handle) }
+        let handle: *Unit = ffi_x509_from_der(der.handle)
         if handle == null {
             return Err(CryptoError::new(CryptoErrorKind::CertificateParseError))
         }
@@ -179,21 +314,28 @@ impl X509Certificate {
 
     /// Returns the certificate subject.
     pub func subject(this) -> X509Name {
-        let dn: Str = lowlevel { crypto_x509_get_subject(this.handle) }
-        let cn: Str = lowlevel { crypto_x509_get_subject_cn(this.handle) }
-        let org: Str = lowlevel { crypto_x509_get_subject_o(this.handle) }
-        let ou: Str = lowlevel { crypto_x509_get_subject_ou(this.handle) }
-        let country: Str = lowlevel { crypto_x509_get_subject_c(this.handle) }
-        let state: Str = lowlevel { crypto_x509_get_subject_st(this.handle) }
-        let locality: Str = lowlevel { crypto_x509_get_subject_l(this.handle) }
+        let dn: Str = ffi_x509_get_subject(this.handle)
+        let cn: Str = ffi_x509_get_subject_cn(this.handle)
+        let org: Str = ffi_x509_get_subject_o(this.handle)
+        let ou: Str = ffi_x509_get_subject_ou(this.handle)
+        let country: Str = ffi_x509_get_subject_c(this.handle)
+        let state: Str = ffi_x509_get_subject_st(this.handle)
+        let locality: Str = ffi_x509_get_subject_l(this.handle)
+
+        let maybe_cn: Maybe[Str] = cn != "" ? Just(cn) : Nothing
+        let maybe_org: Maybe[Str] = org != "" ? Just(org) : Nothing
+        let maybe_ou: Maybe[Str] = ou != "" ? Just(ou) : Nothing
+        let maybe_country: Maybe[Str] = country != "" ? Just(country) : Nothing
+        let maybe_state: Maybe[Str] = state != "" ? Just(state) : Nothing
+        let maybe_locality: Maybe[Str] = locality != "" ? Just(locality) : Nothing
 
         return X509Name {
-            common_name: if cn != "" { Just(cn) } else { Nothing },
-            organization: if org != "" { Just(org) } else { Nothing },
-            organizational_unit: if ou != "" { Just(ou) } else { Nothing },
-            country: if country != "" { Just(country) } else { Nothing },
-            state: if state != "" { Just(state) } else { Nothing },
-            locality: if locality != "" { Just(locality) } else { Nothing },
+            common_name: maybe_cn,
+            organization: maybe_org,
+            organizational_unit: maybe_ou,
+            country: maybe_country,
+            state: maybe_state,
+            locality: maybe_locality,
             email: Nothing,
             serial_number: Nothing,
             dn: dn,
@@ -202,13 +344,16 @@ impl X509Certificate {
 
     /// Returns the certificate issuer.
     pub func issuer(this) -> X509Name {
-        let dn: Str = lowlevel { crypto_x509_get_issuer(this.handle) }
-        let cn: Str = lowlevel { crypto_x509_get_issuer_cn(this.handle) }
-        let org: Str = lowlevel { crypto_x509_get_issuer_o(this.handle) }
+        let dn: Str = ffi_x509_get_issuer(this.handle)
+        let cn: Str = ffi_x509_get_issuer_cn(this.handle)
+        let org: Str = ffi_x509_get_issuer_o(this.handle)
+
+        let maybe_cn: Maybe[Str] = cn != "" ? Just(cn) : Nothing
+        let maybe_org: Maybe[Str] = org != "" ? Just(org) : Nothing
 
         return X509Name {
-            common_name: if cn != "" { Just(cn) } else { Nothing },
-            organization: if org != "" { Just(org) } else { Nothing },
+            common_name: maybe_cn,
+            organization: maybe_org,
             organizational_unit: Nothing,
             country: Nothing,
             state: Nothing,
@@ -221,75 +366,65 @@ impl X509Certificate {
 
     /// Returns the serial number as a hex string.
     pub func serial_number(this) -> Str {
-        let serial: Str = lowlevel { crypto_x509_get_serial(this.handle) }
-        return serial
+        return ffi_x509_get_serial(this.handle)
     }
 
     /// Returns the "not before" date as ISO 8601 string.
     pub func valid_from(this) -> Str {
-        let date: Str = lowlevel { crypto_x509_get_not_before(this.handle) }
-        return date
+        return ffi_x509_get_not_before(this.handle)
     }
 
     /// Returns the "not after" date as ISO 8601 string.
     pub func valid_to(this) -> Str {
-        let date: Str = lowlevel { crypto_x509_get_not_after(this.handle) }
-        return date
+        return ffi_x509_get_not_after(this.handle)
     }
 
     /// Returns the "not before" date as Unix timestamp.
     pub func valid_from_date(this) -> I64 {
-        let ts: I64 = lowlevel { crypto_x509_get_not_before_ts(this.handle) }
-        return ts
+        return ffi_x509_get_not_before_ts(this.handle)
     }
 
     /// Returns the "not after" date as Unix timestamp.
     pub func valid_to_date(this) -> I64 {
-        let ts: I64 = lowlevel { crypto_x509_get_not_after_ts(this.handle) }
-        return ts
+        return ffi_x509_get_not_after_ts(this.handle)
     }
 
     /// Returns the SHA-1 fingerprint as hex string.
     pub func fingerprint(this) -> Str {
-        let fp: Str = lowlevel { crypto_x509_fingerprint_sha1(this.handle) }
-        return fp
+        return ffi_x509_fingerprint_sha1(this.handle)
     }
 
     /// Returns the SHA-256 fingerprint as hex string.
     pub func fingerprint256(this) -> Str {
-        let fp: Str = lowlevel { crypto_x509_fingerprint_sha256(this.handle) }
-        return fp
+        return ffi_x509_fingerprint_sha256(this.handle)
     }
 
     /// Returns the SHA-512 fingerprint as hex string.
     pub func fingerprint512(this) -> Str {
-        let fp: Str = lowlevel { crypto_x509_fingerprint_sha512(this.handle) }
-        return fp
+        return ffi_x509_fingerprint_sha512(this.handle)
     }
 
     /// Returns the public key from the certificate.
     pub func public_key(this) -> PublicKey {
-        let pk_handle: *Unit = lowlevel { crypto_x509_get_public_key(this.handle) }
-        let key_type_str: Str = lowlevel { crypto_key_get_type(pk_handle) }
+        let pk_handle: *Unit = ffi_x509_get_public_key(this.handle)
+        let key_type_str: Str = ffi_key_get_type(pk_handle)
         let key_type = KeyType::from_name(key_type_str).unwrap_or(KeyType::Rsa)
         return PublicKey { handle: pk_handle, key_type: key_type }
     }
 
     /// Returns the signature algorithm.
     pub func signature_algorithm(this) -> Str {
-        let alg: Str = lowlevel { crypto_x509_get_sig_alg(this.handle) }
-        return alg
+        return ffi_x509_get_sig_alg(this.handle)
     }
 
     /// Returns true if this is a CA certificate.
     pub func is_ca(this) -> Bool {
-        let ca: Bool = lowlevel { crypto_x509_is_ca(this.handle) }
-        return ca
+        return ffi_x509_is_ca(this.handle)
     }
 
     /// Returns the key usage flags.
     pub func key_usage(this) -> KeyUsage {
-        let flags: I64 = lowlevel { crypto_x509_get_key_usage(this.handle) }
+        let flags: I64 = ffi_x509_get_key_usage(this.handle)
         return KeyUsage {
             digital_signature: (flags & 0x80) != 0,
             non_repudiation: (flags & 0x40) != 0,
@@ -299,119 +434,116 @@ impl X509Certificate {
             key_cert_sign: (flags & 0x04) != 0,
             crl_sign: (flags & 0x02) != 0,
             encipher_only: (flags & 0x01) != 0,
-            decipher_only: false,  // bit 8
+            decipher_only: false,
         }
     }
 
     /// Returns the Subject Alternative Names (SANs).
     pub func subject_alt_names(this) -> List[Str] {
-        let handle: *Unit = lowlevel { crypto_x509_get_san(this.handle) }
+        let handle: *Unit = ffi_x509_get_san(this.handle)
         return List[Str] { handle: handle }
     }
 
     /// Verifies the certificate signature using a public key.
     pub func verify(this, key: ref PublicKey) -> CryptoResult[Bool] {
-        let result: Bool = lowlevel { crypto_x509_verify(this.handle, key.handle) }
+        let result: Bool = ffi_x509_verify(this.handle, key.handle)
         return Ok(result)
     }
 
     /// Checks if the certificate was issued by another certificate.
     pub func check_issued(this, issuer_cert: ref X509Certificate) -> Bool {
-        let result: Bool = lowlevel { crypto_x509_check_issued(this.handle, issuer_cert.handle) }
-        return result
+        return ffi_x509_check_issued(this.handle, issuer_cert.handle)
     }
 
     /// Checks if the certificate is valid for a hostname.
     pub func check_host(this, hostname: Str) -> Bool {
-        let result: Bool = lowlevel { crypto_x509_check_host(this.handle, hostname) }
-        return result
+        return ffi_x509_check_host(this.handle, hostname)
     }
 
     /// Checks if the certificate is valid for an email address.
     pub func check_email(this, email: Str) -> Bool {
-        let result: Bool = lowlevel { crypto_x509_check_email(this.handle, email) }
-        return result
+        return ffi_x509_check_email(this.handle, email)
     }
 
     /// Checks if the certificate is valid for an IP address.
     pub func check_ip(this, ip: Str) -> Bool {
-        let result: Bool = lowlevel { crypto_x509_check_ip(this.handle, ip) }
-        return result
+        return ffi_x509_check_ip(this.handle, ip)
     }
 
     /// Checks if the private key matches this certificate.
     pub func check_private_key(this, key: ref std::crypto::key::PrivateKey) -> Bool {
-        let result: Bool = lowlevel { crypto_x509_check_private_key(this.handle, key.handle) }
-        return result
+        return ffi_x509_check_private_key(this.handle, key.handle)
     }
 
     /// Returns true if the certificate is currently valid (time-wise).
     pub func is_valid_now(this) -> Bool {
-        let result: Bool = lowlevel { crypto_x509_is_valid_now(this.handle) }
-        return result
+        return ffi_x509_is_valid_now(this.handle)
     }
 
     /// Exports the certificate to PEM format.
     pub func to_pem(this) -> Str {
-        let pem: Str = lowlevel { crypto_x509_to_pem(this.handle) }
-        return pem
+        return ffi_x509_to_pem(this.handle)
     }
 
     /// Exports the certificate to DER format.
     pub func to_der(this) -> Buffer {
-        let handle: *Unit = lowlevel { crypto_x509_to_der(this.handle) }
+        let handle: *Unit = ffi_x509_to_der(this.handle)
         return Buffer { handle: handle }
     }
 
     /// Returns raw text representation of the certificate.
     pub func to_text(this) -> Str {
-        let text: Str = lowlevel { crypto_x509_to_text(this.handle) }
-        return text
+        return ffi_x509_to_text(this.handle)
     }
 
     /// Frees the certificate resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { crypto_x509_destroy(this.handle) }
+            ffi_x509_destroy(this.handle)
             this.handle = null
         }
     }
 }
 
+// ============================================================================
+// X509Chain
+// ============================================================================
+
 /// Certificate chain for verification.
+///
+/// Internally stores certificate handles in a raw list to avoid
+/// generic List[T] indexing limitations.
 pub type X509Chain {
-    certificates: List[X509Certificate]
+    list_handle: *Unit
 }
 
 impl X509Chain {
     /// Creates a new empty certificate chain.
     pub func new() -> X509Chain {
+        let h: *Unit = ffi_list_new(4)
         return X509Chain {
-            certificates: List[X509Certificate]::new(4),
+            list_handle: h,
         }
     }
 
     /// Adds a certificate to the chain.
     pub func add_cert(mut this, cert: X509Certificate) {
-        this.certificates.push(cert)
+        ffi_list_push(this.list_handle, cert.handle as I64)
     }
 
     /// Adds certificates from a PEM bundle (multiple certs in one string).
     pub func add_pem_bundle(mut this, pem: Str) -> CryptoResult[I64] {
-        let count: I64 = lowlevel { crypto_x509_count_pem_certs(pem) }
+        let count: I64 = ffi_x509_count_pem_certs(pem)
         let mut added: I64 = 0
         let mut offset: I64 = 0
 
-        loop {
-            if added >= count {
-                break
-            }
-            let cert_pem: Str = lowlevel { crypto_x509_extract_pem_cert(pem, offset) }
+        loop (added < count) {
+            let cert_pem: Str = ffi_x509_extract_pem_cert(pem, offset)
             if cert_pem == "" {
                 break
             }
-            let cert = X509Certificate::from_pem(cert_pem)?
-            this.certificates.push(cert)
+            let cert = X509Certificate::from_pem(cert_pem)!
+            ffi_list_push(this.list_handle, cert.handle as I64)
             added = added + 1
             offset = offset + 1
         }
@@ -421,31 +553,20 @@ impl X509Chain {
 
     /// Returns the number of certificates in the chain.
     pub func len(this) -> I64 {
-        return this.certificates.len()
-    }
-
-    /// Gets a certificate by index.
-    pub func get(this, index: I64) -> Maybe[ref X509Certificate] {
-        if index < 0 or index >= this.certificates.len() {
-            return Nothing
-        }
-        return Just(ref this.certificates[index])
+        return ffi_list_len(this.list_handle)
     }
 
     /// Verifies a certificate against this chain.
-    ///
-    /// Returns true if the certificate can be verified using any
-    /// certificate in the chain.
     pub func verify(this, cert: ref X509Certificate) -> CryptoResult[Bool] {
+        let chain_len: I64 = this.len()
         let mut i: I64 = 0
-        loop {
-            if i >= this.certificates.len() {
-                break
-            }
-            let ca = ref this.certificates[i]
-            if cert.check_issued(ca) {
-                let valid = cert.verify(ca.public_key())?
-                if valid {
+        loop (i < chain_len) {
+            let ca_handle: *Unit = ffi_list_get(this.list_handle, i) as *Unit
+            let issued: Bool = ffi_x509_check_issued(cert.handle, ca_handle)
+            if issued {
+                let pk_handle: *Unit = ffi_x509_get_public_key(ca_handle)
+                let result: Bool = ffi_x509_verify(cert.handle, pk_handle)
+                if result {
                     return Ok(true)
                 }
             }
@@ -455,27 +576,20 @@ impl X509Chain {
     }
 
     /// Builds and verifies a complete certificate chain.
-    ///
-    /// Attempts to build a chain from the given certificate to a trusted root.
     pub func verify_chain(this, cert: ref X509Certificate) -> CryptoResult[Bool] {
-        // Check if certificate is directly trusted
+        let chain_len: I64 = this.len()
         let mut i: I64 = 0
-        loop {
-            if i >= this.certificates.len() {
-                break
-            }
-            let ca = ref this.certificates[i]
-            // Check if cert was issued by this CA
-            if cert.check_issued(ca) {
-                // Verify signature
-                let valid = cert.verify(ca.public_key())?
+        loop (i < chain_len) {
+            let ca_handle: *Unit = ffi_list_get(this.list_handle, i) as *Unit
+            let issued: Bool = ffi_x509_check_issued(cert.handle, ca_handle)
+            if issued {
+                let pk_handle: *Unit = ffi_x509_get_public_key(ca_handle)
+                let valid: Bool = ffi_x509_verify(cert.handle, pk_handle)
                 if valid {
-                    // If CA is self-signed (root), we're done
-                    if ca.check_issued(ca) {
+                    let self_issued: Bool = ffi_x509_check_issued(ca_handle, ca_handle)
+                    if self_issued {
                         return Ok(true)
                     }
-                    // Otherwise, verify the CA recursively
-                    return this.verify_chain(ca)
                 }
             }
             i = i + 1
@@ -485,17 +599,20 @@ impl X509Chain {
 
     /// Frees all certificates in the chain.
     pub func destroy(mut this) {
+        let chain_len: I64 = this.len()
         let mut i: I64 = 0
-        loop {
-            if i >= this.certificates.len() {
-                break
-            }
-            this.certificates[i].destroy()
+        loop (i < chain_len) {
+            let cert_handle: *Unit = ffi_list_get(this.list_handle, i) as *Unit
+            ffi_x509_destroy(cert_handle)
             i = i + 1
         }
-        this.certificates.destroy()
+        ffi_list_destroy(this.list_handle)
     }
 }
+
+// ============================================================================
+// X509Store
+// ============================================================================
 
 /// Certificate store for system trusted roots.
 pub type X509Store {
@@ -505,13 +622,13 @@ pub type X509Store {
 impl X509Store {
     /// Creates a new certificate store.
     pub func new() -> X509Store {
-        let handle: *Unit = lowlevel { crypto_x509_store_create() }
+        let handle: *Unit = ffi_x509_store_create()
         return X509Store { handle: handle }
     }
 
     /// Creates a store with system default trusted certificates.
     pub func system() -> CryptoResult[X509Store] {
-        let handle: *Unit = lowlevel { crypto_x509_store_system() }
+        let handle: *Unit = ffi_x509_store_system()
         if handle == null {
             return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
         }
@@ -520,7 +637,7 @@ impl X509Store {
 
     /// Adds a trusted certificate to the store.
     pub func add_cert(mut this, cert: ref X509Certificate) -> CryptoResult[Unit] {
-        let success: Bool = lowlevel { crypto_x509_store_add_cert(this.handle, cert.handle) }
+        let success: Bool = ffi_x509_store_add_cert(this.handle, cert.handle)
         if not success {
             return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
         }
@@ -529,7 +646,7 @@ impl X509Store {
 
     /// Adds certificates from a PEM file.
     pub func add_pem_file(mut this, path: Str) -> CryptoResult[I64] {
-        let count: I64 = lowlevel { crypto_x509_store_add_pem_file(this.handle, path) }
+        let count: I64 = ffi_x509_store_add_pem_file(this.handle, path)
         if count < 0 {
             return Err(CryptoError::new(CryptoErrorKind::CertificateParseError))
         }
@@ -538,34 +655,20 @@ impl X509Store {
 
     /// Verifies a certificate chain against this store.
     pub func verify(this, cert: ref X509Certificate) -> CryptoResult[Bool] {
-        let result: Bool = lowlevel { crypto_x509_store_verify(this.handle, cert.handle) }
+        let result: Bool = ffi_x509_store_verify(this.handle, cert.handle)
         return Ok(result)
     }
 
     /// Verifies a certificate chain with intermediates.
     pub func verify_chain(this, cert: ref X509Certificate, chain: ref X509Chain) -> CryptoResult[Bool] {
-        // Build list of intermediate cert handles
-        let mut handles = List[*Unit]::new(chain.len())
-        let mut i: I64 = 0
-        loop {
-            if i >= chain.len() {
-                break
-            }
-            handles.push(chain.certificates[i].handle)
-            i = i + 1
-        }
-
-        let result: Bool = lowlevel {
-            crypto_x509_store_verify_chain(this.handle, cert.handle, handles.handle)
-        }
-        handles.destroy()
+        let result: Bool = ffi_x509_store_verify_chain(this.handle, cert.handle, chain.list_handle)
         return Ok(result)
     }
 
     /// Frees the store resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { crypto_x509_store_destroy(this.handle) }
+            ffi_x509_store_destroy(this.handle)
             this.handle = null
         }
     }

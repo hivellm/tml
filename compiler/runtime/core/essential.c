@@ -44,10 +44,10 @@
 #endif
 
 // Backtrace support for panic handlers
-#include "backtrace.h"
+#include "../diagnostics/backtrace.h"
 
 // Structured logging API
-#include "log.h"
+#include "../diagnostics/log.h"
 
 // ============================================================================
 // Backtrace Configuration

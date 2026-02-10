@@ -456,6 +456,7 @@ bool has_socket_functions(const parser::Module& module) {
                                                           "sys_connect_v6",
                                                           "sys_send",
                                                           "sys_recv",
+                                                          "sys_peek",
                                                           "sys_sendto_v4",
                                                           "sys_recvfrom_v4",
                                                           "sys_shutdown",
@@ -463,10 +464,13 @@ bool has_socket_functions(const parser::Module& module) {
                                                           "sys_set_nonblocking",
                                                           "sys_setsockopt",
                                                           "sys_getsockopt",
+                                                          "sys_getsockopt_value",
                                                           "sys_setsockopt_timeout",
                                                           "sys_getsockopt_timeout",
                                                           "sys_getsockname_v4",
                                                           "sys_getpeername_v4",
+                                                          "sys_sockaddr_get_ip",
+                                                          "sys_sockaddr_get_port",
                                                           "sys_get_last_error",
                                                           "sys_wsa_startup",
                                                           "sys_wsa_cleanup"};
@@ -525,10 +529,14 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             objects.push_back(fs::path(obj));
             TML_LOG_DEBUG("build", "Including runtime: " << obj);
 
-            // Also include log.c (required by essential.c, text.c, backtrace.c)
-            fs::path runtime_dir = fs::path(runtime_path).parent_path();
+            // Runtime is organized into themed subdirectories:
+            //   core/, memory/, text/, collections/, math/, time/,
+            //   concurrency/, net/, os/, crypto/, diagnostics/
+            // find_runtime() returns path to core/essential.c, go up one level for runtime root
+            fs::path runtime_dir = fs::path(runtime_path).parent_path().parent_path();
 
-            fs::path log_c = runtime_dir / "log.c";
+            // diagnostics/ - log.c (required by essential.c, text.c, backtrace.c)
+            fs::path log_c = runtime_dir / "diagnostics" / "log.c";
             if (fs::exists(log_c)) {
                 std::string log_obj = ensure_c_compiled(to_forward_slashes(log_c.string()),
                                                         deps_cache, clang, verbose);
@@ -536,7 +544,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including log runtime: " << log_obj);
             }
 
-            fs::path string_c = runtime_dir / "string.c";
+            // text/ - string.c
+            fs::path string_c = runtime_dir / "text" / "string.c";
             if (fs::exists(string_c)) {
                 std::string string_obj = ensure_c_compiled(to_forward_slashes(string_c.string()),
                                                            deps_cache, clang, verbose);
@@ -550,7 +559,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 mem_flags = "-DTML_DEBUG_MEMORY";
             }
 
-            fs::path mem_c = runtime_dir / "mem.c";
+            // memory/ - mem.c
+            fs::path mem_c = runtime_dir / "memory" / "mem.c";
             if (fs::exists(mem_c)) {
                 std::string mem_obj = ensure_c_compiled(to_forward_slashes(mem_c.string()),
                                                         deps_cache, clang, verbose, mem_flags);
@@ -558,9 +568,9 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including mem runtime: " << mem_obj);
             }
 
-            // Include memory tracking runtime when leak checking is enabled
+            // memory/ - mem_track.c (when leak checking is enabled)
             if (CompilerOptions::check_leaks) {
-                fs::path mem_track_c = runtime_dir / "mem_track.c";
+                fs::path mem_track_c = runtime_dir / "memory" / "mem_track.c";
                 if (fs::exists(mem_track_c)) {
                     std::string mem_track_obj =
                         ensure_c_compiled(to_forward_slashes(mem_track_c.string()), deps_cache,
@@ -571,8 +581,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 }
             }
 
-            // Also include time.c by default (commonly used for timing/sleep)
-            fs::path time_c = runtime_dir / "time.c";
+            // time/ - time.c
+            fs::path time_c = runtime_dir / "time" / "time.c";
             if (fs::exists(time_c)) {
                 std::string time_obj = ensure_c_compiled(to_forward_slashes(time_c.string()),
                                                          deps_cache, clang, verbose);
@@ -580,8 +590,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including time runtime: " << time_obj);
             }
 
-            // Include async.c for async/await executor support
-            fs::path async_c = runtime_dir / "async.c";
+            // concurrency/ - async.c
+            fs::path async_c = runtime_dir / "concurrency" / "async.c";
             if (fs::exists(async_c)) {
                 std::string async_obj = ensure_c_compiled(to_forward_slashes(async_c.string()),
                                                           deps_cache, clang, verbose);
@@ -589,8 +599,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including async runtime: " << async_obj);
             }
 
-            // Include math.c for math builtins (sqrt, pow, int_to_float, etc.)
-            fs::path math_c = runtime_dir / "math.c";
+            // math/ - math.c
+            fs::path math_c = runtime_dir / "math" / "math.c";
             if (fs::exists(math_c)) {
                 std::string math_obj = ensure_c_compiled(to_forward_slashes(math_c.string()),
                                                          deps_cache, clang, verbose);
@@ -598,8 +608,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including math runtime: " << math_obj);
             }
 
-            // Include text.c for Text type (used by template literals $"...")
-            fs::path text_c = runtime_dir / "text.c";
+            // text/ - text.c
+            fs::path text_c = runtime_dir / "text" / "text.c";
             if (fs::exists(text_c)) {
                 std::string text_obj = ensure_c_compiled(to_forward_slashes(text_c.string()),
                                                          deps_cache, clang, verbose);
@@ -607,9 +617,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including text runtime: " << text_obj);
             }
 
-            // Include net.c by default (commonly used by std::net, and needed for test suites)
-            // The cost of including it is minimal and prevents hard-to-debug linking errors
-            fs::path net_c = runtime_dir / "net.c";
+            // net/ - net.c (included by default for std::net)
+            fs::path net_c = runtime_dir / "net" / "net.c";
             if (fs::exists(net_c)) {
                 std::string net_obj = ensure_c_compiled(to_forward_slashes(net_c.string()),
                                                         deps_cache, clang, verbose);
@@ -617,8 +626,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including net runtime: " << net_obj);
             }
 
-            // Include collections.c (needed by string.c for list_* functions)
-            fs::path collections_c = runtime_dir / "collections.c";
+            // collections/ - collections.c (needed by string.c for list_* functions)
+            fs::path collections_c = runtime_dir / "collections" / "collections.c";
             if (fs::exists(collections_c)) {
                 std::string collections_obj = ensure_c_compiled(
                     to_forward_slashes(collections_c.string()), deps_cache, clang, verbose);
@@ -626,8 +635,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including collections runtime: " << collections_obj);
             }
 
-            // Include sync.c for Mutex, RwLock, Condvar runtime functions
-            fs::path sync_c = runtime_dir / "sync.c";
+            // concurrency/ - sync.c
+            fs::path sync_c = runtime_dir / "concurrency" / "sync.c";
             if (fs::exists(sync_c)) {
                 std::string sync_obj = ensure_c_compiled(to_forward_slashes(sync_c.string()),
                                                          deps_cache, clang, verbose);
@@ -635,8 +644,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including sync runtime: " << sync_obj);
             }
 
-            // Include thread.c for thread management functions
-            fs::path thread_c = runtime_dir / "thread.c";
+            // concurrency/ - thread.c
+            fs::path thread_c = runtime_dir / "concurrency" / "thread.c";
             if (fs::exists(thread_c)) {
                 std::string thread_obj = ensure_c_compiled(to_forward_slashes(thread_c.string()),
                                                            deps_cache, clang, verbose);
@@ -644,8 +653,8 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including thread runtime: " << thread_obj);
             }
 
-            // Include crypto.c for cryptographic functions (CSPRNG, etc.)
-            fs::path crypto_c = runtime_dir / "crypto.c";
+            // crypto/ - crypto.c
+            fs::path crypto_c = runtime_dir / "crypto" / "crypto.c";
             if (fs::exists(crypto_c)) {
                 std::string crypto_obj = ensure_c_compiled(to_forward_slashes(crypto_c.string()),
                                                            deps_cache, clang, verbose);
@@ -653,8 +662,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including crypto runtime: " << crypto_obj);
             }
 
-            // Include backtrace.c for stack trace capture and symbol resolution
-            fs::path backtrace_c = runtime_dir / "backtrace.c";
+            // os/ - os.c
+            fs::path os_c = runtime_dir / "os" / "os.c";
+            if (fs::exists(os_c)) {
+                std::string os_obj = ensure_c_compiled(to_forward_slashes(os_c.string()),
+                                                       deps_cache, clang, verbose);
+                objects.push_back(fs::path(os_obj));
+                TML_LOG_DEBUG("build", "Including os runtime: " << os_obj);
+            }
+
+            // diagnostics/ - backtrace.c
+            fs::path backtrace_c = runtime_dir / "diagnostics" / "backtrace.c";
             if (fs::exists(backtrace_c)) {
                 std::string backtrace_obj = ensure_c_compiled(
                     to_forward_slashes(backtrace_c.string()), deps_cache, clang, verbose);
@@ -726,9 +744,10 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             "coverage");
     }
 
-    // NOTE: std::collections runtime is already provided by compiler/runtime/collections.c
-    // which is always linked above. Do not link lib/std/runtime/collections.c as it has
-    // different struct layouts that cause memory corruption when both are linked.
+    // NOTE: std::collections runtime is already provided by
+    // compiler/runtime/collections/collections.c which is always linked above. Do not link
+    // lib/std/runtime/collections.c as it has different struct layouts that cause memory corruption
+    // when both are linked.
 
     // Link std::file runtime if imported
     if (registry->has_module("std::file")) {
@@ -746,10 +765,10 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     if (registry->has_module("std::text") && !use_precompiled) {
         add_runtime(
             {
-                "compiler/runtime/text.c",
-                "runtime/text.c",
-                "../runtime/text.c",
-                "F:/Node/hivellm/tml/compiler/runtime/text.c",
+                "compiler/runtime/text/text.c",
+                "runtime/text/text.c",
+                "../runtime/text/text.c",
+                "F:/Node/hivellm/tml/compiler/runtime/text/text.c",
             },
             "std::text");
     }

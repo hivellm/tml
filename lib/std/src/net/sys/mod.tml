@@ -32,8 +32,16 @@ pub const IPPROTO_TCP_OPT: I32 = 6
 /// Socket options.
 pub const SO_REUSEADDR: I32 = 4
 pub const SO_KEEPALIVE: I32 = 8
-pub const SO_BROADCAST: I32 = 32  // Allow sending broadcast messages
+pub const SO_BROADCAST: I32 = 32
+pub const SO_RCVBUF: I32 = 0x1002
+pub const SO_SNDBUF: I32 = 0x1001
+pub const SO_RCVTIMEO: I32 = 0x1006
+pub const SO_SNDTIMEO: I32 = 0x1005
 pub const TCP_NODELAY: I32 = 1
+pub const IP_TTL: I32 = 4
+pub const IP_MULTICAST_LOOP: I32 = 11
+pub const IP_MULTICAST_TTL: I32 = 10
+pub const IPPROTO_IP: I32 = 0
 
 // ============================================================================
 // Socket Type Enum
@@ -127,6 +135,37 @@ impl AddressFamily {
             Just(AddressFamily::Inet6)
         } else {
             Nothing
+        }
+    }
+
+    /// Determines address family from a SocketAddr.
+    pub func from_addr(addr: ref SocketAddr) -> AddressFamily {
+        // Currently SocketAddr only wraps IPv4
+        AddressFamily::Inet
+    }
+}
+
+// ============================================================================
+// ShutdownMode Enum
+// ============================================================================
+
+/// How to shut down a socket connection.
+pub type ShutdownMode {
+    /// Shut down the read half.
+    Read,
+    /// Shut down the write half.
+    Write,
+    /// Shut down both halves.
+    Both,
+}
+
+impl ShutdownMode {
+    /// Returns the platform constant for this shutdown mode.
+    pub func to_raw(this) -> I32 {
+        when this {
+            ShutdownMode::Read => 0 as I32
+            ShutdownMode::Write => 1 as I32
+            ShutdownMode::Both => 2 as I32
         }
     }
 }
@@ -242,10 +281,327 @@ impl RawSocket {
         Ok(())
     }
 
+    /// Gets the SO_BROADCAST option value.
+    pub func get_broadcast(this) -> Outcome[Bool, NetError] {
+        let result: I32 = lowlevel { sys_getsockopt(this.handle, SOL_SOCKET, SO_BROADCAST) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        let value: I32 = lowlevel { sys_getsockopt_value() }
+        Ok(value != 0)
+    }
+
+    // ========================================================================
+    // Connection operations
+    // ========================================================================
+
+    /// Binds the socket to a local address.
+    pub func bind(this, addr: ref SocketAddr) -> Outcome[(), NetError] {
+        let ip_bits: I32 = addr.inner.ip().to_bits() as I32
+        let port: I32 = addr.inner.port() as I32
+        let result: I32 = lowlevel { sys_bind_v4(this.handle, ip_bits, port) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::AddrInUse()))
+        }
+        Ok(())
+    }
+
+    /// Starts listening for incoming connections.
+    pub func listen(this, backlog: I32) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_listen(this.handle, backlog) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    /// Accepts an incoming connection. Returns (new_socket, peer_addr).
+    pub func accept(this) -> Outcome[(RawSocket, SocketAddr), NetError] {
+        let new_handle: I64 = lowlevel { sys_accept_v4(this.handle) }
+        if new_handle < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        let ip: I32 = lowlevel { sys_sockaddr_get_ip() }
+        let port: I32 = lowlevel { sys_sockaddr_get_port() }
+        let peer_ip: Ipv4Addr = Ipv4Addr::from_bits(ip as U32)
+        let peer_addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(peer_ip, port as U16))
+        let new_socket: RawSocket = RawSocket {
+            handle: new_handle,
+            socket_type: SocketType::Stream,
+            family: this.family,
+            nonblocking: false,
+        }
+        Ok((new_socket, peer_addr))
+    }
+
+    /// Connects to a remote address.
+    pub func connect(this, addr: ref SocketAddr) -> Outcome[(), NetError] {
+        let ip_bits: I32 = addr.inner.ip().to_bits() as I32
+        let port: I32 = addr.inner.port() as I32
+        let result: I32 = lowlevel { sys_connect_v4(this.handle, ip_bits, port) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::ConnectionRefused()))
+        }
+        Ok(())
+    }
+
+    /// Shuts down part of the socket.
+    pub func shutdown(this, how: ShutdownMode) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_shutdown(this.handle, how.to_raw()) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    /// Closes the socket.
+    pub func close(this) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_close(this.handle) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    // ========================================================================
+    // Data transfer
+    // ========================================================================
+
+    /// Sends data on a connected socket.
+    pub func send(this, buf: ref [U8]) -> Outcome[I64, NetError] {
+        let len: I64 = buf.len() as I64
+        let result: I64 = lowlevel { sys_send(this.handle, buf, len) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(result)
+    }
+
+    /// Receives data from a connected socket.
+    pub func recv(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        let len: I64 = buf.len() as I64
+        let result: I64 = lowlevel { sys_recv(this.handle, buf, len) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(result)
+    }
+
+    /// Peeks at data without removing it from the buffer.
+    pub func peek(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        let len: I64 = buf.len() as I64
+        let result: I64 = lowlevel { sys_peek(this.handle, buf, len) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(result)
+    }
+
+    /// Sends data to a specific address (UDP).
+    pub func send_to(this, buf: ref [U8], addr: ref SocketAddr) -> Outcome[I64, NetError] {
+        let ip_bits: I32 = addr.inner.ip().to_bits() as I32
+        let port: I32 = addr.inner.port() as I32
+        let len: I64 = buf.len() as I64
+        let result: I64 = lowlevel { sys_sendto_v4(this.handle, buf, len, ip_bits, port) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(result)
+    }
+
+    /// Receives data and the sender's address (UDP).
+    pub func recv_from(this, buf: mut ref [U8]) -> Outcome[(I64, SocketAddr), NetError] {
+        let len: I64 = buf.len() as I64
+        let result: I64 = lowlevel { sys_recvfrom_v4(this.handle, buf, len) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        let ip: I32 = lowlevel { sys_sockaddr_get_ip() }
+        let port: I32 = lowlevel { sys_sockaddr_get_port() }
+        let sender_ip: Ipv4Addr = Ipv4Addr::from_bits(ip as U32)
+        let sender_addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(sender_ip, port as U16))
+        Ok((result, sender_addr))
+    }
+
+    // ========================================================================
+    // Address info
+    // ========================================================================
+
+    /// Returns the local address this socket is bound to.
+    pub func local_addr(this) -> Outcome[SocketAddr, NetError] {
+        let result: I32 = lowlevel { sys_getsockname_v4(this.handle) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        let ip: I32 = lowlevel { sys_sockaddr_get_ip() }
+        let port: I32 = lowlevel { sys_sockaddr_get_port() }
+        let addr_ip: Ipv4Addr = Ipv4Addr::from_bits(ip as U32)
+        Ok(SocketAddr::V4(SocketAddrV4::new(addr_ip, port as U16)))
+    }
+
+    /// Returns the remote address this socket is connected to.
+    pub func peer_addr(this) -> Outcome[SocketAddr, NetError] {
+        let result: I32 = lowlevel { sys_getpeername_v4(this.handle) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::NotConnected()))
+        }
+        let ip: I32 = lowlevel { sys_sockaddr_get_ip() }
+        let port: I32 = lowlevel { sys_sockaddr_get_port() }
+        let addr_ip: Ipv4Addr = Ipv4Addr::from_bits(ip as U32)
+        Ok(SocketAddr::V4(SocketAddrV4::new(addr_ip, port as U16)))
+    }
+
+    // ========================================================================
+    // Socket options - getters
+    // ========================================================================
+
+    /// Gets TCP_NODELAY option.
+    pub func get_nodelay(this) -> Outcome[Bool, NetError] {
+        let result: I32 = lowlevel { sys_getsockopt(this.handle, IPPROTO_TCP_OPT, TCP_NODELAY) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        let value: I32 = lowlevel { sys_getsockopt_value() }
+        Ok(value != 0)
+    }
+
+    /// Gets SO_KEEPALIVE option.
+    pub func get_keepalive(this) -> Outcome[Bool, NetError] {
+        let result: I32 = lowlevel { sys_getsockopt(this.handle, SOL_SOCKET, SO_KEEPALIVE) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        let value: I32 = lowlevel { sys_getsockopt_value() }
+        Ok(value != 0)
+    }
+
+    /// Gets IP_TTL option.
+    pub func get_ttl(this) -> Outcome[I32, NetError] {
+        let result: I32 = lowlevel { sys_getsockopt(this.handle, IPPROTO_IP, IP_TTL) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        let value: I32 = lowlevel { sys_getsockopt_value() }
+        Ok(value)
+    }
+
+    /// Sets IP_TTL option.
+    pub func set_ttl(this, ttl: I32) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_setsockopt(this.handle, IPPROTO_IP, IP_TTL, ttl) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    // ========================================================================
+    // Timeout options
+    // ========================================================================
+
+    /// Sets the receive timeout in milliseconds.
+    pub func set_recv_timeout(this, millis: I64) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_setsockopt_timeout(this.handle, SOL_SOCKET, SO_RCVTIMEO, millis) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    /// Sets the send timeout in milliseconds.
+    pub func set_send_timeout(this, millis: I64) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_setsockopt_timeout(this.handle, SOL_SOCKET, SO_SNDTIMEO, millis) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    /// Gets the receive timeout in milliseconds.
+    pub func get_recv_timeout(this) -> Outcome[I64, NetError] {
+        let result: I64 = lowlevel { sys_getsockopt_timeout(this.handle, SOL_SOCKET, SO_RCVTIMEO) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(result)
+    }
+
+    /// Gets the send timeout in milliseconds.
+    pub func get_send_timeout(this) -> Outcome[I64, NetError] {
+        let result: I64 = lowlevel { sys_getsockopt_timeout(this.handle, SOL_SOCKET, SO_SNDTIMEO) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(result)
+    }
+
+    // ========================================================================
+    // Buffer size options
+    // ========================================================================
+
+    /// Sets the receive buffer size.
+    pub func set_recv_buffer_size(this, size: I32) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_setsockopt(this.handle, SOL_SOCKET, SO_RCVBUF, size) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    /// Sets the send buffer size.
+    pub func set_send_buffer_size(this, size: I32) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_setsockopt(this.handle, SOL_SOCKET, SO_SNDBUF, size) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    // ========================================================================
+    // Multicast options (IPv4)
+    // ========================================================================
+
+    /// Gets IP_MULTICAST_LOOP option.
+    pub func get_multicast_loop_v4(this) -> Outcome[Bool, NetError] {
+        let result: I32 = lowlevel { sys_getsockopt(this.handle, IPPROTO_IP, IP_MULTICAST_LOOP) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        let value: I32 = lowlevel { sys_getsockopt_value() }
+        Ok(value != 0)
+    }
+
+    /// Sets IP_MULTICAST_LOOP option.
+    pub func set_multicast_loop_v4(this, enabled: Bool) -> Outcome[(), NetError] {
+        let value: I32 = if enabled { 1 } else { 0 }
+        let result: I32 = lowlevel { sys_setsockopt(this.handle, IPPROTO_IP, IP_MULTICAST_LOOP, value) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    /// Gets IP_MULTICAST_TTL option.
+    pub func get_multicast_ttl_v4(this) -> Outcome[I32, NetError] {
+        let result: I32 = lowlevel { sys_getsockopt(this.handle, IPPROTO_IP, IP_MULTICAST_TTL) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        let value: I32 = lowlevel { sys_getsockopt_value() }
+        Ok(value)
+    }
+
+    /// Sets IP_MULTICAST_TTL option.
+    pub func set_multicast_ttl_v4(this, ttl: I32) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_setsockopt(this.handle, IPPROTO_IP, IP_MULTICAST_TTL, ttl) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
 }
 
 // ============================================================================
-// Low-level functions (implemented in runtime)
+// Low-level functions (implemented in C runtime net.c)
 // ============================================================================
 
 /// Creates a socket.
@@ -254,5 +610,65 @@ pub lowlevel func sys_socket(family: I32, sock_type: I32, protocol: I32) -> I64
 /// Sets socket to non-blocking mode.
 pub lowlevel func sys_set_nonblocking(handle: I64, nonblocking: Bool) -> I32
 
-/// Sets a socket option.
+/// Sets a socket option (integer value).
 pub lowlevel func sys_setsockopt(handle: I64, level: I32, optname: I32, value: I32) -> I32
+
+/// Binds to an IPv4 address.
+pub lowlevel func sys_bind_v4(handle: I64, ip_bits: I32, port: I32) -> I32
+
+/// Starts listening for connections.
+pub lowlevel func sys_listen(handle: I64, backlog: I32) -> I32
+
+/// Connects to an IPv4 address.
+pub lowlevel func sys_connect_v4(handle: I64, ip_bits: I32, port: I32) -> I32
+
+/// Accepts an IPv4 connection. Returns new socket handle, stores peer addr in TLS.
+pub lowlevel func sys_accept_v4(handle: I64) -> I64
+
+/// Sends data on a connected socket.
+pub lowlevel func sys_send(handle: I64, buf: ref [U8], len: I64) -> I64
+
+/// Receives data from a connected socket.
+pub lowlevel func sys_recv(handle: I64, buf: mut ref [U8], len: I64) -> I64
+
+/// Peeks at data without consuming it.
+pub lowlevel func sys_peek(handle: I64, buf: mut ref [U8], len: I64) -> I64
+
+/// Sends data to an IPv4 address (UDP).
+pub lowlevel func sys_sendto_v4(handle: I64, buf: ref [U8], len: I64, ip_bits: I32, port: I32) -> I64
+
+/// Receives data from any address (UDP). Stores sender addr in TLS.
+pub lowlevel func sys_recvfrom_v4(handle: I64, buf: mut ref [U8], len: I64) -> I64
+
+/// Gets the local socket address (IPv4). Stores in TLS.
+pub lowlevel func sys_getsockname_v4(handle: I64) -> I32
+
+/// Gets the peer socket address (IPv4). Stores in TLS.
+pub lowlevel func sys_getpeername_v4(handle: I64) -> I32
+
+/// Gets the IP from last TLS-stored address.
+pub lowlevel func sys_sockaddr_get_ip() -> I32
+
+/// Gets the port from last TLS-stored address.
+pub lowlevel func sys_sockaddr_get_port() -> I32
+
+/// Gets a socket option (stores result in TLS).
+pub lowlevel func sys_getsockopt(handle: I64, level: I32, optname: I32) -> I32
+
+/// Gets the value from last getsockopt call.
+pub lowlevel func sys_getsockopt_value() -> I32
+
+/// Sets a socket timeout option (in milliseconds).
+pub lowlevel func sys_setsockopt_timeout(handle: I64, level: I32, optname: I32, millis: I64) -> I32
+
+/// Gets a socket timeout option (returns milliseconds).
+pub lowlevel func sys_getsockopt_timeout(handle: I64, level: I32, optname: I32) -> I64
+
+/// Shuts down part of a socket connection.
+pub lowlevel func sys_shutdown(handle: I64, how: I32) -> I32
+
+/// Closes a socket.
+pub lowlevel func sys_close(handle: I64) -> I32
+
+/// Gets the last socket error code.
+pub lowlevel func sys_get_last_error() -> I32

@@ -1,0 +1,10 @@
+//! Tests for crypto constants module
+//! NOTE: constants module has a codegen bug with lowlevel blocks returning *Unit
+//! (generates i32 instead of ptr). Tests deferred until bug is fixed.
+
+use test::{assert}
+
+@test
+func test_constants_placeholder() -> I32 {
+    return 0
+}

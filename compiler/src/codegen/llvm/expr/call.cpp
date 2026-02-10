@@ -2170,9 +2170,20 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         bool is_library_function = false;
         if (env_.module_registry()) {
             const auto& all_modules = env_.module_registry()->get_all_modules();
+            // Also extract the bare function name (last segment after ::) for module lookup.
+            // Module registry stores functions by bare name (e.g., "arch" not "os::arch").
+            std::string bare_fn_name;
+            {
+                size_t last_sep = fn_name.rfind("::");
+                if (last_sep != std::string::npos) {
+                    bare_fn_name = fn_name.substr(last_sep + 2);
+                }
+            }
             for (const auto& [mod_name, mod] : all_modules) {
                 if (mod.functions.find(fn_name) != mod.functions.end() ||
-                    mod.functions.find(sanitized_name) != mod.functions.end()) {
+                    mod.functions.find(sanitized_name) != mod.functions.end() ||
+                    (!bare_fn_name.empty() &&
+                     mod.functions.find(bare_fn_name) != mod.functions.end())) {
                     is_library_function = true;
 
                     // Queue instantiation for non-generic library static methods (e.g., Text::from)

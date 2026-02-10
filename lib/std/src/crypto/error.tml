@@ -151,4 +151,4 @@ impl CryptoError {
     }
 }
 
-// Note: CryptoResult[T] = Outcome[T, CryptoError] - use Outcome directly due to codegen limitations
+pub type CryptoResult[T] = Outcome[T, CryptoError]

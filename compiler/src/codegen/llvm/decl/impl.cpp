@@ -498,12 +498,19 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
                     // Fix: if returning struct type with "0" placeholder, use zeroinitializer
                     emit_line("  ret " + ret_type + " zeroinitializer");
                 } else {
-                    // Handle integer type extension when actual differs from expected
+                    // Handle type mismatches between result and return type
                     std::string final_result = result;
                     std::string actual_type = last_expr_type_;
                     if (actual_type != ret_type) {
-                        if (ret_type == "i64" &&
-                            (actual_type == "i32" || actual_type == "i16" || actual_type == "i8")) {
+                        if (actual_type == "ptr" && ret_type.find("%struct.") == 0) {
+                            // Returning 'this' (ptr) from a method that returns a struct by value.
+                            // Load the struct from the pointer.
+                            std::string load_reg = fresh_reg();
+                            emit_line("  " + load_reg + " = load " + ret_type + ", ptr " + result);
+                            final_result = load_reg;
+                        } else if (ret_type == "i64" &&
+                                   (actual_type == "i32" || actual_type == "i16" ||
+                                    actual_type == "i8")) {
                             std::string ext_reg = fresh_reg();
                             emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
                                       " to i64");
@@ -896,12 +903,19 @@ void LLVMIRGen::gen_impl_method_instantiation(
                     // Fix: if returning struct type with "0" placeholder, use zeroinitializer
                     emit_line("  ret " + ret_type + " zeroinitializer");
                 } else {
-                    // Handle integer type extension when actual differs from expected
+                    // Handle type mismatches between result and return type
                     std::string final_result = result;
                     std::string actual_type = last_expr_type_;
                     if (actual_type != ret_type) {
-                        if (ret_type == "i64" &&
-                            (actual_type == "i32" || actual_type == "i16" || actual_type == "i8")) {
+                        if (actual_type == "ptr" && ret_type.find("%struct.") == 0) {
+                            // Returning 'this' (ptr) from a method that returns a struct by value.
+                            // Load the struct from the pointer.
+                            std::string load_reg = fresh_reg();
+                            emit_line("  " + load_reg + " = load " + ret_type + ", ptr " + result);
+                            final_result = load_reg;
+                        } else if (ret_type == "i64" &&
+                                   (actual_type == "i32" || actual_type == "i16" ||
+                                    actual_type == "i8")) {
                             std::string ext_reg = fresh_reg();
                             emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
                                       " to i64");

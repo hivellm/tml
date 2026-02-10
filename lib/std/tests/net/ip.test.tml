@@ -1,0 +1,405 @@
+//! IP Address Tests
+//!
+//! Tests for Ipv4Addr, Ipv6Addr, and IpAddr types.
+//! Covers constants, constructors, accessors, classification, and conversions.
+
+use test::{assert, assert_eq}
+use std::net::{Ipv4Addr, Ipv6Addr, IpAddr}
+
+// ============================================================================
+// Ipv4Addr - Constants and Constructors
+// ============================================================================
+
+@test
+func test_ipv4_localhost() {
+    let localhost: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    assert(localhost.is_loopback(), "LOCALHOST should be loopback")
+    let bits: U32 = localhost.to_bits()
+    assert_eq(bits, 0x7F000001 as U32)
+}
+
+@test
+func test_ipv4_unspecified() {
+    let unspec: Ipv4Addr = Ipv4Addr::UNSPECIFIED()
+    assert(unspec.is_unspecified(), "UNSPECIFIED should be unspecified")
+    let bits: U32 = unspec.to_bits()
+    assert_eq(bits, 0 as U32)
+}
+
+@test
+func test_ipv4_broadcast() {
+    let broadcast: Ipv4Addr = Ipv4Addr::BROADCAST()
+    assert(broadcast.is_broadcast(), "BROADCAST should be broadcast")
+}
+
+@test
+func test_ipv4_from_octets() {
+    let ip: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let bits: U32 = ip.to_bits()
+    assert_eq(bits, 0xC0A80101 as U32)
+    assert(ip.is_private(), "192.168.x.x should be private")
+}
+
+@test
+func test_ipv4_from_bits() {
+    let ip: Ipv4Addr = Ipv4Addr::from_bits(0xC0A80101 as U32)
+    let bits: U32 = ip.to_bits()
+    assert_eq(bits, 0xC0A80101 as U32)
+    assert(ip.is_private(), "192.168.1.1 should be private")
+}
+
+@test
+func test_ipv4_octets() {
+    let ip: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let octs: [U8; 4] = ip.octets()
+    assert_eq(octs[0], 192 as U8)
+    assert_eq(octs[1], 168 as U8)
+    assert_eq(octs[2], 1 as U8)
+    assert_eq(octs[3], 1 as U8)
+}
+
+// ============================================================================
+// Ipv4Addr - Individual Octet Accessors
+// ============================================================================
+
+@test
+func test_ipv4_octet_accessors() {
+    let ip: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 42)
+    assert_eq(ip.octet0(), 192 as U8, "octet0 should be 192")
+    assert_eq(ip.octet1(), 168 as U8, "octet1 should be 168")
+    assert_eq(ip.octet2(), 1 as U8, "octet2 should be 1")
+    assert_eq(ip.octet3(), 42 as U8, "octet3 should be 42")
+}
+
+// ============================================================================
+// Ipv4Addr - Classification Methods
+// ============================================================================
+
+@test
+func test_ipv4_is_link_local() {
+    let link_local: Ipv4Addr = Ipv4Addr::new(169, 254, 1, 1)
+    assert(link_local.is_link_local(), "169.254.1.1 should be link-local")
+
+    let not_link: Ipv4Addr = Ipv4Addr::new(169, 253, 1, 1)
+    assert(not not_link.is_link_local(), "169.253.1.1 should not be link-local")
+
+    let also_not: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    assert(not also_not.is_link_local(), "192.168.1.1 should not be link-local")
+}
+
+@test
+func test_ipv4_is_documentation() {
+    // 192.0.2.0/24 (TEST-NET-1)
+    let doc1: Ipv4Addr = Ipv4Addr::new(192, 0, 2, 1)
+    assert(doc1.is_documentation(), "192.0.2.1 should be documentation")
+
+    // 198.51.100.0/24 (TEST-NET-2)
+    let doc2: Ipv4Addr = Ipv4Addr::new(198, 51, 100, 50)
+    assert(doc2.is_documentation(), "198.51.100.50 should be documentation")
+
+    // 203.0.113.0/24 (TEST-NET-3)
+    let doc3: Ipv4Addr = Ipv4Addr::new(203, 0, 113, 255)
+    assert(doc3.is_documentation(), "203.0.113.255 should be documentation")
+
+    let not_doc: Ipv4Addr = Ipv4Addr::new(8, 8, 8, 8)
+    assert(not not_doc.is_documentation(), "8.8.8.8 should not be documentation")
+}
+
+@test
+func test_ipv4_is_multicast() {
+    // Multicast range: 224.0.0.0 - 239.255.255.255
+    let mcast1: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 1)
+    assert(mcast1.is_multicast(), "224.0.0.1 should be multicast")
+
+    let mcast2: Ipv4Addr = Ipv4Addr::new(239, 255, 255, 255)
+    assert(mcast2.is_multicast(), "239.255.255.255 should be multicast")
+
+    let not_mcast: Ipv4Addr = Ipv4Addr::new(223, 255, 255, 255)
+    assert(not not_mcast.is_multicast(), "223.255.255.255 should not be multicast")
+
+    let also_not: Ipv4Addr = Ipv4Addr::new(240, 0, 0, 1)
+    assert(not also_not.is_multicast(), "240.0.0.1 should not be multicast")
+}
+
+@test
+func test_ipv4_is_global() {
+    // Public IP should be global
+    let global: Ipv4Addr = Ipv4Addr::new(8, 8, 8, 8)
+    assert(global.is_global(), "8.8.8.8 should be global")
+
+    // Non-global addresses
+    assert(not Ipv4Addr::LOCALHOST().is_global(), "localhost should not be global")
+    assert(not Ipv4Addr::UNSPECIFIED().is_global(), "unspecified should not be global")
+    assert(not Ipv4Addr::BROADCAST().is_global(), "broadcast should not be global")
+
+    let priv_ip: Ipv4Addr = Ipv4Addr::new(10, 0, 0, 1)
+    assert(not priv_ip.is_global(), "10.0.0.1 should not be global")
+
+    let link_local: Ipv4Addr = Ipv4Addr::new(169, 254, 1, 1)
+    assert(not link_local.is_global(), "169.254.1.1 should not be global")
+
+    let doc: Ipv4Addr = Ipv4Addr::new(192, 0, 2, 1)
+    assert(not doc.is_global(), "192.0.2.1 should not be global")
+
+    let mcast: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 1)
+    assert(not mcast.is_global(), "224.0.0.1 should not be global")
+}
+
+@test
+func test_ipv4_to_ipv6_mapped() {
+    let v4: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let v6: Ipv6Addr = v4.to_ipv6_mapped()
+
+    // ::ffff:192.168.1.1 => segments: 0,0,0,0,0,0xFFFF,0xC0A8,0x0101
+    let segs: [U16; 8] = v6.segments()
+    assert_eq(segs[0], 0 as U16, "s0 should be 0")
+    assert_eq(segs[1], 0 as U16, "s1 should be 0")
+    assert_eq(segs[2], 0 as U16, "s2 should be 0")
+    assert_eq(segs[3], 0 as U16, "s3 should be 0")
+    assert_eq(segs[4], 0 as U16, "s4 should be 0")
+    assert_eq(segs[5], 0xFFFF as U16, "s5 should be 0xFFFF")
+    assert_eq(segs[6], 0xC0A8 as U16, "s6 should be 0xC0A8 (192.168)")
+    assert_eq(segs[7], 0x0101 as U16, "s7 should be 0x0101 (1.1)")
+
+    assert(v6.is_ipv4_mapped(), "mapped address should be ipv4_mapped")
+}
+
+@test
+func test_ipv4_private_ranges() {
+    // 10.0.0.0/8
+    let p10: Ipv4Addr = Ipv4Addr::new(10, 255, 255, 255)
+    assert(p10.is_private(), "10.255.255.255 should be private")
+
+    // 172.16.0.0/12
+    let p172_16: Ipv4Addr = Ipv4Addr::new(172, 16, 0, 0)
+    assert(p172_16.is_private(), "172.16.0.0 should be private")
+
+    let p172_31: Ipv4Addr = Ipv4Addr::new(172, 31, 255, 255)
+    assert(p172_31.is_private(), "172.31.255.255 should be private")
+
+    let p172_15: Ipv4Addr = Ipv4Addr::new(172, 15, 0, 0)
+    assert(not p172_15.is_private(), "172.15.0.0 should not be private")
+
+    let p172_32: Ipv4Addr = Ipv4Addr::new(172, 32, 0, 0)
+    assert(not p172_32.is_private(), "172.32.0.0 should not be private")
+
+    // 192.168.0.0/16
+    let p192: Ipv4Addr = Ipv4Addr::new(192, 168, 0, 0)
+    assert(p192.is_private(), "192.168.0.0 should be private")
+}
+
+// ============================================================================
+// Ipv6Addr - Constants and Constructors
+// ============================================================================
+
+@test
+func test_ipv6_localhost() {
+    let localhost: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    assert(localhost.is_loopback(), "LOCALHOST should be loopback")
+    assert(not localhost.is_unspecified(), "LOCALHOST should not be unspecified")
+}
+
+@test
+func test_ipv6_unspecified() {
+    let unspec: Ipv6Addr = Ipv6Addr::UNSPECIFIED()
+    assert(unspec.is_unspecified(), "UNSPECIFIED should be unspecified")
+    assert(not unspec.is_loopback(), "UNSPECIFIED should not be loopback")
+}
+
+@test
+func test_ipv6_new() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1)
+    assert(not addr.is_loopback(), "Custom address should not be loopback")
+    assert(not addr.is_unspecified(), "Custom address should not be unspecified")
+}
+
+@test
+func test_ipv6_segments() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0x1234, 0x5678, 0xabcd, 0xef01, 0x2345, 0x6789)
+    let segs: [U16; 8] = addr.segments()
+    assert_eq(segs[0], 0x2001 as U16)
+    assert_eq(segs[1], 0x0db8 as U16)
+    assert_eq(segs[2], 0x1234 as U16)
+    assert_eq(segs[3], 0x5678 as U16)
+    assert_eq(segs[4], 0xabcd as U16)
+    assert_eq(segs[5], 0xef01 as U16)
+    assert_eq(segs[6], 0x2345 as U16)
+    assert_eq(segs[7], 0x6789 as U16)
+}
+
+// ============================================================================
+// Ipv6Addr - from_parts and to_bits
+// ============================================================================
+
+@test
+func test_ipv6_from_parts() {
+    // 2001:0db8:1234:5678:abcd:ef01:2345:6789
+    let high: U64 = 0x20010db812345678 as U64
+    let low: U64 = 0xabcdef0123456789 as U64
+    let addr: Ipv6Addr = Ipv6Addr::from_parts(high, low)
+    let segs: [U16; 8] = addr.segments()
+    assert_eq(segs[0], 0x2001 as U16, "s0")
+    assert_eq(segs[1], 0x0db8 as U16, "s1")
+    assert_eq(segs[2], 0x1234 as U16, "s2")
+    assert_eq(segs[3], 0x5678 as U16, "s3")
+    assert_eq(segs[4], 0xabcd as U16, "s4")
+    assert_eq(segs[5], 0xef01 as U16, "s5")
+    assert_eq(segs[6], 0x2345 as U16, "s6")
+    assert_eq(segs[7], 0x6789 as U16, "s7")
+}
+
+@test
+func test_ipv6_to_bits_high() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0x1234, 0x5678, 0, 0, 0, 0)
+    let high: U64 = addr.to_bits_high()
+    assert_eq(high, 0x20010db812345678 as U64, "to_bits_high")
+}
+
+@test
+func test_ipv6_to_bits_low() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0xabcd, 0xef01, 0x2345, 0x6789)
+    let low: U64 = addr.to_bits_low()
+    assert_eq(low, 0xabcdef0123456789 as U64, "to_bits_low")
+}
+
+@test
+func test_ipv6_from_parts_roundtrip() {
+    let high: U64 = 0x20010db800000000 as U64
+    let low: U64 = 0x0000000000000001 as U64
+    let addr: Ipv6Addr = Ipv6Addr::from_parts(high, low)
+    assert_eq(addr.to_bits_high(), high, "high roundtrip")
+    assert_eq(addr.to_bits_low(), low, "low roundtrip")
+}
+
+// ============================================================================
+// Ipv6Addr - Classification Methods
+// ============================================================================
+
+@test
+func test_ipv6_is_multicast() {
+    // ff00::/8
+    let mcast: Ipv6Addr = Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 1)
+    assert(mcast.is_multicast(), "ff02::1 should be multicast")
+
+    let not_mcast: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1)
+    assert(not not_mcast.is_multicast(), "2001:db8::1 should not be multicast")
+}
+
+@test
+func test_ipv6_is_unicast_link_local() {
+    // fe80::/10
+    let link_local: Ipv6Addr = Ipv6Addr::new(0xFE80, 0, 0, 0, 0, 0, 0, 1)
+    assert(link_local.is_unicast_link_local(), "fe80::1 should be link-local")
+
+    let not_ll: Ipv6Addr = Ipv6Addr::new(0xFEC0, 0, 0, 0, 0, 0, 0, 1)
+    assert(not not_ll.is_unicast_link_local(), "fec0::1 should not be link-local")
+}
+
+@test
+func test_ipv6_is_unique_local() {
+    // fc00::/7 -> fc00 and fd00
+    let ula_fc: Ipv6Addr = Ipv6Addr::new(0xFC00, 0, 0, 0, 0, 0, 0, 1)
+    assert(ula_fc.is_unique_local(), "fc00::1 should be unique local")
+
+    let ula_fd: Ipv6Addr = Ipv6Addr::new(0xFD00, 0, 0, 0, 0, 0, 0, 1)
+    assert(ula_fd.is_unique_local(), "fd00::1 should be unique local")
+
+    let not_ula: Ipv6Addr = Ipv6Addr::new(0xFE00, 0, 0, 0, 0, 0, 0, 1)
+    assert(not not_ula.is_unique_local(), "fe00::1 should not be unique local")
+}
+
+@test
+func test_ipv6_is_ipv4_mapped() {
+    // ::ffff:192.168.1.1 => 0,0,0,0,0,0xFFFF,0xC0A8,0x0101
+    let mapped: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0xFFFF, 0xC0A8, 0x0101)
+    assert(mapped.is_ipv4_mapped(), "::ffff:192.168.1.1 should be ipv4-mapped")
+
+    let not_mapped: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)
+    assert(not not_mapped.is_ipv4_mapped(), "::1 should not be ipv4-mapped")
+}
+
+@test
+func test_ipv6_to_ipv4() {
+    // ::ffff:192.168.1.1
+    let v6: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0xFFFF, 0xC0A8, 0x0101)
+    let maybe_v4 = v6.to_ipv4()
+    assert(maybe_v4.is_just(), "mapped address should convert to IPv4")
+    when maybe_v4 {
+        Just(v4) => {
+            assert_eq(v4.octet0(), 192 as U8, "octet0")
+            assert_eq(v4.octet1(), 168 as U8, "octet1")
+            assert_eq(v4.octet2(), 1 as U8, "octet2")
+            assert_eq(v4.octet3(), 1 as U8, "octet3")
+        },
+        Nothing => assert(false, "should have converted"),
+    }
+
+    // Non-mapped should return Nothing
+    let v6_not_mapped: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let nothing = v6_not_mapped.to_ipv4()
+    assert(nothing.is_nothing(), "non-mapped should return Nothing")
+}
+
+// ============================================================================
+// IpAddr Enum Tests
+// ============================================================================
+
+@test
+func test_ipaddr_v4_basic() {
+    let v4: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: IpAddr = IpAddr::V4(v4)
+    assert(addr.is_ipv4(), "Should be IPv4")
+    assert(not addr.is_ipv6(), "Should not be IPv6")
+}
+
+@test
+func test_ipaddr_v6_basic() {
+    let v6: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let addr: IpAddr = IpAddr::V6(v6)
+    assert(not addr.is_ipv4(), "Should not be IPv4")
+    assert(addr.is_ipv6(), "Should be IPv6")
+}
+
+@test
+func test_ipaddr_v4_loopback() {
+    let v4: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: IpAddr = IpAddr::V4(v4)
+    assert(addr.is_loopback(), "V4 localhost should be loopback")
+}
+
+@test
+func test_ipaddr_v6_loopback() {
+    let v6: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let addr: IpAddr = IpAddr::V6(v6)
+    assert(addr.is_loopback(), "V6 localhost should be loopback")
+}
+
+@test
+func test_ipaddr_is_unspecified() {
+    let v4_unspec: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED())
+    assert(v4_unspec.is_unspecified(), "V4 UNSPECIFIED should be unspecified")
+
+    let v6_unspec: IpAddr = IpAddr::V6(Ipv6Addr::UNSPECIFIED())
+    assert(v6_unspec.is_unspecified(), "V6 UNSPECIFIED should be unspecified")
+
+    let v4_local: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    assert(not v4_local.is_unspecified(), "V4 LOCALHOST should not be unspecified")
+}
+
+@test
+func test_ipaddr_is_multicast() {
+    let v4_mcast: IpAddr = IpAddr::V4(Ipv4Addr::new(224, 0, 0, 1))
+    assert(v4_mcast.is_multicast(), "V4 224.0.0.1 should be multicast")
+
+    let v6_mcast: IpAddr = IpAddr::V6(Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 1))
+    assert(v6_mcast.is_multicast(), "V6 ff02::1 should be multicast")
+
+    let v4_not: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    assert(not v4_not.is_multicast(), "V4 localhost should not be multicast")
+}
+
+@test
+func test_ipaddr_port() {
+    let addr: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+    assert_eq(addr.port(), 0 as U16, "IpAddr.port() should always return 0")
+}

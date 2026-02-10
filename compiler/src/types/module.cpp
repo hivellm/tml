@@ -189,6 +189,20 @@ auto ModuleRegistry::lookup_type_alias(const std::string& module_path,
     return std::nullopt;
 }
 
+auto ModuleRegistry::lookup_type_alias_generics(const std::string& module_path,
+                                                const std::string& symbol_name) const
+    -> std::optional<std::vector<std::string>> {
+    auto module = get_module(module_path);
+    if (!module)
+        return std::nullopt;
+
+    auto it = module->type_alias_generics.find(symbol_name);
+    if (it != module->type_alias_generics.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
 auto ModuleRegistry::lookup_constant(const std::string& module_path,
                                      const std::string& symbol_name) const
     -> std::optional<std::string> {

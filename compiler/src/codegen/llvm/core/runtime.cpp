@@ -1175,6 +1175,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             auto tokens = lex.tokenize();
 
             if (lex.has_errors()) {
+                TML_DEBUG_LN("[MODULE] Lex errors for: " << module_name);
                 continue;
             }
 
@@ -1182,6 +1183,13 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             auto parse_result = parser.parse_module(mod_name);
 
             if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+                const auto& errs = std::get<std::vector<parser::ParseError>>(parse_result);
+                TML_DEBUG_LN("[MODULE] Parse errors for: " << module_name << " (" << errs.size()
+                                                           << " errors)");
+                for (const auto& e : errs) {
+                    TML_DEBUG_LN("[MODULE]   " << e.span.start.line << ":" << e.span.start.column
+                                               << " " << e.message);
+                }
                 continue;
             }
 

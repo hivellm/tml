@@ -450,8 +450,9 @@ public:
     /// Registers a function signature (supports overloading).
     void define_func(FuncSig sig);
 
-    /// Registers a type alias.
-    void define_type_alias(const std::string& name, TypePtr type);
+    /// Registers a type alias (with optional generic parameter names).
+    void define_type_alias(const std::string& name, TypePtr type,
+                           std::vector<std::string> generic_params = {});
 
     /// Looks up a struct by name.
     [[nodiscard]] auto lookup_struct(const std::string& name) const -> std::optional<StructDef>;
@@ -481,6 +482,10 @@ public:
 
     /// Looks up a type alias by name.
     [[nodiscard]] auto lookup_type_alias(const std::string& name) const -> std::optional<TypePtr>;
+
+    /// Looks up generic parameter names for a type alias.
+    [[nodiscard]] auto lookup_type_alias_generics(const std::string& name) const
+        -> std::optional<std::vector<std::string>>;
 
     // ========================================================================
     // OOP Type Definitions (C#-style)
@@ -736,7 +741,9 @@ private:
     std::unordered_map<std::string, std::vector<std::string>>
         behavior_impls_;                                    ///< Type -> behaviors.
     std::unordered_map<std::string, TypePtr> type_aliases_; ///< Type aliases.
-    std::unordered_map<std::string, TypePtr> builtins_;     ///< Builtin types.
+    std::unordered_map<std::string, std::vector<std::string>>
+        type_alias_generics_;                           ///< Generic params for type aliases.
+    std::unordered_map<std::string, TypePtr> builtins_; ///< Builtin types.
 
     // OOP type definition tables (C#-style)
     std::unordered_map<std::string, ClassDef> classes_;        ///< Registered classes.

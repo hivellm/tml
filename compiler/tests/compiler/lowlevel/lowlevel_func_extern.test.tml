@@ -1,0 +1,79 @@
+// Tests for lowlevel func declarations acting as external C function bindings
+// This tests the pattern used in std::net::sys where C functions are declared
+// with `lowlevel func` (without @extern) and called from TML code.
+//
+// The bug was that the type checker hardcoded is_lowlevel=false when registering
+// function signatures, and the codegen late-emit path only checked is_extern()
+// but not is_lowlevel. This caused "undefined symbol" errors when lowlevel func
+// declarations were used cross-module.
+
+use test
+
+// Declare C runtime functions using the lowlevel func pattern
+// (same pattern as lib/std/src/net/sys/mod.tml)
+// These are NOT pre-declared by the runtime codegen, so they test the
+// lowlevel func declaration -> codegen path.
+lowlevel func sys_wsa_startup() -> I32
+lowlevel func sys_wsa_cleanup()
+lowlevel func sys_get_last_error() -> I32
+
+// ============================================================================
+// Test lowlevel func declarations resolve to C functions
+// ============================================================================
+
+@test
+func test_lowlevel_func_wsa_startup() {
+    // sys_wsa_startup initializes Winsock on Windows
+    // Returns 0 on success
+    let result: I32 = sys_wsa_startup()
+    assert_eq(result, 0, "sys_wsa_startup should succeed (return 0)")
+    sys_wsa_cleanup()
+}
+
+@test
+func test_lowlevel_func_get_last_error() {
+    // After successful WSA startup, error should be 0
+    let startup: I32 = sys_wsa_startup()
+    assert_eq(startup, 0, "startup should succeed")
+
+    let err: I32 = sys_get_last_error()
+    assert_eq(err, 0, "no error after successful startup")
+
+    sys_wsa_cleanup()
+}
+
+// ============================================================================
+// Test pub lowlevel func pattern (as used in std::net::sys)
+// ============================================================================
+
+pub lowlevel func sys_socket_raw(family: I32, sock_type: I32, protocol: I32) -> I64
+
+@test
+func test_pub_lowlevel_func_socket() {
+    let startup: I32 = sys_wsa_startup()
+    assert_eq(startup, 0, "startup should succeed")
+
+    // AF_INET=2, SOCK_STREAM=1, IPPROTO_TCP=6
+    let sock: I64 = sys_socket_raw(2, 1, 6)
+    // Socket should be valid (non-negative on success)
+    assert(sock >= 0, "sys_socket_raw should return valid handle")
+
+    sys_wsa_cleanup()
+}
+
+// ============================================================================
+// Test lowlevel func called inside lowlevel block
+// ============================================================================
+
+@test
+func test_lowlevel_func_inside_lowlevel_block() {
+    let mut result: I32 = -1
+
+    lowlevel {
+        result = sys_wsa_startup()
+    }
+
+    assert_eq(result, 0, "lowlevel func inside lowlevel block should work")
+
+    sys_wsa_cleanup()
+}

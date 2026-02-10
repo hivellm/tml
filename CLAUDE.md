@@ -94,6 +94,16 @@ scripts\clean.bat
 
 **Why scripts only?** The build scripts handle environment setup, path configuration, and proper sequencing that direct cmake calls miss. Using cmake directly can result in tests that appear to pass but actually fail silently or hang indefinitely.
 
+**⚠️ EXACT BUILD COMMAND (MANDATORY) ⚠️**
+
+When running a build via Bash, the correct command is:
+
+```bash
+cd /f/Node/hivellm/tml && cmd //c "scripts\\build.bat --no-tests" 2>&1
+```
+
+This is the canonical build invocation. Always use this exact form (adjusting flags as needed, e.g. removing `--no-tests` or adding `release`).
+
 ## Test Cache Management
 
 **⚠️⚠️⚠️ CRITICAL: NEVER USE --no-cache WITHOUT PERMISSION! ⚠️⚠️⚠️**

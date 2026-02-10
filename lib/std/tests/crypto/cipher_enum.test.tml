@@ -1,0 +1,139 @@
+//! Tests for crypto cipher - just error handling (no encrypt_string)
+
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::crypto::cipher::{
+    CipherAlgorithm, Cipher, Decipher,
+}
+use std::crypto::random::random_bytes
+
+@test
+func test_cipher_invalid_key_size() -> I32 {
+    let bad_key: Buffer = random_bytes(10 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let result = Cipher::new(CipherAlgorithm::Aes256Cbc, ref bad_key, ref iv)
+    assert(result.is_err(), "wrong key size should fail")
+
+    bad_key.destroy()
+    iv.destroy()
+    return 0
+}
+
+@test
+func test_cipher_invalid_iv_size() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let bad_iv: Buffer = random_bytes(5 as I64)
+
+    let result = Cipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref bad_iv)
+    assert(result.is_err(), "wrong IV size should fail")
+
+    key.destroy()
+    bad_iv.destroy()
+    return 0
+}
+
+@test
+func test_decipher_invalid_key_size() -> I32 {
+    let bad_key: Buffer = random_bytes(10 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let result = Decipher::new(CipherAlgorithm::Aes256Cbc, ref bad_key, ref iv)
+    assert(result.is_err(), "wrong key size should fail for decipher")
+
+    bad_key.destroy()
+    iv.destroy()
+    return 0
+}
+
+@test
+func test_decipher_invalid_iv_size() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let bad_iv: Buffer = random_bytes(5 as I64)
+
+    let result = Decipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref bad_iv)
+    assert(result.is_err(), "wrong IV size should fail for decipher")
+
+    key.destroy()
+    bad_iv.destroy()
+    return 0
+}
+
+@test
+func test_cipher_set_auto_padding() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let mut cipher: Cipher = when Cipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref iv) {
+        Err(e) => return 1,
+        Ok(c) => c
+    }
+    cipher.set_auto_padding(false)
+    cipher.destroy()
+
+    key.destroy()
+    iv.destroy()
+    return 0
+}
+
+@test
+func test_decipher_set_auto_padding() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let mut decipher: Decipher = when Decipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref iv) {
+        Err(e) => return 1,
+        Ok(d) => d
+    }
+    decipher.set_auto_padding(false)
+    decipher.destroy()
+
+    key.destroy()
+    iv.destroy()
+    return 0
+}
+
+@test
+func test_aes_gcm_set_aad_str() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+
+    let mut cipher: Cipher = when Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref nonce) {
+        Err(e) => return 1,
+        Ok(c) => c
+    }
+    when cipher.set_aad_str("additional data") {
+        Err(e) => return 1,
+        Ok(_) => {}
+    }
+    cipher.update("test data")
+    let ct: Buffer = when cipher.finalize() {
+        Err(e) => return 1,
+        Ok(b) => b
+    }
+    assert(ct.len() > (0 as I64), "GCM with AAD string works")
+
+    cipher.destroy()
+    key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_cbc_set_aad_fails() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+    let aad: Buffer = Buffer::new(0)
+
+    let mut cipher: Cipher = when Cipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref iv) {
+        Err(e) => return 1,
+        Ok(c) => c
+    }
+    let result = cipher.set_aad(ref aad)
+    assert(result.is_err(), "CBC should reject AAD")
+
+    cipher.destroy()
+    key.destroy()
+    iv.destroy()
+    return 0
+}

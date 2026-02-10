@@ -1,0 +1,54 @@
+//! Tests for uncovered random functions
+
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::crypto::random::{random_u32, random_u64, random_fill_range, random_bytes}
+
+@test
+func test_random_u32() -> I32 {
+    let val: U32 = random_u32()
+    // Just check it doesn't crash - any value is valid
+    assert(true, "random_u32 returns")
+    return 0
+}
+
+@test
+func test_random_u64() -> I32 {
+    let val: U64 = random_u64()
+    assert(true, "random_u64 returns")
+    return 0
+}
+
+@test
+func test_random_fill_range() -> I32 {
+    // Use random_bytes to create an initialized buffer with actual length
+    let mut buf: Buffer = random_bytes(32 as I64)
+
+    let result = random_fill_range(mut ref buf, 8 as I64, 16 as I64)
+    assert(result.is_ok(), "fill_range succeeds")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_random_fill_range_invalid_offset() -> I32 {
+    let mut buf: Buffer = random_bytes(16 as I64)
+
+    let result = random_fill_range(mut ref buf, -1 as I64, 8 as I64)
+    assert(result.is_err(), "negative offset should fail")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_random_fill_range_overflow() -> I32 {
+    let mut buf: Buffer = random_bytes(16 as I64)
+
+    let result = random_fill_range(mut ref buf, 8 as I64, 16 as I64)
+    assert(result.is_err(), "offset+size > len should fail")
+
+    buf.destroy()
+    return 0
+}

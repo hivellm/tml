@@ -58,8 +58,12 @@ void TypeEnv::define_func(FuncSig sig) {
     }
 }
 
-void TypeEnv::define_type_alias(const std::string& name, TypePtr type) {
+void TypeEnv::define_type_alias(const std::string& name, TypePtr type,
+                                std::vector<std::string> generic_params) {
     type_aliases_[name] = std::move(type);
+    if (!generic_params.empty()) {
+        type_alias_generics_[name] = std::move(generic_params);
+    }
 }
 
 // ============================================================================

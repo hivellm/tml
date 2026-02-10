@@ -451,6 +451,21 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                 return "ptr";
             }
 
+            // Check if this is a generic type alias (e.g., CryptoResult[SecretKey])
+            // If so, resolve the alias body with substituted type args
+            auto alias_type = env_.lookup_type_alias(named.name);
+            auto alias_generics = env_.lookup_type_alias_generics(named.name);
+            if (alias_type && alias_generics && !alias_generics->empty()) {
+                // Build substitution map
+                std::unordered_map<std::string, types::TypePtr> subs;
+                for (size_t i = 0; i < alias_generics->size() && i < resolved_type_args.size();
+                     ++i) {
+                    subs[(*alias_generics)[i]] = resolved_type_args[i];
+                }
+                auto resolved = types::substitute_type(*alias_type, subs);
+                return llvm_type_from_semantic(resolved, for_data);
+            }
+
             // Check if it's a generic enum (like Maybe, Outcome)
             auto enum_it = pending_generic_enums_.find(named.name);
             if (enum_it != pending_generic_enums_.end()) {
@@ -848,7 +863,7 @@ auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
         // Tuple type: (A, B, C) -> "tuple_A_B_C"
         const auto& tuple = type->as<types::TupleType>();
         if (tuple.elements.empty()) {
-            return "tuple_empty";
+            return "Unit"; // () is semantically identical to Unit
         }
         std::string result = "tuple";
         for (const auto& elem : tuple.elements) {

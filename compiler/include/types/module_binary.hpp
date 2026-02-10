@@ -48,7 +48,7 @@ namespace tml::types {
 constexpr uint32_t MODULE_META_MAGIC = 0x544D4D54;
 
 /// Format version.
-constexpr uint16_t MODULE_META_VERSION_MAJOR = 1;
+constexpr uint16_t MODULE_META_VERSION_MAJOR = 2;
 constexpr uint16_t MODULE_META_VERSION_MINOR = 0;
 
 // ============================================================================
@@ -133,8 +133,12 @@ public:
     /// Returns the source hash from header, or 0 on error.
     uint64_t read_header_hash();
 
-    [[nodiscard]] bool has_error() const { return has_error_; }
-    [[nodiscard]] const std::string& error_message() const { return error_; }
+    [[nodiscard]] bool has_error() const {
+        return has_error_;
+    }
+    [[nodiscard]] const std::string& error_message() const {
+        return error_;
+    }
 
 private:
     std::istream& in_;

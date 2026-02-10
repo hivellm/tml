@@ -442,7 +442,6 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     }
 
     std::string qualified_name = named2.name + "::" + method;
-    TML_DEBUG_LN("[METHOD] Looking for impl method: " << qualified_name);
     auto func_sig = env_.lookup_func(qualified_name);
     bool is_from_library = false;
 

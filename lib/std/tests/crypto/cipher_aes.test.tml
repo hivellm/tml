@@ -1,0 +1,174 @@
+//! Tests for aes_encrypt/aes_decrypt helper functions and chacha20 error paths
+
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::crypto::cipher::{
+    AuthTag,
+    aes_encrypt, aes_decrypt,
+    chacha20_poly1305_encrypt, chacha20_poly1305_decrypt,
+    xchacha20_poly1305_encrypt, xchacha20_poly1305_decrypt,
+}
+use std::crypto::random::random_bytes
+
+@test
+func test_aes_encrypt_decrypt_roundtrip() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let plaintext: Buffer = Buffer::from_string("hello world CBC")
+
+    let ct: Buffer = when aes_encrypt(ref key, ref iv, ref plaintext) {
+        Err(e) => return 1,
+        Ok(b) => b
+    }
+    assert(ct.len() > (0 as I64), "ciphertext not empty")
+
+    let pt: Buffer = when aes_decrypt(ref key, ref iv, ref ct) {
+        Err(e) => return 1,
+        Ok(b) => b
+    }
+    assert(pt.len() > (0 as I64), "plaintext not empty after decrypt")
+
+    key.destroy()
+    iv.destroy()
+    return 0
+}
+
+@test
+func test_aes_encrypt_invalid_key() -> I32 {
+    let bad_key: Buffer = random_bytes(10 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+    let plaintext: Buffer = Buffer::from_string("test")
+
+    let result = aes_encrypt(ref bad_key, ref iv, ref plaintext)
+    assert(result.is_err(), "bad key should fail")
+
+    bad_key.destroy()
+    iv.destroy()
+    return 0
+}
+
+@test
+func test_aes_decrypt_invalid_key() -> I32 {
+    let bad_key: Buffer = random_bytes(10 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+    let ct: Buffer = random_bytes(32 as I64)
+
+    let result = aes_decrypt(ref bad_key, ref iv, ref ct)
+    assert(result.is_err(), "bad key should fail")
+
+    bad_key.destroy()
+    iv.destroy()
+    return 0
+}
+
+@test
+func test_chacha20_invalid_key_size() -> I32 {
+    let bad_key: Buffer = random_bytes(16 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+    let pt: Buffer = Buffer::from_string("test")
+    let aad: Buffer = Buffer::new(0)
+
+    let result = chacha20_poly1305_encrypt(ref bad_key, ref nonce, ref pt, ref aad)
+    assert(result.is_err(), "ChaCha20 requires 32-byte key")
+
+    bad_key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_chacha20_invalid_nonce_size() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let bad_nonce: Buffer = random_bytes(8 as I64)
+    let pt: Buffer = Buffer::from_string("test")
+    let aad: Buffer = Buffer::new(0)
+
+    let result = chacha20_poly1305_encrypt(ref key, ref bad_nonce, ref pt, ref aad)
+    assert(result.is_err(), "ChaCha20 requires 12-byte nonce")
+
+    key.destroy()
+    bad_nonce.destroy()
+    return 0
+}
+
+@test
+func test_chacha20_decrypt_invalid_key_size() -> I32 {
+    let bad_key: Buffer = random_bytes(16 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+    let ct: Buffer = random_bytes(32 as I64)
+    let aad: Buffer = Buffer::new(0)
+    let tag_buf: Buffer = random_bytes(16 as I64)
+    let tag: AuthTag = AuthTag::from_bytes(tag_buf)
+
+    let result = chacha20_poly1305_decrypt(ref bad_key, ref nonce, ref ct, ref aad, ref tag)
+    assert(result.is_err(), "ChaCha20 decrypt requires 32-byte key")
+
+    bad_key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_xchacha20_invalid_key_size() -> I32 {
+    let bad_key: Buffer = random_bytes(16 as I64)
+    let nonce: Buffer = random_bytes(24 as I64)
+    let pt: Buffer = Buffer::from_string("test")
+    let aad: Buffer = Buffer::new(0)
+
+    let result = xchacha20_poly1305_encrypt(ref bad_key, ref nonce, ref pt, ref aad)
+    assert(result.is_err(), "XChaCha20 requires 32-byte key")
+
+    bad_key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_xchacha20_invalid_nonce_size() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let bad_nonce: Buffer = random_bytes(12 as I64)
+    let pt: Buffer = Buffer::from_string("test")
+    let aad: Buffer = Buffer::new(0)
+
+    let result = xchacha20_poly1305_encrypt(ref key, ref bad_nonce, ref pt, ref aad)
+    assert(result.is_err(), "XChaCha20 requires 24-byte nonce")
+
+    key.destroy()
+    bad_nonce.destroy()
+    return 0
+}
+
+@test
+func test_xchacha20_decrypt_invalid_key_size() -> I32 {
+    let bad_key: Buffer = random_bytes(16 as I64)
+    let nonce: Buffer = random_bytes(24 as I64)
+    let ct: Buffer = random_bytes(32 as I64)
+    let aad: Buffer = Buffer::new(0)
+    let tag_buf: Buffer = random_bytes(16 as I64)
+    let tag: AuthTag = AuthTag::from_bytes(tag_buf)
+
+    let result = xchacha20_poly1305_decrypt(ref bad_key, ref nonce, ref ct, ref aad, ref tag)
+    assert(result.is_err(), "XChaCha20 decrypt requires 32-byte key")
+
+    bad_key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_xchacha20_decrypt_invalid_nonce_size() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let bad_nonce: Buffer = random_bytes(12 as I64)
+    let ct: Buffer = random_bytes(32 as I64)
+    let aad: Buffer = Buffer::new(0)
+    let tag_buf: Buffer = random_bytes(16 as I64)
+    let tag: AuthTag = AuthTag::from_bytes(tag_buf)
+
+    let result = xchacha20_poly1305_decrypt(ref key, ref bad_nonce, ref ct, ref aad, ref tag)
+    assert(result.is_err(), "XChaCha20 decrypt requires 24-byte nonce")
+
+    key.destroy()
+    bad_nonce.destroy()
+    return 0
+}

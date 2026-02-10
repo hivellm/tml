@@ -101,7 +101,8 @@ TypeEnv::TypeEnv(SnapshotTag, const TypeEnv& source)
     : // Type definition tables (shared across all compilation units)
       structs_(source.structs_), enums_(source.enums_), behaviors_(source.behaviors_),
       functions_(source.functions_), behavior_impls_(source.behavior_impls_),
-      type_aliases_(source.type_aliases_), builtins_(source.builtins_),
+      type_aliases_(source.type_aliases_), type_alias_generics_(source.type_alias_generics_),
+      builtins_(source.builtins_),
       // OOP type definition tables
       classes_(source.classes_), interfaces_(source.interfaces_),
       class_interfaces_(source.class_interfaces_),

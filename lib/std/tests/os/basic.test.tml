@@ -1,0 +1,29 @@
+//! Tests for std::os module - basic system information functions.
+
+use test::{assert, assert_eq}
+use std::os
+
+@test
+func test_arch_returns_non_empty() -> I32 {
+    let a = os::arch()
+    assert(a.len() > (0 as I64), "arch() should return non-empty string")
+    return 0
+}
+
+@test
+func test_platform_returns_known_value() -> I32 {
+    let p = os::platform()
+    assert(p == "win32" or p == "linux" or p == "darwin" or p == "freebsd"
+           or p == "openbsd" or p == "sunos" or p == "aix" or p == "android",
+           "platform() should return a known platform")
+    return 0
+}
+
+@test
+func test_os_type_returns_known_value() -> I32 {
+    let t = os::os_type()
+    assert(t == "Windows_NT" or t == "Linux" or t == "Darwin"
+           or t == "FreeBSD" or t == "OpenBSD",
+           "os_type() should return a known type")
+    return 0
+}

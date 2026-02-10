@@ -24,6 +24,7 @@
 //! | [`hash`] | Fast non-crypto hashes (FNV-1a, Murmur2) for ETags |
 //! | [`zlib`] | Compression (gzip, deflate, brotli, zstd) |
 //! | [`log`] | Structured logging with level-based filtering |
+//! | [`os`] | Operating system information and utilities |
 
 pub mod traits
 pub mod interfaces
@@ -42,3 +43,4 @@ pub mod crypto
 pub mod hash
 pub mod zlib
 pub mod log
+pub mod os

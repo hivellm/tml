@@ -594,6 +594,15 @@ private:
     // Class field info (class_name -> field info list)
     std::unordered_map<std::string, std::vector<ClassFieldInfo>> class_fields_;
 
+    // Class metadata for OOP reflection intrinsics (class_name -> meta)
+    struct ClassMeta {
+        std::string base_class; // Base class name (empty if none)
+        bool is_abstract = false;
+        bool is_sealed = false;
+        size_t method_count = 0; // Number of instance methods (non-static)
+    };
+    std::unordered_map<std::string, ClassMeta> class_meta_;
+
     // Static field info (ClassName.fieldName -> {global_name, type})
     struct StaticFieldInfo {
         std::string global_name; // LLVM global variable name
@@ -1244,6 +1253,9 @@ private:
     void gen_derive_reflect_enum(const parser::EnumDecl& e);
     void gen_derive_reflect_impl(const std::string& type_name, const std::string& typeinfo_name);
     void gen_derive_reflect_enum_methods(const parser::EnumDecl& e, const std::string& type_name);
+    void gen_derive_reflect_field_accessors(const parser::StructDecl& s,
+                                            const std::string& type_name);
+    void ensure_reflect_types_defined();
 
     // @derive(PartialEq, Eq) support
     void gen_derive_partial_eq_struct(const parser::StructDecl& s);

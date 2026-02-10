@@ -15,7 +15,7 @@
  * - Bit 0: 0 = heap, 1 = inline
  */
 
-#include "log.h"
+#include "../diagnostics/log.h"
 
 #include <ctype.h>
 #include <stdint.h>

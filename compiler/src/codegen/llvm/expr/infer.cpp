@@ -591,6 +591,11 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         // Get the type of the object
         types::TypePtr obj_type = infer_expr_type(*field.object);
 
+        // Auto-deref: unwrap RefType for field access (ref T → T)
+        if (obj_type && obj_type->is<types::RefType>()) {
+            obj_type = obj_type->as<types::RefType>().inner;
+        }
+
         // Handle tuple element access (tuple.0, tuple.1, etc.)
         if (obj_type && obj_type->is<types::TupleType>()) {
             const auto& tuple_type = obj_type->as<types::TupleType>();
@@ -1271,6 +1276,11 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         }
 
         types::TypePtr receiver_type = infer_expr_type(*call.receiver);
+
+        // Auto-deref: unwrap RefType for method dispatch (ref T → T)
+        if (receiver_type && receiver_type->is<types::RefType>()) {
+            receiver_type = receiver_type->as<types::RefType>().inner;
+        }
 
         // Check for Ordering methods
         if (receiver_type && receiver_type->is<types::NamedType>()) {

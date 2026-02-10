@@ -1,0 +1,302 @@
+//! UDP networking primitives.
+//!
+//! This module provides UDP socket types for connectionless, datagram-based
+//! communication.
+//!
+//! # Types
+//!
+//! - [`UdpSocket`] - A UDP socket for sending and receiving datagrams
+//!
+//! # UDP vs TCP
+//!
+//! UDP (User Datagram Protocol) differs from TCP in several ways:
+//!
+//! - **Connectionless**: No connection establishment; send to any address
+//! - **Unreliable**: Packets may be lost, duplicated, or arrive out of order
+//! - **Message-oriented**: Each send/receive is a discrete message
+//! - **Lower latency**: No connection overhead or retransmission delays
+
+use std::net::{SocketAddr, SocketAddrV4, IpAddr, Ipv4Addr}
+use std::net::error::{NetError, NetErrorKind}
+use std::net::sys::{RawSocket, SocketType, SocketProtocol, AddressFamily}
+use core::time::Duration
+
+// ============================================================================
+// UdpSocket
+// ============================================================================
+
+/// A UDP socket.
+///
+/// UDP sockets can send and receive datagrams to/from any address.
+/// They can optionally be "connected" to a specific remote address.
+pub type UdpSocket {
+    /// The underlying socket
+    socket: RawSocket,
+    /// Whether the socket is connected to a specific address
+    connected: Bool,
+}
+
+impl UdpSocket {
+    /// Creates a UDP socket from the given address.
+    ///
+    /// This function binds a UDP socket to the specified local address.
+    /// The socket is ready to send and receive datagrams.
+    pub func bind(addr: SocketAddr) -> Outcome[UdpSocket, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Datagram, SocketProtocol::Udp)!
+        socket.bind(ref addr)!
+
+        let udp_socket: UdpSocket = UdpSocket { socket: socket, connected: false }
+        Ok(udp_socket)
+    }
+
+    /// Connects the UDP socket to a remote address.
+    ///
+    /// After connecting, the socket will only receive datagrams from the
+    /// specified address, and `send()` and `recv()` can be used instead
+    /// of `send_to()` and `recv_from()`.
+    pub func connect(mut this, addr: SocketAddr) -> Outcome[(), NetError] {
+        this.socket.connect(ref addr)!
+        this.connected = true
+        Ok(())
+    }
+
+    /// Sends data to the specified address.
+    pub func send_to(this, buf: ref [U8], addr: SocketAddr) -> Outcome[I64, NetError] {
+        this.socket.send_to(buf, ref addr)
+    }
+
+    /// Receives a single datagram and returns the sender's address.
+    pub func recv_from(this, buf: mut ref [U8]) -> Outcome[(I64, SocketAddr), NetError] {
+        this.socket.recv_from(buf)
+    }
+
+    /// Sends data on a connected socket.
+    ///
+    /// This method can only be used after `connect()` has been called.
+    pub func send(this, buf: ref [U8]) -> Outcome[I64, NetError] {
+        if not this.connected {
+            return Err(NetError::new(NetErrorKind::NotConnected()))
+        }
+        this.socket.send(buf)
+    }
+
+    /// Receives data on a connected socket.
+    ///
+    /// This method can only be used after `connect()` has been called.
+    pub func recv(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        if not this.connected {
+            return Err(NetError::new(NetErrorKind::NotConnected()))
+        }
+        this.socket.recv(buf)
+    }
+
+    /// Returns the local address that this socket is bound to.
+    pub func local_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.local_addr()
+    }
+
+    /// Returns the remote address that this socket is connected to.
+    pub func peer_addr(this) -> Outcome[SocketAddr, NetError] {
+        if not this.connected {
+            return Err(NetError::new(NetErrorKind::NotConnected()))
+        }
+        this.socket.peer_addr()
+    }
+
+    /// Sets the read timeout.
+    pub func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[(), NetError] {
+        when dur {
+            Just(d) => this.socket.set_recv_timeout(d.as_millis())
+            Nothing => this.socket.set_recv_timeout(0)
+        }
+    }
+
+    /// Sets the write timeout.
+    pub func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[(), NetError] {
+        when dur {
+            Just(d) => this.socket.set_send_timeout(d.as_millis())
+            Nothing => this.socket.set_send_timeout(0)
+        }
+    }
+
+    /// Gets the read timeout.
+    pub func read_timeout(this) -> Outcome[Maybe[Duration], NetError] {
+        let millis: I64 = this.socket.get_recv_timeout()!
+        if millis == 0 {
+            Ok(Nothing)
+        } else {
+            Ok(Just(Duration::from_millis(millis)))
+        }
+    }
+
+    /// Gets the write timeout.
+    pub func write_timeout(this) -> Outcome[Maybe[Duration], NetError] {
+        let millis: I64 = this.socket.get_send_timeout()!
+        if millis == 0 {
+            Ok(Nothing)
+        } else {
+            Ok(Just(Duration::from_millis(millis)))
+        }
+    }
+
+    /// Sets the value of the `SO_BROADCAST` option.
+    pub func set_broadcast(this, broadcast: Bool) -> Outcome[(), NetError] {
+        this.socket.set_broadcast(broadcast)
+    }
+
+    /// Gets the value of the `SO_BROADCAST` option.
+    pub func broadcast(this) -> Outcome[Bool, NetError] {
+        this.socket.get_broadcast()
+    }
+
+    /// Sets the value of the `IP_TTL` option.
+    pub func set_ttl(this, ttl: I32) -> Outcome[(), NetError] {
+        this.socket.set_ttl(ttl)
+    }
+
+    /// Gets the value of the `IP_TTL` option.
+    pub func ttl(this) -> Outcome[I32, NetError] {
+        this.socket.get_ttl()
+    }
+
+    /// Moves this UDP socket into or out of non-blocking mode.
+    pub func set_nonblocking(mut this, nonblocking: Bool) -> Outcome[(), NetError] {
+        this.socket.set_nonblocking(nonblocking)
+    }
+
+    // ========================================================================
+    // Multicast
+    // ========================================================================
+
+    /// Sets the value of the `IP_MULTICAST_LOOP` option.
+    pub func set_multicast_loop_v4(this, enabled: Bool) -> Outcome[(), NetError] {
+        this.socket.set_multicast_loop_v4(enabled)
+    }
+
+    /// Gets the value of the `IP_MULTICAST_LOOP` option.
+    pub func multicast_loop_v4(this) -> Outcome[Bool, NetError] {
+        this.socket.get_multicast_loop_v4()
+    }
+
+    /// Sets the value of the `IP_MULTICAST_TTL` option.
+    pub func set_multicast_ttl_v4(this, ttl: I32) -> Outcome[(), NetError] {
+        this.socket.set_multicast_ttl_v4(ttl)
+    }
+
+    /// Gets the value of the `IP_MULTICAST_TTL` option.
+    pub func multicast_ttl_v4(this) -> Outcome[I32, NetError] {
+        this.socket.get_multicast_ttl_v4()
+    }
+
+    // ========================================================================
+    // Raw socket access
+    // ========================================================================
+
+    /// Returns a reference to the underlying raw socket.
+    pub func as_raw_socket(this) -> ref RawSocket {
+        ref this.socket
+    }
+
+    /// Consumes the socket and returns the underlying raw socket.
+    pub func into_raw_socket(this) -> RawSocket {
+        this.socket
+    }
+
+    /// Returns whether this socket is connected.
+    pub func is_connected(this) -> Bool {
+        this.connected
+    }
+}
+
+// ============================================================================
+// UdpBuilder - Builder pattern for UDP sockets
+// ============================================================================
+
+/// A builder for creating UDP sockets with custom options.
+pub type UdpBuilder {
+    broadcast: Bool,
+    ttl: Maybe[I32],
+    multicast_loop: Bool,
+    multicast_ttl: Maybe[I32],
+    recv_buffer_size: Maybe[I32],
+    send_buffer_size: Maybe[I32],
+}
+
+impl UdpBuilder {
+    /// Creates a new UDP builder with default options.
+    pub func new() -> UdpBuilder {
+        UdpBuilder {
+            broadcast: false,
+            ttl: Nothing,
+            multicast_loop: true,
+            multicast_ttl: Nothing,
+            recv_buffer_size: Nothing,
+            send_buffer_size: Nothing,
+        }
+    }
+
+    /// Enables or disables broadcast.
+    pub func broadcast(mut this, broadcast: Bool) -> UdpBuilder {
+        this.broadcast = broadcast
+        this
+    }
+
+    /// Sets the TTL.
+    pub func ttl(mut this, ttl: I32) -> UdpBuilder {
+        this.ttl = Just(ttl)
+        this
+    }
+
+    /// Enables or disables multicast loopback.
+    pub func multicast_loop(mut this, enabled: Bool) -> UdpBuilder {
+        this.multicast_loop = enabled
+        this
+    }
+
+    /// Sets the multicast TTL.
+    pub func multicast_ttl(mut this, ttl: I32) -> UdpBuilder {
+        this.multicast_ttl = Just(ttl)
+        this
+    }
+
+    /// Sets the receive buffer size.
+    pub func recv_buffer_size(mut this, size: I32) -> UdpBuilder {
+        this.recv_buffer_size = Just(size)
+        this
+    }
+
+    /// Sets the send buffer size.
+    pub func send_buffer_size(mut this, size: I32) -> UdpBuilder {
+        this.send_buffer_size = Just(size)
+        this
+    }
+
+    /// Binds to an address and creates a UdpSocket.
+    pub func bind(this, addr: SocketAddr) -> Outcome[UdpSocket, NetError] {
+        var socket: UdpSocket = UdpSocket::bind(addr)!
+
+        if this.broadcast {
+            socket.set_broadcast(true)!
+        }
+        when this.ttl {
+            Just(t) => socket.set_ttl(t)!
+            Nothing => {}
+        }
+        socket.set_multicast_loop_v4(this.multicast_loop)!
+        when this.multicast_ttl {
+            Just(t) => socket.set_multicast_ttl_v4(t)!
+            Nothing => {}
+        }
+        when this.recv_buffer_size {
+            Just(size) => socket.socket.set_recv_buffer_size(size)!
+            Nothing => {}
+        }
+        when this.send_buffer_size {
+            Just(size) => socket.socket.set_send_buffer_size(size)!
+            Nothing => {}
+        }
+
+        Ok(socket)
+    }
+}

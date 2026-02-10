@@ -270,6 +270,25 @@ auto TypeEnv::lookup_type_alias(const std::string& name) const -> std::optional<
     return std::nullopt;
 }
 
+auto TypeEnv::lookup_type_alias_generics(const std::string& name) const
+    -> std::optional<std::vector<std::string>> {
+    auto it = type_alias_generics_.find(name);
+    if (it != type_alias_generics_.end())
+        return it->second;
+    if (module_registry_) {
+        auto import_path = resolve_imported_symbol(name);
+        if (import_path) {
+            auto pos = import_path->rfind("::");
+            if (pos != std::string::npos) {
+                std::string module_path = import_path->substr(0, pos);
+                std::string symbol_name = import_path->substr(pos + 2);
+                return module_registry_->lookup_type_alias_generics(module_path, symbol_name);
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 auto TypeEnv::lookup_class(const std::string& name) const -> std::optional<ClassDef> {
     auto it = classes_.find(name);
     if (it != classes_.end())

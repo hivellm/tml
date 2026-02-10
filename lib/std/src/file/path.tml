@@ -1,0 +1,116 @@
+//! Path manipulation utilities.
+//!
+//! Provides the [`Path`] type for querying and manipulating
+//! file system paths.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::file::Path
+//!
+//! if Path::exists("data.json") {
+//!     let dir = Path::parent("data.json")
+//!     let name = Path::filename("data.json")
+//! }
+//! ```
+
+/// Path manipulation utilities.
+///
+/// `Path` provides static methods for working with file system paths:
+/// checking existence, joining paths, extracting components, etc.
+///
+/// # Example
+///
+/// ```tml
+/// let full = Path::join("output", "data.txt")
+/// let ext = Path::extension("file.txt")  // ".txt"
+/// ```
+pub type Path {
+    dummy: I32
+}
+
+impl Path {
+    /// Check if a path exists
+    pub func exists(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_exists(path) }
+        return r
+    }
+
+    /// Check if path is a file
+    pub func is_file(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_is_file(path) }
+        return r
+    }
+
+    /// Check if path is a directory
+    pub func is_dir(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_is_dir(path) }
+        return r
+    }
+
+    /// Remove a file
+    pub func remove(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_remove(path) }
+        return r
+    }
+
+    /// Rename/move a file or directory
+    pub func rename(src_path: Str, dst_path: Str) -> Bool {
+        let r: Bool = lowlevel { path_rename(src_path, dst_path) }
+        return r
+    }
+
+    /// Copy a file
+    pub func copy(src_path: Str, dst_path: Str) -> Bool {
+        let r: Bool = lowlevel { path_copy(src_path, dst_path) }
+        return r
+    }
+
+    /// Join two path components
+    pub func join(base_path: Str, child_path: Str) -> Str {
+        let r: Str = lowlevel { path_join(base_path, child_path) }
+        return r
+    }
+
+    /// Get the parent directory of a path
+    pub func parent(path: Str) -> Str {
+        let r: Str = lowlevel { path_parent(path) }
+        return r
+    }
+
+    /// Get the filename from a path
+    pub func filename(path: Str) -> Str {
+        let r: Str = lowlevel { path_filename(path) }
+        return r
+    }
+
+    /// Get the file extension (including dot)
+    pub func extension(path: Str) -> Str {
+        let r: Str = lowlevel { path_extension(path) }
+        return r
+    }
+
+    /// Get the absolute path
+    pub func absolute(path: Str) -> Str {
+        let r: Str = lowlevel { path_absolute(path) }
+        return r
+    }
+
+    /// Create a directory
+    pub func create_dir(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_create_dir(path) }
+        return r
+    }
+
+    /// Create a directory and all parent directories
+    pub func create_dir_all(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_create_dir_all(path) }
+        return r
+    }
+
+    /// Remove a directory
+    pub func remove_dir(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_remove_dir(path) }
+        return r
+    }
+}

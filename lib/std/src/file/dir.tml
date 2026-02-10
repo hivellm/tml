@@ -1,0 +1,49 @@
+//! Directory operations.
+//!
+//! Provides the [`Dir`] type for creating, removing, and
+//! managing directories.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::file::Dir
+//!
+//! Dir::create("output")
+//! Dir::create_all("a/b/c")
+//! Dir::remove("output")
+//! ```
+
+/// Directory manipulation utilities.
+///
+/// `Dir` provides static methods for creating and removing directories.
+///
+/// # Example
+///
+/// ```tml
+/// if not Path::exists("output") {
+///     Dir::create("output")
+/// }
+/// ```
+pub type Dir {
+    dummy: I32
+}
+
+impl Dir {
+    /// Create a directory
+    pub func create(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_create_dir(path) }
+        return r
+    }
+
+    /// Create a directory and all parent directories
+    pub func create_all(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_create_dir_all(path) }
+        return r
+    }
+
+    /// Remove an empty directory
+    pub func remove(path: Str) -> Bool {
+        let r: Bool = lowlevel { path_remove_dir(path) }
+        return r
+    }
+}

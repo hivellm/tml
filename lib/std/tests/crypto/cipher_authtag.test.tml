@@ -1,0 +1,188 @@
+//! Tests for AuthTag methods and Decipher::set_aad_str
+
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::crypto::cipher::{
+    CipherAlgorithm, Cipher, Decipher, AuthTag,
+    aes_gcm_encrypt, aes_gcm_decrypt,
+}
+use std::crypto::random::random_bytes
+
+@test
+func test_authtag_len() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+
+    let mut cipher: Cipher = when Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref nonce) {
+        Err(e) => return 1,
+        Ok(c) => c
+    }
+    cipher.update("test data")
+    let ct: Buffer = when cipher.finalize() {
+        Err(e) => return 1,
+        Ok(b) => b
+    }
+    let tag: AuthTag = when cipher.get_auth_tag() {
+        Err(e) => return 1,
+        Ok(t) => t
+    }
+
+    assert_eq(tag.len(), 16 as I64, "GCM auth tag is 16 bytes")
+
+    cipher.destroy()
+    key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_authtag_to_hex() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+
+    let mut cipher: Cipher = when Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref nonce) {
+        Err(e) => return 1,
+        Ok(c) => c
+    }
+    cipher.update("hello")
+    let ct: Buffer = when cipher.finalize() {
+        Err(e) => return 1,
+        Ok(b) => b
+    }
+    let tag: AuthTag = when cipher.get_auth_tag() {
+        Err(e) => return 1,
+        Ok(t) => t
+    }
+
+    let hex: Str = tag.to_hex()
+    assert_eq(hex.len(), 32 as I64, "hex representation is 32 chars for 16 bytes")
+
+    cipher.destroy()
+    key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_authtag_from_hex_roundtrip() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+
+    let mut cipher: Cipher = when Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref nonce) {
+        Err(e) => return 1,
+        Ok(c) => c
+    }
+    cipher.update("roundtrip test")
+    let ct: Buffer = when cipher.finalize() {
+        Err(e) => return 1,
+        Ok(b) => b
+    }
+    let tag: AuthTag = when cipher.get_auth_tag() {
+        Err(e) => return 1,
+        Ok(t) => t
+    }
+
+    let hex: Str = tag.to_hex()
+    let tag2: AuthTag = when AuthTag::from_hex(hex) {
+        Err(e) => return 1,
+        Ok(t) => t
+    }
+    assert_eq(tag2.len(), 16 as I64, "restored tag has correct length")
+    assert_eq(tag2.to_hex(), hex, "hex roundtrip preserves value")
+
+    cipher.destroy()
+    key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_authtag_from_hex_invalid() -> I32 {
+    let result = AuthTag::from_hex("not-valid-hex!!!")
+    assert(result.is_err(), "invalid hex should fail")
+    return 0
+}
+
+@test
+func test_authtag_from_bytes() -> I32 {
+    let buf: Buffer = random_bytes(16 as I64)
+    let tag: AuthTag = AuthTag::from_bytes(buf)
+    assert_eq(tag.len(), 16 as I64, "from_bytes preserves length")
+    return 0
+}
+
+@test
+func test_authtag_bytes_ref() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+
+    let mut cipher: Cipher = when Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref nonce) {
+        Err(e) => return 1,
+        Ok(c) => c
+    }
+    cipher.update("data")
+    let ct: Buffer = when cipher.finalize() {
+        Err(e) => return 1,
+        Ok(b) => b
+    }
+    let tag: AuthTag = when cipher.get_auth_tag() {
+        Err(e) => return 1,
+        Ok(t) => t
+    }
+
+    let bytes_ref: ref Buffer = tag.bytes()
+    assert(bytes_ref.len() > (0 as I64), "bytes() returns non-empty buffer ref")
+
+    cipher.destroy()
+    key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_decipher_set_aad_str() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+
+    // Encrypt with AAD string
+    let mut cipher: Cipher = when Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref nonce) {
+        Err(e) => return 1,
+        Ok(c) => c
+    }
+    when cipher.set_aad_str("additional data") {
+        Err(e) => return 1,
+        Ok(_) => {}
+    }
+    cipher.update("secret")
+    let ct: Buffer = when cipher.finalize() {
+        Err(e) => return 1,
+        Ok(b) => b
+    }
+    let tag: AuthTag = when cipher.get_auth_tag() {
+        Err(e) => return 1,
+        Ok(t) => t
+    }
+
+    // Decrypt with matching AAD string using Decipher::set_aad_str
+    let mut decipher: Decipher = when Decipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref nonce) {
+        Err(e) => return 1,
+        Ok(d) => d
+    }
+    when decipher.set_aad_str("additional data") {
+        Err(e) => return 1,
+        Ok(_) => {}
+    }
+    decipher.set_auth_tag(ref tag)
+    decipher.update_bytes(ref ct)
+    let pt: Buffer = when decipher.finalize() {
+        Err(e) => return 1,
+        Ok(b) => b
+    }
+    assert(pt.len() > (0 as I64), "decrypted with set_aad_str works")
+
+    cipher.destroy()
+    decipher.destroy()
+    key.destroy()
+    nonce.destroy()
+    return 0
+}

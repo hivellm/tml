@@ -1,0 +1,129 @@
+use std::crypto::error::{CryptoError, CryptoErrorKind}
+use std::crypto::key::{PublicKey, KeyType}
+use std::collections::{Buffer, List}
+
+@extern("crypto_x509_from_pem")
+func ffi_crypto_x509_from_pem(pem: Str) -> *Unit
+
+@extern("crypto_x509_destroy")
+func ffi_crypto_x509_destroy(handle: *Unit)
+
+@extern("crypto_x509_get_subject_cn")
+func ffi_crypto_x509_get_subject_cn(handle: *Unit) -> Str
+
+pub type X509CertMin {
+    handle: *Unit
+}
+
+impl X509CertMin {
+    pub func from_pem(pem: Str) -> Outcome[X509CertMin, CryptoError] {
+        let handle: *Unit = ffi_crypto_x509_from_pem(pem)
+        if handle == null {
+            return Err(CryptoError::from_kind(CryptoErrorKind::CertificateParseError))
+        }
+        return Ok(X509CertMin { handle: handle })
+    }
+
+    pub func destroy(mut this) {
+        if this.handle != null {
+            ffi_crypto_x509_destroy(this.handle)
+            this.handle = null
+        }
+    }
+}
+
+@extern("crypto_x509_check_issued")
+func ffi_crypto_x509_check_issued(handle: *Unit, issuer_handle: *Unit) -> Bool
+
+@extern("crypto_x509_verify")
+func ffi_crypto_x509_verify(handle: *Unit, key_handle: *Unit) -> Bool
+
+@extern("crypto_x509_get_public_key")
+func ffi_crypto_x509_get_public_key(handle: *Unit) -> *Unit
+
+@extern("crypto_key_get_type")
+func ffi_crypto_key_get_type(handle: *Unit) -> Str
+
+impl X509CertMin {
+    pub func check_issued(this, issuer_cert: ref X509CertMin) -> Bool {
+        let result: Bool = ffi_crypto_x509_check_issued(this.handle, issuer_cert.handle)
+        return result
+    }
+
+    pub func verify(this, key: ref PublicKey) -> Outcome[Bool, CryptoError] {
+        let result: Bool = ffi_crypto_x509_verify(this.handle, key.handle)
+        return Ok(result)
+    }
+
+    pub func public_key(this) -> PublicKey {
+        let pk_handle: *Unit = ffi_crypto_x509_get_public_key(this.handle)
+        let key_type_str: Str = ffi_crypto_key_get_type(pk_handle)
+        let key_type = KeyType::from_name(key_type_str).unwrap_or(KeyType::Rsa)
+        return PublicKey { handle: pk_handle, key_type: key_type }
+    }
+}
+
+pub type X509ChainMin {
+    certificates: List[X509CertMin]
+}
+
+impl X509ChainMin {
+    pub func new() -> X509ChainMin {
+        return X509ChainMin {
+            certificates: List[X509CertMin]::new(4),
+        }
+    }
+
+    pub func verify(this, cert: ref X509CertMin) -> Outcome[Bool, CryptoError] {
+        let mut i: I64 = 0
+        loop (true) {
+            if i >= this.certificates.len() {
+                break
+            }
+            let ca = ref this.certificates[i]
+            if cert.check_issued(ca) {
+                let verify_result = cert.verify(ca.public_key())
+                when verify_result {
+                    Err(e) => return Err(e),
+                    Ok(valid) => {
+                        if valid {
+                            return Ok(true)
+                        }
+                    }
+                }
+            }
+            i = i + 1
+        }
+        return Ok(false)
+    }
+
+    pub func verify_chain(this, cert: ref X509CertMin) -> Outcome[Bool, CryptoError] {
+        let mut i: I64 = 0
+        loop (true) {
+            if i >= this.certificates.len() {
+                break
+            }
+            let ca: X509CertMin = this.certificates.get(i)
+            if cert.check_issued(ref ca) {
+                let pk: PublicKey = ca.public_key()
+                let verify_result = cert.verify(pk)
+                when verify_result {
+                    Err(e) => return Err(e),
+                    Ok(valid) => {
+                        if valid {
+                            let is_self_issued: Bool = ca.check_issued(ref ca)
+                            if is_self_issued {
+                                return Ok(true)
+                            }
+                            return this.verify_chain(ref ca)
+                        }
+                    }
+                }
+            }
+            i = i + 1
+        }
+        return Ok(false)
+    }
+}
+
+// key_usage removed for test

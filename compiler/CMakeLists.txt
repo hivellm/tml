@@ -160,21 +160,35 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 # Runtime source files
 # Note: io.c is excluded - essential.c provides the same functions plus panic catching
 set(TML_RUNTIME_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/essential.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/string.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/mem.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/time.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/async.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/text.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/math.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/thread.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/sync.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/pool.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/backtrace.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/log.c
+    # core/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential.c
+    # memory/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/mem.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/pool.c
+    # text/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/text/string.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/text/text.c
+    # collections/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections/collections.c
+    # math/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/math/math.c
+    # time/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/time/time.c
+    # concurrency/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/thread.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/sync.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/async.c
+    # net/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/net.c
+    # os/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/os/os.c
+    # crypto/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto/crypto.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto/crypto_key.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto/crypto_x509.c
+    # diagnostics/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/diagnostics/backtrace.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/diagnostics/log.c
 )
 
 # Create static library
@@ -215,6 +229,24 @@ foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
 endforeach()
 
 message(STATUS "TML Runtime: Building static library (tml_runtime)")
+
+# OpenSSL support for crypto runtime modules
+set(OPENSSL_ROOT "C:/Program Files/OpenSSL-Win64")
+if(EXISTS "${OPENSSL_ROOT}/include/openssl/evp.h")
+    message(STATUS "OpenSSL: Found at ${OPENSSL_ROOT}")
+    target_include_directories(tml_runtime PRIVATE "${OPENSSL_ROOT}/include")
+    target_include_directories(tml_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto")
+    target_compile_definitions(tml_runtime PRIVATE TML_HAS_OPENSSL=1)
+    # Link OpenSSL static libraries
+    target_link_libraries(tml_runtime PUBLIC
+        "${OPENSSL_ROOT}/lib/libcrypto_static.lib"
+        "${OPENSSL_ROOT}/lib/libssl_static.lib"
+        crypt32 ws2_32
+    )
+else()
+    message(STATUS "OpenSSL: Not found, crypto_x509 will use stub implementations")
+    target_include_directories(tml_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto")
+endif()
 
 # Common utilities library
 add_library(tml_common STATIC

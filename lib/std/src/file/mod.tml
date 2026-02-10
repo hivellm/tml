@@ -1,13 +1,14 @@
 //! File I/O operations for TML programs.
 //!
 //! This module provides types for reading and writing files,
-//! as well as path manipulation utilities.
+//! directory management, and path manipulation utilities.
 //!
 //! # Main Types
 //!
 //! | Type | Description |
 //! |------|-------------|
 //! | [`File`] | Handle for reading and writing files |
+//! | [`Dir`]  | Directory creation and removal |
 //! | [`Path`] | Path manipulation utilities |
 //!
 //! # Example
@@ -21,199 +22,24 @@
 //! // Write to file
 //! File::write_all("output.txt", "Hello, World!")
 //!
+//! // Create directory
+//! Dir::create_all("output/data")
+//!
 //! // Check if path exists
 //! if Path::exists("data.json") {
 //!     print("File exists!")
 //! }
 //! ```
 
-/// A file handle for reading and writing operations.
-///
-/// `File` provides both instance methods for streaming I/O
-/// and static methods for simple read/write operations.
-///
-/// # Example
-///
-/// ```tml
-/// let file = File::open_read("data.txt")
-/// let line = file.read_line()
-/// file.close()
-/// ```
-pub type File {
-    handle: *Unit
-}
+pub mod file
+pub mod dir
+pub mod path
 
-impl File {
-    /// Open a file for reading
-    pub func open_read(path: Str) -> File {
-        let h: *Unit = lowlevel { file_open_read(path) }
-        File { handle: h }
-    }
+// Re-export file types
+pub use std::file::file::{File}
 
-    /// Open a file for writing (creates or truncates)
-    pub func open_write(path: Str) -> File {
-        let h: *Unit = lowlevel { file_open_write(path) }
-        File { handle: h }
-    }
+// Re-export directory types
+pub use std::file::dir::{Dir}
 
-    /// Open a file for appending
-    pub func open_append(path: Str) -> File {
-        let h: *Unit = lowlevel { file_open_append(path) }
-        File { handle: h }
-    }
-
-    /// Check if the file is open
-    pub func is_open(this) -> Bool {
-        let r: Bool = lowlevel { file_is_open(this.handle) }
-        return r
-    }
-
-    /// Read a single line from the file
-    pub func read_line(this) -> Str {
-        let r: Str = lowlevel { file_read_line(this.handle) }
-        return r
-    }
-
-    /// Write a string to the file
-    pub func write_str(this, content: Str) -> Bool {
-        let r: Bool = lowlevel { file_write_str(this.handle, content) }
-        return r
-    }
-
-    /// Get the size of the file in bytes
-    pub func size(this) -> I64 {
-        let r: I64 = lowlevel { file_size(this.handle) }
-        return r
-    }
-
-    /// Close the file
-    pub func close(this) {
-        lowlevel { file_close(this.handle) }
-    }
-
-    // ========== Static utility functions ==========
-
-    /// Read entire file contents as a string
-    pub func read_all(path: Str) -> Str {
-        let r: Str = lowlevel { file_read_all(path) }
-        return r
-    }
-
-    /// Write content to a file (overwrites if exists)
-    pub func write_all(path: Str, content: Str) -> Bool {
-        let r: Bool = lowlevel { file_write_all(path, content) }
-        return r
-    }
-
-    /// Append content to a file
-    pub func append_all(path: Str, content: Str) -> Bool {
-        let r: Bool = lowlevel { file_append_all(path, content) }
-        return r
-    }
-}
-
-/// Path manipulation utilities.
-///
-/// `Path` provides static methods for working with file system paths:
-/// checking existence, creating directories, joining paths, etc.
-///
-/// # Example
-///
-/// ```tml
-/// // Check and create directory
-/// if not Path::exists("output") {
-///     Path::create_dir("output")
-/// }
-///
-/// // Join paths
-/// let full_path = Path::join("output", "data.txt")
-/// ```
-pub type Path {
-    dummy: I32
-}
-
-impl Path {
-    /// Check if a path exists
-    pub func exists(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_exists(path) }
-        return r
-    }
-
-    /// Check if path is a file
-    pub func is_file(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_is_file(path) }
-        return r
-    }
-
-    /// Check if path is a directory
-    pub func is_dir(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_is_dir(path) }
-        return r
-    }
-
-    /// Create a directory
-    pub func create_dir(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_create_dir(path) }
-        return r
-    }
-
-    /// Create a directory and all parent directories
-    pub func create_dir_all(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_create_dir_all(path) }
-        return r
-    }
-
-    /// Remove a file
-    pub func remove(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_remove(path) }
-        return r
-    }
-
-    /// Remove an empty directory
-    pub func remove_dir(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_remove_dir(path) }
-        return r
-    }
-
-    /// Rename/move a file or directory
-    pub func rename(src_path: Str, dst_path: Str) -> Bool {
-        let r: Bool = lowlevel { path_rename(src_path, dst_path) }
-        return r
-    }
-
-    /// Copy a file
-    pub func copy(src_path: Str, dst_path: Str) -> Bool {
-        let r: Bool = lowlevel { path_copy(src_path, dst_path) }
-        return r
-    }
-
-    /// Join two path components
-    pub func join(base_path: Str, child_path: Str) -> Str {
-        let r: Str = lowlevel { path_join(base_path, child_path) }
-        return r
-    }
-
-    /// Get the parent directory of a path
-    pub func parent(path: Str) -> Str {
-        let r: Str = lowlevel { path_parent(path) }
-        return r
-    }
-
-    /// Get the filename from a path
-    pub func filename(path: Str) -> Str {
-        let r: Str = lowlevel { path_filename(path) }
-        return r
-    }
-
-    /// Get the file extension (including dot)
-    pub func extension(path: Str) -> Str {
-        let r: Str = lowlevel { path_extension(path) }
-        return r
-    }
-
-    /// Get the absolute path
-    pub func absolute(path: Str) -> Str {
-        let r: Str = lowlevel { path_absolute(path) }
-        return r
-    }
-}
+// Re-export path types
+pub use std::file::path::{Path}

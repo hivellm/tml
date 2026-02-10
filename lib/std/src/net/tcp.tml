@@ -1,0 +1,415 @@
+//! TCP networking primitives.
+//!
+//! This module provides TCP socket types for reliable, ordered, connection-based
+//! byte stream communication.
+//!
+//! # Types
+//!
+//! - [`TcpListener`] - Listens for incoming TCP connections
+//! - [`TcpStream`] - A connected TCP socket for reading and writing
+//! - [`TcpIncoming`] - Iterator over incoming connections
+//!
+//! # Example: Echo Server
+//!
+//! ```tml
+//! use std::net::tcp::{TcpListener, TcpStream}
+//! use std::net::{SocketAddr, Ipv4Addr}
+//!
+//! func main() -> Outcome[(), NetError] {
+//!     // Bind to localhost:8080
+//!     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST, 8080)
+//!     let listener = TcpListener::bind(addr)!
+//!
+//!     print("Listening on {}\n", listener.local_addr())
+//!
+//!     // Accept connections
+//!     loop (true) {
+//!         let (mut stream, peer) = listener.accept()!
+//!         print("Connection from {}\n", peer)
+//!
+//!         // Echo data back
+//!         var buf: [U8; 1024] = [0; 1024]
+//!         loop (true) {
+//!             let n = stream.read(mut ref buf)!
+//!             if n == 0 { break }
+//!             stream.write_all(ref buf[0..n])!
+//!         }
+//!     }
+//! }
+//! ```
+
+use std::net::{SocketAddr, SocketAddrV4, IpAddr, Ipv4Addr}
+use std::net::error::{NetError, NetErrorKind}
+use std::net::sys::{RawSocket, SocketType, SocketProtocol, AddressFamily, ShutdownMode}
+use core::time::Duration
+
+// ============================================================================
+// TcpListener
+// ============================================================================
+
+/// A TCP socket server, listening for connections.
+///
+/// After creating a `TcpListener` by binding it to a socket address, it listens
+/// for incoming TCP connections. These can be accepted by calling [`accept()`]
+/// or by iterating over the [`incoming()`] iterator.
+///
+/// The socket will be closed when the value is dropped.
+pub type TcpListener {
+    /// The underlying socket
+    socket: RawSocket,
+}
+
+impl TcpListener {
+    /// Creates a new `TcpListener` which will be bound to the specified address.
+    ///
+    /// The returned listener is ready for accepting connections.
+    pub func bind(addr: SocketAddr) -> Outcome[TcpListener, NetError] {
+        // Determine address family
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+
+        // Create socket
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        // Set SO_REUSEADDR
+        socket.set_reuse_addr(true)!
+
+        // Bind to address
+        socket.bind(ref addr)!
+
+        // Start listening with default backlog
+        socket.listen(128)!
+
+        let listener: TcpListener = TcpListener { socket: socket }
+        Ok(listener)
+    }
+
+    /// Creates a new `TcpListener` bound to the specified address with custom backlog.
+    pub func bind_with_backlog(addr: SocketAddr, backlog: I32) -> Outcome[TcpListener, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+        socket.set_reuse_addr(true)!
+        socket.bind(ref addr)!
+        socket.listen(backlog)!
+        let listener: TcpListener = TcpListener { socket: socket }
+        Ok(listener)
+    }
+
+    /// Accept a new incoming connection from this listener.
+    ///
+    /// This function will block the calling thread until a new TCP connection
+    /// is established. When established, the corresponding [`TcpStream`] and
+    /// the remote peer's address will be returned.
+    pub func accept(this) -> Outcome[(TcpStream, SocketAddr), NetError] {
+        let result: (RawSocket, SocketAddr) = this.socket.accept()!
+        let stream: TcpStream = TcpStream {
+            socket: result.0,
+        }
+        Ok((stream, result.1))
+    }
+
+    /// Returns the local socket address of this listener.
+    pub func local_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.local_addr()
+    }
+
+    /// Sets the value of the `SO_REUSEADDR` option on this socket.
+    pub func set_reuse_addr(this, reuse: Bool) -> Outcome[(), NetError] {
+        this.socket.set_reuse_addr(reuse)
+    }
+
+    /// Gets the value of the `IP_TTL` option for this socket.
+    pub func ttl(this) -> Outcome[I32, NetError] {
+        this.socket.get_ttl()
+    }
+
+    /// Sets the value of the `IP_TTL` option for this socket.
+    pub func set_ttl(this, ttl: I32) -> Outcome[(), NetError] {
+        this.socket.set_ttl(ttl)
+    }
+
+    /// Moves this TCP listener into or out of non-blocking mode.
+    pub func set_nonblocking(mut this, nonblocking: Bool) -> Outcome[(), NetError] {
+        this.socket.set_nonblocking(nonblocking)
+    }
+
+    /// Returns a reference to the underlying raw socket.
+    pub func as_raw_socket(this) -> ref RawSocket {
+        ref this.socket
+    }
+
+    /// Consumes the listener and returns the underlying raw socket.
+    pub func into_raw_socket(this) -> RawSocket {
+        this.socket
+    }
+}
+
+// ============================================================================
+// TcpStream
+// ============================================================================
+
+/// A TCP stream between a local and a remote socket.
+///
+/// After creating a `TcpStream` by either connecting to a remote host or
+/// accepting a connection on a `TcpListener`, data can be transmitted by
+/// reading and writing to it.
+///
+/// The connection is closed when the value is dropped.
+pub type TcpStream {
+    /// The underlying socket
+    socket: RawSocket,
+}
+
+impl TcpStream {
+    /// Opens a TCP connection to a remote host.
+    pub func connect(addr: SocketAddr) -> Outcome[TcpStream, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+        socket.connect(ref addr)!
+        let stream: TcpStream = TcpStream { socket: socket }
+        Ok(stream)
+    }
+
+    /// Returns the socket address of the remote peer.
+    pub func peer_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.peer_addr()
+    }
+
+    /// Returns the socket address of the local half.
+    pub func local_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.local_addr()
+    }
+
+    /// Shuts down the read, write, or both halves of this connection.
+    pub func shutdown(this, how: ShutdownMode) -> Outcome[(), NetError] {
+        this.socket.shutdown(how)
+    }
+
+    /// Sets the read timeout to the given duration.
+    pub func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[(), NetError] {
+        when dur {
+            Just(d) => this.socket.set_recv_timeout(d.as_millis())
+            Nothing => this.socket.set_recv_timeout(0)
+        }
+    }
+
+    /// Sets the write timeout to the given duration.
+    pub func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[(), NetError] {
+        when dur {
+            Just(d) => this.socket.set_send_timeout(d.as_millis())
+            Nothing => this.socket.set_send_timeout(0)
+        }
+    }
+
+    /// Gets the read timeout.
+    pub func read_timeout(this) -> Outcome[Maybe[Duration], NetError] {
+        let millis: I64 = this.socket.get_recv_timeout()!
+        if millis == 0 {
+            Ok(Nothing)
+        } else {
+            Ok(Just(Duration::from_millis(millis)))
+        }
+    }
+
+    /// Gets the write timeout.
+    pub func write_timeout(this) -> Outcome[Maybe[Duration], NetError] {
+        let millis: I64 = this.socket.get_send_timeout()!
+        if millis == 0 {
+            Ok(Nothing)
+        } else {
+            Ok(Just(Duration::from_millis(millis)))
+        }
+    }
+
+    /// Receives data on the socket without removing it from the queue.
+    pub func peek(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        this.socket.peek(buf)
+    }
+
+    /// Sets the value of the `TCP_NODELAY` option.
+    pub func set_nodelay(this, nodelay: Bool) -> Outcome[(), NetError] {
+        this.socket.set_nodelay(nodelay)
+    }
+
+    /// Gets the value of the `TCP_NODELAY` option.
+    pub func nodelay(this) -> Outcome[Bool, NetError] {
+        this.socket.get_nodelay()
+    }
+
+    /// Sets the value of the `SO_KEEPALIVE` option.
+    pub func set_keepalive(this, keepalive: Bool) -> Outcome[(), NetError] {
+        this.socket.set_keepalive(keepalive)
+    }
+
+    /// Gets the value of the `SO_KEEPALIVE` option.
+    pub func keepalive(this) -> Outcome[Bool, NetError] {
+        this.socket.get_keepalive()
+    }
+
+    /// Gets the value of the `IP_TTL` option.
+    pub func ttl(this) -> Outcome[I32, NetError] {
+        this.socket.get_ttl()
+    }
+
+    /// Sets the value of the `IP_TTL` option.
+    pub func set_ttl(this, ttl: I32) -> Outcome[(), NetError] {
+        this.socket.set_ttl(ttl)
+    }
+
+    /// Moves this TCP stream into or out of non-blocking mode.
+    pub func set_nonblocking(mut this, nonblocking: Bool) -> Outcome[(), NetError] {
+        this.socket.set_nonblocking(nonblocking)
+    }
+
+    /// Returns a reference to the underlying raw socket.
+    pub func as_raw_socket(this) -> ref RawSocket {
+        ref this.socket
+    }
+
+    /// Consumes the stream and returns the underlying raw socket.
+    pub func into_raw_socket(this) -> RawSocket {
+        this.socket
+    }
+
+    // ========================================================================
+    // Read and Write operations
+    // ========================================================================
+
+    /// Reads data into the provided buffer.
+    ///
+    /// Returns the number of bytes read. Returns 0 if the connection was closed.
+    pub func read(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        this.socket.recv(buf)
+    }
+
+    /// Writes data to the socket.
+    ///
+    /// Returns the number of bytes written.
+    pub func write(this, buf: ref [U8]) -> Outcome[I64, NetError] {
+        this.socket.send(buf)
+    }
+
+    /// Flushes this output stream. For TCP, this is a no-op.
+    pub func flush(this) -> Outcome[(), NetError] {
+        Ok(())
+    }
+}
+
+// ============================================================================
+// TcpBuilder - Builder pattern for TCP sockets
+// ============================================================================
+
+/// A builder for creating TCP sockets with custom options.
+pub type TcpBuilder {
+    reuse_addr: Bool,
+    nodelay: Bool,
+    keepalive: Bool,
+    recv_buffer_size: Maybe[I32],
+    send_buffer_size: Maybe[I32],
+    backlog: I32,
+}
+
+impl TcpBuilder {
+    /// Creates a new TCP builder with default options.
+    pub func new() -> TcpBuilder {
+        TcpBuilder {
+            reuse_addr: true,
+            nodelay: false,
+            keepalive: false,
+            recv_buffer_size: Nothing,
+            send_buffer_size: Nothing,
+            backlog: 128,
+        }
+    }
+
+    /// Sets the `SO_REUSEADDR` option.
+    pub func reuse_addr(mut this, reuse: Bool) -> TcpBuilder {
+        this.reuse_addr = reuse
+        this
+    }
+
+    /// Sets the `TCP_NODELAY` option.
+    pub func nodelay(mut this, nodelay: Bool) -> TcpBuilder {
+        this.nodelay = nodelay
+        this
+    }
+
+    /// Sets the `SO_KEEPALIVE` option.
+    pub func keepalive(mut this, keepalive: Bool) -> TcpBuilder {
+        this.keepalive = keepalive
+        this
+    }
+
+    /// Sets the receive buffer size.
+    pub func recv_buffer_size(mut this, size: I32) -> TcpBuilder {
+        this.recv_buffer_size = Just(size)
+        this
+    }
+
+    /// Sets the send buffer size.
+    pub func send_buffer_size(mut this, size: I32) -> TcpBuilder {
+        this.send_buffer_size = Just(size)
+        this
+    }
+
+    /// Sets the backlog for the listener.
+    pub func backlog(mut this, backlog: I32) -> TcpBuilder {
+        this.backlog = backlog
+        this
+    }
+
+    /// Binds to an address and creates a TcpListener.
+    pub func bind(this, addr: SocketAddr) -> Outcome[TcpListener, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        if this.reuse_addr {
+            socket.set_reuse_addr(true)!
+        }
+        if this.nodelay {
+            socket.set_nodelay(true)!
+        }
+        if this.keepalive {
+            socket.set_keepalive(true)!
+        }
+        when this.recv_buffer_size {
+            Just(size) => socket.set_recv_buffer_size(size)!
+            Nothing => {}
+        }
+        when this.send_buffer_size {
+            Just(size) => socket.set_send_buffer_size(size)!
+            Nothing => {}
+        }
+
+        socket.bind(ref addr)!
+        socket.listen(this.backlog)!
+
+        let listener: TcpListener = TcpListener { socket: socket }
+        Ok(listener)
+    }
+
+    /// Connects to an address and creates a TcpStream.
+    pub func connect(this, addr: SocketAddr) -> Outcome[TcpStream, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        if this.nodelay {
+            socket.set_nodelay(true)!
+        }
+        if this.keepalive {
+            socket.set_keepalive(true)!
+        }
+        when this.recv_buffer_size {
+            Just(size) => socket.set_recv_buffer_size(size)!
+            Nothing => {}
+        }
+        when this.send_buffer_size {
+            Just(size) => socket.set_send_buffer_size(size)!
+            Nothing => {}
+        }
+
+        socket.connect(ref addr)!
+
+        let stream: TcpStream = TcpStream { socket: socket }
+        Ok(stream)
+    }
+}

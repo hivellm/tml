@@ -1925,12 +1925,16 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             types::preload_all_meta_caches();
 
             auto compile_task_worker = [&]() {
-                auto thread_registry = std::make_shared<types::ModuleRegistry>();
-
                 while (!has_error.load()) {
                     size_t task_idx = next_task.fetch_add(1);
                     if (task_idx >= tasks.size())
                         break;
+
+                    // Fresh registry per task to avoid type environment pollution
+                    // from previous tasks on the same thread. Library modules are
+                    // fast to load from GlobalModuleCache (pre-populated by
+                    // preload_all_meta_caches()).
+                    auto thread_registry = std::make_shared<types::ModuleRegistry>();
 
                     auto& task = tasks[task_idx];
                     auto task_start = Clock::now();

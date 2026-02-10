@@ -1,0 +1,142 @@
+// TCP networking tests - unit + integration (with Node.js echo server)
+use test::{assert, assert_eq}
+use std::net::tcp::{TcpBuilder, TcpListener, TcpStream}
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::error::{NetError, NetErrorKind}
+use std::net::sys::ShutdownMode
+
+// ============================================================================
+// Unit Tests - TcpBuilder
+// ============================================================================
+
+@test
+func test_tcp_builder_defaults() {
+    let builder: TcpBuilder = TcpBuilder::new()
+
+    assert(builder.reuse_addr)
+    assert(not builder.nodelay)
+    assert(not builder.keepalive)
+    assert_eq(builder.backlog, 128)
+}
+
+@test
+func test_tcp_builder_chain() {
+    var builder: TcpBuilder = TcpBuilder::new()
+    builder = builder.reuse_addr(false)
+    builder = builder.nodelay(true)
+    builder = builder.keepalive(true)
+    builder = builder.recv_buffer_size(8192)
+    builder = builder.send_buffer_size(16384)
+    builder = builder.backlog(512)
+
+    assert(not builder.reuse_addr)
+    assert(builder.nodelay)
+    assert(builder.keepalive)
+    assert_eq(builder.backlog, 512)
+}
+
+// ============================================================================
+// Integration Tests - TcpListener
+// ============================================================================
+
+@test
+func test_tcp_listener_bind_port_zero() {
+    // Bind to port 0 lets the OS assign an available port
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 0 as U16))
+    let listener_result: Outcome[TcpListener, NetError] = TcpListener::bind(addr)
+
+    when listener_result {
+        Ok(listener) => {
+            // Should have been assigned a real port
+            let local: Outcome[SocketAddr, NetError] = listener.local_addr()
+            when local {
+                Ok(local_addr) => {
+                    let port: U16 = local_addr.port()
+                    assert(port > 0 as U16)
+                }
+                Err(e) => {
+                    assert(false)
+                }
+            }
+        }
+        Err(e) => {
+            // Bind should succeed
+            assert(false)
+        }
+    }
+}
+
+// ============================================================================
+// Integration Tests - TcpStream (requires Node.js echo server on port 19876)
+// ============================================================================
+
+@test
+func test_tcp_stream_connect() {
+    // Connect to the Node.js echo server
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 19876 as U16))
+    let result: Outcome[TcpStream, NetError] = TcpStream::connect(addr)
+
+    when result {
+        Ok(stream) => {
+            // Connection succeeded - check peer address
+            let peer: Outcome[SocketAddr, NetError] = stream.peer_addr()
+            when peer {
+                Ok(peer_addr) => {
+                    assert_eq(peer_addr.port(), 19876 as U16)
+                }
+                Err(e) => assert(false)
+            }
+
+            // Check local address is assigned
+            let local: Outcome[SocketAddr, NetError] = stream.local_addr()
+            when local {
+                Ok(local_addr) => {
+                    assert(local_addr.port() > 0 as U16)
+                }
+                Err(e) => assert(false)
+            }
+        }
+        Err(e) => {
+            // Connection should succeed (echo server must be running)
+            assert(false)
+        }
+    }
+}
+
+@test
+func test_tcp_stream_write_read_echo() {
+    // Connect to the Node.js echo server
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 19876 as U16))
+    let connect_result: Outcome[TcpStream, NetError] = TcpStream::connect(addr)
+
+    when connect_result {
+        Ok(stream) => {
+            // Write "hello" to the echo server
+            var send_buf: [U8; 5] = [104, 101, 108, 108, 111]  // "hello"
+            let write_result: Outcome[I64, NetError] = stream.write(ref send_buf)
+            when write_result {
+                Ok(n) => assert_eq(n, 5 as I64)
+                Err(e) => assert(false)
+            }
+
+            // Read the echoed data back
+            var recv_buf: [U8; 64] = [0; 64]
+            let read_result: Outcome[I64, NetError] = stream.read(mut ref recv_buf)
+            when read_result {
+                Ok(n) => {
+                    assert_eq(n, 5 as I64)
+                    // Verify echoed content
+                    assert_eq(recv_buf[0], 104 as U8)  // 'h'
+                    assert_eq(recv_buf[1], 101 as U8)  // 'e'
+                    assert_eq(recv_buf[2], 108 as U8)  // 'l'
+                    assert_eq(recv_buf[3], 108 as U8)  // 'l'
+                    assert_eq(recv_buf[4], 111 as U8)  // 'o'
+                }
+                Err(e) => assert(false)
+            }
+        }
+        Err(e) => {
+            assert(false)
+        }
+    }
+}

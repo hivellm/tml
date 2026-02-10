@@ -74,7 +74,9 @@ struct Module {
     std::unordered_map<std::string, EnumDef> enums;              ///< Enum definitions.
     std::unordered_map<std::string, BehaviorDef> behaviors;      ///< Behavior definitions.
     std::unordered_map<std::string, TypePtr> type_aliases;       ///< Type aliases.
-    std::unordered_map<std::string, std::string> submodules;     ///< Submodule name -> path.
+    std::unordered_map<std::string, std::vector<std::string>>
+        type_alias_generics;                                 ///< Generic params for type aliases.
+    std::unordered_map<std::string, std::string> submodules; ///< Submodule name -> path.
     /// Constant info with value and type.
     struct ConstantInfo {
         std::string value;    ///< The constant value as string.
@@ -210,6 +212,11 @@ public:
     /// Looks up a type alias in a module.
     auto lookup_type_alias(const std::string& module_path, const std::string& symbol_name) const
         -> std::optional<TypePtr>;
+
+    /// Looks up generic parameter names for a type alias in a module.
+    auto lookup_type_alias_generics(const std::string& module_path,
+                                    const std::string& symbol_name) const
+        -> std::optional<std::vector<std::string>>;
 
     /// Looks up a constant in a module.
     auto lookup_constant(const std::string& module_path, const std::string& symbol_name) const

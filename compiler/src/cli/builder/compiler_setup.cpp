@@ -158,12 +158,14 @@ std::string find_clang() {
 }
 
 std::string find_runtime() {
+    // Runtime is organized into themed subdirectories under runtime/
+    // essential.c lives in runtime/core/essential.c
     std::vector<std::string> runtime_search = {
-        "compiler/runtime/essential.c",
-        "runtime/essential.c",
-        "../runtime/essential.c",
-        "../../runtime/essential.c",
-        "F:/Node/hivellm/tml/compiler/runtime/essential.c",
+        "compiler/runtime/core/essential.c",
+        "runtime/core/essential.c",
+        "../runtime/core/essential.c",
+        "../../runtime/core/essential.c",
+        "F:/Node/hivellm/tml/compiler/runtime/core/essential.c",
     };
     for (const auto& rp : runtime_search) {
         if (fs::exists(rp)) {

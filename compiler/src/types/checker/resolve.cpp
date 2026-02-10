@@ -60,9 +60,25 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                             }
                         }
                     }
-                    // Create new type with type_args
+                    // Check if the base type came from a generic type alias
+                    // e.g., type CryptoResult[T] = Outcome[T, CryptoError]
+                    // When resolving CryptoResult[SecretKey], we need to substitute T->SecretKey
+                    // in the alias body, not just overwrite the type_args
                     if (base_type->template is<types::NamedType>()) {
                         auto& named = base_type->template as<types::NamedType>();
+                        // Look up the original name from the path (before alias resolution)
+                        const auto& original_name = t.path.segments.back();
+                        auto alias_generics = env_.lookup_type_alias_generics(original_name);
+                        if (alias_generics && !alias_generics->empty()) {
+                            // Build substitution map: generic param -> concrete type
+                            std::unordered_map<std::string, TypePtr> subs;
+                            for (size_t i = 0; i < alias_generics->size() && i < type_args.size();
+                                 ++i) {
+                                subs[(*alias_generics)[i]] = type_args[i];
+                            }
+                            return types::substitute_type(base_type, subs);
+                        }
+                        // Non-generic alias or direct type: set type_args directly
                         auto result = std::make_shared<Type>();
                         result->kind =
                             types::NamedType{named.name, named.module_path, std::move(type_args)};
