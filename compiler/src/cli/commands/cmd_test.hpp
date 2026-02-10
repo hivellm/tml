@@ -142,6 +142,8 @@ struct TestOptions {
     bool fail_fast = false;            // Stop on first test failure
     bool backtrace = true;             // Show backtrace on test failures (enabled by default)
     std::string backend = "llvm";      // Codegen backend ("llvm" or "cranelift")
+    std::vector<std::string>
+        features; // Feature flags (--feature network → defines FEATURE_NETWORK)
 };
 
 // Parse test command arguments

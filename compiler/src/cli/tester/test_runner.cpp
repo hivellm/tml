@@ -366,14 +366,12 @@ bool DynamicLibrary::load(const std::string& path) {
     static bool vcpkg_paths_added = false;
     if (!vcpkg_paths_added) {
         vcpkg_paths_added = true;
-        // Try common vcpkg bin locations
-        std::vector<std::string> vcpkg_paths = {"src/x64-windows/bin", "../src/x64-windows/bin",
-                                                "../../src/x64-windows/bin"};
-        for (const auto& vcpkg_path : vcpkg_paths) {
-            if (fs::exists(vcpkg_path)) {
-                fs::path abs_vcpkg_path = fs::absolute(vcpkg_path);
-                AddDllDirectory(abs_vcpkg_path.wstring().c_str());
-            }
+        // Add vcpkg bin directory for DLL dependencies (OpenSSL, zlib, etc.)
+        fs::path project_root = build::find_project_root();
+        fs::path vcpkg_bin = project_root / "vcpkg_installed" / "x64-windows" / "bin";
+        if (fs::exists(vcpkg_bin)) {
+            fs::path abs_vcpkg_path = fs::absolute(vcpkg_bin);
+            AddDllDirectory(abs_vcpkg_path.wstring().c_str());
         }
     }
 
@@ -612,6 +610,21 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
             link_options.link_flags.push_back("-l" + lib);
         }
     }
+
+#ifdef _WIN32
+    // Add OpenSSL libraries for crypto modules
+    if (build::has_crypto_modules(registry)) {
+        auto openssl = build::find_openssl();
+        if (openssl.found) {
+            link_options.link_flags.push_back(
+                to_forward_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
+            link_options.link_flags.push_back(
+                to_forward_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
+            link_options.link_flags.push_back("/DEFAULTLIB:crypt32");
+            link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
+        }
+    }
+#endif
 
     auto link_result = link_objects(object_files, lib_output, clang, link_options);
     if (!link_result.success) {
@@ -965,6 +978,21 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
             link_options.link_flags.push_back("-l" + lib);
         }
     }
+
+#ifdef _WIN32
+    // Add OpenSSL libraries for crypto modules
+    if (build::has_crypto_modules(registry)) {
+        auto openssl = build::find_openssl();
+        if (openssl.found) {
+            link_options.link_flags.push_back(
+                to_forward_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
+            link_options.link_flags.push_back(
+                to_forward_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
+            link_options.link_flags.push_back("/DEFAULTLIB:crypt32");
+            link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
+        }
+    }
+#endif
 
     auto link_result = link_objects(object_files, lib_output, clang, link_options);
     if (!link_result.success) {
@@ -1535,7 +1563,8 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
 #endif // DISABLED precompiled symbols
 
 SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool no_cache,
-                                      const std::string& backend) {
+                                      const std::string& backend,
+                                      const std::vector<std::string>& features) {
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
@@ -1596,6 +1625,12 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             }
 
             auto pp_config = preprocessor::Preprocessor::host_config();
+            // Inject feature defines: --feature network → FEATURE_NETWORK
+            for (const auto& feat : features) {
+                std::string upper = feat;
+                std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
+                pp_config.defines["FEATURE_" + upper] = "1";
+            }
             preprocessor::Preprocessor pp(pp_config);
             auto pp_result = pp.process(source_code, test.file_path);
 
@@ -2858,6 +2893,33 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 }
             }
 
+#ifdef _WIN32
+            // Add Windows system libraries for socket support
+            if (shared_registry->has_module("std::net") ||
+                shared_registry->has_module("std::net::sys") ||
+                shared_registry->has_module("std::net::tcp") ||
+                shared_registry->has_module("std::net::udp")) {
+                link_options.link_flags.push_back("-lws2_32");
+            }
+            // Add Windows system libraries for OS module (Registry, user info)
+            if (shared_registry->has_module("std::os")) {
+                link_options.link_flags.push_back("-ladvapi32");
+                link_options.link_flags.push_back("-luserenv");
+            }
+            // Add OpenSSL libraries for crypto modules
+            if (build::has_crypto_modules(shared_registry)) {
+                auto openssl = build::find_openssl();
+                if (openssl.found) {
+                    link_options.link_flags.push_back(
+                        to_forward_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
+                    link_options.link_flags.push_back(
+                        to_forward_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
+                    link_options.link_flags.push_back("/DEFAULTLIB:crypt32");
+                    link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
+                }
+            }
+#endif
+
             TML_LOG_INFO("test", "  Starting link...");
             auto link_result = link_objects(object_files, cached_dll, clang, link_options);
             TML_LOG_INFO("test", "  Link complete");
@@ -2927,13 +2989,14 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 }
 
 SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimings* timings,
-                                               bool verbose, bool no_cache) {
+                                               bool verbose, bool no_cache,
+                                               const std::vector<std::string>& features) {
     // For now, just use the regular compile and record total time
     // Detailed phase profiling can be added later if needed
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
-    auto result = compile_test_suite(suite, verbose, no_cache);
+    auto result = compile_test_suite(suite, verbose, no_cache, "llvm", features);
 
     if (timings) {
         auto end = Clock::now();

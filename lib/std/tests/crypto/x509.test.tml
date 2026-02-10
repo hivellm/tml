@@ -1,8 +1,9 @@
 //! Tests for crypto X.509 certificate functions
 //!
-//! Tests certificate parsing from PEM, subject/issuer field extraction,
+//! Covers certificate parsing from PEM format, subject/issuer field extraction,
 //! serial number, validity dates, fingerprints, signature algorithm,
 //! PEM roundtrip export, verification, and certificate store operations.
+//! Requires OpenSSL runtime libraries for parsing functionality.
 
 use test::{assert, assert_eq}
 use std::crypto::x509::{X509Certificate, X509Name, X509Store, KeyUsage}

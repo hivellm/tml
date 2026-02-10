@@ -1,0 +1,21 @@
+//! x509 sret test - isolated subject() test
+
+use test::{assert, assert_eq}
+use std::crypto::x509::{X509Certificate, X509Name, X509Store, KeyUsage}
+
+func get_test_cert_pem() -> Str {
+    return "-----BEGIN CERTIFICATE-----\nMIIDyTCCArGgAwIBAgIUaCPVlOIx5CPDFZq1Pa88HunX0UswDQYJKoZIhvcNAQEL\nBQAwbDEZMBcGA1UEAwwQdGVzdC5leGFtcGxlLmNvbTEVMBMGA1UECgwMVE1MIFRl\nc3QgT3JnMQswCQYDVQQGEwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UE\nBwwNU2FuIEZyYW5jaXNjbzAeFw0yNjAyMTAxMTIyNTVaFw0zNjAyMDgxMTIyNTVa\nMGwxGTAXBgNVBAMMEHRlc3QuZXhhbXBsZS5jb20xFTATBgNVBAoMDFRNTCBUZXN0\nIE9yZzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDVNhbiBGcmFuY2lzY28wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC0\nCdN1Q9zDtNHRfCEkUvX1oNCOoX1HAi4jtsrQd2WRC/BmPWeZtylPy+X+PJ2t340o\ndgZ7ec5aP+/0fsrq6fA2f6VtMOeEV/kP44jkzEDmmcGLxEyl6nfbL4twyc0+IkSy\nzZgw28P809G3/NxXg+PQS2DRgVoWuaqvWoOEmx0R/jGvSrNsMwbHc1vBN525flOu\n6dPErbIKYHRJmvHF+HqxADi47jl1roBLeBia5+WGY+koWA2bq2a/JGIGgXabDgFu\nOuGmNvcEFM6lm45nCqWxwLEN2Ij81ZrUhk1JJxqfSC0YBva6mwBjP0rAqSrR5OLO\nCLd0B3RSCBVu01ejiuTfAgMBAAGjYzBhMB0GA1UdDgQWBBRH3/kmqJpIR/A28aiZ\nYQpZILLrAzAfBgNVHSMEGDAWgBRH3/kmqJpIR/A28aiZYQpZILLrAzAPBgNVHRMB\nAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjANBgkqhkiG9w0BAQsFAAOCAQEAegD/\nPDDhy12rpq/MC9bcq+hMlGBAFzrk1rcouu5Tlqcmv4pAJi6U8VXf4NSccHtw6uDC\nyc3PdW2PxFERnbChyhtvC9z9z6DlywVfath1WnOcABm87gLYN2H4nlLlfy5PEx8n\npEhblS7go+LmNLgobGO5Kc+oGf5ifU9VImaRcQEMCGGOiubtsiI5kv+HU0JRPwhR\nxhEe266ktBt4785HOJ3kB/yPjXNZjrHv6hWWYkyhj5DVgE1XICWRAcjq88L5dzpx\nCs053i7wUgjToNXGW7jGAxtU9AOgPQGgFhlXF1PbDBc3oj4A+fxXs1xpyyHQ2x97\nZUrbOqIoKzjUm7+kNw==\n-----END CERTIFICATE-----\n"
+}
+
+@test
+func test_subject_cn() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse")
+    let mut cert: X509Certificate = result.unwrap()
+    let name: X509Name = cert.subject()
+    let cn: Str = name.cn()
+    assert_eq(cn, "test.example.com", "subject CN")
+    cert.destroy()
+    return 0
+}

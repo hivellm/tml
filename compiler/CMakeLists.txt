@@ -180,6 +180,7 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/async.c
     # net/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/net.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/dns.c
     # os/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/os/os.c
     # crypto/
@@ -231,19 +232,80 @@ endforeach()
 message(STATUS "TML Runtime: Building static library (tml_runtime)")
 
 # OpenSSL support for crypto runtime modules
-set(OPENSSL_ROOT "C:/Program Files/OpenSSL-Win64")
-if(EXISTS "${OPENSSL_ROOT}/include/openssl/evp.h")
-    message(STATUS "OpenSSL: Found at ${OPENSSL_ROOT}")
-    target_include_directories(tml_runtime PRIVATE "${OPENSSL_ROOT}/include")
+# Search order: vcpkg_installed (project-local), standalone install (Windows), system (Unix/Mac)
+set(TML_OPENSSL_FOUND FALSE)
+
+# 1. Check vcpkg_installed (cross-platform)
+if(WIN32)
+    set(VCPKG_OPENSSL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../vcpkg_installed/x64-windows")
+elseif(APPLE)
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+        set(VCPKG_OPENSSL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../vcpkg_installed/arm64-osx")
+    else()
+        set(VCPKG_OPENSSL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../vcpkg_installed/x64-osx")
+    endif()
+else()
+    set(VCPKG_OPENSSL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../vcpkg_installed/x64-linux")
+endif()
+
+if(EXISTS "${VCPKG_OPENSSL_DIR}/include/openssl/evp.h")
+    message(STATUS "OpenSSL: Found via vcpkg at ${VCPKG_OPENSSL_DIR}")
+    target_include_directories(tml_runtime PRIVATE "${VCPKG_OPENSSL_DIR}/include")
     target_include_directories(tml_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto")
     target_compile_definitions(tml_runtime PRIVATE TML_HAS_OPENSSL=1)
-    # Link OpenSSL static libraries
-    target_link_libraries(tml_runtime PUBLIC
-        "${OPENSSL_ROOT}/lib/libcrypto_static.lib"
-        "${OPENSSL_ROOT}/lib/libssl_static.lib"
-        crypt32 ws2_32
-    )
-else()
+    if(WIN32)
+        target_link_libraries(tml_runtime PUBLIC
+            "${VCPKG_OPENSSL_DIR}/lib/libcrypto.lib"
+            "${VCPKG_OPENSSL_DIR}/lib/libssl.lib"
+            crypt32 ws2_32
+        )
+    else()
+        target_link_libraries(tml_runtime PUBLIC
+            "${VCPKG_OPENSSL_DIR}/lib/libcrypto.a"
+            "${VCPKG_OPENSSL_DIR}/lib/libssl.a"
+        )
+        if(NOT APPLE)
+            target_link_libraries(tml_runtime PUBLIC dl pthread)
+        endif()
+    endif()
+    set(TML_OPENSSL_FOUND TRUE)
+endif()
+
+# 2. Windows standalone install (C:/Program Files/OpenSSL-Win64)
+if(NOT TML_OPENSSL_FOUND AND WIN32)
+    set(OPENSSL_ROOT "C:/Program Files/OpenSSL-Win64")
+    if(EXISTS "${OPENSSL_ROOT}/include/openssl/evp.h")
+        message(STATUS "OpenSSL: Found at ${OPENSSL_ROOT}")
+        target_include_directories(tml_runtime PRIVATE "${OPENSSL_ROOT}/include")
+        target_include_directories(tml_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto")
+        target_compile_definitions(tml_runtime PRIVATE TML_HAS_OPENSSL=1)
+        target_link_libraries(tml_runtime PUBLIC
+            "${OPENSSL_ROOT}/lib/libcrypto_static.lib"
+            "${OPENSSL_ROOT}/lib/libssl_static.lib"
+            crypt32 ws2_32
+        )
+        set(TML_OPENSSL_FOUND TRUE)
+    endif()
+endif()
+
+# 3. System OpenSSL (Linux/macOS - pkg-config or find_package)
+if(NOT TML_OPENSSL_FOUND AND NOT WIN32)
+    find_package(OpenSSL QUIET)
+    if(OPENSSL_FOUND)
+        message(STATUS "OpenSSL: Found system OpenSSL ${OPENSSL_VERSION}")
+        target_include_directories(tml_runtime PRIVATE ${OPENSSL_INCLUDE_DIR})
+        target_include_directories(tml_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto")
+        target_compile_definitions(tml_runtime PRIVATE TML_HAS_OPENSSL=1)
+        target_link_libraries(tml_runtime PUBLIC OpenSSL::Crypto OpenSSL::SSL)
+        if(NOT APPLE)
+            target_link_libraries(tml_runtime PUBLIC dl pthread)
+        endif()
+        set(TML_OPENSSL_FOUND TRUE)
+    endif()
+endif()
+
+# Fallback: no OpenSSL
+if(NOT TML_OPENSSL_FOUND)
     message(STATUS "OpenSSL: Not found, crypto_x509 will use stub implementations")
     target_include_directories(tml_runtime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto")
 endif()

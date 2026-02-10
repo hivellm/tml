@@ -48,7 +48,7 @@ namespace tml::types {
 constexpr uint32_t MODULE_META_MAGIC = 0x544D4D54;
 
 /// Format version.
-constexpr uint16_t MODULE_META_VERSION_MAJOR = 2;
+constexpr uint16_t MODULE_META_VERSION_MAJOR = 3;
 constexpr uint16_t MODULE_META_VERSION_MINOR = 0;
 
 // ============================================================================

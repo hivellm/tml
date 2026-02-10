@@ -1,0 +1,401 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CMake",
+  "scopeName": "source.cmake",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#commands"
+    },
+    {
+      "include": "#variables"
+    },
+    {
+      "include": "#generators"
+    },
+    {
+      "include": "#constants"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.cmake",
+          "begin": "#\\[=*\\[",
+          "end": "\\]=*\\]"
+        },
+        {
+          "name": "comment.line.number-sign.cmake",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.cmake",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "include": "#variable-references"
+            },
+            {
+              "include": "#escape-sequences"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.bracket.cmake",
+          "begin": "\\[=*\\[",
+          "end": "\\]=*\\]"
+        }
+      ]
+    },
+    "escape-sequences": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.cmake",
+          "match": "\\\\(\\\\|\"|\\$|n|t|r|;)"
+        }
+      ]
+    },
+    "variable-references": {
+      "patterns": [
+        {
+          "name": "variable.other.substitution.cmake",
+          "match": "\\$\\{[A-Za-z0-9_\\.\\-]+\\}",
+          "captures": {
+            "0": {
+              "patterns": [
+                {
+                  "name": "punctuation.definition.variable.begin.cmake",
+                  "match": "\\$\\{"
+                },
+                {
+                  "name": "punctuation.definition.variable.end.cmake",
+                  "match": "\\}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "variable.other.env.cmake",
+          "match": "\\$ENV\\{[A-Za-z0-9_]+\\}"
+        },
+        {
+          "name": "variable.other.cache.cmake",
+          "match": "\\$CACHE\\{[A-Za-z0-9_]+\\}"
+        }
+      ]
+    },
+    "commands": {
+      "patterns": [
+        {
+          "name": "meta.command.flow-control.cmake",
+          "begin": "\\b(if|elseif|else|endif|foreach|endforeach|while|endwhile|break|continue|return|macro|endmacro|function|endfunction|block|endblock)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.cmake"
+            },
+            "2": {
+              "name": "punctuation.section.arguments.begin.cmake"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.arguments.end.cmake"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#command-arguments"
+            }
+          ]
+        },
+        {
+          "name": "meta.command.project.cmake",
+          "begin": "\\b(project|cmake_minimum_required|cmake_policy)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.cmake"
+            },
+            "2": {
+              "name": "punctuation.section.arguments.begin.cmake"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.arguments.end.cmake"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#command-arguments"
+            }
+          ]
+        },
+        {
+          "name": "meta.command.target.cmake",
+          "begin": "\\b(add_executable|add_library|add_custom_target|add_custom_command|add_subdirectory|add_test|add_dependencies|add_compile_options|add_compile_definitions|add_link_options)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.cmake"
+            },
+            "2": {
+              "name": "punctuation.section.arguments.begin.cmake"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.arguments.end.cmake"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#command-arguments"
+            }
+          ]
+        },
+        {
+          "name": "meta.command.target-props.cmake",
+          "begin": "\\b(target_link_libraries|target_include_directories|target_compile_definitions|target_compile_options|target_compile_features|target_sources|target_link_options|target_link_directories|target_precompile_headers)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.cmake"
+            },
+            "2": {
+              "name": "punctuation.section.arguments.begin.cmake"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.arguments.end.cmake"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#command-arguments"
+            }
+          ]
+        },
+        {
+          "name": "meta.command.set.cmake",
+          "begin": "\\b(set|unset|option|list|string|math|file|get_filename_component|get_cmake_property|get_directory_property|get_property|set_property|set_target_properties|get_target_property)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": {
+              "name": "support.function.cmake"
+            },
+            "2": {
+              "name": "punctuation.section.arguments.begin.cmake"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.arguments.end.cmake"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#command-arguments"
+            }
+          ]
+        },
+        {
+          "name": "meta.command.find.cmake",
+          "begin": "\\b(find_package|find_library|find_path|find_file|find_program|include|include_directories|link_directories|link_libraries)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": {
+              "name": "support.function.cmake"
+            },
+            "2": {
+              "name": "punctuation.section.arguments.begin.cmake"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.arguments.end.cmake"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#command-arguments"
+            }
+          ]
+        },
+        {
+          "name": "meta.command.message.cmake",
+          "begin": "\\b(message|install|configure_file|execute_process|enable_testing|enable_language|export|cmake_parse_arguments|separate_arguments|mark_as_advanced)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": {
+              "name": "support.function.cmake"
+            },
+            "2": {
+              "name": "punctuation.section.arguments.begin.cmake"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.arguments.end.cmake"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#command-arguments"
+            }
+          ]
+        },
+        {
+          "name": "meta.command.generic.cmake",
+          "begin": "\\b([a-z_][a-z0-9_]*)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.call.cmake"
+            },
+            "2": {
+              "name": "punctuation.section.arguments.begin.cmake"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.arguments.end.cmake"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#command-arguments"
+            }
+          ]
+        }
+      ]
+    },
+    "command-arguments": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#variable-references"
+        },
+        {
+          "include": "#generators"
+        },
+        {
+          "name": "keyword.operator.cmake",
+          "match": "\\b(NOT|AND|OR|COMMAND|POLICY|TARGET|TEST|DEFINED|EXISTS|IS_DIRECTORY|IS_SYMLINK|IS_ABSOLUTE|MATCHES|LESS|GREATER|EQUAL|LESS_EQUAL|GREATER_EQUAL|STRLESS|STRGREATER|STREQUAL|STRLESS_EQUAL|STRGREATER_EQUAL|VERSION_LESS|VERSION_GREATER|VERSION_EQUAL|VERSION_LESS_EQUAL|VERSION_GREATER_EQUAL|IN_LIST|IN|ITEMS|RANGE)\\b"
+        },
+        {
+          "name": "constant.language.cmake",
+          "match": "\\b(ON|OFF|TRUE|FALSE|YES|NO|IGNORE|NOTFOUND|CACHE|PARENT_SCOPE|FORCE)\\b"
+        },
+        {
+          "name": "storage.modifier.cmake",
+          "match": "\\b(PUBLIC|PRIVATE|INTERFACE|IMPORTED|GLOBAL|ALIAS|OBJECT|STATIC|SHARED|MODULE|EXCLUDE_FROM_ALL)\\b"
+        },
+        {
+          "name": "keyword.other.cmake",
+          "match": "\\b(REQUIRED|COMPONENTS|CONFIG|MODULE|QUIET|NO_MODULE|OPTIONAL_COMPONENTS|PATHS|HINTS|PATH_SUFFIXES|NAMES|CONFIGS|VERSION|LANGUAGES|DESCRIPTION|HOMEPAGE_URL)\\b"
+        },
+        {
+          "name": "support.type.property-name.cmake",
+          "match": "\\b(FATAL_ERROR|SEND_ERROR|WARNING|AUTHOR_WARNING|DEPRECATION|NOTICE|STATUS|VERBOSE|DEBUG|TRACE|CHECK_START|CHECK_PASS|CHECK_FAIL)\\b"
+        },
+        {
+          "name": "variable.parameter.cmake",
+          "match": "\\b(CXX|C|CUDA|Fortran|ASM|OBJC|OBJCXX|ISPC|HIP|Swift)\\b"
+        },
+        {
+          "name": "support.type.cmake",
+          "match": "\\b(BOOL|FILEPATH|PATH|STRING|INTERNAL)\\b"
+        },
+        {
+          "name": "keyword.other.action.cmake",
+          "match": "\\b(APPEND|REMOVE_ITEM|REMOVE_AT|REMOVE_DUPLICATES|REVERSE|SORT|INSERT|FILTER|LENGTH|GET|JOIN|SUBLIST|FIND|POP_BACK|POP_FRONT|PREPEND|TRANSFORM)\\b"
+        },
+        {
+          "name": "keyword.other.string-op.cmake",
+          "match": "\\b(REPLACE|REGEX|MATCH|MATCHALL|TOUPPER|TOLOWER|STRIP|GENEX_STRIP|SUBSTRING|REPEAT|CONFIGURE|MAKE_C_IDENTIFIER|RANDOM|TIMESTAMP|UUID|JSON|COMPARE|ASCII|HEX|SHA1|SHA256|SHA512|MD5)\\b"
+        },
+        {
+          "name": "keyword.other.file-op.cmake",
+          "match": "\\b(READ|WRITE|APPEND|GLOB|GLOB_RECURSE|RENAME|REMOVE|REMOVE_RECURSE|MAKE_DIRECTORY|RELATIVE_PATH|TO_CMAKE_PATH|TO_NATIVE_PATH|DOWNLOAD|UPLOAD|COPY|INSTALL|SIZE|READ_SYMLINK|CREATE_LINK|CHMOD|TOUCH|GENERATE|ARCHIVE_CREATE|ARCHIVE_EXTRACT)\\b"
+        },
+        {
+          "name": "keyword.other.cmake",
+          "match": "\\b(SET|CMP[0-9]+|NEW|OLD|PROPERTY|PROPERTIES|COMPILE_FLAGS|COMPILE_DEFINITIONS|COMPILE_OPTIONS|INCLUDE_DIRECTORIES|LINK_LIBRARIES|LINK_FLAGS|OUTPUT_NAME|SUFFIX|PREFIX|POSITION_INDEPENDENT_CODE|RUNTIME_OUTPUT_DIRECTORY|LIBRARY_OUTPUT_DIRECTORY|ARCHIVE_OUTPUT_DIRECTORY)\\b"
+        },
+        {
+          "include": "#constants"
+        }
+      ]
+    },
+    "generators": {
+      "patterns": [
+        {
+          "name": "meta.generator-expression.cmake",
+          "begin": "\\$<",
+          "end": ">",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.generator.begin.cmake"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.generator.end.cmake"
+            }
+          },
+          "patterns": [
+            {
+              "name": "keyword.generator.cmake",
+              "match": "\\b(AND|OR|NOT|BOOL|IF|STREQUAL|EQUAL|VERSION_GREATER|VERSION_LESS|TARGET_EXISTS|CONFIG|PLATFORM_ID|CXX_COMPILER_ID|COMPILE_LANGUAGE|BUILD_INTERFACE|INSTALL_INTERFACE|TARGET_FILE|TARGET_LINKER_FILE|TARGET_PROPERTY|GENEX_EVAL|TARGET_GENEX_EVAL)\\b"
+            },
+            {
+              "include": "#variable-references"
+            },
+            {
+              "include": "#generators"
+            }
+          ]
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "include": "#variable-references"
+        },
+        {
+          "name": "variable.language.cmake",
+          "match": "\\b(CMAKE_[A-Z0-9_]+|PROJECT_[A-Z0-9_]+)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.numeric.cmake",
+          "match": "\\b[0-9]+(\\.[0-9]+)*\\b"
+        }
+      ]
+    }
+  }
+}

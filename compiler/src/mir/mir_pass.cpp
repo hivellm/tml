@@ -203,8 +203,14 @@ void PassManager::configure_standard_pipeline() {
     // Clear existing passes
     passes_.clear();
 
+    // Sret conversion is an ABI CORRECTNESS requirement, not an optimization.
+    // On Windows x86_64, returning structs > 8 bytes by value violates the
+    // calling convention and causes ACCESS_VIOLATION crashes. This must run
+    // at ALL optimization levels, including O0.
+    add_pass(std::make_unique<SretConversionPass>());
+
     if (level_ == OptLevel::O0) {
-        // No optimizations
+        // No optimizations beyond ABI correctness
         return;
     }
 
@@ -418,8 +424,14 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
     // integrated at the right points for maximum effectiveness
     passes_.clear();
 
+    // Sret conversion is an ABI CORRECTNESS requirement, not an optimization.
+    // On Windows x86_64, returning structs > 8 bytes by value violates the
+    // calling convention and causes ACCESS_VIOLATION crashes. This must run
+    // at ALL optimization levels, including O0.
+    add_pass(std::make_unique<SretConversionPass>());
+
     if (level_ == OptLevel::O0) {
-        return; // No optimizations
+        return; // No optimizations beyond ABI correctness
     }
 
     // ==========================================================================

@@ -2,7 +2,7 @@
   "name": "tml-language",
   "displayName": "TML Language Support",
   "description": "Syntax highlighting, autocompletion, and language support for TML (To Machine Language)",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "publisher": "tml-lang",
   "engines": {
     "vscode": "^1.75.0"
@@ -62,6 +62,34 @@
           ".mir"
         ],
         "configuration": "./language-configuration-mir.json"
+      },
+      {
+        "id": "toml",
+        "aliases": [
+          "TOML",
+          "toml"
+        ],
+        "extensions": [
+          ".toml"
+        ],
+        "filenames": [
+          "tml.toml"
+        ],
+        "configuration": "./language-configuration-toml.json"
+      },
+      {
+        "id": "cmake",
+        "aliases": [
+          "CMake",
+          "cmake"
+        ],
+        "extensions": [
+          ".cmake"
+        ],
+        "filenames": [
+          "CMakeLists.txt"
+        ],
+        "configuration": "./language-configuration-cmake.json"
       }
     ],
     "grammars": [
@@ -89,6 +117,16 @@
         "language": "tml-mir",
         "scopeName": "source.tml-mir",
         "path": "./syntaxes/mir.tmLanguage.json"
+      },
+      {
+        "language": "toml",
+        "scopeName": "source.toml",
+        "path": "./syntaxes/toml.tmLanguage.json"
+      },
+      {
+        "language": "cmake",
+        "scopeName": "source.cmake",
+        "path": "./syntaxes/cmake.tmLanguage.json"
       }
     ],
     "configuration": {

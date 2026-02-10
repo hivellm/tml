@@ -114,6 +114,21 @@ fs::path get_deps_cache_dir();
 // Get the global run cache directory (for tml run temporary files)
 fs::path get_run_cache_dir();
 
+// OpenSSL path info for crypto runtime compilation and linking
+struct OpenSSLPaths {
+    bool found = false;
+    fs::path include_dir;   // Path to include/ containing openssl/
+    fs::path lib_dir;       // Path to lib/ containing libcrypto/libssl
+    std::string crypto_lib; // Filename: "libcrypto.lib" or "libcrypto_static.lib"
+    std::string ssl_lib;    // Filename: "libssl.lib" or "libssl_static.lib"
+};
+
+// Find OpenSSL installation (checks vcpkg_installed, then standalone installs)
+OpenSSLPaths find_openssl();
+
+// Check if a module registry uses any crypto modules
+bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry);
+
 // ============================================================================
 // Diagnostic Helpers
 // ============================================================================

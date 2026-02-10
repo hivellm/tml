@@ -344,16 +344,28 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         }
         // "c" and "c++" use default calling convention (no prefix)
 
+        // For C ABI compatibility: C functions returning bool use i32 (int),
+        // not i1. Declare with i32 and truncate at call site.
+        std::string abi_ret_type = ret_type;
+        bool promoted_bool = false;
+        if (abi_ret_type == "i1") {
+            abi_ret_type = "i32";
+            promoted_bool = true;
+        }
+
         // Emit external declaration
         emit_line("");
         emit_line("; @extern(\"" + abi + "\") " + func.name);
-        emit_line("declare " + call_conv + ret_type + " @" + symbol_name + "(" + param_types + ")");
+        emit_line("declare " + call_conv + abi_ret_type + " @" + symbol_name + "(" + param_types +
+                  ")");
 
         // Register function - map TML name to external symbol
         // Mark as extern for coverage tracking
-        std::string func_type = ret_type + " (" + param_types + ")";
+        // Use abi_ret_type so call sites emit the correct C ABI return type
+        std::string func_type = abi_ret_type + " (" + param_types + ")";
         functions_[func.name] =
-            FuncInfo{"@" + symbol_name, func_type, ret_type, param_types_vec, true, func.name};
+            FuncInfo{"@" + symbol_name, func_type,    abi_ret_type, param_types_vec, true,
+                     func.name,         promoted_bool};
 
         // Store link libraries for later (linker phase)
         for (const auto& lib : func.link_libs) {
@@ -366,18 +378,27 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Handle lowlevel functions without body - these are external C functions
     // pub lowlevel func sys_wsa_startup() -> I32 maps to C function sys_wsa_startup
     if (func.is_unsafe && !func.body.has_value()) {
+        // For C ABI compatibility: C functions returning bool use i32, not i1
+        std::string abi_ret_type = ret_type;
+        bool promoted_bool = false;
+        if (abi_ret_type == "i1") {
+            abi_ret_type = "i32";
+            promoted_bool = true;
+        }
+
         // Only emit declaration if not already declared by runtime
         if (declared_externals_.find(func.name) == declared_externals_.end()) {
             // External C function - emit declaration
             emit_line("");
             emit_line("; lowlevel func " + func.name + " (external C function)");
-            emit_line("declare " + ret_type + " @" + func.name + "(" + param_types + ")");
+            emit_line("declare " + abi_ret_type + " @" + func.name + "(" + param_types + ")");
             declared_externals_.insert(func.name);
         }
 
         // Register function - map TML name directly to C symbol
-        std::string func_type = ret_type + " (" + param_types + ")";
-        functions_[func.name] = FuncInfo{"@" + func.name, func_type, ret_type, param_types_vec};
+        std::string func_type = abi_ret_type + " (" + param_types + ")";
+        functions_[func.name] = FuncInfo{"@" + func.name, func_type, abi_ret_type, param_types_vec,
+                                         false,           "",        promoted_bool};
 
         return; // Don't generate function body for external lowlevel functions
     }

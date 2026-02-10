@@ -709,6 +709,51 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
     auto receiver_type = check_expr(*call.receiver);
 
+    // Expand type aliases before method resolution
+    // e.g., CryptoResult[X509Certificate] -> Outcome[X509Certificate, CryptoError]
+    // so that methods like .unwrap(), .is_ok() are properly recognized
+    {
+        TypePtr alias_target = receiver_type;
+        if (alias_target->is<RefType>()) {
+            alias_target = alias_target->as<RefType>().inner;
+        }
+        if (alias_target->is<NamedType>()) {
+            auto& pre_named = alias_target->as<NamedType>();
+            auto alias_base = env_.lookup_type_alias(pre_named.name);
+            std::optional<std::vector<std::string>> alias_generics;
+
+            // If local lookup fails, search all loaded modules for the type alias
+            if (!alias_base && env_.module_registry()) {
+                for (const auto& [mod_path, mod] : env_.module_registry()->get_all_modules()) {
+                    auto it = mod.type_aliases.find(pre_named.name);
+                    if (it != mod.type_aliases.end()) {
+                        alias_base = it->second;
+                        auto gen_it = mod.type_alias_generics.find(pre_named.name);
+                        if (gen_it != mod.type_alias_generics.end()) {
+                            alias_generics = gen_it->second;
+                        }
+                        break;
+                    }
+                }
+            } else if (alias_base) {
+                alias_generics = env_.lookup_type_alias_generics(pre_named.name);
+            }
+
+            if (alias_base) {
+                if (alias_generics && !alias_generics->empty() && !pre_named.type_args.empty()) {
+                    std::unordered_map<std::string, TypePtr> subs;
+                    for (size_t i = 0; i < alias_generics->size() && i < pre_named.type_args.size();
+                         ++i) {
+                        subs[(*alias_generics)[i]] = pre_named.type_args[i];
+                    }
+                    receiver_type = substitute_type(*alias_base, subs);
+                } else {
+                    receiver_type = *alias_base;
+                }
+            }
+        }
+    }
+
     // Helper lambda to apply type arguments to a function signature
     auto apply_type_args = [&](const FuncSig& func) -> TypePtr {
         if (!call.type_args.empty() && !func.type_params.empty()) {
@@ -817,12 +862,31 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             return apply_type_args(*func);
         }
 
+        // Helper: substitute receiver type args into a module-level function signature
+        auto apply_with_receiver_type_args = [&](const FuncSig& func_sig) -> TypePtr {
+            if (call.type_args.empty() && !func_sig.type_params.empty() &&
+                !named.type_args.empty()) {
+                std::unordered_map<std::string, TypePtr> subs;
+                for (size_t i = 0; i < func_sig.type_params.size() && i < named.type_args.size();
+                     ++i) {
+                    subs[func_sig.type_params[i]] = named.type_args[i];
+                }
+                for (size_t i = 0; i < call.args.size() && i + 1 < func_sig.params.size(); ++i) {
+                    TypePtr arg_type = check_expr(*call.args[i]);
+                    TypePtr param_type = func_sig.params[i + 1];
+                    extract_type_params(param_type, arg_type, func_sig.type_params, subs);
+                }
+                return substitute_type(func_sig.return_type, subs);
+            }
+            return apply_type_args(func_sig);
+        };
+
         if (!named.module_path.empty()) {
             auto module = env_.get_module(named.module_path);
             if (module) {
                 auto func_it = module->functions.find(qualified);
                 if (func_it != module->functions.end()) {
-                    return apply_type_args(func_it->second);
+                    return apply_with_receiver_type_args(func_it->second);
                 }
             }
         }
@@ -839,7 +903,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (module) {
                 auto func_it = module->functions.find(qualified);
                 if (func_it != module->functions.end()) {
-                    return apply_type_args(func_it->second);
+                    return apply_with_receiver_type_args(func_it->second);
                 }
             }
         }

@@ -348,7 +348,7 @@ TML_EXPORT const char* crypto_x509_get_sig_alg(void* handle) {
         OBJ_obj2txt(oid_buf, sizeof(oid_buf), obj, 1);
         return tml_strdup(oid_buf);
     }
-    return tml_strdup(OBJ_nid2ln(nid));
+    return tml_strdup(OBJ_nid2sn(nid));
 }
 
 TML_EXPORT int32_t crypto_x509_is_ca(void* handle) {

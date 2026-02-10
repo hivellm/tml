@@ -13,11 +13,12 @@
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN
-#include <lmcons.h>  /* UNLEN */
+#include <lmcons.h>  /* UNLEN - must come after windows.h */
 #include <process.h> /* _getpid */
 #include <userenv.h> /* GetUserProfileDirectoryA */
 #include <windows.h>
 #pragma comment(lib, "userenv.lib")
+#pragma comment(lib, "advapi32.lib")
 #else
 #define TML_EXPORT __attribute__((visibility("default")))
 #include <errno.h>

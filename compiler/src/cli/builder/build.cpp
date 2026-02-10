@@ -752,6 +752,23 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             registry->has_module("std::net::udp")) {
             link_options.link_flags.push_back("-lws2_32");
         }
+        // Add Windows system libraries for OS module (Registry, user info)
+        if (registry->has_module("std::os")) {
+            link_options.link_flags.push_back("-ladvapi32");
+            link_options.link_flags.push_back("-luserenv");
+        }
+        // Add OpenSSL libraries for crypto modules
+        if (has_crypto_modules(registry)) {
+            auto openssl = find_openssl();
+            if (openssl.found) {
+                link_options.link_flags.push_back(
+                    to_forward_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
+                link_options.link_flags.push_back(
+                    to_forward_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
+                link_options.link_flags.push_back("/DEFAULTLIB:crypt32");
+                link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
+            }
+        }
 #endif
 
         auto link_result = link_objects(object_files, final_output, clang, link_options);

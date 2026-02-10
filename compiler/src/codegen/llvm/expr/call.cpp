@@ -2124,6 +2124,13 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         std::string symbol_name = func_sig->extern_name.value_or(func_sig->name);
         std::string ext_ret_type = llvm_type_from_semantic(func_sig->return_type);
 
+        // For C ABI compatibility: C functions returning bool use i32, not i1
+        bool promoted_bool = false;
+        if (ext_ret_type == "i1") {
+            ext_ret_type = "i32";
+            promoted_bool = true;
+        }
+
         // Build parameter types
         std::string param_types;
         std::vector<std::string> param_types_vec;
@@ -2146,8 +2153,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
         // Register in functions_ map so future calls find it immediately
         std::string func_type = ext_ret_type + " (" + param_types + ")";
-        functions_[fn_name] = FuncInfo{"@" + symbol_name, func_type, ext_ret_type,
-                                       param_types_vec,   true,      func_sig->name};
+        functions_[fn_name] =
+            FuncInfo{"@" + symbol_name, func_type,    ext_ret_type, param_types_vec, true,
+                     func_sig->name,    promoted_bool};
 
         // Re-find in the map so the normal path picks it up
         func_it = functions_.find(fn_name);
@@ -2747,6 +2755,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         emit_coverage(func_it->second.tml_name);
     }
 
+    // Check if this extern function had Bool return promoted to i32 for C ABI
+    bool needs_bool_trunc = func_it != functions_.end() && func_it->second.bool_ret_promoted;
+
     // Call - handle void vs non-void return types
     std::string dbg_suffix = get_debug_loc_suffix();
     if (ret_type == "void") {
@@ -2768,6 +2779,16 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             emit(arg_vals[i].second + " " + arg_vals[i].first);
         }
         emit_line(")" + dbg_suffix);
+
+        // For extern functions where Bool was promoted to i32 for C ABI,
+        // truncate the i32 result back to i1 for TML code
+        if (needs_bool_trunc) {
+            std::string truncated = fresh_reg();
+            emit_line("  " + truncated + " = trunc i32 " + result + " to i1");
+            last_expr_type_ = "i1";
+            return truncated;
+        }
+
         last_expr_type_ = ret_type;
         return result;
     }

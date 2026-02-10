@@ -186,6 +186,12 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
                         }
                     }
                 }
+
+                // Check if this is a generic type alias (e.g., CryptoResult[X509Certificate])
+                // Delegate to llvm_type_from_semantic which has full alias resolution
+                auto sem_type =
+                    std::make_shared<types::Type>(types::NamedType{base_name, "", type_args});
+                return llvm_type_from_semantic(sem_type, true);
             }
 
             // For non-generic named types, ensure the type is defined
@@ -455,6 +461,19 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
             // If so, resolve the alias body with substituted type args
             auto alias_type = env_.lookup_type_alias(named.name);
             auto alias_generics = env_.lookup_type_alias_generics(named.name);
+            // If not found in local env, search all modules in registry
+            if ((!alias_type || !alias_generics) && env_.module_registry()) {
+                const auto& all_mods = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_mods) {
+                    auto ta_it = mod.type_aliases.find(named.name);
+                    auto tg_it = mod.type_alias_generics.find(named.name);
+                    if (ta_it != mod.type_aliases.end() && tg_it != mod.type_alias_generics.end()) {
+                        alias_type = ta_it->second;
+                        alias_generics = tg_it->second;
+                        break;
+                    }
+                }
+            }
             if (alias_type && alias_generics && !alias_generics->empty()) {
                 // Build substitution map
                 std::unordered_map<std::string, types::TypePtr> subs;
@@ -880,6 +899,9 @@ auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
         }
         // Fallback: uninstantiated generic - shouldn't reach codegen normally
         return generic.name;
+    } else if (type->is<types::FuncType>()) {
+        // Function types are opaque pointers in LLVM, mangle as "Fn"
+        return "Fn";
     }
 
     return "unknown";

@@ -54,6 +54,7 @@ build/
 
 # Compiler build artifacts
 packages/compiler/build/
+vcpkg_installed/
 
 # Coverage reports (generated in build/coverage/)
 coverage.html

@@ -337,8 +337,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                                   << " tests)");
                     }
 
-                    job.result =
-                        compile_test_suite(job.suite, opts.verbose, opts.no_cache, opts.backend);
+                    job.result = compile_test_suite(job.suite, opts.verbose, opts.no_cache,
+                                                    opts.backend, opts.features);
                     job.compiled = true;
                 }
             };

@@ -115,6 +115,20 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
 }
 
 auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
+    // Pre-infer the result type so we allocate the correct size.
+    // Without this, struct-typed ternaries (e.g., Maybe[Str]) write 16+ bytes
+    // into a 4-byte alloca, corrupting the stack.
+    std::string alloca_type = "i32"; // default for scalar types
+    {
+        auto semantic_type = infer_expr_type(*ternary.true_value);
+        if (semantic_type) {
+            std::string inferred = llvm_type_from_semantic(semantic_type);
+            if (!inferred.empty() && inferred != "void") {
+                alloca_type = inferred;
+            }
+        }
+    }
+
     // Evaluate condition
     std::string cond = gen_expr(*ternary.condition);
 
@@ -125,9 +139,9 @@ auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
         cond = bool_cond;
     }
 
-    // Allocate temporary for result (use i32 initially, will work for most types)
+    // Allocate temporary for result with the correct type size
     std::string result_ptr = fresh_reg();
-    emit_line("  " + result_ptr + " = alloca i32");
+    emit_line("  " + result_ptr + " = alloca " + alloca_type);
 
     std::string label_true = fresh_label("ternary.true");
     std::string label_false = fresh_label("ternary.false");

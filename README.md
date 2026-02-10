@@ -364,42 +364,67 @@ func test_maybe_unwrap() -> I32 {
 - **CMake 3.20+**
 - **LLVM 15+**
 
-### Optional Dependencies (for std::zlib module)
+### Optional Dependencies
 
-The `std::zlib` compression module requires external libraries.
+TML's standard library has optional modules that require external C libraries. These are **statically linked** into the compiler runtime — no DLLs need to be copied or distributed.
 
-**Option 1: Install locally in project (recommended)**
+| Module | Requires | Purpose |
+|--------|----------|---------|
+| `std::crypto` | OpenSSL 3.0+ | X.509 certificates, key management, signatures |
+| `std::zlib` | zlib, brotli, zstd | Compression (deflate, gzip, brotli, zstd) |
 
-The project includes a `vcpkg.json` manifest file. Simply run:
+If not installed, the compiler still works — programs using these modules will get stub implementations or compile-time errors.
+
+#### Install via vcpkg (recommended, all platforms)
+
+The project includes a `vcpkg.json` manifest. Install all dependencies with a single command:
 
 ```bash
+# Windows
 cd tml
-vcpkg install --x-install-root=src
+vcpkg install --x-install-root=vcpkg_installed --triplet=x64-windows
+
+# Linux
+cd tml
+vcpkg install --x-install-root=vcpkg_installed --triplet=x64-linux
+
+# macOS (Intel)
+cd tml
+vcpkg install --x-install-root=vcpkg_installed --triplet=x64-osx
+
+# macOS (Apple Silicon)
+cd tml
+vcpkg install --x-install-root=vcpkg_installed --triplet=arm64-osx
 ```
 
-This reads `vcpkg.json` and installs zlib, brotli, and zstd to `tml/src/x64-windows/`. The build system auto-detects them.
+This installs OpenSSL, zlib, brotli, and zstd to `tml/vcpkg_installed/<triplet>/`. The build system auto-detects them.
 
-**Option 2: Install globally via vcpkg**
+> **Don't have vcpkg?** Install it from [github.com/microsoft/vcpkg](https://github.com/microsoft/vcpkg):
+> ```bash
+> git clone https://github.com/microsoft/vcpkg.git
+> cd vcpkg && bootstrap-vcpkg.bat   # Windows
+> cd vcpkg && ./bootstrap-vcpkg.sh  # Linux/macOS
+> # Add vcpkg to your PATH
+> ```
 
-```bash
-vcpkg install zlib:x64-windows brotli:x64-windows zstd:x64-windows
-```
-
-Global vcpkg paths (Windows):
-- Headers: `C:\vcpkg\installed\x64-windows\include`
-- Libraries: `C:\vcpkg\installed\x64-windows\lib`
-
-**Option 3: System package managers**
+#### Alternative: System package managers (Linux/macOS)
 
 ```bash
-# Linux (apt)
-sudo apt install zlib1g-dev libbrotli-dev libzstd-dev
+# Linux (apt/Ubuntu/Debian)
+sudo apt install libssl-dev zlib1g-dev libbrotli-dev libzstd-dev
+
+# Linux (dnf/Fedora)
+sudo dnf install openssl-devel zlib-devel brotli-devel libzstd-devel
 
 # macOS (brew)
-brew install zlib brotli zstd
+brew install openssl@3 zlib brotli zstd
 ```
 
-The build system auto-detects these libraries from multiple paths. If not found, compression support is disabled but the compiler still works.
+The build system auto-detects system-installed libraries via `find_package` and standard include paths.
+
+#### Alternative: Standalone OpenSSL (Windows only)
+
+Download from [slproweb.com/products/Win32OpenSSL.html](https://slproweb.com/products/Win32OpenSSL.html) and install to `C:\Program Files\OpenSSL-Win64`. The build system checks this path automatically.
 
 ### Build
 

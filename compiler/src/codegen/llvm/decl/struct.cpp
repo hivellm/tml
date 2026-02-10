@@ -175,6 +175,20 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
         return mangled; // Already queued or generated
     }
 
+    // RawPtr[T] and RawMutPtr[T] are type-erased pointer wrappers — always { i64 }
+    // regardless of the type parameter. Handle them like other runtime-backed types
+    // (List, HashMap) to ensure the type definition is always emitted correctly.
+    if (base_name == "RawPtr" || base_name == "RawMutPtr") {
+        struct_instantiations_[mangled] =
+            GenericInstantiation{base_name, final_type_args, mangled, true};
+        std::string type_name = "%struct." + mangled;
+        std::string def = type_name + " = type { i64 }";
+        type_defs_buffer_ << def << "\n";
+        struct_types_[mangled] = type_name;
+        struct_fields_[mangled] = {{"addr", 0, "i64", types::make_i64()}};
+        return mangled;
+    }
+
     // Register new instantiation (mark as generated since we'll generate immediately)
     struct_instantiations_[mangled] = GenericInstantiation{
         base_name, final_type_args, mangled,

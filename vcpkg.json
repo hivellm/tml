@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "TML Compiler - To Machine Language",
   "dependencies": [
+    "openssl",
     "zlib",
     "brotli",
     "zstd"

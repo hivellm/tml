@@ -2016,6 +2016,42 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     // =========================================================================
+    // 6b. Expand type aliases before method dispatch
+    // =========================================================================
+    if (receiver_type && receiver_type->is<types::NamedType>()) {
+        const auto& pre_named = receiver_type->as<types::NamedType>();
+        auto alias_base = env_.lookup_type_alias(pre_named.name);
+        std::optional<std::vector<std::string>> alias_generics;
+        if (!alias_base && env_.module_registry()) {
+            for (const auto& [mod_path, mod] : env_.module_registry()->get_all_modules()) {
+                auto it = mod.type_aliases.find(pre_named.name);
+                if (it != mod.type_aliases.end()) {
+                    alias_base = it->second;
+                    auto gen_it = mod.type_alias_generics.find(pre_named.name);
+                    if (gen_it != mod.type_alias_generics.end()) {
+                        alias_generics = gen_it->second;
+                    }
+                    break;
+                }
+            }
+        } else if (alias_base) {
+            alias_generics = env_.lookup_type_alias_generics(pre_named.name);
+        }
+        if (alias_base) {
+            if (alias_generics && !alias_generics->empty() && !pre_named.type_args.empty()) {
+                std::unordered_map<std::string, types::TypePtr> subs;
+                for (size_t i = 0; i < alias_generics->size() && i < pre_named.type_args.size();
+                     ++i) {
+                    subs[(*alias_generics)[i]] = pre_named.type_args[i];
+                }
+                receiver_type = types::substitute_type(*alias_base, subs);
+            } else {
+                receiver_type = *alias_base;
+            }
+        }
+    }
+
+    // =========================================================================
     // 7. Handle Ordering enum methods
     // =========================================================================
     if (receiver_type && receiver_type->is<types::NamedType>()) {

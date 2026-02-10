@@ -27,11 +27,43 @@
 
 namespace tml::codegen {
 
+// Check if a parser type refers to an unsigned integer type (U8, U16, U32, U64, U128, Usize)
+static bool is_unsigned_parser_type(const parser::Type& type) {
+    if (auto* named = std::get_if<parser::NamedType>(&type.kind)) {
+        if (!named->path.segments.empty()) {
+            const auto& name = named->path.segments.back();
+            return name == "U8" || name == "U16" || name == "U32" || name == "U64" ||
+                   name == "U128" || name == "Usize";
+        }
+    }
+    return false;
+}
+
 auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
     // Generate the source expression
     std::string src = gen_expr(*cast.expr);
     std::string src_type = last_expr_type_;
     bool src_is_unsigned = last_expr_is_unsigned_;
+
+    // Also check if either source or target type is explicitly unsigned.
+    // The last_expr_is_unsigned_ flag may not propagate correctly through all
+    // expression forms (e.g., struct field access), so we also check the
+    // semantic type of the cast target. If either side is unsigned, we use
+    // zero-extension (zext) for widening casts.
+    if (!src_is_unsigned && cast.target) {
+        src_is_unsigned = is_unsigned_parser_type(*cast.target);
+    }
+    // Also check the source expression's inferred semantic type
+    if (!src_is_unsigned && cast.expr) {
+        auto src_semantic = infer_expr_type(*cast.expr);
+        if (src_semantic && src_semantic->is<types::PrimitiveType>()) {
+            auto kind = src_semantic->as<types::PrimitiveType>().kind;
+            src_is_unsigned =
+                (kind == types::PrimitiveKind::U8 || kind == types::PrimitiveKind::U16 ||
+                 kind == types::PrimitiveKind::U32 || kind == types::PrimitiveKind::U64 ||
+                 kind == types::PrimitiveKind::U128);
+        }
+    }
 
     // Get the target type
     std::string target_type = llvm_type_ptr(cast.target);

@@ -217,6 +217,75 @@ fs::path get_run_cache_dir() {
 }
 
 // ============================================================================
+// OpenSSL Detection
+// ============================================================================
+
+OpenSSLPaths find_openssl() {
+    OpenSSLPaths result;
+
+#ifdef _WIN32
+    // Check vcpkg_installed first (project-local)
+    fs::path project_root = find_project_root();
+    fs::path vcpkg_dir = project_root / "vcpkg_installed" / "x64-windows";
+    if (fs::exists(vcpkg_dir / "include" / "openssl" / "evp.h")) {
+        result.found = true;
+        result.include_dir = vcpkg_dir / "include";
+        result.lib_dir = vcpkg_dir / "lib";
+        result.crypto_lib = "libcrypto.lib";
+        result.ssl_lib = "libssl.lib";
+        TML_LOG_DEBUG("build", "OpenSSL found via vcpkg: " << vcpkg_dir.string());
+        return result;
+    }
+
+    // Check standalone OpenSSL install
+    fs::path standalone = "C:/Program Files/OpenSSL-Win64";
+    if (fs::exists(standalone / "include" / "openssl" / "evp.h")) {
+        result.found = true;
+        result.include_dir = standalone / "include";
+        result.lib_dir = standalone / "lib";
+        if (fs::exists(standalone / "lib" / "libcrypto_static.lib")) {
+            result.crypto_lib = "libcrypto_static.lib";
+            result.ssl_lib = "libssl_static.lib";
+        } else {
+            result.crypto_lib = "libcrypto.lib";
+            result.ssl_lib = "libssl.lib";
+        }
+        TML_LOG_DEBUG("build", "OpenSSL found standalone: " << standalone.string());
+        return result;
+    }
+#else
+    // Unix: check system paths
+    if (fs::exists("/usr/include/openssl/evp.h")) {
+        result.found = true;
+        result.include_dir = "/usr/include";
+        result.lib_dir = "/usr/lib";
+        result.crypto_lib = "libcrypto.so";
+        result.ssl_lib = "libssl.so";
+        return result;
+    }
+    if (fs::exists("/usr/local/include/openssl/evp.h")) {
+        result.found = true;
+        result.include_dir = "/usr/local/include";
+        result.lib_dir = "/usr/local/lib";
+        result.crypto_lib = "libcrypto.so";
+        result.ssl_lib = "libssl.so";
+        return result;
+    }
+#endif
+
+    return result;
+}
+
+bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry) {
+    if (!registry)
+        return false;
+    return registry->has_module("std::crypto") || registry->has_module("std::crypto::x509") ||
+           registry->has_module("std::crypto::key") || registry->has_module("std::crypto::sign") ||
+           registry->has_module("std::crypto::dh") || registry->has_module("std::crypto::ecdh") ||
+           registry->has_module("std::crypto::kdf") || registry->has_module("std::crypto::rsa");
+}
+
+// ============================================================================
 // Diagnostic Helpers
 // ============================================================================
 
@@ -512,9 +581,11 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     // Check for pre-compiled runtime library first (self-contained mode)
     // Disable precompiled runtime when coverage or leak checking is enabled,
     // because those require linking additional runtime components (coverage.c, mem_track.c)
+    // Also disable when crypto modules are used, since the precompiled lib doesn't have OpenSSL
     std::string runtime_lib = find_runtime_library();
-    bool use_precompiled =
-        !runtime_lib.empty() && !CompilerOptions::check_leaks && !CompilerOptions::coverage;
+    bool needs_crypto = has_crypto_modules(registry);
+    bool use_precompiled = !runtime_lib.empty() && !CompilerOptions::check_leaks &&
+                           !CompilerOptions::coverage && !needs_crypto;
 
     if (use_precompiled) {
         // Use pre-compiled runtime library (no clang needed)
@@ -626,6 +697,15 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including net runtime: " << net_obj);
             }
 
+            // net/ - dns.c (DNS resolution functions)
+            fs::path dns_c = runtime_dir / "net" / "dns.c";
+            if (fs::exists(dns_c)) {
+                std::string dns_obj = ensure_c_compiled(to_forward_slashes(dns_c.string()),
+                                                        deps_cache, clang, verbose);
+                objects.push_back(fs::path(dns_obj));
+                TML_LOG_DEBUG("build", "Including dns runtime: " << dns_obj);
+            }
+
             // collections/ - collections.c (needed by string.c for list_* functions)
             fs::path collections_c = runtime_dir / "collections" / "collections.c";
             if (fs::exists(collections_c)) {
@@ -653,13 +733,49 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including thread runtime: " << thread_obj);
             }
 
-            // crypto/ - crypto.c
-            fs::path crypto_c = runtime_dir / "crypto" / "crypto.c";
-            if (fs::exists(crypto_c)) {
-                std::string crypto_obj = ensure_c_compiled(to_forward_slashes(crypto_c.string()),
-                                                           deps_cache, clang, verbose);
-                objects.push_back(fs::path(crypto_obj));
-                TML_LOG_DEBUG("build", "Including crypto runtime: " << crypto_obj);
+            // crypto/ - crypto.c, crypto_key.c, crypto_x509.c, etc.
+            // Only include crypto runtime objects when the program actually uses
+            // crypto modules. These objects require OpenSSL at link time, so
+            // including them unconditionally causes link failures for non-crypto code.
+            if (needs_crypto) {
+                std::string crypto_extra_flags;
+                {
+                    auto openssl = find_openssl();
+                    if (openssl.found) {
+                        crypto_extra_flags = "-DTML_HAS_OPENSSL=1 -I\"" +
+                                             to_forward_slashes(openssl.include_dir.string()) +
+                                             "\"";
+                    }
+                }
+                fs::path crypto_c = runtime_dir / "crypto" / "crypto.c";
+                if (fs::exists(crypto_c)) {
+                    std::string crypto_obj =
+                        ensure_c_compiled(to_forward_slashes(crypto_c.string()), deps_cache, clang,
+                                          verbose, crypto_extra_flags);
+                    objects.push_back(fs::path(crypto_obj));
+                    TML_LOG_DEBUG("build", "Including crypto runtime: " << crypto_obj);
+                }
+                fs::path crypto_key_c = runtime_dir / "crypto" / "crypto_key.c";
+                if (fs::exists(crypto_key_c)) {
+                    std::string crypto_key_obj =
+                        ensure_c_compiled(to_forward_slashes(crypto_key_c.string()), deps_cache,
+                                          clang, verbose, crypto_extra_flags);
+                    objects.push_back(fs::path(crypto_key_obj));
+                    TML_LOG_DEBUG("build", "Including crypto_key runtime: " << crypto_key_obj);
+                }
+                // Compile all additional crypto runtime files
+                for (const auto& crypto_file : {"crypto_x509.c", "crypto_dh.c", "crypto_ecdh.c",
+                                                "crypto_kdf.c", "crypto_rsa.c", "crypto_sign.c"}) {
+                    fs::path crypto_extra_c = runtime_dir / "crypto" / crypto_file;
+                    if (fs::exists(crypto_extra_c)) {
+                        std::string crypto_extra_obj =
+                            ensure_c_compiled(to_forward_slashes(crypto_extra_c.string()),
+                                              deps_cache, clang, verbose, crypto_extra_flags);
+                        objects.push_back(fs::path(crypto_extra_obj));
+                        TML_LOG_DEBUG("build", "Including " << crypto_file
+                                                            << " runtime: " << crypto_extra_obj);
+                    }
+                }
             }
 
             // os/ - os.c

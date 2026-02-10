@@ -1,0 +1,29 @@
+//! IP diagnostic test - check segment values
+
+use test::{assert, assert_eq}
+use std::net::ip::{Ipv4Addr, Ipv6Addr}
+
+@test
+func test_ipv4_mapped_segments() -> I32 {
+    let v4: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let v6: Ipv6Addr = v4.to_ipv6_mapped()
+    let segs: [U16; 8] = v6.segments()
+
+    // Print segment values for debugging
+    print("s0=" + segs[0].to_string() + "\n")
+    print("s1=" + segs[1].to_string() + "\n")
+    print("s2=" + segs[2].to_string() + "\n")
+    print("s3=" + segs[3].to_string() + "\n")
+    print("s4=" + segs[4].to_string() + "\n")
+    print("s5=" + segs[5].to_string() + "\n")
+    print("s6=" + segs[6].to_string() + " (expected 49320=0xC0A8)\n")
+    print("s7=" + segs[7].to_string() + " (expected 257=0x0101)\n")
+
+    // Also test the shift operation directly
+    let a: U8 = 192
+    let b: U8 = 168
+    let result: U16 = ((a as U16) shl 8) | (b as U16)
+    print("shift result=" + result.to_string() + " (expected 49320)\n")
+
+    return 0
+}

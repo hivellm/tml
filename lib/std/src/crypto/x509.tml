@@ -298,7 +298,7 @@ impl X509Certificate {
     pub func from_pem(pem: Str) -> CryptoResult[X509Certificate] {
         let handle: *Unit = ffi_x509_from_pem(pem)
         if handle == null {
-            return Err(CryptoError::new(CryptoErrorKind::CertificateParseError))
+            return Err(CryptoError::new("certificate parsing failed"))
         }
         return Ok(X509Certificate { handle: handle })
     }
@@ -307,7 +307,7 @@ impl X509Certificate {
     pub func from_der(der: ref Buffer) -> CryptoResult[X509Certificate] {
         let handle: *Unit = ffi_x509_from_der(der.handle)
         if handle == null {
-            return Err(CryptoError::new(CryptoErrorKind::CertificateParseError))
+            return Err(CryptoError::new("certificate parsing failed"))
         }
         return Ok(X509Certificate { handle: handle })
     }
@@ -630,7 +630,7 @@ impl X509Store {
     pub func system() -> CryptoResult[X509Store] {
         let handle: *Unit = ffi_x509_store_system()
         if handle == null {
-            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+            return Err(CryptoError::new("operation failed"))
         }
         return Ok(X509Store { handle: handle })
     }
@@ -639,7 +639,7 @@ impl X509Store {
     pub func add_cert(mut this, cert: ref X509Certificate) -> CryptoResult[Unit] {
         let success: Bool = ffi_x509_store_add_cert(this.handle, cert.handle)
         if not success {
-            return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+            return Err(CryptoError::new("operation failed"))
         }
         return Ok(())
     }
@@ -648,7 +648,7 @@ impl X509Store {
     pub func add_pem_file(mut this, path: Str) -> CryptoResult[I64] {
         let count: I64 = ffi_x509_store_add_pem_file(this.handle, path)
         if count < 0 {
-            return Err(CryptoError::new(CryptoErrorKind::CertificateParseError))
+            return Err(CryptoError::new("certificate parsing failed"))
         }
         return Ok(count)
     }

@@ -171,6 +171,10 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             }
         } else if (arg == "--polonius") {
             CompilerOptions::polonius = true;
+        } else if (arg.starts_with("--feature=")) {
+            opts.features.push_back(arg.substr(10));
+        } else if (arg == "--feature" && i + 1 < argc) {
+            opts.features.push_back(argv[++i]);
         } else if (!arg.starts_with("--")) {
             opts.patterns.push_back(arg);
         }

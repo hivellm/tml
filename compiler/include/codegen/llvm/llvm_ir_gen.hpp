@@ -482,10 +482,13 @@ private:
     struct FuncInfo {
         std::string llvm_name;                // e.g., "@tml_double"
         std::string llvm_func_type;           // e.g., "i32 (i32)"
-        std::string ret_type;                 // e.g., "i32"
+        std::string ret_type;                 // e.g., "i32" (C ABI type for externs)
         std::vector<std::string> param_types; // e.g., {"i32", "%struct.Layout"}
         bool is_extern = false;               // true for @extern FFI functions
         std::string tml_name;                 // Original TML name for coverage tracking
+        bool bool_ret_promoted = false;       // true if Bool return was promoted i1->i32 for C ABI
+        bool has_sret = false; // true if return type uses sret (large struct on Win x64)
+        std::string sret_type; // original return type for sret (e.g., "%struct.X509Name")
     };
     std::unordered_map<std::string, FuncInfo> functions_;
 

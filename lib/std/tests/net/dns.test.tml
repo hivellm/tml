@@ -1,4 +1,4 @@
-//! DNS Module Tests
+//! DNS Module Tests (requires Winsock init on Windows)
 //!
 //! Tests for hostname resolution using the OS DNS resolver.
 //! Covers error types, lookup, reverse, and lookup_all APIs.
@@ -227,8 +227,10 @@ func test_dns_error_all_messages() -> I32 {
 
 // ============================================================================
 // Real-world DNS resolution tests (network-dependent)
+// Run with: tml test --feature network
 // ============================================================================
 
+#ifdef FEATURE_NETWORK
 @test
 func test_lookup_google() -> I32 {
     let result = dns::lookup("google.com")
@@ -413,10 +415,6 @@ func test_lookup_all_github_with_accessors() -> I32 {
     return 0
 }
 
-// ============================================================================
-// lookup_all6 tests (IPv6-only lookup)
-// ============================================================================
-
 @test
 func test_lookup_all6_google() -> I32 {
     let result = dns::lookup_all6("google.com", 16)
@@ -443,6 +441,7 @@ func test_lookup_all6_nonexistent() -> I32 {
     }
     return 0
 }
+#endif
 
 // ============================================================================
 // reverse() IpAddr wrapper tests

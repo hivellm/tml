@@ -200,11 +200,13 @@ std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& t
 // Each test file becomes a separate entry function: tml_test_<index>()
 // The DLL exports: tml_suite_count() and tml_suite_run(int index)
 SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose = false,
-                                      bool no_cache = false, const std::string& backend = "llvm");
+                                      bool no_cache = false, const std::string& backend = "llvm",
+                                      const std::vector<std::string>& features = {});
 
 // Compile a suite with phase profiling
 SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimings* timings,
-                                               bool verbose = false, bool no_cache = false);
+                                               bool verbose = false, bool no_cache = false,
+                                               const std::vector<std::string>& features = {});
 
 // Run a specific test within a loaded suite DLL
 // Uses the test index to call the correct entry function

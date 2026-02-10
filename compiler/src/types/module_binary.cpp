@@ -669,6 +669,16 @@ void ModuleBinaryWriter::write_module(const Module& module, uint64_t source_hash
     for (const auto& [name, type] : module.type_aliases) {
         write_string(name);
         write_type(type);
+        // Write generic parameter names for this alias
+        auto gen_it = module.type_alias_generics.find(name);
+        if (gen_it != module.type_alias_generics.end()) {
+            write_u32(static_cast<uint32_t>(gen_it->second.size()));
+            for (const auto& param : gen_it->second) {
+                write_string(param);
+            }
+        } else {
+            write_u32(0);
+        }
     }
 
     // Submodules
@@ -1177,6 +1187,16 @@ Module ModuleBinaryReader::read_module() {
         std::string name = read_string();
         TypePtr type = read_type();
         module.type_aliases[name] = type;
+        // Read generic parameter names
+        uint32_t gen_count = read_u32();
+        if (gen_count > 0) {
+            std::vector<std::string> params;
+            params.reserve(gen_count);
+            for (uint32_t j = 0; j < gen_count && !has_error_; ++j) {
+                params.push_back(read_string());
+            }
+            module.type_alias_generics[name] = std::move(params);
+        }
     }
 
     // Submodules

@@ -343,38 +343,67 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("");
 
     // List runtime declarations
+    // Register in declared_externals_ to prevent duplicate declarations from @extern modules
     emit_line("; List (dynamic array) runtime");
     emit_line("declare ptr @list_create(i64)");
+    declared_externals_.insert("list_create");
     emit_line("declare void @list_destroy(ptr)");
+    declared_externals_.insert("list_destroy");
     emit_line("declare void @list_push(ptr, i64)");
+    declared_externals_.insert("list_push");
     emit_line("declare i64 @list_pop(ptr)");
+    declared_externals_.insert("list_pop");
     emit_line("declare i64 @list_get(ptr, i64)");
+    declared_externals_.insert("list_get");
     emit_line("declare void @list_set(ptr, i64, i64)");
+    declared_externals_.insert("list_set");
     emit_line("declare i64 @list_len(ptr)");
+    declared_externals_.insert("list_len");
     emit_line("declare i64 @list_capacity(ptr)");
+    declared_externals_.insert("list_capacity");
     emit_line("declare void @list_clear(ptr)");
+    declared_externals_.insert("list_clear");
     emit_line("declare i32 @list_is_empty(ptr)");
+    declared_externals_.insert("list_is_empty");
     emit_line("declare void @list_remove(ptr, i64)");
+    declared_externals_.insert("list_remove");
     emit_line("declare i64 @list_first(ptr)");
+    declared_externals_.insert("list_first");
     emit_line("declare i64 @list_last(ptr)");
+    declared_externals_.insert("list_last");
     emit_line("");
 
     // HashMap runtime declarations
+    // Register in declared_externals_ to prevent duplicate declarations from @extern modules
     emit_line("; HashMap runtime");
     emit_line("declare ptr @hashmap_create(i64)");
+    declared_externals_.insert("hashmap_create");
     emit_line("declare void @hashmap_destroy(ptr)");
+    declared_externals_.insert("hashmap_destroy");
     emit_line("declare void @hashmap_set(ptr, i64, i64)");
+    declared_externals_.insert("hashmap_set");
     emit_line("declare i64 @hashmap_get(ptr, i64)");
+    declared_externals_.insert("hashmap_get");
     emit_line("declare i32 @hashmap_has(ptr, i64)");
+    declared_externals_.insert("hashmap_has");
     emit_line("declare i32 @hashmap_remove(ptr, i64)");
+    declared_externals_.insert("hashmap_remove");
     emit_line("declare i64 @hashmap_len(ptr)");
+    declared_externals_.insert("hashmap_len");
     emit_line("declare void @hashmap_clear(ptr)");
+    declared_externals_.insert("hashmap_clear");
     emit_line("declare ptr @hashmap_iter_create(ptr)");
+    declared_externals_.insert("hashmap_iter_create");
     emit_line("declare void @hashmap_iter_destroy(ptr)");
+    declared_externals_.insert("hashmap_iter_destroy");
     emit_line("declare i32 @hashmap_iter_has_next(ptr)");
+    declared_externals_.insert("hashmap_iter_has_next");
     emit_line("declare i64 @hashmap_iter_key(ptr)");
+    declared_externals_.insert("hashmap_iter_key");
     emit_line("declare i64 @hashmap_iter_value(ptr)");
+    declared_externals_.insert("hashmap_iter_value");
     emit_line("declare void @hashmap_iter_next(ptr)");
+    declared_externals_.insert("hashmap_iter_next");
     emit_line("");
 
     // Buffer runtime declarations
@@ -409,19 +438,47 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("");
 
     // File I/O runtime declarations
+    // Register in declared_externals_ to prevent duplicate declarations from @extern modules
     emit_line("; File I/O runtime");
     emit_line("declare ptr @file_open_read(ptr)");
+    declared_externals_.insert("file_open_read");
     emit_line("declare ptr @file_open_write(ptr)");
+    declared_externals_.insert("file_open_write");
     emit_line("declare ptr @file_open_append(ptr)");
+    declared_externals_.insert("file_open_append");
     emit_line("declare void @file_close(ptr)");
+    declared_externals_.insert("file_close");
     emit_line("declare i1 @file_is_open(ptr)");
+    declared_externals_.insert("file_is_open");
     emit_line("declare ptr @file_read_line(ptr)");
+    declared_externals_.insert("file_read_line");
     emit_line("declare i1 @file_write_str(ptr, ptr)");
+    declared_externals_.insert("file_write_str");
     emit_line("declare i64 @file_size(ptr)");
+    declared_externals_.insert("file_size");
     emit_line("declare ptr @file_read_all(ptr)");
+    declared_externals_.insert("file_read_all");
     emit_line("declare i1 @file_write_all(ptr, ptr)");
+    declared_externals_.insert("file_write_all");
     emit_line("declare i1 @file_append_all(ptr, ptr)");
+    declared_externals_.insert("file_append_all");
     emit_line("");
+
+    // Register file I/O functions in functions_ map for lowlevel calls from module functions
+    functions_["file_open_read"] = FuncInfo{"@file_open_read", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["file_open_write"] = FuncInfo{"@file_open_write", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["file_open_append"] = FuncInfo{"@file_open_append", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["file_close"] = FuncInfo{"@file_close", "void (ptr)", "void", {"ptr"}};
+    functions_["file_is_open"] = FuncInfo{"@file_is_open", "i1 (ptr)", "i1", {"ptr"}};
+    functions_["file_read_line"] = FuncInfo{"@file_read_line", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["file_write_str"] =
+        FuncInfo{"@file_write_str", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
+    functions_["file_size"] = FuncInfo{"@file_size", "i64 (ptr)", "i64", {"ptr"}};
+    functions_["file_read_all"] = FuncInfo{"@file_read_all", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["file_write_all"] =
+        FuncInfo{"@file_write_all", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
+    functions_["file_append_all"] =
+        FuncInfo{"@file_append_all", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
 
     // Log runtime declarations (matches runtime/log.c)
     emit_line("; Log runtime");
@@ -473,21 +530,53 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["rt_log_init_from_env"] = FuncInfo{"@rt_log_init_from_env", "i32 ()", "i32", {}};
 
     // Path utilities runtime declarations
+    // Register in declared_externals_ to prevent duplicate declarations from @extern modules
     emit_line("; Path utilities runtime");
     emit_line("declare i1 @path_exists(ptr)");
+    declared_externals_.insert("path_exists");
     emit_line("declare i1 @path_is_file(ptr)");
+    declared_externals_.insert("path_is_file");
     emit_line("declare i1 @path_is_dir(ptr)");
+    declared_externals_.insert("path_is_dir");
     emit_line("declare i1 @path_create_dir(ptr)");
+    declared_externals_.insert("path_create_dir");
     emit_line("declare i1 @path_create_dir_all(ptr)");
+    declared_externals_.insert("path_create_dir_all");
     emit_line("declare i1 @path_remove(ptr)");
+    declared_externals_.insert("path_remove");
     emit_line("declare i1 @path_remove_dir(ptr)");
+    declared_externals_.insert("path_remove_dir");
     emit_line("declare i1 @path_rename(ptr, ptr)");
+    declared_externals_.insert("path_rename");
     emit_line("declare i1 @path_copy(ptr, ptr)");
+    declared_externals_.insert("path_copy");
     emit_line("declare ptr @path_join(ptr, ptr)");
+    declared_externals_.insert("path_join");
     emit_line("declare ptr @path_parent(ptr)");
+    declared_externals_.insert("path_parent");
     emit_line("declare ptr @path_filename(ptr)");
+    declared_externals_.insert("path_filename");
     emit_line("declare ptr @path_extension(ptr)");
+    declared_externals_.insert("path_extension");
     emit_line("declare ptr @path_absolute(ptr)");
+    declared_externals_.insert("path_absolute");
+
+    // Register path functions in functions_ map for lowlevel calls from module functions
+    // (e.g., Dir::create calls lowlevel { path_create_dir(path) })
+    functions_["path_exists"] = FuncInfo{"@path_exists", "i1 (ptr)", "i1", {"ptr"}};
+    functions_["path_is_file"] = FuncInfo{"@path_is_file", "i1 (ptr)", "i1", {"ptr"}};
+    functions_["path_is_dir"] = FuncInfo{"@path_is_dir", "i1 (ptr)", "i1", {"ptr"}};
+    functions_["path_create_dir"] = FuncInfo{"@path_create_dir", "i1 (ptr)", "i1", {"ptr"}};
+    functions_["path_create_dir_all"] = FuncInfo{"@path_create_dir_all", "i1 (ptr)", "i1", {"ptr"}};
+    functions_["path_remove"] = FuncInfo{"@path_remove", "i1 (ptr)", "i1", {"ptr"}};
+    functions_["path_remove_dir"] = FuncInfo{"@path_remove_dir", "i1 (ptr)", "i1", {"ptr"}};
+    functions_["path_rename"] = FuncInfo{"@path_rename", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
+    functions_["path_copy"] = FuncInfo{"@path_copy", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
+    functions_["path_join"] = FuncInfo{"@path_join", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
+    functions_["path_parent"] = FuncInfo{"@path_parent", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["path_filename"] = FuncInfo{"@path_filename", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["path_extension"] = FuncInfo{"@path_extension", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["path_absolute"] = FuncInfo{"@path_absolute", "ptr (ptr)", "ptr", {"ptr"}};
     emit_line("");
 
     // String utilities (matches runtime/string.c)

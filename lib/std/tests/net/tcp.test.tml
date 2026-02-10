@@ -68,8 +68,10 @@ func test_tcp_listener_bind_port_zero() {
 
 // ============================================================================
 // Integration Tests - TcpStream (requires Node.js echo server on port 19876)
+// Run with: tml test --feature network
 // ============================================================================
 
+#ifdef FEATURE_NETWORK
 @test
 func test_tcp_stream_connect() {
     // Connect to the Node.js echo server
@@ -140,3 +142,4 @@ func test_tcp_stream_write_read_echo() {
         }
     }
 }
+#endif
