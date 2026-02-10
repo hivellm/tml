@@ -1,0 +1,171 @@
+// Tests for Display (to_string) on all primitive types - covers fmt/impls
+use test
+
+// =============================================================================
+// I8::to_string
+// =============================================================================
+
+@test
+func test_i8_to_string_positive() -> I32 {
+    let x: I8 = 127
+    assert_eq(x.to_string(), "127", "I8 max to_string")
+    return 0
+}
+
+@test
+func test_i8_to_string_negative() -> I32 {
+    let x: I8 = -128
+    assert_eq(x.to_string(), "-128", "I8 min to_string")
+    return 0
+}
+
+@test
+func test_i8_to_string_zero() -> I32 {
+    let x: I8 = 0
+    assert_eq(x.to_string(), "0", "I8 zero to_string")
+    return 0
+}
+
+// =============================================================================
+// I16::to_string
+// =============================================================================
+
+@test
+func test_i16_to_string_positive() -> I32 {
+    let x: I16 = 32767
+    assert_eq(x.to_string(), "32767", "I16 max to_string")
+    return 0
+}
+
+@test
+func test_i16_to_string_negative() -> I32 {
+    let x: I16 = -32768
+    assert_eq(x.to_string(), "-32768", "I16 min to_string")
+    return 0
+}
+
+// =============================================================================
+// I32::to_string
+// =============================================================================
+
+@test
+func test_i32_to_string_normal() -> I32 {
+    let x: I32 = 123456
+    assert_eq(x.to_string(), "123456", "I32 to_string")
+    return 0
+}
+
+// =============================================================================
+// I64::to_string
+// =============================================================================
+
+@test
+func test_i64_to_string_large() -> I32 {
+    let x: I64 = 9876543210
+    assert_eq(x.to_string(), "9876543210", "I64 large to_string")
+    return 0
+}
+
+// =============================================================================
+// U8::to_string
+// =============================================================================
+
+@test
+func test_u8_to_string_max() -> I32 {
+    let x: U8 = 255
+    assert_eq(x.to_string(), "255", "U8 max to_string")
+    return 0
+}
+
+@test
+func test_u8_to_string_zero() -> I32 {
+    let x: U8 = 0
+    assert_eq(x.to_string(), "0", "U8 zero to_string")
+    return 0
+}
+
+// =============================================================================
+// U16::to_string
+// =============================================================================
+
+@test
+func test_u16_to_string_max() -> I32 {
+    let x: U16 = 65535
+    assert_eq(x.to_string(), "65535", "U16 max to_string")
+    return 0
+}
+
+// =============================================================================
+// U32::to_string
+// =============================================================================
+
+@test
+func test_u32_to_string_large() -> I32 {
+    let x: U32 = 4000000000
+    assert_eq(x.to_string(), "4000000000", "U32 large to_string")
+    return 0
+}
+
+// =============================================================================
+// U64::to_string
+// =============================================================================
+
+@test
+func test_u64_to_string() -> I32 {
+    let x: U64 = 10000000000
+    assert_eq(x.to_string(), "10000000000", "U64 to_string")
+    return 0
+}
+
+// =============================================================================
+// F32::to_string
+// =============================================================================
+
+@test
+func test_f32_to_string() -> I32 {
+    let x: F32 = 2.5
+    let s: Str = x.to_string()
+    assert(s.len() > 0, "F32 to_string should produce output")
+    return 0
+}
+
+// =============================================================================
+// F64::to_string
+// =============================================================================
+
+@test
+func test_f64_to_string() -> I32 {
+    let x: F64 = 3.14
+    let s: Str = x.to_string()
+    assert(s.len() > 0, "F64 to_string should produce output")
+    return 0
+}
+
+// =============================================================================
+// Bool::to_string
+// =============================================================================
+
+@test
+func test_bool_to_string_true() -> I32 {
+    assert_eq(true.to_string(), "true", "true to_string")
+    return 0
+}
+
+@test
+func test_bool_to_string_false() -> I32 {
+    assert_eq(false.to_string(), "false", "false to_string")
+    return 0
+}
+
+// =============================================================================
+// Str::to_string
+// =============================================================================
+
+@test
+func test_str_to_string_identity() -> I32 {
+    let s: Str = "hello"
+    assert_eq(s.to_string(), "hello", "Str to_string is identity")
+    return 0
+}
+
+// Char::to_string and Unit::to_string skipped - type assignment issues

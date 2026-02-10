@@ -104,18 +104,17 @@ cd /f/Node/hivellm/tml && cmd //c "scripts\\build.bat --no-tests" 2>&1
 
 This is the canonical build invocation. Always use this exact form (adjusting flags as needed, e.g. removing `--no-tests` or adding `release`).
 
-## Test Cache Management
+## Test Commands
 
-**⚠️⚠️⚠️ CRITICAL: NEVER USE --no-cache WITHOUT PERMISSION! ⚠️⚠️⚠️**
+**⚠️ EXACT TEST + COVERAGE COMMAND (MANDATORY) ⚠️**
 
-**HARD RULE:** The `--no-cache` flag requires **EXPLICIT USER CONFIRMATION** before use.
+When running the full test suite with coverage, the correct command is:
 
-- ❌ NEVER run `tml test --no-cache` without asking first
-- ❌ NEVER run `tml build --no-cache` without asking first
-- ✅ ALWAYS use the MCP tool `mcp__tml__test` which respects the cache
-- ✅ ALWAYS run tests WITHOUT `--no-cache` by default
+```bash
+cd f:/Node/hivellm/tml && build/debug/tml.exe test --profile --verbose --no-cache --coverage 2>&1
+```
 
-**If you think you need --no-cache:** ASK THE USER FIRST with AskUserQuestion tool. The cache system auto-invalidates changed files - you almost NEVER need `--no-cache`.
+This is the canonical test invocation for generating coverage reports. Always use this exact form.
 
 **CRITICAL: NEVER DELETE TEST CACHES!**
 
@@ -128,8 +127,6 @@ The test cache system is designed to automatically invalidate when:
 - Source files change (hash-based detection)
 - Coverage mode changes (coverage_enabled flag)
 - Dependencies change
-
-**Why not delete caches or use --no-cache?** Forces full recompilation of ALL test DLLs, which is slow and unnecessary. The cache invalidation logic handles all cases correctly.
 
 Output directories:
 

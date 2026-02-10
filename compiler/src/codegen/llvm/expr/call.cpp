@@ -2436,6 +2436,13 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 emit_line("  " + converted + " = icmp ne i32 " + val + ", 0");
                 val = converted;
             }
+            // %struct.* -> ptr conversion (extract inner pointer from wrapper struct)
+            // Handles cases like List[T] -> TmlList* in lowlevel calls
+            else if (actual_type.starts_with("%struct.") && expected_type == "ptr") {
+                std::string converted = fresh_reg();
+                emit_line("  " + converted + " = extractvalue " + actual_type + " " + val + ", 0");
+                val = converted;
+            }
         }
 
         arg_vals.push_back({val, expected_type});

@@ -603,8 +603,16 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i64 @str_rfind(ptr, ptr)");
     emit_line("declare i64 @str_parse_i64(ptr)");
     emit_line("declare ptr @str_replace(ptr, ptr, ptr)");
+    emit_line("declare ptr @str_replace_first(ptr, ptr, ptr)");
     emit_line("declare ptr @str_split(ptr, ptr)");
+    emit_line("declare ptr @str_split_whitespace(ptr)");
+    emit_line("declare ptr @str_lines(ptr)");
     emit_line("declare ptr @str_chars(ptr)");
+    emit_line("declare ptr @str_repeat(ptr, i32)");
+    emit_line("declare i32 @str_parse_i32(ptr)");
+    emit_line("declare double @str_parse_f64(ptr)");
+    emit_line("declare ptr @str_join(ptr, ptr)");
+    emit_line("declare ptr @str_as_bytes(ptr)");
     emit_line("declare ptr @i64_to_str(i64)");
     emit_line("declare ptr @f64_to_str(double)");
     emit_line("");
@@ -645,6 +653,53 @@ void LLVMIRGen::emit_runtime_decls() {
         FuncInfo{"@utf8_3byte_to_string", "ptr (i8, i8, i8)", "ptr", {"i8", "i8", "i8"}};
     functions_["utf8_4byte_to_string"] =
         FuncInfo{"@utf8_4byte_to_string", "ptr (i8, i8, i8, i8)", "ptr", {"i8", "i8", "i8", "i8"}};
+
+    // Register string runtime functions in functions_ map for lowlevel calls from core::str
+    functions_["str_len"] = FuncInfo{"@str_len", "i32 (ptr)", "i32", {"ptr"}};
+    functions_["str_eq"] = FuncInfo{"@str_eq", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
+    functions_["str_hash"] = FuncInfo{"@str_hash", "i32 (ptr)", "i32", {"ptr"}};
+    functions_["str_concat"] = FuncInfo{"@str_concat", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
+    functions_["str_concat_opt"] =
+        FuncInfo{"@str_concat_opt", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
+    functions_["str_concat_3"] =
+        FuncInfo{"@str_concat_3", "ptr (ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr"}};
+    functions_["str_concat_4"] =
+        FuncInfo{"@str_concat_4", "ptr (ptr, ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr", "ptr"}};
+    functions_["str_substring"] =
+        FuncInfo{"@str_substring", "ptr (ptr, i32, i32)", "ptr", {"ptr", "i32", "i32"}};
+    functions_["str_slice"] =
+        FuncInfo{"@str_slice", "ptr (ptr, i64, i64)", "ptr", {"ptr", "i64", "i64"}};
+    functions_["str_contains"] = FuncInfo{"@str_contains", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
+    functions_["str_starts_with"] =
+        FuncInfo{"@str_starts_with", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
+    functions_["str_ends_with"] =
+        FuncInfo{"@str_ends_with", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
+    functions_["str_to_upper"] = FuncInfo{"@str_to_upper", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["str_to_lower"] = FuncInfo{"@str_to_lower", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["str_trim"] = FuncInfo{"@str_trim", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["str_trim_start"] = FuncInfo{"@str_trim_start", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["str_trim_end"] = FuncInfo{"@str_trim_end", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["str_char_at"] = FuncInfo{"@str_char_at", "i32 (ptr, i32)", "i32", {"ptr", "i32"}};
+    functions_["str_find"] = FuncInfo{"@str_find", "i64 (ptr, ptr)", "i64", {"ptr", "ptr"}};
+    functions_["str_rfind"] = FuncInfo{"@str_rfind", "i64 (ptr, ptr)", "i64", {"ptr", "ptr"}};
+    functions_["str_parse_i64"] = FuncInfo{"@str_parse_i64", "i64 (ptr)", "i64", {"ptr"}};
+    functions_["str_replace"] =
+        FuncInfo{"@str_replace", "ptr (ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr"}};
+    functions_["str_split"] = FuncInfo{"@str_split", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
+    functions_["str_split_whitespace"] =
+        FuncInfo{"@str_split_whitespace", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["str_lines"] = FuncInfo{"@str_lines", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["str_chars"] = FuncInfo{"@str_chars", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["str_replace_first"] =
+        FuncInfo{"@str_replace_first", "ptr (ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr"}};
+    functions_["str_repeat"] = FuncInfo{"@str_repeat", "ptr (ptr, i32)", "ptr", {"ptr", "i32"}};
+    functions_["str_parse_i32"] = FuncInfo{"@str_parse_i32", "i32 (ptr)", "i32", {"ptr"}};
+    functions_["str_parse_f64"] = FuncInfo{"@str_parse_f64", "double (ptr)", "double", {"ptr"}};
+    functions_["str_join"] = FuncInfo{"@str_join", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
+    functions_["str_as_bytes"] = FuncInfo{"@str_as_bytes", "ptr (ptr)", "ptr", {"ptr"}};
+    // Also register names used in lowlevel blocks that differ from runtime names
+    functions_["str_to_uppercase"] = FuncInfo{"@str_to_upper", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["str_to_lowercase"] = FuncInfo{"@str_to_lower", "ptr (ptr)", "ptr", {"ptr"}};
 
     // StringBuilder utilities (matches runtime/string.c)
     emit_line("; StringBuilder utilities");

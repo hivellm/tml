@@ -1,0 +1,156 @@
+// Tests for Ord methods (.max(), .min()) on additional types
+use test
+
+// =============================================================================
+// I8 Ord methods
+// =============================================================================
+
+@test
+func test_i8_max() -> I32 {
+    let a: I8 = 5
+    let b: I8 = 10
+    let r: I8 = a.max(b)
+    assert_eq(r as I32, 10, "I8 5.max(10) = 10")
+    return 0
+}
+
+@test
+func test_i8_min() -> I32 {
+    let a: I8 = 5
+    let b: I8 = 10
+    let r: I8 = a.min(b)
+    assert_eq(r as I32, 5, "I8 5.min(10) = 5")
+    return 0
+}
+
+// =============================================================================
+// I16 Ord methods
+// =============================================================================
+
+@test
+func test_i16_max() -> I32 {
+    let a: I16 = 100
+    let b: I16 = 200
+    let r: I16 = a.max(b)
+    assert_eq(r as I32, 200, "I16 100.max(200) = 200")
+    return 0
+}
+
+@test
+func test_i16_min() -> I32 {
+    let a: I16 = 100
+    let b: I16 = 200
+    let r: I16 = a.min(b)
+    assert_eq(r as I32, 100, "I16 100.min(200) = 100")
+    return 0
+}
+
+// =============================================================================
+// U8 Ord methods
+// =============================================================================
+
+@test
+func test_u8_max() -> I32 {
+    let a: U8 = 10
+    let b: U8 = 200
+    let r: U8 = a.max(b)
+    assert_eq(r as I32, 200, "U8 10.max(200) = 200")
+    return 0
+}
+
+@test
+func test_u8_min() -> I32 {
+    let a: U8 = 10
+    let b: U8 = 200
+    let r: U8 = a.min(b)
+    assert_eq(r as I32, 10, "U8 10.min(200) = 10")
+    return 0
+}
+
+// =============================================================================
+// U16 Ord methods
+// =============================================================================
+
+@test
+func test_u16_max() -> I32 {
+    let a: U16 = 100
+    let b: U16 = 60000
+    let r: U16 = a.max(b)
+    assert_eq(r as I32, 60000, "U16 100.max(60000) = 60000")
+    return 0
+}
+
+@test
+func test_u16_min() -> I32 {
+    let a: U16 = 100
+    let b: U16 = 60000
+    let r: U16 = a.min(b)
+    assert_eq(r as I32, 100, "U16 100.min(60000) = 100")
+    return 0
+}
+
+// =============================================================================
+// I64 Ord methods
+// =============================================================================
+
+@test
+func test_i64_max() -> I32 {
+    let a: I64 = -100
+    let b: I64 = 100
+    let r: I64 = a.max(b)
+    assert_eq(r, 100, "I64 -100.max(100) = 100")
+    return 0
+}
+
+@test
+func test_i64_min() -> I32 {
+    let a: I64 = -100
+    let b: I64 = 100
+    let r: I64 = a.min(b)
+    assert_eq(r, -100, "I64 -100.min(100) = -100")
+    return 0
+}
+
+// =============================================================================
+// U32 Ord methods
+// =============================================================================
+
+@test
+func test_u32_max() -> I32 {
+    let a: U32 = 100
+    let b: U32 = 1000
+    let r: U32 = a.max(b)
+    assert_eq(r as I32, 1000, "U32 100.max(1000) = 1000")
+    return 0
+}
+
+@test
+func test_u32_min() -> I32 {
+    let a: U32 = 100
+    let b: U32 = 1000
+    let r: U32 = a.min(b)
+    assert_eq(r as I32, 100, "U32 100.min(1000) = 100")
+    return 0
+}
+
+// =============================================================================
+// U64 Ord methods
+// =============================================================================
+
+@test
+func test_u64_max() -> I32 {
+    let a: U64 = 100
+    let b: U64 = 1000
+    let r: U64 = a.max(b)
+    assert_eq(r as I64, 1000, "U64 100.max(1000) = 1000")
+    return 0
+}
+
+@test
+func test_u64_min() -> I32 {
+    let a: U64 = 100
+    let b: U64 = 1000
+    let r: U64 = a.min(b)
+    assert_eq(r as I64, 100, "U64 100.min(1000) = 100")
+    return 0
+}

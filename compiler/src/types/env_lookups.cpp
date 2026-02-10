@@ -198,6 +198,24 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
             }
         }
     }
+
+    // Last resort: search GlobalModuleCache for impl methods on primitive types.
+    // This handles cases like s.char_at() where s: Str and the impl Str block
+    // is in core::str, which may not be explicitly imported via 'use core::str'.
+    // The GlobalModuleCache is populated by meta preload and contains all library modules.
+    // We iterate ALL cached modules generically, so new impl blocks in .tml files
+    // are automatically discovered without needing hardcoded mappings in C++.
+    auto method_pos = name.find("::");
+    if (method_pos != std::string::npos) {
+        auto& global_cache = GlobalModuleCache::instance();
+        for (const auto& [mod_path, mod] : global_cache.get_all()) {
+            auto func_it = mod.functions.find(name);
+            if (func_it != mod.functions.end()) {
+                return func_it->second;
+            }
+        }
+    }
+
     return std::nullopt;
 }
 

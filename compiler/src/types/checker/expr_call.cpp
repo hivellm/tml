@@ -1115,6 +1115,19 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             }
         }
 
+        // PartialEq / PartialOrd behavior methods return Bool for all primitives
+        if (call.method == "eq" || call.method == "ne" || call.method == "lt" ||
+            call.method == "le" || call.method == "gt" || call.method == "ge") {
+            return make_primitive(PrimitiveKind::Bool);
+        }
+
+        // Bitwise operations return Self for integer types
+        if (is_integer &&
+            (call.method == "bitand" || call.method == "bitor" || call.method == "bitxor" ||
+             call.method == "shl" || call.method == "shr" || call.method == "bitnot")) {
+            return receiver_type;
+        }
+
         // duplicate() returns Self for all primitives (copy semantics)
         if (call.method == "duplicate") {
             return receiver_type;
@@ -1147,26 +1160,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 RefType{.is_mut = true, .inner = receiver_type, .lifetime = std::nullopt});
         }
 
-        // Str-specific methods
-        if (kind == PrimitiveKind::Str) {
-            // len() returns I64 (byte length)
-            if (call.method == "len") {
-                return make_primitive(PrimitiveKind::I64);
-            }
-            // is_empty() returns Bool
-            if (call.method == "is_empty") {
-                return make_primitive(PrimitiveKind::Bool);
-            }
-            // as_bytes() returns ref [U8]
-            if (call.method == "as_bytes") {
-                auto u8_type = make_primitive(PrimitiveKind::U8);
-                auto slice_type = std::make_shared<Type>(SliceType{u8_type});
-                return std::make_shared<Type>(
-                    RefType{.is_mut = false, .inner = slice_type, .lifetime = std::nullopt});
-            }
-        }
-
-        // Try to look up user-defined impl methods for primitive types (e.g., I32::abs)
+        // Dynamic lookup for all impl methods on primitive types.
+        // This covers Str methods (len, char_at, find, etc.) and any other
+        // impl blocks defined in .tml files (core::str, core::ops::*, etc.).
+        // The lookup goes through env_.lookup_func() which searches local scope,
+        // module_registry_, and GlobalModuleCache as a last resort.
         std::string type_name = primitive_to_string(kind);
         std::string qualified = type_name + "::" + call.method;
         auto func = env_.lookup_func(qualified);

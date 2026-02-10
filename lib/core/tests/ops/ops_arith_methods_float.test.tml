@@ -1,0 +1,98 @@
+// Tests for arithmetic behavior methods on F32 and F64
+use test
+
+// =============================================================================
+// F32 behavior methods
+// =============================================================================
+
+@test
+func test_f32_add_method() -> I32 {
+    let a: F32 = 1.5
+    let b: F32 = 2.5
+    let r: F32 = a.add(b)
+    assert_eq((r * 10.0) as I32, 40, "F32.add()")
+    return 0
+}
+
+@test
+func test_f32_sub_method() -> I32 {
+    let a: F32 = 5.0
+    let b: F32 = 2.0
+    let r: F32 = a.sub(b)
+    assert_eq((r * 10.0) as I32, 30, "F32.sub()")
+    return 0
+}
+
+@test
+func test_f32_mul_method() -> I32 {
+    let a: F32 = 3.0
+    let b: F32 = 4.0
+    let r: F32 = a.mul(b)
+    assert_eq(r as I32, 12, "F32.mul()")
+    return 0
+}
+
+@test
+func test_f32_div_method() -> I32 {
+    let a: F32 = 10.0
+    let b: F32 = 4.0
+    let r: F32 = a.div(b)
+    assert_eq((r * 10.0) as I32, 25, "F32.div()")
+    return 0
+}
+
+@test
+func test_f32_neg_method() -> I32 {
+    let a: F32 = 3.14
+    let r: F32 = a.neg()
+    assert(r < 0.0, "F32.neg() should be negative")
+    return 0
+}
+
+// =============================================================================
+// F64 behavior methods
+// =============================================================================
+
+@test
+func test_f64_add_method() -> I32 {
+    let a: F64 = 1.5
+    let b: F64 = 2.5
+    let r: F64 = a.add(b)
+    assert_eq(r as I64, 4, "F64.add()")
+    return 0
+}
+
+@test
+func test_f64_sub_method() -> I32 {
+    let a: F64 = 100.0
+    let b: F64 = 42.0
+    let r: F64 = a.sub(b)
+    assert_eq(r as I64, 58, "F64.sub()")
+    return 0
+}
+
+@test
+func test_f64_mul_method() -> I32 {
+    let a: F64 = 7.0
+    let b: F64 = 6.0
+    let r: F64 = a.mul(b)
+    assert_eq(r as I64, 42, "F64.mul()")
+    return 0
+}
+
+@test
+func test_f64_div_method() -> I32 {
+    let a: F64 = 22.0
+    let b: F64 = 7.0
+    let r: F64 = a.div(b)
+    assert_eq((r * 100.0) as I64, 314, "F64.div()")
+    return 0
+}
+
+@test
+func test_f64_neg_method() -> I32 {
+    let a: F64 = 42.0
+    let r: F64 = a.neg()
+    assert_eq(r as I64, -42, "F64.neg()")
+    return 0
+}

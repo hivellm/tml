@@ -368,6 +368,16 @@ void GlobalModuleCache::put(const std::string& module_path, const Module& module
     cache_[module_path] = module;
 }
 
+std::vector<std::pair<std::string, Module>> GlobalModuleCache::get_all() const {
+    std::shared_lock lock(mutex_);
+    std::vector<std::pair<std::string, Module>> result;
+    result.reserve(cache_.size());
+    for (const auto& [path, mod] : cache_) {
+        result.emplace_back(path, mod);
+    }
+    return result;
+}
+
 void GlobalModuleCache::clear() {
     std::unique_lock lock(mutex_);
     cache_.clear();

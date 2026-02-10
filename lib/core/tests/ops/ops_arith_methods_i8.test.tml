@@ -1,0 +1,55 @@
+// Tests for arithmetic behavior methods on I8
+use test
+
+@test
+func test_i8_add_method() -> I32 {
+    let a: I8 = 10
+    let b: I8 = 20
+    let r: I8 = a.add(b)
+    assert_eq(r as I32, 30, "I8.add()")
+    return 0
+}
+
+@test
+func test_i8_sub_method() -> I32 {
+    let a: I8 = 50
+    let b: I8 = 20
+    let r: I8 = a.sub(b)
+    assert_eq(r as I32, 30, "I8.sub()")
+    return 0
+}
+
+@test
+func test_i8_mul_method() -> I32 {
+    let a: I8 = 6
+    let b: I8 = 7
+    let r: I8 = a.mul(b)
+    assert_eq(r as I32, 42, "I8.mul()")
+    return 0
+}
+
+@test
+func test_i8_div_method() -> I32 {
+    let a: I8 = 100
+    let b: I8 = 10
+    let r: I8 = a.div(b)
+    assert_eq(r as I32, 10, "I8.div()")
+    return 0
+}
+
+@test
+func test_i8_rem_method() -> I32 {
+    let a: I8 = 17
+    let b: I8 = 5
+    let r: I8 = a.rem(b)
+    assert_eq(r as I32, 2, "I8.rem()")
+    return 0
+}
+
+@test
+func test_i8_neg_method() -> I32 {
+    let a: I8 = 42
+    let r: I8 = a.neg()
+    assert_eq(r as I32, -42, "I8.neg()")
+    return 0
+}

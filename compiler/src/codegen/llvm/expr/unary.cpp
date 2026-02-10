@@ -770,8 +770,8 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
     switch (unary.op) {
     case parser::UnaryOp::Neg:
         if (operand_type == "double" || operand_type == "float") {
-            emit_line("  " + result + " = fsub double 0.0, " + operand);
-            last_expr_type_ = "double";
+            emit_line("  " + result + " = fsub " + operand_type + " 0.0, " + operand);
+            last_expr_type_ = operand_type;
         } else {
             emit_line("  " + result + " = sub " + operand_type + " 0, " + operand);
             last_expr_type_ = operand_type;

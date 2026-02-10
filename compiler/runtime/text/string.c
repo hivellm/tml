@@ -997,3 +997,206 @@ void* str_chars(const char* s) {
     }
     return result;
 }
+
+// str_split_whitespace(s: Str) -> ptr (returns list of strings, splits on whitespace)
+void* str_split_whitespace(const char* s) {
+    TmlList* result = list_create(4);
+    if (!s)
+        return result;
+
+    while (*s) {
+        // Skip leading whitespace
+        while (*s && (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r'))
+            s++;
+        if (!*s)
+            break;
+        // Find end of word
+        const char* start = s;
+        while (*s && *s != ' ' && *s != '\t' && *s != '\n' && *s != '\r')
+            s++;
+        size_t len = s - start;
+        char* part = (char*)malloc(len + 1);
+        if (part) {
+            memcpy(part, start, len);
+            part[len] = '\0';
+            list_push(result, (int64_t)part);
+        }
+    }
+    return result;
+}
+
+// str_lines(s: Str) -> ptr (returns list of lines, handles \n and \r\n)
+void* str_lines(const char* s) {
+    TmlList* result = list_create(4);
+    if (!s)
+        return result;
+
+    const char* start = s;
+    while (*s) {
+        if (*s == '\n') {
+            size_t len = s - start;
+            // Strip \r before \n
+            if (len > 0 && start[len - 1] == '\r')
+                len--;
+            char* part = (char*)malloc(len + 1);
+            if (part) {
+                memcpy(part, start, len);
+                part[len] = '\0';
+                list_push(result, (int64_t)part);
+            }
+            s++;
+            start = s;
+        } else {
+            s++;
+        }
+    }
+    // Add remaining part (last line without newline)
+    if (start != s || *start) {
+        size_t len = s - start;
+        if (len > 0) {
+            char* part = (char*)malloc(len + 1);
+            if (part) {
+                memcpy(part, start, len);
+                part[len] = '\0';
+                list_push(result, (int64_t)part);
+            }
+        }
+    }
+    return result;
+}
+
+// str_replace_first(s: Str, from: Str, to: Str) -> Str
+static char str_buffer2[16384];
+const char* str_replace_first(const char* s, const char* from, const char* to) {
+    if (!s)
+        return "";
+    if (!from || !*from) {
+        size_t len = strlen(s);
+        if (len >= sizeof(str_buffer2))
+            len = sizeof(str_buffer2) - 1;
+        memcpy(str_buffer2, s, len);
+        str_buffer2[len] = '\0';
+        return str_buffer2;
+    }
+    if (!to)
+        to = "";
+
+    const char* found = strstr(s, from);
+    if (!found) {
+        size_t len = strlen(s);
+        if (len >= sizeof(str_buffer2))
+            len = sizeof(str_buffer2) - 1;
+        memcpy(str_buffer2, s, len);
+        str_buffer2[len] = '\0';
+        return str_buffer2;
+    }
+
+    size_t prefix_len = found - s;
+    size_t from_len = strlen(from);
+    size_t to_len = strlen(to);
+    size_t suffix_len = strlen(found + from_len);
+    size_t total = prefix_len + to_len + suffix_len;
+    if (total >= sizeof(str_buffer2))
+        total = sizeof(str_buffer2) - 1;
+
+    char* out = str_buffer2;
+    if (prefix_len > 0) {
+        memcpy(out, s, prefix_len);
+        out += prefix_len;
+    }
+    size_t copy_to = to_len;
+    if (out + copy_to > str_buffer2 + sizeof(str_buffer2) - 1)
+        copy_to = str_buffer2 + sizeof(str_buffer2) - 1 - out;
+    memcpy(out, to, copy_to);
+    out += copy_to;
+    size_t copy_suffix = suffix_len;
+    if (out + copy_suffix > str_buffer2 + sizeof(str_buffer2) - 1)
+        copy_suffix = str_buffer2 + sizeof(str_buffer2) - 1 - out;
+    memcpy(out, found + from_len, copy_suffix);
+    out += copy_suffix;
+    *out = '\0';
+    return str_buffer2;
+}
+
+// str_repeat(s: Str, n: I32) -> Str
+static char str_repeat_buffer[16384];
+const char* str_repeat(const char* s, int32_t n) {
+    if (!s || n <= 0) {
+        str_repeat_buffer[0] = '\0';
+        return str_repeat_buffer;
+    }
+    size_t len = strlen(s);
+    size_t total = len * (size_t)n;
+    if (total >= sizeof(str_repeat_buffer))
+        total = sizeof(str_repeat_buffer) - 1;
+
+    char* out = str_repeat_buffer;
+    for (int32_t i = 0;
+         i < n && (size_t)(out - str_repeat_buffer) + len < sizeof(str_repeat_buffer); i++) {
+        memcpy(out, s, len);
+        out += len;
+    }
+    *out = '\0';
+    return str_repeat_buffer;
+}
+
+// str_parse_i32(s: Str) -> I32 (returns 0 on parse failure)
+int32_t str_parse_i32(const char* s) {
+    if (!s)
+        return 0;
+    char* endptr;
+    long result = strtol(s, &endptr, 10);
+    return (int32_t)result;
+}
+
+// str_parse_f64(s: Str) -> F64 (returns 0.0 on parse failure)
+double str_parse_f64(const char* s) {
+    if (!s)
+        return 0.0;
+    char* endptr;
+    double result = strtod(s, &endptr);
+    return result;
+}
+
+// str_join(parts: List[Str], separator: Str) -> Str
+extern int64_t list_len(TmlList* list);
+extern int64_t list_get(TmlList* list, int64_t index);
+
+static char str_join_buffer[16384];
+const char* str_join(TmlList* parts, const char* separator) {
+    if (!parts) {
+        str_join_buffer[0] = '\0';
+        return str_join_buffer;
+    }
+    int64_t count = list_len(parts);
+    if (count == 0) {
+        str_join_buffer[0] = '\0';
+        return str_join_buffer;
+    }
+
+    size_t sep_len = separator ? strlen(separator) : 0;
+    char* out = str_join_buffer;
+    char* end = str_join_buffer + sizeof(str_join_buffer) - 1;
+
+    for (int64_t i = 0; i < count && out < end; i++) {
+        if (i > 0 && sep_len > 0 && out + sep_len < end) {
+            memcpy(out, separator, sep_len);
+            out += sep_len;
+        }
+        const char* part = (const char*)list_get(parts, i);
+        if (part) {
+            size_t part_len = strlen(part);
+            if (out + part_len > end)
+                part_len = end - out;
+            memcpy(out, part, part_len);
+            out += part_len;
+        }
+    }
+    *out = '\0';
+    return str_join_buffer;
+}
+
+// str_as_bytes(s: Str) -> ptr (returns pointer to the string's byte data)
+const void* str_as_bytes(const char* s) {
+    return s ? s : "";
+}

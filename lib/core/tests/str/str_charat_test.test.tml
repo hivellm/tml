@@ -1,0 +1,9 @@
+// Minimal test to debug char_at
+use test
+
+@test
+func test_charat() -> I32 {
+    let s: Str = "hello"
+    let c: I32 = s.char_at(0)
+    return 0
+}

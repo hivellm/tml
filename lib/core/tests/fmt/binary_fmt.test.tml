@@ -1,0 +1,70 @@
+// Tests for Binary formatting helpers - covers fmt/helpers
+use test
+use core::fmt::helpers::{
+    u8_to_binary_str, u16_to_binary_str, u32_to_binary_str, u64_to_binary_str,
+    i8_to_binary_str, i16_to_binary_str, i32_to_binary_str, i64_to_binary_str
+}
+
+// =============================================================================
+// Unsigned binary helpers
+// =============================================================================
+
+@test
+func test_u8_binary() -> I32 {
+    let s: Str = u8_to_binary_str(5 as U8)
+    assert(s.len() > 0, "U8 binary output")
+    return 0
+}
+
+@test
+func test_u16_binary() -> I32 {
+    let s: Str = u16_to_binary_str(255 as U16)
+    assert(s.len() > 0, "U16 binary output")
+    return 0
+}
+
+@test
+func test_u32_binary() -> I32 {
+    let s: Str = u32_to_binary_str(15 as U32)
+    assert(s.len() > 0, "U32 binary output")
+    return 0
+}
+
+@test
+func test_u64_binary() -> I32 {
+    let s: Str = u64_to_binary_str(255 as U64)
+    assert(s.len() > 0, "U64 binary output")
+    return 0
+}
+
+// =============================================================================
+// Signed binary helpers
+// =============================================================================
+
+@test
+func test_i8_binary() -> I32 {
+    let s: Str = i8_to_binary_str(42 as I8)
+    assert(s.len() > 0, "I8 binary output")
+    return 0
+}
+
+@test
+func test_i16_binary() -> I32 {
+    let s: Str = i16_to_binary_str(100 as I16)
+    assert(s.len() > 0, "I16 binary output")
+    return 0
+}
+
+@test
+func test_i32_binary() -> I32 {
+    let s: Str = i32_to_binary_str(255)
+    assert(s.len() > 0, "I32 binary output")
+    return 0
+}
+
+@test
+func test_i64_binary() -> I32 {
+    let s: Str = i64_to_binary_str(1024)
+    assert(s.len() > 0, "I64 binary output")
+    return 0
+}

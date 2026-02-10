@@ -35,6 +35,7 @@
 #include "cli/tester/test_cache.hpp"
 #include "log/log.hpp"
 #include "tester_internal.hpp"
+#include "types/module_binary.hpp"
 
 #include <fstream>
 #include <iomanip>
@@ -134,6 +135,11 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
     }
 
     try {
+
+        // Pre-load all library modules from .tml.meta binary cache.
+        // This MUST complete before any test compilation starts, otherwise
+        // dynamic impl method lookups (e.g. Str::len) will fail with () return type.
+        types::preload_all_meta_caches();
 
         // Group test files into suites
         auto phase_start = Clock::now();

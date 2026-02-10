@@ -130,6 +130,9 @@ public:
     /// Cache a module (only caches library modules: core::*, std::*, test).
     void put(const std::string& module_path, const Module& module);
 
+    /// Get all cached modules (for iterating over all library modules).
+    std::vector<std::pair<std::string, Module>> get_all() const;
+
     /// Clear the cache (e.g., for --no-cache flag).
     void clear();
 

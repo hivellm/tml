@@ -254,19 +254,7 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg == "--emit-header") {
                 emit_header = true;
             } else if (arg == "--no-cache") {
-                // Require explicit confirmation for --no-cache
-                std::cerr
-                    << "\033[1;33mWarning:\033[0m --no-cache will force full recompilation.\n";
-                std::cerr
-                    << "The cache auto-invalidates changed files. You probably don't need this.\n";
-                std::cerr << "Continue? [y/N]: ";
-                std::string response;
-                std::getline(std::cin, response);
-                if (response == "y" || response == "Y" || response == "yes" || response == "Yes") {
-                    no_cache = true;
-                } else {
-                    std::cerr << "Aborted. Running with cache enabled.\n";
-                }
+                no_cache = true;
             } else if (arg == "--release") {
                 opt_level = 3;
                 // Disable leak checking in release mode for performance
@@ -460,19 +448,7 @@ int tml_main(int argc, char* argv[]) {
                 CompilerOptions::optimization_level = 3;
                 CompilerOptions::check_leaks = false;
             } else if (arg == "--no-cache") {
-                // Require explicit confirmation for --no-cache
-                std::cerr
-                    << "\033[1;33mWarning:\033[0m --no-cache will force full recompilation.\n";
-                std::cerr
-                    << "The cache auto-invalidates changed files. You probably don't need this.\n";
-                std::cerr << "Continue? [y/N]: ";
-                std::string response;
-                std::getline(std::cin, response);
-                if (response == "y" || response == "Y" || response == "yes" || response == "Yes") {
-                    opts.no_cache = true;
-                } else {
-                    std::cerr << "Aborted. Running with cache enabled.\n";
-                }
+                opts.no_cache = true;
             } else if (arg == "--coverage") {
                 opts.coverage = true;
             } else if (arg.starts_with("--coverage-output=")) {

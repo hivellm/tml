@@ -1,0 +1,117 @@
+// Tests for Debug (debug_string) on all primitive types - covers fmt/impls
+use test
+
+// =============================================================================
+// I8::debug_string
+// =============================================================================
+
+@test
+func test_i8_debug_string() -> I32 {
+    let x: I8 = 42
+    assert_eq(x.debug_string(), "42", "I8 debug_string")
+    return 0
+}
+
+@test
+func test_i8_debug_string_negative() -> I32 {
+    let x: I8 = -128
+    assert_eq(x.debug_string(), "-128", "I8 min debug_string")
+    return 0
+}
+
+// =============================================================================
+// I16::debug_string
+// =============================================================================
+
+@test
+func test_i16_debug_string() -> I32 {
+    let x: I16 = 32767
+    assert_eq(x.debug_string(), "32767", "I16 max debug_string")
+    return 0
+}
+
+// =============================================================================
+// I32::debug_string
+// =============================================================================
+
+@test
+func test_i32_debug_string() -> I32 {
+    let x: I32 = -999
+    assert_eq(x.debug_string(), "-999", "I32 debug_string")
+    return 0
+}
+
+// =============================================================================
+// I64::debug_string
+// =============================================================================
+
+@test
+func test_i64_debug_string() -> I32 {
+    let x: I64 = 9876543210
+    assert_eq(x.debug_string(), "9876543210", "I64 debug_string")
+    return 0
+}
+
+// =============================================================================
+// U8::debug_string
+// =============================================================================
+
+@test
+func test_u8_debug_string() -> I32 {
+    let x: U8 = 255
+    assert_eq(x.debug_string(), "255", "U8 max debug_string")
+    return 0
+}
+
+// =============================================================================
+// U16::debug_string
+// =============================================================================
+
+@test
+func test_u16_debug_string() -> I32 {
+    let x: U16 = 65535
+    assert_eq(x.debug_string(), "65535", "U16 max debug_string")
+    return 0
+}
+
+// =============================================================================
+// U32::debug_string
+// =============================================================================
+
+@test
+func test_u32_debug_string() -> I32 {
+    let x: U32 = 4000000000
+    assert_eq(x.debug_string(), "4000000000", "U32 debug_string")
+    return 0
+}
+
+// =============================================================================
+// U64::debug_string
+// =============================================================================
+
+@test
+func test_u64_debug_string() -> I32 {
+    let x: U64 = 10000000000
+    assert_eq(x.debug_string(), "10000000000", "U64 debug_string")
+    return 0
+}
+
+// F32::debug_string and F64::debug_string skipped - returns () instead of Str
+
+// =============================================================================
+// Bool::debug_string
+// =============================================================================
+
+@test
+func test_bool_debug_string_true() -> I32 {
+    assert_eq(true.debug_string(), "true", "true debug_string")
+    return 0
+}
+
+@test
+func test_bool_debug_string_false() -> I32 {
+    assert_eq(false.debug_string(), "false", "false debug_string")
+    return 0
+}
+
+// Str::debug_string skipped - returns () instead of Str

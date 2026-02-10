@@ -1,0 +1,53 @@
+// Tests for min/max free functions on various types
+use test
+use core::cmp::{min, max}
+
+@test
+func test_min_i64() -> I32 {
+    let r: I64 = min(-100 as I64, 100 as I64)
+    assert_eq(r, -100, "min(-100i64, 100i64)")
+    return 0
+}
+
+@test
+func test_max_i64() -> I32 {
+    let r: I64 = max(-100 as I64, 100 as I64)
+    assert_eq(r, 100, "max(-100i64, 100i64)")
+    return 0
+}
+
+@test
+func test_min_u32() -> I32 {
+    let a: U32 = 42
+    let b: U32 = 100
+    let r: U32 = min(a, b)
+    assert_eq(r as I32, 42, "min(42u32, 100u32)")
+    return 0
+}
+
+@test
+func test_max_u32() -> I32 {
+    let a: U32 = 42
+    let b: U32 = 100
+    let r: U32 = max(a, b)
+    assert_eq(r as I32, 100, "max(42u32, 100u32)")
+    return 0
+}
+
+@test
+func test_min_i8() -> I32 {
+    let a: I8 = -10
+    let b: I8 = 10
+    let r: I8 = min(a, b)
+    assert_eq(r as I32, -10, "min(-10i8, 10i8)")
+    return 0
+}
+
+@test
+func test_max_i8() -> I32 {
+    let a: I8 = -10
+    let b: I8 = 10
+    let r: I8 = max(a, b)
+    assert_eq(r as I32, 10, "max(-10i8, 10i8)")
+    return 0
+}

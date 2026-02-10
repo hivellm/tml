@@ -33,6 +33,7 @@
 #include "parser/parser.hpp"
 #include "types/checker.hpp"
 #include "types/module.hpp"
+#include "types/module_binary.hpp"
 
 #include <filesystem>
 #include <iostream>
@@ -264,7 +265,9 @@ int run_check(const std::string& path, bool verbose) {
 
     const auto& module = std::get<parser::Module>(parse_result);
 
-    // Initialize module registry for test module
+    // Preload library modules so impl methods on primitive types resolve dynamically
+    types::preload_all_meta_caches();
+
     auto registry = std::make_shared<types::ModuleRegistry>();
     types::TypeChecker checker;
     checker.set_module_registry(registry);
