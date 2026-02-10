@@ -110,9 +110,15 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
                 }
             }
 
-            // For numeric/bool types, use icmp
+            // For numeric/bool types, use icmp (or fcmp for floats)
             std::string cmp_result = fresh_reg();
-            emit_line("  " + cmp_result + " = icmp eq " + cmp_type + " " + left + ", " + right);
+            bool is_float_cmp = (cmp_type == "float" || cmp_type == "double");
+            if (is_float_cmp) {
+                emit_line("  " + cmp_result + " = fcmp oeq " + cmp_type + " " + left + ", " +
+                          right);
+            } else {
+                emit_line("  " + cmp_result + " = icmp eq " + cmp_type + " " + left + ", " + right);
+            }
 
             std::string ok_label = fresh_label("assert_ok");
             std::string fail_label = fresh_label("assert_fail");
@@ -180,7 +186,13 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             }
 
             std::string cmp_result = fresh_reg();
-            emit_line("  " + cmp_result + " = icmp ne " + cmp_type + " " + left + ", " + right);
+            bool is_float_cmp = (cmp_type == "float" || cmp_type == "double");
+            if (is_float_cmp) {
+                emit_line("  " + cmp_result + " = fcmp one " + cmp_type + " " + left + ", " +
+                          right);
+            } else {
+                emit_line("  " + cmp_result + " = icmp ne " + cmp_type + " " + left + ", " + right);
+            }
 
             std::string ok_label = fresh_label("assert_ok");
             std::string fail_label = fresh_label("assert_fail");

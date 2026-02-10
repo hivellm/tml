@@ -181,6 +181,7 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  --crate-type=<type> Output type: bin, lib, dylib, rlib\n";
             std::cerr << "  --backend=<name>    Codegen backend: llvm (default), cranelift\n";
             std::cerr << "  --polonius          Use Polonius borrow checker (more permissive)\n";
+            std::cerr << "  --no-thir           Disable THIR pipeline (fall back to HIR→MIR)\n";
             std::cerr << "  --target=<triple>   Target triple (e.g., x86_64-unknown-linux-gnu)\n";
             std::cerr << "  --sysroot=<path>    Sysroot path for cross-compilation\n";
             std::cerr << "  --out-dir=<dir>     Output directory\n";
@@ -371,6 +372,8 @@ int tml_main(int argc, char* argv[]) {
                 }
             } else if (arg == "--polonius") {
                 polonius = true;
+            } else if (arg == "--no-thir") {
+                tml::CompilerOptions::use_thir = false;
             }
         }
 

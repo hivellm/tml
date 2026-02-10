@@ -1,0 +1,167 @@
+use test
+
+// ============================================================================
+// THIR Struct & Enum Tests
+//
+// Tests that THIR correctly lowers struct/enum construction, field access,
+// pattern matching (when), and method calls.
+// ============================================================================
+
+// ============ Struct Definitions ============
+
+type Point {
+    x: I32,
+    y: I32
+}
+
+type Rectangle {
+    origin: Point,
+    width: I32,
+    height: I32
+}
+
+// ============ Enum Definitions ============
+
+type Color {
+    Red,
+    Green,
+    Blue
+}
+
+// ============ Struct Tests ============
+
+@test
+func test_struct_creation() -> I32 {
+    let p: Point = Point { x: 10, y: 20 }
+    assert_eq(p.x, 10, "Point.x")
+    assert_eq(p.y, 20, "Point.y")
+    return 0
+}
+
+@test
+func test_nested_struct() -> I32 {
+    let origin: Point = Point { x: 0, y: 0 }
+    let rect: Rectangle = Rectangle { origin: origin, width: 100, height: 50 }
+    assert_eq(rect.width, 100, "Rectangle.width")
+    assert_eq(rect.height, 50, "Rectangle.height")
+    assert_eq(rect.origin.x, 0, "Rectangle.origin.x")
+    assert_eq(rect.origin.y, 0, "Rectangle.origin.y")
+    return 0
+}
+
+@test
+func test_struct_in_function() -> I32 {
+    let p: Point = make_point(3, 7)
+    assert_eq(p.x, 3, "make_point x")
+    assert_eq(p.y, 7, "make_point y")
+    return 0
+}
+
+func make_point(x: I32, y: I32) -> Point {
+    return Point { x: x, y: y }
+}
+
+func point_sum(p: Point) -> I32 {
+    return p.x + p.y
+}
+
+@test
+func test_struct_as_argument() -> I32 {
+    let p: Point = Point { x: 5, y: 15 }
+    let sum: I32 = point_sum(p)
+    assert_eq(sum, 20, "point_sum(5, 15) = 20")
+    return 0
+}
+
+// ============ Simple Enum Tests ============
+
+@test
+func test_simple_enum() -> I32 {
+    let c: Color = Color::Red
+    let is_red: Bool = when c {
+        Color::Red => true,
+        _ => false
+    }
+    assert(is_red, "Color::Red should match")
+    return 0
+}
+
+@test
+func test_enum_all_variants() -> I32 {
+    assert_eq(color_to_int(Color::Red), 1, "Red = 1")
+    assert_eq(color_to_int(Color::Green), 2, "Green = 2")
+    assert_eq(color_to_int(Color::Blue), 3, "Blue = 3")
+    return 0
+}
+
+func color_to_int(c: Color) -> I32 {
+    return when c {
+        Color::Red => 1,
+        Color::Green => 2,
+        Color::Blue => 3
+    }
+}
+
+@test
+func test_enum_wildcard_pattern() -> I32 {
+    let c: Color = Color::Blue
+    let is_primary: Bool = when c {
+        Color::Red => true,
+        _ => false
+    }
+    assert(not is_primary, "Blue is not Red")
+    return 0
+}
+
+@test
+func test_enum_in_if() -> I32 {
+    let c: Color = Color::Green
+    let val: I32 = color_to_int(c)
+    let result: I32 = if val == 2 then 100 else 0
+    assert_eq(result, 100, "Green = 2, so result = 100")
+    return 0
+}
+
+// ============ Enum Payload with Arithmetic ============
+
+type Shape {
+    Circle(I32),
+    Square(I32),
+    Empty
+}
+
+@test
+func test_enum_payload_multiply() -> I32 {
+    let sh: Shape = Shape::Circle(5)
+    let area: I32 = when sh {
+        Shape::Circle(r) => r * r * 3,
+        Shape::Square(side) => side * side,
+        Shape::Empty => 0
+    }
+    assert_eq(area, 75, "Circle(5) area ~ 75")
+    return 0
+}
+
+@test
+func test_enum_payload_add() -> I32 {
+    let sh: Shape = Shape::Square(7)
+    let perimeter: I32 = when sh {
+        Shape::Circle(r) => r * 2 + r * 2,
+        Shape::Square(side) => side * 4,
+        Shape::Empty => 0
+    }
+    assert_eq(perimeter, 28, "Square(7) perimeter = 28")
+    return 0
+}
+
+// ============ Struct with Computed Fields ============
+
+@test
+func test_struct_computed() -> I32 {
+    let a: I32 = 3
+    let b: I32 = 4
+    let p: Point = Point { x: a * 2, y: b + 1 }
+    assert_eq(p.x, 6, "3*2 = 6")
+    assert_eq(p.y, 5, "4+1 = 5")
+    return 0
+}

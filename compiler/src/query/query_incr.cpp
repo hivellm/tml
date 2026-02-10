@@ -165,6 +165,12 @@ std::optional<QueryKey> deserialize_query_key(const uint8_t* data, size_t len, Q
             return std::nullopt;
         return QueryKey{HirLowerKey{std::move(file_path), std::move(module_name)}};
     }
+    case QueryKind::ThirLower: {
+        std::string file_path, module_name;
+        if (!read_str(file_path) || !read_str(module_name))
+            return std::nullopt;
+        return QueryKey{ThirLowerKey{std::move(file_path), std::move(module_name)}};
+    }
     case QueryKind::MirBuild: {
         std::string file_path, module_name;
         if (!read_str(file_path) || !read_str(module_name))

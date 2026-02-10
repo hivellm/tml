@@ -317,6 +317,14 @@ add_library(tml_borrow STATIC
 target_link_libraries(tml_borrow PUBLIC tml_types)
 target_include_directories(tml_borrow PUBLIC include src)
 
+# Trait solver library (goal-based behavior resolution)
+add_library(tml_traits STATIC
+    src/traits/solver.cpp
+    src/traits/solver_builtins.cpp
+)
+target_link_libraries(tml_traits PUBLIC tml_types)
+target_include_directories(tml_traits PUBLIC include src)
+
 # IR library (high-level IR for serialization)
 add_library(tml_ir STATIC
     src/ir/builder_utils.cpp
@@ -356,6 +364,15 @@ add_library(tml_hir STATIC
 target_link_libraries(tml_hir PUBLIC tml_borrow)
 target_include_directories(tml_hir PUBLIC include src)
 
+# THIR library (Typed High-level IR with explicit coercions, resolved dispatch)
+add_library(tml_thir STATIC
+    src/thir/thir_module.cpp
+    src/thir/thir_lower.cpp
+    src/thir/exhaustiveness.cpp
+)
+target_link_libraries(tml_thir PUBLIC tml_hir tml_traits)
+target_include_directories(tml_thir PUBLIC include src)
+
 # MIR library (Mid-level IR in SSA form for optimization)
 add_library(tml_mir STATIC
     src/mir/mir_type.cpp
@@ -376,6 +393,8 @@ add_library(tml_mir STATIC
     src/mir/builder/hir_expr.cpp
     src/mir/builder/hir_stmt.cpp
     src/mir/builder/hir_pattern.cpp
+    # THIR to MIR builder (uses THIR with explicit coercions)
+    src/mir/thir_mir_builder.cpp
     # Serializer modules (split from mir_serialize.cpp for maintainability)
     src/mir/serializer/binary_writer.cpp
     src/mir/serializer/binary_reader.cpp
@@ -433,7 +452,7 @@ add_library(tml_mir STATIC
     src/mir/passes/pgo.cpp
     src/mir/passes/vectorization.cpp
 )
-target_link_libraries(tml_mir PUBLIC tml_hir tml_types)
+target_link_libraries(tml_mir PUBLIC tml_hir tml_thir tml_types)
 target_include_directories(tml_mir PUBLIC include src)
 
 # Codegen library (LLVM IR text generator + clang backend)
@@ -538,7 +557,7 @@ add_library(tml_query STATIC
     src/query/query_core.cpp
     src/query/query_incr.cpp
 )
-target_link_libraries(tml_query PUBLIC tml_codegen tml_common tml_log)
+target_link_libraries(tml_query PUBLIC tml_codegen tml_thir tml_traits tml_common tml_log)
 target_include_directories(tml_query PUBLIC include src)
 
 # Format library

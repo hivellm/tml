@@ -1,0 +1,145 @@
+use test
+
+// ============================================================================
+// THIR Numeric Coercion Tests
+//
+// These tests verify that the THIR layer correctly handles numeric types
+// and coercions. The THIR pipeline (enabled by default) inserts explicit
+// coercion nodes (IntWidening, UintWidening, etc.) when types don't match.
+// ============================================================================
+
+// ============ I32 Baseline ============
+
+@test
+func test_i32_arithmetic() -> I32 {
+    let a: I32 = 10
+    let b: I32 = 20
+    assert_eq(a + b, 30, "I32 addition")
+    assert_eq(b - a, 10, "I32 subtraction")
+    assert_eq(a * 3, 30, "I32 multiplication")
+    assert_eq(b / 4, 5, "I32 division")
+    assert_eq(b % 3, 2, "I32 modulo")
+    return 0
+}
+
+@test
+func test_i32_comparisons() -> I32 {
+    let a: I32 = 10
+    let b: I32 = 20
+    assert(a < b, "10 < 20")
+    assert(b > a, "20 > 10")
+    assert(a <= 10, "10 <= 10")
+    assert(b >= 20, "20 >= 20")
+    assert(a != b, "10 != 20")
+    assert(a == 10, "10 == 10")
+    return 0
+}
+
+// ============ I64 Arithmetic ============
+
+@test
+func test_i64_arithmetic() -> I32 {
+    let a: I64 = 100000
+    let b: I64 = 200000
+    assert_eq(a + b, 300000, "I64 addition")
+    assert_eq(b - a, 100000, "I64 subtraction")
+    assert_eq(a * 2, 200000, "I64 multiplication")
+    return 0
+}
+
+// ============ Explicit Cast (I32 -> I64) ============
+
+@test
+func test_cast_i32_to_i64() -> I32 {
+    let a: I32 = 42
+    let b: I64 = a as I64
+    assert_eq(b, 42, "I32 42 cast to I64")
+    return 0
+}
+
+@test
+func test_cast_negative_i32_to_i64() -> I32 {
+    let a: I32 = -100
+    let b: I64 = a as I64
+    assert_eq(b, -100, "negative I32 cast to I64 preserves sign")
+    return 0
+}
+
+// ============ Boolean Logic (THIR pass-through) ============
+
+@test
+func test_boolean_and_or() -> I32 {
+    let t: Bool = true
+    let f: Bool = false
+    assert(t and t, "true and true")
+    assert(not (t and f), "not (true and false)")
+    assert(t or f, "true or false")
+    assert(not (f or f), "not (false or false)")
+    return 0
+}
+
+// ============ Mixed Expressions Through THIR ============
+
+@test
+func test_nested_arithmetic() -> I32 {
+    // Complex expression that THIR must lower correctly
+    let a: I32 = 2
+    let b: I32 = 3
+    let c: I32 = 4
+    let result: I32 = (a + b) * c - a
+    assert_eq(result, 18, "(2+3)*4 - 2 = 18")
+    return 0
+}
+
+@test
+func test_chained_comparisons_in_if() -> I32 {
+    let x: I32 = 15
+    let result: I32 = if x > 10 and x < 20 then 1 else 0
+    assert_eq(result, 1, "15 is between 10 and 20")
+
+    let y: I32 = 5
+    let result2: I32 = if y > 10 or y < 3 then 1 else 0
+    assert_eq(result2, 0, "5 is not >10 and not <3")
+    return 0
+}
+
+// ============ F64 Float Operations ============
+
+@test
+func test_f64_assert_eq() -> I32 {
+    let a: F64 = 10.0
+    let b: F64 = 3.0
+    let sum: F64 = a + b
+    assert_eq(sum, 13.0, "F64 addition: 10.0 + 3.0 = 13.0")
+    return 0
+}
+
+@test
+func test_f64_multiplication() -> I32 {
+    let x: F64 = 2.5
+    let y: F64 = 4.0
+    let product: F64 = x * y
+    assert_eq(product, 10.0, "F64 multiply: 2.5 * 4.0 = 10.0")
+    return 0
+}
+
+@test
+func test_f64_assert_ne() -> I32 {
+    let a: F64 = 3.14
+    let b: F64 = 2.71
+    assert_ne(a, b, "3.14 != 2.71")
+    return 0
+}
+
+// ============ Variable Reassignment ============
+
+@test
+func test_variable_mutation() -> I32 {
+    let mut x: I32 = 10
+    assert_eq(x, 10, "initial value")
+    x = x + 5
+    assert_eq(x, 15, "after += 5")
+    x = x * 2
+    assert_eq(x, 30, "after *= 2")
+    return 0
+}

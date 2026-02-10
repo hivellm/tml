@@ -548,7 +548,23 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
 
 auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     auto left = check_expr(*binary.left);
-    auto right = check_expr(*binary.right);
+
+    // For arithmetic operations, propagate left operand's type as expected type
+    // for the right operand. This allows unsuffixed integer literals to infer
+    // the correct type (e.g., `x * 3` where x is I32 → 3 infers as I32).
+    TypePtr right;
+    switch (binary.op) {
+    case parser::BinaryOp::Add:
+    case parser::BinaryOp::Sub:
+    case parser::BinaryOp::Mul:
+    case parser::BinaryOp::Div:
+    case parser::BinaryOp::Mod:
+        right = check_expr(*binary.right, left);
+        break;
+    default:
+        right = check_expr(*binary.right);
+        break;
+    }
 
     auto check_binary_types = [&](const char* op_name) {
         TypePtr resolved_left = env_.resolve(left);

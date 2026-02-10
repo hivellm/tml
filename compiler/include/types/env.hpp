@@ -55,12 +55,24 @@ struct BoundConstraint {
     std::vector<TypePtr> type_args; ///< Type arguments (e.g., [T] in FromIterator[T]).
 };
 
+/// A higher-ranked behavior bound: `for[T] Fn(T) -> T`
+///
+/// Represents universally quantified bounds where the bound type parameters
+/// are scoped to the constraint itself, not the enclosing function.
+struct HigherRankedBound {
+    std::vector<std::string> bound_type_params; ///< The `for[T]` params.
+    std::string behavior_name;                  ///< e.g., "Fn".
+    std::vector<TypePtr> type_args;             ///< e.g., [T, T] for Fn(T) -> T.
+};
+
 /// A where clause constraint: type parameter -> required behaviors.
 struct WhereConstraint {
     std::string type_param;                      ///< The constrained type parameter.
     std::vector<std::string> required_behaviors; ///< Required behavior implementations (simple).
     std::vector<BoundConstraint>
         parameterized_bounds; ///< Parameterized bounds (e.g., FromIterator[T]).
+    std::vector<HigherRankedBound>
+        higher_ranked_bounds; ///< Higher-ranked bounds (e.g., for[T] Fn(T) -> T).
 };
 
 /// A const generic parameter definition.
@@ -450,6 +462,12 @@ public:
     /// Looks up a behavior by name.
     [[nodiscard]] auto lookup_behavior(const std::string& name) const -> std::optional<BehaviorDef>;
 
+    /// Returns a read-only reference to all registered behaviors.
+    [[nodiscard]] auto get_behavior_list() const
+        -> const std::unordered_map<std::string, BehaviorDef>* {
+        return &behaviors_;
+    }
+
     /// Looks up a function by name (returns first overload).
     [[nodiscard]] auto lookup_func(const std::string& name) const -> std::optional<FuncSig>;
 
@@ -628,7 +646,9 @@ public:
 
     /// Sets whether to abort (exit) on module parse errors.
     /// Use false for best-effort pre-loading (e.g., warmup).
-    void set_abort_on_module_error(bool abort) { abort_on_module_error_ = abort; }
+    void set_abort_on_module_error(bool abort) {
+        abort_on_module_error_ = abort;
+    }
 
     /// Returns the module registry.
     [[nodiscard]] auto module_registry() const -> std::shared_ptr<ModuleRegistry>;

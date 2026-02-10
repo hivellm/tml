@@ -108,7 +108,10 @@ auto TypeChecker::check_when(const parser::WhenExpr& when) -> TypePtr {
             check_expr(**arm.guard);
         }
 
-        auto arm_type = check_expr(*arm.body);
+        // Pass accumulated result_type as expected type for arm body.
+        // This allows integer literals in later arms to match the type
+        // established by the first arm (e.g., 0 infers as I32 not I64).
+        auto arm_type = result_type ? check_expr(*arm.body, result_type) : check_expr(*arm.body);
 
         // Unify arm types with Never type coercion:
         // - Never type coerces to any type (it's a bottom type)

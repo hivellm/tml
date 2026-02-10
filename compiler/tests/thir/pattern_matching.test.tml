@@ -1,0 +1,154 @@
+use test
+
+// ============================================================================
+// THIR Pattern Matching Tests
+//
+// Tests that THIR correctly lowers `when` expressions with various patterns.
+// The THIR layer also checks exhaustiveness — missing patterns should produce
+// warnings (but not errors, so tests still compile).
+// ============================================================================
+
+// ============ Type Definitions ============
+
+type Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+type Animal {
+    Dog,
+    Cat,
+    Bird
+}
+
+// ============ Simple Pattern Matching ============
+
+@test
+func test_when_simple_enum() -> I32 {
+    let d: Direction = Direction::North
+    let result: I32 = when d {
+        Direction::North => 1,
+        Direction::South => 2,
+        Direction::East => 3,
+        Direction::West => 4
+    }
+    assert_eq(result, 1, "North = 1")
+    return 0
+}
+
+@test
+func test_when_all_variants() -> I32 {
+    assert_eq(direction_to_int(Direction::North), 1, "North")
+    assert_eq(direction_to_int(Direction::South), 2, "South")
+    assert_eq(direction_to_int(Direction::East), 3, "East")
+    assert_eq(direction_to_int(Direction::West), 4, "West")
+    return 0
+}
+
+func direction_to_int(d: Direction) -> I32 {
+    return when d {
+        Direction::North => 1,
+        Direction::South => 2,
+        Direction::East => 3,
+        Direction::West => 4
+    }
+}
+
+// ============ Wildcard Pattern ============
+
+@test
+func test_when_wildcard() -> I32 {
+    let a: Animal = Animal::Bird
+    let is_dog: Bool = when a {
+        Animal::Dog => true,
+        _ => false
+    }
+    assert(not is_dog, "Bird is not Dog")
+    return 0
+}
+
+@test
+func test_when_wildcard_catch_all() -> I32 {
+    let d: Direction = Direction::West
+    let is_vertical: Bool = when d {
+        Direction::North => true,
+        Direction::South => true,
+        _ => false
+    }
+    assert(not is_vertical, "West is not vertical")
+    return 0
+}
+
+// ============ When with Integer Literals ============
+
+@test
+func test_when_integer() -> I32 {
+    let x: I32 = 3
+    let result: I32 = when x {
+        1 => 10,
+        2 => 20,
+        3 => 30,
+        _ => 0
+    }
+    assert_eq(result, 30, "when 3 => 30")
+    return 0
+}
+
+@test
+func test_when_integer_default() -> I32 {
+    let x: I32 = 99
+    let result: I32 = when x {
+        1 => 10,
+        2 => 20,
+        _ => -1
+    }
+    assert_eq(result, -1, "when 99 => default -1")
+    return 0
+}
+
+// ============ When with Boolean ============
+
+@test
+func test_when_bool() -> I32 {
+    let b: Bool = true
+    let result: I32 = when b {
+        true => 1,
+        false => 0
+    }
+    assert_eq(result, 1, "when true => 1")
+    return 0
+}
+
+// ============ Nested When ============
+
+@test
+func test_nested_when_with_if() -> I32 {
+    let d: Direction = Direction::East
+    let dist: I32 = 5
+
+    let result: I32 = when d {
+        Direction::North => if dist > 3 then 100 else 50,
+        Direction::South => if dist > 3 then 200 else 150,
+        Direction::East => if dist > 3 then 300 else 250,
+        Direction::West => if dist > 3 then 400 else 350
+    }
+    assert_eq(result, 300, "East with dist 5 > 3 => 300")
+    return 0
+}
+
+// ============ When Used in Computation ============
+
+@test
+func test_when_in_expression() -> I32 {
+    let a: Animal = Animal::Cat
+    let legs: I32 = when a {
+        Animal::Dog => 4,
+        Animal::Cat => 4,
+        Animal::Bird => 2
+    }
+    let total: I32 = legs * 2
+    assert_eq(total, 8, "Cat has 4 legs, *2 = 8")
+    return 0
+}

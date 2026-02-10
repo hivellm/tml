@@ -44,6 +44,10 @@ namespace tml::mir {
 struct Module;
 } // namespace tml::mir
 
+namespace tml::thir {
+struct ThirModule;
+} // namespace tml::thir
+
 namespace tml::query {
 
 // ============================================================================
@@ -90,7 +94,14 @@ struct HirLowerKey {
     bool operator==(const HirLowerKey&) const = default;
 };
 
-/// Key for building MIR from HIR.
+/// Key for lowering HIR to THIR (with trait solving, coercions, exhaustiveness).
+struct ThirLowerKey {
+    std::string file_path;
+    std::string module_name;
+    bool operator==(const ThirLowerKey&) const = default;
+};
+
+/// Key for building MIR from HIR (or THIR when --use-thir is enabled).
 struct MirBuildKey {
     std::string file_path;
     std::string module_name;
@@ -107,8 +118,9 @@ struct CodegenUnitKey {
 };
 
 /// Union of all query keys.
-using QueryKey = std::variant<ReadSourceKey, TokenizeKey, ParseModuleKey, TypecheckModuleKey,
-                              BorrowcheckModuleKey, HirLowerKey, MirBuildKey, CodegenUnitKey>;
+using QueryKey =
+    std::variant<ReadSourceKey, TokenizeKey, ParseModuleKey, TypecheckModuleKey,
+                 BorrowcheckModuleKey, HirLowerKey, ThirLowerKey, MirBuildKey, CodegenUnitKey>;
 
 /// Tag enum for fast query type discrimination.
 enum class QueryKind : uint8_t {
@@ -118,6 +130,7 @@ enum class QueryKind : uint8_t {
     TypecheckModule,
     BorrowcheckModule,
     HirLower,
+    ThirLower,
     MirBuild,
     CodegenUnit,
     COUNT
@@ -186,6 +199,13 @@ struct BorrowcheckResult {
 struct HirLowerResult {
     std::shared_ptr<hir::HirModule> hir_module;
     bool success = false;
+};
+
+/// Result of THIR lowering (HIR → THIR with coercions, method resolution, exhaustiveness).
+struct ThirLowerResult {
+    std::shared_ptr<thir::ThirModule> thir_module;
+    bool success = false;
+    std::vector<std::string> diagnostics; ///< Exhaustiveness warnings, etc.
 };
 
 /// Result of MIR building.

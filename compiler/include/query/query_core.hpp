@@ -35,7 +35,10 @@ std::any provide_borrowcheck_module(QueryContext& ctx, const QueryKey& key);
 /// Provider: lower AST+TypeEnv to HIR.
 std::any provide_hir_lower(QueryContext& ctx, const QueryKey& key);
 
-/// Provider: build MIR from HIR.
+/// Provider: lower HIR to THIR (trait solving, coercions, exhaustiveness).
+std::any provide_thir_lower(QueryContext& ctx, const QueryKey& key);
+
+/// Provider: build MIR from HIR (or THIR when --use-thir is enabled).
 std::any provide_mir_build(QueryContext& ctx, const QueryKey& key);
 
 /// Provider: generate LLVM IR from MIR (or AST fallback).

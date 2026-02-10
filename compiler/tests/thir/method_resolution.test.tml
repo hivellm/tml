@@ -1,0 +1,122 @@
+use test
+
+// ============================================================================
+// THIR Method Resolution Tests
+//
+// Tests that the THIR layer correctly resolves method calls, including:
+// - Inherent methods (methods on structs/enums directly)
+// - Behavior method dispatch (via TraitSolver)
+// - Function calls with struct arguments
+// ============================================================================
+
+// ============ Struct with Methods ============
+
+type Counter {
+    value: I32
+}
+
+impl Counter {
+    func new(start: I32) -> Counter {
+        return Counter { value: start }
+    }
+
+    func get(self) -> I32 {
+        return self.value
+    }
+
+    func increment(mut self) -> Counter {
+        return Counter { value: self.value + 1 }
+    }
+
+    func add(self, other: I32) -> I32 {
+        return self.value + other
+    }
+}
+
+@test
+func test_inherent_method_call() -> I32 {
+    let c: Counter = Counter::new(10)
+    assert_eq(c.get(), 10, "Counter::new(10).get() = 10")
+    return 0
+}
+
+@test
+func test_method_with_args() -> I32 {
+    let c: Counter = Counter::new(5)
+    let result: I32 = c.add(15)
+    assert_eq(result, 20, "Counter(5).add(15) = 20")
+    return 0
+}
+
+@test
+func test_method_chaining() -> I32 {
+    let c: Counter = Counter::new(0)
+    let c2: Counter = c.increment()
+    let c3: Counter = c2.increment()
+    assert_eq(c3.get(), 2, "0 -> increment -> increment = 2")
+    return 0
+}
+
+// ============ Multiple Types with Methods ============
+
+type Vec2 {
+    x: I32,
+    y: I32
+}
+
+impl Vec2 {
+    func new(x: I32, y: I32) -> Vec2 {
+        return Vec2 { x: x, y: y }
+    }
+
+    func magnitude_squared(self) -> I32 {
+        return self.x * self.x + self.y * self.y
+    }
+
+    func dot(self, other: Vec2) -> I32 {
+        return self.x * other.x + self.y * other.y
+    }
+}
+
+@test
+func test_vec2_methods() -> I32 {
+    let v: Vec2 = Vec2::new(3, 4)
+    assert_eq(v.magnitude_squared(), 25, "||(3,4)||^2 = 25")
+    return 0
+}
+
+@test
+func test_vec2_dot_product() -> I32 {
+    let a: Vec2 = Vec2::new(1, 2)
+    let b: Vec2 = Vec2::new(3, 4)
+    assert_eq(a.dot(b), 11, "(1,2).(3,4) = 11")
+    return 0
+}
+
+// ============ Static Methods ============
+
+type MathHelper {}
+
+impl MathHelper {
+    func max(a: I32, b: I32) -> I32 {
+        return if a > b then a else b
+    }
+
+    func min(a: I32, b: I32) -> I32 {
+        return if a < b then a else b
+    }
+
+    func clamp(val: I32, lo: I32, hi: I32) -> I32 {
+        return MathHelper::max(lo, MathHelper::min(val, hi))
+    }
+}
+
+@test
+func test_static_methods() -> I32 {
+    assert_eq(MathHelper::max(3, 7), 7, "max(3,7) = 7")
+    assert_eq(MathHelper::min(3, 7), 3, "min(3,7) = 3")
+    assert_eq(MathHelper::clamp(15, 0, 10), 10, "clamp(15, 0, 10) = 10")
+    assert_eq(MathHelper::clamp(-5, 0, 10), 0, "clamp(-5, 0, 10) = 0")
+    assert_eq(MathHelper::clamp(5, 0, 10), 5, "clamp(5, 0, 10) = 5")
+    return 0
+}

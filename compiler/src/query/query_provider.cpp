@@ -26,6 +26,7 @@ void QueryProviderRegistry::register_core_providers() {
     register_provider(QueryKind::TypecheckModule, providers::provide_typecheck_module);
     register_provider(QueryKind::BorrowcheckModule, providers::provide_borrowcheck_module);
     register_provider(QueryKind::HirLower, providers::provide_hir_lower);
+    register_provider(QueryKind::ThirLower, providers::provide_thir_lower);
     register_provider(QueryKind::MirBuild, providers::provide_mir_build);
     register_provider(QueryKind::CodegenUnit, providers::provide_codegen_unit);
 }

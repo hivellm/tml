@@ -1,0 +1,145 @@
+use test
+
+// ============================================================================
+// THIR Casts & Behavior Tests
+//
+// Tests explicit casts (as), behavior implementations, and method dispatch
+// through the THIR pipeline.
+// ============================================================================
+
+// ============ Explicit Casts ============
+
+@test
+func test_cast_i32_to_i64() -> I32 {
+    let a: I32 = 255
+    let b: I64 = a as I64
+    assert_eq(b, 255, "I32 255 as I64")
+    return 0
+}
+
+@test
+func test_cast_i64_to_i32() -> I32 {
+    let a: I64 = 42
+    let b: I32 = a as I32
+    assert_eq(b, 42, "I64 42 as I32")
+    return 0
+}
+
+@test
+func test_cast_negative() -> I32 {
+    let a: I32 = -50
+    let b: I64 = a as I64
+    assert_eq(b, -50, "I32 -50 as I64 preserves sign")
+    return 0
+}
+
+// ============ Behavior Implementations ============
+
+behavior Describable {
+    func describe(self) -> I32
+}
+
+type Status {
+    Active,
+    Inactive,
+    Pending
+}
+
+impl Describable for Status {
+    func describe(self) -> I32 {
+        return when self {
+            Status::Active => 1,
+            Status::Inactive => 2,
+            Status::Pending => 3
+        }
+    }
+}
+
+@test
+func test_behavior_method() -> I32 {
+    let s: Status = Status::Active
+    assert_eq(s.describe(), 1, "Active.describe() = 1")
+
+    let s2: Status = Status::Pending
+    assert_eq(s2.describe(), 3, "Pending.describe() = 3")
+    return 0
+}
+
+// ============ Struct with Behavior ============
+
+type Score {
+    value: I32
+}
+
+impl Score {
+    func new(v: I32) -> Score {
+        return Score { value: v }
+    }
+
+    func get(self) -> I32 {
+        return self.value
+    }
+
+    func is_passing(self) -> Bool {
+        return self.value >= 60
+    }
+}
+
+@test
+func test_struct_behavior() -> I32 {
+    let s: Score = Score::new(85)
+    assert_eq(s.get(), 85, "Score(85).get()")
+    assert(s.is_passing(), "85 is passing")
+
+    let s2: Score = Score::new(45)
+    assert(not s2.is_passing(), "45 is not passing")
+    return 0
+}
+
+// ============ Multiple Behaviors ============
+
+type Pair {
+    first: I32,
+    second: I32
+}
+
+impl Pair {
+    func new(a: I32, b: I32) -> Pair {
+        return Pair { first: a, second: b }
+    }
+
+    func sum(self) -> I32 {
+        return self.first + self.second
+    }
+
+    func max(self) -> I32 {
+        return if self.first > self.second then self.first else self.second
+    }
+
+    func min(self) -> I32 {
+        return if self.first < self.second then self.first else self.second
+    }
+}
+
+@test
+func test_pair_methods() -> I32 {
+    let p: Pair = Pair::new(10, 20)
+    assert_eq(p.sum(), 30, "Pair(10,20).sum() = 30")
+    assert_eq(p.max(), 20, "Pair(10,20).max() = 20")
+    assert_eq(p.min(), 10, "Pair(10,20).min() = 10")
+    return 0
+}
+
+// ============ Function Calls with Casts ============
+
+func double_i64(x: I64) -> I64 {
+    return x + x
+}
+
+@test
+func test_cast_in_function_call() -> I32 {
+    let val: I32 = 25
+    let result: I64 = double_i64(val as I64)
+    assert_eq(result, 50, "double_i64(25 as I64) = 50")
+    return 0
+}

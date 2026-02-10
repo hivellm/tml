@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **THIR Layer + Advanced Trait Solver** (2026-02-10) - Typed High-level IR between HIR and MIR
+  - THIR (Typed HIR) makes all implicit type transformations explicit before MIR lowering
+  - Numeric coercion insertion: IntWidening, UintWidening, FloatWidening, IntToFloat, DerefCoercion, RefCoercion
+  - Method resolution via TraitSolver with candidate assembly and selection
+  - Operator desugaring: `a + b` lowered to `Add::add(a, b)` for non-primitive types
+  - Pattern exhaustiveness checking in `when` expressions (warns on missing arms)
+  - Associated type normalization via `AssociatedTypeNormalizer`
+  - TraitSolver with goal-based resolution, cycle detection, memoization cache
+  - Builtin trait impls for primitives (Numeric, Eq, Ord, Hash, Display, Debug, Default, Duplicate)
+  - THIR→MIR builder (`ThirMirBuilder`) replaces `HirMirBuilder` in default pipeline
+  - Enabled by default; `--no-thir` flag falls back to legacy HIR→MIR path
+  - 58 THIR-specific tests across 7 test files (closures, coercions, enums, methods, patterns, structs, control flow)
+  - New files: `traits/solver.hpp/cpp`, `traits/solver_builtins.cpp`, `thir/thir_expr.hpp`, `thir/thir_module.hpp`, `thir/thir_lower.cpp`, `thir/exhaustiveness.hpp/cpp`, `mir/thir_mir_builder.hpp/cpp`
+
+### Fixed
+- **Float comparison in assert builtins** (2026-02-10) - `assert_eq` and `assert_ne` now emit correct LLVM IR for float types
+  - `assert_eq` was generating `icmp eq float` (invalid) instead of `fcmp oeq float`
+  - `assert_ne` was generating `icmp ne float` (invalid) instead of `fcmp one float`
+  - File: `compiler/src/codegen/llvm/builtins/assert.cpp`
+
+- **Integer literal type inference in binary expressions** (2026-02-10) - Unsuffixed integer literals now infer type from context
+  - Arithmetic binary operations (Add, Sub, Mul, Div, Mod) now propagate the left operand's type as expected type for the right operand
+  - `when` expression arms now propagate accumulated result type to subsequent arm bodies
+  - Fixes: `r * r * 3` no longer infers `3` as I64 when `r` is I32; `Shape::Empty => 0` matches I32 from previous arms
+  - Also fixes closures like `do(x: I32) -> I32 { x * 2 }` where `2` was defaulting to I64
+  - Files: `compiler/src/types/checker/expr.cpp`, `compiler/src/types/checker/control.cpp`
+
 - **Query-Based Build Pipeline (Default)** (2026-02-09) - Query system is now the default `tml build` pipeline
   - `tml build file.tml` uses the demand-driven query pipeline with incremental compilation
   - `tml build file.tml --legacy` falls back to the traditional sequential pipeline

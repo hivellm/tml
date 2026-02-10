@@ -73,6 +73,7 @@ public:
     BorrowcheckResult borrowcheck_module(const std::string& file_path,
                                          const std::string& module_name);
     HirLowerResult hir_lower(const std::string& file_path, const std::string& module_name);
+    ThirLowerResult thir_lower(const std::string& file_path, const std::string& module_name);
     MirBuildResult mir_build(const std::string& file_path, const std::string& module_name);
     CodegenUnitResult codegen_unit(const std::string& file_path, const std::string& module_name);
 

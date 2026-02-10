@@ -30,6 +30,8 @@ const char* query_kind_name(QueryKind kind) {
         return "borrowcheck_module";
     case QueryKind::HirLower:
         return "hir_lower";
+    case QueryKind::ThirLower:
+        return "thir_lower";
     case QueryKind::MirBuild:
         return "mir_build";
     case QueryKind::CodegenUnit:
@@ -63,6 +65,9 @@ size_t QueryKeyHash::operator()(const QueryKey& key) const {
                 h = hash_combine(h, std::hash<std::string>{}(k.file_path));
                 h = hash_combine(h, std::hash<std::string>{}(k.module_name));
             } else if constexpr (std::is_same_v<T, HirLowerKey>) {
+                h = hash_combine(h, std::hash<std::string>{}(k.file_path));
+                h = hash_combine(h, std::hash<std::string>{}(k.module_name));
+            } else if constexpr (std::is_same_v<T, ThirLowerKey>) {
                 h = hash_combine(h, std::hash<std::string>{}(k.file_path));
                 h = hash_combine(h, std::hash<std::string>{}(k.module_name));
             } else if constexpr (std::is_same_v<T, MirBuildKey>) {
@@ -114,6 +119,11 @@ BorrowcheckResult QueryContext::borrowcheck_module(const std::string& file_path,
 HirLowerResult QueryContext::hir_lower(const std::string& file_path,
                                        const std::string& module_name) {
     return force<HirLowerResult>(HirLowerKey{file_path, module_name});
+}
+
+ThirLowerResult QueryContext::thir_lower(const std::string& file_path,
+                                         const std::string& module_name) {
+    return force<ThirLowerResult>(ThirLowerKey{file_path, module_name});
 }
 
 MirBuildResult QueryContext::mir_build(const std::string& file_path,

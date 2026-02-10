@@ -20,8 +20,12 @@
 #include "mir/passes/infinite_loop_check.hpp"
 #include "mir/passes/memory_leak_check.hpp"
 #include "mir/passes/pgo.hpp"
+#include "mir/thir_mir_builder.hpp"
 #include "parser/parser.hpp"
 #include "preprocessor/preprocessor.hpp"
+#include "thir/thir.hpp"
+#include "thir/thir_lower.hpp"
+#include "traits/solver.hpp"
 #include "types/checker.hpp"
 #include "types/module.hpp"
 #include "types/module_binary.hpp"
@@ -293,6 +297,36 @@ std::any provide_hir_lower(QueryContext& ctx, const QueryKey& key) {
 }
 
 // ============================================================================
+// ThirLower Provider
+// ============================================================================
+
+std::any provide_thir_lower(QueryContext& ctx, const QueryKey& key) {
+    const auto& tk = std::get<ThirLowerKey>(key);
+    ThirLowerResult result;
+
+    // Force HIR lowering
+    auto hir = ctx.hir_lower(tk.file_path, tk.module_name);
+    if (!hir.success) {
+        return result;
+    }
+
+    auto tc = ctx.typecheck_module(tk.file_path, tk.module_name);
+    if (!tc.success) {
+        return result;
+    }
+
+    // Lower HIR to THIR using trait solver
+    traits::TraitSolver solver(*tc.env);
+    thir::ThirLower thir_lower(*tc.env, solver);
+    auto thir_module = thir_lower.lower_module(*hir.hir_module);
+
+    result.thir_module = std::make_shared<thir::ThirModule>(std::move(thir_module));
+    result.diagnostics = thir_lower.diagnostics();
+    result.success = true;
+    return result;
+}
+
+// ============================================================================
 // MirBuild Provider
 // ============================================================================
 
@@ -300,20 +334,38 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
     const auto& mk = std::get<MirBuildKey>(key);
     MirBuildResult result;
 
-    // Force HIR lowering and type checking
-    auto hir = ctx.hir_lower(mk.file_path, mk.module_name);
-    if (!hir.success) {
-        return result;
-    }
-
     auto tc = ctx.typecheck_module(mk.file_path, mk.module_name);
     if (!tc.success) {
         return result;
     }
 
-    // Build MIR from HIR
-    mir::HirMirBuilder hir_mir_builder(*tc.env);
-    auto mir_module = hir_mir_builder.build(*hir.hir_module);
+    mir::Module mir_module;
+
+    // Route through THIR pipeline when --use-thir is enabled
+    if (CompilerOptions::use_thir) {
+        auto thir = ctx.thir_lower(mk.file_path, mk.module_name);
+        if (!thir.success) {
+            return result;
+        }
+
+        // Report THIR diagnostics (exhaustiveness warnings, etc.)
+        for (const auto& diag : thir.diagnostics) {
+            TML_LOG_WARN("thir", diag);
+        }
+
+        // Build MIR from THIR
+        mir::ThirMirBuilder thir_mir_builder(*tc.env);
+        mir_module = thir_mir_builder.build(*thir.thir_module);
+    } else {
+        // Default: HIR → MIR pipeline
+        auto hir = ctx.hir_lower(mk.file_path, mk.module_name);
+        if (!hir.success) {
+            return result;
+        }
+
+        mir::HirMirBuilder hir_mir_builder(*tc.env);
+        mir_module = hir_mir_builder.build(*hir.hir_module);
+    }
 
     // Run infinite loop detection
     mir::InfiniteLoopCheckPass loop_check;
