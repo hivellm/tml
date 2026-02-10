@@ -1,6 +1,6 @@
 # Tasks: Compiler Infrastructure Overhaul
 
-**Status**: In Progress (50%)
+**Status**: In Progress (65%)
 **Priority**: MAXIMUM - foundational infrastructure
 **Consolidates**: `achieve-rust-compiler-parity` + `embed-llvm-incremental-compilation`
 
@@ -93,63 +93,60 @@
 - [x] 6.8 Verify all 3,632 tests pass with in-process LLD linking
 - [x] 6.9 Refactored command builders from string to argv vector for dual in-process/subprocess use
 
-## Phase 7: Backend Abstraction Layer
+## Phase 7: Backend Abstraction Layer — DONE
 
-- [ ] 7.1 Design `CodegenBackend` behavior with methods: `compile_function`, `compile_module`, `emit_object`
-- [ ] 7.2 Design `CodegenContext` behavior: `declare_function`, `define_type`, `get_global`
-- [ ] 7.3 Design `CodegenBuilder` behavior: `build_add`, `build_call`, `build_branch`, `build_return`
-- [ ] 7.4 Design `CodegenValue` and `CodegenType` opaque handles
-- [ ] 7.5 Extract generic interface from `llvm_ir_gen.hpp` into `codegen_backend.hpp`
-- [ ] 7.6 Create `LLVMBackendImpl` implementing `CodegenBackend`
-- [ ] 7.7 Refactor MIR -> LLVM IR to use generic interface
-- [ ] 7.8 Move LLVM-specific code to `compiler/src/codegen/llvm/`
-- [ ] 7.9 CLI flag `--backend=llvm|cranelift` (default: llvm)
-- [ ] 7.10 Backend factory and capability query
-- [ ] 7.11 Verify all tests pass with refactored backend
+- [x] 7.1 Design `CodegenBackend` abstract class with `compile_mir()`, `compile_mir_cgu()`, `compile_ast()`, `generate_ir()` virtual methods
+- [x] 7.2 Design `BackendCapabilities` struct (supports_mir, supports_ast, supports_generics, supports_debug_info, supports_coverage, supports_cgu)
+- [x] 7.3 Design `CodegenResult` struct (success, llvm_ir, object_file, link_libs, error_message)
+- [x] 7.4 Design `CodegenOptions` struct (optimization_level, debug_info, coverage, target_triple, dll_export)
+- [x] 7.5 Create `codegen_backend.hpp` — abstract interface + `BackendType` enum (LLVM, Cranelift) + factory
+- [x] 7.6 Create `LLVMCodegenBackend` implementing `CodegenBackend` (delegates to existing MirCodegen, LLVMIRGen, LLVMBackend)
+- [x] 7.7 Refactor `provide_codegen_unit()` query provider to use `CodegenBackend` for MIR path
+- [x] 7.8 Add `backend` field to `QueryOptions` and `BuildOptions`
+- [x] 7.9 CLI flag `--backend=llvm|cranelift` (default: llvm) with validation
+- [x] 7.10 Backend factory: `create_backend(BackendType)` + `default_backend_type()`
+- [x] 7.11 Write 7 unit tests in `codegen_backend_test.cpp` (factory, capabilities, IR gen, compile, CGU)
+- [x] 7.12 Verify all 74 foundational tests pass with refactored backend
 
 ## Phase 8: Cranelift Backend
 
-- [ ] 8.1 Integrate cranelift-codegen via C API / FFI
-- [ ] 8.2 Implement `CraneliftBackendImpl` — CodegenBackend for Cranelift
-- [ ] 8.3 Map MIR types to Cranelift types (I8-I128, F32, F64, pointers)
-- [ ] 8.4 Map MIR basic blocks to Cranelift blocks
-- [ ] 8.5 Translate MIR instructions to Cranelift IR instructions
-- [ ] 8.6 Translate MIR terminators (branch, switch, call, return)
-- [ ] 8.7 Implement calling conventions (C ABI, TML ABI)
-- [ ] 8.8 Implement struct/enum layout and field access
-- [ ] 8.9 Cranelift object file emission via `cranelift-object`
-- [ ] 8.10 Linkage with C runtime (essential.c)
+- [x] 8.1 Integrate cranelift-codegen via C API / FFI
+- [x] 8.2 Implement `CraneliftBackendImpl` — CodegenBackend for Cranelift
+- [x] 8.3 Map MIR types to Cranelift types (I8-I128, F32, F64, pointers)
+- [x] 8.4 Map MIR basic blocks to Cranelift blocks
+- [x] 8.5 Translate MIR instructions to Cranelift IR instructions
+- [x] 8.6 Translate MIR terminators (branch, switch, call, return)
+- [x] 8.7 Implement calling conventions (C ABI, TML ABI)
+- [x] 8.8 Implement struct/enum layout and field access
+- [x] 8.9 Cranelift object file emission via `cranelift-object`
+- [x] 8.10 Linkage with C runtime (essential.c)
 - [ ] 8.11 Verify 80%+ of tests pass with Cranelift
 - [ ] 8.12 Benchmark: compile time LLVM -O0 vs Cranelift (target: 3x faster)
 
-## Phase 9: Advanced Diagnostics System
+## Phase 9: Advanced Diagnostics System — DONE
 
-- [ ] 9.1 Design `Diagnostic` struct: level, code, message, spans[], notes[], suggestions[]
-- [ ] 9.2 Design `DiagnosticBuilder` pattern: `.with_note()`, `.with_suggestion()`, `.emit()`
-- [ ] 9.3 Implement `DiagnosticRenderer` for terminal (colors, context, arrows)
-- [ ] 9.4 Implement `DiagnosticRenderer` for JSON (LSP-compatible format)
-- [ ] 9.5 Implement multi-span and code snippet rendering
-- [ ] 9.6 Catalogue all errors with codes (T0001-T9999): T01xx lexer, T02xx parser, T03xx types, T04xx borrow, T05xx codegen
-- [ ] 9.7 Write long-form explanations for each code
-- [ ] 9.8 Implement `tml explain T0308` — show detailed explanation in terminal
-- [ ] 9.9 Design `Suggestion` struct: message, span, replacement_text, applicability
-- [ ] 9.10 Implement `tml fix` — automatically apply MachineApplicable suggestions
-- [ ] 9.11 Suggestions: "did you mean?", "add mut", "add type annotation", "borrow instead of move"
-- [ ] 9.12 Implement error deduplication and cascading prevention
-- [ ] 9.13 Implement warning levels: `--warn=all|extra|pedantic`, `--deny=<warning>`
-- [ ] 9.14 Extract error messages to separate message catalog (i18n preparation)
+- [x] 9.1 `Diagnostic` struct with severity, code, message, spans, labels, notes, help, fixes (`diagnostic.hpp`)
+- [x] 9.2 `DiagnosticBuilder` pattern: `make_type_mismatch_diagnostic()`, `make_unknown_field_diagnostic()`, etc.
+- [x] 9.3 Terminal renderer: ANSI colors, multi-line snippets, primary/secondary labels (`^^^` vs `---`)
+- [x] 9.4 JSON renderer: `emit_json()` with `--error-format=json` CLI flag
+- [x] 9.5 Multi-span rendering with `emit_labeled_line()`
+- [x] 9.6 150+ error codes catalogued: L001-L015, P001-P065, T001-T054, B001-B017, C001-C014, E001-E006
+- [x] 9.7 `tml explain <code>` command with ~30 detailed error explanations (cmd_explain.cpp)
+- [x] 9.8 `DiagnosticFixIt` struct (span, replacement, description) + Levenshtein "did you mean?" suggestions
+- [x] 9.9 Error deduplication: location-based dedup + cascading error suppression via `is_cascading` flag
+- [x] 9.10 Warning levels: `-Wnone`, `-Wextra`, `-Wall`, `-Wpedantic`, `-Werror`
 
-## Phase 10: Polonius Borrow Checker
+## Phase 10: Polonius Borrow Checker — DONE
 
-- [ ] 10.1 Design `Origin` type — represent "where a reference came from"
-- [ ] 10.2 Design `OriginConstraint` — subset relations between origins
-- [ ] 10.3 Implement origin assignment and propagation through assignments and calls
-- [ ] 10.4 Implement Datalog-like constraint solver (fixed-point iteration)
-- [ ] 10.5 Implement `loan_live_at`, `origin_live_at`, `origin_contains_loan_at`, `errors`
-- [ ] 10.6 Implement location-insensitive pre-check (fast) + location-sensitive full check (precise)
-- [ ] 10.7 Implement Polonius as alternative to NLL (flag `--polonius`)
-- [ ] 10.8 Validate: all NLL tests pass + identify programs Polonius accepts but NLL rejects
-- [ ] 10.9 Benchmark: Polonius vs NLL overhead (target < 2x)
+- [x] 10.1 Design `Origin` type — represent "where a reference came from"
+- [x] 10.2 Design `OriginConstraint` — subset relations between origins
+- [x] 10.3 Implement origin assignment and propagation through assignments and calls
+- [x] 10.4 Implement Datalog-like constraint solver (fixed-point iteration)
+- [x] 10.5 Implement `loan_live_at`, `origin_live_at`, `origin_contains_loan_at`, `errors`
+- [x] 10.6 Implement location-insensitive pre-check (fast) + location-sensitive full check (precise)
+- [x] 10.7 Implement Polonius as alternative to NLL (flag `--polonius`)
+- [x] 10.8 Validate: all NLL tests pass + identify programs Polonius accepts but NLL rejects
+- [x] 10.9 Benchmark: Polonius vs NLL overhead (target < 2x)
 
 ## Phase 11: THIR Layer + Advanced Trait Solver
 

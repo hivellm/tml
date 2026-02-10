@@ -135,8 +135,7 @@ int run_lint(int argc, char* argv[]) {
             // Print file header if changed
             if (issue.file != current_file) {
                 current_file = issue.file;
-                TML_LOG_INFO("lint",
-                             BOLD << fs::path(issue.file).filename().string() << RESET);
+                TML_LOG_INFO("lint", BOLD << fs::path(issue.file).filename().string() << RESET);
             }
 
             const char* color = RED;
@@ -158,8 +157,8 @@ int run_lint(int argc, char* argv[]) {
 
             std::ostringstream oss;
             oss << "  " << DIM << issue.line << ":" << issue.column << RESET << "  " << color
-                << severity_str << RESET << "  " << DIM << "[" << issue.code << "]" << RESET
-                << " " << issue.message;
+                << severity_str << RESET << "  " << DIM << "[" << issue.code << "]" << RESET << " "
+                << issue.message;
 
             // Print fix hint if available
             if (!issue.fix_hint.empty()) {
@@ -190,8 +189,8 @@ int run_lint(int argc, char* argv[]) {
         TML_LOG_INFO("lint", summary.str());
 
         if (result.errors > 0) {
-            TML_LOG_INFO("lint",
-                         "Run " << CYAN << "tml lint --fix" << RESET << " to auto-fix style errors");
+            TML_LOG_INFO("lint", "Run " << CYAN << "tml lint --fix" << RESET
+                                        << " to auto-fix style errors");
             return 1;
         }
     } else {

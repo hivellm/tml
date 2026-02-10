@@ -408,7 +408,7 @@ Backtrace:
 | v0.5 | ✅ Active | Bootstrap compiler with LLVM backend |
 | v1.0 | 🔄 In Progress | Self-hosted compiler |
 
-### Implementation Status (Jan 2026)
+### Implementation Status (Feb 2026)
 
 | Feature | Status |
 |---------|--------|
@@ -423,9 +423,11 @@ Backtrace:
 | Where Clauses | ✅ Complete |
 | String Interpolation | ✅ Complete |
 | LLVM Backend | ✅ Complete |
+| **Cranelift Backend** | 🧪 Experimental (in development, not ready for use) |
 | Test Framework | ✅ Complete |
 | FFI Support | ✅ Complete (@extern, @link) |
-| Borrow Checker | ✅ Complete (reborrows, two-phase) |
+| Borrow Checker (NLL) | ✅ Complete (reborrows, two-phase) |
+| **Polonius Borrow Checker** | ✅ Complete (alternative, `--polonius` flag) |
 | Build Cache | ✅ Complete (content-based) |
 | Mid-level IR (MIR) | ✅ Complete (SSA, 6 optimization passes) |
 | **C#-Style OOP** | ✅ Complete (classes, inheritance, interfaces, vtables) |

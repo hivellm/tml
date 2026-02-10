@@ -188,8 +188,7 @@ static size_t estimate_type_size(const TypePtr& type) {
         type->kind);
 }
 
-TypeChecker::TypeChecker()
-    : env_(BuiltinsSnapshot::instance().create_env()) {}
+TypeChecker::TypeChecker() : env_(BuiltinsSnapshot::instance().create_env()) {}
 
 auto TypeChecker::check_module(const parser::Module& module)
     -> Result<TypeEnv, std::vector<TypeError>> {

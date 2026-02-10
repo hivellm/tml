@@ -23,19 +23,21 @@
 //! how code is tokenized, and verifying type inference results.
 
 #include "cmd_debug.hpp"
-#include "log/log.hpp"
 
 #include "cli/diagnostic.hpp"
 #include "cli/utils.hpp"
 #include "common.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
+#include "log/log.hpp"
 #include "parser/parser.hpp"
 #include "types/checker.hpp"
 #include "types/module.hpp"
 
 #include <filesystem>
 #include <iostream>
+#include <set>
+#include <tuple>
 
 namespace fs = std::filesystem;
 using namespace tml;
@@ -75,11 +77,38 @@ static void emit_all_parser_errors(DiagnosticEmitter& emitter,
     }
 }
 
-// Emit all type errors using the diagnostic emitter
+// Emit all type errors using the diagnostic emitter (with deduplication)
 static void emit_all_type_errors(DiagnosticEmitter& emitter,
                                  const std::vector<types::TypeError>& errors) {
+    bool has_root_cause = false;
     for (const auto& error : errors) {
-        emitter.error("T001", error.message, error.span, error.notes);
+        if (!error.is_cascading) {
+            has_root_cause = true;
+            break;
+        }
+    }
+
+    std::set<std::tuple<std::string, uint32_t, uint32_t>> seen;
+    size_t suppressed = 0;
+
+    for (const auto& error : errors) {
+        if (has_root_cause && error.is_cascading) {
+            ++suppressed;
+            continue;
+        }
+        auto key = std::make_tuple(error.code.empty() ? std::string("T001") : error.code,
+                                   error.span.start.line, error.span.start.column);
+        if (!seen.insert(key).second) {
+            ++suppressed;
+            continue;
+        }
+        auto code = error.code.empty() ? std::string("T001") : error.code;
+        emitter.error(code, error.message, error.span, error.notes);
+    }
+
+    if (suppressed > 0) {
+        std::cerr << "note: " << suppressed
+                  << " additional error(s) suppressed (likely caused by previous error)\n";
     }
 }
 

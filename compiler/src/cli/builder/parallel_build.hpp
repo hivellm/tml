@@ -116,6 +116,7 @@ struct ParallelBuildOptions {
     bool debug_info = false;
     std::string output_dir; // Output directory for build artifacts
     std::string cache_dir;  // Cache directory for object files
+    bool polonius = false;  // Use Polonius borrow checker
 };
 
 /**

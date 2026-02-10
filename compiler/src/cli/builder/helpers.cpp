@@ -270,8 +270,39 @@ void emit_all_parser_errors(DiagnosticEmitter& emitter,
 }
 
 void emit_all_type_errors(DiagnosticEmitter& emitter, const std::vector<types::TypeError>& errors) {
+    // Check if any non-cascading errors exist
+    bool has_root_cause = false;
     for (const auto& error : errors) {
+        if (!error.is_cascading) {
+            has_root_cause = true;
+            break;
+        }
+    }
+
+    // Deduplicate by (code, line, column) to avoid duplicate errors from different code paths
+    std::set<std::tuple<std::string, uint32_t, uint32_t>> seen;
+    size_t suppressed = 0;
+
+    for (const auto& error : errors) {
+        // Suppress cascading errors when root-cause errors exist
+        if (error.is_cascading && has_root_cause) {
+            ++suppressed;
+            continue;
+        }
+
+        // Skip duplicate errors at the same location
+        auto key = std::make_tuple(error.code, error.span.start.line, error.span.start.column);
+        if (!seen.insert(key).second) {
+            ++suppressed;
+            continue;
+        }
+
         emit_type_error(emitter, error);
+    }
+
+    if (suppressed > 0) {
+        std::cerr << "note: " << suppressed
+                  << " additional error(s) suppressed (likely caused by previous error)\n";
     }
 }
 
@@ -377,8 +408,21 @@ void emit_borrow_error(DiagnosticEmitter& emitter, const borrow::BorrowError& er
 
 void emit_all_borrow_errors(DiagnosticEmitter& emitter,
                             const std::vector<borrow::BorrowError>& errors) {
+    // Deduplicate by (message, line, column) to avoid duplicate borrow errors
+    std::set<std::tuple<std::string, uint32_t, uint32_t>> seen;
+    size_t suppressed = 0;
+
     for (const auto& error : errors) {
+        auto key = std::make_tuple(error.message, error.span.start.line, error.span.start.column);
+        if (!seen.insert(key).second) {
+            ++suppressed;
+            continue;
+        }
         emit_borrow_error(emitter, error);
+    }
+
+    if (suppressed > 0) {
+        std::cerr << "note: " << suppressed << " duplicate borrow error(s) suppressed\n";
     }
 }
 

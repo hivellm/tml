@@ -1,7 +1,7 @@
 // TML Compiler - Text Type Tests
 // Comprehensive tests for Text type codegen and runtime integration
 
-#include "codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"

@@ -74,6 +74,7 @@ static void ensure_runtime_dlls(const fs::path& target_dir) {
 struct RunCompileResult {
     bool success = false;
     std::string llvm_ir;
+    fs::path object_file; ///< Direct object file (Cranelift path, empty for LLVM)
     std::set<std::string> link_libs;
     std::shared_ptr<types::ModuleRegistry> registry;
     std::shared_ptr<parser::Module> module;
@@ -84,7 +85,8 @@ struct RunCompileResult {
 ///
 /// This replaces the manual preprocess->lex->parse->typecheck->borrow->codegen pipeline
 /// with the memoized 8-stage query system that supports incremental compilation.
-RunCompileResult compile_via_queries(const std::string& path, bool coverage, bool no_cache) {
+RunCompileResult compile_via_queries(const std::string& path, bool coverage, bool no_cache,
+                                     const std::string& backend = "llvm") {
     RunCompileResult result;
 
     // Pre-load all library modules from .tml.meta binary cache
@@ -101,6 +103,7 @@ RunCompileResult compile_via_queries(const std::string& path, bool coverage, boo
     qopts.target_triple = tml::CompilerOptions::target_triple;
     qopts.sysroot = tml::CompilerOptions::sysroot;
     qopts.incremental = !no_cache;
+    qopts.backend = backend;
 
     auto source_dir = fs::path(path).parent_path();
     if (source_dir.empty()) {
@@ -174,6 +177,7 @@ RunCompileResult compile_via_queries(const std::string& path, bool coverage, boo
 
     result.success = true;
     result.llvm_ir = codegen_result.llvm_ir;
+    result.object_file = codegen_result.object_file;
     result.link_libs = codegen_result.link_libs;
     result.registry =
         (tc && tc->success) ? tc->registry : std::make_shared<types::ModuleRegistry>();
@@ -203,9 +207,9 @@ RunCompileResult compile_via_queries(const std::string& path, bool coverage, boo
 ///
 /// Returns the exit code of the executed program.
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
-            bool coverage, bool no_cache) {
+            bool coverage, bool no_cache, const std::string& backend) {
     // Compile via query pipeline (incremental + memoized)
-    auto compile = compile_via_queries(path, coverage, no_cache);
+    auto compile = compile_via_queries(path, coverage, no_cache, backend);
     if (!compile.success) {
         TML_LOG_ERROR("build", compile.error_message);
         return 1;
@@ -217,43 +221,49 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     // Use centralized run cache - NEVER create files inside packages
     fs::path cache_dir = get_run_cache_dir();
 
-    // Calculate content hash for caching (hash the IR which reflects all source changes)
-    std::string content_hash = generate_content_hash(llvm_ir);
-
-    fs::path obj_output = cache_dir / (content_hash + get_object_extension());
-    fs::path exe_output = cache_dir / module_name;
-#ifdef _WIN32
-    exe_output += ".exe";
-#endif
-
     // Note: clang may be empty if LLVM backend and LLD are available (self-contained mode)
     std::string clang = find_clang();
 
     // Use global deps cache for precompiled runtimes
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
-    // Check if we have a cached object file
-    bool use_cached_obj = fs::exists(obj_output);
+    fs::path obj_output;
 
-    if (use_cached_obj) {
-        TML_LOG_DEBUG("build", "Using cached object: " << obj_output);
+    if (!compile.object_file.empty()) {
+        // Cranelift path: object file already produced by the backend
+        obj_output = compile.object_file;
+        TML_LOG_DEBUG("build", "Using Cranelift object: " << obj_output);
     } else {
-        // Compile LLVM IR string directly to object file (no .ll on disk)
-        ObjectCompileOptions obj_options;
-        obj_options.optimization_level = tml::CompilerOptions::optimization_level;
-        obj_options.debug_info = tml::CompilerOptions::debug_info;
-        obj_options.verbose = verbose;
-        obj_options.target_triple = tml::CompilerOptions::target_triple;
-        obj_options.sysroot = tml::CompilerOptions::sysroot;
+        // LLVM path: compile IR text to object file
+        std::string content_hash = generate_content_hash(llvm_ir);
+        obj_output = cache_dir / (content_hash + get_object_extension());
 
-        auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
-        if (!obj_result.success) {
-            TML_LOG_ERROR("build", "Object compilation failed: " << obj_result.error_message);
-            return 1;
+        bool use_cached_obj = fs::exists(obj_output);
+
+        if (use_cached_obj) {
+            TML_LOG_DEBUG("build", "Using cached object: " << obj_output);
+        } else {
+            ObjectCompileOptions obj_options;
+            obj_options.optimization_level = tml::CompilerOptions::optimization_level;
+            obj_options.debug_info = tml::CompilerOptions::debug_info;
+            obj_options.verbose = verbose;
+            obj_options.target_triple = tml::CompilerOptions::target_triple;
+            obj_options.sysroot = tml::CompilerOptions::sysroot;
+
+            auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
+            if (!obj_result.success) {
+                TML_LOG_ERROR("build", "Object compilation failed: " << obj_result.error_message);
+                return 1;
+            }
+
+            TML_LOG_DEBUG("build", "Compiled to: " << obj_result.object_file);
         }
-
-        TML_LOG_DEBUG("build", "Compiled to: " << obj_result.object_file);
     }
+
+    fs::path exe_output = cache_dir / module_name;
+#ifdef _WIN32
+    exe_output += ".exe";
+#endif
 
     // Collect all object files to link
     std::vector<fs::path> object_files;
@@ -269,7 +279,9 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     }
 
     // Generate hash for executable caching (source + all object files)
-    std::string exe_hash = generate_exe_hash(content_hash, object_files);
+    std::string content_hash_str = !compile.object_file.empty() ? obj_output.filename().string()
+                                                                : generate_content_hash(llvm_ir);
+    std::string exe_hash = generate_exe_hash(content_hash_str, object_files);
     fs::path cached_exe = cache_dir / (exe_hash + ".exe");
 
     // Check if we have a cached executable (skip if --no-cache)
@@ -555,7 +567,7 @@ int run_run_ex(const std::string& path, const RunOptions& opts) {
         TML_LOG_INFO("build", "For manual profiling, use std::profiler module in your code.");
     }
 
-    return run_run(path, opts.args, opts.verbose, opts.coverage, opts.no_cache);
+    return run_run(path, opts.args, opts.verbose, opts.coverage, opts.no_cache, opts.backend);
 }
 
 } // namespace tml::cli

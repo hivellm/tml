@@ -33,6 +33,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `tml_query` static library linked into `tml_cli`
   - New files: `query_context.hpp/cpp`, `query_cache.hpp/cpp`, `query_key.hpp`, `query_core.hpp/cpp`, `query_deps.hpp/cpp`, `query_fingerprint.hpp/cpp`, `query_provider.hpp/cpp`
 
+- **Polonius Borrow Checker** (2026-02-09) - Alternative borrow checker using Datalog-style constraint solving
+  - Enabled via `--polonius` flag on `tml build` and `tml test` commands
+  - Strictly more permissive than NLL: accepts programs with conditional borrows across branches
+  - Datalog-style algorithm: Origins (where references come from), Loans (borrow operations), Points (CFG positions)
+  - Fixed-point worklist solver propagates loans through CFG edges and subset constraints
+  - Location-insensitive pre-check (`quick_check`) provides O(n) fast path for simple programs
+  - AST-based approach: builds lightweight CFG from AST control flow, reuses existing `BorrowEnv` infrastructure
+  - Produces identical `BorrowError` output as NLL checker — rest of pipeline unaffected
+  - Integrated into all build paths: `build.cpp`, `parallel_build.cpp`, `test_runner.cpp`, `query_core.cpp`
+  - All 59 borrow tests pass under both NLL and Polonius; all 3,632 tests pass
+  - New files: `polonius.hpp`, `polonius_facts.cpp`, `polonius_solver.cpp`, `polonius_checker.cpp`
+
+- **Cranelift Backend (Experimental)** (2026-02-09) - Alternative codegen backend using Cranelift
+  - Enabled via `--backend=cranelift` flag
+  - Faster compilation times compared to LLVM at the cost of runtime performance
+  - Experimental status: core functionality implemented, advanced optimizations pending
+  - LLVM remains the default and recommended backend
+
 - **Embedded LLD Linker** (2026-02-09) - In-process linking eliminates linker subprocess
   - LLD libraries linked as CMake dependencies (lldCOFF, lldCommon, lldELF, lldMachO, lldMinGW, lldWasm)
   - In-process API via `lld::lldMain()` — zero subprocess spawning for linking

@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-TML supports cross-compilation to multiple platforms. The compiler uses LLVM as the backend, enabling support for all LLVM targets.
+TML supports cross-compilation to multiple platforms. The compiler uses LLVM as the default backend, enabling support for all LLVM targets. An experimental Cranelift backend is also in development (see [16-COMPILER-ARCHITECTURE.md](./16-COMPILER-ARCHITECTURE.md#64-cranelift-backend-experimental)), but currently only supports x86_64 and is not ready for production use.
 
 ## 2. Target Triple Format
 

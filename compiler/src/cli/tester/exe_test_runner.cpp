@@ -16,7 +16,7 @@
 #include "cli/builder/object_compiler.hpp"
 #include "cli/commands/cmd_build.hpp"
 #include "cli/tester/tester_internal.hpp"
-#include "codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm/llvm_ir_gen.hpp"
 #include "log/log.hpp"
 #include "preprocessor/preprocessor.hpp"
 #include "types/module_binary.hpp"
@@ -613,10 +613,16 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
                         }
                         const auto& env = std::get<types::TypeEnv>(check_result);
 
-                        // Borrow check
+                        // Borrow check (Polonius or NLL)
                         auto bc_start = TClock::now();
-                        borrow::BorrowChecker borrow_checker(env);
-                        auto borrow_result = borrow_checker.check_module(module);
+                        std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+                        if (CompilerOptions::polonius) {
+                            borrow::polonius::PoloniusChecker polonius_checker(env);
+                            borrow_result = polonius_checker.check_module(module);
+                        } else {
+                            borrow::BorrowChecker borrow_checker(env);
+                            borrow_result = borrow_checker.check_module(module);
+                        }
                         auto bc_us = std::chrono::duration_cast<std::chrono::microseconds>(
                                          TClock::now() - bc_start)
                                          .count();
@@ -886,8 +892,14 @@ ExeCompileResult compile_test_suite_exe(const TestSuite& suite, bool verbose, bo
                                 }
                                 const auto& env = std::get<types::TypeEnv>(check_result);
 
-                                borrow::BorrowChecker borrow_checker(env);
-                                auto borrow_result = borrow_checker.check_module(module);
+                                std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+                                if (CompilerOptions::polonius) {
+                                    borrow::polonius::PoloniusChecker polonius_checker(env);
+                                    borrow_result = polonius_checker.check_module(module);
+                                } else {
+                                    borrow::BorrowChecker borrow_checker(env);
+                                    borrow_result = borrow_checker.check_module(module);
+                                }
                                 if (std::holds_alternative<std::vector<borrow::BorrowError>>(
                                         borrow_result)) {
                                     std::lock_guard<std::mutex> lock(fb_error_mutex);

@@ -18,8 +18,9 @@
 
 #include "mcp/mcp_server.hpp"
 
-#include "json/json_parser.hpp"
 #include "log/log.hpp"
+
+#include "json/json_parser.hpp"
 
 namespace tml::mcp {
 

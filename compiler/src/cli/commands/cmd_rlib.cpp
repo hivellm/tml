@@ -28,9 +28,9 @@
 //! ```
 
 #include "cmd_rlib.hpp"
-#include "log/log.hpp"
 
 #include "cli/builder/rlib.hpp"
+#include "log/log.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -56,7 +56,8 @@ int run_rlib_info(int argc, char* argv[]) {
     // Read metadata
     auto metadata_opt = read_rlib_metadata(rlib_file);
     if (!metadata_opt) {
-        TML_LOG_ERROR("rlib", "Failed to read RLIB metadata from " << rlib_file << ". This may not be a valid TML library file.");
+        TML_LOG_ERROR("rlib", "Failed to read RLIB metadata from "
+                                  << rlib_file << ". This may not be a valid TML library file.");
         return 1;
     }
 
@@ -126,8 +127,8 @@ int run_rlib_exports(int argc, char* argv[]) {
     const auto& metadata = *metadata_opt;
 
     // Display exports
-    TML_LOG_INFO("rlib",
-                 "Public exports from " << metadata.library.name << " v" << metadata.library.version);
+    TML_LOG_INFO("rlib", "Public exports from " << metadata.library.name << " v"
+                                                << metadata.library.version);
     TML_LOG_INFO("rlib", std::string(60, '='));
 
     auto exports = metadata.get_all_exports();
@@ -209,7 +210,8 @@ int run_rlib_validate(int argc, char* argv[]) {
 
     // Check format version
     if (metadata.format_version != "1.0") {
-        TML_LOG_WARN("rlib", "Unexpected format version: " << metadata.format_version << ". Expected: 1.0");
+        TML_LOG_WARN("rlib",
+                     "Unexpected format version: " << metadata.format_version << ". Expected: 1.0");
     } else {
         TML_LOG_INFO("rlib", "Format version: " << metadata.format_version);
     }
@@ -221,7 +223,8 @@ int run_rlib_validate(int argc, char* argv[]) {
         if (has_module) {
             TML_LOG_INFO("rlib", "  " << module.name << " (" << module.file << ")");
         } else {
-            TML_LOG_ERROR("rlib", "Module " << module.name << " (" << module.file << ") not found in archive");
+            TML_LOG_ERROR("rlib", "Module " << module.name << " (" << module.file
+                                            << ") not found in archive");
             return 1;
         }
     }
@@ -255,7 +258,10 @@ int run_rlib(int argc, char* argv[]) {
     } else if (subcommand == "validate") {
         return run_rlib_validate(argc, argv);
     } else {
-        TML_LOG_ERROR("rlib", "Unknown rlib subcommand: " << subcommand << ". Use 'tml rlib info', 'tml rlib exports', or 'tml rlib validate'");
+        TML_LOG_ERROR("rlib",
+                      "Unknown rlib subcommand: "
+                          << subcommand
+                          << ". Use 'tml rlib info', 'tml rlib exports', or 'tml rlib validate'");
         return 1;
     }
 }

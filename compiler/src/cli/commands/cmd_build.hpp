@@ -70,6 +70,12 @@ struct BuildOptions {
     // Runtime profiling (generates .cpuprofile for Chrome DevTools)
     bool profile = false;       // Enable runtime profiling instrumentation
     std::string profile_output; // Custom output path (default: profile.cpuprofile)
+
+    // Backend selection ("llvm" or "cranelift")
+    std::string backend = "llvm";
+
+    // Use Polonius borrow checker (more permissive than NLL)
+    bool polonius = false;
 };
 
 // Run options (for run command)
@@ -80,6 +86,7 @@ struct RunOptions {
     bool profile = false;          // Enable runtime profiling
     std::string profile_output;    // Custom output path (default: profile.cpuprofile)
     std::vector<std::string> args; // Program arguments
+    std::string backend = "llvm";  // Codegen backend ("llvm" or "cranelift")
 };
 
 // Build commands
@@ -94,7 +101,7 @@ int run_build_ex(const std::string& path, const BuildOptions& options);
 int run_build_with_queries(const std::string& path, const BuildOptions& options);
 
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
-            bool coverage = false, bool no_cache = false);
+            bool coverage = false, bool no_cache = false, const std::string& backend = "llvm");
 
 // Run with extended options
 int run_run_ex(const std::string& path, const RunOptions& options);

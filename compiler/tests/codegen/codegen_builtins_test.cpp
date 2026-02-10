@@ -1,7 +1,7 @@
 // TML Compiler - Codegen Builtins Tests
 // Comprehensive tests for all builtin functions in codegen
 
-#include "codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"

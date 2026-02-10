@@ -12,7 +12,7 @@
 
 #include "mcp/mcp_tools.hpp"
 
-#include "codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm/llvm_ir_gen.hpp"
 #include "hir/hir_builder.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"

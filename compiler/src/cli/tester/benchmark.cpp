@@ -173,9 +173,8 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
 
     if (bench_files.empty()) {
         if (!opts.quiet) {
-            TML_LOG_INFO("test",
-                         c.yellow() << "No benchmark files found" << c.reset()
-                                    << " (looking for *.bench.tml)");
+            TML_LOG_INFO("test", c.yellow() << "No benchmark files found" << c.reset()
+                                            << " (looking for *.bench.tml)");
         }
         return 0;
     }
@@ -196,8 +195,8 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
 
     if (bench_files.empty()) {
         if (!opts.quiet) {
-            TML_LOG_INFO("test",
-                         c.yellow() << "No benchmarks matched the specified pattern(s)" << c.reset());
+            TML_LOG_INFO("test", c.yellow() << "No benchmarks matched the specified pattern(s)"
+                                            << c.reset());
         }
         return 0;
     }
@@ -213,8 +212,8 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
 
     // Print header
     if (!opts.quiet) {
-        TML_LOG_INFO("test", c.cyan() << c.bold() << "TML Benchmarks" << c.reset() << " "
-                                      << c.dim() << "v0.1.0" << c.reset());
+        TML_LOG_INFO("test", c.cyan() << c.bold() << "TML Benchmarks" << c.reset() << " " << c.dim()
+                                      << "v0.1.0" << c.reset());
         TML_LOG_INFO("test", c.dim() << "Running " << bench_files.size() << " benchmark file"
                                      << (bench_files.size() != 1 ? "s" : "") << "..." << c.reset());
     }
@@ -268,16 +267,13 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
                                     double change = ((double)(new_ns - old_ns) / old_ns) * 100.0;
                                     if (change < -5.0) {
                                         oss << " " << c.green() << "(" << std::fixed
-                                            << std::setprecision(1) << change << "%)"
-                                            << c.reset();
+                                            << std::setprecision(1) << change << "%)" << c.reset();
                                     } else if (change > 5.0) {
                                         oss << " " << c.red() << "(+" << std::fixed
-                                            << std::setprecision(1) << change << "%)"
-                                            << c.reset();
+                                            << std::setprecision(1) << change << "%)" << c.reset();
                                     } else {
                                         oss << " " << c.dim() << "(~" << std::fixed
-                                            << std::setprecision(1) << change << "%)"
-                                            << c.reset();
+                                            << std::setprecision(1) << change << "%)" << c.reset();
                                     }
                                 }
                             }
@@ -294,8 +290,8 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
         if (exit_code != 0) {
             failed++;
             if (!opts.quiet) {
-                TML_LOG_INFO("test",
-                             "   " << c.red() << "x" << c.reset() << " Failed with exit code " << exit_code);
+                TML_LOG_INFO("test", "   " << c.red() << "x" << c.reset()
+                                           << " Failed with exit code " << exit_code);
             }
         }
     }
@@ -308,8 +304,8 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
     if (!opts.save_baseline.empty() && !all_results.empty()) {
         save_benchmark_baseline(opts.save_baseline, all_results);
         if (!opts.quiet) {
-            TML_LOG_INFO("test",
-                         c.dim() << "Saved baseline to " << opts.save_baseline << c.reset());
+            TML_LOG_INFO("test", c.dim()
+                                     << "Saved baseline to " << opts.save_baseline << c.reset());
         }
     }
 
@@ -320,8 +316,8 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c) {
         if (failed > 0) {
             summary << c.red() << c.bold() << failed << " failed" << c.reset() << " | ";
         }
-        summary << c.green() << c.bold() << (bench_files.size() - failed) << " passed"
-                << c.reset() << " " << c.gray() << "(" << bench_files.size() << ")" << c.reset();
+        summary << c.green() << c.bold() << (bench_files.size() - failed) << " passed" << c.reset()
+                << " " << c.gray() << "(" << bench_files.size() << ")" << c.reset();
         TML_LOG_INFO("test", summary.str());
         TML_LOG_INFO("test",
                      c.bold() << "Duration    " << c.reset() << format_duration(total_duration_ms));

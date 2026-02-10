@@ -43,6 +43,9 @@
 #include "cli/builder/object_compiler.hpp"
 #include "cli/commands/cmd_build.hpp"
 #include "cli/tester/tester_internal.hpp"
+#include "codegen/codegen_backend.hpp"
+#include "hir/hir_builder.hpp"
+#include "mir/hir_mir_builder.hpp"
 #include "preprocessor/preprocessor.hpp"
 #include "types/module_binary.hpp"
 
@@ -518,9 +521,15 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
-    // Borrow check
-    borrow::BorrowChecker borrow_checker(env);
-    auto borrow_result = borrow_checker.check_module(module);
+    // Borrow check (Polonius or NLL)
+    std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+    if (CompilerOptions::polonius) {
+        borrow::polonius::PoloniusChecker polonius_checker(env);
+        borrow_result = polonius_checker.check_module(module);
+    } else {
+        borrow::BorrowChecker borrow_checker(env);
+        borrow_result = borrow_checker.check_module(module);
+    }
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
         result.error_message = "Borrow check errors";
@@ -866,9 +875,15 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
-    // Borrow check
-    borrow::BorrowChecker borrow_checker(env);
-    auto borrow_result = borrow_checker.check_module(module);
+    // Borrow check (Polonius or NLL)
+    std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+    if (CompilerOptions::polonius) {
+        borrow::polonius::PoloniusChecker polonius_checker(env);
+        borrow_result = polonius_checker.check_module(module);
+    } else {
+        borrow::BorrowChecker borrow_checker(env);
+        borrow_result = borrow_checker.check_module(module);
+    }
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
         result.error_message = "Borrow check errors";
@@ -1038,10 +1053,16 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
-    // Phase: Borrow check
+    // Phase: Borrow check (Polonius or NLL)
     phase_start = Clock::now();
-    borrow::BorrowChecker borrow_checker(env);
-    auto borrow_result = borrow_checker.check_module(module);
+    std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+    if (CompilerOptions::polonius) {
+        borrow::polonius::PoloniusChecker polonius_checker(env);
+        borrow_result = polonius_checker.check_module(module);
+    } else {
+        borrow::BorrowChecker borrow_checker(env);
+        borrow_result = borrow_checker.check_module(module);
+    }
     record_phase("borrow_check", phase_start);
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
@@ -1455,9 +1476,15 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
         }
         const auto& env = std::get<types::TypeEnv>(check_result);
 
-        // Borrow check
-        borrow::BorrowChecker borrow_checker(env);
-        auto borrow_result = borrow_checker.check_module(module);
+        // Borrow check (Polonius or NLL)
+        std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+        if (CompilerOptions::polonius) {
+            borrow::polonius::PoloniusChecker polonius_checker(env);
+            borrow_result = polonius_checker.check_module(module);
+        } else {
+            borrow::BorrowChecker borrow_checker(env);
+            borrow_result = borrow_checker.check_module(module);
+        }
         if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
             TML_LOG_WARN("test", "[PRECOMPILE] Borrow check errors in precompiled_symbols.tml");
             return "";
@@ -1507,7 +1534,8 @@ static std::string get_precompiled_symbols_obj(bool verbose, bool no_cache) {
 }
 #endif // DISABLED precompiled symbols
 
-SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool no_cache) {
+SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool no_cache,
+                                      const std::string& backend) {
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
@@ -1601,6 +1629,10 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         if (CompilerOptions::coverage) {
             combined_hash += ":coverage";
         }
+        // Include backend in hash to separate LLVM vs Cranelift builds
+        if (backend != "llvm") {
+            combined_hash += ":backend=" + backend;
+        }
 
         // Check for cached DLL using source-only hash (before typechecking)
         std::string source_hash = build::generate_content_hash(combined_hash);
@@ -1672,7 +1704,9 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
         for (size_t i = 0; i < suite.tests.size(); ++i) {
             const auto& pp_source = preprocessed_sources[i];
-            std::string obj_name = pp_source.content_hash + "_suite_" + std::to_string(i);
+            std::string backend_tag = (backend != "llvm") ? "_" + backend : "";
+            std::string obj_name =
+                pp_source.content_hash + backend_tag + "_suite_" + std::to_string(i);
             fs::path obj_output = cache_dir / (obj_name + get_object_extension());
             bool needs_compile = no_cache || !fs::exists(obj_output);
 
@@ -1999,10 +2033,16 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                             }
                         }
 
-                        // Borrow check
+                        // Borrow check (Polonius or NLL)
                         auto borrow_start = Clock::now();
-                        borrow::BorrowChecker borrow_checker(env);
-                        auto borrow_result = borrow_checker.check_module(module);
+                        std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+                        if (CompilerOptions::polonius) {
+                            borrow::polonius::PoloniusChecker polonius_checker(env);
+                            borrow_result = polonius_checker.check_module(module);
+                        } else {
+                            borrow::BorrowChecker borrow_checker(env);
+                            borrow_result = borrow_checker.check_module(module);
+                        }
                         borrow_us = std::chrono::duration_cast<std::chrono::microseconds>(
                                         Clock::now() - borrow_start)
                                         .count();
@@ -2028,65 +2068,432 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
                         // Codegen with indexed entry point
                         auto codegen_start = Clock::now();
-                        codegen::LLVMGenOptions options;
-                        options.emit_comments = false;
-                        options.generate_dll_entry = true;
-                        options.suite_test_index = static_cast<int>(task.index);
-                        options.suite_total_tests = static_cast<int>(suite.tests.size());
-                        options.dll_export = true;
-                        options.force_internal_linkage = true;
-                        options.library_decls_only = use_shared_lib;
-                        options.emit_debug_info = CompilerOptions::debug_info;
-                        options.debug_level = CompilerOptions::debug_level;
-                        options.source_file = task.file_path;
-                        options.coverage_enabled = CompilerOptions::coverage;
-                        options.coverage_quiet = CompilerOptions::coverage;
-                        options.coverage_output_file = CompilerOptions::coverage_output;
-                        options.llvm_source_coverage = CompilerOptions::coverage_source;
-                        codegen::LLVMIRGen llvm_gen(env, options);
 
-                        auto gen_result = llvm_gen.generate(module);
-                        codegen_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                                         Clock::now() - codegen_start)
-                                         .count();
+                        if (backend == "cranelift") {
+                            // ======================================================
+                            // Cranelift path: HIR → MIR → Cranelift → object file
+                            // Plus LLVM IR for library functions + entry stub
+                            // ======================================================
 
-                        if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(
-                                gen_result)) {
-                            std::lock_guard<std::mutex> lock(error_mutex);
-                            if (!has_error.load()) {
-                                has_error.store(true);
-                                const auto& errors =
-                                    std::get<std::vector<codegen::LLVMGenError>>(gen_result);
-                                std::ostringstream oss;
-                                oss << "Codegen errors in " << task.file_path << ":\n";
-                                for (const auto& err : errors) {
-                                    oss << "  " << err.span.start.line << ":"
-                                        << err.span.start.column << ": " << err.message << "\n";
-                                }
-                                first_error_msg = oss.str();
-                                first_error_file = task.file_path;
+                            // 1. Build HIR
+                            types::TypeEnv env_copy = env;
+                            hir::HirBuilder hir_builder(env_copy);
+                            auto hir_module = hir_builder.lower_module(module);
+
+                            // 2. Build MIR
+                            mir::HirMirBuilder mir_builder(env);
+                            auto mir_module = mir_builder.build(hir_module);
+
+                            // 2b. Rename MIR functions with suite prefix to avoid
+                            // name collisions when multiple test files are in one DLL.
+                            // This matches what the LLVM path does with force_internal_linkage.
+                            // Also mark all functions as public so Cranelift uses Export
+                            // linkage — the stub needs to call them across object files.
+                            std::string suite_prefix = "s" + std::to_string(task.index) + "_";
+                            for (auto& mir_func : mir_module.functions) {
+                                mir_func.name = suite_prefix + mir_func.name;
+                                mir_func.is_public = true;
                             }
-                            continue;
-                        }
 
-                        const auto& llvm_ir = std::get<std::string>(gen_result);
+                            // 3. Compile MIR with Cranelift backend
+                            codegen::CodegenOptions cg_opts;
+                            cg_opts.optimization_level = CompilerOptions::optimization_level;
+                            cg_opts.dll_export = true;
+#ifdef _WIN32
+                            cg_opts.target_triple = "x86_64-pc-windows-msvc";
+#else
+                            cg_opts.target_triple = "x86_64-unknown-linux-gnu";
+#endif
+                            auto cl_backend =
+                                codegen::create_backend(codegen::BackendType::Cranelift);
+                            auto cg_result = cl_backend->compile_mir(mir_module, cg_opts);
 
-                        // Collect link libraries (thread-safe)
-                        {
-                            std::lock_guard<std::mutex> lock(libs_mutex);
-                            for (const auto& lib : llvm_gen.get_link_libs()) {
-                                if (std::find(link_libs.begin(), link_libs.end(), lib) ==
-                                    link_libs.end()) {
-                                    link_libs.push_back(lib);
+                            codegen_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                             Clock::now() - codegen_start)
+                                             .count();
+
+                            if (!cg_result.success) {
+                                std::lock_guard<std::mutex> lock(error_mutex);
+                                if (!has_error.load()) {
+                                    has_error.store(true);
+                                    first_error_msg = "Cranelift codegen error in " +
+                                                      task.file_path + ": " +
+                                                      cg_result.error_message;
+                                    first_error_file = task.file_path;
+                                }
+                                continue;
+                            }
+
+                            // Copy Cranelift object to the expected output location
+                            if (cg_result.object_file != task.obj_output) {
+                                std::error_code ec;
+                                fs::copy_file(cg_result.object_file, task.obj_output,
+                                              fs::copy_options::overwrite_existing, ec);
+                                if (ec) {
+                                    std::lock_guard<std::mutex> lock(error_mutex);
+                                    if (!has_error.load()) {
+                                        has_error.store(true);
+                                        first_error_msg =
+                                            "Failed to copy Cranelift object: " + ec.message();
+                                        first_error_file = task.file_path;
+                                    }
+                                    continue;
                                 }
                             }
-                        }
 
-                        // Store IR string for later parallel compilation (no .ll on disk)
-                        {
-                            std::lock_guard<std::mutex> lock(pending_mutex);
-                            pending_compiles.push_back(
-                                {std::move(llvm_ir), task.obj_output, task.file_path, true});
+                            // 4. Collect Cranelift external symbol references from MIR.
+                            // The MIR has call targets like "fnv1a32", "assert_eq",
+                            // and method calls like "to_hex" on receiver type "Hash32".
+                            // Cranelift will reference these as "tml_fnv1a32", "tml_assert_eq",
+                            // "tml_to_hex". But LLVM names them "tml_std_hash_fnv1a32",
+                            // "tml_test_assert_eq", "tml_Hash32_to_hex".
+                            // We build a mapping to generate LLVM aliases.
+                            std::set<std::string> cranelift_extern_symbols;
+                            // MIR function names are the user functions (already have suite prefix)
+                            std::set<std::string> mir_func_names;
+                            for (const auto& mf : mir_module.functions) {
+                                mir_func_names.insert("tml_" + mf.name);
+                            }
+                            for (const auto& mf : mir_module.functions) {
+                                for (const auto& block : mf.blocks) {
+                                    for (const auto& inst : block.instructions) {
+                                        std::visit(
+                                            [&](const auto& i) {
+                                                using T = std::decay_t<decltype(i)>;
+                                                if constexpr (std::is_same_v<T, mir::CallInst>) {
+                                                    std::string sym = "tml_" + i.func_name;
+                                                    if (mir_func_names.find(sym) ==
+                                                        mir_func_names.end()) {
+                                                        cranelift_extern_symbols.insert(sym);
+                                                    }
+                                                } else if constexpr (std::is_same_v<
+                                                                         T, mir::MethodCallInst>) {
+                                                    std::string sym = "tml_" + i.method_name;
+                                                    cranelift_extern_symbols.insert(sym);
+                                                }
+                                            },
+                                            inst.inst);
+                                    }
+                                }
+                            }
+
+                            // 5. Generate LLVM IR using full codegen (same as LLVM path)
+                            codegen::LLVMGenOptions lib_options;
+                            lib_options.emit_comments = false;
+                            lib_options.generate_dll_entry = true;
+                            lib_options.suite_test_index = static_cast<int>(task.index);
+                            lib_options.suite_total_tests = static_cast<int>(suite.tests.size());
+                            lib_options.dll_export = true;
+                            lib_options.force_internal_linkage = true;
+                            lib_options.library_decls_only = use_shared_lib;
+                            lib_options.emit_debug_info = false;
+                            lib_options.coverage_enabled = false;
+
+                            codegen::LLVMIRGen lib_gen(env, lib_options);
+                            auto lib_gen_result = lib_gen.generate(module);
+
+                            std::string combined_ir;
+                            if (std::holds_alternative<std::string>(lib_gen_result)) {
+                                combined_ir = std::get<std::string>(lib_gen_result);
+                            }
+
+                            if (!combined_ir.empty()) {
+                                // Post-process the LLVM IR:
+                                // 1. Strip user function bodies (suite-prefixed) → declarations
+                                // 2. Promote library functions from internal → external linkage
+                                // 3. Collect LLVM function names for alias generation
+                                std::string search_prefix = "tml_" + suite_prefix;
+                                std::string result_ir;
+                                result_ir.reserve(combined_ir.size());
+                                std::istringstream stream(combined_ir);
+                                std::string line;
+                                bool skipping_body = false;
+                                int brace_depth = 0;
+                                std::vector<std::string> llvm_func_names;
+
+                                // Helper: find @funcname or @"funcname" in a line
+                                // When prefix_match=true, matches names that START with the given
+                                // name Returns position of the @ character
+                                auto find_at_name = [](const std::string& ln,
+                                                       const std::string& name,
+                                                       bool prefix_match = false) -> size_t {
+                                    // Try quoted: @"name..."
+                                    auto pos = ln.find("@\"" + name);
+                                    if (pos != std::string::npos)
+                                        return pos;
+                                    // Try unquoted: @name...
+                                    pos = ln.find("@" + name);
+                                    if (pos != std::string::npos) {
+                                        if (prefix_match)
+                                            return pos;
+                                        size_t after = pos + 1 + name.size();
+                                        if (after <= ln.size()) {
+                                            char c = (after < ln.size()) ? ln[after] : '(';
+                                            if (c == '(' || c == ')' || c == ' ' || c == '"') {
+                                                return pos;
+                                            }
+                                        }
+                                    }
+                                    return std::string::npos;
+                                };
+
+                                // Helper: extract function name from a define line
+                                auto extract_func_name = [](const std::string& ln) -> std::string {
+                                    auto at = ln.find('@');
+                                    if (at == std::string::npos)
+                                        return "";
+                                    at++; // skip @
+                                    bool quoted = (at < ln.size() && ln[at] == '"');
+                                    if (quoted)
+                                        at++; // skip opening quote
+                                    size_t end = at;
+                                    while (end < ln.size() && ln[end] != '(' && ln[end] != '"' &&
+                                           ln[end] != ' ') {
+                                        end++;
+                                    }
+                                    return ln.substr(at, end - at);
+                                };
+
+                                while (std::getline(stream, line)) {
+                                    if (skipping_body) {
+                                        for (char c : line) {
+                                            if (c == '{')
+                                                brace_depth++;
+                                            else if (c == '}')
+                                                brace_depth--;
+                                        }
+                                        if (brace_depth <= 0) {
+                                            skipping_body = false;
+                                        }
+                                        continue;
+                                    }
+
+                                    // Check if this is a user function definition (suite-prefixed)
+                                    if (line.find("define ") != std::string::npos &&
+                                        find_at_name(line, search_prefix, true) !=
+                                            std::string::npos) {
+
+                                        auto at_pos = find_at_name(line, search_prefix, true);
+                                        // Convert to declaration
+                                        std::string prefix_part = line.substr(0, at_pos);
+                                        auto last_space = prefix_part.rfind(' ');
+                                        std::string ret_type =
+                                            (last_space != std::string::npos)
+                                                ? prefix_part.substr(last_space + 1)
+                                                : "i32";
+
+                                        std::string func_sig = line.substr(at_pos);
+                                        auto brace_pos2 = func_sig.find('{');
+                                        if (brace_pos2 != std::string::npos) {
+                                            func_sig = func_sig.substr(0, brace_pos2);
+                                        }
+                                        auto hash_pos = func_sig.find(" #");
+                                        if (hash_pos != std::string::npos) {
+                                            func_sig = func_sig.substr(0, hash_pos);
+                                        }
+
+                                        result_ir += "declare " + ret_type + " " + func_sig + "\n";
+
+                                        if (line.find('{') != std::string::npos) {
+                                            brace_depth = 1;
+                                            for (size_t ci = line.find('{') + 1; ci < line.size();
+                                                 ci++) {
+                                                if (line[ci] == '{')
+                                                    brace_depth++;
+                                                else if (line[ci] == '}')
+                                                    brace_depth--;
+                                            }
+                                            if (brace_depth > 0)
+                                                skipping_body = true;
+                                        }
+                                        continue;
+                                    }
+
+                                    // For library functions: promote internal → external, collect
+                                    // names
+                                    if (line.find("define internal ") != std::string::npos &&
+                                        line.find("@tml_") != std::string::npos &&
+                                        find_at_name(line, search_prefix) == std::string::npos) {
+                                        // Collect function name for alias matching
+                                        std::string fn_name = extract_func_name(line);
+                                        if (!fn_name.empty()) {
+                                            llvm_func_names.push_back(fn_name);
+                                        }
+                                        // Promote to external linkage
+                                        std::string modified = line;
+                                        auto ipos = modified.find("define internal ");
+                                        if (ipos != std::string::npos) {
+                                            modified.replace(ipos, 16, "define ");
+                                        }
+                                        result_ir += modified + "\n";
+                                    } else {
+                                        result_ir += line + "\n";
+                                    }
+                                }
+
+                                // 6. Generate LLVM aliases for Cranelift symbol references.
+                                // For each symbol Cranelift references (e.g., "tml_fnv1a32"),
+                                // find the matching LLVM function (e.g., "tml_std_hash_fnv1a32")
+                                // and create an alias.
+                                std::ostringstream aliases;
+                                aliases << "\n; Cranelift symbol aliases\n";
+                                for (const auto& cl_sym : cranelift_extern_symbols) {
+                                    // Check if this symbol already exists in the LLVM IR
+                                    bool found_exact = false;
+                                    for (const auto& llvm_fn : llvm_func_names) {
+                                        if (llvm_fn == cl_sym) {
+                                            found_exact = true;
+                                            break;
+                                        }
+                                    }
+                                    if (found_exact)
+                                        continue;
+
+                                    // Try suffix matching: "tml_fnv1a32" → look for "*_fnv1a32"
+                                    std::string suffix = cl_sym.substr(4); // strip "tml_"
+                                    std::string best_match;
+                                    for (const auto& llvm_fn : llvm_func_names) {
+                                        // Check if llvm_fn ends with _<suffix>
+                                        std::string target = "_" + suffix;
+                                        if (llvm_fn.size() > target.size() &&
+                                            llvm_fn.substr(llvm_fn.size() - target.size()) ==
+                                                target) {
+                                            best_match = llvm_fn;
+                                            break;
+                                        }
+                                    }
+                                    if (!best_match.empty()) {
+                                        // Use a weak alias (global alias) so the Cranelift object
+                                        // can reference the short name while the definition uses
+                                        // the fully-qualified name.
+                                        // LLVM IR alias syntax: @alias = alias <type>, ptr @target
+                                        // We don't know the exact type, so use a function alias
+                                        // via a simple wrapper.
+                                        // Actually, we can't create typed aliases without knowing
+                                        // the signature. Instead, emit a forwarding function
+                                        // definition. But that requires knowing params/returns...
+                                        //
+                                        // Simpler: find the LLVM function's full declaration line
+                                        // and create a bitcast alias.
+                                        // Actually simplest: just define the short-name function
+                                        // as calling the long-name function. But we don't know
+                                        // params.
+                                        //
+                                        // Use @alias = alias ptr, ptr @target (opaque pointer
+                                        // alias)
+                                        aliases << "@\"" << cl_sym << "\" = alias i8, ptr @\""
+                                                << best_match << "\"\n";
+                                    }
+                                }
+                                result_ir += aliases.str();
+                                combined_ir = std::move(result_ir);
+                            }
+
+                            // DEBUG: dump IR + symbol info
+                            {
+                                fs::path debug_path = fs::path(task.obj_output).parent_path() /
+                                                      (task.content_hash + "_cranelift_debug.ll");
+                                std::ofstream dbg(debug_path);
+                                if (dbg.is_open()) {
+                                    dbg << "; Cranelift extern symbols:\n";
+                                    for (const auto& s : cranelift_extern_symbols) {
+                                        dbg << ";   " << s << "\n";
+                                    }
+                                    dbg << "\n" << combined_ir;
+                                    dbg.close();
+                                }
+                            }
+
+                            // Collect link libraries from LLVM gen
+                            {
+                                std::lock_guard<std::mutex> lock(libs_mutex);
+                                for (const auto& lib : lib_gen.get_link_libs()) {
+                                    if (std::find(link_libs.begin(), link_libs.end(), lib) ==
+                                        link_libs.end()) {
+                                        link_libs.push_back(lib);
+                                    }
+                                }
+                            }
+
+                            // Store the combined library+stub IR for compilation in Phase 2
+                            fs::path stub_obj =
+                                fs::path(task.obj_output).parent_path() /
+                                (task.content_hash + "_cranelift_stub" + get_object_extension());
+                            {
+                                std::lock_guard<std::mutex> lock(pending_mutex);
+                                pending_compiles.push_back({combined_ir, stub_obj,
+                                                            task.file_path + ".cranelift_lib",
+                                                            true});
+                            }
+                            {
+                                // Add stub object to link list (Cranelift obj is already there)
+                                std::lock_guard<std::mutex> lock(libs_mutex);
+                                object_files.push_back(stub_obj);
+                            }
+                        } else {
+                            // ======================================================
+                            // LLVM path (default): AST → LLVM IR → object
+                            // ======================================================
+                            codegen::LLVMGenOptions options;
+                            options.emit_comments = false;
+                            options.generate_dll_entry = true;
+                            options.suite_test_index = static_cast<int>(task.index);
+                            options.suite_total_tests = static_cast<int>(suite.tests.size());
+                            options.dll_export = true;
+                            options.force_internal_linkage = true;
+                            options.library_decls_only = use_shared_lib;
+                            options.emit_debug_info = CompilerOptions::debug_info;
+                            options.debug_level = CompilerOptions::debug_level;
+                            options.source_file = task.file_path;
+                            options.coverage_enabled = CompilerOptions::coverage;
+                            options.coverage_quiet = CompilerOptions::coverage;
+                            options.coverage_output_file = CompilerOptions::coverage_output;
+                            options.llvm_source_coverage = CompilerOptions::coverage_source;
+                            codegen::LLVMIRGen llvm_gen(env, options);
+
+                            auto gen_result = llvm_gen.generate(module);
+                            codegen_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                             Clock::now() - codegen_start)
+                                             .count();
+
+                            if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(
+                                    gen_result)) {
+                                std::lock_guard<std::mutex> lock(error_mutex);
+                                if (!has_error.load()) {
+                                    has_error.store(true);
+                                    const auto& errors =
+                                        std::get<std::vector<codegen::LLVMGenError>>(gen_result);
+                                    std::ostringstream oss;
+                                    oss << "Codegen errors in " << task.file_path << ":\n";
+                                    for (const auto& err : errors) {
+                                        oss << "  " << err.span.start.line << ":"
+                                            << err.span.start.column << ": " << err.message << "\n";
+                                    }
+                                    first_error_msg = oss.str();
+                                    first_error_file = task.file_path;
+                                }
+                                continue;
+                            }
+
+                            const auto& llvm_ir = std::get<std::string>(gen_result);
+
+                            // Collect link libraries (thread-safe)
+                            {
+                                std::lock_guard<std::mutex> lock(libs_mutex);
+                                for (const auto& lib : llvm_gen.get_link_libs()) {
+                                    if (std::find(link_libs.begin(), link_libs.end(), lib) ==
+                                        link_libs.end()) {
+                                        link_libs.push_back(lib);
+                                    }
+                                }
+                            }
+
+                            // Store IR string for later parallel compilation (no .ll on disk)
+                            {
+                                std::lock_guard<std::mutex> lock(pending_mutex);
+                                pending_compiles.push_back(
+                                    {std::move(llvm_ir), task.obj_output, task.file_path, true});
+                            }
                         }
 
                         // Track task timing and check for slow tasks

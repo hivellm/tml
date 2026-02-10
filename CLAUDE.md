@@ -320,6 +320,10 @@ tml build file.tml -DDEBUG        # Define preprocessor symbol
 tml build file.tml -DVERSION=1.0  # Define symbol with value
 tml build file.tml --define=FEAT  # Alternative syntax
 tml build file.tml --target=x86_64-unknown-linux-gnu  # Cross-compile
+
+# Backend selection (EXPERIMENTAL)
+tml build file.tml --backend=llvm       # Use LLVM backend (default)
+tml build file.tml --backend=cranelift  # Use Cranelift backend (experimental, NOT ready for use)
 ```
 
 ## Compilation Architecture
@@ -328,7 +332,7 @@ The TML compiler uses a **demand-driven query system** (like rustc) as the defau
 
 ```
 Source (.tml) → [QueryContext] → ReadSource → Tokenize → Parse → Typecheck
-             → Borrowcheck → HirLower → MirBuild → CodegenUnit → [LLVM] → .obj → [LLD] → .exe
+             → Borrowcheck → HirLower → MirBuild → CodegenUnit → [Backend] → .obj → [LLD] → .exe
 ```
 
 **Key components:**
@@ -336,7 +340,8 @@ Source (.tml) → [QueryContext] → ReadSource → Tokenize → Parse → Typec
 - **Incremental Compilation**: Fingerprints + dependency edges persisted to `.incr-cache/incr.bin`
 - **GREEN path**: No source changes → cached LLVM IR loaded from disk, entire pipeline skipped
 - **RED path**: Source changed → affected queries recomputed, downstream checked for changes
-- **Embedded LLVM**: IR compiled to .obj in-process (no clang subprocess)
+- **Embedded LLVM** (default backend): IR compiled to .obj in-process (no clang subprocess)
+- **Cranelift** (experimental backend, in development): Alternative backend for faster debug builds. **Not ready for production use.**
 - **Embedded LLD**: Linking done in-process (no linker subprocess)
 
 **Key files:**
@@ -346,6 +351,8 @@ Source (.tml) → [QueryContext] → ReadSource → Tokenize → Parse → Typec
 - `compiler/src/query/query_core.cpp` - Provider implementations (8 stage wrappers)
 - `compiler/src/backend/llvm_backend.cpp` - LLVM C API for in-memory compilation
 - `compiler/src/backend/lld_linker.cpp` - LLD in-process linker (COFF/ELF/MachO)
+- `compiler/include/codegen/codegen_backend.hpp` - Backend abstraction interface
+- `compiler/src/codegen/cranelift/` - Cranelift backend (experimental)
 ````
 
 ## Conditional Compilation

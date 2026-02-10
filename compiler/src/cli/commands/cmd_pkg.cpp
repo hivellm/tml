@@ -28,12 +28,12 @@
 //! ```
 
 #include "cmd_pkg.hpp"
-#include "log/log.hpp"
 
 #include "cli/builder/build_config.hpp"
 #include "cli/builder/dependency_resolver.hpp"
 #include "cli/commands/cmd_test.hpp" // For colors namespace
 #include "cli/utils.hpp"
+#include "log/log.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -172,7 +172,9 @@ int run_add(int argc, char* argv[]) {
 
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (!fs::exists(manifest_path)) {
-        TML_LOG_ERROR("pkg", "No tml.toml found in current directory. Run 'tml init' to create a new project");
+        TML_LOG_ERROR(
+            "pkg",
+            "No tml.toml found in current directory. Run 'tml init' to create a new project");
         return 1;
     }
 
@@ -201,10 +203,12 @@ int run_add(int argc, char* argv[]) {
         dep_spec = "{ git = \"" + git_dep + "\" }";
     } else if (!version_dep.empty()) {
         // Version dependencies require registry support
-        TML_LOG_ERROR("pkg", "Version dependencies require a package registry. Use --path or --git instead");
+        TML_LOG_ERROR(
+            "pkg", "Version dependencies require a package registry. Use --path or --git instead");
         return 1;
     } else {
-        TML_LOG_ERROR("pkg", "Must specify --path, --git, or --version. Use 'tml add <package> --path <dir>' for local dependencies");
+        TML_LOG_ERROR("pkg", "Must specify --path, --git, or --version. Use 'tml add <package> "
+                             "--path <dir>' for local dependencies");
         return 1;
     }
 
@@ -218,7 +222,8 @@ int run_add(int argc, char* argv[]) {
     // Check if dependency already exists
     if (content.find(package_name + " =") != std::string::npos ||
         content.find(package_name + "=") != std::string::npos) {
-        TML_LOG_ERROR("pkg", "Dependency '" << package_name << "' already exists. Use 'tml remove " << package_name << "' first to replace it");
+        TML_LOG_ERROR("pkg", "Dependency '" << package_name << "' already exists. Use 'tml remove "
+                                            << package_name << "' first to replace it");
         return 1;
     }
 
@@ -241,7 +246,9 @@ int run_update(int argc, char* argv[]) {
 
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (!fs::exists(manifest_path)) {
-        TML_LOG_ERROR("pkg", "No tml.toml found in current directory. Run 'tml init' to create a new project");
+        TML_LOG_ERROR(
+            "pkg",
+            "No tml.toml found in current directory. Run 'tml init' to create a new project");
         return 1;
     }
 
@@ -279,8 +286,8 @@ int run_update(int argc, char* argv[]) {
             TML_LOG_INFO("pkg", "  git: " << name << " - " << dep.git);
             TML_LOG_INFO("pkg", "       (run 'git pull' in dependency directory to update)");
         } else if (!dep.version.empty()) {
-            TML_LOG_WARN("pkg", "  skip: " << name << " " << dep.version
-                                           << " (registry not available)");
+            TML_LOG_WARN("pkg",
+                         "  skip: " << name << " " << dep.version << " (registry not available)");
         }
     }
 
@@ -292,7 +299,8 @@ int run_update(int argc, char* argv[]) {
     }
 
     TML_LOG_INFO("pkg", "All path dependencies are valid.");
-    TML_LOG_INFO("pkg", "Note: For git dependencies, run 'git pull' in each dependency's directory.");
+    TML_LOG_INFO("pkg",
+                 "Note: For git dependencies, run 'git pull' in each dependency's directory.");
     return 0;
 }
 
@@ -319,7 +327,9 @@ int run_remove(int argc, char* argv[]) {
 
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (!fs::exists(manifest_path)) {
-        TML_LOG_ERROR("pkg", "No tml.toml found in current directory. Run 'tml init' to create a new project");
+        TML_LOG_ERROR(
+            "pkg",
+            "No tml.toml found in current directory. Run 'tml init' to create a new project");
         return 1;
     }
 
@@ -355,7 +365,9 @@ int run_remove(int argc, char* argv[]) {
 int run_deps(int argc, char* argv[]) {
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (!fs::exists(manifest_path)) {
-        TML_LOG_ERROR("pkg", "No tml.toml found in current directory. Run 'tml init' to create a new project");
+        TML_LOG_ERROR(
+            "pkg",
+            "No tml.toml found in current directory. Run 'tml init' to create a new project");
         return 1;
     }
 

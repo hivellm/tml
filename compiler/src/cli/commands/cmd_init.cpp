@@ -30,9 +30,9 @@
 //! - `[build]`: default build options
 
 #include "cmd_init.hpp"
-#include "log/log.hpp"
 
 #include "cli/utils.hpp"
+#include "log/log.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -197,7 +197,8 @@ int run_init(int argc, char* argv[]) {
                       << "  tml init --bin src/app.tml  # Custom binary path\n";
             return 0;
         } else {
-            TML_LOG_ERROR("init", "Unknown argument: " << arg << ". Use 'tml init --help' for usage information");
+            TML_LOG_ERROR("init", "Unknown argument: "
+                                      << arg << ". Use 'tml init --help' for usage information");
             return 1;
         }
     }
@@ -210,7 +211,8 @@ int run_init(int argc, char* argv[]) {
     // Check if tml.toml already exists
     fs::path manifest_path = fs::current_path() / "tml.toml";
     if (fs::exists(manifest_path)) {
-        TML_LOG_ERROR("init", "tml.toml already exists in current directory. Remove it or run 'tml init' in a different directory");
+        TML_LOG_ERROR("init", "tml.toml already exists in current directory. Remove it or run 'tml "
+                              "init' in a different directory");
         return 1;
     }
 

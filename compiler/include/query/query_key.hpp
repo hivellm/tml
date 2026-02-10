@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <set>
 #include <string>
@@ -17,6 +18,7 @@
 namespace tml::lexer {
 struct Token;
 struct LexerError;
+class Source;
 } // namespace tml::lexer
 
 namespace tml::parser {
@@ -154,6 +156,7 @@ struct ReadSourceResult {
 /// Result of tokenization.
 struct TokenizeResult {
     std::shared_ptr<std::vector<lexer::Token>> tokens;
+    std::shared_ptr<lexer::Source> source; ///< Keeps source buffer alive for token string_views.
     bool success = false;
     std::vector<std::string> errors;
 };
@@ -192,12 +195,18 @@ struct MirBuildResult {
     std::vector<std::string> errors;
 };
 
-/// Result of LLVM IR generation.
+/// Result of code generation (IR text or object file).
 struct CodegenUnitResult {
-    std::string llvm_ir;
+    std::string llvm_ir;               ///< IR text (LLVM IR or Cranelift IR)
+    std::filesystem::path object_file; ///< Direct object file (Cranelift path)
     std::set<std::string> link_libs;
     bool success = false;
     std::string error_message;
+
+    /// True if the backend produced an object file directly (skip IR→object step).
+    [[nodiscard]] bool has_object_file() const {
+        return !object_file.empty();
+    }
 };
 
 /// Unique integer ID for a query invocation (for dependency tracking).

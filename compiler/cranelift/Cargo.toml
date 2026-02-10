@@ -1,0 +1,21 @@
+[package]
+name = "tml_cranelift_bridge"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "Cranelift code generation bridge for the TML compiler"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+cranelift-codegen = "0.128"
+cranelift-frontend = "0.128"
+cranelift-module = "0.128"
+cranelift-object = "0.128"
+cranelift-native = "0.128"
+target-lexicon = "0.13"
+
+[profile.release]
+opt-level = 2
+lto = true

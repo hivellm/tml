@@ -25,7 +25,6 @@
 //! 3. Write formatted output (or check for differences)
 
 #include "cmd_format.hpp"
-#include "log/log.hpp"
 
 #include "cli/diagnostic.hpp"
 #include "cli/utils.hpp"
@@ -33,6 +32,7 @@
 #include "format/formatter.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
+#include "log/log.hpp"
 #include "parser/parser.hpp"
 
 #include <filesystem>

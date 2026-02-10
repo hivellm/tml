@@ -86,6 +86,13 @@ tml build --verbose              # Show detailed build output
 tml build --time                 # Show detailed compiler phase timings
 tml build --lto                  # Enable Link-Time Optimization
 
+# Backend selection (EXPERIMENTAL)
+tml build --backend=llvm         # Use LLVM backend (default)
+tml build --backend=cranelift    # Use Cranelift backend (experimental, in development)
+
+# Borrow checker selection
+tml build --polonius             # Use Polonius borrow checker (more permissive than NLL)
+
 # Preprocessor options
 tml build -DDEBUG                # Define preprocessor symbol
 tml build -DVERSION=1.0          # Define symbol with value
@@ -948,6 +955,70 @@ func log(msg: Str) { }
 ```
 
 See [02-LEXICAL.md](./02-LEXICAL.md#10-preprocessor-directives) for full preprocessor documentation.
+
+### 8.11 Code Generation Backends
+
+TML supports multiple code generation backends. The backend is selected via the `--backend` flag.
+
+| Backend | Flag | Status | Description |
+|---------|------|--------|-------------|
+| **LLVM** | `--backend=llvm` | ✅ Default | Full-featured backend with optimizations, LTO, debug info. Production-ready. |
+| **Cranelift** | `--backend=cranelift` | 🧪 Experimental | Lightweight backend focused on fast compile times. **In development — not ready for production use.** |
+
+```bash
+# Default (LLVM)
+tml build main.tml
+
+# Explicit LLVM
+tml build main.tml --backend=llvm
+
+# Cranelift (experimental, in development)
+tml build main.tml --backend=cranelift
+```
+
+**Cranelift Backend (Experimental)**
+
+The Cranelift backend is under active development as an alternative to LLVM. It aims to provide:
+- Faster compilation times (especially for debug builds)
+- Lower memory usage during compilation
+- Simpler integration (no LLVM dependency)
+
+**Current limitations** (will be addressed as development progresses):
+- No optimization passes (debug-quality code only)
+- Limited target support (x86_64 only initially)
+- No LTO support
+- No debug info emission
+- Incomplete feature coverage
+
+> **Warning:** The Cranelift backend is experimental and actively in development. Use LLVM for all production builds.
+
+### 8.12 Borrow Checker Selection
+
+TML supports two borrow checking algorithms:
+
+| Checker | Flag | Status | Description |
+|---------|------|--------|-------------|
+| **NLL** | *(default)* | ✅ Default | Non-Lexical Lifetimes checker. Single forward pass over AST. Conservative but fast. |
+| **Polonius** | `--polonius` | ✅ Complete | Datalog-style constraint solver. Strictly more permissive than NLL. |
+
+```bash
+# Default (NLL)
+tml build main.tml
+
+# Polonius (more permissive)
+tml build main.tml --polonius
+
+# Polonius with test runner
+tml test tests/ --polonius
+```
+
+**Polonius Borrow Checker**
+
+Polonius uses a constraint-based algorithm that tracks **origins** (where references come from) and **loans** (specific borrow operations). It propagates loan liveness through the control flow graph and only reports errors when an invalidated loan is still reachable through a live origin.
+
+Polonius accepts all programs NLL accepts, plus additional safe programs where borrows are conditionally taken across branches. Both checkers produce identical `BorrowError` output.
+
+See [06-MEMORY.md](./06-MEMORY.md#1251-polonius-borrow-checker-alternative) for detailed algorithm description and examples.
 
 ---
 

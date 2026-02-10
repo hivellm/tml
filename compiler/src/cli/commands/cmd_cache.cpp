@@ -170,8 +170,8 @@ int run_cache_info(bool verbose) {
     // Gather statistics
     CacheStats stats = gather_cache_stats(cache_dir);
 
-    int total_files = stats.object_files + stats.executable_files + stats.cache_files +
-                      stats.other_files;
+    int total_files =
+        stats.object_files + stats.executable_files + stats.cache_files + stats.other_files;
     TML_LOG_INFO("cache", "Cache statistics:");
     TML_LOG_INFO("cache", "  Object files (.obj):     " << stats.object_files);
     TML_LOG_INFO("cache", "  Executable files (.exe): " << stats.executable_files);
@@ -231,8 +231,8 @@ int run_cache_clean(bool clean_all, int max_age_days, bool /*verbose*/) {
     if (clean_all) {
         TML_LOG_INFO("cache", "Removing all cached files from: " << cache_dir);
     } else {
-        TML_LOG_INFO("cache", "Removing files older than " << max_age_days
-                                                           << " days from: " << cache_dir);
+        TML_LOG_INFO("cache",
+                     "Removing files older than " << max_age_days << " days from: " << cache_dir);
     }
 
     int removed_count = 0;
@@ -269,8 +269,8 @@ int run_cache_clean(bool clean_all, int max_age_days, bool /*verbose*/) {
             removed_size += size;
         }
 
-        TML_LOG_INFO("cache", "Cleaned " << removed_count << " files ("
-                                        << format_size(removed_size) << ")");
+        TML_LOG_INFO("cache",
+                     "Cleaned " << removed_count << " files (" << format_size(removed_size) << ")");
 
     } catch (const std::exception& e) {
         TML_LOG_ERROR("cache", "Error cleaning cache: " << e.what());
@@ -361,7 +361,9 @@ int enforce_cache_limit(uintmax_t max_size_mb, bool /*verbose*/) {
 
 int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/) {
     if (files.empty()) {
-        TML_LOG_ERROR("cache", "No files specified for invalidation. Usage: tml cache invalidate <file1> [file2] ...");
+        TML_LOG_ERROR(
+            "cache",
+            "No files specified for invalidation. Usage: tml cache invalidate <file1> [file2] ...");
         return 1;
     }
 
@@ -554,8 +556,10 @@ int run_cache_clear_meta() {
     if (total_removed == 0) {
         TML_LOG_INFO("cache", "No module metadata cache files found.");
     } else {
-        TML_LOG_INFO("cache", "Cleared " << total_removed
-                     << " module metadata cache entries. Next build will re-parse all modules.");
+        TML_LOG_INFO(
+            "cache",
+            "Cleared " << total_removed
+                       << " module metadata cache entries. Next build will re-parse all modules.");
     }
 
     return 0;
@@ -615,7 +619,10 @@ int run_cache(int argc, char* argv[]) {
     } else if (subcommand == "clear-meta") {
         return run_cache_clear_meta();
     } else {
-        TML_LOG_ERROR("cache", "Unknown cache subcommand: " << subcommand << ". Use 'tml cache info', 'tml cache clean', 'tml cache invalidate', or 'tml cache clear-meta'");
+        TML_LOG_ERROR("cache", "Unknown cache subcommand: "
+                                   << subcommand
+                                   << ". Use 'tml cache info', 'tml cache clean', 'tml cache "
+                                      "invalidate', or 'tml cache clear-meta'");
         return 1;
     }
 }

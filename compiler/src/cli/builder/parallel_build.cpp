@@ -38,11 +38,12 @@
 #include "parallel_build.hpp"
 
 #include "borrow/checker.hpp"
+#include "borrow/polonius.hpp"
 #include "cli/builder/compiler_setup.hpp"
 #include "cli/builder/object_compiler.hpp"
 #include "cli/commands/cmd_build.hpp"
 #include "cli/utils.hpp"
-#include "codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm/llvm_ir_gen.hpp"
 #include "codegen/mir_codegen.hpp"
 #include "common.hpp"
 #include "hir/hir.hpp"
@@ -597,9 +598,15 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
 
         const auto& env = std::get<types::TypeEnv>(check_result);
 
-        // Borrow checking
-        borrow::BorrowChecker borrow_checker(env);
-        auto borrow_result = borrow_checker.check_module(module);
+        // Borrow checking (Polonius or NLL)
+        std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+        if (options.polonius) {
+            borrow::polonius::PoloniusChecker polonius_checker(env);
+            borrow_result = polonius_checker.check_module(module);
+        } else {
+            borrow::BorrowChecker borrow_checker(env);
+            borrow_result = borrow_checker.check_module(module);
+        }
 
         if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
             std::ostringstream err;
@@ -803,6 +810,7 @@ int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
     opts.use_hir = use_hir;
     opts.optimization_level = opt_level;
     opts.debug_info = tml::CompilerOptions::debug_info;
+    opts.polonius = tml::CompilerOptions::polonius;
     builder.set_options(opts);
 
     // Create output directory

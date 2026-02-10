@@ -4,7 +4,9 @@
 
 // Full includes for all compilation stages
 #include "borrow/checker.hpp"
-#include "codegen/llvm_ir_gen.hpp"
+#include "borrow/polonius.hpp"
+#include "codegen/codegen_backend.hpp"
+#include "codegen/llvm/llvm_ir_gen.hpp"
 #include "codegen/mir_codegen.hpp"
 #include "common.hpp"
 #include "hir/hir.hpp"
@@ -114,9 +116,10 @@ std::any provide_tokenize(QueryContext& ctx, const QueryKey& key) {
         return result;
     }
 
-    // Tokenize
-    auto source = lexer::Source::from_string(src.preprocessed, tk.file_path);
-    lexer::Lexer lex(source);
+    // Tokenize — store Source in result so token string_views stay valid
+    auto source =
+        std::make_shared<lexer::Source>(lexer::Source::from_string(src.preprocessed, tk.file_path));
+    lexer::Lexer lex(*source);
     auto tokens = lex.tokenize();
 
     if (lex.has_errors()) {
@@ -127,6 +130,7 @@ std::any provide_tokenize(QueryContext& ctx, const QueryKey& key) {
     }
 
     result.tokens = std::make_shared<std::vector<lexer::Token>>(std::move(tokens));
+    result.source = std::move(source);
     result.success = true;
     return result;
 }
@@ -237,9 +241,15 @@ std::any provide_borrowcheck_module(QueryContext& ctx, const QueryKey& key) {
         return result;
     }
 
-    // Borrow check
-    borrow::BorrowChecker borrow_checker(*tc.env);
-    auto borrow_result = borrow_checker.check_module(*parsed.module);
+    // Borrow check (Polonius or NLL)
+    std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+    if (CompilerOptions::polonius) {
+        borrow::polonius::PoloniusChecker polonius_checker(*tc.env);
+        borrow_result = polonius_checker.check_module(*parsed.module);
+    } else {
+        borrow::BorrowChecker borrow_checker(*tc.env);
+        borrow_result = borrow_checker.check_module(*parsed.module);
+    }
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
         const auto& errors = std::get<std::vector<borrow::BorrowError>>(borrow_result);
@@ -367,6 +377,7 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
     }
 
     result.mir_module = std::make_shared<mir::Module>(std::move(mir_module));
+
     result.success = true;
     return result;
 }
@@ -442,9 +453,12 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         }
     }
 
-    // Use MIR-based codegen when safe, AST codegen otherwise
-    if (!has_tml_imports_needing_codegen && !has_local_generics) {
-        // MIR pipeline
+    // Use MIR-based codegen when safe, AST codegen otherwise.
+    // When Cranelift backend is selected, always use MIR path — library code
+    // is compiled separately as runtime objects and linked in.
+    bool force_mir = (ctx.options().backend == "cranelift");
+    if (force_mir || (!has_tml_imports_needing_codegen && !has_local_generics)) {
+        // MIR pipeline — use CodegenBackend abstraction
         auto mir = ctx.mir_build(ck.file_path, ck.module_name);
         if (!mir.success) {
             result.error_message = "MIR build failed";
@@ -454,20 +468,38 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
             return result;
         }
 
-        codegen::MirCodegenOptions mir_opts;
-        mir_opts.emit_comments = ctx.options().verbose;
+        // Build CodegenOptions from query context
+        codegen::CodegenOptions codegen_opts;
+        codegen_opts.emit_comments = ctx.options().verbose;
+        codegen_opts.coverage_enabled = ctx.options().coverage;
 #ifdef _WIN32
-        mir_opts.target_triple = "x86_64-pc-windows-msvc";
+        codegen_opts.target_triple = "x86_64-pc-windows-msvc";
 #else
-        mir_opts.target_triple = "x86_64-unknown-linux-gnu";
+        codegen_opts.target_triple = "x86_64-unknown-linux-gnu";
 #endif
         if (!ctx.options().target_triple.empty()) {
-            mir_opts.target_triple = ctx.options().target_triple;
+            codegen_opts.target_triple = ctx.options().target_triple;
         }
-        mir_opts.coverage_enabled = ctx.options().coverage;
 
-        codegen::MirCodegen mir_codegen(mir_opts);
-        result.llvm_ir = mir_codegen.generate(*mir.mir_module);
+        // Create backend from options (defaults to LLVM)
+        auto backend_type = codegen::default_backend_type();
+        if (ctx.options().backend == "cranelift") {
+            backend_type = codegen::BackendType::Cranelift;
+        }
+        auto backend = codegen::create_backend(backend_type);
+
+        if (backend_type == codegen::BackendType::Cranelift) {
+            // Cranelift: compile MIR directly to object file (no IR text step)
+            auto cg_result = backend->compile_mir(*mir.mir_module, codegen_opts);
+            if (!cg_result.success) {
+                result.error_message = cg_result.error_message;
+                return result;
+            }
+            result.object_file = cg_result.object_file;
+        } else {
+            // LLVM: generate IR text (compiled to object later by the build system)
+            result.llvm_ir = backend->generate_ir(*mir.mir_module, codegen_opts);
+        }
 
         // Extract link_libs from AST
         for (const auto& decl : parsed.module->decls) {

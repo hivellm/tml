@@ -36,7 +36,8 @@ static void emit_parser_errors(DiagnosticEmitter& emitter,
 
 int run_doc(const DocOptions& options) {
     if (options.input_files.empty() && !options.all_modules) {
-        TML_LOG_ERROR("doc", "No input files specified. Usage: tml doc <file.tml> [options] or tml doc --all [options]");
+        TML_LOG_ERROR("doc", "No input files specified. Usage: tml doc <file.tml> [options] or tml "
+                             "doc --all [options]");
         return 1;
     }
 
@@ -230,7 +231,7 @@ int run_doc(const DocOptions& options) {
         total_items += module.items.size();
     }
     TML_LOG_INFO("doc", "Documented " << doc_index.modules.size() << " modules, " << total_items
-                                     << " items");
+                                      << " items");
 
     return 0;
 }

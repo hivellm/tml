@@ -310,6 +310,9 @@ add_library(tml_borrow STATIC
     src/borrow/checker_expr.cpp
     src/borrow/checker_ops.cpp
     src/borrow/checker_nll.cpp
+    src/borrow/polonius_facts.cpp
+    src/borrow/polonius_solver.cpp
+    src/borrow/polonius_checker.cpp
 )
 target_link_libraries(tml_borrow PUBLIC tml_types)
 target_include_directories(tml_borrow PUBLIC include src)
@@ -435,88 +438,92 @@ target_include_directories(tml_mir PUBLIC include src)
 
 # Codegen library (LLVM IR text generator + clang backend)
 add_library(tml_codegen STATIC
-    src/codegen/llvm_ir_gen_stmt.cpp
-    # Declaration codegen (split from llvm_ir_gen_decl.cpp for maintainability)
-    src/codegen/decl/struct.cpp
-    src/codegen/decl/enum.cpp
-    src/codegen/decl/func.cpp
-    src/codegen/decl/impl.cpp
-    # Derive macro codegen
-    src/codegen/derive/reflect.cpp
-    src/codegen/derive/partial_eq.cpp
-    src/codegen/derive/duplicate.cpp
-    src/codegen/derive/hash.cpp
-    src/codegen/derive/default.cpp
-    src/codegen/derive/partial_ord.cpp
-    src/codegen/derive/debug.cpp
-    src/codegen/derive/display.cpp
-    src/codegen/derive/serialize.cpp
-    src/codegen/derive/deserialize.cpp
-    src/codegen/derive/fromstr.cpp
-    src/codegen/llvm_ir_gen_expr.cpp
+    # Backend abstraction layer (backend-agnostic)
+    src/codegen/codegen_backend.cpp
     src/codegen/c_header_gen.cpp
-    # Control flow codegen (split from llvm_ir_gen_control.cpp for maintainability)
-    src/codegen/control/if.cpp
-    src/codegen/control/loop.cpp
-    src/codegen/control/return.cpp
-    src/codegen/control/when.cpp
-    src/codegen/mir_codegen.cpp
     src/codegen/codegen_partitioner.cpp
-    # Core codegen (split from llvm_ir_gen.cpp for maintainability)
-    src/codegen/core/utils.cpp
-    src/codegen/core/types.cpp
-    src/codegen/core/generic.cpp
-    src/codegen/core/runtime.cpp
-    src/codegen/core/dyn.cpp
-    src/codegen/core/generate.cpp
-    src/codegen/core/debug_info.cpp
-    src/codegen/core/target.cpp
-    src/codegen/core/drop.cpp
-    src/codegen/core/class_codegen.cpp
-    src/codegen/core/optimization_passes.cpp
-    # Expression codegen (split for maintainability)
-    src/codegen/expr/core.cpp
-    src/codegen/expr/call.cpp
-    src/codegen/expr/binary.cpp
-    src/codegen/expr/unary.cpp
-    src/codegen/expr/cast.cpp
-    src/codegen/expr/closure.cpp
-    src/codegen/expr/infer.cpp
-    src/codegen/expr/struct.cpp
-    src/codegen/expr/tuple.cpp
-    src/codegen/expr/print.cpp
-    src/codegen/expr/collections.cpp
-    src/codegen/expr/method.cpp
-    src/codegen/expr/method_static.cpp
-    src/codegen/expr/method_primitive.cpp
-    src/codegen/expr/method_collection.cpp
-    src/codegen/expr/method_slice.cpp
-    src/codegen/expr/method_maybe.cpp
-    src/codegen/expr/method_outcome.cpp
-    src/codegen/expr/method_array.cpp
-    src/codegen/expr/method_impl.cpp
-    src/codegen/expr/method_dyn.cpp
-    src/codegen/expr/method_class.cpp
-    src/codegen/expr/method_prim_behavior.cpp
-    src/codegen/expr/await.cpp
-    src/codegen/expr/try.cpp
-    # Builtin function codegen (split for maintainability)
-    src/codegen/builtins/io.cpp
-    src/codegen/builtins/mem.cpp
-    src/codegen/builtins/atomic.cpp
-    src/codegen/builtins/sync.cpp
-    src/codegen/builtins/time.cpp
-    src/codegen/builtins/math.cpp
-    src/codegen/builtins/collections.cpp
-    src/codegen/builtins/string.cpp
-    src/codegen/builtins/assert.cpp
-    src/codegen/builtins/async.cpp
-    src/codegen/builtins/intrinsics.cpp
-    # MIR codegen modules (split from mir_codegen.cpp for maintainability)
+    # MIR codegen (MIR → LLVM IR text, backend-agnostic interface)
+    src/codegen/mir_codegen.cpp
     src/codegen/mir/helpers.cpp
     src/codegen/mir/types.cpp
     src/codegen/mir/terminators.cpp
     src/codegen/mir/instructions.cpp
+    # LLVM backend implementation
+    src/codegen/llvm/llvm_codegen_backend.cpp
+    src/codegen/llvm/llvm_ir_gen_stmt.cpp
+    src/codegen/llvm/llvm_ir_gen_expr.cpp
+    # LLVM declaration codegen
+    src/codegen/llvm/decl/struct.cpp
+    src/codegen/llvm/decl/enum.cpp
+    src/codegen/llvm/decl/func.cpp
+    src/codegen/llvm/decl/impl.cpp
+    # LLVM derive macro codegen
+    src/codegen/llvm/derive/reflect.cpp
+    src/codegen/llvm/derive/partial_eq.cpp
+    src/codegen/llvm/derive/duplicate.cpp
+    src/codegen/llvm/derive/hash.cpp
+    src/codegen/llvm/derive/default.cpp
+    src/codegen/llvm/derive/partial_ord.cpp
+    src/codegen/llvm/derive/debug.cpp
+    src/codegen/llvm/derive/display.cpp
+    src/codegen/llvm/derive/serialize.cpp
+    src/codegen/llvm/derive/deserialize.cpp
+    src/codegen/llvm/derive/fromstr.cpp
+    # LLVM control flow codegen
+    src/codegen/llvm/control/if.cpp
+    src/codegen/llvm/control/loop.cpp
+    src/codegen/llvm/control/return.cpp
+    src/codegen/llvm/control/when.cpp
+    # LLVM core codegen
+    src/codegen/llvm/core/utils.cpp
+    src/codegen/llvm/core/types.cpp
+    src/codegen/llvm/core/generic.cpp
+    src/codegen/llvm/core/runtime.cpp
+    src/codegen/llvm/core/dyn.cpp
+    src/codegen/llvm/core/generate.cpp
+    src/codegen/llvm/core/debug_info.cpp
+    src/codegen/llvm/core/target.cpp
+    src/codegen/llvm/core/drop.cpp
+    src/codegen/llvm/core/class_codegen.cpp
+    src/codegen/llvm/core/optimization_passes.cpp
+    # LLVM expression codegen
+    src/codegen/llvm/expr/core.cpp
+    src/codegen/llvm/expr/call.cpp
+    src/codegen/llvm/expr/binary.cpp
+    src/codegen/llvm/expr/unary.cpp
+    src/codegen/llvm/expr/cast.cpp
+    src/codegen/llvm/expr/closure.cpp
+    src/codegen/llvm/expr/infer.cpp
+    src/codegen/llvm/expr/struct.cpp
+    src/codegen/llvm/expr/tuple.cpp
+    src/codegen/llvm/expr/print.cpp
+    src/codegen/llvm/expr/collections.cpp
+    src/codegen/llvm/expr/method.cpp
+    src/codegen/llvm/expr/method_static.cpp
+    src/codegen/llvm/expr/method_primitive.cpp
+    src/codegen/llvm/expr/method_collection.cpp
+    src/codegen/llvm/expr/method_slice.cpp
+    src/codegen/llvm/expr/method_maybe.cpp
+    src/codegen/llvm/expr/method_outcome.cpp
+    src/codegen/llvm/expr/method_array.cpp
+    src/codegen/llvm/expr/method_impl.cpp
+    src/codegen/llvm/expr/method_dyn.cpp
+    src/codegen/llvm/expr/method_class.cpp
+    src/codegen/llvm/expr/method_prim_behavior.cpp
+    src/codegen/llvm/expr/await.cpp
+    src/codegen/llvm/expr/try.cpp
+    # LLVM builtin function codegen
+    src/codegen/llvm/builtins/io.cpp
+    src/codegen/llvm/builtins/mem.cpp
+    src/codegen/llvm/builtins/atomic.cpp
+    src/codegen/llvm/builtins/sync.cpp
+    src/codegen/llvm/builtins/time.cpp
+    src/codegen/llvm/builtins/math.cpp
+    src/codegen/llvm/builtins/collections.cpp
+    src/codegen/llvm/builtins/string.cpp
+    src/codegen/llvm/builtins/assert.cpp
+    src/codegen/llvm/builtins/async.cpp
+    src/codegen/llvm/builtins/intrinsics.cpp
 )
 target_link_libraries(tml_codegen PUBLIC tml_mir)
 target_include_directories(tml_codegen PUBLIC include src)
@@ -1126,6 +1133,51 @@ if(TML_USE_LLD)
     endforeach()
 endif()
 
+# ============================================================================
+# Cranelift Backend (optional, for faster debug builds)
+# ============================================================================
+option(TML_USE_CRANELIFT_BACKEND "Use Cranelift backend for fast debug compilation" OFF)
+
+if(TML_USE_CRANELIFT_BACKEND)
+    # Path to the pre-built Cranelift bridge static library
+    set(CRANELIFT_LIB_DIR "${CMAKE_SOURCE_DIR}/../build/cranelift/release")
+
+    if(WIN32)
+        set(CRANELIFT_LIB_PATH "${CRANELIFT_LIB_DIR}/tml_cranelift_bridge.lib")
+    else()
+        set(CRANELIFT_LIB_PATH "${CRANELIFT_LIB_DIR}/libtml_cranelift_bridge.a")
+    endif()
+
+    if(EXISTS "${CRANELIFT_LIB_PATH}")
+        message(STATUS "Cranelift Backend: Enabled")
+        message(STATUS "  Library: ${CRANELIFT_LIB_PATH}")
+
+        # Add Cranelift wrapper source to tml_codegen
+        target_sources(tml_codegen PRIVATE
+            src/codegen/cranelift/cranelift_codegen_backend.cpp
+        )
+        target_compile_definitions(tml_codegen PUBLIC TML_HAS_CRANELIFT_BACKEND=1)
+
+        # Link the Rust static library
+        target_link_libraries(tml_codegen PUBLIC "${CRANELIFT_LIB_PATH}")
+
+        # Windows system libraries required by Rust static libraries
+        if(WIN32)
+            target_link_libraries(tml_codegen PUBLIC
+                ws2_32 userenv bcrypt ntdll advapi32
+            )
+        else()
+            target_link_libraries(tml_codegen PUBLIC dl pthread m)
+        endif()
+    else()
+        message(WARNING "Cranelift library not found at ${CRANELIFT_LIB_PATH}")
+        message(WARNING "Build it first: cd compiler/cranelift && cargo build --release")
+        message(WARNING "Cranelift backend disabled.")
+    endif()
+else()
+    message(STATUS "Cranelift Backend: Disabled (use -DTML_USE_CRANELIFT_BACKEND=ON to enable)")
+endif()
+
 # CLI library
 add_library(tml_cli STATIC
     # Core CLI files
@@ -1138,6 +1190,7 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_cache.cpp
     src/cli/commands/cmd_debug.cpp
     src/cli/commands/cmd_doc.cpp
+    src/cli/commands/cmd_explain.cpp
     src/cli/commands/cmd_format.cpp
     src/cli/commands/cmd_init.cpp
     src/cli/commands/cmd_lint.cpp
@@ -1260,6 +1313,7 @@ if(TML_BUILD_TESTS)
         tests/foundational/mir_codegen_cgu_test.cpp
         tests/foundational/llvm_backend_test.cpp
         tests/foundational/lld_linker_test.cpp
+        tests/foundational/codegen_backend_test.cpp
         # CLI
         tests/cli/object_compiler_test.cpp
         tests/cli/parallel_build_test.cpp

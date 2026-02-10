@@ -26,6 +26,7 @@
 //! Use `--no-cache` to force recompilation.
 
 #include "builder_internal.hpp"
+#include "codegen/codegen_backend.hpp"
 #include "codegen/codegen_partitioner.hpp"
 #include "query/query_context.hpp"
 #include "types/module_binary.hpp"
@@ -131,13 +132,23 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
     // Run borrow checker (ownership and borrowing validation)
-    borrow::BorrowChecker borrow_checker(env);
-    auto borrow_result = borrow_checker.check_module(module);
-
-    if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
-        const auto& errors = std::get<std::vector<borrow::BorrowError>>(borrow_result);
-        emit_all_borrow_errors(diag, errors);
-        return 1;
+    // Use Polonius if --polonius flag is set, otherwise use default NLL checker
+    if (options.polonius) {
+        borrow::polonius::PoloniusChecker polonius_checker(env);
+        auto borrow_result = polonius_checker.check_module(module);
+        if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+            const auto& errors = std::get<std::vector<borrow::BorrowError>>(borrow_result);
+            emit_all_borrow_errors(diag, errors);
+            return 1;
+        }
+    } else {
+        borrow::BorrowChecker borrow_checker(env);
+        auto borrow_result = borrow_checker.check_module(module);
+        if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+            const auto& errors = std::get<std::vector<borrow::BorrowError>>(borrow_result);
+            emit_all_borrow_errors(diag, errors);
+            return 1;
+        }
     }
 
     // Emit MIR if requested (early exit before LLVM codegen)
@@ -820,6 +831,7 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     qopts.profile_generate = options.profile_generate;
     qopts.profile_use = options.profile_use;
     qopts.incremental = !options.no_cache;
+    qopts.backend = options.backend;
 
     auto source_dir = fs::path(path).parent_path();
     if (source_dir.empty()) {
@@ -937,9 +949,15 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
 
     std::vector<fs::path> object_files;
 
+    // Check if the backend already produced an object file (Cranelift path)
+    if (codegen_result.has_object_file()) {
+        object_files.push_back(codegen_result.object_file);
+        TML_LOG_INFO("build", "Using Cranelift object: " << codegen_result.object_file);
+    }
+
     // Try CGU partitioning if MIR is available from query cache
-    bool use_cgu = false;
-    if (!options.no_cache) {
+    bool use_cgu = !codegen_result.has_object_file();
+    if (use_cgu && !options.no_cache) {
         auto mir =
             qctx.cache().lookup<query::MirBuildResult>(query::MirBuildKey{path, module_name});
         if (mir && mir->success && mir->mir_module && mir->mir_module->functions.size() >= 2) {
@@ -1006,8 +1024,8 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
         }
     }
 
-    if (!use_cgu) {
-        // Monolithic path
+    if (!use_cgu && !codegen_result.has_object_file()) {
+        // Monolithic path (LLVM IR → object)
         fs::path obj_output = cache_dir / (module_name + get_object_extension());
         auto obj_result = compile_ir_string_to_object(llvm_ir, obj_output, clang, obj_options);
         if (!obj_result.success) {

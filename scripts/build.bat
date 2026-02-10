@@ -21,6 +21,7 @@ set "BUILD_TESTS=ON"
 set "ENABLE_ASAN=OFF"
 set "ENABLE_UBSAN=OFF"
 set "ENABLE_LLVM_BACKEND=ON"
+set "ENABLE_CRANELIFT_BACKEND=OFF"
 
 :: Parse arguments
 :parse_args
@@ -34,6 +35,7 @@ if /i "%~1"=="--asan" set "ENABLE_ASAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--ubsan" set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--sanitize" set "ENABLE_ASAN=ON" & set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--no-llvm" set "ENABLE_LLVM_BACKEND=OFF" & shift & goto :parse_args
+if /i "%~1"=="--cranelift" set "ENABLE_CRANELIFT_BACKEND=ON" & shift & goto :parse_args
 if /i "%~1"=="--help" goto :show_help
 if /i "%~1"=="-h" goto :show_help
 echo Unknown argument: %~1
@@ -55,6 +57,7 @@ echo   --no-tests  Don't build tests
 echo   --asan      Enable AddressSanitizer (memory error detection)
 echo   --ubsan     Enable UndefinedBehaviorSanitizer
 echo   --sanitize  Enable both ASan and UBSan
+echo   --cranelift Enable Cranelift backend (fast debug builds)
 echo   --help      Show this help message
 echo.
 echo Host target: %TARGET%
@@ -82,6 +85,7 @@ echo Build type:  %BUILD_TYPE%
 echo Cache dir:   %CACHE_DIR%
 echo Output dir:  %OUTPUT_DIR%
 echo Tests:       %BUILD_TESTS%
+if "%ENABLE_CRANELIFT_BACKEND%"=="ON" echo Cranelift:   Enabled
 if "%ENABLE_ASAN%"=="ON" echo ASan:        Enabled
 if "%ENABLE_UBSAN%"=="ON" echo UBSan:       Enabled
 echo.
@@ -100,6 +104,23 @@ if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 taskkill /F /IM tml.exe >nul 2>&1
 taskkill /F /IM tml_mcp.exe >nul 2>&1
 
+:: Build Cranelift bridge if enabled
+if "%ENABLE_CRANELIFT_BACKEND%"=="ON" (
+    set "CRANELIFT_LIB=%ROOT_DIR%\build\cranelift\release\tml_cranelift_bridge.lib"
+    if not exist "!CRANELIFT_LIB!" (
+        echo Building Cranelift bridge...
+        cd /d "%ROOT_DIR%\compiler\cranelift"
+        cargo build --release
+        if errorlevel 1 (
+            echo Cranelift bridge build failed!
+            exit /b 1
+        )
+        cd /d "%ROOT_DIR%"
+    ) else (
+        echo Cranelift bridge: Using cached library
+    )
+)
+
 :: Set CMake build type
 set "CMAKE_BUILD_TYPE=Debug"
 if /i "%BUILD_TYPE%"=="release" set "CMAKE_BUILD_TYPE=Release"
@@ -115,6 +136,7 @@ cmake "%ROOT_DIR%\compiler" ^
     -DTML_ENABLE_ASAN=%ENABLE_ASAN% ^
     -DTML_ENABLE_UBSAN=%ENABLE_UBSAN% ^
     -DTML_USE_LLVM_BACKEND=%ENABLE_LLVM_BACKEND% ^
+    -DTML_USE_CRANELIFT_BACKEND=%ENABLE_CRANELIFT_BACKEND% ^
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
     -DTML_OUTPUT_DIR="%OUTPUT_DIR%"
 

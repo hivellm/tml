@@ -301,21 +301,27 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
     }
 
     // Print report
-    TML_LOG_INFO("test", c.cyan() << c.bold()
-                                  << "================================================================================"
-                                  << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.cyan()
+            << c.bold()
+            << "================================================================================"
+            << c.reset());
     TML_LOG_INFO("test", c.cyan() << c.bold() << "                    LIBRARY COVERAGE ANALYSIS"
                                   << c.reset());
-    TML_LOG_INFO("test", c.cyan() << c.bold()
-                                  << "================================================================================"
-                                  << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.cyan()
+            << c.bold()
+            << "================================================================================"
+            << c.reset());
 
     // Overall summary
     double overall_pct = total_funcs > 0 ? (100.0 * total_covered / total_funcs) : 0.0;
     {
         std::ostringstream oss;
-        oss << " Library Coverage: " << c.bold() << total_covered << "/" << total_funcs
-            << c.reset() << " functions (" << c.bold();
+        oss << " Library Coverage: " << c.bold() << total_covered << "/" << total_funcs << c.reset()
+            << " functions (" << c.bold();
         if (overall_pct < 10)
             oss << c.red();
         else if (overall_pct < 50)
@@ -329,18 +335,22 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
                                                      << covered_functions.size() << c.reset());
 
     // Per-module table with function details
-    TML_LOG_INFO("test", c.dim()
-                            << "--------------------------------------------------------------------------------"
-                            << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.dim()
+            << "--------------------------------------------------------------------------------"
+            << c.reset());
     {
         std::ostringstream hdr;
         hdr << " " << std::left << std::setw(45) << "Module" << std::right << std::setw(12)
             << "Coverage" << std::setw(10) << "Percent";
         TML_LOG_INFO("test", hdr.str());
     }
-    TML_LOG_INFO("test", c.dim()
-                            << "--------------------------------------------------------------------------------"
-                            << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.dim()
+            << "--------------------------------------------------------------------------------"
+            << c.reset());
 
     for (const auto& mod : modules) {
         int mod_total = static_cast<int>(mod.functions.size());
@@ -363,20 +373,20 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
         {
             std::ostringstream mod_row;
             mod_row << " " << color << status << c.reset() << " " << std::left << std::setw(43)
-                    << mod.name << std::right << std::setw(5) << mod.covered_count << "/" << std::left
-                    << std::setw(5) << mod_total << std::right << color << std::setw(9) << std::fixed
-                    << std::setprecision(1) << pct << "%" << c.reset();
+                    << mod.name << std::right << std::setw(5) << mod.covered_count << "/"
+                    << std::left << std::setw(5) << mod_total << std::right << color << std::setw(9)
+                    << std::fixed << std::setprecision(1) << pct << "%" << c.reset();
             TML_LOG_INFO("test", mod_row.str());
         }
 
         // Always show function details for every module
         for (const auto& func : mod.covered_functions) {
-            TML_LOG_INFO("test",
-                         "      " << c.green() << "+" << c.reset() << " " << c.dim() << func << c.reset());
+            TML_LOG_INFO("test", "      " << c.green() << "+" << c.reset() << " " << c.dim() << func
+                                          << c.reset());
         }
         for (const auto& func : mod.uncovered_functions) {
-            TML_LOG_INFO("test",
-                         "      " << c.red() << "X" << c.reset() << " " << c.dim() << func << c.reset());
+            TML_LOG_INFO("test", "      " << c.red() << "X" << c.reset() << " " << c.dim() << func
+                                          << c.reset());
         }
     }
 
@@ -388,24 +398,34 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
         }
     }
 
-    TML_LOG_INFO("test", c.dim()
-                            << "--------------------------------------------------------------------------------"
-                            << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.dim()
+            << "--------------------------------------------------------------------------------"
+            << c.reset());
     TML_LOG_INFO("test", " " << c.red() << c.bold() << zero_coverage_modules << c.reset()
                              << " modules with 0% coverage");
-    TML_LOG_INFO("test", c.dim()
-                            << "================================================================================"
-                            << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.dim()
+            << "================================================================================"
+            << c.reset());
 
     // Priority table - modules that need tests
-    TML_LOG_INFO("test", c.cyan() << c.bold()
-                                  << "================================================================================"
-                                  << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.cyan()
+            << c.bold()
+            << "================================================================================"
+            << c.reset());
     TML_LOG_INFO("test", c.cyan() << c.bold() << "                    TEST IMPROVEMENT PRIORITIES"
                                   << c.reset());
-    TML_LOG_INFO("test", c.cyan() << c.bold()
-                                  << "================================================================================"
-                                  << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.cyan()
+            << c.bold()
+            << "================================================================================"
+            << c.reset());
 
     // Collect and sort by priority (0% with most functions first, then low coverage)
     struct PriorityModule {
@@ -451,10 +471,12 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
               });
 
     // Print critical modules (0% that are important)
-    TML_LOG_INFO("test", " " << c.red() << c.bold() << "CRITICAL (0% - high priority):" << c.reset());
-    TML_LOG_INFO("test", c.dim()
-                            << " -----------------------------------------------------------------------"
-                            << c.reset());
+    TML_LOG_INFO("test",
+                 " " << c.red() << c.bold() << "CRITICAL (0% - high priority):" << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.dim() << " -----------------------------------------------------------------------"
+                << c.reset());
 
     int critical_count = 0;
     for (const auto& pm : priority_list) {
@@ -474,9 +496,10 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
     // Print 0% coverage modules with most functions
     TML_LOG_INFO("test",
                  " " << c.red() << c.bold() << "ZERO COVERAGE (0% - most functions):" << c.reset());
-    TML_LOG_INFO("test", c.dim()
-                            << " -----------------------------------------------------------------------"
-                            << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.dim() << " -----------------------------------------------------------------------"
+                << c.reset());
 
     int zero_count = 0;
     for (const auto& pm : priority_list) {
@@ -491,11 +514,11 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
     }
 
     // Print low coverage modules
-    TML_LOG_INFO("test",
-                 " " << c.yellow() << c.bold() << "LOW COVERAGE (<30%):" << c.reset());
-    TML_LOG_INFO("test", c.dim()
-                            << " -----------------------------------------------------------------------"
-                            << c.reset());
+    TML_LOG_INFO("test", " " << c.yellow() << c.bold() << "LOW COVERAGE (<30%):" << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.dim() << " -----------------------------------------------------------------------"
+                << c.reset());
 
     int low_count = 0;
     for (const auto& pm : priority_list) {
@@ -510,19 +533,24 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
         }
     }
 
-    TML_LOG_INFO("test", c.dim()
-                            << "================================================================================"
-                            << c.reset());
+    TML_LOG_INFO(
+        "test",
+        c.dim()
+            << "================================================================================"
+            << c.reset());
 
     // Print uncovered functions by module
     if (!uncovered_by_module.empty()) {
         TML_LOG_INFO("test", c.cyan() << c.bold()
-                                      << "================================================================================"
+                                      << "========================================================="
+                                         "======================="
                                       << c.reset());
+        TML_LOG_INFO("test", c.cyan()
+                                 << c.bold() << "                    UNCOVERED FUNCTIONS BY MODULE"
+                                 << c.reset());
         TML_LOG_INFO("test", c.cyan() << c.bold()
-                                      << "                    UNCOVERED FUNCTIONS BY MODULE" << c.reset());
-        TML_LOG_INFO("test", c.cyan() << c.bold()
-                                      << "================================================================================"
+                                      << "========================================================="
+                                         "======================="
                                       << c.reset());
 
         // Sort by number of uncovered functions (most first)
@@ -539,7 +567,8 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
             shown_modules++;
 
             TML_LOG_INFO("test", " " << c.yellow() << c.bold() << module_name << c.reset() << " "
-                                     << c.dim() << "(" << funcs.size() << " uncovered)" << c.reset());
+                                     << c.dim() << "(" << funcs.size() << " uncovered)"
+                                     << c.reset());
 
             // Show up to 10 functions per module
             int shown_funcs = 0;
@@ -549,8 +578,8 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
                                                << " more" << c.reset());
                     break;
                 }
-                TML_LOG_INFO("test",
-                             "   " << c.red() << "✗" << c.reset() << " " << c.dim() << func << c.reset());
+                TML_LOG_INFO("test", "   " << c.red() << "✗" << c.reset() << " " << c.dim() << func
+                                           << c.reset());
                 shown_funcs++;
             }
         }
@@ -560,9 +589,9 @@ void print_library_coverage_report(const std::set<std::string>& covered_function
                                      << " more modules with uncovered functions" << c.reset());
         }
 
-        TML_LOG_INFO("test", c.dim()
-                                << "================================================================================"
-                                << c.reset());
+        TML_LOG_INFO("test", c.dim() << "=========================================================="
+                                        "======================"
+                                     << c.reset());
     }
 }
 

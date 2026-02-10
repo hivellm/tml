@@ -261,9 +261,8 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
 
     if (fuzz_files.empty()) {
         if (!opts.quiet) {
-            TML_LOG_INFO("test",
-                         c.yellow() << "No fuzz files found" << c.reset()
-                                    << " (looking for *.fuzz.tml)");
+            TML_LOG_INFO("test", c.yellow() << "No fuzz files found" << c.reset()
+                                            << " (looking for *.fuzz.tml)");
         }
         return 0;
     }
@@ -284,8 +283,8 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
 
     if (fuzz_files.empty()) {
         if (!opts.quiet) {
-            TML_LOG_INFO("test",
-                         c.yellow() << "No fuzz tests matched the specified pattern(s)" << c.reset());
+            TML_LOG_INFO("test", c.yellow() << "No fuzz tests matched the specified pattern(s)"
+                                            << c.reset());
         }
         return 0;
     }
@@ -473,8 +472,8 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
         summary << c.green() << c.bold() << (fuzz_files.size() - crashes_found) << " ok"
                 << c.reset() << " " << c.gray() << "(" << fuzz_files.size() << ")" << c.reset();
         TML_LOG_INFO("test", summary.str());
-        TML_LOG_INFO("test",
-                     c.bold() << "Duration      " << c.reset() << format_duration(total_duration_ms));
+        TML_LOG_INFO("test", c.bold() << "Duration      " << c.reset()
+                                      << format_duration(total_duration_ms));
 
         // Print total iterations
         int64_t total_iterations = 0;

@@ -8,7 +8,6 @@
 #include "cli/builder/compiler_setup.hpp"
 #include "cli/commands/cmd_test.hpp"
 #include "cli/utils.hpp"
-
 #include "log/log.hpp"
 
 #include <algorithm>
@@ -613,8 +612,8 @@ void CoverageCollector::print_function_report(const CoverageReport& report) {
         mod_row << " " << std::left << std::setw(30) << display_module << "│ " << std::right
                 << std::setw(4) << cov.covered << "/" << std::left << std::setw(4) << cov.total
                 << " │ " << colorize_percent(pct) << std::right << std::setw(5) << std::fixed
-                << std::setprecision(1) << pct << "%" << reset << " " << dim
-                << format_bar(pct, 15) << reset;
+                << std::setprecision(1) << pct << "%" << reset << " " << dim << format_bar(pct, 15)
+                << reset;
         TML_LOG_INFO("test", mod_row.str());
     }
 
@@ -655,9 +654,8 @@ void CoverageCollector::print_function_report(const CoverageReport& report) {
             int shown = 0;
             for (const auto& fn : cov.uncovered_funcs) {
                 if (shown >= 5) {
-                    TML_LOG_INFO("test", dim << "      ... and "
-                                             << (cov.uncovered_funcs.size() - 5) << " more"
-                                             << reset);
+                    TML_LOG_INFO("test", dim << "      ... and " << (cov.uncovered_funcs.size() - 5)
+                                             << " more" << reset);
                     break;
                 }
                 // Extract just function name from mangled name

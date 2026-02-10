@@ -32,8 +32,9 @@
 
 // Headers from include/ (no prefix needed, include/ is in path)
 #include "borrow/checker.hpp"
+#include "borrow/polonius.hpp"
 #include "codegen/c_header_gen.hpp"
-#include "codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm/llvm_ir_gen.hpp"
 #include "codegen/mir_codegen.hpp"
 #include "common.hpp"
 #include "hir/hir.hpp"
@@ -62,6 +63,7 @@
 #include <set>
 #include <sstream>
 #include <thread>
+#include <tuple>
 #ifndef _WIN32
 #include "types/module.hpp"
 

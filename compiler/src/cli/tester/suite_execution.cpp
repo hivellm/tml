@@ -223,7 +223,11 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         std::vector<TestSuite> suites_to_compile;
         std::vector<TestSuite> suites_fully_cached;
 
-        if (cache_loaded) {
+        // Skip test-result cache when using a non-default backend
+        // (the cache records results from the default LLVM backend)
+        bool skip_result_cache = (opts.backend != "llvm");
+
+        if (cache_loaded && !skip_result_cache) {
             for (auto& suite : suites) {
                 bool all_cached = true;
                 for (const auto& test_info : suite.tests) {
@@ -333,7 +337,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                                   << " tests)");
                     }
 
-                    job.result = compile_test_suite(job.suite, opts.verbose, opts.no_cache);
+                    job.result =
+                        compile_test_suite(job.suite, opts.verbose, opts.no_cache, opts.backend);
                     job.compiled = true;
                 }
             };

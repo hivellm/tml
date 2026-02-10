@@ -104,13 +104,14 @@ Source (.tml)
     ▼
 ┌──────────────────┐
 │   MIR Builder    │  → Mid-level IR (SSA form, control flow)
-│   + LLVM Codegen │     (Query: mir_build + codegen_unit)
+│   + Codegen      │     (Query: mir_build + codegen_unit)
 └──────────────────┘
     │
     ▼
 ┌──────────────────┐
-│  Embedded LLVM   │  → Object files (in-process, no clang subprocess)
-│  (IR → .obj)     │     via LLVMParseIRInContext + LLVMTargetMachineEmit
+│  Code Generation │  → Object files via pluggable backend:
+│  (Backend)       │     • LLVM (default): in-process via LLVM C API
+│                  │     • Cranelift (experimental, in development)
 └──────────────────┘
     │
     ▼
@@ -330,11 +331,12 @@ Source (.tml) → [Query Pipeline] → LLVM IR (in-memory) → Object File (.obj
   (demand-driven)  query stages      (in-process)            (in-process)
 ```
 
-#### Embedded LLVM Backend
+#### Embedded LLVM Backend (Default)
 
-The compiler links ~55 LLVM static libraries directly into the `tml` binary. LLVM IR
+The default backend. The compiler links ~55 LLVM static libraries directly into the `tml` binary. LLVM IR
 is compiled to object files **in-process** — no intermediate `.ll` files are written
-to disk (unless `--emit-ir` is specified).
+to disk (unless `--emit-ir` is specified). An experimental Cranelift backend is also
+in development (see [Section 6.4](#64-cranelift-backend-experimental)).
 
 ```cpp
 // Compile LLVM IR string directly to object file (no disk I/O for IR)
@@ -712,6 +714,50 @@ func check_borrow(place: Place, kind: BorrowKind) -> Outcome[(), BorrowError] {
 // mut ref T + mut ref T = ERROR
 ```
 
+### 4.4 Polonius Borrow Checker (Alternative)
+
+TML provides an alternative Polonius borrow checker alongside the default NLL checker. Polonius uses a Datalog-style constraint solver and is strictly more permissive.
+
+**Architecture:**
+
+```
+AST traversal (PoloniusFacts)
+  │ emit facts per expression/statement
+  ▼
+FactTable
+  ├─ loan_issued_at(Origin, Loan, Point)
+  ├─ loan_invalidated_at(Point, Loan)
+  ├─ cfg_edge(Point, Point)
+  ├─ subset(Origin, Origin, Point)
+  └─ origin_live_at(Origin, Point)
+  │
+  ▼
+PoloniusSolver (fixed-point iteration)
+  │ propagate loans through CFG + subset constraints
+  ▼
+errors(Loan, Point) → convert to BorrowError[]
+```
+
+**Core Types:**
+
+```cpp
+using OriginId = uint32_t;  // Where a reference came from
+using LoanId = uint32_t;    // A specific borrow operation
+using PointId = uint32_t;   // A program point in the CFG
+```
+
+**Two-Phase Checking:**
+1. **Location-insensitive pre-check** (`quick_check`): Ignores CFG edges, checks if any origin could ever conflict. O(n) fast path — if no conflicts, skips full solver.
+2. **Full location-sensitive solve**: Worklist-based fixed-point iteration propagating loans through CFG edges and subset constraints, filtered by origin liveness.
+
+**Integration:** Enabled via `--polonius` flag. Integrated at every `BorrowChecker` instantiation site (build, parallel build, test runner, query system). Produces identical `BorrowError` output as NLL.
+
+**Files:**
+- `compiler/include/borrow/polonius.hpp` — Types, FactTable, Solver, Checker declarations
+- `compiler/src/borrow/polonius_facts.cpp` — AST traversal, fact generation, CFG construction, liveness
+- `compiler/src/borrow/polonius_solver.cpp` — Fixed-point solver, location-insensitive pre-check
+- `compiler/src/borrow/polonius_checker.cpp` — Entry point, error conversion
+
 ## 5. Effect System Implementation
 
 ### 5.1 Effect Representation
@@ -785,18 +831,29 @@ func check_capabilities(module: ref Module) -> Outcome[(), CapError] {
 
 ## 6. Code Generation
 
-### 6.1 Target Support Matrix
+### 6.1 Backend Architecture
 
-| Target | Bootstrap | Native | Notes |
-|--------|-----------|--------|-------|
-| x86_64-linux | ✓ | ✓ | Primary |
-| x86_64-windows | ✓ | ✓ | Primary |
-| x86_64-macos | ✓ | ✓ | Primary |
-| aarch64-linux | ○ | ✓ | ARM servers |
-| aarch64-macos | ○ | ✓ | Apple Silicon |
-| wasm32 | ○ | ✓ | Web/WASI |
+TML uses a **pluggable backend architecture** that abstracts code generation behind a common interface (`CodegenBackend`). This allows multiple backends to coexist.
 
-### 6.2 LLVM Type Mapping
+| Backend | Status | Use Case |
+|---------|--------|----------|
+| **LLVM** | ✅ Production (default) | Full optimizations, LTO, debug info, all targets |
+| **Cranelift** | 🧪 Experimental (in development) | Fast compile times for debug builds. **Not ready for production use.** |
+
+The backend is selected via `--backend=llvm` (default) or `--backend=cranelift`.
+
+### 6.2 Target Support Matrix
+
+| Target | LLVM Backend | Cranelift Backend | Notes |
+|--------|-------------|-------------------|-------|
+| x86_64-linux | ✓ | 🧪 In development | Primary |
+| x86_64-windows | ✓ | 🧪 In development | Primary |
+| x86_64-macos | ✓ | 🧪 In development | Primary |
+| aarch64-linux | ✓ | ✗ Not yet | ARM servers |
+| aarch64-macos | ✓ | ✗ Not yet | Apple Silicon |
+| wasm32 | ✓ | ✗ Not yet | Web/WASI |
+
+### 6.3 LLVM Type Mapping
 
 ```cpp
 // TML Type -> LLVM Type
@@ -829,7 +886,33 @@ Outcome[T,E] -> { i8, max(T,E) }  // tag, union
 // Enum -> tagged union
 ```
 
-### 6.3 Function ABI
+### 6.4 Cranelift Backend (Experimental)
+
+> **Warning:** The Cranelift backend is under active development and is **not ready for production use**.
+
+Cranelift is being developed as an alternative code generation backend, targeting fast
+compilation for debug builds. It bypasses LLVM entirely, generating native machine code
+directly from MIR via the Cranelift code generator.
+
+**Goals:**
+- Faster debug build times (no LLVM overhead)
+- Lower memory usage during compilation
+- Simpler dependency chain (Cranelift is smaller than LLVM)
+
+**Current limitations:**
+- No optimization passes (debug-quality code only)
+- Limited target support (x86_64 only initially)
+- No LTO support
+- No debug info emission (DWARF/CodeView)
+- Incomplete feature coverage (many TML features not yet implemented)
+- Not integrated with the incremental compilation cache
+
+**Usage:**
+```bash
+tml build main.tml --backend=cranelift    # Experimental
+```
+
+### 6.5 Function ABI
 
 ```cpp
 // Calling convention: C (platform default)

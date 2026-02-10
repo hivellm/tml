@@ -145,10 +145,16 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
-    // Phase 4.5: Borrow Checking
+    // Phase 4.5: Borrow Checking (Polonius or NLL)
     phase_start = Clock::now();
-    borrow::BorrowChecker borrow_checker(env);
-    auto borrow_result = borrow_checker.check_module(module);
+    std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+    if (CompilerOptions::polonius) {
+        borrow::polonius::PoloniusChecker polonius_checker(env);
+        borrow_result = polonius_checker.check_module(module);
+    } else {
+        borrow::BorrowChecker borrow_checker(env);
+        borrow_result = borrow_checker.check_module(module);
+    }
     record_phase("borrow_check", phase_start);
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {

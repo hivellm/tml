@@ -141,6 +141,7 @@ struct TestOptions {
     bool check_leaks = true;           // Memory leak detection (enabled by default)
     bool fail_fast = false;            // Stop on first test failure
     bool backtrace = true;             // Show backtrace on test failures (enabled by default)
+    std::string backend = "llvm";      // Codegen backend ("llvm" or "cranelift")
 };
 
 // Parse test command arguments

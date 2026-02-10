@@ -31,10 +31,9 @@
 //! - Writes responses to stdout (newline-delimited JSON)
 //! - Writes logs to stderr
 
+#include "log/log.hpp"
 #include "mcp/mcp_server.hpp"
 #include "mcp/mcp_tools.hpp"
-
-#include "log/log.hpp"
 
 #include <cstring>
 #include <iostream>

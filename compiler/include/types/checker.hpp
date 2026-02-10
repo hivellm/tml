@@ -41,6 +41,7 @@ struct TypeError {
     SourceSpan span;                ///< Error location.
     std::vector<std::string> notes; ///< Additional notes and suggestions.
     std::string code;               ///< Error code (e.g., "T001"). Empty uses default.
+    bool is_cascading = false;      ///< Suppressed when a root-cause error exists.
 };
 
 /// Type checker for TML modules.

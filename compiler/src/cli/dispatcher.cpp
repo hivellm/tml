@@ -48,6 +48,7 @@
 #include "commands/cmd_cache.hpp"
 #include "commands/cmd_debug.hpp"
 #include "commands/cmd_doc.hpp"
+#include "commands/cmd_explain.hpp"
 #include "commands/cmd_format.hpp"
 #include "commands/cmd_init.hpp"
 #include "commands/cmd_lint.hpp"
@@ -151,6 +152,15 @@ int tml_main(int argc, char* argv[]) {
         return run_check(argv[2], verbose);
     }
 
+    if (command == "explain") {
+        if (argc < 3) {
+            std::cerr << "Usage: tml explain <error-code>\n";
+            std::cerr << "Example: tml explain T001\n";
+            return 1;
+        }
+        return run_explain(argv[2], verbose);
+    }
+
     if (command == "build") {
         if (argc < 3) {
             std::cerr << "Usage: tml build <file.tml> [options]\n";
@@ -169,6 +179,8 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  -O0...-O3           Set optimization level\n";
             std::cerr << "  -Os, -Oz            Optimize for size\n";
             std::cerr << "  --crate-type=<type> Output type: bin, lib, dylib, rlib\n";
+            std::cerr << "  --backend=<name>    Codegen backend: llvm (default), cranelift\n";
+            std::cerr << "  --polonius          Use Polonius borrow checker (more permissive)\n";
             std::cerr << "  --target=<triple>   Target triple (e.g., x86_64-unknown-linux-gnu)\n";
             std::cerr << "  --sysroot=<path>    Sysroot path for cross-compilation\n";
             std::cerr << "  --out-dir=<dir>     Output directory\n";
@@ -226,6 +238,10 @@ int tml_main(int argc, char* argv[]) {
         // PGO options
         bool profile_generate = false;
         std::string profile_use;
+
+        // Backend selection
+        std::string backend = "llvm";
+        bool polonius = false; // Use Polonius borrow checker
 
         // Parse command-line arguments (override manifest settings)
         for (int i = 3; i < argc; ++i) {
@@ -346,6 +362,15 @@ int tml_main(int argc, char* argv[]) {
                 tml::CompilerOptions::use_external_tools = true;
             } else if (arg == "--legacy") {
                 use_legacy = true;
+            } else if (arg.starts_with("--backend=")) {
+                backend = arg.substr(10);
+                if (backend != "llvm" && backend != "cranelift") {
+                    TML_LOG_ERROR("build",
+                                  "Unknown backend '" << backend << "'. Valid: llvm, cranelift");
+                    return 1;
+                }
+            } else if (arg == "--polonius") {
+                polonius = true;
             }
         }
 
@@ -381,6 +406,9 @@ int tml_main(int argc, char* argv[]) {
         opts.defines = std::move(defines);
         opts.profile_generate = profile_generate;
         opts.profile_use = std::move(profile_use);
+        opts.backend = std::move(backend);
+        opts.polonius = polonius;
+        tml::CompilerOptions::polonius = polonius;
 
         // Default: query-based build (demand-driven with incremental compilation)
         // Use --legacy to fall back to the traditional pipeline
@@ -458,6 +486,13 @@ int tml_main(int argc, char* argv[]) {
                 }
             } else if (arg == "--backtrace") {
                 CompilerOptions::backtrace = true;
+            } else if (arg.starts_with("--backend=")) {
+                opts.backend = arg.substr(10);
+                if (opts.backend != "llvm" && opts.backend != "cranelift") {
+                    TML_LOG_ERROR("run", "Unknown backend '" << opts.backend
+                                                             << "'. Valid: llvm, cranelift");
+                    return 1;
+                }
             } else {
                 opts.args.push_back(arg);
             }

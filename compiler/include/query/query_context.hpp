@@ -45,6 +45,9 @@ struct QueryOptions {
 
     // Incremental compilation
     bool incremental = true;
+
+    // Backend selection ("llvm" or "cranelift")
+    std::string backend = "llvm";
 };
 
 /// Central query context for the compilation session.

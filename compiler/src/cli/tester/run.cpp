@@ -163,6 +163,14 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.patterns.push_back(arg.substr(8));
         } else if (arg.starts_with("--suite=")) {
             opts.patterns.push_back(arg.substr(8));
+        } else if (arg.starts_with("--backend=")) {
+            opts.backend = arg.substr(10);
+            if (opts.backend != "llvm" && opts.backend != "cranelift") {
+                TML_LOG_ERROR("test",
+                              "Unknown backend '" << opts.backend << "'. Valid: llvm, cranelift");
+            }
+        } else if (arg == "--polonius") {
+            CompilerOptions::polonius = true;
         } else if (!arg.starts_with("--")) {
             opts.patterns.push_back(arg);
         }

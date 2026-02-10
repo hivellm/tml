@@ -69,7 +69,8 @@ Available tools:
 )";
             return 0;
         } else if (arg.starts_with("-")) {
-            TML_LOG_ERROR("mcp", "Unknown option: " << arg << ". Use --help for usage information.");
+            TML_LOG_ERROR("mcp",
+                          "Unknown option: " << arg << ". Use --help for usage information.");
             return 1;
         }
     }

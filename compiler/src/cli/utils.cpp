@@ -56,6 +56,7 @@ void print_usage() {
               << "  init      Initialize a new project\n"
               << "  deps      List project dependencies\n"
               << "  remove    Remove a dependency from tml.toml\n"
+              << "  explain   Show detailed error code explanation\n"
               << "  lex       Tokenize a file (debug)\n"
               << "  parse     Parse a file (debug)\n"
               << "\nOptions:\n"

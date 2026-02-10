@@ -154,6 +154,11 @@ struct CompilerOptions {
     /// Enable backtrace printing on panic.
     /// When enabled, the runtime prints a stack trace when panic() or assert() fails.
     static inline bool backtrace = false;
+
+    /// Use Polonius borrow checker instead of NLL.
+    /// Polonius is more permissive, accepting programs where borrows
+    /// are conditionally taken across branches.
+    static inline bool polonius = false;
 };
 
 // ============================================================================
