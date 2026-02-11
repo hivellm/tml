@@ -1,0 +1,41 @@
+// Tests for std::json::builder - Builder nested structures
+use test
+use std::json::builder::{Builder, object, array}
+
+@test
+func test_builder_nested_object() -> I32 {
+    let b: Builder = Builder::new()
+    b.obj()
+    b.k("inner")
+    b.obj()
+    b.ks("x", "y")
+    b.end_obj()
+    b.end_obj()
+    let result: Str = b.build()
+    assert_eq(result, "{\"inner\":{\"x\":\"y\"}}", "nested object")
+    b.drop()
+    return 0
+}
+
+@test
+func test_object_convenience() -> I32 {
+    let b: Builder = object()
+    b.ks("key", "val")
+    b.end_obj()
+    let result: Str = b.build()
+    assert_eq(result, "{\"key\":\"val\"}", "object() convenience")
+    b.drop()
+    return 0
+}
+
+@test
+func test_array_convenience() -> I32 {
+    let b: Builder = array()
+    b.s("a")
+    b.s("b")
+    b.end_arr()
+    let result: Str = b.build()
+    assert_eq(result, "[\"a\",\"b\"]", "array() convenience")
+    b.drop()
+    return 0
+}

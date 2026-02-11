@@ -1,0 +1,26 @@
+// Tests for core::alloc::heap - Heap[T] smart pointer
+use test
+use core::alloc::heap::{Heap}
+
+@test
+func test_heap_new_get() -> I32 {
+    let h: Heap[I32] = Heap::new(42 as I32)
+    assert_eq(h.get(), 42 as I32, "Heap::new stores value")
+    return 0
+}
+
+@test
+func test_heap_set() -> I32 {
+    var h: Heap[I32] = Heap::new(10 as I32)
+    h.set(99 as I32)
+    assert_eq(h.get(), 99 as I32, "Heap::set updates value")
+    return 0
+}
+
+@test
+func test_heap_into_inner() -> I32 {
+    let h: Heap[I32] = Heap::new(55 as I32)
+    let val: I32 = h.into_inner()
+    assert_eq(val, 55 as I32, "into_inner returns stored value")
+    return 0
+}

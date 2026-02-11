@@ -1,0 +1,38 @@
+// Tests for std::collections::class_collections - ArrayList contains/indexOf
+use test
+use std::collections::class_collections::{ArrayList}
+
+@test
+func test_arraylist_contains() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(5 as I32)
+    list.add(10 as I32)
+    list.add(15 as I32)
+    assert(list.contains(10 as I32), "contains existing element")
+    assert(not list.contains(99 as I32), "not contains missing element")
+    return 0
+}
+
+@test
+func test_arraylist_index_of() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(100 as I32)
+    list.add(200 as I32)
+    list.add(300 as I32)
+    assert_eq(list.index_of(200 as I32), 1 as I64, "index_of finds element")
+    assert_eq(list.index_of(999 as I32), -1 as I64, "index_of returns -1 for missing")
+    return 0
+}
+
+@test
+func test_arraylist_remove() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(1 as I32)
+    list.add(2 as I32)
+    list.add(3 as I32)
+    let removed: Bool = list.remove(2 as I32)
+    assert(removed, "remove returns true")
+    assert_eq(list.count(), 2 as I64, "count after remove")
+    assert(not list.contains(2 as I32), "removed element not found")
+    return 0
+}

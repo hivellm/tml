@@ -1,0 +1,50 @@
+// Tests for std::object - Object to_string_format virtual method
+use test
+use std::object::*
+use std::interfaces::*
+
+class Token extends Object {
+    code: I32
+
+    static func create(c: I32) -> Token {
+        return Token { code: c }
+    }
+
+    override func to_string(this) -> Str {
+        return "Token"
+    }
+
+    override func to_string_format(this, format: Str) -> Str {
+        return "Token[fmt]"
+    }
+
+    override func get_type(this) -> Str {
+        return "Token"
+    }
+
+    override func get_hash_code(this) -> I64 {
+        return this.code as I64
+    }
+}
+
+@test
+func test_token_to_string() -> I32 {
+    let t: Token = Token::create(1)
+    assert_eq(t.to_string(), "Token", "Token.to_string")
+    return 0
+}
+
+@test
+func test_token_to_string_format() -> I32 {
+    let t: Token = Token::create(2)
+    assert_eq(t.to_string_format("any"), "Token[fmt]", "Token.to_string_format override")
+    return 0
+}
+
+@test
+func test_token_get_type_and_hash() -> I32 {
+    let t: Token = Token::create(55)
+    assert_eq(t.get_type(), "Token", "Token.get_type")
+    assert_eq(t.get_hash_code(), 55 as I64, "Token hash code")
+    return 0
+}

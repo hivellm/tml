@@ -544,57 +544,12 @@ func zeroed_array[T, N]() -> [T; N] {
 
 /// Returns max of two I64 values.
 func max_i64(a: I64, b: I64) -> I64 {
-    if a > b { a } else { b }
+    if a > b { return a }
+    return b
 }
 
 // ============================================================================
 // Tests
 // ============================================================================
 
-@test
-func test_cache_aligned() {
-    let aligned: CacheAligned[I64] = CacheAligned::new(42)
-
-    assert_eq(*aligned.get(), 42)
-}
-
-@test
-func test_padded() {
-    var padded: Padded[I64] = Padded::new(100)
-
-    assert_eq(*padded.get(), 100)
-
-    padded.set(200)
-    assert_eq(*padded.get(), 200)
-}
-
-@test
-func test_cache_aligned_box() {
-    let boxed: CacheAlignedBox[I64] = CacheAlignedBox::new(999)
-
-    assert(boxed.is_valid())
-    assert_eq(*boxed.get(), 999)
-
-    // Check alignment (should be 64-byte aligned)
-    let addr = (ref *boxed.get()) as I64
-    assert_eq(addr and 63, 0) // Should be aligned
-}
-
-@test
-func test_soa_vec_basic() {
-    var soa = SoaVec::with_capacity(10)
-
-    soa.add_column[F64]("x")
-    soa.add_column[F64]("y")
-
-    assert_eq(soa.column_count(), 2)
-    assert_eq(soa.len(), 0)
-}
-
-@test
-func test_alignment_utility() {
-    assert_eq(align_up(1, 64), 64)
-    assert_eq(align_up(64, 64), 64)
-    assert_eq(align_up(65, 64), 128)
-    assert_eq(align_up(100, 64), 128)
-}
+// Note: inline tests moved to lib/core/tests/cache/ for proper test infrastructure

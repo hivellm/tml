@@ -1,0 +1,31 @@
+// Tests for std::net::sys - SocketType enum
+use test
+use std::net::sys::{SocketType}
+
+@test
+func test_socket_type_to_raw() -> I32 {
+    assert_eq(SocketType::Stream.to_raw(), 1 as I32, "Stream is SOCK_STREAM(1)")
+    assert_eq(SocketType::Datagram.to_raw(), 2 as I32, "Datagram is SOCK_DGRAM(2)")
+    assert_eq(SocketType::Raw.to_raw(), 3 as I32, "Raw is SOCK_RAW(3)")
+    return 0
+}
+
+@test
+func test_socket_type_from_raw_valid() -> I32 {
+    let stream: Maybe[SocketType] = SocketType::from_raw(1 as I32)
+    assert(stream.is_just(), "from_raw(1) should be Just")
+    let dgram: Maybe[SocketType] = SocketType::from_raw(2 as I32)
+    assert(dgram.is_just(), "from_raw(2) should be Just")
+    let raw: Maybe[SocketType] = SocketType::from_raw(3 as I32)
+    assert(raw.is_just(), "from_raw(3) should be Just")
+    return 0
+}
+
+@test
+func test_socket_type_from_raw_invalid() -> I32 {
+    let invalid: Maybe[SocketType] = SocketType::from_raw(0 as I32)
+    assert(invalid.is_nothing(), "from_raw(0) should be Nothing")
+    let invalid2: Maybe[SocketType] = SocketType::from_raw(99 as I32)
+    assert(invalid2.is_nothing(), "from_raw(99) should be Nothing")
+    return 0
+}

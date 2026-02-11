@@ -1,0 +1,36 @@
+// Tests for std::collections::class_collections - Queue
+use test
+use std::collections::class_collections::{Queue}
+
+@test
+func test_queue_create() -> I32 {
+    let q: Queue[I32] = Queue::create()
+    assert_eq(q.count(), 0 as I64, "new Queue is empty")
+    assert(q.is_empty(), "new Queue is_empty")
+    return 0
+}
+
+@test
+func test_queue_enqueue_dequeue() -> I32 {
+    var q: Queue[I32] = Queue::create()
+    q.enqueue(10 as I32)
+    q.enqueue(20 as I32)
+    q.enqueue(30 as I32)
+    assert_eq(q.count(), 3 as I64, "count after 3 enqueues")
+    let first: Maybe[I32] = q.dequeue()
+    assert(first.is_just(), "dequeue returns Just")
+    assert_eq(q.count(), 2 as I64, "count after dequeue")
+    return 0
+}
+
+@test
+func test_queue_peek_empty() -> I32 {
+    var q: Queue[I32] = Queue::create()
+    let empty: Maybe[I32] = q.peek()
+    assert(empty.is_nothing(), "peek on empty returns Nothing")
+    q.enqueue(42 as I32)
+    let val: Maybe[I32] = q.peek()
+    assert(val.is_just(), "peek on non-empty returns Just")
+    assert_eq(q.count(), 1 as I64, "peek does not remove")
+    return 0
+}

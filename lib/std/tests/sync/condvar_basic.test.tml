@@ -1,0 +1,27 @@
+// Tests for std::sync::condvar - Condvar basic operations
+use test
+use std::sync::condvar::{Condvar}
+
+@test
+func test_condvar_new() -> I32 {
+    let cv: Condvar = Condvar::new()
+    // Condvar can be created without error
+    // notify on empty condvar is a no-op
+    return 0
+}
+
+@test
+func test_condvar_notify_one_noop() -> I32 {
+    var cv: Condvar = Condvar::new()
+    // Calling notify_one when nobody is waiting should not crash
+    cv.notify_one()
+    return 0
+}
+
+@test
+func test_condvar_notify_all_noop() -> I32 {
+    var cv: Condvar = Condvar::new()
+    // Calling notify_all when nobody is waiting should not crash
+    cv.notify_all()
+    return 0
+}

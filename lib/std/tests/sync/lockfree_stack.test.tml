@@ -1,0 +1,39 @@
+// Tests for std::sync::stack - LockFreeStack
+use test
+use std::sync::stack::{LockFreeStack}
+
+@test
+func test_stack_new_empty() -> I32 {
+    let s: LockFreeStack[I32] = LockFreeStack::new()
+    assert(s.is_empty(), "new stack should be empty")
+    assert_eq(s.len(), 0 as I64, "new stack len is 0")
+    return 0
+}
+
+@test
+func test_stack_push_pop() -> I32 {
+    var s: LockFreeStack[I32] = LockFreeStack::new()
+    s.push(10 as I32)
+    s.push(20 as I32)
+    s.push(30 as I32)
+    assert_eq(s.len(), 3 as I64, "len after 3 pushes")
+    assert(not s.is_empty(), "stack should not be empty")
+    return 0
+}
+
+@test
+func test_stack_lifo_order() -> I32 {
+    var s: LockFreeStack[I32] = LockFreeStack::new()
+    s.push(1 as I32)
+    s.push(2 as I32)
+    s.push(3 as I32)
+    let top: Maybe[I32] = s.pop()
+    assert(top.is_just(), "pop should return Just")
+    let second: Maybe[I32] = s.pop()
+    assert(second.is_just(), "second pop should return Just")
+    let third: Maybe[I32] = s.pop()
+    assert(third.is_just(), "third pop should return Just")
+    let empty: Maybe[I32] = s.pop()
+    assert(empty.is_nothing(), "pop on empty should return Nothing")
+    return 0
+}

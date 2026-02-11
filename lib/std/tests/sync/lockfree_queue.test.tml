@@ -1,0 +1,39 @@
+// Tests for std::sync::queue - LockFreeQueue
+use test
+use std::sync::queue::{LockFreeQueue}
+
+@test
+func test_queue_new_empty() -> I32 {
+    let q: LockFreeQueue[I32] = LockFreeQueue::new()
+    assert(q.is_empty(), "new queue should be empty")
+    assert_eq(q.len(), 0 as I64, "new queue len is 0")
+    return 0
+}
+
+@test
+func test_queue_push_pop() -> I32 {
+    var q: LockFreeQueue[I32] = LockFreeQueue::new()
+    q.push(10 as I32)
+    q.push(20 as I32)
+    q.push(30 as I32)
+    assert_eq(q.len(), 3 as I64, "len after 3 pushes")
+    assert(not q.is_empty(), "queue should not be empty")
+    return 0
+}
+
+@test
+func test_queue_fifo_order() -> I32 {
+    var q: LockFreeQueue[I32] = LockFreeQueue::new()
+    q.push(1 as I32)
+    q.push(2 as I32)
+    q.push(3 as I32)
+    let first: Maybe[I32] = q.pop()
+    assert(first.is_just(), "pop should return Just")
+    let second: Maybe[I32] = q.pop()
+    assert(second.is_just(), "second pop should return Just")
+    let third: Maybe[I32] = q.pop()
+    assert(third.is_just(), "third pop should return Just")
+    let empty: Maybe[I32] = q.pop()
+    assert(empty.is_nothing(), "pop on empty should return Nothing")
+    return 0
+}

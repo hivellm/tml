@@ -1,0 +1,36 @@
+// Tests for std::collections::class_collections - Stack
+use test
+use std::collections::class_collections::{Stack}
+
+@test
+func test_stack_create() -> I32 {
+    let s: Stack[I32] = Stack::create()
+    assert_eq(s.count(), 0 as I64, "new Stack is empty")
+    assert(s.is_empty(), "new Stack is_empty")
+    return 0
+}
+
+@test
+func test_stack_push_pop() -> I32 {
+    var s: Stack[I32] = Stack::create()
+    s.push(10 as I32)
+    s.push(20 as I32)
+    s.push(30 as I32)
+    assert_eq(s.count(), 3 as I64, "count after 3 pushes")
+    let top: Maybe[I32] = s.pop()
+    assert(top.is_just(), "pop returns Just")
+    assert_eq(s.count(), 2 as I64, "count after pop")
+    return 0
+}
+
+@test
+func test_stack_peek_empty() -> I32 {
+    var s: Stack[I32] = Stack::create()
+    let empty: Maybe[I32] = s.peek()
+    assert(empty.is_nothing(), "peek on empty returns Nothing")
+    s.push(42 as I32)
+    let val: Maybe[I32] = s.peek()
+    assert(val.is_just(), "peek on non-empty returns Just")
+    assert_eq(s.count(), 1 as I64, "peek does not remove")
+    return 0
+}

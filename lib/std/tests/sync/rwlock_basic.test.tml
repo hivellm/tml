@@ -1,0 +1,32 @@
+// Tests for std::sync::rwlock - RwLock basic operations
+use test
+use std::sync::rwlock::{RwLock}
+
+@test
+func test_rwlock_new() -> I32 {
+    var lock: RwLock[I32] = RwLock::new(42 as I32)
+    let guard = lock.read()
+    assert_eq(*guard.get(), 42 as I32, "RwLock::new stores value")
+    return 0
+}
+
+@test
+func test_rwlock_write() -> I32 {
+    var lock: RwLock[I32] = RwLock::new(0 as I32)
+    {
+        let mut w = lock.write()
+        *w.get_mut() = 99 as I32
+    }
+    let r = lock.read()
+    assert_eq(*r.get(), 99 as I32, "write should update value")
+    return 0
+}
+
+@test
+func test_rwlock_get_mut() -> I32 {
+    var lock: RwLock[I32] = RwLock::new(5 as I32)
+    *lock.get_mut() = 10 as I32
+    let r = lock.read()
+    assert_eq(*r.get(), 10 as I32, "get_mut should update directly")
+    return 0
+}

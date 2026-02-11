@@ -1,0 +1,26 @@
+// Tests for core::cache - Padded[T] false sharing prevention
+use test
+use core::cache::{Padded}
+
+@test
+func test_padded_new() -> I32 {
+    let p: Padded[I32] = Padded::new(100 as I32)
+    assert_eq(*p.get(), 100 as I32, "Padded stores value")
+    return 0
+}
+
+@test
+func test_padded_set() -> I32 {
+    var p: Padded[I32] = Padded::new(0 as I32)
+    p.set(42 as I32)
+    assert_eq(*p.get(), 42 as I32, "Padded::set updates value")
+    return 0
+}
+
+@test
+func test_padded_into_inner() -> I32 {
+    let p: Padded[I64] = Padded::new(777 as I64)
+    let val: I64 = p.into_inner()
+    assert_eq(val, 777 as I64, "into_inner returns stored value")
+    return 0
+}

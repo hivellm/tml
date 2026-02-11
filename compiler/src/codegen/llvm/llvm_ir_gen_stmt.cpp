@@ -993,6 +993,100 @@ void LLVMIRGen::gen_tuple_pattern_binding(const parser::TuplePattern& pattern,
             // Recursively handle nested tuple patterns
             gen_tuple_pattern_binding(elem_pattern.as<parser::TuplePattern>(), elem_val, elem_type,
                                       semantic_elem);
+        } else if (elem_pattern.is<parser::EnumPattern>()) {
+            // Handle enum destructuring inside tuple patterns
+            // e.g., (Just(a), Just(b)) where each element is an EnumPattern
+            const auto& enum_pat = elem_pattern.as<parser::EnumPattern>();
+
+            if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
+                // The element is an enum struct { i32, payload... }
+                // Extract payload pointer (field index 1)
+                std::string payload_ptr = fresh_reg();
+                emit_line("  " + payload_ptr + " = getelementptr inbounds " + elem_type +
+                          ", ptr " + elem_ptr + ", i32 0, i32 1");
+
+                // Determine the payload type from semantic type info
+                types::TypePtr payload_type = nullptr;
+                if (semantic_elem && semantic_elem->is<types::NamedType>()) {
+                    const auto& named = semantic_elem->as<types::NamedType>();
+                    std::string variant_name;
+                    if (!enum_pat.path.segments.empty()) {
+                        variant_name = enum_pat.path.segments.back();
+                    }
+
+                    if (named.name == "Maybe" && !named.type_args.empty()) {
+                        if (variant_name == "Just") {
+                            payload_type = named.type_args[0];
+                        }
+                    } else if (named.name == "Outcome" && named.type_args.size() >= 2) {
+                        if (variant_name == "Ok") {
+                            payload_type = named.type_args[0];
+                        } else if (variant_name == "Err") {
+                            payload_type = named.type_args[1];
+                        }
+                    } else {
+                        // Look up the enum definition for other enum types
+                        auto enum_def = env_.lookup_enum(named.name);
+                        if (enum_def.has_value()) {
+                            for (const auto& [var_name, var_payloads] : enum_def->variants) {
+                                if (var_name == variant_name && !var_payloads.empty()) {
+                                    payload_type = var_payloads[0];
+                                    break;
+                                }
+                            }
+                        }
+                        // Substitute type parameters if needed
+                        if (payload_type && !named.type_args.empty()) {
+                            std::unordered_map<std::string, types::TypePtr> type_subs;
+                            auto enum_def2 = env_.lookup_enum(named.name);
+                            if (enum_def2 && !enum_def2->type_params.empty()) {
+                                for (size_t j = 0; j < enum_def2->type_params.size() &&
+                                                    j < named.type_args.size();
+                                     ++j) {
+                                    type_subs[enum_def2->type_params[j]] = named.type_args[j];
+                                }
+                            }
+                            if (!type_subs.empty()) {
+                                payload_type = types::substitute_type(payload_type, type_subs);
+                            }
+                        }
+                    }
+                }
+
+                std::string bound_type =
+                    payload_type ? llvm_type_from_semantic(payload_type, true) : "i64";
+
+                // Bind the payload variable(s)
+                const auto& payload_pat = enum_pat.payload->at(0);
+                if (payload_pat->is<parser::IdentPattern>()) {
+                    const auto& ident = payload_pat->as<parser::IdentPattern>();
+                    if (!ident.name.empty() && ident.name != "_") {
+                        if (bound_type.starts_with("%struct.") || bound_type.starts_with("{")) {
+                            // Struct/tuple type - variable is the pointer
+                            locals_[ident.name] =
+                                VarInfo{payload_ptr, bound_type, payload_type, std::nullopt};
+                        } else {
+                            // Primitive type - load from payload
+                            std::string payload_val = fresh_reg();
+                            emit_line("  " + payload_val + " = load " + bound_type + ", ptr " +
+                                      payload_ptr);
+                            std::string var_alloca = fresh_reg();
+                            emit_line("  " + var_alloca + " = alloca " + bound_type);
+                            emit_line("  store " + bound_type + " " + payload_val + ", ptr " +
+                                      var_alloca);
+                            locals_[ident.name] =
+                                VarInfo{var_alloca, bound_type, payload_type, std::nullopt};
+                        }
+                    }
+                } else if (payload_pat->is<parser::TuplePattern>()) {
+                    // Nested tuple in enum payload: e.g., Ok((a, b))
+                    std::string payload_val = fresh_reg();
+                    emit_line("  " + payload_val + " = load " + bound_type + ", ptr " +
+                              payload_ptr);
+                    gen_tuple_pattern_binding(payload_pat->as<parser::TuplePattern>(), payload_val,
+                                              bound_type, payload_type);
+                }
+            }
         }
     }
 }
