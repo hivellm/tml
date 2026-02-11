@@ -929,6 +929,21 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     continue; // Skip if we couldn't determine the type name
                 }
 
+                // Register behavior implementation (e.g., impl[T] Drop for MutexGuard[T])
+                // This is critical for is_trivially_destructible() to detect Drop impls
+                // on imported library types, so that drop calls are emitted at scope exit.
+                if (impl_decl.trait_type && impl_decl.trait_type->is<parser::NamedType>()) {
+                    const auto& trait_named = impl_decl.trait_type->as<parser::NamedType>();
+                    if (!trait_named.path.segments.empty()) {
+                        std::string behavior_name = trait_named.path.segments.back();
+                        register_impl(type_name, behavior_name);
+                        mod.behavior_impls[type_name].push_back(behavior_name);
+                        TML_DEBUG_LN("[MODULE] Registered behavior impl: "
+                                     << type_name << " implements " << behavior_name
+                                     << " in module " << module_path);
+                    }
+                }
+
                 // Extract methods from impl block (methods is std::vector<FuncDecl>)
                 for (const auto& func : impl_decl.methods) {
                     // Only include public methods
@@ -1627,6 +1642,24 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     }
                 }
             }
+            // Also check class declarations for public methods with bodies
+            else if (decl->is<parser::ClassDecl>()) {
+                const auto& cls = decl->as<parser::ClassDecl>();
+                for (const auto& method : cls.methods) {
+                    if (method.vis == parser::MemberVisibility::Public && !method.is_abstract &&
+                        method.body.has_value()) {
+                        mod.has_pure_tml_functions = true;
+                        break;
+                    }
+                }
+            }
+            // Modules with pub const declarations need codegen for constant registration
+            else if (decl->is<parser::ConstDecl>()) {
+                const auto& const_decl = decl->as<parser::ConstDecl>();
+                if (const_decl.vis == parser::Visibility::Public) {
+                    mod.has_pure_tml_functions = true;
+                }
+            }
         }
         if (!src.empty()) {
             combined_source += src + "\n";
@@ -1703,6 +1736,26 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             // Copy private import paths (for glob imports like `use std::zlib::constants::*`)
             std::vector<std::string> private_import_sources = cached_module->private_imports;
 
+            // Register behavior impls from cached module (e.g., Drop for MutexGuard)
+            // Each TypeEnv has its own behavior_impls_, so we must re-register
+            for (const auto& [type_name, behaviors] : cached_module->behavior_impls) {
+                for (const auto& behavior_name : behaviors) {
+                    register_impl(type_name, behavior_name);
+                }
+            }
+
+            // Fallback: if behavior_impls is empty (old cache format), infer Drop impls
+            // from function names like "MutexGuard::drop" in the module's functions map
+            if (cached_module->behavior_impls.empty()) {
+                for (const auto& [func_name, _sig] : cached_module->functions) {
+                    if (func_name.size() > 6 &&
+                        func_name.substr(func_name.size() - 6) == "::drop") {
+                        std::string type_name = func_name.substr(0, func_name.size() - 6);
+                        register_impl(type_name, "Drop");
+                    }
+                }
+            }
+
             module_registry_->register_module(module_path, *cached_module);
 
             // Load re-export source modules to ensure they're in the current registry
@@ -1743,6 +1796,24 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                 re_export_sources.push_back(re_export.source_path);
             }
             std::vector<std::string> private_import_sources = cached->private_imports;
+
+            // Register behavior impls from binary-cached module
+            for (const auto& [type_name, behaviors] : cached->behavior_impls) {
+                for (const auto& behavior_name : behaviors) {
+                    register_impl(type_name, behavior_name);
+                }
+            }
+
+            // Fallback: if behavior_impls is empty (old cache format), infer Drop impls
+            if (cached->behavior_impls.empty()) {
+                for (const auto& [func_name, _sig] : cached->functions) {
+                    if (func_name.size() > 6 &&
+                        func_name.substr(func_name.size() - 6) == "::drop") {
+                        std::string type_name = func_name.substr(0, func_name.size() - 6);
+                        register_impl(type_name, "Drop");
+                    }
+                }
+            }
 
             GlobalModuleCache::instance().put(module_path, *cached);
             module_registry_->register_module(module_path, std::move(*cached));
@@ -1819,6 +1890,69 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
         }
 
         TML_LOG_ERROR("types", "Test module file not found");
+        return false;
+    }
+
+    // Test library submodules - load from lib/test/src/
+    if (module_path.substr(0, 6) == "test::") {
+        std::string cached = get_cached_path(module_path);
+        if (!cached.empty()) {
+            TML_DEBUG_LN("[MODULE] Path cache hit: " << module_path);
+            return load_module_from_file(module_path, cached);
+        }
+        if (is_known_not_found(module_path)) {
+            if (!silent) {
+                TML_LOG_ERROR("types", "test module not found: " << module_path);
+            }
+            return false;
+        }
+
+        std::string module_name = module_path.substr(6);
+        std::string fs_module_path = module_name;
+        size_t pos = 0;
+        while ((pos = fs_module_path.find("::", pos)) != std::string::npos) {
+            fs_module_path.replace(pos, 2, "/");
+            pos += 1;
+        }
+
+        // Try cached library root first
+        std::string resolved = resolve_lib_module_path("test", "src", fs_module_path);
+        if (!resolved.empty()) {
+            cache_resolved_path(module_path, resolved);
+            TML_DEBUG_LN("[MODULE] Resolved test module: " << module_path << " -> " << resolved);
+            return load_module_from_file(module_path, resolved);
+        }
+
+        // Fallback: try all relative paths
+        auto cwd = std::filesystem::current_path();
+        std::vector<std::filesystem::path> search_paths = {
+            std::filesystem::path("lib") / "test" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("lib") / "test" / "src" / fs_module_path / "mod.tml",
+            std::filesystem::path("..") / ".." / "lib" / "test" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("..") / ".." / "lib" / "test" / "src" / fs_module_path /
+                "mod.tml",
+            std::filesystem::path("..") / "lib" / "test" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("..") / "lib" / "test" / "src" / fs_module_path / "mod.tml",
+            cwd / "lib" / "test" / "src" / (fs_module_path + ".tml"),
+            cwd / "lib" / "test" / "src" / fs_module_path / "mod.tml",
+        };
+
+        TML_DEBUG_LN("[MODULE] Looking for test module: " << module_path << " (fs_path: "
+                                                          << fs_module_path << ")");
+        for (const auto& module_file : search_paths) {
+            TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
+            if (std::filesystem::exists(module_file)) {
+                TML_DEBUG_LN("[MODULE]   FOUND!");
+                std::string res = module_file.string();
+                cache_resolved_path(module_path, res);
+                return load_module_from_file(module_path, res);
+            }
+        }
+
+        if (!silent) {
+            TML_LOG_ERROR("types", "test module not found: " << module_path);
+        }
+        cache_not_found(module_path);
         return false;
     }
 

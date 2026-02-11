@@ -1,0 +1,24 @@
+// Tests for std::os process and environment functions
+use test
+use std::os
+
+@test
+func test_pid_positive() -> I32 {
+    let p: I32 = os::pid()
+    assert(p > 0, "pid() should be positive")
+    return 0
+}
+
+@test
+func test_username_non_empty() -> I32 {
+    let u: Str = os::username()
+    assert(u.len() > 0, "username() should return non-empty string")
+    return 0
+}
+
+@test
+func test_endianness_le_or_be() -> I32 {
+    let e: Str = os::endianness()
+    assert(e == "LE" or e == "BE", "endianness() should be LE or BE")
+    return 0
+}

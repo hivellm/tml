@@ -1,0 +1,29 @@
+// Tests for std::json array access
+use test
+use std::json::types::{Json, parse_or_panic}
+
+@test
+func test_json_array_basic() -> I32 {
+    let j: Json = parse_or_panic("[1, 2, 3]")
+    assert(j.is_array(), "should be an array")
+    assert(not j.is_object(), "array is not object")
+    assert(not j.is_string(), "array is not string")
+    assert_eq(j.len(), 3 as I64, "should have 3 elements")
+    return 0
+}
+
+@test
+func test_json_array_empty() -> I32 {
+    let j: Json = parse_or_panic("[]")
+    assert(j.is_array(), "should be an array")
+    assert_eq(j.len(), 0 as I64, "empty array should have 0 elements")
+    return 0
+}
+
+@test
+func test_json_array_mixed_types() -> I32 {
+    let j: Json = parse_or_panic("[1, \"hello\", true, null]")
+    assert(j.is_array(), "should be an array")
+    assert_eq(j.len(), 4 as I64, "should have 4 elements")
+    return 0
+}

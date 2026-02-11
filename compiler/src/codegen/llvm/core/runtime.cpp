@@ -228,8 +228,14 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @f64_to_string(double)"); // F64.to_string() method
     emit_line("declare ptr @f32_to_string(float)");  // F32.to_string() method
     emit_line("declare ptr @float_to_exp(double, i32)");
+    emit_line("declare ptr @f64_to_string_precision(double, i64)");
+    emit_line("declare ptr @f32_to_string_precision(float, i64)");
+    emit_line("declare ptr @f64_to_exp_string(double, i32)");
+    emit_line("declare ptr @f32_to_exp_string(float, i32)");
     emit_line("declare i32 @f64_is_nan(double)");
     emit_line("declare i32 @f64_is_infinite(double)");
+    emit_line("declare i32 @f32_is_nan(float)");
+    emit_line("declare i32 @f32_is_infinite(float)");
     emit_line("declare double @int_to_float(i32)");
     emit_line("declare double @i64_to_float(i64)");
     emit_line("declare i32 @float_to_int(double)");
@@ -701,6 +707,22 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["str_to_uppercase"] = FuncInfo{"@str_to_upper", "ptr (ptr)", "ptr", {"ptr"}};
     functions_["str_to_lowercase"] = FuncInfo{"@str_to_lower", "ptr (ptr)", "ptr", {"ptr"}};
 
+    // Register float formatting runtime functions for lowlevel calls from core::fmt::float
+    functions_["f64_to_string"] = FuncInfo{"@f64_to_string", "ptr (double)", "ptr", {"double"}};
+    functions_["f32_to_string"] = FuncInfo{"@f32_to_string", "ptr (float)", "ptr", {"float"}};
+    functions_["f64_to_string_precision"] =
+        FuncInfo{"@f64_to_string_precision", "ptr (double, i64)", "ptr", {"double", "i64"}};
+    functions_["f32_to_string_precision"] =
+        FuncInfo{"@f32_to_string_precision", "ptr (float, i64)", "ptr", {"float", "i64"}};
+    functions_["f64_to_exp_string"] =
+        FuncInfo{"@f64_to_exp_string", "ptr (double, i32)", "ptr", {"double", "i32"}};
+    functions_["f32_to_exp_string"] =
+        FuncInfo{"@f32_to_exp_string", "ptr (float, i32)", "ptr", {"float", "i32"}};
+    functions_["f64_is_nan"] = FuncInfo{"@f64_is_nan", "i32 (double)", "i32", {"double"}};
+    functions_["f64_is_infinite"] = FuncInfo{"@f64_is_infinite", "i32 (double)", "i32", {"double"}};
+    functions_["f32_is_nan"] = FuncInfo{"@f32_is_nan", "i32 (float)", "i32", {"float"}};
+    functions_["f32_is_infinite"] = FuncInfo{"@f32_is_infinite", "i32 (float)", "i32", {"float"}};
+
     // StringBuilder utilities (matches runtime/string.c)
     emit_line("; StringBuilder utilities");
     emit_line("declare ptr @strbuilder_create(i64)");
@@ -945,6 +967,75 @@ void LLVMIRGen::emit_runtime_decls() {
     declared_externals_.insert("sys_wsa_startup");
     emit_line("declare void @sys_wsa_cleanup()");
     declared_externals_.insert("sys_wsa_cleanup");
+    emit_line("");
+
+    // TLS/SSL functions (matches runtime/net/tls.c)
+    emit_line("; TLS/SSL functions");
+    emit_line("declare void @tls_init()");
+    declared_externals_.insert("tls_init");
+    emit_line("declare ptr @tls_context_client_new()");
+    declared_externals_.insert("tls_context_client_new");
+    emit_line("declare ptr @tls_context_server_new()");
+    declared_externals_.insert("tls_context_server_new");
+    emit_line("declare void @tls_context_free(ptr)");
+    declared_externals_.insert("tls_context_free");
+    emit_line("declare i32 @tls_context_set_certificate(ptr, ptr)");
+    declared_externals_.insert("tls_context_set_certificate");
+    emit_line("declare i32 @tls_context_set_private_key(ptr, ptr)");
+    declared_externals_.insert("tls_context_set_private_key");
+    emit_line("declare i32 @tls_context_set_ca(ptr, ptr, ptr)");
+    declared_externals_.insert("tls_context_set_ca");
+    emit_line("declare void @tls_context_set_verify_mode(ptr, i32)");
+    declared_externals_.insert("tls_context_set_verify_mode");
+    emit_line("declare i32 @tls_context_set_min_version(ptr, i32)");
+    declared_externals_.insert("tls_context_set_min_version");
+    emit_line("declare i32 @tls_context_set_max_version(ptr, i32)");
+    declared_externals_.insert("tls_context_set_max_version");
+    emit_line("declare i32 @tls_context_set_alpn(ptr, ptr, i32)");
+    declared_externals_.insert("tls_context_set_alpn");
+    emit_line("declare i32 @tls_context_set_ciphers(ptr, ptr)");
+    declared_externals_.insert("tls_context_set_ciphers");
+    emit_line("declare i32 @tls_context_set_ciphersuites(ptr, ptr)");
+    declared_externals_.insert("tls_context_set_ciphersuites");
+    emit_line("declare ptr @tls_stream_new(ptr, i64)");
+    declared_externals_.insert("tls_stream_new");
+    emit_line("declare i32 @tls_stream_set_hostname(ptr, ptr)");
+    declared_externals_.insert("tls_stream_set_hostname");
+    emit_line("declare i32 @tls_stream_connect(ptr)");
+    declared_externals_.insert("tls_stream_connect");
+    emit_line("declare i32 @tls_stream_accept(ptr)");
+    declared_externals_.insert("tls_stream_accept");
+    emit_line("declare i64 @tls_stream_read(ptr, ptr, i64)");
+    declared_externals_.insert("tls_stream_read");
+    emit_line("declare i64 @tls_stream_write(ptr, ptr, i64)");
+    declared_externals_.insert("tls_stream_write");
+    emit_line("declare i32 @tls_stream_shutdown(ptr)");
+    declared_externals_.insert("tls_stream_shutdown");
+    emit_line("declare void @tls_stream_free(ptr)");
+    declared_externals_.insert("tls_stream_free");
+    emit_line("declare ptr @tls_stream_get_version(ptr)");
+    declared_externals_.insert("tls_stream_get_version");
+    emit_line("declare ptr @tls_stream_get_cipher(ptr)");
+    declared_externals_.insert("tls_stream_get_cipher");
+    emit_line("declare ptr @tls_stream_get_alpn(ptr)");
+    declared_externals_.insert("tls_stream_get_alpn");
+    emit_line("declare ptr @tls_stream_get_peer_cn(ptr)");
+    declared_externals_.insert("tls_stream_get_peer_cn");
+    emit_line("declare ptr @tls_stream_get_peer_cert_pem(ptr)");
+    declared_externals_.insert("tls_stream_get_peer_cert_pem");
+    emit_line("declare i32 @tls_stream_get_verify_result(ptr)");
+    declared_externals_.insert("tls_stream_get_verify_result");
+    emit_line("declare i32 @tls_stream_peer_verified(ptr)");
+    declared_externals_.insert("tls_stream_peer_verified");
+    emit_line("declare ptr @tls_get_error()");
+    declared_externals_.insert("tls_get_error");
+    // Lowlevel wrappers (tml_ prefix for buffer-passing functions)
+    emit_line("declare i64 @tml_tls_stream_read(ptr, ptr, i64)");
+    declared_externals_.insert("tml_tls_stream_read");
+    emit_line("declare i64 @tml_tls_stream_write(ptr, ptr, i64)");
+    declared_externals_.insert("tml_tls_stream_write");
+    emit_line("declare i64 @tml_tls_stream_write_str(ptr, ptr, i64)");
+    declared_externals_.insert("tml_tls_stream_write_str");
     emit_line("");
 
     // Format strings for print/println
@@ -1390,6 +1481,19 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 const auto& e = decl->as<parser::EnumDecl>();
                 // Register all enums (public AND private) for generic instantiation
                 gen_enum_decl(e);
+            } else if (decl->is<parser::ClassDecl>()) {
+                const auto& c = decl->as<parser::ClassDecl>();
+                // Register class types so %class.ClassName is properly sized.
+                // Use emit_external_class_type for type + field registration,
+                // then gen_class_vtable for vtable type + global.
+                auto class_def = env_.lookup_class(c.name);
+                if (class_def.has_value()) {
+                    emit_external_class_type(c.name, *class_def);
+                    // Generate vtable type and global constant.
+                    // gen_class_vtable emits the vtable type and global with
+                    // method pointers. Methods themselves are generated in PHASE 2.
+                    gen_class_vtable(c);
+                }
             } else if (decl->is<parser::ConstDecl>()) {
                 // Register module-level constants for use in functions
                 const auto& const_decl = decl->as<parser::ConstDecl>();
@@ -1534,6 +1638,25 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
 
         emit_line("; Module: " + module_name);
 
+        // Collect types defined in THIS module (struct/enum/class declarations)
+        // so their impl blocks are not skipped by the imported_types filter
+        std::unordered_set<std::string> module_defined_types;
+        for (const auto& decl : parsed_module.decls) {
+            if (decl->is<parser::StructDecl>()) {
+                const auto& s = decl->as<parser::StructDecl>();
+                if (!s.name.empty())
+                    module_defined_types.insert(s.name);
+            } else if (decl->is<parser::EnumDecl>()) {
+                const auto& e = decl->as<parser::EnumDecl>();
+                if (!e.name.empty())
+                    module_defined_types.insert(e.name);
+            } else if (decl->is<parser::ClassDecl>()) {
+                const auto& c = decl->as<parser::ClassDecl>();
+                if (!c.name.empty())
+                    module_defined_types.insert(c.name);
+            }
+        }
+
         // Generate code for each function (both public AND private)
         TML_DEBUG_LN("[MODULE] Processing " << parsed_module.decls.size() << " decls for "
                                             << module_name);
@@ -1584,7 +1707,8 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 // Arc is used). Uses dynamic_always_generate computed based on actual imports.
                 if (!type_name.empty() && !imported_types.empty() &&
                     imported_types.find(type_name) == imported_types.end()) {
-                    if (dynamic_always_generate.find(type_name) == dynamic_always_generate.end()) {
+                    if (dynamic_always_generate.find(type_name) == dynamic_always_generate.end() &&
+                        module_defined_types.find(type_name) == module_defined_types.end()) {
                         TML_DEBUG_LN("[MODULE] Skipping impl for non-imported type: " << type_name);
                         continue;
                     }
@@ -1712,6 +1836,32 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                             gen_impl_method(type_name, method);
                         }
                     }
+                }
+            }
+            // Handle class declarations - generate methods for imported classes
+            // This ensures class methods like Object::reference_equals get declare statements
+            else if (decl->is<parser::ClassDecl>()) {
+                const auto& cls = decl->as<parser::ClassDecl>();
+                std::string class_name = cls.name;
+
+                // Apply same filter as impl blocks
+                if (!class_name.empty() && !imported_types.empty() &&
+                    imported_types.find(class_name) == imported_types.end()) {
+                    if (dynamic_always_generate.find(class_name) == dynamic_always_generate.end() &&
+                        module_defined_types.find(class_name) == module_defined_types.end()) {
+                        TML_DEBUG_LN(
+                            "[MODULE] Skipping class for non-imported type: " << class_name);
+                        continue;
+                    }
+                }
+
+                // Generate methods for this class
+                // gen_class_method handles library_decls_only mode
+                for (const auto& method : cls.methods) {
+                    if (!method.generics.empty()) {
+                        continue; // Skip generic methods
+                    }
+                    gen_class_method(cls, method);
                 }
             }
         }

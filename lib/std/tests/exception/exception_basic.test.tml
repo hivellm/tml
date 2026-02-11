@@ -1,0 +1,27 @@
+// Tests for std::exception basic exception types
+use test
+use std::exception::*
+
+@test
+func test_exception_create() -> I32 {
+    let e: Exception = Exception::create("something went wrong")
+    let msg: Str = e.get_message()
+    assert_eq(msg, "something went wrong", "message should match")
+    return 0
+}
+
+@test
+func test_exception_to_string() -> I32 {
+    let e: Exception = Exception::create("test error")
+    let s: Str = e.to_string()
+    assert_eq(s, "Exception: test error", "to_string format")
+    return 0
+}
+
+@test
+func test_exception_get_type() -> I32 {
+    let e: Exception = Exception::create("err")
+    let t: Str = e.get_type()
+    assert_eq(t, "Exception", "type should be Exception")
+    return 0
+}

@@ -1,0 +1,485 @@
+//! Transport Layer Security (TLS) for encrypted network communication.
+//!
+//! This module provides TLS client and server support built on OpenSSL,
+//! enabling secure communication over TCP sockets.
+//!
+//! # Types
+//!
+//! - [`TlsContext`] - Configuration for TLS connections (wraps SSL_CTX)
+//! - [`TlsStream`] - An encrypted TLS connection (wraps SSL)
+//! - [`TlsVersion`] - TLS protocol version constants
+//! - [`TlsVerifyMode`] - Certificate verification modes
+//!
+//! # Example: TLS Client
+//!
+//! ```tml
+//! use std::net::{TcpStream, SocketAddr, Ipv4Addr}
+//! use std::net::tls::{TlsContext, TlsStream}
+//!
+//! func main() -> Outcome[(), NetError] {
+//!     // Create TCP connection
+//!     let addr = SocketAddr::new(Ipv4Addr::new(93, 184, 216, 34), 443)
+//!     let tcp = TcpStream::connect(addr)!
+//!
+//!     // Wrap with TLS using socket fd
+//!     let ctx = TlsContext::client()!
+//!     let raw = tcp.as_raw_socket()
+//!     let mut tls = TlsStream::connect(ctx, raw.handle, "example.com")!
+//!
+//!     // Send HTTP request
+//!     tls.write_str("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")!
+//!
+//!     // Read response
+//!     var buf: [U8; 4096] = [0; 4096]
+//!     let n = tls.read(mut ref buf)!
+//!     print("Received {} bytes\n", n)
+//!
+//!     tls.shutdown()!
+//! }
+//! ```
+
+use std::net::error::{NetError, NetErrorKind}
+
+// ============================================================================
+// FFI declarations for tls.c
+// ============================================================================
+
+// Initialization
+@extern("tls_init")
+func ffi_tls_init()
+
+// Context management
+@extern("tls_context_client_new")
+func ffi_tls_context_client_new() -> *Unit
+
+@extern("tls_context_server_new")
+func ffi_tls_context_server_new() -> *Unit
+
+@extern("tls_context_free")
+func ffi_tls_context_free(ctx: *Unit)
+
+@extern("tls_context_set_certificate")
+func ffi_tls_context_set_certificate(ctx: *Unit, cert_path: Str) -> I32
+
+@extern("tls_context_set_private_key")
+func ffi_tls_context_set_private_key(ctx: *Unit, key_path: Str) -> I32
+
+@extern("tls_context_set_ca")
+func ffi_tls_context_set_ca(ctx: *Unit, file_path: Str, dir_path: Str) -> I32
+
+@extern("tls_context_set_verify_mode")
+func ffi_tls_context_set_verify_mode(ctx: *Unit, mode: I32)
+
+@extern("tls_context_set_min_version")
+func ffi_tls_context_set_min_version(ctx: *Unit, version: I32) -> I32
+
+@extern("tls_context_set_max_version")
+func ffi_tls_context_set_max_version(ctx: *Unit, version: I32) -> I32
+
+@extern("tls_context_set_ciphers")
+func ffi_tls_context_set_ciphers(ctx: *Unit, ciphers: Str) -> I32
+
+@extern("tls_context_set_ciphersuites")
+func ffi_tls_context_set_ciphersuites(ctx: *Unit, ciphersuites: Str) -> I32
+
+// Stream management
+@extern("tls_stream_new")
+func ffi_tls_stream_new(ctx: *Unit, socket_fd: I64) -> *Unit
+
+@extern("tls_stream_set_hostname")
+func ffi_tls_stream_set_hostname(ssl: *Unit, hostname: Str) -> I32
+
+@extern("tls_stream_connect")
+func ffi_tls_stream_connect(ssl: *Unit) -> I32
+
+@extern("tls_stream_accept")
+func ffi_tls_stream_accept(ssl: *Unit) -> I32
+
+@extern("tls_stream_shutdown")
+func ffi_tls_stream_shutdown(ssl: *Unit) -> I32
+
+@extern("tls_stream_free")
+func ffi_tls_stream_free(ssl: *Unit)
+
+// Stream I/O (lowlevel for buffer passing)
+lowlevel func tls_stream_read(ssl: *Unit, buf: mut ref [U8], len: I64) -> I64
+lowlevel func tls_stream_write(ssl: *Unit, buf: ref [U8], len: I64) -> I64
+lowlevel func tls_stream_write_str(ssl: *Unit, s: Str, len: I64) -> I64
+
+// Stream inspection
+@extern("tls_stream_get_version")
+func ffi_tls_stream_get_version(ssl: *Unit) -> Str
+
+@extern("tls_stream_get_cipher")
+func ffi_tls_stream_get_cipher(ssl: *Unit) -> Str
+
+@extern("tls_stream_get_alpn")
+func ffi_tls_stream_get_alpn(ssl: *Unit) -> Str
+
+@extern("tls_stream_get_peer_cn")
+func ffi_tls_stream_get_peer_cn(ssl: *Unit) -> Str
+
+@extern("tls_stream_get_peer_cert_pem")
+func ffi_tls_stream_get_peer_cert_pem(ssl: *Unit) -> Str
+
+@extern("tls_stream_get_verify_result")
+func ffi_tls_stream_get_verify_result(ssl: *Unit) -> I32
+
+@extern("tls_stream_peer_verified")
+func ffi_tls_stream_peer_verified(ssl: *Unit) -> I32
+
+// Error handling
+@extern("tls_get_error")
+func ffi_tls_get_error() -> Str
+
+@extern("tls_clear_errors")
+func ffi_tls_clear_errors()
+
+// ============================================================================
+// TLS Protocol Version
+// ============================================================================
+
+/// TLS protocol version constants.
+pub type TlsVersion {
+    /// The protocol version code
+    value: I32,
+}
+
+impl TlsVersion {
+    /// TLS 1.0 (deprecated, insecure)
+    pub func TLS_1_0() -> TlsVersion { TlsVersion { value: 0x0301 } }
+
+    /// TLS 1.1 (deprecated, insecure)
+    pub func TLS_1_1() -> TlsVersion { TlsVersion { value: 0x0302 } }
+
+    /// TLS 1.2 (widely supported, secure)
+    pub func TLS_1_2() -> TlsVersion { TlsVersion { value: 0x0303 } }
+
+    /// TLS 1.3 (latest, most secure)
+    pub func TLS_1_3() -> TlsVersion { TlsVersion { value: 0x0304 } }
+
+    /// Returns the raw protocol version code.
+    pub func raw(this) -> I32 { this.value }
+
+    /// Returns a human-readable version string.
+    pub func to_string(this) -> Str {
+        if this.value == 0x0301 { return "TLS 1.0" }
+        if this.value == 0x0302 { return "TLS 1.1" }
+        if this.value == 0x0303 { return "TLS 1.2" }
+        if this.value == 0x0304 { return "TLS 1.3" }
+        return "Unknown"
+    }
+}
+
+// ============================================================================
+// TLS Verify Mode
+// ============================================================================
+
+/// Certificate verification mode.
+pub type TlsVerifyMode {
+    /// The verification mode code
+    value: I32,
+}
+
+impl TlsVerifyMode {
+    /// No verification (insecure, testing only)
+    pub func None() -> TlsVerifyMode { TlsVerifyMode { value: 0 } }
+
+    /// Verify peer certificate (default for clients)
+    pub func Peer() -> TlsVerifyMode { TlsVerifyMode { value: 1 } }
+
+    /// Require client certificate (server mode)
+    pub func RequireClientCert() -> TlsVerifyMode { TlsVerifyMode { value: 2 } }
+
+    /// Returns the raw mode value.
+    pub func raw(this) -> I32 { this.value }
+}
+
+// ============================================================================
+// TLS Context
+// ============================================================================
+
+/// Configuration context for TLS connections.
+///
+/// A `TlsContext` holds TLS settings like certificates, keys, protocol versions,
+/// and verification modes. It can be shared across multiple `TlsStream` instances.
+///
+/// Use `TlsContext::client()` for client connections or
+/// `TlsContext::server()` for server connections.
+pub type TlsContext {
+    /// Opaque handle to the underlying SSL_CTX
+    handle: *Unit,
+}
+
+impl TlsContext {
+    /// Creates a new TLS client context with default settings.
+    ///
+    /// Default configuration:
+    /// - TLS 1.2 minimum version
+    /// - System CA certificates loaded
+    /// - Peer certificate verification enabled
+    pub func client() -> Outcome[TlsContext, NetError] {
+        ffi_tls_init()
+        let handle: *Unit = ffi_tls_context_client_new()
+        if handle == null {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(TlsContext { handle: handle })
+    }
+
+    /// Creates a new TLS server context with certificate and key.
+    ///
+    /// Loads the certificate chain and private key from PEM files.
+    pub func server(cert_path: Str, key_path: Str) -> Outcome[TlsContext, NetError] {
+        ffi_tls_init()
+        let handle: *Unit = ffi_tls_context_server_new()
+        if handle == null {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+
+        let cert_result: I32 = ffi_tls_context_set_certificate(handle, cert_path)
+        if cert_result != 0 {
+            ffi_tls_context_free(handle)
+            return Err(NetError::new(NetErrorKind::InvalidInput()))
+        }
+
+        let key_result: I32 = ffi_tls_context_set_private_key(handle, key_path)
+        if key_result != 0 {
+            ffi_tls_context_free(handle)
+            return Err(NetError::new(NetErrorKind::InvalidInput()))
+        }
+
+        Ok(TlsContext { handle: handle })
+    }
+
+    /// Sets the CA certificate file for peer verification.
+    pub func set_ca_file(this, ca_path: Str) -> Outcome[(), NetError] {
+        let result: I32 = ffi_tls_context_set_ca(this.handle, ca_path, "")
+        if result != 0 {
+            return Err(NetError::new(NetErrorKind::InvalidInput()))
+        }
+        Ok(())
+    }
+
+    /// Sets the certificate verification mode.
+    pub func set_verify_mode(this, mode: TlsVerifyMode) {
+        ffi_tls_context_set_verify_mode(this.handle, mode.raw())
+    }
+
+    /// Sets the minimum TLS protocol version.
+    pub func set_min_version(this, version: TlsVersion) -> Outcome[(), NetError] {
+        let result: I32 = ffi_tls_context_set_min_version(this.handle, version.raw())
+        if result != 0 {
+            return Err(NetError::new(NetErrorKind::InvalidInput()))
+        }
+        Ok(())
+    }
+
+    /// Sets the maximum TLS protocol version.
+    pub func set_max_version(this, version: TlsVersion) -> Outcome[(), NetError] {
+        let result: I32 = ffi_tls_context_set_max_version(this.handle, version.raw())
+        if result != 0 {
+            return Err(NetError::new(NetErrorKind::InvalidInput()))
+        }
+        Ok(())
+    }
+
+    /// Sets the cipher list for TLS 1.2 and below.
+    pub func set_ciphers(this, ciphers: Str) -> Outcome[(), NetError] {
+        let result: I32 = ffi_tls_context_set_ciphers(this.handle, ciphers)
+        if result != 0 {
+            return Err(NetError::new(NetErrorKind::InvalidInput()))
+        }
+        Ok(())
+    }
+
+    /// Sets the cipher suites for TLS 1.3.
+    pub func set_ciphersuites(this, suites: Str) -> Outcome[(), NetError] {
+        let result: I32 = ffi_tls_context_set_ciphersuites(this.handle, suites)
+        if result != 0 {
+            return Err(NetError::new(NetErrorKind::InvalidInput()))
+        }
+        Ok(())
+    }
+
+    /// Returns the raw handle (for advanced use).
+    pub func raw_handle(this) -> *Unit {
+        this.handle
+    }
+}
+
+// ============================================================================
+// TLS Stream
+// ============================================================================
+
+/// An encrypted TLS connection wrapping a socket.
+///
+/// A `TlsStream` provides encrypted read/write operations on top of a
+/// raw socket. It handles the TLS handshake, certificate verification,
+/// and protocol negotiation.
+///
+/// Use with a TCP socket handle obtained from `TcpStream.as_raw_socket().handle`.
+pub type TlsStream {
+    /// Opaque handle to the underlying SSL object
+    ssl_handle: *Unit,
+    /// The socket file descriptor (kept for reference)
+    socket_fd: I64,
+}
+
+impl TlsStream {
+    /// Performs a TLS client handshake over the given socket fd.
+    ///
+    /// Sets the SNI hostname for certificate verification and
+    /// establishes an encrypted connection.
+    ///
+    /// Get the socket fd from `tcp_stream.as_raw_socket().handle`.
+    pub func connect(ctx: TlsContext, socket_fd: I64, hostname: Str) -> Outcome[TlsStream, NetError] {
+        // Create SSL object
+        let ssl: *Unit = ffi_tls_stream_new(ctx.handle, socket_fd)
+        if ssl == null {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+
+        // Set SNI hostname
+        let sni_result: I32 = ffi_tls_stream_set_hostname(ssl, hostname)
+        if sni_result != 0 {
+            ffi_tls_stream_free(ssl)
+            return Err(NetError::new(NetErrorKind::InvalidInput()))
+        }
+
+        // Perform handshake
+        let connect_result: I32 = ffi_tls_stream_connect(ssl)
+        if connect_result != 0 {
+            ffi_tls_stream_free(ssl)
+            return Err(NetError::new(NetErrorKind::ConnectionRefused()))
+        }
+
+        Ok(TlsStream { ssl_handle: ssl, socket_fd: socket_fd })
+    }
+
+    /// Performs a TLS server handshake over the given socket fd.
+    ///
+    /// Accepts an incoming TLS connection from a client.
+    pub func accept(ctx: TlsContext, socket_fd: I64) -> Outcome[TlsStream, NetError] {
+        let ssl: *Unit = ffi_tls_stream_new(ctx.handle, socket_fd)
+        if ssl == null {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+
+        let accept_result: I32 = ffi_tls_stream_accept(ssl)
+        if accept_result != 0 {
+            ffi_tls_stream_free(ssl)
+            return Err(NetError::new(NetErrorKind::ConnectionRefused()))
+        }
+
+        Ok(TlsStream { ssl_handle: ssl, socket_fd: socket_fd })
+    }
+
+    /// Reads encrypted data from the TLS stream into the buffer.
+    ///
+    /// Returns the number of bytes read, or 0 if the connection was closed.
+    pub func read(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        let len: I64 = buf.len() as I64
+        let n: I64 = lowlevel { tls_stream_read(this.ssl_handle, buf, len) }
+        if n == -2 {
+            return Err(NetError::new(NetErrorKind::WouldBlock()))
+        }
+        if n < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(n)
+    }
+
+    /// Writes data to the TLS stream (encrypted).
+    ///
+    /// Returns the number of bytes written.
+    pub func write(this, buf: ref [U8]) -> Outcome[I64, NetError] {
+        let len: I64 = buf.len() as I64
+        let n: I64 = lowlevel { tls_stream_write(this.ssl_handle, buf, len) }
+        if n == -2 {
+            return Err(NetError::new(NetErrorKind::WouldBlock()))
+        }
+        if n < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(n)
+    }
+
+    /// Writes a string to the TLS stream.
+    pub func write_str(this, s: Str) -> Outcome[I64, NetError] {
+        let len: I64 = s.len() as I64
+        let n: I64 = lowlevel { tls_stream_write_str(this.ssl_handle, s, len) }
+        if n < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(n)
+    }
+
+    /// Initiates a clean TLS shutdown.
+    ///
+    /// Sends a close_notify alert to the peer and waits for acknowledgment.
+    pub func shutdown(this) -> Outcome[(), NetError] {
+        let result: I32 = ffi_tls_stream_shutdown(this.ssl_handle)
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    // ========================================================================
+    // Connection Inspection
+    // ========================================================================
+
+    /// Returns the negotiated TLS protocol version (e.g., "TLSv1.3").
+    pub func version(this) -> Str {
+        ffi_tls_stream_get_version(this.ssl_handle)
+    }
+
+    /// Returns the negotiated cipher name (e.g., "TLS_AES_256_GCM_SHA384").
+    pub func cipher(this) -> Str {
+        ffi_tls_stream_get_cipher(this.ssl_handle)
+    }
+
+    /// Returns the negotiated ALPN protocol (e.g., "h2", "http/1.1").
+    /// Returns an empty string if no ALPN was negotiated.
+    pub func alpn(this) -> Str {
+        ffi_tls_stream_get_alpn(this.ssl_handle)
+    }
+
+    /// Returns the Common Name (CN) of the peer certificate.
+    /// Returns an empty string if no peer certificate is available.
+    pub func peer_cn(this) -> Str {
+        ffi_tls_stream_get_peer_cn(this.ssl_handle)
+    }
+
+    /// Returns the peer certificate as a PEM string.
+    /// Returns an empty string if no peer certificate is available.
+    pub func peer_cert_pem(this) -> Str {
+        ffi_tls_stream_get_peer_cert_pem(this.ssl_handle)
+    }
+
+    /// Returns whether the peer certificate was successfully verified.
+    pub func peer_verified(this) -> Bool {
+        ffi_tls_stream_peer_verified(this.ssl_handle) == 1
+    }
+
+    /// Returns the X.509 verification result code.
+    /// 0 means success (X509_V_OK).
+    pub func verify_result(this) -> I32 {
+        ffi_tls_stream_get_verify_result(this.ssl_handle)
+    }
+}
+
+// ============================================================================
+// Module-level Helpers
+// ============================================================================
+
+/// Returns the last TLS error message from OpenSSL.
+pub func last_error() -> Str {
+    ffi_tls_get_error()
+}
+
+/// Clears the OpenSSL error queue.
+pub func clear_errors() {
+    ffi_tls_clear_errors()
+}

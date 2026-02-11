@@ -1,4 +1,4 @@
-// AtomicU64 tests
+// Test: AtomicU64 operations (v2)
 use test::{assert, assert_eq}
 use std::sync::{AtomicU64, Ordering}
 

@@ -1,0 +1,28 @@
+// Tests for core::time::Duration constructors and accessors
+use test
+use core::time::Duration
+
+@test
+func test_duration_from_secs() -> I32 {
+    let d: Duration = Duration::from_secs(5)
+    assert_eq(d.as_secs(), 5 as I64, "from_secs(5) should be 5 seconds")
+    assert_eq(d.subsec_nanos(), 0, "from_secs should have 0 nanos")
+    return 0
+}
+
+@test
+func test_duration_from_millis() -> I32 {
+    let d: Duration = Duration::from_millis(2500)
+    assert_eq(d.as_secs(), 2 as I64, "2500ms should be 2 seconds")
+    assert_eq(d.subsec_millis(), 500, "2500ms should have 500ms fractional")
+    assert_eq(d.as_millis(), 2500 as I64, "total should be 2500ms")
+    return 0
+}
+
+@test
+func test_duration_from_nanos() -> I32 {
+    let d: Duration = Duration::from_nanos(1500000000)
+    assert_eq(d.as_secs(), 1 as I64, "1.5B nanos should be 1 second")
+    assert_eq(d.subsec_nanos(), 500000000, "should have 500M nanos fractional")
+    return 0
+}

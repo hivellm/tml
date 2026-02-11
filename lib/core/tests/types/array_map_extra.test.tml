@@ -1,0 +1,33 @@
+// Tests for Array map method with various transformations
+use test
+
+@test
+func test_array_map_double() -> I32 {
+    let arr: [I32; 4] = [1, 2, 3, 4]
+    let doubled: [I32; 4] = arr.map(do(x: I32) -> I32 { return x * 2 })
+    assert(doubled[0] == 2, "map doubled[0]")
+    assert(doubled[1] == 4, "map doubled[1]")
+    assert(doubled[2] == 6, "map doubled[2]")
+    assert(doubled[3] == 8, "map doubled[3]")
+    return 0
+}
+
+@test
+func test_array_map_negate() -> I32 {
+    let arr: [I32; 3] = [10, -20, 30]
+    let neg: [I32; 3] = arr.map(do(x: I32) -> I32 { return 0 - x })
+    assert(neg[0] == -10, "map negate[0]")
+    assert(neg[1] == 20, "map negate[1]")
+    assert(neg[2] == -30, "map negate[2]")
+    return 0
+}
+
+@test
+func test_array_map_constant() -> I32 {
+    let arr: [I32; 3] = [1, 2, 3]
+    let ones: [I32; 3] = arr.map(do(_: I32) -> I32 { return 1 })
+    assert(ones[0] == 1, "map constant[0]")
+    assert(ones[1] == 1, "map constant[1]")
+    assert(ones[2] == 1, "map constant[2]")
+    return 0
+}

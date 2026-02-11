@@ -1,0 +1,27 @@
+// Tests for core::fmt::rt - Count enum
+use test
+use core::fmt::rt::{Count}
+
+@test
+func test_count_is_debug() -> I32 {
+    let c: Count = Count::Is(42)
+    let dbg: Str = c.debug_string()
+    assert(dbg.len() > 0, "Count::Is debug_string should produce output")
+    return 0
+}
+
+@test
+func test_count_param_debug() -> I32 {
+    let c: Count = Count::Param(3)
+    let dbg: Str = c.debug_string()
+    assert(dbg.len() > 0, "Count::Param debug_string should produce output")
+    return 0
+}
+
+@test
+func test_count_implied_debug() -> I32 {
+    let c: Count = Count::Implied
+    let dbg: Str = c.debug_string()
+    assert(dbg.len() > 0, "Count::Implied debug_string should produce output")
+    return 0
+}

@@ -1,0 +1,22 @@
+// Minimal test to debug MutexGuard drop at scope exit
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard}
+
+@test
+func test_mutex_drop_at_scope_exit() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+
+    // Scope 1: lock and read
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 42)
+    }  // guard.drop() should be called here, releasing the lock
+
+    // Scope 2: lock again - deadlocks if drop wasn't called
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 42)
+    }
+
+    return 0
+}

@@ -1,0 +1,34 @@
+// Tests for Array comparison methods: cmp, partial_cmp, eq/ne with I64
+use test
+
+@test
+func test_array_cmp_equal() -> I32 {
+    let a: [I32; 3] = [1, 2, 3]
+    let b: [I32; 3] = [1, 2, 3]
+    when a.cmp(ref b) {
+        Equal => {},
+        _ => assert(false, "equal arrays should compare Equal")
+    }
+    return 0
+}
+
+@test
+func test_array_cmp_greater() -> I32 {
+    let a: [I32; 3] = [1, 3, 0]
+    let b: [I32; 3] = [1, 2, 9]
+    when a.cmp(ref b) {
+        Greater => {},
+        _ => assert(false, "[1,3,0] should be greater than [1,2,9]")
+    }
+    return 0
+}
+
+@test
+func test_array_eq_i64() -> I32 {
+    let a: [I64; 2] = [100, 200]
+    let b: [I64; 2] = [100, 200]
+    let c: [I64; 2] = [100, 999]
+    assert(a.eq(ref b), "I64 arrays eq")
+    assert(a.ne(ref c), "I64 arrays ne")
+    return 0
+}

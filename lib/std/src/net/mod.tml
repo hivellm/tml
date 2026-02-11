@@ -101,6 +101,15 @@
 //! - [`UdpSocket`] - A UDP socket for sending and receiving datagrams
 //! - [`UdpBuilder`] - Builder pattern for UDP socket configuration
 //!
+//! # TLS/SSL
+//!
+//! Transport Layer Security for encrypted connections:
+//!
+//! - [`TlsContext`] - TLS configuration (certificates, protocol versions)
+//! - [`TlsStream`] - An encrypted connection wrapping a TCP stream
+//! - [`TlsVersion`] - TLS protocol version constants
+//! - [`TlsVerifyMode`] - Certificate verification modes
+//!
 //! # Module Structure
 //!
 //! - [`ip`] - IP address types (`Ipv4Addr`, `Ipv6Addr`, `IpAddr`)
@@ -109,12 +118,14 @@
 //! - [`error`] - Network error types (`NetError`, `NetErrorKind`)
 //! - [`buffer`] - Buffer management (`Buffer`, `BufferView`, `BufferPool`)
 //! - [`sys`] - Platform abstraction layer for sockets
+//! - [`tls`] - TLS/SSL encrypted connections
 pub mod ip
 pub mod socket
 pub mod error
 pub mod sys
 pub mod tcp
 pub mod udp
+pub mod tls
 
 // Re-export main types
 pub use ip::{IpAddr, Ipv4Addr, Ipv6Addr}
@@ -123,3 +134,4 @@ pub use error::{NetError, NetErrorKind}
 pub use sys::{RawSocket, SocketType, SocketProtocol}
 pub use tcp::{TcpListener, TcpStream, TcpBuilder}
 pub use udp::{UdpSocket, UdpBuilder}
+pub use tls::{TlsContext, TlsStream, TlsVersion, TlsVerifyMode}

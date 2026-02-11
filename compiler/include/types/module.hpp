@@ -90,6 +90,11 @@ struct Module {
 
     std::vector<std::string> private_imports; ///< Module paths from private use declarations.
 
+    /// Behavior implementations: type_name -> list of behavior names.
+    /// e.g., {"MutexGuard": ["Drop"], "Mutex": ["Drop", "Send", "Sync"]}
+    /// Populated during module loading so is_trivially_destructible() works for imported types.
+    std::unordered_map<std::string, std::vector<std::string>> behavior_impls;
+
     std::string source_code;             ///< Source for pure TML modules.
     bool has_pure_tml_functions = false; ///< True if module has non-extern functions.
 

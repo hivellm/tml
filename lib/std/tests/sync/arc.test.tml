@@ -1,4 +1,4 @@
-// Consolidated Arc tests
+// Test: consolidated Arc functionality (v2)
 use test::{assert, assert_eq}
 use std::sync::Arc
 use std::sync::Mutex

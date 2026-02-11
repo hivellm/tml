@@ -1,4 +1,4 @@
-// AtomicIsize tests (pointer-sized signed)
+// Test: AtomicIsize operations (pointer-sized signed) (v2)
 use test::{assert, assert_eq}
 use std::sync::{AtomicIsize, Ordering}
 

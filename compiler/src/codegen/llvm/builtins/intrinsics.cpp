@@ -123,6 +123,10 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc",
         // Drop intrinsic - for explicit destruction
         "drop",
+        // Checked arithmetic intrinsics
+        "checked_add", "checked_sub", "checked_mul", "checked_div",
+        // Saturating arithmetic intrinsics
+        "saturating_add", "saturating_sub", "saturating_mul",
         // Reflection intrinsics
         "field_count", "variant_count", "field_name", "field_type_id", "field_offset"};
 
@@ -1191,6 +1195,360 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             return "0";
         }
         last_expr_type_ = "void";
+        return "0";
+    }
+
+    // ============================================================================
+    // Checked Arithmetic Intrinsics
+    // ============================================================================
+
+    // checked_add[T](a: T, b: T) -> Maybe[T]
+    // checked_sub[T](a: T, b: T) -> Maybe[T]
+    // checked_mul[T](a: T, b: T) -> Maybe[T]
+    if (intrinsic_name == "checked_add" || intrinsic_name == "checked_sub" ||
+        intrinsic_name == "checked_mul") {
+        if (call.args.size() >= 2) {
+            // Resolve the target type from the generic type argument [T] on the call,
+            // not from argument evaluation (which may produce wrong types for large literals)
+            std::string target_type = "i32"; // default
+            types::TypePtr type_arg = types::make_i32();
+
+            if (call.callee->is<parser::PathExpr>()) {
+                const auto& path_expr = call.callee->as<parser::PathExpr>();
+                if (path_expr.generics && !path_expr.generics->args.empty()) {
+                    const auto& first_arg = path_expr.generics->args[0];
+                    if (first_arg.is_type()) {
+                        type_arg =
+                            resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                        target_type = llvm_type_from_semantic(type_arg);
+                    }
+                }
+            }
+
+            // Generate args and truncate/extend to target type if needed
+            std::string a = gen_expr(*call.args[0]);
+            std::string a_type = last_expr_type_;
+            if (a_type != target_type) {
+                std::string cast = fresh_reg();
+                emit_line("  " + cast + " = trunc " + a_type + " " + a + " to " + target_type);
+                a = cast;
+            }
+
+            std::string b = gen_expr(*call.args[1]);
+            std::string b_type = last_expr_type_;
+            if (b_type != target_type) {
+                std::string cast = fresh_reg();
+                emit_line("  " + cast + " = trunc " + b_type + " " + b + " to " + target_type);
+                b = cast;
+            }
+
+            // Map to LLVM overflow intrinsic operation
+            std::string op;
+            if (intrinsic_name == "checked_add")
+                op = "sadd";
+            else if (intrinsic_name == "checked_sub")
+                op = "ssub";
+            else
+                op = "smul";
+
+            // Ensure Maybe[T] enum type is instantiated
+            std::vector<types::TypePtr> maybe_type_args = {type_arg};
+            std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+            std::string maybe_type = "%struct." + maybe_mangled;
+
+            // Call LLVM overflow intrinsic: returns { T, i1 }
+            std::string overflow_type = "{ " + target_type + ", i1 }";
+            std::string ov_result = fresh_reg();
+            emit_line("  " + ov_result + " = call " + overflow_type + " @llvm." + op +
+                      ".with.overflow." + target_type + "(" + target_type + " " + a + ", " +
+                      target_type + " " + b + ")");
+
+            // Extract value and overflow flag
+            std::string value = fresh_reg();
+            std::string overflow = fresh_reg();
+            emit_line("  " + value + " = extractvalue " + overflow_type + " " + ov_result + ", 0");
+            emit_line("  " + overflow + " = extractvalue " + overflow_type + " " + ov_result +
+                      ", 1");
+
+            // Build Maybe[T] result using alloca/store pattern
+            // If overflow: Nothing (tag=1), else: Just(value) (tag=0)
+            // The Maybe[T] layout is { i32 tag, [1 x i64] data }, so we must store
+            // the payload as i64 to match the when-pattern extraction which loads i64.
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + maybe_type);
+
+            // Extend value to i64 for payload storage (enum payload is always [N x i64])
+            std::string store_value = value;
+            if (target_type != "i64") {
+                store_value = fresh_reg();
+                emit_line("  " + store_value + " = sext " + target_type + " " + value + " to i64");
+            }
+
+            std::string label_just = "checked.just." + std::to_string(label_counter_++);
+            std::string label_nothing = "checked.nothing." + std::to_string(label_counter_++);
+            std::string label_end = "checked.end." + std::to_string(label_counter_++);
+
+            emit_line("  br i1 " + overflow + ", label %" + label_nothing + ", label %" +
+                      label_just);
+
+            // Just branch: tag=0, store value as i64
+            emit_line(label_just + ":");
+            std::string tag_ptr_j = fresh_reg();
+            emit_line("  " + tag_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      alloca_reg + ", i32 0, i32 0");
+            emit_line("  store i32 0, ptr " + tag_ptr_j);
+            std::string data_ptr_j = fresh_reg();
+            emit_line("  " + data_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      alloca_reg + ", i32 0, i32 1");
+            emit_line("  store i64 " + store_value + ", ptr " + data_ptr_j);
+            emit_line("  br label %" + label_end);
+
+            // Nothing branch: tag=1
+            emit_line(label_nothing + ":");
+            std::string tag_ptr_n = fresh_reg();
+            emit_line("  " + tag_ptr_n + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      alloca_reg + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + tag_ptr_n);
+            emit_line("  br label %" + label_end);
+
+            // End: load result
+            emit_line(label_end + ":");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + maybe_type + ", ptr " + alloca_reg);
+            last_expr_type_ = maybe_type;
+            return result;
+        }
+        return "0";
+    }
+
+    // checked_div[T](a: T, b: T) -> Maybe[T]
+    // Division by zero returns Nothing, otherwise Just(a/b)
+    if (intrinsic_name == "checked_div") {
+        if (call.args.size() >= 2) {
+            // Resolve target type from generic type argument [T]
+            std::string target_type = "i32";
+            types::TypePtr type_arg = types::make_i32();
+
+            if (call.callee->is<parser::PathExpr>()) {
+                const auto& path_expr = call.callee->as<parser::PathExpr>();
+                if (path_expr.generics && !path_expr.generics->args.empty()) {
+                    const auto& first_arg = path_expr.generics->args[0];
+                    if (first_arg.is_type()) {
+                        type_arg =
+                            resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                        target_type = llvm_type_from_semantic(type_arg);
+                    }
+                }
+            }
+
+            std::string a = gen_expr(*call.args[0]);
+            std::string a_type = last_expr_type_;
+            if (a_type != target_type) {
+                std::string cast = fresh_reg();
+                emit_line("  " + cast + " = trunc " + a_type + " " + a + " to " + target_type);
+                a = cast;
+            }
+
+            std::string b = gen_expr(*call.args[1]);
+            std::string b_type = last_expr_type_;
+            if (b_type != target_type) {
+                std::string cast = fresh_reg();
+                emit_line("  " + cast + " = trunc " + b_type + " " + b + " to " + target_type);
+                b = cast;
+            }
+
+            // Ensure Maybe[T] enum type is instantiated
+            std::vector<types::TypePtr> maybe_type_args = {type_arg};
+            std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+            std::string maybe_type = "%struct." + maybe_mangled;
+
+            // Check if b == 0
+            std::string is_zero = fresh_reg();
+            emit_line("  " + is_zero + " = icmp eq " + target_type + " " + b + ", 0");
+
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + maybe_type);
+
+            std::string label_ok = "cdiv.ok." + std::to_string(label_counter_++);
+            std::string label_zero = "cdiv.zero." + std::to_string(label_counter_++);
+            std::string label_end = "cdiv.end." + std::to_string(label_counter_++);
+
+            emit_line("  br i1 " + is_zero + ", label %" + label_zero + ", label %" + label_ok);
+
+            // Ok branch: divide and return Just(result)
+            emit_line(label_ok + ":");
+            std::string div_result = fresh_reg();
+            emit_line("  " + div_result + " = sdiv " + target_type + " " + a + ", " + b);
+            // Extend to i64 for payload storage
+            std::string store_val = div_result;
+            if (target_type != "i64") {
+                store_val = fresh_reg();
+                emit_line("  " + store_val + " = sext " + target_type + " " + div_result +
+                          " to i64");
+            }
+            std::string tag_ptr_ok = fresh_reg();
+            emit_line("  " + tag_ptr_ok + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      alloca_reg + ", i32 0, i32 0");
+            emit_line("  store i32 0, ptr " + tag_ptr_ok);
+            std::string data_ptr_ok = fresh_reg();
+            emit_line("  " + data_ptr_ok + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      alloca_reg + ", i32 0, i32 1");
+            emit_line("  store i64 " + store_val + ", ptr " + data_ptr_ok);
+            emit_line("  br label %" + label_end);
+
+            // Zero branch: return Nothing (tag=1)
+            emit_line(label_zero + ":");
+            std::string tag_ptr_z = fresh_reg();
+            emit_line("  " + tag_ptr_z + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                      alloca_reg + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + tag_ptr_z);
+            emit_line("  br label %" + label_end);
+
+            // End: load result
+            emit_line(label_end + ":");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + maybe_type + ", ptr " + alloca_reg);
+            last_expr_type_ = maybe_type;
+            return result;
+        }
+        return "0";
+    }
+
+    // ============================================================================
+    // Saturating Arithmetic Intrinsics
+    // ============================================================================
+
+    // saturating_add[T](a: T, b: T) -> T
+    // saturating_sub[T](a: T, b: T) -> T
+    if (intrinsic_name == "saturating_add" || intrinsic_name == "saturating_sub") {
+        if (call.args.size() >= 2) {
+            // Resolve target type from generic type argument [T]
+            std::string target_type = "i32";
+            if (call.callee->is<parser::PathExpr>()) {
+                const auto& path_expr = call.callee->as<parser::PathExpr>();
+                if (path_expr.generics && !path_expr.generics->args.empty()) {
+                    const auto& first_arg = path_expr.generics->args[0];
+                    if (first_arg.is_type()) {
+                        auto resolved =
+                            resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                        target_type = llvm_type_from_semantic(resolved);
+                    }
+                }
+            }
+
+            std::string a = gen_expr(*call.args[0]);
+            std::string a_type = last_expr_type_;
+            if (a_type != target_type) {
+                std::string cast = fresh_reg();
+                emit_line("  " + cast + " = trunc " + a_type + " " + a + " to " + target_type);
+                a = cast;
+            }
+
+            std::string b = gen_expr(*call.args[1]);
+            std::string b_type = last_expr_type_;
+            if (b_type != target_type) {
+                std::string cast = fresh_reg();
+                emit_line("  " + cast + " = trunc " + b_type + " " + b + " to " + target_type);
+                b = cast;
+            }
+
+            std::string llvm_op = (intrinsic_name == "saturating_add") ? "sadd" : "ssub";
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call " + target_type + " @llvm." + llvm_op + ".sat." +
+                      target_type + "(" + target_type + " " + a + ", " + target_type + " " + b +
+                      ")");
+            last_expr_type_ = target_type;
+            return result;
+        }
+        return "0";
+    }
+
+    // saturating_mul[T](a: T, b: T) -> T
+    // LLVM doesn't have a saturating multiply intrinsic, so we use overflow check + select
+    if (intrinsic_name == "saturating_mul") {
+        if (call.args.size() >= 2) {
+            // Resolve target type from generic type argument [T]
+            std::string target_type = "i32";
+            if (call.callee->is<parser::PathExpr>()) {
+                const auto& path_expr = call.callee->as<parser::PathExpr>();
+                if (path_expr.generics && !path_expr.generics->args.empty()) {
+                    const auto& first_arg = path_expr.generics->args[0];
+                    if (first_arg.is_type()) {
+                        auto resolved =
+                            resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                        target_type = llvm_type_from_semantic(resolved);
+                    }
+                }
+            }
+
+            std::string a = gen_expr(*call.args[0]);
+            std::string a_type = last_expr_type_;
+            if (a_type != target_type) {
+                std::string cast = fresh_reg();
+                emit_line("  " + cast + " = trunc " + a_type + " " + a + " to " + target_type);
+                a = cast;
+            }
+
+            std::string b = gen_expr(*call.args[1]);
+            std::string b_type = last_expr_type_;
+            if (b_type != target_type) {
+                std::string cast = fresh_reg();
+                emit_line("  " + cast + " = trunc " + b_type + " " + b + " to " + target_type);
+                b = cast;
+            }
+
+            // Use overflow intrinsic to detect overflow
+            std::string overflow_type = "{ " + target_type + ", i1 }";
+            std::string ov_result = fresh_reg();
+            emit_line("  " + ov_result + " = call " + overflow_type + " @llvm.smul.with.overflow." +
+                      target_type + "(" + target_type + " " + a + ", " + target_type + " " + b +
+                      ")");
+
+            std::string value = fresh_reg();
+            std::string overflow = fresh_reg();
+            emit_line("  " + value + " = extractvalue " + overflow_type + " " + ov_result + ", 0");
+            emit_line("  " + overflow + " = extractvalue " + overflow_type + " " + ov_result +
+                      ", 1");
+
+            // Determine saturation value based on sign of operands
+            // If (a ^ b) < 0, result is negative overflow -> MIN, else -> MAX
+            std::string xor_val = fresh_reg();
+            emit_line("  " + xor_val + " = xor " + target_type + " " + a + ", " + b);
+            std::string is_neg = fresh_reg();
+            emit_line("  " + is_neg + " = icmp slt " + target_type + " " + xor_val + ", 0");
+
+            // Compute min and max for the type
+            std::string min_val, max_val;
+            if (target_type == "i8") {
+                min_val = "-128";
+                max_val = "127";
+            } else if (target_type == "i16") {
+                min_val = "-32768";
+                max_val = "32767";
+            } else if (target_type == "i32") {
+                min_val = "-2147483648";
+                max_val = "2147483647";
+            } else if (target_type == "i64") {
+                min_val = "-9223372036854775808";
+                max_val = "9223372036854775807";
+            } else {
+                min_val = "-2147483648";
+                max_val = "2147483647";
+            }
+
+            // Select saturation value: negative overflow -> MIN, positive overflow -> MAX
+            std::string sat_val = fresh_reg();
+            emit_line("  " + sat_val + " = select i1 " + is_neg + ", " + target_type + " " +
+                      min_val + ", " + target_type + " " + max_val);
+
+            // If overflow, use saturation value; otherwise, use computed value
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = select i1 " + overflow + ", " + target_type + " " +
+                      sat_val + ", " + target_type + " " + value);
+
+            last_expr_type_ = target_type;
+            return result;
+        }
         return "0";
     }
 

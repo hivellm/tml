@@ -1,0 +1,47 @@
+// Tests for core::char::convert - from_digit and try_from_u32
+use test
+use core::char::convert::*
+
+@test
+func test_from_digit_decimal() -> I32 {
+    let r: Maybe[Char] = from_digit(4 as U32, 10 as U32)
+    assert(r.is_just(), "from_digit(4, 10) should be Just")
+    assert_eq(r.unwrap(), '4', "from_digit(4, 10) should be '4'")
+    return 0
+}
+
+@test
+func test_from_digit_hex() -> I32 {
+    let r: Maybe[Char] = from_digit(10 as U32, 16 as U32)
+    assert(r.is_just(), "from_digit(10, 16) should be Just")
+    assert_eq(r.unwrap(), 'a', "from_digit(10, 16) should be 'a'")
+    return 0
+}
+
+@test
+func test_from_digit_out_of_range() -> I32 {
+    let r: Maybe[Char] = from_digit(17 as U32, 16 as U32)
+    assert(r.is_nothing(), "from_digit(17, 16) should be Nothing")
+    return 0
+}
+
+@test
+func test_try_from_u32_valid() -> I32 {
+    let r: Outcome[Char, CharTryFromError] = try_from_u32(0x41 as U32)
+    assert(r.is_ok(), "try_from_u32(0x41) should be Ok")
+    return 0
+}
+
+@test
+func test_try_from_u32_surrogate() -> I32 {
+    let r: Outcome[Char, CharTryFromError] = try_from_u32(0xD800 as U32)
+    assert(r.is_err(), "try_from_u32(0xD800) should be Err")
+    return 0
+}
+
+@test
+func test_char_try_from_error_value() -> I32 {
+    let err: CharTryFromError = CharTryFromError { value: 0xD800 as U32 }
+    assert_eq(err.invalid_value(), 0xD800 as U32, "invalid_value should return 0xD800")
+    return 0
+}

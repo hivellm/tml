@@ -1,4 +1,4 @@
-// Arc method tests - strong_count, weak_count, downgrade, ptr_eq, etc.
+// Test: Arc methods - strong_count, weak_count, downgrade, ptr_eq, etc. (v2)
 use test::{assert, assert_eq}
 use std::sync::{Arc, Weak}
 

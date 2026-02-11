@@ -1,0 +1,28 @@
+// Tests for core::borrow - basic borrow patterns
+use test
+
+// Test that basic reference borrowing works (language-level, not trait)
+@test
+func test_ref_borrow_i32() -> I32 {
+    let x: I32 = 42
+    let r: ref I32 = ref x
+    assert_eq(*r, 42, "ref should point to same value")
+    return 0
+}
+
+@test
+func test_mut_ref_borrow() -> I32 {
+    var x: I32 = 10
+    let r: mut ref I32 = mut ref x
+    *r = 20
+    assert_eq(x, 20, "mutation via mut ref should be visible")
+    return 0
+}
+
+@test
+func test_ref_borrow_str() -> I32 {
+    let s: Str = "hello"
+    let r: ref Str = ref s
+    assert_eq(*r, "hello", "ref to Str should work")
+    return 0
+}

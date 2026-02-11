@@ -1,4 +1,4 @@
-// Test: string pattern matching in when expressions
+// Test: string patterns in when expressions
 
 use test
 

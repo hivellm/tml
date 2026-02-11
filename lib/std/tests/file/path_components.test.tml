@@ -1,0 +1,25 @@
+// Tests for std::file::path::Path component extraction
+use test
+use std::file::path::Path
+
+@test
+func test_path_parent() -> I32 {
+    let p: Str = Path::parent("some/dir/file.txt")
+    assert(p.len() > 0, "parent should return non-empty path")
+    return 0
+}
+
+@test
+func test_path_is_dir() -> I32 {
+    assert(Path::is_dir("build"), "build should be a directory")
+    assert(not Path::is_dir("__nonexistent_xyz__"), "nonexistent should not be dir")
+    return 0
+}
+
+@test
+func test_path_exists() -> I32 {
+    // The build directory should exist
+    assert(Path::exists("build"), "build directory should exist")
+    assert(not Path::exists("__nonexistent_dir_xyz__"), "nonexistent should return false")
+    return 0
+}

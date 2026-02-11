@@ -686,7 +686,15 @@ void LLVMIRGen::gen_class_vtable(const parser::ClassDecl& c) {
             // Abstract method - should not happen for non-abstract class
             vtable_value += "ptr null";
         } else {
-            vtable_value += "ptr @tml_" + get_suite_prefix() + vm.impl_class + "_" + vm.name;
+            // Determine prefix: imported/library classes don't use suite prefix,
+            // local classes do. This prevents name mismatches in vtables where
+            // a local class inherits methods from an imported base class.
+            std::string method_prefix = get_suite_prefix();
+            if (!method_prefix.empty() && vm.impl_class != c.name &&
+                is_library_method(vm.impl_class, vm.name)) {
+                method_prefix = "";
+            }
+            vtable_value += "ptr @tml_" + method_prefix + vm.impl_class + "_" + vm.name;
         }
     }
 
@@ -1305,7 +1313,10 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
         return;
     }
 
-    std::string func_name = "@tml_" + get_suite_prefix() + c.name + "_" + method.name;
+    // In library_decls_only mode, use no suite prefix (library methods are shared)
+    std::string prefix =
+        (options_.library_decls_only && !current_module_prefix_.empty()) ? "" : get_suite_prefix();
+    std::string func_name = "@tml_" + prefix + c.name + "_" + method.name;
     std::string class_type = "%class." + c.name;
 
     // Build parameter list - first param is always 'this' for instance methods
@@ -1347,6 +1358,27 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
                 return_value_class_by_value = true;
             }
         }
+    }
+
+    // Build parameter types string for function registration
+    std::string param_types_str;
+    for (size_t i = 0; i < param_types.size(); ++i) {
+        if (i > 0)
+            param_types_str += ", ";
+        param_types_str += param_types[i];
+    }
+
+    // Register function in functions_ map for lookup
+    std::string method_key = c.name + "_" + method.name;
+    std::string func_type_str = ret_type + " (" + param_types_str + ")";
+    functions_[method_key] = FuncInfo{func_name, func_type_str, ret_type, param_types};
+
+    // In library_decls_only mode, emit a declare statement for library class methods
+    // instead of the full definition. The implementations come from the shared library object.
+    if (options_.library_decls_only && !current_module_prefix_.empty()) {
+        emit_line("");
+        emit_line("declare " + ret_type + " " + func_name + "(" + param_types_str + ")");
+        return;
     }
 
     // Function signature
@@ -1606,6 +1638,37 @@ void LLVMIRGen::emit_external_class_type(const std::string& name, const types::C
     std::vector<ClassFieldInfo> field_info;
     size_t field_offset = field_types.size();
 
+    // First, add inherited fields from base class (for field access in methods)
+    // This mirrors the logic in gen_class_decl (lines 176-206)
+    if (def.base_class) {
+        int base_class_idx = 1; // Base class is always at index 1 (after vtable ptr at 0)
+        auto base_fields_it = class_fields_.find(*def.base_class);
+        if (base_fields_it != class_fields_.end()) {
+            for (const auto& base_field : base_fields_it->second) {
+                ClassFieldInfo inherited;
+                inherited.name = base_field.name;
+                inherited.index = -1; // Not a direct index
+                inherited.llvm_type = base_field.llvm_type;
+                inherited.vis = base_field.vis;
+                inherited.is_inherited = true;
+
+                // Build the inheritance path: first step accesses base in current class
+                inherited.inheritance_path.push_back({*def.base_class, base_class_idx});
+
+                if (base_field.is_inherited) {
+                    // Append the path from the base class to the actual field
+                    for (const auto& step : base_field.inheritance_path) {
+                        inherited.inheritance_path.push_back(step);
+                    }
+                } else {
+                    // Field is directly in the base class - add final step
+                    inherited.inheritance_path.push_back({*def.base_class, base_field.index});
+                }
+                field_info.push_back(inherited);
+            }
+        }
+    }
+
     for (const auto& field : def.fields) {
         if (field.is_static)
             continue;
@@ -1636,10 +1699,6 @@ void LLVMIRGen::emit_external_class_type(const std::string& name, const types::C
     // Register class type
     class_types_[name] = type_name;
     class_fields_[name] = field_info;
-
-    // Emit vtable type (even if empty)
-    std::string vtable_type = "%vtable." + name + " = type { ptr }";
-    emit_line(vtable_type);
 }
 
 // ============================================================================

@@ -1,0 +1,28 @@
+// Tests for Maybe[T] additional patterns and edge cases
+use test
+
+@test
+func test_maybe_unwrap_or_negative() -> I32 {
+    let opt: Maybe[I32] = Nothing
+    let val: I32 = opt.unwrap_or(-100)
+    assert(val == -100, "unwrap_or with negative default")
+    return 0
+}
+
+@test
+func test_maybe_and_then_to_nothing() -> I32 {
+    let opt: Maybe[I32] = Just(3)
+    let result: Maybe[I32] = opt.and_then(do(_x) Nothing)
+    assert(result.is_nothing(), "and_then returning Nothing should be Nothing")
+    return 0
+}
+
+@test
+func test_maybe_filter_boundary() -> I32 {
+    let opt: Maybe[I32] = Just(5)
+    let pass: Maybe[I32] = opt.filter(do(x) x >= 5)
+    let fail: Maybe[I32] = opt.filter(do(x) x > 5)
+    assert(pass.is_just(), "filter >= 5 should keep 5")
+    assert(fail.is_nothing(), "filter > 5 should drop 5")
+    return 0
+}

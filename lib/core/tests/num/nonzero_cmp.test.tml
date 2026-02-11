@@ -1,0 +1,39 @@
+// Tests for NonZero with various types
+use test
+use core::num::nonzero::NonZero
+
+@test
+func test_nonzero_i64_get() -> I32 {
+    let big: I64 = 9999999999
+    let result: Maybe[NonZero[I64]] = NonZero::new[I64](big)
+    when result {
+        Just(n) => {
+            assert_eq(n.get(), big, "NonZero I64 get should return big value")
+            return 0
+        },
+        Nothing => { return 1 }
+    }
+}
+
+@test
+func test_nonzero_new_one() -> I32 {
+    let result: Maybe[NonZero[I32]] = NonZero::new[I32](1)
+    assert(result.is_just(), "NonZero::new(1) should be Just")
+    when result {
+        Just(n) => assert_eq(n.get(), 1, "get should return 1"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_nonzero_new_max() -> I32 {
+    let max_val: I32 = 2147483647
+    let result: Maybe[NonZero[I32]] = NonZero::new[I32](max_val)
+    assert(result.is_just(), "NonZero::new(MAX) should be Just")
+    when result {
+        Just(n) => assert_eq(n.get(), max_val, "get should return max value"),
+        Nothing => {}
+    }
+    return 0
+}

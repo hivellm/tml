@@ -29,6 +29,22 @@ func test_i8_mul_assign() -> I32 {
     return 0
 }
 
+@test
+func test_i8_div_assign() -> I32 {
+    var x: I8 = 100
+    x /= 10
+    assert_eq(x as I32, 10, "I8 /= ")
+    return 0
+}
+
+@test
+func test_i8_rem_assign() -> I32 {
+    var x: I8 = 17
+    x %= 5
+    assert_eq(x as I32, 2, "I8 %= ")
+    return 0
+}
+
 // =============================================================================
 // I16 compound assignments
 // =============================================================================
@@ -57,6 +73,22 @@ func test_i16_mul_assign() -> I32 {
     return 0
 }
 
+@test
+func test_i16_div_assign() -> I32 {
+    var x: I16 = 1000
+    x /= 50
+    assert_eq(x as I32, 20, "I16 /= ")
+    return 0
+}
+
+@test
+func test_i16_rem_assign() -> I32 {
+    var x: I16 = 103
+    x %= 10
+    assert_eq(x as I32, 3, "I16 %= ")
+    return 0
+}
+
 // =============================================================================
 // U8 compound assignments
 // =============================================================================
@@ -74,6 +106,32 @@ func test_u8_sub_assign() -> I32 {
     var x: U8 = 50
     x -= 20
     assert_eq(x as I32, 30, "U8 -= ")
+    return 0
+}
+
+@test
+func test_u8_mul_assign() -> I32 {
+    var x: U8 = 15
+    x *= 10
+    assert_eq(x as I32, 150, "U8 *= ")
+    return 0
+}
+
+@test
+func test_u8_div_assign() -> I32 {
+    var x: U8 = 100
+    let d: U8 = 10
+    x /= d
+    assert_eq(x as I32, 10, "U8 /= ")
+    return 0
+}
+
+@test
+func test_u8_rem_assign() -> I32 {
+    var x: U8 = 17
+    let d: U8 = 5
+    x %= d
+    assert_eq(x as I32, 2, "U8 %= ")
     return 0
 }
 
@@ -97,6 +155,32 @@ func test_u16_sub_assign() -> I32 {
     return 0
 }
 
+@test
+func test_u16_mul_assign() -> I32 {
+    var x: U16 = 200
+    x *= 100
+    assert_eq(x as I32, 20000, "U16 *= ")
+    return 0
+}
+
+@test
+func test_u16_div_assign() -> I32 {
+    var x: U16 = 1000
+    let d: U16 = 50
+    x /= d
+    assert_eq(x as I32, 20, "U16 /= ")
+    return 0
+}
+
+@test
+func test_u16_rem_assign() -> I32 {
+    var x: U16 = 103
+    let d: U16 = 10
+    x %= d
+    assert_eq(x as I32, 3, "U16 %= ")
+    return 0
+}
+
 // =============================================================================
 // U32 compound assignments
 // =============================================================================
@@ -117,6 +201,30 @@ func test_u32_mul_assign() -> I32 {
     return 0
 }
 
+@test
+func test_u32_sub_assign() -> I32 {
+    var x: U32 = 1000
+    x -= 300
+    assert_eq(x as I32, 700, "U32 -= ")
+    return 0
+}
+
+@test
+func test_u32_div_assign() -> I32 {
+    var x: U32 = 1000
+    x /= 50
+    assert_eq(x as I32, 20, "U32 /= ")
+    return 0
+}
+
+@test
+func test_u32_rem_assign() -> I32 {
+    var x: U32 = 103
+    x %= 10
+    assert_eq(x as I32, 3, "U32 %= ")
+    return 0
+}
+
 // =============================================================================
 // U64 compound assignments
 // =============================================================================
@@ -134,5 +242,29 @@ func test_u64_mul_assign() -> I32 {
     var x: U64 = 100
     x *= 10
     assert_eq(x as I64, 1000, "U64 *= ")
+    return 0
+}
+
+@test
+func test_u64_sub_assign() -> I32 {
+    var x: U64 = 5000
+    x -= 2000
+    assert_eq(x as I64, 3000, "U64 -= ")
+    return 0
+}
+
+@test
+func test_u64_div_assign() -> I32 {
+    var x: U64 = 10000
+    x /= 50
+    assert_eq(x as I64, 200, "U64 /= ")
+    return 0
+}
+
+@test
+func test_u64_rem_assign() -> I32 {
+    var x: U64 = 1003
+    x %= 100
+    assert_eq(x as I64, 3, "U64 %= ")
     return 0
 }

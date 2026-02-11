@@ -1,0 +1,28 @@
+// Tests for Array mutation via indexing
+use test
+
+@test
+func test_array_mutation_via_index() -> I32 {
+    var arr: [I32; 3] = [10, 20, 30]
+    arr[1] = 99
+    assert(arr[1] == 99, "element at index 1 should be 99 after mutation")
+    assert(arr[0] == 10, "other elements unchanged")
+    assert(arr[2] == 30, "other elements unchanged")
+    return 0
+}
+
+@test
+func test_array_mutation_first_element() -> I32 {
+    var arr: [I32; 3] = [10, 20, 30]
+    arr[0] = 77
+    assert(arr[0] == 77, "first element should be 77 after mutation")
+    return 0
+}
+
+@test
+func test_array_mutation_last_element() -> I32 {
+    var arr: [I32; 3] = [10, 20, 30]
+    arr[2] = 55
+    assert(arr[2] == 55, "last element should be 55 after mutation")
+    return 0
+}

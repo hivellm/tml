@@ -1,0 +1,84 @@
+// Tests for argument-style exception classes
+// Uses local mock classes to avoid duplicate symbol linking issues
+use test
+
+class MockArgNullException {
+    message: Str
+    param_name: Str
+
+    static func create(param_name: Str) -> MockArgNullException {
+        return MockArgNullException {
+            message: "Value cannot be null: " + param_name,
+            param_name: param_name
+        }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_param_name(this) -> Str { return this.param_name }
+    func get_type(this) -> Str { return "ArgumentNullException" }
+    func to_string(this) -> Str { return "ArgumentNullException: " + this.message }
+}
+
+class MockArgOutOfRangeException {
+    message: Str
+    param_name: Str
+    actual_value: I64
+
+    static func create(param_name: Str, actual: I64, message: Str) -> MockArgOutOfRangeException {
+        return MockArgOutOfRangeException {
+            message: message,
+            param_name: param_name,
+            actual_value: actual
+        }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_param_name(this) -> Str { return this.param_name }
+    func get_actual_value(this) -> I64 { return this.actual_value }
+    func get_type(this) -> Str { return "ArgumentOutOfRangeException" }
+    func to_string(this) -> Str { return "ArgumentOutOfRangeException: " + this.message }
+}
+
+class MockArgException {
+    message: Str
+    param_name: Str
+
+    static func create(message: Str) -> MockArgException {
+        return MockArgException { message: message, param_name: "" }
+    }
+
+    static func with_param(message: Str, param_name: Str) -> MockArgException {
+        return MockArgException { message: message, param_name: param_name }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_param_name(this) -> Str { return this.param_name }
+    func get_type(this) -> Str { return "ArgumentException" }
+    func to_string(this) -> Str { return "ArgumentException: " + this.message }
+}
+
+@test
+func test_arg_null_create() -> I32 {
+    let e: MockArgNullException = MockArgNullException::create("name")
+    assert_eq(e.get_type(), "ArgumentNullException", "type should match")
+    assert_eq(e.get_param_name(), "name", "param name should match")
+    assert_eq(e.get_message(), "Value cannot be null: name", "message format")
+    return 0
+}
+
+@test
+func test_arg_null_to_string() -> I32 {
+    let e: MockArgNullException = MockArgNullException::create("data")
+    assert_eq(e.to_string(), "ArgumentNullException: Value cannot be null: data", "to_string format")
+    return 0
+}
+
+@test
+func test_arg_out_of_range() -> I32 {
+    let e: MockArgOutOfRangeException = MockArgOutOfRangeException::create("index", 15 as I64, "Must be 0-10")
+    assert_eq(e.get_type(), "ArgumentOutOfRangeException", "type")
+    assert_eq(e.get_param_name(), "index", "param name")
+    assert_eq(e.get_actual_value(), 15 as I64, "actual value")
+    assert_eq(e.get_message(), "Must be 0-10", "message")
+    return 0
+}

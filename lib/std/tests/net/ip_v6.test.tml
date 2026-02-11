@@ -1,0 +1,27 @@
+// Tests for std::net::ip - Ipv6Addr
+use test
+use std::net::ip::{Ipv6Addr}
+
+@test
+func test_ipv6_localhost() -> I32 {
+    let addr: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    assert(addr.is_loopback(), "::1 should be loopback")
+    assert(not addr.is_unspecified(), "::1 should not be unspecified")
+    return 0
+}
+
+@test
+func test_ipv6_unspecified() -> I32 {
+    let addr: Ipv6Addr = Ipv6Addr::UNSPECIFIED()
+    assert(addr.is_unspecified(), ":: should be unspecified")
+    assert(not addr.is_loopback(), ":: should not be loopback")
+    return 0
+}
+
+@test
+func test_ipv6_is_multicast() -> I32 {
+    let addr: Ipv6Addr = Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 1)
+    assert(addr.is_multicast(), "ff02::1 should be multicast")
+    assert(not Ipv6Addr::LOCALHOST().is_multicast(), "::1 should not be multicast")
+    return 0
+}

@@ -1,0 +1,44 @@
+// Tests for concrete range iterators (RangeIterI64, RangeInclusiveIterI64)
+// Note: Generic Range[T] and direct Step method calls are blocked by
+// compiler limitations. Tests use the concrete I64 iterator types.
+use test
+use core::range::{RangeIterI64, RangeInclusiveIterI64}
+
+@test
+func test_range_iter_sum() -> I32 {
+    let mut iter: RangeIterI64 = RangeIterI64 { current: 1, end: 6 }
+    var sum: I64 = 0
+    loop (true) {
+        when iter.next() {
+            Just(v) => { sum = sum + v },
+            Nothing => { break }
+        }
+    }
+    // 1 + 2 + 3 + 4 + 5 = 15
+    assert_eq(sum, 15, "range 1..6 sum should be 15")
+    return 0
+}
+
+@test
+func test_range_iter_count() -> I32 {
+    let mut iter: RangeIterI64 = RangeIterI64 { current: 10, end: 20 }
+    var count: I64 = 0
+    loop (true) {
+        when iter.next() {
+            Just(v) => { count = count + 1 },
+            Nothing => { break }
+        }
+    }
+    assert_eq(count, 10, "range 10..20 should have 10 elements")
+    return 0
+}
+
+@test
+func test_range_iter_single_element() -> I32 {
+    let mut iter: RangeIterI64 = RangeIterI64 { current: 99, end: 100 }
+    let v: Maybe[I64] = iter.next()
+    assert_eq(v.unwrap(), 99, "single element should be 99")
+    let v2: Maybe[I64] = iter.next()
+    assert(v2.is_nothing(), "should be exhausted")
+    return 0
+}

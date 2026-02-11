@@ -1,0 +1,42 @@
+// Tests for core::ops::try_trait - ControlFlow
+use test
+use core::ops::try_trait::ControlFlow
+
+@test
+func test_control_flow_continue() -> I32 {
+    let cf: ControlFlow[I32, Str] = ControlFlow::Continue(42)
+    assert(cf.is_continue(), "Continue should be is_continue")
+    assert(not cf.is_break(), "Continue should not be is_break")
+    return 0
+}
+
+@test
+func test_control_flow_break() -> I32 {
+    let cf: ControlFlow[I32, Str] = ControlFlow::Break("error")
+    assert(cf.is_break(), "Break should be is_break")
+    assert(not cf.is_continue(), "Break should not be is_continue")
+    return 0
+}
+
+@test
+func test_control_flow_i64_continue() -> I32 {
+    let cf: ControlFlow[I64, I64] = ControlFlow::Continue(100 as I64)
+    assert(cf.is_continue(), "i64 Continue should be is_continue")
+    return 0
+}
+
+@test
+func test_control_flow_i64_break() -> I32 {
+    let cf: ControlFlow[I64, I64] = ControlFlow::Break(-1 as I64)
+    assert(cf.is_break(), "i64 Break should be is_break")
+    return 0
+}
+
+@test
+func test_control_flow_bool_types() -> I32 {
+    let cont: ControlFlow[Bool, Bool] = ControlFlow::Continue(true)
+    assert(cont.is_continue(), "bool Continue")
+    let brk: ControlFlow[Bool, Bool] = ControlFlow::Break(false)
+    assert(brk.is_break(), "bool Break")
+    return 0
+}

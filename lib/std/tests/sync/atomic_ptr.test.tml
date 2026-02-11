@@ -1,4 +1,4 @@
-// AtomicPtr tests
+// Test: AtomicPtr operations (v2)
 use test::{assert, assert_eq}
 use std::sync::{AtomicPtr, Ordering}
 

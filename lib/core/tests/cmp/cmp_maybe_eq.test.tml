@@ -1,0 +1,47 @@
+// Tests for PartialEq .eq method via behavior call on Ordering type
+use test
+use core::cmp::Ordering
+
+// =============================================================================
+// Ordering .eq via behavior method (custom type, not primitive)
+// =============================================================================
+
+@test
+func test_ordering_eq_less_less() -> I32 {
+    let a: Ordering = Ordering::Less
+    let b: Ordering = Ordering::Less
+    assert(a.eq(ref b), "Less.eq(Less) should be true")
+    return 0
+}
+
+@test
+func test_ordering_eq_equal_equal() -> I32 {
+    let a: Ordering = Ordering::Equal
+    let b: Ordering = Ordering::Equal
+    assert(a.eq(ref b), "Equal.eq(Equal) should be true")
+    return 0
+}
+
+@test
+func test_ordering_eq_greater_greater() -> I32 {
+    let a: Ordering = Ordering::Greater
+    let b: Ordering = Ordering::Greater
+    assert(a.eq(ref b), "Greater.eq(Greater) should be true")
+    return 0
+}
+
+@test
+func test_ordering_eq_different() -> I32 {
+    let a: Ordering = Ordering::Less
+    let b: Ordering = Ordering::Greater
+    assert(a.eq(ref b) == false, "Less.eq(Greater) should be false")
+    return 0
+}
+
+@test
+func test_ordering_eq_less_equal() -> I32 {
+    let a: Ordering = Ordering::Less
+    let b: Ordering = Ordering::Equal
+    assert(a.eq(ref b) == false, "Less.eq(Equal) should be false")
+    return 0
+}

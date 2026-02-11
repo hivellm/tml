@@ -1,0 +1,87 @@
+// Tests for TimeoutException and ArgumentOutOfRangeException patterns
+use test
+
+// TimeoutException mirror
+class TimeoutEx {
+    message: Str
+
+    static func create() -> TimeoutEx {
+        return TimeoutEx { message: "Operation timed out" }
+    }
+
+    static func with_message(message: Str) -> TimeoutEx {
+        return TimeoutEx { message: message }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_type(this) -> Str {
+        return "TimeoutException"
+    }
+
+    func to_string(this) -> Str {
+        return "TimeoutException: " + this.message
+    }
+}
+
+@test
+func test_timeout_default() -> I32 {
+    let ex: TimeoutEx = TimeoutEx::create()
+    assert_eq(ex.get_message(), "Operation timed out", "default message")
+    assert_eq(ex.get_type(), "TimeoutException", "type")
+    return 0
+}
+
+@test
+func test_timeout_custom() -> I32 {
+    let ex: TimeoutEx = TimeoutEx::with_message("Connection timed out after 30s")
+    assert_eq(ex.to_string(), "TimeoutException: Connection timed out after 30s", "to_string")
+    return 0
+}
+
+// ArgumentOutOfRangeException mirror
+class ArgOutOfRangeEx {
+    message: Str
+    param_name: Str
+    actual_value: I64
+
+    static func create(param_name: Str, actual: I64, message: Str) -> ArgOutOfRangeEx {
+        return ArgOutOfRangeEx {
+            message: message,
+            param_name: param_name,
+            actual_value: actual
+        }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_param_name(this) -> Str {
+        return this.param_name
+    }
+
+    func get_actual_value(this) -> I64 {
+        return this.actual_value
+    }
+
+    func get_type(this) -> Str {
+        return "ArgumentOutOfRangeException"
+    }
+
+    func to_string(this) -> Str {
+        return "ArgumentOutOfRangeException: " + this.message
+    }
+}
+
+@test
+func test_arg_out_of_range() -> I32 {
+    let ex: ArgOutOfRangeEx = ArgOutOfRangeEx::create("index", 10, "Index must be 0-9")
+    assert_eq(ex.get_param_name(), "index", "param name")
+    assert_eq(ex.get_actual_value() as I32, 10, "actual value")
+    assert_eq(ex.get_message(), "Index must be 0-9", "message")
+    assert_eq(ex.get_type(), "ArgumentOutOfRangeException", "type")
+    return 0
+}

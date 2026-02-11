@@ -53,6 +53,13 @@ TML_EXPORT TmlList* list_create(int64_t initial_capacity) {
 }
 
 /**
+ * @brief Alias for list_create (used by std::crypto::x509).
+ */
+TML_EXPORT TmlList* list_new(int64_t initial_capacity) {
+    return list_create(initial_capacity);
+}
+
+/**
  * @brief Destroys a list and frees all memory.
  */
 TML_EXPORT void list_destroy(TmlList* list) {

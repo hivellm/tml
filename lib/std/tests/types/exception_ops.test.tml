@@ -1,0 +1,72 @@
+// Tests for InvalidOperationException, NotSupportedException, NotImplementedException
+// Using local mirror classes due to Object inheritance codegen issues
+use test
+
+// InvalidOperationException mirror
+class InvalidOpEx {
+    message: Str
+
+    static func create(message: Str) -> InvalidOpEx {
+        return InvalidOpEx { message: message }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_type(this) -> Str {
+        return "InvalidOperationException"
+    }
+
+    func to_string(this) -> Str {
+        return "InvalidOperationException: " + this.message
+    }
+}
+
+@test
+func test_invalid_operation_create() -> I32 {
+    let ex: InvalidOpEx = InvalidOpEx::create("Cannot send while disconnected")
+    assert_eq(ex.get_message(), "Cannot send while disconnected", "message should match")
+    assert_eq(ex.get_type(), "InvalidOperationException", "type should match")
+    return 0
+}
+
+@test
+func test_invalid_operation_to_string() -> I32 {
+    let ex: InvalidOpEx = InvalidOpEx::create("Queue is empty")
+    assert_eq(ex.to_string(), "InvalidOperationException: Queue is empty", "to_string format")
+    return 0
+}
+
+// NotSupportedException mirror
+class NotSupportedEx {
+    message: Str
+
+    static func create() -> NotSupportedEx {
+        return NotSupportedEx { message: "Operation is not supported" }
+    }
+
+    static func with_message(message: Str) -> NotSupportedEx {
+        return NotSupportedEx { message: message }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_type(this) -> Str {
+        return "NotSupportedException"
+    }
+
+    func to_string(this) -> Str {
+        return "NotSupportedException: " + this.message
+    }
+}
+
+@test
+func test_not_supported_default() -> I32 {
+    let ex: NotSupportedEx = NotSupportedEx::create()
+    assert_eq(ex.get_message(), "Operation is not supported", "default message")
+    assert_eq(ex.get_type(), "NotSupportedException", "type should match")
+    return 0
+}

@@ -181,6 +181,7 @@ set(TML_RUNTIME_SOURCES
     # net/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/dns.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/tls.c
     # os/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/os/os.c
     # crypto/
@@ -908,6 +909,7 @@ add_library(tml_profiler STATIC
     src/profiler/profiler.cpp
 )
 target_include_directories(tml_profiler PUBLIC include src)
+target_link_libraries(tml_profiler PUBLIC tml_log)
 if(MSVC)
     target_compile_options(tml_profiler PRIVATE
         /W3

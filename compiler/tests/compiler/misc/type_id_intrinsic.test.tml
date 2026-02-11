@@ -1,4 +1,4 @@
-// Test type_id intrinsic - returns unique ID for each type
+// Test type_id intrinsic - returns unique ID per type
 // Validates that type_id[T]() returns a stable U64 hash
 
 use test

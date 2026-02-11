@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Comprehensive Test Coverage Expansion** (2026-02-10) - 4799 tests passing across 564 test files
+  - **core::fmt::rt** — 9 tests: Count debug output, FormatSpec defaults/with_width/with_precision, Argument new_with/empty, Placeholder::new
+  - **core::alloc** — 6 tests: Layout constructors, from_type, array, alignment utilities
+  - **core::borrow** — 9 tests: Borrow/BorrowMut basics, struct borrows, ToOwned
+  - **core::cell** — 15 tests: Cell basic/into_inner, RefCell basic, OnceCell, UnsafeCell
+  - **core::char** — 18 tests: case conversion, classification, char conversion, from_digit, type checks, validation
+  - **core::cmp** — 15 tests: clamp, maybe_eq, partial_cmp, Ordering methods/reverse
+  - **core::convert** — 12 tests: identity, Into, TryFrom cross-type, TryFrom small
+  - **core::hash** — 30 tests: combine, default/duplicate, DefaultHasher, i32/i64, sequence, write, Maybe, Outcome, primitives, RandomState
+  - **core::iter** — 9 tests: iter sources, range inclusive extras, Step[I32]
+  - **core::mem** — 15 tests: ManuallyDrop, MaybeUninit, size/align, swap, take/zeroed
+  - **core::num** — 24 tests: checked arithmetic, integer bits (I64/U32/U64), endian ops, rotate/reverse, NonZero cmp, saturating intrinsics
+  - **core::ops** — 18 tests: arith methods (U32/U64), bit assign extras, bit types, try_trait
+  - **core::option** — 12 tests: basics, convert, extract
+  - **core::pin** — 3 tests: Pin basics
+  - **core::ptr** — 21 tests: alignment, ptr ops, RawMutPtr, RawPtr align/arith/basic/cast
+  - **core::range** — 6 tests: Range iter, RangeInclusive iter
+  - **core::reflect** — 3 tests: type reflection
+  - **core::sync** — 6 tests: atomic basics, spinlock
+  - **core::time** — 15 tests: Duration accessors, arithmetic, basics, conversion, saturating
+  - **core::types** — 27 tests: array cmp/get/hash/map/mutation/partial_cmp/small_types, char decode
+  - **std::collections** — 9 tests: Buffer swap, HashMap edge cases, List grow
+  - **std::exception** — 15 tests: basics, argument exceptions, IO/file, subclasses, formatting, timeout
+  - **std::file** — 12 tests: dir ops, file IO, path basics, path components
+  - **std::json** — 18 tests: arrays, constructors, nested, objects, parse, serialize
+  - **std::net::ip** — 15 tests: Ipv4Addr (localhost, loopback, private, classify, bits, multicast), Ipv6Addr (localhost, unspecified, multicast), IpAddr enum (V4/V6/unspecified)
+  - **std::net::error** — 3 tests: NetErrorKind values/checks, NetError convenience
+  - **std::net::tls** — TLS module and tests
+  - **std::os** — 21 tests: CPU/memory info, environment variables, process info, priority, system info
+  - **std::profiler** — 3 tests: profiler basics
+  - **std::sync** — 6 tests: Ordering has_acquire/has_release semantics
+  - **std::text** — 18 tests: basics, constructors, modify, operations, search, transform
+  - **std::types** — 12 tests: exception format/io/ops/timeout, Outcome, unwrap
+  - **test::report** — 3 tests: test report module
+  - **test::runner** — 3 tests: test runner module
+
+- **TLS Module** (2026-02-10) - TLS/SSL support in `std::net::tls`
+  - `TlsConfig` struct with `new()`, `with_verify()`, `with_cert_file()`, `with_key_file()`, `with_ca_file()`
+  - `TlsStream` struct wrapping raw socket with `connect()`, `read()`, `write()`, `close()`
+  - Runtime implementation in `compiler/runtime/net/tls.c`
+
+- **Dynamic Impl Resolution for Primitive Types** (2026-02-10) - Compiler support for method calls on primitives
+  - Primitive types (I32, U64, Str, etc.) now resolve methods through dynamic impl lookup
+  - Fixes method calls on numeric literals and string operations
+
+- **Test Directory Reorganization** (2026-02-10) - Tests organized into themed subdirectories
+  - core tests: `alloc/`, `any/`, `arena/`, `borrow/`, `cell/`, `char/`, `cmp/`, `convert/`, `default/`, `error/`, `fmt/`, `hash/`, `intrinsics/`, `iter/`, `mem/`, `num/`, `ops/`, `option/`, `pin/`, `pool/`, `ptr/`, `range/`, `reflect/`, `result/`, `soo/`, `sync/`, `time/`, `types/`
+  - std tests: `collections/`, `exception/`, `file/`, `json/`, `lowlevel/`, `net/`, `os/`, `profiler/`, `sync/`, `text/`, `types/`
+
 - **THIR Layer + Advanced Trait Solver** (2026-02-10) - Typed High-level IR between HIR and MIR
   - THIR (Typed HIR) makes all implicit type transformations explicit before MIR lowering
   - Numeric coercion insertion: IntWidening, UintWidening, FloatWidening, IntToFloat, DerefCoercion, RefCoercion
@@ -23,6 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New files: `traits/solver.hpp/cpp`, `traits/solver_builtins.cpp`, `thir/thir_expr.hpp`, `thir/thir_module.hpp`, `thir/thir_lower.cpp`, `thir/exhaustiveness.hpp/cpp`, `mir/thir_mir_builder.hpp/cpp`
 
 ### Fixed
+- **Bool ABI and ternary alloca codegen** (2026-02-10) - Fixed Bool value representation and conditional expression code generation
+  - Bool ABI now correctly uses i1/i8 representation across function boundaries
+  - Ternary expressions properly allocate temporaries for aggregate types
+  - RawPtr casts and DNS runtime fixes
+
 - **Float comparison in assert builtins** (2026-02-10) - `assert_eq` and `assert_ne` now emit correct LLVM IR for float types
   - `assert_eq` was generating `icmp eq float` (invalid) instead of `fcmp oeq float`
   - `assert_ne` was generating `icmp ne float` (invalid) instead of `fcmp one float`

@@ -1,0 +1,77 @@
+// Tests for NotImplementedException, KeyNotFoundException, ArithmeticException patterns
+use test
+
+// NotImplementedException mirror
+class NotImplEx {
+    message: Str
+
+    static func create() -> NotImplEx {
+        return NotImplEx { message: "Method not implemented" }
+    }
+
+    static func with_message(message: Str) -> NotImplEx {
+        return NotImplEx { message: message }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_type(this) -> Str {
+        return "NotImplementedException"
+    }
+
+    func to_string(this) -> Str {
+        return "NotImplementedException: " + this.message
+    }
+}
+
+@test
+func test_not_implemented_default() -> I32 {
+    let ex: NotImplEx = NotImplEx::create()
+    assert_eq(ex.get_message(), "Method not implemented", "default message")
+    assert_eq(ex.get_type(), "NotImplementedException", "type")
+    return 0
+}
+
+@test
+func test_not_implemented_with_message() -> I32 {
+    let ex: NotImplEx = NotImplEx::with_message("TODO: implement serialize")
+    assert_eq(ex.get_message(), "TODO: implement serialize", "custom message")
+    assert_eq(ex.to_string(), "NotImplementedException: TODO: implement serialize", "to_string")
+    return 0
+}
+
+// KeyNotFoundException mirror
+class KeyNotFoundEx {
+    message: Str
+
+    static func create() -> KeyNotFoundEx {
+        return KeyNotFoundEx { message: "Key not found in collection" }
+    }
+
+    static func with_message(message: Str) -> KeyNotFoundEx {
+        return KeyNotFoundEx { message: message }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_type(this) -> Str {
+        return "KeyNotFoundException"
+    }
+
+    func to_string(this) -> Str {
+        return "KeyNotFoundException: " + this.message
+    }
+}
+
+@test
+func test_key_not_found_default() -> I32 {
+    let ex: KeyNotFoundEx = KeyNotFoundEx::create()
+    assert_eq(ex.get_message(), "Key not found in collection", "default message")
+    assert_eq(ex.get_type(), "KeyNotFoundException", "type")
+    assert_eq(ex.to_string(), "KeyNotFoundException: Key not found in collection", "to_string")
+    return 0
+}

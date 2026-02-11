@@ -1,0 +1,26 @@
+// Tests for I32 clamping using manual min/max (Ord.clamp has codegen issue with Self type)
+use test
+
+@test
+func test_manual_clamp_within_range() -> I32 {
+    let v: I32 = 5
+    let r: I32 = v.max(0).min(10)
+    assert_eq(r, 5, "5 clamped to [0,10] should be 5")
+    return 0
+}
+
+@test
+func test_manual_clamp_below_min() -> I32 {
+    let v: I32 = -5
+    let r: I32 = v.max(0).min(10)
+    assert_eq(r, 0, "-5 clamped to [0,10] should be 0")
+    return 0
+}
+
+@test
+func test_manual_clamp_above_max() -> I32 {
+    let v: I32 = 20
+    let r: I32 = v.max(0).min(10)
+    assert_eq(r, 10, "20 clamped to [0,10] should be 10")
+    return 0
+}

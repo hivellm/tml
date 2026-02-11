@@ -1,0 +1,28 @@
+// Tests for RawPtr cast and hash
+use test
+use core::ptr::const_ptr::RawPtr
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_rawptr_cast() -> I32 {
+    let p: RawPtr[I64] = RawPtr[I64].from_addr(0x4000)
+    let q: RawPtr[U8] = p.cast[U8]()
+    assert_eq(q.addr(), 0x4000 as I64, "cast should preserve address")
+    return 0
+}
+
+@test
+func test_rawptr_hash() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(12345)
+    let h: I64 = p.hash()
+    assert_eq(h, 12345 as I64, "hash should return address")
+    return 0
+}
+
+@test
+func test_rawptr_to_usize() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(0x5000)
+    let addr: I64 = p.to_usize()
+    assert_eq(addr, 0x5000 as I64, "to_usize should return address")
+    return 0
+}

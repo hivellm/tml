@@ -1,0 +1,26 @@
+// Tests for core::hash combine_hashes function
+use test
+use core::hash::combine_hashes
+
+@test
+func test_combine_hashes_basic() -> I32 {
+    let h: I64 = combine_hashes(10 as I64, 20 as I64)
+    // h1 * 31 + h2 = 10 * 31 + 20 = 330
+    assert_eq(h, 330 as I64, "combine_hashes(10, 20) should be 330")
+    return 0
+}
+
+@test
+func test_combine_hashes_order_matters() -> I32 {
+    let h1: I64 = combine_hashes(10 as I64, 20 as I64)
+    let h2: I64 = combine_hashes(20 as I64, 10 as I64)
+    assert(h1 != h2, "combine_hashes should be order-dependent")
+    return 0
+}
+
+@test
+func test_combine_hashes_zero() -> I32 {
+    let h: I64 = combine_hashes(0 as I64, 0 as I64)
+    assert_eq(h, 0 as I64, "combine_hashes(0, 0) should be 0")
+    return 0
+}

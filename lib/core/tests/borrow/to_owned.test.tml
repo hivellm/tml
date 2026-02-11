@@ -1,0 +1,51 @@
+// Tests for core::borrow - ToOwned for primitives
+use test
+use core::borrow::ToOwned
+
+@test
+func test_to_owned_i32() -> I32 {
+    let x: I32 = 42
+    let owned: I32 = x.to_owned()
+    assert_eq(owned, 42, "I32 to_owned should return same value")
+    return 0
+}
+
+@test
+func test_to_owned_i64() -> I32 {
+    let x: I64 = 1000 as I64
+    let owned: I64 = x.to_owned()
+    assert_eq(owned, 1000 as I64, "I64 to_owned should return same value")
+    return 0
+}
+
+@test
+func test_to_owned_bool() -> I32 {
+    let x: Bool = true
+    let owned: Bool = x.to_owned()
+    assert(owned, "Bool to_owned should return true")
+    return 0
+}
+
+@test
+func test_to_owned_str() -> I32 {
+    let s: Str = "hello world"
+    let owned: Str = s.to_owned()
+    assert(owned == "hello world", "Str to_owned should duplicate")
+    return 0
+}
+
+@test
+func test_to_owned_i8() -> I32 {
+    let x: I8 = 127 as I8
+    let owned: I8 = x.to_owned()
+    assert_eq(owned as I32, 127, "I8 to_owned")
+    return 0
+}
+
+@test
+func test_to_owned_f64() -> I32 {
+    let x: F64 = 3.14
+    let owned: F64 = x.to_owned()
+    assert(owned == 3.14, "F64 to_owned should return same value")
+    return 0
+}

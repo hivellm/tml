@@ -1,5 +1,5 @@
 // Test: method calls on ref Buffer parameters
-// This tests the same pattern used in cipher.tml
+// Tests the same pattern used in cipher.tml
 
 use test
 

@@ -1,0 +1,27 @@
+// Tests for core::cell::Cell[T]
+use test
+use core::cell::cell::Cell
+
+@test
+func test_cell_new_get() -> I32 {
+    let c: Cell[I32] = Cell::new[I32](42)
+    assert_eq(c.get(), 42, "get should return initial value")
+    return 0
+}
+
+@test
+func test_cell_set() -> I32 {
+    var c: Cell[I32] = Cell::new[I32](10)
+    c.set(20)
+    assert_eq(c.get(), 20, "get should return updated value")
+    return 0
+}
+
+@test
+func test_cell_replace() -> I32 {
+    var c: Cell[I32] = Cell::new[I32](5)
+    let old: I32 = c.replace(99)
+    assert_eq(old, 5, "replace should return old value")
+    assert_eq(c.get(), 99, "get should return new value")
+    return 0
+}

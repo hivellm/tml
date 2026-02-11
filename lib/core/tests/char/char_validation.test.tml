@@ -1,0 +1,49 @@
+// Tests for core::char::methods - is_valid and ASCII-specific checks
+use test
+use core::char::methods::*
+
+@test
+func test_is_valid_ascii() -> I32 {
+    assert(is_valid(0x41 as U32), "0x41 (A) should be valid")
+    assert(is_valid(0x0 as U32), "0x0 should be valid")
+    return 0
+}
+
+@test
+func test_is_valid_surrogate() -> I32 {
+    assert(not is_valid(0xD800 as U32), "0xD800 (surrogate) should be invalid")
+    assert(not is_valid(0xDFFF as U32), "0xDFFF (surrogate) should be invalid")
+    return 0
+}
+
+@test
+func test_is_valid_max_unicode() -> I32 {
+    assert(is_valid(0x10FFFF as U32), "0x10FFFF (max) should be valid")
+    assert(not is_valid(0x110000 as U32), "0x110000 should be invalid")
+    return 0
+}
+
+@test
+func test_is_ascii_lowercase() -> I32 {
+    assert(is_ascii_lowercase('a'), "'a' should be ASCII lowercase")
+    assert(is_ascii_lowercase('z'), "'z' should be ASCII lowercase")
+    assert(not is_ascii_lowercase('A'), "'A' should not be ASCII lowercase")
+    assert(not is_ascii_lowercase('1'), "'1' should not be ASCII lowercase")
+    return 0
+}
+
+@test
+func test_is_ascii_uppercase() -> I32 {
+    assert(is_ascii_uppercase('A'), "'A' should be ASCII uppercase")
+    assert(is_ascii_uppercase('Z'), "'Z' should be ASCII uppercase")
+    assert(not is_ascii_uppercase('a'), "'a' should not be ASCII uppercase")
+    return 0
+}
+
+@test
+func test_is_ascii_digit() -> I32 {
+    assert(is_ascii_digit('0'), "'0' should be ASCII digit")
+    assert(is_ascii_digit('9'), "'9' should be ASCII digit")
+    assert(not is_ascii_digit('a'), "'a' should not be ASCII digit")
+    return 0
+}

@@ -1,4 +1,4 @@
-// AtomicUsize tests (pointer-sized unsigned)
+// Test: AtomicUsize operations (pointer-sized unsigned) (v2)
 use test::{assert, assert_eq}
 use std::sync::{AtomicUsize, Ordering}
 

@@ -141,5 +141,26 @@ func test_dog_hash() -> I32 {
     return 0
 }
 
-// Note: Objects utility class tests disabled for now
-// External static method resolution needs improvement
+// ============================================================================
+// reference_equals Tests
+// ============================================================================
+
+@test
+func test_reference_equals_different_instances() -> I32 {
+    let p1: Point = Point::create(1, 2)
+    let p2: Point = Point::create(1, 2)
+
+    // reference_equals on different instances should return false
+    assert(p1.reference_equals(p2) == false, "Different instances should not be reference-equal")
+    return 0
+}
+
+@test
+func test_reference_equals_animal() -> I32 {
+    let a1: Animal = Animal::create(10)
+    let a2: Animal = Animal::create(10)
+
+    // reference_equals on different Animal instances should be false
+    assert(a1.reference_equals(a2) == false, "Different Animal instances should not be reference-equal")
+    return 0
+}

@@ -1,0 +1,37 @@
+// Tests for std::json object access
+use test
+use std::json::types::{Json, parse_or_panic}
+
+@test
+func test_json_object_fields() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
+    assert(j.is_object(), "should be an object")
+    assert_eq(j.len(), 2 as I64, "should have 2 fields")
+    assert(j.has("name"), "should have name field")
+    assert(j.has("age"), "should have age field")
+    assert(not j.has("missing"), "should not have missing field")
+    return 0
+}
+
+@test
+func test_json_object_type_checks() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30, \"active\": true}")
+    assert(j.is_object(), "should be object")
+    assert(not j.is_array(), "object is not array")
+    assert(not j.is_string(), "object is not string")
+    assert(not j.is_number(), "object is not number")
+    assert(not j.is_null(), "object is not null")
+    assert(not j.is_bool(), "object is not bool")
+    assert_eq(j.len(), 3 as I64, "should have 3 fields")
+    return 0
+}
+
+@test
+func test_json_null_value() -> I32 {
+    let j: Json = parse_or_panic("null")
+    assert(j.is_null(), "should be null")
+    assert(not j.is_object(), "null is not object")
+    assert(not j.is_array(), "null is not array")
+    assert(not j.is_number(), "null is not number")
+    return 0
+}

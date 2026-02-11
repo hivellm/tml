@@ -1,0 +1,30 @@
+// Tests for Array with U32, U64, and Bool types
+use test
+
+@test
+func test_array_u32() -> I32 {
+    let arr: [U32; 3] = [100, 200, 300]
+    assert(arr[0] as I32 == 100, "U32 array[0]")
+    assert(arr[1] as I32 == 200, "U32 array[1]")
+    assert(arr[2] as I32 == 300, "U32 array[2]")
+    assert(arr.len() == 3, "U32 array len")
+    return 0
+}
+
+@test
+func test_array_u64() -> I32 {
+    let arr: [U64; 2] = [1000000, 2000000]
+    assert(arr[0] as I64 == 1000000, "U64 array[0]")
+    assert(arr[1] as I64 == 2000000, "U64 array[1]")
+    return 0
+}
+
+@test
+func test_array_bool() -> I32 {
+    let arr: [Bool; 4] = [true, false, true, false]
+    assert(arr[0] == true, "bool array[0]")
+    assert(arr[1] == false, "bool array[1]")
+    assert(arr[2] == true, "bool array[2]")
+    assert(arr[3] == false, "bool array[3]")
+    return 0
+}

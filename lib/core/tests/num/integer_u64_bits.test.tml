@@ -1,0 +1,32 @@
+// Tests for U64 bit manipulation functions
+use test
+use core::num::integer::{
+    count_zeros_u64, leading_zeros_u64, trailing_zeros_u64,
+    rotate_left_u64, rotate_right_u64,
+    swap_bytes_u64, reverse_bits_u64
+}
+
+@test
+func test_count_zeros_u64() -> I32 {
+    let zero: U64 = 0 as U64
+    assert_eq(count_zeros_u64(zero) as I64, 64, "count_zeros U64 of 0 should be 64")
+    return 0
+}
+
+@test
+func test_leading_trailing_zeros_u64() -> I32 {
+    let one: U64 = 1 as U64
+    assert_eq(leading_zeros_u64(one) as I64, 63, "leading zeros of 1 should be 63")
+    assert_eq(trailing_zeros_u64(one) as I64, 0, "trailing zeros of 1 should be 0")
+    let eight: U64 = 8 as U64
+    assert_eq(trailing_zeros_u64(eight) as I64, 3, "trailing zeros of 8 should be 3")
+    return 0
+}
+
+@test
+func test_swap_bytes_u64_double() -> I32 {
+    let original: U64 = 123456789 as U64
+    let swapped: U64 = swap_bytes_u64(swap_bytes_u64(original))
+    assert_eq(swapped as I64, original as I64, "double swap U64 should be identity")
+    return 0
+}

@@ -1,0 +1,33 @@
+// Tests for core::sync - spinlock operations
+use test
+
+@test
+func test_spin_lock_unlock() -> I32 {
+    let lock: *Unit = alloc(4)
+    atomic_store(lock, 0)
+    spin_lock(lock)
+    spin_unlock(lock)
+    dealloc(lock)
+    return 0
+}
+
+@test
+func test_spin_trylock_success() -> I32 {
+    let lock: *Unit = alloc(4)
+    atomic_store(lock, 0)
+    let acquired: Bool = spin_trylock(lock)
+    assert(acquired, "trylock should succeed on unlocked mutex")
+    spin_unlock(lock)
+    dealloc(lock)
+    return 0
+}
+
+@test
+func test_spin_trylock_fail_when_locked() -> I32 {
+    let lock: *Unit = alloc(4)
+    atomic_store(lock, 1)
+    let acquired: Bool = spin_trylock(lock)
+    assert(not acquired, "trylock should fail on locked mutex")
+    dealloc(lock)
+    return 0
+}

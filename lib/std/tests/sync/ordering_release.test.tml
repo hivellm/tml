@@ -1,0 +1,24 @@
+// Tests for std::sync::ordering - has_release method
+use test
+use std::sync::ordering::{Ordering}
+
+@test
+func test_has_release_false() -> I32 {
+    assert(not Ordering::Relaxed.has_release(), "Relaxed should not have release semantics")
+    assert(not Ordering::Acquire.has_release(), "Acquire should not have release semantics")
+    return 0
+}
+
+@test
+func test_acqrel_has_both() -> I32 {
+    assert(Ordering::AcqRel.has_acquire(), "AcqRel should have acquire")
+    assert(Ordering::AcqRel.has_release(), "AcqRel should have release")
+    return 0
+}
+
+@test
+func test_seqcst_has_both() -> I32 {
+    assert(Ordering::SeqCst.has_acquire(), "SeqCst should have acquire")
+    assert(Ordering::SeqCst.has_release(), "SeqCst should have release")
+    return 0
+}

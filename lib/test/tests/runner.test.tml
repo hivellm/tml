@@ -1,0 +1,145 @@
+// Tests for test runner types and functions
+// Tests TestConfig, TestStats, TestMetadata construction
+use test::{assert, assert_eq}
+use test::types::*
+
+// ============================================================================
+// TestConfig Tests
+// ============================================================================
+
+@test
+func test_config_construction() -> I32 {
+    let config: TestConfig = TestConfig {
+        parallel: false,
+        threads: 1,
+        nocapture: false,
+        verbose: false,
+        quiet: false,
+        filter: Nothing,
+    }
+    assert(config.parallel == false, "Config parallel should be false")
+    assert_eq(config.threads, 1, "Config threads should be 1")
+    return 0
+}
+
+@test
+func test_config_parallel() -> I32 {
+    let config: TestConfig = TestConfig {
+        parallel: true,
+        threads: 4,
+        nocapture: false,
+        verbose: false,
+        quiet: false,
+        filter: Nothing,
+    }
+    assert(config.parallel == true, "Config should be parallel")
+    assert_eq(config.threads, 4, "Config should have 4 threads")
+    return 0
+}
+
+@test
+func test_config_verbose() -> I32 {
+    let config: TestConfig = TestConfig {
+        parallel: false,
+        threads: 1,
+        nocapture: true,
+        verbose: true,
+        quiet: false,
+        filter: Nothing,
+    }
+    assert(config.nocapture == true, "Nocapture should be true")
+    assert(config.verbose == true, "Verbose should be true")
+    assert(config.quiet == false, "Quiet should be false")
+    return 0
+}
+
+// ============================================================================
+// TestStats Tests
+// ============================================================================
+
+@test
+func test_stats_construction() -> I32 {
+    let stats: TestStats = TestStats {
+        total: 0,
+        passed: 0,
+        failed: 0,
+        ignored: 0,
+        duration: 0,
+    }
+    assert_eq(stats.total, 0, "Initial total should be 0")
+    assert_eq(stats.passed, 0, "Initial passed should be 0")
+    assert_eq(stats.failed, 0, "Initial failed should be 0")
+    assert_eq(stats.ignored, 0, "Initial ignored should be 0")
+    return 0
+}
+
+@test
+func test_stats_with_values() -> I32 {
+    let stats: TestStats = TestStats {
+        total: 10,
+        passed: 7,
+        failed: 2,
+        ignored: 1,
+        duration: 5000,
+    }
+    assert_eq(stats.total, 10, "Total should be 10")
+    assert_eq(stats.passed, 7, "Passed should be 7")
+    assert_eq(stats.failed, 2, "Failed should be 2")
+    assert_eq(stats.ignored, 1, "Ignored should be 1")
+    assert_eq(stats.duration as I32, 5000, "Duration should be 5000")
+    return 0
+}
+
+// ============================================================================
+// TestMetadata Tests
+// ============================================================================
+
+@test
+func test_metadata_construction() -> I32 {
+    let meta: TestMetadata = TestMetadata {
+        name: "test_example",
+        module: "my_module",
+        file: "test.tml",
+        line: 42,
+        should_panic: false,
+        panic_message: Nothing,
+        ignored: false,
+    }
+    assert_eq(meta.name, "test_example", "Name should match")
+    assert_eq(meta.module, "my_module", "Module should match")
+    assert_eq(meta.file, "test.tml", "File should match")
+    assert_eq(meta.line, 42, "Line should be 42")
+    assert(meta.should_panic == false, "Should not panic")
+    assert(meta.ignored == false, "Should not be ignored")
+    return 0
+}
+
+@test
+func test_metadata_should_panic() -> I32 {
+    let meta: TestMetadata = TestMetadata {
+        name: "test_panics",
+        module: "panic_module",
+        file: "panic.tml",
+        line: 10,
+        should_panic: true,
+        panic_message: Just("expected panic"),
+        ignored: false,
+    }
+    assert(meta.should_panic == true, "Should panic should be true")
+    return 0
+}
+
+@test
+func test_metadata_ignored() -> I32 {
+    let meta: TestMetadata = TestMetadata {
+        name: "test_ignored",
+        module: "mod",
+        file: "test.tml",
+        line: 1,
+        should_panic: false,
+        panic_message: Nothing,
+        ignored: true,
+    }
+    assert(meta.ignored == true, "Ignored should be true")
+    return 0
+}

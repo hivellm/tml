@@ -1,0 +1,136 @@
+// Tests for core::ptr::alignment - pointer alignment utilities
+use test
+use core::ptr::alignment::*
+
+// ============================================================================
+// align_up Tests
+// ============================================================================
+
+@test
+func test_align_up_already_aligned() -> I32 {
+    assert_eq(align_up(16 as I64, 8 as I64), 16 as I64, "16 aligned to 8 stays 16")
+    assert_eq(align_up(8 as I64, 4 as I64), 8 as I64, "8 aligned to 4 stays 8")
+    return 0
+}
+
+@test
+func test_align_up_needs_rounding() -> I32 {
+    assert_eq(align_up(1 as I64, 4 as I64), 4 as I64, "1 rounds up to 4")
+    assert_eq(align_up(5 as I64, 4 as I64), 8 as I64, "5 rounds up to 8")
+    assert_eq(align_up(13 as I64, 8 as I64), 16 as I64, "13 rounds up to 16")
+    return 0
+}
+
+@test
+func test_align_up_zero() -> I32 {
+    assert_eq(align_up(0 as I64, 4 as I64), 0 as I64, "0 aligned to 4 is 0")
+    return 0
+}
+
+// ============================================================================
+// align_down Tests
+// ============================================================================
+
+@test
+func test_align_down_already_aligned() -> I32 {
+    assert_eq(align_down(16 as I64, 8 as I64), 16 as I64, "16 aligned down to 8 stays 16")
+    return 0
+}
+
+@test
+func test_align_down_needs_rounding() -> I32 {
+    assert_eq(align_down(5 as I64, 4 as I64), 4 as I64, "5 rounds down to 4")
+    assert_eq(align_down(7 as I64, 4 as I64), 4 as I64, "7 rounds down to 4")
+    assert_eq(align_down(15 as I64, 8 as I64), 8 as I64, "15 rounds down to 8")
+    return 0
+}
+
+// ============================================================================
+// is_aligned_to Tests
+// ============================================================================
+
+@test
+func test_is_aligned_to() -> I32 {
+    assert(is_aligned_to(16 as I64, 8 as I64), "16 is 8-aligned")
+    assert(is_aligned_to(16 as I64, 4 as I64), "16 is 4-aligned")
+    assert(is_aligned_to(16 as I64, 2 as I64), "16 is 2-aligned")
+    assert(is_aligned_to(16 as I64, 1 as I64), "16 is 1-aligned")
+    assert(not is_aligned_to(5 as I64, 4 as I64), "5 is not 4-aligned")
+    assert(not is_aligned_to(3 as I64, 2 as I64), "3 is not 2-aligned")
+    return 0
+}
+
+// ============================================================================
+// align_offset Tests
+// ============================================================================
+
+@test
+func test_align_offset() -> I32 {
+    assert_eq(align_offset(16 as I64, 8 as I64), 0 as I64, "already aligned offset is 0")
+    assert_eq(align_offset(5 as I64, 4 as I64), 3 as I64, "5 needs 3 to reach 8")
+    assert_eq(align_offset(1 as I64, 4 as I64), 3 as I64, "1 needs 3 to reach 4")
+    return 0
+}
+
+// ============================================================================
+// is_power_of_two Tests
+// ============================================================================
+
+@test
+func test_is_power_of_two() -> I32 {
+    assert(is_power_of_two(1 as I64), "1 is power of two")
+    assert(is_power_of_two(2 as I64), "2 is power of two")
+    assert(is_power_of_two(4 as I64), "4 is power of two")
+    assert(is_power_of_two(8 as I64), "8 is power of two")
+    assert(is_power_of_two(1024 as I64), "1024 is power of two")
+    assert(not is_power_of_two(0 as I64), "0 is not power of two")
+    assert(not is_power_of_two(3 as I64), "3 is not power of two")
+    assert(not is_power_of_two(6 as I64), "6 is not power of two")
+    return 0
+}
+
+// ============================================================================
+// checked_next_power_of_two Tests
+// ============================================================================
+
+@test
+func test_checked_next_power_of_two() -> I32 {
+    let p1: Maybe[I64] = checked_next_power_of_two(3 as I64)
+    assert(p1.is_just(), "3 should have next power")
+    assert_eq(p1.unwrap(), 4 as I64, "next power of 3 is 4")
+
+    let p2: Maybe[I64] = checked_next_power_of_two(8 as I64)
+    assert_eq(p2.unwrap(), 8 as I64, "8 is already power of 2")
+
+    let p3: Maybe[I64] = checked_next_power_of_two(1 as I64)
+    assert_eq(p3.unwrap(), 1 as I64, "next power of 1 is 1")
+    return 0
+}
+
+// ============================================================================
+// prev_power_of_two Tests
+// ============================================================================
+
+@test
+func test_prev_power_of_two() -> I32 {
+    assert_eq(prev_power_of_two(5 as I64), 4 as I64, "prev power of 5 is 4")
+    assert_eq(prev_power_of_two(8 as I64), 8 as I64, "prev power of 8 is 8")
+    assert_eq(prev_power_of_two(0 as I64), 0 as I64, "prev power of 0 is 0")
+    assert_eq(prev_power_of_two(1 as I64), 1 as I64, "prev power of 1 is 1")
+    return 0
+}
+
+// ============================================================================
+// log2 Tests
+// ============================================================================
+
+@test
+func test_log2() -> I32 {
+    assert_eq(log2(1 as I64).unwrap(), 0 as I64, "log2(1) = 0")
+    assert_eq(log2(2 as I64).unwrap(), 1 as I64, "log2(2) = 1")
+    assert_eq(log2(4 as I64).unwrap(), 2 as I64, "log2(4) = 2")
+    assert_eq(log2(8 as I64).unwrap(), 3 as I64, "log2(8) = 3")
+    assert_eq(log2(10 as I64).unwrap(), 3 as I64, "log2(10) = 3 (floor)")
+    assert(log2(0 as I64).is_nothing(), "log2(0) is Nothing")
+    return 0
+}

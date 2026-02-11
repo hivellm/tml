@@ -1,0 +1,85 @@
+// Tests for ArithmeticException, IOException, FileNotFoundException patterns
+use test
+
+// ArithmeticException mirror
+class ArithEx {
+    message: Str
+
+    static func create(message: Str) -> ArithEx {
+        return ArithEx { message: message }
+    }
+
+    static func overflow() -> ArithEx {
+        return ArithEx { message: "Arithmetic overflow" }
+    }
+
+    static func divide_by_zero() -> ArithEx {
+        return ArithEx { message: "Division by zero" }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_type(this) -> Str {
+        return "ArithmeticException"
+    }
+
+    func to_string(this) -> Str {
+        return "ArithmeticException: " + this.message
+    }
+}
+
+@test
+func test_arithmetic_overflow() -> I32 {
+    let ex: ArithEx = ArithEx::overflow()
+    assert_eq(ex.get_message(), "Arithmetic overflow", "overflow message")
+    assert_eq(ex.get_type(), "ArithmeticException", "type")
+    return 0
+}
+
+@test
+func test_arithmetic_divide_by_zero() -> I32 {
+    let ex: ArithEx = ArithEx::divide_by_zero()
+    assert_eq(ex.get_message(), "Division by zero", "div by zero message")
+    assert_eq(ex.to_string(), "ArithmeticException: Division by zero", "to_string")
+    return 0
+}
+
+// FileNotFoundException mirror (extends IOException pattern)
+class FileNotFoundEx {
+    message: Str
+    file_path: Str
+
+    static func create(file_path: Str) -> FileNotFoundEx {
+        return FileNotFoundEx {
+            message: "File not found: " + file_path,
+            file_path: file_path
+        }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_file_path(this) -> Str {
+        return this.file_path
+    }
+
+    func get_type(this) -> Str {
+        return "FileNotFoundException"
+    }
+
+    func to_string(this) -> Str {
+        return "FileNotFoundException: " + this.message
+    }
+}
+
+@test
+func test_file_not_found() -> I32 {
+    let ex: FileNotFoundEx = FileNotFoundEx::create("/tmp/missing.txt")
+    assert_eq(ex.get_file_path(), "/tmp/missing.txt", "file path")
+    assert_eq(ex.get_message(), "File not found: /tmp/missing.txt", "message")
+    assert_eq(ex.get_type(), "FileNotFoundException", "type")
+    return 0
+}

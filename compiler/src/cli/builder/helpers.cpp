@@ -282,7 +282,8 @@ bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry) 
     return registry->has_module("std::crypto") || registry->has_module("std::crypto::x509") ||
            registry->has_module("std::crypto::key") || registry->has_module("std::crypto::sign") ||
            registry->has_module("std::crypto::dh") || registry->has_module("std::crypto::ecdh") ||
-           registry->has_module("std::crypto::kdf") || registry->has_module("std::crypto::rsa");
+           registry->has_module("std::crypto::kdf") || registry->has_module("std::crypto::rsa") ||
+           registry->has_module("std::hash") || registry->has_module("std::net::tls");
 }
 
 // ============================================================================
@@ -776,6 +777,16 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                                                             << " runtime: " << crypto_extra_obj);
                     }
                 }
+
+                // net/ - tls.c (TLS/SSL support, requires OpenSSL)
+                fs::path tls_c = runtime_dir / "net" / "tls.c";
+                if (fs::exists(tls_c)) {
+                    std::string tls_obj =
+                        ensure_c_compiled(to_forward_slashes(tls_c.string()), deps_cache, clang,
+                                          verbose, crypto_extra_flags);
+                    objects.push_back(fs::path(tls_obj));
+                    TML_LOG_DEBUG("build", "Including tls runtime: " << tls_obj);
+                }
             }
 
             // os/ - os.c
@@ -1120,6 +1131,42 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             objects.push_back(*profiler_lib);
             TML_LOG_DEBUG("build",
                           "Including profiler runtime library: " << profiler_lib->string());
+
+            // Also link tml_log dependency (profiler uses TML_LOG_* macros)
+#ifdef _WIN32
+            std::string log_lib_name = "tml_log.lib";
+#else
+            std::string log_lib_name = "libtml_log.a";
+#endif
+            auto profiler_lib_dir = profiler_lib->parent_path();
+            // Search: same dir as profiler, then recursively in parent/cache
+            bool log_found = false;
+            // Check same directory first
+            auto log_same_dir = profiler_lib_dir / log_lib_name;
+            if (fs::exists(log_same_dir)) {
+                objects.push_back(fs::absolute(log_same_dir));
+                log_found = true;
+            }
+            // Search build cache directory (CMake puts libs in cache/*/Debug/)
+            if (!log_found) {
+                auto cache_base = profiler_lib_dir.parent_path() / "cache";
+                if (fs::exists(cache_base)) {
+                    try {
+                        for (auto& p : fs::recursive_directory_iterator(cache_base)) {
+                            if (p.path().filename().string() == log_lib_name) {
+                                objects.push_back(fs::absolute(p.path()));
+                                log_found = true;
+                                break;
+                            }
+                        }
+                    } catch (...) {}
+                }
+            }
+            if (log_found) {
+                TML_LOG_DEBUG("build", "Including log library (profiler dependency)");
+            } else {
+                TML_LOG_WARN("build", "tml_log library not found (profiler dependency)");
+            }
         } else {
             TML_LOG_WARN("build", "std::profiler imported but tml_profiler library not found");
         }

@@ -1,0 +1,25 @@
+// Tests for core::char::convert - from_u32, from_digit, try_from_u32
+use test
+use core::char::convert::*
+
+@test
+func test_from_u32_valid_ascii() -> I32 {
+    let result: Maybe[Char] = from_u32(0x41 as U32)
+    assert(result.is_just(), "0x41 should be valid (A)")
+    assert_eq(result.unwrap(), 'A', "0x41 should be 'A'")
+    return 0
+}
+
+@test
+func test_from_u32_surrogate_invalid() -> I32 {
+    let result: Maybe[Char] = from_u32(0xD800 as U32)
+    assert(result.is_nothing(), "surrogate 0xD800 should be invalid")
+    return 0
+}
+
+@test
+func test_from_u32_out_of_range() -> I32 {
+    let result: Maybe[Char] = from_u32(0x110000 as U32)
+    assert(result.is_nothing(), "0x110000 should be out of range")
+    return 0
+}

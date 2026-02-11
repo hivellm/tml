@@ -1,0 +1,25 @@
+// Tests for core::ptr::ops - size_of, align_of, pointer free functions
+use test
+use core::ptr::ops::{size_of, align_of}
+use core::ptr::const_ptr::RawPtr
+
+@test
+func test_size_of_i32() -> I32 {
+    let s: I64 = size_of[I32]()
+    assert_eq(s, 4 as I64, "sizeof I32 should be 4")
+    return 0
+}
+
+@test
+func test_size_of_i64() -> I32 {
+    let s: I64 = size_of[I64]()
+    assert_eq(s, 8 as I64, "sizeof I64 should be 8")
+    return 0
+}
+
+@test
+func test_size_of_u8() -> I32 {
+    let s: I64 = size_of[U8]()
+    assert_eq(s, 1 as I64, "sizeof U8 should be 1")
+    return 0
+}

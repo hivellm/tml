@@ -1,0 +1,21 @@
+// Tests for core::fmt::helpers - hex and octal conversion functions
+use test
+use core::fmt::helpers::*
+
+@test
+func test_u64_to_hex_str_zero() -> I32 {
+    assert_eq(u64_to_hex_str(0 as U64, false), "0", "hex 0 -> '0'")
+    return 0
+}
+
+@test
+func test_u64_to_hex_str_255_lower() -> I32 {
+    assert_eq(u64_to_hex_str(255 as U64, false), "ff", "hex 255 lower -> 'ff'")
+    return 0
+}
+
+@test
+func test_u64_to_hex_str_255_upper() -> I32 {
+    assert_eq(u64_to_hex_str(255 as U64, true), "FF", "hex 255 upper -> 'FF'")
+    return 0
+}

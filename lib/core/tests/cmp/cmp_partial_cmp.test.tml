@@ -1,0 +1,153 @@
+// Tests for partial_cmp on various integer types
+use test
+use core::cmp::{Ordering, PartialOrd}
+
+// =============================================================================
+// I32 partial_cmp (already tested elsewhere, but adding for coverage)
+// =============================================================================
+
+@test
+func test_i32_partial_cmp_less() -> I32 {
+    let a: I32 = 1
+    let b: I32 = 5
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_less(), "1.partial_cmp(5) should be Less"),
+        Nothing => assert(false, "I32 partial_cmp should not return Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_i32_partial_cmp_equal() -> I32 {
+    let a: I32 = 7
+    let b: I32 = 7
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_equal(), "7.partial_cmp(7) should be Equal"),
+        Nothing => assert(false, "I32 partial_cmp should not return Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_i32_partial_cmp_greater() -> I32 {
+    let a: I32 = 10
+    let b: I32 = 3
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_greater(), "10.partial_cmp(3) should be Greater"),
+        Nothing => assert(false, "I32 partial_cmp should not return Nothing"),
+    }
+    return 0
+}
+
+// =============================================================================
+// I8 partial_cmp
+// =============================================================================
+
+@test
+func test_i8_partial_cmp() -> I32 {
+    let a: I8 = -10
+    let b: I8 = 10
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_less(), "I8(-10).partial_cmp(10) should be Less"),
+        Nothing => assert(false, "I8 partial_cmp should not return Nothing"),
+    }
+    return 0
+}
+
+// =============================================================================
+// I64 partial_cmp
+// =============================================================================
+
+@test
+func test_i64_partial_cmp() -> I32 {
+    let a: I64 = 100
+    let b: I64 = 50
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_greater(), "I64(100).partial_cmp(50) should be Greater"),
+        Nothing => assert(false, "I64 partial_cmp should not return Nothing"),
+    }
+    return 0
+}
+
+// =============================================================================
+// U8 partial_cmp
+// =============================================================================
+
+@test
+func test_u8_partial_cmp() -> I32 {
+    let a: U8 = 5
+    let b: U8 = 5
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_equal(), "U8(5).partial_cmp(5) should be Equal"),
+        Nothing => assert(false, "U8 partial_cmp should not return Nothing"),
+    }
+    return 0
+}
+
+// =============================================================================
+// U32 partial_cmp
+// =============================================================================
+
+@test
+func test_u32_partial_cmp() -> I32 {
+    let a: U32 = 100
+    let b: U32 = 200
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_less(), "U32(100).partial_cmp(200) should be Less"),
+        Nothing => assert(false, "U32 partial_cmp should not return Nothing"),
+    }
+    return 0
+}
+
+// =============================================================================
+// U64 partial_cmp
+// =============================================================================
+
+@test
+func test_u64_partial_cmp() -> I32 {
+    let a: U64 = 999
+    let b: U64 = 1
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_greater(), "U64(999).partial_cmp(1) should be Greater"),
+        Nothing => assert(false, "U64 partial_cmp should not return Nothing"),
+    }
+    return 0
+}
+
+// =============================================================================
+// F64 partial_cmp (normal values)
+// =============================================================================
+
+@test
+func test_f64_partial_cmp_less() -> I32 {
+    let a: F64 = 1.0
+    let b: F64 = 2.0
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_less(), "F64(1.0).partial_cmp(2.0) should be Less"),
+        Nothing => assert(false, "F64 partial_cmp normal should not return Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_f64_partial_cmp_equal() -> I32 {
+    let a: F64 = 3.14
+    let b: F64 = 3.14
+    let result: Maybe[Ordering] = a.partial_cmp(ref b)
+    when result {
+        Just(ord) => assert(ord.is_equal(), "F64(3.14).partial_cmp(3.14) should be Equal"),
+        Nothing => assert(false, "F64 partial_cmp equal should not return Nothing"),
+    }
+    return 0
+}
+
+// Note: clamp has codegen bug (Self type not substituted) - skipping for now

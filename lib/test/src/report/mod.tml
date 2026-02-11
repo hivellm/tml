@@ -168,11 +168,11 @@ pub func print_section_header(title: Str) {
 }
 
 // ANSI color codes
-const ANSI_RESET: Str = "\x1b[0m"
-const ANSI_GREEN: Str = "\x1b[32m"
-const ANSI_RED: Str = "\x1b[31m"
-const ANSI_YELLOW: Str = "\x1b[33m"
-const ANSI_BOLD: Str = "\x1b[1m"
+pub const ANSI_RESET: Str = "\x1b[0m"
+pub const ANSI_GREEN: Str = "\x1b[32m"
+pub const ANSI_RED: Str = "\x1b[31m"
+pub const ANSI_YELLOW: Str = "\x1b[33m"
+pub const ANSI_BOLD: Str = "\x1b[1m"
 
 /// Print colored result using ANSI escape codes
 pub func print_colored(text: Str, passed: Bool) {

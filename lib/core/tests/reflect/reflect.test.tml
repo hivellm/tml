@@ -1,0 +1,127 @@
+// Tests for core::reflect module - TypeKind, FieldInfo, VariantInfo, TypeInfo
+use test
+use core::reflect::*
+
+// ============================================================================
+// TypeKind Tests
+// ============================================================================
+
+@test
+func test_typekind_tag_values() -> I32 {
+    assert_eq(TypeKind::Struct.tag(), 0, "Struct tag should be 0")
+    assert_eq(TypeKind::Enum.tag(), 1, "Enum tag should be 1")
+    assert_eq(TypeKind::Primitive.tag(), 2, "Primitive tag should be 2")
+    assert_eq(TypeKind::Pointer.tag(), 3, "Pointer tag should be 3")
+    assert_eq(TypeKind::Reference.tag(), 4, "Reference tag should be 4")
+    assert_eq(TypeKind::Array.tag(), 5, "Array tag should be 5")
+    assert_eq(TypeKind::Slice.tag(), 6, "Slice tag should be 6")
+    assert_eq(TypeKind::Tuple.tag(), 7, "Tuple tag should be 7")
+    assert_eq(TypeKind::Function.tag(), 8, "Function tag should be 8")
+    assert_eq(TypeKind::Class.tag(), 9, "Class tag should be 9")
+    assert_eq(TypeKind::Interface.tag(), 10, "Interface tag should be 10")
+    assert_eq(TypeKind::Unknown.tag(), 11, "Unknown tag should be 11")
+    return 0
+}
+
+@test
+func test_typekind_to_string() -> I32 {
+    assert(TypeKind::Struct.to_string() == "struct", "Struct to_string")
+    assert(TypeKind::Enum.to_string() == "enum", "Enum to_string")
+    assert(TypeKind::Primitive.to_string() == "primitive", "Primitive to_string")
+    assert(TypeKind::Unknown.to_string() == "unknown", "Unknown to_string")
+    return 0
+}
+
+@test
+func test_typekind_eq() -> I32 {
+    let a: TypeKind = TypeKind::Struct
+    let b: TypeKind = TypeKind::Struct
+    let c: TypeKind = TypeKind::Enum
+    assert(a == b, "same TypeKind should be equal")
+    assert(a != c, "different TypeKind should not be equal")
+    return 0
+}
+
+// ============================================================================
+// FieldInfo Tests
+// ============================================================================
+
+@test
+func test_fieldinfo_new() -> I32 {
+    let fi: FieldInfo = FieldInfo::new("name", 12345 as U64, "Str", 0 as I64, true)
+    assert(fi.name == "name", "field name")
+    assert(fi.type_name == "Str", "field type_name")
+    assert(fi.offset == (0 as I64), "field offset")
+    assert(fi.is_public, "field should be public")
+    return 0
+}
+
+@test
+func test_fieldinfo_private() -> I32 {
+    let fi: FieldInfo = FieldInfo::new("secret", 99 as U64, "I32", 8 as I64, false)
+    assert(fi.name == "secret", "private field name")
+    assert(not fi.is_public, "field should be private")
+    assert(fi.offset == (8 as I64), "field offset should be 8")
+    return 0
+}
+
+// ============================================================================
+// VariantInfo Tests
+// ============================================================================
+
+@test
+func test_variantinfo_unit() -> I32 {
+    let vi: VariantInfo = VariantInfo::new("Nothing", 0 as I64, 0 as I64)
+    assert(vi.name == "Nothing", "variant name")
+    assert(vi.tag == (0 as I64), "variant tag")
+    assert(vi.is_unit(), "unit variant should report is_unit true")
+    return 0
+}
+
+@test
+func test_variantinfo_with_payload() -> I32 {
+    let vi: VariantInfo = VariantInfo::new("Just", 1 as I64, 1 as I64)
+    assert(vi.name == "Just", "variant name")
+    assert(vi.tag == (1 as I64), "variant tag")
+    assert(not vi.is_unit(), "variant with payload should not be unit")
+    return 0
+}
+
+// ============================================================================
+// TypeInfo Tests
+// ============================================================================
+
+@test
+func test_typeinfo_for_struct() -> I32 {
+    let ti: TypeInfo = TypeInfo::for_struct(100 as U64, "Point", 8 as I64, 4 as I64, 2 as I64)
+    assert(ti.name == "Point", "struct name")
+    assert(ti.is_struct(), "should be struct")
+    assert(not ti.is_enum(), "should not be enum")
+    assert(not ti.is_primitive(), "should not be primitive")
+    assert(ti.size == (8 as I64), "size")
+    assert(ti.align == (4 as I64), "alignment")
+    assert(ti.field_count == (2 as I64), "field count")
+    assert(ti.variant_count == (0 as I64), "variant count should be 0")
+    return 0
+}
+
+@test
+func test_typeinfo_for_enum() -> I32 {
+    let ti: TypeInfo = TypeInfo::for_enum(200 as U64, "Color", 4 as I64, 4 as I64, 3 as I64)
+    assert(ti.name == "Color", "enum name")
+    assert(ti.is_enum(), "should be enum")
+    assert(not ti.is_struct(), "should not be struct")
+    assert(ti.variant_count == (3 as I64), "variant count")
+    assert(ti.field_count == (0 as I64), "field count should be 0")
+    return 0
+}
+
+@test
+func test_typeinfo_for_primitive() -> I32 {
+    let ti: TypeInfo = TypeInfo::for_primitive(300 as U64, "I32", 4 as I64, 4 as I64)
+    assert(ti.name == "I32", "primitive name")
+    assert(ti.is_primitive(), "should be primitive")
+    assert(not ti.is_struct(), "should not be struct")
+    assert(not ti.is_enum(), "should not be enum")
+    return 0
+}

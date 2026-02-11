@@ -1,0 +1,26 @@
+// Tests for std::os environment variable functions
+use test
+use std::os
+
+@test
+func test_env_set_returns_true() -> I32 {
+    let success: Bool = os::env_set("TML_TEST_VAR_SET", "value1")
+    assert(success, "env_set should return true")
+    os::env_unset("TML_TEST_VAR_SET")
+    return 0
+}
+
+@test
+func test_env_unset_returns_true() -> I32 {
+    os::env_set("TML_TEST_VAR_DEL", "temp")
+    let success: Bool = os::env_unset("TML_TEST_VAR_DEL")
+    assert(success, "env_unset should return true")
+    return 0
+}
+
+@test
+func test_uptime_positive() -> I32 {
+    let u: I64 = os::uptime()
+    assert(u > 0, "uptime() should be positive")
+    return 0
+}

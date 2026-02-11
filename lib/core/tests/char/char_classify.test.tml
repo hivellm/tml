@@ -1,0 +1,24 @@
+// Tests for core::char::methods - character classification
+use test
+use core::char::methods::*
+
+@test
+func test_is_alphabetic_uppercase() -> I32 {
+    assert(is_alphabetic('A'), "'A' should be alphabetic")
+    assert(is_alphabetic('Z'), "'Z' should be alphabetic")
+    return 0
+}
+
+@test
+func test_is_alphabetic_lowercase() -> I32 {
+    assert(is_alphabetic('a'), "'a' should be alphabetic")
+    assert(is_alphabetic('z'), "'z' should be alphabetic")
+    return 0
+}
+
+@test
+func test_is_alphabetic_digit() -> I32 {
+    assert(not is_alphabetic('0'), "'0' should not be alphabetic")
+    assert(not is_alphabetic('9'), "'9' should not be alphabetic")
+    return 0
+}

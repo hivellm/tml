@@ -1,0 +1,63 @@
+// Tests for DefaultHasher write_i32 and write_i64 methods
+use test
+use core::hash::DefaultHasher
+
+@test
+func test_hasher_write_i32() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    hasher.write_i32(12345)
+    let h: I64 = hasher.finish()
+    let empty: DefaultHasher = DefaultHasher::new()
+    assert(h != empty.finish(), "write_i32 should change hasher state")
+    return 0
+}
+
+@test
+func test_hasher_write_i32_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i32(42)
+    h2.write_i32(42)
+    assert_eq(h1.finish(), h2.finish(), "same write_i32 should produce same hash")
+    return 0
+}
+
+@test
+func test_hasher_write_i32_different() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i32(100)
+    h2.write_i32(200)
+    assert(h1.finish() != h2.finish(), "different I32s should produce different hashes")
+    return 0
+}
+
+@test
+func test_hasher_write_i64() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    hasher.write_i64(9876543210)
+    let h: I64 = hasher.finish()
+    let empty: DefaultHasher = DefaultHasher::new()
+    assert(h != empty.finish(), "write_i64 should change hasher state")
+    return 0
+}
+
+@test
+func test_hasher_write_i64_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i64(42)
+    h2.write_i64(42)
+    assert_eq(h1.finish(), h2.finish(), "same write_i64 should produce same hash")
+    return 0
+}
+
+@test
+func test_hasher_write_i64_different() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i64(1000)
+    h2.write_i64(2000)
+    assert(h1.finish() != h2.finish(), "different I64s should produce different hashes")
+    return 0
+}

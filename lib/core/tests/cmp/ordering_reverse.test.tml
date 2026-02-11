@@ -1,0 +1,36 @@
+// Tests for Ordering.reverse() and Ordering.then_cmp()
+use test
+use core::cmp::Ordering
+
+@test
+func test_ordering_reverse() -> I32 {
+    assert(Ordering::Less.reverse().is_greater(), "Less.reverse() should be Greater")
+    assert(Ordering::Equal.reverse().is_equal(), "Equal.reverse() should be Equal")
+    assert(Ordering::Greater.reverse().is_less(), "Greater.reverse() should be Less")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp_equal_first() -> I32 {
+    // When first is Equal, should return the second ordering
+    let r1: Ordering = Ordering::Equal.then_cmp(Ordering::Less)
+    assert(r1.is_less(), "Equal.then_cmp(Less) should be Less")
+
+    let r2: Ordering = Ordering::Equal.then_cmp(Ordering::Greater)
+    assert(r2.is_greater(), "Equal.then_cmp(Greater) should be Greater")
+
+    let r3: Ordering = Ordering::Equal.then_cmp(Ordering::Equal)
+    assert(r3.is_equal(), "Equal.then_cmp(Equal) should be Equal")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp_non_equal_first() -> I32 {
+    // When first is not Equal, should return the first ordering
+    let r1: Ordering = Ordering::Less.then_cmp(Ordering::Greater)
+    assert(r1.is_less(), "Less.then_cmp(Greater) should be Less")
+
+    let r2: Ordering = Ordering::Greater.then_cmp(Ordering::Less)
+    assert(r2.is_greater(), "Greater.then_cmp(Less) should be Greater")
+    return 0
+}

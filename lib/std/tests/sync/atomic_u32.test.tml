@@ -1,4 +1,4 @@
-// AtomicU32 tests
+// Test: AtomicU32 operations (v2)
 use test::{assert, assert_eq}
 use std::sync::{AtomicU32, Ordering}
 

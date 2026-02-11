@@ -1,0 +1,77 @@
+// Tests for FormatException, InvalidCastException, TimeoutException,
+// ArgumentOutOfRangeException patterns
+use test
+
+// FormatException mirror
+class FormatEx {
+    message: Str
+
+    static func create() -> FormatEx {
+        return FormatEx { message: "Invalid format" }
+    }
+
+    static func with_message(message: Str) -> FormatEx {
+        return FormatEx { message: message }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_type(this) -> Str {
+        return "FormatException"
+    }
+
+    func to_string(this) -> Str {
+        return "FormatException: " + this.message
+    }
+}
+
+@test
+func test_format_exception_default() -> I32 {
+    let ex: FormatEx = FormatEx::create()
+    assert_eq(ex.get_message(), "Invalid format", "default message")
+    assert_eq(ex.get_type(), "FormatException", "type")
+    return 0
+}
+
+@test
+func test_format_exception_custom() -> I32 {
+    let ex: FormatEx = FormatEx::with_message("Expected ISO 8601 date")
+    assert_eq(ex.get_message(), "Expected ISO 8601 date", "custom message")
+    assert_eq(ex.to_string(), "FormatException: Expected ISO 8601 date", "to_string")
+    return 0
+}
+
+// InvalidCastException mirror
+class InvalidCastEx {
+    message: Str
+
+    static func create(from_type: Str, to_type: Str) -> InvalidCastEx {
+        return InvalidCastEx { message: "Cannot cast from " + from_type + " to " + to_type }
+    }
+
+    static func with_message(message: Str) -> InvalidCastEx {
+        return InvalidCastEx { message: message }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_type(this) -> Str {
+        return "InvalidCastException"
+    }
+
+    func to_string(this) -> Str {
+        return "InvalidCastException: " + this.message
+    }
+}
+
+@test
+func test_invalid_cast_create() -> I32 {
+    let ex: InvalidCastEx = InvalidCastEx::create("Str", "I32")
+    assert_eq(ex.get_message(), "Cannot cast from Str to I32", "cast message")
+    assert_eq(ex.get_type(), "InvalidCastException", "type")
+    return 0
+}

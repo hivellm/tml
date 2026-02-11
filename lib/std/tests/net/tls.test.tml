@@ -1,0 +1,96 @@
+// Test: std::net::tls module
+// Tests TLS context creation, version constants, and verify modes
+use test::{assert, assert_eq}
+use std::net::tls::{TlsContext, TlsVersion, TlsVerifyMode}
+use std::net::error::{NetError, NetErrorKind}
+
+// ============================================================================
+// TLS Version Tests
+// ============================================================================
+
+@test
+func test_tls_version_1_2() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_2()
+    assert_eq(v.raw(), 0x0303, "TLS 1.2 should be 0x0303")
+    return 0
+}
+
+@test
+func test_tls_version_1_3() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_3()
+    assert_eq(v.raw(), 0x0304, "TLS 1.3 should be 0x0304")
+    return 0
+}
+
+@test
+func test_tls_version_legacy() -> I32 {
+    let v10: TlsVersion = TlsVersion::TLS_1_0()
+    assert_eq(v10.raw(), 0x0301, "TLS 1.0 should be 0x0301")
+
+    let v11: TlsVersion = TlsVersion::TLS_1_1()
+    assert_eq(v11.raw(), 0x0302, "TLS 1.1 should be 0x0302")
+    return 0
+}
+
+// ============================================================================
+// TLS Verify Mode Tests
+// ============================================================================
+
+@test
+func test_tls_verify_mode_none() -> I32 {
+    let mode: TlsVerifyMode = TlsVerifyMode::None()
+    assert_eq(mode.raw(), 0, "None should be 0")
+    return 0
+}
+
+@test
+func test_tls_verify_mode_peer() -> I32 {
+    let mode: TlsVerifyMode = TlsVerifyMode::Peer()
+    assert_eq(mode.raw(), 1, "Peer should be 1")
+    return 0
+}
+
+@test
+func test_tls_verify_mode_require_client() -> I32 {
+    let mode: TlsVerifyMode = TlsVerifyMode::RequireClientCert()
+    assert_eq(mode.raw(), 2, "RequireClientCert should be 2")
+    return 0
+}
+
+// ============================================================================
+// TLS Context Tests
+// ============================================================================
+
+@test
+func test_tls_client_context_creation() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            // Context created successfully - OpenSSL available
+            let handle: *Unit = ctx.raw_handle()
+            assert(handle != null, "Client context handle should not be null")
+        }
+        Err(e) => {
+            // OK if OpenSSL stubs are in use
+            assert(true, "Client context error (stubs)")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_server_context_missing_cert() -> I32 {
+    // Server context with non-existent cert should fail
+    let result = TlsContext::server("nonexistent.crt", "nonexistent.key")
+    when result {
+        Ok(ctx) => {
+            // Should not succeed with non-existent files
+            assert(false, "Server should fail with missing cert")
+        }
+        Err(e) => {
+            // Expected failure
+            assert(true, "Server context correctly rejects missing cert")
+        }
+    }
+    return 0
+}

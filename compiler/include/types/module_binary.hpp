@@ -49,7 +49,7 @@ constexpr uint32_t MODULE_META_MAGIC = 0x544D4D54;
 
 /// Format version.
 constexpr uint16_t MODULE_META_VERSION_MAJOR = 3;
-constexpr uint16_t MODULE_META_VERSION_MINOR = 0;
+constexpr uint16_t MODULE_META_VERSION_MINOR = 1;
 
 // ============================================================================
 // Source Hash

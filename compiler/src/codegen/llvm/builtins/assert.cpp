@@ -248,6 +248,71 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
         return "0";
     }
 
+    // assert_true(value, message) - Assert value is true (alias for assert)
+    if (fn_name == "assert_true") {
+        if (!call.args.empty()) {
+            std::string cond = gen_expr(*call.args[0]);
+
+            std::string msg_literal;
+            if (call.args.size() >= 2) {
+                msg_literal = gen_expr(*call.args[1]);
+            } else {
+                msg_literal = add_string_literal("expected true");
+            }
+
+            std::string file_literal = add_string_literal(options_.source_file);
+            int line = static_cast<int>(call.span.start.line);
+
+            std::string ok_label = fresh_label("assert_ok");
+            std::string fail_label = fresh_label("assert_fail");
+            emit_line("  br i1 " + cond + ", label %" + ok_label + ", label %" + fail_label);
+
+            emit_line(fail_label + ":");
+            emit_line("  call void @assert_tml_loc(i32 0, ptr " + msg_literal + ", ptr " +
+                      file_literal + ", i32 " + std::to_string(line) + ")");
+            emit_line("  unreachable");
+
+            emit_line(ok_label + ":");
+            last_expr_type_ = "void";
+            return "0";
+        }
+        last_expr_type_ = "void";
+        return "0";
+    }
+
+    // assert_false(condition, message) - Assert condition is false
+    if (fn_name == "assert_false") {
+        if (!call.args.empty()) {
+            std::string cond = gen_expr(*call.args[0]);
+
+            std::string msg_literal;
+            if (call.args.size() >= 2) {
+                msg_literal = gen_expr(*call.args[1]);
+            } else {
+                msg_literal = add_string_literal("expected false");
+            }
+
+            std::string file_literal = add_string_literal(options_.source_file);
+            int line = static_cast<int>(call.span.start.line);
+
+            // Inverted: branch to fail if condition is TRUE
+            std::string ok_label = fresh_label("assert_ok");
+            std::string fail_label = fresh_label("assert_fail");
+            emit_line("  br i1 " + cond + ", label %" + fail_label + ", label %" + ok_label);
+
+            emit_line(fail_label + ":");
+            emit_line("  call void @assert_tml_loc(i32 0, ptr " + msg_literal + ", ptr " +
+                      file_literal + ", i32 " + std::to_string(line) + ")");
+            emit_line("  unreachable");
+
+            emit_line(ok_label + ":");
+            last_expr_type_ = "void";
+            return "0";
+        }
+        last_expr_type_ = "void";
+        return "0";
+    }
+
     return std::nullopt;
 }
 

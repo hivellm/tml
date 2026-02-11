@@ -1,0 +1,77 @@
+// Tests for core::pin module - Pin type basics
+use test::{assert, assert_eq}
+use core::pin::{Pin}
+
+// ============================================================================
+// Pin struct construction
+// ============================================================================
+
+@test
+func test_pin_struct_creation() -> I32 {
+    let pinned: Pin[I32] = Pin { pointer: 42 }
+    assert_eq(pinned.pointer, 42, "Pin should hold the value")
+    return 0
+}
+
+@test
+func test_pin_struct_creation_u64() -> I32 {
+    let pinned: Pin[U64] = Pin { pointer: 1000 as U64 }
+    assert_eq(pinned.pointer, 1000 as U64, "Pin[U64] should hold the value")
+    return 0
+}
+
+// ============================================================================
+// Pin::new_unchecked
+// ============================================================================
+
+@test
+func test_pin_new_unchecked_i32() -> I32 {
+    let pinned: Pin[I32] = Pin::new_unchecked(99)
+    assert_eq(pinned.pointer, 99, "new_unchecked should wrap the value")
+    return 0
+}
+
+@test
+func test_pin_new_unchecked_negative() -> I32 {
+    let pinned: Pin[I32] = Pin::new_unchecked(-42)
+    assert_eq(pinned.pointer, -42, "new_unchecked should wrap negative value")
+    return 0
+}
+
+@test
+func test_pin_new_unchecked_zero() -> I32 {
+    let pinned: Pin[I32] = Pin::new_unchecked(0)
+    assert_eq(pinned.pointer, 0, "new_unchecked should wrap zero")
+    return 0
+}
+
+// ============================================================================
+// Pin::into_inner_unchecked
+// ============================================================================
+
+@test
+func test_pin_into_inner_unchecked() -> I32 {
+    let pinned: Pin[I32] = Pin::new_unchecked(77)
+    let inner: I32 = pinned.into_inner_unchecked()
+    assert_eq(inner, 77, "into_inner_unchecked should return the wrapped value")
+    return 0
+}
+
+@test
+func test_pin_roundtrip() -> I32 {
+    // new_unchecked -> into_inner_unchecked should be identity
+    let original: I32 = 123
+    let pinned: Pin[I32] = Pin::new_unchecked(original)
+    let recovered: I32 = pinned.into_inner_unchecked()
+    assert_eq(recovered, original, "roundtrip should preserve value")
+    return 0
+}
+
+@test
+func test_pin_roundtrip_u64() -> I32 {
+    let original: U64 = 999999 as U64
+    let pinned: Pin[U64] = Pin::new_unchecked(original)
+    let recovered: U64 = pinned.into_inner_unchecked()
+    assert_eq(recovered, original, "U64 roundtrip should preserve value")
+    return 0
+}

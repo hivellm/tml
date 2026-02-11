@@ -1,0 +1,26 @@
+// Tests for std::sync::ordering - Ordering enum methods
+use test
+use std::sync::ordering::{Ordering}
+
+@test
+func test_has_acquire_true() -> I32 {
+    assert(Ordering::Acquire.has_acquire(), "Acquire should have acquire semantics")
+    assert(Ordering::AcqRel.has_acquire(), "AcqRel should have acquire semantics")
+    assert(Ordering::SeqCst.has_acquire(), "SeqCst should have acquire semantics")
+    return 0
+}
+
+@test
+func test_has_acquire_false() -> I32 {
+    assert(not Ordering::Relaxed.has_acquire(), "Relaxed should not have acquire semantics")
+    assert(not Ordering::Release.has_acquire(), "Release should not have acquire semantics")
+    return 0
+}
+
+@test
+func test_has_release_true() -> I32 {
+    assert(Ordering::Release.has_release(), "Release should have release semantics")
+    assert(Ordering::AcqRel.has_release(), "AcqRel should have release semantics")
+    assert(Ordering::SeqCst.has_release(), "SeqCst should have release semantics")
+    return 0
+}

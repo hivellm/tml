@@ -1,0 +1,27 @@
+// Tests for std::json serialization (to_string)
+use test
+use std::json::types::{Json, parse_or_panic}
+
+@test
+func test_json_to_string_number() -> I32 {
+    let j: Json = Json::int(99 as I64)
+    let s: Str = j.to_string()
+    assert_eq(s, "99", "int 99 should serialize to '99'")
+    return 0
+}
+
+@test
+func test_json_to_string_bool() -> I32 {
+    let t: Json = Json::new_bool(true)
+    let f: Json = Json::new_bool(false)
+    assert_eq(t.to_string(), "true", "true should serialize to 'true'")
+    assert_eq(f.to_string(), "false", "false should serialize to 'false'")
+    return 0
+}
+
+@test
+func test_json_to_string_null() -> I32 {
+    let j: Json = Json::new_null()
+    assert_eq(j.to_string(), "null", "null should serialize to 'null'")
+    return 0
+}

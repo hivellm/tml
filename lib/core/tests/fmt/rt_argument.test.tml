@@ -1,0 +1,24 @@
+// Tests for core::fmt::rt - Argument and Placeholder types
+use test
+use core::fmt::rt::{Argument, Placeholder, FormatSpec}
+
+@test
+func test_argument_new_with() -> I32 {
+    let arg: Argument = Argument::new_with("hello")
+    assert_eq(arg.as_str(), "hello", "Argument::new_with preserves string")
+    return 0
+}
+
+@test
+func test_argument_empty() -> I32 {
+    let arg: Argument = Argument::new_with("")
+    assert_eq(arg.as_str(), "", "Argument::new_with empty string")
+    return 0
+}
+
+@test
+func test_placeholder_new() -> I32 {
+    let ph: Placeholder = Placeholder::new(0)
+    assert_eq(ph.position, 0, "Placeholder position should be 0")
+    return 0
+}

@@ -125,9 +125,40 @@ void LLVMIRGen::pop_drop_scope() {
 
 void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string& var_reg,
                                   const std::string& type_name, const std::string& llvm_type) {
-    // Only register if the type is NOT trivially destructible
-    // (i.e., it implements Drop or contains non-trivial fields)
-    if (type_name.empty() || env_.is_trivially_destructible(type_name)) {
+    if (type_name.empty()) {
+        return;
+    }
+
+    // Only register for drop if the type directly implements Drop.
+    // Types that are non-trivially-destructible only because their fields
+    // have Drop impls need recursive field-level drops (not yet supported).
+    // For now, we only call drop on types that explicitly implement Drop.
+    bool has_drop = env_.type_implements(type_name, "Drop");
+
+    // For generic types (MutexGuard__I32), check the base type too
+    if (!has_drop) {
+        auto sep_pos = type_name.find("__");
+        if (sep_pos != std::string::npos) {
+            std::string base_type = type_name.substr(0, sep_pos);
+            has_drop = env_.type_implements(base_type, "Drop");
+
+            // Also check source code for generic Drop impls
+            if (!has_drop && env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    if (!mod.source_code.empty()) {
+                        std::string pattern = "Drop for " + base_type + "[";
+                        if (mod.source_code.find(pattern) != std::string::npos) {
+                            has_drop = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!has_drop) {
         return;
     }
 
@@ -171,6 +202,38 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
                         FuncInfo{"@" + func_llvm_name, "void (ptr)", "void", {"ptr"}};
                 }
             }
+        } else {
+            // Non-generic type with Drop impl (e.g., Condvar, DroppableResource)
+            // Need to ensure the drop function exists and is findable
+            std::string method_name = type_name + "_drop";
+            if (functions_.find(method_name) == functions_.end()) {
+                // Determine if this is a library type or a local (test-defined) type
+                // Library types are from imported modules (std::*, core::*)
+                // Local types are defined in the current compilation unit
+                bool is_library = false;
+                if (env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        if (mod_name.starts_with("std::") || mod_name.starts_with("core::")) {
+                            if (mod.structs.count(type_name) || mod.classes.count(type_name)) {
+                                is_library = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                std::string prefix = is_library ? "" : get_suite_prefix();
+                std::string func_llvm_name = "tml_" + prefix + type_name + "_drop";
+                functions_[method_name] =
+                    FuncInfo{"@" + func_llvm_name, "void (ptr)", "void", {"ptr"}};
+                // Request instantiation
+                std::unordered_map<std::string, types::TypePtr> empty_subs;
+                pending_impl_method_instantiations_.push_back(
+                    PendingImplMethod{type_name, "drop", empty_subs, type_name, "",
+                                      /*is_library_type=*/is_library});
+                generated_impl_methods_.insert(func_llvm_name);
+            }
         }
     }
 }
@@ -190,6 +253,7 @@ void LLVMIRGen::emit_drop_call(const DropInfo& info) {
     if (drop_it != functions_.end()) {
         drop_func = drop_it->second.llvm_name;
     } else {
+        // Fallback: use suite prefix for test-local types
         drop_func = "@tml_" + get_suite_prefix() + info.type_name + "_drop";
     }
     emit_line("  call void " + drop_func + "(ptr " + info.var_reg + ")");

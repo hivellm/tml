@@ -1,0 +1,26 @@
+// Tests for std::os CPU and memory functions
+use test
+use std::os
+
+@test
+func test_cpu_count_positive() -> I32 {
+    let count: I32 = os::cpu_count()
+    assert(count > 0, "cpu_count() should be positive")
+    return 0
+}
+
+@test
+func test_totalmem_positive() -> I32 {
+    let mem: U64 = os::totalmem()
+    assert(mem as I64 > 0, "totalmem() should be positive")
+    return 0
+}
+
+@test
+func test_freemem_positive() -> I32 {
+    let free: U64 = os::freemem()
+    let total: U64 = os::totalmem()
+    assert(free as I64 > 0, "freemem() should be positive")
+    assert(free as I64 <= total as I64, "freemem should be <= totalmem")
+    return 0
+}

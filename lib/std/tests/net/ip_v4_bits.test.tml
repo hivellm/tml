@@ -1,0 +1,26 @@
+// Tests for std::net::ip - Ipv4Addr bit conversion
+use test
+use std::net::ip::{Ipv4Addr}
+
+@test
+func test_ipv4_to_bits() -> I32 {
+    let addr: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1)
+    assert_eq(addr.to_bits(), 0x7F000001 as U32, "127.0.0.1 to_bits")
+    return 0
+}
+
+@test
+func test_ipv4_from_bits() -> I32 {
+    let addr: Ipv4Addr = Ipv4Addr::from_bits(0x7F000001 as U32)
+    assert_eq(addr.octet0(), 127 as U8, "from_bits o0")
+    assert_eq(addr.octet3(), 1 as U8, "from_bits o3")
+    return 0
+}
+
+@test
+func test_ipv4_is_multicast() -> I32 {
+    assert(Ipv4Addr::new(224, 0, 0, 1).is_multicast(), "224.0.0.1 should be multicast")
+    assert(Ipv4Addr::new(239, 255, 255, 255).is_multicast(), "239.255.255.255 should be multicast")
+    assert(not Ipv4Addr::new(223, 0, 0, 1).is_multicast(), "223.0.0.1 should not be multicast")
+    return 0
+}

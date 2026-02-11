@@ -1,0 +1,36 @@
+// Tests for DefaultHasher Default and Duplicate impls
+use test
+use core::hash::DefaultHasher
+use core::default::Default
+use core::clone::Duplicate
+
+@test
+func test_default_hasher_default() -> I32 {
+    let h: DefaultHasher = DefaultHasher::default()
+    let h2: DefaultHasher = DefaultHasher::new()
+    // Default should produce same state as new()
+    assert_eq(h.finish(), h2.finish(), "default() should equal new()")
+    return 0
+}
+
+@test
+func test_default_hasher_duplicate() -> I32 {
+    var original: DefaultHasher = DefaultHasher::new()
+    original.write_i32(42)
+    let copy: DefaultHasher = original.duplicate()
+    assert_eq(original.finish(), copy.finish(), "duplicate should have same state")
+    return 0
+}
+
+@test
+func test_default_hasher_duplicate_independent() -> I32 {
+    var original: DefaultHasher = DefaultHasher::new()
+    original.write_i32(42)
+    var copy: DefaultHasher = original.duplicate()
+    // Writing more to original should not affect copy
+    original.write_i32(99)
+    copy.write_i32(99)
+    // Both wrote the same data after the fork, so they should still match
+    assert_eq(original.finish(), copy.finish(), "duplicate should be independent copy")
+    return 0
+}

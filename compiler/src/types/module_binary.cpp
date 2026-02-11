@@ -204,6 +204,59 @@ static TypePtr deserialize_type_string(const std::string& str) {
         return std::make_shared<Type>(Type{RefType{false, inner}});
     }
 
+    // Dynamic behavior types: dyn Behavior, dyn mut Behavior, dyn Behavior[T]
+    if (str.starts_with("dyn mut ")) {
+        std::string rest = str.substr(8);
+        // Check for generic args: dyn mut Behavior[T]
+        std::string behavior_name = rest;
+        std::vector<TypePtr> type_args;
+        auto bracket_pos = rest.find('[');
+        if (bracket_pos != std::string::npos && rest.back() == ']') {
+            behavior_name = rest.substr(0, bracket_pos);
+            std::string args_str = rest.substr(bracket_pos + 1, rest.size() - bracket_pos - 2);
+            auto arg_strs = split_type_args(args_str);
+            for (const auto& arg : arg_strs) {
+                type_args.push_back(deserialize_type_string(arg));
+            }
+        }
+        return std::make_shared<Type>(
+            Type{DynBehaviorType{behavior_name, std::move(type_args), true}});
+    }
+    if (str.starts_with("dyn ")) {
+        std::string rest = str.substr(4);
+        // Check for generic args: dyn Behavior[T]
+        std::string behavior_name = rest;
+        std::vector<TypePtr> type_args;
+        auto bracket_pos = rest.find('[');
+        if (bracket_pos != std::string::npos && rest.back() == ']') {
+            behavior_name = rest.substr(0, bracket_pos);
+            std::string args_str = rest.substr(bracket_pos + 1, rest.size() - bracket_pos - 2);
+            auto arg_strs = split_type_args(args_str);
+            for (const auto& arg : arg_strs) {
+                type_args.push_back(deserialize_type_string(arg));
+            }
+        }
+        return std::make_shared<Type>(
+            Type{DynBehaviorType{behavior_name, std::move(type_args), false}});
+    }
+
+    // Impl behavior types: impl Behavior, impl Behavior[T]
+    if (str.starts_with("impl ")) {
+        std::string rest = str.substr(5);
+        std::string behavior_name = rest;
+        std::vector<TypePtr> type_args;
+        auto bracket_pos = rest.find('[');
+        if (bracket_pos != std::string::npos && rest.back() == ']') {
+            behavior_name = rest.substr(0, bracket_pos);
+            std::string args_str = rest.substr(bracket_pos + 1, rest.size() - bracket_pos - 2);
+            auto arg_strs = split_type_args(args_str);
+            for (const auto& arg : arg_strs) {
+                type_args.push_back(deserialize_type_string(arg));
+            }
+        }
+        return std::make_shared<Type>(Type{ImplBehaviorType{behavior_name, std::move(type_args)}});
+    }
+
     // Pointer types (raw pointer syntax: *T, *mut T)
     if (str.starts_with("*mut ")) {
         auto inner = deserialize_type_string(str.substr(5));
@@ -719,6 +772,14 @@ void ModuleBinaryWriter::write_module(const Module& module, uint64_t source_hash
 
     // Source code (for pure TML modules that need it for codegen)
     write_string(module.source_code);
+
+    // Behavior implementations (v3.1+): type -> list of behavior names
+    // Critical for is_trivially_destructible() to detect Drop impls on imported types
+    write_u32(static_cast<uint32_t>(module.behavior_impls.size()));
+    for (const auto& [type_name, behaviors] : module.behavior_impls) {
+        write_string(type_name);
+        write_string_array(behaviors);
+    }
 }
 
 // ============================================================================
@@ -1242,6 +1303,17 @@ Module ModuleBinaryReader::read_module() {
 
     // Source code
     module.source_code = read_string();
+
+    // Behavior implementations (v3.1+): type -> list of behavior names
+    // Gracefully handle old format (v3.0) where this data doesn't exist
+    if (!has_error_ && in_.peek() != std::char_traits<char>::eof()) {
+        uint32_t bi_count = read_u32();
+        for (uint32_t i = 0; i < bi_count && !has_error_; ++i) {
+            std::string type_name = read_string();
+            std::vector<std::string> behaviors = read_string_array();
+            module.behavior_impls[type_name] = std::move(behaviors);
+        }
+    }
 
     return module;
 }

@@ -1,0 +1,59 @@
+// Tests for core::mem size_of, align_of, and related functions
+use test
+use core::mem::{size_of, align_of, size_of_val, align_of_val}
+
+@test
+func test_size_of_i8() -> I32 {
+    assert_eq(size_of[I8](), 1 as I64, "size_of I8 should be 1")
+    return 0
+}
+
+@test
+func test_size_of_i32() -> I32 {
+    assert_eq(size_of[I32](), 4 as I64, "size_of I32 should be 4")
+    return 0
+}
+
+@test
+func test_size_of_i64() -> I32 {
+    assert_eq(size_of[I64](), 8 as I64, "size_of I64 should be 8")
+    return 0
+}
+
+@test
+func test_size_of_bool() -> I32 {
+    assert_eq(size_of[Bool](), 1 as I64, "size_of Bool should be 1")
+    return 0
+}
+
+@test
+func test_align_of_i8() -> I32 {
+    assert_eq(align_of[I8](), 1 as I64, "align_of I8 should be 1")
+    return 0
+}
+
+@test
+func test_align_of_i32() -> I32 {
+    assert_eq(align_of[I32](), 4 as I64, "align_of I32 should be 4")
+    return 0
+}
+
+@test
+func test_align_of_i64() -> I32 {
+    assert_eq(align_of[I64](), 8 as I64, "align_of I64 should be 8")
+    return 0
+}
+
+@test
+func test_size_of_val_i32() -> I32 {
+    let x: I32 = 42
+    assert_eq(size_of_val[I32](ref x), 4 as I64, "size_of_val I32 should be 4")
+    return 0
+}
+
+@test
+func test_align_of_val_i64() -> I32 {
+    let x: I64 = 100
+    assert_eq(align_of_val[I64](ref x), 8 as I64, "align_of_val I64 should be 8")
+    return 0
+}

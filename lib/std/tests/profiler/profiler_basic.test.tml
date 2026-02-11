@@ -1,0 +1,95 @@
+// Test: std::profiler module (v2)
+// Tests profiler state management and convenience functions
+use test::{assert, assert_eq}
+use std::profiler
+
+// All profiler outputs go to build/debug/ to avoid polluting the project root
+
+// ============================================================================
+// Profiler State Tests
+// ============================================================================
+
+@test
+func test_profiler_not_active_by_default() -> I32 {
+    let active: I32 = profiler::is_active()
+    assert_eq(active, 0, "Profiler should not be active by default")
+    return 0
+}
+
+@test
+func test_profiler_init_and_check() -> I32 {
+    profiler::init("build/debug/test_output.cpuprofile")
+    let active: I32 = profiler::is_active()
+    assert_eq(active, 0, "Profiler should not be active after init only")
+    return 0
+}
+
+@test
+func test_profiler_start_stop() -> I32 {
+    profiler::init("build/debug/test_start_stop.cpuprofile")
+    profiler::start()
+    let active: I32 = profiler::is_active()
+    assert_eq(active, 1, "Profiler should be active after start")
+    profiler::stop()
+    let inactive: I32 = profiler::is_active()
+    assert_eq(inactive, 0, "Profiler should not be active after stop")
+    return 0
+}
+
+// ============================================================================
+// Convenience Function Tests
+// ============================================================================
+
+@test
+func test_profiler_begin() -> I32 {
+    profiler::begin("build/debug/test_begin.cpuprofile")
+    let active: I32 = profiler::is_active()
+    assert_eq(active, 1, "Profiler should be active after begin")
+    profiler::stop()
+    return 0
+}
+
+@test
+func test_profiler_begin_default() -> I32 {
+    profiler::begin_default()
+    let active: I32 = profiler::is_active()
+    assert_eq(active, 1, "Profiler should be active after begin_default")
+    profiler::stop()
+    return 0
+}
+
+@test
+func test_profiler_section_when_inactive() -> I32 {
+    // section() should be a no-op when profiler is not active
+    profiler::section("test_section", "test.tml", 1)
+    profiler::end_section()
+    return 0
+}
+
+@test
+func test_profiler_section_when_active() -> I32 {
+    profiler::begin("build/debug/test_section_active.cpuprofile")
+    profiler::section("my_section", "test.tml", 10)
+    profiler::end_section()
+    profiler::stop()
+    let inactive: I32 = profiler::is_active()
+    assert_eq(inactive, 0, "Profiler should not be active after stop")
+    return 0
+}
+
+@test
+func test_profiler_enter_exit() -> I32 {
+    profiler::begin("build/debug/test_enter_exit.cpuprofile")
+    profiler::enter("test_func", "test.tml", 42)
+    profiler::exit()
+    profiler::stop()
+    return 0
+}
+
+@test
+func test_profiler_sample() -> I32 {
+    profiler::begin("build/debug/test_sample.cpuprofile")
+    profiler::sample()
+    profiler::stop()
+    return 0
+}

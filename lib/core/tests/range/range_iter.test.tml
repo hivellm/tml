@@ -1,0 +1,78 @@
+// Tests for core::range - RangeIterI64
+use test
+use core::range::RangeIterI64
+
+@test
+func test_range_iter_basic() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: 0, end: 3 }
+    let v0: Maybe[I64] = iter.next()
+    assert(v0.is_just(), "first next should return Just")
+    assert_eq(v0.unwrap(), 0 as I64, "first value should be 0")
+    let v1: Maybe[I64] = iter.next()
+    assert_eq(v1.unwrap(), 1 as I64, "second value should be 1")
+    let v2: Maybe[I64] = iter.next()
+    assert_eq(v2.unwrap(), 2 as I64, "third value should be 2")
+    let v3: Maybe[I64] = iter.next()
+    assert(v3.is_nothing(), "fourth next should return Nothing")
+    return 0
+}
+
+@test
+func test_range_iter_empty() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: 5, end: 5 }
+    let v: Maybe[I64] = iter.next()
+    assert(v.is_nothing(), "empty range should return Nothing immediately")
+    return 0
+}
+
+@test
+func test_range_iter_single() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: 42, end: 43 }
+    let v: Maybe[I64] = iter.next()
+    assert(v.is_just(), "single element range should return Just")
+    assert_eq(v.unwrap(), 42 as I64, "value should be 42")
+    let v2: Maybe[I64] = iter.next()
+    assert(v2.is_nothing(), "second next should return Nothing")
+    return 0
+}
+
+@test
+func test_range_iter_negative() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: -2, end: 1 }
+    let v0: Maybe[I64] = iter.next()
+    assert_eq(v0.unwrap(), -2 as I64, "should start at -2")
+    let v1: Maybe[I64] = iter.next()
+    assert_eq(v1.unwrap(), -1 as I64, "second should be -1")
+    let v2: Maybe[I64] = iter.next()
+    assert_eq(v2.unwrap(), 0 as I64, "third should be 0")
+    let v3: Maybe[I64] = iter.next()
+    assert(v3.is_nothing(), "should be exhausted")
+    return 0
+}
+
+@test
+func test_range_iter_reversed_empty() -> I32 {
+    // start > end should produce no elements
+    var iter: RangeIterI64 = RangeIterI64 { current: 10, end: 5 }
+    let v: Maybe[I64] = iter.next()
+    assert(v.is_nothing(), "reversed range should be empty")
+    return 0
+}
+
+@test
+func test_range_iter_large_range() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: 0, end: 100 }
+    var count: I64 = 0
+    var done: Bool = false
+    loop (not done) {
+        let v: Maybe[I64] = iter.next()
+        if v.is_nothing() {
+            done = true
+        } else {
+            assert_eq(v.unwrap(), count, "value should match count")
+            count = count + 1
+        }
+    }
+    assert_eq(count, 100 as I64, "should have yielded 100 elements")
+    return 0
+}

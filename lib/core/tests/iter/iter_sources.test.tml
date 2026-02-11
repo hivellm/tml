@@ -1,0 +1,61 @@
+// Tests for core::iter::sources - Once, RepeatN
+use test
+use core::iter::sources::once::{Once, once}
+use core::iter::sources::repeat_n::{RepeatN, repeat_n}
+
+// ============================================================================
+// Once Iterator Tests
+// ============================================================================
+
+@test
+func test_once_yields_one() -> I32 {
+    let mut iter: Once[I32] = once(42)
+    let v1: Maybe[I32] = iter.next()
+    assert(v1.is_just(), "once should yield one element")
+    assert_eq(v1.unwrap(), 42, "should be 42")
+
+    let v2: Maybe[I32] = iter.next()
+    assert(v2.is_nothing(), "second call should be Nothing")
+    return 0
+}
+
+@test
+func test_once_stays_exhausted() -> I32 {
+    let mut iter: Once[I64] = once(100 as I64)
+    iter.next() // consume the element
+    assert(iter.next().is_nothing(), "second call Nothing")
+    assert(iter.next().is_nothing(), "third call Nothing")
+    return 0
+}
+
+// ============================================================================
+// RepeatN Iterator Tests
+// ============================================================================
+
+@test
+func test_repeat_n_yields_n_times() -> I32 {
+    let mut iter: RepeatN[I32] = repeat_n(7, 3 as I64)
+    assert_eq(iter.next().unwrap(), 7, "first should be 7")
+    assert_eq(iter.next().unwrap(), 7, "second should be 7")
+    assert_eq(iter.next().unwrap(), 7, "third should be 7")
+    assert(iter.next().is_nothing(), "fourth should be Nothing")
+    return 0
+}
+
+@test
+func test_repeat_n_zero() -> I32 {
+    let mut iter: RepeatN[I32] = repeat_n(99, 0 as I64)
+    assert(iter.next().is_nothing(), "zero repeats should be Nothing immediately")
+    return 0
+}
+
+@test
+func test_repeat_n_one() -> I32 {
+    let mut iter: RepeatN[I64] = repeat_n(42 as I64, 1 as I64)
+    assert_eq(iter.next().unwrap(), 42 as I64, "should yield 42")
+    assert(iter.next().is_nothing(), "should be exhausted")
+    return 0
+}
+
+// Note: OnceWith, FromFn, Successors tests skipped due to codegen limitations
+// with higher-order generic types (Maybe__Fn vs Maybe__T mismatch)

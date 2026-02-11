@@ -1,0 +1,40 @@
+// Tests for precompiled_symbols module
+// Exercises the tml_precompiled_symbols_init function that forces
+// monomorphization of common generic types (Mutex, Arc, etc.)
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard, Arc}
+use core::mem::drop
+
+// ============================================================================
+// Mutex[I32] Tests (exercising precompiled types)
+// ============================================================================
+
+@test
+func test_precompiled_mutex_i32() -> I32 {
+    var m: Mutex[I32] = Mutex::new(42)
+    let g: MutexGuard[I32] = m.lock()
+    assert_eq(*g.get(), 42, "Mutex[I32] should hold value")
+    drop(g)
+    return 0
+}
+
+@test
+func test_precompiled_mutex_i32_modify() -> I32 {
+    var m: Mutex[I32] = Mutex::new(0)
+    {
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), 0, "Initial value should be 0")
+    }
+    return 0
+}
+
+// ============================================================================
+// Arc[I32] Tests (exercising precompiled types)
+// ============================================================================
+
+@test
+func test_precompiled_arc_i32() -> I32 {
+    let a: Arc[I32] = Arc::new(100)
+    drop(a)
+    return 0
+}

@@ -130,8 +130,43 @@ const char* f32_to_string(float value) {
     return float_buffer;
 }
 
-// Note: float_to_precision, float_to_exp, f64_is_nan, f64_is_infinite
-// are defined in essential.c to avoid duplicate symbol errors
+// f64_to_string_precision(value: F64, precision: I64) -> Str
+const char* f64_to_string_precision(double value, int64_t precision) {
+    if (precision < 0)
+        precision = 0;
+    if (precision > 20)
+        precision = 20;
+    snprintf(float_buffer, sizeof(float_buffer), "%.*f", (int)precision, value);
+    return float_buffer;
+}
+
+// f32_to_string_precision(value: F32, precision: I64) -> Str
+const char* f32_to_string_precision(float value, int64_t precision) {
+    return f64_to_string_precision((double)value, precision);
+}
+
+// f64_to_exp_string(value: F64, uppercase: Bool) -> Str
+const char* f64_to_exp_string(double value, int32_t uppercase) {
+    snprintf(float_buffer, sizeof(float_buffer), uppercase ? "%E" : "%e", value);
+    return float_buffer;
+}
+
+// f32_to_exp_string(value: F32, uppercase: Bool) -> Str
+const char* f32_to_exp_string(float value, int32_t uppercase) {
+    return f64_to_exp_string((double)value, uppercase);
+}
+
+// f32_is_nan(value: F32) -> Bool
+int32_t f32_is_nan(float value) {
+    return value != value ? 1 : 0;
+}
+
+// f32_is_infinite(value: F32) -> Bool
+int32_t f32_is_infinite(float value) {
+    return (!f32_is_nan(value) && f32_is_nan(value - value)) ? 1 : 0;
+}
+
+// Note: f64_is_nan, f64_is_infinite are defined in essential.c
 
 // int_to_float(value: I32) -> F64
 double int_to_float(int32_t value) {

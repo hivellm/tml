@@ -1,0 +1,28 @@
+// Tests for std::text::Text - modification methods
+use test
+use std::text::Text
+
+@test
+func test_text_push_str() {
+    let t: Text = Text::from("hello")
+    t.push_str(" world")
+    assert_eq(t.as_str(), "hello world", "push_str should append")
+    t.drop()
+}
+
+@test
+func test_text_clear() {
+    let t: Text = Text::from("hello")
+    t.clear()
+    assert(t.is_empty(), "should be empty after clear")
+    assert_eq(t.len(), 0, "len should be 0 after clear")
+    t.drop()
+}
+
+@test
+func test_text_push_formatted() {
+    let t: Text = Text::new()
+    t.push_formatted("item #", 3, " done")
+    assert_eq(t.as_str(), "item #3 done", "push_formatted should format correctly")
+    t.drop()
+}

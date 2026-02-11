@@ -1,0 +1,29 @@
+// Tests for core::ptr RawPtr basic operations
+use test
+use core::ptr::const_ptr::RawPtr
+
+@test
+func test_rawptr_null() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].null_ptr()
+    assert(p.is_null(), "null_ptr should be null")
+    assert_eq(p.addr(), 0 as I64, "null addr should be 0")
+    return 0
+}
+
+@test
+func test_rawptr_from_addr() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(0x1000)
+    assert(not p.is_null(), "non-zero addr should not be null")
+    assert_eq(p.addr(), 0x1000 as I64, "addr should be 0x1000")
+    return 0
+}
+
+@test
+func test_rawptr_eq() -> I32 {
+    let a: RawPtr[I32] = RawPtr[I32].from_addr(100)
+    let b: RawPtr[I32] = RawPtr[I32].from_addr(100)
+    let c: RawPtr[I32] = RawPtr[I32].from_addr(200)
+    assert(a.eq(ref b), "same addr should be equal")
+    assert(not a.eq(ref c), "different addr should not be equal")
+    return 0
+}

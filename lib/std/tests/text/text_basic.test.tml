@@ -1,0 +1,28 @@
+// Tests for std::text::Text - additional coverage for push_i64 and fill_char
+use test
+use std::text::Text
+
+@test
+func test_text_push_i64() {
+    let t: Text = Text::from("count: ")
+    t.push_i64(42)
+    assert_eq(t.as_str(), "count: 42", "push_i64 should append number")
+    t.drop()
+}
+
+@test
+func test_text_push_i64_negative() {
+    let t: Text = Text::new()
+    t.push_i64(-7)
+    assert_eq(t.as_str(), "-7", "push_i64 negative should work")
+    t.drop()
+}
+
+@test
+func test_text_fill_char() {
+    let t: Text = Text::new()
+    t.fill_char(42, 5)  // '*' = 42
+    assert_eq(t.as_str(), "*****", "fill_char should fill with 5 asterisks")
+    assert_eq(t.len(), 5, "len should be 5")
+    t.drop()
+}

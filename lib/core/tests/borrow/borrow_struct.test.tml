@@ -1,0 +1,41 @@
+// Tests for borrow patterns with structs
+use test
+
+class Counter {
+    value: I32
+
+    static func create(v: I32) -> Counter {
+        return Counter { value: v }
+    }
+
+    func get_value(this) -> I32 {
+        return this.value
+    }
+
+    func add(mut this, n: I32) {
+        this.value = this.value + n
+    }
+}
+
+@test
+func test_struct_method_read() -> I32 {
+    let c: Counter = Counter::create(10)
+    assert_eq(c.get_value(), 10, "method should read field")
+    return 0
+}
+
+@test
+func test_struct_mutation() -> I32 {
+    var c: Counter = Counter::create(0)
+    c.add(5)
+    c.add(3)
+    assert_eq(c.get_value(), 8, "mutations should accumulate")
+    return 0
+}
+
+@test
+func test_struct_field_access() -> I32 {
+    let c: Counter = Counter::create(42)
+    assert_eq(c.value, 42, "direct field access should work")
+    return 0
+}

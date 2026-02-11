@@ -1,0 +1,252 @@
+// Tests for TryFrom - smaller type narrowing conversions
+// Tests I16->I8, I32->I16, U16->U8, U32->U16 TryFrom implementations
+use test::{assert, assert_eq}
+use core::convert::*
+
+// ============================================================================
+// I16 -> I8 TryFrom
+// ============================================================================
+
+@test
+func test_tryfrom_i16_to_i8_normal() -> I32 {
+    let val: I16 = 50 as I16
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 50, "50 should fit in I8"),
+        Err(_) => assert(false, "50 should not overflow I8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i16_to_i8_max() -> I32 {
+    let val: I16 = 127 as I16
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 127, "127 is I8 max"),
+        Err(_) => assert(false, "127 should fit in I8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i16_to_i8_min() -> I32 {
+    let val: I16 = -128 as I16
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, -128, "-128 is I8 min"),
+        Err(_) => assert(false, "-128 should fit in I8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i16_to_i8_overflow() -> I32 {
+    let val: I16 = 200 as I16
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(_) => assert(false, "200 should overflow I8"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i16_to_i8_underflow() -> I32 {
+    let val: I16 = -200 as I16
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(_) => assert(false, "-200 should underflow I8"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+// ============================================================================
+// I32 -> I16 TryFrom
+// ============================================================================
+
+@test
+func test_tryfrom_i32_to_i16_normal() -> I32 {
+    let val: I32 = 1000
+    let result: Outcome[I16, TryFromIntError] = I16::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 1000, "1000 should fit in I16"),
+        Err(_) => assert(false, "1000 should not overflow I16")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i32_to_i16_max() -> I32 {
+    let val: I32 = 32767
+    let result: Outcome[I16, TryFromIntError] = I16::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 32767, "32767 is I16 max"),
+        Err(_) => assert(false, "32767 should fit in I16")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i32_to_i16_overflow() -> I32 {
+    let val: I32 = 40000
+    let result: Outcome[I16, TryFromIntError] = I16::try_from(val)
+    when result {
+        Ok(_) => assert(false, "40000 should overflow I16"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+// ============================================================================
+// U16 -> U8 TryFrom
+// ============================================================================
+
+@test
+func test_tryfrom_u16_to_u8_normal() -> I32 {
+    let val: U16 = 200 as U16
+    let result: Outcome[U8, TryFromIntError] = U8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 200, "200 should fit in U8"),
+        Err(_) => assert(false, "200 should not overflow U8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_u16_to_u8_max() -> I32 {
+    let val: U16 = 255 as U16
+    let result: Outcome[U8, TryFromIntError] = U8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 255, "255 is U8 max"),
+        Err(_) => assert(false, "255 should fit in U8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_u16_to_u8_overflow() -> I32 {
+    let val: U16 = 300 as U16
+    let result: Outcome[U8, TryFromIntError] = U8::try_from(val)
+    when result {
+        Ok(_) => assert(false, "300 should overflow U8"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+// ============================================================================
+// U32 -> U16 TryFrom
+// ============================================================================
+
+@test
+func test_tryfrom_u32_to_u16_normal() -> I32 {
+    let val: U32 = 50000 as U32
+    let result: Outcome[U16, TryFromIntError] = U16::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 50000, "50000 should fit in U16"),
+        Err(_) => assert(false, "50000 should not overflow U16")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_u32_to_u16_max() -> I32 {
+    let val: U32 = 65535 as U32
+    let result: Outcome[U16, TryFromIntError] = U16::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 65535, "65535 is U16 max"),
+        Err(_) => assert(false, "65535 should fit in U16")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_u32_to_u16_overflow() -> I32 {
+    let val: U32 = 70000 as U32
+    let result: Outcome[U16, TryFromIntError] = U16::try_from(val)
+    when result {
+        Ok(_) => assert(false, "70000 should overflow U16"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+// ============================================================================
+// I32 -> I8 TryFrom
+// ============================================================================
+
+@test
+func test_tryfrom_i32_to_i8_normal() -> I32 {
+    let val: I32 = 100
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 100, "100 should fit in I8"),
+        Err(_) => assert(false, "100 should not overflow I8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i32_to_i8_overflow() -> I32 {
+    let val: I32 = 500
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(_) => assert(false, "500 should overflow I8"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+// ============================================================================
+// Cross-type: I16 -> U16
+// ============================================================================
+
+@test
+func test_tryfrom_i16_to_u16_positive() -> I32 {
+    let val: I16 = 1000 as I16
+    let result: Outcome[U16, TryFromIntError] = U16::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 1000, "1000 should convert"),
+        Err(_) => assert(false, "Positive I16 should convert to U16")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i16_to_u16_negative() -> I32 {
+    let val: I16 = -5 as I16
+    let result: Outcome[U16, TryFromIntError] = U16::try_from(val)
+    when result {
+        Ok(_) => assert(false, "Negative should fail"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+// ============================================================================
+// Cross-type: U16 -> I16
+// ============================================================================
+
+@test
+func test_tryfrom_u16_to_i16_in_range() -> I32 {
+    let val: U16 = 30000 as U16
+    let result: Outcome[I16, TryFromIntError] = I16::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 30000, "30000 fits in I16"),
+        Err(_) => assert(false, "30000 should fit in I16")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_u16_to_i16_overflow() -> I32 {
+    let val: U16 = 40000 as U16
+    let result: Outcome[I16, TryFromIntError] = I16::try_from(val)
+    when result {
+        Ok(_) => assert(false, "40000 should overflow I16"),
+        Err(_) => return 0
+    }
+    return 0
+}

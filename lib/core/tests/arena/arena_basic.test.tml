@@ -1,0 +1,94 @@
+// Tests for core::arena - Arena allocator
+use test
+use core::arena::{Arena, ArenaStats}
+
+@test
+func test_arena_new() -> I32 {
+    var arena: Arena = Arena::new(4096)
+    assert(arena.capacity() >= 4096 as I64, "capacity should be at least 4096")
+    assert_eq(arena.bytes_allocated(), 0 as I64, "should start with 0 bytes allocated")
+    assert_eq(arena.allocation_count(), 0 as I64, "should start with 0 allocations")
+    return 0
+}
+
+@test
+func test_arena_alloc_raw() -> I32 {
+    var arena: Arena = Arena::new(4096)
+    let ptr: I64 = arena.alloc_raw(64, 8)
+    assert(ptr != 0 as I64, "allocation should succeed")
+    assert_eq(arena.allocation_count(), 1 as I64, "should have 1 allocation")
+    assert(arena.bytes_allocated() >= 64 as I64, "should have at least 64 bytes allocated")
+    return 0
+}
+
+@test
+func test_arena_multiple_allocs() -> I32 {
+    var arena: Arena = Arena::new(4096)
+    let p1: I64 = arena.alloc_raw(64, 8)
+    let p2: I64 = arena.alloc_raw(128, 8)
+    assert(p1 != 0 as I64, "first alloc should succeed")
+    assert(p2 != 0 as I64, "second alloc should succeed")
+    assert(p2 > p1, "second pointer should be after first (bump allocation)")
+    assert_eq(arena.allocation_count(), 2 as I64, "should have 2 allocations")
+    return 0
+}
+
+@test
+func test_arena_reset() -> I32 {
+    var arena: Arena = Arena::new(4096)
+    arena.alloc_raw(64, 8)
+    arena.alloc_raw(128, 8)
+    assert(arena.bytes_allocated() > 0 as I64, "should have bytes allocated")
+    arena.reset()
+    assert_eq(arena.bytes_allocated(), 0 as I64, "bytes should be 0 after reset")
+    assert_eq(arena.allocation_count(), 0 as I64, "count should be 0 after reset")
+    let stats: ArenaStats = arena.stats()
+    assert_eq(stats.reset_count, 1 as I64, "reset count should be 1")
+    return 0
+}
+
+@test
+func test_arena_remaining() -> I32 {
+    var arena: Arena = Arena::new(1024)
+    let initial: I64 = arena.remaining()
+    assert_eq(initial, 1024 as I64, "remaining should equal capacity initially")
+    arena.alloc_raw(256, 8)
+    assert(arena.remaining() < initial, "remaining should decrease after alloc")
+    arena.reset()
+    assert_eq(arena.remaining(), 1024 as I64, "remaining should restore after reset")
+    return 0
+}
+
+@test
+func test_arena_exhaustion() -> I32 {
+    // Minimum capacity is 1024, so we fill it up
+    var arena: Arena = Arena::new(1024)
+    arena.alloc_raw(512, 8)
+    arena.alloc_raw(512, 8)
+    let ptr: I64 = arena.alloc_raw(512, 8)
+    assert_eq(ptr, 0 as I64, "should return 0 when arena is full")
+    return 0
+}
+
+@test
+func test_arena_stats_utilization() -> I32 {
+    var arena: Arena = Arena::new(4096)
+    let stats0: ArenaStats = arena.stats()
+    let util0: F64 = stats0.utilization()
+    assert(util0 < 1.0, "utilization should be near 0 initially")
+    return 0
+}
+
+@test
+func test_arena_default_capacity() -> I32 {
+    var arena: Arena = Arena::default()
+    assert(arena.capacity() >= 65536 as I64, "default arena should be at least 64KB")
+    return 0
+}
+
+@test
+func test_arena_small_capacity() -> I32 {
+    var arena: Arena = Arena::small()
+    assert(arena.capacity() >= 4096 as I64, "small arena should be at least 4KB")
+    return 0
+}

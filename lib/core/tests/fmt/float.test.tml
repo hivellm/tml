@@ -1,0 +1,420 @@
+// Tests for core::fmt::float - float formatting, precision, scientific notation, special values
+use test
+use core::fmt::float::*
+
+// =============================================================================
+// format_f64 - default formatting
+// =============================================================================
+
+@test
+func test_format_f64_positive() -> I32 {
+    let s: Str = format_f64(3.14)
+    assert(s.len() > 0, "format_f64 should produce output")
+    return 0
+}
+
+@test
+func test_format_f64_zero() -> I32 {
+    let s: Str = format_f64(0.0)
+    assert(s.len() > 0, "format_f64(0.0) should produce output")
+    return 0
+}
+
+@test
+func test_format_f64_negative() -> I32 {
+    let s: Str = format_f64(-2.5)
+    assert(s.len() > 0, "format_f64 negative should produce output")
+    return 0
+}
+
+// =============================================================================
+// format_f32 - default formatting
+// =============================================================================
+
+@test
+func test_format_f32_positive() -> I32 {
+    let x: F32 = 1.5
+    let s: Str = format_f32(x)
+    assert(s.len() > 0, "format_f32 should produce output")
+    return 0
+}
+
+@test
+func test_format_f32_zero() -> I32 {
+    let x: F32 = 0.0
+    let s: Str = format_f32(x)
+    assert(s.len() > 0, "format_f32(0.0) should produce output")
+    return 0
+}
+
+// =============================================================================
+// format_f64_precision - fixed decimal places
+// =============================================================================
+
+@test
+func test_format_f64_precision_2() -> I32 {
+    let s: Str = format_f64_precision(3.14159, 2)
+    assert_eq(s, "3.14", "format_f64_precision 2 decimal places")
+    return 0
+}
+
+@test
+func test_format_f64_precision_0() -> I32 {
+    let s: Str = format_f64_precision(3.7, 0)
+    assert_eq(s, "4", "format_f64_precision 0 decimal places rounds")
+    return 0
+}
+
+@test
+func test_format_f64_precision_4() -> I32 {
+    let s: Str = format_f64_precision(1.0, 4)
+    assert_eq(s, "1.0000", "format_f64_precision pads with zeros")
+    return 0
+}
+
+// =============================================================================
+// format_f32_precision - fixed decimal places
+// =============================================================================
+
+@test
+func test_format_f32_precision_2() -> I32 {
+    let x: F32 = 2.718
+    let s: Str = format_f32_precision(x, 2)
+    assert_eq(s, "2.72", "format_f32_precision 2 decimal places")
+    return 0
+}
+
+@test
+func test_format_f32_precision_1() -> I32 {
+    let x: F32 = 9.99
+    let s: Str = format_f32_precision(x, 1)
+    assert_eq(s, "10.0", "format_f32_precision rounds up")
+    return 0
+}
+
+// =============================================================================
+// format_f64_exp - scientific notation
+// =============================================================================
+
+@test
+func test_format_f64_exp_lowercase() -> I32 {
+    let s: Str = format_f64_exp(3.14, false)
+    assert(s.len() > 0, "format_f64_exp should produce output")
+    return 0
+}
+
+@test
+func test_format_f64_exp_uppercase() -> I32 {
+    let s: Str = format_f64_exp(3.14, true)
+    assert(s.len() > 0, "format_f64_exp uppercase should produce output")
+    return 0
+}
+
+// =============================================================================
+// format_f32_exp - scientific notation
+// =============================================================================
+
+@test
+func test_format_f32_exp_lowercase() -> I32 {
+    let x: F32 = 1.5
+    let s: Str = format_f32_exp(x, false)
+    assert(s.len() > 0, "format_f32_exp should produce output")
+    return 0
+}
+
+// =============================================================================
+// is_nan_f64 / is_nan_f32
+// =============================================================================
+
+@test
+func test_is_nan_f64_normal() -> I32 {
+    assert_eq(is_nan_f64(3.14), false, "3.14 is not NaN")
+    return 0
+}
+
+@test
+func test_is_nan_f64_zero() -> I32 {
+    assert_eq(is_nan_f64(0.0), false, "0.0 is not NaN")
+    return 0
+}
+
+@test
+func test_is_nan_f32_normal() -> I32 {
+    let x: F32 = 1.0
+    assert_eq(is_nan_f32(x), false, "1.0f is not NaN")
+    return 0
+}
+
+// =============================================================================
+// is_infinite_f64 / is_infinite_f32
+// =============================================================================
+
+@test
+func test_is_infinite_f64_normal() -> I32 {
+    assert_eq(is_infinite_f64(42.0), false, "42.0 is not infinite")
+    return 0
+}
+
+@test
+func test_is_infinite_f64_zero() -> I32 {
+    assert_eq(is_infinite_f64(0.0), false, "0.0 is not infinite")
+    return 0
+}
+
+@test
+func test_is_infinite_f32_normal() -> I32 {
+    let x: F32 = 1.0
+    assert_eq(is_infinite_f32(x), false, "1.0f is not infinite")
+    return 0
+}
+
+// =============================================================================
+// is_finite_f64 / is_finite_f32
+// =============================================================================
+
+@test
+func test_is_finite_f64_normal() -> I32 {
+    assert_eq(is_finite_f64(3.14), true, "3.14 is finite")
+    return 0
+}
+
+@test
+func test_is_finite_f64_zero() -> I32 {
+    assert_eq(is_finite_f64(0.0), true, "0.0 is finite")
+    return 0
+}
+
+@test
+func test_is_finite_f32_normal() -> I32 {
+    let x: F32 = 2.5
+    assert_eq(is_finite_f32(x), true, "2.5f is finite")
+    return 0
+}
+
+// =============================================================================
+// format_float - generic with NaN/inf handling
+// =============================================================================
+
+@test
+func test_format_float_normal() -> I32 {
+    let s: Str = format_float(3.14)
+    assert(s.len() > 0, "format_float normal should produce output")
+    return 0
+}
+
+@test
+func test_format_float_zero() -> I32 {
+    let s: Str = format_float(0.0)
+    assert(s.len() > 0, "format_float(0.0) should produce output")
+    return 0
+}
+
+@test
+func test_format_float_negative() -> I32 {
+    let s: Str = format_float(-99.5)
+    assert(s.len() > 0, "format_float negative should produce output")
+    return 0
+}
+
+// =============================================================================
+// format_float_precision - generic with NaN/inf handling
+// =============================================================================
+
+@test
+func test_format_float_precision_normal() -> I32 {
+    let s: Str = format_float_precision(3.14159, 2)
+    assert_eq(s, "3.14", "format_float_precision 2 places")
+    return 0
+}
+
+@test
+func test_format_float_precision_zero_places() -> I32 {
+    let s: Str = format_float_precision(7.8, 0)
+    assert_eq(s, "8", "format_float_precision 0 places rounds")
+    return 0
+}
+
+// =============================================================================
+// format_float_exp - generic with NaN/inf handling
+// =============================================================================
+
+@test
+func test_format_float_exp_lowercase() -> I32 {
+    let s: Str = format_float_exp(3.14, false)
+    assert(s.len() > 0, "format_float_exp lowercase should produce output")
+    return 0
+}
+
+@test
+func test_format_float_exp_uppercase() -> I32 {
+    let s: Str = format_float_exp(3.14, true)
+    assert(s.len() > 0, "format_float_exp uppercase should produce output")
+    return 0
+}
+
+// =============================================================================
+// FloatFormatOptions constructors
+// =============================================================================
+
+@test
+func test_float_format_options_default() -> I32 {
+    let opts: FloatFormatOptions = FloatFormatOptions::default()
+    assert_eq(opts.uppercase, false, "default uppercase is false")
+    assert_eq(opts.always_decimal, false, "default always_decimal is false")
+    assert_eq(opts.zero_pad, false, "default zero_pad is false")
+    return 0
+}
+
+@test
+func test_float_format_options_with_precision() -> I32 {
+    let opts: FloatFormatOptions = FloatFormatOptions::with_precision(3)
+    assert_eq(opts.uppercase, false, "with_precision uppercase is false")
+    assert_eq(opts.zero_pad, false, "with_precision zero_pad is false")
+    return 0
+}
+
+@test
+func test_float_format_options_scientific() -> I32 {
+    let opts: FloatFormatOptions = FloatFormatOptions::scientific(true)
+    assert_eq(opts.uppercase, true, "scientific uppercase is true")
+    assert_eq(opts.always_decimal, true, "scientific always_decimal is true")
+    return 0
+}
+
+@test
+func test_float_format_options_scientific_lowercase() -> I32 {
+    let opts: FloatFormatOptions = FloatFormatOptions::scientific(false)
+    assert_eq(opts.uppercase, false, "scientific lowercase uppercase is false")
+    assert_eq(opts.always_decimal, true, "scientific lowercase always_decimal is true")
+    return 0
+}
+
+// =============================================================================
+// Constant string functions
+// =============================================================================
+
+@test
+func test_infinity_str() -> I32 {
+    assert_eq(infinity_str(), "inf", "infinity_str returns inf")
+    return 0
+}
+
+@test
+func test_neg_infinity_str() -> I32 {
+    assert_eq(neg_infinity_str(), "-inf", "neg_infinity_str returns -inf")
+    return 0
+}
+
+@test
+func test_nan_str() -> I32 {
+    assert_eq(nan_str(), "NaN", "nan_str returns NaN")
+    return 0
+}
+
+// =============================================================================
+// round_to_precision
+// =============================================================================
+
+@test
+func test_round_to_precision_2() -> I32 {
+    let r: F64 = round_to_precision(3.14159, 2)
+    // Should be approximately 3.14
+    assert(r > 3.13, "round_to_precision(3.14159, 2) > 3.13")
+    assert(r < 3.15, "round_to_precision(3.14159, 2) < 3.15")
+    return 0
+}
+
+@test
+func test_round_to_precision_0() -> I32 {
+    let r: F64 = round_to_precision(3.7, 0)
+    assert(r > 3.9, "round_to_precision(3.7, 0) rounds to 4.0")
+    assert(r < 4.1, "round_to_precision(3.7, 0) rounds to 4.0")
+    return 0
+}
+
+@test
+func test_round_to_precision_negative_precision() -> I32 {
+    let r: F64 = round_to_precision(3.7, -1)
+    assert(r > 3.9, "round_to_precision with negative precision rounds to integer")
+    assert(r < 4.1, "round_to_precision with negative precision rounds to integer")
+    return 0
+}
+
+// =============================================================================
+// FloatParts - struct construction and methods
+// =============================================================================
+
+@test
+func test_float_parts_to_decimal_with_fraction() -> I32 {
+    let parts: FloatParts = FloatParts {
+        sign: "",
+        integer: "3",
+        fraction: "14",
+        exponent: Nothing
+    }
+    assert_eq(parts.to_decimal(), "3.14", "FloatParts to_decimal with fraction")
+    return 0
+}
+
+@test
+func test_float_parts_to_decimal_no_fraction() -> I32 {
+    let parts: FloatParts = FloatParts {
+        sign: "-",
+        integer: "42",
+        fraction: "",
+        exponent: Nothing
+    }
+    assert_eq(parts.to_decimal(), "-42", "FloatParts to_decimal without fraction")
+    return 0
+}
+
+@test
+func test_float_parts_to_string_display() -> I32 {
+    let parts: FloatParts = FloatParts {
+        sign: "",
+        integer: "1",
+        fraction: "5",
+        exponent: Nothing
+    }
+    assert_eq(parts.to_string(), "1.5", "FloatParts Display to_string")
+    return 0
+}
+
+@test
+func test_float_parts_debug_string() -> I32 {
+    let parts: FloatParts = FloatParts {
+        sign: "",
+        integer: "3",
+        fraction: "14",
+        exponent: Nothing
+    }
+    let dbg: Str = parts.debug_string()
+    assert(dbg.len() > 0, "FloatParts debug_string should produce output")
+    return 0
+}
+
+@test
+func test_float_parts_to_scientific_lowercase() -> I32 {
+    let parts: FloatParts = FloatParts {
+        sign: "",
+        integer: "3",
+        fraction: "14",
+        exponent: Just(2)
+    }
+    let s: Str = parts.to_scientific(false)
+    assert(s.len() > 0, "FloatParts to_scientific lowercase should produce output")
+    return 0
+}
+
+@test
+func test_float_parts_to_scientific_no_exponent() -> I32 {
+    let parts: FloatParts = FloatParts {
+        sign: "",
+        integer: "5",
+        fraction: "",
+        exponent: Nothing
+    }
+    let s: Str = parts.to_scientific(false)
+    assert_eq(s, "5", "FloatParts to_scientific no exponent")
+    return 0
+}

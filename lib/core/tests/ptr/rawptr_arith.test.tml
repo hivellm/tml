@@ -1,0 +1,29 @@
+// Tests for core::ptr RawPtr pointer arithmetic
+use test
+use core::ptr::const_ptr::RawPtr
+
+@test
+func test_rawptr_add() -> I32 {
+    // I32 is 4 bytes, so add(1) should advance by 4
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(1000)
+    let q: RawPtr[I32] = p.add(1)
+    assert_eq(q.addr(), 1004 as I64, "add(1) for I32 should advance 4 bytes")
+    return 0
+}
+
+@test
+func test_rawptr_sub() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(1000)
+    let q: RawPtr[I32] = p.sub(1)
+    assert_eq(q.addr(), 996 as I64, "sub(1) for I32 should go back 4 bytes")
+    return 0
+}
+
+@test
+func test_rawptr_offset_from() -> I32 {
+    let a: RawPtr[I32] = RawPtr[I32].from_addr(1000)
+    let b: RawPtr[I32] = RawPtr[I32].from_addr(1016)
+    let dist: I64 = a.offset_from(b)
+    assert_eq(dist, 4 as I64, "distance should be 4 elements of I32")
+    return 0
+}

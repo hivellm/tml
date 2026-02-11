@@ -1,5 +1,5 @@
 // Test: cipher.tml from_name pattern with when syntax
-// This tests the idiomatic way to write CipherAlgorithm::from_name
+// Tests the idiomatic way to write CipherAlgorithm::from_name
 
 use test
 

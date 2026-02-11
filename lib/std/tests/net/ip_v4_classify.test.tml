@@ -1,0 +1,24 @@
+// Tests for std::net::ip - Ipv4Addr classification and conversion methods
+use test
+use std::net::ip::{Ipv4Addr}
+
+@test
+func test_ipv4_is_unspecified() -> I32 {
+    assert(Ipv4Addr::UNSPECIFIED().is_unspecified(), "0.0.0.0 should be unspecified")
+    assert(not Ipv4Addr::LOCALHOST().is_unspecified(), "127.0.0.1 should not be unspecified")
+    return 0
+}
+
+@test
+func test_ipv4_is_broadcast() -> I32 {
+    assert(Ipv4Addr::BROADCAST().is_broadcast(), "255.255.255.255 should be broadcast")
+    assert(not Ipv4Addr::new(255, 255, 255, 0).is_broadcast(), "255.255.255.0 should not be broadcast")
+    return 0
+}
+
+@test
+func test_ipv4_is_link_local() -> I32 {
+    assert(Ipv4Addr::new(169, 254, 1, 1).is_link_local(), "169.254.1.1 should be link-local")
+    assert(not Ipv4Addr::new(169, 253, 1, 1).is_link_local(), "169.253.1.1 should not be link-local")
+    return 0
+}

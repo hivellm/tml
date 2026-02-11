@@ -1,0 +1,24 @@
+// Tests for std::types Outcome free functions (Bool-returning)
+use test
+use std::types::{is_ok, is_err}
+
+@test
+func test_free_is_ok_true() -> I32 {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert(is_ok[I32, Str](o), "is_ok on Ok should be true")
+    return 0
+}
+
+@test
+func test_free_is_ok_false() -> I32 {
+    let o: Outcome[I32, Str] = Err("bad")
+    assert(not is_ok[I32, Str](o), "is_ok on Err should be false")
+    return 0
+}
+
+@test
+func test_free_is_err_true() -> I32 {
+    let o: Outcome[I32, Str] = Err("fail")
+    assert(is_err[I32, Str](o), "is_err on Err should be true")
+    return 0
+}

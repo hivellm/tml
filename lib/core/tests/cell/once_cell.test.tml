@@ -1,0 +1,28 @@
+// Tests for core::cell::once::OnceCell[T]
+use test
+use core::cell::once::OnceCell
+
+@test
+func test_once_cell_new_empty() -> I32 {
+    let c: OnceCell[I32] = OnceCell::new[I32]()
+    assert(c.is_empty(), "new OnceCell should be empty")
+    assert(not c.is_initialized(), "new should not be initialized")
+    return 0
+}
+
+@test
+func test_once_cell_with_value() -> I32 {
+    let c: OnceCell[I32] = OnceCell::with_value[I32](42)
+    assert(c.is_initialized(), "with_value should be initialized")
+    assert(not c.is_empty(), "with_value should not be empty")
+    return 0
+}
+
+@test
+func test_once_cell_set() -> I32 {
+    var c: OnceCell[I32] = OnceCell::new[I32]()
+    let result: Outcome[Unit, I32] = c.set(99)
+    assert(result.is_ok(), "first set should succeed")
+    assert(c.is_initialized(), "should be initialized after set")
+    return 0
+}

@@ -1,0 +1,27 @@
+// Tests for core::mem::ManuallyDrop
+use test
+use core::mem::ManuallyDrop
+
+@test
+func test_manually_drop_new_into_inner() -> I32 {
+    let wrapper: ManuallyDrop[I32] = ManuallyDrop::new[I32](42)
+    let val: I32 = wrapper.into_inner()
+    assert_eq(val, 42, "into_inner should return original value")
+    return 0
+}
+
+@test
+func test_manually_drop_get_ref() -> I32 {
+    let wrapper: ManuallyDrop[I32] = ManuallyDrop::new[I32](99)
+    let r: ref I32 = wrapper.get_ref()
+    assert_eq(*r, 99, "get_ref should return reference to value")
+    return 0
+}
+
+@test
+func test_manually_drop_str() -> I32 {
+    let wrapper: ManuallyDrop[Str] = ManuallyDrop::new[Str]("hello")
+    let val: Str = wrapper.into_inner()
+    assert_eq(val, "hello", "ManuallyDrop works with Str")
+    return 0
+}

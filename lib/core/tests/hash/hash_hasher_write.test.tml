@@ -1,0 +1,34 @@
+// Tests for DefaultHasher write methods (write_u8, write_i32, write_i64, finish)
+use test
+use core::hash::DefaultHasher
+
+@test
+func test_hasher_write_u8() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    hasher.write_u8(42 as U8)
+    let h: I64 = hasher.finish()
+    // After writing data, hash should differ from initial state
+    let empty: DefaultHasher = DefaultHasher::new()
+    assert(h != empty.finish(), "write_u8 should change hasher state")
+    return 0
+}
+
+@test
+func test_hasher_write_u8_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_u8(100 as U8)
+    h2.write_u8(100 as U8)
+    assert_eq(h1.finish(), h2.finish(), "same write_u8 should produce same hash")
+    return 0
+}
+
+@test
+func test_hasher_write_u8_different_values() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_u8(10 as U8)
+    h2.write_u8(20 as U8)
+    assert(h1.finish() != h2.finish(), "different bytes should produce different hashes")
+    return 0
+}

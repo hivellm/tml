@@ -1,0 +1,82 @@
+// Tests for core::alloc::layout utility functions
+use test
+use core::alloc::layout::{padding_needed, align_up, align_down, is_aligned, is_valid_align, next_power_of_two, is_power_of_two}
+
+@test
+func test_padding_needed_aligned() -> I32 {
+    // 16 is already aligned to 8
+    assert_eq(padding_needed(16, 8), 0 as I64, "16 aligned to 8 needs 0 padding")
+    return 0
+}
+
+@test
+func test_padding_needed_unaligned() -> I32 {
+    // 5 needs 3 more to reach 8
+    assert_eq(padding_needed(5, 8), 3 as I64, "5 aligned to 8 needs 3 padding")
+    // 1 needs 3 more to reach 4
+    assert_eq(padding_needed(1, 4), 3 as I64, "1 aligned to 4 needs 3 padding")
+    return 0
+}
+
+@test
+func test_align_up() -> I32 {
+    assert_eq(align_up(5, 8), 8 as I64, "5 aligned up to 8 = 8")
+    assert_eq(align_up(8, 8), 8 as I64, "8 aligned up to 8 = 8")
+    assert_eq(align_up(9, 8), 16 as I64, "9 aligned up to 8 = 16")
+    assert_eq(align_up(0, 4), 0 as I64, "0 aligned up to 4 = 0")
+    return 0
+}
+
+@test
+func test_align_down() -> I32 {
+    assert_eq(align_down(5, 4), 4 as I64, "5 aligned down to 4 = 4")
+    assert_eq(align_down(8, 8), 8 as I64, "8 aligned down to 8 = 8")
+    assert_eq(align_down(15, 8), 8 as I64, "15 aligned down to 8 = 8")
+    assert_eq(align_down(16, 8), 16 as I64, "16 aligned down to 8 = 16")
+    return 0
+}
+
+@test
+func test_is_aligned() -> I32 {
+    assert(is_aligned(0, 4), "0 is aligned to 4")
+    assert(is_aligned(8, 4), "8 is aligned to 4")
+    assert(is_aligned(16, 8), "16 is aligned to 8")
+    assert(not is_aligned(5, 4), "5 is not aligned to 4")
+    assert(not is_aligned(7, 8), "7 is not aligned to 8")
+    return 0
+}
+
+@test
+func test_is_valid_align() -> I32 {
+    assert(is_valid_align(1), "1 is valid align")
+    assert(is_valid_align(2), "2 is valid align")
+    assert(is_valid_align(4), "4 is valid align")
+    assert(is_valid_align(8), "8 is valid align")
+    assert(is_valid_align(1024), "1024 is valid align")
+    assert(not is_valid_align(0), "0 is not valid align")
+    assert(not is_valid_align(3), "3 is not valid align")
+    assert(not is_valid_align(6), "6 is not valid align")
+    return 0
+}
+
+@test
+func test_is_power_of_two() -> I32 {
+    assert(is_power_of_two(1), "1 is power of two")
+    assert(is_power_of_two(2), "2 is power of two")
+    assert(is_power_of_two(64), "64 is power of two")
+    assert(not is_power_of_two(0), "0 is not power of two")
+    assert(not is_power_of_two(3), "3 is not power of two")
+    assert(not is_power_of_two(5), "5 is not power of two")
+    return 0
+}
+
+@test
+func test_next_power_of_two() -> I32 {
+    assert_eq(next_power_of_two(0), 1 as I64, "next_pow2(0) = 1")
+    assert_eq(next_power_of_two(1), 1 as I64, "next_pow2(1) = 1")
+    assert_eq(next_power_of_two(2), 2 as I64, "next_pow2(2) = 2")
+    assert_eq(next_power_of_two(3), 4 as I64, "next_pow2(3) = 4")
+    assert_eq(next_power_of_two(5), 8 as I64, "next_pow2(5) = 8")
+    assert_eq(next_power_of_two(17), 32 as I64, "next_pow2(17) = 32")
+    return 0
+}

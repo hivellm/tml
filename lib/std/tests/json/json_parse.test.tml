@@ -1,0 +1,34 @@
+// Tests for std::json parsing and type checks
+use test
+use std::json::types::{Json, parse_or_panic}
+
+@test
+func test_json_parse_int() -> I32 {
+    let j: Json = parse_or_panic("42")
+    assert(j.is_number(), "42 should be a number")
+    assert(not j.is_string(), "42 should not be a string")
+    assert(not j.is_null(), "42 should not be null")
+    let val: I64 = j.unwrap_i64()
+    assert_eq(val, 42 as I64, "value should be 42")
+    return 0
+}
+
+@test
+func test_json_parse_string() -> I32 {
+    let j: Json = parse_or_panic("\"hello\"")
+    assert(j.is_string(), "should be a string")
+    let val: Str = j.unwrap_str()
+    assert_eq(val, "hello", "value should be hello")
+    return 0
+}
+
+@test
+func test_json_parse_bool() -> I32 {
+    let t: Json = parse_or_panic("true")
+    let f: Json = parse_or_panic("false")
+    assert(t.is_bool(), "true should be bool")
+    assert(f.is_bool(), "false should be bool")
+    assert(t.unwrap_bool(), "should be true")
+    assert(not f.unwrap_bool(), "should be false")
+    return 0
+}

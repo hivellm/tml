@@ -1,0 +1,24 @@
+// Tests for std::types free functions that return Bool
+use test
+use std::types::{is_just, is_nothing}
+
+@test
+func test_free_is_just_true() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    assert(is_just[I32](m), "is_just on Just should be true")
+    return 0
+}
+
+@test
+func test_free_is_just_false() -> I32 {
+    let m: Maybe[I32] = Nothing
+    assert(not is_just[I32](m), "is_just on Nothing should be false")
+    return 0
+}
+
+@test
+func test_free_is_nothing_true() -> I32 {
+    let m: Maybe[I32] = Nothing
+    assert(is_nothing[I32](m), "is_nothing on Nothing should be true")
+    return 0
+}

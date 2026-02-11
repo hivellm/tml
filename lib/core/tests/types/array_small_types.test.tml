@@ -1,0 +1,31 @@
+// Tests for Array with small integer types (I8, I16, U8, U16)
+use test
+
+@test
+func test_array_i8() -> I32 {
+    let arr: [I8; 3] = [10, 20, 30]
+    assert(arr[0] as I32 == 10, "I8 array[0]")
+    assert(arr[1] as I32 == 20, "I8 array[1]")
+    assert(arr[2] as I32 == 30, "I8 array[2]")
+    assert(arr.len() == 3, "I8 array len")
+    return 0
+}
+
+@test
+func test_array_u8() -> I32 {
+    let arr: [U8; 4] = [0, 128, 200, 255]
+    assert(arr[0] as I32 == 0, "U8 array[0]")
+    assert(arr[1] as I32 == 128, "U8 array[1]")
+    assert(arr[2] as I32 == 200, "U8 array[2]")
+    assert(arr[3] as I32 == 255, "U8 array[3]")
+    return 0
+}
+
+@test
+func test_array_i16() -> I32 {
+    let arr: [I16; 3] = [1000, -2000, 3000]
+    assert(arr[0] as I32 == 1000, "I16 array[0]")
+    assert(arr[1] as I32 == -2000, "I16 array[1]")
+    assert(arr[2] as I32 == 3000, "I16 array[2]")
+    return 0
+}

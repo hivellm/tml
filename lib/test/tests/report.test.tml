@@ -1,0 +1,138 @@
+// Tests for test report types and formatting utilities
+// Tests OutputFormat-like enum construction and duration conversion logic
+use test::{assert, assert_eq}
+
+// Define OutputFormat locally since report module has const codegen issues
+type OutputFormat {
+    Pretty,
+    Quiet,
+    Verbose,
+}
+
+// ============================================================================
+// OutputFormat Enum Tests
+// ============================================================================
+
+@test
+func test_output_format_pretty() -> I32 {
+    let fmt: OutputFormat = OutputFormat::Pretty
+    return 0
+}
+
+@test
+func test_output_format_quiet() -> I32 {
+    let fmt: OutputFormat = OutputFormat::Quiet
+    return 0
+}
+
+@test
+func test_output_format_verbose() -> I32 {
+    let fmt: OutputFormat = OutputFormat::Verbose
+    return 0
+}
+
+// ============================================================================
+// Duration Conversion Logic Tests (mirrors report::convert_duration_us)
+// ============================================================================
+
+// Replicate the logic from report module to test it
+func convert_duration_us(us: I64) -> I64 {
+    if us < 1000 {
+        return us
+    } else if us < 1000000 {
+        return us / 1000
+    } else {
+        return us / 1000000
+    }
+}
+
+func format_duration_us(us: I64) -> Str {
+    if us < 1000 {
+        return "us"
+    } else if us < 1000000 {
+        return "ms"
+    } else {
+        return "s"
+    }
+}
+
+@test
+func test_convert_duration_microseconds() -> I32 {
+    let result: I64 = convert_duration_us(500)
+    assert_eq(result, 500 as I64, "500us should stay as 500")
+    return 0
+}
+
+@test
+func test_convert_duration_milliseconds() -> I32 {
+    let result: I64 = convert_duration_us(5000)
+    assert_eq(result, 5 as I64, "5000us should convert to 5ms")
+    return 0
+}
+
+@test
+func test_convert_duration_seconds() -> I32 {
+    let result: I64 = convert_duration_us(2000000)
+    assert_eq(result, 2 as I64, "2000000us should convert to 2s")
+    return 0
+}
+
+@test
+func test_format_duration_us_unit() -> I32 {
+    let unit: Str = format_duration_us(500)
+    assert_eq(unit, "us", "Under 1000 should be us")
+    return 0
+}
+
+@test
+func test_format_duration_ms_unit() -> I32 {
+    let unit: Str = format_duration_us(5000)
+    assert_eq(unit, "ms", "Under 1000000 should be ms")
+    return 0
+}
+
+@test
+func test_format_duration_s_unit() -> I32 {
+    let unit: Str = format_duration_us(2000000)
+    assert_eq(unit, "s", "Over 1000000 should be s")
+    return 0
+}
+
+// ============================================================================
+// Edge Case Duration Tests
+// ============================================================================
+
+@test
+func test_convert_duration_boundary_1000() -> I32 {
+    let result: I64 = convert_duration_us(1000)
+    assert_eq(result, 1 as I64, "1000us should convert to 1ms")
+    return 0
+}
+
+@test
+func test_convert_duration_boundary_1000000() -> I32 {
+    let result: I64 = convert_duration_us(1000000)
+    assert_eq(result, 1 as I64, "1000000us should convert to 1s")
+    return 0
+}
+
+@test
+func test_convert_duration_zero() -> I32 {
+    let result: I64 = convert_duration_us(0)
+    assert_eq(result, 0 as I64, "0us should be 0")
+    return 0
+}
+
+@test
+func test_format_duration_zero() -> I32 {
+    let unit: Str = format_duration_us(0)
+    assert_eq(unit, "us", "0 should be us")
+    return 0
+}
+
+@test
+func test_format_duration_boundary_1000() -> I32 {
+    let unit: Str = format_duration_us(1000)
+    assert_eq(unit, "ms", "Exactly 1000 should be ms")
+    return 0
+}

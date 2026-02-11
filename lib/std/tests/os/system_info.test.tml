@@ -1,0 +1,24 @@
+// Tests for std::os system information functions
+use test
+use std::os
+
+@test
+func test_hostname_non_empty() -> I32 {
+    let h: Str = os::hostname()
+    assert(h.len() > 0, "hostname() should return non-empty string")
+    return 0
+}
+
+@test
+func test_homedir_non_empty() -> I32 {
+    let h: Str = os::homedir()
+    assert(h.len() > 0, "homedir() should return non-empty string")
+    return 0
+}
+
+@test
+func test_tmpdir_non_empty() -> I32 {
+    let t: Str = os::tmpdir()
+    assert(t.len() > 0, "tmpdir() should return non-empty string")
+    return 0
+}
