@@ -343,6 +343,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                                   << " tests)");
                     }
 
+                    // Track which suite is being compiled for crash diagnostics
+                    set_crash_context("compiling", job.suite.name.c_str(), nullptr, nullptr);
+
                     job.result = compile_test_suite(job.suite, opts.verbose, opts.no_cache,
                                                     opts.backend, opts.features);
                     job.compiled = true;
@@ -402,6 +405,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 suite.dll_path = compile_result.dll_path;
 
                 // Load the suite DLL
+                set_crash_context("loading_dll", suite.name.c_str(), nullptr,
+                                  suite.dll_path.c_str());
                 phase_start = Clock::now();
                 DynamicLibrary lib;
                 bool load_ok = lib.load(suite.dll_path);
@@ -444,7 +449,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         unsigned int hw_threads = std::thread::hardware_concurrency();
         if (hw_threads == 0)
             hw_threads = 8;
-        unsigned int num_exec_threads = std::clamp(hw_threads / 4, 1u, 4u);
+        // Single-threaded test execution to avoid global state conflicts
+        // between test DLLs (mem_track atexit, log sinks, etc.)
+        // Compilation is still parallelized for speed.
+        unsigned int num_exec_threads = 1;
         num_exec_threads =
             std::min(num_exec_threads, static_cast<unsigned int>(loaded_suites.size()));
 
@@ -517,6 +525,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                            << ": " << test_info.test_name << " ("
                                                            << test_info.test_count
                                                            << " sub-tests)");
+
+                    // Track which test is running for crash diagnostics
+                    set_crash_context("running", suite.name.c_str(), test_info.test_name.c_str(),
+                                      test_info.file_path.c_str());
 
                     TestResult result;
                     result.file_path = test_info.file_path;
@@ -621,6 +633,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 }
 
                 // Clean up suite DLL
+                set_crash_context("unloading_dll", suite.name.c_str(), nullptr,
+                                  suite.dll_path.c_str());
                 lib.unload();
                 try {
                     fs::remove(suite.dll_path);
@@ -642,6 +656,9 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     fs::create_directories(cache_file.parent_path());
                     test_cache.save(cache_file.string());
                 }
+
+                // Suite completed - clear crash context
+                clear_crash_context();
             }
         };
 

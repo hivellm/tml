@@ -1,0 +1,31 @@
+// Tests for json/types - JsonObject and JsonArray direct methods
+use test
+use std::json::types::{Json, JsonObject, JsonArray, parse_or_panic}
+
+// =============================================================================
+// JsonObject direct methods
+// =============================================================================
+
+@test
+func test_obj_new() -> I32 {
+    let obj: JsonObject = JsonObject::new()
+    assert(obj.is_empty(), "new object should be empty")
+    assert(obj.len() == 0, "new object len should be 0")
+    return 0
+}
+
+@test
+func test_obj_has() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
+    let maybe_obj: Maybe[JsonObject] = j.as_object()
+    assert(maybe_obj.is_just(), "should be object")
+    return 0
+}
+
+@test
+func test_obj_to_string() -> I32 {
+    let obj: JsonObject = JsonObject::new()
+    let s: Str = obj.to_string()
+    assert(s.len() > 0, "empty object to_string should produce output")
+    return 0
+}

@@ -109,8 +109,9 @@ impl Text {
     }
 
     /// Free the Text memory
-    pub func drop(this) {
+    pub func drop(mut this) {
         lowlevel { text_drop(this.handle) }
+        this.handle = null  // Null so double-drop is a no-op
     }
 
     // ========================================================================

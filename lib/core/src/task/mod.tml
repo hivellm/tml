@@ -447,10 +447,9 @@ impl Waker {
     /// }
     /// ```
     pub func wake(this) {
-        let vtable: ref RawWakerVTable = this.waker.vtable
-        let data: RawPtr[Unit] = this.waker.data
-        // Call wake function (consumes the waker)
-        vtable.wake_fn(data)
+        // TODO: Call vtable.wake_fn(data) when function pointer field calls are supported
+        // For now, this is a placeholder - Waker requires runtime executor support
+        panic("Waker::wake not yet implemented - requires function pointer field call support")
     }
 
     /// Wake up the task associated with this waker by reference.
@@ -466,8 +465,8 @@ impl Waker {
     /// // Can still use stored_waker later
     /// ```
     pub func wake_by_ref(this) {
-        let vtable: ref RawWakerVTable = this.waker.vtable
-        vtable.wake_by_ref_fn(this.waker.data)
+        // TODO: Call vtable.wake_by_ref_fn(data) when function pointer field calls are supported
+        panic("Waker::wake_by_ref not yet implemented - requires function pointer field call support")
     }
 
     /// Returns whether this waker will wake the same task as another waker.
@@ -491,17 +490,16 @@ impl Duplicate for Waker {
     ///
     /// The duplicated waker will wake the same task.
     pub func duplicate(this) -> Waker {
-        let vtable: ref RawWakerVTable = this.waker.vtable
-        let new_raw: RawWaker = vtable.clone_fn(this.waker.data)
-        return Waker { waker: new_raw }
+        // TODO: Call vtable.clone_fn(data) when function pointer field calls are supported
+        panic("Waker::duplicate not yet implemented - requires function pointer field call support")
     }
 }
 
 impl Drop for Waker {
     /// Drops this waker, releasing its resources.
     pub func drop(mut this) {
-        let vtable: ref RawWakerVTable = this.waker.vtable
-        vtable.drop_fn(this.waker.data)
+        // TODO: Call vtable.drop_fn(data) when function pointer field calls are supported
+        // No-op for now - Waker resources are not cleaned up until function pointer calls work
     }
 }
 

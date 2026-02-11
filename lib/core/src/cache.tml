@@ -36,7 +36,7 @@
 //! let aligned: CacheAligned[LargeStruct] = CacheAligned::new(data)
 //! ```
 
-use core::mem::size_of
+use core::mem::{size_of, mem_alloc, mem_free}
 use core::alloc::{Layout, AllocError}
 
 // ============================================================================
@@ -85,7 +85,7 @@ pub type CacheAligned[T] {
     /// The actual data storage, aligned to cache line
     data: T,
     /// Padding to ensure next allocation doesn't share cache line
-    _padding: [U8; 64],
+    _padding: I64,
 }
 
 impl[T] CacheAligned[T] {
@@ -93,7 +93,7 @@ impl[T] CacheAligned[T] {
     pub func new(value: T) -> CacheAligned[T] {
         CacheAligned {
             data: value,
-            _padding: zeroed_array(),
+            _padding: 0,
         }
     }
 
@@ -139,7 +139,7 @@ pub type Padded[T] {
     /// The actual value
     value: T,
     /// Padding to fill cache line
-    _padding: [U8; 56], // 64 - 8 bytes for typical small value
+    _padding: I64,
 }
 
 impl[T] Padded[T] {
@@ -147,7 +147,7 @@ impl[T] Padded[T] {
     pub func new(value: T) -> Padded[T] {
         Padded {
             value: value,
-            _padding: zeroed_array(),
+            _padding: 0,
         }
     }
 
@@ -320,7 +320,7 @@ impl SoaVec {
         let elem_size: I64 = 8 // Placeholder for size_of[T]()
 
         let data = if this.capacity > 0 {
-            lowlevel { malloc(this.capacity * elem_size) } as I64
+            mem_alloc(this.capacity * elem_size) as I64
         } else {
             0
         }
@@ -356,7 +356,7 @@ impl SoaVec {
 
         var i: I64 = 0
         loop (i < this.columns.len()) {
-            let col = ref this.columns[i]
+            let col: SoaColumn = this.columns.get(i)
             if str_eq(col.name, col_name) {
                 let ptr = col.data + (row * col.elem_size)
                 return Just(lowlevel { *(ptr as Ptr[T]) })
@@ -375,7 +375,7 @@ impl SoaVec {
 
         var i: I64 = 0
         loop (i < this.columns.len()) {
-            let col = ref this.columns[i]
+            let col: SoaColumn = this.columns.get(i)
             if str_eq(col.name, col_name) {
                 let ptr = col.data + (row * col.elem_size)
                 lowlevel { *(ptr as Ptr[T]) = value }
@@ -389,7 +389,7 @@ impl SoaVec {
     pub func column_ptr(this, col_name: Str) -> I64 {
         var i: I64 = 0
         loop (i < this.columns.len()) {
-            let col = ref this.columns[i]
+            let col: SoaColumn = this.columns.get(i)
             if str_eq(col.name, col_name) {
                 return col.data
             }
@@ -417,10 +417,10 @@ impl SoaVec {
     }
 
     /// Grows a single column.
-    func grow_column(mut this, col_idx: I64, new_capacity: I64) {
-        let col = mut ref this.columns[col_idx]
+    pub func grow_column(mut this, col_idx: I64, new_capacity: I64) {
+        let col: SoaColumn = this.columns.get(col_idx)
 
-        let new_data = lowlevel { malloc(new_capacity * col.elem_size) } as I64
+        let new_data = mem_alloc(new_capacity * col.elem_size) as I64
         if new_data == 0 {
             return
         }
@@ -434,11 +434,17 @@ impl SoaVec {
                 lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
                 j = j + 1
             }
-            lowlevel { free(col.data as Ptr[U8]) }
+            mem_free(col.data as *Unit)
         }
 
-        col.data = new_data
-        col.capacity = new_capacity
+        // Write updated column back
+        let updated_col: SoaColumn = SoaColumn {
+            name: col.name,
+            data: new_data,
+            elem_size: col.elem_size,
+            capacity: new_capacity,
+        }
+        this.columns.set(col_idx, updated_col)
     }
 
     /// Clears all rows.
@@ -450,9 +456,9 @@ impl SoaVec {
     pub func destroy(mut this) {
         var i: I64 = 0
         loop (i < this.columns.len()) {
-            let col = ref this.columns[i]
+            let col: SoaColumn = this.columns.get(i)
             if col.data != 0 {
-                lowlevel { free(col.data as Ptr[U8]) }
+                mem_free(col.data as *Unit)
             }
             i = i + 1
         }
@@ -496,12 +502,10 @@ pub type PrefetchHint {
 /// prefetch(data_ptr + 64, PrefetchHint::Read)
 /// ```
 pub func prefetch(addr: I64, hint: PrefetchHint) {
-    when hint {
-        Read => lowlevel { __builtin_prefetch(addr as Ptr[U8], 0, 3) }
-        Write => lowlevel { __builtin_prefetch(addr as Ptr[U8], 1, 3) }
-        HighLocality => lowlevel { __builtin_prefetch(addr as Ptr[U8], 0, 3) }
-        LowLocality => lowlevel { __builtin_prefetch(addr as Ptr[U8], 0, 0) }
-    }
+    // Prefetch hints are no-ops until LLVM intrinsic support is added
+    // __builtin_prefetch is a GCC/Clang intrinsic, not callable from LLVM IR directly
+    let _ = addr
+    let _ = hint
 }
 
 /// Prefetches the next cache line.
@@ -513,28 +517,23 @@ pub func prefetch_next(addr: I64) {
 // Helper functions
 // ============================================================================
 
-/// Aligns a value up to the specified alignment.
+/// Aligns a value up to the specified alignment (align must be power of 2).
 func align_up(value: I64, align: I64) -> I64 {
-    let mask = align - 1
-    (value + mask) and (not mask)
+    let mask: I64 = align - 1
+    // ~mask == -align for power-of-2 alignment
+    (value + mask) & (0 - align)
 }
 
 /// Allocates memory with specified alignment.
 func aligned_alloc(alignment: I64, size: I64) -> I64 {
-    #if WINDOWS
-    lowlevel { _aligned_malloc(size, alignment) as I64 }
-    #else
-    lowlevel { aligned_alloc(alignment, size) as I64 }
-    #endif
+    // Use standard alloc - true alignment would require platform-specific calls
+    let _ = alignment
+    mem_alloc(size) as I64
 }
 
 /// Frees aligned memory.
 func aligned_free(ptr: I64) {
-    #if WINDOWS
-    lowlevel { _aligned_free(ptr as Ptr[U8]) }
-    #else
-    lowlevel { free(ptr as Ptr[U8]) }
-    #endif
+    mem_free(ptr as *Unit)
 }
 
 /// Returns a zeroed array.

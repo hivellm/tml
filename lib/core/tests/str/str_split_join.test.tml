@@ -1,0 +1,126 @@
+// Tests for str replace, repeat, pad, parse functions
+use test
+use core::str::{
+    replace, replace_first,
+    repeat, pad_left, pad_right,
+    parse_i32, parse_i64, parse_f64, parse_bool,
+    concat
+}
+
+// =============================================================================
+// replace / replace_first
+// =============================================================================
+
+@test
+func test_replace_all() -> I32 {
+    let r: Str = replace("aaa", "a", "b")
+    assert_eq(r, "bbb", "replace all a with b")
+    return 0
+}
+
+@test
+func test_replace_first_only() -> I32 {
+    let r: Str = replace_first("aaa", "a", "b")
+    assert_eq(r, "baa", "replace_first should only replace first")
+    return 0
+}
+
+// =============================================================================
+// repeat
+// =============================================================================
+
+@test
+func test_repeat_string() -> I32 {
+    let r: Str = repeat("ab", 3)
+    assert_eq(r, "ababab", "repeat ab 3 times")
+    return 0
+}
+
+@test
+func test_repeat_zero() -> I32 {
+    let r: Str = repeat("hello", 0)
+    assert_eq(r, "", "repeat 0 times is empty")
+    return 0
+}
+
+// =============================================================================
+// pad_left / pad_right
+// =============================================================================
+
+@test
+func test_pad_left_basic() -> I32 {
+    let r: Str = pad_left("42", 5, "0")
+    assert_eq(r, "00042", "pad_left with zeros")
+    return 0
+}
+
+@test
+func test_pad_right_basic() -> I32 {
+    let r: Str = pad_right("42", 5, "0")
+    assert_eq(r, "42000", "pad_right with zeros")
+    return 0
+}
+
+@test
+func test_pad_left_no_padding_needed() -> I32 {
+    let r: Str = pad_left("long", 2, "x")
+    assert_eq(r, "long", "pad_left no padding when already long enough")
+    return 0
+}
+
+// =============================================================================
+// parse_i32 / parse_i64 / parse_f64 / parse_bool
+// =============================================================================
+
+@test
+func test_parse_i32_basic() -> I32 {
+    let result: Maybe[I32] = parse_i32("42")
+    assert(result.is_just(), "parse_i32 should return Just")
+    return 0
+}
+
+@test
+func test_parse_i64_basic() -> I32 {
+    let result: Maybe[I64] = parse_i64("9876543210")
+    assert(result.is_just(), "parse_i64 should return Just")
+    return 0
+}
+
+@test
+func test_parse_f64_basic() -> I32 {
+    let result: Maybe[F64] = parse_f64("3.14")
+    assert(result.is_just(), "parse_f64 should return Just")
+    return 0
+}
+
+@test
+func test_parse_bool_true() -> I32 {
+    let result: Maybe[Bool] = parse_bool("true")
+    assert(result.is_just(), "parse_bool true should return Just")
+    return 0
+}
+
+@test
+func test_parse_bool_false() -> I32 {
+    let result: Maybe[Bool] = parse_bool("false")
+    assert(result.is_just(), "parse_bool false should return Just")
+    return 0
+}
+
+@test
+func test_parse_bool_invalid() -> I32 {
+    let result: Maybe[Bool] = parse_bool("yes")
+    assert(result.is_nothing(), "parse_bool yes should return Nothing")
+    return 0
+}
+
+// =============================================================================
+// concat
+// =============================================================================
+
+@test
+func test_concat_basic() -> I32 {
+    let r: Str = concat("Hello, ", "World!")
+    assert_eq(r, "Hello, World!", "concat two strings")
+    return 0
+}

@@ -251,3 +251,18 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
                                  const TestRunStats& test_stats = {});
 
 } // namespace tml::cli::tester
+
+// ============================================================================
+// Global Crash Context Tracking (defined in run.cpp)
+// ============================================================================
+// These functions track what the test runner is currently doing so that
+// the crash handler can identify which test/suite/phase caused a crash.
+
+#ifdef _WIN32
+void set_crash_context(const char* phase, const char* suite, const char* test_name,
+                       const char* test_file);
+void clear_crash_context();
+#else
+inline void set_crash_context(const char*, const char*, const char*, const char*) {}
+inline void clear_crash_context() {}
+#endif

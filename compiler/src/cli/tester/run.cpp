@@ -26,14 +26,55 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+// ============================================================================
+// Global Crash Tracking - identifies WHICH test caused a crash
+// ============================================================================
+
+// These globals track what the test runner is currently doing.
+// When a crash occurs, the crash handler reads them to identify the culprit.
+static char g_current_test_name[512] = {0};
+static char g_current_test_file[1024] = {0};
+static char g_current_suite_name[256] = {0};
+static char g_current_phase[128] = "idle"; // "compiling", "loading_dll", "running", "unloading_dll"
+
+static void safe_copy(char* dst, size_t dst_size, const char* src) {
+    if (!src)
+        return;
+    size_t len = strlen(src);
+    if (len >= dst_size)
+        len = dst_size - 1;
+    memcpy(dst, src, len);
+    dst[len] = '\0';
+}
+
+void set_crash_context(const char* phase, const char* suite, const char* test_name,
+                       const char* test_file) {
+    if (phase)
+        safe_copy(g_current_phase, sizeof(g_current_phase), phase);
+    if (suite)
+        safe_copy(g_current_suite_name, sizeof(g_current_suite_name), suite);
+    if (test_name)
+        safe_copy(g_current_test_name, sizeof(g_current_test_name), test_name);
+    if (test_file)
+        safe_copy(g_current_test_file, sizeof(g_current_test_file), test_file);
+}
+
+void clear_crash_context() {
+    g_current_test_name[0] = '\0';
+    g_current_test_file[0] = '\0';
+    g_current_suite_name[0] = '\0';
+    safe_copy(g_current_phase, sizeof(g_current_phase), "idle");
+}
+
 // Global unhandled exception filter for crash logging
 static LONG WINAPI global_crash_filter(EXCEPTION_POINTERS* info) {
     DWORD code = info->ExceptionRecord->ExceptionCode;
+    void* crash_addr = info->ExceptionRecord->ExceptionAddress;
 
     const char* name = "UNKNOWN";
     switch (code) {
     case EXCEPTION_ACCESS_VIOLATION:
-        name = "ACCESS_VIOLATION";
+        name = "ACCESS_VIOLATION (segfault)";
         break;
     case EXCEPTION_STACK_OVERFLOW:
         name = "STACK_OVERFLOW";
@@ -41,19 +82,68 @@ static LONG WINAPI global_crash_filter(EXCEPTION_POINTERS* info) {
     case EXCEPTION_INT_DIVIDE_BY_ZERO:
         name = "INTEGER_DIVIDE_BY_ZERO";
         break;
+    case EXCEPTION_ILLEGAL_INSTRUCTION:
+        name = "ILLEGAL_INSTRUCTION";
+        break;
+    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+        name = "FLOAT_DIVIDE_BY_ZERO";
+        break;
+    case 0xC0000028:
+        name = "BAD_STACK (stack corruption)";
+        break;
+    case 0xC0000374:
+        name = "HEAP_CORRUPTION";
+        break;
+    case 0xC0000409:
+        name = "STACK_BUFFER_OVERRUN";
+        break;
     }
 
-    // Write directly to stderr handle for reliability
-    char msg[256];
-    int len = snprintf(msg, sizeof(msg),
-                       "\n[FATAL CRASH] Exception 0x%08lX (%s)\n"
-                       "Test crashed before exception could be caught.\n",
-                       (unsigned long)code, name);
+    // Build detailed crash message with test context
+    char msg[2048];
+    int len = snprintf(
+        msg, sizeof(msg),
+        "\n"
+        "================================================================================\n"
+        "                    FATAL CRASH IN TEST RUNNER\n"
+        "================================================================================\n"
+        "\n"
+        "  Exception:  0x%08lX (%s)\n"
+        "  Address:    %p\n"
+        "  Phase:      %s\n"
+        "  Suite:      %s\n"
+        "  Test:       %s\n"
+        "  File:       %s\n"
+        "\n"
+        "  The test process crashed. This is likely caused by:\n"
+        "  - A double-free or use-after-free in a test DLL\n"
+        "  - A null pointer dereference in generated code\n"
+        "  - Stack corruption from buffer overflow\n"
+        "  - Heap corruption from memory mismanagement\n"
+        "\n"
+        "  To debug: run the failing test individually:\n"
+        "    tml test \"%s\"\n"
+        "\n"
+        "================================================================================\n",
+        (unsigned long)code, name, crash_addr, g_current_phase[0] ? g_current_phase : "(unknown)",
+        g_current_suite_name[0] ? g_current_suite_name : "(unknown)",
+        g_current_test_name[0] ? g_current_test_name : "(unknown)",
+        g_current_test_file[0] ? g_current_test_file : "(unknown)",
+        g_current_test_name[0] ? g_current_test_name : "?");
 
+    // Write directly to stderr handle for reliability (no buffering)
     HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
     DWORD written;
     WriteFile(hErr, msg, (DWORD)len, &written, NULL);
     FlushFileBuffers(hErr);
+
+    // Also write crash report to a file for post-mortem analysis
+    HANDLE hFile = CreateFileA("build\\debug\\crash_report.txt", GENERIC_WRITE, 0, NULL,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        WriteFile(hFile, msg, (DWORD)len, &written, NULL);
+        CloseHandle(hFile);
+    }
 
     return EXCEPTION_EXECUTE_HANDLER;
 }
@@ -412,11 +502,49 @@ int run_test(int argc, char* argv[], bool verbose) {
         TML_LOG_INFO("test", c.dim() << "Test log: " << c.reset() << log_path.string());
     }
 
+    // Flush all log sinks to ensure output is written before exit
+    tml::log::Logger::instance().flush();
+    std::cerr.flush();
+    std::cout.flush();
+    std::fflush(stderr);
+    std::fflush(stdout);
+
     // Count failures
     int failed = 0;
     for (const auto& result : collector.results) {
         if (!result.passed) {
             failed++;
+        }
+    }
+
+    // Write final summary to a file so it's never lost even if terminal truncates output
+    {
+        int total_tests = 0;
+        int total_passed = 0;
+        for (const auto& result : collector.results) {
+            total_tests += result.test_count;
+            if (result.passed) {
+                total_passed += result.test_count;
+            }
+        }
+        fs::path summary_path = fs::path("build") / "debug" / "test_summary.txt";
+        std::ofstream summary(summary_path);
+        if (summary.is_open()) {
+            summary << "test result: " << (failed == 0 ? "ok" : "FAILED") << ". " << total_passed
+                    << " passed; " << (total_tests - total_passed) << " failed; "
+                    << collector.results.size() << " files; finished in " << total_duration_ms
+                    << "ms\n";
+            if (failed > 0) {
+                summary << "\nfailures:\n";
+                for (const auto& result : collector.results) {
+                    if (!result.passed) {
+                        summary << "    " << result.test_name << " (" << result.file_path << ")\n";
+                        if (!result.error_message.empty()) {
+                            summary << "      " << result.error_message << "\n";
+                        }
+                    }
+                }
+            }
         }
     }
 

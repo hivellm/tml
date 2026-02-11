@@ -248,7 +248,7 @@ impl Builder {
     }
 
     /// Free the builder's resources
-    pub func drop(this) {
+    pub func drop(mut this) {
         this.buffer.drop()
     }
 }
@@ -509,7 +509,7 @@ impl PrettyBuilder {
     }
 
     /// Free resources
-    pub func drop(this) {
+    pub func drop(mut this) {
         this.buffer.drop()
     }
 }

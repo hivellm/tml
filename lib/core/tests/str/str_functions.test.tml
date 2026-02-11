@@ -1,0 +1,181 @@
+// Tests for standalone str module functions
+use test
+use core::str::{
+    char_at, first_char, last_char,
+    substring, substring_from, substring_to,
+    trim, trim_start, trim_end,
+    contains, starts_with, ends_with,
+    find, rfind
+}
+
+// =============================================================================
+// char_at
+// =============================================================================
+
+@test
+func test_char_at_first() -> I32 {
+    let c: I32 = char_at("hello", 0)
+    assert(c == 104, "char_at(0) should be 'h' (104)")
+    return 0
+}
+
+@test
+func test_char_at_last() -> I32 {
+    let c: I32 = char_at("hello", 4)
+    assert(c == 111, "char_at(4) should be 'o' (111)")
+    return 0
+}
+
+// =============================================================================
+// first_char / last_char
+// =============================================================================
+
+@test
+func test_first_char_nonempty() -> I32 {
+    let fc: Maybe[I32] = first_char("abc")
+    assert(fc.is_just(), "first_char of non-empty should be Just")
+    return 0
+}
+
+@test
+func test_first_char_empty() -> I32 {
+    let fc: Maybe[I32] = first_char("")
+    assert(fc.is_nothing(), "first_char of empty should be Nothing")
+    return 0
+}
+
+@test
+func test_last_char_nonempty() -> I32 {
+    let lc: Maybe[I32] = last_char("abc")
+    assert(lc.is_just(), "last_char of non-empty should be Just")
+    return 0
+}
+
+@test
+func test_last_char_empty() -> I32 {
+    let lc: Maybe[I32] = last_char("")
+    assert(lc.is_nothing(), "last_char of empty should be Nothing")
+    return 0
+}
+
+// =============================================================================
+// substring / substring_from / substring_to
+// =============================================================================
+
+@test
+func test_substring_middle() -> I32 {
+    let s: Str = substring("hello", 1, 4)
+    assert(s.len() > 0, "substring(1,4) should produce output")
+    return 0
+}
+
+@test
+func test_substring_from_idx() -> I32 {
+    let s: Str = substring_from("hello", 2)
+    assert(s.len() > 0, "substring_from(2) should produce output")
+    return 0
+}
+
+@test
+func test_substring_to_idx() -> I32 {
+    let s: Str = substring_to("hello", 3)
+    assert(s.len() > 0, "substring_to(3) should produce output")
+    return 0
+}
+
+// =============================================================================
+// trim / trim_start / trim_end
+// =============================================================================
+
+@test
+func test_trim_both() -> I32 {
+    let trimmed: Str = trim("  hello  ")
+    assert_eq(trimmed, "hello", "trim both sides")
+    return 0
+}
+
+@test
+func test_trim_start_fn() -> I32 {
+    let trimmed: Str = trim_start("  hello  ")
+    assert(trimmed.starts_with("hello"), "trim_start removes leading space")
+    return 0
+}
+
+@test
+func test_trim_end_fn() -> I32 {
+    let trimmed: Str = trim_end("  hello  ")
+    assert(trimmed.ends_with("hello"), "trim_end removes trailing space")
+    return 0
+}
+
+// =============================================================================
+// contains / starts_with / ends_with
+// =============================================================================
+
+@test
+func test_contains_found() -> I32 {
+    assert(contains("hello world", "world") == true, "contains found")
+    return 0
+}
+
+@test
+func test_contains_not_found() -> I32 {
+    assert(contains("hello", "xyz") == false, "contains not found")
+    return 0
+}
+
+@test
+func test_starts_with_true() -> I32 {
+    assert(starts_with("hello", "hel") == true, "starts_with match")
+    return 0
+}
+
+@test
+func test_starts_with_false() -> I32 {
+    assert(starts_with("hello", "lo") == false, "starts_with no match")
+    return 0
+}
+
+@test
+func test_ends_with_true() -> I32 {
+    assert(ends_with("hello", "lo") == true, "ends_with match")
+    return 0
+}
+
+@test
+func test_ends_with_false() -> I32 {
+    assert(ends_with("hello", "hel") == false, "ends_with no match")
+    return 0
+}
+
+// =============================================================================
+// find / rfind
+// =============================================================================
+
+@test
+func test_find_found() -> I32 {
+    let idx: Maybe[I64] = find("hello", "ll")
+    assert(idx.is_just(), "find should return Just when found")
+    return 0
+}
+
+@test
+func test_find_not_found() -> I32 {
+    let idx: Maybe[I64] = find("hello", "xyz")
+    assert(idx.is_nothing(), "find should return Nothing when not found")
+    return 0
+}
+
+@test
+func test_rfind_found() -> I32 {
+    let idx: Maybe[I64] = rfind("hello hello", "hello")
+    assert(idx.is_just(), "rfind should return Just when found")
+    return 0
+}
+
+@test
+func test_rfind_not_found() -> I32 {
+    let idx: Maybe[I64] = rfind("hello", "xyz")
+    assert(idx.is_nothing(), "rfind should return Nothing when not found")
+    return 0
+}

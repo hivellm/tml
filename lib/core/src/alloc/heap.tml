@@ -128,7 +128,7 @@ impl[T] Heap[T] {
     /// let value = boxed.into_inner()
     /// assert_eq(value, 42)
     /// ```
-    pub func into_inner(this) -> T {
+    pub func into_inner(mut this) -> T {
         if this.ptr == null {
             panic("Heap::into_inner: null pointer")
         }
@@ -136,8 +136,8 @@ impl[T] Heap[T] {
         let value: T = lowlevel { *this.ptr }
         mem_free(this.ptr as *Unit)
 
-        // Mark as consumed (in real implementation, this would use move semantics)
-        // For now, we just return the value
+        // Null the pointer so drop() is a no-op (prevents double-free)
+        this.ptr = null
         return value
     }
 
@@ -149,9 +149,10 @@ impl[T] Heap[T] {
     ///
     /// After calling this function, the `Heap[T]` no longer owns the memory,
     /// and you must call `mem_free` manually.
-    pub func into_raw(this) -> *T {
+    pub func into_raw(mut this) -> *T {
         let ptr: *T = this.ptr
-        // In real implementation, we'd mark this as moved/consumed
+        // Null the pointer so drop() is a no-op (prevents double-free)
+        this.ptr = null
         return ptr
     }
 
@@ -174,7 +175,7 @@ impl[T] Heap[T] {
     /// let leaked = Heap::leak(Heap::new(42))
     /// // leaked now points to memory that will never be freed
     /// ```
-    pub func leak(this) -> *T {
+    pub func leak(mut this) -> *T {
         return this.into_raw()
     }
 }

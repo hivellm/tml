@@ -328,9 +328,10 @@ impl JsonObject {
     }
 
     /// Free the underlying handle
-    pub func drop(this) {
+    pub func drop(mut this) {
         if this.handle >= 0 {
             json_free(this.handle)
+            this.handle = -1  // Invalidate so double-drop is a no-op
         }
     }
 }
@@ -421,9 +422,10 @@ impl JsonArray {
     }
 
     /// Free the underlying handle
-    pub func drop(this) {
+    pub func drop(mut this) {
         if this.handle >= 0 {
             json_free(this.handle)
+            this.handle = -1  // Invalidate so double-drop is a no-op
         }
     }
 }
@@ -896,9 +898,10 @@ impl Json {
     // ------------------------------------------------------------------------
 
     /// Free the underlying handle
-    pub func drop(this) {
+    pub func drop(mut this) {
         if this.handle >= 0 {
             json_free(this.handle)
+            this.handle = -1  // Invalidate so double-drop is a no-op
         }
     }
 }

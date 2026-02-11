@@ -179,10 +179,12 @@ impl[T] Shared[T] {
     ///     Nothing => print("Still has multiple owners")
     /// }
     /// ```
-    pub func try_unwrap(this) -> Maybe[T] {
+    pub func try_unwrap(mut this) -> Maybe[T] {
         if this.is_unique() {
             let value: T = (*this.ptr).value
             mem_free(this.ptr as *Unit)
+            // Null the pointer so drop() is a no-op (prevents double-free)
+            this.ptr = null
             return Just(value)
         } else {
             return Nothing

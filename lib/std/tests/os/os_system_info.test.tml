@@ -1,0 +1,172 @@
+// Tests for os module - system info functions
+use test
+use std::os::{
+    machine, release, version,
+    uptime, totalmem, freemem, endianness,
+    cpu_model, cpu_speed,
+    loadavg_1, loadavg_5, loadavg_15,
+    username, uid, gid, shell,
+    env_unset, get_priority
+}
+
+// =============================================================================
+// machine / release / version
+// =============================================================================
+
+@test
+func test_os_machine() -> I32 {
+    let m: Str = machine()
+    assert(m.len() > 0, "machine should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_release() -> I32 {
+    let r: Str = release()
+    assert(r.len() > 0, "release should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_version() -> I32 {
+    let v: Str = version()
+    assert(v.len() > 0, "version should return non-empty string")
+    return 0
+}
+
+// =============================================================================
+// uptime / totalmem / freemem
+// =============================================================================
+
+@test
+func test_os_uptime() -> I32 {
+    let u: I64 = uptime()
+    assert(u > 0, "uptime should be positive")
+    return 0
+}
+
+@test
+func test_os_totalmem() -> I32 {
+    let m: U64 = totalmem()
+    assert(m > 0, "totalmem should be positive")
+    return 0
+}
+
+@test
+func test_os_freemem() -> I32 {
+    let m: U64 = freemem()
+    assert(m > 0, "freemem should be positive")
+    return 0
+}
+
+// =============================================================================
+// endianness
+// =============================================================================
+
+@test
+func test_os_endianness() -> I32 {
+    let e: Str = endianness()
+    assert(e.len() > 0, "endianness should return non-empty string")
+    return 0
+}
+
+// =============================================================================
+// cpu_model / cpu_speed
+// =============================================================================
+
+@test
+func test_os_cpu_model() -> I32 {
+    let m: Str = cpu_model(0)
+    assert(m.len() > 0, "cpu_model(0) should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_cpu_speed() -> I32 {
+    let s: I64 = cpu_speed(0)
+    assert(s > 0, "cpu_speed(0) should be positive")
+    return 0
+}
+
+// =============================================================================
+// loadavg
+// =============================================================================
+
+@test
+func test_os_loadavg_1() -> I32 {
+    let l: F64 = loadavg_1()
+    assert(l >= 0.0, "loadavg_1 should be non-negative")
+    return 0
+}
+
+@test
+func test_os_loadavg_5() -> I32 {
+    let l: F64 = loadavg_5()
+    assert(l >= 0.0, "loadavg_5 should be non-negative")
+    return 0
+}
+
+@test
+func test_os_loadavg_15() -> I32 {
+    let l: F64 = loadavg_15()
+    assert(l >= 0.0, "loadavg_15 should be non-negative")
+    return 0
+}
+
+// =============================================================================
+// username / uid / gid / shell
+// =============================================================================
+
+@test
+func test_os_username() -> I32 {
+    let u: Str = username()
+    assert(u.len() > 0, "username should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_uid() -> I32 {
+    let _u: I64 = uid()
+    // On Windows uid may be -1, just verify it doesn't crash
+    assert(true, "uid should not crash")
+    return 0
+}
+
+@test
+func test_os_gid() -> I32 {
+    let _g: I64 = gid()
+    // On Windows gid may be -1, just verify it doesn't crash
+    assert(true, "gid should not crash")
+    return 0
+}
+
+@test
+func test_os_shell() -> I32 {
+    let s: Str = shell()
+    assert(s.len() > 0, "shell should return non-empty string")
+    return 0
+}
+
+// =============================================================================
+// env_unset
+// =============================================================================
+
+@test
+func test_os_env_unset() -> I32 {
+    let result: Bool = env_unset("TML_NONEXISTENT_TO_UNSET")
+    // Just verify it doesn't crash
+    assert(true, "env_unset should not crash")
+    return 0
+}
+
+// =============================================================================
+// get_priority
+// =============================================================================
+
+@test
+func test_os_get_priority() -> I32 {
+    let p: I32 = get_priority(0)
+    // priority 0 means current process, result can be any value
+    assert(true, "get_priority should not crash")
+    return 0
+}
