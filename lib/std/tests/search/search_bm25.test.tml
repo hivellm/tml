@@ -1,0 +1,276 @@
+//! Tests for std::search::bm25 module.
+//!
+//! Validates BM25 full-text search index creation, document indexing,
+//! search queries, and result ranking using the public API.
+
+use test::{assert, assert_eq}
+use std::search::bm25::{Bm25Index, Bm25Result}
+
+// ============================================================================
+// Index Lifecycle Tests
+// ============================================================================
+
+@test
+func test_bm25_create_and_size() -> I32 {
+    var idx = Bm25Index.create()
+    assert_eq(idx.size(), 0, "new index should have size 0")
+    assert(not idx.is_built(), "new index should not be built")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_add_and_build() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "hello world")
+    idx.add_text(1, "goodbye world")
+    idx.build()
+    assert_eq(idx.size(), 2, "index should have 2 documents")
+    assert(idx.is_built(), "index should be built after build()")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_add_multiple() -> I32 {
+    var idx = Bm25Index.create()
+    var i: U32 = 0
+    loop (i < 10) {
+        idx.add_text(i, "document content here")
+        i = i + 1
+    }
+    idx.build()
+    assert_eq(idx.size(), 10, "index should have 10 documents")
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// Search Tests (using module API)
+// ============================================================================
+
+@test
+func test_bm25_search_finds_fox() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "the quick brown fox jumps")
+    idx.add_text(1, "hello world program")
+    idx.add_text(2, "fox hunting forest")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("fox", 10)
+    assert(results.len() >= 2, "search for 'fox' should find at least 2 docs")
+
+    let first: Bm25Result = results.get(0)
+    assert(first.score > 0.0, "first result should have positive score")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_search_no_match() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "hello world")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("nonexistent", 10)
+    assert_eq(results.len(), 0, "search for nonexistent term should return 0")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_search_respects_limit() -> I32 {
+    var idx = Bm25Index.create()
+    var i: U32 = 0
+    loop (i < 20) {
+        idx.add_text(i, "common search term")
+        i = i + 1
+    }
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("common", 5)
+    assert(results.len() <= 5, "search with limit 5 should return at most 5")
+
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// Ranking and IDF Tests
+// ============================================================================
+
+@test
+func test_bm25_multi_field_name_boost() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_document(0, "split", "pub func split()", "Splits string", "core::str")
+    idx.add_document(1, "join", "pub func join()", "Join strings", "core::str")
+    idx.add_document(2, "contains", "pub func contains()", "Check split", "core::str")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("split", 10)
+    assert(results.len() >= 1, "should find at least 1 result for 'split'")
+    // Doc 0 has "split" in name (3x boost) so should rank first
+    let top: Bm25Result = results.get(0)
+    assert_eq(top.doc_id, 0, "doc with 'split' in name should rank first")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_idf_rare_vs_common() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "common rare")
+    idx.add_text(1, "common word")
+    idx.add_text(2, "common text")
+    idx.build()
+
+    let idf_common: F32 = idx.idf("common")
+    let idf_rare: F32 = idx.idf("rare")
+    assert(idf_rare > idf_common, "rare term should have higher IDF")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_score_descending() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "fox fox fox fox fox")
+    idx.add_text(1, "fox")
+    idx.add_text(2, "no match here")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("fox", 10)
+    assert(results.len() >= 2, "should find at least 2 results")
+
+    let r0: Bm25Result = results.get(0)
+    let r1: Bm25Result = results.get(1)
+    assert(r0.score >= r1.score, "results should be sorted by score descending")
+
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// Parameter Configuration Tests
+// ============================================================================
+
+@test
+func test_bm25_set_k1() -> I32 {
+    var idx = Bm25Index.create()
+    let k1_val: F32 = 2.0
+    idx.set_k1(k1_val)
+    idx.add_text(0, "test document content")
+    idx.add_text(1, "another test word")
+    idx.build()
+    // Should still work after changing k1
+    let results: List[Bm25Result] = idx.search("test", 10)
+    assert(results.len() >= 1, "search should work with custom k1")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_set_b() -> I32 {
+    var idx = Bm25Index.create()
+    let b_val: F32 = 0.5
+    idx.set_b(b_val)
+    idx.add_text(0, "hello world")
+    idx.build()
+    let results: List[Bm25Result] = idx.search("hello", 10)
+    assert(results.len() >= 1, "search should work with custom b")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_set_field_boosts() -> I32 {
+    var idx = Bm25Index.create()
+    let boost_name: F32 = 5.0
+    let boost_sig: F32 = 2.0
+    let boost_doc: F32 = 1.0
+    let boost_path: F32 = 0.3
+    idx.set_name_boost(boost_name)
+    idx.set_signature_boost(boost_sig)
+    idx.set_doc_boost(boost_doc)
+    idx.set_path_boost(boost_path)
+    idx.add_document(0, "target", "func target()", "A target function", "pkg::mod")
+    idx.add_document(1, "other", "func other()", "Mentions target", "pkg::mod")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("target", 10)
+    assert(results.len() >= 1, "should find results with custom boosts")
+    let top: Bm25Result = results.get(0)
+    assert_eq(top.doc_id, 0, "doc with 'target' in name should rank first with 5x boost")
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// Multi-word Query Tests
+// ============================================================================
+
+@test
+func test_bm25_multi_word_query() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "the quick brown fox jumps over the lazy dog")
+    idx.add_text(1, "hello world program")
+    idx.add_text(2, "quick program runs fast")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("quick program", 10)
+    assert(results.len() >= 1, "multi-word query should find results")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_add_document_all_fields() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_document(0, "parse", "pub func parse(input: Str) -> Ast",
+        "Parses input string into an AST node", "compiler::parser")
+    idx.add_document(1, "tokenize", "pub func tokenize(src: Str) -> List[Token]",
+        "Tokenizes source code into tokens", "compiler::lexer")
+    idx.build()
+
+    // Search by name
+    let r1: List[Bm25Result] = idx.search("parse", 10)
+    assert(r1.len() >= 1, "should find 'parse' by name")
+
+    // Search by signature content
+    let r2: List[Bm25Result] = idx.search("Ast", 10)
+    assert(r2.len() >= 1, "should find by signature content 'Ast'")
+
+    // Search by doc text
+    let r3: List[Bm25Result] = idx.search("tokenizes source", 10)
+    assert(r3.len() >= 1, "should find by doc text")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_idf_unknown_term() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "hello world")
+    idx.build()
+
+    let idf_unknown: F32 = idx.idf("zzzzzzz")
+    // IDF of unknown term should be 0 or very high
+    // (depends on implementation, just verify it doesn't crash)
+    assert(idf_unknown >= 0.0, "IDF of unknown term should be non-negative")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_destroy_null_safe() -> I32 {
+    var idx = Bm25Index.create()
+    idx.destroy()
+    // Double destroy should be safe (null check in destroy)
+    idx.destroy()
+    return 0
+}

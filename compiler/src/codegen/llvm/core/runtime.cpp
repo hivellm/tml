@@ -585,6 +585,27 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["path_absolute"] = FuncInfo{"@path_absolute", "ptr (ptr)", "ptr", {"ptr"}};
     emit_line("");
 
+    // Glob runtime declarations
+    emit_line("; Glob runtime");
+    emit_line("declare ptr @glob_match(ptr, ptr)");
+    declared_externals_.insert("glob_match");
+    emit_line("declare ptr @glob_result_next(ptr)");
+    declared_externals_.insert("glob_result_next");
+    emit_line("declare i64 @glob_result_count(ptr)");
+    declared_externals_.insert("glob_result_count");
+    emit_line("declare void @glob_result_free(ptr)");
+    declared_externals_.insert("glob_result_free");
+    emit_line("declare i1 @glob_pattern_matches(ptr, ptr)");
+    declared_externals_.insert("glob_pattern_matches");
+
+    functions_["glob_match"] = FuncInfo{"@glob_match", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
+    functions_["glob_result_next"] = FuncInfo{"@glob_result_next", "ptr (ptr)", "ptr", {"ptr"}};
+    functions_["glob_result_count"] = FuncInfo{"@glob_result_count", "i64 (ptr)", "i64", {"ptr"}};
+    functions_["glob_result_free"] = FuncInfo{"@glob_result_free", "void (ptr)", "void", {"ptr"}};
+    functions_["glob_pattern_matches"] =
+        FuncInfo{"@glob_pattern_matches", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
+    emit_line("");
+
     // String utilities (matches runtime/string.c)
     emit_line("; String utilities");
     emit_line("declare i32 @str_len(ptr)");

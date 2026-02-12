@@ -191,6 +191,8 @@ set(TML_RUNTIME_SOURCES
     # diagnostics/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/diagnostics/backtrace.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/diagnostics/log.c
+    # search/
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/search/search.c
 )
 
 # Create static library
@@ -719,6 +721,35 @@ foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
 endforeach()
 message(STATUS "TML JSON Runtime: Building static library (tml_json_runtime)")
 
+# Search Runtime library (C++ linkage for TML programs)
+# Provides BM25, HNSW, TF-IDF, and F32 SIMD distance functions via extern "C" FFI
+add_library(tml_search_runtime STATIC
+    runtime/search/search_engine.cpp
+)
+target_link_libraries(tml_search_runtime PUBLIC tml_search)
+target_include_directories(tml_search_runtime PUBLIC include src)
+if(MSVC)
+    target_compile_options(tml_search_runtime PRIVATE
+        /W3
+        $<$<CONFIG:Debug>:/Od>
+        $<$<NOT:$<CONFIG:Debug>>:/O2>
+    )
+else()
+    target_compile_options(tml_search_runtime PRIVATE
+        $<$<CONFIG:Debug>:-O0 -g>
+        $<$<NOT:$<CONFIG:Debug>>:-O3 -fomit-frame-pointer>
+    )
+endif()
+set_target_properties(tml_search_runtime PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR}
+)
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(tml_search_runtime PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR}
+    )
+endforeach()
+message(STATUS "TML Search Runtime: Building static library (tml_search_runtime)")
+
 # ============================================================================
 # Zlib/Compression Runtime Library (optional)
 # ============================================================================
@@ -944,6 +975,14 @@ add_library(tml_doc STATIC
 target_link_libraries(tml_doc PUBLIC tml_parser)
 target_include_directories(tml_doc PUBLIC include src)
 
+# Search index library (BM25 + HNSW vector search)
+add_library(tml_search STATIC
+    src/search/simd_distance.cpp
+    src/search/bm25_index.cpp
+    src/search/hnsw_index.cpp
+)
+target_include_directories(tml_search PUBLIC include src)
+
 # MCP library (Model Context Protocol server)
 # Named tml_mcp_lib to avoid conflict with tml_mcp executable
 add_library(tml_mcp_lib STATIC
@@ -951,7 +990,7 @@ add_library(tml_mcp_lib STATIC
     src/mcp/mcp_server.cpp
     src/mcp/mcp_tools.cpp
 )
-target_link_libraries(tml_mcp_lib PUBLIC tml_json tml_codegen)
+target_link_libraries(tml_mcp_lib PUBLIC tml_json tml_codegen tml_search)
 target_include_directories(tml_mcp_lib PUBLIC include src)
 
 # ============================================================================
@@ -1376,7 +1415,7 @@ endif()
 # MCP server executable (separate from main tml to avoid file locking issues)
 # When MCP server is running, tml.exe can still be rebuilt independently
 add_executable(tml_mcp src/main_mcp.cpp)
-target_link_libraries(tml_mcp PRIVATE tml_mcp_lib tml_codegen tml_log)
+target_link_libraries(tml_mcp PRIVATE tml_mcp_lib tml_codegen tml_doc tml_search tml_log)
 target_include_directories(tml_mcp PRIVATE include src)
 
 # Tests
@@ -1438,10 +1477,16 @@ if(TML_BUILD_TESTS)
         tests/integration/memory_test.cpp
         tests/integration/json_test.cpp
         tests/integration/log_test.cpp
+        # Search
+        tests/search/simd_distance_test.cpp
+        tests/search/bm25_index_test.cpp
+        tests/search/hnsw_index_test.cpp
+        tests/search/search_benchmark_test.cpp
     )
     target_link_libraries(tml_tests PRIVATE
         tml_cli
         tml_json
+        tml_search
         GTest::gtest_main
     )
 

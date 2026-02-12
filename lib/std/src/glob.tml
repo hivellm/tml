@@ -1,0 +1,157 @@
+//! High-performance glob pattern matching.
+//!
+//! Find files and directories matching glob patterns with support for
+//! wildcards, recursive descent, character classes, and alternation.
+//!
+//! # Supported Patterns
+//!
+//! | Pattern | Matches |
+//! |---------|---------|
+//! | `*` | Any characters within a single path segment |
+//! | `?` | Exactly one character |
+//! | `**` | Zero or more directories (recursive) |
+//! | `[abc]` | Any character in the set |
+//! | `[a-z]` | Any character in the range |
+//! | `[!abc]` | Any character NOT in the set |
+//! | `{a,b}` | Any of the alternatives |
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::glob::Glob
+//!
+//! // Find all .tml files recursively
+//! var g: Glob = Glob::find("src", "**/*.tml")
+//! loop {
+//!     let path: Str = g.next()
+//!     if path == "" { break }
+//!     print("{path}\n")
+//! }
+//! g.free()
+//!
+//! // Simple pattern matching (no filesystem)
+//! use std::glob::matches
+//! assert(matches("*.tml", "main.tml"))
+//! assert(not matches("*.tml", "main.rs"))
+//! ```
+
+/// Glob result handle for iterating matched file paths.
+///
+/// Use `Glob::find()` to create, `next()` to iterate, and `free()` to release.
+pub type Glob {
+    handle: *Unit
+}
+
+impl Glob {
+    /// Find all files matching a glob pattern relative to a base directory.
+    ///
+    /// Returns a `Glob` handle that can be iterated with `next()`.
+    /// The handle must be freed with `free()` when done.
+    ///
+    /// # Arguments
+    ///
+    /// * `base_dir` - The directory to search from
+    /// * `pattern` - The glob pattern (e.g., `**/*.tml`, `src/*.cpp`)
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var g: Glob = Glob::find(".", "**/*.tml")
+    /// let n: I64 = g.count()
+    /// print("Found {n} files\n")
+    /// g.free()
+    /// ```
+    pub func find(base_dir: Str, pattern: Str) -> Glob {
+        let h: *Unit = lowlevel { glob_match(base_dir, pattern) }
+        return Glob { handle: h }
+    }
+
+    /// Get the next matched path.
+    ///
+    /// Returns the next path as a string, or an empty string `""` when
+    /// all results have been consumed.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var g: Glob = Glob::find(".", "*.txt")
+    /// loop {
+    ///     let path: Str = g.next()
+    ///     if path == "" { break }
+    ///     print("{path}\n")
+    /// }
+    /// g.free()
+    /// ```
+    pub func next(mut this) -> Str {
+        let r: Str = lowlevel { glob_result_next(this.handle) }
+        return r
+    }
+
+    /// Get the total number of matched paths.
+    pub func count(this) -> I64 {
+        let r: I64 = lowlevel { glob_result_count(this.handle) }
+        return r
+    }
+
+    /// Free the glob results and release memory.
+    ///
+    /// Must be called when done iterating to avoid memory leaks.
+    pub func free(this) {
+        lowlevel { glob_result_free(this.handle) }
+    }
+}
+
+/// Test if a text string matches a glob pattern.
+///
+/// This performs pattern matching only — it does NOT access the filesystem.
+/// Useful for filtering paths or strings against patterns.
+///
+/// # Arguments
+///
+/// * `pattern` - The glob pattern
+/// * `text` - The string to test
+///
+/// # Example
+///
+/// ```tml
+/// use std::glob::matches
+///
+/// assert(matches("*.tml", "main.tml"))
+/// assert(matches("src/**/*.cpp", "src/foo/bar.cpp"))
+/// assert(not matches("*.rs", "main.tml"))
+/// ```
+pub func matches(pattern: Str, text: Str) -> Bool {
+    let r: Bool = lowlevel { glob_pattern_matches(pattern, text) }
+    return r
+}
+
+/// Find all matching paths and return them as a single newline-separated string.
+///
+/// Convenience function for simple use cases where you just need all paths.
+///
+/// # Example
+///
+/// ```tml
+/// use std::glob::find_all
+///
+/// let paths: Str = find_all(".", "**/*.tml")
+/// print(paths)
+/// ```
+pub func find_all(base_dir: Str, pattern: Str) -> Str {
+    var g: Glob = Glob::find(base_dir, pattern)
+    let n: I64 = g.count()
+    var result: Str = ""
+    var first: Bool = true
+    var i: I64 = 0
+    loop (i < n) {
+        let path: Str = g.next()
+        if not first {
+            result = result + "\n"
+        }
+        result = result + path
+        first = false
+        i = i + 1
+    }
+    g.free()
+    return result
+}

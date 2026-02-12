@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`std::glob` Standard Library Module** (2026-02-11) - High-performance glob pattern matching and directory walking
+  - `Glob` type with `find()`, `next()`, `count()`, `free()` for filesystem glob iteration
+  - `matches()` function for in-memory pattern matching (no filesystem access)
+  - `find_all()` convenience function returning newline-separated matched paths
+  - Supported patterns: `*` (any segment), `?` (single char), `**` (recursive), `[abc]`/`[a-z]`/`[!abc]`/`[^abc]` (character classes), `{a,b}` (alternation)
+  - C runtime (`lib/std/runtime/glob.c`) with recursive directory walker, early pruning, sorted output via qsort
+  - Windows (`FindFirstFileA`/`FindNextFileA`) and POSIX (`opendir`/`readdir`) support
+  - Path normalization (backslash to forward slash) for cross-platform consistency
+  - 64 tests across 8 test files: pattern matching (`*`, `?`, `[...]`, `{...}`, `**`), edge cases (star-only, mixed wildcards, length mismatches), character classes (caret negation, numeric/uppercase ranges), path patterns (multi-globstar, trailing `**`, backslash normalization), filesystem operations (`next()` iteration, `find_all()`, sorted output, empty dir, `?`/`[abc]` on FS, recursive `**`, deep nesting)
+  - New files: `lib/std/runtime/glob.h`, `lib/std/runtime/glob.c`, `lib/std/src/glob.tml`
+  - Modified: `lib/std/src/mod.tml`, `compiler/src/codegen/llvm/core/runtime.cpp`, `compiler/src/cli/builder/helpers.cpp`
+
+- **MCP Hybrid Documentation Search** (2026-02-11) - Intelligent doc search with BM25 + HNSW vector retrieval
+  - **BM25 full-text index** with multi-field boosting (name=3x, signature=1.5x, doc=1x, path=0.5x), camelCase/snake_case tokenization, and stop word filtering
+  - **HNSW (Hierarchical Navigable Small World)** approximate nearest neighbor index for semantic vector search (M=16, efConstruction=200, efSearch=50)
+  - **TF-IDF vectorizer** embedding documents into top-512 IDF-weighted bag-of-words vectors with L2 normalization
+  - **Reciprocal Rank Fusion (RRF)** merging BM25 lexical results with HNSW semantic results (k=60)
+  - **Query expansion** with 65+ TML synonym mappings (e.g., "option" → "maybe", "trait" → "behavior", "match" → "when")
+  - **MMR (Maximal Marginal Relevance)** diversification using Jaccard similarity (lambda=0.7) to reduce redundant results
+  - **Multi-signal ranking** with boosts for public items (+0.15), documented items (+0.1), and top-level modules (+0.05)
+  - **Index persistence** — serialized BM25, HNSW, and TF-IDF indices cached to `build/debug/.doc-index/` with FNV fingerprint validation (~15MB total; bm25.bin, hnsw.bin, tfidf.bin, fingerprint.bin)
+  - **Performance instrumentation** — build time and query latency displayed in search results header (3-9ms query latency)
+  - New MCP tools: `docs/get` (full item documentation), `docs/list` (grouped-by-kind module listing), `docs/resolve` (resolve item by path)
+  - Enhanced `docs/search` with `kind` and `module` optional filter parameters
+  - New files: `compiler/src/search/bm25_index.cpp`, `compiler/src/search/hnsw_index.cpp`, `compiler/include/search/bm25_index.hpp`, `compiler/include/search/hnsw_index.hpp`
+  - SIMD-accelerated distance functions: `compiler/src/search/distance.cpp` (AVX2/SSE4.1 dot product, L2 distance, cosine similarity)
+
+- **`std::search` Standard Library Module** (2026-02-11) - Vector search and text indexing for TML programs
+  - `std::search::bm25` — BM25Index with `create()`, `add_document()`, `build()`, `search()`, `destroy()`
+  - `std::search::hnsw` — HnswIndex with `create()`, `insert()`, `search()`, `set_params()`, `destroy()`; TfIdfVectorizer with `create()`, `add_document()`, `build()`, `vectorize()`, `destroy()`
+  - `std::search::distance` — SIMD distance functions: `dot_product()`, `l2_distance()`, `cosine_similarity()`
+  - 15 HNSW tests: lifecycle, search nearest, k-limit, distance ordering, max_layer, many vectors, empty index, cosine distance, TF-IDF pipeline
+  - 12 BM25 tests: lifecycle, search, IDF scoring, boosting, serialization
+
 - **Comprehensive Test Coverage Expansion** (2026-02-10) - 4799 tests passing across 564 test files
   - **core::fmt::rt** — 9 tests: Count debug output, FormatSpec defaults/with_width/with_precision, Argument new_with/empty, Placeholder::new
   - **core::alloc** — 6 tests: Layout constructors, from_type, array, alignment utilities

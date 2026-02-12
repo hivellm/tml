@@ -1,0 +1,44 @@
+//! Vector search and text retrieval engine.
+//!
+//! Provides high-performance search capabilities for TML programs:
+//!
+//! | Module | Description |
+//! |--------|-------------|
+//! | [`distance`] | SIMD-optimized vector distance functions (F32, F64) |
+//! | [`bm25`] | BM25 full-text search index with TF-IDF scoring |
+//! | [`hnsw`] | HNSW approximate nearest neighbor vector search |
+//!
+//! # Quick Start
+//!
+//! ```tml
+//! use std::search::bm25::Bm25Index
+//! use std::search::hnsw::{HnswIndex, TfIdfVectorizer}
+//! use std::search::distance::{dot_product_f32, cosine_similarity}
+//!
+//! // Full-text search
+//! var idx = Bm25Index.create()
+//! idx.add_text(0, "quick brown fox jumps over lazy dog")
+//! idx.add_text(1, "hello world program example")
+//! idx.build()
+//! let results = idx.search("fox jumps", 10)
+//!
+//! // Vector search
+//! var hnsw = HnswIndex.create(128)
+//! hnsw.insert(0, embedding_vec)
+//! let neighbors = hnsw.search(query_vec, 10)
+//! ```
+
+pub mod distance
+pub mod bm25
+pub mod hnsw
+
+// Re-export key types for convenience
+pub use std::search::distance::{
+    dot_product,
+    cosine_similarity,
+    euclidean_distance,
+    norm,
+    normalize,
+}
+pub use std::search::bm25::{Bm25Index, Bm25Result}
+pub use std::search::hnsw::{HnswIndex, HnswResult, TfIdfVectorizer}

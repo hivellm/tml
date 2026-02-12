@@ -25,6 +25,8 @@
 //! | [`zlib`] | Compression (gzip, deflate, brotli, zstd) |
 //! | [`log`] | Structured logging with level-based filtering |
 //! | [`os`] | Operating system information and utilities |
+//! | [`search`] | Vector search and text retrieval (BM25, HNSW, SIMD) |
+//! | [`glob`] | High-performance glob pattern matching |
 
 pub mod traits
 pub mod interfaces
@@ -44,3 +46,5 @@ pub mod hash
 pub mod zlib
 pub mod log
 pub mod os
+pub mod search
+pub mod glob

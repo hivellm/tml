@@ -35,7 +35,7 @@ TML is the first language with a **Model Context Protocol server built directly 
 tml mcp
 ```
 
-The server exposes 11 tools that map 1:1 to compiler capabilities:
+The server exposes 14 tools that map 1:1 to compiler capabilities:
 
 | Tool | What it does |
 |------|-------------|
@@ -48,12 +48,17 @@ The server exposes 11 tools that map 1:1 to compiler capabilities:
 | `test` | Run tests with filtering, coverage, and profiling |
 | `format` | Format source files (check or write mode) |
 | `lint` | Lint for style and semantic issues (with auto-fix) |
-| `docs/search` | Search integrated documentation |
+| `docs/search` | Hybrid BM25 + HNSW semantic search over all documentation |
+| `docs/get` | Get full documentation for a specific item by path |
+| `docs/list` | List all items in a module, grouped by kind |
+| `docs/resolve` | Resolve a documentation item by its qualified path |
 | `cache/invalidate` | Invalidate compilation cache for specific files |
 
 This is not a wrapper or plugin. The MCP server links against the same compiler internals used by `tml build`. When an AI calls `check`, it runs the real type checker. When it calls `emit-ir`, it generates real LLVM IR. The AI gets the same diagnostics, errors, and output a human developer would see.
 
-**Why this matters:** Traditional languages require AI assistants to shell out to `gcc`, `rustc`, or `go build` and parse text output. TML gives AI assistants structured, programmatic access to every compilation stage.
+The `docs/search` tool uses **hybrid retrieval** combining BM25 lexical scoring with HNSW semantic vector search, merged via Reciprocal Rank Fusion. It includes query expansion (65+ TML-specific synonyms), MMR diversification, and multi-signal ranking. Indices are cached to disk for sub-10ms query latency across 6000+ documentation items.
+
+**Why this matters:** Traditional languages require AI assistants to shell out to `gcc`, `rustc`, or `go build` and parse text output. TML gives AI assistants structured, programmatic access to every compilation stage — including semantic documentation search that understands TML's vocabulary.
 
 ---
 
@@ -226,17 +231,6 @@ Every syntax decision in TML eliminates ambiguity that confuses language models.
 | RAII / cleanup | `Drop` trait | `defer` | Destructors | `Disposable` behavior |
 | Memory safety | Compile-time | Runtime (GC) | Manual | Compile-time |
 | Null safety | No null | `nil` | `nullptr` | No null (use `Maybe[T]`) |
-
-#### LLM-Specific Features (Unique to TML)
-
-| Feature | Syntax | Purpose |
-|---------|--------|---------|
-| Stable IDs | `func name@a1b2c3d4()` | Immutable 8-char hex ID for cross-version references |
-| Capabilities | `caps: [io.file, io.network]` | Explicit module permissions |
-| Effects | `effects: [io.file.read]` | Function side-effect declarations |
-| Contracts | `pre: x > 0` / `post(r): r > 0` | Formal pre/post-conditions |
-| AI comments | `// @ai:context: Hot loop` | Structured guidance for LLMs |
-| LL(1) grammar | 32 keywords, no ambiguity | Deterministic single-token lookahead parsing |
 
 The result: LLMs generate TML code with significantly fewer syntax errors because there are no ambiguous tokens, no overloaded symbols, and every construct has exactly one unambiguous parse.
 
@@ -515,6 +509,7 @@ TML ships with a comprehensive standard library covering:
 | `std::thread` | Thread spawning, thread-local storage |
 | `std::os` | Environment variables, system info |
 | `std::log` | Structured logging with levels and sinks |
+| `std::search` | BM25 text index, HNSW vector index, TF-IDF vectorizer, SIMD distance |
 | `std::text` | Regex, Unicode utilities |
 
 ---

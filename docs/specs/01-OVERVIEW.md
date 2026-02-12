@@ -16,7 +16,6 @@ LLMs need something different:
 - **Deterministic parsing** — no ambiguities
 - **Unique tokens** — each symbol with one meaning
 - **Explicit structure** — no contextual inferences
-- **Stable IDs** — references that survive refactoring
 - **Self-documenting syntax** — words over symbols
 
 ### 1.2 The Solution: Best of Both Worlds
@@ -29,7 +28,7 @@ TML takes the **rigor needed for LLM generation** and combines it with the **erg
 | Pattern matching | Method syntax `.len()` | `to`/`through` for ranges |
 | `ref`/`mut` semantics | Properties and indexers | `Maybe[T]`/`Outcome[T,E]` |
 | Zero-cost abstractions | LINQ-style chains | `@directives` over macros |
-| Traits → `behavior` | `async`/`await` | Stable IDs `@abc123` |
+| Traits → `behavior` | `async`/`await` | `@directives` system |
 
 **For LLMs:** Deterministic LL(1) grammar, unique token meanings, self-documenting syntax.
 
@@ -45,7 +44,6 @@ TML takes the **rigor needed for LLM generation** and combines it with the **erg
 | One token = one meaning | `<` is always comparison, `[` is always generic/array |
 | LL(1) parsing | Lookahead of 1 token determines the production |
 | Explicit > implicit | `return` mandatory, `then` mandatory |
-| Stable IDs | Functions and types have immutable `@id` |
 | Self-documenting types | `Maybe[T]`, `Outcome[T, E]`, `Shared[T]` |
 | Natural language directives | `@when(os: linux)`, `@auto(debug)` |
 | No macros | Code is code, no meta-programming |
@@ -173,48 +171,7 @@ func raw_access(p: ptr U8) -> U8 {
 
 ## 4. Unique Features
 
-### 4.1 Stable IDs
-
-Each definition has a unique ID that survives renames:
-
-```tml
-func calculate@a1b2c3d4(x: I32) -> I32 {
-    return x * 2
-}
-```
-
-LLMs can reference `@a1b2c3d4` in patches without depending on the name.
-
-### 4.2 Caps and Effects
-
-Explicit declaration of what code can and does:
-
-```tml
-module Database {
-    caps: [io.network, io.file]
-
-    func query(sql: String) -> Outcome[Rows, Error]
-    effects: [db.read]
-    {
-        // ...
-    }
-}
-```
-
-### 4.3 Contracts
-
-Formal pre and post-conditions:
-
-```tml
-func sqrt(x: F64) -> F64
-pre: x >= 0.0
-post(result): result >= 0.0 and result * result == x
-{
-    // ...
-}
-```
-
-### 4.4 Canonical IR
+### 4.1 Canonical IR
 
 Code normalizes to a unique representation:
 
@@ -331,20 +288,18 @@ Err(error)            // Failed outcome
 
 ### 8.1 Code Generation by LLM
 - Deterministic parsing allows immediate validation
-- Stable IDs allow surgical patches
 - No ambiguity reduces generation errors
 - Self-documenting syntax reduces hallucinations
+- Native MCP server enables structured AI-compiler interaction
 
 ### 8.2 Code Analysis by LLM
-- Explicit caps/effects allow reasoning about behavior
-- Formalizable contracts
 - Canonical IR allows semantic diff
 - Natural language keywords improve comprehension
+- LL(1) grammar enables reliable parsing by LLMs
 
 ### 8.3 Automatic Refactoring
-- IDs survive renames
 - Transformations preserve semantics via IR
-- Patches applicable without context
+- Query-based incremental compilation minimizes rebuild cost
 
 ---
 

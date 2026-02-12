@@ -22,6 +22,7 @@ set "ENABLE_ASAN=OFF"
 set "ENABLE_UBSAN=OFF"
 set "ENABLE_LLVM_BACKEND=ON"
 set "ENABLE_CRANELIFT_BACKEND=OFF"
+set "BUILD_TARGET="
 
 :: Parse arguments
 :parse_args
@@ -36,6 +37,7 @@ if /i "%~1"=="--ubsan" set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--sanitize" set "ENABLE_ASAN=ON" & set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--no-llvm" set "ENABLE_LLVM_BACKEND=OFF" & shift & goto :parse_args
 if /i "%~1"=="--cranelift" set "ENABLE_CRANELIFT_BACKEND=ON" & shift & goto :parse_args
+if /i "%~1"=="--target" set "BUILD_TARGET=%~2" & shift & shift & goto :parse_args
 if /i "%~1"=="--help" goto :show_help
 if /i "%~1"=="-h" goto :show_help
 echo Unknown argument: %~1
@@ -58,6 +60,7 @@ echo   --asan      Enable AddressSanitizer (memory error detection)
 echo   --ubsan     Enable UndefinedBehaviorSanitizer
 echo   --sanitize  Enable both ASan and UBSan
 echo   --cranelift Enable Cranelift backend (fast debug builds)
+echo   --target X  Build only target X (e.g., tml, tml_mcp, tml_tests)
 echo   --help      Show this help message
 echo.
 echo Host target: %TARGET%
@@ -149,7 +152,12 @@ if errorlevel 1 (
 echo.
 echo Building TML compiler...
 
-cmake --build . --config %CMAKE_BUILD_TYPE%
+if "%BUILD_TARGET%"=="" (
+    cmake --build . --config %CMAKE_BUILD_TYPE%
+) else (
+    echo Building target: %BUILD_TARGET%
+    cmake --build . --config %CMAKE_BUILD_TYPE% --target %BUILD_TARGET%
+)
 
 if errorlevel 1 (
     echo Build failed!

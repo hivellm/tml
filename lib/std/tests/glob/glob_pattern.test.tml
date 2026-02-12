@@ -1,0 +1,164 @@
+//! Tests for glob pattern matching (no filesystem access).
+//!
+//! Tests the `matches()` function which checks if a string matches a glob pattern.
+
+use std::glob::matches
+use test::{assert, assert_eq}
+
+// ============================================================================
+// Basic wildcard: *
+// ============================================================================
+
+@test
+func test_star_matches_filename() -> I32 {
+    assert(matches("*.tml", "main.tml"), "*.tml should match main.tml")
+    return 0
+}
+
+@test
+func test_star_no_match_wrong_ext() -> I32 {
+    assert(not matches("*.tml", "main.rs"), "*.tml should not match main.rs")
+    return 0
+}
+
+@test
+func test_star_matches_any_prefix() -> I32 {
+    assert(matches("*.txt", "hello.txt"), "*.txt should match hello.txt")
+    assert(matches("*.txt", "a.txt"), "*.txt should match a.txt")
+    assert(matches("*.txt", "very_long_filename.txt"), "*.txt should match long names")
+    return 0
+}
+
+@test
+func test_star_prefix_pattern() -> I32 {
+    assert(matches("test_*", "test_foo"), "test_* should match test_foo")
+    assert(matches("test_*", "test_"), "test_* should match test_")
+    assert(not matches("test_*", "best_foo"), "test_* should not match best_foo")
+    return 0
+}
+
+@test
+func test_star_middle_pattern() -> I32 {
+    assert(matches("a*b", "ab"), "a*b should match ab")
+    assert(matches("a*b", "axb"), "a*b should match axb")
+    assert(matches("a*b", "axxxb"), "a*b should match axxxb")
+    assert(not matches("a*b", "axc"), "a*b should not match axc")
+    return 0
+}
+
+// ============================================================================
+// Single char wildcard: ?
+// ============================================================================
+
+@test
+func test_question_mark() -> I32 {
+    assert(matches("?.txt", "a.txt"), "?.txt should match a.txt")
+    assert(not matches("?.txt", "ab.txt"), "?.txt should not match ab.txt")
+    assert(not matches("?.txt", ".txt"), "?.txt should not match .txt")
+    return 0
+}
+
+@test
+func test_multiple_question_marks() -> I32 {
+    assert(matches("???.tml", "abc.tml"), "???.tml should match abc.tml")
+    assert(not matches("???.tml", "ab.tml"), "???.tml should not match ab.tml")
+    assert(not matches("???.tml", "abcd.tml"), "???.tml should not match abcd.tml")
+    return 0
+}
+
+// ============================================================================
+// Character classes: [abc], [a-z], [!abc]
+// ============================================================================
+
+@test
+func test_char_class_set() -> I32 {
+    assert(matches("[abc].txt", "a.txt"), "[abc] should match a")
+    assert(matches("[abc].txt", "b.txt"), "[abc] should match b")
+    assert(matches("[abc].txt", "c.txt"), "[abc] should match c")
+    assert(not matches("[abc].txt", "d.txt"), "[abc] should not match d")
+    return 0
+}
+
+@test
+func test_char_class_range() -> I32 {
+    assert(matches("[a-z].txt", "m.txt"), "[a-z] should match m")
+    assert(matches("[a-z].txt", "a.txt"), "[a-z] should match a")
+    assert(matches("[a-z].txt", "z.txt"), "[a-z] should match z")
+    assert(not matches("[a-z].txt", "A.txt"), "[a-z] should not match A")
+    return 0
+}
+
+@test
+func test_char_class_negation() -> I32 {
+    assert(matches("[!abc].txt", "d.txt"), "[!abc] should match d")
+    assert(not matches("[!abc].txt", "a.txt"), "[!abc] should not match a")
+    assert(not matches("[!abc].txt", "b.txt"), "[!abc] should not match b")
+    return 0
+}
+
+// ============================================================================
+// Alternation: {a,b,c}
+// ============================================================================
+
+@test
+func test_alternation_basic() -> I32 {
+    assert(matches("\{foo,bar}.txt", "foo.txt"), "alternation should match foo")
+    assert(matches("\{foo,bar}.txt", "bar.txt"), "alternation should match bar")
+    assert(not matches("\{foo,bar}.txt", "baz.txt"), "alternation should not match baz")
+    return 0
+}
+
+@test
+func test_alternation_extensions() -> I32 {
+    assert(matches("file.\{tml,rs,cpp}", "file.tml"), "should match .tml")
+    assert(matches("file.\{tml,rs,cpp}", "file.rs"), "should match .rs")
+    assert(matches("file.\{tml,rs,cpp}", "file.cpp"), "should match .cpp")
+    assert(not matches("file.\{tml,rs,cpp}", "file.py"), "should not match .py")
+    return 0
+}
+
+// ============================================================================
+// Exact / literal matching
+// ============================================================================
+
+@test
+func test_exact_match() -> I32 {
+    assert(matches("hello", "hello"), "exact match should work")
+    assert(not matches("hello", "world"), "different strings should not match")
+    return 0
+}
+
+@test
+func test_empty_pattern() -> I32 {
+    assert(matches("", ""), "empty pattern should match empty string")
+    assert(not matches("", "a"), "empty pattern should not match non-empty")
+    return 0
+}
+
+// ============================================================================
+// Path-style patterns with **
+// ============================================================================
+
+@test
+func test_globstar_path() -> I32 {
+    assert(matches("**/*.tml", "src/main.tml"), "**/*.tml should match src/main.tml")
+    assert(matches("**/*.tml", "src/foo/bar.tml"), "**/*.tml should match deep paths")
+    assert(matches("**/*.tml", "main.tml"), "**/*.tml should match root-level files")
+    return 0
+}
+
+@test
+func test_path_segments() -> I32 {
+    assert(matches("src/*.tml", "src/main.tml"), "src/*.tml should match src/main.tml")
+    assert(not matches("src/*.tml", "lib/main.tml"), "src/*.tml should not match lib/main.tml")
+    assert(not matches("src/*.tml", "src/sub/main.tml"), "src/*.tml should not match nested")
+    return 0
+}
+
+@test
+func test_globstar_middle() -> I32 {
+    assert(matches("src/**/test.tml", "src/test.tml"), "should match zero dirs")
+    assert(matches("src/**/test.tml", "src/a/test.tml"), "should match one dir")
+    assert(matches("src/**/test.tml", "src/a/b/test.tml"), "should match two dirs")
+    return 0
+}

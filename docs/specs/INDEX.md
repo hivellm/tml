@@ -15,7 +15,7 @@
 | Deterministic LL(1) grammar | Familiar Rust/C# patterns |
 | Unique token meanings | Method chaining `.filter().map()` |
 | Self-documenting keywords | Explicit types everywhere |
-| Stable IDs for patches | Clean generics `List[T]` |
+| No ambiguous syntax | Clean generics `List[T]` |
 | No ambiguous syntax | Readable `and`/`or`/`not` |
 
 ### Inspired By
@@ -24,7 +24,7 @@
 |--------|----------------|
 | **Rust** | Ownership, pattern matching, `ref`/`mut`, zero-cost abstractions, traits (as `behavior`) |
 | **C#** | Clean generics `[T]`, method syntax, properties, LINQ-style chains, `async`/`await` |
-| **TML Innovation** | `and`/`or`/`not` keywords, `to`/`through` ranges, `Maybe[T]`/`Outcome[T,E]`, `@directives`, stable IDs |
+| **TML Innovation** | `and`/`or`/`not` keywords, `to`/`through` ranges, `Maybe[T]`/`Outcome[T,E]`, `@directives` |
 
 ## Why Not Use Existing Languages?
 
@@ -55,10 +55,10 @@
 | [02-LEXICAL.md](./02-LEXICAL.md) | Tokens, keywords, operators |
 | [03-GRAMMAR.md](./03-GRAMMAR.md) | Complete EBNF grammar |
 | [04-TYPES.md](./04-TYPES.md) | Type system |
-| [05-SEMANTICS.md](./05-SEMANTICS.md) | Caps, effects, contracts |
+| [05-SEMANTICS.md](./05-SEMANTICS.md) | Ownership, error handling, evaluation |
 | [06-MEMORY.md](./06-MEMORY.md) | Ownership and borrowing |
 | [07-MODULES.md](./07-MODULES.md) | Module system |
-| [08-IR.md](./08-IR.md) | High-level IR for semantic analysis |
+| [08-IR.md](./08-IR.md) | Canonical IR for semantic analysis |
 | [30-MIR.md](./30-MIR.md) | Mid-level IR for optimization (SSA form) |
 
 ### Toolchain

@@ -1,0 +1,311 @@
+//! Tests for std::search::hnsw module.
+//!
+//! Validates HNSW vector index creation, insertion, search,
+//! and TF-IDF vectorizer using the public API.
+
+use test::{assert, assert_eq}
+use std::search::hnsw::{HnswIndex, HnswResult, TfIdfVectorizer}
+
+// ============================================================================
+// HnswIndex Lifecycle Tests
+// ============================================================================
+
+@test
+func test_hnsw_create_and_size() -> I32 {
+    var idx = HnswIndex.create(4)
+    assert_eq(idx.size(), 0, "new index should have size 0")
+    assert_eq(idx.dims(), 4, "dims should be 4")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_insert_and_size() -> I32 {
+    var idx = HnswIndex.create(3)
+    var v1: [F32; 3] = [1.0, 0.0, 0.0]
+    var v2: [F32; 3] = [0.0, 1.0, 0.0]
+    idx.insert(0, &v1)
+    idx.insert(1, &v2)
+    assert_eq(idx.size(), 2, "index should have 2 vectors")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_set_params() -> I32 {
+    var idx = HnswIndex.create(4)
+    idx.set_params(32, 400, 100)
+    // Should not crash; params are internal
+    assert_eq(idx.dims(), 4, "dims should still be 4 after set_params")
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// HNSW Search Tests
+// ============================================================================
+
+@test
+func test_hnsw_search_nearest() -> I32 {
+    var idx = HnswIndex.create(3)
+    // Insert 3 unit vectors along each axis
+    var v0: [F32; 3] = [1.0, 0.0, 0.0]
+    var v1: [F32; 3] = [0.0, 1.0, 0.0]
+    var v2: [F32; 3] = [0.0, 0.0, 1.0]
+    idx.insert(0, &v0)
+    idx.insert(1, &v1)
+    idx.insert(2, &v2)
+
+    // Search for something close to v0
+    var query: [F32; 3] = [0.9, 0.1, 0.0]
+    let results: List[HnswResult] = idx.search(&query, 3)
+    assert(results.len() >= 1, "should find at least 1 neighbor")
+
+    let nearest: HnswResult = results.get(0)
+    assert_eq(nearest.doc_id, 0, "nearest to [0.9,0.1,0] should be doc 0")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_search_k_limit() -> I32 {
+    var idx = HnswIndex.create(2)
+    var i: U32 = 0
+    loop (i < 10) {
+        var v: [F32; 2] = [0.0, 0.0]
+        v[0] = 1.0
+        v[1] = 0.0
+        idx.insert(i, &v)
+        i = i + 1
+    }
+
+    var q: [F32; 2] = [1.0, 0.0]
+    let results: List[HnswResult] = idx.search(&q, 3)
+    assert(results.len() <= 3, "search with k=3 should return at most 3")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_distance_ascending() -> I32 {
+    var idx = HnswIndex.create(2)
+    // Insert vectors at different distances from query
+    var v0: [F32; 2] = [1.0, 0.0]
+    var v1: [F32; 2] = [0.0, 1.0]
+    var v2: [F32; 2] = [-1.0, 0.0]
+    idx.insert(0, &v0)
+    idx.insert(1, &v1)
+    idx.insert(2, &v2)
+
+    var q: [F32; 2] = [1.0, 0.0]
+    let results: List[HnswResult] = idx.search(&q, 3)
+    assert(results.len() >= 2, "should find at least 2 results")
+
+    let r0: HnswResult = results.get(0)
+    let r1: HnswResult = results.get(1)
+    assert(r0.distance <= r1.distance, "results should be sorted by distance ascending")
+
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// TfIdfVectorizer Tests
+// ============================================================================
+
+@test
+func test_tfidf_create_and_build() -> I32 {
+    var vec = TfIdfVectorizer.create(64)
+    assert(not vec.is_built(), "new vectorizer should not be built")
+    vec.add_document(0, "hello world foo bar")
+    vec.add_document(1, "world bar baz qux")
+    vec.build()
+    assert(vec.is_built(), "vectorizer should be built after build()")
+    assert(vec.dims() > 0, "dims should be positive after build")
+    vec.destroy()
+    return 0
+}
+
+@test
+func test_tfidf_vectorize() -> I32 {
+    var vec = TfIdfVectorizer.create(64)
+    vec.add_document(0, "quick brown fox")
+    vec.add_document(1, "lazy dog sleeps")
+    vec.build()
+
+    var out: [F32; 64] = [0.0; 64]
+    let written: I32 = vec.vectorize("quick fox", &out)
+    assert(written > 0, "vectorize should write at least 1 dimension")
+
+    // At least one dimension should be nonzero
+    var has_nonzero: Bool = false
+    var i: I32 = 0
+    loop (i < written) {
+        if out[i] != 0.0 {
+            has_nonzero = true
+        }
+        i = i + 1
+    }
+    assert(has_nonzero, "vectorized output should have nonzero values")
+
+    vec.destroy()
+    return 0
+}
+
+// ============================================================================
+// Additional HNSW Tests
+// ============================================================================
+
+@test
+func test_hnsw_max_layer() -> I32 {
+    var idx = HnswIndex.create(3)
+    var v0: [F32; 3] = [1.0, 0.0, 0.0]
+    var v1: [F32; 3] = [0.0, 1.0, 0.0]
+    var v2: [F32; 3] = [0.0, 0.0, 1.0]
+    idx.insert(0, &v0)
+    idx.insert(1, &v1)
+    idx.insert(2, &v2)
+    let layer: I32 = idx.max_layer()
+    assert(layer >= 0, "max_layer should be non-negative")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_many_vectors() -> I32 {
+    var idx = HnswIndex.create(2)
+    var i: U32 = 0
+    loop (i < 50) {
+        var v: [F32; 2] = [0.0, 0.0]
+        v[0] = 1.0
+        idx.insert(i, &v)
+        i = i + 1
+    }
+    assert_eq(idx.size(), 50, "should have 50 vectors")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_search_empty_index() -> I32 {
+    var idx = HnswIndex.create(3)
+    var q: [F32; 3] = [1.0, 0.0, 0.0]
+    let results: List[HnswResult] = idx.search(&q, 5)
+    assert_eq(results.len(), 0, "search on empty index should return 0 results")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_cosine_distance_identical() -> I32 {
+    var idx = HnswIndex.create(3)
+    var v: [F32; 3] = [1.0, 2.0, 3.0]
+    idx.insert(0, &v)
+
+    // Search with same vector
+    let results: List[HnswResult] = idx.search(&v, 1)
+    assert_eq(results.len(), 1, "should find 1 result")
+    let r: HnswResult = results.get(0)
+    assert_eq(r.doc_id, 0, "should find the inserted doc")
+    // Cosine distance to itself should be ~0
+    assert(r.distance < 0.01, "cosine distance to self should be near 0")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_destroy_null_safe() -> I32 {
+    var idx = HnswIndex.create(4)
+    idx.destroy()
+    // Double destroy should be safe
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// Additional TF-IDF Tests
+// ============================================================================
+
+@test
+func test_tfidf_dims_matches_max() -> I32 {
+    var vec = TfIdfVectorizer.create(32)
+    vec.add_document(0, "alpha beta gamma delta epsilon")
+    vec.add_document(1, "zeta eta theta iota kappa")
+    vec.build()
+    let d: I32 = vec.dims()
+    assert(d > 0, "dims should be positive")
+    assert(d <= 32, "dims should not exceed max_dims")
+    vec.destroy()
+    return 0
+}
+
+@test
+func test_tfidf_vectorize_unknown_text() -> I32 {
+    var vec = TfIdfVectorizer.create(64)
+    vec.add_document(0, "hello world")
+    vec.add_document(1, "foo bar baz")
+    vec.build()
+
+    // Vectorize text with no overlap to training corpus
+    var out: [F32; 64] = [0.0; 64]
+    let written: I32 = vec.vectorize("zzzzz qqqqq", &out)
+    assert(written > 0, "should still return dims even for unknown text")
+    vec.destroy()
+    return 0
+}
+
+@test
+func test_tfidf_destroy_null_safe() -> I32 {
+    var vec = TfIdfVectorizer.create(64)
+    vec.destroy()
+    // Double destroy should be safe
+    vec.destroy()
+    return 0
+}
+
+// ============================================================================
+// End-to-End: TF-IDF + HNSW Pipeline
+// ============================================================================
+
+@test
+func test_tfidf_hnsw_pipeline() -> I32 {
+    // Build vocabulary
+    var vectorizer = TfIdfVectorizer.create(32)
+    vectorizer.add_document(0, "quick brown fox jumps over lazy dog")
+    vectorizer.add_document(1, "hello world program example code")
+    vectorizer.add_document(2, "fox runs through the forest quickly")
+    vectorizer.build()
+
+    let d: I32 = vectorizer.dims()
+    assert(d > 0, "vectorizer should have positive dims")
+
+    // Create HNSW index with matching dimensions
+    var hnsw = HnswIndex.create(d)
+
+    // Vectorize and insert each document
+    var v0: [F32; 32] = [0.0; 32]
+    vectorizer.vectorize("quick brown fox jumps over lazy dog", &v0)
+    hnsw.insert(0, &v0)
+
+    var v1: [F32; 32] = [0.0; 32]
+    vectorizer.vectorize("hello world program example code", &v1)
+    hnsw.insert(1, &v1)
+
+    var v2: [F32; 32] = [0.0; 32]
+    vectorizer.vectorize("fox runs through the forest quickly", &v2)
+    hnsw.insert(2, &v2)
+
+    assert_eq(hnsw.size(), 3, "hnsw should have 3 vectors")
+
+    // Search for "fox" - should find docs 0 and 2
+    var query_vec: [F32; 32] = [0.0; 32]
+    vectorizer.vectorize("fox", &query_vec)
+    let results: List[HnswResult] = hnsw.search(&query_vec, 3)
+    assert(results.len() >= 1, "should find at least 1 result for 'fox'")
+
+    hnsw.destroy()
+    vectorizer.destroy()
+    return 0
+}

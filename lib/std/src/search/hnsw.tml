@@ -1,0 +1,289 @@
+//! HNSW approximate nearest neighbor vector search.
+//!
+//! Implements the Hierarchical Navigable Small World (HNSW) algorithm
+//! for fast approximate k-nearest neighbor search on high-dimensional
+//! vectors. Also provides TF-IDF vectorization for converting text
+//! to embeddings.
+//!
+//! # Vector Search
+//!
+//! ```tml
+//! use std::search::hnsw::HnswIndex
+//!
+//! var index = HnswIndex.create(128)  // 128-dimensional vectors
+//! index.set_params(16, 200, 50)      // M, ef_construction, ef_search
+//!
+//! var vec: [F32; 128] = [0.0; 128]
+//! // ... fill vec with embedding values ...
+//! index.insert(0, &vec[0])
+//!
+//! let results = index.search(&query[0], 10)  // Find 10 nearest
+//! ```
+//!
+//! # Text-to-Vector Pipeline
+//!
+//! ```tml
+//! use std::search::hnsw::{HnswIndex, TfIdfVectorizer}
+//!
+//! // Build vocabulary from documents
+//! var vectorizer = TfIdfVectorizer.create(256)
+//! vectorizer.add_document(0, "quick brown fox jumps")
+//! vectorizer.add_document(1, "hello world program")
+//! vectorizer.build()
+//!
+//! // Convert text to vectors and index
+//! var index = HnswIndex.create(vectorizer.dims())
+//! // vectorize + insert for each document
+//! ```
+
+// ============================================================================
+// HNSW FFI Declarations
+// ============================================================================
+
+@extern("hnsw_create")
+func ffi_hnsw_create(dims: I32) -> *Unit
+
+@extern("hnsw_destroy")
+func ffi_hnsw_destroy(handle: *Unit)
+
+@extern("hnsw_set_params")
+func ffi_hnsw_set_params(handle: *Unit, m: I32, ef_construction: I32, ef_search: I32)
+
+@extern("hnsw_insert")
+func ffi_hnsw_insert(handle: *Unit, doc_id: U32, embedding: *F32)
+
+@extern("hnsw_search")
+func ffi_hnsw_search(handle: *Unit, query: *F32, k: I32,
+    out_doc_ids: *U32, out_distances: *F32) -> I32
+
+@extern("hnsw_size")
+func ffi_hnsw_size(handle: *Unit) -> I32
+
+@extern("hnsw_dims")
+func ffi_hnsw_dims(handle: *Unit) -> I32
+
+@extern("hnsw_max_layer")
+func ffi_hnsw_max_layer(handle: *Unit) -> I32
+
+// ============================================================================
+// TF-IDF FFI Declarations
+// ============================================================================
+
+@extern("tfidf_create")
+func ffi_tfidf_create(max_dims: I32) -> *Unit
+
+@extern("tfidf_destroy")
+func ffi_tfidf_destroy(handle: *Unit)
+
+@extern("tfidf_add_document")
+func ffi_tfidf_add_document(handle: *Unit, doc_id: U32, text: Str)
+
+@extern("tfidf_build")
+func ffi_tfidf_build(handle: *Unit)
+
+@extern("tfidf_vectorize")
+func ffi_tfidf_vectorize(handle: *Unit, text: Str, out_vec: *F32) -> I32
+
+@extern("tfidf_dims")
+func ffi_tfidf_dims(handle: *Unit) -> I32
+
+@extern("tfidf_is_built")
+func ffi_tfidf_is_built(handle: *Unit) -> I32
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/// A nearest neighbor search result from HNSW.
+pub type HnswResult {
+    /// The document identifier.
+    pub doc_id: U32,
+    /// The distance to the query vector (lower = more similar).
+    /// For cosine distance: 0.0 = identical, 2.0 = opposite.
+    pub distance: F32,
+}
+
+// ============================================================================
+// HnswIndex
+// ============================================================================
+
+/// HNSW approximate nearest neighbor index.
+///
+/// Builds a hierarchical navigable small world graph for fast
+/// approximate k-nearest neighbor search. Uses cosine distance
+/// (1 - cosine_similarity) as the distance metric.
+///
+/// ## Parameters
+///
+/// - **M** (default 16): Maximum connections per node per layer.
+///   Higher M improves recall but increases memory and build time.
+/// - **ef_construction** (default 200): Beam width during insertion.
+///   Higher values improve index quality but slow down build.
+/// - **ef_search** (default 50): Beam width during query.
+///   Higher values improve recall but slow down search.
+///
+/// ## Lifecycle
+///
+/// 1. Create with `HnswIndex.create(dims)`
+/// 2. Optionally configure with `set_params(M, ef_construction, ef_search)`
+/// 3. Insert vectors with `insert(doc_id, embedding)`
+/// 4. Search with `search(query, k)` — no explicit build step needed
+pub type HnswIndex {
+    handle: *Unit,
+    dim: I32,
+}
+
+impl HnswIndex {
+    /// Creates a new HNSW index for vectors of the given dimensionality.
+    ///
+    /// @param dims Number of dimensions per vector (e.g., 128, 256, 512)
+    pub func create(dims: I32) -> HnswIndex {
+        let h: *Unit = lowlevel { ffi_hnsw_create(dims) }
+        return HnswIndex { handle: h, dim: dims }
+    }
+
+    /// Configures HNSW algorithm parameters.
+    ///
+    /// @param m Maximum connections per node per layer (default 16)
+    /// @param ef_construction Beam width for insertion (default 200)
+    /// @param ef_search Beam width for search (default 50)
+    pub func set_params(mut this, m: I32, ef_construction: I32, ef_search: I32) {
+        lowlevel { ffi_hnsw_set_params(this.handle, m, ef_construction, ef_search) }
+    }
+
+    /// Inserts a vector into the index.
+    ///
+    /// The vector must have exactly `dims` elements. Vectors are
+    /// automatically L2-normalized internally for cosine distance.
+    ///
+    /// @param doc_id Unique document identifier
+    /// @param embedding Pointer to F32 array of size `dims`
+    pub func insert(mut this, doc_id: U32, embedding: *F32) {
+        lowlevel { ffi_hnsw_insert(this.handle, doc_id, embedding) }
+    }
+
+    /// Searches for the k nearest neighbors to the query vector.
+    ///
+    /// @param query Pointer to F32 array of size `dims`
+    /// @param k Number of nearest neighbors to return
+    /// @returns List of results sorted by distance (ascending)
+    pub func search(this, query: *F32, k: I32) -> List[HnswResult] {
+        var doc_ids: [U32; 1024] = [0; 1024]
+        var distances: [F32; 1024] = [0.0; 1024]
+        let actual_k: I32 = if k > 1024 { 1024 } else { k }
+        let count: I32 = lowlevel {
+            ffi_hnsw_search(this.handle, query, actual_k, &doc_ids, &distances)
+        }
+        var results: List[HnswResult] = List[HnswResult].new()
+        var i: I32 = 0
+        loop (i < count) {
+            results.push(HnswResult { doc_id: doc_ids[i], distance: distances[i] })
+            i = i + 1
+        }
+        return results
+    }
+
+    /// Returns the number of indexed vectors.
+    pub func size(this) -> I32 {
+        return lowlevel { ffi_hnsw_size(this.handle) }
+    }
+
+    /// Returns the vector dimensionality.
+    pub func dims(this) -> I32 {
+        return lowlevel { ffi_hnsw_dims(this.handle) }
+    }
+
+    /// Returns the maximum layer in the HNSW graph.
+    pub func max_layer(this) -> I32 {
+        return lowlevel { ffi_hnsw_max_layer(this.handle) }
+    }
+
+    /// Frees the underlying index resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { ffi_hnsw_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}
+
+// ============================================================================
+// TfIdfVectorizer
+// ============================================================================
+
+/// TF-IDF text vectorizer for converting documents to embeddings.
+///
+/// Builds a vocabulary from a corpus of documents, selecting the
+/// top-N most discriminative terms by IDF (inverse document frequency).
+/// Converts text into normalized TF-IDF vectors suitable for HNSW
+/// indexing.
+///
+/// ## Lifecycle
+///
+/// 1. Create with `TfIdfVectorizer.create(max_dims)`
+/// 2. Add training documents with `add_document()`
+/// 3. Call `build()` to compute vocabulary and IDF weights
+/// 4. Call `vectorize()` to convert text to vectors
+pub type TfIdfVectorizer {
+    handle: *Unit,
+}
+
+impl TfIdfVectorizer {
+    /// Creates a new TF-IDF vectorizer.
+    ///
+    /// @param max_dims Maximum number of dimensions (vocabulary size, default 512)
+    pub func create(max_dims: I32) -> TfIdfVectorizer {
+        let h: *Unit = lowlevel { ffi_tfidf_create(max_dims) }
+        return TfIdfVectorizer { handle: h }
+    }
+
+    /// Adds a document to the training corpus.
+    ///
+    /// Documents added before `build()` are used to determine the
+    /// vocabulary and IDF weights.
+    ///
+    /// @param doc_id Document identifier
+    /// @param text Document text content
+    pub func add_document(mut this, doc_id: U32, text: Str) {
+        lowlevel { ffi_tfidf_add_document(this.handle, doc_id, text) }
+    }
+
+    /// Builds the vectorizer from the training corpus.
+    ///
+    /// Selects the top-N terms by IDF as dimensions and computes
+    /// IDF weights. Must be called before `vectorize()`.
+    pub func build(mut this) {
+        lowlevel { ffi_tfidf_build(this.handle) }
+    }
+
+    /// Converts text to an L2-normalized TF-IDF vector.
+    ///
+    /// The output vector has `dims()` elements. Each dimension
+    /// corresponds to a vocabulary term, weighted by TF-IDF.
+    ///
+    /// @param text Input text to vectorize
+    /// @param out_vec Pre-allocated F32 buffer of size >= `dims()`
+    /// @returns Actual number of dimensions written
+    pub func vectorize(this, text: Str, out_vec: *F32) -> I32 {
+        return lowlevel { ffi_tfidf_vectorize(this.handle, text, out_vec) }
+    }
+
+    /// Returns the number of dimensions in output vectors.
+    pub func dims(this) -> I32 {
+        return lowlevel { ffi_tfidf_dims(this.handle) }
+    }
+
+    /// Returns whether the vectorizer has been built.
+    pub func is_built(this) -> Bool {
+        let result: I32 = lowlevel { ffi_tfidf_is_built(this.handle) }
+        return result != 0
+    }
+
+    /// Frees the underlying vectorizer resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { ffi_tfidf_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}

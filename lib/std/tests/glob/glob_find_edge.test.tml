@@ -1,0 +1,160 @@
+//! Tests for glob filesystem matching edge cases.
+//!
+//! Covers: ? pattern, [abc] pattern, middle ** with subdirs, mixed file types,
+//! multiple extensions, and wildcard in directory name.
+
+use std::glob::{Glob, matches}
+use std::file::{File, Dir, Path}
+use test::{assert, assert_eq}
+
+// ============================================================================
+// ? wildcard on filesystem
+// ============================================================================
+
+@test
+func test_glob_find_question_mark() -> I32 {
+    Dir::create_all("_ge1")
+    File::write_all("_ge1/a.txt", "a")
+    File::write_all("_ge1/b.txt", "b")
+    File::write_all("_ge1/ab.txt", "ab")
+
+    var g: Glob = Glob::find("_ge1", "?.txt")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge1/a.txt")
+    Path::remove("_ge1/b.txt")
+    Path::remove("_ge1/ab.txt")
+    Dir::remove("_ge1")
+
+    assert_eq(n, 2, "?.txt should match a.txt and b.txt only (not ab.txt)")
+    return 0
+}
+
+// ============================================================================
+// Character class [abc] on filesystem
+// ============================================================================
+
+@test
+func test_glob_find_char_class() -> I32 {
+    Dir::create_all("_ge2")
+    File::write_all("_ge2/a.log", "a")
+    File::write_all("_ge2/b.log", "b")
+    File::write_all("_ge2/c.log", "c")
+    File::write_all("_ge2/d.log", "d")
+
+    var g: Glob = Glob::find("_ge2", "[abc].log")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge2/a.log")
+    Path::remove("_ge2/b.log")
+    Path::remove("_ge2/c.log")
+    Path::remove("_ge2/d.log")
+    Dir::remove("_ge2")
+
+    assert_eq(n, 3, "[abc].log should match a, b, c but not d")
+    return 0
+}
+
+// ============================================================================
+// Middle ** with specific subdirectory structure
+// ============================================================================
+
+@test
+func test_glob_find_middle_globstar() -> I32 {
+    Dir::create_all("_ge3/src/tests")
+    Dir::create_all("_ge3/lib/tests")
+    File::write_all("_ge3/src/tests/t1.tml", "t1")
+    File::write_all("_ge3/lib/tests/t2.tml", "t2")
+    File::write_all("_ge3/src/main.tml", "main")
+
+    // Pattern: find all test.tml files under any **/tests/ directory
+    var g: Glob = Glob::find("_ge3", "**/tests/*.tml")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge3/src/tests/t1.tml")
+    Path::remove("_ge3/lib/tests/t2.tml")
+    Path::remove("_ge3/src/main.tml")
+    Dir::remove("_ge3/src/tests")
+    Dir::remove("_ge3/lib/tests")
+    Dir::remove("_ge3/src")
+    Dir::remove("_ge3/lib")
+    Dir::remove("_ge3")
+
+    assert_eq(n, 2, "**/tests/*.tml should find 2 test files")
+    return 0
+}
+
+// ============================================================================
+// Mixed file types - only matching extension
+// ============================================================================
+
+@test
+func test_glob_find_mixed_extensions() -> I32 {
+    Dir::create_all("_ge4")
+    File::write_all("_ge4/app.tml", "tml")
+    File::write_all("_ge4/app.rs", "rs")
+    File::write_all("_ge4/app.cpp", "cpp")
+    File::write_all("_ge4/app.h", "h")
+
+    var g: Glob = Glob::find("_ge4", "*.tml")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge4/app.tml")
+    Path::remove("_ge4/app.rs")
+    Path::remove("_ge4/app.cpp")
+    Path::remove("_ge4/app.h")
+    Dir::remove("_ge4")
+
+    assert_eq(n, 1, "*.tml should match only app.tml")
+    return 0
+}
+
+// ============================================================================
+// Glob only matches files, not subdirectories as final segment
+// ============================================================================
+
+@test
+func test_glob_find_files_and_dirs() -> I32 {
+    Dir::create_all("_ge5/subdir")
+    File::write_all("_ge5/file.txt", "f")
+
+    var g: Glob = Glob::find("_ge5", "*")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge5/file.txt")
+    Dir::remove("_ge5/subdir")
+    Dir::remove("_ge5")
+
+    // * should match both files and directories in the last segment
+    assert_eq(n, 2, "* should match both file.txt and subdir")
+    return 0
+}
+
+// ============================================================================
+// Recursive ** with single file deep in tree
+// ============================================================================
+
+@test
+func test_glob_find_deep_single_file() -> I32 {
+    Dir::create_all("_ge6/a/b/c/d")
+    File::write_all("_ge6/a/b/c/d/target.tml", "found")
+
+    var g: Glob = Glob::find("_ge6", "**/*.tml")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge6/a/b/c/d/target.tml")
+    Dir::remove("_ge6/a/b/c/d")
+    Dir::remove("_ge6/a/b/c")
+    Dir::remove("_ge6/a/b")
+    Dir::remove("_ge6/a")
+    Dir::remove("_ge6")
+
+    assert_eq(n, 1, "should find deeply nested file with **/*.tml")
+    return 0
+}

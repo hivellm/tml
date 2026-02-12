@@ -798,6 +798,15 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including os runtime: " << os_obj);
             }
 
+            // search/ - search.c (vector distance functions)
+            fs::path search_c = runtime_dir / "search" / "search.c";
+            if (fs::exists(search_c)) {
+                std::string search_obj = ensure_c_compiled(to_forward_slashes(search_c.string()),
+                                                           deps_cache, clang, verbose);
+                objects.push_back(fs::path(search_obj));
+                TML_LOG_DEBUG("build", "Including search runtime: " << search_obj);
+            }
+
             // diagnostics/ - backtrace.c
             fs::path backtrace_c = runtime_dir / "diagnostics" / "backtrace.c";
             if (fs::exists(backtrace_c)) {
@@ -885,6 +894,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 "F:/Node/hivellm/tml/lib/std/runtime/file.c",
             },
             "std::file");
+    }
+
+    // Link std::glob runtime if imported
+    if (registry->has_module("std::glob")) {
+        add_runtime(
+            {
+                "lib/std/runtime/glob.c",
+                "../../../lib/std/runtime/glob.c",
+                "F:/Node/hivellm/tml/lib/std/runtime/glob.c",
+            },
+            "std::glob");
     }
 
     // Link std::text runtime if imported (Text type with SSO)
@@ -1169,6 +1189,101 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             }
         } else {
             TML_LOG_WARN("build", "std::profiler imported but tml_profiler library not found");
+        }
+    }
+
+    // Link std::search runtime if imported (pre-built C++ library)
+    // Provides BM25, HNSW, TF-IDF vectorizer, and F32 SIMD distance functions
+    auto uses_search_module = [&registry]() -> bool {
+        if (registry->has_module("std::search"))
+            return true;
+        for (const auto& [path, _] : registry->get_all_modules()) {
+            if (path.find("std::search::") == 0 || path == "std::search") {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (uses_search_module()) {
+        auto find_search_runtime = []() -> std::optional<fs::path> {
+#ifdef _WIN32
+            std::string lib_name = "tml_search_runtime.lib";
+#else
+            std::string lib_name = "libtml_search_runtime.a";
+#endif
+            std::vector<std::string> search_paths;
+            bool is_release = CompilerOptions::optimization_level >= 1;
+            if (is_release) {
+                search_paths = {
+                    ".",
+                    "build/release",
+                    "build/debug",
+                    "../build/release",
+                    "../build/debug",
+                    "F:/Node/hivellm/tml/build/release",
+                    "F:/Node/hivellm/tml/build/debug",
+                };
+            } else {
+                search_paths = {
+                    ".",
+                    "build/debug",
+                    "build/release",
+                    "../build/debug",
+                    "../build/release",
+                    "F:/Node/hivellm/tml/build/debug",
+                    "F:/Node/hivellm/tml/build/release",
+                };
+            }
+
+            for (const auto& search_path : search_paths) {
+                fs::path lib_path = fs::path(search_path) / lib_name;
+                if (fs::exists(lib_path)) {
+                    return fs::absolute(lib_path);
+                }
+            }
+            return std::nullopt;
+        };
+
+        if (auto search_lib = find_search_runtime()) {
+            objects.push_back(*search_lib);
+            TML_LOG_DEBUG("build", "Including search runtime library: " << search_lib->string());
+
+            // Also link tml_search.lib (search_engine.cpp depends on it)
+            auto search_lib_dir = search_lib->parent_path();
+#ifdef _WIN32
+            std::string search_core_name = "tml_search.lib";
+#else
+            std::string search_core_name = "libtml_search.a";
+#endif
+            // Search in cache directory (CMake puts libs there)
+            bool core_found = false;
+            auto cache_base = search_lib_dir.parent_path() / "cache";
+            if (fs::exists(cache_base)) {
+                try {
+                    for (auto& p : fs::recursive_directory_iterator(cache_base)) {
+                        if (p.path().filename().string() == search_core_name) {
+                            objects.push_back(fs::absolute(p.path()));
+                            core_found = true;
+                            TML_LOG_DEBUG("build",
+                                          "Including search core library: " << p.path().string());
+                            break;
+                        }
+                    }
+                } catch (...) {}
+            }
+            if (!core_found) {
+                // Check same directory
+                auto same_dir = search_lib_dir / search_core_name;
+                if (fs::exists(same_dir)) {
+                    objects.push_back(fs::absolute(same_dir));
+                    core_found = true;
+                }
+            }
+            if (!core_found) {
+                TML_LOG_WARN("build", "tml_search library not found (search runtime dependency)");
+            }
+        } else {
+            TML_LOG_WARN("build", "std::search imported but tml_search_runtime library not found");
         }
     }
 

@@ -1,0 +1,237 @@
+//! BM25 full-text search index.
+//!
+//! Implements the Okapi BM25 ranking function for full-text search
+//! with TF-IDF scoring. Supports multi-field documents with
+//! configurable field boosts.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::search::bm25::Bm25Index
+//!
+//! var idx = Bm25Index.create()
+//! idx.add_text(0, "the quick brown fox jumps over the lazy dog")
+//! idx.add_text(1, "hello world program example")
+//! idx.add_text(2, "fox hunting in the wild forest")
+//! idx.build()
+//!
+//! let results = idx.search("fox", 10)
+//! // results[0].doc_id = 0, results[0].score > 0
+//! ```
+//!
+//! # Multi-field Documents
+//!
+//! ```tml
+//! var idx = Bm25Index.create()
+//! idx.add_document(0, "split", "pub func split(s: Str) -> List[Str]",
+//!     "Splits a string by delimiter", "core::str")
+//! idx.build()
+//! let results = idx.search("split string", 5)
+//! ```
+
+// ============================================================================
+// FFI Declarations
+// ============================================================================
+
+@extern("bm25_create")
+func ffi_bm25_create() -> *Unit
+
+@extern("bm25_destroy")
+func ffi_bm25_destroy(handle: *Unit)
+
+@extern("bm25_set_k1")
+func ffi_bm25_set_k1(handle: *Unit, k1: F32)
+
+@extern("bm25_set_b")
+func ffi_bm25_set_b(handle: *Unit, b: F32)
+
+@extern("bm25_set_name_boost")
+func ffi_bm25_set_name_boost(handle: *Unit, boost: F32)
+
+@extern("bm25_set_signature_boost")
+func ffi_bm25_set_signature_boost(handle: *Unit, boost: F32)
+
+@extern("bm25_set_doc_boost")
+func ffi_bm25_set_doc_boost(handle: *Unit, boost: F32)
+
+@extern("bm25_set_path_boost")
+func ffi_bm25_set_path_boost(handle: *Unit, boost: F32)
+
+@extern("bm25_add_document")
+func ffi_bm25_add_document(handle: *Unit, doc_id: U32,
+    name: Str, signature: Str, doc_text: Str, path: Str)
+
+@extern("bm25_add_text")
+func ffi_bm25_add_text(handle: *Unit, doc_id: U32, text: Str)
+
+@extern("bm25_build")
+func ffi_bm25_build(handle: *Unit)
+
+@extern("bm25_search")
+func ffi_bm25_search(handle: *Unit, query: Str, limit: I32,
+    out_doc_ids: *U32, out_scores: *F32) -> I32
+
+@extern("bm25_size")
+func ffi_bm25_size(handle: *Unit) -> I32
+
+@extern("bm25_idf")
+func ffi_bm25_idf(handle: *Unit, term: Str) -> F32
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/// A search result from BM25 ranking.
+pub type Bm25Result {
+    /// The document identifier.
+    pub doc_id: U32,
+    /// The BM25 relevance score (higher = more relevant).
+    pub score: F32,
+}
+
+// ============================================================================
+// Bm25Index
+// ============================================================================
+
+/// BM25 full-text search index.
+///
+/// Indexes documents by tokenizing text into terms, computing inverse
+/// document frequency (IDF), and scoring queries using the Okapi BM25
+/// ranking function.
+///
+/// ## Lifecycle
+///
+/// 1. Create index with `Bm25Index.create()`
+/// 2. Add documents with `add_text()` or `add_document()`
+/// 3. Call `build()` to compute statistics
+/// 4. Search with `search()`
+///
+/// ## Parameters
+///
+/// - **k1** (default 1.2): Term frequency saturation. Higher values
+///   give more weight to term frequency.
+/// - **b** (default 0.75): Document length normalization. 0.0 disables
+///   length normalization, 1.0 fully normalizes.
+pub type Bm25Index {
+    handle: *Unit,
+    built: Bool,
+}
+
+impl Bm25Index {
+    /// Creates a new empty BM25 index with default parameters.
+    pub func create() -> Bm25Index {
+        let h: *Unit = lowlevel { ffi_bm25_create() }
+        return Bm25Index { handle: h, built: false }
+    }
+
+    /// Sets the k1 parameter (term frequency saturation, default 1.2).
+    pub func set_k1(mut this, k1: F32) {
+        lowlevel { ffi_bm25_set_k1(this.handle, k1) }
+    }
+
+    /// Sets the b parameter (document length normalization, default 0.75).
+    pub func set_b(mut this, b: F32) {
+        lowlevel { ffi_bm25_set_b(this.handle, b) }
+    }
+
+    /// Sets the name field boost factor (default 3.0).
+    pub func set_name_boost(mut this, boost: F32) {
+        lowlevel { ffi_bm25_set_name_boost(this.handle, boost) }
+    }
+
+    /// Sets the signature field boost factor (default 1.5).
+    pub func set_signature_boost(mut this, boost: F32) {
+        lowlevel { ffi_bm25_set_signature_boost(this.handle, boost) }
+    }
+
+    /// Sets the documentation field boost factor (default 1.0).
+    pub func set_doc_boost(mut this, boost: F32) {
+        lowlevel { ffi_bm25_set_doc_boost(this.handle, boost) }
+    }
+
+    /// Sets the path field boost factor (default 0.5).
+    pub func set_path_boost(mut this, boost: F32) {
+        lowlevel { ffi_bm25_set_path_boost(this.handle, boost) }
+    }
+
+    /// Adds a multi-field document to the index.
+    ///
+    /// Each field is independently tokenized and scored with its own
+    /// boost factor. Call `build()` after adding all documents.
+    ///
+    /// @param doc_id Unique document identifier
+    /// @param name Short name (boosted 3x by default)
+    /// @param signature Function signature or type (boosted 1.5x)
+    /// @param doc_text Documentation or description text (boosted 1x)
+    /// @param path Module path (boosted 0.5x)
+    pub func add_document(mut this, doc_id: U32, name: Str,
+                          signature: Str, doc_text: Str, path: Str) {
+        lowlevel { ffi_bm25_add_document(this.handle, doc_id, name, signature, doc_text, path) }
+    }
+
+    /// Adds a simple text document to the index.
+    ///
+    /// Convenience method for single-field indexing. The text is indexed
+    /// in the doc_text field. Call `build()` after adding all documents.
+    ///
+    /// @param doc_id Unique document identifier
+    /// @param text Document text content
+    pub func add_text(mut this, doc_id: U32, text: Str) {
+        lowlevel { ffi_bm25_add_text(this.handle, doc_id, text) }
+    }
+
+    /// Builds the index after all documents have been added.
+    ///
+    /// Computes IDF values and average field lengths. Must be called
+    /// before `search()`.
+    pub func build(mut this) {
+        lowlevel { ffi_bm25_build(this.handle) }
+        this.built = true
+    }
+
+    /// Searches the index and returns ranked results.
+    ///
+    /// @param query The search query (tokenized internally)
+    /// @param limit Maximum number of results to return
+    /// @returns List of results sorted by BM25 score (descending)
+    pub func search(this, query: Str, limit: I32) -> List[Bm25Result] {
+        var doc_ids: [U32; 1024] = [0; 1024]
+        var scores: [F32; 1024] = [0.0; 1024]
+        let actual_limit: I32 = if limit > 1024 { 1024 } else { limit }
+        let count: I32 = lowlevel {
+            ffi_bm25_search(this.handle, query, actual_limit, &doc_ids, &scores)
+        }
+        var results: List[Bm25Result] = List[Bm25Result].new()
+        var i: I32 = 0
+        loop (i < count) {
+            results.push(Bm25Result { doc_id: doc_ids[i], score: scores[i] })
+            i = i + 1
+        }
+        return results
+    }
+
+    /// Returns the number of indexed documents.
+    pub func size(this) -> I32 {
+        return lowlevel { ffi_bm25_size(this.handle) }
+    }
+
+    /// Returns the IDF (inverse document frequency) of a term.
+    ///
+    /// Higher IDF means the term is rarer and more discriminative.
+    pub func idf(this, term: Str) -> F32 {
+        return lowlevel { ffi_bm25_idf(this.handle, term) }
+    }
+
+    /// Returns whether the index has been built.
+    pub func is_built(this) -> Bool {
+        return this.built
+    }
+
+    /// Frees the underlying index resources.
+    pub func destroy(mut this) {
+        if this.handle != null {
+            lowlevel { ffi_bm25_destroy(this.handle) }
+            this.handle = null
+        }
+    }
+}

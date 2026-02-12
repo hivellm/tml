@@ -219,8 +219,6 @@ func test_bst() {
 ```tml
 module http_client
 
-caps: [io.network.http]
-
 import std.io.http.{Request, Response, Client}
 import std.json.Json
 
@@ -243,9 +241,7 @@ extend ApiClient {
         }
     }
 
-    public func get_user(this, id: U64) -> Outcome[User, Error]
-    effects: [io.network.http]
-    {
+    public func get_user(this, id: U64) -> Outcome[User, Error] {
         let url: String = this.base_url + "/users/" + id.to_string()
         let response: Response = this.client.get(url)!
 
@@ -259,9 +255,7 @@ extend ApiClient {
         return Ok(user)
     }
 
-    public func create_user(this, name: String, email: String) -> Outcome[User, Error]
-    effects: [io.network.http]
-    {
+    public func create_user(this, name: String, email: String) -> Outcome[User, Error] {
         let url: String = this.base_url + "/users"
         let body: String = Json.object()
             .set("name", name)
@@ -295,8 +289,6 @@ extend User {
 ```tml
 module counter
 
-caps: [io.sync]
-
 import std.sync.{Sync, Mutex}
 import std.thread
 
@@ -322,9 +314,7 @@ extend Counter {
     }
 }
 
-public func parallel_count(n: I32) -> I64
-effects: [io.sync]
-{
+public func parallel_count(n: I32) -> I64 {
     let counter: Counter = Counter.new()
     var handles: List[thread.Handle] = List.new()
 
@@ -892,7 +882,6 @@ func test_sum() {
 
 ```tml
 module memory_ops
-caps: [system.lowlevel]
 
 // Zero out a buffer using pointers
 func zero_buffer(size: I32) {
@@ -929,7 +918,6 @@ func safe_read(ptr: *I32) -> Maybe[I32] {
 
 ```tml
 module ffi_example
-caps: [system.ffi, system.lowlevel]
 
 // Example: Calling a C function that takes a buffer
 // (Conceptual - actual FFI syntax may vary)
@@ -963,8 +951,6 @@ func process_with_c_lib(input: ref [U8; 1024]) -> Outcome[I32, Error] {
 ```tml
 module cli
 
-caps: [io.file, io.process.env]
-
 import std.env
 import std.fs.{File, read_to_string}
 
@@ -974,9 +960,7 @@ type Args {
     verbose: Bool,
 }
 
-public func main() -> Outcome[Unit, Error]
-effects: [io.file, io.process.env]
-{
+public func main() -> Outcome[Unit, Error] {
     let args: Args = parse_args()!
 
     if args.verbose {

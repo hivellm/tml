@@ -57,10 +57,10 @@ Visibility = 'pub' | 'private' | 'protected'
 ### 3.1 Functions
 
 ```ebnf
-Function = Directive* Visibility? 'func' Ident StableId?
+Function = Directive* Visibility? 'func' Ident
            GenericParams? '(' Params? ')' ('->' Type)?
            WhereClause?
-           Contract? EffectDecl? Block
+           Block
 
 GenericParams = '[' GenericParam (',' GenericParam)* ']'
 GenericParam  = Ident (':' TypeBound)?
@@ -71,13 +71,6 @@ WhereConstraint = Type ':' TypeBound
 
 Params = Param (',' Param)*
 Param  = Ident ':' Type
-
-Contract   = PreCond? PostCond?
-PreCond    = 'pre' ':' Expr
-PostCond   = 'post' ('(' Ident ')')? ':' Expr
-
-EffectDecl = 'effects' ':' '[' Effect (',' Effect)* ']'
-Effect     = Ident ('::' Ident)*
 ```
 
 **Examples:**
@@ -89,25 +82,12 @@ func add(a: I32, b: I32) -> I32 {
 pub func first[T](list: List[T]) -> Maybe[T] {
     return list.get(0)
 }
-
-func sqrt(x: F64) -> F64
-pre: x >= 0.0
-post(r): r >= 0.0
-{
-    return x.sqrt_impl()
-}
-
-func read_file(path: String) -> Outcome[String, IoError]
-effects: [io::file::read]
-{
-    // ...
-}
 ```
 
 ### 3.2 Types
 
 ```ebnf
-TypeDecl = Directive* Visibility? 'type' Ident StableId?
+TypeDecl = Directive* Visibility? 'type' Ident
            GenericParams? TypeBody
 
 TypeBody = StructBody | EnumBody | AliasBody
@@ -122,7 +102,7 @@ VariantData = '(' Type (',' Type)* ')'
 
 AliasBody = '=' Type
 
-UnionDecl = Directive* Visibility? 'union' Ident StableId?
+UnionDecl = Directive* Visibility? 'union' Ident
             '{' (Field (',' Field)* ','?)? '}'
 ```
 
@@ -1142,9 +1122,7 @@ extend Point {
 }
 
 extend Circle {
-    pub func new(center: Point, radius: F64) -> This
-    pre: radius >= 0.0
-    {
+    pub func new(center: Point, radius: F64) -> This {
         return This { center, radius }
     }
 

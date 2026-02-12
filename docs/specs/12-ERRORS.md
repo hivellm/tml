@@ -242,53 +242,9 @@ error[S005]: cannot assign to immutable variable
    |     ^ cannot assign
 ```
 
-### S006: Capability violation
+### S006: Non-exhaustive patterns
 ```
-error[S006]: capability not declared
-  --> src/main.tml:8:9
-   |
- 3 |     module reader {
- 4 |         caps: []
-   |               -- no io capabilities
-...
- 8 |         File.read("data.txt")
-   |         ^^^^^^^^^^^^^^^^^^^^^ requires `io.file.read`
-   |
-   = help: add `io.file.read` to module caps
-```
-
-### S007: Effect not declared
-```
-error[S007]: undeclared effect
-  --> src/main.tml:5:5
-   |
- 5 |     func process() {
-   |          ^^^^^^^ function has undeclared effects
-...
- 8 |         File.write(path, data)
-   |         ---------------------- io.file.write effect
-   |
-   = help: add `effects: [io.file.write]` to function
-```
-
-### S008: Precondition violation
-```
-error[S008]: precondition may be violated
-  --> src/main.tml:10:5
-   |
- 5 |     func sqrt(x: F64) -> F64
- 6 |     pre: x >= 0.0
-   |          ^^^^^^^^ precondition
-...
-10 |     sqrt(value)
-   |     ^^^^^^^^^^^ cannot prove `value >= 0.0`
-   |
-   = help: add check: `if value >= 0.0 then sqrt(value) else ...`
-```
-
-### S009: Non-exhaustive patterns
-```
-error[S009]: non-exhaustive patterns
+error[S006]: non-exhaustive patterns
   --> src/main.tml:5:5
    |
  5 |     when status {
@@ -300,9 +256,9 @@ error[S009]: non-exhaustive patterns
    = help: add `Pending -> ...` or `_ -> ...`
 ```
 
-### S010: Unused variable
+### S007: Unused variable
 ```
-warning[S010]: unused variable
+warning[S007]: unused variable
   --> src/main.tml:5:9
    |
  5 |     let result: I32 = compute()
@@ -311,9 +267,9 @@ warning[S010]: unused variable
    = help: prefix with underscore: `_result`
 ```
 
-### S011: Unreachable code
+### S008: Unreachable code
 ```
-warning[S011]: unreachable code
+warning[S008]: unreachable code
   --> src/main.tml:7:5
    |
  5 |     return early
@@ -322,9 +278,9 @@ warning[S011]: unreachable code
    |     ^^^^^^^^^ this code will never execute
 ```
 
-### S012: Private access
+### S009: Private access
 ```
-error[S012]: private field
+error[S009]: private field
   --> src/main.tml:10:15
    |
  3 |     type User {
@@ -367,7 +323,6 @@ tml build --format=json
         "start": { "line": 5, "column": 15 },
         "end": { "line": 5, "column": 17 }
       },
-      "stable_id": "@a1b2c3d4",
       "context": {
         "expected_type": "String",
         "found_type": "I32"
@@ -412,7 +367,6 @@ tml build --format=json
 | `message` | Yes | String | Human-readable description |
 | `file` | Yes | String | Source file path |
 | `span` | Yes | Object | Source location with start/end positions |
-| `stable_id` | No | String | Associated stable ID (`@xxxxxxxx`) if applicable |
 | `context` | No | Object | Error-specific context (types, names, etc.) |
 | `suggestions` | No | Array | Machine-applicable fixes |
 | `related` | No | Array | Related diagnostic locations |
@@ -434,24 +388,6 @@ tml check --format=json --watch | ide-plugin
 ```bash
 tml build --format=json | jq '.summary.errors'
 ```
-
-### 5.5 Stable ID Linking
-
-When `stable_id` is present, errors reference code by stable ID rather than just line number:
-
-```json
-{
-  "code": "S001",
-  "message": "use of moved value",
-  "stable_id": "@func_process_a1b2",
-  "span": { "start": { "line": 15, "column": 5 }, "end": { "line": 15, "column": 10 } }
-}
-```
-
-This enables LLMs to:
-1. Reference the error location even after code reformatting
-2. Apply patches using stable IDs instead of line numbers
-3. Track errors across refactoring sessions
 
 ---
 
