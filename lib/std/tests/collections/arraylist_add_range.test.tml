@@ -1,0 +1,30 @@
+// Tests for ArrayList::add_range, Queue::grow
+use test
+use std::collections::class_collections::{ArrayList, Queue}
+
+@test
+func test_arraylist_add_range() -> I32 {
+    var list1: ArrayList[I32] = ArrayList::create()
+    list1.add(1)
+    list1.add(2)
+
+    var list2: ArrayList[I32] = ArrayList::create()
+    list2.add(3)
+    list2.add(4)
+
+    list1.add_range(ref list2)
+    assert_eq(list1.count(), 4 as I64, "list1 should have 4 items after add_range")
+    return 0
+}
+
+@test
+func test_queue_grow() -> I32 {
+    var q: Queue[I32] = Queue::create()
+    var i: I32 = 0
+    loop (i < 20) {
+        q.enqueue(i)
+        i = i + 1
+    }
+    assert_eq(q.count(), 20 as I64, "queue should have 20 items after grow")
+    return 0
+}

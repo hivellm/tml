@@ -1,0 +1,914 @@
+// Consolidated tests for std::search (59 tests)
+
+use test::{assert, assert_eq}
+use std::search::distance::{
+    dot_product,
+    cosine_similarity,
+    euclidean_distance,
+    norm,
+    normalize,
+    dot_product_f32,
+    cosine_similarity_f32,
+    euclidean_distance_f32,
+    l2_squared_f32,
+    norm_f32,
+    normalize_f32,
+}
+use std::search::bm25::{Bm25Index, Bm25Result}
+use std::search::hnsw::{HnswIndex, HnswResult, TfIdfVectorizer}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+// Helper: approximate equality for F64
+func approx_eq(a: F64, b: F64, epsilon: F64) -> Bool {
+    let diff = a - b
+    if diff < 0.0 {
+        return (0.0 - diff) < epsilon
+    }
+    return diff < epsilon
+}
+
+// Helper: approximate equality for F32
+func approx_eq_f32(a: F32, b: F32, epsilon: F32) -> Bool {
+    let diff: F32 = a - b
+    let zero: F32 = 0.0
+    if diff < zero {
+        return (zero - diff) < epsilon
+    }
+    return diff < epsilon
+}
+
+// ============================================================================
+// Distance: Dot Product Tests
+// ============================================================================
+
+@test
+func test_dot_product_basic() -> I32 {
+    var a: [F64; 3] = [1.0, 2.0, 3.0]
+    var b: [F64; 3] = [4.0, 5.0, 6.0]
+    // 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
+    let result = dot_product(&a, &b, 3)
+    assert(approx_eq(result, 32.0, 0.001), "dot product of [1,2,3] . [4,5,6] should be 32")
+    return 0
+}
+
+@test
+func test_dot_product_orthogonal() -> I32 {
+    var a: [F64; 2] = [1.0, 0.0]
+    var b: [F64; 2] = [0.0, 1.0]
+    let result = dot_product(&a, &b, 2)
+    assert(approx_eq(result, 0.0, 0.001), "orthogonal vectors should have 0 dot product")
+    return 0
+}
+
+@test
+func test_dot_product_self() -> I32 {
+    var a: [F64; 3] = [3.0, 4.0, 0.0]
+    // 9 + 16 + 0 = 25
+    let result = dot_product(&a, &a, 3)
+    assert(approx_eq(result, 25.0, 0.001), "self dot product should be sum of squares")
+    return 0
+}
+
+// ============================================================================
+// Distance: Cosine Similarity Tests
+// ============================================================================
+
+@test
+func test_cosine_similarity_identical() -> I32 {
+    var a: [F64; 3] = [1.0, 2.0, 3.0]
+    let result = cosine_similarity(&a, &a, 3)
+    assert(approx_eq(result, 1.0, 0.0001), "cosine similarity of identical vectors should be 1.0")
+    return 0
+}
+
+@test
+func test_cosine_similarity_orthogonal() -> I32 {
+    var a: [F64; 2] = [1.0, 0.0]
+    var b: [F64; 2] = [0.0, 1.0]
+    let result = cosine_similarity(&a, &b, 2)
+    assert(approx_eq(result, 0.0, 0.0001), "orthogonal vectors should have cosine similarity 0")
+    return 0
+}
+
+@test
+func test_cosine_similarity_opposite() -> I32 {
+    var a: [F64; 2] = [1.0, 0.0]
+    var b: [F64; 2] = [-1.0, 0.0]
+    let result = cosine_similarity(&a, &b, 2)
+    assert(approx_eq(result, -1.0, 0.0001), "opposite vectors should have cosine similarity -1")
+    return 0
+}
+
+@test
+func test_cosine_similarity_scale_invariant() -> I32 {
+    var a: [F64; 3] = [1.0, 2.0, 3.0]
+    var b: [F64; 3] = [10.0, 20.0, 30.0]
+    let result = cosine_similarity(&a, &b, 3)
+    assert(approx_eq(result, 1.0, 0.0001), "parallel vectors should have cosine similarity 1.0")
+    return 0
+}
+
+// ============================================================================
+// Distance: Euclidean Distance Tests
+// ============================================================================
+
+@test
+func test_euclidean_distance_zero() -> I32 {
+    var a: [F64; 3] = [1.0, 2.0, 3.0]
+    let result = euclidean_distance(&a, &a, 3)
+    assert(approx_eq(result, 0.0, 0.0001), "distance to self should be 0")
+    return 0
+}
+
+@test
+func test_euclidean_distance_3_4_5() -> I32 {
+    var a: [F64; 2] = [0.0, 0.0]
+    var b: [F64; 2] = [3.0, 4.0]
+    let result = euclidean_distance(&a, &b, 2)
+    assert(approx_eq(result, 5.0, 0.0001), "distance from origin to (3,4) should be 5")
+    return 0
+}
+
+// ============================================================================
+// Distance: Norm Tests
+// ============================================================================
+
+@test
+func test_norm_basic() -> I32 {
+    var v: [F64; 2] = [3.0, 4.0]
+    let result = norm(&v, 2)
+    assert(approx_eq(result, 5.0, 0.0001), "norm of [3,4] should be 5")
+    return 0
+}
+
+@test
+func test_norm_unit_vector() -> I32 {
+    var v: [F64; 3] = [1.0, 0.0, 0.0]
+    let result = norm(&v, 3)
+    assert(approx_eq(result, 1.0, 0.0001), "norm of unit vector should be 1")
+    return 0
+}
+
+// ============================================================================
+// Distance: Normalize Tests (F64)
+// ============================================================================
+
+@test
+func test_normalize_makes_unit() -> I32 {
+    var v: [F64; 3] = [3.0, 4.0, 0.0]
+    normalize(&v, 3)
+    let n = norm(&v, 3)
+    assert(approx_eq(n, 1.0, 0.0001), "normalized vector should have norm 1.0")
+    return 0
+}
+
+@test
+func test_normalize_preserves_direction() -> I32 {
+    var v: [F64; 2] = [3.0, 4.0]
+    var original: [F64; 2] = [3.0, 4.0]
+    normalize(&v, 2)
+    // After normalization, cosine similarity with original should be 1.0
+    let sim = cosine_similarity(&v, &original, 2)
+    assert(approx_eq(sim, 1.0, 0.0001), "normalized vector should preserve direction")
+    return 0
+}
+
+// ============================================================================
+// Distance: F32 Dot Product Tests
+// ============================================================================
+
+@test
+func test_dot_product_f32_basic() -> I32 {
+    var a: [F32; 3] = [1.0, 2.0, 3.0]
+    var b: [F32; 3] = [4.0, 5.0, 6.0]
+    let result: F32 = dot_product_f32(&a, &b, 3)
+    let expected: F32 = 32.0
+    let eps: F32 = 0.01
+    assert(approx_eq_f32(result, expected, eps), "F32 dot product of [1,2,3] . [4,5,6] should be 32")
+    return 0
+}
+
+@test
+func test_dot_product_f32_orthogonal() -> I32 {
+    var a: [F32; 2] = [1.0, 0.0]
+    var b: [F32; 2] = [0.0, 1.0]
+    let result: F32 = dot_product_f32(&a, &b, 2)
+    let expected: F32 = 0.0
+    let eps: F32 = 0.001
+    assert(approx_eq_f32(result, expected, eps), "F32 orthogonal dot product should be 0")
+    return 0
+}
+
+// ============================================================================
+// Distance: F32 Cosine Similarity Tests
+// ============================================================================
+
+@test
+func test_cosine_similarity_f32_identical() -> I32 {
+    var a: [F32; 3] = [1.0, 2.0, 3.0]
+    let result: F32 = cosine_similarity_f32(&a, &a, 3)
+    let expected: F32 = 1.0
+    let eps: F32 = 0.001
+    assert(approx_eq_f32(result, expected, eps), "F32 cosine similarity of identical should be 1.0")
+    return 0
+}
+
+@test
+func test_cosine_similarity_f32_orthogonal() -> I32 {
+    var a: [F32; 2] = [1.0, 0.0]
+    var b: [F32; 2] = [0.0, 1.0]
+    let result: F32 = cosine_similarity_f32(&a, &b, 2)
+    let expected: F32 = 0.0
+    let eps: F32 = 0.001
+    assert(approx_eq_f32(result, expected, eps), "F32 orthogonal cosine should be 0")
+    return 0
+}
+
+@test
+func test_cosine_similarity_f32_opposite() -> I32 {
+    var a: [F32; 2] = [1.0, 0.0]
+    var b: [F32; 2] = [-1.0, 0.0]
+    let result: F32 = cosine_similarity_f32(&a, &b, 2)
+    let expected: F32 = -1.0
+    let eps: F32 = 0.001
+    assert(approx_eq_f32(result, expected, eps), "F32 opposite cosine should be -1")
+    return 0
+}
+
+// ============================================================================
+// Distance: F32 Euclidean Distance Tests
+// ============================================================================
+
+@test
+func test_euclidean_distance_f32_zero() -> I32 {
+    var a: [F32; 3] = [1.0, 2.0, 3.0]
+    let result: F32 = euclidean_distance_f32(&a, &a, 3)
+    let expected: F32 = 0.0
+    let eps: F32 = 0.001
+    assert(approx_eq_f32(result, expected, eps), "F32 distance to self should be 0")
+    return 0
+}
+
+@test
+func test_euclidean_distance_f32_3_4_5() -> I32 {
+    var a: [F32; 2] = [0.0, 0.0]
+    var b: [F32; 2] = [3.0, 4.0]
+    let result: F32 = euclidean_distance_f32(&a, &b, 2)
+    let expected: F32 = 5.0
+    let eps: F32 = 0.01
+    assert(approx_eq_f32(result, expected, eps), "F32 distance (3,4) should be 5")
+    return 0
+}
+
+// ============================================================================
+// Distance: F32 L2 Squared Tests
+// ============================================================================
+
+@test
+func test_l2_squared_f32_basic() -> I32 {
+    var a: [F32; 2] = [0.0, 0.0]
+    var b: [F32; 2] = [3.0, 4.0]
+    let result: F32 = l2_squared_f32(&a, &b, 2)
+    // 9 + 16 = 25
+    let expected: F32 = 25.0
+    let eps: F32 = 0.01
+    assert(approx_eq_f32(result, expected, eps), "L2 squared of (3,4) should be 25")
+    return 0
+}
+
+@test
+func test_l2_squared_f32_zero() -> I32 {
+    var a: [F32; 3] = [1.0, 2.0, 3.0]
+    let result: F32 = l2_squared_f32(&a, &a, 3)
+    let expected: F32 = 0.0
+    let eps: F32 = 0.001
+    assert(approx_eq_f32(result, expected, eps), "L2 squared to self should be 0")
+    return 0
+}
+
+// ============================================================================
+// Distance: F32 Norm Tests
+// ============================================================================
+
+@test
+func test_norm_f32_basic() -> I32 {
+    var v: [F32; 2] = [3.0, 4.0]
+    let result: F32 = norm_f32(&v, 2)
+    let expected: F32 = 5.0
+    let eps: F32 = 0.01
+    assert(approx_eq_f32(result, expected, eps), "F32 norm of [3,4] should be 5")
+    return 0
+}
+
+@test
+func test_norm_f32_unit() -> I32 {
+    var v: [F32; 3] = [1.0, 0.0, 0.0]
+    let result: F32 = norm_f32(&v, 3)
+    let expected: F32 = 1.0
+    let eps: F32 = 0.001
+    assert(approx_eq_f32(result, expected, eps), "F32 norm of unit vector should be 1")
+    return 0
+}
+
+// ============================================================================
+// Distance: F32 Normalize Tests
+// ============================================================================
+
+@test
+func test_normalize_f32_makes_unit() -> I32 {
+    var v: [F32; 3] = [3.0, 4.0, 0.0]
+    normalize_f32(&v, 3)
+    let n: F32 = norm_f32(&v, 3)
+    let expected: F32 = 1.0
+    let eps: F32 = 0.001
+    assert(approx_eq_f32(n, expected, eps), "F32 normalized vector should have norm 1.0")
+    return 0
+}
+
+@test
+func test_normalize_f32_preserves_direction() -> I32 {
+    var v: [F32; 2] = [3.0, 4.0]
+    var original: [F32; 2] = [3.0, 4.0]
+    normalize_f32(&v, 2)
+    let sim: F32 = cosine_similarity_f32(&v, &original, 2)
+    let expected: F32 = 1.0
+    let eps: F32 = 0.001
+    assert(approx_eq_f32(sim, expected, eps), "F32 normalized should preserve direction")
+    return 0
+}
+
+// ============================================================================
+// BM25: Index Lifecycle Tests
+// ============================================================================
+
+@test
+func test_bm25_create_and_size() -> I32 {
+    var idx = Bm25Index.create()
+    assert_eq(idx.size(), 0, "new index should have size 0")
+    assert(not idx.is_built(), "new index should not be built")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_add_and_build() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "hello world")
+    idx.add_text(1, "goodbye world")
+    idx.build()
+    assert_eq(idx.size(), 2, "index should have 2 documents")
+    assert(idx.is_built(), "index should be built after build()")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_add_multiple() -> I32 {
+    var idx = Bm25Index.create()
+    var i: U32 = 0
+    loop (i < 10) {
+        idx.add_text(i, "document content here")
+        i = i + 1
+    }
+    idx.build()
+    assert_eq(idx.size(), 10, "index should have 10 documents")
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// BM25: Search Tests (using module API)
+// ============================================================================
+
+@test
+func test_bm25_search_finds_fox() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "the quick brown fox jumps")
+    idx.add_text(1, "hello world program")
+    idx.add_text(2, "fox hunting forest")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("fox", 10)
+    assert(results.len() >= 2, "search for 'fox' should find at least 2 docs")
+
+    let first: Bm25Result = results.get(0)
+    assert(first.score > 0.0, "first result should have positive score")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_search_no_match() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "hello world")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("nonexistent", 10)
+    assert_eq(results.len(), 0, "search for nonexistent term should return 0")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_search_respects_limit() -> I32 {
+    var idx = Bm25Index.create()
+    var i: U32 = 0
+    loop (i < 20) {
+        idx.add_text(i, "common search term")
+        i = i + 1
+    }
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("common", 5)
+    assert(results.len() <= 5, "search with limit 5 should return at most 5")
+
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// BM25: Ranking and IDF Tests
+// ============================================================================
+
+@test
+func test_bm25_multi_field_name_boost() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_document(0, "split", "pub func split()", "Splits string", "core::str")
+    idx.add_document(1, "join", "pub func join()", "Join strings", "core::str")
+    idx.add_document(2, "contains", "pub func contains()", "Check split", "core::str")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("split", 10)
+    assert(results.len() >= 1, "should find at least 1 result for 'split'")
+    // Doc 0 has "split" in name (3x boost) so should rank first
+    let top: Bm25Result = results.get(0)
+    assert_eq(top.doc_id, 0, "doc with 'split' in name should rank first")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_idf_rare_vs_common() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "common rare")
+    idx.add_text(1, "common word")
+    idx.add_text(2, "common text")
+    idx.build()
+
+    let idf_common: F32 = idx.idf("common")
+    let idf_rare: F32 = idx.idf("rare")
+    assert(idf_rare > idf_common, "rare term should have higher IDF")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_score_descending() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "fox fox fox fox fox")
+    idx.add_text(1, "fox")
+    idx.add_text(2, "no match here")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("fox", 10)
+    assert(results.len() >= 2, "should find at least 2 results")
+
+    let r0: Bm25Result = results.get(0)
+    let r1: Bm25Result = results.get(1)
+    assert(r0.score >= r1.score, "results should be sorted by score descending")
+
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// BM25: Parameter Configuration Tests
+// ============================================================================
+
+@test
+func test_bm25_set_k1() -> I32 {
+    var idx = Bm25Index.create()
+    let k1_val: F32 = 2.0
+    idx.set_k1(k1_val)
+    idx.add_text(0, "test document content")
+    idx.add_text(1, "another test word")
+    idx.build()
+    // Should still work after changing k1
+    let results: List[Bm25Result] = idx.search("test", 10)
+    assert(results.len() >= 1, "search should work with custom k1")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_set_b() -> I32 {
+    var idx = Bm25Index.create()
+    let b_val: F32 = 0.5
+    idx.set_b(b_val)
+    idx.add_text(0, "hello world")
+    idx.build()
+    let results: List[Bm25Result] = idx.search("hello", 10)
+    assert(results.len() >= 1, "search should work with custom b")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_set_field_boosts() -> I32 {
+    var idx = Bm25Index.create()
+    let boost_name: F32 = 5.0
+    let boost_sig: F32 = 2.0
+    let boost_doc: F32 = 1.0
+    let boost_path: F32 = 0.3
+    idx.set_name_boost(boost_name)
+    idx.set_signature_boost(boost_sig)
+    idx.set_doc_boost(boost_doc)
+    idx.set_path_boost(boost_path)
+    idx.add_document(0, "target", "func target()", "A target function", "pkg::mod")
+    idx.add_document(1, "other", "func other()", "Mentions target", "pkg::mod")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("target", 10)
+    assert(results.len() >= 1, "should find results with custom boosts")
+    let top: Bm25Result = results.get(0)
+    assert_eq(top.doc_id, 0, "doc with 'target' in name should rank first with 5x boost")
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// BM25: Multi-word Query Tests
+// ============================================================================
+
+@test
+func test_bm25_multi_word_query() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "the quick brown fox jumps over the lazy dog")
+    idx.add_text(1, "hello world program")
+    idx.add_text(2, "quick program runs fast")
+    idx.build()
+
+    let results: List[Bm25Result] = idx.search("quick program", 10)
+    assert(results.len() >= 1, "multi-word query should find results")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_add_document_all_fields() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_document(0, "parse", "pub func parse(input: Str) -> Ast",
+        "Parses input string into an AST node", "compiler::parser")
+    idx.add_document(1, "tokenize", "pub func tokenize(src: Str) -> List[Token]",
+        "Tokenizes source code into tokens", "compiler::lexer")
+    idx.build()
+
+    // Search by name
+    let r1: List[Bm25Result] = idx.search("parse", 10)
+    assert(r1.len() >= 1, "should find 'parse' by name")
+
+    // Search by signature content
+    let r2: List[Bm25Result] = idx.search("Ast", 10)
+    assert(r2.len() >= 1, "should find by signature content 'Ast'")
+
+    // Search by doc text
+    let r3: List[Bm25Result] = idx.search("tokenizes source", 10)
+    assert(r3.len() >= 1, "should find by doc text")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_idf_unknown_term() -> I32 {
+    var idx = Bm25Index.create()
+    idx.add_text(0, "hello world")
+    idx.build()
+
+    let idf_unknown: F32 = idx.idf("zzzzzzz")
+    // IDF of unknown term should be 0 or very high
+    // (depends on implementation, just verify it doesn't crash)
+    assert(idf_unknown >= 0.0, "IDF of unknown term should be non-negative")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_bm25_destroy_null_safe() -> I32 {
+    var idx = Bm25Index.create()
+    idx.destroy()
+    // Double destroy should be safe (null check in destroy)
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// HNSW: Index Lifecycle Tests
+// ============================================================================
+
+@test
+func test_hnsw_create_and_size() -> I32 {
+    var idx = HnswIndex.create(4)
+    assert_eq(idx.size(), 0, "new index should have size 0")
+    assert_eq(idx.dims(), 4, "dims should be 4")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_insert_and_size() -> I32 {
+    var idx = HnswIndex.create(3)
+    var v1: [F32; 3] = [1.0, 0.0, 0.0]
+    var v2: [F32; 3] = [0.0, 1.0, 0.0]
+    idx.insert(0, &v1)
+    idx.insert(1, &v2)
+    assert_eq(idx.size(), 2, "index should have 2 vectors")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_set_params() -> I32 {
+    var idx = HnswIndex.create(4)
+    idx.set_params(32, 400, 100)
+    // Should not crash; params are internal
+    assert_eq(idx.dims(), 4, "dims should still be 4 after set_params")
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// HNSW: Search Tests
+// ============================================================================
+
+@test
+func test_hnsw_search_nearest() -> I32 {
+    var idx = HnswIndex.create(3)
+    // Insert 3 unit vectors along each axis
+    var v0: [F32; 3] = [1.0, 0.0, 0.0]
+    var v1: [F32; 3] = [0.0, 1.0, 0.0]
+    var v2: [F32; 3] = [0.0, 0.0, 1.0]
+    idx.insert(0, &v0)
+    idx.insert(1, &v1)
+    idx.insert(2, &v2)
+
+    // Search for something close to v0
+    var query: [F32; 3] = [0.9, 0.1, 0.0]
+    let results: List[HnswResult] = idx.search(&query, 3)
+    assert(results.len() >= 1, "should find at least 1 neighbor")
+
+    let nearest: HnswResult = results.get(0)
+    assert_eq(nearest.doc_id, 0, "nearest to [0.9,0.1,0] should be doc 0")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_search_k_limit() -> I32 {
+    var idx = HnswIndex.create(2)
+    var i: U32 = 0
+    loop (i < 10) {
+        var v: [F32; 2] = [0.0, 0.0]
+        v[0] = 1.0
+        v[1] = 0.0
+        idx.insert(i, &v)
+        i = i + 1
+    }
+
+    var q: [F32; 2] = [1.0, 0.0]
+    let results: List[HnswResult] = idx.search(&q, 3)
+    assert(results.len() <= 3, "search with k=3 should return at most 3")
+
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_distance_ascending() -> I32 {
+    var idx = HnswIndex.create(2)
+    // Insert vectors at different distances from query
+    var v0: [F32; 2] = [1.0, 0.0]
+    var v1: [F32; 2] = [0.0, 1.0]
+    var v2: [F32; 2] = [-1.0, 0.0]
+    idx.insert(0, &v0)
+    idx.insert(1, &v1)
+    idx.insert(2, &v2)
+
+    var q: [F32; 2] = [1.0, 0.0]
+    let results: List[HnswResult] = idx.search(&q, 3)
+    assert(results.len() >= 2, "should find at least 2 results")
+
+    let r0: HnswResult = results.get(0)
+    let r1: HnswResult = results.get(1)
+    assert(r0.distance <= r1.distance, "results should be sorted by distance ascending")
+
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// HNSW: TfIdfVectorizer Tests
+// ============================================================================
+
+@test
+func test_tfidf_create_and_build() -> I32 {
+    var vec = TfIdfVectorizer.create(64)
+    assert(not vec.is_built(), "new vectorizer should not be built")
+    vec.add_document(0, "hello world foo bar")
+    vec.add_document(1, "world bar baz qux")
+    vec.build()
+    assert(vec.is_built(), "vectorizer should be built after build()")
+    assert(vec.dims() > 0, "dims should be positive after build")
+    vec.destroy()
+    return 0
+}
+
+@test
+func test_tfidf_vectorize() -> I32 {
+    var vec = TfIdfVectorizer.create(64)
+    vec.add_document(0, "quick brown fox")
+    vec.add_document(1, "lazy dog sleeps")
+    vec.build()
+
+    var out: [F32; 64] = [0.0; 64]
+    let written: I32 = vec.vectorize("quick fox", &out)
+    assert(written > 0, "vectorize should write at least 1 dimension")
+
+    // At least one dimension should be nonzero
+    var has_nonzero: Bool = false
+    var i: I32 = 0
+    loop (i < written) {
+        if out[i] != 0.0 {
+            has_nonzero = true
+        }
+        i = i + 1
+    }
+    assert(has_nonzero, "vectorized output should have nonzero values")
+
+    vec.destroy()
+    return 0
+}
+
+// ============================================================================
+// HNSW: Additional Tests
+// ============================================================================
+
+@test
+func test_hnsw_max_layer() -> I32 {
+    var idx = HnswIndex.create(3)
+    var v0: [F32; 3] = [1.0, 0.0, 0.0]
+    var v1: [F32; 3] = [0.0, 1.0, 0.0]
+    var v2: [F32; 3] = [0.0, 0.0, 1.0]
+    idx.insert(0, &v0)
+    idx.insert(1, &v1)
+    idx.insert(2, &v2)
+    let layer: I32 = idx.max_layer()
+    assert(layer >= 0, "max_layer should be non-negative")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_many_vectors() -> I32 {
+    var idx = HnswIndex.create(2)
+    var i: U32 = 0
+    loop (i < 50) {
+        var v: [F32; 2] = [0.0, 0.0]
+        v[0] = 1.0
+        idx.insert(i, &v)
+        i = i + 1
+    }
+    assert_eq(idx.size(), 50, "should have 50 vectors")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_search_empty_index() -> I32 {
+    var idx = HnswIndex.create(3)
+    var q: [F32; 3] = [1.0, 0.0, 0.0]
+    let results: List[HnswResult] = idx.search(&q, 5)
+    assert_eq(results.len(), 0, "search on empty index should return 0 results")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_cosine_distance_identical() -> I32 {
+    var idx = HnswIndex.create(3)
+    var v: [F32; 3] = [1.0, 2.0, 3.0]
+    idx.insert(0, &v)
+
+    // Search with same vector
+    let results: List[HnswResult] = idx.search(&v, 1)
+    assert_eq(results.len(), 1, "should find 1 result")
+    let r: HnswResult = results.get(0)
+    assert_eq(r.doc_id, 0, "should find the inserted doc")
+    // Cosine distance to itself should be ~0
+    assert(r.distance < 0.01, "cosine distance to self should be near 0")
+    idx.destroy()
+    return 0
+}
+
+@test
+func test_hnsw_destroy_null_safe() -> I32 {
+    var idx = HnswIndex.create(4)
+    idx.destroy()
+    // Double destroy should be safe
+    idx.destroy()
+    return 0
+}
+
+// ============================================================================
+// HNSW: Additional TF-IDF Tests
+// ============================================================================
+
+@test
+func test_tfidf_dims_matches_max() -> I32 {
+    var vec = TfIdfVectorizer.create(32)
+    vec.add_document(0, "alpha beta gamma delta epsilon")
+    vec.add_document(1, "zeta eta theta iota kappa")
+    vec.build()
+    let d: I32 = vec.dims()
+    assert(d > 0, "dims should be positive")
+    assert(d <= 32, "dims should not exceed max_dims")
+    vec.destroy()
+    return 0
+}
+
+@test
+func test_tfidf_vectorize_unknown_text() -> I32 {
+    var vec = TfIdfVectorizer.create(64)
+    vec.add_document(0, "hello world")
+    vec.add_document(1, "foo bar baz")
+    vec.build()
+
+    // Vectorize text with no overlap to training corpus
+    var out: [F32; 64] = [0.0; 64]
+    let written: I32 = vec.vectorize("zzzzz qqqqq", &out)
+    assert(written > 0, "should still return dims even for unknown text")
+    vec.destroy()
+    return 0
+}
+
+@test
+func test_tfidf_destroy_null_safe() -> I32 {
+    var vec = TfIdfVectorizer.create(64)
+    vec.destroy()
+    // Double destroy should be safe
+    vec.destroy()
+    return 0
+}
+
+// ============================================================================
+// HNSW: End-to-End TF-IDF + HNSW Pipeline
+// ============================================================================
+
+@test
+func test_tfidf_hnsw_pipeline() -> I32 {
+    // Build vocabulary
+    var vectorizer = TfIdfVectorizer.create(32)
+    vectorizer.add_document(0, "quick brown fox jumps over lazy dog")
+    vectorizer.add_document(1, "hello world program example code")
+    vectorizer.add_document(2, "fox runs through the forest quickly")
+    vectorizer.build()
+
+    let d: I32 = vectorizer.dims()
+    assert(d > 0, "vectorizer should have positive dims")
+
+    // Create HNSW index with matching dimensions
+    var hnsw = HnswIndex.create(d)
+
+    // Vectorize and insert each document
+    var v0: [F32; 32] = [0.0; 32]
+    vectorizer.vectorize("quick brown fox jumps over lazy dog", &v0)
+    hnsw.insert(0, &v0)
+
+    var v1: [F32; 32] = [0.0; 32]
+    vectorizer.vectorize("hello world program example code", &v1)
+    hnsw.insert(1, &v1)
+
+    var v2: [F32; 32] = [0.0; 32]
+    vectorizer.vectorize("fox runs through the forest quickly", &v2)
+    hnsw.insert(2, &v2)
+
+    assert_eq(hnsw.size(), 3, "hnsw should have 3 vectors")
+
+    // Search for "fox" - should find docs 0 and 2
+    var query_vec: [F32; 32] = [0.0; 32]
+    vectorizer.vectorize("fox", &query_vec)
+    let results: List[HnswResult] = hnsw.search(&query_vec, 3)
+    assert(results.len() >= 1, "should find at least 1 result for 'fox'")
+
+    hnsw.destroy()
+    vectorizer.destroy()
+    return 0
+}

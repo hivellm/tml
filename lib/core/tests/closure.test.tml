@@ -1,0 +1,282 @@
+// Consolidated tests for core::closure (14 tests)
+
+use test
+use core::iter::*
+
+// === Fn Traits: Callable Types ===
+
+// Note: The Fn/FnMut/FnOnce traits are defined in core::ops::function but
+// implementing them requires tuple type arguments (e.g., Fn[(I32,)]) which
+// the parser doesn't fully support yet. These tests show the callable pattern
+// works with manually-defined methods.
+
+// A simple callable struct
+pub type Adder {
+    amount: I32
+}
+
+impl Adder {
+    // Manual call method (equivalent to Fn::call)
+    pub func call(this, x: I32) -> I32 {
+        return x + this.amount
+    }
+
+    // Method that mutates state (equivalent to FnMut::call_mut)
+    pub func call_mut(mut this, x: I32) -> I32 {
+        this.amount = this.amount + 1
+        return x + this.amount
+    }
+}
+
+// Counter with mutable state
+pub type Counter {
+    count: I32
+}
+
+impl Counter {
+    pub func call_mut(mut this) -> I32 {
+        this.count = this.count + 1
+        return this.count
+    }
+
+    pub func current(this) -> I32 {
+        return this.count
+    }
+}
+
+@test
+func test_adder_call() -> I32 {
+    let adder: Adder = Adder { amount: 10 }
+    let result: I32 = adder.call(5)
+    assert_eq(result, 15, "10 + 5 should be 15")
+    return 0
+}
+
+@test
+func test_adder_multiple_calls() -> I32 {
+    let adder: Adder = Adder { amount: 7 }
+    let r1: I32 = adder.call(3)
+    let r2: I32 = adder.call(4)
+    assert_eq(r1, 10, "7 + 3 should be 10")
+    assert_eq(r2, 11, "7 + 4 should be 11")
+    return 0
+}
+
+@test
+func test_adder_call_mut() -> I32 {
+    var adder: Adder = Adder { amount: 10 }
+    // First call: amount becomes 11, returns 5 + 11 = 16
+    let r1: I32 = adder.call_mut(5)
+    // Second call: amount becomes 12, returns 5 + 12 = 17
+    let r2: I32 = adder.call_mut(5)
+    assert_eq(r1, 16, "first call should return 16")
+    assert_eq(r2, 17, "second call should return 17")
+    return 0
+}
+
+@test
+func test_counter() -> I32 {
+    var counter: Counter = Counter { count: 0 }
+    let c1: I32 = counter.call_mut()
+    let c2: I32 = counter.call_mut()
+    let c3: I32 = counter.call_mut()
+    assert_eq(c1, 1, "first call should return 1")
+    assert_eq(c2, 2, "second call should return 2")
+    assert_eq(c3, 3, "third call should return 3")
+    assert_eq(counter.current(), 3, "current count should be 3")
+    return 0
+}
+
+// === Fn Traits: Function Pointer in Struct ===
+
+pub type Transformer {
+    f: func(I32) -> I32
+}
+
+@test
+func test_closure_in_transformer() -> I32 {
+    let double: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    let t: Transformer = Transformer { f: double }
+    let mapper: func(I32) -> I32 = t.f
+    let result: I32 = mapper(21)
+    assert_eq(result, 42, "21 * 2 should be 42")
+    return 0
+}
+
+// NOTE: test_closure_with_capture is disabled because TML doesn't support
+// storing capturing closures in struct fields yet. The closure signature
+// includes captures (e.g., func(capture, I32) -> I32) but struct fields
+// only store func(I32) -> I32, losing capture information.
+// This works with direct calls but not when stored in struct fields.
+// See: capturing closures work with direct calls (test_closure_with_capture_direct)
+
+// === Fn Simple: Higher-Order Functions ===
+
+// Higher-order function that takes a function pointer
+pub func apply(f: func(I32) -> I32, x: I32) -> I32 {
+    return f(x)
+}
+
+@test
+func test_higher_order_function() -> I32 {
+    let triple: func(I32) -> I32 = do(x: I32) -> I32 { x * 3 }
+    let result: I32 = apply(triple, 7)
+    assert_eq(result, 21, "7 * 3 should be 21")
+    return 0
+}
+
+@test
+func test_inline_closure() -> I32 {
+    let result: I32 = apply(do(x: I32) -> I32 { x + 10 }, 5)
+    assert_eq(result, 15, "5 + 10 should be 15")
+    return 0
+}
+
+// === Simple: Basic Closure ===
+
+@test
+func test_closure_direct() -> I32 {
+    let double: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    let result: I32 = double(5)
+    assert_eq(result, 10, "5 * 2 should be 10")
+    return 0
+}
+
+// === Field: Closure in Struct Field ===
+
+pub type FuncHolder {
+    f: func(I32) -> I32
+}
+
+@test
+func test_closure_in_field() -> I32 {
+    let double: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    let holder: FuncHolder = FuncHolder { f: double }
+
+    // Extract function from field and call
+    let mapper: func(I32) -> I32 = holder.f
+    let result: I32 = mapper(5)
+    assert_eq(result, 10, "5 * 2 should be 10")
+    return 0
+}
+
+// === Iter: Closure with Iterator Adapters ===
+
+// Map adapter for OnceI32
+pub type MapOnceI32 {
+    iter: OnceI32,
+    f: func(I32) -> I32
+}
+
+impl MapOnceI32 {
+    pub func next(mut this) -> Maybe[I32] {
+        let result: Maybe[I32] = this.iter.next()
+        when result {
+            Just(x) => {
+                let mapper: func(I32) -> I32 = this.f
+                return Just(mapper(x))
+            },
+            Nothing => return Nothing
+        }
+        return Nothing
+    }
+}
+
+pub func map_once_i32(iter: OnceI32, f: func(I32) -> I32) -> MapOnceI32 {
+    return MapOnceI32 { iter: iter, f: f }
+}
+
+// Map adapter for RepeatNI32
+pub type MapRepeatNI32 {
+    iter: RepeatNI32,
+    f: func(I32) -> I32
+}
+
+impl MapRepeatNI32 {
+    pub func next(mut this) -> Maybe[I32] {
+        let result: Maybe[I32] = this.iter.next()
+        when result {
+            Just(x) => {
+                let mapper: func(I32) -> I32 = this.f
+                return Just(mapper(x))
+            },
+            Nothing => return Nothing
+        }
+        return Nothing
+    }
+}
+
+pub func map_repeat_n_i32(iter: RepeatNI32, f: func(I32) -> I32) -> MapRepeatNI32 {
+    return MapRepeatNI32 { iter: iter, f: f }
+}
+
+@test
+func test_map_once_double() -> I32 {
+    let once: OnceI32 = once_i32(7)
+    let double: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    var mapped: MapOnceI32 = map_once_i32(once, double)
+
+    when mapped.next() {
+        Just(n) => assert_eq(n, 14, "7 * 2 should be 14"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_map_once_square() -> I32 {
+    let once: OnceI32 = once_i32(5)
+    let square: func(I32) -> I32 = do(x: I32) -> I32 { x * x }
+    var mapped: MapOnceI32 = map_once_i32(once, square)
+
+    when mapped.next() {
+        Just(n) => assert_eq(n, 25, "5^2 should be 25"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_map_repeat_n() -> I32 {
+    let repeat: RepeatNI32 = repeat_n_i32(3, 3)  // Repeat 3 three times
+    let triple: func(I32) -> I32 = do(x: I32) -> I32 { x * 3 }
+    var mapped: MapRepeatNI32 = map_repeat_n_i32(repeat, triple)
+
+    // First should return 9
+    when mapped.next() {
+        Just(n) => assert_eq(n, 9, "3 * 3 should be 9"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_closure_with_addition() -> I32 {
+    let once: OnceI32 = once_i32(10)
+    let add_five: func(I32) -> I32 = do(x: I32) -> I32 { x + 5 }
+    var mapped: MapOnceI32 = map_once_i32(once, add_five)
+
+    when mapped.next() {
+        Just(n) => assert_eq(n, 15, "10 + 5 should be 15"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_identity_closure() -> I32 {
+    let once: OnceI32 = once_i32(42)
+    let identity: func(I32) -> I32 = do(x: I32) -> I32 { x }
+    var mapped: MapOnceI32 = map_once_i32(once, identity)
+
+    when mapped.next() {
+        Just(n) => assert_eq(n, 42, "identity should return 42"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}

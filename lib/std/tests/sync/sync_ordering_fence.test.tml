@@ -1,0 +1,9 @@
+// Tests for compiler_fence
+// BLOCKED: compiler_fence intrinsic emits @tml_compiler_fence instead of LLVM intrinsic
+use test
+
+@test
+func test_compiler_fence_placeholder() -> I32 {
+    // compiler_fence(Ordering::SeqCst) — blocked by intrinsic codegen
+    return 0
+}

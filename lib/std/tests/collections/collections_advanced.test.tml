@@ -1,0 +1,484 @@
+// Consolidated collections tests: ArrayList, HashSet, Queue, Stack, LinkedList
+// Total @test count: 41
+// Sources: arraylist.test.tml, arraylist_ops.test.tml, arraylist_add_range.test.tml,
+//          hashset.test.tml, queue.test.tml, stack.test.tml,
+//          class_coverage.test.tml, linkedlist_coverage.test.tml
+use test
+use std::collections::class_collections::{ArrayList, HashSet, Queue, Stack, LinkedList}
+
+// ============================================================================
+// ArrayList Basic Operations (from arraylist.test.tml)
+// ============================================================================
+
+@test
+func test_arraylist_create() -> I32 {
+    let list: ArrayList[I32] = ArrayList::create()
+    assert_eq(list.count(), 0 as I64, "new ArrayList is empty")
+    assert(list.is_empty(), "new ArrayList is_empty")
+    return 0
+}
+
+@test
+func test_arraylist_add_get() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(10 as I32)
+    list.add(20 as I32)
+    list.add(30 as I32)
+    assert_eq(list.count(), 3 as I64, "count after 3 adds")
+    assert_eq(list.get(0 as I64), 10 as I32, "get(0) is 10")
+    assert_eq(list.get(1 as I64), 20 as I32, "get(1) is 20")
+    assert_eq(list.get(2 as I64), 30 as I32, "get(2) is 30")
+    return 0
+}
+
+@test
+func test_arraylist_set_clear() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(1 as I32)
+    list.add(2 as I32)
+    list.set(0 as I64, 99 as I32)
+    assert_eq(list.get(0 as I64), 99 as I32, "set updates value")
+    list.clear()
+    assert(list.is_empty(), "clear empties list")
+    return 0
+}
+
+// ============================================================================
+// ArrayList contains/indexOf/remove (from arraylist_ops.test.tml)
+// ============================================================================
+
+@test
+func test_arraylist_contains() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(5 as I32)
+    list.add(10 as I32)
+    list.add(15 as I32)
+    assert(list.contains(10 as I32), "contains existing element")
+    assert(not list.contains(99 as I32), "not contains missing element")
+    return 0
+}
+
+@test
+func test_arraylist_index_of() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(100 as I32)
+    list.add(200 as I32)
+    list.add(300 as I32)
+    assert_eq(list.index_of(200 as I32), 1 as I64, "index_of finds element")
+    assert_eq(list.index_of(999 as I32), -1 as I64, "index_of returns -1 for missing")
+    return 0
+}
+
+@test
+func test_arraylist_remove() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(1 as I32)
+    list.add(2 as I32)
+    list.add(3 as I32)
+    let removed: Bool = list.remove(2 as I32)
+    assert(removed, "remove returns true")
+    assert_eq(list.count(), 2 as I64, "count after remove")
+    assert(not list.contains(2 as I32), "removed element not found")
+    return 0
+}
+
+// ============================================================================
+// ArrayList add_range (from arraylist_add_range.test.tml)
+// ============================================================================
+
+@test
+func test_arraylist_add_range() -> I32 {
+    var list1: ArrayList[I32] = ArrayList::create()
+    list1.add(1)
+    list1.add(2)
+
+    var list2: ArrayList[I32] = ArrayList::create()
+    list2.add(3)
+    list2.add(4)
+
+    list1.add_range(ref list2)
+    assert_eq(list1.count(), 4 as I64, "list1 should have 4 items after add_range")
+    return 0
+}
+
+// ============================================================================
+// ArrayList Coverage Methods (from class_coverage.test.tml)
+// ============================================================================
+
+@test
+func test_arraylist_with_capacity() -> I32 {
+    let list: ArrayList[I32] = ArrayList::with_capacity(32 as I64)
+    assert(list.is_empty(), "with_capacity creates empty list")
+    return 0
+}
+
+@test
+func test_arraylist_insert() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(10 as I32)
+    list.add(30 as I32)
+    list.insert(1 as I64, 20 as I32)
+    assert_eq(list.count(), 3 as I64, "insert increases count")
+    return 0
+}
+
+@test
+func test_arraylist_reverse() -> I32 {
+    var list: ArrayList[I32] = ArrayList::create()
+    list.add(1 as I32)
+    list.add(2 as I32)
+    list.add(3 as I32)
+    list.reverse()
+    assert_eq(list.get(0 as I64), 3 as I32, "reverse first element")
+    assert_eq(list.get(2 as I64), 1 as I32, "reverse last element")
+    return 0
+}
+
+// ============================================================================
+// HashSet Basic Operations (from hashset.test.tml)
+// ============================================================================
+
+@test
+func test_hashset_create() -> I32 {
+    let set: HashSet[I32] = HashSet::create()
+    assert_eq(set.count(), 0 as I64, "new HashSet is empty")
+    assert(set.is_empty(), "new HashSet is_empty")
+    return 0
+}
+
+@test
+func test_hashset_add_unique() -> I32 {
+    var set: HashSet[I32] = HashSet::create()
+    let added1: Bool = set.add(10 as I32)
+    assert(added1, "first add should return true")
+    let added2: Bool = set.add(10 as I32)
+    assert(not added2, "duplicate add should return false")
+    assert_eq(set.count(), 1 as I64, "count should be 1 after duplicate")
+    return 0
+}
+
+@test
+func test_hashset_contains_remove() -> I32 {
+    var set: HashSet[I32] = HashSet::create()
+    set.add(1 as I32)
+    set.add(2 as I32)
+    set.add(3 as I32)
+    assert(set.contains(2 as I32), "contains existing element")
+    assert(not set.contains(99 as I32), "not contains missing element")
+    let removed: Bool = set.remove(2 as I32)
+    assert(removed, "remove returns true")
+    assert(not set.contains(2 as I32), "removed element not found")
+    assert_eq(set.count(), 2 as I64, "count after remove")
+    return 0
+}
+
+// ============================================================================
+// HashSet Coverage Methods (from class_coverage.test.tml)
+// ============================================================================
+
+@test
+func test_hashset_with_capacity() -> I32 {
+    let s: HashSet[I64] = HashSet::with_capacity(64 as I64)
+    assert(s.is_empty(), "with_capacity creates empty set")
+    return 0
+}
+
+@test
+func test_hashset_clear() -> I32 {
+    var s: HashSet[I64] = HashSet::create()
+    s.add(1 as I64)
+    s.add(2 as I64)
+    assert_eq(s.count(), 2 as I64, "count after adds")
+    s.clear()
+    assert(s.is_empty(), "clear empties set")
+    return 0
+}
+
+// ============================================================================
+// Queue Basic Operations (from queue.test.tml)
+// ============================================================================
+
+@test
+func test_queue_create() -> I32 {
+    let q: Queue[I32] = Queue::create()
+    assert_eq(q.count(), 0 as I64, "new Queue is empty")
+    assert(q.is_empty(), "new Queue is_empty")
+    return 0
+}
+
+@test
+func test_queue_enqueue_dequeue() -> I32 {
+    var q: Queue[I32] = Queue::create()
+    q.enqueue(10 as I32)
+    q.enqueue(20 as I32)
+    q.enqueue(30 as I32)
+    assert_eq(q.count(), 3 as I64, "count after 3 enqueues")
+    let first: Maybe[I32] = q.dequeue()
+    assert(first.is_just(), "dequeue returns Just")
+    assert_eq(q.count(), 2 as I64, "count after dequeue")
+    return 0
+}
+
+@test
+func test_queue_peek_empty() -> I32 {
+    var q: Queue[I32] = Queue::create()
+    let empty: Maybe[I32] = q.peek()
+    assert(empty.is_nothing(), "peek on empty returns Nothing")
+    q.enqueue(42 as I32)
+    let val: Maybe[I32] = q.peek()
+    assert(val.is_just(), "peek on non-empty returns Just")
+    assert_eq(q.count(), 1 as I64, "peek does not remove")
+    return 0
+}
+
+// ============================================================================
+// Queue Coverage Methods (from class_coverage.test.tml, arraylist_add_range.test.tml)
+// ============================================================================
+
+@test
+func test_queue_with_capacity() -> I32 {
+    let q: Queue[I32] = Queue::with_capacity(32 as I64)
+    assert(q.is_empty(), "with_capacity creates empty queue")
+    return 0
+}
+
+@test
+func test_queue_add() -> I32 {
+    var q: Queue[I32] = Queue::create()
+    q.add(10 as I32)
+    q.add(20 as I32)
+    assert_eq(q.count(), 2 as I64, "add adds to queue")
+    return 0
+}
+
+@test
+func test_queue_clear() -> I32 {
+    var q: Queue[I32] = Queue::create()
+    q.add(1 as I32)
+    q.add(2 as I32)
+    q.clear()
+    assert(q.is_empty(), "clear empties queue")
+    return 0
+}
+
+@test
+func test_queue_remove() -> I32 {
+    var q: Queue[I64] = Queue::create()
+    q.add(10 as I64)
+    q.add(20 as I64)
+    q.add(30 as I64)
+    let removed: Bool = q.remove(20 as I64)
+    assert(removed, "remove should find and remove element")
+    return 0
+}
+
+@test
+func test_queue_contains() -> I32 {
+    var q: Queue[I64] = Queue::create()
+    q.add(10 as I64)
+    q.add(20 as I64)
+    assert(q.contains(10 as I64), "contains should find element")
+    assert(not q.contains(99 as I64), "contains should not find missing element")
+    return 0
+}
+
+@test
+func test_queue_grow() -> I32 {
+    var q: Queue[I32] = Queue::create()
+    var i: I32 = 0
+    loop (i < 20) {
+        q.enqueue(i)
+        i = i + 1
+    }
+    assert_eq(q.count(), 20 as I64, "queue should have 20 items after grow")
+    return 0
+}
+
+// ============================================================================
+// Stack Basic Operations (from stack.test.tml)
+// ============================================================================
+
+@test
+func test_stack_create() -> I32 {
+    let s: Stack[I32] = Stack::create()
+    assert_eq(s.count(), 0 as I64, "new Stack is empty")
+    assert(s.is_empty(), "new Stack is_empty")
+    return 0
+}
+
+@test
+func test_stack_push_pop() -> I32 {
+    var s: Stack[I32] = Stack::create()
+    s.push(10 as I32)
+    s.push(20 as I32)
+    s.push(30 as I32)
+    assert_eq(s.count(), 3 as I64, "count after 3 pushes")
+    let top: Maybe[I32] = s.pop()
+    assert(top.is_just(), "pop returns Just")
+    assert_eq(s.count(), 2 as I64, "count after pop")
+    return 0
+}
+
+@test
+func test_stack_peek_empty() -> I32 {
+    var s: Stack[I32] = Stack::create()
+    let empty: Maybe[I32] = s.peek()
+    assert(empty.is_nothing(), "peek on empty returns Nothing")
+    s.push(42 as I32)
+    let val: Maybe[I32] = s.peek()
+    assert(val.is_just(), "peek on non-empty returns Just")
+    assert_eq(s.count(), 1 as I64, "peek does not remove")
+    return 0
+}
+
+// ============================================================================
+// Stack Coverage Methods (from class_coverage.test.tml)
+// ============================================================================
+
+@test
+func test_stack_with_capacity() -> I32 {
+    let s: Stack[I32] = Stack::with_capacity(32 as I64)
+    assert(s.is_empty(), "with_capacity creates empty stack")
+    return 0
+}
+
+@test
+func test_stack_add() -> I32 {
+    var s: Stack[I32] = Stack::create()
+    s.add(10 as I32)
+    s.add(20 as I32)
+    assert_eq(s.count(), 2 as I64, "add adds to stack")
+    return 0
+}
+
+@test
+func test_stack_clear() -> I32 {
+    var s: Stack[I32] = Stack::create()
+    s.add(1 as I32)
+    s.add(2 as I32)
+    s.clear()
+    assert(s.is_empty(), "clear empties stack")
+    return 0
+}
+
+@test
+func test_stack_remove() -> I32 {
+    var s: Stack[I64] = Stack::create()
+    s.add(10 as I64)
+    s.add(20 as I64)
+    s.add(30 as I64)
+    let removed: Bool = s.remove(20 as I64)
+    assert(removed, "remove should find and remove element")
+    assert_eq(s.count(), 2 as I64, "count after remove")
+    return 0
+}
+
+@test
+func test_stack_contains() -> I32 {
+    var s: Stack[I64] = Stack::create()
+    s.add(10 as I64)
+    s.add(20 as I64)
+    assert(s.contains(10 as I64), "contains should find element")
+    assert(not s.contains(99 as I64), "contains should not find missing element")
+    return 0
+}
+
+// ============================================================================
+// LinkedList Operations (from linkedlist_coverage.test.tml)
+// ============================================================================
+
+@test
+func test_linkedlist_create() -> I32 {
+    let list: LinkedList[I64] = LinkedList::create()
+    assert(list.is_empty(), "new LinkedList should be empty")
+    assert_eq(list.count(), 0 as I64, "new LinkedList count is 0")
+    return 0
+}
+
+@test
+func test_linkedlist_add() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    assert_eq(list.count(), 2 as I64, "count after 2 adds")
+    assert(not list.is_empty(), "not empty after add")
+    return 0
+}
+
+@test
+func test_linkedlist_add_first_last() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add_last(10 as I64)
+    list.add_first(5 as I64)
+    list.add_last(15 as I64)
+    assert_eq(list.count(), 3 as I64, "count after add_first/add_last")
+    return 0
+}
+
+@test
+func test_linkedlist_first_last() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    list.add(30 as I64)
+    let f: Maybe[I64] = list.first()
+    assert(f.is_just(), "first should return Just")
+    let l: Maybe[I64] = list.last()
+    assert(l.is_just(), "last should return Just")
+    return 0
+}
+
+@test
+func test_linkedlist_remove_first() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    let v: Maybe[I64] = list.remove_first()
+    assert(v.is_just(), "remove_first should return Just")
+    assert_eq(list.count(), 1 as I64, "count after remove_first")
+    return 0
+}
+
+@test
+func test_linkedlist_remove_last() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    let v: Maybe[I64] = list.remove_last()
+    assert(v.is_just(), "remove_last should return Just")
+    assert_eq(list.count(), 1 as I64, "count after remove_last")
+    return 0
+}
+
+@test
+func test_linkedlist_clear() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(1 as I64)
+    list.add(2 as I64)
+    list.clear()
+    assert(list.is_empty(), "clear empties list")
+    assert_eq(list.count(), 0 as I64, "count is 0 after clear")
+    return 0
+}
+
+@test
+func test_linkedlist_contains() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    assert(list.contains(10 as I64), "contains should find 10")
+    assert(not list.contains(99 as I64), "contains should not find 99")
+    return 0
+}
+
+@test
+func test_linkedlist_remove() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    list.add(30 as I64)
+    let removed: Bool = list.remove(20 as I64)
+    assert(removed, "remove should find and remove element")
+    assert_eq(list.count(), 2 as I64, "count after remove")
+    return 0
+}

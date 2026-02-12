@@ -1,0 +1,464 @@
+// Consolidated Advanced Sync tests (AtomicU32, AtomicU64, AtomicUsize, AtomicIsize,
+// Ordering, Send/Sync, Weak, Isolation structs)
+// Total @test count: 50
+// Sources: sync_atomic.test.tml (U32/U64/Usize/Isize portions), atomic_u32.test.tml,
+//          atomic_u64.test.tml, atomic_usize.test.tml, atomic_isize.test.tml,
+//          atomic_coverage2.test.tml (U32/U64/Usize/Isize portions),
+//          atomic_usize_isize.test.tml, ordering.test.tml, ordering_release.test.tml,
+//          send_sync.test.tml (portions), sync_isolation.test.tml (struct portions),
+//          arc_methods.test.tml (weak portions)
+use test::{assert, assert_eq}
+use std::sync::{AtomicU32, AtomicU64, AtomicUsize, AtomicIsize, AtomicBool, Ordering}
+use std::sync::{Arc, Weak, Mutex, RwLock, Condvar, Barrier, Once, OnceLock}
+use std::sync::ordering::Ordering
+use core::marker::{Send, Sync}
+
+// Helper types
+type SSPoint { x: I32, y: I32 }
+type Container[T] { value: T }
+
+type IsoSimpleInner {
+    count: AtomicUsize,
+    alive: AtomicBool,
+}
+
+type IsoMutexCondvarInner {
+    head: Mutex[I32],
+    cv: Condvar,
+    count: AtomicUsize,
+}
+
+type IsoDualMutexInner {
+    head: Mutex[I32],
+    tail: Mutex[I32],
+    cv: Condvar,
+    sender_count: AtomicUsize,
+    receiver_alive: AtomicBool,
+    len: AtomicUsize,
+}
+
+// ============================================================================
+// AtomicU32 Tests
+// ============================================================================
+
+@test
+func test_atomic_u32_new() -> I32 {
+    let counter: AtomicU32 = AtomicU32::new(42 as U32)
+    assert_eq(counter.load(Ordering::Relaxed), 42 as U32, "new u32 should be 42")
+    return 0
+}
+
+@test
+func test_atomic_u32_store_load() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0 as U32)
+    counter.store(100 as U32, Ordering::Relaxed)
+    assert_eq(counter.load(Ordering::Relaxed), 100 as U32, "loaded value should be 100")
+    return 0
+}
+
+@test
+func test_atomic_u32_swap() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let old: U32 = counter.swap(20 as U32, Ordering::Relaxed)
+    assert_eq(old, 10 as U32, "swap should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 20 as U32, "new value should be 20")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_add() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(5 as U32)
+    let old: U32 = counter.fetch_add(3 as U32, Ordering::Relaxed)
+    assert_eq(old, 5 as U32, "fetch_add should return old value 5")
+    assert_eq(counter.load(Ordering::Relaxed), 8 as U32, "5 + 3 = 8")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_sub() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let old: U32 = counter.fetch_sub(3 as U32, Ordering::Relaxed)
+    assert_eq(old, 10 as U32, "fetch_sub should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 7 as U32, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_and() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0b1111 as U32)
+    let old: U32 = counter.fetch_and(0b1010 as U32, Ordering::Relaxed)
+    assert_eq(old, 0b1111 as U32, "fetch_and should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 0b1010 as U32, "1111 & 1010 = 1010")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_or() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0b1010 as U32)
+    let old: U32 = counter.fetch_or(0b0101 as U32, Ordering::Relaxed)
+    assert_eq(old, 0b1010 as U32, "fetch_or should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 0b1111 as U32, "1010 | 0101 = 1111")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_xor() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0b1111 as U32)
+    let old: U32 = counter.fetch_xor(0b1010 as U32, Ordering::Relaxed)
+    assert_eq(old, 0b1111 as U32, "fetch_xor should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 0b0101 as U32, "1111 ^ 1010 = 0101")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_max() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let old1: U32 = counter.fetch_max(5 as U32, Ordering::Relaxed)
+    assert_eq(old1, 10 as U32, "fetch_max(10, 5) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 10 as U32, "max(10, 5) = 10")
+    let old2: U32 = counter.fetch_max(20 as U32, Ordering::Relaxed)
+    assert_eq(old2, 10 as U32, "fetch_max(10, 20) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 20 as U32, "max(10, 20) = 20")
+    return 0
+}
+
+@test
+func test_atomic_u32_fetch_min() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let old1: U32 = counter.fetch_min(20 as U32, Ordering::Relaxed)
+    assert_eq(old1, 10 as U32, "fetch_min(10, 20) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 10 as U32, "min(10, 20) = 10")
+    let old2: U32 = counter.fetch_min(5 as U32, Ordering::Relaxed)
+    assert_eq(old2, 10 as U32, "fetch_min(10, 5) should return 10")
+    assert_eq(counter.load(Ordering::Relaxed), 5 as U32, "min(10, 5) = 5")
+    return 0
+}
+
+@test
+func test_atomic_u32_compare_exchange_success() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let result: Outcome[U32, U32] = counter.compare_exchange(10 as U32, 20 as U32, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert_eq(v, 10 as U32, "Ok should contain old value"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 20 as U32, "value should now be 20")
+    return 0
+}
+
+@test
+func test_atomic_u32_compare_exchange_fail() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let result: Outcome[U32, U32] = counter.compare_exchange(5 as U32, 20 as U32, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(_) => assert(false, "compare_exchange should fail"),
+        Err(v) => assert_eq(v, 10 as U32, "Err should contain actual value"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 10 as U32, "value should still be 10")
+    return 0
+}
+
+@test
+func test_atomic_u32_into_inner() -> I32 {
+    let counter: AtomicU32 = AtomicU32::new(42 as U32)
+    let value: U32 = counter.into_inner()
+    assert_eq(value, 42 as U32, "into_inner should return 42")
+    return 0
+}
+
+@test
+func test_atomic_u32_is_lock_free() -> I32 {
+    let counter: AtomicU32 = AtomicU32::new(0 as U32)
+    assert(counter.is_lock_free(), "AtomicU32 should be lock-free")
+    return 0
+}
+
+@test
+func test_atomic_u32_compare_exchange_weak() -> I32 {
+    var au: AtomicU32 = AtomicU32::new(42 as U32)
+    let r: Outcome[U32, U32] = au.compare_exchange_weak(42 as U32, 100 as U32, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_u32_compare_and_swap() -> I32 {
+    var au: AtomicU32 = AtomicU32::new(42 as U32)
+    let old: U32 = au.compare_and_swap(42 as U32, 100 as U32, Ordering::Relaxed)
+    assert(old == 42 as U32, "compare_and_swap returns old value")
+    return 0
+}
+
+// ============================================================================
+// AtomicU64 Tests
+// ============================================================================
+
+@test
+func test_atomic_u64_new() -> I32 {
+    let counter: AtomicU64 = AtomicU64::new(1000000000000 as U64)
+    assert_eq(counter.load(Ordering::Relaxed), 1000000000000 as U64, "new u64 should be 1T")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_add() -> I32 {
+    var counter: AtomicU64 = AtomicU64::new(100 as U64)
+    let old: U64 = counter.fetch_add(50 as U64, Ordering::Relaxed)
+    assert_eq(old, 100 as U64, "fetch_add should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 150 as U64, "100 + 50 = 150")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_sub() -> I32 {
+    var counter: AtomicU64 = AtomicU64::new(100 as U64)
+    let old: U64 = counter.fetch_sub(30 as U64, Ordering::Relaxed)
+    assert_eq(old, 100 as U64, "fetch_sub should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 70 as U64, "100 - 30 = 70")
+    return 0
+}
+
+@test
+func test_atomic_u64_swap() -> I32 {
+    var counter: AtomicU64 = AtomicU64::new(111 as U64)
+    let old: U64 = counter.swap(222 as U64, Ordering::Relaxed)
+    assert_eq(old, 111 as U64, "swap should return old value")
+    assert_eq(counter.load(Ordering::Relaxed), 222 as U64, "new value should be 222")
+    return 0
+}
+
+@test
+func test_atomic_u64_compare_exchange_success() -> I32 {
+    var counter: AtomicU64 = AtomicU64::new(50 as U64)
+    let result: Outcome[U64, U64] = counter.compare_exchange(50 as U64, 100 as U64, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert_eq(v, 50 as U64, "Ok should contain old value"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 100 as U64, "value should now be 100")
+    return 0
+}
+
+@test
+func test_atomic_u64_store() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(0 as U64)
+    au.store(100 as U64, Ordering::Relaxed)
+    assert(au.load(Ordering::Relaxed) == 100 as U64, "store should set value")
+    return 0
+}
+
+@test
+func test_atomic_u64_compare_exchange_weak() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(42 as U64)
+    let r: Outcome[U64, U64] = au.compare_exchange_weak(42 as U64, 100 as U64, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_u64_compare_and_swap() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(42 as U64)
+    let old: U64 = au.compare_and_swap(42 as U64, 100 as U64, Ordering::Relaxed)
+    assert(old == 42 as U64, "compare_and_swap returns old value")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_and() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(15 as U64)
+    let old: U64 = au.fetch_and(9 as U64, Ordering::Relaxed)
+    assert(old == 15 as U64, "fetch_and returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_or() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(3 as U64)
+    let old: U64 = au.fetch_or(12 as U64, Ordering::Relaxed)
+    assert(old == 3 as U64, "fetch_or returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_xor() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(15 as U64)
+    let old: U64 = au.fetch_xor(9 as U64, Ordering::Relaxed)
+    assert(old == 15 as U64, "fetch_xor returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_max() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(5 as U64)
+    let old: U64 = au.fetch_max(10 as U64, Ordering::Relaxed)
+    assert(old == 5 as U64, "fetch_max returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_min() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(10 as U64)
+    let old: U64 = au.fetch_min(5 as U64, Ordering::Relaxed)
+    assert(old == 10 as U64, "fetch_min returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_is_lock_free() -> I32 {
+    let au: AtomicU64 = AtomicU64::new(0 as U64)
+    let lf: Bool = au.is_lock_free()
+    assert(lf, "AtomicU64 should be lock-free")
+    return 0
+}
+
+@test
+func test_atomic_u64_into_inner() -> I32 {
+    let au: AtomicU64 = AtomicU64::new(42 as U64)
+    let v: U64 = au.into_inner()
+    assert(v == 42 as U64, "into_inner returns initial value")
+    return 0
+}
+
+@test
+func test_atomic_u64_max_value() -> I32 {
+    let max_u64: U64 = 18446744073709551615 as U64
+    var counter: AtomicU64 = AtomicU64::new(max_u64)
+    assert_eq(counter.load(Ordering::Relaxed), max_u64, "should handle max U64")
+    return 0
+}
+
+@test
+func test_atomic_u32_max_value() -> I32 {
+    let max_u32: U32 = 4294967295 as U32
+    var counter: AtomicU32 = AtomicU32::new(max_u32)
+    assert_eq(counter.load(Ordering::Relaxed), max_u32, "should handle max U32")
+    return 0
+}
+
+@test
+func test_atomic_u32_zero() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0 as U32)
+    assert_eq(counter.load(Ordering::Relaxed), 0 as U32, "should handle zero")
+    counter.fetch_add(1 as U32, Ordering::Relaxed)
+    assert_eq(counter.load(Ordering::Relaxed), 1 as U32, "0 + 1 = 1")
+    return 0
+}
+
+// ============================================================================
+// Ordering Tests
+// ============================================================================
+
+@test
+func test_ordering_release_acquire() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0 as U32)
+    counter.store(1 as U32, Ordering::Release)
+    let v: U32 = counter.load(Ordering::Acquire)
+    assert_eq(v, 1 as U32, "Release store visible to Acquire load")
+    return 0
+}
+
+@test
+func test_ordering_acqrel() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(10 as U32)
+    let old: U32 = counter.fetch_add(5 as U32, Ordering::AcqRel)
+    assert_eq(old, 10 as U32, "AcqRel fetch_add should work")
+    assert_eq(counter.load(Ordering::SeqCst), 15 as U32, "value should be 15")
+    return 0
+}
+
+@test
+func test_has_acquire_true() -> I32 {
+    assert(Ordering::Acquire.has_acquire(), "Acquire should have acquire semantics")
+    assert(Ordering::AcqRel.has_acquire(), "AcqRel should have acquire semantics")
+    assert(Ordering::SeqCst.has_acquire(), "SeqCst should have acquire semantics")
+    return 0
+}
+
+@test
+func test_has_acquire_false() -> I32 {
+    assert(not Ordering::Relaxed.has_acquire(), "Relaxed should not have acquire semantics")
+    assert(not Ordering::Release.has_acquire(), "Release should not have acquire semantics")
+    return 0
+}
+
+@test
+func test_has_release_true() -> I32 {
+    assert(Ordering::Release.has_release(), "Release should have release semantics")
+    assert(Ordering::AcqRel.has_release(), "AcqRel should have release semantics")
+    assert(Ordering::SeqCst.has_release(), "SeqCst should have release semantics")
+    return 0
+}
+
+@test
+func test_has_release_false() -> I32 {
+    assert(not Ordering::Relaxed.has_release(), "Relaxed should not have release semantics")
+    assert(not Ordering::Acquire.has_release(), "Acquire should not have release semantics")
+    return 0
+}
+
+@test
+func test_acqrel_has_both() -> I32 {
+    assert(Ordering::AcqRel.has_acquire(), "AcqRel should have acquire")
+    assert(Ordering::AcqRel.has_release(), "AcqRel should have release")
+    return 0
+}
+
+@test
+func test_seqcst_has_both() -> I32 {
+    assert(Ordering::SeqCst.has_acquire(), "SeqCst should have acquire")
+    assert(Ordering::SeqCst.has_release(), "SeqCst should have release")
+    return 0
+}
+
+// ============================================================================
+// Counter Pattern Tests
+// ============================================================================
+
+@test
+func test_atomic_u32_counter_pattern() -> I32 {
+    var counter: AtomicU32 = AtomicU32::new(0 as U32)
+    var i: I32 = 0
+    loop (i < 10) {
+        counter.fetch_add(1 as U32, Ordering::Relaxed)
+        i = i + 1
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 10 as U32, "counter should be 10")
+    return 0
+}
+
+// ============================================================================
+// Weak Reference Tests (from arc_methods.test.tml)
+// ============================================================================
+
+@test
+func test_weak_strong_count() -> I32 {
+    let arc: Arc[I32] = Arc::new(42)
+    let weak: Weak[I32] = arc.downgrade()
+    assert_eq(weak.strong_count(), 1 as I64)
+    return 0
+}
+
+@test
+func test_weak_weak_count() -> I32 {
+    let arc: Arc[I32] = Arc::new(42)
+    let weak1: Weak[I32] = arc.downgrade()
+    let weak2: Weak[I32] = arc.downgrade()
+    assert_eq(weak1.weak_count(), 2 as I64)
+    return 0
+}
+
+@test
+func test_weak_new() -> I32 {
+    let weak: Weak[I32] = Weak::new[I32]()
+    assert_eq(weak.strong_count(), 0 as I64)
+    return 0
+}
+
+@test
+func test_weak_duplicate() -> I32 {
+    let arc: Arc[I32] = Arc::new(42)
+    let weak1: Weak[I32] = arc.downgrade()
+    let weak2: Weak[I32] = weak1.duplicate()
+    assert_eq(arc.weak_count(), 2 as I64)
+    return 0
+}

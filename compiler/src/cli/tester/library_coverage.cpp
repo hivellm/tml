@@ -6,6 +6,7 @@
 #include "log/log.hpp"
 #include "tester_internal.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <regex>
 #include <set>
@@ -1498,44 +1499,98 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
     }
     std::sort(non_library_functions.begin(), non_library_functions.end());
 
-    // Generate JSON summary alongside the HTML report
+    // Generate JSON coverage report — designed to be actionable for planning next tests.
+    // Key data: per-module coverage with uncovered function lists, sorted by impact.
     fs::path json_path = fs::path(output_path).replace_extension(".json");
     std::ofstream json_file(json_path);
     if (json_file.is_open()) {
         json_file << "{\n";
-        json_file << "  \"library_functions\": " << total_funcs << ",\n";
-        json_file << "  \"library_covered\": " << total_covered << ",\n";
-        json_file << "  \"library_coverage_percent\": " << std::fixed << std::setprecision(2)
+
+        // --- Summary ---
+        json_file << "  \"summary\": {\n";
+        json_file << "    \"library_functions\": " << total_funcs << ",\n";
+        json_file << "    \"library_covered\": " << total_covered << ",\n";
+        json_file << "    \"coverage_percent\": " << std::fixed << std::setprecision(2)
                   << overall_pct << ",\n";
-        json_file << "  \"total_functions_called\": " << covered_functions.size() << ",\n";
-        json_file << "  \"non_library_functions_called\": " << non_library_functions.size()
-                  << ",\n";
-        json_file << "  \"tests_passed\": " << tml_tests << ",\n";
-        json_file << "  \"test_files\": " << tml_files << ",\n";
-        json_file << "  \"test_suites\": " << tml_suites << ",\n";
-        json_file << "  \"duration_ms\": " << test_stats.total_duration_ms << ",\n";
-        json_file << "  \"modules_100_percent\": " << full_coverage << ",\n";
-        json_file << "  \"modules_partial\": " << partial_coverage << ",\n";
-        json_file << "  \"modules_zero_coverage\": " << zero_coverage << ",\n";
-        json_file << "  \"suites\": [\n";
-        for (size_t i = 0; i < test_stats.suites.size(); ++i) {
-            const auto& suite = test_stats.suites[i];
-            json_file << "    {\"name\": \"" << suite.name << "\", \"tests\": " << suite.test_count
-                      << ", \"duration_ms\": " << suite.duration_ms << "}";
-            if (i + 1 < test_stats.suites.size())
-                json_file << ",";
-            json_file << "\n";
+        json_file << "    \"modules_full\": " << full_coverage << ",\n";
+        json_file << "    \"modules_partial\": " << partial_coverage << ",\n";
+        json_file << "    \"modules_zero\": " << zero_coverage << ",\n";
+        json_file << "    \"tests_passed\": " << tml_tests << ",\n";
+        json_file << "    \"test_files\": " << tml_files << ",\n";
+        json_file << "    \"duration_ms\": " << test_stats.total_duration_ms << "\n";
+        json_file << "  },\n";
+
+        // --- Modules: sorted by uncovered count descending (highest impact first) ---
+        // Build sorted list: zero-coverage first, then partial, then full
+        struct ModuleEntry {
+            std::string name;
+            int total;
+            int covered;
+            double percent;
+            std::vector<std::string> uncovered;
+        };
+        std::vector<ModuleEntry> sorted_modules;
+        for (const auto& mod : modules) {
+            if (mod.functions.empty())
+                continue;
+            ModuleEntry entry;
+            entry.name = mod.name;
+            entry.total = static_cast<int>(mod.functions.size());
+            entry.covered = mod.covered_count;
+            entry.percent = entry.total > 0 ? (100.0 * entry.covered / entry.total) : 0.0;
+            entry.uncovered = mod.uncovered_functions;
+            sorted_modules.push_back(std::move(entry));
         }
-        json_file << "  ],\n";
-        // Add non-library functions for debugging
-        json_file << "  \"non_library_functions\": [\n";
-        for (size_t i = 0; i < non_library_functions.size(); ++i) {
-            json_file << "    \"" << non_library_functions[i] << "\"";
-            if (i + 1 < non_library_functions.size())
+        // Sort by uncovered count descending (most impactful modules first)
+        std::sort(sorted_modules.begin(), sorted_modules.end(),
+                  [](const ModuleEntry& a, const ModuleEntry& b) {
+                      int a_uncov = a.total - a.covered;
+                      int b_uncov = b.total - b.covered;
+                      if (a_uncov != b_uncov)
+                          return a_uncov > b_uncov;
+                      return a.name < b.name;
+                  });
+
+        json_file << "  \"modules\": [\n";
+        for (size_t i = 0; i < sorted_modules.size(); ++i) {
+            const auto& mod = sorted_modules[i];
+            int uncovered_count = mod.total - mod.covered;
+            json_file << "    {\n";
+            json_file << "      \"name\": \"" << mod.name << "\",\n";
+            json_file << "      \"total\": " << mod.total << ",\n";
+            json_file << "      \"covered\": " << mod.covered << ",\n";
+            json_file << "      \"uncovered\": " << uncovered_count << ",\n";
+            json_file << "      \"percent\": " << std::fixed << std::setprecision(1) << mod.percent
+                      << ",\n";
+
+            // List uncovered functions — this is the actionable data
+            json_file << "      \"uncovered_functions\": [";
+            if (!mod.uncovered.empty()) {
+                json_file << "\n";
+                for (size_t j = 0; j < mod.uncovered.size(); ++j) {
+                    // Escape quotes in function names
+                    std::string escaped = mod.uncovered[j];
+                    size_t pos = 0;
+                    while ((pos = escaped.find('"', pos)) != std::string::npos) {
+                        escaped.replace(pos, 1, "\\\"");
+                        pos += 2;
+                    }
+                    json_file << "        \"" << escaped << "\"";
+                    if (j + 1 < mod.uncovered.size())
+                        json_file << ",";
+                    json_file << "\n";
+                }
+                json_file << "      ";
+            }
+            json_file << "]\n";
+
+            json_file << "    }";
+            if (i + 1 < sorted_modules.size())
                 json_file << ",";
             json_file << "\n";
         }
         json_file << "  ]\n";
+
         json_file << "}\n";
         json_file.close();
     }

@@ -1,0 +1,323 @@
+// Consolidated fmt advanced tests - runtime types, helpers (binary, hex, octal, char, pad)
+// Test count: 41 @test functions
+// Sources: rt_count.test.tml, rt_formatspec.test.tml, rt_argument.test.tml,
+//          binary_simple.test.tml, binary_fmt.test.tml, helpers_binary.test.tml, helpers_hex.test.tml,
+//          helpers_char.test.tml, fmt_helpers_pad.test.tml, fmt_format_methods.test.tml
+use test
+use core::fmt::rt::{Count, FormatSpec, Argument, Placeholder}
+use core::fmt::helpers::*
+
+// ============================================================================
+// Runtime Count enum tests
+// ============================================================================
+
+@test
+func test_count_is_debug() -> I32 {
+    let c: Count = Count::Is(42)
+    let dbg: Str = c.debug_string()
+    assert(dbg.len() > 0, "Count::Is debug_string should produce output")
+    return 0
+}
+
+@test
+func test_count_param_debug() -> I32 {
+    let c: Count = Count::Param(3)
+    let dbg: Str = c.debug_string()
+    assert(dbg.len() > 0, "Count::Param debug_string should produce output")
+    return 0
+}
+
+@test
+func test_count_implied_debug() -> I32 {
+    let c: Count = Count::Implied
+    let dbg: Str = c.debug_string()
+    assert(dbg.len() > 0, "Count::Implied debug_string should produce output")
+    return 0
+}
+
+// ============================================================================
+// Runtime FormatSpec tests
+// ============================================================================
+
+@test
+func test_formatspec_new_defaults() -> I32 {
+    let spec: FormatSpec = FormatSpec::new()
+    assert_eq(spec.fill, ' ', "default fill is space")
+    assert_eq(spec.alternate, false, "default alternate is false")
+    assert_eq(spec.zero_pad, false, "default zero_pad is false")
+    return 0
+}
+
+@test
+func test_formatspec_with_width() -> I32 {
+    let spec: FormatSpec = FormatSpec::with_width(10)
+    assert_eq(spec.fill, ' ', "with_width fill is space")
+    assert_eq(spec.alternate, false, "with_width alternate is false")
+    return 0
+}
+
+@test
+func test_formatspec_with_precision() -> I32 {
+    let spec: FormatSpec = FormatSpec::with_precision(5)
+    assert_eq(spec.fill, ' ', "with_precision fill is space")
+    assert_eq(spec.zero_pad, false, "with_precision zero_pad is false")
+    return 0
+}
+
+// ============================================================================
+// Runtime Argument and Placeholder tests
+// ============================================================================
+
+@test
+func test_argument_new_with() -> I32 {
+    let arg: Argument = Argument::new_with("hello")
+    assert_eq(arg.as_str(), "hello", "Argument::new_with preserves string")
+    return 0
+}
+
+@test
+func test_argument_empty() -> I32 {
+    let arg: Argument = Argument::new_with("")
+    assert_eq(arg.as_str(), "", "Argument::new_with empty string")
+    return 0
+}
+
+@test
+func test_placeholder_new() -> I32 {
+    let ph: Placeholder = Placeholder::new(0)
+    assert_eq(ph.position, 0, "Placeholder position should be 0")
+    return 0
+}
+
+// ============================================================================
+// Binary helpers - simple and conversion functions
+// ============================================================================
+
+@test
+func test_u8_binary_simple() -> I32 {
+    let x: U8 = 5
+    let s: Str = u8_to_binary_str(x)
+    assert(s.len() > 0, "should produce output")
+    return 0
+}
+
+@test
+func test_u8_to_binary_str_zero() -> I32 {
+    assert_eq(u8_to_binary_str(0 as U8), "0", "u8 0 -> '0'")
+    return 0
+}
+
+@test
+func test_u8_to_binary_str_one() -> I32 {
+    assert_eq(u8_to_binary_str(1 as U8), "1", "u8 1 -> '1'")
+    return 0
+}
+
+@test
+func test_u8_to_binary_str_255() -> I32 {
+    assert_eq(u8_to_binary_str(255 as U8), "11111111", "u8 255 -> '11111111'")
+    return 0
+}
+
+@test
+func test_u16_binary() -> I32 {
+    let s: Str = u16_to_binary_str(255 as U16)
+    assert(s.len() > 0, "U16 binary output")
+    return 0
+}
+
+@test
+func test_u32_binary() -> I32 {
+    let s: Str = u32_to_binary_str(15 as U32)
+    assert(s.len() > 0, "U32 binary output")
+    return 0
+}
+
+@test
+func test_u64_binary() -> I32 {
+    let s: Str = u64_to_binary_str(255 as U64)
+    assert(s.len() > 0, "U64 binary output")
+    return 0
+}
+
+@test
+func test_i8_binary() -> I32 {
+    let s: Str = i8_to_binary_str(42 as I8)
+    assert(s.len() > 0, "I8 binary output")
+    return 0
+}
+
+@test
+func test_i16_binary() -> I32 {
+    let s: Str = i16_to_binary_str(100 as I16)
+    assert(s.len() > 0, "I16 binary output")
+    return 0
+}
+
+@test
+func test_i32_binary() -> I32 {
+    let s: Str = i32_to_binary_str(255)
+    assert(s.len() > 0, "I32 binary output")
+    return 0
+}
+
+@test
+func test_i64_binary() -> I32 {
+    let s: Str = i64_to_binary_str(1024)
+    assert(s.len() > 0, "I64 binary output")
+    return 0
+}
+
+// ============================================================================
+// Hex helpers
+// ============================================================================
+
+@test
+func test_u64_to_hex_str_zero() -> I32 {
+    assert_eq(u64_to_hex_str(0 as U64, false), "0", "hex 0 -> '0'")
+    return 0
+}
+
+@test
+func test_u64_to_hex_str_255_lower() -> I32 {
+    assert_eq(u64_to_hex_str(255 as U64, false), "ff", "hex 255 lower -> 'ff'")
+    return 0
+}
+
+@test
+func test_u64_to_hex_str_255_upper() -> I32 {
+    assert_eq(u64_to_hex_str(255 as U64, true), "FF", "hex 255 upper -> 'FF'")
+    return 0
+}
+
+// ============================================================================
+// Char/digit helpers
+// ============================================================================
+
+@test
+func test_digit_to_char_0() -> I32 {
+    assert_eq(digit_to_char(0), "0", "digit_to_char(0) -> '0'")
+    return 0
+}
+
+@test
+func test_digit_to_char_9() -> I32 {
+    assert_eq(digit_to_char(9), "9", "digit_to_char(9) -> '9'")
+    return 0
+}
+
+@test
+func test_digit_to_char_invalid() -> I32 {
+    assert_eq(digit_to_char(10), "?", "digit_to_char(10) -> '?'")
+    return 0
+}
+
+@test
+func test_hex_digit_10_lower() -> I32 {
+    assert_eq(hex_digit(10, false), "a", "hex_digit(10, false) -> 'a'")
+    return 0
+}
+
+@test
+func test_hex_digit_15_upper() -> I32 {
+    assert_eq(hex_digit(15, true), "F", "hex_digit(15, true) -> 'F'")
+    return 0
+}
+
+@test
+func test_u64_to_octal_str_zero() -> I32 {
+    assert_eq(u64_to_octal_str(0 as U64), "0", "octal 0 -> '0'")
+    return 0
+}
+
+@test
+func test_u64_to_octal_str_8() -> I32 {
+    assert_eq(u64_to_octal_str(8 as U64), "10", "octal 8 -> '10'")
+    return 0
+}
+
+@test
+func test_u64_to_octal_str_63() -> I32 {
+    assert_eq(u64_to_octal_str(63 as U64), "77", "octal 63 -> '77'")
+    return 0
+}
+
+@test
+func test_repeat_string_basic() -> I32 {
+    assert_eq(repeat_string("ab", 3), "ababab", "repeat 'ab' 3 times")
+    return 0
+}
+
+@test
+func test_repeat_string_zero() -> I32 {
+    assert_eq(repeat_string("x", 0), "", "repeat 0 times -> empty")
+    return 0
+}
+
+// ============================================================================
+// Pad/sign/escape helpers
+// ============================================================================
+
+@test
+func test_pad_center_short() -> I32 {
+    let r: Str = pad_center("hi", 6 as I64, " ")
+    assert_eq(r, "  hi  ", "pad_center hi to 6")
+    return 0
+}
+
+@test
+func test_pad_center_already_wide() -> I32 {
+    let r: Str = pad_center("hello", 3 as I64, " ")
+    assert_eq(r, "hello", "pad_center no change if already wide")
+    return 0
+}
+
+@test
+func test_format_with_sign_minus_only() -> I32 {
+    let r: Str = format_with_sign(42 as I64, 0)
+    assert_eq(r, "42", "positive, minus-only mode")
+    let neg: Str = format_with_sign(-7 as I64, 0)
+    assert_eq(neg, "-7", "negative, minus-only mode")
+    return 0
+}
+
+@test
+func test_format_with_sign_plus() -> I32 {
+    let r: Str = format_with_sign(42 as I64, 1)
+    assert_eq(r, "+42", "positive with plus sign")
+    return 0
+}
+
+@test
+func test_format_with_sign_space() -> I32 {
+    let r: Str = format_with_sign(42 as I64, 2)
+    assert_eq(r, " 42", "positive with space sign")
+    return 0
+}
+
+@test
+func test_escape_string() -> I32 {
+    let r: Str = escape_string("hello")
+    assert_eq(r, "hello", "escape_string returns string as-is")
+    return 0
+}
+
+@test
+func test_escape_char() -> I32 {
+    let r: Str = escape_char('A')
+    assert(r.len() > 0, "escape_char returns a string")
+    return 0
+}
+
+// ============================================================================
+// Placeholder fmt (documenting blocked functions)
+// ============================================================================
+
+@test
+func test_placeholder_fmt() -> I32 {
+    // This test documents blocked fmt functions
+    // NOTE: fmt_binary/octal/hex/exp all have undefined symbol codegen errors
+    // NOTE: Maybe/Outcome to_string has type mismatch in inner type codegen
+    // Only primitive to_string() and debug_string() are testable (covered in other files)
+    return 0
+}

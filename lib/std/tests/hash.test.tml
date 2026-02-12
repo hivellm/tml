@@ -1,0 +1,467 @@
+// Consolidated tests for std::hash (51 tests)
+
+use test
+use test::{assert, assert_eq}
+use std::collections::Buffer
+use std::hash::{fnv1a32, fnv1a64, murmur2_32, murmur2_64, Hash32, Hash64}
+use std::hash::{etag_weak, etag_strong}
+use std::hash::{fnv1a32_bytes, fnv1a64_bytes, murmur2_32_bytes, murmur2_64_bytes}
+use std::hash::{etag_strong_bytes, etag_weak_bytes}
+
+// =============================================================================
+// FNV-1a 32-bit Tests (from fast_hash.test.tml)
+// =============================================================================
+
+@test
+func test_fnv1a32_empty_string() -> I32 {
+    let hash: Hash32 = fnv1a32("")
+    // Empty string should hash to FNV offset basis
+    assert_eq(hash.to_hex(), "811c9dc5", "fnv1a32 empty string")
+    return 0
+}
+
+@test
+func test_fnv1a32_hello() -> I32 {
+    let hash: Hash32 = fnv1a32("hello")
+    // Known FNV-1a 32-bit hash of "hello"
+    assert_eq(hash.to_hex(), "4f9f2cab", "fnv1a32 hello")
+    return 0
+}
+
+@test
+func test_fnv1a32_deterministic() -> I32 {
+    let hash1: Hash32 = fnv1a32("test")
+    let hash2: Hash32 = fnv1a32("test")
+    assert_eq(hash1.raw(), hash2.raw(), "fnv1a32 should be deterministic")
+    return 0
+}
+
+@test
+func test_fnv1a32_different_inputs() -> I32 {
+    let hash1: Hash32 = fnv1a32("hello")
+    let hash2: Hash32 = fnv1a32("world")
+    assert(hash1.raw() != hash2.raw(), "different inputs should produce different hashes")
+    return 0
+}
+
+// =============================================================================
+// FNV-1a 64-bit Tests (from fast_hash.test.tml)
+// =============================================================================
+
+@test
+func test_fnv1a64_empty_string() -> I32 {
+    let hash: Hash64 = fnv1a64("")
+    // Empty string should hash to FNV offset basis
+    assert_eq(hash.to_hex(), "cbf29ce484222325", "fnv1a64 empty string")
+    return 0
+}
+
+@test
+func test_fnv1a64_hello() -> I32 {
+    let hash: Hash64 = fnv1a64("hello")
+    // Known FNV-1a 64-bit hash of "hello"
+    assert_eq(hash.to_hex(), "a430d84680aabd0b", "fnv1a64 hello")
+    return 0
+}
+
+@test
+func test_fnv1a64_deterministic() -> I32 {
+    let hash1: Hash64 = fnv1a64("test")
+    let hash2: Hash64 = fnv1a64("test")
+    assert_eq(hash1.raw(), hash2.raw(), "fnv1a64 should be deterministic")
+    return 0
+}
+
+@test
+func test_fnv1a64_hex_length() -> I32 {
+    let hash: Hash64 = fnv1a64("any string")
+    let hex: Str = hash.to_hex()
+    assert_eq(hex.len(), 16 as I64, "fnv1a64 hex should be 16 chars")
+    return 0
+}
+
+// =============================================================================
+// MurmurHash2 32-bit Tests (from fast_hash.test.tml)
+// =============================================================================
+
+@test
+func test_murmur2_32_empty_string() -> I32 {
+    let hash: Hash32 = murmur2_32("", 0 as U32)
+    // Empty string with seed 0
+    let hex: Str = hash.to_hex()
+    assert_eq(hex.len(), 8 as I64, "murmur2_32 hex should be 8 chars")
+    return 0
+}
+
+@test
+func test_murmur2_32_hello() -> I32 {
+    let hash: Hash32 = murmur2_32("hello", 0 as U32)
+    let hex: Str = hash.to_hex()
+    assert_eq(hex.len(), 8 as I64, "murmur2_32 hex should be 8 chars")
+    return 0
+}
+
+@test
+func test_murmur2_32_different_seeds() -> I32 {
+    let hash1: Hash32 = murmur2_32("hello", 0 as U32)
+    let hash2: Hash32 = murmur2_32("hello", 42 as U32)
+    assert(hash1.raw() != hash2.raw(), "different seeds should produce different hashes")
+    return 0
+}
+
+@test
+func test_murmur2_32_deterministic() -> I32 {
+    let hash1: Hash32 = murmur2_32("test", 123 as U32)
+    let hash2: Hash32 = murmur2_32("test", 123 as U32)
+    assert_eq(hash1.raw(), hash2.raw(), "murmur2_32 should be deterministic")
+    return 0
+}
+
+// =============================================================================
+// MurmurHash2 64-bit Tests (from fast_hash.test.tml)
+// =============================================================================
+
+@test
+func test_murmur2_64_empty_string() -> I32 {
+    let hash: Hash64 = murmur2_64("", 0 as U64)
+    let hex: Str = hash.to_hex()
+    assert_eq(hex.len(), 16 as I64, "murmur2_64 hex should be 16 chars")
+    return 0
+}
+
+@test
+func test_murmur2_64_hello() -> I32 {
+    let hash: Hash64 = murmur2_64("hello", 0 as U64)
+    let hex: Str = hash.to_hex()
+    assert_eq(hex.len(), 16 as I64, "murmur2_64 hex should be 16 chars")
+    return 0
+}
+
+@test
+func test_murmur2_64_different_seeds() -> I32 {
+    let hash1: Hash64 = murmur2_64("hello", 0 as U64)
+    let hash2: Hash64 = murmur2_64("hello", 42 as U64)
+    assert(hash1.raw() != hash2.raw(), "different seeds should produce different hashes")
+    return 0
+}
+
+@test
+func test_murmur2_64_deterministic() -> I32 {
+    let hash1: Hash64 = murmur2_64("test", 123 as U64)
+    let hash2: Hash64 = murmur2_64("test", 123 as U64)
+    assert_eq(hash1.raw(), hash2.raw(), "murmur2_64 should be deterministic")
+    return 0
+}
+
+// =============================================================================
+// ETag Helper Tests (from fast_hash.test.tml)
+// =============================================================================
+
+@test
+func test_etag_weak_format() -> I32 {
+    let etag: Str = etag_weak("Hello, World!")
+    // Should be in format: W/"<hash>"
+    assert(etag.starts_with("W/\""), "weak etag should start with W/\"")
+    assert(etag.ends_with("\""), "etag should end with quote")
+    return 0
+}
+
+@test
+func test_etag_strong_format() -> I32 {
+    let etag: Str = etag_strong("Hello, World!")
+    // Should be in format: "<hash>"
+    assert(etag.starts_with("\""), "strong etag should start with quote")
+    assert(etag.ends_with("\""), "etag should end with quote")
+    assert(not etag.starts_with("W/"), "strong etag should not start with W/")
+    return 0
+}
+
+@test
+func test_etag_deterministic() -> I32 {
+    let etag1: Str = etag_strong("content")
+    let etag2: Str = etag_strong("content")
+    assert_eq(etag1, etag2, "etags should be deterministic")
+    return 0
+}
+
+@test
+func test_etag_different_content() -> I32 {
+    let etag1: Str = etag_strong("content1")
+    let etag2: Str = etag_strong("content2")
+    assert(etag1 != etag2, "different content should produce different etags")
+    return 0
+}
+
+// =============================================================================
+// Hash32/Hash64 Conversion Tests (from fast_hash.test.tml)
+// =============================================================================
+
+@test
+func test_hash32_to_i64() -> I32 {
+    let hash: Hash32 = fnv1a32("test")
+    let i64_val: I64 = hash.to_i64()
+    assert(i64_val == (hash.raw() as I64), "to_i64 should return same value as raw cast")
+    return 0
+}
+
+@test
+func test_hash64_raw() -> I32 {
+    let hash: Hash64 = fnv1a64("test")
+    let raw: U64 = hash.raw()
+    assert(raw != (0 as U64), "hash should not be zero for non-empty input")
+    return 0
+}
+
+// =============================================================================
+// FNV-1a Additional Tests (from hash_fnv.test.tml)
+// =============================================================================
+
+@test
+func test_fnv1a32_basic() -> I32 {
+    let h: Hash32 = fnv1a32("hello")
+    let val: U32 = h.raw()
+    assert(val > 0 as U32, "fnv1a32 should produce non-zero hash")
+    return 0
+}
+
+@test
+func test_fnv1a32_hex() -> I32 {
+    let h: Hash32 = fnv1a32("hello")
+    let hex: Str = h.to_hex()
+    assert(hex.len() > 0, "fnv1a32 to_hex should produce non-empty string")
+    return 0
+}
+
+@test
+func test_fnv1a32_to_i64() -> I32 {
+    let h: Hash32 = fnv1a32("hello")
+    let val: I64 = h.to_i64()
+    assert(val > 0, "fnv1a32 to_i64 should be positive")
+    return 0
+}
+
+@test
+func test_fnv1a32_different_inputs_2() -> I32 {
+    let h1: Hash32 = fnv1a32("hello")
+    let h2: Hash32 = fnv1a32("world")
+    assert(h1.raw() != h2.raw(), "different inputs should produce different hashes")
+    return 0
+}
+
+@test
+func test_fnv1a32_deterministic_2() -> I32 {
+    let h1: Hash32 = fnv1a32("test")
+    let h2: Hash32 = fnv1a32("test")
+    assert(h1.raw() == h2.raw(), "same input should produce same hash")
+    return 0
+}
+
+@test
+func test_fnv1a32_empty_string_2() -> I32 {
+    let h: Hash32 = fnv1a32("")
+    let val: U32 = h.raw()
+    // Empty string should still produce a valid hash (the offset basis)
+    assert(true, "fnv1a32 empty string should not crash")
+    return 0
+}
+
+@test
+func test_fnv1a64_basic() -> I32 {
+    let h: Hash64 = fnv1a64("hello")
+    let val: U64 = h.raw()
+    assert(val > 0 as U64, "fnv1a64 should produce non-zero hash")
+    return 0
+}
+
+@test
+func test_fnv1a64_hex() -> I32 {
+    let h: Hash64 = fnv1a64("hello")
+    let hex: Str = h.to_hex()
+    assert(hex.len() > 0, "fnv1a64 to_hex should produce non-empty string")
+    return 0
+}
+
+@test
+func test_fnv1a64_to_i64() -> I32 {
+    let h: Hash64 = fnv1a64("hello")
+    let _val: I64 = h.to_i64()
+    // Value may be negative due to U64->I64 cast, just verify no crash
+    assert(true, "fnv1a64 to_i64 should not crash")
+    return 0
+}
+
+@test
+func test_fnv1a64_different_inputs_2() -> I32 {
+    let h1: Hash64 = fnv1a64("hello")
+    let h2: Hash64 = fnv1a64("world")
+    assert(h1.raw() != h2.raw(), "different inputs should produce different hashes")
+    return 0
+}
+
+@test
+func test_fnv1a64_deterministic_2() -> I32 {
+    let h1: Hash64 = fnv1a64("test")
+    let h2: Hash64 = fnv1a64("test")
+    assert(h1.raw() == h2.raw(), "same input should produce same hash")
+    return 0
+}
+
+// =============================================================================
+// Murmur2 Additional Tests (from hash_murmur_etag.test.tml)
+// =============================================================================
+
+@test
+func test_murmur2_32_basic() -> I32 {
+    let h: Hash32 = murmur2_32("hello", 0 as U32)
+    let val: U32 = h.raw()
+    assert(val > 0 as U32, "murmur2_32 should produce non-zero hash")
+    return 0
+}
+
+@test
+func test_murmur2_32_hex() -> I32 {
+    let h: Hash32 = murmur2_32("hello", 0 as U32)
+    let hex: Str = h.to_hex()
+    assert(hex.len() > 0, "murmur2_32 to_hex should produce non-empty string")
+    return 0
+}
+
+@test
+func test_murmur2_32_different_seeds_2() -> I32 {
+    let h1: Hash32 = murmur2_32("hello", 0 as U32)
+    let h2: Hash32 = murmur2_32("hello", 42 as U32)
+    assert(h1.raw() != h2.raw(), "different seeds should produce different hashes")
+    return 0
+}
+
+@test
+func test_murmur2_32_deterministic_2() -> I32 {
+    let h1: Hash32 = murmur2_32("test", 100 as U32)
+    let h2: Hash32 = murmur2_32("test", 100 as U32)
+    assert(h1.raw() == h2.raw(), "same input and seed should produce same hash")
+    return 0
+}
+
+@test
+func test_murmur2_64_basic() -> I32 {
+    let h: Hash64 = murmur2_64("hello", 0 as U64)
+    let val: U64 = h.raw()
+    assert(val > 0 as U64, "murmur2_64 should produce non-zero hash")
+    return 0
+}
+
+@test
+func test_murmur2_64_hex() -> I32 {
+    let h: Hash64 = murmur2_64("hello", 0 as U64)
+    let hex: Str = h.to_hex()
+    assert(hex.len() > 0, "murmur2_64 to_hex should produce non-empty string")
+    return 0
+}
+
+@test
+func test_murmur2_64_different_seeds_2() -> I32 {
+    let h1: Hash64 = murmur2_64("hello", 0 as U64)
+    let h2: Hash64 = murmur2_64("hello", 42 as U64)
+    assert(h1.raw() != h2.raw(), "different seeds should produce different hashes")
+    return 0
+}
+
+@test
+func test_murmur2_64_to_i64() -> I32 {
+    let h: Hash64 = murmur2_64("hello", 0 as U64)
+    let _val: I64 = h.to_i64()
+    assert(true, "murmur2_64 to_i64 should not crash")
+    return 0
+}
+
+// =============================================================================
+// ETag Additional Tests (from hash_murmur_etag.test.tml)
+// =============================================================================
+
+@test
+func test_etag_weak() -> I32 {
+    let etag: Str = etag_weak("Hello, World!")
+    assert(etag.len() > 0, "etag_weak should produce non-empty string")
+    return 0
+}
+
+@test
+func test_etag_strong() -> I32 {
+    let etag: Str = etag_strong("Hello, World!")
+    assert(etag.len() > 0, "etag_strong should produce non-empty string")
+    return 0
+}
+
+@test
+func test_etag_weak_deterministic() -> I32 {
+    let e1: Str = etag_weak("test content")
+    let e2: Str = etag_weak("test content")
+    assert(e1.len() == e2.len(), "same content should produce same etag length")
+    return 0
+}
+
+@test
+func test_etag_strong_deterministic() -> I32 {
+    let e1: Str = etag_strong("test content")
+    let e2: Str = etag_strong("test content")
+    assert(e1.len() == e2.len(), "same content should produce same etag length")
+    return 0
+}
+
+// =============================================================================
+// Bytes-based Hash Functions (from hash_bytes_coverage.test.tml)
+// =============================================================================
+
+@test
+func test_fnv1a32_bytes_basic() -> I32 {
+    let buf: Buffer = Buffer::from_string("hello")
+    let hash: Hash32 = fnv1a32_bytes(buf)
+    let hex: Str = hash.to_hex()
+    assert(hex.len() > 0, "fnv1a32_bytes should produce hex output")
+    return 0
+}
+
+@test
+func test_fnv1a64_bytes_basic() -> I32 {
+    let buf: Buffer = Buffer::from_string("hello")
+    let hash: Hash64 = fnv1a64_bytes(buf)
+    let hex: Str = hash.to_hex()
+    assert(hex.len() > 0, "fnv1a64_bytes should produce hex output")
+    return 0
+}
+
+@test
+func test_murmur2_32_bytes_basic() -> I32 {
+    let buf: Buffer = Buffer::from_string("hello")
+    let hash: Hash32 = murmur2_32_bytes(buf, 0 as U32)
+    let hex: Str = hash.to_hex()
+    assert(hex.len() > 0, "murmur2_32_bytes should produce hex output")
+    return 0
+}
+
+@test
+func test_murmur2_64_bytes_basic() -> I32 {
+    let buf: Buffer = Buffer::from_string("hello")
+    let hash: Hash64 = murmur2_64_bytes(buf, 0 as U64)
+    let hex: Str = hash.to_hex()
+    assert(hex.len() > 0, "murmur2_64_bytes should produce hex output")
+    return 0
+}
+
+@test
+func test_etag_strong_bytes_format() -> I32 {
+    let buf: Buffer = Buffer::from_string("content")
+    let etag: Str = etag_strong_bytes(buf)
+    assert(etag.starts_with("\""), "strong etag should start with quote")
+    assert(etag.ends_with("\""), "strong etag should end with quote")
+    return 0
+}
+
+@test
+func test_etag_weak_bytes_format() -> I32 {
+    let buf: Buffer = Buffer::from_string("content")
+    let etag: Str = etag_weak_bytes(buf)
+    assert(etag.starts_with("W/\""), "weak etag should start with W/\"")
+    assert(etag.ends_with("\""), "weak etag should end with quote")
+    return 0
+}

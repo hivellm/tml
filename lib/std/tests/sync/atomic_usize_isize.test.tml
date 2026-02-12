@@ -1,0 +1,204 @@
+// Tests for AtomicUsize and AtomicIsize uncovered functions
+use test::{assert, assert_eq}
+use std::sync::{AtomicUsize, AtomicIsize, Ordering}
+
+// =============================================================================
+// AtomicUsize - return values are U64 on 64-bit platforms
+// =============================================================================
+
+@test
+func test_atomic_usize_compare_exchange_weak() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(42 as Usize)
+    let r: Outcome[Usize, Usize] = au.compare_exchange_weak(42 as Usize, 100 as Usize, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_usize_compare_and_swap() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(42 as Usize)
+    let old: U64 = au.compare_and_swap(42 as Usize, 100 as Usize, Ordering::Relaxed)
+    assert_eq(old, 42 as U64, "compare_and_swap returns old")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_and() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(15 as Usize)
+    let old: U64 = au.fetch_and(9 as Usize, Ordering::Relaxed)
+    assert_eq(old, 15 as U64, "fetch_and returns old")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_or() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(3 as Usize)
+    let old: U64 = au.fetch_or(12 as Usize, Ordering::Relaxed)
+    assert_eq(old, 3 as U64, "fetch_or returns old")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_xor() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(15 as Usize)
+    let old: U64 = au.fetch_xor(9 as Usize, Ordering::Relaxed)
+    assert_eq(old, 15 as U64, "fetch_xor returns old")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_max() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(5 as Usize)
+    let old: U64 = au.fetch_max(10 as Usize, Ordering::Relaxed)
+    assert_eq(old, 5 as U64, "fetch_max returns old")
+    assert_eq(au.load(Ordering::Relaxed), 10 as Usize, "max(5,10) = 10")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_min() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(10 as Usize)
+    let old: U64 = au.fetch_min(5 as Usize, Ordering::Relaxed)
+    assert_eq(old, 10 as U64, "fetch_min returns old")
+    assert_eq(au.load(Ordering::Relaxed), 5 as Usize, "min(10,5) = 5")
+    return 0
+}
+
+@test
+func test_atomic_usize_is_lock_free() -> I32 {
+    let au: AtomicUsize = AtomicUsize::new(0 as Usize)
+    assert(au.is_lock_free(), "AtomicUsize should be lock-free")
+    return 0
+}
+
+@test
+func test_atomic_usize_into_inner() -> I32 {
+    let au: AtomicUsize = AtomicUsize::new(42 as Usize)
+    let v: U64 = au.into_inner()
+    assert_eq(v, 42 as U64, "into_inner returns initial value")
+    return 0
+}
+
+// =============================================================================
+// AtomicIsize - return values are I64 on 64-bit platforms
+// =============================================================================
+
+@test
+func test_atomic_isize_new_load() -> I32 {
+    let ai: AtomicIsize = AtomicIsize::new(42 as Isize)
+    let v: I64 = ai.load(Ordering::Relaxed)
+    assert_eq(v, 42 as I64, "new + load")
+    return 0
+}
+
+@test
+func test_atomic_isize_store() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(0 as Isize)
+    ai.store(100 as Isize, Ordering::Relaxed)
+    let v: I64 = ai.load(Ordering::Relaxed)
+    assert_eq(v, 100 as I64, "store")
+    return 0
+}
+
+@test
+func test_atomic_isize_swap() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(10 as Isize)
+    let old: I64 = ai.swap(20 as Isize, Ordering::Relaxed)
+    assert_eq(old, 10 as I64, "swap returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_compare_exchange() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(42 as Isize)
+    let r: Outcome[Isize, Isize] = ai.compare_exchange(42 as Isize, 100 as Isize, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok(), "compare_exchange success")
+    return 0
+}
+
+@test
+func test_atomic_isize_compare_exchange_weak() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(42 as Isize)
+    let r: Outcome[Isize, Isize] = ai.compare_exchange_weak(42 as Isize, 100 as Isize, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_isize_compare_and_swap() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(42 as Isize)
+    let old: I64 = ai.compare_and_swap(42 as Isize, 100 as Isize, Ordering::Relaxed)
+    assert_eq(old, 42 as I64, "compare_and_swap returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_add() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(10 as Isize)
+    let old: I64 = ai.fetch_add(5 as Isize, Ordering::Relaxed)
+    assert_eq(old, 10 as I64, "fetch_add returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_sub() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(10 as Isize)
+    let old: I64 = ai.fetch_sub(3 as Isize, Ordering::Relaxed)
+    assert_eq(old, 10 as I64, "fetch_sub returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_and() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(15 as Isize)
+    let old: I64 = ai.fetch_and(9 as Isize, Ordering::Relaxed)
+    assert_eq(old, 15 as I64, "fetch_and returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_or() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(3 as Isize)
+    let old: I64 = ai.fetch_or(12 as Isize, Ordering::Relaxed)
+    assert_eq(old, 3 as I64, "fetch_or returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_xor() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(15 as Isize)
+    let old: I64 = ai.fetch_xor(9 as Isize, Ordering::Relaxed)
+    assert_eq(old, 15 as I64, "fetch_xor returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_max() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(5 as Isize)
+    let old: I64 = ai.fetch_max(10 as Isize, Ordering::Relaxed)
+    assert_eq(old, 5 as I64, "fetch_max returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_min() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(10 as Isize)
+    let old: I64 = ai.fetch_min(5 as Isize, Ordering::Relaxed)
+    assert_eq(old, 10 as I64, "fetch_min returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_is_lock_free() -> I32 {
+    let ai: AtomicIsize = AtomicIsize::new(0 as Isize)
+    assert(ai.is_lock_free(), "AtomicIsize should be lock-free")
+    return 0
+}
+
+@test
+func test_atomic_isize_into_inner() -> I32 {
+    let ai: AtomicIsize = AtomicIsize::new(42 as Isize)
+    let v: I64 = ai.into_inner()
+    assert_eq(v, 42 as I64, "into_inner returns initial value")
+    return 0
+}

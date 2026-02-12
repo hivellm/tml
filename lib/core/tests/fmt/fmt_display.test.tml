@@ -1,0 +1,448 @@
+// Consolidated fmt display/debug tests - Display and Debug implementations for all primitive types
+// Test count: 50 @test functions (47 original + 3 float/str debug_string)
+// Sources: impls.test.tml, display_primitives.test.tml, debug_primitives.test.tml,
+//          fmt_to_string.test.tml, fmt_debug_string.test.tml, fmt_binary_methods.test.tml
+use test
+use core::fmt::impls
+
+// ============================================================================
+// Display tests (to_string) - from impls.test.tml
+// ============================================================================
+
+@test
+func test_display_i32() -> I32 {
+    let val: I32 = 42
+    assert_eq(val.to_string(), "42", "I32 Display")
+    let neg: I32 = -123
+    assert_eq(neg.to_string(), "-123", "I32 Display negative")
+    return 0
+}
+
+@test
+func test_display_i64() -> I32 {
+    let val: I64 = 9876543210
+    assert_eq(val.to_string(), "9876543210", "I64 Display")
+    let neg: I64 = -9876543210
+    assert_eq(neg.to_string(), "-9876543210", "I64 Display negative")
+    return 0
+}
+
+@test
+func test_display_u32() -> I32 {
+    let val: U32 = 4294967295
+    assert_eq(val.to_string(), "4294967295", "U32 Display max")
+    return 0
+}
+
+// SKIPPED: codegen bug - zext i64 to i64 is invalid
+// @test
+// func test_display_u64() -> I32 {
+//     let val: U64 = 18446744073709551615
+//     assert_eq(val.to_string(), "18446744073709551615", "U64 Display max")
+//     return 0
+// }
+
+@test
+func test_display_bool() -> I32 {
+    assert_eq(true.to_string(), "true", "Bool Display true")
+    assert_eq(false.to_string(), "false", "Bool Display false")
+    return 0
+}
+
+@test
+func test_display_str() -> I32 {
+    let s: Str = "hello world"
+    assert_eq(s.to_string(), "hello world", "Str Display")
+    return 0
+}
+
+// ============================================================================
+// Debug tests (debug_string) - from impls.test.tml
+// ============================================================================
+
+@test
+func test_debug_i32() -> I32 {
+    let val: I32 = 42
+    assert_eq(val.debug_string(), "42", "I32 Debug")
+    return 0
+}
+
+@test
+func test_debug_bool() -> I32 {
+    assert_eq(true.debug_string(), "true", "Bool Debug true")
+    assert_eq(false.debug_string(), "false", "Bool Debug false")
+    return 0
+}
+
+// SKIPPED: Str::debug_string returns different format
+// @test
+// func test_debug_str() -> I32 {
+//     let s: Str = "hello"
+//     assert_eq(s.debug_string(), "\"hello\"", "Str Debug with quotes")
+//     return 0
+// }
+
+// ============================================================================
+// Display and Debug for Maybe[T] - SKIPPED (codegen bug: zext i64 to i64)
+// ============================================================================
+
+// TODO: Fix codegen for generic type Display/Debug methods
+
+// ============================================================================
+// Display and Debug for Outcome[T, E] - SKIPPED (codegen bug)
+// ============================================================================
+
+// TODO: Fix codegen for Outcome Display/Debug
+
+// ============================================================================
+// Display and Debug for Ordering - from impls.test.tml
+// ============================================================================
+
+@test
+func test_display_ordering_less() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert_eq(o.to_string(), "Less", "Ordering Less Display")
+    return 0
+}
+
+@test
+func test_display_ordering_equal() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert_eq(o.to_string(), "Equal", "Ordering Equal Display")
+    return 0
+}
+
+@test
+func test_display_ordering_greater() -> I32 {
+    let o: Ordering = Ordering::Greater
+    assert_eq(o.to_string(), "Greater", "Ordering Greater Display")
+    return 0
+}
+
+@test
+func test_debug_ordering() -> I32 {
+    let less: Ordering = Ordering::Less
+    let equal: Ordering = Ordering::Equal
+    let greater: Ordering = Ordering::Greater
+
+    assert_eq(less.debug_string(), "Ordering::Less", "Ordering Less Debug")
+    assert_eq(equal.debug_string(), "Ordering::Equal", "Ordering Equal Debug")
+    assert_eq(greater.debug_string(), "Ordering::Greater", "Ordering Greater Debug")
+    return 0
+}
+
+// ============================================================================
+// Display for tuples - SKIPPED (tuple formatting not yet implemented)
+// ============================================================================
+
+// TODO: Implement tuple Display/Debug traits
+// @test
+// func test_display_tuple_2() -> I32 {
+//     let t: (I64, I64) = (1, 2)
+//     assert_eq(t.to_string(), "(1, 2)", "Tuple2 Display")
+//     return 0
+// }
+
+// ============================================================================
+// Float Display - from impls.test.tml
+// ============================================================================
+
+@test
+func test_display_f64() -> I32 {
+    let val: F64 = 3.14
+    let result: Str = val.to_string()
+    assert(result.len() > 0, "F64 Display should not be empty")
+    return 0
+}
+
+@test
+func test_display_f32() -> I32 {
+    let val: F32 = 2.5
+    let result: Str = val.to_string()
+    assert(result.len() > 0, "F32 Display should not be empty")
+    return 0
+}
+
+// ============================================================================
+// to_string boundary tests - from display_primitives.test.tml
+// ============================================================================
+
+@test
+func test_i8_to_string_positive() -> I32 {
+    let x: I8 = 127
+    assert_eq(x.to_string(), "127", "I8 max to_string")
+    return 0
+}
+
+@test
+func test_i8_to_string_negative_min() -> I32 {
+    let x: I8 = -128
+    assert_eq(x.to_string(), "-128", "I8 min to_string")
+    return 0
+}
+
+@test
+func test_i8_to_string_zero() -> I32 {
+    let x: I8 = 0
+    assert_eq(x.to_string(), "0", "I8 zero to_string")
+    return 0
+}
+
+@test
+func test_i16_to_string_positive() -> I32 {
+    let x: I16 = 32767
+    assert_eq(x.to_string(), "32767", "I16 max to_string")
+    return 0
+}
+
+@test
+func test_i16_to_string_negative() -> I32 {
+    let x: I16 = -32768
+    assert_eq(x.to_string(), "-32768", "I16 min to_string")
+    return 0
+}
+
+@test
+func test_i32_to_string_normal() -> I32 {
+    let x: I32 = 123456
+    assert_eq(x.to_string(), "123456", "I32 to_string")
+    return 0
+}
+
+@test
+func test_i64_to_string_large() -> I32 {
+    let x: I64 = 9876543210
+    assert_eq(x.to_string(), "9876543210", "I64 large to_string")
+    return 0
+}
+
+@test
+func test_u8_to_string_max() -> I32 {
+    let x: U8 = 255
+    assert_eq(x.to_string(), "255", "U8 max to_string")
+    return 0
+}
+
+@test
+func test_u8_to_string_zero() -> I32 {
+    let x: U8 = 0
+    assert_eq(x.to_string(), "0", "U8 zero to_string")
+    return 0
+}
+
+@test
+func test_u16_to_string_max() -> I32 {
+    let x: U16 = 65535
+    assert_eq(x.to_string(), "65535", "U16 max to_string")
+    return 0
+}
+
+@test
+func test_u32_to_string_large() -> I32 {
+    let x: U32 = 4000000000
+    assert_eq(x.to_string(), "4000000000", "U32 large to_string")
+    return 0
+}
+
+@test
+func test_u64_to_string_display() -> I32 {
+    let x: U64 = 10000000000
+    assert_eq(x.to_string(), "10000000000", "U64 to_string")
+    return 0
+}
+
+@test
+func test_f32_to_string_display() -> I32 {
+    let x: F32 = 2.5
+    let s: Str = x.to_string()
+    assert(s.len() > 0, "F32 to_string should produce output")
+    return 0
+}
+
+@test
+func test_f64_to_string_display() -> I32 {
+    let x: F64 = 3.14
+    let s: Str = x.to_string()
+    assert(s.len() > 0, "F64 to_string should produce output")
+    return 0
+}
+
+@test
+func test_bool_to_string_true() -> I32 {
+    assert_eq(true.to_string(), "true", "true to_string")
+    return 0
+}
+
+@test
+func test_bool_to_string_false() -> I32 {
+    assert_eq(false.to_string(), "false", "false to_string")
+    return 0
+}
+
+@test
+func test_str_to_string_identity() -> I32 {
+    let s: Str = "hello"
+    assert_eq(s.to_string(), "hello", "Str to_string is identity")
+    return 0
+}
+
+// Char::to_string and Unit::to_string skipped - type assignment issues
+
+// ============================================================================
+// debug_string boundary tests - from debug_primitives.test.tml
+// ============================================================================
+
+@test
+func test_i8_debug_string() -> I32 {
+    let x: I8 = 42
+    assert_eq(x.debug_string(), "42", "I8 debug_string")
+    return 0
+}
+
+@test
+func test_i8_debug_string_negative() -> I32 {
+    let x: I8 = -128
+    assert_eq(x.debug_string(), "-128", "I8 min debug_string")
+    return 0
+}
+
+@test
+func test_i16_debug_string() -> I32 {
+    let x: I16 = 32767
+    assert_eq(x.debug_string(), "32767", "I16 max debug_string")
+    return 0
+}
+
+@test
+func test_i32_debug_string() -> I32 {
+    let x: I32 = -999
+    assert_eq(x.debug_string(), "-999", "I32 debug_string")
+    return 0
+}
+
+@test
+func test_i64_debug_string() -> I32 {
+    let x: I64 = 9876543210
+    assert_eq(x.debug_string(), "9876543210", "I64 debug_string")
+    return 0
+}
+
+@test
+func test_u8_debug_string() -> I32 {
+    let x: U8 = 255
+    assert_eq(x.debug_string(), "255", "U8 max debug_string")
+    return 0
+}
+
+@test
+func test_u16_debug_string() -> I32 {
+    let x: U16 = 65535
+    assert_eq(x.debug_string(), "65535", "U16 max debug_string")
+    return 0
+}
+
+@test
+func test_u32_debug_string() -> I32 {
+    let x: U32 = 4000000000
+    assert_eq(x.debug_string(), "4000000000", "U32 debug_string")
+    return 0
+}
+
+@test
+func test_u64_debug_string() -> I32 {
+    let x: U64 = 10000000000
+    assert_eq(x.debug_string(), "10000000000", "U64 debug_string")
+    return 0
+}
+
+@test
+func test_f32_debug_string() -> I32 {
+    let a: F32 = 3.14 as F32
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "F32 debug_string")
+    return 0
+}
+
+@test
+func test_f64_debug_string() -> I32 {
+    let a: F64 = 2.71828
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "F64 debug_string")
+    return 0
+}
+
+@test
+func test_bool_debug_string_true() -> I32 {
+    assert_eq(true.debug_string(), "true", "true debug_string")
+    return 0
+}
+
+@test
+func test_bool_debug_string_false() -> I32 {
+    assert_eq(false.debug_string(), "false", "false debug_string")
+    return 0
+}
+
+@test
+func test_str_debug_string() -> I32 {
+    let a: Str = "hello"
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "Str debug_string")
+    return 0
+}
+
+// ============================================================================
+// Char to_string and debug_string - from fmt_to_string/fmt_debug_string
+// ============================================================================
+
+@test
+func test_char_to_string() -> I32 {
+    let a: Char = 'A'
+    let s: Str = a.to_string()
+    assert(s.len() > 0, "Char to_string")
+    return 0
+}
+
+@test
+func test_char_debug_string() -> I32 {
+    let a: Char = 'A'
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "Char debug_string")
+    return 0
+}
+
+// ============================================================================
+// Ordering to_string/debug_string - from fmt_binary_methods.test.tml
+// ============================================================================
+
+@test
+func test_ordering_less_to_string_v2() -> I32 {
+    let o: Ordering = Ordering::Less
+    let s: Str = o.to_string()
+    assert(s.len() > 0, "Ordering Less to_string")
+    return 0
+}
+
+@test
+func test_ordering_less_debug_string() -> I32 {
+    let o: Ordering = Ordering::Less
+    let s: Str = o.debug_string()
+    assert(s.len() > 0, "Ordering Less debug_string")
+    return 0
+}
+
+@test
+func test_ordering_equal_debug_string() -> I32 {
+    let o: Ordering = Ordering::Equal
+    let s: Str = o.debug_string()
+    assert(s.len() > 0, "Ordering Equal debug_string")
+    return 0
+}
+
+@test
+func test_ordering_greater_debug_string() -> I32 {
+    let o: Ordering = Ordering::Greater
+    let s: Str = o.debug_string()
+    assert(s.len() > 0, "Ordering Greater debug_string")
+    return 0
+}

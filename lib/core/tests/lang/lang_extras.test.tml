@@ -1,0 +1,354 @@
+// Consolidated language tests - Higher-Order Functions, Closures, Recursion
+// Total @test count: 30
+// Sources: higher_order.test.tml (10), closures_advanced.test.tml (9),
+//          recursion.test.tml (11)
+// Duplicates resolved:
+//   - apply_twice from higher_order renamed to apply_twice_hof
+//   - test_apply_twice_double from higher_order renamed to test_apply_twice_double_v2
+//   - count_matching from higher_order renamed to count_matching_arr (different signature)
+use test
+
+// =============================================================================
+// SECTION: Higher-Order Functions (from higher_order.test.tml)
+// =============================================================================
+
+// -- Function as parameter --
+
+func apply(f: func(I32) -> I32, x: I32) -> I32 {
+    return f(x)
+}
+
+func double(x: I32) -> I32 {
+    return x * 2
+}
+
+func square(x: I32) -> I32 {
+    return x * x
+}
+
+func negate(x: I32) -> I32 {
+    return 0 - x
+}
+
+@test
+func test_apply_double() -> I32 {
+    assert_eq(apply(double, 5), 10, "apply(double, 5) should be 10")
+    return 0
+}
+
+@test
+func test_apply_square() -> I32 {
+    assert_eq(apply(square, 4), 16, "apply(square, 4) should be 16")
+    return 0
+}
+
+@test
+func test_apply_negate() -> I32 {
+    assert_eq(apply(negate, 7), -7, "apply(negate, 7) should be -7")
+    return 0
+}
+
+// -- Apply twice (renamed to apply_twice_hof to avoid duplicate with closures section) --
+
+func apply_twice_hof(f: func(I32) -> I32, x: I32) -> I32 {
+    return f(f(x))
+}
+
+@test
+func test_apply_twice_double_v2() -> I32 {
+    assert_eq(apply_twice_hof(double, 3), 12, "double(double(3)) should be 12")
+    return 0
+}
+
+@test
+func test_apply_twice_square() -> I32 {
+    assert_eq(apply_twice_hof(square, 2), 16, "square(square(2)) = (2^2)^2 = 16")
+    return 0
+}
+
+// -- Predicate functions (count_matching_arr to avoid duplicate with closures section) --
+
+func count_matching_arr(arr: [I32; 5], pred: func(I32) -> Bool) -> I32 {
+    var count: I32 = 0
+    for i in 0 to 5 {
+        if pred(arr[i]) {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+func is_positive(x: I32) -> Bool {
+    return x > 0
+}
+
+func is_even(x: I32) -> Bool {
+    return x % 2 == 0
+}
+
+@test
+func test_count_positive() -> I32 {
+    let arr: [I32; 5] = [-2, -1, 0, 1, 2]
+    assert_eq(count_matching_arr(arr, is_positive), 2, "2 positive numbers")
+    return 0
+}
+
+@test
+func test_count_even() -> I32 {
+    let arr: [I32; 5] = [1, 2, 3, 4, 5]
+    assert_eq(count_matching_arr(arr, is_even), 2, "2 even numbers in [1..5]")
+    return 0
+}
+
+// -- Closure as higher-order argument --
+
+@test
+func test_closure_as_hof_arg() -> I32 {
+    let result: I32 = apply(do(x: I32) -> I32 { x + 100 }, 5)
+    assert_eq(result, 105, "closure adding 100 should give 105")
+    return 0
+}
+
+@test
+func test_closure_predicate() -> I32 {
+    let arr: [I32; 5] = [10, 20, 30, 40, 50]
+    let count: I32 = count_matching_arr(arr, do(x: I32) -> Bool { x > 25 })
+    assert_eq(count, 3, "3 values > 25 in [10,20,30,40,50]")
+    return 0
+}
+
+// -- Function composition via apply chain --
+
+@test
+func test_function_chain() -> I32 {
+    let x: I32 = 3
+    let step1: I32 = apply(double, x)     // 6
+    let step2: I32 = apply(square, step1)  // 36
+    let step3: I32 = apply(negate, step2)  // -36
+    assert_eq(step3, -36, "double then square then negate: 3->6->36->-36")
+    return 0
+}
+
+// =============================================================================
+// SECTION: Closures Advanced (from closures_advanced.test.tml)
+// =============================================================================
+
+// -- Closures as function arguments (higher-order functions) --
+
+func apply_twice(f: func(I32) -> I32, x: I32) -> I32 {
+    return f(f(x))
+}
+
+@test
+func test_apply_twice_double() -> I32 {
+    let double_cl: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    let result: I32 = apply_twice(double_cl, 3)
+    assert_eq(result, 12, "double applied twice to 3 should be 12")
+    return 0
+}
+
+@test
+func test_apply_twice_increment() -> I32 {
+    let inc: func(I32) -> I32 = do(x: I32) -> I32 { x + 1 }
+    let result: I32 = apply_twice(inc, 5)
+    assert_eq(result, 7, "increment applied twice to 5 should be 7")
+    return 0
+}
+
+// -- Closure with multiple parameters --
+
+@test
+func test_closure_two_params() -> I32 {
+    let add: func(I32, I32) -> I32 = do(a: I32, b: I32) -> I32 { a + b }
+    assert_eq(add(3, 4), 7, "add(3, 4) should be 7")
+    return 0
+}
+
+@test
+func test_closure_multiply_params() -> I32 {
+    let mul: func(I32, I32) -> I32 = do(a: I32, b: I32) -> I32 { a * b }
+    assert_eq(mul(6, 7), 42, "mul(6, 7) should be 42")
+    return 0
+}
+
+// -- Closure returning Bool (predicate) --
+
+func count_matching(pred: func(I32) -> Bool, limit: I32) -> I32 {
+    var count: I32 = 0
+    var i: I32 = 0
+    loop (i < limit) {
+        if pred(i) {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+@test
+func test_closure_predicate_even() -> I32 {
+    let is_even_cl: func(I32) -> Bool = do(x: I32) -> Bool { x % 2 == 0 }
+    let count: I32 = count_matching(is_even_cl, 10)
+    assert_eq(count, 5, "0-9 has 5 even numbers")
+    return 0
+}
+
+@test
+func test_closure_predicate_positive() -> I32 {
+    let is_positive_cl: func(I32) -> Bool = do(x: I32) -> Bool { x > 0 }
+    let count: I32 = count_matching(is_positive_cl, 5)
+    // 0,1,2,3,4 -> 1,2,3,4 positive = 4
+    assert_eq(count, 4, "0-4 has 4 positive numbers")
+    return 0
+}
+
+// -- Closure used with array.map --
+
+@test
+func test_closure_array_map_negate() -> I32 {
+    let arr: [I32; 3] = [1, 2, 3]
+    let negate_cl: func(I32) -> I32 = do(x: I32) -> I32 { 0 - x }
+    let result: [I32; 3] = arr.map(negate_cl)
+    assert_eq(result[0], -1, "negated[0] should be -1")
+    assert_eq(result[1], -2, "negated[1] should be -2")
+    assert_eq(result[2], -3, "negated[2] should be -3")
+    return 0
+}
+
+@test
+func test_closure_array_map_add_ten() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    let add_ten: func(I32) -> I32 = do(x: I32) -> I32 { x + 10 }
+    let result: [I32; 3] = arr.map(add_ten)
+    assert_eq(result[0], 20, "result[0] should be 20")
+    assert_eq(result[1], 30, "result[1] should be 30")
+    assert_eq(result[2], 40, "result[2] should be 40")
+    return 0
+}
+
+// NOTE: Closures capturing outer variables (closure factories) are a known
+// codegen limitation and tested separately when that feature is implemented.
+
+// =============================================================================
+// SECTION: Recursion (from recursion.test.tml)
+// =============================================================================
+
+// -- Basic recursion --
+
+func factorial(n: I32) -> I32 {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+@test
+func test_factorial_0() -> I32 {
+    assert_eq(factorial(0), 1, "0! should be 1")
+    return 0
+}
+
+@test
+func test_factorial_5() -> I32 {
+    assert_eq(factorial(5), 120, "5! should be 120")
+    return 0
+}
+
+@test
+func test_factorial_10() -> I32 {
+    assert_eq(factorial(10), 3628800, "10! should be 3628800")
+    return 0
+}
+
+// -- Fibonacci --
+
+func fibonacci(n: I32) -> I32 {
+    if n <= 0 {
+        return 0
+    }
+    if n == 1 {
+        return 1
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+@test
+func test_fib_0() -> I32 {
+    assert_eq(fibonacci(0), 0, "fib(0) should be 0")
+    return 0
+}
+
+@test
+func test_fib_1() -> I32 {
+    assert_eq(fibonacci(1), 1, "fib(1) should be 1")
+    return 0
+}
+
+@test
+func test_fib_10() -> I32 {
+    assert_eq(fibonacci(10), 55, "fib(10) should be 55")
+    return 0
+}
+
+// -- Recursive sum --
+
+func sum_to(n: I32) -> I32 {
+    if n <= 0 {
+        return 0
+    }
+    return n + sum_to(n - 1)
+}
+
+@test
+func test_sum_to_100() -> I32 {
+    assert_eq(sum_to(100), 5050, "sum 1..100 should be 5050")
+    return 0
+}
+
+// -- Recursive GCD (Euclidean algorithm) --
+
+func gcd(a: I32, b: I32) -> I32 {
+    if b == 0 {
+        return a
+    }
+    return gcd(b, a % b)
+}
+
+@test
+func test_gcd_12_8() -> I32 {
+    assert_eq(gcd(12, 8), 4, "gcd(12, 8) should be 4")
+    return 0
+}
+
+@test
+func test_gcd_48_18() -> I32 {
+    assert_eq(gcd(48, 18), 6, "gcd(48, 18) should be 6")
+    return 0
+}
+
+@test
+func test_gcd_same() -> I32 {
+    assert_eq(gcd(7, 7), 7, "gcd(7, 7) should be 7")
+    return 0
+}
+
+// -- Recursive power --
+
+func power(b: I32, n: I32) -> I32 {
+    if n == 0 {
+        return 1
+    }
+    return b * power(b, n - 1)
+}
+
+@test
+func test_power_2_10() -> I32 {
+    assert_eq(power(2, 10), 1024, "2^10 should be 1024")
+    return 0
+}
+
+@test
+func test_power_3_4() -> I32 {
+    assert_eq(power(3, 4), 81, "3^4 should be 81")
+    return 0
+}

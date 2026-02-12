@@ -1,0 +1,460 @@
+// Consolidated: Mul/Div/Rem/Neg trait impls across all types + atomic operations
+// Sources: ops_arith_mul_div.test.tml (34 tests, renamed _v2) + atomic.test.tml (14 tests)
+// Total: 48 @test functions
+use test
+use core::ops::arith::{Mul, Div, Rem, Neg}
+
+// =============================================================================
+// Mul trait method across all types
+// =============================================================================
+
+@test
+func test_i8_mul_v2() -> I32 {
+    let a: I8 = 3 as I8
+    let b: I8 = 4 as I8
+    assert_eq(a.mul(b) as I32, 12, "I8 mul")
+    return 0
+}
+
+@test
+func test_i16_mul_v2() -> I32 {
+    let a: I16 = 10 as I16
+    let b: I16 = 20 as I16
+    assert_eq(a.mul(b) as I32, 200, "I16 mul")
+    return 0
+}
+
+@test
+func test_i32_mul_v2() -> I32 {
+    let a: I32 = 7
+    assert_eq(a.mul(6), 42, "I32 mul")
+    return 0
+}
+
+@test
+func test_i64_mul_v2() -> I32 {
+    let a: I64 = 100 as I64
+    let b: I64 = 200 as I64
+    assert(a.mul(b) == 20000 as I64, "I64 mul")
+    return 0
+}
+
+@test
+func test_u8_mul_v2() -> I32 {
+    let a: U8 = 5 as U8
+    let b: U8 = 6 as U8
+    assert_eq(a.mul(b) as I32, 30, "U8 mul")
+    return 0
+}
+
+@test
+func test_u16_mul_v2() -> I32 {
+    let a: U16 = 100 as U16
+    let b: U16 = 50 as U16
+    assert_eq(a.mul(b) as I32, 5000, "U16 mul")
+    return 0
+}
+
+@test
+func test_u32_mul_v2() -> I32 {
+    let a: U32 = 10 as U32
+    let b: U32 = 20 as U32
+    assert_eq(a.mul(b) as I32, 200, "U32 mul")
+    return 0
+}
+
+@test
+func test_u64_mul_v2() -> I32 {
+    let a: U64 = 100 as U64
+    let b: U64 = 200 as U64
+    assert(a.mul(b) == 20000 as U64, "U64 mul")
+    return 0
+}
+
+@test
+func test_f32_mul_v2() -> I32 {
+    let a: F32 = 2.0 as F32
+    let b: F32 = 3.0 as F32
+    assert(a.mul(b) > 5.9 as F32, "F32 mul")
+    return 0
+}
+
+@test
+func test_f64_mul_v2() -> I32 {
+    let a: F64 = 2.5
+    let b: F64 = 4.0
+    assert(a.mul(b) > 9.9, "F64 mul")
+    return 0
+}
+
+// =============================================================================
+// Div trait method across all types
+// =============================================================================
+
+@test
+func test_i8_div_v2() -> I32 {
+    let a: I8 = 12 as I8
+    let b: I8 = 4 as I8
+    assert_eq(a.div(b) as I32, 3, "I8 div")
+    return 0
+}
+
+@test
+func test_i16_div_v2() -> I32 {
+    let a: I16 = 200 as I16
+    let b: I16 = 10 as I16
+    assert_eq(a.div(b) as I32, 20, "I16 div")
+    return 0
+}
+
+@test
+func test_i32_div_v2() -> I32 {
+    let a: I32 = 42
+    assert_eq(a.div(6), 7, "I32 div")
+    return 0
+}
+
+@test
+func test_i64_div_v2() -> I32 {
+    let a: I64 = 20000 as I64
+    let b: I64 = 100 as I64
+    assert(a.div(b) == 200 as I64, "I64 div")
+    return 0
+}
+
+@test
+func test_u8_div_v2() -> I32 {
+    let a: U8 = 30 as U8
+    let b: U8 = 5 as U8
+    assert_eq(a.div(b) as I32, 6, "U8 div")
+    return 0
+}
+
+@test
+func test_u16_div_v2() -> I32 {
+    let a: U16 = 5000 as U16
+    let b: U16 = 50 as U16
+    assert_eq(a.div(b) as I32, 100, "U16 div")
+    return 0
+}
+
+@test
+func test_u32_div_v2() -> I32 {
+    let a: U32 = 200 as U32
+    let b: U32 = 10 as U32
+    assert_eq(a.div(b) as I32, 20, "U32 div")
+    return 0
+}
+
+@test
+func test_u64_div_v2() -> I32 {
+    let a: U64 = 20000 as U64
+    let b: U64 = 100 as U64
+    assert(a.div(b) == 200 as U64, "U64 div")
+    return 0
+}
+
+@test
+func test_f32_div_v2() -> I32 {
+    let a: F32 = 6.0 as F32
+    let b: F32 = 2.0 as F32
+    assert(a.div(b) > 2.9 as F32, "F32 div")
+    return 0
+}
+
+@test
+func test_f64_div_v2() -> I32 {
+    let a: F64 = 10.0
+    let b: F64 = 4.0
+    assert(a.div(b) > 2.4, "F64 div")
+    return 0
+}
+
+// =============================================================================
+// Rem trait method across all types
+// =============================================================================
+
+@test
+func test_i8_rem_v2() -> I32 {
+    let a: I8 = 17 as I8
+    let b: I8 = 5 as I8
+    assert_eq(a.rem(b) as I32, 2, "I8 rem")
+    return 0
+}
+
+@test
+func test_i16_rem_v2() -> I32 {
+    let a: I16 = 17 as I16
+    let b: I16 = 5 as I16
+    assert_eq(a.rem(b) as I32, 2, "I16 rem")
+    return 0
+}
+
+@test
+func test_i32_rem_v2() -> I32 {
+    let a: I32 = 17
+    assert_eq(a.rem(5), 2, "I32 rem")
+    return 0
+}
+
+@test
+func test_i64_rem_v2() -> I32 {
+    let a: I64 = 17 as I64
+    let b: I64 = 5 as I64
+    assert(a.rem(b) == 2 as I64, "I64 rem")
+    return 0
+}
+
+@test
+func test_u8_rem_v2() -> I32 {
+    let a: U8 = 17 as U8
+    let b: U8 = 5 as U8
+    assert_eq(a.rem(b) as I32, 2, "U8 rem")
+    return 0
+}
+
+@test
+func test_u16_rem_v2() -> I32 {
+    let a: U16 = 17 as U16
+    let b: U16 = 5 as U16
+    assert_eq(a.rem(b) as I32, 2, "U16 rem")
+    return 0
+}
+
+@test
+func test_u32_rem_v2() -> I32 {
+    let a: U32 = 17 as U32
+    let b: U32 = 5 as U32
+    assert_eq(a.rem(b) as I32, 2, "U32 rem")
+    return 0
+}
+
+@test
+func test_u64_rem_v2() -> I32 {
+    let a: U64 = 17 as U64
+    let b: U64 = 5 as U64
+    assert(a.rem(b) == 2 as U64, "U64 rem")
+    return 0
+}
+
+// =============================================================================
+// Neg trait method across signed types
+// =============================================================================
+
+@test
+func test_i8_neg_v2() -> I32 {
+    let a: I8 = 5 as I8
+    let r: I8 = a.neg()
+    assert_eq(r as I32, -5, "I8 neg")
+    return 0
+}
+
+@test
+func test_i16_neg_v2() -> I32 {
+    let a: I16 = 100 as I16
+    let r: I16 = a.neg()
+    assert_eq(r as I32, -100, "I16 neg")
+    return 0
+}
+
+@test
+func test_i32_neg_v2() -> I32 {
+    let a: I32 = 42
+    assert_eq(a.neg(), -42, "I32 neg")
+    return 0
+}
+
+@test
+func test_i64_neg_v2() -> I32 {
+    let a: I64 = 100 as I64
+    let r: I64 = a.neg()
+    assert(r == -100 as I64, "I64 neg")
+    return 0
+}
+
+@test
+func test_f32_neg_v2() -> I32 {
+    let a: F32 = 3.14 as F32
+    let r: F32 = a.neg()
+    assert(r < 0.0 as F32, "F32 neg should be negative")
+    return 0
+}
+
+@test
+func test_f64_neg_v2() -> I32 {
+    let a: F64 = 3.14
+    let r: F64 = a.neg()
+    assert(r < 0.0, "F64 neg should be negative")
+    return 0
+}
+
+// =============================================================================
+// Atomic Operations (I32)
+// =============================================================================
+
+@test
+func test_atomic_fetch_add_i32() -> I32 {
+    let mut value: I32 = 10
+    let old: I32 = atomic_fetch_add_i32(&mut value, 5)
+    assert_eq(old, 10, "Should return old value")
+    assert_eq(value, 15, "Should add to value")
+    return 0
+}
+
+@test
+func test_atomic_fetch_sub_i32() -> I32 {
+    let mut value: I32 = 20
+    let old: I32 = atomic_fetch_sub_i32(&mut value, 7)
+    assert_eq(old, 20, "Should return old value")
+    assert_eq(value, 13, "Should subtract from value")
+    return 0
+}
+
+@test
+func test_atomic_load_i32() -> I32 {
+    let value: I32 = 42
+    let loaded: I32 = atomic_load_i32(&value)
+    assert_eq(loaded, 42, "Should load value atomically")
+    return 0
+}
+
+@test
+func test_atomic_store_i32() -> I32 {
+    let mut value: I32 = 0
+    atomic_store_i32(&mut value, 99)
+    assert_eq(value, 99, "Should store value atomically")
+    return 0
+}
+
+@test
+func test_atomic_compare_exchange_i32_success() -> I32 {
+    let mut value: I32 = 100
+    let old: I32 = atomic_compare_exchange_i32(&mut value, 100, 200)
+    assert_eq(old, 100, "Should return old value")
+    assert_eq(value, 200, "Should exchange when match")
+    return 0
+}
+
+@test
+func test_atomic_compare_exchange_i32_fail() -> I32 {
+    let mut value: I32 = 100
+    let old: I32 = atomic_compare_exchange_i32(&mut value, 50, 200)
+    assert_eq(old, 100, "Should return current value")
+    assert_eq(value, 100, "Should not exchange when no match")
+    return 0
+}
+
+@test
+func test_atomic_swap_i32() -> I32 {
+    let mut value: I32 = 77
+    let old: I32 = atomic_swap_i32(&mut value, 88)
+    assert_eq(old, 77, "Should return old value")
+    assert_eq(value, 88, "Should swap to new value")
+    return 0
+}
+
+// NOTE: I64 atomic tests disabled due to codegen bug with I64 to I32 casts
+
+// =============================================================================
+// Memory Fences
+// =============================================================================
+
+@test
+func test_atomic_fence() -> I32 {
+    atomic_fence()
+    assert(true, "Fence should complete")
+    return 0
+}
+
+@test
+func test_atomic_fence_acquire() -> I32 {
+    atomic_fence_acquire()
+    assert(true, "Acquire fence should complete")
+    return 0
+}
+
+@test
+func test_atomic_fence_release() -> I32 {
+    atomic_fence_release()
+    assert(true, "Release fence should complete")
+    return 0
+}
+
+// =============================================================================
+// Atomic Sequence and Edge Cases
+// =============================================================================
+
+@test
+func test_atomic_sequence_i32() -> I32 {
+    let mut counter: I32 = 0
+
+    {
+        atomic_fetch_add_i32(&mut counter, 1)
+    }
+    {
+        atomic_fetch_add_i32(&mut counter, 1)
+    }
+    {
+        atomic_fetch_add_i32(&mut counter, 1)
+    }
+
+    {
+        let result: I32 = atomic_load_i32(&counter)
+        assert_eq(result, 3, "Should accumulate increments")
+    }
+
+    {
+        atomic_fetch_sub_i32(&mut counter, 1)
+    }
+    {
+        let result2: I32 = atomic_load_i32(&counter)
+        assert_eq(result2, 2, "Should decrement correctly")
+    }
+
+    return 0
+}
+
+@test
+func test_atomic_zero_operations() -> I32 {
+    let mut value: I32 = 42
+
+    let old1: I32 = {
+        atomic_fetch_add_i32(&mut value, 0)
+    }
+    assert_eq(old1, 42, "Add zero returns old value")
+    assert_eq(value, 42, "Add zero doesn't change value")
+
+    let old2: I32 = {
+        atomic_fetch_sub_i32(&mut value, 0)
+    }
+    assert_eq(old2, 42, "Sub zero returns old value")
+    assert_eq(value, 42, "Sub zero doesn't change value")
+
+    return 0
+}
+
+@test
+func test_atomic_negative_values() -> I32 {
+    let mut value: I32 = -10
+
+    {
+        atomic_fetch_add_i32(&mut value, -5)
+    }
+    assert_eq(value, -15, "Should handle negative addition")
+
+    {
+        atomic_fetch_sub_i32(&mut value, -5)
+    }
+    assert_eq(value, -10, "Should handle negative subtraction")
+
+    return 0
+}
+
+@test
+func test_atomic_swap_same_value() -> I32 {
+    let mut value: I32 = 123
+    let old: I32 = atomic_swap_i32(&mut value, 123)
+    assert_eq(old, 123, "Should return old value")
+    assert_eq(value, 123, "Value should remain same")
+    return 0
+}

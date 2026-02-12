@@ -129,6 +129,32 @@ std::string get_debug_timestamp();
 int count_tests_in_file(const std::string& file_path);
 
 // ============================================================================
+// Diagnostic Test Types
+// ============================================================================
+
+// An expected error directive parsed from a diagnostic test file
+// Format: // @expect-error CODE [optional message pattern]
+struct DiagnosticExpectation {
+    std::string error_code;      // e.g., "T001", "B005", "P003"
+    std::string message_pattern; // Optional substring to match in error message
+    int line_number = 0;         // Line where the directive appears (for reporting)
+    bool matched = false;        // Set to true when a matching error is found
+};
+
+// Result of running a diagnostic test
+struct DiagnosticTestResult {
+    std::string file_path;
+    bool passed = false;
+    std::vector<DiagnosticExpectation> expectations;
+    std::vector<std::string> actual_errors; // Error codes actually emitted
+    std::string error_message;              // Explanation if test failed
+    int64_t duration_ms = 0;
+};
+
+// Parse @expect-error directives from a TML source file
+std::vector<DiagnosticExpectation> parse_diagnostic_expectations(const std::string& file_path);
+
+// ============================================================================
 // Discovery Functions
 // ============================================================================
 
@@ -137,6 +163,9 @@ std::vector<std::string> discover_test_files(const std::string& root_dir);
 
 // Discover benchmark files (*.bench.tml) in a directory
 std::vector<std::string> discover_bench_files(const std::string& root_dir);
+
+// Discover diagnostic test files (*.error.tml) in a directory
+std::vector<std::string> discover_diagnostic_files(const std::string& root_dir);
 
 // ============================================================================
 // Execution Functions
@@ -196,6 +225,16 @@ int run_benchmarks(const TestOptions& opts, const ColorOutput& c);
 // Run tests using suite-based DLL compilation (fewer DLLs, faster loading)
 // Returns exit code (0 = all passed, 1 = failures)
 int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestOptions& opts,
+                         TestResultCollector& collector, const ColorOutput& c);
+
+// ============================================================================
+// Diagnostic Test Execution
+// ============================================================================
+
+// Run diagnostic tests (*.error.tml) that verify compiler error messages.
+// These tests are expected to FAIL compilation with specific error codes.
+// Returns number of diagnostic test failures (0 = all passed).
+int run_diagnostic_tests(const std::vector<std::string>& diag_files, const TestOptions& opts,
                          TestResultCollector& collector, const ColorOutput& c);
 
 // ============================================================================

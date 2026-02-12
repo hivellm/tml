@@ -1,0 +1,19 @@
+// Tests for Hmac::update_bytes
+use test
+use std::crypto::hmac::{Hmac, HmacDigest}
+use std::crypto::hash::HashAlgorithm
+use std::collections::buffer::Buffer
+
+@test
+func test_hmac_update_bytes() -> I32 {
+    var h: Hmac = Hmac::create(HashAlgorithm::Sha256, "secret")
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u8(0x41, 0)
+    buf.write_u8(0x42, 1)
+    h.update_bytes(ref buf)
+    let d: HmacDigest = h.digest()
+    assert(d.len() > 0 as I64, "hmac digest should have length")
+    d.destroy()
+    buf.destroy()
+    return 0
+}

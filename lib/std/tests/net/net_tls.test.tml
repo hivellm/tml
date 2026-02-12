@@ -1,0 +1,634 @@
+//! Consolidated TLS Tests (35 @test functions)
+//!
+//! Tests for TLS types, context configuration, stream operations, and helpers.
+//! Covers TlsVersion, TlsVerifyMode, TlsContext, TlsStream error paths,
+//! and module-level helper functions (clear_errors, last_error).
+//!
+//! Consolidated from: tls.test.tml
+
+use test::{assert, assert_eq, assert_ne}
+use std::net::tls::{TlsContext, TlsStream, TlsVersion, TlsVerifyMode}
+use std::net::tls
+use std::net::error::{NetError, NetErrorKind}
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::sys::{RawSocket}
+
+// ============================================================================
+// TLS Version Tests
+// ============================================================================
+
+@test
+func test_tls_version_1_2() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_2()
+    assert_eq(v.raw(), 0x0303, "TLS 1.2 should be 0x0303")
+    print("[PASS] test_tls_version_1_2\n")
+    return 0
+}
+
+@test
+func test_tls_version_1_3() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_3()
+    assert_eq(v.raw(), 0x0304, "TLS 1.3 should be 0x0304")
+    print("[PASS] test_tls_version_1_3\n")
+    return 0
+}
+
+@test
+func test_tls_version_legacy() -> I32 {
+    let v10: TlsVersion = TlsVersion::TLS_1_0()
+    assert_eq(v10.raw(), 0x0301, "TLS 1.0 should be 0x0301")
+
+    let v11: TlsVersion = TlsVersion::TLS_1_1()
+    assert_eq(v11.raw(), 0x0302, "TLS 1.1 should be 0x0302")
+    print("[PASS] test_tls_version_legacy\n")
+    return 0
+}
+
+// ============================================================================
+// TLS Verify Mode Tests
+// ============================================================================
+
+@test
+func test_tls_verify_mode_none() -> I32 {
+    let mode: TlsVerifyMode = TlsVerifyMode::None()
+    assert_eq(mode.raw(), 0, "None should be 0")
+    print("[PASS] test_tls_verify_mode_none\n")
+    return 0
+}
+
+@test
+func test_tls_verify_mode_peer() -> I32 {
+    let mode: TlsVerifyMode = TlsVerifyMode::Peer()
+    assert_eq(mode.raw(), 1, "Peer should be 1")
+    print("[PASS] test_tls_verify_mode_peer\n")
+    return 0
+}
+
+@test
+func test_tls_verify_mode_require_client() -> I32 {
+    let mode: TlsVerifyMode = TlsVerifyMode::RequireClientCert()
+    assert_eq(mode.raw(), 2, "RequireClientCert should be 2")
+    print("[PASS] test_tls_verify_mode_require_client\n")
+    return 0
+}
+
+// ============================================================================
+// TLS Context Tests
+// ============================================================================
+
+@test
+func test_tls_client_context_creation() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            let handle: *Unit = ctx.raw_handle()
+            assert(handle != null, "Client context handle should not be null")
+            print("[PASS] test_tls_client_context_creation -> Ok (OpenSSL available)\n")
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_client_context_creation -> Err (OpenSSL should be available!)\n")
+            panic("TlsContext::client() failed unexpectedly - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_server_context_missing_cert() -> I32 {
+    let result = TlsContext::server("nonexistent.crt", "nonexistent.key")
+    when result {
+        Ok(ctx) => {
+            print("[FAIL] test_tls_server_context_missing_cert -> Ok (should have failed!)\n")
+            assert(false, "Server should fail with missing cert")
+        }
+        Err(e) => {
+            print("[PASS] test_tls_server_context_missing_cert -> Err (expected)\n")
+            assert(true, "Server context correctly rejects missing cert")
+        }
+    }
+    return 0
+}
+
+// ============================================================================
+// TLS Version to_string Tests
+// ============================================================================
+
+@test
+func test_tls_version_to_string_1_2() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_2()
+    assert_eq(v.to_string(), "TLS 1.2", "TLS 1.2 to_string")
+    print("[PASS] test_tls_version_to_string_1_2\n")
+    return 0
+}
+
+@test
+func test_tls_version_to_string_1_3() -> I32 {
+    let v: TlsVersion = TlsVersion::TLS_1_3()
+    assert_eq(v.to_string(), "TLS 1.3", "TLS 1.3 to_string")
+    print("[PASS] test_tls_version_to_string_1_3\n")
+    return 0
+}
+
+@test
+func test_tls_version_to_string_legacy() -> I32 {
+    let v10: TlsVersion = TlsVersion::TLS_1_0()
+    assert_eq(v10.to_string(), "TLS 1.0", "TLS 1.0 to_string")
+
+    let v11: TlsVersion = TlsVersion::TLS_1_1()
+    assert_eq(v11.to_string(), "TLS 1.1", "TLS 1.1 to_string")
+    print("[PASS] test_tls_version_to_string_legacy\n")
+    return 0
+}
+
+@test
+func test_tls_version_to_string_unknown() -> I32 {
+    let v: TlsVersion = TlsVersion { value: 0x9999 }
+    assert_eq(v.to_string(), "Unknown", "Unknown version to_string")
+    print("[PASS] test_tls_version_to_string_unknown\n")
+    return 0
+}
+
+// ============================================================================
+// TLS Context Configuration Tests
+// ============================================================================
+
+@test
+func test_tls_context_set_verify_mode() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            ctx.set_verify_mode(TlsVerifyMode::None())
+            ctx.set_verify_mode(TlsVerifyMode::Peer())
+            ctx.set_verify_mode(TlsVerifyMode::RequireClientCert())
+            print("[PASS] test_tls_context_set_verify_mode -> Ok\n")
+            assert(true, "set_verify_mode completed without error")
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_set_verify_mode -> client() failed!\n")
+            panic("TlsContext::client() failed unexpectedly")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_context_set_min_version() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            let min_result = ctx.set_min_version(TlsVersion::TLS_1_2())
+            when min_result {
+                Ok(u) => {
+                    print("[PASS] test_tls_context_set_min_version -> Ok\n")
+                    assert(true, "set_min_version TLS 1.2 succeeded")
+                }
+                Err(e) => {
+                    print("[FAIL] test_tls_context_set_min_version -> set_min_version returned Err\n")
+                    assert(false, "set_min_version TLS 1.2 should succeed")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_set_min_version -> client() failed!\n")
+            panic("TlsContext::client() failed unexpectedly")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_context_set_max_version() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            let max_result = ctx.set_max_version(TlsVersion::TLS_1_3())
+            when max_result {
+                Ok(u) => {
+                    print("[PASS] test_tls_context_set_max_version -> Ok\n")
+                    assert(true, "set_max_version TLS 1.3 succeeded")
+                }
+                Err(e) => {
+                    print("[FAIL] test_tls_context_set_max_version -> set_max_version returned Err\n")
+                    assert(false, "set_max_version TLS 1.3 should succeed")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_set_max_version -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_context_set_ciphers() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            let cipher_result = ctx.set_ciphers("HIGH:!aNULL:!MD5")
+            when cipher_result {
+                Ok(u) => {
+                    print("[PASS] test_tls_context_set_ciphers -> Ok\n")
+                    assert(true, "set_ciphers succeeded")
+                }
+                Err(e) => {
+                    print("[FAIL] test_tls_context_set_ciphers -> set_ciphers returned Err\n")
+                    assert(false, "set_ciphers should succeed with valid cipher string")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_set_ciphers -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_context_set_ciphersuites() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            let suite_result = ctx.set_ciphersuites("TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256")
+            when suite_result {
+                Ok(u) => {
+                    print("[PASS] test_tls_context_set_ciphersuites -> Ok\n")
+                    assert(true, "set_ciphersuites succeeded")
+                }
+                Err(e) => {
+                    print("[FAIL] test_tls_context_set_ciphersuites -> set_ciphersuites returned Err\n")
+                    assert(false, "set_ciphersuites should succeed with valid suites")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_set_ciphersuites -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_context_set_ca_file_invalid() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            let ca_result = ctx.set_ca_file("/nonexistent/ca-bundle.crt")
+            when ca_result {
+                Ok(u) => {
+                    print("[PASS] test_tls_context_set_ca_file_invalid -> set_ca_file returned Ok (platform-dependent)\n")
+                    assert(true, "set_ca_file returned ok")
+                }
+                Err(e) => {
+                    print("[PASS] test_tls_context_set_ca_file_invalid -> set_ca_file returned Err (expected)\n")
+                    assert(true, "set_ca_file correctly rejected invalid path")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_set_ca_file_invalid -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_context_raw_handle() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            let h1: *Unit = ctx.raw_handle()
+            let h2: *Unit = ctx.raw_handle()
+            assert(h1 != null, "raw_handle should not be null")
+            assert(h1 == h2, "raw_handle should return same handle")
+            print("[PASS] test_tls_context_raw_handle -> Ok\n")
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_raw_handle -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+// ============================================================================
+// Module-level Helpers
+// ============================================================================
+
+@test
+func test_tls_clear_errors() -> I32 {
+    tls::clear_errors()
+    print("[PASS] test_tls_clear_errors\n")
+    assert(true, "clear_errors completed")
+    return 0
+}
+
+@test
+func test_tls_last_error() -> I32 {
+    tls::clear_errors()
+    let err: Str = tls::last_error()
+    print("[PASS] test_tls_last_error\n")
+    assert(true, "last_error returned without crash")
+    return 0
+}
+
+// ============================================================================
+// TlsStream Error Path Tests (no real network needed)
+// ============================================================================
+
+@test
+func test_tls_stream_connect_invalid_fd() -> I32 {
+    let ctx_result = TlsContext::client()
+    when ctx_result {
+        Ok(ctx) => {
+            print("[DEBUG] test_tls_stream_connect_invalid_fd: client() -> Ok, trying connect fd=-1...\n")
+            let stream_result = TlsStream::connect(ctx, -1, "example.com")
+            when stream_result {
+                Ok(stream) => {
+                    print("[FAIL] test_tls_stream_connect_invalid_fd -> connect returned Ok (should have failed!)\n")
+                    assert(false, "connect should fail with fd=-1")
+                }
+                Err(e) => {
+                    print("[PASS] test_tls_stream_connect_invalid_fd -> connect returned Err (expected)\n")
+                    assert(true, "connect correctly failed with invalid fd")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_stream_connect_invalid_fd -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_stream_accept_invalid_fd() -> I32 {
+    let ctx_result = TlsContext::client()
+    when ctx_result {
+        Ok(ctx) => {
+            print("[DEBUG] test_tls_stream_accept_invalid_fd: client() -> Ok, trying accept fd=-1...\n")
+            let stream_result = TlsStream::accept(ctx, -1)
+            when stream_result {
+                Ok(stream) => {
+                    print("[FAIL] test_tls_stream_accept_invalid_fd -> accept returned Ok (should have failed!)\n")
+                    assert(false, "accept should fail with fd=-1")
+                }
+                Err(e) => {
+                    print("[PASS] test_tls_stream_accept_invalid_fd -> accept returned Err (expected)\n")
+                    assert(true, "accept correctly failed with invalid fd")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_stream_accept_invalid_fd -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+// ============================================================================
+// TlsStream Error Path Tests (additional)
+// ============================================================================
+
+@test
+func test_tls_stream_connect_with_hostname() -> I32 {
+    let ctx_result = TlsContext::client()
+    when ctx_result {
+        Ok(ctx) => {
+            print("[DEBUG] test_tls_stream_connect_with_hostname: client() -> Ok, trying connect fd=-1 hostname=localhost...\n")
+            let stream_result = TlsStream::connect(ctx, -1, "localhost")
+            when stream_result {
+                Ok(stream) => {
+                    print("[FAIL] test_tls_stream_connect_with_hostname -> connect returned Ok (should have failed!)\n")
+                    assert(false, "connect should fail with fd=-1")
+                }
+                Err(e) => {
+                    print("[PASS] test_tls_stream_connect_with_hostname -> connect returned Err (expected)\n")
+                    assert(true, "connect correctly failed with invalid fd and hostname")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_stream_connect_with_hostname -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_stream_connect_empty_hostname() -> I32 {
+    let ctx_result = TlsContext::client()
+    when ctx_result {
+        Ok(ctx) => {
+            print("[DEBUG] test_tls_stream_connect_empty_hostname: client() -> Ok, trying connect fd=-1 hostname=''...\n")
+            let stream_result = TlsStream::connect(ctx, -1, "")
+            when stream_result {
+                Ok(stream) => {
+                    print("[FAIL] test_tls_stream_connect_empty_hostname -> connect returned Ok (should have failed!)\n")
+                    assert(false, "connect with empty hostname and invalid fd should fail")
+                }
+                Err(e) => {
+                    print("[PASS] test_tls_stream_connect_empty_hostname -> connect returned Err (expected)\n")
+                    assert(true, "connect correctly failed")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_stream_connect_empty_hostname -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_stream_accept_error() -> I32 {
+    let ctx_result = TlsContext::client()
+    when ctx_result {
+        Ok(ctx) => {
+            print("[DEBUG] test_tls_stream_accept_error: client() -> Ok, trying accept fd=0...\n")
+            let stream_result = TlsStream::accept(ctx, 0)
+            when stream_result {
+                Ok(stream) => {
+                    print("[PASS] test_tls_stream_accept_error -> accept returned Ok (platform-dependent)\n")
+                    assert(true, "accept on fd=0 returned ok (platform-dependent)")
+                }
+                Err(e) => {
+                    print("[PASS] test_tls_stream_accept_error -> accept returned Err (expected)\n")
+                    assert(true, "accept correctly failed on invalid fd")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_stream_accept_error -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+// ============================================================================
+// TlsContext additional configuration tests
+// ============================================================================
+
+@test
+func test_tls_context_set_verify_mode_all_modes() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            ctx.set_verify_mode(TlsVerifyMode::None())
+            ctx.set_verify_mode(TlsVerifyMode::Peer())
+            ctx.set_verify_mode(TlsVerifyMode::RequireClientCert())
+            print("[PASS] test_tls_context_set_verify_mode_all_modes -> Ok\n")
+            assert(true, "set_verify_mode all modes ok")
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_set_verify_mode_all_modes -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_context_version_range() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            let min_result = ctx.set_min_version(TlsVersion::TLS_1_2())
+            when min_result {
+                Ok(u) => {
+                    let max_result = ctx.set_max_version(TlsVersion::TLS_1_3())
+                    when max_result {
+                        Ok(u2) => {
+                            print("[PASS] test_tls_context_version_range -> Ok (1.2 - 1.3)\n")
+                            assert(true, "version range TLS 1.2 - 1.3 set successfully")
+                        }
+                        Err(e) => {
+                            print("[FAIL] test_tls_context_version_range -> set_max_version Err\n")
+                            assert(false, "set_max_version should succeed")
+                        }
+                    }
+                }
+                Err(e) => {
+                    print("[FAIL] test_tls_context_version_range -> set_min_version Err\n")
+                    assert(false, "set_min_version should succeed")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_version_range -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_context_invalid_ciphers() -> I32 {
+    let result = TlsContext::client()
+    when result {
+        Ok(ctx) => {
+            let cipher_result = ctx.set_ciphers("INVALID_CIPHER_THAT_DOES_NOT_EXIST")
+            when cipher_result {
+                Ok(u) => {
+                    print("[PASS] test_tls_context_invalid_ciphers -> set_ciphers returned Ok (platform-dependent)\n")
+                    assert(true, "set_ciphers returned ok (platform-dependent)")
+                }
+                Err(e) => {
+                    print("[PASS] test_tls_context_invalid_ciphers -> set_ciphers returned Err (expected)\n")
+                    assert(true, "set_ciphers correctly rejected invalid cipher string")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_invalid_ciphers -> client() Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_context_multiple_clients() -> I32 {
+    let r1 = TlsContext::client()
+    let r2 = TlsContext::client()
+    when r1 {
+        Ok(ctx1) => {
+            when r2 {
+                Ok(ctx2) => {
+                    let h1: *Unit = ctx1.raw_handle()
+                    let h2: *Unit = ctx2.raw_handle()
+                    assert(h1 != null, "ctx1 handle should not be null")
+                    assert(h2 != null, "ctx2 handle should not be null")
+                    assert(h1 != h2, "two contexts should have different handles")
+                    print("[PASS] test_tls_context_multiple_clients -> Ok (two independent contexts)\n")
+                }
+                Err(e) => {
+                    print("[FATAL] test_tls_context_multiple_clients -> client() #2 Err (stubs)\n")
+                    panic("TlsContext::client() failed - OpenSSL not linked?")
+                }
+            }
+        }
+        Err(e) => {
+            print("[FATAL] test_tls_context_multiple_clients -> client() #1 Err (stubs)\n")
+            panic("TlsContext::client() failed - OpenSSL not linked?")
+        }
+    }
+    return 0
+}
+
+@test
+func test_tls_version_raw_values_all() -> I32 {
+    assert_eq(TlsVersion::TLS_1_0().raw(), 0x0301, "TLS 1.0")
+    assert_eq(TlsVersion::TLS_1_1().raw(), 0x0302, "TLS 1.1")
+    assert_eq(TlsVersion::TLS_1_2().raw(), 0x0303, "TLS 1.2")
+    assert_eq(TlsVersion::TLS_1_3().raw(), 0x0304, "TLS 1.3")
+    print("[PASS] test_tls_version_raw_values_all\n")
+    return 0
+}
+
+@test
+func test_tls_verify_mode_raw_values_all() -> I32 {
+    assert_eq(TlsVerifyMode::None().raw(), 0, "None")
+    assert_eq(TlsVerifyMode::Peer().raw(), 1, "Peer")
+    assert_eq(TlsVerifyMode::RequireClientCert().raw(), 2, "RequireClientCert")
+    print("[PASS] test_tls_verify_mode_raw_values_all\n")
+    return 0
+}
+
+@test
+func test_tls_version_struct_creation() -> I32 {
+    let v: TlsVersion = TlsVersion { value: 0x0305 }
+    assert_eq(v.raw(), 0x0305, "custom version raw value")
+    assert_eq(v.to_string(), "Unknown", "custom version should be Unknown")
+    print("[PASS] test_tls_version_struct_creation\n")
+    return 0
+}
+
+@test
+func test_tls_clear_errors_multiple() -> I32 {
+    tls::clear_errors()
+    tls::clear_errors()
+    tls::clear_errors()
+    print("[PASS] test_tls_clear_errors_multiple\n")
+    assert(true, "multiple clear_errors calls succeeded")
+    return 0
+}
+
+@test
+func test_tls_last_error_after_clear() -> I32 {
+    tls::clear_errors()
+    let err1: Str = tls::last_error()
+    let err2: Str = tls::last_error()
+    print("[PASS] test_tls_last_error_after_clear\n")
+    assert(true, "last_error called twice after clear without crash")
+    return 0
+}

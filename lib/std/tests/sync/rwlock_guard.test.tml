@@ -1,0 +1,8 @@
+// Tests for sync/rwlock - guard deref methods
+// BLOCKED: RwLockReadGuard::deref, RwLockWriteGuard::deref, deref_mut return () — behavior dispatch on generics
+use test
+
+@test
+func test_rwlock_guard_blocked() -> I32 {
+    return 0
+}

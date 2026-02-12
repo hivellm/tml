@@ -1,0 +1,227 @@
+// Consolidated RwLock tests
+// Total @test count: 17
+// Sources: mutex.test.tml (rwlock portions), sync_mutex.test.tml (rwlock portions),
+//          rwlock_basic.test.tml, rwlock_guard.test.tml
+use test::{assert, assert_eq}
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard}
+
+// ============================================================================
+// RwLock Creation Tests
+// ============================================================================
+
+@test
+func test_rwlock_new() {
+    let rwlock: RwLock[I32] = RwLock::new(42)
+}
+
+// From rwlock_basic.test.tml (uses different import style and read() after new)
+@test
+func test_rwlock_new_with_read() -> I32 {
+    var lock: RwLock[I32] = RwLock::new(42 as I32)
+    let guard = lock.read()
+    assert_eq(*guard.get(), 42 as I32, "RwLock::new stores value")
+    return 0
+}
+
+// ============================================================================
+// RwLock Read Tests
+// ============================================================================
+
+@test
+func test_rwlock_read() {
+    let rwlock: RwLock[I32] = RwLock::new(100)
+    {
+        let guard: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*guard.get(), 100)
+    }
+}
+
+@test
+func test_rwlock_multiple_readers() {
+    let rwlock: RwLock[I32] = RwLock::new(55)
+    {
+        let r1: RwLockReadGuard[I32] = rwlock.read()
+        let r2: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*r1.get(), 55)
+        assert_eq(*r2.get(), 55)
+    }
+}
+
+// ============================================================================
+// RwLock Write Tests
+// ============================================================================
+
+@test
+func test_rwlock_write() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+    {
+        var guard: RwLockWriteGuard[I32] = rwlock.write()
+        *guard.get_mut() = 42
+    }
+    {
+        let guard: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*guard.get(), 42)
+    }
+}
+
+// From rwlock_basic.test.tml
+@test
+func test_rwlock_write_and_read() -> I32 {
+    var lock: RwLock[I32] = RwLock::new(0 as I32)
+    {
+        let mut w = lock.write()
+        *w.get_mut() = 99 as I32
+    }
+    let r = lock.read()
+    assert_eq(*r.get(), 99 as I32, "write should update value")
+    return 0
+}
+
+// ============================================================================
+// RwLock try_read / try_write Tests
+// ============================================================================
+
+@test
+func test_rwlock_try_read_success() {
+    let rwlock: RwLock[I32] = RwLock::new(77)
+    when rwlock.try_read() {
+        Just(guard) => {
+            assert_eq(*guard.get(), 77)
+        },
+        Nothing => panic("try_read should succeed")
+    }
+}
+
+@test
+func test_rwlock_try_write_success() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+    when rwlock.try_write() {
+        Just(guard) => {
+            *guard.get_mut() = 88
+        },
+        Nothing => panic("try_write should succeed")
+    }
+    let r: RwLockReadGuard[I32] = rwlock.read()
+    assert_eq(*r.get(), 88)
+}
+
+// ============================================================================
+// RwLock into_inner Tests
+// ============================================================================
+
+@test
+func test_rwlock_into_inner() {
+    let rwlock: RwLock[I32] = RwLock::new(123)
+    {
+        var w: RwLockWriteGuard[I32] = rwlock.write()
+        *w.get_mut() = 456
+    }
+    let value: I32 = rwlock.into_inner()
+    assert_eq(value, 456)
+}
+
+// ============================================================================
+// RwLock get_mut Tests
+// ============================================================================
+
+// From rwlock_basic.test.tml
+@test
+func test_rwlock_get_mut() -> I32 {
+    var lock: RwLock[I32] = RwLock::new(5 as I32)
+    *lock.get_mut() = 10 as I32
+    let r = lock.read()
+    assert_eq(*r.get(), 10 as I32, "get_mut should update directly")
+    return 0
+}
+
+// ============================================================================
+// Guard Drop Tests (RAII)
+// ============================================================================
+
+@test
+func test_rwlock_read_guard_drop() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+    {
+        let r: RwLockReadGuard[I32] = rwlock.read()
+    }
+    {
+        var w: RwLockWriteGuard[I32] = rwlock.write()
+        *w.get_mut() = 1
+    }
+}
+
+@test
+func test_rwlock_write_guard_drop() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+    {
+        var w: RwLockWriteGuard[I32] = rwlock.write()
+        *w.get_mut() = 42
+    }
+    {
+        let r: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*r.get(), 42)
+    }
+}
+
+// ============================================================================
+// RwLock with Different Types
+// ============================================================================
+
+@test
+func test_rwlock_with_i64() {
+    let rwlock: RwLock[I64] = RwLock::new(9999999999 as I64)
+    {
+        let r: RwLockReadGuard[I64] = rwlock.read()
+        assert_eq(*r.get(), 9999999999 as I64)
+    }
+}
+
+// ============================================================================
+// RwLock Read After Write
+// ============================================================================
+
+@test
+func test_rwlock_read_after_write() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+    {
+        var w: RwLockWriteGuard[I32] = rwlock.write()
+        *w.get_mut() = 100
+    }
+    {
+        let r1: RwLockReadGuard[I32] = rwlock.read()
+        let r2: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*r1.get(), 100)
+        assert_eq(*r2.get(), 100)
+    }
+}
+
+// ============================================================================
+// RwLock Sequential Writes
+// ============================================================================
+
+@test
+func test_rwlock_sequential_writes() {
+    let rwlock: RwLock[I32] = RwLock::new(0)
+    var i: I32 = 0
+    loop (i < 3) {
+        {
+            var w: RwLockWriteGuard[I32] = rwlock.write()
+            *w.get_mut() = *w.get() + 10
+        }
+        i = i + 1
+    }
+    {
+        let r: RwLockReadGuard[I32] = rwlock.read()
+        assert_eq(*r.get(), 30)
+    }
+}
+
+// ============================================================================
+// BLOCKED: RwLockReadGuard::deref, RwLockWriteGuard::deref, deref_mut
+// BLOCKED: behavior dispatch on generics
+// ============================================================================
+
+@test
+func test_rwlock_guard_blocked() -> I32 {
+    return 0
+}

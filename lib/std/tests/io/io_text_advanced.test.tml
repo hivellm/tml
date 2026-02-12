@@ -1,0 +1,505 @@
+// Consolidated IO Tests: Text Type - Concatenation, Comparison, SSO, Chained, Edge Cases, Stress, Templates
+// Total @test count: 46
+// Source: text.test.tml (tests 101-146 of 146)
+// Sections: Padding (remainder), Concatenation, Comparison, SSO, Chained Operations,
+//           Edge Cases, Empty Text Comprehensive, Stress Tests, Template Literal Tests
+
+use std::text::Text
+use test::*
+
+// ============================================================================
+// PADDING TESTS (remainder)
+// ============================================================================
+
+@test
+func test_pad_end_exact_length() {
+    let t: Text = Text::from("hello")
+    let padded: Text = t.pad_end(5, 46)
+    assert_eq(padded.as_str(), "hello", "exact length should not change")
+    t.drop()
+    padded.drop()
+}
+
+// ============================================================================
+// CONCATENATION TESTS
+// ============================================================================
+
+@test
+func test_concat_basic() {
+    let t1: Text = Text::from("Hello")
+    let t2: Text = Text::from(", World!")
+    let combined: Text = t1.concat(ref t2)
+    assert_eq(combined.as_str(), "Hello, World!", "concat should combine")
+    t1.drop()
+    t2.drop()
+    combined.drop()
+}
+
+@test
+func test_concat_with_empty() {
+    let t1: Text = Text::from("Hello")
+    let t2: Text = Text::new()
+    let combined: Text = t1.concat(ref t2)
+    assert_eq(combined.as_str(), "Hello", "concat with empty should work")
+    t1.drop()
+    t2.drop()
+    combined.drop()
+}
+
+@test
+func test_concat_empty_with_text() {
+    let t1: Text = Text::new()
+    let t2: Text = Text::from("Hello")
+    let combined: Text = t1.concat(ref t2)
+    assert_eq(combined.as_str(), "Hello", "empty concat with text")
+    t1.drop()
+    t2.drop()
+    combined.drop()
+}
+
+@test
+func test_concat_both_empty() {
+    let t1: Text = Text::new()
+    let t2: Text = Text::new()
+    let combined: Text = t1.concat(ref t2)
+    assert_eq(combined.len(), 0, "concat two empties should be empty")
+    t1.drop()
+    t2.drop()
+    combined.drop()
+}
+
+@test
+func test_concat_str_basic() {
+    let t: Text = Text::from("Hello")
+    let combined: Text = t.concat_str(", World!")
+    assert_eq(combined.as_str(), "Hello, World!", "concat_str should append")
+    t.drop()
+    combined.drop()
+}
+
+@test
+func test_concat_str_empty() {
+    let t: Text = Text::from("Hello")
+    let combined: Text = t.concat_str("")
+    assert_eq(combined.as_str(), "Hello", "concat_str with empty")
+    t.drop()
+    combined.drop()
+}
+
+// ============================================================================
+// COMPARISON TESTS
+// ============================================================================
+
+@test
+func test_equals_true() {
+    let t1: Text = Text::from("hello")
+    let t2: Text = Text::from("hello")
+    assert(t1.equals(ref t2), "equal texts should be equal")
+    t1.drop()
+    t2.drop()
+}
+
+@test
+func test_equals_false_different() {
+    let t1: Text = Text::from("hello")
+    let t2: Text = Text::from("world")
+    assert(not t1.equals(ref t2), "different texts should not be equal")
+    t1.drop()
+    t2.drop()
+}
+
+@test
+func test_equals_false_case() {
+    let t1: Text = Text::from("Hello")
+    let t2: Text = Text::from("hello")
+    assert(not t1.equals(ref t2), "different case should not be equal")
+    t1.drop()
+    t2.drop()
+}
+
+@test
+func test_equals_empty() {
+    let t1: Text = Text::new()
+    let t2: Text = Text::new()
+    assert(t1.equals(ref t2), "two empties should be equal")
+    t1.drop()
+    t2.drop()
+}
+
+@test
+func test_compare_less_than() {
+    let t1: Text = Text::from("apple")
+    let t2: Text = Text::from("banana")
+    assert(t1.compare(ref t2) < 0, "apple should come before banana")
+    t1.drop()
+    t2.drop()
+}
+
+@test
+func test_compare_greater_than() {
+    let t1: Text = Text::from("banana")
+    let t2: Text = Text::from("apple")
+    assert(t1.compare(ref t2) > 0, "banana should come after apple")
+    t1.drop()
+    t2.drop()
+}
+
+@test
+func test_compare_equal() {
+    let t1: Text = Text::from("hello")
+    let t2: Text = Text::from("hello")
+    assert_eq(t1.compare(ref t2), 0, "equal strings should compare to 0")
+    t1.drop()
+    t2.drop()
+}
+
+@test
+func test_compare_prefix() {
+    let t1: Text = Text::from("hello")
+    let t2: Text = Text::from("hello world")
+    assert(t1.compare(ref t2) < 0, "shorter prefix should be less")
+    t1.drop()
+    t2.drop()
+}
+
+// ============================================================================
+// SSO TESTS (Small String Optimization)
+// ============================================================================
+
+@test
+func test_sso_short_string() {
+    let t: Text = Text::from("short")
+    assert_eq(t.len(), 5, "short string should have correct length")
+    assert_eq(t.as_str(), "short", "short string should be correct")
+    t.drop()
+}
+
+@test
+func test_sso_exact_boundary() {
+    // Exactly 23 bytes - should still use SSO
+    let t: Text = Text::from("12345678901234567890123")
+    assert_eq(t.len(), 23, "23-char string should have correct length")
+    assert_eq(t.as_str(), "12345678901234567890123", "content should match")
+    t.drop()
+}
+
+@test
+func test_sso_one_over_boundary() {
+    // 24 bytes - should use heap
+    let t: Text = Text::from("123456789012345678901234")
+    assert_eq(t.len(), 24, "24-char string should have correct length")
+    assert_eq(t.as_str(), "123456789012345678901234", "content should match")
+    t.drop()
+}
+
+@test
+func test_heap_long_string() {
+    let t: Text = Text::from("This is a longer string that exceeds SSO")
+    assert(t.len() > 23, "long string should exceed SSO threshold")
+    assert_eq(t.as_str(), "This is a longer string that exceeds SSO", "content should match")
+    t.drop()
+}
+
+@test
+func test_sso_to_heap_transition() {
+    let t: Text = Text::from("short")
+    assert_eq(t.len(), 5, "should start as SSO")
+
+    t.push_str(" - now adding more content to exceed SSO limit!")
+
+    assert(t.len() > 23, "should now be on heap")
+    assert(t.starts_with("short"), "content should be preserved")
+    t.drop()
+}
+
+// ============================================================================
+// CHAINED OPERATIONS TESTS
+// ============================================================================
+
+@test
+func test_chained_transforms() {
+    let t: Text = Text::from("  HELLO WORLD  ")
+    let trimmed: Text = t.trim()
+    let lower: Text = trimmed.to_lower_case()
+    let replaced: Text = lower.replace(" ", "_")
+
+    assert_eq(replaced.as_str(), "hello_world", "chained transforms should work")
+
+    t.drop()
+    trimmed.drop()
+    lower.drop()
+    replaced.drop()
+}
+
+@test
+func test_chained_concat() {
+    let t1: Text = Text::from("Hello")
+    let t2: Text = Text::from(" ")
+    let t3: Text = Text::from("World")
+
+    let r1: Text = t1.concat(ref t2)
+    let r2: Text = r1.concat(ref t3)
+
+    assert_eq(r2.as_str(), "Hello World", "chained concat should work")
+
+    t1.drop()
+    t2.drop()
+    t3.drop()
+    r1.drop()
+    r2.drop()
+}
+
+@test
+func test_multiple_push_str() {
+    let t: Text = Text::new()
+    t.push_str("one")
+    t.push_str(" ")
+    t.push_str("two")
+    t.push_str(" ")
+    t.push_str("three")
+    assert_eq(t.as_str(), "one two three", "multiple push_str should work")
+    t.drop()
+}
+
+// ============================================================================
+// EDGE CASES AND SPECIAL CHARACTERS
+// ============================================================================
+
+@test
+func test_special_characters() {
+    let t: Text = Text::from("!@#$%^&*()")
+    assert_eq(t.len(), 10, "special chars should have correct length")
+    assert_eq(t.as_str(), "!@#$%^&*()", "special chars should be preserved")
+    t.drop()
+}
+
+@test
+func test_digits_only() {
+    let t: Text = Text::from("0123456789")
+    assert_eq(t.len(), 10, "digits should have correct length")
+    assert_eq(t.as_str(), "0123456789", "digits should be preserved")
+    t.drop()
+}
+
+@test
+func test_whitespace_variations() {
+    let t: Text = Text::from(" \t\n\r")
+    assert_eq(t.len(), 4, "whitespace should have correct length")
+    let trimmed: Text = t.trim()
+    assert_eq(trimmed.len(), 0, "all whitespace should trim to empty")
+    t.drop()
+    trimmed.drop()
+}
+
+@test
+func test_single_character() {
+    let t: Text = Text::from("X")
+    assert_eq(t.len(), 1, "single char should have length 1")
+    assert_eq(t.as_str(), "X", "single char should be preserved")
+    assert_eq(t.byte_at(0), 88, "byte_at should return 'X'")
+    t.drop()
+}
+
+// ============================================================================
+// EMPTY TEXT COMPREHENSIVE TESTS
+// ============================================================================
+
+@test
+func test_empty_all_search_operations() {
+    let t: Text = Text::new()
+
+    assert_eq(t.index_of("x"), -1, "index_of on empty")
+    assert_eq(t.last_index_of("x"), -1, "last_index_of on empty")
+    assert(not t.starts_with("x"), "starts_with on empty")
+    assert(not t.ends_with("x"), "ends_with on empty")
+    assert(not t.includes("x"), "includes on empty")
+    assert(not t.contains("x"), "contains on empty")
+
+    t.drop()
+}
+
+@test
+func test_empty_all_transforms() {
+    let t: Text = Text::new()
+
+    let upper: Text = t.to_upper_case()
+    assert_eq(upper.len(), 0, "to_upper_case of empty")
+
+    let lower: Text = t.to_lower_case()
+    assert_eq(lower.len(), 0, "to_lower_case of empty")
+
+    let trimmed: Text = t.trim()
+    assert_eq(trimmed.len(), 0, "trim of empty")
+
+    let reversed: Text = t.reverse()
+    assert_eq(reversed.len(), 0, "reverse of empty")
+
+    let repeated: Text = t.repeat(5)
+    assert_eq(repeated.len(), 0, "repeat of empty")
+
+    t.drop()
+    upper.drop()
+    lower.drop()
+    trimmed.drop()
+    reversed.drop()
+    repeated.drop()
+}
+
+@test
+func test_empty_substring() {
+    let t: Text = Text::new()
+    let sub: Text = t.substring(0, 10)
+    assert_eq(sub.len(), 0, "substring of empty should be empty")
+    t.drop()
+    sub.drop()
+}
+
+@test
+func test_empty_replace() {
+    let t: Text = Text::new()
+    let replaced: Text = t.replace("x", "y")
+    assert_eq(replaced.len(), 0, "replace on empty should be empty")
+    t.drop()
+    replaced.drop()
+}
+
+// ============================================================================
+// STRESS TESTS
+// ============================================================================
+
+@test
+func test_many_push_operations() {
+    let t: Text = Text::new()
+    let mut i: I32 = 0
+    loop (i < 100) {
+        t.push(65)  // 'A'
+        i = i + 1
+    }
+    assert_eq(t.len(), 100, "should have 100 characters")
+    t.drop()
+}
+
+@test
+func test_large_repeat() {
+    let t: Text = Text::from("x")
+    let repeated: Text = t.repeat(100)
+    assert_eq(repeated.len(), 100, "repeat 100 times should have length 100")
+    t.drop()
+    repeated.drop()
+}
+
+@test
+func test_clear_and_reuse() {
+    let t: Text = Text::from("Hello")
+    t.clear()
+    t.push_str("World")
+    assert_eq(t.as_str(), "World", "should be able to reuse after clear")
+    t.drop()
+}
+
+// ============================================================================
+// TEMPLATE LITERAL TESTS
+// ============================================================================
+
+@test
+func test_template_literal_simple() {
+    let t: Text = `Hello, World!`
+    assert_eq(t.as_str(), "Hello, World!", "simple template literal should work")
+    assert_eq(t.len(), 13, "length should be 13")
+    t.drop()
+}
+
+@test
+func test_template_literal_empty() {
+    let t: Text = ``
+    assert(t.is_empty(), "empty template should be empty")
+    assert_eq(t.len(), 0, "empty template should have length 0")
+    t.drop()
+}
+
+@test
+func test_template_literal_with_variable() {
+    let name: Str = "Alice"
+    let t: Text = `Hello, {name}!`
+    assert_eq(t.as_str(), "Hello, Alice!", "template with variable should work")
+    t.drop()
+}
+
+@test
+func test_template_literal_with_integer() {
+    let age: I32 = 25
+    let t: Text = `Age: {age}`
+    assert_eq(t.as_str(), "Age: 25", "template with integer should work")
+    t.drop()
+}
+
+@test
+func test_template_literal_with_multiple_vars() {
+    let name: Str = "Bob"
+    let age: I32 = 30
+    let t: Text = `Name: {name}, Age: {age}`
+    assert_eq(t.as_str(), "Name: Bob, Age: 30", "template with multiple vars should work")
+    t.drop()
+}
+
+@test
+func test_template_literal_multiline() {
+    let t: Text = `Line 1
+Line 2`
+    assert(t.contains("Line 1"), "should contain Line 1")
+    assert(t.contains("Line 2"), "should contain Line 2")
+    t.drop()
+}
+
+@test
+func test_template_literal_with_bool() {
+    let active: Bool = true
+    let t: Text = `Active: {active}`
+    assert_eq(t.as_str(), "Active: true", "template with bool should work")
+    t.drop()
+}
+
+@test
+func test_template_literal_with_float() {
+    let value: F64 = 3.14
+    let t: Text = `Pi: {value}`
+    assert(t.starts_with("Pi: 3.14"), "template with float should work")
+    t.drop()
+}
+
+@test
+func test_template_literal_special_chars() {
+    let t: Text = `Tab:\t and newline:\n`
+    assert(t.contains("\t"), "should contain tab")
+    assert(t.contains("\n"), "should contain newline")
+    t.drop()
+}
+
+@test
+func test_template_literal_literal_braces() {
+    let t: Text = `This is a { literal brace }`
+    assert(t.contains("{"), "should contain literal brace")
+    assert(t.contains("}"), "should contain literal brace")
+    t.drop()
+}
+
+@test
+func test_template_literal_returns_text_type() {
+    // Template literals should produce Text type, not Str
+    let t: Text = `Hello`
+    // Should be able to use Text methods
+    t.push_str("!")
+    assert_eq(t.as_str(), "Hello!", "should be modifiable Text type")
+    t.drop()
+}
+
+@test
+func test_template_literal_concat_with_text() {
+    let t1: Text = `Hello`
+    let t2: Text = `, World`
+    let t3: Text = t1.concat_str(t2.as_str())
+    assert_eq(t3.as_str(), "Hello, World", "template concatenation should work")
+    t1.drop()
+    t2.drop()
+    t3.drop()
+}

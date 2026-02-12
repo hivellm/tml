@@ -1,0 +1,556 @@
+// Consolidated gzip/gunzip tests
+// Sources: gzip.test.tml, gzip_buffer.test.tml, gzip_sync.test.tml,
+//          gzip_header.test.tml, stream_gzip.test.tml
+// Test count: 28 @test functions
+// Renamed duplicates: test_gzip_with_options_v2, test_gunzip_with_options_v2
+
+use test
+use std::zlib::{gzip, gunzip, gzip_with_options, gunzip_with_options}
+use std::zlib::{gzip_buffer, gunzip_to_buffer}
+use std::zlib::{gzip_sync, gunzip_sync, gzip_sync_with_options, gunzip_sync_with_options}
+use std::zlib::{GzipHeader, read_gzip_header}
+use std::zlib::deflate
+use std::zlib::stream::{Gzip, Gunzip}
+use std::zlib::options::ZlibOptions
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+// ============================================================================
+// From: gzip.test.tml - Basic gzip/gunzip
+// ============================================================================
+
+@test
+func test_gzip_compress_basic() -> I32 {
+    let original: Str = "Hello, World! This is some test data to compress with gzip."
+    let result: Outcome[Buffer, ZlibError] = gzip(original)
+
+    if result.is_err() {
+        print("gzip failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+
+    // Compressed data should exist
+    if compressed.len() == 0 {
+        print("compressed data is empty\n")
+        return 1
+    }
+
+    // Now decompress
+    let decompress_result: Outcome[Str, ZlibError] = gunzip(ref compressed)
+    if decompress_result.is_err() {
+        print("gunzip failed\n")
+        return 1
+    }
+
+    let decompressed: Str = decompress_result.unwrap()
+    assert_eq(decompressed, original, "gzip roundtrip")
+
+    return 0
+}
+
+@test
+func test_gzip_compress_empty() -> I32 {
+    let original: Str = ""
+    let result: Outcome[Buffer, ZlibError] = gzip(original)
+
+    if result.is_err() {
+        // Empty string compression might fail
+        return 0
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let decompress_result: Outcome[Str, ZlibError] = gunzip(ref compressed)
+
+    if decompress_result.is_ok() {
+        let decompressed: Str = decompress_result.unwrap()
+        assert_eq(decompressed, original, "empty string roundtrip")
+    }
+
+    return 0
+}
+
+@test
+func test_gzip_with_options() -> I32 {
+    let original: Str = "Test data for gzip with options"
+    let options: ZlibOptions = ZlibOptions::gzip().with_level(6)
+    let result: Outcome[Buffer, ZlibError] = gzip_with_options(original, options)
+
+    if result.is_err() {
+        print("gzip_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let decompress_result: Outcome[Str, ZlibError] = gunzip(ref compressed)
+    if decompress_result.is_err() {
+        print("gunzip after gzip_with_options failed\n")
+        return 1
+    }
+
+    let decompressed: Str = decompress_result.unwrap()
+    assert_eq(decompressed, original, "gzip_with_options roundtrip")
+
+    return 0
+}
+
+@test
+func test_gunzip_with_options() -> I32 {
+    let original: Str = "Test data for gunzip with options"
+    let result: Outcome[Buffer, ZlibError] = gzip(original)
+    if result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let options: ZlibOptions = ZlibOptions::gzip()
+    let decompress_result: Outcome[Str, ZlibError] = gunzip_with_options(ref compressed, options)
+    if decompress_result.is_err() {
+        print("gunzip_with_options failed\n")
+        return 1
+    }
+
+    let decompressed: Str = decompress_result.unwrap()
+    assert_eq(decompressed, original, "gunzip_with_options roundtrip")
+
+    return 0
+}
+
+// ============================================================================
+// From: gzip_buffer.test.tml - Buffer operations
+// ============================================================================
+
+@test
+func test_gzip_buffer() -> I32 {
+    // First create a buffer using deflate
+    let original: Str = "Data to test gzip_buffer function"
+    let deflate_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if deflate_result.is_err() {
+        print("deflate failed\n")
+        return 1
+    }
+
+    var input_buf: Buffer = deflate_result.unwrap()
+
+    // Now compress the buffer with gzip
+    let result: Outcome[Buffer, ZlibError] = gzip_buffer(ref input_buf)
+    if result.is_err() {
+        print("gzip_buffer failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    if compressed.len() == 0 {
+        print("gzip_buffer returned empty buffer\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_gunzip_to_buffer() -> I32 {
+    let original: Str = "Data for gunzip_to_buffer test"
+    let result: Outcome[Buffer, ZlibError] = gzip(original)
+    if result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+
+    // Decompress to buffer instead of string
+    let decompress_result: Outcome[Buffer, ZlibError] = gunzip_to_buffer(ref compressed)
+    if decompress_result.is_err() {
+        print("gunzip_to_buffer failed\n")
+        return 1
+    }
+
+    var decompressed_buf: Buffer = decompress_result.unwrap()
+    if decompressed_buf.len() == 0 {
+        print("gunzip_to_buffer returned empty buffer\n")
+        return 1
+    }
+
+    return 0
+}
+
+// ============================================================================
+// From: gzip_sync.test.tml - Sync operations
+// ============================================================================
+
+@test
+func test_gzip_sync() -> I32 {
+    let original: Str = "Test data for gzip_sync"
+    let result: Outcome[Buffer, ZlibError] = gzip_sync(original)
+
+    if result.is_err() {
+        print("gzip_sync failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let decompress_result: Outcome[Str, ZlibError] = gunzip_sync(ref compressed)
+    if decompress_result.is_err() {
+        print("gunzip_sync failed\n")
+        return 1
+    }
+
+    let decompressed: Str = decompress_result.unwrap()
+    assert_eq(decompressed, original, "gzip_sync/gunzip_sync roundtrip")
+
+    return 0
+}
+
+@test
+func test_gzip_sync_with_options() -> I32 {
+    let original: Str = "Test data for gzip_sync_with_options"
+    let opts: ZlibOptions = ZlibOptions::gzip().with_level(6)
+    let result: Outcome[Buffer, ZlibError] = gzip_sync_with_options(original, opts)
+
+    if result.is_err() {
+        print("gzip_sync_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    if compressed.len() == 0 {
+        print("gzip_sync_with_options returned empty buffer\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_gunzip_sync_with_options() -> I32 {
+    let original: Str = "Test data for gunzip_sync_with_options"
+    let result: Outcome[Buffer, ZlibError] = gzip_sync(original)
+    if result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::gzip()
+    let decompress_result: Outcome[Str, ZlibError] = gunzip_sync_with_options(ref compressed, opts)
+    if decompress_result.is_err() {
+        print("gunzip_sync_with_options failed\n")
+        return 1
+    }
+
+    assert_eq(decompress_result.unwrap(), original, "gunzip_sync_with_options roundtrip")
+    return 0
+}
+
+// ============================================================================
+// From: gzip_header.test.tml - GzipHeader tests
+// ============================================================================
+
+@test
+func test_gzip_header_new() -> I32 {
+    let header: GzipHeader = GzipHeader::new()
+
+    // Default header should have unknown OS (255)
+    assert_eq(header.os, 255, "default header os")
+    assert_eq(header.text, false, "default header text flag")
+    assert_eq(header.hcrc, false, "default header hcrc flag")
+
+    return 0
+}
+
+@test
+func test_gzip_header_with_time() -> I32 {
+    let header: GzipHeader = GzipHeader::new()
+    let header2: GzipHeader = header.with_time(1234567890)
+
+    assert_eq(header2.time, 1234567890, "header time")
+
+    return 0
+}
+
+// Note: Tests for with_name and with_comment require accessing Maybe[Str] fields
+// which triggers a compiler codegen bug. These tests verify the functions execute
+// without crashing but cannot verify the field values directly.
+
+@test
+func test_gzip_header_with_name() -> I32 {
+    let header: GzipHeader = GzipHeader::new()
+    // with_name should return a new header without crashing
+    let header2: GzipHeader = header.with_name("test.txt")
+    // Verify other fields are preserved
+    assert_eq(header2.os, 255, "os should be preserved")
+    assert_eq(header2.text, false, "text should be preserved")
+
+    return 0
+}
+
+@test
+func test_gzip_header_with_comment() -> I32 {
+    let header: GzipHeader = GzipHeader::new()
+    // with_comment should return a new header without crashing
+    let header2: GzipHeader = header.with_comment("Test comment")
+    // Verify other fields are preserved
+    assert_eq(header2.os, 255, "os should be preserved")
+    assert_eq(header2.text, false, "text should be preserved")
+
+    return 0
+}
+
+@test
+func test_gzip_header_with_text() -> I32 {
+    let header: GzipHeader = GzipHeader::new()
+    let header2: GzipHeader = header.with_text()
+
+    assert_eq(header2.text, true, "header text flag")
+
+    return 0
+}
+
+@test
+func test_gzip_header_chaining() -> I32 {
+    // Chaining should work without crashing
+    let header: GzipHeader = GzipHeader::new()
+        .with_name("data.txt")
+        .with_comment("compressed file")
+        .with_time(1000000000)
+        .with_text()
+
+    // Verify non-Maybe fields are set correctly
+    assert_eq(header.time, 1000000000, "chained time")
+    assert_eq(header.text, true, "chained text flag")
+    assert_eq(header.os, 255, "chained os preserved")
+
+    return 0
+}
+
+@test
+func test_read_gzip_header_basic() -> I32 {
+    // Compress some data to get a valid gzip buffer
+    let data: Str = "Hello, World!"
+    let compressed: Outcome[Buffer, ZlibError] = gzip(data)
+    if compressed.is_err() {
+        return 1
+    }
+    var buf: Buffer = compressed.unwrap()
+
+    // Read the header from the compressed data
+    let header_result: Outcome[GzipHeader, ZlibError] = read_gzip_header(buf)
+    if header_result.is_err() {
+        buf.destroy()
+        return 2
+    }
+    let header: GzipHeader = header_result.unwrap()
+
+    // Verify basic header fields
+    // OS code should be valid (0-255)
+    assert_true(header.os >= 0 and header.os <= 255, "header os valid range")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_read_gzip_header_fields() -> I32 {
+    // Compress with gzip to get valid header
+    let data: Str = "Test data for header reading"
+    let compressed: Outcome[Buffer, ZlibError] = gzip(data)
+    if compressed.is_err() {
+        return 1
+    }
+    var buf: Buffer = compressed.unwrap()
+
+    let header_result: Outcome[GzipHeader, ZlibError] = read_gzip_header(buf)
+    if header_result.is_err() {
+        buf.destroy()
+        return 2
+    }
+    let header: GzipHeader = header_result.unwrap()
+
+    // Default gzip doesn't set name/comment, so they should be Nothing
+    assert_eq(header.text, false, "default gzip text flag is false")
+    assert_eq(header.hcrc, false, "default gzip hcrc is false")
+
+    buf.destroy()
+    return 0
+}
+
+// ============================================================================
+// From: stream_gzip.test.tml - Gzip/Gunzip stream classes
+// Renamed: test_gzip_with_options -> test_gzip_with_options_v2
+// Renamed: test_gunzip_with_options -> test_gunzip_with_options_v2
+// ============================================================================
+
+@test
+func test_gzip_new() -> I32 {
+    let result: Outcome[Gzip, ZlibError] = Gzip::new()
+    if result.is_err() {
+        assert(false, "Gzip::new should succeed")
+        return 1
+    }
+    let gzip: Gzip = result.unwrap()
+    gzip.destroy()
+    return 0
+}
+
+@test
+func test_gzip_with_options_v2() -> I32 {
+    let options: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Gzip, ZlibError] = Gzip::with_options(options)
+    if result.is_err() {
+        assert(false, "Gzip::with_options should succeed")
+        return 1
+    }
+    let gzip: Gzip = result.unwrap()
+    gzip.destroy()
+    return 0
+}
+
+@test
+func test_gzip_write() -> I32 {
+    let result: Outcome[Gzip, ZlibError] = Gzip::new()
+    if result.is_err() {
+        assert(false, "Gzip::new should succeed")
+        return 1
+    }
+    let gzip: Gzip = result.unwrap()
+    let write_result: Outcome[Buffer, ZlibError] = gzip.write("Hello")
+    if write_result.is_err() {
+        gzip.destroy()
+        assert(false, "write should succeed")
+        return 1
+    }
+    gzip.destroy()
+    return 0
+}
+
+@test
+func test_gzip_write_multiple() -> I32 {
+    let result: Outcome[Gzip, ZlibError] = Gzip::new()
+    if result.is_err() {
+        assert(false, "Gzip::new should succeed")
+        return 1
+    }
+    let gzip: Gzip = result.unwrap()
+    let w1: Outcome[Buffer, ZlibError] = gzip.write("Hello, ")
+    let w2: Outcome[Buffer, ZlibError] = gzip.write("World!")
+    gzip.destroy()
+    return 0
+}
+
+@test
+func test_gzip_flush() -> I32 {
+    let result: Outcome[Gzip, ZlibError] = Gzip::new()
+    if result.is_err() {
+        assert(false, "Gzip::new should succeed")
+        return 1
+    }
+    let gzip: Gzip = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = gzip.write("Hello")
+    let flush_result: Outcome[Buffer, ZlibError] = gzip.flush()
+    if flush_result.is_err() {
+        gzip.destroy()
+        assert(false, "flush should succeed")
+        return 1
+    }
+    let buf: Buffer = flush_result.unwrap()
+    assert(buf.len() > 0, "flush should produce output")
+    gzip.destroy()
+    return 0
+}
+
+@test
+func test_gzip_finish() -> I32 {
+    let result: Outcome[Gzip, ZlibError] = Gzip::new()
+    if result.is_err() {
+        assert(false, "Gzip::new should succeed")
+        return 1
+    }
+    let gzip: Gzip = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = gzip.write("Hello, World!")
+    let finish_result: Outcome[Buffer, ZlibError] = gzip.finish()
+    if finish_result.is_err() {
+        gzip.destroy()
+        assert(false, "finish should succeed")
+        return 1
+    }
+    let buf: Buffer = finish_result.unwrap()
+    assert(buf.len() > 0, "finish should produce output")
+    gzip.destroy()
+    return 0
+}
+
+@test
+func test_gzip_reset() -> I32 {
+    let result: Outcome[Gzip, ZlibError] = Gzip::new()
+    if result.is_err() {
+        assert(false, "Gzip::new should succeed")
+        return 1
+    }
+    let gzip: Gzip = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = gzip.write("Hello")
+    let reset_result: Outcome[Unit, ZlibError] = gzip.reset()
+    if reset_result.is_err() {
+        gzip.destroy()
+        assert(false, "reset should succeed")
+        return 1
+    }
+    gzip.destroy()
+    return 0
+}
+
+@test
+func test_gunzip_new() -> I32 {
+    let result: Outcome[Gunzip, ZlibError] = Gunzip::new()
+    if result.is_err() {
+        assert(false, "Gunzip::new should succeed")
+        return 1
+    }
+    let gunzip: Gunzip = result.unwrap()
+    gunzip.destroy()
+    return 0
+}
+
+@test
+func test_gunzip_with_options_v2() -> I32 {
+    let options: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Gunzip, ZlibError] = Gunzip::with_options(options)
+    if result.is_err() {
+        assert(false, "Gunzip::with_options should succeed")
+        return 1
+    }
+    let gunzip: Gunzip = result.unwrap()
+    gunzip.destroy()
+    return 0
+}
+
+@test
+func test_gunzip_reset() -> I32 {
+    let result: Outcome[Gunzip, ZlibError] = Gunzip::new()
+    if result.is_err() {
+        assert(false, "Gunzip::new should succeed")
+        return 1
+    }
+    let gunzip: Gunzip = result.unwrap()
+    let reset_result: Outcome[Unit, ZlibError] = gunzip.reset()
+    if reset_result.is_err() {
+        gunzip.destroy()
+        assert(false, "reset should succeed")
+        return 1
+    }
+    gunzip.destroy()
+    return 0
+}
+
+@test
+func test_gunzip_with_custom_window_bits() -> I32 {
+    var options: ZlibOptions = ZlibOptions::default()
+    options.window_bits = 12
+    let result: Outcome[Gunzip, ZlibError] = Gunzip::with_options(options)
+    if result.is_err() {
+        assert(false, "Gunzip with window_bits 12 should succeed")
+        return 1
+    }
+    let gunzip: Gunzip = result.unwrap()
+    gunzip.destroy()
+    return 0
+}

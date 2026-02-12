@@ -1,0 +1,374 @@
+// Consolidated numeric tests: checked arithmetic, saturating intrinsics, Saturating/Wrapping wrappers
+// Test count: 40 @test functions
+// Sources: checked.test.tml, checked_minimal.test.tml, saturating_intrinsics.test.tml, saturating.test.tml
+use test
+use core::intrinsics::{checked_add, checked_sub, checked_mul, checked_div}
+use core::intrinsics::{saturating_add, saturating_sub, saturating_mul}
+use core::num::saturating::Saturating
+
+// ============================================================================
+// checked_add - normal cases (from checked.test.tml)
+// ============================================================================
+
+@test
+func test_checked_add_i32_normal() -> I32 {
+    when checked_add[I32](10, 20) {
+        Just(n) => assert_eq(n, 30, "10 + 20 = 30"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_add_i32_zero() -> I32 {
+    when checked_add[I32](42, 0) {
+        Just(n) => assert_eq(n, 42, "42 + 0 = 42"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_add_i32_negative() -> I32 {
+    when checked_add[I32](-10, -20) {
+        Just(n) => assert_eq(n, -30, "-10 + -20 = -30"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+// ============================================================================
+// checked_add - overflow cases (from checked.test.tml)
+// ============================================================================
+
+@test
+func test_checked_add_i32_overflow() -> I32 {
+    when checked_add[I32](2147483647, 1) {
+        Just(_) => panic("should overflow"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_checked_add_i32_underflow() -> I32 {
+    when checked_add[I32](-2147483648, -1) {
+        Just(_) => panic("should underflow"),
+        Nothing => {}
+    }
+    return 0
+}
+
+// ============================================================================
+// checked_sub (from checked.test.tml)
+// ============================================================================
+
+@test
+func test_checked_sub_i32_normal() -> I32 {
+    when checked_sub[I32](30, 10) {
+        Just(n) => assert_eq(n, 20, "30 - 10 = 20"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_sub_i32_overflow() -> I32 {
+    when checked_sub[I32](-2147483648, 1) {
+        Just(_) => panic("should underflow"),
+        Nothing => {}
+    }
+    return 0
+}
+
+// ============================================================================
+// checked_mul (from checked.test.tml)
+// ============================================================================
+
+@test
+func test_checked_mul_i32_normal() -> I32 {
+    when checked_mul[I32](6, 7) {
+        Just(n) => assert_eq(n, 42, "6 * 7 = 42"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_mul_i32_overflow() -> I32 {
+    when checked_mul[I32](2147483647, 2) {
+        Just(_) => panic("should overflow"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_checked_mul_i32_zero() -> I32 {
+    when checked_mul[I32](999999, 0) {
+        Just(n) => assert_eq(n, 0, "anything * 0 = 0"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+// ============================================================================
+// checked_div (from checked.test.tml)
+// ============================================================================
+
+@test
+func test_checked_div_i32_normal() -> I32 {
+    when checked_div[I32](42, 6) {
+        Just(n) => assert_eq(n, 7, "42 / 6 = 7"),
+        Nothing => panic("should not fail")
+    }
+    return 0
+}
+
+@test
+func test_checked_div_i32_by_zero() -> I32 {
+    when checked_div[I32](42, 0) {
+        Just(_) => panic("should fail on div by zero"),
+        Nothing => {}
+    }
+    return 0
+}
+
+// ============================================================================
+// checked arithmetic - simple naming (from checked_minimal.test.tml)
+// ============================================================================
+
+@test
+func test_checked_add_simple() -> I32 {
+    when checked_add[I32](10, 20) {
+        Just(n) => assert_eq(n, 30, "10 + 20 = 30"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_add_zero() -> I32 {
+    when checked_add[I32](42, 0) {
+        Just(n) => assert_eq(n, 42, "42 + 0 = 42"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_add_negative() -> I32 {
+    when checked_add[I32](-10, -20) {
+        Just(n) => assert_eq(n, -30, "-10 + -20 = -30"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_add_overflow() -> I32 {
+    when checked_add[I32](2147483647, 1) {
+        Just(_) => panic("should overflow"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_checked_add_underflow() -> I32 {
+    when checked_add[I32](-2147483648, -1) {
+        Just(_) => panic("should underflow"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_checked_sub_normal() -> I32 {
+    when checked_sub[I32](30, 10) {
+        Just(n) => assert_eq(n, 20, "30 - 10 = 20"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_sub_overflow() -> I32 {
+    when checked_sub[I32](-2147483648, 1) {
+        Just(_) => panic("should underflow"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_checked_mul_normal() -> I32 {
+    when checked_mul[I32](6, 7) {
+        Just(n) => assert_eq(n, 42, "6 * 7 = 42"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_mul_overflow() -> I32 {
+    when checked_mul[I32](2147483647, 2) {
+        Just(_) => panic("should overflow"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_checked_mul_zero() -> I32 {
+    when checked_mul[I32](999999, 0) {
+        Just(n) => assert_eq(n, 0, "anything * 0 = 0"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_div_normal() -> I32 {
+    when checked_div[I32](42, 6) {
+        Just(n) => assert_eq(n, 7, "42 / 6 = 7"),
+        Nothing => panic("should not fail")
+    }
+    return 0
+}
+
+@test
+func test_checked_div_by_zero() -> I32 {
+    when checked_div[I32](42, 0) {
+        Just(_) => panic("should fail on div by zero"),
+        Nothing => {}
+    }
+    return 0
+}
+
+// ============================================================================
+// saturating_add (from saturating_intrinsics.test.tml)
+// ============================================================================
+
+@test
+func test_saturating_add_normal() -> I32 {
+    assert_eq(saturating_add[I32](10, 20), 30, "10 + 20 = 30")
+    return 0
+}
+
+@test
+func test_saturating_add_overflow() -> I32 {
+    let result: I32 = saturating_add[I32](2147483647, 100)
+    assert_eq(result, 2147483647, "should saturate at I32 max")
+    return 0
+}
+
+@test
+func test_saturating_add_underflow() -> I32 {
+    let result: I32 = saturating_add[I32](-2147483648, -100)
+    assert_eq(result, -2147483648, "should saturate at I32 min")
+    return 0
+}
+
+// ============================================================================
+// saturating_sub (from saturating_intrinsics.test.tml)
+// ============================================================================
+
+@test
+func test_saturating_sub_normal() -> I32 {
+    assert_eq(saturating_sub[I32](30, 10), 20, "30 - 10 = 20")
+    return 0
+}
+
+@test
+func test_saturating_sub_underflow() -> I32 {
+    let result: I32 = saturating_sub[I32](-2147483648, 100)
+    assert_eq(result, -2147483648, "should saturate at I32 min")
+    return 0
+}
+
+// ============================================================================
+// saturating_mul (from saturating_intrinsics.test.tml)
+// ============================================================================
+
+@test
+func test_saturating_mul_normal() -> I32 {
+    assert_eq(saturating_mul[I32](6, 7), 42, "6 * 7 = 42")
+    return 0
+}
+
+@test
+func test_saturating_mul_overflow() -> I32 {
+    let result: I32 = saturating_mul[I32](2147483647, 2)
+    assert_eq(result, 2147483647, "should saturate at I32 max")
+    return 0
+}
+
+@test
+func test_saturating_mul_zero() -> I32 {
+    assert_eq(saturating_mul[I32](999999, 0), 0, "anything * 0 = 0")
+    return 0
+}
+
+// ============================================================================
+// Saturating wrapper type (from saturating.test.tml)
+// ============================================================================
+
+@test
+func test_saturating_new_i32() -> I32 {
+    let s: Saturating[I32] = Saturating::new[I32](42)
+    assert_eq(s.value(), 42, "Saturating::new(42).value() should return 42")
+    return 0
+}
+
+@test
+func test_saturating_new_negative() -> I32 {
+    let s: Saturating[I32] = Saturating::new[I32](-100)
+    assert_eq(s.value(), -100, "Saturating::new(-100).value() should return -100")
+    return 0
+}
+
+@test
+func test_saturating_new_zero() -> I32 {
+    let s: Saturating[I32] = Saturating::new[I32](0)
+    assert_eq(s.value(), 0, "Saturating::new(0).value() should return 0")
+    return 0
+}
+
+@test
+func test_saturating_into_inner() -> I32 {
+    let s: Saturating[I32] = Saturating::new[I32](99)
+    let val: I32 = s.into_inner()
+    assert_eq(val, 99, "into_inner() should return the inner value")
+    return 0
+}
+
+@test
+func test_saturating_i64() -> I32 {
+    let s: Saturating[I64] = Saturating::new[I64](1000000i64)
+    assert_eq(s.value(), 1000000i64, "Saturating[I64] should work")
+    return 0
+}
+
+@test
+func test_saturating_i64_negative() -> I32 {
+    let s: Saturating[I64] = Saturating::new[I64](-999999i64)
+    assert_eq(s.value(), -999999i64, "Saturating[I64] with negative should work")
+    return 0
+}
+
+@test
+func test_saturating_i8_positive() -> I32 {
+    let s: Saturating[I8] = Saturating::new[I8](100i8)
+    let val: I8 = s.value()
+    assert_eq(val, 100i8, "Saturating[I8] positive value should work")
+    return 0
+}
+
+@test
+func test_saturating_i8_negative() -> I32 {
+    let s: Saturating[I8] = Saturating::new[I8](-50i8)
+    let val: I8 = s.value()
+    assert_eq(val, -50i8, "Saturating[I8] negative value should work")
+    return 0
+}

@@ -1,0 +1,24 @@
+// Tests for str find functions
+use test
+use core::str
+
+@test
+func test_str_find_found() -> I32 {
+    let r: Maybe[I64] = str::find("hello world", "world")
+    assert(r.is_just(), "find world in hello world")
+    return 0
+}
+
+@test
+func test_str_find_not_found() -> I32 {
+    let r: Maybe[I64] = str::find("hello", "xyz")
+    assert(r.is_nothing(), "find xyz not in hello")
+    return 0
+}
+
+@test
+func test_str_rfind_found() -> I32 {
+    let r: Maybe[I64] = str::rfind("hello hello", "hello")
+    assert(r.is_just(), "rfind hello")
+    return 0
+}

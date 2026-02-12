@@ -1,0 +1,129 @@
+// Tests targeting uncovered os module functions
+use test
+use std::os
+
+@test
+func test_os_machine() -> I32 {
+    let s: Str = os::machine()
+    assert(s.len() > 0, "machine() should return a string")
+    return 0
+}
+
+@test
+func test_os_release() -> I32 {
+    let s: Str = os::release()
+    assert(s.len() > 0, "release() should return a string")
+    return 0
+}
+
+@test
+func test_os_version() -> I32 {
+    let s: Str = os::version()
+    assert(s.len() > 0, "version() should return a string")
+    return 0
+}
+
+@test
+func test_os_uptime() -> I32 {
+    let u: I64 = os::uptime()
+    assert(u > 0 as I64, "uptime() should be positive")
+    return 0
+}
+
+@test
+func test_os_totalmem() -> I32 {
+    let m: U64 = os::totalmem()
+    assert(m > 0 as U64, "totalmem() should be positive")
+    return 0
+}
+
+@test
+func test_os_freemem() -> I32 {
+    let m: U64 = os::freemem()
+    assert(m > 0 as U64, "freemem() should be positive")
+    return 0
+}
+
+@test
+func test_os_endianness() -> I32 {
+    let s: Str = os::endianness()
+    assert(s.len() > 0, "endianness() should return LE or BE")
+    return 0
+}
+
+@test
+func test_os_cpu_count() -> I32 {
+    let c: I32 = os::cpu_count()
+    assert(c > 0, "cpu_count() should be positive")
+    return 0
+}
+
+@test
+func test_os_cpu_model() -> I32 {
+    let s: Str = os::cpu_model(0)
+    assert(s.len() > 0, "cpu_model(0) should return a string")
+    return 0
+}
+
+@test
+func test_os_cpu_speed() -> I32 {
+    let s: I64 = os::cpu_speed(0)
+    assert(s > 0 as I64, "cpu_speed(0) should be positive")
+    return 0
+}
+
+@test
+func test_os_loadavg_1() -> I32 {
+    let l: F64 = os::loadavg_1()
+    assert(l >= 0.0, "loadavg_1() should be non-negative")
+    return 0
+}
+
+@test
+func test_os_loadavg_5() -> I32 {
+    let l: F64 = os::loadavg_5()
+    assert(l >= 0.0, "loadavg_5() should be non-negative")
+    return 0
+}
+
+@test
+func test_os_loadavg_15() -> I32 {
+    let l: F64 = os::loadavg_15()
+    assert(l >= 0.0, "loadavg_15() should be non-negative")
+    return 0
+}
+
+@test
+func test_os_username() -> I32 {
+    let s: Str = os::username()
+    assert(s.len() > 0, "username() should return a string")
+    return 0
+}
+
+@test
+func test_os_uid() -> I32 {
+    let u: I64 = os::uid()
+    assert(u >= -1 as I64, "uid() should return value")
+    return 0
+}
+
+@test
+func test_os_gid() -> I32 {
+    let g: I64 = os::gid()
+    assert(g >= -1 as I64, "gid() should return value")
+    return 0
+}
+
+@test
+func test_os_shell() -> I32 {
+    let s: Str = os::shell()
+    assert(s.len() > 0, "shell() should return a string")
+    return 0
+}
+
+@test
+func test_os_pid() -> I32 {
+    let p: I32 = os::pid()
+    assert(p > 0, "pid() should be positive")
+    return 0
+}

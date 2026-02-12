@@ -1,0 +1,12 @@
+// Diagnostic test: parser errors
+// Tests multiple parser error codes in a single file.
+// Note: the parser stops after encountering errors, but may report multiple.
+
+// @expect-error P001
+// @expect-error P008
+
+func main() -> I32 {
+    let x
+    let y: I32 = (5 + 3
+    return 0
+}

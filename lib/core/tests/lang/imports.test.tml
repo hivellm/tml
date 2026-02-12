@@ -1,0 +1,73 @@
+// Tests for use declarations and module imports
+use test
+use core::str::{len, contains, starts_with, ends_with, to_uppercase}
+use core::str::trim
+
+// =============================================================================
+// Importing specific functions from a module
+// =============================================================================
+
+@test
+func test_imported_len() -> I32 {
+    assert_eq(len("hello"), 5, "len should work when imported")
+    return 0
+}
+
+@test
+func test_imported_contains() -> I32 {
+    assert(contains("hello world", "world"), "contains should work when imported")
+    return 0
+}
+
+@test
+func test_imported_starts_with() -> I32 {
+    assert(starts_with("hello", "hel"), "starts_with should work")
+    return 0
+}
+
+@test
+func test_imported_ends_with() -> I32 {
+    assert(ends_with("hello", "llo"), "ends_with should work")
+    return 0
+}
+
+@test
+func test_imported_to_uppercase() -> I32 {
+    let s: Str = to_uppercase("hello")
+    assert_eq(s, "HELLO", "to_uppercase should work when imported")
+    return 0
+}
+
+// =============================================================================
+// Importing a single function
+// =============================================================================
+
+@test
+func test_single_import_trim() -> I32 {
+    let s: Str = trim("  hello  ")
+    assert_eq(s, "hello", "single import trim should work")
+    return 0
+}
+
+// =============================================================================
+// Using multiple modules together
+// =============================================================================
+
+@test
+func test_combined_imports() -> I32 {
+    let s: Str = "  Hello World  "
+    let trimmed: Str = trim(s)
+    let upper: Str = to_uppercase(trimmed)
+    assert_eq(upper, "HELLO WORLD", "chained imports should work")
+    return 0
+}
+
+@test
+func test_combined_checks() -> I32 {
+    let s: Str = "TML Language"
+    assert(starts_with(s, "TML"), "should start with TML")
+    assert(ends_with(s, "Language"), "should end with Language")
+    assert(contains(s, " "), "should contain space")
+    assert_eq(len(s), 12, "length should be 12")
+    return 0
+}

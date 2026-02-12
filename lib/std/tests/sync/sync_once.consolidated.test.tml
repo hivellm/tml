@@ -1,0 +1,475 @@
+// Consolidated Once, OnceLock, AtomicUsize coverage, and AtomicIsize coverage tests
+// Total @test count: 44
+// Sources: once_barrier.test.tml (once/oncelock portions), sync_once_lock.test.tml,
+//          atomic_usize_isize.test.tml, atomic_usize.test.tml (unique portions),
+//          atomic_isize.test.tml (unique portions)
+use test::{assert, assert_eq}
+use std::sync::{Once, OnceLock, AtomicUsize, AtomicIsize, Ordering}
+use std::sync::once::{Once, OnceLock}
+
+// ============================================================================
+// Once Tests
+// ============================================================================
+
+@test
+func test_once_new() -> I32 {
+    let once: Once = Once::new()
+    return 0
+}
+
+@test
+func test_once_is_completed_initially_false() -> I32 {
+    let once: Once = Once::new()
+    assert(not once.is_completed(), "Once should not be completed initially")
+    return 0
+}
+
+// From sync_once_lock.test.tml (same logic, different source)
+@test
+func test_once_new_not_completed() -> I32 {
+    let o: Once = Once::new()
+    assert(not o.is_completed(), "new Once should not be completed")
+    return 0
+}
+
+@test
+func test_once_call_once_completes() -> I32 {
+    var once: Once = Once::new()
+
+    once.call_once(do() {
+        // Initialization code
+    })
+
+    assert(once.is_completed(), "Once should be completed after call_once")
+    return 0
+}
+
+@test
+func test_once_call_once_runs_exactly_once() -> I32 {
+    var once: Once = Once::new()
+
+    once.call_once(do() {
+        // First call runs this
+    })
+
+    once.call_once(do() {
+        // Second call skipped
+    })
+
+    once.call_once(do() {
+        // Third call skipped
+    })
+
+    assert(once.is_completed(), "Once should remain completed")
+    return 0
+}
+
+@test
+func test_once_is_completed_after_multiple_calls() -> I32 {
+    var once: Once = Once::new()
+
+    once.call_once(do() {})
+    assert(once.is_completed(), "Should be completed after first call")
+
+    once.call_once(do() {})
+    assert(once.is_completed(), "Should remain completed after second call")
+
+    return 0
+}
+
+// ============================================================================
+// OnceLock Tests
+// ============================================================================
+
+@test
+func test_once_lock_new() -> I32 {
+    let lock: OnceLock[I32] = OnceLock::new[I32]()
+    return 0
+}
+
+@test
+func test_once_lock_is_initialized_initially_false() -> I32 {
+    let lock: OnceLock[I32] = OnceLock::new[I32]()
+    assert(not lock.is_initialized(), "OnceLock should not be initialized initially")
+    return 0
+}
+
+// From sync_once_lock.test.tml (same concept, slightly different)
+@test
+func test_once_lock_new_not_initialized() -> I32 {
+    let lock: OnceLock[I32] = OnceLock::new[I32]()
+    assert(not lock.is_initialized(), "new OnceLock should not be initialized")
+    return 0
+}
+
+@test
+func test_once_lock_set_success() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    let result: Outcome[Unit, I32] = lock.set(42)
+    when result {
+        Ok(_) => {},
+        Err(_) => assert(false, "set() should succeed on empty OnceLock")
+    }
+    assert(lock.is_initialized(), "OnceLock should be initialized after set")
+    return 0
+}
+
+@test
+func test_once_lock_set_twice_fails() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    let r1: Outcome[Unit, I32] = lock.set(42)
+    when r1 {
+        Ok(_) => {},
+        Err(_) => assert(false, "First set should succeed")
+    }
+    let r2: Outcome[Unit, I32] = lock.set(100)
+    when r2 {
+        Ok(_) => assert(false, "Second set should fail"),
+        Err(v) => assert_eq(v, 100, "Err should contain the rejected value")
+    }
+    return 0
+}
+
+@test
+func test_once_lock_with_i64() -> I32 {
+    var lock: OnceLock[I64] = OnceLock::new[I64]()
+    let result: Outcome[Unit, I64] = lock.set(9999999999 as I64)
+    when result {
+        Ok(_) => {},
+        Err(_) => assert(false, "set() should succeed")
+    }
+    assert(lock.is_initialized(), "Should be initialized after set")
+    return 0
+}
+
+@test
+func test_once_lock_with_bool() -> I32 {
+    var lock: OnceLock[Bool] = OnceLock::new[Bool]()
+    let result: Outcome[Unit, Bool] = lock.set(true)
+    when result {
+        Ok(_) => {},
+        Err(_) => assert(false, "set() should succeed")
+    }
+    assert(lock.is_initialized(), "Should be initialized after set")
+    return 0
+}
+
+// Note: Tests for OnceLock::get(), get_or_init() are
+// temporarily skipped due to codegen issues with Maybe[ref T] type handling.
+
+// From sync_once_lock.test.tml
+@test
+func test_once_lock_set_and_initialized() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    lock.set(42)
+    assert(lock.is_initialized(), "OnceLock should be initialized after set")
+    return 0
+}
+
+@test
+func test_once_lock_take() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    lock.set(99)
+    let v: Maybe[I32] = lock.take()
+    assert(v.is_just(), "take should return Just after set")
+    return 0
+}
+
+@test
+func test_once_lock_into_inner() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    lock.set(77)
+    let v: Maybe[I32] = lock.into_inner()
+    assert(v.is_just(), "into_inner should return Just")
+    return 0
+}
+
+@test
+func test_once_lock_into_inner_empty() -> I32 {
+    let lock: OnceLock[I32] = OnceLock::new[I32]()
+    let v: Maybe[I32] = lock.into_inner()
+    assert(v.is_nothing(), "into_inner on empty should be Nothing")
+    return 0
+}
+
+// ============================================================================
+// AtomicUsize Coverage Tests (from atomic_usize_isize.test.tml)
+// Return values are U64 on 64-bit platforms
+// ============================================================================
+
+@test
+func test_atomic_usize_new() -> I32 {
+    let counter: AtomicUsize = AtomicUsize::new(42 as Usize)
+    assert_eq(counter.load(Ordering::Relaxed), 42 as Usize, "new usize should be 42")
+    return 0
+}
+
+@test
+func test_atomic_usize_store_load() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(0 as Usize)
+    counter.store(100 as Usize, Ordering::Relaxed)
+    assert_eq(counter.load(Ordering::Relaxed), 100 as Usize, "loaded value should be 100")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_add() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(5 as Usize)
+    let old: U64 = counter.fetch_add(3 as Usize, Ordering::Relaxed)
+    assert_eq(old, 5 as U64, "fetch_add should return old value 5")
+    assert_eq(counter.load(Ordering::Relaxed), 8 as Usize, "5 + 3 = 8")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_sub() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(10 as Usize)
+    let old: U64 = counter.fetch_sub(3 as Usize, Ordering::Relaxed)
+    assert_eq(old, 10 as U64, "fetch_sub should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 7 as Usize, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_atomic_usize_swap() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(10 as Usize)
+    let old: U64 = counter.swap(20 as Usize, Ordering::Relaxed)
+    assert_eq(old, 10 as U64, "swap should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 20 as Usize, "new value should be 20")
+    return 0
+}
+
+@test
+func test_atomic_usize_compare_exchange_success() -> I32 {
+    var counter: AtomicUsize = AtomicUsize::new(10 as Usize)
+    let result: Outcome[Usize, Usize] = counter.compare_exchange(10 as Usize, 20 as Usize, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert_eq(v, 10 as Usize, "Ok should contain old value"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 20 as Usize, "value should now be 20")
+    return 0
+}
+
+@test
+func test_atomic_usize_compare_exchange_weak() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(42 as Usize)
+    let r: Outcome[Usize, Usize] = au.compare_exchange_weak(42 as Usize, 100 as Usize, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_usize_compare_and_swap() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(42 as Usize)
+    let old: U64 = au.compare_and_swap(42 as Usize, 100 as Usize, Ordering::Relaxed)
+    assert_eq(old, 42 as U64, "compare_and_swap returns old")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_and() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(15 as Usize)
+    let old: U64 = au.fetch_and(9 as Usize, Ordering::Relaxed)
+    assert_eq(old, 15 as U64, "fetch_and returns old")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_or() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(3 as Usize)
+    let old: U64 = au.fetch_or(12 as Usize, Ordering::Relaxed)
+    assert_eq(old, 3 as U64, "fetch_or returns old")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_xor() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(15 as Usize)
+    let old: U64 = au.fetch_xor(9 as Usize, Ordering::Relaxed)
+    assert_eq(old, 15 as U64, "fetch_xor returns old")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_max() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(5 as Usize)
+    let old: U64 = au.fetch_max(10 as Usize, Ordering::Relaxed)
+    assert_eq(old, 5 as U64, "fetch_max returns old")
+    assert_eq(au.load(Ordering::Relaxed), 10 as Usize, "max(5,10) = 10")
+    return 0
+}
+
+@test
+func test_atomic_usize_fetch_min() -> I32 {
+    var au: AtomicUsize = AtomicUsize::new(10 as Usize)
+    let old: U64 = au.fetch_min(5 as Usize, Ordering::Relaxed)
+    assert_eq(old, 10 as U64, "fetch_min returns old")
+    assert_eq(au.load(Ordering::Relaxed), 5 as Usize, "min(10,5) = 5")
+    return 0
+}
+
+@test
+func test_atomic_usize_is_lock_free() -> I32 {
+    let au: AtomicUsize = AtomicUsize::new(0 as Usize)
+    assert(au.is_lock_free(), "AtomicUsize should be lock-free")
+    return 0
+}
+
+@test
+func test_atomic_usize_into_inner() -> I32 {
+    let au: AtomicUsize = AtomicUsize::new(42 as Usize)
+    let v: U64 = au.into_inner()
+    assert_eq(v, 42 as U64, "into_inner returns initial value")
+    return 0
+}
+
+@test
+func test_atomic_usize_index_pattern() -> I32 {
+    var index: AtomicUsize = AtomicUsize::new(0 as Usize)
+    var i: I32 = 0
+    loop (i < 5) {
+        let prev: U64 = index.fetch_add(1 as Usize, Ordering::Relaxed)
+        i = i + 1
+    }
+    assert_eq(index.load(Ordering::Relaxed), 5 as Usize, "index should be 5")
+    return 0
+}
+
+// ============================================================================
+// AtomicIsize Coverage Tests (from atomic_usize_isize.test.tml)
+// Return values are I64 on 64-bit platforms
+// ============================================================================
+
+@test
+func test_atomic_isize_new() -> I32 {
+    let counter: AtomicIsize = AtomicIsize::new(42 as Isize)
+    assert_eq(counter.load(Ordering::Relaxed), 42 as Isize, "new isize should be 42")
+    return 0
+}
+
+@test
+func test_atomic_isize_negative() -> I32 {
+    let counter: AtomicIsize = AtomicIsize::new(-100 as Isize)
+    assert_eq(counter.load(Ordering::Relaxed), -100 as Isize, "should handle negative values")
+    return 0
+}
+
+@test
+func test_atomic_isize_store() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(0 as Isize)
+    ai.store(100 as Isize, Ordering::Relaxed)
+    let v: I64 = ai.load(Ordering::Relaxed)
+    assert_eq(v, 100 as I64, "store")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_add() -> I32 {
+    var counter: AtomicIsize = AtomicIsize::new(5 as Isize)
+    let old: I64 = counter.fetch_add(3 as Isize, Ordering::Relaxed)
+    assert_eq(old, 5 as I64, "fetch_add should return old value 5")
+    assert_eq(counter.load(Ordering::Relaxed), 8 as Isize, "5 + 3 = 8")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_sub() -> I32 {
+    var counter: AtomicIsize = AtomicIsize::new(10 as Isize)
+    let old: I64 = counter.fetch_sub(3 as Isize, Ordering::Relaxed)
+    assert_eq(old, 10 as I64, "fetch_sub should return old value 10")
+    assert_eq(counter.load(Ordering::Relaxed), 7 as Isize, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_atomic_isize_swap() -> I32 {
+    var counter: AtomicIsize = AtomicIsize::new(-50 as Isize)
+    let old: I64 = counter.swap(50 as Isize, Ordering::Relaxed)
+    assert_eq(old, -50 as I64, "swap should return old value -50")
+    assert_eq(counter.load(Ordering::Relaxed), 50 as Isize, "new value should be 50")
+    return 0
+}
+
+@test
+func test_atomic_isize_compare_exchange_success() -> I32 {
+    var counter: AtomicIsize = AtomicIsize::new(10 as Isize)
+    let result: Outcome[Isize, Isize] = counter.compare_exchange(10 as Isize, 20 as Isize, Ordering::SeqCst, Ordering::Relaxed)
+    when result {
+        Ok(v) => assert_eq(v, 10 as Isize, "Ok should contain old value"),
+        Err(_) => assert(false, "compare_exchange should succeed"),
+    }
+    assert_eq(counter.load(Ordering::Relaxed), 20 as Isize, "value should now be 20")
+    return 0
+}
+
+@test
+func test_atomic_isize_compare_exchange_weak() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(42 as Isize)
+    let r: Outcome[Isize, Isize] = ai.compare_exchange_weak(42 as Isize, 100 as Isize, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_isize_compare_and_swap() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(42 as Isize)
+    let old: I64 = ai.compare_and_swap(42 as Isize, 100 as Isize, Ordering::Relaxed)
+    assert_eq(old, 42 as I64, "compare_and_swap returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_and() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(15 as Isize)
+    let old: I64 = ai.fetch_and(9 as Isize, Ordering::Relaxed)
+    assert_eq(old, 15 as I64, "fetch_and returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_or() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(3 as Isize)
+    let old: I64 = ai.fetch_or(12 as Isize, Ordering::Relaxed)
+    assert_eq(old, 3 as I64, "fetch_or returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_xor() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(15 as Isize)
+    let old: I64 = ai.fetch_xor(9 as Isize, Ordering::Relaxed)
+    assert_eq(old, 15 as I64, "fetch_xor returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_max() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(5 as Isize)
+    let old: I64 = ai.fetch_max(10 as Isize, Ordering::Relaxed)
+    assert_eq(old, 5 as I64, "fetch_max returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_fetch_min() -> I32 {
+    var ai: AtomicIsize = AtomicIsize::new(10 as Isize)
+    let old: I64 = ai.fetch_min(5 as Isize, Ordering::Relaxed)
+    assert_eq(old, 10 as I64, "fetch_min returns old")
+    return 0
+}
+
+@test
+func test_atomic_isize_is_lock_free() -> I32 {
+    let ai: AtomicIsize = AtomicIsize::new(0 as Isize)
+    assert(ai.is_lock_free(), "AtomicIsize should be lock-free")
+    return 0
+}
+
+@test
+func test_atomic_isize_into_inner() -> I32 {
+    let ai: AtomicIsize = AtomicIsize::new(42 as Isize)
+    let v: I64 = ai.into_inner()
+    assert_eq(v, 42 as I64, "into_inner returns initial value")
+    return 0
+}

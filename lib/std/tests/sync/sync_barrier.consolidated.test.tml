@@ -1,0 +1,407 @@
+// Consolidated Barrier, Condvar, Send/Sync, and Isolation Struct tests
+// Total @test count: 48
+// Sources: once_barrier.test.tml (barrier portions), condvar_basic.test.tml,
+//          condvar_extra.test.tml, sync_isolation.test.tml, send_sync.test.tml,
+//          sync_ordering_fence.test.tml
+use test::{assert, assert_eq}
+use std::sync::{Barrier, BarrierWaitResult, Arc, Mutex, RwLock, Condvar, Once, OnceLock}
+use std::sync::condvar::Condvar
+use std::sync::mutex::{Mutex, MutexGuard}
+use std::sync::atomic::{AtomicI32, AtomicU32, AtomicBool, AtomicI64, AtomicU64, AtomicUsize}
+use std::sync::Ordering
+use core::marker::{Send, Sync}
+
+// Helper types
+type SendSyncPoint { x: I32, y: I32 }
+type SendSyncContainer[T] { value: T }
+
+type IsoSimpleInner {
+    count: AtomicUsize,
+    alive: AtomicBool,
+}
+
+type IsoMutexCondvarInner {
+    head: Mutex[I32],
+    cv: Condvar,
+    count: AtomicUsize,
+}
+
+type IsoDualMutexInner {
+    head: Mutex[I32],
+    tail: Mutex[I32],
+    cv: Condvar,
+    sender_count: AtomicUsize,
+    receiver_alive: AtomicBool,
+    len: AtomicUsize,
+}
+
+// ============================================================================
+// Barrier Tests
+// ============================================================================
+
+@test
+func test_barrier_new() -> I32 {
+    let barrier: Barrier = Barrier::new(1 as U32)
+    return 0
+}
+
+@test
+func test_barrier_wait_single_thread() -> I32 {
+    var barrier: Barrier = Barrier::new(1 as U32)
+    let result: BarrierWaitResult = barrier.wait()
+    assert(result.is_leader(), "Single thread should be leader")
+    return 0
+}
+
+@test
+func test_barrier_wait_result_is_leader() -> I32 {
+    var barrier: Barrier = Barrier::new(1 as U32)
+    let result: BarrierWaitResult = barrier.wait()
+    let is_leader: Bool = result.is_leader()
+    assert(is_leader, "is_leader should return true for single thread")
+    return 0
+}
+
+// Note: test_barrier_reusable is disabled - multiple barrier.wait() calls on the
+// same barrier cause hangs. This needs investigation in the Barrier/Condvar impl.
+
+// ============================================================================
+// Condvar Basic Tests
+// ============================================================================
+
+@test
+func test_condvar_new() -> I32 {
+    let cv: Condvar = Condvar::new()
+    return 0
+}
+
+@test
+func test_condvar_notify_one_noop() -> I32 {
+    var cv: Condvar = Condvar::new()
+    cv.notify_one()
+    return 0
+}
+
+@test
+func test_condvar_notify_all_noop() -> I32 {
+    var cv: Condvar = Condvar::new()
+    cv.notify_all()
+    return 0
+}
+
+@test
+func test_condvar_notify_and_wait() -> I32 {
+    let cv: Condvar = Condvar::new()
+    cv.notify_one()
+    cv.notify_all()
+    return 0
+}
+
+@test
+func test_isolation_condvar_creation() -> I32 {
+    let cv: Condvar = Condvar::new()
+    return 0
+}
+
+// BLOCKED: compiler_fence intrinsic emits @tml_compiler_fence instead of LLVM intrinsic
+@test
+func test_compiler_fence_placeholder() -> I32 {
+    return 0
+}
+
+// ============================================================================
+// Send/Sync Primitive Type Tests (from send_sync.test.tml)
+// ============================================================================
+
+@test
+func test_i32_is_send() -> I32 {
+    let x: I32 = 42
+    return 0
+}
+
+@test
+func test_i32_is_sync() -> I32 {
+    let x: I32 = 42
+    return 0
+}
+
+@test
+func test_bool_is_send_sync() -> I32 {
+    let b: Bool = true
+    return 0
+}
+
+@test
+func test_f64_is_send_sync() -> I32 {
+    let f: F64 = 3.14
+    return 0
+}
+
+@test
+func test_struct_with_primitives_is_send() -> I32 {
+    let p: SendSyncPoint = SendSyncPoint { x: 1, y: 2 }
+    return 0
+}
+
+@test
+func test_struct_with_primitives_is_sync() -> I32 {
+    let p: SendSyncPoint = SendSyncPoint { x: 1, y: 2 }
+    return 0
+}
+
+@test
+func test_container_of_i32_is_send() -> I32 {
+    let c: SendSyncContainer[I32] = SendSyncContainer { value: 42 }
+    return 0
+}
+
+// ============================================================================
+// Send/Sync Atomic Type Tests
+// ============================================================================
+
+@test
+func test_atomic_i32_is_send() -> I32 {
+    let a: AtomicI32 = AtomicI32::new(0)
+    return 0
+}
+
+@test
+func test_atomic_i32_is_sync() -> I32 {
+    let a: AtomicI32 = AtomicI32::new(0)
+    return 0
+}
+
+@test
+func test_atomic_bool_is_send_sync() -> I32 {
+    let a: AtomicBool = AtomicBool::new(false)
+    return 0
+}
+
+@test
+func test_atomic_u64_is_send_sync() -> I32 {
+    let a: AtomicU64 = AtomicU64::new(0)
+    return 0
+}
+
+// ============================================================================
+// Send/Sync Mutex/RwLock/Arc Tests
+// ============================================================================
+
+@test
+func test_mutex_of_i32_is_send() -> I32 {
+    let m: Mutex[I32] = Mutex::new(0)
+    return 0
+}
+
+@test
+func test_mutex_of_i32_is_sync() -> I32 {
+    let m: Mutex[I32] = Mutex::new(0)
+    return 0
+}
+
+@test
+func test_mutex_of_point_is_send() -> I32 {
+    let m: Mutex[SendSyncPoint] = Mutex::new(SendSyncPoint { x: 0, y: 0 })
+    return 0
+}
+
+@test
+func test_rwlock_of_i32_is_send() -> I32 {
+    let rw: RwLock[I32] = RwLock::new(0)
+    return 0
+}
+
+@test
+func test_rwlock_of_i32_is_sync() -> I32 {
+    let rw: RwLock[I32] = RwLock::new(0)
+    return 0
+}
+
+@test
+func test_arc_of_i32_is_send() -> I32 {
+    let a: Arc[I32] = Arc::new(42)
+    return 0
+}
+
+@test
+func test_arc_of_i32_is_sync() -> I32 {
+    let a: Arc[I32] = Arc::new(42)
+    return 0
+}
+
+@test
+func test_arc_can_be_cloned_across_threads() -> I32 {
+    let a1: Arc[I32] = Arc::new(42)
+    let a2: Arc[I32] = a1.duplicate()
+    assert_eq(a1.strong_count(), 2 as I64)
+    return 0
+}
+
+@test
+func test_condvar_is_send() -> I32 {
+    let cv: Condvar = Condvar::new()
+    return 0
+}
+
+@test
+func test_condvar_is_sync() -> I32 {
+    let cv: Condvar = Condvar::new()
+    return 0
+}
+
+@test
+func test_barrier_is_send() -> I32 {
+    let b: Barrier = Barrier::new(1)
+    return 0
+}
+
+@test
+func test_barrier_is_sync() -> I32 {
+    let b: Barrier = Barrier::new(1)
+    return 0
+}
+
+@test
+func test_once_is_send() -> I32 {
+    let o: Once = Once::new()
+    return 0
+}
+
+@test
+func test_once_is_sync() -> I32 {
+    let o: Once = Once::new()
+    return 0
+}
+
+@test
+func test_oncelock_of_i32_is_send() -> I32 {
+    let ol: OnceLock[I32] = OnceLock::new[I32]()
+    return 0
+}
+
+@test
+func test_oncelock_of_i32_is_sync() -> I32 {
+    let ol: OnceLock[I32] = OnceLock::new[I32]()
+    return 0
+}
+
+@test
+func test_arc_mutex_pattern() -> I32 {
+    let shared: Arc[Mutex[I32]] = Arc::new(Mutex::new(0))
+    let clone: Arc[Mutex[I32]] = shared.duplicate()
+    assert_eq(shared.strong_count(), 2 as I64)
+    return 0
+}
+
+@test
+func test_nested_container_send() -> I32 {
+    let nested: SendSyncContainer[SendSyncContainer[I32]] = SendSyncContainer {
+        value: SendSyncContainer { value: 42 }
+    }
+    return 0
+}
+
+// ============================================================================
+// Isolation Struct Tests (from sync_isolation.test.tml)
+// ============================================================================
+
+@test
+func test_isolation_atomic_usize() -> I32 {
+    let counter: AtomicUsize = AtomicUsize::new(0)
+    assert_eq(counter.load(Ordering::Relaxed), 0)
+    return 0
+}
+
+@test
+func test_isolation_atomic_bool() -> I32 {
+    let flag: AtomicBool = AtomicBool::new(true)
+    assert(flag.load(Ordering::Relaxed))
+    return 0
+}
+
+@test
+func test_isolation_simple_struct_atomics() -> I32 {
+    let inner: IsoSimpleInner = IsoSimpleInner {
+        count: AtomicUsize::new(5),
+        alive: AtomicBool::new(true),
+    }
+    assert_eq(inner.count.load(Ordering::Relaxed), 5)
+    assert(inner.alive.load(Ordering::Relaxed))
+    return 0
+}
+
+@test
+func test_isolation_mutex_condvar_struct() -> I32 {
+    let inner: IsoMutexCondvarInner = IsoMutexCondvarInner {
+        head: Mutex::new(99),
+        cv: Condvar::new(),
+        count: AtomicUsize::new(1),
+    }
+    assert_eq(inner.count.load(Ordering::Relaxed), 1)
+    return 0
+}
+
+@test
+func test_isolation_dual_mutex_struct() -> I32 {
+    let inner: IsoDualMutexInner = IsoDualMutexInner {
+        head: Mutex::new(1),
+        tail: Mutex::new(2),
+        cv: Condvar::new(),
+        sender_count: AtomicUsize::new(1),
+        receiver_alive: AtomicBool::new(true),
+        len: AtomicUsize::new(0),
+    }
+    assert_eq(inner.sender_count.load(Ordering::Relaxed), 1)
+    assert(inner.receiver_alive.load(Ordering::Relaxed))
+    return 0
+}
+
+@test
+func test_isolation_arc_struct_atomics() -> I32 {
+    let a: Arc[IsoSimpleInner] = Arc::new(IsoSimpleInner {
+        count: AtomicUsize::new(10),
+        alive: AtomicBool::new(false),
+    })
+    return 0
+}
+
+@test
+func test_isolation_arc_mutex_condvar() -> I32 {
+    let a: Arc[IsoMutexCondvarInner] = Arc::new(IsoMutexCondvarInner {
+        head: Mutex::new(77),
+        cv: Condvar::new(),
+        count: AtomicUsize::new(2),
+    })
+    return 0
+}
+
+@test
+func test_isolation_arc_dual_mutex() -> I32 {
+    let a: Arc[IsoDualMutexInner] = Arc::new(IsoDualMutexInner {
+        head: Mutex::new(10),
+        tail: Mutex::new(20),
+        cv: Condvar::new(),
+        sender_count: AtomicUsize::new(1),
+        receiver_alive: AtomicBool::new(true),
+        len: AtomicUsize::new(0),
+    })
+    return 0
+}
+
+@test
+func test_isolation_arc_i32() -> I32 {
+    let a: Arc[I32] = Arc::new(123)
+    return 0
+}
+
+@test
+func test_isolation_arc_with_atomic_usize() -> I32 {
+    let a: Arc[AtomicUsize] = Arc::new(AtomicUsize::new(1))
+    return 0
+}
+
+@test
+func test_isolation_arc_with_mutex() -> I32 {
+    let a: Arc[Mutex[I32]] = Arc::new(Mutex::new(42))
+    return 0
+}

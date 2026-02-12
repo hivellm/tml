@@ -1,0 +1,333 @@
+// Consolidated IO Tests: File/Path Operations + Network
+// Total @test count: 26
+// Sources: file.test.tml (6 tests), net.test.tml (20 tests)
+
+use test
+use test::{assert, assert_eq}
+use std::file
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr, Ipv6Addr, IpAddr}
+use std::net::sys::{RawSocket}
+use std::net::error::{NetError, NetErrorKind}
+
+// ============================================================================
+// File Tests (Static Methods Only) [from file.test.tml]
+// ============================================================================
+
+@test
+func test_file_write_read_all() -> I32 {
+    let path: Str = "test_file_rw.txt"
+    let content: Str = "Hello, TML!"
+
+    // Write
+    let success: Bool = File.write_all(path, content)
+    assert(success, "write_all should succeed")
+
+    // Read
+    let read_content: Str = File.read_all(path)
+    assert(str_eq(read_content, content), "read content should match written content")
+
+    // Cleanup
+    Path.remove(path)
+    return 0
+}
+
+@test
+func test_file_append() -> I32 {
+    let path: Str = "test_file_append.txt"
+
+    File.write_all(path, "Line 1\n")
+    File.append_all(path, "Line 2\n")
+
+    let content: Str = File.read_all(path)
+    assert(str_len(content) == 14, "appended content should have correct length")
+
+    Path.remove(path)
+    return 0
+}
+
+// ============================================================================
+// Path Tests [from file.test.tml]
+// ============================================================================
+
+@test
+func test_path_exists() -> I32 {
+    let path: Str = "test_exists.txt"
+
+    assert(not Path.exists(path), "file should not exist initially")
+
+    File.write_all(path, "test")
+    assert(Path.exists(path), "file should exist after writing")
+
+    Path.remove(path)
+    assert(not Path.exists(path), "file should not exist after removal")
+    return 0
+}
+
+@test
+func test_path_is_file_dir() -> I32 {
+    let file_path: Str = "test_is_file.txt"
+    let dir_path: Str = "test_is_dir"
+
+    // Create file
+    File.write_all(file_path, "test")
+    assert(Path.is_file(file_path), "should be a file")
+    assert(not Path.is_dir(file_path), "should not be a directory")
+
+    // Create directory
+    Path.create_dir(dir_path)
+    assert(Path.is_dir(dir_path), "should be a directory")
+    assert(not Path.is_file(dir_path), "should not be a file")
+
+    // Cleanup
+    Path.remove(file_path)
+    Path.remove_dir(dir_path)
+    return 0
+}
+
+@test
+func test_path_create_dir() -> I32 {
+    let path: Str = "test_mkdir"
+
+    assert(not Path.exists(path), "dir should not exist initially")
+
+    let success: Bool = Path.create_dir(path)
+    assert(success, "create_dir should succeed")
+    assert(Path.exists(path), "dir should exist after creation")
+    assert(Path.is_dir(path), "should be a directory")
+
+    Path.remove_dir(path)
+    return 0
+}
+
+@test
+func test_path_rename_copy() -> I32 {
+    let src: Str = "test_src.txt"
+    let dst: Str = "test_dst.txt"
+    let copy: Str = "test_copy.txt"
+
+    File.write_all(src, "content")
+    assert(Path.exists(src), "source should exist")
+
+    // Test copy
+    Path.copy(src, copy)
+    assert(Path.exists(copy), "copy should exist")
+
+    // Test rename
+    Path.rename(src, dst)
+    assert(not Path.exists(src), "source should not exist after rename")
+    assert(Path.exists(dst), "dest should exist after rename")
+
+    // Cleanup
+    Path.remove(dst)
+    Path.remove(copy)
+    return 0
+}
+
+// ============================================================================
+// IPv4 Address Tests [from net.test.tml]
+// ============================================================================
+
+@test
+func test_ipv4_localhost() {
+    let localhost: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    assert(localhost.is_loopback(), "LOCALHOST should be loopback")
+    // Verify to_bits() gives correct 32-bit representation
+    let bits: U32 = localhost.to_bits()
+    assert_eq(bits, 0x7F000001 as U32)
+}
+
+@test
+func test_ipv4_unspecified() {
+    let unspec: Ipv4Addr = Ipv4Addr::UNSPECIFIED()
+    assert(unspec.is_unspecified(), "UNSPECIFIED should be unspecified")
+    // Verify to_bits() gives zero
+    let bits: U32 = unspec.to_bits()
+    assert_eq(bits, 0 as U32)
+}
+
+@test
+func test_ipv4_broadcast() {
+    let broadcast: Ipv4Addr = Ipv4Addr::BROADCAST()
+    assert(broadcast.is_broadcast(), "BROADCAST should be broadcast")
+}
+
+@test
+func test_ipv4_from_octets() {
+    let ip: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    // Verify to_bits() gives correct 32-bit representation
+    let bits: U32 = ip.to_bits()
+    assert_eq(bits, 0xC0A80101 as U32)  // 192.168.1.1 in hex
+    assert(ip.is_private(), "192.168.x.x should be private")
+}
+
+@test
+func test_ipv4_from_bits() {
+    let ip: Ipv4Addr = Ipv4Addr::from_bits(0xC0A80101 as U32)
+    let bits: U32 = ip.to_bits()
+    assert_eq(bits, 0xC0A80101 as U32)
+    assert(ip.is_private(), "192.168.1.1 should be private")
+}
+
+@test
+func test_ipv4_octets() {
+    let ip: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let octs: [U8; 4] = ip.octets()
+    assert_eq(octs[0], 192 as U8)
+    assert_eq(octs[1], 168 as U8)
+    assert_eq(octs[2], 1 as U8)
+    assert_eq(octs[3], 1 as U8)
+}
+
+// ============================================================================
+// IPv6 Address Tests [from net.test.tml]
+// ============================================================================
+
+@test
+func test_ipv6_localhost() {
+    let localhost: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    assert(localhost.is_loopback(), "LOCALHOST should be loopback")
+    assert(not localhost.is_unspecified(), "LOCALHOST should not be unspecified")
+}
+
+@test
+func test_ipv6_unspecified() {
+    let unspec: Ipv6Addr = Ipv6Addr::UNSPECIFIED()
+    assert(unspec.is_unspecified(), "UNSPECIFIED should be unspecified")
+    assert(not unspec.is_loopback(), "UNSPECIFIED should not be loopback")
+}
+
+@test
+func test_ipv6_new() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1)
+    assert(not addr.is_loopback(), "Custom address should not be loopback")
+    assert(not addr.is_unspecified(), "Custom address should not be unspecified")
+}
+
+@test
+func test_ipv6_segments() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0x1234, 0x5678, 0xabcd, 0xef01, 0x2345, 0x6789)
+    let segs: [U16; 8] = addr.segments()
+    assert_eq(segs[0], 0x2001 as U16)
+    assert_eq(segs[1], 0x0db8 as U16)
+    assert_eq(segs[2], 0x1234 as U16)
+    assert_eq(segs[3], 0x5678 as U16)
+    assert_eq(segs[4], 0xabcd as U16)
+    assert_eq(segs[5], 0xef01 as U16)
+    assert_eq(segs[6], 0x2345 as U16)
+    assert_eq(segs[7], 0x6789 as U16)
+}
+
+// ============================================================================
+// IpAddr Enum Tests [from net.test.tml]
+// ============================================================================
+
+@test
+func test_ipaddr_v4_basic() {
+    let v4: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: IpAddr = IpAddr::V4(v4)
+    assert(addr.is_ipv4(), "Should be IPv4")
+    assert(not addr.is_ipv6(), "Should not be IPv6")
+}
+
+@test
+func test_ipaddr_v6_basic() {
+    let v6: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let addr: IpAddr = IpAddr::V6(v6)
+    assert(not addr.is_ipv4(), "Should not be IPv4")
+    assert(addr.is_ipv6(), "Should be IPv6")
+}
+
+@test
+func test_ipaddr_v4_loopback() {
+    let v4: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: IpAddr = IpAddr::V4(v4)
+    assert(addr.is_loopback(), "V4 localhost should be loopback")
+}
+
+@test
+func test_ipaddr_v6_loopback() {
+    let v6: Ipv6Addr = Ipv6Addr::LOCALHOST()
+    let addr: IpAddr = IpAddr::V6(v6)
+    assert(addr.is_loopback(), "V6 localhost should be loopback")
+}
+
+// ============================================================================
+// Socket Address Tests [from net.test.tml]
+// ============================================================================
+
+@test
+func test_socket_addr_v4_creation() {
+    let ip: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddrV4 = SocketAddrV4::new(ip, 8080 as U16)
+
+    assert_eq(addr.port(), 8080 as U16)
+    assert(addr.ip().is_loopback(), "IP should be loopback")
+}
+
+@test
+func test_socket_addr_port_change() {
+    let ip: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    var addr: SocketAddrV4 = SocketAddrV4::new(ip, 8080 as U16)
+
+    assert_eq(addr.port(), 8080 as U16)
+
+    addr.set_port(9090 as U16)
+    assert_eq(addr.port(), 9090 as U16)
+}
+
+@test
+func test_socket_addr_enum() {
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+
+    assert(addr.is_ipv4(), "Should be IPv4")
+    assert(not addr.is_ipv6(), "Should not be IPv6")
+    assert_eq(addr.port(), 80 as U16)
+}
+
+// ============================================================================
+// RawSocket Tests [from net.test.tml]
+// ============================================================================
+
+@test
+func test_raw_socket_tcp_creation() {
+    let result: Outcome[RawSocket, NetError] = RawSocket::tcp()
+    when result {
+        Ok(sock) => {
+            assert(sock.is_valid(), "TCP socket should be valid")
+        },
+        Err(_) => {
+            // Socket creation may fail on some systems (e.g., sandboxed environments)
+            // This is acceptable - just verify we can handle the error case
+        },
+    }
+}
+
+@test
+func test_raw_socket_udp_creation() {
+    let result: Outcome[RawSocket, NetError] = RawSocket::udp()
+    when result {
+        Ok(sock) => {
+            assert(sock.is_valid(), "UDP socket should be valid")
+        },
+        Err(_) => {
+            // Socket creation may fail on some systems
+        },
+    }
+}
+
+// ============================================================================
+// Error Type Tests [from net.test.tml]
+// ============================================================================
+
+@test
+func test_net_error_kinds() {
+    let conn_refused: NetError = NetError::new(NetErrorKind::ConnectionRefused())
+    assert(conn_refused.is_connection_refused(), "Should be connection refused")
+
+    let would_block: NetError = NetError::new(NetErrorKind::WouldBlock())
+    assert(would_block.is_would_block(), "Should be would block")
+
+    let not_connected: NetError = NetError::new(NetErrorKind::NotConnected())
+    assert(not_connected.is_not_connected(), "Should be not connected")
+}

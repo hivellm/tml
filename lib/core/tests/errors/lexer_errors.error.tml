@@ -1,0 +1,11 @@
+// Diagnostic test: lexer errors
+// Tests lexer error detection.
+
+// @expect-error L002
+// @expect-error L015
+
+func main() -> I32 {
+    let x = "unterminated string
+    let y: Str = `unterminated template
+    return 0
+}

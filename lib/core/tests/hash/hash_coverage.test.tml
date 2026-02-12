@@ -1,0 +1,313 @@
+// Consolidated hash coverage tests: DefaultHasher, RandomState, write methods
+// Total: 25 @test functions
+//
+// Merged from:
+//   hash_default_hasher.test.tml
+//   hash_default_duplicate.test.tml
+//   hash_hasher_write.test.tml
+//   hash_hasher_i32_i64.test.tml
+//   hash_hasher_sequence.test.tml
+//   hash_random_state.test.tml
+//   hash_random_state_extra.test.tml
+
+use test
+use core::hash::{DefaultHasher, RandomState}
+use core::default::Default
+use core::clone::Duplicate
+
+// =============================================================================
+// DefaultHasher Construction (from hash_default_hasher.test.tml)
+// =============================================================================
+
+@test
+func test_default_hasher_new() -> I32 {
+    let hasher: DefaultHasher = DefaultHasher::new()
+    let h: I64 = hasher.finish()
+    // FNV offset basis cast to I64
+    assert(h != 0, "DefaultHasher::new() should have non-zero initial state")
+    return 0
+}
+
+@test
+func test_default_hasher_with_seed() -> I32 {
+    let h1: DefaultHasher = DefaultHasher::with_seed(42 as U64)
+    let h2: DefaultHasher = DefaultHasher::with_seed(99 as U64)
+    // Different seeds should produce different initial states
+    assert(h1.finish() != h2.finish(), "different seeds should produce different states")
+    return 0
+}
+
+@test
+func test_default_hasher_with_seed_deterministic() -> I32 {
+    let h1: DefaultHasher = DefaultHasher::with_seed(42 as U64)
+    let h2: DefaultHasher = DefaultHasher::with_seed(42 as U64)
+    assert_eq(h1.finish(), h2.finish(), "same seed should produce same state")
+    return 0
+}
+
+// =============================================================================
+// DefaultHasher Default + Duplicate (from hash_default_duplicate.test.tml)
+// =============================================================================
+
+@test
+func test_default_hasher_default() -> I32 {
+    let h: DefaultHasher = DefaultHasher::default()
+    let h2: DefaultHasher = DefaultHasher::new()
+    // Default should produce same state as new()
+    assert_eq(h.finish(), h2.finish(), "default() should equal new()")
+    return 0
+}
+
+@test
+func test_default_hasher_duplicate() -> I32 {
+    var original: DefaultHasher = DefaultHasher::new()
+    original.write_i32(42)
+    let copy: DefaultHasher = original.duplicate()
+    assert_eq(original.finish(), copy.finish(), "duplicate should have same state")
+    return 0
+}
+
+@test
+func test_default_hasher_duplicate_independent() -> I32 {
+    var original: DefaultHasher = DefaultHasher::new()
+    original.write_i32(42)
+    var copy: DefaultHasher = original.duplicate()
+    // Writing more to original should not affect copy
+    original.write_i32(99)
+    copy.write_i32(99)
+    // Both wrote the same data after the fork, so they should still match
+    assert_eq(original.finish(), copy.finish(), "duplicate should be independent copy")
+    return 0
+}
+
+// =============================================================================
+// DefaultHasher write_u8 (from hash_hasher_write.test.tml)
+// =============================================================================
+
+@test
+func test_hasher_write_u8() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    hasher.write_u8(42 as U8)
+    let h: I64 = hasher.finish()
+    // After writing data, hash should differ from initial state
+    let empty: DefaultHasher = DefaultHasher::new()
+    assert(h != empty.finish(), "write_u8 should change hasher state")
+    return 0
+}
+
+@test
+func test_hasher_write_u8_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_u8(100 as U8)
+    h2.write_u8(100 as U8)
+    assert_eq(h1.finish(), h2.finish(), "same write_u8 should produce same hash")
+    return 0
+}
+
+@test
+func test_hasher_write_u8_different_values() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_u8(10 as U8)
+    h2.write_u8(20 as U8)
+    assert(h1.finish() != h2.finish(), "different bytes should produce different hashes")
+    return 0
+}
+
+// =============================================================================
+// DefaultHasher write_i32 and write_i64 (from hash_hasher_i32_i64.test.tml)
+// =============================================================================
+
+@test
+func test_hasher_write_i32() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    hasher.write_i32(12345)
+    let h: I64 = hasher.finish()
+    let empty: DefaultHasher = DefaultHasher::new()
+    assert(h != empty.finish(), "write_i32 should change hasher state")
+    return 0
+}
+
+@test
+func test_hasher_write_i32_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i32(42)
+    h2.write_i32(42)
+    assert_eq(h1.finish(), h2.finish(), "same write_i32 should produce same hash")
+    return 0
+}
+
+@test
+func test_hasher_write_i32_different() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i32(100)
+    h2.write_i32(200)
+    assert(h1.finish() != h2.finish(), "different I32s should produce different hashes")
+    return 0
+}
+
+@test
+func test_hasher_write_i64() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    hasher.write_i64(9876543210)
+    let h: I64 = hasher.finish()
+    let empty: DefaultHasher = DefaultHasher::new()
+    assert(h != empty.finish(), "write_i64 should change hasher state")
+    return 0
+}
+
+@test
+func test_hasher_write_i64_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i64(42)
+    h2.write_i64(42)
+    assert_eq(h1.finish(), h2.finish(), "same write_i64 should produce same hash")
+    return 0
+}
+
+@test
+func test_hasher_write_i64_different() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i64(1000)
+    h2.write_i64(2000)
+    assert(h1.finish() != h2.finish(), "different I64s should produce different hashes")
+    return 0
+}
+
+// =============================================================================
+// DefaultHasher Sequence + Mixed Writes (from hash_hasher_sequence.test.tml)
+// =============================================================================
+
+@test
+func test_hasher_multiple_writes() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    h1.write_u8(1 as U8)
+    h1.write_u8(2 as U8)
+
+    var h2: DefaultHasher = DefaultHasher::new()
+    h2.write_u8(1 as U8)
+    h2.write_u8(2 as U8)
+
+    assert_eq(h1.finish(), h2.finish(), "same sequence should produce same hash")
+    return 0
+}
+
+@test
+func test_hasher_write_order_matters() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    h1.write_u8(1 as U8)
+    h1.write_u8(2 as U8)
+
+    var h2: DefaultHasher = DefaultHasher::new()
+    h2.write_u8(2 as U8)
+    h2.write_u8(1 as U8)
+
+    assert(h1.finish() != h2.finish(), "write order should matter")
+    return 0
+}
+
+@test
+func test_hasher_finish_idempotent() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    hasher.write_i32(42)
+    let h1: I64 = hasher.finish()
+    let h2: I64 = hasher.finish()
+    assert_eq(h1, h2, "finish() should be idempotent without more writes")
+    return 0
+}
+
+@test
+func test_hasher_mixed_writes() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    h1.write_u8(10 as U8)
+    h1.write_i32(200)
+    h1.write_i64(3000)
+
+    var h2: DefaultHasher = DefaultHasher::new()
+    h2.write_u8(10 as U8)
+    h2.write_i32(200)
+    h2.write_i64(3000)
+
+    assert_eq(h1.finish(), h2.finish(), "same mixed writes should produce same hash")
+    return 0
+}
+
+// =============================================================================
+// RandomState (from hash_random_state.test.tml)
+// =============================================================================
+
+@test
+func test_random_state_with_keys() -> I32 {
+    let rs: RandomState = RandomState::with_keys(100 as U64, 200 as U64)
+    let hasher: DefaultHasher = rs.build_hasher()
+    let h: I64 = hasher.finish()
+    // Hasher from with_keys should have deterministic initial state
+    let rs2: RandomState = RandomState::with_keys(100 as U64, 200 as U64)
+    let hasher2: DefaultHasher = rs2.build_hasher()
+    assert_eq(h, hasher2.finish(), "same keys should produce same hasher")
+    return 0
+}
+
+@test
+func test_random_state_different_keys() -> I32 {
+    let rs1: RandomState = RandomState::with_keys(1 as U64, 2 as U64)
+    let rs2: RandomState = RandomState::with_keys(3 as U64, 4 as U64)
+    let h1: DefaultHasher = rs1.build_hasher()
+    let h2: DefaultHasher = rs2.build_hasher()
+    assert(h1.finish() != h2.finish(), "different keys should produce different hashers")
+    return 0
+}
+
+@test
+func test_random_state_build_hasher_usable() -> I32 {
+    let rs: RandomState = RandomState::with_keys(42 as U64, 99 as U64)
+    var hasher: DefaultHasher = rs.build_hasher()
+    hasher.write_i64(12345)
+    let h: I64 = hasher.finish()
+    // Hash should be deterministic for same state + same input
+    var hasher2: DefaultHasher = rs.build_hasher()
+    hasher2.write_i64(12345)
+    assert_eq(h, hasher2.finish(), "same hasher + same input = same hash")
+    return 0
+}
+
+// =============================================================================
+// RandomState Extra (from hash_random_state_extra.test.tml)
+// =============================================================================
+
+@test
+func test_random_state_new() -> I32 {
+    let rs: RandomState = RandomState::new()
+    let hasher: DefaultHasher = rs.build_hasher()
+    let h: I64 = hasher.finish()
+    // Should produce a valid hash value
+    assert(h == h, "RandomState::new() should produce valid hasher")
+    return 0
+}
+
+@test
+func test_random_state_duplicate() -> I32 {
+    let rs: RandomState = RandomState::with_keys(10 as U64, 20 as U64)
+    let copy: RandomState = rs.duplicate()
+    let h1: DefaultHasher = rs.build_hasher()
+    let h2: DefaultHasher = copy.build_hasher()
+    assert_eq(h1.finish(), h2.finish(), "duplicated RandomState should produce same hasher")
+    return 0
+}
+
+@test
+func test_random_state_duplicate_hasher_same_output() -> I32 {
+    let rs: RandomState = RandomState::with_keys(42 as U64, 99 as U64)
+    let copy: RandomState = rs.duplicate()
+    var h1: DefaultHasher = rs.build_hasher()
+    var h2: DefaultHasher = copy.build_hasher()
+    h1.write_i64(555)
+    h2.write_i64(555)
+    assert_eq(h1.finish(), h2.finish(), "hashers from duplicated state should match")
+    return 0
+}

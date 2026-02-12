@@ -1,0 +1,103 @@
+// Tests targeting uncovered LinkedList functions
+use test
+use std::collections::class_collections::LinkedList
+
+// =============================================================================
+// LinkedList basic operations
+// =============================================================================
+
+@test
+func test_linkedlist_create() -> I32 {
+    let list: LinkedList[I64] = LinkedList::create()
+    assert(list.is_empty(), "new LinkedList should be empty")
+    assert_eq(list.count(), 0 as I64, "new LinkedList count is 0")
+    return 0
+}
+
+@test
+func test_linkedlist_add() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    assert_eq(list.count(), 2 as I64, "count after 2 adds")
+    assert(not list.is_empty(), "not empty after add")
+    return 0
+}
+
+@test
+func test_linkedlist_add_first_last() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add_last(10 as I64)
+    list.add_first(5 as I64)
+    list.add_last(15 as I64)
+    assert_eq(list.count(), 3 as I64, "count after add_first/add_last")
+    return 0
+}
+
+@test
+func test_linkedlist_first_last() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    list.add(30 as I64)
+    let f: Maybe[I64] = list.first()
+    assert(f.is_just(), "first should return Just")
+    let l: Maybe[I64] = list.last()
+    assert(l.is_just(), "last should return Just")
+    return 0
+}
+
+@test
+func test_linkedlist_remove_first() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    let v: Maybe[I64] = list.remove_first()
+    assert(v.is_just(), "remove_first should return Just")
+    assert_eq(list.count(), 1 as I64, "count after remove_first")
+    return 0
+}
+
+@test
+func test_linkedlist_remove_last() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    let v: Maybe[I64] = list.remove_last()
+    assert(v.is_just(), "remove_last should return Just")
+    assert_eq(list.count(), 1 as I64, "count after remove_last")
+    return 0
+}
+
+@test
+func test_linkedlist_clear() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(1 as I64)
+    list.add(2 as I64)
+    list.clear()
+    assert(list.is_empty(), "clear empties list")
+    assert_eq(list.count(), 0 as I64, "count is 0 after clear")
+    return 0
+}
+
+@test
+func test_linkedlist_contains() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    assert(list.contains(10 as I64), "contains should find 10")
+    assert(not list.contains(99 as I64), "contains should not find 99")
+    return 0
+}
+
+@test
+func test_linkedlist_remove() -> I32 {
+    var list: LinkedList[I64] = LinkedList::create()
+    list.add(10 as I64)
+    list.add(20 as I64)
+    list.add(30 as I64)
+    let removed: Bool = list.remove(20 as I64)
+    assert(removed, "remove should find and remove element")
+    assert_eq(list.count(), 2 as I64, "count after remove")
+    return 0
+}

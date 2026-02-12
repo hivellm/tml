@@ -1,0 +1,109 @@
+// Tests targeting uncovered fmt/impls debug_string methods
+use test
+use core::fmt::impls
+
+@test
+func test_i8_debug_string() -> I32 {
+    let a: I8 = 42 as I8
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "I8 debug_string")
+    return 0
+}
+
+@test
+func test_i16_debug_string() -> I32 {
+    let a: I16 = 1000 as I16
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "I16 debug_string")
+    return 0
+}
+
+@test
+func test_i32_debug_string() -> I32 {
+    let a: I32 = 42
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "I32 debug_string")
+    return 0
+}
+
+@test
+func test_i64_debug_string() -> I32 {
+    let a: I64 = 123456 as I64
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "I64 debug_string")
+    return 0
+}
+
+@test
+func test_u8_debug_string() -> I32 {
+    let a: U8 = 255 as U8
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "U8 debug_string")
+    return 0
+}
+
+@test
+func test_u16_debug_string() -> I32 {
+    let a: U16 = 1000 as U16
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "U16 debug_string")
+    return 0
+}
+
+@test
+func test_u32_debug_string() -> I32 {
+    let a: U32 = 42 as U32
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "U32 debug_string")
+    return 0
+}
+
+@test
+func test_u64_debug_string() -> I32 {
+    let a: U64 = 999 as U64
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "U64 debug_string")
+    return 0
+}
+
+@test
+func test_f32_debug_string() -> I32 {
+    let a: F32 = 3.14 as F32
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "F32 debug_string")
+    return 0
+}
+
+@test
+func test_f64_debug_string() -> I32 {
+    let a: F64 = 2.71828
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "F64 debug_string")
+    return 0
+}
+
+@test
+func test_bool_debug_string() -> I32 {
+    let a: Bool = true
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "Bool debug_string")
+    return 0
+}
+
+@test
+func test_str_debug_string() -> I32 {
+    let a: Str = "hello"
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "Str debug_string")
+    return 0
+}
+
+@test
+func test_char_debug_string() -> I32 {
+    let a: Char = 'A'
+    let s: Str = a.debug_string()
+    assert(s.len() > 0, "Char debug_string")
+    return 0
+}
+
+// Ordering::to_string and Ordering::debug_string have type mismatch issues - skipped

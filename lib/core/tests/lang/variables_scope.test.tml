@@ -1,0 +1,127 @@
+// Tests for variable declarations, mutability, scoping, shadowing
+use test
+
+// =============================================================================
+// let vs var (immutable vs mutable)
+// =============================================================================
+
+@test
+func test_let_immutable() -> I32 {
+    let x: I32 = 42
+    assert_eq(x, 42, "let should bind immutably")
+    return 0
+}
+
+@test
+func test_var_mutable() -> I32 {
+    var x: I32 = 10
+    x = 20
+    assert_eq(x, 20, "var should be mutable")
+    return 0
+}
+
+@test
+func test_var_increment() -> I32 {
+    var count: I32 = 0
+    count = count + 1
+    count = count + 1
+    count = count + 1
+    assert_eq(count, 3, "count should be 3 after 3 increments")
+    return 0
+}
+
+// =============================================================================
+// Multiple variables
+// =============================================================================
+
+@test
+func test_multiple_vars() -> I32 {
+    let a: I32 = 1
+    let b: I32 = 2
+    let c: I32 = 3
+    assert_eq(a + b + c, 6, "sum of 1+2+3 should be 6")
+    return 0
+}
+
+@test
+func test_var_depends_on_other() -> I32 {
+    let x: I32 = 10
+    let y: I32 = x * 2
+    let z: I32 = y + x
+    assert_eq(z, 30, "z = (10*2) + 10 = 30")
+    return 0
+}
+
+// =============================================================================
+// Block scoping
+// =============================================================================
+
+@test
+func test_inner_scope() -> I32 {
+    let x: I32 = 10
+    var result: I32 = 0
+    if true {
+        let y: I32 = 20
+        result = x + y
+    }
+    assert_eq(result, 30, "inner scope should access outer and local vars")
+    return 0
+}
+
+@test
+func test_loop_scope() -> I32 {
+    var total: I32 = 0
+    for i in 0 to 5 {
+        let doubled: I32 = i * 2
+        total = total + doubled
+    }
+    // 0+2+4+6+8 = 20
+    assert_eq(total, 20, "loop scope vars should work correctly")
+    return 0
+}
+
+// =============================================================================
+// Variable reassignment chain
+// =============================================================================
+
+@test
+func test_var_reassignment_chain() -> I32 {
+    var x: I32 = 5
+    x = x + 1
+    x = x * 2
+    assert_eq(x, 12, "reassignment chain: (5+1)*2 = 12")
+    return 0
+}
+
+// =============================================================================
+// Different types
+// =============================================================================
+
+@test
+func test_bool_variables() -> I32 {
+    let t: Bool = true
+    let f: Bool = false
+    assert(t, "true should be truthy")
+    assert(not f, "false should be falsy")
+    return 0
+}
+
+@test
+func test_f64_variables() -> I32 {
+    let pi: F64 = 3.14159
+    let r: F64 = 2.0
+    let area: F64 = pi * r * r
+    // area ≈ 12.566
+    assert(area > 12.0, "area should be > 12")
+    assert(area < 13.0, "area should be < 13")
+    return 0
+}
+
+@test
+func test_str_variables() -> I32 {
+    let greeting: Str = "hello"
+    let target: Str = "world"
+    assert_eq(greeting, "hello", "string var should hold value")
+    assert_eq(target, "world", "string var should hold value")
+    return 0
+}

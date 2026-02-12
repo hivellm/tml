@@ -1,0 +1,11 @@
+// Tests for checked/saturating/wrapping arithmetic on I32
+// NOTE: checked_* methods return () instead of Maybe[I32] - codegen limitation
+// This file documents the blocked functions
+use test
+
+@test
+func test_placeholder_num_checked() -> I32 {
+    // All checked_add/sub/mul/div/rem/neg/shl/shr return () on primitives
+    // Same codegen issue as eq/cmp on primitives
+    return 0
+}

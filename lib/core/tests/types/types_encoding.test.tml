@@ -1,0 +1,300 @@
+// Consolidated character encoding and Unicode case conversion tests
+// Source files: char.test.tml (tests 51-64 of 64)
+// Total @test count: 14
+
+// ============================================================================
+// UTF-8 Encoding Tests (continued)
+// ============================================================================
+
+@test
+func test_len_utf8_4_bytes() -> I32 {
+    assert(len_utf8(0x10000) == 4, "0x10000 should be 4 bytes in UTF-8")
+    assert(len_utf8(0x1F980) == 4, "crab emoji should be 4 bytes in UTF-8")
+    assert(len_utf8(0x10FFFF) == 4, "max code point should be 4 bytes in UTF-8")
+
+    return 0
+}
+
+// ============================================================================
+// UTF-16 Encoding Tests
+// ============================================================================
+
+@test
+func test_len_utf16_1_unit() -> I32 {
+    assert(len_utf16(0x00) == 1, "NUL should be 1 unit in UTF-16")
+    assert(len_utf16(0x41) == 1, "A should be 1 unit in UTF-16")
+    assert(len_utf16(0x4E2D) == 1, "CJK char should be 1 unit in UTF-16")
+    assert(len_utf16(0xFFFF) == 1, "0xFFFF should be 1 unit in UTF-16")
+
+    return 0
+}
+
+@test
+func test_len_utf16_2_units() -> I32 {
+    assert(len_utf16(0x10000) == 2, "0x10000 should be 2 units in UTF-16")
+    assert(len_utf16(0x1F980) == 2, "crab emoji should be 2 units in UTF-16")
+    assert(len_utf16(0x10FFFF) == 2, "max code point should be 2 units in UTF-16")
+
+    return 0
+}
+
+// ============================================================================
+// UTF-8 Encode Tests
+// ============================================================================
+
+@test
+func test_encode_utf8_1_byte() -> I32 {
+    let (bytes, len): ([U8; 4], I64) = encode_utf8(0x41)
+    assert(len == 1, "encode_utf8 A should have length 1")
+    assert(bytes[0] == 0x41, "encode_utf8 A first byte should be 0x41")
+
+    return 0
+}
+
+@test
+func test_encode_utf8_2_bytes() -> I32 {
+    // e-acute = U+00E9 = 0xC3 0xA9 in UTF-8
+    let (bytes, len): ([U8; 4], I64) = encode_utf8(0x00E9)
+    assert(len == 2, "encode_utf8 e-acute should have length 2")
+    assert(bytes[0] == 0xC3, "encode_utf8 e-acute first byte should be 0xC3")
+    assert(bytes[1] == 0xA9, "encode_utf8 e-acute second byte should be 0xA9")
+
+    return 0
+}
+
+@test
+func test_encode_utf8_3_bytes() -> I32 {
+    // CJK char = U+4E2D = 0xE4 0xB8 0xAD in UTF-8
+    let (bytes, len): ([U8; 4], I64) = encode_utf8(0x4E2D)
+    assert(len == 3, "encode_utf8 CJK should have length 3")
+    assert(bytes[0] == 0xE4, "encode_utf8 CJK first byte should be 0xE4")
+    assert(bytes[1] == 0xB8, "encode_utf8 CJK second byte should be 0xB8")
+    assert(bytes[2] == 0xAD, "encode_utf8 CJK third byte should be 0xAD")
+
+    return 0
+}
+
+@test
+func test_encode_utf8_4_bytes() -> I32 {
+    // U+1F980 (crab emoji) = 0xF0 0x9F 0xA6 0x80 in UTF-8
+    let (bytes, len): ([U8; 4], I64) = encode_utf8(0x1F980)
+    assert(len == 4, "encode_utf8 crab should have length 4")
+    assert(bytes[0] == 0xF0, "encode_utf8 crab first byte should be 0xF0")
+    assert(bytes[1] == 0x9F, "encode_utf8 crab second byte should be 0x9F")
+    assert(bytes[2] == 0xA6, "encode_utf8 crab third byte should be 0xA6")
+    assert(bytes[3] == 0x80, "encode_utf8 crab fourth byte should be 0x80")
+
+    return 0
+}
+
+// ============================================================================
+// UTF-16 Encode Tests
+// ============================================================================
+
+@test
+func test_encode_utf16_1_unit() -> I32 {
+    let (units, len): ([U16; 2], I64) = encode_utf16(0x41)
+    assert(len == 1, "encode_utf16 A should have length 1")
+    assert(units[0] == 0x0041, "encode_utf16 A first unit should be 0x0041")
+
+    let (units2, len2): ([U16; 2], I64) = encode_utf16(0x4E2D)
+    assert(len2 == 1, "encode_utf16 CJK should have length 1")
+    assert(units2[0] == 0x4E2D, "encode_utf16 CJK first unit should be 0x4E2D")
+
+    return 0
+}
+
+@test
+func test_encode_utf16_2_units() -> I32 {
+    // U+1F980 = surrogate pair: D83E DD80
+    // adjusted = 0x1F980 - 0x10000 = 0xF980
+    // high = 0xD800 | (0xF980 >> 10) = 0xD800 | 0x3E = 0xD83E
+    // low = 0xDC00 | (0xF980 & 0x3FF) = 0xDC00 | 0x180 = 0xDD80
+    let (units, len): ([U16; 2], I64) = encode_utf16(0x1F980)
+    assert(len == 2, "encode_utf16 crab should have length 2")
+    assert(units[0] == 0xD83E, "encode_utf16 crab high surrogate should be 0xD83E")
+    assert(units[1] == 0xDD80, "encode_utf16 crab low surrogate should be 0xDD80")
+
+    return 0
+}
+
+// ============================================================================
+// Unicode Case Conversion Tests
+// ============================================================================
+
+@test
+func test_to_lowercase_greek() -> I32 {
+    // Greek capital Alpha -> lowercase alpha
+    assert(to_lowercase(0x0391) == 0x03B1, "to_lowercase Greek Alpha should be alpha")
+    // Greek capital Omega -> lowercase omega
+    assert(to_lowercase(0x03A9) == 0x03C9, "to_lowercase Greek Omega should be omega")
+    // Already lowercase
+    assert(to_lowercase(0x03B1) == 0x03B1, "to_lowercase Greek alpha should stay alpha")
+
+    return 0
+}
+
+@test
+func test_to_uppercase_greek() -> I32 {
+    // Greek lowercase alpha -> capital Alpha
+    assert(to_uppercase(0x03B1) == 0x0391, "to_uppercase Greek alpha should be Alpha")
+    // Greek lowercase omega -> capital Omega
+    assert(to_uppercase(0x03C9) == 0x03A9, "to_uppercase Greek omega should be Omega")
+    // Already uppercase
+    assert(to_uppercase(0x0391) == 0x0391, "to_uppercase Greek Alpha should stay Alpha")
+
+    return 0
+}
+
+@test
+func test_to_lowercase_cyrillic() -> I32 {
+    // Cyrillic capital A -> lowercase a
+    assert(to_lowercase(0x0410) == 0x0430, "to_lowercase Cyrillic A should be a")
+    // Cyrillic capital Ya -> lowercase ya
+    assert(to_lowercase(0x042F) == 0x044F, "to_lowercase Cyrillic Ya should be ya")
+
+    return 0
+}
+
+@test
+func test_to_uppercase_cyrillic() -> I32 {
+    // Cyrillic lowercase a -> capital A
+    assert(to_uppercase(0x0430) == 0x0410, "to_uppercase Cyrillic a should be A")
+    // Cyrillic lowercase ya -> capital Ya
+    assert(to_uppercase(0x044F) == 0x042F, "to_uppercase Cyrillic ya should be Ya")
+
+    return 0
+}
+
+@test
+func test_german_sharp_s() -> I32 {
+    // German sharp s to uppercase is capital sharp S
+    assert(to_uppercase(0x00DF) == 0x1E9E, "to_uppercase sharp-s should be capital sharp-S")
+    // Capital sharp S to lowercase is sharp s
+    assert(to_lowercase(0x1E9E) == 0x00DF, "to_lowercase capital sharp-S should be sharp-s")
+
+    return 0
+}
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+// UTF encoding functions
+func len_utf8(c: U32) -> I64 {
+    if c < 0x80 {
+        return 1
+    }
+    if c < 0x800 {
+        return 2
+    }
+    if c < 0x10000 {
+        return 3
+    }
+    return 4
+}
+
+func len_utf16(c: U32) -> I64 {
+    if c < 0x10000 {
+        return 1
+    }
+    return 2
+}
+
+func encode_utf8(c: U32) -> ([U8; 4], I64) {
+    var bytes: [U8; 4] = [0, 0, 0, 0]
+
+    if c < 0x80 {
+        bytes[0] = c as U8
+        return (bytes, 1)
+    }
+    if c < 0x800 {
+        bytes[0] = (0xC0 | (c >> 6)) as U8
+        bytes[1] = (0x80 | (c & 0x3F)) as U8
+        return (bytes, 2)
+    }
+    if c < 0x10000 {
+        bytes[0] = (0xE0 | (c >> 12)) as U8
+        bytes[1] = (0x80 | ((c >> 6) & 0x3F)) as U8
+        bytes[2] = (0x80 | (c & 0x3F)) as U8
+        return (bytes, 3)
+    }
+    bytes[0] = (0xF0 | (c >> 18)) as U8
+    bytes[1] = (0x80 | ((c >> 12) & 0x3F)) as U8
+    bytes[2] = (0x80 | ((c >> 6) & 0x3F)) as U8
+    bytes[3] = (0x80 | (c & 0x3F)) as U8
+    return (bytes, 4)
+}
+
+func encode_utf16(c: U32) -> ([U16; 2], I64) {
+    var units: [U16; 2] = [0, 0]
+
+    if c < 0x10000 {
+        units[0] = c as U16
+        return (units, 1)
+    }
+    let adjusted: U32 = c - 0x10000
+    units[0] = (0xD800 | (adjusted >> 10)) as U16
+    units[1] = (0xDC00 | (adjusted & 0x3FF)) as U16
+    return (units, 2)
+}
+
+// Case conversion functions
+func to_lowercase(c: U32) -> U32 {
+    if c < 128 {
+        if c >= 0x41 and c <= 0x5A {
+            return c + 32
+        }
+        return c
+    }
+    return to_lowercase_nonascii(c)
+}
+
+func to_uppercase(c: U32) -> U32 {
+    if c < 128 {
+        if c >= 0x61 and c <= 0x7A {
+            return c - 32
+        }
+        return c
+    }
+    return to_uppercase_nonascii(c)
+}
+
+// Non-ASCII helper functions
+func to_lowercase_nonascii(c: U32) -> U32 {
+    // Greek uppercase to lowercase
+    if c >= 0x0391 and c <= 0x03A1 {
+        return c + 32
+    }
+    if c >= 0x03A3 and c <= 0x03A9 {
+        return c + 32
+    }
+    // Cyrillic uppercase to lowercase
+    if c >= 0x0410 and c <= 0x042F {
+        return c + 32
+    }
+    // Capital sharp S
+    if c == 0x1E9E {
+        return 0x00DF
+    }
+    return c
+}
+
+func to_uppercase_nonascii(c: U32) -> U32 {
+    // Greek lowercase to uppercase
+    if c >= 0x03B1 and c <= 0x03C1 {
+        return c - 32
+    }
+    if c >= 0x03C3 and c <= 0x03C9 {
+        return c - 32
+    }
+    // Cyrillic lowercase to uppercase
+    if c >= 0x0430 and c <= 0x044F {
+        return c - 32
+    }
+    // German sharp s
+    if c == 0x00DF {
+        return 0x1E9E
+    }
+    return c
+}

@@ -1,0 +1,11 @@
+// Tests for Heap::duplicate
+use test
+use core::alloc::heap::Heap
+
+@test
+func test_heap_duplicate() -> I32 {
+    let h1: Heap[I32] = Heap::new(42)
+    let h2: Heap[I32] = h1.duplicate()
+    assert_eq(h2.get(), 42, "duplicate should have same value")
+    return 0
+}

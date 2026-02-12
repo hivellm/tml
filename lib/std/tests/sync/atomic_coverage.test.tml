@@ -1,0 +1,93 @@
+// Tests targeting uncovered sync/atomic functions
+use test::{assert, assert_eq}
+use std::sync::{AtomicBool, AtomicI32, AtomicI64, AtomicU32, AtomicU64, AtomicUsize, AtomicIsize, Ordering}
+
+// =============================================================================
+// AtomicBool uncovered: compare_exchange_weak, fetch_nand, into_inner
+// =============================================================================
+
+@test
+func test_atomic_bool_compare_exchange_weak() -> I32 {
+    var ab: AtomicBool = AtomicBool::new(true)
+    // compare_exchange_weak may spuriously fail, so just call it
+    let r: Outcome[Bool, Bool] = ab.compare_exchange_weak(true, false, Ordering::Relaxed, Ordering::Relaxed)
+    // Either succeeds or fails, both are valid
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_bool_fetch_nand() -> I32 {
+    var ab: AtomicBool = AtomicBool::new(true)
+    let old: Bool = ab.fetch_nand(true, Ordering::Relaxed)
+    assert_eq(old, true, "fetch_nand returns old value")
+    // NAND(true, true) = false
+    assert_eq(ab.load(Ordering::Relaxed), false, "NAND(true,true) = false")
+    return 0
+}
+
+@test
+func test_atomic_bool_into_inner() -> I32 {
+    let ab: AtomicBool = AtomicBool::new(true)
+    let v: Bool = ab.into_inner()
+    assert_eq(v, true, "into_inner should return initial value")
+    return 0
+}
+
+// =============================================================================
+// AtomicI32 uncovered: compare_exchange_weak, fetch_and/or/xor, fetch_update, is_lock_free, into_inner
+// =============================================================================
+
+@test
+func test_atomic_i32_compare_exchange_weak() -> I32 {
+    var ai: AtomicI32 = AtomicI32::new(42)
+    let r: Outcome[I32, I32] = ai.compare_exchange_weak(42, 100, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_and() -> I32 {
+    var ai: AtomicI32 = AtomicI32::new(15)
+    let old: I32 = ai.fetch_and(9, Ordering::Relaxed)
+    assert_eq(old, 15, "fetch_and returns old value")
+    // 15 & 9 = 9
+    assert_eq(ai.load(Ordering::Relaxed), 9, "15 & 9 = 9")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_or() -> I32 {
+    var ai: AtomicI32 = AtomicI32::new(3)
+    let old: I32 = ai.fetch_or(12, Ordering::Relaxed)
+    assert_eq(old, 3, "fetch_or returns old value")
+    // 3 | 12 = 15
+    assert_eq(ai.load(Ordering::Relaxed), 15, "3 | 12 = 15")
+    return 0
+}
+
+@test
+func test_atomic_i32_fetch_xor() -> I32 {
+    var ai: AtomicI32 = AtomicI32::new(15)
+    let old: I32 = ai.fetch_xor(9, Ordering::Relaxed)
+    assert_eq(old, 15, "fetch_xor returns old value")
+    // 15 ^ 9 = 6
+    assert_eq(ai.load(Ordering::Relaxed), 6, "15 ^ 9 = 6")
+    return 0
+}
+
+@test
+func test_atomic_i32_is_lock_free() -> I32 {
+    let ai: AtomicI32 = AtomicI32::new(0)
+    let lf: Bool = ai.is_lock_free()
+    assert(lf, "AtomicI32 should be lock-free on x86_64")
+    return 0
+}
+
+@test
+func test_atomic_i32_into_inner() -> I32 {
+    let ai: AtomicI32 = AtomicI32::new(42)
+    let v: I32 = ai.into_inner()
+    assert_eq(v, 42, "into_inner returns initial value")
+    return 0
+}

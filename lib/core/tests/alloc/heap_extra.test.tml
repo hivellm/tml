@@ -1,0 +1,28 @@
+// Tests for alloc/heap - Heap extra methods
+use test
+use core::alloc::heap::Heap
+
+@test
+func test_heap_new_default_i32() -> I32 {
+    let h: Heap[I32] = Heap::new_default()
+    let v: I32 = h.get()
+    assert_eq(v, 0, "Heap::new_default I32 = 0")
+    return 0
+}
+
+@test
+func test_heap_into_raw_from_raw() -> I32 {
+    var h: Heap[I32] = Heap::new(42)
+    let raw: *I32 = h.into_raw()
+    let h2: Heap[I32] = Heap::from_raw(raw)
+    assert_eq(h2.get(), 42, "from_raw should restore value")
+    return 0
+}
+
+@test
+func test_heap_leak() -> I32 {
+    var h: Heap[I32] = Heap::new(99)
+    let ptr: *I32 = h.leak()
+    // ptr is now leaked, we don't clean it up (intentional)
+    return 0
+}

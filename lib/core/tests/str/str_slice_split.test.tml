@@ -1,0 +1,11 @@
+// Tests for str module
+// BLOCKED: Str::slice_str — runtime crash
+// BLOCKED: split/lines/join/concat_all/split_whitespace/Str::split — List[Str] LLVM type mismatch
+// BLOCKED: Str::as_bytes — returns ref [U8] slice type
+use test
+
+@test
+func test_str_blocked_placeholder() -> I32 {
+    // All remaining str functions blocked by runtime crashes or type issues
+    return 0
+}

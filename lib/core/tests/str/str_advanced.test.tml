@@ -1,0 +1,427 @@
+// Consolidated str tests - parsing, find/rfind value assertions, replace, pad, substring assertions
+// Total @test count: 48
+// Sources: str_parse_find.test.tml, str_split_join.test.tml,
+//          str_value_assertions.test.tml, str_coverage3.test.tml,
+//          str_functions.test.tml (rfind moved from str_methods.test.tml)
+use test
+use core::str
+use core::str::{
+    parse_i32, parse_i64, parse_f64,
+    find, rfind,
+    replace, replace_first,
+    repeat, pad_left, pad_right,
+    parse_bool, concat,
+    trim, trim_start, trim_end,
+    substring, substring_from, substring_to
+}
+
+// =============================================================================
+// parse_i32 value assertions (from str_parse_find.test.tml)
+// =============================================================================
+
+@test
+func test_parse_i32_positive() -> I32 {
+    let result: Maybe[I32] = parse_i32("42")
+    assert(result.is_just(), "parse_i32(42) should be Just")
+    assert_eq(result.unwrap(), 42, "parse_i32(42) should be 42")
+    return 0
+}
+
+@test
+func test_parse_i32_negative() -> I32 {
+    let result: Maybe[I32] = parse_i32("-17")
+    assert(result.is_just(), "parse_i32(-17) should be Just")
+    assert_eq(result.unwrap(), -17, "parse_i32(-17) should be -17")
+    return 0
+}
+
+@test
+func test_parse_i32_zero() -> I32 {
+    let result: Maybe[I32] = parse_i32("0")
+    assert(result.is_just(), "parse_i32(0) should be Just")
+    assert_eq(result.unwrap(), 0, "parse_i32(0) should be 0")
+    return 0
+}
+
+// =============================================================================
+// parse_i64 value assertions (from str_parse_find.test.tml)
+// =============================================================================
+
+@test
+func test_parse_i64_positive() -> I32 {
+    let result: Maybe[I64] = parse_i64("123456")
+    assert(result.is_just(), "parse_i64(123456) should be Just")
+    assert_eq(result.unwrap(), 123456, "parse_i64(123456) should be 123456")
+    return 0
+}
+
+@test
+func test_parse_i64_negative() -> I32 {
+    let result: Maybe[I64] = parse_i64("-999")
+    assert(result.is_just(), "parse_i64(-999) should be Just")
+    assert_eq(result.unwrap(), -999, "parse_i64(-999) should be -999")
+    return 0
+}
+
+// =============================================================================
+// parse_f64 value assertions (from str_parse_find.test.tml)
+// =============================================================================
+
+@test
+func test_parse_f64_integer() -> I32 {
+    let result: Maybe[F64] = parse_f64("3")
+    assert(result.is_just(), "parse_f64(3) should be Just")
+    assert(result.unwrap() == 3.0, "parse_f64(3) should be 3.0")
+    return 0
+}
+
+@test
+func test_parse_f64_decimal() -> I32 {
+    let result: Maybe[F64] = parse_f64("3.14")
+    assert(result.is_just(), "parse_f64(3.14) should be Just")
+    let val: F64 = result.unwrap()
+    // Check approximate equality (floating point)
+    assert(val > 3.13, "parse_f64(3.14) should be > 3.13")
+    assert(val < 3.15, "parse_f64(3.14) should be < 3.15")
+    return 0
+}
+
+// =============================================================================
+// find value assertions (from str_parse_find.test.tml)
+// =============================================================================
+
+@test
+func test_find_at_start() -> I32 {
+    let idx: Maybe[I64] = find("hello world", "hello")
+    assert(idx.is_just(), "find hello should be Just")
+    assert_eq(idx.unwrap(), 0, "find hello should be at index 0")
+    return 0
+}
+
+@test
+func test_find_in_middle() -> I32 {
+    let idx: Maybe[I64] = find("hello world", "world")
+    assert(idx.is_just(), "find world should be Just")
+    assert_eq(idx.unwrap(), 6, "find world should be at index 6")
+    return 0
+}
+
+@test
+func test_find_single_char() -> I32 {
+    let idx: Maybe[I64] = find("abcde", "c")
+    assert(idx.is_just(), "find c should be Just")
+    assert_eq(idx.unwrap(), 2, "find c should be at index 2")
+    return 0
+}
+
+@test
+func test_find_not_found() -> I32 {
+    let idx: Maybe[I64] = find("hello", "xyz")
+    assert(idx.is_nothing(), "find xyz should be Nothing")
+    return 0
+}
+
+// =============================================================================
+// rfind value assertions (from str_parse_find.test.tml)
+// =============================================================================
+
+@test
+func test_rfind_last_occurrence() -> I32 {
+    let idx: Maybe[I64] = rfind("hello hello", "hello")
+    assert(idx.is_just(), "rfind hello should be Just")
+    assert_eq(idx.unwrap(), 6, "rfind hello should be at index 6 (last occurrence)")
+    return 0
+}
+
+@test
+func test_rfind_single_occurrence() -> I32 {
+    let idx: Maybe[I64] = rfind("hello world", "world")
+    assert(idx.is_just(), "rfind world should be Just")
+    assert_eq(idx.unwrap(), 6, "rfind world should be at index 6")
+    return 0
+}
+
+@test
+func test_rfind_not_found() -> I32 {
+    let idx: Maybe[I64] = rfind("hello", "xyz")
+    assert(idx.is_nothing(), "rfind xyz should be Nothing")
+    return 0
+}
+
+// =============================================================================
+// find / rfind (moved from str_methods.test.tml, originally str_functions.test.tml)
+// =============================================================================
+
+@test
+func test_find_not_found_v2() -> I32 {
+    let idx: Maybe[I64] = find("hello", "xyz")
+    assert(idx.is_nothing(), "find should return Nothing when not found")
+    return 0
+}
+
+@test
+func test_rfind_found_v2() -> I32 {
+    let idx: Maybe[I64] = rfind("hello hello", "hello")
+    assert(idx.is_just(), "rfind should return Just when found")
+    return 0
+}
+
+@test
+func test_rfind_not_found_v2() -> I32 {
+    let idx: Maybe[I64] = rfind("hello", "xyz")
+    assert(idx.is_nothing(), "rfind should return Nothing when not found")
+    return 0
+}
+
+// =============================================================================
+// str::find / str::rfind (from str_coverage3.test.tml)
+// =============================================================================
+
+@test
+func test_str_find_found() -> I32 {
+    let r: Maybe[I64] = str::find("hello world", "world")
+    assert(r.is_just(), "find world in hello world")
+    return 0
+}
+
+@test
+func test_str_find_not_found() -> I32 {
+    let r: Maybe[I64] = str::find("hello", "xyz")
+    assert(r.is_nothing(), "find xyz not in hello")
+    return 0
+}
+
+@test
+func test_str_rfind_found() -> I32 {
+    let r: Maybe[I64] = str::rfind("hello hello", "hello")
+    assert(r.is_just(), "rfind hello")
+    return 0
+}
+
+// =============================================================================
+// replace / replace_first (from str_split_join.test.tml)
+// =============================================================================
+
+@test
+func test_replace_all() -> I32 {
+    let r: Str = replace("aaa", "a", "b")
+    assert_eq(r, "bbb", "replace all a with b")
+    return 0
+}
+
+@test
+func test_replace_first_only() -> I32 {
+    let r: Str = replace_first("aaa", "a", "b")
+    assert_eq(r, "baa", "replace_first should only replace first")
+    return 0
+}
+
+// =============================================================================
+// repeat (from str_split_join.test.tml)
+// =============================================================================
+
+@test
+func test_repeat_string() -> I32 {
+    let r: Str = repeat("ab", 3)
+    assert_eq(r, "ababab", "repeat ab 3 times")
+    return 0
+}
+
+@test
+func test_repeat_zero() -> I32 {
+    let r: Str = repeat("hello", 0)
+    assert_eq(r, "", "repeat 0 times is empty")
+    return 0
+}
+
+// =============================================================================
+// pad_left / pad_right (from str_split_join.test.tml)
+// =============================================================================
+
+@test
+func test_pad_left_basic() -> I32 {
+    let r: Str = pad_left("42", 5, "0")
+    assert_eq(r, "00042", "pad_left with zeros")
+    return 0
+}
+
+@test
+func test_pad_right_basic() -> I32 {
+    let r: Str = pad_right("42", 5, "0")
+    assert_eq(r, "42000", "pad_right with zeros")
+    return 0
+}
+
+@test
+func test_pad_left_no_padding_needed() -> I32 {
+    let r: Str = pad_left("long", 2, "x")
+    assert_eq(r, "long", "pad_left no padding when already long enough")
+    return 0
+}
+
+// =============================================================================
+// parse (basic, from str_split_join.test.tml)
+// =============================================================================
+
+@test
+func test_parse_i32_basic() -> I32 {
+    let result: Maybe[I32] = parse_i32("42")
+    assert(result.is_just(), "parse_i32 should return Just")
+    return 0
+}
+
+@test
+func test_parse_i64_basic() -> I32 {
+    let result: Maybe[I64] = parse_i64("9876543210")
+    assert(result.is_just(), "parse_i64 should return Just")
+    return 0
+}
+
+@test
+func test_parse_f64_basic() -> I32 {
+    let result: Maybe[F64] = parse_f64("3.14")
+    assert(result.is_just(), "parse_f64 should return Just")
+    return 0
+}
+
+@test
+func test_parse_bool_true() -> I32 {
+    let result: Maybe[Bool] = parse_bool("true")
+    assert(result.is_just(), "parse_bool true should return Just")
+    return 0
+}
+
+@test
+func test_parse_bool_false() -> I32 {
+    let result: Maybe[Bool] = parse_bool("false")
+    assert(result.is_just(), "parse_bool false should return Just")
+    return 0
+}
+
+@test
+func test_parse_bool_invalid() -> I32 {
+    let result: Maybe[Bool] = parse_bool("yes")
+    assert(result.is_nothing(), "parse_bool yes should return Nothing")
+    return 0
+}
+
+// =============================================================================
+// concat (from str_split_join.test.tml)
+// =============================================================================
+
+@test
+func test_concat_basic() -> I32 {
+    let r: Str = concat("Hello, ", "World!")
+    assert_eq(r, "Hello, World!", "concat two strings")
+    return 0
+}
+
+// =============================================================================
+// trim value assertions (from str_value_assertions.test.tml)
+// =============================================================================
+
+@test
+func test_trim_both_sides() -> I32 {
+    let s: Str = trim("  hello  ")
+    assert_eq(s, "hello", "trim both sides")
+    return 0
+}
+
+@test
+func test_trim_no_whitespace() -> I32 {
+    let s: Str = trim("hello")
+    assert_eq(s, "hello", "trim with no whitespace")
+    return 0
+}
+
+@test
+func test_trim_start_spaces() -> I32 {
+    let s: Str = trim_start("   hello")
+    assert_eq(s, "hello", "trim_start leading spaces")
+    return 0
+}
+
+@test
+func test_trim_end_spaces() -> I32 {
+    let s: Str = trim_end("hello   ")
+    assert_eq(s, "hello", "trim_end trailing spaces")
+    return 0
+}
+
+@test
+func test_trim_empty() -> I32 {
+    let s: Str = trim("")
+    assert_eq(s, "", "trim empty string")
+    return 0
+}
+
+// =============================================================================
+// replace value assertions (from str_value_assertions.test.tml)
+// =============================================================================
+
+@test
+func test_replace_word() -> I32 {
+    let s: Str = replace("hello world", "world", "TML")
+    assert_eq(s, "hello TML", "replace word")
+    return 0
+}
+
+@test
+func test_replace_not_found() -> I32 {
+    let s: Str = replace("hello", "xyz", "abc")
+    assert_eq(s, "hello", "replace with no match should be unchanged")
+    return 0
+}
+
+@test
+func test_replace_all_occurrences() -> I32 {
+    let s: Str = replace("abab", "ab", "X")
+    assert_eq(s, "XX", "replace should replace all occurrences")
+    return 0
+}
+
+@test
+func test_replace_char() -> I32 {
+    let s: Str = replace("hello", "l", "r")
+    assert_eq(s, "herro", "replace single char")
+    return 0
+}
+
+// =============================================================================
+// substring value assertions (from str_value_assertions.test.tml)
+// =============================================================================
+
+@test
+func test_substring_middle_v2() -> I32 {
+    let s: Str = substring("hello", 1, 4)
+    assert_eq(s, "ell", "substring(hello, 1, 4) should be ell")
+    return 0
+}
+
+@test
+func test_substring_full() -> I32 {
+    let s: Str = substring("hello", 0, 5)
+    assert_eq(s, "hello", "substring(hello, 0, 5) should be hello")
+    return 0
+}
+
+@test
+func test_substring_from_start() -> I32 {
+    let s: Str = substring("abcde", 0, 3)
+    assert_eq(s, "abc", "substring(abcde, 0, 3) should be abc")
+    return 0
+}
+
+@test
+func test_substring_from() -> I32 {
+    let s: Str = substring_from("hello", 2)
+    assert_eq(s, "llo", "substring_from(hello, 2) should be llo")
+    return 0
+}
+
+@test
+func test_substring_to() -> I32 {
+    let s: Str = substring_to("hello", 3)
+    assert_eq(s, "hel", "substring_to(hello, 3) should be hel")
+    return 0
+}

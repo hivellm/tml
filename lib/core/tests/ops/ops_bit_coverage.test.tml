@@ -1,0 +1,22 @@
+// Tests targeting uncovered ops/bit trait impls
+// NOTE: bitand/bitor/bitxor/shift_left/shift_right all fail with "Unknown method"
+// on primitives - same codegen limitation as cmp::eq/cmp
+// Only Bool::negate() is testable
+use test
+use core::ops::bit::Not
+
+@test
+func test_bool_negate_true() -> I32 {
+    let a: Bool = true
+    let r: Bool = a.negate()
+    assert_eq(r, false, "Bool negate(true) = false")
+    return 0
+}
+
+@test
+func test_bool_negate_false() -> I32 {
+    let a: Bool = false
+    let r: Bool = a.negate()
+    assert_eq(r, true, "Bool negate(false) = true")
+    return 0
+}

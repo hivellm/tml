@@ -1,0 +1,193 @@
+// Tests targeting uncovered functions in json/builder module
+// (json/serialize is blocked - trait impls on primitives return () in codegen)
+use test
+use std::json::builder::{Builder, object, array, PrettyBuilder, pretty_object, pretty_array}
+
+// =============================================================================
+// Builder::with_capacity, Builder::n32, Builder::f, Builder::raw, Builder::len
+// =============================================================================
+
+@test
+func test_builder_with_capacity() -> I32 {
+    let b: Builder = Builder::with_capacity(512 as I64)
+    b.arr()
+    b.n(1 as I64)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "with_capacity builder should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_n32() -> I32 {
+    let b: Builder = array()
+    b.n32(42)
+    b.n32(-7)
+    b.end_arr()
+    let s: Str = b.build()
+    assert_eq(s, "[42,-7]", "n32 should add I32 numbers")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_f() -> I32 {
+    let b: Builder = array()
+    b.f(3.14)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 3, "f should add float value")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_kn32() -> I32 {
+    let b: Builder = object()
+    b.kn32("age", 25)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "kn32 should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_kf() -> I32 {
+    let b: Builder = object()
+    b.kf("pi", 3.14)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "kf should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_raw() -> I32 {
+    let b: Builder = array()
+    b.raw("{\"nested\":true}")
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 10, "raw should inject pre-built JSON")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_len() -> I32 {
+    let b: Builder = array()
+    b.n(1 as I64)
+    let l: I64 = b.len()
+    assert(l > 0 as I64, "len should return positive value")
+    b.end_arr()
+    b.drop()
+    return 0
+}
+
+// =============================================================================
+// PrettyBuilder methods
+// =============================================================================
+
+@test
+func test_pretty_array_builder() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.n(1 as I64)
+    b.n(2 as I64)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty_array should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_s() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.s("hello")
+    b.s("world")
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty s should produce string values")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_n32() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.n32(42)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty n32 should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_f() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.f(2.718)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty f should produce float value")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_b() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.b(true)
+    b.b(false)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty b should produce bool values")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_nil() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.nil()
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty nil should produce null")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_kn32() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.kn32("count", 10)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty kn32 should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_kf() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.kf("rate", 0.95)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty kf should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_knil() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.knil("deleted_at")
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty knil should produce output")
+    b.drop()
+    return 0
+}

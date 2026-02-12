@@ -2,6 +2,33 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⛔ MANDATORY: Use MCP Tools First ⛔
+
+**YOU MUST USE MCP TOOLS AS YOUR PRIMARY INTERFACE FOR ALL TML OPERATIONS.**
+
+This is a HARD REQUIREMENT. The MCP server (`mcp__tml__*`) provides dedicated tools for:
+- **`mcp__tml__test`** — Running tests (use `path` for specific files, `filter` for name matching)
+- **`mcp__tml__run`** — Building and running TML source files
+- **`mcp__tml__build`** — Building TML source to executable
+- **`mcp__tml__compile`** — Compiling TML source files
+- **`mcp__tml__check`** — Type checking without compiling
+- **`mcp__tml__emit-ir`** — Emitting LLVM IR for debugging
+- **`mcp__tml__emit-mir`** — Emitting MIR for debugging
+- **`mcp__tml__format`** — Formatting TML source files
+- **`mcp__tml__lint`** — Linting TML source files
+- **`mcp__tml__docs_search`** — Searching TML documentation
+- **`mcp__tml__cache_invalidate`** — Invalidating stale caches
+
+**Rules:**
+1. **NEVER use Bash/PowerShell** to run `tml.exe test`, `tml.exe build`, `tml.exe run`, etc. when the equivalent MCP tool exists
+2. **NEVER use Bash** to grep test output — use the MCP tool's structured output instead
+3. The ONLY acceptable use of Bash for `tml.exe` is when you need to build the **compiler itself** (`scripts\build.bat`)
+4. MCP tools handle caching, path resolution, and output formatting automatically
+
+**WHY:** MCP tools are purpose-built for this workflow. They strip ANSI codes, handle Windows path normalization, validate meta caches, and provide clean structured output. Using Bash/PowerShell bypasses all of this and wastes tokens on noisy output.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ ABSOLUTE PROHIBITION: NO `rm` COMMANDS ⛔
 
 **YOU ARE EXPRESSLY FORBIDDEN FROM RUNNING `rm` COMMANDS WITHOUT EXPLICIT USER AUTHORIZATION.**

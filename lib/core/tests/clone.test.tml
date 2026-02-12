@@ -1,0 +1,323 @@
+// Consolidated tests for core::clone (20 tests)
+use test
+
+use core::clone::{Duplicate, Copy}
+
+// ============================================================================
+// Custom types for testing
+// ============================================================================
+
+// A simple struct that implements Duplicate
+type Point {
+    x: I32,
+    y: I32
+}
+
+impl Duplicate for Point {
+    pub func duplicate(this) -> Point {
+        return Point { x: this.x, y: this.y }
+    }
+}
+
+impl Display for Point {
+    pub func to_string(this) -> Str {
+        return "Point(" + this.x.to_string() + ", " + this.y.to_string() + ")"
+    }
+}
+
+// A struct with nested Duplicate fields
+type Line {
+    start: Point,
+    end: Point
+}
+
+impl Duplicate for Line {
+    pub func duplicate(this) -> Line {
+        return Line {
+            start: this.start.duplicate(),
+            end: this.end.duplicate()
+        }
+    }
+}
+
+impl Display for Line {
+    pub func to_string(this) -> Str {
+        return "Line(" + this.start.to_string() + " -> " + this.end.to_string() + ")"
+    }
+}
+
+// ============================================================================
+// Generic functions with Duplicate bound
+// ============================================================================
+
+// Generic function that requires T: Duplicate
+func clone_value[T: Duplicate](value: T) -> T {
+    return value.duplicate()
+}
+
+// Generic function that duplicates and returns both
+func duplicate_pair[T: Duplicate](value: T) -> (T, T) {
+    return (value.duplicate(), value.duplicate())
+}
+
+// ============================================================================
+// Tests for Duplicate on primitives (I32, I64, F64, Bool)
+// ============================================================================
+
+@test
+func test_i32_duplicate() -> I32 {
+    let x: I32 = 42
+    let y: I32 = x.duplicate()
+
+    assert_eq(x, 42, "original should be unchanged")
+    assert_eq(y, 42, "duplicate should have same value")
+
+    return 0
+}
+
+@test
+func test_i64_duplicate() -> I32 {
+    let x: I64 = 12345678901234
+    let y: I64 = x.duplicate()
+
+    assert_eq(x, 12345678901234, "original should be unchanged")
+    assert_eq(y, 12345678901234, "duplicate should have same value")
+
+    return 0
+}
+
+@test
+func test_f64_duplicate() -> I32 {
+    let x: F64 = 3.14159
+    let y: F64 = x.duplicate()
+
+    // F64 duplicate should preserve value
+    // Using I64 conversion to avoid fcmp codegen issue
+    let x_int: I64 = (x * 100000.0) as I64
+    let y_int: I64 = (y * 100000.0) as I64
+
+    assert_eq(x_int, 314159, "original should be unchanged")
+    assert_eq(y_int, 314159, "duplicate should have same value")
+
+    return 0
+}
+
+@test
+func test_bool_duplicate() -> I32 {
+    let t: Bool = true
+    let f: Bool = false
+
+    let t_dup: Bool = t.duplicate()
+    let f_dup: Bool = f.duplicate()
+
+    assert(t_dup, "true duplicate should be true")
+    assert(not f_dup, "false duplicate should be false")
+
+    return 0
+}
+
+// ============================================================================
+// Tests for Duplicate on additional primitive types (I8, I16, U8, U16, U32, U64, F32)
+// ============================================================================
+
+@test
+func test_i8_duplicate() -> I32 {
+    let x: I8 = 42 as I8
+    let y: I8 = x.duplicate()
+    assert_eq(y, 42 as I8, "I8 duplicate")
+    return 0
+}
+
+@test
+func test_i16_duplicate() -> I32 {
+    let x: I16 = 1000 as I16
+    let y: I16 = x.duplicate()
+    assert_eq(y, 1000 as I16, "I16 duplicate")
+    return 0
+}
+
+@test
+func test_u8_duplicate() -> I32 {
+    let x: U8 = 255 as U8
+    let y: U8 = x.duplicate()
+    assert_eq(y, 255 as U8, "U8 duplicate")
+    return 0
+}
+
+@test
+func test_u16_duplicate() -> I32 {
+    let x: U16 = 50000 as U16
+    let y: U16 = x.duplicate()
+    assert_eq(y, 50000 as U16, "U16 duplicate")
+    return 0
+}
+
+@test
+func test_u32_duplicate() -> I32 {
+    let x: U32 = 4000000000 as U32
+    let y: U32 = x.duplicate()
+    assert_eq(y, 4000000000 as U32, "U32 duplicate")
+    return 0
+}
+
+@test
+func test_u64_duplicate() -> I32 {
+    let x: U64 = 999999999999 as U64
+    let y: U64 = x.duplicate()
+    assert_eq(y, 999999999999 as U64, "U64 duplicate")
+    return 0
+}
+
+@test
+func test_f32_duplicate() -> I32 {
+    let x: F32 = 2.5 as F32
+    let y: F32 = x.duplicate()
+    let y_int: I32 = (y * 10.0 as F32) as I32
+    assert_eq(y_int, 25, "F32 duplicate 2.5")
+    return 0
+}
+
+// ============================================================================
+// Tests for Duplicate on custom types
+// ============================================================================
+
+@test
+func test_point_duplicate() -> I32 {
+    let p1: Point = Point { x: 10, y: 20 }
+    let p2: Point = p1.duplicate()
+
+    assert_eq(p1.x, 10, "original x should be unchanged")
+    assert_eq(p1.y, 20, "original y should be unchanged")
+    assert_eq(p2.x, 10, "duplicate x should match")
+    assert_eq(p2.y, 20, "duplicate y should match")
+
+    return 0
+}
+
+@test
+func test_line_duplicate() -> I32 {
+    let line: Line = Line {
+        start: Point { x: 0, y: 0 },
+        end: Point { x: 100, y: 100 }
+    }
+    let line2: Line = line.duplicate()
+
+    assert_eq(line2.start.x, 0, "duplicate start x should match")
+    assert_eq(line2.start.y, 0, "duplicate start y should match")
+    assert_eq(line2.end.x, 100, "duplicate end x should match")
+    assert_eq(line2.end.y, 100, "duplicate end y should match")
+
+    return 0
+}
+
+// ============================================================================
+// Tests for generic Duplicate bound
+// ============================================================================
+
+@test
+func test_generic_clone_i32() -> I32 {
+    let x: I32 = 99
+    let cloned: I32 = clone_value(x)
+
+    assert_eq(cloned, 99, "cloned value should be 99")
+
+    return 0
+}
+
+@test
+func test_generic_clone_point() -> I32 {
+    let p: Point = Point { x: 5, y: 15 }
+    let cloned: Point = clone_value(p)
+
+    assert_eq(cloned.x, 5, "cloned x should be 5")
+    assert_eq(cloned.y, 15, "cloned y should be 15")
+
+    return 0
+}
+
+@test
+func test_generic_duplicate_pair() -> I32 {
+    let x: I32 = 42
+    let pair: (I32, I32) = duplicate_pair(x)
+
+    assert_eq(pair.0, 42, "first element should be 42")
+    assert_eq(pair.1, 42, "second element should be 42")
+
+    return 0
+}
+
+// ============================================================================
+// Tests for Maybe[T] Duplicate
+// ============================================================================
+
+@test
+func test_maybe_duplicate_just() -> I32 {
+    let m1: Maybe[I32] = Just(42)
+    let m2: Maybe[I32] = m1.duplicate()
+
+    when m2 {
+        Just(val) => {
+            assert_eq(val, 42, "duplicated Just should contain 42")
+        },
+        Nothing => {
+            assert(false, "should be Just, not Nothing")
+        }
+    }
+
+    return 0
+}
+
+@test
+func test_maybe_duplicate_nothing() -> I32 {
+    let m1: Maybe[I32] = Nothing
+    let m2: Maybe[I32] = m1.duplicate()
+
+    when m2 {
+        Just(val) => {
+            assert(false, "should be Nothing, not Just")
+        },
+        Nothing => {
+            // Expected
+        }
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Tests for Outcome[T, E] Duplicate
+// ============================================================================
+
+@test
+func test_outcome_duplicate_ok() -> I32 {
+    let r1: Outcome[I32, I32] = Ok(100)
+    let r2: Outcome[I32, I32] = r1.duplicate()
+
+    when r2 {
+        Ok(val) => {
+            assert_eq(val, 100, "duplicated Ok should contain 100")
+        },
+        Err(e) => {
+            assert(false, "should be Ok, not Err")
+        }
+    }
+
+    return 0
+}
+
+@test
+func test_outcome_duplicate_err() -> I32 {
+    let r1: Outcome[I32, I32] = Err(-1)
+    let r2: Outcome[I32, I32] = r1.duplicate()
+
+    when r2 {
+        Ok(val) => {
+            assert(false, "should be Err, not Ok")
+        },
+        Err(e) => {
+            assert_eq(e, -1, "duplicated Err should contain -1")
+        }
+    }
+
+    return 0
+}

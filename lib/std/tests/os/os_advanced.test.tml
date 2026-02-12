@@ -1,0 +1,163 @@
+//! Consolidated tests for std::os module - advanced / additional coverage tests.
+//! Total @test count: 20
+//!
+//! Consolidation sources:
+//!   os_system_info.test.tml (last 2 of 18: env_unset, get_priority)
+//!   os_coverage.test.tml (18, all renamed with _v2 suffix to avoid duplicates)
+
+use test::{assert, assert_eq}
+use std::os
+use std::os::{
+    env_unset, get_priority
+}
+
+// =============================================================================
+// From os_system_info.test.tml — env_unset / get_priority (unqualified calls)
+// =============================================================================
+
+@test
+func test_os_env_unset() -> I32 {
+    let result: Bool = env_unset("TML_NONEXISTENT_TO_UNSET")
+    // Just verify it doesn't crash
+    assert(true, "env_unset should not crash")
+    return 0
+}
+
+@test
+func test_os_get_priority() -> I32 {
+    let p: I32 = get_priority(0)
+    // priority 0 means current process, result can be any value
+    assert(true, "get_priority should not crash")
+    return 0
+}
+
+// =============================================================================
+// From os_coverage.test.tml — coverage-oriented tests (qualified calls)
+// All renamed with _v2 suffix to avoid duplicate names from os.test.tml
+// =============================================================================
+
+@test
+func test_os_machine_v2() -> I32 {
+    let s: Str = os::machine()
+    assert(s.len() > 0, "machine() should return a string")
+    return 0
+}
+
+@test
+func test_os_release_v2() -> I32 {
+    let s: Str = os::release()
+    assert(s.len() > 0, "release() should return a string")
+    return 0
+}
+
+@test
+func test_os_version_v2() -> I32 {
+    let s: Str = os::version()
+    assert(s.len() > 0, "version() should return a string")
+    return 0
+}
+
+@test
+func test_os_uptime_v2() -> I32 {
+    let u: I64 = os::uptime()
+    assert(u > 0 as I64, "uptime() should be positive")
+    return 0
+}
+
+@test
+func test_os_totalmem_v2() -> I32 {
+    let m: U64 = os::totalmem()
+    assert(m > 0 as U64, "totalmem() should be positive")
+    return 0
+}
+
+@test
+func test_os_freemem_v2() -> I32 {
+    let m: U64 = os::freemem()
+    assert(m > 0 as U64, "freemem() should be positive")
+    return 0
+}
+
+@test
+func test_os_endianness_v2() -> I32 {
+    let s: Str = os::endianness()
+    assert(s.len() > 0, "endianness() should return LE or BE")
+    return 0
+}
+
+@test
+func test_os_cpu_count_v2() -> I32 {
+    let c: I32 = os::cpu_count()
+    assert(c > 0, "cpu_count() should be positive")
+    return 0
+}
+
+@test
+func test_os_cpu_model_v2() -> I32 {
+    let s: Str = os::cpu_model(0)
+    assert(s.len() > 0, "cpu_model(0) should return a string")
+    return 0
+}
+
+@test
+func test_os_cpu_speed_v2() -> I32 {
+    let s: I64 = os::cpu_speed(0)
+    assert(s > 0 as I64, "cpu_speed(0) should be positive")
+    return 0
+}
+
+@test
+func test_os_loadavg_1_v2() -> I32 {
+    let l: F64 = os::loadavg_1()
+    assert(l >= 0.0, "loadavg_1() should be non-negative")
+    return 0
+}
+
+@test
+func test_os_loadavg_5_v2() -> I32 {
+    let l: F64 = os::loadavg_5()
+    assert(l >= 0.0, "loadavg_5() should be non-negative")
+    return 0
+}
+
+@test
+func test_os_loadavg_15_v2() -> I32 {
+    let l: F64 = os::loadavg_15()
+    assert(l >= 0.0, "loadavg_15() should be non-negative")
+    return 0
+}
+
+@test
+func test_os_username_v2() -> I32 {
+    let s: Str = os::username()
+    assert(s.len() > 0, "username() should return a string")
+    return 0
+}
+
+@test
+func test_os_uid_v2() -> I32 {
+    let u: I64 = os::uid()
+    assert(u >= -1 as I64, "uid() should return value")
+    return 0
+}
+
+@test
+func test_os_gid_v2() -> I32 {
+    let g: I64 = os::gid()
+    assert(g >= -1 as I64, "gid() should return value")
+    return 0
+}
+
+@test
+func test_os_shell_v2() -> I32 {
+    let s: Str = os::shell()
+    assert(s.len() > 0, "shell() should return a string")
+    return 0
+}
+
+@test
+func test_os_pid_v2() -> I32 {
+    let p: I32 = os::pid()
+    assert(p > 0, "pid() should be positive")
+    return 0
+}

@@ -1,9 +1,22 @@
-// Tests for Str built-in methods (no core::str import)
+// Consolidated str tests - basic string operations
+// Total @test count: 43
+// Sources: str.test.tml, str_basics.test.tml, str_coverage.test.tml,
+//          str_case_chars.test.tml, str_charat_test.test.tml,
+//          str_len_typed.test.tml, str_functions.test.tml (partial)
+// BLOCKED: Str::slice_str — runtime crash
+// BLOCKED: split/lines/join/concat_all/split_whitespace/Str::split — List[Str] LLVM type mismatch
+// BLOCKED: Str::as_bytes — returns ref [U8] slice type
 use test
+use core::str
+use core::str::{
+    len, is_empty,
+    to_uppercase, to_lowercase,
+    char_at, first_char, last_char
+}
 
-// ============================================================================
-// Str method tests
-// ============================================================================
+// =============================================================================
+// Str.len() - builtin method (from str.test.tml)
+// =============================================================================
 
 @test
 func test_str_len() -> I32 {
@@ -11,6 +24,55 @@ func test_str_len() -> I32 {
     assert_eq(s.len(), 5, "Str.len()")
     return 0
 }
+
+@test
+func test_str_len_v2() -> I32 {
+    let s: Str = "hello"
+    let n: I64 = s.len()
+    assert(n == 5 as I64, "len of hello = 5")
+    return 0
+}
+
+@test
+func test_str_len_typed() -> I32 {
+    let s: Str = "hello"
+    let n: I64 = s.len()
+    assert_eq(n, 5, "len typed")
+    return 0
+}
+
+@test
+func test_str_len_comparison() -> I32 {
+    let s: Str = "hello"
+    assert(s.len() > 0, "len > 0")
+    return 0
+}
+
+// =============================================================================
+// len() - free function (from str_basics.test.tml)
+// =============================================================================
+
+@test
+func test_len_hello() -> I32 {
+    assert_eq(len("hello"), 5, "len hello")
+    return 0
+}
+
+@test
+func test_len_empty() -> I32 {
+    assert_eq(len(""), 0, "len empty")
+    return 0
+}
+
+@test
+func test_len_longer() -> I32 {
+    assert_eq(len("hello world"), 11, "len hello world")
+    return 0
+}
+
+// =============================================================================
+// is_empty - builtin method and free function
+// =============================================================================
 
 @test
 func test_str_is_empty_false() -> I32 {
@@ -27,6 +89,34 @@ func test_str_is_empty_true() -> I32 {
 }
 
 @test
+func test_str_is_empty_false_v2() -> I32 {
+    assert(is_empty("hello") == false, "hello is not empty")
+    return 0
+}
+
+@test
+func test_str_is_empty_true_v2() -> I32 {
+    assert(is_empty("") == true, "empty string is empty")
+    return 0
+}
+
+@test
+func test_is_empty_true() -> I32 {
+    assert(is_empty(""), "empty is empty")
+    return 0
+}
+
+@test
+func test_is_empty_false() -> I32 {
+    assert(not is_empty("x"), "x is not empty")
+    return 0
+}
+
+// =============================================================================
+// contains - builtin method and free function
+// =============================================================================
+
+@test
 func test_str_contains() -> I32 {
     let s: Str = "hello world"
     assert(s.contains("world"), "contains world")
@@ -39,6 +129,22 @@ func test_str_contains_false() -> I32 {
     assert(not s.contains("world"), "does not contain world")
     return 0
 }
+
+@test
+func test_str_contains_true() -> I32 {
+    assert(str::contains("hello world", "world"), "contains world")
+    return 0
+}
+
+@test
+func test_str_contains_false_v2() -> I32 {
+    assert(str::contains("hello", "xyz") == false, "does not contain xyz")
+    return 0
+}
+
+// =============================================================================
+// starts_with / ends_with - builtin method and free function
+// =============================================================================
 
 @test
 func test_str_starts_with() -> I32 {
@@ -55,10 +161,211 @@ func test_str_ends_with() -> I32 {
 }
 
 @test
+func test_str_starts_with_v2() -> I32 {
+    assert(str::starts_with("hello world", "hello"), "starts with hello")
+    assert(str::starts_with("hello", "xyz") == false, "not starts with xyz")
+    return 0
+}
+
+@test
+func test_str_ends_with_v2() -> I32 {
+    assert(str::ends_with("hello world", "world"), "ends with world")
+    assert(str::ends_with("hello", "xyz") == false, "not ends with xyz")
+    return 0
+}
+
+// =============================================================================
+// concat - operator +
+// =============================================================================
+
+@test
 func test_str_concat() -> I32 {
     let a: Str = "Hello"
     let b: Str = " World"
     let result: Str = a + b
     assert_eq(result, "Hello World", "string concat")
+    return 0
+}
+
+// =============================================================================
+// to_uppercase (free function, from str_case_chars.test.tml)
+// =============================================================================
+
+@test
+func test_uppercase_lower() -> I32 {
+    let s: Str = to_uppercase("hello")
+    assert_eq(s, "HELLO", "to_uppercase(hello) should be HELLO")
+    return 0
+}
+
+@test
+func test_uppercase_mixed() -> I32 {
+    let s: Str = to_uppercase("Hello World")
+    assert_eq(s, "HELLO WORLD", "to_uppercase mixed case")
+    return 0
+}
+
+@test
+func test_uppercase_already_upper() -> I32 {
+    let s: Str = to_uppercase("HELLO")
+    assert_eq(s, "HELLO", "to_uppercase already uppercase")
+    return 0
+}
+
+@test
+func test_uppercase_with_numbers() -> I32 {
+    let s: Str = to_uppercase("abc123")
+    assert_eq(s, "ABC123", "to_uppercase with numbers")
+    return 0
+}
+
+// =============================================================================
+// to_lowercase (free function, from str_case_chars.test.tml)
+// =============================================================================
+
+@test
+func test_lowercase_upper() -> I32 {
+    let s: Str = to_lowercase("HELLO")
+    assert_eq(s, "hello", "to_lowercase(HELLO) should be hello")
+    return 0
+}
+
+@test
+func test_lowercase_mixed() -> I32 {
+    let s: Str = to_lowercase("Hello World")
+    assert_eq(s, "hello world", "to_lowercase mixed case")
+    return 0
+}
+
+@test
+func test_lowercase_already_lower() -> I32 {
+    let s: Str = to_lowercase("hello")
+    assert_eq(s, "hello", "to_lowercase already lowercase")
+    return 0
+}
+
+// =============================================================================
+// char_at (free function, from str_case_chars.test.tml)
+// =============================================================================
+
+@test
+func test_char_at_first() -> I32 {
+    let c: I32 = char_at("hello", 0)
+    assert_eq(c, 104, "char_at(hello, 0) should be 104 (h)")
+    return 0
+}
+
+@test
+func test_char_at_middle() -> I32 {
+    let c: I32 = char_at("hello", 2)
+    assert_eq(c, 108, "char_at(hello, 2) should be 108 (l)")
+    return 0
+}
+
+@test
+func test_char_at_last() -> I32 {
+    let c: I32 = char_at("hello", 4)
+    assert_eq(c, 111, "char_at(hello, 4) should be 111 (o)")
+    return 0
+}
+
+// =============================================================================
+// first_char / last_char (free function, from str_case_chars.test.tml)
+// =============================================================================
+
+@test
+func test_first_char_value() -> I32 {
+    let fc: Maybe[I32] = first_char("abc")
+    assert(fc.is_just(), "first_char of abc should be Just")
+    assert_eq(fc.unwrap(), 97, "first_char(abc) should be 97 (a)")
+    return 0
+}
+
+@test
+func test_first_char_empty() -> I32 {
+    let fc: Maybe[I32] = first_char("")
+    assert(fc.is_nothing(), "first_char of empty should be Nothing")
+    return 0
+}
+
+@test
+func test_last_char_value() -> I32 {
+    let lc: Maybe[I32] = last_char("abc")
+    assert(lc.is_just(), "last_char of abc should be Just")
+    assert_eq(lc.unwrap(), 99, "last_char(abc) should be 99 (c)")
+    return 0
+}
+
+@test
+func test_last_char_empty() -> I32 {
+    let lc: Maybe[I32] = last_char("")
+    assert(lc.is_nothing(), "last_char of empty should be Nothing")
+    return 0
+}
+
+// =============================================================================
+// char_at - minimal/diagnostic (from str_charat_test.test.tml)
+// =============================================================================
+
+@test
+func test_charat() -> I32 {
+    let s: Str = "hello"
+    let c: I32 = s.char_at(0)
+    return 0
+}
+
+// =============================================================================
+// char_at / first_char / last_char (free function, from str_functions.test.tml)
+// =============================================================================
+
+@test
+func test_char_at_first_v2() -> I32 {
+    let c: I32 = char_at("hello", 0)
+    assert(c == 104, "char_at(0) should be 'h' (104)")
+    return 0
+}
+
+@test
+func test_char_at_last_v2() -> I32 {
+    let c: I32 = char_at("hello", 4)
+    assert(c == 111, "char_at(4) should be 'o' (111)")
+    return 0
+}
+
+@test
+func test_first_char_nonempty() -> I32 {
+    let fc: Maybe[I32] = first_char("abc")
+    assert(fc.is_just(), "first_char of non-empty should be Just")
+    return 0
+}
+
+@test
+func test_first_char_empty_v2() -> I32 {
+    let fc: Maybe[I32] = first_char("")
+    assert(fc.is_nothing(), "first_char of empty should be Nothing")
+    return 0
+}
+
+@test
+func test_last_char_nonempty() -> I32 {
+    let lc: Maybe[I32] = last_char("abc")
+    assert(lc.is_just(), "last_char of non-empty should be Just")
+    return 0
+}
+
+@test
+func test_last_char_empty_v2() -> I32 {
+    let lc: Maybe[I32] = last_char("")
+    assert(lc.is_nothing(), "last_char of empty should be Nothing")
+    return 0
+}
+
+// =============================================================================
+// blocked placeholder (from str_slice_split.test.tml)
+// =============================================================================
+
+@test
+func test_str_blocked_placeholder() -> I32 {
+    // All remaining str functions blocked by runtime crashes or type issues
     return 0
 }

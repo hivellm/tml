@@ -26,3 +26,7 @@ func test_socket_addr_v4_set_ip() -> I32 {
     assert(addr.ip().is_unspecified(), "ip should be updated to unspecified")
     return 0
 }
+
+// BLOCKED: All SocketAddrV4/SocketAddr trait impls (eq, cmp, partial_cmp, duplicate, hash, fmt)
+// — "Unknown method" at codegen for behavior dispatch on struct
+// BLOCKED: SocketAddr::from_v4() returns () — can't construct SocketAddr

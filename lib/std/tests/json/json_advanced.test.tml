@@ -1,0 +1,229 @@
+// Consolidated JSON tests - File 3 of 3
+// Test count: 18
+// Contents: Builder extended methods, PrettyBuilder (all methods)
+//
+// Consolidated from: json_serialize_coverage (builder f/kn32/kf/raw/len,
+//   pretty builder methods), json_pretty_builder, json_pretty_arr
+use test
+use std::json::builder::{Builder, object, array, PrettyBuilder, pretty_object, pretty_array}
+
+// =============================================================================
+// Builder extended methods (from json_serialize_coverage)
+// =============================================================================
+
+@test
+func test_builder_f() -> I32 {
+    let b: Builder = array()
+    b.f(3.14)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 3, "f should add float value")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_kn32() -> I32 {
+    let b: Builder = object()
+    b.kn32("age", 25)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "kn32 should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_kf() -> I32 {
+    let b: Builder = object()
+    b.kf("pi", 3.14)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "kf should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_raw() -> I32 {
+    let b: Builder = array()
+    b.raw("{\"nested\":true}")
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 10, "raw should inject pre-built JSON")
+    b.drop()
+    return 0
+}
+
+@test
+func test_builder_len() -> I32 {
+    let b: Builder = array()
+    b.n(1 as I64)
+    let l: I64 = b.len()
+    assert(l > 0 as I64, "len should return positive value")
+    b.end_arr()
+    b.drop()
+    return 0
+}
+
+// =============================================================================
+// PrettyBuilder basics (from json_pretty_builder)
+// =============================================================================
+
+@test
+func test_pretty_builder_new() -> I32 {
+    let pb: PrettyBuilder = PrettyBuilder::new()
+    assert_eq(pb.len(), 0 as I64, "new PrettyBuilder is empty")
+    pb.drop()
+    return 0
+}
+
+@test
+func test_pretty_object_convenience() -> I32 {
+    let pb: PrettyBuilder = pretty_object()
+    pb.kn("count", 42 as I64)
+    pb.end_obj()
+    let result: Str = pb.build()
+    assert(result.len() > 0, "pretty object should produce output")
+    pb.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_with_indent() -> I32 {
+    let pb: PrettyBuilder = PrettyBuilder::with_indent("    ")
+    pb.obj()
+    pb.ks("key", "val")
+    pb.end_obj()
+    let result: Str = pb.build()
+    assert(result.len() > 0, "with_indent should produce output")
+    pb.drop()
+    return 0
+}
+
+// =============================================================================
+// PrettyBuilder value methods (from json_serialize_coverage)
+// =============================================================================
+
+@test
+func test_pretty_array_builder() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.n(1 as I64)
+    b.n(2 as I64)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty_array should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_s() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.s("hello")
+    b.s("world")
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty s should produce string values")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_n32() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.n32(42)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty n32 should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_f() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.f(2.718)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty f should produce float value")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_b() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.b(true)
+    b.b(false)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty b should produce bool values")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_nil() -> I32 {
+    let b: PrettyBuilder = pretty_array()
+    b.nil()
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty nil should produce null")
+    b.drop()
+    return 0
+}
+
+// =============================================================================
+// PrettyBuilder key-value methods (from json_serialize_coverage)
+// =============================================================================
+
+@test
+func test_pretty_builder_kn32() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.kn32("count", 10)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty kn32 should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_kf() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.kf("rate", 0.95)
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty kf should produce output")
+    b.drop()
+    return 0
+}
+
+@test
+func test_pretty_builder_knil() -> I32 {
+    let b: PrettyBuilder = pretty_object()
+    b.knil("deleted_at")
+    b.end_obj()
+    let s: Str = b.build()
+    assert(s.len() > 0, "pretty knil should produce output")
+    b.drop()
+    return 0
+}
+
+// =============================================================================
+// PrettyBuilder::arr (from json_pretty_arr)
+// =============================================================================
+
+@test
+func test_pretty_builder_arr() -> I32 {
+    let b: PrettyBuilder = PrettyBuilder::new()
+    b.arr()
+    b.n(1 as I64)
+    b.n(2 as I64)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "PrettyBuilder::arr should produce output")
+    b.drop()
+    return 0
+}

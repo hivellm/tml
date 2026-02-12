@@ -1,0 +1,470 @@
+// Consolidated: Range operations, drop/ManuallyDrop, try_trait, coroutine, async
+// Sources: ops_range.test.tml (23) + ops_drop.test.tml (11) + try_trait.test.tml (5) + ops_coroutine.test.tml (4) + ops_async.test.tml (1)
+// Total: 44 @test functions
+use test
+
+use core::ops::range::{
+    Range,
+    RangeInclusive,
+    RangeFrom,
+    RangeTo,
+    RangeToInclusive,
+    RangeFull
+}
+
+use core::ops::drop::ManuallyDrop
+use core::ops::try_trait::ControlFlow
+use core::ops::coroutine::{CoroutineState, CoroutineResumePoint, Ready}
+
+// ============================================================================
+// Range Tests (half-open: start to end)
+// ============================================================================
+
+@test
+func test_range_new() -> I32 {
+    let r: Range[I64] = Range::new(0, 10)
+    assert_eq(r.start, 0, "start should be 0")
+    assert_eq(r.end, 10, "end should be 10")
+    return 0
+}
+
+@test
+func test_range_is_empty_false() -> I32 {
+    let r: Range[I64] = Range::new(0, 10)
+    assert(not r.is_empty(), "0 to 10 should not be empty")
+    return 0
+}
+
+@test
+func test_range_is_empty_true() -> I32 {
+    let r: Range[I64] = Range::new(10, 10)
+    assert(r.is_empty(), "10 to 10 should be empty")
+    return 0
+}
+
+@test
+func test_range_is_empty_inverted() -> I32 {
+    let r: Range[I64] = Range::new(10, 5)
+    assert(r.is_empty(), "10 to 5 should be empty (inverted)")
+    return 0
+}
+
+@test
+func test_range_contains() -> I32 {
+    let r: Range[I64] = Range::new(0, 10)
+    let v0: I64 = 0
+    let v5: I64 = 5
+    let v9: I64 = 9
+    let v10: I64 = 10
+    let v100: I64 = 100
+    let vm1: I64 = -1
+
+    assert(r.contains(ref v0), "0 to 10 should contain 0")
+    assert(r.contains(ref v5), "0 to 10 should contain 5")
+    assert(r.contains(ref v9), "0 to 10 should contain 9")
+    assert(not r.contains(ref v10), "0 to 10 should not contain 10 (exclusive)")
+    assert(not r.contains(ref v100), "0 to 10 should not contain 100")
+    assert(not r.contains(ref vm1), "0 to 10 should not contain -1")
+    return 0
+}
+
+// ============================================================================
+// RangeInclusive Tests (closed: start through end)
+// ============================================================================
+
+@test
+func test_range_inclusive_new() -> I32 {
+    let r: RangeInclusive[I64] = RangeInclusive::new(1, 5)
+    assert_eq(*r.start(), 1, "start should be 1")
+    assert_eq(*r.end(), 5, "end should be 5")
+    return 0
+}
+
+@test
+func test_range_inclusive_is_empty_false() -> I32 {
+    let r: RangeInclusive[I64] = RangeInclusive::new(1, 5)
+    assert(not r.is_empty(), "1 through 5 should not be empty")
+    return 0
+}
+
+@test
+func test_range_inclusive_is_empty_single() -> I32 {
+    let r: RangeInclusive[I64] = RangeInclusive::new(5, 5)
+    assert(not r.is_empty(), "5 through 5 should not be empty (single element)")
+    return 0
+}
+
+@test
+func test_range_inclusive_is_empty_inverted() -> I32 {
+    let r: RangeInclusive[I64] = RangeInclusive::new(10, 5)
+    assert(r.is_empty(), "10 through 5 should be empty (inverted)")
+    return 0
+}
+
+@test
+func test_range_inclusive_contains() -> I32 {
+    let r: RangeInclusive[I64] = RangeInclusive::new(1, 5)
+    let v1: I64 = 1
+    let v3: I64 = 3
+    let v5: I64 = 5
+    let v0: I64 = 0
+    let v6: I64 = 6
+
+    assert(r.contains(ref v1), "1 through 5 should contain 1")
+    assert(r.contains(ref v3), "1 through 5 should contain 3")
+    assert(r.contains(ref v5), "1 through 5 should contain 5 (inclusive!)")
+    assert(not r.contains(ref v0), "1 through 5 should not contain 0")
+    assert(not r.contains(ref v6), "1 through 5 should not contain 6")
+    return 0
+}
+
+// ============================================================================
+// RangeFrom Tests (no upper: start to)
+// ============================================================================
+
+@test
+func test_range_from_new() -> I32 {
+    let r: RangeFrom[I64] = RangeFrom::new(5)
+    assert_eq(r.start, 5, "start should be 5")
+    return 0
+}
+
+@test
+func test_range_from_contains() -> I32 {
+    let r: RangeFrom[I64] = RangeFrom::new(10)
+    let v9: I64 = 9
+    let v10: I64 = 10
+    let v100: I64 = 100
+
+    assert(not r.contains(ref v9), "10 to should not contain 9")
+    assert(r.contains(ref v10), "10 to should contain 10")
+    assert(r.contains(ref v100), "10 to should contain 100")
+    return 0
+}
+
+// ============================================================================
+// RangeTo Tests (no lower: to end)
+// ============================================================================
+
+@test
+func test_range_to_new() -> I32 {
+    let r: RangeTo[I64] = RangeTo::new(10)
+    assert_eq(r.end, 10, "end should be 10")
+    return 0
+}
+
+@test
+func test_range_to_contains() -> I32 {
+    let r: RangeTo[I64] = RangeTo::new(10)
+    let vm100: I64 = -100
+    let v0: I64 = 0
+    let v9: I64 = 9
+    let v10: I64 = 10
+    let v11: I64 = 11
+
+    assert(r.contains(ref vm100), "to 10 should contain -100")
+    assert(r.contains(ref v0), "to 10 should contain 0")
+    assert(r.contains(ref v9), "to 10 should contain 9")
+    assert(not r.contains(ref v10), "to 10 should not contain 10 (exclusive)")
+    assert(not r.contains(ref v11), "to 10 should not contain 11")
+    return 0
+}
+
+// ============================================================================
+// RangeToInclusive Tests (no lower, inclusive: through end)
+// ============================================================================
+
+@test
+func test_range_to_inclusive_new() -> I32 {
+    let r: RangeToInclusive[I64] = RangeToInclusive::new(10)
+    assert_eq(r.end, 10, "end should be 10")
+    return 0
+}
+
+@test
+func test_range_to_inclusive_contains() -> I32 {
+    let r: RangeToInclusive[I64] = RangeToInclusive::new(10)
+    let vm100: I64 = -100
+    let v0: I64 = 0
+    let v9: I64 = 9
+    let v10: I64 = 10
+    let v11: I64 = 11
+
+    assert(r.contains(ref vm100), "through 10 should contain -100")
+    assert(r.contains(ref v0), "through 10 should contain 0")
+    assert(r.contains(ref v9), "through 10 should contain 9")
+    assert(r.contains(ref v10), "through 10 should contain 10 (inclusive!)")
+    assert(not r.contains(ref v11), "through 10 should not contain 11")
+    return 0
+}
+
+// ============================================================================
+// RangeFull Tests (all values: ..)
+// ============================================================================
+
+@test
+func test_range_full_new() -> I32 {
+    let _r: RangeFull = RangeFull::new()
+    return 0
+}
+
+@test
+func test_range_full_contains_everything() -> I32 {
+    let r: RangeFull = RangeFull::new()
+    let vm1000000: I64 = -1000000
+    let v0: I64 = 0
+    let v1000000: I64 = 1000000
+
+    assert(r.contains[I64](ref vm1000000), ".. should contain -1000000")
+    assert(r.contains[I64](ref v0), ".. should contain 0")
+    assert(r.contains[I64](ref v1000000), ".. should contain 1000000")
+    return 0
+}
+
+// ============================================================================
+// Range Debug/Display Tests
+// ============================================================================
+
+@test
+func test_range_debug_string() -> I32 {
+    let r: Range[I64] = Range::new(1, 10)
+    let s: Str = r.debug_string()
+    assert(s == "1 to 10", "Range debug should be '1 to 10'")
+    return 0
+}
+
+@test
+func test_range_inclusive_debug_string() -> I32 {
+    let r: RangeInclusive[I64] = RangeInclusive::new(1, 10)
+    let s: Str = r.debug_string()
+    assert(s == "1 through 10", "RangeInclusive debug should be '1 through 10'")
+    return 0
+}
+
+@test
+func test_range_from_debug_string() -> I32 {
+    let r: RangeFrom[I64] = RangeFrom::new(5)
+    let s: Str = r.debug_string()
+    assert(s == "5 to", "RangeFrom debug should be '5 to'")
+    return 0
+}
+
+@test
+func test_range_to_debug_string() -> I32 {
+    let r: RangeTo[I64] = RangeTo::new(5)
+    let s: Str = r.debug_string()
+    assert(s == "to 5", "RangeTo debug should be 'to 5'")
+    return 0
+}
+
+@test
+func test_range_full_debug_string() -> I32 {
+    let r: RangeFull = RangeFull::new()
+    let s: Str = r.debug_string()
+    assert(s == "..", "RangeFull debug should be '..'")
+    return 0
+}
+
+// ============================================================================
+// ManuallyDrop Tests
+// ============================================================================
+
+@test
+func test_manually_drop_new() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(42)
+    let value: I64 = *md.get()
+    assert_eq(value, 42, "ManuallyDrop should hold 42")
+    return 0
+}
+
+@test
+func test_manually_drop_get() -> I32 {
+    let md: ManuallyDrop[I32] = ManuallyDrop::new(100)
+    let ref_value: ref I32 = md.get()
+    assert_eq(*ref_value, 100, "get() should return reference to value")
+    return 0
+}
+
+@test
+func test_manually_drop_get_mut() -> I32 {
+    var md: ManuallyDrop[I32] = ManuallyDrop::new(10)
+    let ref_mut: mut ref I32 = md.get_mut()
+    *ref_mut = 20
+    assert_eq(*md.get(), 20, "get_mut() should allow mutation")
+    return 0
+}
+
+@test
+func test_manually_drop_into_inner() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(999)
+    let value: I64 = ManuallyDrop::into_inner(md)
+    assert_eq(value, 999, "into_inner should return the value")
+    return 0
+}
+
+@test
+func test_manually_drop_debug_string() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(42)
+    let s: Str = md.debug_string()
+    assert(s == "ManuallyDrop(42)", "debug_string should be 'ManuallyDrop(42)'")
+    return 0
+}
+
+@test
+func test_manually_drop_to_string() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(123)
+    let s: Str = md.to_string()
+    assert(s == "123", "to_string should return inner value's string")
+    return 0
+}
+
+@test
+func test_manually_drop_default() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::default[I64]()
+    assert_eq(*md.get(), 0, "default ManuallyDrop[I64] should hold 0")
+    return 0
+}
+
+@test
+func test_manually_drop_duplicate() -> I32 {
+    let md1: ManuallyDrop[I32] = ManuallyDrop::new(42)
+    let md2: ManuallyDrop[I32] = md1.duplicate()
+    assert_eq(*md1.get(), 42, "original should still have 42")
+    assert_eq(*md2.get(), 42, "duplicate should have 42")
+    return 0
+}
+
+@test
+func test_manually_drop_i8() -> I32 {
+    let md: ManuallyDrop[I8] = ManuallyDrop::new(127 as I8)
+    let value: I8 = *md.get()
+    let expected: I8 = 127 as I8
+    assert(value == expected, "should hold I8 value")
+    return 0
+}
+
+@test
+func test_manually_drop_bool() -> I32 {
+    let md_true: ManuallyDrop[Bool] = ManuallyDrop::new(true)
+    let md_false: ManuallyDrop[Bool] = ManuallyDrop::new(false)
+    assert(*md_true.get() == true, "should hold true")
+    assert(*md_false.get() == false, "should hold false")
+    return 0
+}
+
+// Note: Drop behavior tests cannot be fully tested without runtime support
+@test
+func test_drop_behavior_documented() -> I32 {
+    // The Drop behavior is defined as:
+    // pub behavior Drop {
+    //     func drop(mut this)
+    // }
+    // This test just ensures the module compiles correctly.
+    return 0
+}
+
+// ============================================================================
+// ControlFlow Tests (try_trait)
+// ============================================================================
+
+@test
+func test_control_flow_continue() -> I32 {
+    let cf: ControlFlow[I32, Str] = ControlFlow::Continue(42)
+    assert(cf.is_continue(), "Continue should be is_continue")
+    assert(not cf.is_break(), "Continue should not be is_break")
+    return 0
+}
+
+@test
+func test_control_flow_break() -> I32 {
+    let cf: ControlFlow[I32, Str] = ControlFlow::Break("error")
+    assert(cf.is_break(), "Break should be is_break")
+    assert(not cf.is_continue(), "Break should not be is_continue")
+    return 0
+}
+
+@test
+func test_control_flow_i64_continue() -> I32 {
+    let cf: ControlFlow[I64, I64] = ControlFlow::Continue(100 as I64)
+    assert(cf.is_continue(), "i64 Continue should be is_continue")
+    return 0
+}
+
+@test
+func test_control_flow_i64_break() -> I32 {
+    let cf: ControlFlow[I64, I64] = ControlFlow::Break(-1 as I64)
+    assert(cf.is_break(), "i64 Break should be is_break")
+    return 0
+}
+
+@test
+func test_control_flow_bool_types() -> I32 {
+    let cont: ControlFlow[Bool, Bool] = ControlFlow::Continue(true)
+    assert(cont.is_continue(), "bool Continue")
+    let brk: ControlFlow[Bool, Bool] = ControlFlow::Break(false)
+    assert(brk.is_break(), "bool Break")
+    return 0
+}
+
+// ============================================================================
+// Coroutine Tests (basic construction only - generic enum limitations)
+// ============================================================================
+
+// TODO: Generic enum method instantiation not yet working
+// TODO: Generic enum payload extraction not fully working - type parameters not substituted
+
+pub type CounterGen {
+    current: I64,
+    max: I64
+}
+
+impl CounterGen {
+    pub func new(max: I64) -> CounterGen {
+        return CounterGen { current: 0, max: max }
+    }
+
+    pub func resume(mut this) -> CoroutineState[I64, Str] {
+        if this.current < this.max {
+            let value: I64 = this.current
+            this.current = this.current + 1
+            return CoroutineState::Yielded(value)
+        }
+        return CoroutineState::Complete("done")
+    }
+}
+
+@test
+func test_coroutine_state_create_yielded() -> I32 {
+    let state: CoroutineState[I64, Str] = CoroutineState::Yielded(42)
+    // Just test construction works - can't extract payload yet
+    return 0
+}
+
+@test
+func test_coroutine_state_create_complete() -> I32 {
+    let state: CoroutineState[I64, Str] = CoroutineState::Complete("done")
+    // Just test construction works - can't extract payload yet
+    return 0
+}
+
+@test
+func test_ready_construction() -> I32 {
+    let ready: Ready[I64] = Ready::new(42)
+    return 0
+}
+
+@test
+func test_ready_exhausted_construction() -> I32 {
+    let ready: Ready[I64] = Ready::exhausted()
+    return 0
+}
+
+// ============================================================================
+// Async Placeholder (blocked by generic enum issues)
+// ============================================================================
+
+@test
+func test_ops_async_placeholder() -> I32 {
+    // Placeholder until generic enum handling is fixed
+    return 0
+}

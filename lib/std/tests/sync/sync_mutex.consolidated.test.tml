@@ -1,0 +1,453 @@
+// Consolidated Mutex tests
+// Total @test count: 41
+// Sources: mutex.test.tml, sync_mutex.test.tml, mutex_simple.test.tml,
+//          mutex_minimal.test.tml, mutex_drop_debug.test.tml,
+//          precompiled_symbols.test.tml, mpsc_repro_mutex_ptr.test.tml,
+//          sync_primitives.test.tml (mutex/condvar portions),
+//          sync_isolation.test.tml (mutex portions),
+//          mutex_guard.test.tml
+use test::{assert, assert_eq}
+use std::sync::{Mutex, MutexGuard, Condvar, Arc}
+use std::sync::condvar::Condvar
+use std::sync::atomic::{AtomicUsize, AtomicBool}
+use core::mem::drop
+
+// Simple struct to point to
+type MutexData {
+    value: I32,
+}
+
+// ============================================================================
+// Mutex Creation Tests
+// ============================================================================
+
+@test
+func test_mutex_new() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    return 0
+}
+
+// From sync_mutex.test.tml (different - checks is_locked)
+@test
+func test_mutex_new_not_locked() {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    assert(not mutex.is_locked())
+}
+
+@test
+func test_mutex_explicit_type() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    return 0
+}
+
+// ============================================================================
+// Mutex Lock and Read Tests
+// ============================================================================
+
+@test
+func test_mutex_lock() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    let guard: MutexGuard[I32] = mutex.lock()
+    let val: I32 = *guard.get()
+    assert_eq(val, 42)
+    return 0
+}
+
+@test
+func test_mutex_lock_and_read() {
+    let mutex: Mutex[I32] = Mutex::new(100)
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 100)
+    }
+}
+
+// ============================================================================
+// Mutex Lock and Write Tests
+// ============================================================================
+
+@test
+func test_mutex_lock_and_write() {
+    let mutex: Mutex[I32] = Mutex::new(0)
+    {
+        var guard: MutexGuard[I32] = mutex.lock()
+        *guard.get_mut() = 42
+    }
+    // Lock again to verify the write
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 42)
+    }
+}
+
+// ============================================================================
+// Mutex try_lock Tests
+// ============================================================================
+
+@test
+func test_mutex_try_lock_success() {
+    let mutex: Mutex[I32] = Mutex::new(10)
+    when mutex.try_lock() {
+        Just(guard) => {
+            assert_eq(*guard.get(), 10)
+        },
+        Nothing => panic("try_lock should succeed when mutex is unlocked")
+    }
+}
+
+// ============================================================================
+// Mutex is_locked Tests
+// ============================================================================
+
+@test
+func test_mutex_is_locked() {
+    let mutex: Mutex[I32] = Mutex::new(0)
+    assert(not mutex.is_locked())
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+    }
+    assert(not mutex.is_locked())
+}
+
+// ============================================================================
+// Mutex into_inner Tests
+// ============================================================================
+
+@test
+func test_mutex_into_inner() {
+    let mutex: Mutex[I32] = Mutex::new(999)
+    {
+        var guard: MutexGuard[I32] = mutex.lock()
+        *guard.get_mut() = 123
+    }
+    let value: I32 = mutex.into_inner()
+    assert_eq(value, 123)
+}
+
+// ============================================================================
+// Mutex get_mut Tests
+// ============================================================================
+
+@test
+func test_mutex_get_mut() {
+    var mutex: Mutex[I32] = Mutex::new(50)
+    *mutex.get_mut() = 75
+    let guard: MutexGuard[I32] = mutex.lock()
+    assert_eq(*guard.get(), 75)
+}
+
+// ============================================================================
+// Mutex Lock Twice / Drop Tests (RAII)
+// ============================================================================
+
+@test
+func test_mutex_lock_twice() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        let val: I32 = *guard.get()
+        assert_eq(val, 42)
+    }
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 42)
+    }
+    return 0
+}
+
+@test
+func test_mutex_guard_drop_releases_lock() {
+    let mutex: Mutex[I32] = Mutex::new(0)
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+    }
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+    }
+}
+
+// From mutex_simple.test.tml
+@test
+func test_mutex_simple_lock() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        let val: I32 = *guard.get()
+        assert_eq(val, 42)
+    }
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 42)
+    }
+    return 0
+}
+
+// From mutex_drop_debug.test.tml
+@test
+func test_mutex_drop_at_scope_exit() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 42)
+    }
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 42)
+    }
+    return 0
+}
+
+// ============================================================================
+// Mutex with Different Types
+// ============================================================================
+
+@test
+func test_mutex_with_i64() {
+    let mutex: Mutex[I64] = Mutex::new(1000000000000 as I64)
+    {
+        let guard: MutexGuard[I64] = mutex.lock()
+        assert_eq(*guard.get(), 1000000000000 as I64)
+    }
+}
+
+@test
+func test_mutex_with_bool() {
+    let mutex: Mutex[Bool] = Mutex::new(false)
+    {
+        var guard: MutexGuard[Bool] = mutex.lock()
+        *guard.get_mut() = true
+    }
+    {
+        let guard: MutexGuard[Bool] = mutex.lock()
+        assert(*guard.get())
+    }
+}
+
+// ============================================================================
+// Mutex Sequential Locks
+// ============================================================================
+
+@test
+func test_mutex_sequential_locks() {
+    let mutex: Mutex[I32] = Mutex::new(0)
+    var i: I32 = 0
+    loop (i < 5) {
+        {
+            var guard: MutexGuard[I32] = mutex.lock()
+            *guard.get_mut() = *guard.get() + 1
+        }
+        i = i + 1
+    }
+    {
+        let guard: MutexGuard[I32] = mutex.lock()
+        assert_eq(*guard.get(), 5)
+    }
+}
+
+// ============================================================================
+// Precompiled Symbol Tests
+// ============================================================================
+
+@test
+func test_precompiled_mutex_i32() -> I32 {
+    var m: Mutex[I32] = Mutex::new(42)
+    let g: MutexGuard[I32] = m.lock()
+    assert_eq(*g.get(), 42, "Mutex[I32] should hold value")
+    drop(g)
+    return 0
+}
+
+@test
+func test_precompiled_mutex_i32_modify() -> I32 {
+    var m: Mutex[I32] = Mutex::new(0)
+    {
+        let g: MutexGuard[I32] = m.lock()
+        assert_eq(*g.get(), 0, "Initial value should be 0")
+    }
+    return 0
+}
+
+@test
+func test_precompiled_arc_i32() -> I32 {
+    let a: Arc[I32] = Arc::new(100)
+    drop(a)
+    return 0
+}
+
+// ============================================================================
+// Mutex with Pointer Types
+// ============================================================================
+
+@test
+func test_mutex_ptr_i32() -> I32 {
+    var x: I32 = 42
+    var mutex: Mutex[Ptr[I32]] = Mutex::new(ref x as Ptr[I32])
+    let guard: MutexGuard[Ptr[I32]] = mutex.lock()
+    return 0
+}
+
+// ============================================================================
+// Arc + Mutex Tests
+// ============================================================================
+
+@test
+func test_arc_mutex_explicit() -> I32 {
+    let inner: Mutex[I32] = Mutex::new(42)
+    let a: Arc[Mutex[I32]] = Arc::new(inner)
+    return 0
+}
+
+// ============================================================================
+// Condvar Basic Tests (from sync_primitives.test.tml)
+// ============================================================================
+
+@test
+func test_condvar_creation() -> I32 {
+    let cv: Condvar = Condvar::new()
+    return 0
+}
+
+@test
+func test_condvar_wait_timeout() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    let condvar: Condvar = Condvar::new()
+    var guard: MutexGuard[I32] = mutex.lock()
+    let result: (MutexGuard[I32], Bool) = condvar.wait_timeout_ms(guard, 10)
+    guard = result.0
+    let timed_out: Bool = result.1
+    assert(timed_out)
+    return 0
+}
+
+@test
+func test_condvar_notify_one_no_waiters() -> I32 {
+    var condvar: Condvar = Condvar::new()
+    condvar.notify_one()
+    return 0
+}
+
+@test
+func test_condvar_notify_all_no_waiters() -> I32 {
+    var condvar: Condvar = Condvar::new()
+    condvar.notify_all()
+    return 0
+}
+
+@test
+func test_condvar_wait_timeout_longer() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(100)
+    let condvar: Condvar = Condvar::new()
+    var guard: MutexGuard[I32] = mutex.lock()
+    let result: (MutexGuard[I32], Bool) = condvar.wait_timeout_ms(guard, 50)
+    guard = result.0
+    let timed_out: Bool = result.1
+    assert(timed_out)
+    assert_eq(*guard.get(), 100)
+    return 0
+}
+
+@test
+func test_condvar_with_i64_mutex() -> I32 {
+    let mutex: Mutex[I64] = Mutex::new(999999999 as I64)
+    let condvar: Condvar = Condvar::new()
+    var guard: MutexGuard[I64] = mutex.lock()
+    let result: (MutexGuard[I64], Bool) = condvar.wait_timeout_ms(guard, 10)
+    guard = result.0
+    let timed_out: Bool = result.1
+    assert(timed_out)
+    assert_eq(*guard.get(), 999999999 as I64)
+    return 0
+}
+
+@test
+func test_condvar_with_bool_mutex() -> I32 {
+    let mutex: Mutex[Bool] = Mutex::new(false)
+    let condvar: Condvar = Condvar::new()
+    var guard: MutexGuard[Bool] = mutex.lock()
+    let result: (MutexGuard[Bool], Bool) = condvar.wait_timeout_ms(guard, 10)
+    guard = result.0
+    let timed_out: Bool = result.1
+    assert(timed_out)
+    assert(not *guard.get())
+    return 0
+}
+
+@test
+func test_condvar_wait_timeout_zero() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(0)
+    let condvar: Condvar = Condvar::new()
+    var guard: MutexGuard[I32] = mutex.lock()
+    let result: (MutexGuard[I32], Bool) = condvar.wait_timeout_ms(guard, 0)
+    guard = result.0
+    let timed_out: Bool = result.1
+    return 0
+}
+
+@test
+func test_condvar_multiple_notify_one() -> I32 {
+    var condvar: Condvar = Condvar::new()
+    condvar.notify_one()
+    condvar.notify_one()
+    condvar.notify_one()
+    return 0
+}
+
+@test
+func test_condvar_multiple_notify_all() -> I32 {
+    var condvar: Condvar = Condvar::new()
+    condvar.notify_all()
+    condvar.notify_all()
+    condvar.notify_all()
+    return 0
+}
+
+@test
+func test_condvar_interleaved_notify() -> I32 {
+    var condvar: Condvar = Condvar::new()
+    condvar.notify_one()
+    condvar.notify_all()
+    condvar.notify_one()
+    condvar.notify_all()
+    return 0
+}
+
+@test
+func test_condvar_data_preserved_after_wait() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    let condvar: Condvar = Condvar::new()
+    {
+        var guard: MutexGuard[I32] = mutex.lock()
+        *guard.get_mut() = 100
+    }
+    {
+        var guard: MutexGuard[I32] = mutex.lock()
+        let result: (MutexGuard[I32], Bool) = condvar.wait_timeout_ms(guard, 10)
+        guard = result.0
+        assert_eq(*guard.get(), 100)
+    }
+    return 0
+}
+
+// ============================================================================
+// BLOCKED: MutexGuard::deref, deref_mut
+// BLOCKED: behavior dispatch on generics
+// ============================================================================
+
+@test
+func test_mutex_guard_blocked() -> I32 {
+    // MutexGuard::deref and deref_mut blocked by behavior dispatch on generics
+    return 0
+}
+
+// ============================================================================
+// Isolation Tests (Mutex + struct with atomics)
+// ============================================================================
+
+@test
+func test_isolation_mutex_i32() -> I32 {
+    let mutex: Mutex[I32] = Mutex::new(42)
+    let guard: MutexGuard[I32] = mutex.lock()
+    let val: I32 = *guard.get()
+    assert_eq(val, 42)
+    return 0
+}

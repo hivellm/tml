@@ -1,0 +1,636 @@
+//! Consolidated crypto tests - File 3 of 3
+//!
+//! Contains 50 @test functions:
+//!   - Random byte generation, integer ranges, UUID
+//!   - SecureRandom API (bytes, u32, u64, int_range, bool, f64)
+//!   - Random extra functions (random_u32, random_u64, random_fill_range)
+//!   - Placeholder tests (sign, RSA, DH, ECDH)
+//!   - X.509 certificate parsing, field extraction, fingerprints
+//!   - X.509 verification, store, PEM roundtrip, timestamps
+//!   - X.509 additional tests (minimal, sret, diag variants)
+//!
+//! Sources: random.test.tml, random_extra.test.tml, sign.test.tml,
+//!          rsa.test.tml, dh.test.tml, ecdh.test.tml, x509.test.tml,
+//!          x509_minimal.test.tml, x509_sret.test.tml, x509_diag.test.tml
+//!
+//! Duplicate renames:
+//!   - test_x509_parse_pem_succeeds_v2 (was test_x509_parse_pem_succeeds in x509_minimal)
+//!   - test_x509_is_ca_v2 (was test_x509_is_ca in x509_minimal)
+//!   - test_x509_subject_cn_v2 (was test_x509_subject_cn in x509_minimal)
+
+use std::collections::Buffer
+use std::crypto::random::{random_bytes, random_int, random_uuid, SecureRandom}
+use std::crypto::random::{random_u32, random_u64, random_fill_range}
+use std::crypto::x509::{X509Certificate, X509Name, X509Store, KeyUsage}
+use test::{assert, assert_eq}
+
+// ============================================================================
+// random_bytes Tests (from random.test.tml)
+// ============================================================================
+
+@test
+func test_random_bytes_length() -> I32 {
+    let buf16: Buffer = random_bytes(16 as I64)
+    let buf32: Buffer = random_bytes(32 as I64)
+    let buf64: Buffer = random_bytes(64 as I64)
+
+    assert_eq(buf16.len(), 16 as I64, "buf16 length")
+    assert_eq(buf32.len(), 32 as I64, "buf32 length")
+    assert_eq(buf64.len(), 64 as I64, "buf64 length")
+
+    buf16.destroy()
+    buf32.destroy()
+    buf64.destroy()
+    return 0
+}
+
+@test
+func test_random_bytes_zero_length() -> I32 {
+    let buf: Buffer = random_bytes(0 as I64)
+    assert_eq(buf.len(), 0 as I64, "zero length buffer")
+    buf.destroy()
+    return 0
+}
+
+// ============================================================================
+// random_int Tests (from random.test.tml)
+// ============================================================================
+
+@test
+func test_random_int_range() -> I32 {
+    // Generate many random integers and check they're in range
+    let mut i: I64 = 0
+    loop (i < (100 as I64)) {
+        let n: I64 = random_int(0 as I64, 100 as I64)
+        assert(n >= (0 as I64), "n >= 0")
+        assert(n < (100 as I64), "n < 100")
+        i = i + (1 as I64)
+    }
+    return 0
+}
+
+@test
+func test_random_int_single_value() -> I32 {
+    // Range of 1 should always return the same value
+    let mut i: I64 = 0
+    loop (i < (10 as I64)) {
+        let n: I64 = random_int(42 as I64, 43 as I64)
+        assert_eq(n, 42 as I64, "single value range")
+        i = i + (1 as I64)
+    }
+    return 0
+}
+
+@test
+func test_random_int_negative_range() -> I32 {
+    let mut i: I64 = 0
+    loop (i < (100 as I64)) {
+        let n: I64 = random_int(-50 as I64, 50 as I64)
+        assert(n >= (-50 as I64), "n >= -50")
+        assert(n < (50 as I64), "n < 50")
+        i = i + (1 as I64)
+    }
+    return 0
+}
+
+// ============================================================================
+// random_uuid Tests (from random.test.tml)
+// ============================================================================
+
+@test
+func test_random_uuid_format() -> I32 {
+    let uuid: Str = random_uuid()
+
+    // UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    // Length should be 36 characters
+    assert_eq(uuid.len(), 36 as I64, "uuid length")
+
+    return 0
+}
+
+@test
+func test_random_uuid_uniqueness() -> I32 {
+    let uuid1: Str = random_uuid()
+    let uuid2: Str = random_uuid()
+    let uuid3: Str = random_uuid()
+
+    // All UUIDs should be different
+    assert(uuid1 != uuid2, "uuid1 != uuid2")
+    assert(uuid2 != uuid3, "uuid2 != uuid3")
+    assert(uuid1 != uuid3, "uuid1 != uuid3")
+
+    return 0
+}
+
+// ============================================================================
+// SecureRandom Tests (from random.test.tml)
+// ============================================================================
+
+@test
+func test_secure_random_bytes() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+
+    let buf: Buffer = rng.bytes(64 as I64)
+    assert_eq(buf.len(), 64 as I64, "rng bytes length")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_secure_random_next_u32() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+
+    // Generate several random u32 values
+    let v1: U32 = rng.next_u32()
+    let v2: U32 = rng.next_u32()
+    let v3: U32 = rng.next_u32()
+
+    // They should likely be different (extremely unlikely to be same)
+    // We just check that we can call it without error
+    return 0
+}
+
+@test
+func test_secure_random_next_u64() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+
+    let v1: U64 = rng.next_u64()
+    let v2: U64 = rng.next_u64()
+
+    // Should be different (with overwhelming probability)
+    assert(v1 != v2, "u64 values should differ")
+
+    return 0
+}
+
+@test
+func test_secure_random_int_range() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+
+    let mut i: I64 = 0
+    loop (i < (100 as I64)) {
+        let n: I64 = rng.int_range(10 as I64, 20 as I64)
+        assert(n >= (10 as I64), "n >= 10")
+        assert(n < (20 as I64), "n < 20")
+        i = i + (1 as I64)
+    }
+
+    return 0
+}
+
+@test
+func test_secure_random_next_bool() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+
+    // Just verify we can call it
+    let _b1: Bool = rng.next_bool()
+    let _b2: Bool = rng.next_bool()
+
+    return 0
+}
+
+@test
+func test_secure_random_next_f64() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+
+    let mut i: I64 = 0
+    loop (i < (100 as I64)) {
+        let f: F64 = rng.next_f64()
+        assert(f >= 0.0, "f >= 0.0")
+        assert(f < 1.0, "f < 1.0")
+        i = i + (1 as I64)
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Random Extra Tests (from random_extra.test.tml)
+// ============================================================================
+
+@test
+func test_random_u32() -> I32 {
+    let val: U32 = random_u32()
+    // Just check it doesn't crash - any value is valid
+    assert(true, "random_u32 returns")
+    return 0
+}
+
+@test
+func test_random_u64() -> I32 {
+    let val: U64 = random_u64()
+    assert(true, "random_u64 returns")
+    return 0
+}
+
+@test
+func test_random_fill_range() -> I32 {
+    // Use random_bytes to create an initialized buffer with actual length
+    let mut buf: Buffer = random_bytes(32 as I64)
+
+    let result = random_fill_range(mut ref buf, 8 as I64, 16 as I64)
+    assert(result.is_ok(), "fill_range succeeds")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_random_fill_range_invalid_offset() -> I32 {
+    let mut buf: Buffer = random_bytes(16 as I64)
+
+    let result = random_fill_range(mut ref buf, -1 as I64, 8 as I64)
+    assert(result.is_err(), "negative offset should fail")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_random_fill_range_overflow() -> I32 {
+    let mut buf: Buffer = random_bytes(16 as I64)
+
+    let result = random_fill_range(mut ref buf, 8 as I64, 16 as I64)
+    assert(result.is_err(), "offset+size > len should fail")
+
+    buf.destroy()
+    return 0
+}
+
+// ============================================================================
+// Placeholder Tests (from sign.test.tml, rsa.test.tml, dh.test.tml, ecdh.test.tml)
+// ============================================================================
+
+@test
+func test_sign_placeholder() -> I32 {
+    // Digital signature functionality will be added in a future release.
+    assert(true, "placeholder test")
+    return 0
+}
+
+@test
+func test_rsa_placeholder() -> I32 {
+    // RSA functionality will be added in a future release.
+    assert(true, "placeholder test")
+    return 0
+}
+
+@test
+func test_dh_placeholder() -> I32 {
+    // DH key exchange functionality will be added in a future release.
+    assert(true, "placeholder test")
+    return 0
+}
+
+@test
+func test_ecdh_placeholder() -> I32 {
+    // ECDH key exchange functionality will be added in a future release.
+    assert(true, "placeholder test")
+    return 0
+}
+
+// ============================================================================
+// X.509 Helpers (from x509.test.tml)
+// ============================================================================
+
+// Test certificate (self-signed RSA 2048-bit CA, valid 2026-02-10 to 2036-02-08)
+//
+// Subject: CN=test.example.com, O=TML Test Org, C=US, ST=California, L=San Francisco
+// Issuer:  (same, self-signed)
+// Serial:  6823D594E231E423C3159AB53DAF3C1EE9D7D14B
+// Sig Alg: sha256WithRSAEncryption
+// CA: true, KeyUsage: keyCertSign, cRLSign, digitalSignature
+
+func get_test_cert_pem() -> Str {
+    return "-----BEGIN CERTIFICATE-----\nMIIDyTCCArGgAwIBAgIUaCPVlOIx5CPDFZq1Pa88HunX0UswDQYJKoZIhvcNAQEL\nBQAwbDEZMBcGA1UEAwwQdGVzdC5leGFtcGxlLmNvbTEVMBMGA1UECgwMVE1MIFRl\nc3QgT3JnMQswCQYDVQQGEwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UE\nBwwNU2FuIEZyYW5jaXNjbzAeFw0yNjAyMTAxMTIyNTVaFw0zNjAyMDgxMTIyNTVa\nMGwxGTAXBgNVBAMMEHRlc3QuZXhhbXBsZS5jb20xFTATBgNVBAoMDFRNTCBUZXN0\nIE9yZzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDVNhbiBGcmFuY2lzY28wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC0\nCdN1Q9zDtNHRfCEkUvX1oNCOoX1HAi4jtsrQd2WRC/BmPWeZtylPy+X+PJ2t340o\ndgZ7ec5aP+/0fsrq6fA2f6VtMOeEV/kP44jkzEDmmcGLxEyl6nfbL4twyc0+IkSy\nzZgw28P809G3/NxXg+PQS2DRgVoWuaqvWoOEmx0R/jGvSrNsMwbHc1vBN525flOu\n6dPErbIKYHRJmvHF+HqxADi47jl1roBLeBia5+WGY+koWA2bq2a/JGIGgXabDgFu\nOuGmNvcEFM6lm45nCqWxwLEN2Ij81ZrUhk1JJxqfSC0YBva6mwBjP0rAqSrR5OLO\nCLd0B3RSCBVu01ejiuTfAgMBAAGjYzBhMB0GA1UdDgQWBBRH3/kmqJpIR/A28aiZ\nYQpZILLrAzAfBgNVHSMEGDAWgBRH3/kmqJpIR/A28aiZYQpZILLrAzAPBgNVHRMB\nAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjANBgkqhkiG9w0BAQsFAAOCAQEAegD/\nPDDhy12rpq/MC9bcq+hMlGBAFzrk1rcouu5Tlqcmv4pAJi6U8VXf4NSccHtw6uDC\nyc3PdW2PxFERnbChyhtvC9z9z6DlywVfath1WnOcABm87gLYN2H4nlLlfy5PEx8n\npEhblS7go+LmNLgobGO5Kc+oGf5ifU9VImaRcQEMCGGOiubtsiI5kv+HU0JRPwhR\nxhEe266ktBt4785HOJ3kB/yPjXNZjrHv6hWWYkyhj5DVgE1XICWRAcjq88L5dzpx\nCs053i7wUgjToNXGW7jGAxtU9AOgPQGgFhlXF1PbDBc3oj4A+fxXs1xpyyHQ2x97\nZUrbOqIoKzjUm7+kNw==\n-----END CERTIFICATE-----\n"
+}
+
+// Helper: parse cert or fail test
+func parse_test_cert() -> X509Certificate {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "failed to parse test cert PEM")
+    return result.unwrap()
+}
+
+// ============================================================================
+// X.509 Parse PEM and Subject/Issuer (from x509.test.tml)
+// ============================================================================
+
+@test
+func test_x509_parse_pem_succeeds() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse valid PEM cert")
+    return 0
+}
+
+@test
+func test_x509_parse_invalid_pem_fails() -> I32 {
+    let result = X509Certificate::from_pem("not a certificate")
+    assert(result.is_err(), "should fail on invalid PEM")
+    return 0
+}
+
+@test
+func test_x509_parse_empty_pem_fails() -> I32 {
+    let result = X509Certificate::from_pem("")
+    assert(result.is_err(), "should fail on empty PEM")
+    return 0
+}
+
+@test
+func test_x509_subject_cn() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let cn: Str = cert.subject().cn()
+    assert_eq(cn, "test.example.com", "subject CN")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_subject_org() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let org: Str = cert.subject().org()
+    assert_eq(org, "TML Test Org", "subject O")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_issuer_cn_self_signed() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let cn: Str = cert.issuer().cn()
+    assert_eq(cn, "test.example.com", "issuer CN matches subject")
+    cert.destroy()
+    return 0
+}
+
+// ============================================================================
+// X.509 Serial Number, Dates, Fingerprints (from x509.test.tml)
+// ============================================================================
+
+@test
+func test_x509_serial_number() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let serial: Str = cert.serial_number()
+    assert_eq(serial, "6823D594E231E423C3159AB53DAF3C1EE9D7D14B", "serial number")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_valid_from() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let from: Str = cert.valid_from()
+    assert_eq(from, "2026-02-10T11:22:55Z", "not before date")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_valid_to() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let not_after: Str = cert.valid_to()
+    assert_eq(not_after, "2036-02-08T11:22:55Z", "not after date")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_fingerprint_sha1() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let fp: Str = cert.fingerprint()
+    assert_eq(fp, "a6:f7:ce:5f:ec:f0:78:29:8d:d3:e4:f3:63:22:75:26:1b:47:e7:5c", "SHA-1 fingerprint")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_fingerprint_sha256() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let fp: Str = cert.fingerprint256()
+    assert_eq(fp, "e7:26:e7:40:00:7e:24:b3:6f:24:22:f6:86:72:0e:84:79:2a:f8:e0:34:61:c7:49:dd:74:6d:51:b3:5a:21:e7", "SHA-256 fingerprint")
+    cert.destroy()
+    return 0
+}
+
+// ============================================================================
+// X.509 Signature Algorithm, CA Flag, Key Usage, PEM Roundtrip (from x509.test.tml)
+// ============================================================================
+
+@test
+func test_x509_signature_algorithm() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let alg: Str = cert.signature_algorithm()
+    assert_eq(alg, "RSA-SHA256", "signature algorithm")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_is_ca() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    assert(cert.is_ca(), "test cert should be a CA")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_key_usage() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let ku: KeyUsage = cert.key_usage()
+    assert(ku.digital_signature, "should have digitalSignature")
+    assert(ku.key_cert_sign, "should have keyCertSign")
+    assert(ku.crl_sign, "should have cRLSign")
+    assert(not ku.key_encipherment, "should not have keyEncipherment")
+    assert(not ku.data_encipherment, "should not have dataEncipherment")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_to_pem_roundtrip() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let pem_out: Str = cert.to_pem()
+    // Re-parse the exported PEM
+    let result2 = X509Certificate::from_pem(pem_out)
+    assert(result2.is_ok(), "should re-parse exported PEM")
+    let mut cert2: X509Certificate = result2.unwrap()
+    // Check that key fields match
+    assert_eq(cert2.subject().cn(), "test.example.com", "roundtrip subject CN")
+    assert_eq(cert2.serial_number(), cert.serial_number(), "roundtrip serial")
+    cert2.destroy()
+    cert.destroy()
+    return 0
+}
+
+// ============================================================================
+// X.509 Verification, Store, Validity (from x509.test.tml)
+// ============================================================================
+
+@test
+func test_x509_is_valid_now() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    // Cert valid 2026-02-10 to 2036-02-08, so it should be valid today (2026-02-10)
+    assert(cert.is_valid_now(), "cert should be currently valid")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_self_signed_check_issued() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    // Self-signed cert: check_issued(self) should be true
+    let issued: Bool = cert.check_issued(ref cert)
+    assert(issued, "self-signed cert should pass check_issued against itself")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_store_add_and_verify() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let mut store: X509Store = X509Store::new()
+    let add_result = store.add_cert(ref cert)
+    assert(add_result.is_ok(), "should add cert to store")
+    // Verify self-signed cert against store containing itself
+    let verify_result = store.verify(ref cert)
+    assert(verify_result.is_ok(), "verify should not error")
+    let verified: Bool = verify_result.unwrap()
+    assert(verified, "self-signed cert should verify against store containing it")
+    store.destroy()
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_valid_from_timestamp() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let ts: I64 = cert.valid_from_date()
+    // 2026-02-10T11:22:55Z in Unix time is approximately 1770682975
+    assert(ts > 1770000000, "valid_from timestamp should be reasonable")
+    assert(ts < 1780000000, "valid_from timestamp should be reasonable")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_valid_to_timestamp() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let ts: I64 = cert.valid_to_date()
+    // 2036-02-08T11:22:55Z should be roughly 10 years later
+    assert(ts > 2080000000, "valid_to timestamp should be ~10 years later")
+    cert.destroy()
+    return 0
+}
+
+// ============================================================================
+// X.509 Minimal Tests (from x509_minimal.test.tml)
+// Duplicates renamed with _v2 suffix
+// ============================================================================
+
+@test
+func test_x509_parse_pem_succeeds_v2() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse valid PEM cert")
+    return 0
+}
+
+@test
+func test_x509_unwrap_and_serial() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse valid PEM cert")
+    let mut cert: X509Certificate = result.unwrap()
+    let serial: Str = cert.serial_number()
+    assert_eq(serial, "6823D594E231E423C3159AB53DAF3C1EE9D7D14B", "serial number")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_sig_alg() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse")
+    let mut cert: X509Certificate = result.unwrap()
+    let alg: Str = cert.signature_algorithm()
+    assert_eq(alg, "RSA-SHA256", "sig alg")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_fingerprint() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse")
+    let mut cert: X509Certificate = result.unwrap()
+    let fp: Str = cert.fingerprint()
+    assert_eq(fp, "a6:f7:ce:5f:ec:f0:78:29:8d:d3:e4:f3:63:22:75:26:1b:47:e7:5c", "SHA-1 fp")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_is_ca_v2() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse")
+    let mut cert: X509Certificate = result.unwrap()
+    assert(cert.is_ca(), "should be CA")
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_subject_cn_v2() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse")
+    let mut cert: X509Certificate = result.unwrap()
+    let name: X509Name = cert.subject()
+    let cn: Str = name.cn()
+    assert_eq(cn, "test.example.com", "subject CN")
+    cert.destroy()
+    return 0
+}
+
+// ============================================================================
+// X.509 sret Test (from x509_sret.test.tml)
+// ============================================================================
+
+@test
+func test_subject_cn() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse")
+    let mut cert: X509Certificate = result.unwrap()
+    let name: X509Name = cert.subject()
+    let cn: Str = name.cn()
+    assert_eq(cn, "test.example.com", "subject CN")
+    cert.destroy()
+    return 0
+}
+
+// ============================================================================
+// X.509 Diagnostic Test (from x509_diag.test.tml)
+// ============================================================================
+
+@test
+func test_sig_alg_diag() -> I32 {
+    let pem = get_test_cert_pem()
+    let result = X509Certificate::from_pem(pem)
+    assert(result.is_ok(), "should parse")
+    let mut cert: X509Certificate = result.unwrap()
+    let alg: Str = cert.signature_algorithm()
+    print("SIG ALG: [" + alg + "]\n")
+    print("SIG ALG LEN: ")
+    // just test with the actual returned value
+    assert(alg.len() > 0, "sig alg should not be empty")
+    cert.destroy()
+    return 0
+}

@@ -1,0 +1,16 @@
+// Tests for PrettyBuilder::arr
+use test
+use std::json::builder::{PrettyBuilder}
+
+@test
+func test_pretty_builder_arr() -> I32 {
+    let b: PrettyBuilder = PrettyBuilder::new()
+    b.arr()
+    b.n(1 as I64)
+    b.n(2 as I64)
+    b.end_arr()
+    let s: Str = b.build()
+    assert(s.len() > 0, "PrettyBuilder::arr should produce output")
+    b.drop()
+    return 0
+}

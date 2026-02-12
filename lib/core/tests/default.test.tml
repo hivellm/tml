@@ -1,0 +1,325 @@
+// Consolidated tests for core::default (31 active tests, 1 commented-out)
+use test
+use core::default
+use core::default::Default
+
+// ============================================================================
+// Section 1: default.test.tml - Integer Default implementations
+// ============================================================================
+
+@test
+func test_i8_default() -> I32 {
+    let val: I8 = I8::default()
+    assert_eq(val as I32, 0, "I8::default() should be 0")
+    return 0
+}
+
+@test
+func test_i16_default() -> I32 {
+    let val: I16 = I16::default()
+    assert_eq(val as I32, 0, "I16::default() should be 0")
+    return 0
+}
+
+@test
+func test_i32_default() -> I32 {
+    let val: I32 = I32::default()
+    assert_eq(val, 0, "I32::default() should be 0")
+    return 0
+}
+
+@test
+func test_i64_default() -> I32 {
+    let val: I64 = I64::default()
+    assert_eq(val, 0 as I64, "I64::default() should be 0")
+    return 0
+}
+
+// ============================================================================
+// Section 1: default.test.tml - Unsigned Integer Default implementations
+// ============================================================================
+
+@test
+func test_u8_default() -> I32 {
+    let val: U8 = U8::default()
+    assert_eq(val as I32, 0, "U8::default() should be 0")
+    return 0
+}
+
+@test
+func test_u16_default() -> I32 {
+    let val: U16 = U16::default()
+    assert_eq(val as I32, 0, "U16::default() should be 0")
+    return 0
+}
+
+@test
+func test_u32_default() -> I32 {
+    let val: U32 = U32::default()
+    assert_eq(val as I64, 0 as I64, "U32::default() should be 0")
+    return 0
+}
+
+@test
+func test_u64_default() -> I32 {
+    let val: U64 = U64::default()
+    assert_eq(val as I64, 0 as I64, "U64::default() should be 0")
+    return 0
+}
+
+// ============================================================================
+// Section 1: default.test.tml - Float Default implementations
+// ============================================================================
+
+@test
+func test_f32_default() -> I32 {
+    let val: F32 = F32::default()
+    assert(val == 0.0 as F32, "F32::default() should be 0.0")
+    return 0
+}
+
+@test
+func test_f64_default() -> I32 {
+    let val: F64 = F64::default()
+    assert(val == 0.0, "F64::default() should be 0.0")
+    return 0
+}
+
+// ============================================================================
+// Section 1: default.test.tml - Bool Default implementation
+// ============================================================================
+
+@test
+func test_bool_default() -> I32 {
+    let val: Bool = Bool::default()
+    assert(not val, "Bool::default() should be false")
+    return 0
+}
+
+// ============================================================================
+// Section 1: default.test.tml - Str Default implementation
+// ============================================================================
+
+@test
+func test_str_default() -> I32 {
+    let val: Str = Str::default()
+    assert_eq(val, "", "Str::default() should be empty string")
+    assert_eq(val.len() as I32, 0, "empty string len should be 0")
+    return 0
+}
+
+// ============================================================================
+// Section 1: default.test.tml - Maybe[T] Default implementation
+// ============================================================================
+
+@test
+func test_maybe_i32_default() -> I32 {
+    let val: Maybe[I32] = Nothing
+    when val {
+        Just(_) => assert(false, "Maybe should be Nothing"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_maybe_str_default() -> I32 {
+    let val: Maybe[Str] = Nothing
+    when val {
+        Just(_) => assert(false, "Maybe[Str] should be Nothing"),
+        Nothing => {}
+    }
+    return 0
+}
+
+// ============================================================================
+// Section 1: default.test.tml - Custom type with Default
+// ============================================================================
+
+type Point {
+    x: I32,
+    y: I32
+}
+
+impl Default for Point {
+    pub func default() -> Point {
+        return Point { x: 0, y: 0 }
+    }
+}
+
+@test
+func test_custom_type_default() -> I32 {
+    let p: Point = Point::default()
+    assert_eq(p.x, 0, "Point::default() x should be 0")
+    assert_eq(p.y, 0, "Point::default() y should be 0")
+    return 0
+}
+
+type Config {
+    timeout: I32,
+    retries: I32,
+    enabled: Bool
+}
+
+impl Default for Config {
+    pub func default() -> Config {
+        return Config {
+            timeout: 5000,
+            retries: 3,
+            enabled: true
+        }
+    }
+}
+
+@test
+func test_config_default() -> I32 {
+    let c: Config = Config::default()
+    assert_eq(c.timeout, 5000, "Config timeout default")
+    assert_eq(c.retries, 3, "Config retries default")
+    assert(c.enabled, "Config enabled default")
+    return 0
+}
+
+// ============================================================================
+// Section 2: default_basics.test.tml - Primitive Default Tests
+// ============================================================================
+
+@test
+func test_i8_default_basics() -> I32 {
+    let val: I8 = I8::default()
+    assert(val == 0 as I8, "I8::default() should be 0")
+    return 0
+}
+
+@test
+func test_i16_default_basics() -> I32 {
+    let val: I16 = I16::default()
+    assert(val == 0 as I16, "I16::default() should be 0")
+    return 0
+}
+
+@test
+func test_i32_default_basics() -> I32 {
+    let val: I32 = I32::default()
+    assert(val == 0, "I32::default() should be 0")
+    return 0
+}
+
+@test
+func test_i64_default_basics() -> I32 {
+    let val: I64 = I64::default()
+    assert(val == 0, "I64::default() should be 0")
+    return 0
+}
+
+@test
+func test_u8_default_basics() -> I32 {
+    let val: U8 = U8::default()
+    assert(val == 0 as U8, "U8::default() should be 0")
+    return 0
+}
+
+@test
+func test_u16_default_basics() -> I32 {
+    let val: U16 = U16::default()
+    assert(val == 0 as U16, "U16::default() should be 0")
+    return 0
+}
+
+@test
+func test_u32_default_basics() -> I32 {
+    let val: U32 = U32::default()
+    assert(val == 0 as U32, "U32::default() should be 0")
+    return 0
+}
+
+@test
+func test_u64_default_basics() -> I32 {
+    let val: U64 = U64::default()
+    assert(val == 0 as U64, "U64::default() should be 0")
+    return 0
+}
+
+@test
+func test_f32_default_basics() -> I32 {
+    let val: F32 = F32::default()
+    assert(val == 0.0 as F32, "F32::default() should be 0.0")
+    return 0
+}
+
+@test
+func test_f64_default_basics() -> I32 {
+    let val: F64 = F64::default()
+    assert(val == 0.0, "F64::default() should be 0.0")
+    return 0
+}
+
+@test
+func test_bool_default_basics() -> I32 {
+    let val: Bool = Bool::default()
+    assert(val == false, "Bool::default() should be false")
+    return 0
+}
+
+@test
+func test_str_default_basics() -> I32 {
+    let val: Str = Str::default()
+    assert(val == "", "Str::default() should be empty string")
+    return 0
+}
+
+// ============================================================================
+// Section 2: default_basics.test.tml - Maybe Default Test
+// (commented out due to codegen bug with generic static methods)
+// ============================================================================
+
+// @test
+// func test_maybe_default() -> I32 {
+//     let val: Maybe[I32] = Maybe::default()
+//     when val {
+//         Just(_) => panic("Maybe::default() should be Nothing"),
+//         Nothing => {},
+//     }
+//     return 0
+// }
+
+// ============================================================================
+// Section 2: default_basics.test.tml - Custom Type with Default
+// ============================================================================
+
+type PointBasics {
+    x: I32,
+    y: I32
+}
+
+impl Default for PointBasics {
+    pub func default() -> PointBasics {
+        return PointBasics { x: 0, y: 0 }
+    }
+}
+
+@test
+func test_custom_default_basics() -> I32 {
+    let p: PointBasics = PointBasics::default()
+    assert(p.x == 0, "PointBasics::default().x should be 0")
+    assert(p.y == 0, "PointBasics::default().y should be 0")
+    return 0
+}
+
+// ============================================================================
+// Section 3: default_maybe.test.tml - Default::default and Maybe::default
+// ============================================================================
+
+@test
+func test_i64_default_maybe() -> I32 {
+    let v: I64 = I64::default()
+    assert_eq(v, 0 as I64, "I64::default() = 0")
+    return 0
+}
+
+@test
+func test_str_default_maybe() -> I32 {
+    let v: Str = Str::default()
+    assert_eq(v, "", "Str::default() is empty")
+    return 0
+}

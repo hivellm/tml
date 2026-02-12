@@ -1,0 +1,175 @@
+// Consolidated tests for core::mem (22 tests)
+// ManuallyDrop, MaybeUninit, swap, replace, size_of, align_of, drop
+// BLOCKED: forget[T], zeroed[T], transmute[S,D], MaybeUninit::uninit[T] — generic monomorphization
+use test
+use core::mem::ManuallyDrop
+use core::mem::MaybeUninit
+use core::mem::{swap, replace, drop}
+use core::mem::{size_of, align_of, size_of_val, align_of_val}
+
+// === ManuallyDrop ===
+
+@test
+func test_manually_drop_new_into_inner() -> I32 {
+    let wrapper: ManuallyDrop[I32] = ManuallyDrop::new[I32](42)
+    let val: I32 = wrapper.into_inner()
+    assert_eq(val, 42, "into_inner should return original value")
+    return 0
+}
+
+@test
+func test_manually_drop_get_ref() -> I32 {
+    let wrapper: ManuallyDrop[I32] = ManuallyDrop::new[I32](99)
+    let r: ref I32 = wrapper.get_ref()
+    assert_eq(*r, 99, "get_ref should return reference to value")
+    return 0
+}
+
+@test
+func test_manually_drop_str() -> I32 {
+    let wrapper: ManuallyDrop[Str] = ManuallyDrop::new[Str]("hello")
+    let val: Str = wrapper.into_inner()
+    assert_eq(val, "hello", "ManuallyDrop works with Str")
+    return 0
+}
+
+// === MaybeUninit ===
+
+@test
+func test_maybe_uninit_new_assume_init() -> I32 {
+    let m: MaybeUninit[I32] = MaybeUninit::new[I32](42)
+    let val: I32 = m.assume_init()
+    assert_eq(val, 42, "new + assume_init should return value")
+    return 0
+}
+
+@test
+func test_maybe_uninit_write_assume_init() -> I32 {
+    var m: MaybeUninit[I32] = MaybeUninit::new[I32](0)
+    m.write(99)
+    let val: I32 = m.assume_init()
+    assert_eq(val, 99, "write should overwrite value")
+    return 0
+}
+
+@test
+func test_maybe_uninit_assume_init_ref() -> I32 {
+    let m: MaybeUninit[I32] = MaybeUninit::new[I32](77)
+    let r: ref I32 = m.assume_init_ref()
+    assert_eq(*r, 77, "assume_init_ref should return reference")
+    return 0
+}
+
+// === swap, replace ===
+
+@test
+func test_swap_i32() -> I32 {
+    var a: I32 = 10
+    var b: I32 = 20
+    swap[I32](mut ref a, mut ref b)
+    assert_eq(a, 20, "a should be 20 after swap")
+    assert_eq(b, 10, "b should be 10 after swap")
+    return 0
+}
+
+@test
+func test_replace_i32() -> I32 {
+    var x: I32 = 5
+    let old: I32 = replace[I32](mut ref x, 100)
+    assert_eq(x, 100, "x should be 100 after replace")
+    assert_eq(old, 5, "old should be 5")
+    return 0
+}
+
+@test
+func test_replace_negative() -> I32 {
+    var y: I32 = -42
+    let old: I32 = replace[I32](mut ref y, 0)
+    assert_eq(old, -42, "old should be -42")
+    assert_eq(y, 0, "y should be 0 after replace")
+    return 0
+}
+
+// === size_of, align_of ===
+
+@test
+func test_size_of_i8() -> I32 {
+    assert_eq(size_of[I8](), 1 as I64, "size_of I8 should be 1")
+    return 0
+}
+
+@test
+func test_size_of_i32() -> I32 {
+    assert_eq(size_of[I32](), 4 as I64, "size_of I32 should be 4")
+    return 0
+}
+
+@test
+func test_size_of_i64() -> I32 {
+    assert_eq(size_of[I64](), 8 as I64, "size_of I64 should be 8")
+    return 0
+}
+
+@test
+func test_size_of_bool() -> I32 {
+    assert_eq(size_of[Bool](), 1 as I64, "size_of Bool should be 1")
+    return 0
+}
+
+@test
+func test_align_of_i8() -> I32 {
+    assert_eq(align_of[I8](), 1 as I64, "align_of I8 should be 1")
+    return 0
+}
+
+@test
+func test_align_of_i32() -> I32 {
+    assert_eq(align_of[I32](), 4 as I64, "align_of I32 should be 4")
+    return 0
+}
+
+@test
+func test_align_of_i64() -> I32 {
+    assert_eq(align_of[I64](), 8 as I64, "align_of I64 should be 8")
+    return 0
+}
+
+@test
+func test_size_of_val_i32() -> I32 {
+    let x: I32 = 42
+    assert_eq(size_of_val[I32](ref x), 4 as I64, "size_of_val I32 should be 4")
+    return 0
+}
+
+@test
+func test_align_of_val_i64() -> I32 {
+    let x: I64 = 100
+    assert_eq(align_of_val[I64](ref x), 8 as I64, "align_of_val I64 should be 8")
+    return 0
+}
+
+// === drop ===
+
+@test
+func test_drop_i32() -> I32 {
+    let x: I32 = 42
+    drop[I32](x)
+    return 0
+}
+
+@test
+func test_drop_i64() -> I32 {
+    let x: I64 = 999 as I64
+    drop[I64](x)
+    return 0
+}
+
+@test
+func test_drop_bool() -> I32 {
+    let x: Bool = true
+    drop[Bool](x)
+    return 0
+}
+
+// BLOCKED: forget[T], zeroed[T], transmute[S,D], MaybeUninit::uninit[T]
+// All emit %struct.T instead of concrete type — generic monomorphization bug

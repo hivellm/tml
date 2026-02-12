@@ -1,0 +1,537 @@
+// Consolidated fmt tests - basic formatting: Formatter type, padding, precision, Arguments, to_string basics
+// Test count: 49 @test functions
+// Sources: formatter.test.tml, fmt_impls.test.tml
+use test
+use core::fmt::formatter::{Formatter, Arguments}
+use core::fmt::traits::{Alignment, Sign}
+
+// ============================================================================
+// Formatter creation and defaults
+// ============================================================================
+
+@test
+func test_formatter_new() -> I32 {
+    let fmt: Formatter = Formatter::new()
+
+    // Check defaults
+    assert(fmt.width().is_nothing(), "Default width should be Nothing")
+    assert(fmt.precision().is_nothing(), "Default precision should be Nothing")
+    assert(not fmt.alternate(), "Default alternate should be false")
+    assert(not fmt.sign_aware_zero_pad(), "Default sign_aware_zero_pad should be false")
+
+    return 0
+}
+
+@test
+func test_formatter_default_alignment() -> I32 {
+    let fmt: Formatter = Formatter::new()
+
+    when fmt.align() {
+        Alignment::Left => {},
+        _ => panic("Default alignment should be Left")
+    }
+
+    return 0
+}
+
+@test
+func test_formatter_default_sign() -> I32 {
+    let fmt: Formatter = Formatter::new()
+
+    when fmt.sign() {
+        Sign::Minus => {},
+        _ => panic("Default sign should be Minus")
+    }
+
+    return 0
+}
+
+@test
+func test_formatter_default_fill() -> I32 {
+    let fmt: Formatter = Formatter::new()
+
+    assert_eq(fmt.fill(), ' ', "Default fill should be space")
+
+    return 0
+}
+
+// ============================================================================
+// Formatter setters
+// ============================================================================
+
+@test
+func test_formatter_set_width() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(10)
+
+    when fmt.width() {
+        Just(w) => assert_eq(w, 10, "Width should be 10"),
+        Nothing => panic("Width should be set")
+    }
+
+    return 0
+}
+
+@test
+func test_formatter_set_precision() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_precision(3)
+
+    when fmt.precision() {
+        Just(p) => assert_eq(p, 3, "Precision should be 3"),
+        Nothing => panic("Precision should be set")
+    }
+
+    return 0
+}
+
+@test
+func test_formatter_set_align() -> I32 {
+    var fmt: Formatter = Formatter::new()
+
+    fmt.set_align(Alignment::Right)
+    when fmt.align() {
+        Alignment::Right => {},
+        _ => panic("Alignment should be Right")
+    }
+
+    fmt.set_align(Alignment::Center)
+    when fmt.align() {
+        Alignment::Center => {},
+        _ => panic("Alignment should be Center")
+    }
+
+    return 0
+}
+
+@test
+func test_formatter_set_fill() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_fill('0')
+
+    assert_eq(fmt.fill(), '0', "Fill should be '0'")
+
+    return 0
+}
+
+@test
+func test_formatter_set_sign() -> I32 {
+    var fmt: Formatter = Formatter::new()
+
+    fmt.set_sign(Sign::Plus)
+    when fmt.sign() {
+        Sign::Plus => {},
+        _ => panic("Sign should be Plus")
+    }
+
+    fmt.set_sign(Sign::Space)
+    when fmt.sign() {
+        Sign::Space => {},
+        _ => panic("Sign should be Space")
+    }
+
+    return 0
+}
+
+@test
+func test_formatter_set_alternate() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_alternate(true)
+
+    assert(fmt.alternate(), "Alternate should be true")
+
+    return 0
+}
+
+@test
+func test_formatter_set_sign_aware_zero_pad() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_sign_aware_zero_pad(true)
+
+    assert(fmt.sign_aware_zero_pad(), "Sign-aware zero pad should be true")
+
+    return 0
+}
+
+// ============================================================================
+// Padding tests
+// ============================================================================
+
+@test
+func test_pad_no_width() -> I32 {
+    let fmt: Formatter = Formatter::new()
+    let result: Str = fmt.pad("test")
+
+    assert_eq(result, "test", "No width should return unchanged")
+
+    return 0
+}
+
+@test
+func test_pad_left_align() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(10)
+    fmt.set_align(Alignment::Left)
+
+    let result: Str = fmt.pad("hi")
+    assert_eq(result, "hi        ", "Left align with spaces")
+
+    return 0
+}
+
+@test
+func test_pad_right_align() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(10)
+    fmt.set_align(Alignment::Right)
+
+    let result: Str = fmt.pad("hi")
+    assert_eq(result, "        hi", "Right align with spaces")
+
+    return 0
+}
+
+@test
+func test_pad_center_align() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(10)
+    fmt.set_align(Alignment::Center)
+
+    let result: Str = fmt.pad("hi")
+    assert_eq(result, "    hi    ", "Center align with spaces")
+
+    return 0
+}
+
+@test
+func test_pad_custom_fill() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(10)
+    fmt.set_align(Alignment::Right)
+    fmt.set_fill('-')
+
+    let result: Str = fmt.pad("hi")
+    assert_eq(result, "--------hi", "Right align with dashes")
+
+    return 0
+}
+
+@test
+func test_pad_longer_than_width() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(5)
+
+    let result: Str = fmt.pad("hello world")
+    assert_eq(result, "hello world", "Longer string unchanged")
+
+    return 0
+}
+
+@test
+func test_pad_equal_to_width() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(5)
+
+    let result: Str = fmt.pad("hello")
+    assert_eq(result, "hello", "Equal length string unchanged")
+
+    return 0
+}
+
+// ============================================================================
+// Integral padding tests
+// ============================================================================
+
+@test
+func test_pad_integral_positive() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(6)
+
+    let result: Str = fmt.pad_integral(true, "", "42")
+    assert_eq(result, "42    ", "Positive number padded")
+
+    return 0
+}
+
+@test
+func test_pad_integral_negative() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(6)
+
+    let result: Str = fmt.pad_integral(false, "", "42")
+    assert_eq(result, "-42   ", "Negative number with minus")
+
+    return 0
+}
+
+@test
+func test_pad_integral_plus_sign() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(6)
+    fmt.set_sign(Sign::Plus)
+
+    let result: Str = fmt.pad_integral(true, "", "42")
+    assert_eq(result, "+42   ", "Positive with plus sign")
+
+    return 0
+}
+
+@test
+func test_pad_integral_space_sign() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(6)
+    fmt.set_sign(Sign::Space)
+
+    let result: Str = fmt.pad_integral(true, "", "42")
+    assert_eq(result, " 42   ", "Positive with space sign")
+
+    return 0
+}
+
+@test
+func test_pad_integral_sign_aware_zero() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(6)
+    fmt.set_sign_aware_zero_pad(true)
+
+    let result: Str = fmt.pad_integral(false, "", "42")
+    assert_eq(result, "-00042", "Sign-aware zero pad")
+
+    return 0
+}
+
+@test
+func test_pad_integral_with_prefix() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_width(10)
+    fmt.set_sign_aware_zero_pad(true)
+
+    let result: Str = fmt.pad_integral(true, "0x", "ff")
+    assert_eq(result, "0x000000ff", "With prefix and zero pad")
+
+    return 0
+}
+
+// ============================================================================
+// Precision tests
+// ============================================================================
+
+@test
+func test_apply_precision_shorter() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_precision(10)
+
+    let result: Str = fmt.apply_precision("hello")
+    assert_eq(result, "hello", "Shorter than precision unchanged")
+
+    return 0
+}
+
+@test
+func test_apply_precision_equal() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_precision(5)
+
+    let result: Str = fmt.apply_precision("hello")
+    assert_eq(result, "hello", "Equal to precision unchanged")
+
+    return 0
+}
+
+@test
+func test_apply_precision_longer() -> I32 {
+    var fmt: Formatter = Formatter::new()
+    fmt.set_precision(3)
+
+    let result: Str = fmt.apply_precision("hello")
+    assert_eq(result, "hel", "Longer than precision truncated")
+
+    return 0
+}
+
+@test
+func test_apply_precision_none() -> I32 {
+    let fmt: Formatter = Formatter::new()
+
+    let result: Str = fmt.apply_precision("hello world")
+    assert_eq(result, "hello world", "No precision unchanged")
+
+    return 0
+}
+
+// ============================================================================
+// Arguments tests
+// ============================================================================
+
+@test
+func test_arguments_new() -> I32 {
+    let args: Arguments = Arguments::new()
+    assert_eq(args.as_str(), "", "Empty arguments")
+
+    return 0
+}
+
+@test
+func test_arguments_from_str() -> I32 {
+    let args: Arguments = Arguments::from_str("hello world")
+    assert_eq(args.as_str(), "hello world", "Arguments from str")
+
+    return 0
+}
+
+@test
+func test_arguments_display() -> I32 {
+    let args: Arguments = Arguments::from_str("test")
+    assert_eq(args.to_string(), "test", "Arguments Display")
+
+    return 0
+}
+
+@test
+func test_arguments_debug() -> I32 {
+    let args: Arguments = Arguments::from_str("test")
+    let result: Str = args.debug_string()
+    assert(result.contains("Arguments"), "Arguments Debug")
+
+    return 0
+}
+
+// ============================================================================
+// to_string basics (from fmt_impls)
+// ============================================================================
+
+@test
+func test_i8_to_string() -> I32 {
+    let x: I8 = 42
+    let s: Str = x.to_string()
+    assert_eq(s, "42", "I8 to_string")
+    return 0
+}
+
+@test
+func test_i8_to_string_negative() -> I32 {
+    let x: I8 = -42
+    let s: Str = x.to_string()
+    assert_eq(s, "-42", "I8 negative to_string")
+    return 0
+}
+
+@test
+func test_i16_to_string() -> I32 {
+    let x: I16 = 1000
+    let s: Str = x.to_string()
+    assert_eq(s, "1000", "I16 to_string")
+    return 0
+}
+
+@test
+func test_i32_to_string() -> I32 {
+    let x: I32 = 123456
+    let s: Str = x.to_string()
+    assert_eq(s, "123456", "I32 to_string")
+    return 0
+}
+
+@test
+func test_i32_to_string_zero() -> I32 {
+    let x: I32 = 0
+    let s: Str = x.to_string()
+    assert_eq(s, "0", "I32 zero to_string")
+    return 0
+}
+
+@test
+func test_i64_to_string() -> I32 {
+    let x: I64 = 9876543210
+    let s: Str = x.to_string()
+    assert_eq(s, "9876543210", "I64 to_string")
+    return 0
+}
+
+@test
+func test_u8_to_string() -> I32 {
+    let x: U8 = 255
+    let s: Str = x.to_string()
+    assert_eq(s, "255", "U8 max to_string")
+    return 0
+}
+
+@test
+func test_u16_to_string() -> I32 {
+    let x: U16 = 65000
+    let s: Str = x.to_string()
+    assert_eq(s, "65000", "U16 to_string")
+    return 0
+}
+
+@test
+func test_u32_to_string() -> I32 {
+    let x: U32 = 4000000000
+    let s: Str = x.to_string()
+    assert_eq(s, "4000000000", "U32 to_string")
+    return 0
+}
+
+@test
+func test_u64_to_string() -> I32 {
+    let x: U64 = 10000000000
+    let s: Str = (x as I64).to_string()
+    assert_eq(s, "10000000000", "U64 to_string via I64 cast")
+    return 0
+}
+
+@test
+func test_bool_true_to_string() -> I32 {
+    let b: Bool = true
+    let s: Str = b.to_string()
+    assert_eq(s, "true", "true to_string")
+    return 0
+}
+
+@test
+func test_bool_false_to_string() -> I32 {
+    let b: Bool = false
+    let s: Str = b.to_string()
+    assert_eq(s, "false", "false to_string")
+    return 0
+}
+
+@test
+func test_str_to_string() -> I32 {
+    let s: Str = "hello"
+    let result: Str = s.to_string()
+    assert_eq(result, "hello", "Str to_string is identity")
+    return 0
+}
+
+@test
+func test_str_to_string_empty() -> I32 {
+    let s: Str = ""
+    let result: Str = s.to_string()
+    assert_eq(result, "", "empty Str to_string")
+    return 0
+}
+
+@test
+func test_ordering_less_to_string() -> I32 {
+    let ord: Ordering = Ordering::Less
+    let s: Str = ord.to_string()
+    assert_eq(s, "Less", "Ordering::Less to_string")
+    return 0
+}
+
+@test
+func test_ordering_equal_to_string() -> I32 {
+    let ord: Ordering = Ordering::Equal
+    let s: Str = ord.to_string()
+    assert_eq(s, "Equal", "Ordering::Equal to_string")
+    return 0
+}
+
+@test
+func test_ordering_greater_to_string() -> I32 {
+    let ord: Ordering = Ordering::Greater
+    let s: Str = ord.to_string()
+    assert_eq(s, "Greater", "Ordering::Greater to_string")
+    return 0
+}

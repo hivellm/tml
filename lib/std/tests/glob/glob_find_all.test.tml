@@ -1,0 +1,410 @@
+// Consolidated tests for std::glob find and iteration (16 tests)
+//!
+//! Covers: Glob::find() basic and recursive filesystem matching, ? wildcard on filesystem,
+//! character class [abc] on filesystem, middle ** with subdirs, mixed extensions,
+//! files-and-dirs matching, deep single file, next() iteration, count(),
+//! find_all() convenience function, empty dir, and sorted output.
+
+use std::glob::{Glob, matches, find_all}
+use std::file::{File, Dir, Path}
+use test::{assert, assert_eq}
+
+// ============================================================================
+// Glob::find() basic filesystem matching
+// ============================================================================
+
+@test
+func test_glob_find_tml_files() -> I32 {
+    Dir::create_all("_gt1/src")
+    File::write_all("_gt1/src/a.tml", "a")
+    File::write_all("_gt1/src/b.tml", "b")
+    File::write_all("_gt1/src/c.rs", "c")
+
+    var g: Glob = Glob::find("_gt1/src", "*.tml")
+    let n: I64 = g.count()
+    g.free()
+
+    // cleanup
+    Path::remove("_gt1/src/a.tml")
+    Path::remove("_gt1/src/b.tml")
+    Path::remove("_gt1/src/c.rs")
+    Dir::remove("_gt1/src")
+    Dir::remove("_gt1")
+
+    assert_eq(n, 2, "should find 2 .tml files")
+    return 0
+}
+
+@test
+func test_glob_find_no_matches() -> I32 {
+    Dir::create_all("_gt2")
+    File::write_all("_gt2/hello.txt", "hi")
+
+    var g: Glob = Glob::find("_gt2", "*.xyz")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_gt2/hello.txt")
+    Dir::remove("_gt2")
+
+    assert_eq(n, 0, "should find 0 .xyz files")
+    return 0
+}
+
+@test
+func test_glob_recursive_tml() -> I32 {
+    Dir::create_all("_gt3/a/b")
+    File::write_all("_gt3/x.tml", "x")
+    File::write_all("_gt3/a/y.tml", "y")
+    File::write_all("_gt3/a/b/z.tml", "z")
+
+    var g: Glob = Glob::find("_gt3", "**/*.tml")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_gt3/x.tml")
+    Path::remove("_gt3/a/y.tml")
+    Path::remove("_gt3/a/b/z.tml")
+    Dir::remove("_gt3/a/b")
+    Dir::remove("_gt3/a")
+    Dir::remove("_gt3")
+
+    assert_eq(n, 3, "should find 3 .tml files recursively")
+    return 0
+}
+
+@test
+func test_glob_subdirectory_pattern() -> I32 {
+    Dir::create_all("_gt4/src")
+    Dir::create_all("_gt4/lib")
+    File::write_all("_gt4/src/a.tml", "a")
+    File::write_all("_gt4/lib/b.tml", "b")
+    File::write_all("_gt4/readme.txt", "hi")
+
+    var g: Glob = Glob::find("_gt4", "src/*.tml")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_gt4/src/a.tml")
+    Path::remove("_gt4/lib/b.tml")
+    Path::remove("_gt4/readme.txt")
+    Dir::remove("_gt4/src")
+    Dir::remove("_gt4/lib")
+    Dir::remove("_gt4")
+
+    assert_eq(n, 1, "should find 1 .tml file in src/ only")
+    return 0
+}
+
+// ============================================================================
+// Deep recursive find
+// ============================================================================
+
+@test
+func test_glob_recursive_deep() -> I32 {
+    Dir::create_all("_gt5/x/y/z")
+    File::write_all("_gt5/a.txt", "a")
+    File::write_all("_gt5/x/b.txt", "b")
+    File::write_all("_gt5/x/y/c.txt", "c")
+    File::write_all("_gt5/x/y/z/d.txt", "d")
+
+    var g: Glob = Glob::find("_gt5", "**/*.txt")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_gt5/a.txt")
+    Path::remove("_gt5/x/b.txt")
+    Path::remove("_gt5/x/y/c.txt")
+    Path::remove("_gt5/x/y/z/d.txt")
+    Dir::remove("_gt5/x/y/z")
+    Dir::remove("_gt5/x/y")
+    Dir::remove("_gt5/x")
+    Dir::remove("_gt5")
+
+    assert_eq(n, 4, "should find 4 .txt files in deep tree")
+    return 0
+}
+
+// ============================================================================
+// ? wildcard on filesystem
+// ============================================================================
+
+@test
+func test_glob_find_question_mark() -> I32 {
+    Dir::create_all("_ge1")
+    File::write_all("_ge1/a.txt", "a")
+    File::write_all("_ge1/b.txt", "b")
+    File::write_all("_ge1/ab.txt", "ab")
+
+    var g: Glob = Glob::find("_ge1", "?.txt")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge1/a.txt")
+    Path::remove("_ge1/b.txt")
+    Path::remove("_ge1/ab.txt")
+    Dir::remove("_ge1")
+
+    assert_eq(n, 2, "?.txt should match a.txt and b.txt only (not ab.txt)")
+    return 0
+}
+
+// ============================================================================
+// Character class [abc] on filesystem
+// ============================================================================
+
+@test
+func test_glob_find_char_class() -> I32 {
+    Dir::create_all("_ge2")
+    File::write_all("_ge2/a.log", "a")
+    File::write_all("_ge2/b.log", "b")
+    File::write_all("_ge2/c.log", "c")
+    File::write_all("_ge2/d.log", "d")
+
+    var g: Glob = Glob::find("_ge2", "[abc].log")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge2/a.log")
+    Path::remove("_ge2/b.log")
+    Path::remove("_ge2/c.log")
+    Path::remove("_ge2/d.log")
+    Dir::remove("_ge2")
+
+    assert_eq(n, 3, "[abc].log should match a, b, c but not d")
+    return 0
+}
+
+// ============================================================================
+// Middle ** with specific subdirectory structure
+// ============================================================================
+
+@test
+func test_glob_find_middle_globstar() -> I32 {
+    Dir::create_all("_ge3/src/tests")
+    Dir::create_all("_ge3/lib/tests")
+    File::write_all("_ge3/src/tests/t1.tml", "t1")
+    File::write_all("_ge3/lib/tests/t2.tml", "t2")
+    File::write_all("_ge3/src/main.tml", "main")
+
+    // Pattern: find all test.tml files under any **/tests/ directory
+    var g: Glob = Glob::find("_ge3", "**/tests/*.tml")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge3/src/tests/t1.tml")
+    Path::remove("_ge3/lib/tests/t2.tml")
+    Path::remove("_ge3/src/main.tml")
+    Dir::remove("_ge3/src/tests")
+    Dir::remove("_ge3/lib/tests")
+    Dir::remove("_ge3/src")
+    Dir::remove("_ge3/lib")
+    Dir::remove("_ge3")
+
+    assert_eq(n, 2, "**/tests/*.tml should find 2 test files")
+    return 0
+}
+
+// ============================================================================
+// Mixed file types - only matching extension
+// ============================================================================
+
+@test
+func test_glob_find_mixed_extensions() -> I32 {
+    Dir::create_all("_ge4")
+    File::write_all("_ge4/app.tml", "tml")
+    File::write_all("_ge4/app.rs", "rs")
+    File::write_all("_ge4/app.cpp", "cpp")
+    File::write_all("_ge4/app.h", "h")
+
+    var g: Glob = Glob::find("_ge4", "*.tml")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge4/app.tml")
+    Path::remove("_ge4/app.rs")
+    Path::remove("_ge4/app.cpp")
+    Path::remove("_ge4/app.h")
+    Dir::remove("_ge4")
+
+    assert_eq(n, 1, "*.tml should match only app.tml")
+    return 0
+}
+
+// ============================================================================
+// Glob only matches files, not subdirectories as final segment
+// ============================================================================
+
+@test
+func test_glob_find_files_and_dirs() -> I32 {
+    Dir::create_all("_ge5/subdir")
+    File::write_all("_ge5/file.txt", "f")
+
+    var g: Glob = Glob::find("_ge5", "*")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge5/file.txt")
+    Dir::remove("_ge5/subdir")
+    Dir::remove("_ge5")
+
+    // * should match both files and directories in the last segment
+    assert_eq(n, 2, "* should match both file.txt and subdir")
+    return 0
+}
+
+// ============================================================================
+// Recursive ** with single file deep in tree
+// ============================================================================
+
+@test
+func test_glob_find_deep_single_file() -> I32 {
+    Dir::create_all("_ge6/a/b/c/d")
+    File::write_all("_ge6/a/b/c/d/target.tml", "found")
+
+    var g: Glob = Glob::find("_ge6", "**/*.tml")
+    let n: I64 = g.count()
+    g.free()
+
+    Path::remove("_ge6/a/b/c/d/target.tml")
+    Dir::remove("_ge6/a/b/c/d")
+    Dir::remove("_ge6/a/b/c")
+    Dir::remove("_ge6/a/b")
+    Dir::remove("_ge6/a")
+    Dir::remove("_ge6")
+
+    assert_eq(n, 1, "should find deeply nested file with **/*.tml")
+    return 0
+}
+
+// ============================================================================
+// next() iteration: consume results one by one
+// ============================================================================
+
+@test
+func test_glob_next_iteration() -> I32 {
+    Dir::create_all("_gi1/src")
+    File::write_all("_gi1/src/a.txt", "a")
+    File::write_all("_gi1/src/b.txt", "b")
+    File::write_all("_gi1/src/c.txt", "c")
+
+    var g: Glob = Glob::find("_gi1/src", "*.txt")
+    let total: I64 = g.count()
+
+    // Iterate all results
+    let p1: Str = g.next()
+    let p2: Str = g.next()
+    let p3: Str = g.next()
+    let p4: Str = g.next()  // should be empty
+
+    g.free()
+
+    // cleanup
+    Path::remove("_gi1/src/a.txt")
+    Path::remove("_gi1/src/b.txt")
+    Path::remove("_gi1/src/c.txt")
+    Dir::remove("_gi1/src")
+    Dir::remove("_gi1")
+
+    assert_eq(total, 3, "count should be 3")
+    assert(p1 != "", "first next() should return a path")
+    assert(p2 != "", "second next() should return a path")
+    assert(p3 != "", "third next() should return a path")
+    assert(p4 == "", "fourth next() should return empty (exhausted)")
+    return 0
+}
+
+// ============================================================================
+// next() returns empty string when no results at all
+// ============================================================================
+
+@test
+func test_glob_next_empty_results() -> I32 {
+    Dir::create_all("_gi2")
+    File::write_all("_gi2/test.txt", "hi")
+
+    var g: Glob = Glob::find("_gi2", "*.xyz")
+    let n: I64 = g.count()
+    let p: Str = g.next()
+    g.free()
+
+    Path::remove("_gi2/test.txt")
+    Dir::remove("_gi2")
+
+    assert_eq(n, 0, "count should be 0")
+    assert(p == "", "next on empty results should return empty string")
+    return 0
+}
+
+// ============================================================================
+// find_all convenience function
+// ============================================================================
+
+@test
+func test_find_all_basic() -> I32 {
+    Dir::create_all("_gi3")
+    File::write_all("_gi3/x.tml", "x")
+    File::write_all("_gi3/y.tml", "y")
+    File::write_all("_gi3/z.rs", "z")
+
+    let result: Str = find_all("_gi3", "*.tml")
+
+    Path::remove("_gi3/x.tml")
+    Path::remove("_gi3/y.tml")
+    Path::remove("_gi3/z.rs")
+    Dir::remove("_gi3")
+
+    // result should contain paths separated by newlines
+    assert(result != "", "find_all should return non-empty string")
+    return 0
+}
+
+// ============================================================================
+// Empty directory returns 0 results
+// ============================================================================
+
+@test
+func test_glob_empty_dir() -> I32 {
+    Dir::create_all("_gi4")
+
+    var g: Glob = Glob::find("_gi4", "*")
+    let n: I64 = g.count()
+    g.free()
+
+    Dir::remove("_gi4")
+
+    assert_eq(n, 0, "empty directory should have 0 matches")
+    return 0
+}
+
+// ============================================================================
+// Sorted output: results should be alphabetically ordered
+// ============================================================================
+
+@test
+func test_glob_sorted_output() -> I32 {
+    Dir::create_all("_gi5sort")
+    File::write_all("_gi5sort/c.txt", "c")
+    File::write_all("_gi5sort/a.txt", "a")
+    File::write_all("_gi5sort/b.txt", "b")
+
+    var g: Glob = Glob::find("_gi5sort", "*.txt")
+    let n: I64 = g.count()
+    let p1: Str = g.next()
+    let p2: Str = g.next()
+    let p3: Str = g.next()
+    let p4: Str = g.next()
+    g.free()
+
+    Path::remove("_gi5sort/a.txt")
+    Path::remove("_gi5sort/b.txt")
+    Path::remove("_gi5sort/c.txt")
+    Dir::remove("_gi5sort")
+
+    assert_eq(n, 3, "should find 3 files")
+    assert(p1 != "", "first result non-empty")
+    assert(p2 != "", "second result non-empty")
+    assert(p3 != "", "third result non-empty")
+    assert(p4 == "", "fourth result should be empty (exhausted)")
+    return 0
+}

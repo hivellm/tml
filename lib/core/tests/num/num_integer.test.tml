@@ -1,0 +1,518 @@
+// Consolidated numeric tests: core::num::integer module functions and bit operations
+// Test count: 49 @test functions
+// Sources: integer.test.tml, integer_bits_extra.test.tml, integer_i64_bits.test.tml,
+//          integer_i64_endian.test.tml, integer_u32_bits.test.tml
+use test
+use core::num::integer::{
+    abs_i32, abs_i64, signum_i32, signum_i64, pow_i32, pow_i64,
+    count_ones_i32, count_zeros_i32, leading_zeros_i32, trailing_zeros_i32,
+    rotate_left_i32, rotate_right_i32, swap_bytes_i32, reverse_bits_i32,
+    count_ones_i64, count_zeros_i64, leading_zeros_i64, trailing_zeros_i64,
+    reverse_bits_i64, swap_bytes_i64, from_be_i64, from_le_i64, to_be_i64, to_le_i64,
+    rotate_left_i64, rotate_right_i64,
+    count_ones_u32, count_zeros_u32, leading_zeros_u32, trailing_zeros_u32,
+    swap_bytes_u32, rotate_left_u32, rotate_right_u32, reverse_bits_u32,
+    count_ones_u64, count_zeros_u64, leading_zeros_u64, trailing_zeros_u64
+}
+
+// ============================================================================
+// abs_i32 Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_abs_i32_positive() -> I32 {
+    assert_eq(abs_i32(5), 5, "abs of positive should be itself")
+    return 0
+}
+
+@test
+func test_abs_i32_negative() -> I32 {
+    assert_eq(abs_i32(-5), 5, "abs of negative should be positive")
+    return 0
+}
+
+@test
+func test_abs_i32_zero() -> I32 {
+    assert_eq(abs_i32(0), 0, "abs of zero should be zero")
+    return 0
+}
+
+@test
+func test_abs_i32_large() -> I32 {
+    assert_eq(abs_i32(-1000000), 1000000, "abs of large negative")
+    return 0
+}
+
+// ============================================================================
+// abs_i64 Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_abs_i64_positive() -> I32 {
+    let v: I64 = 100
+    let result: I64 = abs_i64(v)
+    assert(result == 100, "abs of positive i64")
+    return 0
+}
+
+@test
+func test_abs_i64_negative() -> I32 {
+    let v: I64 = -100
+    let result: I64 = abs_i64(v)
+    assert(result == 100, "abs of negative i64")
+    return 0
+}
+
+// ============================================================================
+// signum_i32 Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_signum_i32_positive() -> I32 {
+    assert_eq(signum_i32(10), 1, "signum of positive is 1")
+    return 0
+}
+
+@test
+func test_signum_i32_negative() -> I32 {
+    assert_eq(signum_i32(-10), -1, "signum of negative is -1")
+    return 0
+}
+
+@test
+func test_signum_i32_zero() -> I32 {
+    assert_eq(signum_i32(0), 0, "signum of zero is 0")
+    return 0
+}
+
+// ============================================================================
+// signum_i64 Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_signum_i64_positive() -> I32 {
+    let v: I64 = 999
+    let result: I64 = signum_i64(v)
+    let one: I64 = 1
+    assert(result == one, "signum of positive i64 is 1")
+    return 0
+}
+
+@test
+func test_signum_i64_negative() -> I32 {
+    let v: I64 = -999
+    let result: I64 = signum_i64(v)
+    let neg_one: I64 = -1
+    assert(result == neg_one, "signum of negative i64 is -1")
+    return 0
+}
+
+@test
+func test_signum_i64_zero() -> I32 {
+    let v: I64 = 0
+    let result: I64 = signum_i64(v)
+    let zero: I64 = 0
+    assert(result == zero, "signum of zero i64 is 0")
+    return 0
+}
+
+// ============================================================================
+// pow_i32 Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_pow_i32_base_cases() -> I32 {
+    assert_eq(pow_i32(5, 0), 1, "anything^0 = 1")
+    assert_eq(pow_i32(5, 1), 5, "anything^1 = itself")
+    return 0
+}
+
+@test
+func test_pow_i32_square() -> I32 {
+    assert_eq(pow_i32(3, 2), 9, "3^2 = 9")
+    assert_eq(pow_i32(7, 2), 49, "7^2 = 49")
+    return 0
+}
+
+@test
+func test_pow_i32_cube() -> I32 {
+    assert_eq(pow_i32(2, 3), 8, "2^3 = 8")
+    assert_eq(pow_i32(3, 3), 27, "3^3 = 27")
+    return 0
+}
+
+@test
+func test_pow_i32_larger() -> I32 {
+    assert_eq(pow_i32(2, 10), 1024, "2^10 = 1024")
+    assert_eq(pow_i32(10, 4), 10000, "10^4 = 10000")
+    return 0
+}
+
+// ============================================================================
+// pow_i64 Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_pow_i64_base_cases() -> I32 {
+    let two: I64 = 2
+    let zero: I64 = 0
+    let one: I64 = 1
+    let result0: I64 = pow_i64(two, zero)
+    let result1: I64 = pow_i64(two, one)
+    assert(result0 == one, "2^0 = 1")
+    assert(result1 == two, "2^1 = 2")
+    return 0
+}
+
+@test
+func test_pow_i64_larger() -> I32 {
+    let two: I64 = 2
+    let twenty: I64 = 20
+    let expected: I64 = 1048576
+    let result: I64 = pow_i64(two, twenty)
+    assert(result == expected, "2^20 = 1048576")
+    return 0
+}
+
+// ============================================================================
+// I32 Method Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_i32_abs_method() -> I32 {
+    let x: I32 = -42
+    assert_eq(x.abs(), 42, "I32.abs() should return absolute value")
+    return 0
+}
+
+@test
+func test_i32_signum_method() -> I32 {
+    let pos: I32 = 100
+    let neg: I32 = -100
+    let zero: I32 = 0
+    assert_eq(pos.signum(), 1, "positive signum")
+    assert_eq(neg.signum(), -1, "negative signum")
+    assert_eq(zero.signum(), 0, "zero signum")
+    return 0
+}
+
+@test
+func test_i32_is_positive() -> I32 {
+    let pos: I32 = 5
+    let neg: I32 = -5
+    let zero: I32 = 0
+    assert(pos.is_positive(), "5 is positive")
+    assert(not neg.is_positive(), "-5 is not positive")
+    assert(not zero.is_positive(), "0 is not positive")
+    return 0
+}
+
+@test
+func test_i32_is_negative() -> I32 {
+    let pos: I32 = 5
+    let neg: I32 = -5
+    let zero: I32 = 0
+    assert(not pos.is_negative(), "5 is not negative")
+    assert(neg.is_negative(), "-5 is negative")
+    assert(not zero.is_negative(), "0 is not negative")
+    return 0
+}
+
+@test
+func test_i32_pow_method() -> I32 {
+    let n: I32 = 3
+    assert_eq(n.pow(0), 1, "3^0 = 1")
+    assert_eq(n.pow(1), 3, "3^1 = 3")
+    assert_eq(n.pow(2), 9, "3^2 = 9")
+    assert_eq(n.pow(4), 81, "3^4 = 81")
+    return 0
+}
+
+// ============================================================================
+// Bit Manipulation - count_ones/zeros Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_count_ones_i32() -> I32 {
+    assert_eq(count_ones_i32(0), 0, "count_ones(0) = 0")
+    assert_eq(count_ones_i32(1), 1, "count_ones(1) = 1")
+    assert_eq(count_ones_i32(7), 3, "count_ones(0b111) = 3")
+    assert_eq(count_ones_i32(255), 8, "count_ones(0xFF) = 8")
+    return 0
+}
+
+@test
+func test_count_zeros_i32() -> I32 {
+    assert_eq(count_zeros_i32(0), 32, "count_zeros(0) = 32")
+    assert_eq(count_zeros_i32(-1), 0, "count_zeros(-1) = 0")
+    return 0
+}
+
+// ============================================================================
+// Bit Manipulation - leading/trailing_zeros Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_leading_zeros_i32() -> I32 {
+    assert_eq(leading_zeros_i32(0), 32, "leading_zeros(0) = 32")
+    assert_eq(leading_zeros_i32(1), 31, "leading_zeros(1) = 31")
+    assert_eq(leading_zeros_i32(16), 27, "leading_zeros(16) = 27")
+    return 0
+}
+
+@test
+func test_trailing_zeros_i32() -> I32 {
+    assert_eq(trailing_zeros_i32(0), 32, "trailing_zeros(0) = 32")
+    assert_eq(trailing_zeros_i32(1), 0, "trailing_zeros(1) = 0")
+    assert_eq(trailing_zeros_i32(16), 4, "trailing_zeros(16) = 4")
+    assert_eq(trailing_zeros_i32(8), 3, "trailing_zeros(8) = 3")
+    return 0
+}
+
+// ============================================================================
+// Bit Manipulation - rotate Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_rotate_left_i32() -> I32 {
+    // Simple test: rotate 1 left by 1 should give 2
+    assert_eq(rotate_left_i32(1, 1), 2, "rotate_left(1, 1) = 2")
+    // Rotate 1 left by 4 should give 16
+    assert_eq(rotate_left_i32(1, 4), 16, "rotate_left(1, 4) = 16")
+    return 0
+}
+
+@test
+func test_rotate_right_i32() -> I32 {
+    // Rotate 2 right by 1 should give 1
+    assert_eq(rotate_right_i32(2, 1), 1, "rotate_right(2, 1) = 1")
+    // Rotate 16 right by 4 should give 1
+    assert_eq(rotate_right_i32(16, 4), 1, "rotate_right(16, 4) = 1")
+    return 0
+}
+
+@test
+func test_rotate_identity() -> I32 {
+    let v: I32 = 12345
+    assert_eq(rotate_left_i32(v, 0), v, "rotate_left by 0 is identity")
+    assert_eq(rotate_right_i32(v, 0), v, "rotate_right by 0 is identity")
+    assert_eq(rotate_left_i32(v, 32), v, "rotate_left by 32 is identity")
+    return 0
+}
+
+// ============================================================================
+// Bit Manipulation - swap_bytes Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_swap_bytes_i32() -> I32 {
+    let v: I32 = 305419896  // 0x12345678
+    let swapped: I32 = swap_bytes_i32(v)
+    let expected: I32 = 2018915346  // 0x78563412
+    assert_eq(swapped, expected, "swap_bytes reverses byte order")
+    return 0
+}
+
+@test
+func test_swap_bytes_i32_double() -> I32 {
+    // Swapping twice should give original
+    let v: I32 = 12345678
+    let double_swapped: I32 = swap_bytes_i32(swap_bytes_i32(v))
+    assert_eq(double_swapped, v, "double swap is identity")
+    return 0
+}
+
+// ============================================================================
+// I64 Bit Manipulation Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_count_ones_i64() -> I32 {
+    let zero: I64 = 0
+    let one: I64 = 1
+    let seven: I64 = 7
+    let result0: I64 = count_ones_i64(zero)
+    let result1: I64 = count_ones_i64(one)
+    let result7: I64 = count_ones_i64(seven)
+    assert(result0 == zero, "count_ones_i64(0) = 0")
+    assert(result1 == one, "count_ones_i64(1) = 1")
+    let three: I64 = 3
+    assert(result7 == three, "count_ones_i64(7) = 3")
+    return 0
+}
+
+@test
+func test_leading_zeros_i64() -> I32 {
+    let zero: I64 = 0
+    let one: I64 = 1
+    let result_zero: I64 = leading_zeros_i64(zero)
+    let result_one: I64 = leading_zeros_i64(one)
+    let expected_64: I64 = 64
+    let expected_63: I64 = 63
+    assert(result_zero == expected_64, "leading_zeros_i64(0) = 64")
+    assert(result_one == expected_63, "leading_zeros_i64(1) = 63")
+    return 0
+}
+
+// ============================================================================
+// U32 Bit Manipulation Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_count_ones_u32() -> I32 {
+    let zero: U32 = 0 as U32
+    let ff: U32 = 255 as U32
+    let result_zero: U32 = count_ones_u32(zero)
+    let result_ff: U32 = count_ones_u32(ff)
+    assert(result_zero == zero, "count_ones_u32(0) = 0")
+    let eight: U32 = 8 as U32
+    assert(result_ff == eight, "count_ones_u32(255) = 8")
+    return 0
+}
+
+@test
+func test_leading_zeros_u32() -> I32 {
+    let zero: U32 = 0 as U32
+    let one: U32 = 1 as U32
+    let result_zero: U32 = leading_zeros_u32(zero)
+    let result_one: U32 = leading_zeros_u32(one)
+    let expected_32: U32 = 32 as U32
+    let expected_31: U32 = 31 as U32
+    assert(result_zero == expected_32, "leading_zeros_u32(0) = 32")
+    assert(result_one == expected_31, "leading_zeros_u32(1) = 31")
+    return 0
+}
+
+// ============================================================================
+// U64 Bit Manipulation Tests (from integer.test.tml)
+// ============================================================================
+
+@test
+func test_count_ones_u64() -> I32 {
+    let zero: U64 = 0 as U64
+    let ff: U64 = 255 as U64
+    let result_zero: U64 = count_ones_u64(zero)
+    let result_ff: U64 = count_ones_u64(ff)
+    assert(result_zero == zero, "count_ones_u64(0) = 0")
+    let eight: U64 = 8 as U64
+    assert(result_ff == eight, "count_ones_u64(255) = 8")
+    return 0
+}
+
+// ============================================================================
+// reverse_bits Tests (from integer_bits_extra.test.tml)
+// ============================================================================
+
+@test
+func test_reverse_bits_i32_one() -> I32 {
+    // 1 = 0x00000001 reversed = 0x80000000 = -2147483648 (signed)
+    let result: I32 = reverse_bits_i32(1)
+    assert(result < 0, "reverse_bits of 1 should be negative (high bit set)")
+    return 0
+}
+
+@test
+func test_reverse_bits_i32_zero() -> I32 {
+    assert_eq(reverse_bits_i32(0), 0, "reverse_bits of 0 should be 0")
+    return 0
+}
+
+@test
+func test_reverse_bits_i32_double() -> I32 {
+    // Reversing twice should give back original
+    let original: I32 = 12345
+    let reversed: I32 = reverse_bits_i32(reverse_bits_i32(original))
+    assert_eq(reversed, original, "double reverse should be identity")
+    return 0
+}
+
+// ============================================================================
+// I64 count_zeros, trailing_zeros, reverse_bits (from integer_i64_bits.test.tml)
+// ============================================================================
+
+@test
+func test_count_zeros_i64() -> I32 {
+    // 0 has 64 zeros
+    assert_eq(count_zeros_i64(0), 64, "count_zeros of 0 should be 64")
+    // -1 (all ones) has 0 zeros
+    assert_eq(count_zeros_i64(-1), 0, "count_zeros of -1 should be 0")
+    return 0
+}
+
+@test
+func test_trailing_zeros_i64() -> I32 {
+    // 8 = 0b1000, trailing zeros = 3
+    assert_eq(trailing_zeros_i64(8), 3, "trailing zeros of 8 should be 3")
+    // 1 has 0 trailing zeros
+    assert_eq(trailing_zeros_i64(1), 0, "trailing zeros of 1 should be 0")
+    return 0
+}
+
+@test
+func test_reverse_bits_i64_double() -> I32 {
+    let original: I64 = 123456789
+    let reversed: I64 = reverse_bits_i64(reverse_bits_i64(original))
+    assert_eq(reversed, original, "double reverse I64 should be identity")
+    return 0
+}
+
+// ============================================================================
+// I64 swap_bytes, endianness, rotation (from integer_i64_endian.test.tml)
+// ============================================================================
+
+@test
+func test_swap_bytes_i64_double() -> I32 {
+    // Swapping twice should give back original
+    let original: I64 = 123456789
+    let swapped: I64 = swap_bytes_i64(swap_bytes_i64(original))
+    assert_eq(swapped, original, "double swap_bytes I64 should be identity")
+    return 0
+}
+
+@test
+func test_from_le_i64() -> I32 {
+    // On little-endian (x86), from_le should be identity
+    let val: I64 = 42
+    assert_eq(from_le_i64(val), val, "from_le_i64 should be identity on LE")
+    assert_eq(to_le_i64(val), val, "to_le_i64 should be identity on LE")
+    return 0
+}
+
+@test
+func test_rotate_i64() -> I32 {
+    // Rotating left then right by same amount should be identity
+    let val: I64 = 12345
+    let rotated: I64 = rotate_right_i64(rotate_left_i64(val, 16), 16)
+    assert_eq(rotated, val, "rotate left+right should be identity")
+    return 0
+}
+
+// ============================================================================
+// U32 count_zeros, trailing_zeros, swap_bytes (from integer_u32_bits.test.tml)
+// ============================================================================
+
+@test
+func test_count_zeros_u32() -> I32 {
+    let zero: U32 = 0 as U32
+    assert_eq(count_zeros_u32(zero) as I32, 32, "count_zeros of 0 should be 32")
+    let all_ones: U32 = 4294967295 as U32
+    assert_eq(count_zeros_u32(all_ones) as I32, 0, "count_zeros of all 1s should be 0")
+    return 0
+}
+
+@test
+func test_trailing_zeros_u32() -> I32 {
+    let eight: U32 = 8 as U32
+    assert_eq(trailing_zeros_u32(eight) as I32, 3, "trailing zeros of 8 should be 3")
+    let one: U32 = 1 as U32
+    assert_eq(trailing_zeros_u32(one) as I32, 0, "trailing zeros of 1 should be 0")
+    return 0
+}
+
+@test
+func test_swap_bytes_u32_double() -> I32 {
+    let original: U32 = 12345 as U32
+    let swapped: U32 = swap_bytes_u32(swap_bytes_u32(original))
+    assert_eq(swapped as I32, original as I32, "double swap U32 should be identity")
+    return 0
+}

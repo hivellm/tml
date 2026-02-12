@@ -1,0 +1,103 @@
+// Consolidated tests for std::file::path::Path and std::file::dir::Dir
+use test
+use std::file::path::Path
+use std::file::dir::Dir
+
+// === Path basic operations ===
+
+@test
+func test_path_join() -> I32 {
+    let result: Str = Path::join("parent", "child")
+    assert(result.len() > 0, "join should produce non-empty path")
+    return 0
+}
+
+@test
+func test_path_filename() -> I32 {
+    let name: Str = Path::filename("some/dir/file.txt")
+    assert_eq(name, "file.txt", "filename should extract file name")
+    return 0
+}
+
+@test
+func test_path_extension() -> I32 {
+    let ext: Str = Path::extension("document.pdf")
+    assert_eq(ext, ".pdf", "extension should include dot")
+    return 0
+}
+
+@test
+func test_path_parent() -> I32 {
+    let p: Str = Path::parent("some/dir/file.txt")
+    assert(p.len() > 0, "parent should return non-empty path")
+    return 0
+}
+
+@test
+func test_path_absolute() -> I32 {
+    let abs: Str = Path::absolute(".")
+    assert(abs.len() > 0, "absolute path should be non-empty")
+    return 0
+}
+
+// === Path predicates ===
+
+@test
+func test_path_is_dir() -> I32 {
+    assert(Path::is_dir("build"), "build should be a directory")
+    assert(not Path::is_dir("__nonexistent_xyz__"), "nonexistent should not be dir")
+    return 0
+}
+
+@test
+func test_path_exists() -> I32 {
+    assert(Path::exists("build"), "build directory should exist")
+    assert(not Path::exists("__nonexistent_dir_xyz__"), "nonexistent should return false")
+    return 0
+}
+
+@test
+func test_path_create_dir_all() -> I32 {
+    let ok: Bool = Path::create_dir_all("build/debug/test_temp_dir")
+    assert(ok, "create_dir_all should succeed")
+    return 0
+}
+
+// === Dir operations ===
+
+@test
+func test_dir_create_and_remove() -> I32 {
+    let dir_path: Str = "build/debug/_test_dir_tmp"
+    let created: Bool = Dir::create(dir_path)
+    assert(created, "Dir::create should succeed")
+    assert(Path::exists(dir_path), "created dir should exist")
+    assert(Path::is_dir(dir_path), "should be a directory")
+
+    let removed: Bool = Dir::remove(dir_path)
+    assert(removed, "Dir::remove should succeed")
+    assert(not Path::exists(dir_path), "removed dir should not exist")
+    return 0
+}
+
+@test
+func test_dir_create_all() -> I32 {
+    let dir_path: Str = "build/debug/_test_dir_nested/a/b"
+    let created: Bool = Dir::create_all(dir_path)
+    assert(created, "Dir::create_all should succeed")
+    assert(Path::exists(dir_path), "nested dir should exist")
+    assert(Path::is_dir(dir_path), "should be a directory")
+
+    Dir::remove("build/debug/_test_dir_nested/a/b")
+    Dir::remove("build/debug/_test_dir_nested/a")
+    Dir::remove("build/debug/_test_dir_nested")
+    return 0
+}
+
+@test
+func test_dir_create_existing() -> I32 {
+    let dir_path: Str = "build/debug/_test_dir_existing"
+    Dir::create(dir_path)
+    let created_again: Bool = Dir::create(dir_path)
+    Dir::remove(dir_path)
+    return 0
+}

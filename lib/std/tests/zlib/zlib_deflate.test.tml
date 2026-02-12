@@ -1,0 +1,1064 @@
+// Consolidated deflate/inflate tests
+// Sources: deflate.test.tml, deflate_buffer.test.tml, deflate_raw.test.tml,
+//          deflate_sync.test.tml, deflate_comprehensive.test.tml, debug_deflate.test.tml,
+//          unzip.test.tml
+// Test count: 46 @test functions
+
+use test
+use std::zlib::{deflate, inflate, deflate_raw, inflate_raw}
+use std::zlib::{deflate_with_options, inflate_with_options}
+use std::zlib::{deflate_buffer, deflate_buffer_with_options}
+use std::zlib::{inflate_to_buffer, inflate_to_buffer_with_options}
+use std::zlib::{deflate_raw_with_options, inflate_raw_with_options}
+use std::zlib::{deflate_raw_buffer, deflate_raw_buffer_with_options}
+use std::zlib::{inflate_raw_to_buffer, inflate_raw_to_buffer_with_options}
+use std::zlib::{unzip, unzip_with_options, unzip_to_buffer, unzip_to_buffer_with_options}
+use std::zlib::{deflate_sync, deflate_sync_with_options}
+use std::zlib::{inflate_sync, inflate_sync_with_options}
+use std::zlib::{deflate_raw_sync, deflate_raw_sync_with_options}
+use std::zlib::{inflate_raw_sync, inflate_raw_sync_with_options}
+use std::zlib::{unzip_sync, unzip_sync_with_options}
+use std::zlib::options::ZlibOptions
+use std::zlib::constants::*
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+// ============================================================================
+// From: deflate.test.tml - Basic deflate/inflate tests
+// ============================================================================
+
+@test
+func test_deflate_basic() -> I32 {
+    let original: Str = "Hello, World! This is some test data to compress."
+    let result: Outcome[Buffer, ZlibError] = deflate(original)
+
+    if result.is_err() {
+        print("deflate failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+
+    if compressed.len() == 0 {
+        print("compressed data is empty\n")
+        return 1
+    }
+
+    let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if inflate_result.is_err() {
+        print("inflate failed\n")
+        return 1
+    }
+
+    let decompressed: Str = inflate_result.unwrap()
+    assert_eq(decompressed, original, "deflate/inflate roundtrip")
+
+    return 0
+}
+
+@test
+func test_deflate_empty_string() -> I32 {
+    let original: Str = ""
+    let result: Outcome[Buffer, ZlibError] = deflate(original)
+
+    if result.is_err() {
+        return 0
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
+
+    if inflate_result.is_ok() {
+        let decompressed: Str = inflate_result.unwrap()
+        assert_eq(decompressed, original, "empty string roundtrip")
+    }
+
+    return 0
+}
+
+@test
+func test_deflate_with_options_best_compression() -> I32 {
+    let original: Str = "Test data for best compression level testing"
+    let opts: ZlibOptions = ZlibOptions::default().with_level(Z_BEST_COMPRESSION)
+
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        print("deflate_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if inflate_result.is_err() {
+        print("inflate after best compression failed\n")
+        return 1
+    }
+
+    assert_eq(inflate_result.unwrap(), original, "best compression roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_with_options_best_speed() -> I32 {
+    let original: Str = "Test data for fastest compression level testing"
+    let opts: ZlibOptions = ZlibOptions::default().with_level(Z_BEST_SPEED)
+
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        print("deflate_with_options best speed failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if inflate_result.is_err() {
+        print("inflate after best speed failed\n")
+        return 1
+    }
+
+    assert_eq(inflate_result.unwrap(), original, "best speed roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_raw_basic() -> I32 {
+    let original: Str = "Raw deflate test data without zlib header"
+    let result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+
+    if result.is_err() {
+        print("deflate_raw failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+
+    if compressed.len() == 0 {
+        print("raw compressed data is empty\n")
+        return 1
+    }
+
+    let inflate_result: Outcome[Str, ZlibError] = inflate_raw(ref compressed)
+    if inflate_result.is_err() {
+        print("inflate_raw failed\n")
+        return 1
+    }
+
+    let decompressed: Str = inflate_result.unwrap()
+    assert_eq(decompressed, original, "deflate_raw/inflate_raw roundtrip")
+
+    return 0
+}
+
+@test
+func test_deflate_raw_with_options() -> I32 {
+    let original: Str = "Raw deflate with custom options"
+    let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(6)
+
+    let result: Outcome[Buffer, ZlibError] = deflate_raw_with_options(original, opts)
+    if result.is_err() {
+        print("deflate_raw_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let inflate_result: Outcome[Str, ZlibError] = inflate_raw(ref compressed)
+    if inflate_result.is_err() {
+        print("inflate_raw after options failed\n")
+        return 1
+    }
+
+    assert_eq(inflate_result.unwrap(), original, "raw with options roundtrip")
+    return 0
+}
+
+@test
+func test_inflate_to_buffer() -> I32 {
+    let original: Str = "Test data for inflate_to_buffer"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let result: Outcome[Buffer, ZlibError] = inflate_to_buffer(ref compressed)
+    if result.is_err() {
+        print("inflate_to_buffer failed\n")
+        return 1
+    }
+
+    let decompressed: Buffer = result.unwrap()
+    if decompressed.len() == 0 {
+        print("inflate_to_buffer returned empty\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_inflate_to_buffer_with_options() -> I32 {
+    let original: Str = "Test data for inflate_to_buffer_with_options"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Buffer, ZlibError] = inflate_to_buffer_with_options(ref compressed, opts)
+    if result.is_err() {
+        print("inflate_to_buffer_with_options failed\n")
+        return 1
+    }
+
+    return 0
+}
+
+// ============================================================================
+// From: deflate_buffer.test.tml - Buffer operations
+// ============================================================================
+
+@test
+func test_deflate_buffer() -> I32 {
+    // First compress to create a buffer
+    let original: Str = "Test data for deflate buffer compression"
+    let result: Outcome[Buffer, ZlibError] = deflate(original)
+    if result.is_err() {
+        print("deflate failed\n")
+        return 1
+    }
+
+    var input_buf: Buffer = result.unwrap()
+
+    // Now compress the buffer again
+    let result2: Outcome[Buffer, ZlibError] = deflate_buffer(ref input_buf)
+    if result2.is_err() {
+        print("deflate_buffer failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result2.unwrap()
+    if compressed.len() == 0 {
+        print("deflate_buffer returned empty buffer\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_deflate_buffer_with_options() -> I32 {
+    let original: Str = "Test data for deflate buffer with options"
+    let result: Outcome[Buffer, ZlibError] = deflate(original)
+    if result.is_err() {
+        return 1
+    }
+
+    var input_buf: Buffer = result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::default().with_level(6)
+
+    let result2: Outcome[Buffer, ZlibError] = deflate_buffer_with_options(ref input_buf, opts)
+    if result2.is_err() {
+        print("deflate_buffer_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result2.unwrap()
+    if compressed.len() == 0 {
+        print("deflate_buffer_with_options returned empty\n")
+        return 1
+    }
+
+    return 0
+}
+
+// ============================================================================
+// From: deflate_raw.test.tml - Raw buffer operations
+// ============================================================================
+
+@test
+func test_deflate_raw_buffer() -> I32 {
+    // First compress to create a buffer
+    let original: Str = "Test data for raw deflate buffer"
+    let result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if result.is_err() {
+        print("deflate_raw failed\n")
+        return 1
+    }
+
+    var input_buf: Buffer = result.unwrap()
+
+    // Now compress the buffer again
+    let result2: Outcome[Buffer, ZlibError] = deflate_raw_buffer(ref input_buf)
+    if result2.is_err() {
+        print("deflate_raw_buffer failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result2.unwrap()
+    if compressed.len() == 0 {
+        print("deflate_raw_buffer returned empty buffer\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_deflate_raw_buffer_with_options() -> I32 {
+    let original: Str = "Test data for raw deflate with options"
+    let result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if result.is_err() {
+        return 1
+    }
+
+    var input_buf: Buffer = result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(6)
+
+    let result2: Outcome[Buffer, ZlibError] = deflate_raw_buffer_with_options(ref input_buf, opts)
+    if result2.is_err() {
+        print("deflate_raw_buffer_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result2.unwrap()
+    if compressed.len() == 0 {
+        print("deflate_raw_buffer_with_options empty\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_inflate_raw_to_buffer() -> I32 {
+    let original: Str = "Test data for inflate_raw_to_buffer"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let result: Outcome[Buffer, ZlibError] = inflate_raw_to_buffer(ref compressed)
+    if result.is_err() {
+        print("inflate_raw_to_buffer failed\n")
+        return 1
+    }
+
+    if result.unwrap().len() == 0 {
+        print("inflate_raw_to_buffer returned empty\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_inflate_raw_to_buffer_with_options() -> I32 {
+    let original: Str = "Test data for inflate_raw_to_buffer with opts"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::deflate_raw()
+    let result: Outcome[Buffer, ZlibError] = inflate_raw_to_buffer_with_options(ref compressed, opts)
+    if result.is_err() {
+        print("inflate_raw_to_buffer_with_options failed\n")
+        return 1
+    }
+
+    return 0
+}
+
+// ============================================================================
+// From: deflate_sync.test.tml - Sync operations
+// ============================================================================
+
+@test
+func test_deflate_sync() -> I32 {
+    let original: Str = "Test data for deflate_sync"
+    let result: Outcome[Buffer, ZlibError] = deflate_sync(original)
+    if result.is_err() {
+        print("deflate_sync failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let inflate_result: Outcome[Str, ZlibError] = inflate_sync(ref compressed)
+    if inflate_result.is_err() {
+        print("inflate_sync failed\n")
+        return 1
+    }
+
+    assert_eq(inflate_result.unwrap(), original, "sync roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_sync_with_options() -> I32 {
+    let original: Str = "Test data for deflate_sync_with_options"
+    let opts: ZlibOptions = ZlibOptions::default().with_level(6)
+    let result: Outcome[Buffer, ZlibError] = deflate_sync_with_options(original, opts)
+    if result.is_err() {
+        print("deflate_sync_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let opts2: ZlibOptions = ZlibOptions::default()
+    let inflate_result: Outcome[Str, ZlibError] = inflate_sync_with_options(ref compressed, opts2)
+    if inflate_result.is_err() {
+        print("inflate_sync_with_options failed\n")
+        return 1
+    }
+
+    assert_eq(inflate_result.unwrap(), original, "sync with options roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_raw_sync() -> I32 {
+    let original: Str = "Test data for deflate_raw_sync"
+    let result: Outcome[Buffer, ZlibError] = deflate_raw_sync(original)
+    if result.is_err() {
+        print("deflate_raw_sync failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let inflate_result: Outcome[Str, ZlibError] = inflate_raw_sync(ref compressed)
+    if inflate_result.is_err() {
+        print("inflate_raw_sync failed\n")
+        return 1
+    }
+
+    assert_eq(inflate_result.unwrap(), original, "raw sync roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_raw_sync_with_options() -> I32 {
+    let original: Str = "Test data for deflate_raw_sync_with_options"
+    let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(6)
+    let result: Outcome[Buffer, ZlibError] = deflate_raw_sync_with_options(original, opts)
+    if result.is_err() {
+        print("deflate_raw_sync_with_options failed\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let opts2: ZlibOptions = ZlibOptions::deflate_raw()
+    let inflate_result: Outcome[Str, ZlibError] = inflate_raw_sync_with_options(ref compressed, opts2)
+    if inflate_result.is_err() {
+        print("inflate_raw_sync_with_options failed\n")
+        return 1
+    }
+
+    assert_eq(inflate_result.unwrap(), original, "raw sync with opts roundtrip")
+    return 0
+}
+
+// ============================================================================
+// From: deflate_comprehensive.test.tml - Comprehensive FFI coverage
+// ============================================================================
+
+@test
+func test_deflate_level_0() -> I32 {
+    let original: Str = "Test data for compression level 0 (no compression)"
+    let opts: ZlibOptions = ZlibOptions::default().with_level(Z_NO_COMPRESSION)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate level 0 should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "level 0 roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_level_1() -> I32 {
+    let original: Str = "Test data for compression level 1 (best speed)"
+    let opts: ZlibOptions = ZlibOptions::default().with_level(1)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate level 1 should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "level 1 roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_level_6() -> I32 {
+    let original: Str = "Test data for compression level 6 (default)"
+    let opts: ZlibOptions = ZlibOptions::default().with_level(6)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate level 6 should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "level 6 roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_level_9() -> I32 {
+    let original: Str = "Test data for compression level 9 (best compression)"
+    let opts: ZlibOptions = ZlibOptions::default().with_level(9)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate level 9 should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "level 9 roundtrip")
+    return 0
+}
+
+@test
+func test_inflate_with_options_default() -> I32 {
+    let original: Str = "Test inflate_with_options with default options"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+    var compressed: Buffer = compress_result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Str, ZlibError] = inflate_with_options(ref compressed, opts)
+    if result.is_err() {
+        assert(false, "inflate_with_options should succeed")
+        return 1
+    }
+    assert_eq(result.unwrap(), original, "inflate with default opts")
+    return 0
+}
+
+@test
+func test_inflate_with_options_custom_window() -> I32 {
+    let original: Str = "Test inflate with custom window bits"
+    let opts_deflate: ZlibOptions = ZlibOptions::default().with_window_bits(12)
+    let compress_result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts_deflate)
+    if compress_result.is_err() {
+        return 1
+    }
+    var compressed: Buffer = compress_result.unwrap()
+    let opts_inflate: ZlibOptions = ZlibOptions::default().with_window_bits(12)
+    let result: Outcome[Str, ZlibError] = inflate_with_options(ref compressed, opts_inflate)
+    if result.is_err() {
+        assert(false, "inflate with custom window should succeed")
+        return 1
+    }
+    assert_eq(result.unwrap(), original, "custom window roundtrip")
+    return 0
+}
+
+@test
+func test_inflate_raw_with_options_explicit() -> I32 {
+    let original: Str = "Test inflate_raw_with_options explicit"
+    let result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if result.is_err() {
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::deflate_raw()
+    let decomp: Outcome[Str, ZlibError] = inflate_raw_with_options(ref compressed, opts)
+    if decomp.is_err() {
+        assert(false, "inflate_raw_with_options should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "raw with options roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_raw_with_positive_window_bits() -> I32 {
+    // Test deflate_raw_with_options when window_bits is positive (should negate it)
+    let original: Str = "Test deflate_raw auto-negate window bits"
+    var opts: ZlibOptions = ZlibOptions::default()
+    opts.window_bits = 15  // positive, should be negated internally
+    let result: Outcome[Buffer, ZlibError] = deflate_raw_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate_raw should negate positive window_bits")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate_raw(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate_raw should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "auto-negate roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_buffer_roundtrip() -> I32 {
+    // Create initial data
+    let original: Str = "Data for buffer compression test"
+    let first_compress: Outcome[Buffer, ZlibError] = deflate(original)
+    if first_compress.is_err() {
+        return 1
+    }
+    var input_buf: Buffer = first_compress.unwrap()
+
+    // Compress the buffer
+    let result: Outcome[Buffer, ZlibError] = deflate_buffer(ref input_buf)
+    if result.is_err() {
+        assert(false, "deflate_buffer should succeed")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+
+    // Decompress to buffer
+    let decomp_result: Outcome[Buffer, ZlibError] = inflate_to_buffer(ref compressed)
+    if decomp_result.is_err() {
+        assert(false, "inflate_to_buffer should succeed")
+        return 1
+    }
+
+    let decompressed: Buffer = decomp_result.unwrap()
+    assert(decompressed.len() > 0, "decompressed buffer should not be empty")
+    return 0
+}
+
+@test
+func test_deflate_buffer_with_options_level() -> I32 {
+    let original: Str = "Buffer data with options"
+    let first_compress: Outcome[Buffer, ZlibError] = deflate(original)
+    if first_compress.is_err() {
+        return 1
+    }
+    var input_buf: Buffer = first_compress.unwrap()
+
+    let opts: ZlibOptions = ZlibOptions::default().with_level(9)
+    let result: Outcome[Buffer, ZlibError] = deflate_buffer_with_options(ref input_buf, opts)
+    if result.is_err() {
+        assert(false, "deflate_buffer_with_options should succeed")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let opts2: ZlibOptions = ZlibOptions::default()
+    let decomp: Outcome[Buffer, ZlibError] = inflate_to_buffer_with_options(ref compressed, opts2)
+    if decomp.is_err() {
+        assert(false, "inflate_to_buffer_with_options should succeed")
+        return 1
+    }
+    return 0
+}
+
+@test
+func test_deflate_raw_buffer_explicit() -> I32 {
+    let original: Str = "Raw buffer compression test"
+    let first_compress: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if first_compress.is_err() {
+        return 1
+    }
+    var input_buf: Buffer = first_compress.unwrap()
+
+    let result: Outcome[Buffer, ZlibError] = deflate_raw_buffer(ref input_buf)
+    if result.is_err() {
+        assert(false, "deflate_raw_buffer should succeed")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Buffer, ZlibError] = inflate_raw_to_buffer(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate_raw_to_buffer should succeed")
+        return 1
+    }
+    return 0
+}
+
+@test
+func test_deflate_raw_buffer_with_options_explicit() -> I32 {
+    let original: Str = "Raw buffer with options test"
+    let first_compress: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if first_compress.is_err() {
+        return 1
+    }
+    var input_buf: Buffer = first_compress.unwrap()
+
+    let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(6)
+    let result: Outcome[Buffer, ZlibError] = deflate_raw_buffer_with_options(ref input_buf, opts)
+    if result.is_err() {
+        assert(false, "deflate_raw_buffer_with_options should succeed")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    let opts2: ZlibOptions = ZlibOptions::deflate_raw()
+    let decomp: Outcome[Buffer, ZlibError] = inflate_raw_to_buffer_with_options(ref compressed, opts2)
+    if decomp.is_err() {
+        assert(false, "inflate_raw_to_buffer_with_options should succeed")
+        return 1
+    }
+    return 0
+}
+
+@test
+func test_inflate_raw_with_positive_window_bits() -> I32 {
+    // Test inflate_raw_with_options when window_bits is positive (should negate)
+    let original: Str = "Inflate raw auto-negate test"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if compress_result.is_err() {
+        return 1
+    }
+    var compressed: Buffer = compress_result.unwrap()
+
+    var opts: ZlibOptions = ZlibOptions::default()
+    opts.window_bits = 15  // positive, should be negated internally
+    let result: Outcome[Str, ZlibError] = inflate_raw_with_options(ref compressed, opts)
+    if result.is_err() {
+        assert(false, "inflate_raw should auto-negate positive window_bits")
+        return 1
+    }
+    assert_eq(result.unwrap(), original, "inflate raw auto-negate")
+    return 0
+}
+
+@test
+func test_deflate_strategy_filtered() -> I32 {
+    let original: Str = "Test data with filtered strategy"
+    let opts: ZlibOptions = ZlibOptions::default().with_strategy(Z_FILTERED)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate with filtered strategy should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "filtered strategy roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_strategy_huffman_only() -> I32 {
+    let original: Str = "Test data with Huffman only strategy"
+    let opts: ZlibOptions = ZlibOptions::default().with_strategy(Z_HUFFMAN_ONLY)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate with huffman only should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "huffman only roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_strategy_rle() -> I32 {
+    let original: Str = "AAAAAABBBBBBCCCCCCDDDDDD"  // repetitive data for RLE
+    let opts: ZlibOptions = ZlibOptions::default().with_strategy(Z_RLE)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate with RLE strategy should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "RLE strategy roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_strategy_fixed() -> I32 {
+    let original: Str = "Test data with fixed Huffman codes"
+    let opts: ZlibOptions = ZlibOptions::default().with_strategy(Z_FIXED)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate with fixed strategy should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "fixed strategy roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_mem_level_min() -> I32 {
+    let original: Str = "Test with minimum memory level"
+    let opts: ZlibOptions = ZlibOptions::default().with_mem_level(Z_MIN_MEMLEVEL)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate with min mem_level should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "min mem_level roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_mem_level_max() -> I32 {
+    let original: Str = "Test with maximum memory level"
+    let opts: ZlibOptions = ZlibOptions::default().with_mem_level(Z_MAX_MEMLEVEL)
+    let result: Outcome[Buffer, ZlibError] = deflate_with_options(original, opts)
+    if result.is_err() {
+        assert(false, "deflate with max mem_level should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), original, "max mem_level roundtrip")
+    return 0
+}
+
+@test
+func test_deflate_large_data() -> I32 {
+    // Create a large string by repeating
+    var large: Str = ""
+    var i: I32 = 0
+    loop (i < 100) {
+        large = large + "This is test data block number " + i.to_string() + ". "
+        i = i + 1
+    }
+
+    let result: Outcome[Buffer, ZlibError] = deflate(large)
+    if result.is_err() {
+        assert(false, "deflate large data should succeed")
+        return 1
+    }
+    var compressed: Buffer = result.unwrap()
+
+    // Compression should reduce size significantly
+    assert(compressed.len() < large.len() as I64, "compression should reduce size")
+
+    let decomp: Outcome[Str, ZlibError] = inflate(ref compressed)
+    if decomp.is_err() {
+        assert(false, "inflate large data should succeed")
+        return 1
+    }
+    assert_eq(decomp.unwrap(), large, "large data roundtrip")
+    return 0
+}
+
+// ============================================================================
+// From: debug_deflate.test.tml - Debug test
+// ============================================================================
+
+@extern("zlib_last_error_code")
+func debug_last_error() -> I32
+
+@test
+func test_simple_deflate() -> I32 {
+    let original: Str = "Hello"
+
+    print("1. Calling deflate...\n")
+    let result: Outcome[Buffer, ZlibError] = deflate(original)
+
+    if result.is_err() {
+        print("deflate failed!\n")
+        return 1
+    }
+
+    var compressed: Buffer = result.unwrap()
+    print("2. Deflate succeeded, compressed len: ")
+    print(compressed.len())
+    print("\n")
+
+    print("3. Error code after deflate: ")
+    let code1: I32 = debug_last_error()
+    print(code1)
+    print("\n")
+
+    print("4. Calling inflate...\n")
+    let inflate_result: Outcome[Str, ZlibError] = inflate(ref compressed)
+
+    print("5. Error code after inflate: ")
+    let code2: I32 = debug_last_error()
+    print(code2)
+    print("\n")
+
+    if inflate_result.is_err() {
+        print("inflate failed! Error code: ")
+        print(code2)
+        print("\n")
+        return 1
+    }
+
+    let decompressed: Str = inflate_result.unwrap()
+    print("6. Inflate succeeded: ")
+    print(decompressed)
+    print("\n")
+
+    return 0
+}
+
+// ============================================================================
+// From: unzip.test.tml - Auto-detect operations
+// ============================================================================
+
+@test
+func test_unzip_zlib_format() -> I32 {
+    let original: Str = "Test data for unzip auto-detection (zlib format)"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let result: Outcome[Str, ZlibError] = unzip(ref compressed)
+    if result.is_err() {
+        print("unzip failed on zlib format\n")
+        return 1
+    }
+
+    assert_eq(result.unwrap(), original, "unzip zlib roundtrip")
+    return 0
+}
+
+@test
+func test_unzip_with_options() -> I32 {
+    let original: Str = "Test data for unzip_with_options"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::auto_detect()
+    let result: Outcome[Str, ZlibError] = unzip_with_options(ref compressed, opts)
+    if result.is_err() {
+        print("unzip_with_options failed\n")
+        return 1
+    }
+
+    assert_eq(result.unwrap(), original, "unzip with options roundtrip")
+    return 0
+}
+
+@test
+func test_unzip_to_buffer() -> I32 {
+    let original: Str = "Test data for unzip_to_buffer"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let result: Outcome[Buffer, ZlibError] = unzip_to_buffer(ref compressed)
+    if result.is_err() {
+        print("unzip_to_buffer failed\n")
+        return 1
+    }
+
+    if result.unwrap().len() == 0 {
+        print("unzip_to_buffer returned empty\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_unzip_to_buffer_with_options() -> I32 {
+    let original: Str = "Test data for unzip_to_buffer_with_options"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::auto_detect()
+    let result: Outcome[Buffer, ZlibError] = unzip_to_buffer_with_options(ref compressed, opts)
+    if result.is_err() {
+        print("unzip_to_buffer_with_options failed\n")
+        return 1
+    }
+
+    return 0
+}
+
+@test
+func test_unzip_sync() -> I32 {
+    let original: Str = "Test data for unzip_sync"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let result: Outcome[Str, ZlibError] = unzip_sync(ref compressed)
+    if result.is_err() {
+        print("unzip_sync failed\n")
+        return 1
+    }
+
+    assert_eq(result.unwrap(), original, "unzip sync roundtrip")
+    return 0
+}
+
+@test
+func test_unzip_sync_with_options() -> I32 {
+    let original: Str = "Test data for unzip_sync_with_options"
+    let compress_result: Outcome[Buffer, ZlibError] = deflate(original)
+    if compress_result.is_err() {
+        return 1
+    }
+
+    var compressed: Buffer = compress_result.unwrap()
+    let opts: ZlibOptions = ZlibOptions::auto_detect()
+    let result: Outcome[Str, ZlibError] = unzip_sync_with_options(ref compressed, opts)
+    if result.is_err() {
+        print("unzip_sync_with_options failed\n")
+        return 1
+    }
+
+    assert_eq(result.unwrap(), original, "unzip sync with opts roundtrip")
+    return 0
+}

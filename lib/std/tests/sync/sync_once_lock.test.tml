@@ -1,0 +1,54 @@
+// Tests for sync/once — OnceLock methods
+// BLOCKED: OnceLock::get() — Maybe[ref T] LLVM type mismatch
+// BLOCKED: OnceLock::get_or_init() — requires closure param
+use test
+use std::sync::once::{Once, OnceLock}
+
+@test
+func test_once_new() -> I32 {
+    let o: Once = Once::new()
+    assert(not o.is_completed(), "new Once should not be completed")
+    return 0
+}
+
+@test
+func test_once_lock_new() -> I32 {
+    let lock: OnceLock[I32] = OnceLock::new[I32]()
+    assert(not lock.is_initialized(), "new OnceLock should not be initialized")
+    return 0
+}
+
+@test
+func test_once_lock_set_and_initialized() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    lock.set(42)
+    assert(lock.is_initialized(), "OnceLock should be initialized after set")
+    return 0
+}
+
+@test
+func test_once_lock_take() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    lock.set(99)
+    let v: Maybe[I32] = lock.take()
+    assert(v.is_just(), "take should return Just after set")
+    // Note: is_initialized() may still return true after take — runtime behavior
+    return 0
+}
+
+@test
+func test_once_lock_into_inner() -> I32 {
+    var lock: OnceLock[I32] = OnceLock::new[I32]()
+    lock.set(77)
+    let v: Maybe[I32] = lock.into_inner()
+    assert(v.is_just(), "into_inner should return Just")
+    return 0
+}
+
+@test
+func test_once_lock_into_inner_empty() -> I32 {
+    let lock: OnceLock[I32] = OnceLock::new[I32]()
+    let v: Maybe[I32] = lock.into_inner()
+    assert(v.is_nothing(), "into_inner on empty should be Nothing")
+    return 0
+}

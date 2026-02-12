@@ -1,0 +1,80 @@
+// Diagnostic test: type checker errors
+// Tests multiple type checking error codes in a single file.
+// All errors here are caught at the type-check phase.
+
+// @expect-error T001 Type mismatch
+// @expect-error T001 Binary operator
+// @expect-error T001 Undefined variable
+// @expect-error T004
+// @expect-error T008
+// @expect-error T013
+// @expect-error T014
+// @expect-error T016
+// @expect-error T016
+// @expect-error T022
+// @expect-error T030
+
+func test_type_mismatch() -> I32 {
+    let x: I32 = "hello"
+    return 0
+}
+
+func test_duplicate_def() -> I32 {
+    let a: I32 = 1
+    let a: I32 = 2
+    return 0
+}
+
+func test_immutable_assign() -> I32 {
+    let y: I32 = 5
+    y = 10
+    return 0
+}
+
+func test_condition_not_bool() -> I32 {
+    if 42 {
+        return 1
+    }
+    return 0
+}
+
+func test_return_type_mismatch() -> I32 {
+    return "hello"
+}
+
+func test_unknown_struct() -> I32 {
+    let p = FakeStruct { x: 1, y: 2 }
+    return 0
+}
+
+func test_break_outside_loop() -> I32 {
+    break
+    return 0
+}
+
+func test_binary_op_mismatch() -> I32 {
+    let x: I32 = 5 + "hello"
+    return 0
+}
+
+func test_undefined_var() -> I32 {
+    return unknown_thing
+}
+
+func takes_two(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+func test_arg_count() -> I32 {
+    let f = takes_two
+    let result = f(1)
+    return 0
+}
+
+func test_return_type2() -> Bool {
+    return 42
+}
+
+func main() -> I32 {
+    return 0
+}

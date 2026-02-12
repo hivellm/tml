@@ -1,0 +1,107 @@
+// Tests for Buffer big-endian and offset-based read/write methods
+use test
+use std::collections::Buffer
+
+@test
+func test_buffer_read_i16_be() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    // Write 0x1234 in big-endian manually (high byte first)
+    buf.write_u8(0x12, 0)
+    buf.write_u8(0x34, 1)
+
+    let v: I32 = buf.read_i16_be(0)
+    assert_eq(v, 0x1234, "read_i16_be 0x1234")
+
+    // Test negative value: 0xFF80 = -128 as I16
+    buf.write_u8(0xFF, 2)
+    buf.write_u8(0x80, 3)
+    let neg: I32 = buf.read_i16_be(2)
+    assert_eq(neg, -128, "read_i16_be -128")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_read_i64_at() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u64_le(123456789 as I64, 0)
+
+    let v: I64 = buf.read_i64_at(0)
+    assert_eq(v, 123456789 as I64, "read_i64_at offset 0")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_read_i64_be() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u64_be(0x0102030405060708, 0)
+
+    let v: I64 = buf.read_i64_be(0)
+    assert_eq(v, 0x0102030405060708, "read_i64_be")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_f32_be() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_f32_be(1.5 as F32, 0)
+
+    let v: F32 = buf.read_f32_be(0)
+    var diff: F32 = v - 1.5 as F32
+    if diff < 0.0 as F32 {
+        diff = 0.0 as F32 - diff
+    }
+    assert(diff < 0.001 as F32, "f32 be roundtrip")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_f64_be() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_f64_be(2.718281828, 0)
+
+    let v: F64 = buf.read_f64_be(0)
+    var diff: F64 = v - 2.718281828
+    if diff < 0.0 {
+        diff = 0.0 - diff
+    }
+    assert(diff < 0.001, "f64 be roundtrip")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_read_i32_at() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u32_le(12345, 0)
+    buf.write_u32_le(67890, 4)
+
+    let v1: I32 = buf.read_i32_at(0)
+    assert_eq(v1, 12345, "read_i32_at offset 0")
+
+    let v2: I32 = buf.read_i32_at(4)
+    assert_eq(v2, 67890, "read_i32_at offset 4")
+
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_read_i32_be() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u32_be(0x12345678, 0)
+
+    let v: I32 = buf.read_i32_be(0)
+    assert_eq(v, 0x12345678, "read_i32_be")
+
+    buf.destroy()
+    return 0
+}

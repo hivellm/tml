@@ -1,0 +1,106 @@
+// Consolidated tests for std::file::file — File I/O operations
+// BLOCKED: File::create() returns () — can't create files directly
+use test
+use std::file::file::File
+use std::file::path::Path
+
+// === File open/close ===
+
+@test
+func test_file_open_read() -> I32 {
+    let f: File = File::open_read("lib/std/tests/file/file.test.tml")
+    assert(f.is_open(), "file should be open")
+    f.close()
+    return 0
+}
+
+@test
+func test_file_is_open_false() -> I32 {
+    let f: File = File::open_read("nonexistent_file_12345.txt")
+    assert(not f.is_open(), "nonexistent file should not be open")
+    return 0
+}
+
+@test
+func test_file_open_append() -> I32 {
+    var f: File = File::open_append("build/debug/test_append_file.txt")
+    f.close()
+    return 0
+}
+
+// === File write/read ===
+
+@test
+func test_file_write_and_read() -> I32 {
+    let test_path: Str = "build/debug/_test_io_tmp.txt"
+    let wrote: Bool = File::write_all(test_path, "hello file io")
+    assert(wrote, "write_all should succeed")
+
+    let content: Str = File::read_all(test_path)
+    assert_eq(content, "hello file io", "read_all should return written content")
+
+    Path::remove(test_path)
+    return 0
+}
+
+@test
+func test_file_append_all() -> I32 {
+    let test_path: Str = "build/debug/_test_append_tmp.txt"
+    File::write_all(test_path, "line1")
+    File::append_all(test_path, " line2")
+
+    let content: Str = File::read_all(test_path)
+    assert_eq(content, "line1 line2", "append should add to existing content")
+
+    Path::remove(test_path)
+    return 0
+}
+
+@test
+func test_file_open_write_close() -> I32 {
+    let test_path: Str = "build/debug/_test_handle_tmp.txt"
+    let f: File = File::open_write(test_path)
+    assert(f.is_open(), "opened file should be open")
+    f.write_str("streamed data")
+    f.close()
+
+    let content: Str = File::read_all(test_path)
+    assert_eq(content, "streamed data", "should read streamed content")
+
+    Path::remove(test_path)
+    return 0
+}
+
+@test
+func test_file_open_append_write_str() -> I32 {
+    var f: File = File::open_append("build/debug/test_write_via_append.txt")
+    let ok: Bool = f.write_str("hello from append\n")
+    f.close()
+    return 0
+}
+
+@test
+func test_file_size() -> I32 {
+    var fw: File = File::open_append("build/debug/test_size_check.txt")
+    fw.write_str("data\n")
+    fw.close()
+
+    var fr: File = File::open_read("build/debug/test_size_check.txt")
+    let sz: I64 = fr.size()
+    assert(sz >= 0 as I64, "file size should be >= 0")
+    fr.close()
+    return 0
+}
+
+@test
+func test_file_read_line() -> I32 {
+    var fw: File = File::open_append("build/debug/test_readline2.txt")
+    fw.write_str("line one\nline two\n")
+    fw.close()
+
+    var fr: File = File::open_read("build/debug/test_readline2.txt")
+    let line: Str = fr.read_line()
+    assert(line.len() > 0, "read_line should return content")
+    fr.close()
+    return 0
+}

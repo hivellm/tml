@@ -1,11 +1,18 @@
-// Tests for core::hash module
-// Tests Hash behavior and combine_hashes
+// Consolidated hash tests: primitives, combine_hashes, Maybe, Outcome, contract
+// Total: 36 @test functions
+//
+// Merged from:
+//   hash.test.tml (original)
+//   hash_combine.test.tml
+//   hash_primitives.test.tml
+//   hash_maybe.test.tml
+//   hash_outcome.test.tml
 
 use test
 use core::hash::{Hash, combine_hashes}
 
 // =============================================================================
-// I8 Hash Tests
+// I8 Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -30,7 +37,7 @@ func test_hash_i8_different() -> I32 {
 }
 
 // =============================================================================
-// I16 Hash Tests
+// I16 Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -43,7 +50,7 @@ func test_hash_i16() -> I32 {
 }
 
 // =============================================================================
-// I32 Hash Tests
+// I32 Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -74,7 +81,7 @@ func test_hash_i32_negative() -> I32 {
 }
 
 // =============================================================================
-// I64 Hash Tests
+// I64 Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -95,7 +102,7 @@ func test_hash_i64_large() -> I32 {
 }
 
 // =============================================================================
-// U8 Hash Tests
+// U8 Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -108,7 +115,7 @@ func test_hash_u8() -> I32 {
 }
 
 // =============================================================================
-// U16 Hash Tests
+// U16 Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -121,7 +128,7 @@ func test_hash_u16() -> I32 {
 }
 
 // =============================================================================
-// U32 Hash Tests
+// U32 Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -134,7 +141,7 @@ func test_hash_u32() -> I32 {
 }
 
 // =============================================================================
-// U64 Hash Tests
+// U64 Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -147,7 +154,7 @@ func test_hash_u64() -> I32 {
 }
 
 // =============================================================================
-// Bool Hash Tests
+// Bool Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -179,7 +186,7 @@ func test_hash_bool_different() -> I32 {
 }
 
 // =============================================================================
-// Str Hash Tests
+// Str Hash Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -210,7 +217,7 @@ func test_hash_str_empty() -> I32 {
 }
 
 // =============================================================================
-// combine_hashes Tests
+// combine_hashes Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -255,7 +262,34 @@ func test_combine_hashes_same_values() -> I32 {
 }
 
 // =============================================================================
-// Hash Contract Tests (equal values have equal hashes)
+// combine_hashes Tests (from hash_combine.test.tml)
+// =============================================================================
+
+@test
+func test_combine_hashes_basic_v2() -> I32 {
+    let h: I64 = combine_hashes(10 as I64, 20 as I64)
+    // h1 * 31 + h2 = 10 * 31 + 20 = 330
+    assert_eq(h, 330 as I64, "combine_hashes(10, 20) should be 330")
+    return 0
+}
+
+@test
+func test_combine_hashes_order_matters_v2() -> I32 {
+    let h1: I64 = combine_hashes(10 as I64, 20 as I64)
+    let h2: I64 = combine_hashes(20 as I64, 10 as I64)
+    assert(h1 != h2, "combine_hashes should be order-dependent")
+    return 0
+}
+
+@test
+func test_combine_hashes_zero() -> I32 {
+    let h: I64 = combine_hashes(0 as I64, 0 as I64)
+    assert_eq(h, 0 as I64, "combine_hashes(0, 0) should be 0")
+    return 0
+}
+
+// =============================================================================
+// Hash Contract Tests (from hash.test.tml)
 // =============================================================================
 
 @test
@@ -272,5 +306,98 @@ func test_hash_contract_str() -> I32 {
     let s1: Str = Str::from("test")
     let s2: Str = Str::from("test")
     assert_eq(s1.hash(), s2.hash(), "equal strings must have equal hashes")
+    return 0
+}
+
+// =============================================================================
+// Primitive Hash Tests (from hash_primitives.test.tml)
+// =============================================================================
+
+@test
+func test_hash_bool() -> I32 {
+    let t: Bool = true
+    let f: Bool = false
+    assert_eq(t.hash(), 1 as I64, "true.hash() should be 1")
+    assert_eq(f.hash(), 0 as I64, "false.hash() should be 0")
+    return 0
+}
+
+@test
+func test_hash_i64_deterministic() -> I32 {
+    let x: I64 = 42
+    let h1: I64 = x.hash()
+    let h2: I64 = x.hash()
+    assert_eq(h1, h2, "same value should produce same hash")
+    return 0
+}
+
+@test
+func test_hash_i32_deterministic() -> I32 {
+    let a: I32 = 99
+    let b: I32 = 99
+    assert_eq(a.hash(), b.hash(), "equal I32 values should hash equally")
+    return 0
+}
+
+// =============================================================================
+// Hash for Maybe[T] (from hash_maybe.test.tml)
+// =============================================================================
+
+@test
+func test_hash_maybe_nothing() -> I32 {
+    let n: Maybe[I32] = Nothing
+    let h: I64 = n.hash()
+    // Nothing should hash to 0
+    assert_eq(h, 0, "Nothing should hash to 0")
+    return 0
+}
+
+@test
+func test_hash_maybe_just() -> I32 {
+    let j: Maybe[I32] = Just(42)
+    let h: I64 = j.hash()
+    // Just(42) should have a non-zero hash
+    assert(h != 0, "Just(42) should have non-zero hash")
+    return 0
+}
+
+@test
+func test_hash_maybe_just_deterministic() -> I32 {
+    let j1: Maybe[I32] = Just(100)
+    let j2: Maybe[I32] = Just(100)
+    assert_eq(j1.hash(), j2.hash(), "equal Just values should have equal hashes")
+    return 0
+}
+
+// =============================================================================
+// Hash for Outcome[T, E] (from hash_outcome.test.tml)
+// =============================================================================
+
+@test
+func test_hash_outcome_ok() -> I32 {
+    let o: Outcome[I32, I32] = Ok(42)
+    let h: I64 = o.hash()
+    // Ok(42) should have a deterministic hash
+    let o2: Outcome[I32, I32] = Ok(42)
+    assert_eq(h, o2.hash(), "equal Ok values should have equal hashes")
+    return 0
+}
+
+@test
+func test_hash_outcome_err() -> I32 {
+    let e: Outcome[I32, I32] = Err(99)
+    let h: I64 = e.hash()
+    let e2: Outcome[I32, I32] = Err(99)
+    assert_eq(h, e2.hash(), "equal Err values should have equal hashes")
+    return 0
+}
+
+@test
+func test_hash_outcome_ok_vs_err() -> I32 {
+    let ok: Outcome[I32, I32] = Ok(42)
+    let err: Outcome[I32, I32] = Err(42)
+    // Ok and Err with same inner value should have different hashes
+    // because discriminants differ (1 vs 2)
+    assert(ok.hash() != err.hash(), "Ok and Err should have different hashes")
     return 0
 }

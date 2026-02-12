@@ -1367,6 +1367,7 @@ add_library(tml_cli STATIC
     # Tester modules
     src/cli/tester/benchmark.cpp
     src/cli/tester/coverage.cpp
+    src/cli/tester/diagnostic_execution.cpp
     src/cli/tester/discovery.cpp
     src/cli/tester/execution.cpp
     src/cli/tester/fuzzer.cpp

@@ -1,0 +1,602 @@
+// Consolidated language tests - Types, Enums, Behaviors, Generics, Imports
+// Total @test count: 45
+// Sources: struct_basic.test.tml (9), enum_basic.test.tml (8),
+//          behavior_impl.test.tml (3), nested_types.test.tml (9),
+//          generics_basic.test.tml (8), imports.test.tml (8)
+// Duplicates resolved: Point type renamed to Point2D in nested_types section
+use test
+use core::str::{len, contains, starts_with, ends_with, to_uppercase}
+use core::str::trim
+
+// =============================================================================
+// SECTION: Basic Type (Struct) Definitions (from struct_basic.test.tml)
+// =============================================================================
+
+// -- Basic type definition and field access --
+
+type Point {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_type_create() -> I32 {
+    let p: Point = Point { x: 10, y: 20 }
+    assert_eq(p.x, 10, "point x should be 10")
+    assert_eq(p.y, 20, "point y should be 20")
+    return 0
+}
+
+@test
+func test_type_zero_fields() -> I32 {
+    let p: Point = Point { x: 0, y: 0 }
+    assert_eq(p.x, 0, "zero point x")
+    assert_eq(p.y, 0, "zero point y")
+    return 0
+}
+
+@test
+func test_type_negative_fields() -> I32 {
+    let p: Point = Point { x: -5, y: -10 }
+    assert_eq(p.x, -5, "negative x")
+    assert_eq(p.y, -10, "negative y")
+    return 0
+}
+
+// -- Type with methods (impl) --
+
+type Rectangle {
+    width: I32,
+    height: I32
+}
+
+impl Rectangle {
+    func area(this) -> I32 {
+        return this.width * this.height
+    }
+
+    func perimeter(this) -> I32 {
+        return 2 * (this.width + this.height)
+    }
+
+    func is_square(this) -> Bool {
+        return this.width == this.height
+    }
+}
+
+@test
+func test_type_method_area() -> I32 {
+    let r: Rectangle = Rectangle { width: 5, height: 3 }
+    assert_eq(r.area(), 15, "5x3 area should be 15")
+    return 0
+}
+
+@test
+func test_type_method_perimeter() -> I32 {
+    let r: Rectangle = Rectangle { width: 5, height: 3 }
+    assert_eq(r.perimeter(), 16, "5x3 perimeter should be 16")
+    return 0
+}
+
+@test
+func test_type_method_is_square() -> I32 {
+    let r1: Rectangle = Rectangle { width: 4, height: 4 }
+    let r2: Rectangle = Rectangle { width: 4, height: 5 }
+    assert(r1.is_square(), "4x4 should be square")
+    assert(not r2.is_square(), "4x5 should not be square")
+    return 0
+}
+
+// -- Type passed to functions --
+
+func distance_squared(p1: Point, p2: Point) -> I32 {
+    let dx: I32 = p2.x - p1.x
+    let dy: I32 = p2.y - p1.y
+    return dx * dx + dy * dy
+}
+
+@test
+func test_type_as_param() -> I32 {
+    let p1: Point = Point { x: 0, y: 0 }
+    let p2: Point = Point { x: 3, y: 4 }
+    assert_eq(distance_squared(p1, p2), 25, "distance_squared should be 25")
+    return 0
+}
+
+// -- Type returned from functions --
+
+func make_point(x: I32, y: I32) -> Point {
+    return Point { x: x, y: y }
+}
+
+@test
+func test_type_return() -> I32 {
+    let p: Point = make_point(7, 11)
+    assert_eq(p.x, 7, "returned point x should be 7")
+    assert_eq(p.y, 11, "returned point y should be 11")
+    return 0
+}
+
+// -- Mutable type fields --
+
+@test
+func test_type_mutable() -> I32 {
+    var p: Point = Point { x: 1, y: 2 }
+    p.x = 10
+    p.y = 20
+    assert_eq(p.x, 10, "mutated x should be 10")
+    assert_eq(p.y, 20, "mutated y should be 20")
+    return 0
+}
+
+// =============================================================================
+// SECTION: Enum Types (from enum_basic.test.tml)
+// =============================================================================
+
+// -- Simple enum (no payload) --
+
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+@test
+func test_enum_create_variants() -> I32 {
+    let r: Color = Color::Red
+    let g: Color = Color::Green
+    let b: Color = Color::Blue
+    // If we get here without crash, variants are constructible
+    assert(true, "enum variants should be constructible")
+    return 0
+}
+
+// -- Enum with when matching --
+
+func color_value(c: Color) -> I32 {
+    when c {
+        Color::Red => return 1,
+        Color::Green => return 2,
+        Color::Blue => return 3
+    }
+}
+
+@test
+func test_enum_match_red() -> I32 {
+    assert_eq(color_value(Color::Red), 1, "Red should be 1")
+    return 0
+}
+
+@test
+func test_enum_match_green() -> I32 {
+    assert_eq(color_value(Color::Green), 2, "Green should be 2")
+    return 0
+}
+
+@test
+func test_enum_match_blue() -> I32 {
+    assert_eq(color_value(Color::Blue), 3, "Blue should be 3")
+    return 0
+}
+
+// -- Enum with single payload --
+
+enum Value {
+    IntVal(I32),
+    Empty
+}
+
+func extract_or_default(v: Value, default_val: I32) -> I32 {
+    when v {
+        Value::IntVal(n) => return n,
+        Value::Empty => return default_val
+    }
+}
+
+@test
+func test_enum_payload_extract() -> I32 {
+    let v: Value = Value::IntVal(42)
+    assert_eq(extract_or_default(v, 0), 42, "IntVal(42) should extract 42")
+    return 0
+}
+
+@test
+func test_enum_payload_empty() -> I32 {
+    let v: Value = Value::Empty
+    assert_eq(extract_or_default(v, -1), -1, "Empty should use default -1")
+    return 0
+}
+
+// -- Enum used with Maybe (builtin) --
+
+func safe_divide(a: I32, b: I32) -> Maybe[I32] {
+    if b == 0 {
+        return Nothing
+    }
+    return Just(a / b)
+}
+
+@test
+func test_safe_divide_ok() -> I32 {
+    let result: Maybe[I32] = safe_divide(10, 3)
+    assert(result.is_just(), "10/3 should be Just")
+    assert_eq(result.unwrap(), 3, "10/3 should be 3")
+    return 0
+}
+
+@test
+func test_safe_divide_by_zero() -> I32 {
+    let result: Maybe[I32] = safe_divide(10, 0)
+    assert(result.is_nothing(), "10/0 should be Nothing")
+    return 0
+}
+
+// =============================================================================
+// SECTION: Behavior and Impl (from behavior_impl.test.tml)
+// =============================================================================
+
+// -- Basic impl with methods --
+
+type Counter {
+    value: I32
+}
+
+impl Counter {
+    func new(start: I32) -> Counter {
+        return Counter { value: start }
+    }
+
+    func get(this) -> I32 {
+        return this.value
+    }
+
+    func increment(this) -> Counter {
+        return Counter { value: this.value + 1 }
+    }
+
+    func add(this, n: I32) -> Counter {
+        return Counter { value: this.value + n }
+    }
+}
+
+@test
+func test_impl_new() -> I32 {
+    let c: Counter = Counter::new(0)
+    assert_eq(c.get(), 0, "Counter::new(0) should start at 0")
+    return 0
+}
+
+@test
+func test_impl_method_call() -> I32 {
+    let c: Counter = Counter::new(5)
+    let c2: Counter = c.increment()
+    assert_eq(c2.get(), 6, "increment should add 1")
+    return 0
+}
+
+@test
+func test_impl_method_with_args() -> I32 {
+    let c: Counter = Counter::new(10)
+    let c2: Counter = c.add(5)
+    assert_eq(c2.get(), 15, "add(5) should add 5")
+    return 0
+}
+
+// =============================================================================
+// SECTION: Nested Types and Composition (from nested_types.test.tml)
+// Duplicate resolved: Point renamed to Point2D to avoid conflict with struct_basic
+// =============================================================================
+
+// -- Type with Maybe field --
+
+type User {
+    age: I32,
+    level: I32
+}
+
+impl User {
+    func new(age: I32) -> User {
+        return User { age: age, level: 1 }
+    }
+
+    func with_level(age: I32, lvl: I32) -> User {
+        return User { age: age, level: lvl }
+    }
+
+    func is_adult(this) -> Bool {
+        return this.age >= 18
+    }
+
+    func level_up(this) -> User {
+        return User { age: this.age, level: this.level + 1 }
+    }
+}
+
+@test
+func test_user_default_level() -> I32 {
+    let u: User = User::new(30)
+    assert_eq(u.level, 1, "default level should be 1")
+    return 0
+}
+
+@test
+func test_user_with_level() -> I32 {
+    let u: User = User::with_level(25, 5)
+    assert_eq(u.level, 5, "level should be 5")
+    return 0
+}
+
+@test
+func test_user_is_adult() -> I32 {
+    let adult: User = User::new(30)
+    let minor: User = User::new(15)
+    assert(adult.is_adult(), "30 should be adult")
+    assert(not minor.is_adult(), "15 should not be adult")
+    return 0
+}
+
+@test
+func test_user_level_up() -> I32 {
+    let u: User = User::new(20)
+    let u2: User = u.level_up().level_up()
+    assert_eq(u2.level, 3, "two level_ups should be level 3")
+    return 0
+}
+
+// -- Type composition (Point2D to avoid duplicate with struct_basic Point) --
+
+type Point2D {
+    x: I32,
+    y: I32
+}
+
+impl Point2D {
+    func origin() -> Point2D {
+        return Point2D { x: 0, y: 0 }
+    }
+
+    func distance_sq(this, other: Point2D) -> I32 {
+        let dx: I32 = this.x - other.x
+        let dy: I32 = this.y - other.y
+        return dx * dx + dy * dy
+    }
+}
+
+type Line {
+    start: Point2D,
+    end_pt: Point2D
+}
+
+impl Line {
+    func length_sq(this) -> I32 {
+        return this.start.distance_sq(this.end_pt)
+    }
+}
+
+@test
+func test_point_origin() -> I32 {
+    let p: Point2D = Point2D::origin()
+    assert_eq(p.x, 0, "origin x should be 0")
+    assert_eq(p.y, 0, "origin y should be 0")
+    return 0
+}
+
+@test
+func test_point_distance_sq() -> I32 {
+    let a: Point2D = Point2D { x: 0, y: 0 }
+    let b: Point2D = Point2D { x: 3, y: 4 }
+    assert_eq(a.distance_sq(b), 25, "distance^2 from origin to (3,4) should be 25")
+    return 0
+}
+
+@test
+func test_line_length_sq() -> I32 {
+    let l: Line = Line {
+        start: Point2D { x: 1, y: 1 },
+        end_pt: Point2D { x: 4, y: 5 }
+    }
+    assert_eq(l.length_sq(), 25, "line (1,1)-(4,5) length^2 should be 25")
+    return 0
+}
+
+// -- Type with mutable fields --
+
+type Accumulator {
+    total: I32,
+    count: I32
+}
+
+impl Accumulator {
+    func empty() -> Accumulator {
+        return Accumulator { total: 0, count: 0 }
+    }
+
+    func add_val(this, value: I32) -> Accumulator {
+        return Accumulator { total: this.total + value, count: this.count + 1 }
+    }
+
+    func average(this) -> I32 {
+        if this.count == 0 {
+            return 0
+        }
+        return this.total / this.count
+    }
+}
+
+@test
+func test_accumulator_empty() -> I32 {
+    let acc: Accumulator = Accumulator::empty()
+    assert_eq(acc.total, 0, "empty total should be 0")
+    assert_eq(acc.count, 0, "empty count should be 0")
+    return 0
+}
+
+@test
+func test_accumulator_add() -> I32 {
+    let acc: Accumulator = Accumulator::empty()
+    let acc2: Accumulator = acc.add_val(10).add_val(20).add_val(30)
+    assert_eq(acc2.total, 60, "total should be 60")
+    assert_eq(acc2.count, 3, "count should be 3")
+    assert_eq(acc2.average(), 20, "average should be 20")
+    return 0
+}
+
+// =============================================================================
+// SECTION: Generics (from generics_basic.test.tml)
+// =============================================================================
+
+// -- Generic function - identity --
+
+func identity[T](x: T) -> T {
+    return x
+}
+
+@test
+func test_generic_identity_i32() -> I32 {
+    let result: I32 = identity[I32](42)
+    assert_eq(result, 42, "identity(42) should be 42")
+    return 0
+}
+
+@test
+func test_generic_identity_bool() -> I32 {
+    let result: Bool = identity[Bool](true)
+    assert(result, "identity(true) should be true")
+    return 0
+}
+
+// -- Generic function - max --
+
+func max_of[T](a: T, b: T) -> T {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+@test
+func test_generic_max_i32() -> I32 {
+    let result: I32 = max_of[I32](3, 7)
+    assert_eq(result, 7, "max(3, 7) should be 7")
+    return 0
+}
+
+@test
+func test_generic_max_i32_equal() -> I32 {
+    let result: I32 = max_of[I32](5, 5)
+    assert_eq(result, 5, "max(5, 5) should be 5")
+    return 0
+}
+
+// -- Generic type (Pair) --
+
+type Pair[A, B] {
+    first: A,
+    second: B
+}
+
+@test
+func test_generic_pair_i32_i32() -> I32 {
+    let p: Pair[I32, I32] = Pair { first: 10, second: 20 }
+    assert_eq(p.first, 10, "pair first should be 10")
+    assert_eq(p.second, 20, "pair second should be 20")
+    return 0
+}
+
+@test
+func test_generic_pair_i32_bool() -> I32 {
+    let p: Pair[I32, Bool] = Pair { first: 42, second: true }
+    assert_eq(p.first, 42, "pair first should be 42")
+    assert(p.second, "pair second should be true")
+    return 0
+}
+
+// -- Generic function with Maybe --
+
+func or_else[T](m: Maybe[T], default_val: T) -> T {
+    when m {
+        Just(v) => return v,
+        Nothing => return default_val
+    }
+}
+
+@test
+func test_generic_or_else_just() -> I32 {
+    let m: Maybe[I32] = Just(99)
+    assert_eq(or_else(m, 0), 99, "or_else Just(99) should be 99")
+    return 0
+}
+
+@test
+func test_generic_or_else_nothing() -> I32 {
+    let m: Maybe[I32] = Nothing
+    assert_eq(or_else(m, -1), -1, "or_else Nothing should be -1")
+    return 0
+}
+
+// =============================================================================
+// SECTION: Imports (from imports.test.tml)
+// =============================================================================
+
+// -- Importing specific functions from a module --
+
+@test
+func test_imported_len() -> I32 {
+    assert_eq(len("hello"), 5, "len should work when imported")
+    return 0
+}
+
+@test
+func test_imported_contains() -> I32 {
+    assert(contains("hello world", "world"), "contains should work when imported")
+    return 0
+}
+
+@test
+func test_imported_starts_with() -> I32 {
+    assert(starts_with("hello", "hel"), "starts_with should work")
+    return 0
+}
+
+@test
+func test_imported_ends_with() -> I32 {
+    assert(ends_with("hello", "llo"), "ends_with should work")
+    return 0
+}
+
+@test
+func test_imported_to_uppercase() -> I32 {
+    let s: Str = to_uppercase("hello")
+    assert_eq(s, "HELLO", "to_uppercase should work when imported")
+    return 0
+}
+
+// -- Importing a single function --
+
+@test
+func test_single_import_trim() -> I32 {
+    let s: Str = trim("  hello  ")
+    assert_eq(s, "hello", "single import trim should work")
+    return 0
+}
+
+// -- Using multiple modules together --
+
+@test
+func test_combined_imports() -> I32 {
+    let s: Str = "  Hello World  "
+    let trimmed: Str = trim(s)
+    let upper: Str = to_uppercase(trimmed)
+    assert_eq(upper, "HELLO WORLD", "chained imports should work")
+    return 0
+}
+
+@test
+func test_combined_checks() -> I32 {
+    let s: Str = "TML Language"
+    assert(starts_with(s, "TML"), "should start with TML")
+    assert(ends_with(s, "Language"), "should end with Language")
+    assert(contains(s, " "), "should contain space")
+    assert_eq(len(s), 12, "length should be 12")
+    return 0
+}

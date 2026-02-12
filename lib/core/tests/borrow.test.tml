@@ -1,0 +1,128 @@
+// Consolidated tests for core::borrow (12 tests)
+use test
+use core::borrow::ToOwned
+
+// ---------------------------------------------------------------------------
+// Basic borrow patterns
+// ---------------------------------------------------------------------------
+
+// Test that basic reference borrowing works (language-level, not trait)
+@test
+func test_ref_borrow_i32() -> I32 {
+    let x: I32 = 42
+    let r: ref I32 = ref x
+    assert_eq(*r, 42, "ref should point to same value")
+    return 0
+}
+
+@test
+func test_mut_ref_borrow() -> I32 {
+    var x: I32 = 10
+    let r: mut ref I32 = mut ref x
+    *r = 20
+    assert_eq(x, 20, "mutation via mut ref should be visible")
+    return 0
+}
+
+@test
+func test_ref_borrow_str() -> I32 {
+    let s: Str = "hello"
+    let r: ref Str = ref s
+    assert_eq(*r, "hello", "ref to Str should work")
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// Borrow patterns with structs
+// ---------------------------------------------------------------------------
+
+class Counter {
+    value: I32
+
+    static func create(v: I32) -> Counter {
+        return Counter { value: v }
+    }
+
+    func get_value(this) -> I32 {
+        return this.value
+    }
+
+    func add(mut this, n: I32) {
+        this.value = this.value + n
+    }
+}
+
+@test
+func test_struct_method_read() -> I32 {
+    let c: Counter = Counter::create(10)
+    assert_eq(c.get_value(), 10, "method should read field")
+    return 0
+}
+
+@test
+func test_struct_mutation() -> I32 {
+    var c: Counter = Counter::create(0)
+    c.add(5)
+    c.add(3)
+    assert_eq(c.get_value(), 8, "mutations should accumulate")
+    return 0
+}
+
+@test
+func test_struct_field_access() -> I32 {
+    let c: Counter = Counter::create(42)
+    assert_eq(c.value, 42, "direct field access should work")
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// ToOwned for primitives
+// ---------------------------------------------------------------------------
+
+@test
+func test_to_owned_i32() -> I32 {
+    let x: I32 = 42
+    let owned: I32 = x.to_owned()
+    assert_eq(owned, 42, "I32 to_owned should return same value")
+    return 0
+}
+
+@test
+func test_to_owned_i64() -> I32 {
+    let x: I64 = 1000 as I64
+    let owned: I64 = x.to_owned()
+    assert_eq(owned, 1000 as I64, "I64 to_owned should return same value")
+    return 0
+}
+
+@test
+func test_to_owned_bool() -> I32 {
+    let x: Bool = true
+    let owned: Bool = x.to_owned()
+    assert(owned, "Bool to_owned should return true")
+    return 0
+}
+
+@test
+func test_to_owned_str() -> I32 {
+    let s: Str = "hello world"
+    let owned: Str = s.to_owned()
+    assert(owned == "hello world", "Str to_owned should duplicate")
+    return 0
+}
+
+@test
+func test_to_owned_i8() -> I32 {
+    let x: I8 = 127 as I8
+    let owned: I8 = x.to_owned()
+    assert_eq(owned as I32, 127, "I8 to_owned")
+    return 0
+}
+
+@test
+func test_to_owned_f64() -> I32 {
+    let x: F64 = 3.14
+    let owned: F64 = x.to_owned()
+    assert(owned == 3.14, "F64 to_owned should return same value")
+    return 0
+}

@@ -1,0 +1,54 @@
+// Tests for fmt/helpers - pad_center, format_with_sign, escape_string, escape_char
+use test
+use core::fmt::helpers::{pad_center, format_with_sign, escape_string, escape_char}
+
+@test
+func test_pad_center_short() -> I32 {
+    let r: Str = pad_center("hi", 6 as I64, " ")
+    assert_eq(r, "  hi  ", "pad_center hi to 6")
+    return 0
+}
+
+@test
+func test_pad_center_already_wide() -> I32 {
+    let r: Str = pad_center("hello", 3 as I64, " ")
+    assert_eq(r, "hello", "pad_center no change if already wide")
+    return 0
+}
+
+@test
+func test_format_with_sign_minus_only() -> I32 {
+    let r: Str = format_with_sign(42 as I64, 0)
+    assert_eq(r, "42", "positive, minus-only mode")
+    let neg: Str = format_with_sign(-7 as I64, 0)
+    assert_eq(neg, "-7", "negative, minus-only mode")
+    return 0
+}
+
+@test
+func test_format_with_sign_plus() -> I32 {
+    let r: Str = format_with_sign(42 as I64, 1)
+    assert_eq(r, "+42", "positive with plus sign")
+    return 0
+}
+
+@test
+func test_format_with_sign_space() -> I32 {
+    let r: Str = format_with_sign(42 as I64, 2)
+    assert_eq(r, " 42", "positive with space sign")
+    return 0
+}
+
+@test
+func test_escape_string() -> I32 {
+    let r: Str = escape_string("hello")
+    assert_eq(r, "hello", "escape_string returns string as-is")
+    return 0
+}
+
+@test
+func test_escape_char() -> I32 {
+    let r: Str = escape_char('A')
+    assert(r.len() > 0, "escape_char returns a string")
+    return 0
+}

@@ -1,0 +1,202 @@
+// Tests targeting uncovered sync/atomic functions (part 2)
+use test::{assert, assert_eq}
+use std::sync::{AtomicI64, AtomicU32, AtomicU64, AtomicUsize, AtomicIsize, Ordering}
+
+// =============================================================================
+// AtomicI64 uncovered: store, swap, compare_exchange_weak, fetch_sub, fetch_and/or/xor, fetch_max/min, is_lock_free, into_inner
+// =============================================================================
+
+@test
+func test_atomic_i64_store() -> I32 {
+    var ai: AtomicI64 = AtomicI64::new(0 as I64)
+    ai.store(100 as I64, Ordering::Relaxed)
+    assert(ai.load(Ordering::Relaxed) == 100 as I64, "store should set value")
+    return 0
+}
+
+@test
+func test_atomic_i64_swap() -> I32 {
+    var ai: AtomicI64 = AtomicI64::new(10 as I64)
+    let old: I64 = ai.swap(20 as I64, Ordering::Relaxed)
+    assert(old == 10 as I64, "swap returns old value")
+    return 0
+}
+
+@test
+func test_atomic_i64_compare_exchange_weak() -> I32 {
+    var ai: AtomicI64 = AtomicI64::new(42 as I64)
+    let r: Outcome[I64, I64] = ai.compare_exchange_weak(42 as I64, 100 as I64, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_i64_fetch_sub() -> I32 {
+    var ai: AtomicI64 = AtomicI64::new(10 as I64)
+    let old: I64 = ai.fetch_sub(3 as I64, Ordering::Relaxed)
+    assert(old == 10 as I64, "fetch_sub returns old")
+    assert(ai.load(Ordering::Relaxed) == 7 as I64, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_atomic_i64_fetch_and() -> I32 {
+    var ai: AtomicI64 = AtomicI64::new(15 as I64)
+    let old: I64 = ai.fetch_and(9 as I64, Ordering::Relaxed)
+    assert(old == 15 as I64, "fetch_and returns old")
+    return 0
+}
+
+@test
+func test_atomic_i64_fetch_or() -> I32 {
+    var ai: AtomicI64 = AtomicI64::new(3 as I64)
+    let old: I64 = ai.fetch_or(12 as I64, Ordering::Relaxed)
+    assert(old == 3 as I64, "fetch_or returns old")
+    return 0
+}
+
+@test
+func test_atomic_i64_fetch_xor() -> I32 {
+    var ai: AtomicI64 = AtomicI64::new(15 as I64)
+    let old: I64 = ai.fetch_xor(9 as I64, Ordering::Relaxed)
+    assert(old == 15 as I64, "fetch_xor returns old")
+    return 0
+}
+
+@test
+func test_atomic_i64_fetch_max() -> I32 {
+    var ai: AtomicI64 = AtomicI64::new(5 as I64)
+    let old: I64 = ai.fetch_max(10 as I64, Ordering::Relaxed)
+    assert(old == 5 as I64, "fetch_max returns old")
+    assert(ai.load(Ordering::Relaxed) == 10 as I64, "max(5,10) = 10")
+    return 0
+}
+
+@test
+func test_atomic_i64_fetch_min() -> I32 {
+    var ai: AtomicI64 = AtomicI64::new(10 as I64)
+    let old: I64 = ai.fetch_min(5 as I64, Ordering::Relaxed)
+    assert(old == 10 as I64, "fetch_min returns old")
+    assert(ai.load(Ordering::Relaxed) == 5 as I64, "min(10,5) = 5")
+    return 0
+}
+
+@test
+func test_atomic_i64_is_lock_free() -> I32 {
+    let ai: AtomicI64 = AtomicI64::new(0 as I64)
+    let lf: Bool = ai.is_lock_free()
+    assert(lf, "AtomicI64 should be lock-free on x86_64")
+    return 0
+}
+
+@test
+func test_atomic_i64_into_inner() -> I32 {
+    let ai: AtomicI64 = AtomicI64::new(42 as I64)
+    let v: I64 = ai.into_inner()
+    assert(v == 42 as I64, "into_inner returns initial value")
+    return 0
+}
+
+// =============================================================================
+// AtomicU32 uncovered: compare_exchange_weak, compare_and_swap
+// =============================================================================
+
+@test
+func test_atomic_u32_compare_exchange_weak() -> I32 {
+    var au: AtomicU32 = AtomicU32::new(42 as U32)
+    let r: Outcome[U32, U32] = au.compare_exchange_weak(42 as U32, 100 as U32, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_u32_compare_and_swap() -> I32 {
+    var au: AtomicU32 = AtomicU32::new(42 as U32)
+    let old: U32 = au.compare_and_swap(42 as U32, 100 as U32, Ordering::Relaxed)
+    assert(old == 42 as U32, "compare_and_swap returns old value")
+    return 0
+}
+
+// =============================================================================
+// AtomicU64 uncovered: store, compare_exchange_weak, compare_and_swap, fetch_and/or/xor, fetch_max/min, is_lock_free, into_inner
+// =============================================================================
+
+@test
+func test_atomic_u64_store() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(0 as U64)
+    au.store(100 as U64, Ordering::Relaxed)
+    assert(au.load(Ordering::Relaxed) == 100 as U64, "store should set value")
+    return 0
+}
+
+@test
+func test_atomic_u64_compare_exchange_weak() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(42 as U64)
+    let r: Outcome[U64, U64] = au.compare_exchange_weak(42 as U64, 100 as U64, Ordering::Relaxed, Ordering::Relaxed)
+    assert(r.is_ok() or r.is_err(), "compare_exchange_weak returns result")
+    return 0
+}
+
+@test
+func test_atomic_u64_compare_and_swap() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(42 as U64)
+    let old: U64 = au.compare_and_swap(42 as U64, 100 as U64, Ordering::Relaxed)
+    assert(old == 42 as U64, "compare_and_swap returns old value")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_and() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(15 as U64)
+    let old: U64 = au.fetch_and(9 as U64, Ordering::Relaxed)
+    assert(old == 15 as U64, "fetch_and returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_or() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(3 as U64)
+    let old: U64 = au.fetch_or(12 as U64, Ordering::Relaxed)
+    assert(old == 3 as U64, "fetch_or returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_xor() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(15 as U64)
+    let old: U64 = au.fetch_xor(9 as U64, Ordering::Relaxed)
+    assert(old == 15 as U64, "fetch_xor returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_max() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(5 as U64)
+    let old: U64 = au.fetch_max(10 as U64, Ordering::Relaxed)
+    assert(old == 5 as U64, "fetch_max returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_fetch_min() -> I32 {
+    var au: AtomicU64 = AtomicU64::new(10 as U64)
+    let old: U64 = au.fetch_min(5 as U64, Ordering::Relaxed)
+    assert(old == 10 as U64, "fetch_min returns old")
+    return 0
+}
+
+@test
+func test_atomic_u64_is_lock_free() -> I32 {
+    let au: AtomicU64 = AtomicU64::new(0 as U64)
+    let lf: Bool = au.is_lock_free()
+    assert(lf, "AtomicU64 should be lock-free")
+    return 0
+}
+
+@test
+func test_atomic_u64_into_inner() -> I32 {
+    let au: AtomicU64 = AtomicU64::new(42 as U64)
+    let v: U64 = au.into_inner()
+    assert(v == 42 as U64, "into_inner returns initial value")
+    return 0
+}

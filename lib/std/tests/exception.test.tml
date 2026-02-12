@@ -1,0 +1,295 @@
+// Consolidated tests for std::exception (18 tests)
+// BLOCKED: Real exception subclass allocation fails with "Cannot allocate unsized type %struct.Exception"
+// Tests use mock classes to test exception patterns
+use test
+use std::exception::*
+
+// === Real Exception base class ===
+
+@test
+func test_exception_create() -> I32 {
+    let e: Exception = Exception::create("something went wrong")
+    let msg: Str = e.get_message()
+    assert_eq(msg, "something went wrong", "message should match")
+    return 0
+}
+
+@test
+func test_exception_to_string() -> I32 {
+    let e: Exception = Exception::create("test error")
+    let s: Str = e.to_string()
+    assert_eq(s, "Exception: test error", "to_string format")
+    return 0
+}
+
+@test
+func test_exception_get_type() -> I32 {
+    let e: Exception = Exception::create("err")
+    let t: Str = e.get_type()
+    assert_eq(t, "Exception", "type should be Exception")
+    return 0
+}
+
+// === Mock argument exceptions ===
+
+class MockArgNullException {
+    message: Str
+    param_name: Str
+
+    static func create(param_name: Str) -> MockArgNullException {
+        return MockArgNullException {
+            message: "Value cannot be null: " + param_name,
+            param_name: param_name
+        }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_param_name(this) -> Str { return this.param_name }
+    func get_type(this) -> Str { return "ArgumentNullException" }
+    func to_string(this) -> Str { return "ArgumentNullException: " + this.message }
+}
+
+class MockArgOutOfRangeException {
+    message: Str
+    param_name: Str
+    actual_value: I64
+
+    static func create(param_name: Str, actual: I64, message: Str) -> MockArgOutOfRangeException {
+        return MockArgOutOfRangeException {
+            message: message,
+            param_name: param_name,
+            actual_value: actual
+        }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_param_name(this) -> Str { return this.param_name }
+    func get_actual_value(this) -> I64 { return this.actual_value }
+    func get_type(this) -> Str { return "ArgumentOutOfRangeException" }
+    func to_string(this) -> Str { return "ArgumentOutOfRangeException: " + this.message }
+}
+
+@test
+func test_arg_null_create() -> I32 {
+    let e: MockArgNullException = MockArgNullException::create("name")
+    assert_eq(e.get_type(), "ArgumentNullException", "type should match")
+    assert_eq(e.get_param_name(), "name", "param name should match")
+    assert_eq(e.get_message(), "Value cannot be null: name", "message format")
+    return 0
+}
+
+@test
+func test_arg_null_to_string() -> I32 {
+    let e: MockArgNullException = MockArgNullException::create("data")
+    assert_eq(e.to_string(), "ArgumentNullException: Value cannot be null: data", "to_string format")
+    return 0
+}
+
+@test
+func test_arg_out_of_range() -> I32 {
+    let e: MockArgOutOfRangeException = MockArgOutOfRangeException::create("index", 15 as I64, "Must be 0-10")
+    assert_eq(e.get_type(), "ArgumentOutOfRangeException", "type")
+    assert_eq(e.get_param_name(), "index", "param name")
+    assert_eq(e.get_actual_value(), 15 as I64, "actual value")
+    assert_eq(e.get_message(), "Must be 0-10", "message")
+    return 0
+}
+
+// === Mock IO exceptions ===
+
+class MockIOException {
+    message: Str
+
+    static func create(message: Str) -> MockIOException {
+        return MockIOException { message: message }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_type(this) -> Str { return "IOException" }
+    func to_string(this) -> Str { return "IOException: " + this.message }
+}
+
+class MockFileNotFoundException {
+    message: Str
+    file_path: Str
+
+    static func create(file_path: Str) -> MockFileNotFoundException {
+        return MockFileNotFoundException {
+            message: "File not found: " + file_path,
+            file_path: file_path
+        }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_file_path(this) -> Str { return this.file_path }
+    func get_type(this) -> Str { return "FileNotFoundException" }
+    func to_string(this) -> Str { return "FileNotFoundException: " + this.message }
+}
+
+class MockArithmeticException {
+    message: Str
+
+    static func create(message: Str) -> MockArithmeticException {
+        return MockArithmeticException { message: message }
+    }
+
+    static func overflow() -> MockArithmeticException {
+        return MockArithmeticException { message: "Arithmetic overflow" }
+    }
+
+    static func divide_by_zero() -> MockArithmeticException {
+        return MockArithmeticException { message: "Division by zero" }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_type(this) -> Str { return "ArithmeticException" }
+}
+
+class MockTimeoutException {
+    message: Str
+
+    static func create() -> MockTimeoutException {
+        return MockTimeoutException { message: "Operation timed out" }
+    }
+
+    static func with_message(message: Str) -> MockTimeoutException {
+        return MockTimeoutException { message: message }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_type(this) -> Str { return "TimeoutException" }
+}
+
+@test
+func test_io_exception() -> I32 {
+    let e: MockIOException = MockIOException::create("disk full")
+    assert_eq(e.get_type(), "IOException", "type")
+    assert_eq(e.get_message(), "disk full", "message")
+    assert_eq(e.to_string(), "IOException: disk full", "to_string")
+    return 0
+}
+
+@test
+func test_file_not_found() -> I32 {
+    let e: MockFileNotFoundException = MockFileNotFoundException::create("/etc/config.json")
+    assert_eq(e.get_type(), "FileNotFoundException", "type")
+    assert_eq(e.get_file_path(), "/etc/config.json", "file path")
+    assert_eq(e.get_message(), "File not found: /etc/config.json", "message format")
+    return 0
+}
+
+@test
+func test_arithmetic_overflow() -> I32 {
+    let e: MockArithmeticException = MockArithmeticException::overflow()
+    assert_eq(e.get_type(), "ArithmeticException", "type")
+    assert_eq(e.get_message(), "Arithmetic overflow", "overflow message")
+    return 0
+}
+
+@test
+func test_arithmetic_divide_by_zero() -> I32 {
+    let e: MockArithmeticException = MockArithmeticException::divide_by_zero()
+    assert_eq(e.get_message(), "Division by zero", "divide by zero message")
+    return 0
+}
+
+@test
+func test_timeout_default() -> I32 {
+    let e: MockTimeoutException = MockTimeoutException::create()
+    assert_eq(e.get_type(), "TimeoutException", "type")
+    assert_eq(e.get_message(), "Operation timed out", "default message")
+    return 0
+}
+
+@test
+func test_timeout_with_message() -> I32 {
+    let e: MockTimeoutException = MockTimeoutException::with_message("Connection timed out after 30s")
+    assert_eq(e.get_message(), "Connection timed out after 30s", "custom message")
+    return 0
+}
+
+// === Mock operation exceptions ===
+
+class MockInvalidOpException {
+    message: Str
+
+    static func create(message: Str) -> MockInvalidOpException {
+        return MockInvalidOpException { message: message }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_type(this) -> Str { return "InvalidOperationException" }
+    func to_string(this) -> Str { return "InvalidOperationException: " + this.message }
+}
+
+class MockNotSupportedException {
+    message: Str
+
+    static func create() -> MockNotSupportedException {
+        return MockNotSupportedException { message: "Operation is not supported" }
+    }
+
+    static func with_message(message: Str) -> MockNotSupportedException {
+        return MockNotSupportedException { message: message }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_type(this) -> Str { return "NotSupportedException" }
+    func to_string(this) -> Str { return "NotSupportedException: " + this.message }
+}
+
+class MockNotImplException {
+    message: Str
+
+    static func create() -> MockNotImplException {
+        return MockNotImplException { message: "Method not implemented" }
+    }
+
+    static func with_message(message: Str) -> MockNotImplException {
+        return MockNotImplException { message: message }
+    }
+
+    func get_message(this) -> Str { return this.message }
+    func get_type(this) -> Str { return "NotImplementedException" }
+    func to_string(this) -> Str { return "NotImplementedException: " + this.message }
+}
+
+@test
+func test_invalid_op_exception() -> I32 {
+    let e: MockInvalidOpException = MockInvalidOpException::create("Cannot send while disconnected")
+    assert_eq(e.get_type(), "InvalidOperationException", "type")
+    assert_eq(e.get_message(), "Cannot send while disconnected", "message")
+    assert_eq(e.to_string(), "InvalidOperationException: Cannot send while disconnected", "to_string")
+    return 0
+}
+
+@test
+func test_not_supported_default() -> I32 {
+    let e: MockNotSupportedException = MockNotSupportedException::create()
+    assert_eq(e.get_type(), "NotSupportedException", "type")
+    assert_eq(e.get_message(), "Operation is not supported", "default message")
+    return 0
+}
+
+@test
+func test_not_supported_with_message() -> I32 {
+    let e: MockNotSupportedException = MockNotSupportedException::with_message("Read-only collection")
+    assert_eq(e.get_message(), "Read-only collection", "custom message")
+    assert_eq(e.to_string(), "NotSupportedException: Read-only collection", "to_string")
+    return 0
+}
+
+@test
+func test_not_implemented_default() -> I32 {
+    let e: MockNotImplException = MockNotImplException::create()
+    assert_eq(e.get_type(), "NotImplementedException", "type")
+    assert_eq(e.get_message(), "Method not implemented", "default message")
+    return 0
+}
+
+@test
+func test_not_implemented_with_message() -> I32 {
+    let e: MockNotImplException = MockNotImplException::with_message("TODO: implement serialize")
+    assert_eq(e.get_message(), "TODO: implement serialize", "custom message")
+    return 0
+}

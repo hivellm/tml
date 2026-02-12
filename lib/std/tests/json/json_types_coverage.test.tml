@@ -1,0 +1,176 @@
+// Tests targeting uncovered functions in json/types module
+use test
+use std::json::types::{Json, JsonObject, JsonArray, parse, parse_or_panic, parse_result}
+
+// =============================================================================
+// parse_result
+// =============================================================================
+
+@test
+func test_parse_result_valid() -> I32 {
+    let r: Outcome[Json, Str] = parse_result("{\"a\": 1}")
+    assert(r.is_ok(), "valid JSON should parse ok")
+    return 0
+}
+
+@test
+func test_parse_result_invalid() -> I32 {
+    let r: Outcome[Json, Str] = parse_result("not json at all")
+    assert(r.is_err(), "invalid JSON should return Err")
+    return 0
+}
+
+// =============================================================================
+// Json::array and Json::object constructors
+// =============================================================================
+
+@test
+func test_json_array_constructor() -> I32 {
+    let j: Json = Json::array()
+    assert(j.is_array(), "Json::array() should be array")
+    return 0
+}
+
+@test
+func test_json_object_constructor() -> I32 {
+    let j: Json = Json::object()
+    assert(j.is_object(), "Json::object() should be object")
+    return 0
+}
+
+// =============================================================================
+// Json::entry_at
+// =============================================================================
+
+@test
+func test_json_entry_at_valid() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"TML\", \"version\": 1}")
+    let entry: Maybe[(Str, Json)] = j.entry_at(0)
+    assert(entry.is_just(), "entry_at(0) should return Just")
+    return 0
+}
+
+// =============================================================================
+// JsonObject typed getters
+// =============================================================================
+
+@test
+func test_json_object_get_returns_maybe() -> I32 {
+    let j: Json = parse_or_panic("{\"a\": 1, \"b\": \"hello\"}")
+    let o: JsonObject = j.as_object().unwrap()
+    let v: Maybe[Json] = o.get("a")
+    assert(v.is_just(), "get existing key returns Just")
+    let missing: Maybe[Json] = o.get("z")
+    assert(missing.is_nothing(), "get missing key returns Nothing")
+    return 0
+}
+
+@test
+func test_json_object_get_string() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"TML\"}")
+    let o: JsonObject = j.as_object().unwrap()
+    let v: Maybe[Str] = o.get_string("name")
+    assert(v.is_just(), "get_string for string field")
+    return 0
+}
+
+@test
+func test_json_object_get_i64() -> I32 {
+    let j: Json = parse_or_panic("{\"count\": 42}")
+    let o: JsonObject = j.as_object().unwrap()
+    let v: Maybe[I64] = o.get_i64("count")
+    assert(v.is_just(), "get_i64 for number field")
+    return 0
+}
+
+@test
+func test_json_object_get_f64() -> I32 {
+    let j: Json = parse_or_panic("{\"pi\": 3.14}")
+    let o: JsonObject = j.as_object().unwrap()
+    let v: Maybe[F64] = o.get_f64("pi")
+    assert(v.is_just(), "get_f64 for float field")
+    return 0
+}
+
+@test
+func test_json_object_get_bool() -> I32 {
+    let j: Json = parse_or_panic("{\"active\": true}")
+    let o: JsonObject = j.as_object().unwrap()
+    let v: Maybe[Bool] = o.get_bool("active")
+    assert(v.is_just(), "get_bool for bool field")
+    return 0
+}
+
+@test
+func test_json_object_value_at() -> I32 {
+    let j: Json = parse_or_panic("{\"a\": 1, \"b\": 2}")
+    let o: JsonObject = j.as_object().unwrap()
+    let v: Maybe[Json] = o.value_at(0)
+    assert(v.is_just(), "value_at(0) should return Just")
+    return 0
+}
+
+// =============================================================================
+// JsonArray methods
+// =============================================================================
+
+@test
+func test_json_array_new() -> I32 {
+    let arr: JsonArray = JsonArray::new()
+    assert(arr.is_empty(), "new array should be empty")
+    return 0
+}
+
+@test
+func test_json_array_get() -> I32 {
+    let j: Json = parse_or_panic("[10, 20, 30]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let v: Maybe[Json] = arr.get(1)
+    assert(v.is_just(), "get(1) should return Just")
+    return 0
+}
+
+@test
+func test_json_array_get_string() -> I32 {
+    let j: Json = parse_or_panic("[\"hello\", \"world\"]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let v: Maybe[Str] = arr.get_string(0)
+    assert(v.is_just(), "get_string(0)")
+    return 0
+}
+
+@test
+func test_json_array_get_i64() -> I32 {
+    let j: Json = parse_or_panic("[100, 200]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let v: Maybe[I64] = arr.get_i64(0)
+    assert(v.is_just(), "get_i64(0)")
+    return 0
+}
+
+@test
+func test_json_array_get_f64() -> I32 {
+    let j: Json = parse_or_panic("[1.5, 2.5]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let v: Maybe[F64] = arr.get_f64(0)
+    assert(v.is_just(), "get_f64(0)")
+    return 0
+}
+
+@test
+func test_json_array_get_bool() -> I32 {
+    let j: Json = parse_or_panic("[true, false]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let v: Maybe[Bool] = arr.get_bool(0)
+    assert(v.is_just(), "get_bool(0)")
+    return 0
+}
+
+@test
+func test_json_array_to_string() -> I32 {
+    let j: Json = parse_or_panic("[1,2,3]")
+    let arr: JsonArray = j.as_array().unwrap()
+    let s: Str = arr.to_string()
+    assert(s.len() > 0, "array to_string produces output")
+    return 0
+}

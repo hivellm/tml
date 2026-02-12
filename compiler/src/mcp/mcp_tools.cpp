@@ -899,8 +899,36 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         structured = structured_param->as_bool();
     }
 
+    // Check if coverage was requested (for post-run cleanup)
+    bool coverage_requested = false;
+    if (coverage_param != nullptr && coverage_param->is_bool() && coverage_param->as_bool()) {
+        coverage_requested = true;
+    }
+
     // Execute tests
     auto [output, exit_code] = execute_command(cmd.str());
+
+    // Clean up orphaned coverage temp files if tests failed
+    // The suite execution writes to .tmp first and renames on success.
+    // If the process crashed, temp files may be left behind.
+    if (coverage_requested && exit_code != 0) {
+        try {
+            // Check common coverage temp file locations
+            // The test runner uses CompilerOptions::coverage_output + ".tmp"
+            // Default coverage output is "coverage_report.html"
+            std::vector<fs::path> tmp_files = {
+                "coverage_report.html.tmp",
+                "coverage_report.html.json", // JSON temp alongside HTML temp
+            };
+            for (const auto& tmp : tmp_files) {
+                if (fs::exists(tmp)) {
+                    fs::remove(tmp);
+                }
+            }
+        } catch (...) {
+            // Ignore cleanup errors
+        }
+    }
 
     if (structured) {
         // Parse test output into structured format

@@ -1,0 +1,64 @@
+// Tests targeting uncovered Ordering methods
+use test
+use core::cmp::Ordering
+
+@test
+func test_ordering_is_less() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert(o.is_less(), "Less.is_less() should be true")
+    let e: Ordering = Ordering::Equal
+    assert(not e.is_less(), "Equal.is_less() should be false")
+    let g: Ordering = Ordering::Greater
+    assert(not g.is_less(), "Greater.is_less() should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_equal() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert(o.is_equal(), "Equal.is_equal() should be true")
+    let l: Ordering = Ordering::Less
+    assert(not l.is_equal(), "Less.is_equal() should be false")
+    let g: Ordering = Ordering::Greater
+    assert(not g.is_equal(), "Greater.is_equal() should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_greater() -> I32 {
+    let g: Ordering = Ordering::Greater
+    assert(g.is_greater(), "Greater.is_greater() should be true")
+    let l: Ordering = Ordering::Less
+    assert(not l.is_greater(), "Less.is_greater() should be false")
+    let e: Ordering = Ordering::Equal
+    assert(not e.is_greater(), "Equal.is_greater() should be false")
+    return 0
+}
+
+@test
+func test_ordering_reverse() -> I32 {
+    let l: Ordering = Ordering::Less
+    let rl: Ordering = l.reverse()
+    assert(rl.is_greater(), "Less.reverse() should be Greater")
+    let e: Ordering = Ordering::Equal
+    let re: Ordering = e.reverse()
+    assert(re.is_equal(), "Equal.reverse() should be Equal")
+    let g: Ordering = Ordering::Greater
+    let rg: Ordering = g.reverse()
+    assert(rg.is_less(), "Greater.reverse() should be Less")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp() -> I32 {
+    let e: Ordering = Ordering::Equal
+    let l: Ordering = Ordering::Less
+    let r1: Ordering = e.then_cmp(l)
+    assert(r1.is_less(), "Equal.then_cmp(Less) should be Less")
+    let g: Ordering = Ordering::Greater
+    let r2: Ordering = l.then_cmp(g)
+    assert(r2.is_less(), "Less.then_cmp(Greater) should be Less")
+    let r3: Ordering = e.then_cmp(e)
+    assert(r3.is_equal(), "Equal.then_cmp(Equal) should be Equal")
+    return 0
+}

@@ -1,0 +1,176 @@
+// Consolidated convert tests: TryFrom cross-type conversions (I8<->U8, I32<->U32)
+// Sources: tryfrom_cross.test.tml
+// Total @test count: 13
+// Note: 5 tests renamed with _v2 suffix to avoid duplicates with convert_advanced.test.tml:
+//   test_tryfrom_u8_to_i8_in_range_v2, test_tryfrom_u8_to_i8_max_v2,
+//   test_tryfrom_u8_to_i8_overflow_v2, test_tryfrom_i32_to_u32_positive_v2,
+//   test_tryfrom_i32_to_u32_negative_v2
+use test::{assert, assert_eq}
+use core::convert::*
+
+// ============================================================================
+// Section 1: I8 -> U8 TryFrom (4 tests)
+// Source: tryfrom_cross.test.tml
+// ============================================================================
+
+@test
+func test_tryfrom_i8_to_u8_positive() -> I32 {
+    let val: I8 = 100 as I8
+    let result: Outcome[U8, TryFromIntError] = U8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 100, "100 should convert to U8"),
+        Err(_) => assert(false, "Positive I8 should convert to U8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i8_to_u8_zero() -> I32 {
+    let val: I8 = 0 as I8
+    let result: Outcome[U8, TryFromIntError] = U8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 0, "0 should convert to U8"),
+        Err(_) => assert(false, "Zero should convert to U8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i8_to_u8_max() -> I32 {
+    let val: I8 = 127 as I8
+    let result: Outcome[U8, TryFromIntError] = U8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 127, "127 (I8 max) should convert to U8"),
+        Err(_) => assert(false, "I8 max should convert to U8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i8_to_u8_negative() -> I32 {
+    let val: I8 = -1 as I8
+    let result: Outcome[U8, TryFromIntError] = U8::try_from(val)
+    when result {
+        Ok(_) => assert(false, "Negative I8 should fail conversion to U8"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+// ============================================================================
+// Section 2: U8 -> I8 TryFrom (3 tests, renamed _v2 to avoid duplicates)
+// Source: tryfrom_cross.test.tml
+// Duplicates: test_tryfrom_u8_to_i8_in_range, test_tryfrom_u8_to_i8_max,
+//             test_tryfrom_u8_to_i8_overflow exist in convert_advanced.test.tml
+// ============================================================================
+
+@test
+func test_tryfrom_u8_to_i8_in_range_v2() -> I32 {
+    let val: U8 = 100 as U8
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 100, "100 should fit in I8"),
+        Err(_) => assert(false, "100 should fit in I8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_u8_to_i8_max_v2() -> I32 {
+    let val: U8 = 127 as U8
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 127, "127 is I8 max"),
+        Err(_) => assert(false, "127 should fit in I8")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_u8_to_i8_overflow_v2() -> I32 {
+    let val: U8 = 200 as U8
+    let result: Outcome[I8, TryFromIntError] = I8::try_from(val)
+    when result {
+        Ok(_) => assert(false, "200 should overflow I8"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+// ============================================================================
+// Section 3: U32 -> I32 TryFrom (3 tests)
+// Source: tryfrom_cross.test.tml
+// ============================================================================
+
+@test
+func test_tryfrom_u32_to_i32_normal() -> I32 {
+    let val: U32 = 1000 as U32
+    let result: Outcome[I32, TryFromIntError] = I32::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n, 1000, "1000 should fit in I32"),
+        Err(_) => assert(false, "1000 should fit in I32")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_u32_to_i32_max_boundary() -> I32 {
+    let val: U32 = 2147483647 as U32
+    let result: Outcome[I32, TryFromIntError] = I32::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n, 2147483647, "I32 max boundary"),
+        Err(_) => assert(false, "I32 max should fit")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_u32_to_i32_overflow() -> I32 {
+    let val: U32 = 3000000000 as U32
+    let result: Outcome[I32, TryFromIntError] = I32::try_from(val)
+    when result {
+        Ok(_) => assert(false, "3B should overflow I32"),
+        Err(_) => return 0
+    }
+    return 0
+}
+
+// ============================================================================
+// Section 4: I32 -> U32 TryFrom (3 tests, 2 renamed _v2 to avoid duplicates)
+// Source: tryfrom_cross.test.tml
+// Duplicates: test_tryfrom_i32_to_u32_positive, test_tryfrom_i32_to_u32_negative
+//             exist in convert_advanced.test.tml
+// ============================================================================
+
+@test
+func test_tryfrom_i32_to_u32_positive_v2() -> I32 {
+    let val: I32 = 42
+    let result: Outcome[U32, TryFromIntError] = U32::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 42, "42 should convert"),
+        Err(_) => assert(false, "42 should convert to U32")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i32_to_u32_zero() -> I32 {
+    let val: I32 = 0
+    let result: Outcome[U32, TryFromIntError] = U32::try_from(val)
+    when result {
+        Ok(n) => assert_eq(n as I32, 0, "0 should convert"),
+        Err(_) => assert(false, "0 should convert to U32")
+    }
+    return 0
+}
+
+@test
+func test_tryfrom_i32_to_u32_negative_v2() -> I32 {
+    let val: I32 = -1
+    let result: Outcome[U32, TryFromIntError] = U32::try_from(val)
+    when result {
+        Ok(_) => assert(false, "Negative should fail"),
+        Err(_) => return 0
+    }
+    return 0
+}

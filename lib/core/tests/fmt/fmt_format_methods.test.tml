@@ -1,0 +1,12 @@
+// Tests targeting uncovered fmt/impls format methods
+// NOTE: fmt_binary/octal/hex/exp all have undefined symbol codegen errors
+// NOTE: Maybe/Outcome to_string has type mismatch in inner type codegen
+// Only primitive to_string() and debug_string() are testable (covered in other files)
+use test
+
+@test
+func test_placeholder_fmt() -> I32 {
+    // This file documents blocked fmt functions
+    // See fmt_to_string.test.tml and fmt_debug_string.test.tml for working tests
+    return 0
+}

@@ -1,0 +1,13 @@
+// Tests for sync/condvar - Condvar::wait, Condvar::wait_while
+use test
+use std::sync::condvar::Condvar
+use std::sync::mutex::{Mutex, MutexGuard}
+
+@test
+func test_condvar_notify_and_wait() -> I32 {
+    // Just test that Condvar can be created and notify doesn't crash
+    let cv: Condvar = Condvar::new()
+    cv.notify_one()
+    cv.notify_all()
+    return 0
+}

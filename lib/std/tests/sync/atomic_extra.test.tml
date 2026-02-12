@@ -1,0 +1,27 @@
+// Tests for uncovered sync/atomic functions
+use test
+use std::sync::atomic::{AtomicI64, AtomicI32, spin_loop_hint}
+use std::sync::ordering::Ordering
+
+@test
+func test_atomic_i64_new() -> I32 {
+    let a: AtomicI64 = AtomicI64::new(100 as I64)
+    let v: I64 = a.load(Ordering::SeqCst)
+    assert_eq(v, 100 as I64, "AtomicI64::new(100)")
+    return 0
+}
+
+@test
+func test_atomic_i64_compare_exchange() -> I32 {
+    var a: AtomicI64 = AtomicI64::new(10 as I64)
+    let result: Outcome[I64, I64] = a.compare_exchange(10 as I64, 20 as I64, Ordering::SeqCst, Ordering::SeqCst)
+    assert(result.is_ok(), "compare_exchange should succeed")
+    assert_eq(a.load(Ordering::SeqCst), 20 as I64, "value should be 20")
+    return 0
+}
+
+@test
+func test_spin_loop_hint() -> I32 {
+    spin_loop_hint()
+    return 0
+}

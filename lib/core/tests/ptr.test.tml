@@ -1,0 +1,275 @@
+// Consolidated tests for core::ptr (30 tests)
+// RawPtr, RawMutPtr, alignment utilities, ptr::ops
+use test
+use core::ptr::const_ptr::RawPtr
+use core::ptr::mut_ptr::RawMutPtr
+use core::ptr::ops::{size_of, align_of}
+use core::ptr::alignment::*
+
+// === RawPtr basic ===
+
+@test
+func test_rawptr_null() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].null_ptr()
+    assert(p.is_null(), "null_ptr should be null")
+    assert_eq(p.addr(), 0 as I64, "null addr should be 0")
+    return 0
+}
+
+@test
+func test_rawptr_from_addr() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(0x1000)
+    assert(not p.is_null(), "non-zero addr should not be null")
+    assert_eq(p.addr(), 0x1000 as I64, "addr should be 0x1000")
+    return 0
+}
+
+@test
+func test_rawptr_eq() -> I32 {
+    let a: RawPtr[I32] = RawPtr[I32].from_addr(100)
+    let b: RawPtr[I32] = RawPtr[I32].from_addr(100)
+    let c: RawPtr[I32] = RawPtr[I32].from_addr(200)
+    assert(a.eq(ref b), "same addr should be equal")
+    assert(not a.eq(ref c), "different addr should not be equal")
+    return 0
+}
+
+// === RawPtr arithmetic ===
+
+@test
+func test_rawptr_add() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(1000)
+    let q: RawPtr[I32] = p.add(1)
+    assert_eq(q.addr(), 1004 as I64, "add(1) for I32 should advance 4 bytes")
+    return 0
+}
+
+@test
+func test_rawptr_sub() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(1000)
+    let q: RawPtr[I32] = p.sub(1)
+    assert_eq(q.addr(), 996 as I64, "sub(1) for I32 should go back 4 bytes")
+    return 0
+}
+
+@test
+func test_rawptr_offset_from() -> I32 {
+    let a: RawPtr[I32] = RawPtr[I32].from_addr(1000)
+    let b: RawPtr[I32] = RawPtr[I32].from_addr(1016)
+    let dist: I64 = a.offset_from(b)
+    assert_eq(dist, 4 as I64, "distance should be 4 elements of I32")
+    return 0
+}
+
+// === RawPtr cast, hash, alignment ===
+
+@test
+func test_rawptr_cast() -> I32 {
+    let p: RawPtr[I64] = RawPtr[I64].from_addr(0x4000)
+    let q: RawPtr[U8] = p.cast[U8]()
+    assert_eq(q.addr(), 0x4000 as I64, "cast should preserve address")
+    return 0
+}
+
+@test
+func test_rawptr_hash() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(12345)
+    let h: I64 = p.hash()
+    assert_eq(h, 12345 as I64, "hash should return address")
+    return 0
+}
+
+@test
+func test_rawptr_to_usize() -> I32 {
+    let p: RawPtr[I32] = RawPtr[I32].from_addr(0x5000)
+    let addr: I64 = p.to_usize()
+    assert_eq(addr, 0x5000 as I64, "to_usize should return address")
+    return 0
+}
+
+@test
+func test_rawptr_is_aligned_i64() -> I32 {
+    let aligned: RawPtr[I64] = RawPtr[I64].from_addr(0x1000)
+    let unaligned: RawPtr[I64] = RawPtr[I64].from_addr(0x1001)
+    assert(aligned.is_aligned(), "0x1000 should be aligned for I64")
+    assert(not unaligned.is_aligned(), "0x1001 should not be aligned for I64")
+    return 0
+}
+
+@test
+func test_rawptr_cmp() -> I32 {
+    let a: RawPtr[I32] = RawPtr[I32].from_addr(100)
+    let b: RawPtr[I32] = RawPtr[I32].from_addr(200)
+    let c: RawPtr[I32] = RawPtr[I32].from_addr(100)
+    let ab: Ordering = a.cmp(ref b)
+    let ba: Ordering = b.cmp(ref a)
+    let ac: Ordering = a.cmp(ref c)
+    when ab {
+        Less => {},
+        _ => assert(false, "a < b should be Less")
+    }
+    when ba {
+        Greater => {},
+        _ => assert(false, "b > a should be Greater")
+    }
+    when ac {
+        Equal => {},
+        _ => assert(false, "a == c should be Equal")
+    }
+    return 0
+}
+
+// === RawMutPtr ===
+
+@test
+func test_rawmutptr_null() -> I32 {
+    let p: RawMutPtr[I32] = RawMutPtr[I32].null_ptr()
+    assert(p.is_null(), "null_ptr should be null")
+    assert_eq(p.addr(), 0 as I64, "null addr should be 0")
+    return 0
+}
+
+@test
+func test_rawmutptr_from_addr() -> I32 {
+    let p: RawMutPtr[I32] = RawMutPtr[I32].from_addr(0x2000)
+    assert(not p.is_null(), "non-zero addr should not be null")
+    assert_eq(p.addr(), 0x2000 as I64, "addr should be 0x2000")
+    return 0
+}
+
+@test
+func test_rawmutptr_as_const() -> I32 {
+    let mp: RawMutPtr[I32] = RawMutPtr[I32].from_addr(0x3000)
+    let cp: RawPtr[I32] = mp.as_const()
+    assert_eq(cp.addr(), 0x3000 as I64, "as_const should preserve address")
+    return 0
+}
+
+// === ptr::ops ===
+
+@test
+func test_ptr_size_of_i32() -> I32 {
+    let s: I64 = size_of[I32]()
+    assert_eq(s, 4 as I64, "sizeof I32 should be 4")
+    return 0
+}
+
+@test
+func test_ptr_size_of_i64() -> I32 {
+    let s: I64 = size_of[I64]()
+    assert_eq(s, 8 as I64, "sizeof I64 should be 8")
+    return 0
+}
+
+@test
+func test_ptr_size_of_u8() -> I32 {
+    let s: I64 = size_of[U8]()
+    assert_eq(s, 1 as I64, "sizeof U8 should be 1")
+    return 0
+}
+
+@test
+func test_ptr_align_of_types() -> I32 {
+    let a1: I64 = align_of[U8]()
+    let a4: I64 = align_of[I32]()
+    let a8: I64 = align_of[I64]()
+    assert_eq(a1, 1 as I64, "U8 align should be 1")
+    assert_eq(a4, 4 as I64, "I32 align should be 4")
+    assert_eq(a8, 8 as I64, "I64 align should be 8")
+    return 0
+}
+
+// === alignment utilities ===
+
+@test
+func test_align_up_already_aligned() -> I32 {
+    assert_eq(align_up(16 as I64, 8 as I64), 16 as I64, "16 aligned to 8 stays 16")
+    assert_eq(align_up(8 as I64, 4 as I64), 8 as I64, "8 aligned to 4 stays 8")
+    return 0
+}
+
+@test
+func test_align_up_needs_rounding() -> I32 {
+    assert_eq(align_up(1 as I64, 4 as I64), 4 as I64, "1 rounds up to 4")
+    assert_eq(align_up(5 as I64, 4 as I64), 8 as I64, "5 rounds up to 8")
+    assert_eq(align_up(13 as I64, 8 as I64), 16 as I64, "13 rounds up to 16")
+    return 0
+}
+
+@test
+func test_align_up_zero() -> I32 {
+    assert_eq(align_up(0 as I64, 4 as I64), 0 as I64, "0 aligned to 4 is 0")
+    return 0
+}
+
+@test
+func test_align_down_already_aligned() -> I32 {
+    assert_eq(align_down(16 as I64, 8 as I64), 16 as I64, "16 aligned down to 8 stays 16")
+    return 0
+}
+
+@test
+func test_align_down_needs_rounding() -> I32 {
+    assert_eq(align_down(5 as I64, 4 as I64), 4 as I64, "5 rounds down to 4")
+    assert_eq(align_down(7 as I64, 4 as I64), 4 as I64, "7 rounds down to 4")
+    assert_eq(align_down(15 as I64, 8 as I64), 8 as I64, "15 rounds down to 8")
+    return 0
+}
+
+@test
+func test_is_aligned_to() -> I32 {
+    assert(is_aligned_to(16 as I64, 8 as I64), "16 is 8-aligned")
+    assert(is_aligned_to(16 as I64, 4 as I64), "16 is 4-aligned")
+    assert(not is_aligned_to(5 as I64, 4 as I64), "5 is not 4-aligned")
+    assert(not is_aligned_to(3 as I64, 2 as I64), "3 is not 2-aligned")
+    return 0
+}
+
+@test
+func test_align_offset() -> I32 {
+    assert_eq(align_offset(16 as I64, 8 as I64), 0 as I64, "already aligned offset is 0")
+    assert_eq(align_offset(5 as I64, 4 as I64), 3 as I64, "5 needs 3 to reach 8")
+    assert_eq(align_offset(1 as I64, 4 as I64), 3 as I64, "1 needs 3 to reach 4")
+    return 0
+}
+
+@test
+func test_is_power_of_two() -> I32 {
+    assert(is_power_of_two(1 as I64), "1 is power of two")
+    assert(is_power_of_two(2 as I64), "2 is power of two")
+    assert(is_power_of_two(4 as I64), "4 is power of two")
+    assert(is_power_of_two(1024 as I64), "1024 is power of two")
+    assert(not is_power_of_two(0 as I64), "0 is not power of two")
+    assert(not is_power_of_two(3 as I64), "3 is not power of two")
+    return 0
+}
+
+@test
+func test_checked_next_power_of_two() -> I32 {
+    let p1: Maybe[I64] = checked_next_power_of_two(3 as I64)
+    assert(p1.is_just(), "3 should have next power")
+    assert_eq(p1.unwrap(), 4 as I64, "next power of 3 is 4")
+    let p2: Maybe[I64] = checked_next_power_of_two(8 as I64)
+    assert_eq(p2.unwrap(), 8 as I64, "8 is already power of 2")
+    let p3: Maybe[I64] = checked_next_power_of_two(1 as I64)
+    assert_eq(p3.unwrap(), 1 as I64, "next power of 1 is 1")
+    return 0
+}
+
+@test
+func test_prev_power_of_two() -> I32 {
+    assert_eq(prev_power_of_two(5 as I64), 4 as I64, "prev power of 5 is 4")
+    assert_eq(prev_power_of_two(8 as I64), 8 as I64, "prev power of 8 is 8")
+    assert_eq(prev_power_of_two(0 as I64), 0 as I64, "prev power of 0 is 0")
+    return 0
+}
+
+@test
+func test_log2() -> I32 {
+    assert_eq(log2(1 as I64).unwrap(), 0 as I64, "log2(1) = 0")
+    assert_eq(log2(2 as I64).unwrap(), 1 as I64, "log2(2) = 1")
+    assert_eq(log2(4 as I64).unwrap(), 2 as I64, "log2(4) = 2")
+    assert_eq(log2(8 as I64).unwrap(), 3 as I64, "log2(8) = 3")
+    assert(log2(0 as I64).is_nothing(), "log2(0) is Nothing")
+    return 0
+}

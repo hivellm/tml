@@ -1,0 +1,167 @@
+// Consolidated fmt builder tests - DebugStruct, DebugTuple, DebugList, DebugSet, DebugMap
+// Test count: 15 @test functions
+// Sources: builders.test.tml
+use test
+use core::fmt::builders::{DebugStruct, DebugTuple, DebugList, DebugSet, DebugMap}
+
+// ============================================================================
+// DebugStruct tests
+// ============================================================================
+
+@test
+func test_debug_struct_no_fields() -> I32 {
+    let result: Str = DebugStruct::new("Empty").finish()
+    assert_eq(result, "Empty", "DebugStruct without fields")
+    return 0
+}
+
+@test
+func test_debug_struct_one_field() -> I32 {
+    let result: Str = DebugStruct::new("Point")
+        .field("x", "10")
+        .finish()
+    // Build expected string to avoid interpolation
+    let expected: Str = "Point " + "{ x: 10 " + "}"
+    assert_eq(result, expected, "DebugStruct with one field")
+    return 0
+}
+
+@test
+func test_debug_struct_two_fields() -> I32 {
+    let result: Str = DebugStruct::new("Point")
+        .field("x", "10")
+        .field("y", "20")
+        .finish()
+    let expected: Str = "Point " + "{ x: 10, y: 20 " + "}"
+    assert_eq(result, expected, "DebugStruct with two fields")
+    return 0
+}
+
+@test
+func test_debug_struct_non_exhaustive() -> I32 {
+    let result: Str = DebugStruct::new("Config")
+        .field("visible", "true")
+        .finish_non_exhaustive()
+    let expected: Str = "Config " + "{ visible: true, .. " + "}"
+    assert_eq(result, expected, "DebugStruct non-exhaustive")
+    return 0
+}
+
+// ============================================================================
+// DebugTuple tests
+// ============================================================================
+
+@test
+func test_debug_tuple_empty() -> I32 {
+    let result: Str = DebugTuple::new("Empty").finish()
+    assert_eq(result, "Empty()", "DebugTuple empty")
+    return 0
+}
+
+@test
+func test_debug_tuple_one_field() -> I32 {
+    let result: Str = DebugTuple::new("Single")
+        .field("42")
+        .finish()
+    assert_eq(result, "Single(42)", "DebugTuple with one field")
+    return 0
+}
+
+@test
+func test_debug_tuple_two_fields() -> I32 {
+    let result: Str = DebugTuple::new("Pair")
+        .field("10")
+        .field("20")
+        .finish()
+    assert_eq(result, "Pair(10, 20)", "DebugTuple with two fields")
+    return 0
+}
+
+// ============================================================================
+// DebugList tests
+// ============================================================================
+
+@test
+func test_debug_list_empty() -> I32 {
+    let result: Str = DebugList::new().finish()
+    assert_eq(result, "[]", "DebugList empty")
+    return 0
+}
+
+@test
+func test_debug_list_one_entry() -> I32 {
+    let result: Str = DebugList::new()
+        .entry("1")
+        .finish()
+    assert_eq(result, "[1]", "DebugList with one entry")
+    return 0
+}
+
+@test
+func test_debug_list_multiple_entries() -> I32 {
+    let result: Str = DebugList::new()
+        .entry("1")
+        .entry("2")
+        .entry("3")
+        .finish()
+    assert_eq(result, "[1, 2, 3]", "DebugList with three entries")
+    return 0
+}
+
+// ============================================================================
+// DebugSet tests
+// ============================================================================
+
+@test
+func test_debug_set_empty() -> I32 {
+    let result: Str = DebugSet::new().finish()
+    // Build expected with concatenation to avoid interpolation
+    let expected: Str = "" + "{" + "}"
+    assert_eq(result, expected, "DebugSet empty")
+    return 0
+}
+
+@test
+func test_debug_set_multiple_entries() -> I32 {
+    let result: Str = DebugSet::new()
+        .entry("a")
+        .entry("b")
+        .entry("c")
+        .finish()
+    let expected: Str = "" + "{" + "a, b, c" + "}"
+    assert_eq(result, expected, "DebugSet with entries")
+    return 0
+}
+
+// ============================================================================
+// DebugMap tests
+// ============================================================================
+
+@test
+func test_debug_map_empty() -> I32 {
+    let result: Str = DebugMap::new().finish()
+    let expected: Str = "" + "{" + "}"
+    assert_eq(result, expected, "DebugMap empty")
+    return 0
+}
+
+@test
+func test_debug_map_one_entry() -> I32 {
+    let result: Str = DebugMap::new()
+        .entry("key", "value")
+        .finish()
+    let expected: Str = "" + "{" + "key: value" + "}"
+    assert_eq(result, expected, "DebugMap with one entry")
+    return 0
+}
+
+@test
+func test_debug_map_multiple_entries() -> I32 {
+    let result: Str = DebugMap::new()
+        .entry("name", "Alice")
+        .entry("age", "30")
+        .finish()
+    let expected: Str = "" + "{" + "name: Alice, age: 30" + "}"
+    assert_eq(result, expected, "DebugMap with entries")
+    return 0
+}

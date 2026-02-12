@@ -1,0 +1,393 @@
+// Consolidated: Arithmetic operations - small integer types + coverage trait tests
+// Sources: ops_arith_small.test.tml (22 tests) + ops_arith_coverage.test.tml (20 tests, renamed _v2)
+// Total: 42 @test functions
+use test
+use core::ops::arith::{Add, Sub, Mul, Div, Rem, Neg}
+
+// =============================================================================
+// I8 arithmetic (operator syntax)
+// =============================================================================
+
+@test
+func test_i8_add() -> I32 {
+    let a: I8 = 10
+    let b: I8 = 20
+    let r: I8 = a + b
+    assert_eq(r as I32, 30, "I8 10+20=30")
+    return 0
+}
+
+@test
+func test_i8_sub() -> I32 {
+    let a: I8 = 50
+    let b: I8 = 20
+    let r: I8 = a - b
+    assert_eq(r as I32, 30, "I8 50-20=30")
+    return 0
+}
+
+@test
+func test_i8_mul() -> I32 {
+    let a: I8 = 6
+    let b: I8 = 7
+    let r: I8 = a * b
+    assert_eq(r as I32, 42, "I8 6*7=42")
+    return 0
+}
+
+@test
+func test_i8_div() -> I32 {
+    let a: I8 = 100
+    let b: I8 = 10
+    let r: I8 = a / b
+    assert_eq(r as I32, 10, "I8 100/10=10")
+    return 0
+}
+
+@test
+func test_i8_rem() -> I32 {
+    let a: I8 = 17
+    let b: I8 = 5
+    let r: I8 = a % b
+    assert_eq(r as I32, 2, "I8 17%5=2")
+    return 0
+}
+
+@test
+func test_i8_neg() -> I32 {
+    let a: I8 = 42
+    let r: I8 = -a
+    assert_eq(r as I32, -42, "I8 neg 42=-42")
+    return 0
+}
+
+// =============================================================================
+// I16 arithmetic (operator syntax)
+// =============================================================================
+
+@test
+func test_i16_add() -> I32 {
+    let a: I16 = 1000
+    let b: I16 = 2000
+    let r: I16 = a + b
+    assert_eq(r as I32, 3000, "I16 1000+2000=3000")
+    return 0
+}
+
+@test
+func test_i16_sub() -> I32 {
+    let a: I16 = 5000
+    let b: I16 = 2000
+    let r: I16 = a - b
+    assert_eq(r as I32, 3000, "I16 5000-2000=3000")
+    return 0
+}
+
+@test
+func test_i16_mul() -> I32 {
+    let a: I16 = 100
+    let b: I16 = 100
+    let r: I16 = a * b
+    assert_eq(r as I32, 10000, "I16 100*100=10000")
+    return 0
+}
+
+@test
+func test_i16_div() -> I32 {
+    let a: I16 = 10000
+    let b: I16 = 100
+    let r: I16 = a / b
+    assert_eq(r as I32, 100, "I16 10000/100=100")
+    return 0
+}
+
+@test
+func test_i16_rem() -> I32 {
+    let a: I16 = 1003
+    let b: I16 = 100
+    let r: I16 = a % b
+    assert_eq(r as I32, 3, "I16 1003%100=3")
+    return 0
+}
+
+@test
+func test_i16_neg() -> I32 {
+    let a: I16 = 1234
+    let r: I16 = -a
+    assert_eq(r as I32, -1234, "I16 neg 1234=-1234")
+    return 0
+}
+
+// =============================================================================
+// U8 arithmetic (operator syntax)
+// =============================================================================
+
+@test
+func test_u8_add() -> I32 {
+    let a: U8 = 100
+    let b: U8 = 50
+    let r: U8 = a + b
+    assert_eq(r as I32, 150, "U8 100+50=150")
+    return 0
+}
+
+@test
+func test_u8_sub() -> I32 {
+    let a: U8 = 200
+    let b: U8 = 50
+    let r: U8 = a - b
+    assert_eq(r as I32, 150, "U8 200-50=150")
+    return 0
+}
+
+@test
+func test_u8_mul() -> I32 {
+    let a: U8 = 15
+    let b: U8 = 10
+    let r: U8 = a * b
+    assert_eq(r as I32, 150, "U8 15*10=150")
+    return 0
+}
+
+@test
+func test_u8_div() -> I32 {
+    let a: U8 = 200
+    let b: U8 = 10
+    let r: U8 = a / b
+    assert_eq(r as I32, 20, "U8 200/10=20")
+    return 0
+}
+
+@test
+func test_u8_rem() -> I32 {
+    let a: U8 = 255
+    let b: U8 = 100
+    let r: U8 = a % b
+    assert_eq(r as I32, 55, "U8 255%100=55")
+    return 0
+}
+
+// =============================================================================
+// U16 arithmetic (operator syntax)
+// =============================================================================
+
+@test
+func test_u16_add() -> I32 {
+    let a: U16 = 30000
+    let b: U16 = 5000
+    let r: U16 = a + b
+    assert_eq(r as I32, 35000, "U16 30000+5000=35000")
+    return 0
+}
+
+@test
+func test_u16_sub() -> I32 {
+    let a: U16 = 60000
+    let b: U16 = 10000
+    let r: U16 = a - b
+    assert_eq(r as I32, 50000, "U16 60000-10000=50000")
+    return 0
+}
+
+@test
+func test_u16_mul() -> I32 {
+    let a: U16 = 200
+    let b: U16 = 100
+    let r: U16 = a * b
+    assert_eq(r as I32, 20000, "U16 200*100=20000")
+    return 0
+}
+
+@test
+func test_u16_div() -> I32 {
+    let a: U16 = 50000
+    let b: U16 = 100
+    let r: U16 = a / b
+    assert_eq(r as I32, 500, "U16 50000/100=500")
+    return 0
+}
+
+@test
+func test_u16_rem() -> I32 {
+    let a: U16 = 10003
+    let b: U16 = 1000
+    let r: U16 = a % b
+    assert_eq(r as I32, 3, "U16 10003%1000=3")
+    return 0
+}
+
+// =============================================================================
+// Coverage: Add trait method across all types (from ops_arith_coverage)
+// =============================================================================
+
+@test
+func test_i8_add_v2() -> I32 {
+    let a: I8 = 3 as I8
+    let b: I8 = 4 as I8
+    let r: I8 = a.add(b)
+    assert_eq(r as I32, 7, "I8 add")
+    return 0
+}
+
+@test
+func test_i16_add_v2() -> I32 {
+    let a: I16 = 100 as I16
+    let b: I16 = 200 as I16
+    let r: I16 = a.add(b)
+    assert_eq(r as I32, 300, "I16 add")
+    return 0
+}
+
+@test
+func test_i32_add_v2() -> I32 {
+    let a: I32 = 3
+    let b: I32 = 4
+    assert_eq(a.add(b), 7, "I32 add")
+    return 0
+}
+
+@test
+func test_i64_add_v2() -> I32 {
+    let a: I64 = 100 as I64
+    let b: I64 = 200 as I64
+    let r: I64 = a.add(b)
+    assert(r == 300 as I64, "I64 add")
+    return 0
+}
+
+@test
+func test_u8_add_v2() -> I32 {
+    let a: U8 = 10 as U8
+    let b: U8 = 20 as U8
+    let r: U8 = a.add(b)
+    assert_eq(r as I32, 30, "U8 add")
+    return 0
+}
+
+@test
+func test_u16_add_v2() -> I32 {
+    let a: U16 = 1000 as U16
+    let b: U16 = 2000 as U16
+    let r: U16 = a.add(b)
+    assert_eq(r as I32, 3000, "U16 add")
+    return 0
+}
+
+@test
+func test_u32_add_v2() -> I32 {
+    let a: U32 = 100 as U32
+    let b: U32 = 200 as U32
+    let r: U32 = a.add(b)
+    assert_eq(r as I32, 300, "U32 add")
+    return 0
+}
+
+@test
+func test_u64_add_v2() -> I32 {
+    let a: U64 = 100 as U64
+    let b: U64 = 200 as U64
+    let r: U64 = a.add(b)
+    assert(r == 300 as U64, "U64 add")
+    return 0
+}
+
+@test
+func test_f32_add_v2() -> I32 {
+    let a: F32 = 1.5 as F32
+    let b: F32 = 2.5 as F32
+    let r: F32 = a.add(b)
+    assert(r > 3.9 as F32, "F32 add")
+    return 0
+}
+
+@test
+func test_f64_add_v2() -> I32 {
+    let a: F64 = 1.5
+    let b: F64 = 2.5
+    let r: F64 = a.add(b)
+    assert(r > 3.9, "F64 add")
+    return 0
+}
+
+// =============================================================================
+// Coverage: Sub trait method across all types (from ops_arith_coverage)
+// =============================================================================
+
+@test
+func test_i8_sub_v2() -> I32 {
+    let a: I8 = 10 as I8
+    let b: I8 = 3 as I8
+    assert_eq(a.sub(b) as I32, 7, "I8 sub")
+    return 0
+}
+
+@test
+func test_i16_sub_v2() -> I32 {
+    let a: I16 = 500 as I16
+    let b: I16 = 200 as I16
+    assert_eq(a.sub(b) as I32, 300, "I16 sub")
+    return 0
+}
+
+@test
+func test_i32_sub_v2() -> I32 {
+    let a: I32 = 10
+    assert_eq(a.sub(3), 7, "I32 sub")
+    return 0
+}
+
+@test
+func test_i64_sub_v2() -> I32 {
+    let a: I64 = 500 as I64
+    let b: I64 = 200 as I64
+    assert(a.sub(b) == 300 as I64, "I64 sub")
+    return 0
+}
+
+@test
+func test_u8_sub_v2() -> I32 {
+    let a: U8 = 30 as U8
+    let b: U8 = 10 as U8
+    assert_eq(a.sub(b) as I32, 20, "U8 sub")
+    return 0
+}
+
+@test
+func test_u16_sub_v2() -> I32 {
+    let a: U16 = 3000 as U16
+    let b: U16 = 1000 as U16
+    assert_eq(a.sub(b) as I32, 2000, "U16 sub")
+    return 0
+}
+
+@test
+func test_u32_sub_v2() -> I32 {
+    let a: U32 = 300 as U32
+    let b: U32 = 100 as U32
+    assert_eq(a.sub(b) as I32, 200, "U32 sub")
+    return 0
+}
+
+@test
+func test_u64_sub_v2() -> I32 {
+    let a: U64 = 500 as U64
+    let b: U64 = 200 as U64
+    assert(a.sub(b) == 300 as U64, "U64 sub")
+    return 0
+}
+
+@test
+func test_f32_sub_v2() -> I32 {
+    let a: F32 = 5.0 as F32
+    let b: F32 = 2.0 as F32
+    assert(a.sub(b) > 2.9 as F32, "F32 sub")
+    return 0
+}
+
+@test
+func test_f64_sub_v2() -> I32 {
+    let a: F64 = 5.0
+    let b: F64 = 2.0
+    assert(a.sub(b) > 2.9, "F64 sub")
+    return 0
+}

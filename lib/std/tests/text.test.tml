@@ -1,0 +1,241 @@
+// Consolidated tests for std::text::Text (26 tests)
+use test
+use std::text::Text
+
+// === Constructors ===
+
+@test
+func test_text_new_empty() {
+    let t: Text = Text::new()
+    assert(t.is_empty(), "new text should be empty")
+    assert_eq(t.len(), 0, "len should be 0")
+    t.drop()
+}
+
+@test
+func test_text_from_str() {
+    let t: Text = Text::from("hello")
+    assert_eq(t.as_str(), "hello", "should contain 'hello'")
+    assert_eq(t.len(), 5, "len should be 5")
+    assert(not t.is_empty(), "should not be empty")
+    t.drop()
+}
+
+@test
+func test_text_from_i64() {
+    let t: Text = Text::from_i64(42)
+    assert_eq(t.as_str(), "42", "should be '42'")
+    t.drop()
+}
+
+// === Push methods ===
+
+@test
+func test_text_push_str() {
+    let t: Text = Text::from("hello")
+    t.push_str(" world")
+    assert_eq(t.as_str(), "hello world", "push_str should append")
+    t.drop()
+}
+
+@test
+func test_text_push_i64() {
+    let t: Text = Text::from("count: ")
+    t.push_i64(42)
+    assert_eq(t.as_str(), "count: 42", "push_i64 should append number")
+    t.drop()
+}
+
+@test
+func test_text_push_i64_negative() {
+    let t: Text = Text::new()
+    t.push_i64(-7)
+    assert_eq(t.as_str(), "-7", "push_i64 negative should work")
+    t.drop()
+}
+
+@test
+func test_text_push_formatted() {
+    let t: Text = Text::new()
+    t.push_formatted("item #", 3, " done")
+    assert_eq(t.as_str(), "item #3 done", "push_formatted should format correctly")
+    t.drop()
+}
+
+@test
+func test_text_push_log() -> I32 {
+    let t: Text = Text::with_capacity(256)
+    t.push_log("key=", 1 as I64, " val=", 2 as I64, " msg=", 3 as I64, " end")
+    assert(t.len() > 0 as I64, "push_log should add content")
+    t.drop()
+    return 0
+}
+
+@test
+func test_text_push_path() -> I32 {
+    let t: Text = Text::with_capacity(256)
+    t.push_path("dir/", 1 as I64, "sub/", 2 as I64, "file.txt")
+    assert(t.len() > 0 as I64, "push_path should add content")
+    t.drop()
+    return 0
+}
+
+@test
+func test_text_fill_char() {
+    let t: Text = Text::new()
+    t.fill_char(42, 5)  // '*' = 42
+    assert_eq(t.as_str(), "*****", "fill_char should fill with 5 asterisks")
+    assert_eq(t.len(), 5, "len should be 5")
+    t.drop()
+}
+
+// === Modification ===
+
+@test
+func test_text_clear() {
+    let t: Text = Text::from("hello")
+    t.clear()
+    assert(t.is_empty(), "should be empty after clear")
+    assert_eq(t.len(), 0, "len should be 0 after clear")
+    t.drop()
+}
+
+@test
+func test_text_set_len() -> I32 {
+    let t: Text = Text::new("hello world")
+    t.set_len(5 as I64)
+    t.drop()
+    return 0
+}
+
+// === Operations ===
+
+@test
+func test_text_substring() {
+    let t: Text = Text::from("hello world")
+    let sub: Text = t.substring(0, 5)
+    assert_eq(sub.as_str(), "hello", "substring 0..5 should be 'hello'")
+    sub.drop()
+    t.drop()
+}
+
+@test
+func test_text_repeat() {
+    let t: Text = Text::from("ab")
+    let rep: Text = t.repeat(3)
+    assert_eq(rep.as_str(), "ababab", "repeat 3 should be 'ababab'")
+    rep.drop()
+    t.drop()
+}
+
+@test
+func test_text_replace() {
+    let t: Text = Text::from("hello world")
+    let r: Text = t.replace("world", "TML")
+    assert_eq(r.as_str(), "hello TML", "replace should work")
+    r.drop()
+    t.drop()
+}
+
+@test
+func test_text_replace_all() {
+    let t: Text = Text::from("aabaa")
+    let r: Text = t.replace_all("a", "x")
+    assert_eq(r.as_str(), "xxbxx", "replace_all should replace all occurrences")
+    r.drop()
+    t.drop()
+}
+
+@test
+func test_text_reverse() {
+    let t: Text = Text::from("abc")
+    let r: Text = t.reverse()
+    assert_eq(r.as_str(), "cba", "reverse should reverse")
+    r.drop()
+    t.drop()
+}
+
+// === Search ===
+
+@test
+func test_text_contains() {
+    let t: Text = Text::from("hello world")
+    assert(t.contains("world"), "should contain 'world'")
+    assert(t.contains("hello"), "should contain 'hello'")
+    assert(not t.contains("xyz"), "should not contain 'xyz'")
+    t.drop()
+}
+
+@test
+func test_text_starts_with() {
+    let t: Text = Text::from("hello world")
+    assert(t.starts_with("hello"), "should start with 'hello'")
+    assert(not t.starts_with("world"), "should not start with 'world'")
+    t.drop()
+}
+
+@test
+func test_text_ends_with() {
+    let t: Text = Text::from("hello world")
+    assert(t.ends_with("world"), "should end with 'world'")
+    assert(not t.ends_with("hello"), "should not end with 'hello'")
+    t.drop()
+}
+
+// === Transforms ===
+
+@test
+func test_text_to_upper_case() {
+    let t: Text = Text::from("hello")
+    let upper: Text = t.to_upper_case()
+    assert_eq(upper.as_str(), "HELLO", "should be uppercase")
+    upper.drop()
+    t.drop()
+}
+
+@test
+func test_text_to_lower_case() {
+    let t: Text = Text::from("HELLO")
+    let lower: Text = t.to_lower_case()
+    assert_eq(lower.as_str(), "hello", "should be lowercase")
+    lower.drop()
+    t.drop()
+}
+
+@test
+func test_text_trim() {
+    let t: Text = Text::from("  hello  ")
+    let trimmed: Text = t.trim()
+    assert_eq(trimmed.as_str(), "hello", "should trim whitespace")
+    trimmed.drop()
+    t.drop()
+}
+
+// === Print ===
+
+@test
+func test_text_print() -> I32 {
+    let t: Text = Text::new("hello")
+    t.print()
+    t.drop()
+    return 0
+}
+
+@test
+func test_text_println() -> I32 {
+    let t: Text = Text::new("world")
+    t.println()
+    t.drop()
+    return 0
+}
+
+// === data_ptr ===
+
+@test
+func test_text_data_ptr() -> I32 {
+    let t: Text = Text::new("hello")
+    let p: *U8 = t.data_ptr()
+    // Just verify data_ptr doesn't crash — pointer comparison to null may not be supported
+    t.drop()
+    return 0
+}

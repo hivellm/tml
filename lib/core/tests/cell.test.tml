@@ -1,0 +1,231 @@
+// Consolidated tests for core::cell (25 tests)
+// Cell[T], RefCell[T], OnceCell[T], UnsafeCell[T], SyncUnsafeCell[T], BorrowError/BorrowMutError
+// BLOCKED: OnceCell::get() — LLVM type mismatch Maybe[ref I32] vs Maybe[I32]
+// BLOCKED: BorrowError::to_string, BorrowMutError::to_string — behavior dispatch on struct
+use test
+use core::cell::cell::Cell
+use core::cell::ref_cell::RefCell
+use core::cell::once::{OnceCell, BorrowError, BorrowMutError}
+use core::cell::unsafe_cell::{UnsafeCell, SyncUnsafeCell}
+
+// === Cell[T] basic ===
+
+@test
+func test_cell_new_get() -> I32 {
+    let c: Cell[I32] = Cell::new[I32](42)
+    assert_eq(c.get(), 42, "get should return initial value")
+    return 0
+}
+
+@test
+func test_cell_set() -> I32 {
+    var c: Cell[I32] = Cell::new[I32](10)
+    c.set(20)
+    assert_eq(c.get(), 20, "get should return updated value")
+    return 0
+}
+
+@test
+func test_cell_replace() -> I32 {
+    var c: Cell[I32] = Cell::new[I32](5)
+    let old: I32 = c.replace(99)
+    assert_eq(old, 5, "replace should return old value")
+    assert_eq(c.get(), 99, "get should return new value")
+    return 0
+}
+
+@test
+func test_cell_into_inner() -> I32 {
+    let c: Cell[I32] = Cell::new[I32](77)
+    let val: I32 = c.into_inner()
+    assert_eq(val, 77, "into_inner should return value")
+    return 0
+}
+
+@test
+func test_cell_set_multiple_times() -> I32 {
+    var c: Cell[I32] = Cell::new[I32](0)
+    c.set(1)
+    c.set(2)
+    c.set(3)
+    assert_eq(c.get(), 3, "get should return last set value")
+    return 0
+}
+
+@test
+func test_cell_bool() -> I32 {
+    var c: Cell[Bool] = Cell::new[Bool](false)
+    assert(c.get() == false, "initial value should be false")
+    c.set(true)
+    assert(c.get() == true, "after set should be true")
+    return 0
+}
+
+// === Cell swap, take, eq, default ===
+
+@test
+func test_cell_swap() -> I32 {
+    var a: Cell[I32] = Cell::new[I32](10)
+    var b: Cell[I32] = Cell::new[I32](20)
+    a.swap(ref b)
+    assert_eq(a.get(), 20, "a should have b's value after swap")
+    assert_eq(b.get(), 10, "b should have a's value after swap")
+    return 0
+}
+
+@test
+func test_cell_take() -> I32 {
+    var c: Cell[I32] = Cell::new[I32](42)
+    let v: I32 = c.take()
+    assert_eq(v, 42, "take should return current value")
+    assert_eq(c.get(), 0, "cell should be default after take")
+    return 0
+}
+
+@test
+func test_cell_eq() -> I32 {
+    let a: Cell[I32] = Cell::new[I32](5)
+    let b: Cell[I32] = Cell::new[I32](5)
+    let c: Cell[I32] = Cell::new[I32](10)
+    assert(a.eq(ref b), "cells with same value should be eq")
+    assert(not a.eq(ref c), "cells with different value should not be eq")
+    return 0
+}
+
+@test
+func test_cell_default() -> I32 {
+    let c: Cell[I32] = Cell::default()
+    assert_eq(c.get(), 0, "default cell should have 0")
+    return 0
+}
+
+// === RefCell[T] ===
+
+@test
+func test_ref_cell_replace() -> I32 {
+    var c: RefCell[I32] = RefCell::new[I32](10)
+    let old: I32 = c.replace(20)
+    assert_eq(old, 10, "replace should return old value")
+    return 0
+}
+
+@test
+func test_ref_cell_get_mut() -> I32 {
+    var c: RefCell[I32] = RefCell::new[I32](5)
+    let r: mut ref I32 = c.get_mut()
+    *r = 99
+    let r2: mut ref I32 = c.get_mut()
+    assert_eq(*r2, 99, "get_mut should reflect mutation")
+    return 0
+}
+
+@test
+func test_ref_cell_replace_str() -> I32 {
+    var c: RefCell[Str] = RefCell::new[Str]("hello")
+    let old: Str = c.replace("world")
+    assert_eq(old, "hello", "replace should return old string")
+    return 0
+}
+
+// === OnceCell[T] ===
+
+@test
+func test_once_cell_new_empty() -> I32 {
+    let c: OnceCell[I32] = OnceCell::new[I32]()
+    assert(c.is_empty(), "new OnceCell should be empty")
+    assert(not c.is_initialized(), "new should not be initialized")
+    return 0
+}
+
+@test
+func test_once_cell_with_value() -> I32 {
+    let c: OnceCell[I32] = OnceCell::with_value[I32](42)
+    assert(c.is_initialized(), "with_value should be initialized")
+    assert(not c.is_empty(), "with_value should not be empty")
+    return 0
+}
+
+@test
+func test_once_cell_set() -> I32 {
+    var c: OnceCell[I32] = OnceCell::new[I32]()
+    let result: Outcome[Unit, I32] = c.set(99)
+    assert(result.is_ok(), "first set should succeed")
+    assert(c.is_initialized(), "should be initialized after set")
+    return 0
+}
+
+@test
+func test_oncecell_set_twice() -> I32 {
+    var cell: OnceCell[I32] = OnceCell::new[I32]()
+    let r1: Outcome[(), I32] = cell.set(42)
+    assert(r1.is_ok(), "first set should succeed")
+    let r2: Outcome[(), I32] = cell.set(99)
+    assert(r2.is_err(), "second set should fail")
+    return 0
+}
+
+@test
+func test_oncecell_take() -> I32 {
+    var cell: OnceCell[I32] = OnceCell::new[I32]()
+    let _r: Outcome[(), I32] = cell.set(55)
+    let v: Maybe[I32] = cell.take()
+    assert(v.is_just(), "take should return Just")
+    return 0
+}
+
+@test
+func test_oncecell_into_inner() -> I32 {
+    var cell: OnceCell[I32] = OnceCell::new[I32]()
+    let _r: Outcome[(), I32] = cell.set(123)
+    let v: Maybe[I32] = cell.into_inner()
+    assert(v.is_just(), "into_inner should return Just")
+    return 0
+}
+
+@test
+func test_oncecell_into_inner_empty() -> I32 {
+    let cell: OnceCell[I32] = OnceCell::new[I32]()
+    let v: Maybe[I32] = cell.into_inner()
+    assert(v.is_nothing(), "into_inner on empty should return Nothing")
+    return 0
+}
+
+// === UnsafeCell / SyncUnsafeCell ===
+
+@test
+func test_unsafe_cell_new_into_inner() -> I32 {
+    let c: UnsafeCell[I32] = UnsafeCell::new[I32](42)
+    let val: I32 = c.into_inner()
+    assert_eq(val, 42, "into_inner should return initial value")
+    return 0
+}
+
+@test
+func test_unsafe_cell_str() -> I32 {
+    let c: UnsafeCell[Str] = UnsafeCell::new[Str]("hello")
+    let val: Str = c.into_inner()
+    assert_eq(val, "hello", "UnsafeCell works with Str")
+    return 0
+}
+
+@test
+func test_sync_unsafe_cell_new_into_inner() -> I32 {
+    let c: SyncUnsafeCell[I32] = SyncUnsafeCell::new[I32](99)
+    let val: I32 = c.into_inner()
+    assert_eq(val, 99, "SyncUnsafeCell into_inner should return value")
+    return 0
+}
+
+// === BorrowError / BorrowMutError ===
+
+@test
+func test_borrow_error_new() -> I32 {
+    let _e: BorrowError = BorrowError::new()
+    return 0
+}
+
+@test
+func test_borrow_mut_error_new() -> I32 {
+    let _e: BorrowMutError = BorrowMutError::new()
+    return 0
+}

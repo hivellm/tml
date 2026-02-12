@@ -1,0 +1,478 @@
+// Consolidated JSON tests - File 1 of 3
+// Test count: 50
+// Contents: Parsing, type checks, value accessors, constructors, serialization
+//
+// Consolidated from: json_parse, json_object, json_array, json_constructors,
+//   json_serialize, json_nested, json_types_methods (type checks, accessors,
+//   constructors, parse functions), json_types_coverage (parse_result, array/object ctors)
+//
+// Duplicates renamed with _v2 suffix:
+//   test_json_new_null_v2, test_json_new_bool_v2, test_json_int_constructor_v2,
+//   test_json_string_constructor_v2
+use test
+use std::json::types::{Json, JsonObject, JsonArray, parse_or_panic, parse, parse_result}
+
+// =============================================================================
+// Parsing basics (from json_parse)
+// =============================================================================
+
+@test
+func test_json_parse_int() -> I32 {
+    let j: Json = parse_or_panic("42")
+    assert(j.is_number(), "42 should be a number")
+    assert(not j.is_string(), "42 should not be a string")
+    assert(not j.is_null(), "42 should not be null")
+    let val: I64 = j.unwrap_i64()
+    assert_eq(val, 42 as I64, "value should be 42")
+    return 0
+}
+
+@test
+func test_json_parse_string() -> I32 {
+    let j: Json = parse_or_panic("\"hello\"")
+    assert(j.is_string(), "should be a string")
+    let val: Str = j.unwrap_str()
+    assert_eq(val, "hello", "value should be hello")
+    return 0
+}
+
+@test
+func test_json_parse_bool() -> I32 {
+    let t: Json = parse_or_panic("true")
+    let f: Json = parse_or_panic("false")
+    assert(t.is_bool(), "true should be bool")
+    assert(f.is_bool(), "false should be bool")
+    assert(t.unwrap_bool(), "should be true")
+    assert(not f.unwrap_bool(), "should be false")
+    return 0
+}
+
+// =============================================================================
+// Object access (from json_object)
+// =============================================================================
+
+@test
+func test_json_object_fields() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
+    assert(j.is_object(), "should be an object")
+    assert_eq(j.len(), 2 as I64, "should have 2 fields")
+    assert(j.has("name"), "should have name field")
+    assert(j.has("age"), "should have age field")
+    assert(not j.has("missing"), "should not have missing field")
+    return 0
+}
+
+@test
+func test_json_object_type_checks() -> I32 {
+    let j: Json = parse_or_panic("{\"name\": \"Alice\", \"age\": 30, \"active\": true}")
+    assert(j.is_object(), "should be object")
+    assert(not j.is_array(), "object is not array")
+    assert(not j.is_string(), "object is not string")
+    assert(not j.is_number(), "object is not number")
+    assert(not j.is_null(), "object is not null")
+    assert(not j.is_bool(), "object is not bool")
+    assert_eq(j.len(), 3 as I64, "should have 3 fields")
+    return 0
+}
+
+@test
+func test_json_null_value() -> I32 {
+    let j: Json = parse_or_panic("null")
+    assert(j.is_null(), "should be null")
+    assert(not j.is_object(), "null is not object")
+    assert(not j.is_array(), "null is not array")
+    assert(not j.is_number(), "null is not number")
+    return 0
+}
+
+// =============================================================================
+// Array access (from json_array)
+// =============================================================================
+
+@test
+func test_json_array_basic() -> I32 {
+    let j: Json = parse_or_panic("[1, 2, 3]")
+    assert(j.is_array(), "should be an array")
+    assert(not j.is_object(), "array is not object")
+    assert(not j.is_string(), "array is not string")
+    assert_eq(j.len(), 3 as I64, "should have 3 elements")
+    return 0
+}
+
+@test
+func test_json_array_empty() -> I32 {
+    let j: Json = parse_or_panic("[]")
+    assert(j.is_array(), "should be an array")
+    assert_eq(j.len(), 0 as I64, "empty array should have 0 elements")
+    return 0
+}
+
+@test
+func test_json_array_mixed_types() -> I32 {
+    let j: Json = parse_or_panic("[1, \"hello\", true, null]")
+    assert(j.is_array(), "should be an array")
+    assert_eq(j.len(), 4 as I64, "should have 4 elements")
+    return 0
+}
+
+// =============================================================================
+// Value constructors (from json_constructors, renamed _v2 to avoid duplicates)
+// =============================================================================
+
+@test
+func test_json_new_null_v2() -> I32 {
+    let j: Json = Json::new_null()
+    assert(j.is_null(), "new_null should be null")
+    assert(not j.is_object(), "null is not object")
+    assert(not j.is_number(), "null is not number")
+    return 0
+}
+
+@test
+func test_json_new_bool_v2() -> I32 {
+    let t: Json = Json::new_bool(true)
+    let f: Json = Json::new_bool(false)
+    assert(t.is_bool(), "true should be bool")
+    assert(f.is_bool(), "false should be bool")
+    assert(t.unwrap_bool(), "should be true")
+    assert(not f.unwrap_bool(), "should be false")
+    return 0
+}
+
+@test
+func test_json_int_constructor_v2() -> I32 {
+    let j: Json = Json::int(42 as I64)
+    assert(j.is_number(), "should be number")
+    let val: I64 = j.unwrap_i64()
+    assert_eq(val, 42 as I64, "value should be 42")
+    return 0
+}
+
+// =============================================================================
+// Serialization (from json_serialize)
+// =============================================================================
+
+@test
+func test_json_to_string_number() -> I32 {
+    let j: Json = Json::int(99 as I64)
+    let s: Str = j.to_string()
+    assert_eq(s, "99", "int 99 should serialize to '99'")
+    return 0
+}
+
+@test
+func test_json_to_string_bool() -> I32 {
+    let t: Json = Json::new_bool(true)
+    let f: Json = Json::new_bool(false)
+    assert_eq(t.to_string(), "true", "true should serialize to 'true'")
+    assert_eq(f.to_string(), "false", "false should serialize to 'false'")
+    return 0
+}
+
+@test
+func test_json_to_string_null() -> I32 {
+    let j: Json = Json::new_null()
+    assert_eq(j.to_string(), "null", "null should serialize to 'null'")
+    return 0
+}
+
+// =============================================================================
+// Nested structures and string/float constructors (from json_nested)
+// =============================================================================
+
+@test
+func test_json_nested_object() -> I32 {
+    let j: Json = parse_or_panic("{\"user\": {\"name\": \"Bob\", \"age\": 25}}")
+    assert(j.is_object(), "should be object")
+    assert(j.has("user"), "should have user field")
+    assert_eq(j.len(), 1 as I64, "should have 1 top-level field")
+    return 0
+}
+
+@test
+func test_json_string_constructor_v2() -> I32 {
+    let j: Json = Json::string("hello")
+    assert(j.is_string(), "should be string")
+    let val: Str = j.unwrap_str()
+    assert_eq(val, "hello", "value should be hello")
+    return 0
+}
+
+@test
+func test_json_float_constructor() -> I32 {
+    let j: Json = Json::float(3.14)
+    assert(j.is_number(), "should be number")
+    let val: F64 = j.unwrap_f64()
+    // Check approximate equality (floating point)
+    assert(val > 3.13, "should be > 3.13")
+    assert(val < 3.15, "should be < 3.15")
+    return 0
+}
+
+// =============================================================================
+// Json type checks (from json_types_methods)
+// =============================================================================
+
+@test
+func test_json_is_null() -> I32 {
+    let j: Json = parse_or_panic("null")
+    assert(j.is_null(), "null should be null")
+    return 0
+}
+
+@test
+func test_json_is_bool() -> I32 {
+    let j: Json = parse_or_panic("true")
+    assert(j.is_bool(), "true should be bool")
+    return 0
+}
+
+@test
+func test_json_is_number() -> I32 {
+    let j: Json = parse_or_panic("42")
+    assert(j.is_number(), "42 should be number")
+    return 0
+}
+
+@test
+func test_json_is_string() -> I32 {
+    let j: Json = parse_or_panic("\"hello\"")
+    assert(j.is_string(), "quoted string should be string")
+    return 0
+}
+
+@test
+func test_json_is_array() -> I32 {
+    let j: Json = parse_or_panic("[1]")
+    assert(j.is_array(), "[1] should be array")
+    return 0
+}
+
+@test
+func test_json_is_object() -> I32 {
+    let j: Json = parse_or_panic("{\"a\": 1}")
+    assert(j.is_object(), "{} should be object")
+    return 0
+}
+
+@test
+func test_json_get_type() -> I32 {
+    let j: Json = parse_or_panic("42")
+    let t: I32 = j.get_type()
+    assert(t >= 0, "get_type should return valid type")
+    return 0
+}
+
+@test
+func test_json_to_string() -> I32 {
+    let j: Json = parse_or_panic("{\"a\": 1}")
+    let s: Str = j.to_string()
+    assert(s.len() > 0, "to_string should produce output")
+    return 0
+}
+
+@test
+func test_json_len_array() -> I32 {
+    let j: Json = parse_or_panic("[1, 2, 3]")
+    let l: I64 = j.len()
+    assert(l == 3, "array len should be 3")
+    return 0
+}
+
+@test
+func test_json_len_object() -> I32 {
+    let j: Json = parse_or_panic("{\"a\": 1, \"b\": 2}")
+    let l: I64 = j.len()
+    assert(l == 2, "object len should be 2")
+    return 0
+}
+
+// =============================================================================
+// Json value accessors - safe Maybe-returning (from json_types_methods)
+// =============================================================================
+
+@test
+func test_json_as_i64() -> I32 {
+    let j: Json = parse_or_panic("42")
+    let val: Maybe[I64] = j.as_i64()
+    assert(val.is_just(), "as_i64 should be Just for number")
+    return 0
+}
+
+@test
+func test_json_as_f64() -> I32 {
+    let j: Json = parse_or_panic("3.14")
+    let val: Maybe[F64] = j.as_f64()
+    assert(val.is_just(), "as_f64 should be Just for number")
+    return 0
+}
+
+@test
+func test_json_as_bool() -> I32 {
+    let j: Json = parse_or_panic("true")
+    let val: Maybe[Bool] = j.as_bool()
+    assert(val.is_just(), "as_bool should be Just for bool")
+    return 0
+}
+
+@test
+func test_json_as_str() -> I32 {
+    let j: Json = parse_or_panic("\"hello\"")
+    let val: Maybe[Str] = j.as_str()
+    assert(val.is_just(), "as_str should be Just for string")
+    return 0
+}
+
+@test
+func test_json_as_array() -> I32 {
+    let j: Json = parse_or_panic("[1, 2, 3]")
+    let val: Maybe[JsonArray] = j.as_array()
+    assert(val.is_just(), "as_array should be Just for array")
+    return 0
+}
+
+@test
+func test_json_as_object() -> I32 {
+    let j: Json = parse_or_panic("{\"a\": 1}")
+    let val: Maybe[JsonObject] = j.as_object()
+    assert(val.is_just(), "as_object should be Just for object")
+    return 0
+}
+
+// =============================================================================
+// Json value accessors - wrong type returns Nothing (from json_types_methods)
+// =============================================================================
+
+@test
+func test_json_as_i64_wrong_type() -> I32 {
+    let j: Json = parse_or_panic("\"not a number\"")
+    let val: Maybe[I64] = j.as_i64()
+    assert(val.is_nothing(), "as_i64 on string should be Nothing")
+    return 0
+}
+
+@test
+func test_json_as_bool_wrong_type() -> I32 {
+    let j: Json = parse_or_panic("42")
+    let val: Maybe[Bool] = j.as_bool()
+    assert(val.is_nothing(), "as_bool on number should be Nothing")
+    return 0
+}
+
+// =============================================================================
+// Json unwrap methods - panicking (from json_types_methods)
+// =============================================================================
+
+@test
+func test_json_unwrap_i64() -> I32 {
+    let j: Json = parse_or_panic("42")
+    let val: I64 = j.unwrap_i64()
+    assert(val == 42 as I64, "unwrap_i64 should return 42")
+    return 0
+}
+
+@test
+func test_json_unwrap_f64() -> I32 {
+    let j: Json = parse_or_panic("3.14")
+    let val: F64 = j.unwrap_f64()
+    assert(val > 3.0, "unwrap_f64 should return > 3")
+    return 0
+}
+
+@test
+func test_json_unwrap_bool() -> I32 {
+    let j: Json = parse_or_panic("true")
+    let val: Bool = j.unwrap_bool()
+    assert(val, "unwrap_bool should return true")
+    return 0
+}
+
+@test
+func test_json_unwrap_str() -> I32 {
+    let j: Json = parse_or_panic("\"hello\"")
+    let val: Str = j.unwrap_str()
+    assert(val.len() > 0, "unwrap_str should return non-empty string")
+    return 0
+}
+
+// =============================================================================
+// Json constructors (from json_types_methods)
+// =============================================================================
+
+@test
+func test_json_new_null() -> I32 {
+    let j: Json = Json::new_null()
+    assert(j.is_null(), "new_null should be null")
+    return 0
+}
+
+@test
+func test_json_new_bool() -> I32 {
+    let j: Json = Json::new_bool(true)
+    assert(j.is_bool(), "new_bool should be bool")
+    return 0
+}
+
+@test
+func test_json_int_constructor() -> I32 {
+    let j: Json = Json::int(42)
+    assert(j.is_number(), "int constructor should create number")
+    return 0
+}
+
+@test
+func test_json_string_constructor() -> I32 {
+    let j: Json = Json::string("hello")
+    assert(j.is_string(), "string constructor should create string")
+    return 0
+}
+
+// =============================================================================
+// parse / parse_result (from json_types_methods, json_types_coverage)
+// =============================================================================
+
+@test
+func test_json_parse_valid() -> I32 {
+    let result: Maybe[Json] = parse("{\"key\": \"value\"}")
+    assert(result.is_just(), "parse valid JSON should return Just")
+    return 0
+}
+
+@test
+func test_json_parse_invalid() -> I32 {
+    let result: Maybe[Json] = parse("not json at all")
+    assert(result.is_nothing(), "parse invalid JSON should return Nothing")
+    return 0
+}
+
+@test
+func test_parse_result_valid() -> I32 {
+    let r: Outcome[Json, Str] = parse_result("{\"a\": 1}")
+    assert(r.is_ok(), "valid JSON should parse ok")
+    return 0
+}
+
+@test
+func test_parse_result_invalid() -> I32 {
+    let r: Outcome[Json, Str] = parse_result("not json at all")
+    assert(r.is_err(), "invalid JSON should return Err")
+    return 0
+}
+
+// =============================================================================
+// Json::array and Json::object constructors (from json_types_coverage)
+// =============================================================================
+
+@test
+func test_json_array_constructor() -> I32 {
+    let j: Json = Json::array()
+    assert(j.is_array(), "Json::array() should be array")
+    return 0
+}
+
+@test
+func test_json_object_constructor() -> I32 {
+    let j: Json = Json::object()
+    assert(j.is_object(), "Json::object() should be object")
+    return 0
+}

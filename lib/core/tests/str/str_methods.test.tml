@@ -1,10 +1,18 @@
-// Tests for Str methods that work (builtin dispatch)
+// Consolidated str tests - method-style calls and free function variants
+// Total @test count: 49
+// Sources: str_methods.test.tml, str_method_tests.test.tml, str_diag.test.tml,
+//          str_coverage2.test.tml, str_functions.test.tml (partial)
 use test
-
-// Str.char_at() skipped - returns () instead of I32 (behavior dispatch bug)
+use core::str
+use core::str::{
+    substring, substring_from, substring_to,
+    trim, trim_start, trim_end,
+    contains, starts_with, ends_with,
+    find, rfind
+}
 
 // =============================================================================
-// Str.to_uppercase() / Str.to_lowercase()
+// Str.to_uppercase() / Str.to_lowercase() (method-style, from str_methods.test.tml)
 // =============================================================================
 
 @test
@@ -36,7 +44,25 @@ func test_str_to_lowercase_mixed() -> I32 {
 }
 
 // =============================================================================
-// Str.trim() / Str.trim_start() / Str.trim_end()
+// Str.to_uppercase() / Str.to_lowercase() (free function, from str_coverage2.test.tml)
+// =============================================================================
+
+@test
+func test_str_to_uppercase_v2() -> I32 {
+    let s: Str = str::to_uppercase("hello")
+    assert_eq(s, "HELLO", "to_uppercase")
+    return 0
+}
+
+@test
+func test_str_to_lowercase_v2() -> I32 {
+    let s: Str = str::to_lowercase("HELLO")
+    assert_eq(s, "hello", "to_lowercase")
+    return 0
+}
+
+// =============================================================================
+// Str.trim() / Str.trim_start() / Str.trim_end() (method-style, from str_methods.test.tml)
 // =============================================================================
 
 @test
@@ -68,7 +94,57 @@ func test_str_trim_end() -> I32 {
 }
 
 // =============================================================================
-// Str.starts_with() / Str.ends_with() / Str.contains()
+// trim / trim_start / trim_end (free function, from str_coverage2.test.tml)
+// =============================================================================
+
+@test
+func test_str_trim_v2() -> I32 {
+    let s: Str = str::trim("  hello  ")
+    assert_eq(s, "hello", "trim removes whitespace")
+    return 0
+}
+
+@test
+func test_str_trim_start_v2() -> I32 {
+    let s: Str = str::trim_start("  hello")
+    assert_eq(s, "hello", "trim_start removes leading whitespace")
+    return 0
+}
+
+@test
+func test_str_trim_end_v2() -> I32 {
+    let s: Str = str::trim_end("hello  ")
+    assert_eq(s, "hello", "trim_end removes trailing whitespace")
+    return 0
+}
+
+// =============================================================================
+// trim / trim_start / trim_end (free function direct import, from str_functions.test.tml)
+// =============================================================================
+
+@test
+func test_trim_both() -> I32 {
+    let trimmed: Str = trim("  hello  ")
+    assert_eq(trimmed, "hello", "trim both sides")
+    return 0
+}
+
+@test
+func test_trim_start_fn() -> I32 {
+    let trimmed: Str = trim_start("  hello  ")
+    assert(trimmed.starts_with("hello"), "trim_start removes leading space")
+    return 0
+}
+
+@test
+func test_trim_end_fn() -> I32 {
+    let trimmed: Str = trim_end("  hello  ")
+    assert(trimmed.ends_with("hello"), "trim_end removes trailing space")
+    return 0
+}
+
+// =============================================================================
+// Str.starts_with() / Str.ends_with() / Str.contains() (method-style, from str_methods.test.tml)
 // =============================================================================
 
 @test
@@ -121,7 +197,47 @@ func test_str_contains_empty() -> I32 {
 }
 
 // =============================================================================
-// String concatenation
+// contains / starts_with / ends_with (free function, from str_functions.test.tml)
+// =============================================================================
+
+@test
+func test_contains_found() -> I32 {
+    assert(contains("hello world", "world") == true, "contains found")
+    return 0
+}
+
+@test
+func test_contains_not_found() -> I32 {
+    assert(contains("hello", "xyz") == false, "contains not found")
+    return 0
+}
+
+@test
+func test_starts_with_true() -> I32 {
+    assert(starts_with("hello", "hel") == true, "starts_with match")
+    return 0
+}
+
+@test
+func test_starts_with_false() -> I32 {
+    assert(starts_with("hello", "lo") == false, "starts_with no match")
+    return 0
+}
+
+@test
+func test_ends_with_true() -> I32 {
+    assert(ends_with("hello", "lo") == true, "ends_with match")
+    return 0
+}
+
+@test
+func test_ends_with_false() -> I32 {
+    assert(ends_with("hello", "hel") == false, "ends_with no match")
+    return 0
+}
+
+// =============================================================================
+// String concatenation (method-style, from str_methods.test.tml)
 // =============================================================================
 
 @test
@@ -141,5 +257,169 @@ func test_str_concat_empty() -> I32 {
     return 0
 }
 
-// Note: Str.slice(), Str.find(), Str.rfind(), Str.replace() return ()
-// due to behavior dispatch bug - skipped
+// =============================================================================
+// str::concat (free function, from str_coverage2.test.tml)
+// =============================================================================
+
+@test
+func test_str_concat() -> I32 {
+    let s: Str = str::concat("hello", " world")
+    assert_eq(s, "hello world", "concat two strings")
+    return 0
+}
+
+// =============================================================================
+// str::repeat (free function, from str_coverage2.test.tml)
+// =============================================================================
+
+@test
+func test_str_repeat() -> I32 {
+    let s: Str = str::repeat("ab", 3 as I64)
+    assert_eq(s, "ababab", "repeat ab 3 times")
+    return 0
+}
+
+// =============================================================================
+// str::replace (free function, from str_coverage2.test.tml)
+// =============================================================================
+
+@test
+func test_str_replace() -> I32 {
+    let s: Str = str::replace("hello world", "world", "tml")
+    assert_eq(s, "hello tml", "replace world with tml")
+    return 0
+}
+
+// =============================================================================
+// str::substring / substring_from / substring_to (free function, from str_coverage2.test.tml)
+// =============================================================================
+
+@test
+func test_str_substring() -> I32 {
+    let s: Str = str::substring("hello world", 0 as I64, 5 as I64)
+    assert_eq(s, "hello", "substring 0..5")
+    return 0
+}
+
+@test
+func test_str_substring_from() -> I32 {
+    let s: Str = str::substring_from("hello world", 6 as I64)
+    assert_eq(s, "world", "substring_from 6")
+    return 0
+}
+
+@test
+func test_str_substring_to() -> I32 {
+    let s: Str = str::substring_to("hello world", 5 as I64)
+    assert_eq(s, "hello", "substring_to 5")
+    return 0
+}
+
+// =============================================================================
+// substring (free function direct import, from str_functions.test.tml)
+// =============================================================================
+
+@test
+func test_substring_middle() -> I32 {
+    let s: Str = substring("hello", 1, 4)
+    assert(s.len() > 0, "substring(1,4) should produce output")
+    return 0
+}
+
+@test
+func test_substring_from_idx() -> I32 {
+    let s: Str = substring_from("hello", 2)
+    assert(s.len() > 0, "substring_from(2) should produce output")
+    return 0
+}
+
+@test
+func test_substring_to_idx() -> I32 {
+    let s: Str = substring_to("hello", 3)
+    assert(s.len() > 0, "substring_to(3) should produce output")
+    return 0
+}
+
+// =============================================================================
+// Str::slice_str / Str::slice (method-style, from str_method_tests.test.tml)
+// =============================================================================
+
+@test
+func test_str_slice_str() -> I32 {
+    let s: Str = "hello world"
+    let sub: Str = s.slice_str(0, 5)
+    assert(sub.len() > 0, "slice_str should produce output")
+    return 0
+}
+
+@test
+func test_str_slice_str_end() -> I32 {
+    let s: Str = "hello world"
+    let sub: Str = s.slice_str(6, 11)
+    assert(sub.len() > 0, "slice_str end should produce output")
+    return 0
+}
+
+@test
+func test_str_slice() -> I32 {
+    let s: Str = "hello world"
+    let sub: Str = s.slice(0, 5)
+    assert(sub.len() > 0, "slice should produce output")
+    return 0
+}
+
+@test
+func test_str_slice_full() -> I32 {
+    let s: Str = "hello"
+    let sub: Str = s.slice(0, 5)
+    assert(sub.len() == 5, "slice full should be length 5")
+    return 0
+}
+
+// =============================================================================
+// Dynamic dispatch diagnostic (from str_diag.test.tml)
+// =============================================================================
+
+@test
+func test_str_char_at_dynamic() -> I32 {
+    let s: Str = "hello"
+    let c: I32 = s.char_at(0)
+    assert_eq(c, 104, "char_at(0) == h")
+    return 0
+}
+
+@test
+func test_str_find_dynamic() -> I32 {
+    let s: Str = "hello world"
+    let r: I64 = s.find("world")
+    assert_eq(r, 6, "find world")
+    return 0
+}
+
+@test
+func test_str_rfind_dynamic() -> I32 {
+    let s: Str = "hello hello"
+    let r: I64 = s.rfind("hello")
+    assert_eq(r, 6, "rfind hello")
+    return 0
+}
+
+// =============================================================================
+// find / rfind (free function direct import, from str_functions.test.tml)
+// =============================================================================
+
+@test
+func test_find_found() -> I32 {
+    let idx: Maybe[I64] = find("hello", "ll")
+    assert(idx.is_just(), "find should return Just when found")
+    return 0
+}
+
+@test
+func test_find_not_found() -> I32 {
+    let idx: Maybe[I64] = find("hello", "xyz")
+    assert(idx.is_nothing(), "find should return Nothing when not found")
+    return 0
+}
+
+// test_rfind_found and test_rfind_not_found moved to str_advanced.test.tml

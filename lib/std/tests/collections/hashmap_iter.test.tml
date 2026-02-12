@@ -1,0 +1,19 @@
+// Tests for collections/hashmap - HashMapIter methods
+// BLOCKED: HashMapIter::key() returns K, value() returns V — generic monomorphization bug
+use test
+use std::collections::{HashMap, HashMapIter}
+
+@test
+func test_hashmap_iter_has_next() -> I32 {
+    var m: HashMap[I32, I32] = HashMap[I32, I32].new(16)
+    m.set(1, 10)
+    m.set(2, 20)
+    var iter: HashMapIter[I32, I32] = m.iter()
+    assert(iter.has_next(), "iter should have next")
+    iter.next()
+    iter.next()
+    assert(not iter.has_next(), "iter should be exhausted after 2 next calls")
+    iter.destroy()
+    m.destroy()
+    return 0
+}

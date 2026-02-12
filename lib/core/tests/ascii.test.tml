@@ -1,0 +1,703 @@
+// Consolidated tests for core::ascii (49 tests)
+//
+// Merged from:
+//   - ascii.test.tml (18 tests)
+//   - ascii_chain.test.tml (7 tests)
+//   - ascii_simple.test.tml (11 tests)
+//   - ascii_coverage.test.tml (13 tests)
+//
+// Note: Where function names collided across source files, a suffix (_chain,
+// _simple) was appended to disambiguate. Test bodies are unchanged.
+
+use test
+use core::ascii::AsciiChar
+use core::option::Maybe
+
+// ============================================================================
+// Helper functions (from ascii.test.tml)
+// ============================================================================
+
+// Helper to extract AsciiChar from Maybe
+func get_char(m: Maybe[AsciiChar]) -> AsciiChar {
+    when m {
+        Just(c) => return c,
+        Nothing => {
+            assert(false, "unexpected Nothing")
+            return AsciiChar::from_u8_unchecked(0)
+        }
+    }
+}
+
+// Helper to extract U8 from Maybe
+func get_u8(m: Maybe[U8]) -> U8 {
+    when m {
+        Just(v) => return v,
+        Nothing => {
+            assert(false, "unexpected Nothing")
+            return 0
+        }
+    }
+}
+
+// ============================================================================
+// Helper functions (from ascii_simple.test.tml)
+// ============================================================================
+
+// Helper function to unwrap Maybe[AsciiChar]
+func unwrap_char(m: Maybe[AsciiChar]) -> AsciiChar {
+    when m {
+        Just(c) => return c,
+        Nothing => {
+            assert(false, "unexpected Nothing")
+            return AsciiChar::from_u8_unchecked(0)
+        }
+    }
+}
+
+// ============================================================================
+// Helper functions (from ascii_coverage.test.tml)
+// ============================================================================
+
+func make_a() -> AsciiChar {
+    return AsciiChar::from_u8_unchecked(65)
+}
+
+func make_zero() -> AsciiChar {
+    return AsciiChar::from_u8_unchecked(48)
+}
+
+// ############################################################################
+// Tests from ascii.test.tml
+// ############################################################################
+
+// ============================================================================
+// Char Creation
+// ============================================================================
+
+@test
+func test_char_from_u8_valid() -> I32 {
+    // Valid ASCII values (0-127)
+    let a: Maybe[AsciiChar] = AsciiChar::from_u8(65)
+    assert(a.is_just(), "65 should be valid ASCII")
+
+    let zero: Maybe[AsciiChar] = AsciiChar::from_u8(0)
+    assert(zero.is_just(), "0 should be valid ASCII")
+
+    let max: Maybe[AsciiChar] = AsciiChar::from_u8(127)
+    assert(max.is_just(), "127 should be valid ASCII")
+
+    return 0
+}
+
+@test
+func test_char_from_u8_invalid() -> I32 {
+    // Invalid ASCII values (> 127)
+    let invalid1: Maybe[AsciiChar] = AsciiChar::from_u8(128)
+    assert(invalid1.is_nothing(), "128 should be invalid ASCII")
+
+    let invalid2: Maybe[AsciiChar] = AsciiChar::from_u8(255)
+    assert(invalid2.is_nothing(), "255 should be invalid ASCII")
+
+    return 0
+}
+
+@test
+func test_char_digit() -> I32 {
+    // Valid digits
+    let d0: Maybe[AsciiChar] = AsciiChar::digit(0)
+    assert(d0.is_just(), "digit 0 should be valid")
+
+    let d5: Maybe[AsciiChar] = AsciiChar::digit(5)
+    assert(d5.is_just(), "digit 5 should be valid")
+
+    let d9: Maybe[AsciiChar] = AsciiChar::digit(9)
+    assert(d9.is_just(), "digit 9 should be valid")
+
+    // Invalid digit
+    let d10: Maybe[AsciiChar] = AsciiChar::digit(10)
+    assert(d10.is_nothing(), "digit 10 should be invalid")
+
+    return 0
+}
+
+@test
+func test_char_to_u8() -> I32 {
+    let a: AsciiChar = get_char(AsciiChar::from_u8(65))
+    assert(a.to_u8() == 65, "A should have value 65")
+
+    let space: AsciiChar = get_char(AsciiChar::from_u8(32))
+    assert(space.to_u8() == 32, "space should have value 32")
+
+    return 0
+}
+
+// ============================================================================
+// Character Classification - Alphabetic
+// ============================================================================
+
+@test
+func test_char_is_alphabetic() -> I32 {
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))       // 'a'
+    let z: AsciiChar = get_char(AsciiChar::from_u8(122))      // 'z'
+    let upper_a: AsciiChar = get_char(AsciiChar::from_u8(65)) // 'A'
+    let upper_z: AsciiChar = get_char(AsciiChar::from_u8(90)) // 'Z'
+    let digit: AsciiChar = get_char(AsciiChar::from_u8(48))   // '0'
+    let space: AsciiChar = get_char(AsciiChar::from_u8(32))   // ' '
+
+    assert(a.is_alphabetic(), "a should be alphabetic")
+    assert(z.is_alphabetic(), "z should be alphabetic")
+    assert(upper_a.is_alphabetic(), "A should be alphabetic")
+    assert(upper_z.is_alphabetic(), "Z should be alphabetic")
+    assert(not digit.is_alphabetic(), "0 should not be alphabetic")
+    assert(not space.is_alphabetic(), "space should not be alphabetic")
+
+    return 0
+}
+
+@test
+func test_char_is_uppercase() -> I32 {
+    let upper_a: AsciiChar = get_char(AsciiChar::from_u8(65))  // 'A'
+    let upper_z: AsciiChar = get_char(AsciiChar::from_u8(90))  // 'Z'
+    let lower_a: AsciiChar = get_char(AsciiChar::from_u8(97))  // 'a'
+
+    assert(upper_a.is_uppercase(), "A should be uppercase")
+    assert(upper_z.is_uppercase(), "Z should be uppercase")
+    assert(not lower_a.is_uppercase(), "a should not be uppercase")
+
+    return 0
+}
+
+@test
+func test_char_is_lowercase() -> I32 {
+    let lower_a: AsciiChar = get_char(AsciiChar::from_u8(97))  // 'a'
+    let lower_z: AsciiChar = get_char(AsciiChar::from_u8(122)) // 'z'
+    let upper_a: AsciiChar = get_char(AsciiChar::from_u8(65))  // 'A'
+
+    assert(lower_a.is_lowercase(), "a should be lowercase")
+    assert(lower_z.is_lowercase(), "z should be lowercase")
+    assert(not upper_a.is_lowercase(), "A should not be lowercase")
+
+    return 0
+}
+
+// ============================================================================
+// Character Classification - Numeric
+// ============================================================================
+
+@test
+func test_char_is_digit() -> I32 {
+    let d0: AsciiChar = get_char(AsciiChar::from_u8(48))  // '0'
+    let d5: AsciiChar = get_char(AsciiChar::from_u8(53))  // '5'
+    let d9: AsciiChar = get_char(AsciiChar::from_u8(57))  // '9'
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))   // 'a'
+
+    assert(d0.is_digit(), "0 should be digit")
+    assert(d5.is_digit(), "5 should be digit")
+    assert(d9.is_digit(), "9 should be digit")
+    assert(not a.is_digit(), "a should not be digit")
+
+    return 0
+}
+
+@test
+func test_char_is_hexdigit() -> I32 {
+    let d0: AsciiChar = get_char(AsciiChar::from_u8(48))      // '0'
+    let d9: AsciiChar = get_char(AsciiChar::from_u8(57))      // '9'
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))       // 'a'
+    let f: AsciiChar = get_char(AsciiChar::from_u8(102))      // 'f'
+    let upper_a: AsciiChar = get_char(AsciiChar::from_u8(65)) // 'A'
+    let upper_f: AsciiChar = get_char(AsciiChar::from_u8(70)) // 'F'
+    let g: AsciiChar = get_char(AsciiChar::from_u8(103))      // 'g'
+
+    assert(d0.is_hexdigit(), "0 should be hexdigit")
+    assert(d9.is_hexdigit(), "9 should be hexdigit")
+    assert(a.is_hexdigit(), "a should be hexdigit")
+    assert(f.is_hexdigit(), "f should be hexdigit")
+    assert(upper_a.is_hexdigit(), "A should be hexdigit")
+    assert(upper_f.is_hexdigit(), "F should be hexdigit")
+    assert(not g.is_hexdigit(), "g should not be hexdigit")
+
+    return 0
+}
+
+@test
+func test_char_is_alphanumeric() -> I32 {
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))     // 'a'
+    let z: AsciiChar = get_char(AsciiChar::from_u8(90))     // 'Z'
+    let d5: AsciiChar = get_char(AsciiChar::from_u8(53))    // '5'
+    let space: AsciiChar = get_char(AsciiChar::from_u8(32))
+
+    assert(a.is_alphanumeric(), "a should be alphanumeric")
+    assert(z.is_alphanumeric(), "Z should be alphanumeric")
+    assert(d5.is_alphanumeric(), "5 should be alphanumeric")
+    assert(not space.is_alphanumeric(), "space should not be alphanumeric")
+
+    return 0
+}
+
+// ============================================================================
+// Character Classification - Whitespace and Control
+// ============================================================================
+
+@test
+func test_char_is_whitespace() -> I32 {
+    let space: AsciiChar = get_char(AsciiChar::from_u8(32))  // ' '
+    let tab: AsciiChar = get_char(AsciiChar::from_u8(9))     // '\t'
+    let lf: AsciiChar = get_char(AsciiChar::from_u8(10))     // '\n'
+    let cr: AsciiChar = get_char(AsciiChar::from_u8(13))     // '\r'
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))      // 'a'
+
+    assert(space.is_whitespace(), "space should be whitespace")
+    assert(tab.is_whitespace(), "tab should be whitespace")
+    assert(lf.is_whitespace(), "line feed should be whitespace")
+    assert(cr.is_whitespace(), "carriage return should be whitespace")
+    assert(not a.is_whitespace(), "a should not be whitespace")
+
+    return 0
+}
+
+@test
+func test_char_is_control() -> I32 {
+    let null_char: AsciiChar = get_char(AsciiChar::from_u8(0))
+    let bell: AsciiChar = get_char(AsciiChar::from_u8(7))
+    let del: AsciiChar = get_char(AsciiChar::from_u8(127))
+    let space: AsciiChar = get_char(AsciiChar::from_u8(32))
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))
+
+    assert(null_char.is_control(), "null should be control")
+    assert(bell.is_control(), "bell should be control")
+    assert(del.is_control(), "delete should be control")
+    assert(not space.is_control(), "space should not be control")
+    assert(not a.is_control(), "a should not be control")
+
+    return 0
+}
+
+@test
+func test_char_is_printable() -> I32 {
+    let space: AsciiChar = get_char(AsciiChar::from_u8(32))
+    let tilde: AsciiChar = get_char(AsciiChar::from_u8(126))
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))
+    let null_char: AsciiChar = get_char(AsciiChar::from_u8(0))
+    let del: AsciiChar = get_char(AsciiChar::from_u8(127))
+
+    assert(space.is_printable(), "space should be printable")
+    assert(tilde.is_printable(), "tilde should be printable")
+    assert(a.is_printable(), "a should be printable")
+    assert(not null_char.is_printable(), "null should not be printable")
+    assert(not del.is_printable(), "delete should not be printable")
+
+    return 0
+}
+
+// ============================================================================
+// Case Conversion
+// ============================================================================
+
+@test
+func test_char_to_lowercase() -> I32 {
+    let upper_a: AsciiChar = get_char(AsciiChar::from_u8(65))  // 'A'
+    let upper_z: AsciiChar = get_char(AsciiChar::from_u8(90))  // 'Z'
+    let lower_a: AsciiChar = get_char(AsciiChar::from_u8(97))  // 'a'
+    let digit: AsciiChar = get_char(AsciiChar::from_u8(48))    // '0'
+
+    // Test method chaining: .to_lowercase().to_u8()
+    assert(upper_a.to_lowercase().to_u8() == 97, "A should lowercase to a")
+    assert(upper_z.to_lowercase().to_u8() == 122, "Z should lowercase to z")
+    assert(lower_a.to_lowercase().to_u8() == 97, "a should stay a")
+    assert(digit.to_lowercase().to_u8() == 48, "0 should stay 0")
+
+    return 0
+}
+
+@test
+func test_char_to_uppercase() -> I32 {
+    let lower_a: AsciiChar = get_char(AsciiChar::from_u8(97))  // 'a'
+    let lower_z: AsciiChar = get_char(AsciiChar::from_u8(122)) // 'z'
+    let upper_a: AsciiChar = get_char(AsciiChar::from_u8(65))  // 'A'
+    let digit: AsciiChar = get_char(AsciiChar::from_u8(48))    // '0'
+
+    // Test method chaining: .to_uppercase().to_u8()
+    assert(lower_a.to_uppercase().to_u8() == 65, "a should uppercase to A")
+    assert(lower_z.to_uppercase().to_u8() == 90, "z should uppercase to Z")
+    assert(upper_a.to_uppercase().to_u8() == 65, "A should stay A")
+    assert(digit.to_uppercase().to_u8() == 48, "0 should stay 0")
+
+    return 0
+}
+
+@test
+func test_char_eq_ignore_case() -> I32 {
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))       // 'a'
+    let upper_a: AsciiChar = get_char(AsciiChar::from_u8(65)) // 'A'
+    let b: AsciiChar = get_char(AsciiChar::from_u8(98))       // 'b'
+
+    assert(a.eq_ignore_case(upper_a), "a should equal A ignoring case")
+    assert(upper_a.eq_ignore_case(a), "A should equal a ignoring case")
+    assert(not a.eq_ignore_case(b), "a should not equal b")
+
+    return 0
+}
+
+// ============================================================================
+// Digit Conversion
+// ============================================================================
+
+@test
+func test_char_to_digit() -> I32 {
+    let d0: AsciiChar = get_char(AsciiChar::from_u8(48))  // '0'
+    let d5: AsciiChar = get_char(AsciiChar::from_u8(53))  // '5'
+    let d9: AsciiChar = get_char(AsciiChar::from_u8(57))  // '9'
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))   // 'a'
+
+    assert(get_u8(d0.to_digit()) == 0, "0 should convert to 0")
+    assert(get_u8(d5.to_digit()) == 5, "5 should convert to 5")
+    assert(get_u8(d9.to_digit()) == 9, "9 should convert to 9")
+    assert(a.to_digit().is_nothing(), "a should not convert to digit")
+
+    return 0
+}
+
+@test
+func test_char_to_hexdigit() -> I32 {
+    let d0: AsciiChar = get_char(AsciiChar::from_u8(48))      // '0'
+    let d9: AsciiChar = get_char(AsciiChar::from_u8(57))      // '9'
+    let a: AsciiChar = get_char(AsciiChar::from_u8(97))       // 'a'
+    let f: AsciiChar = get_char(AsciiChar::from_u8(102))      // 'f'
+    let upper_a: AsciiChar = get_char(AsciiChar::from_u8(65)) // 'A'
+
+    assert(get_u8(d0.to_hexdigit()) == 0, "0 should convert to 0")
+    assert(get_u8(d9.to_hexdigit()) == 9, "9 should convert to 9")
+    assert(get_u8(a.to_hexdigit()) == 10, "a should convert to 10")
+    assert(get_u8(f.to_hexdigit()) == 15, "f should convert to 15")
+    assert(get_u8(upper_a.to_hexdigit()) == 10, "A should convert to 10")
+
+    return 0
+}
+
+// Note: Constants tests removed - TML doesn't support accessing
+// pub const defined in impl blocks via Type::Constant syntax yet
+
+// ############################################################################
+// Tests from ascii_chain.test.tml
+// ############################################################################
+
+// ============================================================================
+// Method Chaining
+// ============================================================================
+
+@test
+func test_chain_to_lowercase_to_u8() -> I32 {
+    let upper_a: AsciiChar = AsciiChar::from_u8_unchecked(65)  // 'A'
+
+    // Method chaining: to_lowercase returns AsciiChar, then call to_u8 on it
+    let result: U8 = upper_a.to_lowercase().to_u8()
+
+    // 'A' (65) should become 'a' (97)
+    assert(result == 97, "A should lowercase to a (97)")
+
+    return 0
+}
+
+@test
+func test_from_u8_valid() -> I32 {
+    let maybe_a: Maybe[AsciiChar] = AsciiChar::from_u8(65)
+    assert(maybe_a.is_just(), "65 should be valid ASCII")
+    return 0
+}
+
+@test
+func test_from_u8_invalid() -> I32 {
+    let maybe_invalid: Maybe[AsciiChar] = AsciiChar::from_u8(128)
+    assert(maybe_invalid.is_nothing(), "128 should be invalid ASCII")
+    return 0
+}
+
+// Renamed from test_is_uppercase (collision with ascii_simple.test.tml)
+@test
+func test_is_uppercase_chain() -> I32 {
+    let upper_a: AsciiChar = AsciiChar::from_u8_unchecked(65)
+    let lower_a: AsciiChar = AsciiChar::from_u8_unchecked(97)
+
+    assert(upper_a.is_uppercase(), "A should be uppercase")
+    assert(not lower_a.is_uppercase(), "a should not be uppercase")
+    return 0
+}
+
+// Renamed from test_is_lowercase (collision with ascii_simple.test.tml)
+@test
+func test_is_lowercase_chain() -> I32 {
+    let upper_a: AsciiChar = AsciiChar::from_u8_unchecked(65)
+    let lower_a: AsciiChar = AsciiChar::from_u8_unchecked(97)
+
+    assert(lower_a.is_lowercase(), "a should be lowercase")
+    assert(not upper_a.is_lowercase(), "A should not be lowercase")
+    return 0
+}
+
+// Renamed from test_is_digit (collision with ascii_simple.test.tml)
+@test
+func test_is_digit_chain() -> I32 {
+    let d0: AsciiChar = AsciiChar::from_u8_unchecked(48)  // '0'
+    let d9: AsciiChar = AsciiChar::from_u8_unchecked(57)  // '9'
+    let a: AsciiChar = AsciiChar::from_u8_unchecked(97)   // 'a'
+
+    assert(d0.is_digit(), "0 should be digit")
+    assert(d9.is_digit(), "9 should be digit")
+    assert(not a.is_digit(), "a should not be digit")
+    return 0
+}
+
+// Renamed from test_to_uppercase (collision with ascii_simple.test.tml)
+@test
+func test_to_uppercase_chain() -> I32 {
+    let lower_a: AsciiChar = AsciiChar::from_u8_unchecked(97)
+
+    // Method chaining
+    let result: U8 = lower_a.to_uppercase().to_u8()
+    assert(result == 65, "a should uppercase to A (65)")
+    return 0
+}
+
+// ############################################################################
+// Tests from ascii_simple.test.tml
+// ############################################################################
+
+// ============================================================================
+// Basic Char Creation and Conversion (simple variants)
+// ============================================================================
+
+// Renamed from test_char_from_u8_valid (collision with ascii.test.tml)
+@test
+func test_char_from_u8_valid_simple() -> I32 {
+    // Valid ASCII value
+    let a: Maybe[AsciiChar] = AsciiChar::from_u8(65)
+    assert(a.is_just(), "65 should be valid ASCII")
+    return 0
+}
+
+// Renamed from test_char_from_u8_invalid (collision with ascii.test.tml)
+@test
+func test_char_from_u8_invalid_simple() -> I32 {
+    // Invalid ASCII value
+    let invalid: Maybe[AsciiChar] = AsciiChar::from_u8(128)
+    assert(invalid.is_nothing(), "128 should be invalid ASCII")
+    return 0
+}
+
+// Renamed from test_char_to_u8 (collision with ascii.test.tml)
+@test
+func test_char_to_u8_simple() -> I32 {
+    let a: AsciiChar = unwrap_char(AsciiChar::from_u8(65))
+    let result: U8 = a.to_u8()
+    assert(result == 65, "A should have value 65")
+    return 0
+}
+
+// ============================================================================
+// Character Classification (simple variants)
+// ============================================================================
+
+@test
+func test_is_alphabetic() -> I32 {
+    let a: AsciiChar = unwrap_char(AsciiChar::from_u8(97))       // 'a'
+    let upper_a: AsciiChar = unwrap_char(AsciiChar::from_u8(65)) // 'A'
+    let digit: AsciiChar = unwrap_char(AsciiChar::from_u8(48))   // '0'
+
+    assert(a.is_alphabetic(), "a should be alphabetic")
+    assert(upper_a.is_alphabetic(), "A should be alphabetic")
+    assert(not digit.is_alphabetic(), "0 should not be alphabetic")
+    return 0
+}
+
+// Renamed from test_is_uppercase (collision with ascii_chain.test.tml)
+@test
+func test_is_uppercase_simple() -> I32 {
+    let upper_a: AsciiChar = unwrap_char(AsciiChar::from_u8(65))  // 'A'
+    let lower_a: AsciiChar = unwrap_char(AsciiChar::from_u8(97))  // 'a'
+
+    assert(upper_a.is_uppercase(), "A should be uppercase")
+    assert(not lower_a.is_uppercase(), "a should not be uppercase")
+    return 0
+}
+
+// Renamed from test_is_lowercase (collision with ascii_chain.test.tml)
+@test
+func test_is_lowercase_simple() -> I32 {
+    let lower_a: AsciiChar = unwrap_char(AsciiChar::from_u8(97))  // 'a'
+    let upper_a: AsciiChar = unwrap_char(AsciiChar::from_u8(65))  // 'A'
+
+    assert(lower_a.is_lowercase(), "a should be lowercase")
+    assert(not upper_a.is_lowercase(), "A should not be lowercase")
+    return 0
+}
+
+// Renamed from test_is_digit (collision with ascii_chain.test.tml)
+@test
+func test_is_digit_simple() -> I32 {
+    let d0: AsciiChar = unwrap_char(AsciiChar::from_u8(48))  // '0'
+    let d9: AsciiChar = unwrap_char(AsciiChar::from_u8(57))  // '9'
+    let a: AsciiChar = unwrap_char(AsciiChar::from_u8(97))   // 'a'
+
+    assert(d0.is_digit(), "0 should be digit")
+    assert(d9.is_digit(), "9 should be digit")
+    assert(not a.is_digit(), "a should not be digit")
+    return 0
+}
+
+@test
+func test_is_whitespace() -> I32 {
+    let space: AsciiChar = unwrap_char(AsciiChar::from_u8(32))  // ' '
+    let tab: AsciiChar = unwrap_char(AsciiChar::from_u8(9))     // '\t'
+    let a: AsciiChar = unwrap_char(AsciiChar::from_u8(97))      // 'a'
+
+    assert(space.is_whitespace(), "space should be whitespace")
+    assert(tab.is_whitespace(), "tab should be whitespace")
+    assert(not a.is_whitespace(), "a should not be whitespace")
+    return 0
+}
+
+@test
+func test_is_control() -> I32 {
+    let null_char: AsciiChar = unwrap_char(AsciiChar::from_u8(0))
+    let del: AsciiChar = unwrap_char(AsciiChar::from_u8(127))
+    let a: AsciiChar = unwrap_char(AsciiChar::from_u8(97))
+
+    assert(null_char.is_control(), "null should be control")
+    assert(del.is_control(), "delete should be control")
+    assert(not a.is_control(), "a should not be control")
+    return 0
+}
+
+// ============================================================================
+// Case Conversion (simple variants)
+// ============================================================================
+
+@test
+func test_to_lowercase() -> I32 {
+    let upper_a: AsciiChar = unwrap_char(AsciiChar::from_u8(65))  // 'A'
+    let result: AsciiChar = upper_a.to_lowercase()
+    let value: U8 = result.to_u8()
+    assert(value == 97, "A should lowercase to a")
+    return 0
+}
+
+// Renamed from test_to_uppercase (collision with ascii_chain.test.tml)
+@test
+func test_to_uppercase_simple() -> I32 {
+    let lower_a: AsciiChar = unwrap_char(AsciiChar::from_u8(97))  // 'a'
+    let result: AsciiChar = lower_a.to_uppercase()
+    let value: U8 = result.to_u8()
+    assert(value == 65, "a should uppercase to A")
+    return 0
+}
+
+// ############################################################################
+// Tests from ascii_coverage.test.tml
+// ############################################################################
+
+// ============================================================================
+// Uncovered AsciiChar Methods
+// ============================================================================
+
+@test
+func test_digit_unchecked() -> I32 {
+    let d: AsciiChar = AsciiChar::digit_unchecked(5 as U8)
+    assert(d.to_u8() == 53, "digit_unchecked(5) = '5' = 53")
+    return 0
+}
+
+@test
+func test_from_digit() -> I32 {
+    let r: Maybe[AsciiChar] = AsciiChar::from_digit(7 as U8, 10 as U8)
+    assert(r.is_just(), "from_digit(7,10) should be Just")
+    return 0
+}
+
+@test
+func test_from_char() -> I32 {
+    let r: Maybe[AsciiChar] = AsciiChar::from_char('B')
+    assert(r.is_just(), "from_char B should be Just")
+    return 0
+}
+
+@test
+func test_from_char_unchecked() -> I32 {
+    let a: AsciiChar = AsciiChar::from_char_unchecked('C')
+    assert(a.to_u8() == 67, "from_char_unchecked C = 67")
+    return 0
+}
+
+@test
+func test_to_char() -> I32 {
+    let a: AsciiChar = make_a()
+    let c: Char = a.to_char()
+    assert(c == 'A', "to_char returns A")
+    return 0
+}
+
+@test
+func test_as_str() -> I32 {
+    let a: AsciiChar = make_a()
+    let s: Str = a.as_str()
+    assert_eq(s, "A", "as_str returns A")
+    return 0
+}
+
+@test
+func test_is_octdigit() -> I32 {
+    let seven: AsciiChar = AsciiChar::from_u8_unchecked(55) // '7'
+    assert(seven.is_octdigit(), "7 is octdigit")
+    let nine: AsciiChar = AsciiChar::from_u8_unchecked(57) // '9'
+    assert(not nine.is_octdigit(), "9 is not octdigit")
+    return 0
+}
+
+@test
+func test_is_blank() -> I32 {
+    let space: AsciiChar = AsciiChar::from_u8_unchecked(32)
+    assert(space.is_blank(), "space is blank")
+    let a: AsciiChar = make_a()
+    assert(not a.is_blank(), "A is not blank")
+    return 0
+}
+
+@test
+func test_is_graphic() -> I32 {
+    let a: AsciiChar = make_a()
+    assert(a.is_graphic(), "A is graphic")
+    return 0
+}
+
+@test
+func test_is_punctuation() -> I32 {
+    let dot: AsciiChar = AsciiChar::from_u8_unchecked(46) // '.'
+    assert(dot.is_punctuation(), ". is punctuation")
+    let a: AsciiChar = make_a()
+    assert(not a.is_punctuation(), "A is not punctuation")
+    return 0
+}
+
+@test
+func test_to_digit_radix() -> I32 {
+    let five: AsciiChar = AsciiChar::from_u8_unchecked(53) // '5'
+    let r: Maybe[U8] = five.to_digit_radix(10 as U8)
+    assert(r.is_just(), "5 to_digit_radix(10) is Just")
+    return 0
+}
+
+@test
+func test_make_lowercase() -> I32 {
+    var a: AsciiChar = make_a()
+    a.make_lowercase()
+    assert(a.to_u8() == 97, "make_lowercase A -> a = 97")
+    return 0
+}
+
+@test
+func test_make_uppercase() -> I32 {
+    var a: AsciiChar = AsciiChar::from_u8_unchecked(97) // 'a'
+    a.make_uppercase()
+    assert(a.to_u8() == 65, "make_uppercase a -> A = 65")
+    return 0
+}

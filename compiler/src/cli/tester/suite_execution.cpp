@@ -720,84 +720,209 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             test_stats.suites.begin(), test_stats.suites.end(),
             [](const SuiteStats& a, const SuiteStats& b) { return a.test_count > b.test_count; });
 
-        // Check if any tests failed
+        // Check if any tests failed or crashed
+        // A crash is detected by non-zero exit codes (especially negative ones on Windows)
         bool has_failures = false;
+        bool has_crashes = false;
+        int failure_count = 0;
+        int crash_count = 0;
         for (const auto& result : collector.results) {
             if (!result.passed) {
                 has_failures = true;
-                break;
+                failure_count++;
+                // Detect crashes: negative exit codes (Windows STATUS codes) or
+                // specific crash indicators
+                if (result.exit_code < 0 || result.exit_code == -2 || result.compilation_error) {
+                    has_crashes = true;
+                    crash_count++;
+                }
             }
         }
 
         // Print library coverage analysis after all suites complete
         // Note: Coverage with filters is blocked in run.cpp, so opts.patterns is always empty here
         if (CompilerOptions::coverage) {
-            // Generate report even if no functions were tracked (shows 0% coverage)
-            print_library_coverage_report(all_covered_functions, c, test_stats);
-
-            // Write HTML report with proper library coverage data ONLY if:
-            // 1. All tests passed
-            // 2. Coverage is not zero
-            // 3. Coverage PERCENTAGE is not regressing from previous report
-            if (!CompilerOptions::coverage_output.empty() && !has_failures) {
-                int current_covered = static_cast<int>(all_covered_functions.size());
-
-                // Never update with zero coverage - something went wrong
-                if (current_covered == 0) {
-                    TML_LOG_WARN("test", c.red()
-                                             << c.bold()
-                                             << "[HTML report not updated - zero coverage detected]"
-                                             << c.reset());
-                    TML_LOG_WARN(
-                        "test",
-                        c.dim()
-                            << "   No functions were tracked. Check if tests are running correctly."
+            // FATAL: If any tests failed or crashed, coverage data is unreliable.
+            // Do NOT generate any coverage files (HTML/JSON) — this is NON-NEGOTIABLE.
+            if (has_failures) {
+                TML_LOG_FATAL("test",
+                              c.red() << c.bold()
+                                      << "========================================================"
+                                      << c.reset());
+                TML_LOG_FATAL(
+                    "test",
+                    c.red() << c.bold() << "  COVERAGE ABORTED: " << failure_count
+                            << " test(s) failed"
+                            << (has_crashes ? " (" + std::to_string(crash_count) + " crashed)" : "")
                             << c.reset());
-                } else {
-                    auto previous = get_previous_coverage(CompilerOptions::coverage_output);
+                TML_LOG_FATAL("test", c.red()
+                                          << c.bold() << "  Coverage report will NOT be generated."
+                                          << c.reset());
+                TML_LOG_FATAL("test", c.red() << c.bold()
+                                              << "  Fix all test failures before running coverage."
+                                              << c.reset());
+                TML_LOG_FATAL("test",
+                              c.red() << c.bold()
+                                      << "========================================================"
+                                      << c.reset());
 
-                    // Use the previous total as reference for calculating current percentage
-                    // This ensures we compare apples to apples even if library grows
-                    // If no previous report, allow any coverage (as long as > 0)
-                    bool should_update = true;
-                    double current_percent = 0.0;
-
-                    if (previous.valid && previous.total > 0) {
-                        // Calculate current percentage using the SAME total as previous
-                        // This is the fair comparison: did we cover more or fewer functions?
-                        current_percent = (100.0 * current_covered) / previous.total;
-
-                        // Regression if current percentage is less than previous
-                        should_update = current_percent >= previous.percent;
-                    }
-
-                    if (should_update) {
-                        // No previous report or coverage improved/maintained
-                        write_library_coverage_html(all_covered_functions,
-                                                    CompilerOptions::coverage_output, test_stats);
-                    } else {
-                        // Coverage regression detected
-                        TML_LOG_WARN(
+                // Log each failure for diagnostics
+                for (const auto& result : collector.results) {
+                    if (!result.passed) {
+                        TML_LOG_ERROR(
                             "test",
-                            c.yellow() << c.bold()
-                                       << "[HTML report not updated - coverage regression detected]"
-                                       << c.reset());
-                        TML_LOG_WARN("test", c.dim() << "   Previous: " << previous.covered << "/"
-                                                     << previous.total << " functions ("
-                                                     << std::fixed << std::setprecision(1)
-                                                     << previous.percent << "%)" << c.reset());
-                        TML_LOG_WARN("test", c.dim() << "   Current:  " << current_covered << "/"
-                                                     << previous.total << " functions ("
-                                                     << std::fixed << std::setprecision(1)
-                                                     << current_percent << "%)" << c.reset());
-                        TML_LOG_WARN("test", c.dim()
-                                                 << "   Run with --force-coverage to update anyway"
-                                                 << c.reset());
+                            "  FAILED: " << result.test_name << " (exit=" << result.exit_code << ")"
+                                         << (result.compilation_error ? " [COMPILATION ERROR]" : "")
+                                         << " file=" << result.file_path);
                     }
                 }
-            } else if (has_failures && !CompilerOptions::coverage_output.empty()) {
-                TML_LOG_INFO("test",
-                             c.dim() << "[HTML report not updated - tests failed]" << c.reset());
+            } else {
+                // All tests passed — safe to generate coverage report
+                print_library_coverage_report(all_covered_functions, c, test_stats);
+
+                // Write HTML report with proper library coverage data ONLY if:
+                // 1. All tests passed (already checked above)
+                // 2. Coverage is not zero
+                // 3. Coverage PERCENTAGE is not regressing from previous report
+                if (!CompilerOptions::coverage_output.empty()) {
+                    int current_covered = static_cast<int>(all_covered_functions.size());
+
+                    // Never update with zero coverage - something went wrong
+                    if (current_covered == 0) {
+                        TML_LOG_FATAL(
+                            "test",
+                            c.red() << c.bold()
+                                    << "========================================================"
+                                    << c.reset());
+                        TML_LOG_FATAL("test", c.red()
+                                                  << c.bold()
+                                                  << "  COVERAGE ABORTED: Zero functions tracked"
+                                                  << c.reset());
+                        TML_LOG_FATAL(
+                            "test", c.red()
+                                        << c.bold()
+                                        << "  All tests passed but no coverage data was collected."
+                                        << c.reset());
+                        TML_LOG_FATAL(
+                            "test", c.red() << c.bold()
+                                            << "  This indicates a bug in coverage instrumentation."
+                                            << c.reset());
+                        TML_LOG_FATAL("test", c.red() << c.bold()
+                                                      << "  HTML/JSON files will NOT be generated."
+                                                      << c.reset());
+                        TML_LOG_FATAL(
+                            "test",
+                            c.red() << c.bold()
+                                    << "========================================================"
+                                    << c.reset());
+                    } else {
+                        auto previous = get_previous_coverage(CompilerOptions::coverage_output);
+
+                        // Use the previous total as reference for calculating current percentage
+                        // This ensures we compare apples to apples even if library grows
+                        // If no previous report, allow any coverage (as long as > 0)
+                        bool should_update = true;
+                        double current_percent = 0.0;
+
+                        if (previous.valid && previous.total > 0) {
+                            // Calculate current percentage using the SAME total as previous
+                            // This is the fair comparison: did we cover more or fewer functions?
+                            current_percent = (100.0 * current_covered) / previous.total;
+
+                            // Regression if current percentage is less than previous
+                            should_update = current_percent >= previous.percent;
+                        }
+
+                        if (should_update) {
+                            // Write to temp files first, then atomically rename
+                            // This prevents partial/corrupt files if the process crashes
+                            // during exit (e.g., OpenSSL cleanup, atexit handlers)
+                            std::string tmp_output = CompilerOptions::coverage_output + ".tmp";
+                            write_library_coverage_html(all_covered_functions, tmp_output,
+                                                        test_stats);
+
+                            // The JSON is written alongside HTML by write_library_coverage_html
+                            // with replace_extension(".json") — so for "X.html.tmp" it becomes
+                            // "X.html.json". We need to find and rename that too.
+                            std::string tmp_json =
+                                fs::path(tmp_output).replace_extension(".json").string();
+                            std::string final_json = fs::path(CompilerOptions::coverage_output)
+                                                         .replace_extension(".json")
+                                                         .string();
+                            bool html_ok = fs::exists(tmp_output) && fs::file_size(tmp_output) > 0;
+                            bool json_ok = fs::exists(tmp_json) && fs::file_size(tmp_json) > 0;
+
+                            if (html_ok && json_ok) {
+                                // Atomically replace final files
+                                try {
+                                    fs::rename(tmp_output, CompilerOptions::coverage_output);
+                                    fs::rename(tmp_json, final_json);
+                                    TML_LOG_INFO("test",
+                                                 c.green()
+                                                     << c.bold()
+                                                     << "[Coverage report updated successfully]"
+                                                     << c.reset());
+                                } catch (const std::exception& e) {
+                                    TML_LOG_FATAL(
+                                        "test", "Failed to finalize coverage files: " << e.what());
+                                    // Clean up temp files
+                                    try {
+                                        fs::remove(tmp_output);
+                                    } catch (...) {}
+                                    try {
+                                        fs::remove(tmp_json);
+                                    } catch (...) {}
+                                }
+                            } else {
+                                TML_LOG_FATAL("test", c.red() << c.bold()
+                                                              << "================================="
+                                                                 "======================="
+                                                              << c.reset());
+                                TML_LOG_FATAL(
+                                    "test",
+                                    c.red()
+                                        << c.bold()
+                                        << "  COVERAGE ABORTED: Failed to write temp coverage files"
+                                        << c.reset());
+                                TML_LOG_FATAL("test",
+                                              c.red() << c.bold()
+                                                      << "  HTML ok: " << (html_ok ? "yes" : "NO")
+                                                      << ", JSON ok: " << (json_ok ? "yes" : "NO")
+                                                      << c.reset());
+                                TML_LOG_FATAL("test", c.red() << c.bold()
+                                                              << "================================="
+                                                                 "======================="
+                                                              << c.reset());
+                                // Clean up temp files
+                                try {
+                                    fs::remove(tmp_output);
+                                } catch (...) {}
+                                try {
+                                    fs::remove(tmp_json);
+                                } catch (...) {}
+                            }
+                        } else {
+                            // Coverage regression detected
+                            TML_LOG_WARN(
+                                "test",
+                                c.yellow()
+                                    << c.bold()
+                                    << "[HTML report not updated - coverage regression detected]"
+                                    << c.reset());
+                            TML_LOG_WARN("test", c.dim() << "   Previous: " << previous.covered
+                                                         << "/" << previous.total << " functions ("
+                                                         << std::fixed << std::setprecision(1)
+                                                         << previous.percent << "%)" << c.reset());
+                            TML_LOG_WARN("test", c.dim() << "   Current:  " << current_covered
+                                                         << "/" << previous.total << " functions ("
+                                                         << std::fixed << std::setprecision(1)
+                                                         << current_percent << "%)" << c.reset());
+                            TML_LOG_WARN("test",
+                                         c.dim() << "   Run with --force-coverage to update anyway"
+                                                 << c.reset());
+                        }
+                    }
+                }
             }
         }
 

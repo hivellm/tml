@@ -1,0 +1,613 @@
+// Consolidated tests for core::derive (40 tests)
+use test
+
+// ============================================================================
+// Section: PartialEq
+// ============================================================================
+
+// --- Simple Struct Tests ---
+
+@derive(PartialEq)
+type DeriveTestPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_point_eq_same() -> I32 {
+    let p1: DeriveTestPoint = DeriveTestPoint { x: 1, y: 2 }
+    let p2: DeriveTestPoint = DeriveTestPoint { x: 1, y: 2 }
+    let result: Bool = p1.eq(ref p2)
+    assert(result, "Points with same values should be equal")
+    return 0
+}
+
+@test
+func test_point_eq_different_x() -> I32 {
+    let p1: DeriveTestPoint = DeriveTestPoint { x: 1, y: 2 }
+    let p2: DeriveTestPoint = DeriveTestPoint { x: 3, y: 2 }
+    let result: Bool = p1.eq(ref p2)
+    assert(not result, "Points with different x should not be equal")
+    return 0
+}
+
+@test
+func test_point_eq_different_y() -> I32 {
+    let p1: DeriveTestPoint = DeriveTestPoint { x: 1, y: 2 }
+    let p2: DeriveTestPoint = DeriveTestPoint { x: 1, y: 5 }
+    let result: Bool = p1.eq(ref p2)
+    assert(not result, "Points with different y should not be equal")
+    return 0
+}
+
+// --- Multiple Derives Test ---
+
+@derive(PartialEq, Duplicate)
+type DeriveTestRectangle {
+    width: I32,
+    height: I32
+}
+
+@test
+func test_rectangle_eq() -> I32 {
+    let r1: DeriveTestRectangle = DeriveTestRectangle { width: 10, height: 20 }
+    let r2: DeriveTestRectangle = DeriveTestRectangle { width: 10, height: 20 }
+    let result: Bool = r1.eq(ref r2)
+    assert(result, "Rectangles with same values should be equal")
+    return 0
+}
+
+@test
+func test_rectangle_duplicate() -> I32 {
+    let r1: DeriveTestRectangle = DeriveTestRectangle { width: 10, height: 20 }
+    let r2: DeriveTestRectangle = r1.duplicate()
+    assert(r2.width == 10, "Duplicated rectangle should have same width")
+    assert(r2.height == 20, "Duplicated rectangle should have same height")
+    return 0
+}
+
+// ============================================================================
+// Section: Hash
+// ============================================================================
+
+// --- Simple Struct Tests ---
+
+@derive(Hash)
+type HashPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_hash_same_values_same_hash() -> I32 {
+    let p1: HashPoint = HashPoint { x: 1, y: 2 }
+    let p2: HashPoint = HashPoint { x: 1, y: 2 }
+    let h1: I64 = p1.hash()
+    let h2: I64 = p2.hash()
+    assert(h1 == h2, "Same values should produce same hash")
+    return 0
+}
+
+@test
+func test_hash_different_values_different_hash() -> I32 {
+    let p1: HashPoint = HashPoint { x: 1, y: 2 }
+    let p2: HashPoint = HashPoint { x: 3, y: 4 }
+    let h1: I64 = p1.hash()
+    let h2: I64 = p2.hash()
+    // Different values should typically produce different hashes
+    // (not guaranteed but extremely likely for FNV-1a)
+    assert(h1 != h2, "Different values should produce different hash")
+    return 0
+}
+
+@test
+func test_hash_nonzero() -> I32 {
+    let p: HashPoint = HashPoint { x: 0, y: 0 }
+    let h: I64 = p.hash()
+    // Hash should be non-zero even for zero values (due to FNV offset basis)
+    assert(h != 0, "Hash should be non-zero")
+    return 0
+}
+
+// --- Multiple Fields Test ---
+
+@derive(Hash)
+type HashRectangle {
+    x: I32,
+    y: I32,
+    width: I32,
+    height: I32
+}
+
+@test
+func test_hash_multiple_fields() -> I32 {
+    let r1: HashRectangle = HashRectangle { x: 0, y: 0, width: 100, height: 50 }
+    let r2: HashRectangle = HashRectangle { x: 0, y: 0, width: 100, height: 50 }
+    let r3: HashRectangle = HashRectangle { x: 0, y: 0, width: 100, height: 51 }
+
+    let h1: I64 = r1.hash()
+    let h2: I64 = r2.hash()
+    let h3: I64 = r3.hash()
+
+    assert(h1 == h2, "Same rectangles should have same hash")
+    assert(h1 != h3, "Different height should produce different hash")
+    return 0
+}
+
+// ============================================================================
+// Section: Default
+// ============================================================================
+
+// --- Simple Struct Tests ---
+
+@derive(Default)
+type DefaultPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_default_point() -> I32 {
+    let p: DefaultPoint = DefaultPoint::default()
+    assert(p.x == 0, "Default x should be 0")
+    assert(p.y == 0, "Default y should be 0")
+    return 0
+}
+
+// --- Multiple Field Types ---
+
+@derive(Default)
+type DefaultRect {
+    x: I32,
+    y: I32,
+    width: I64,
+    height: I64,
+    visible: Bool
+}
+
+@test
+func test_default_rect() -> I32 {
+    let r: DefaultRect = DefaultRect::default()
+    assert(r.x == 0, "Default x should be 0")
+    assert(r.y == 0, "Default y should be 0")
+    assert(r.width == 0, "Default width should be 0")
+    assert(r.height == 0, "Default height should be 0")
+    assert(not r.visible, "Default visible should be false")
+    return 0
+}
+
+// --- Float Fields ---
+
+@derive(Default)
+type DefaultVec2 {
+    x: F64,
+    y: F64
+}
+
+@test
+func test_default_vec2() -> I32 {
+    let v: DefaultVec2 = DefaultVec2::default()
+    assert(v.x == 0.0, "Default x should be 0.0")
+    assert(v.y == 0.0, "Default y should be 0.0")
+    return 0
+}
+
+// ============================================================================
+// Section: PartialOrd / Ord
+// ============================================================================
+
+// --- Simple Struct Tests - Ord (cmp) ---
+
+@derive(Ord)
+type OrdPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_ord_same_values() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 1, y: 2 }
+    let p2: OrdPoint = OrdPoint { x: 1, y: 2 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Equal, "Same values should be Equal")
+    return 0
+}
+
+@test
+func test_ord_first_field_less() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 1, y: 2 }
+    let p2: OrdPoint = OrdPoint { x: 3, y: 2 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Less, "p1.x < p2.x should be Less")
+    return 0
+}
+
+@test
+func test_ord_first_field_greater() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 5, y: 2 }
+    let p2: OrdPoint = OrdPoint { x: 3, y: 2 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Greater, "p1.x > p2.x should be Greater")
+    return 0
+}
+
+@test
+func test_ord_second_field_less() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 1, y: 2 }
+    let p2: OrdPoint = OrdPoint { x: 1, y: 5 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Less, "p1.y < p2.y should be Less")
+    return 0
+}
+
+@test
+func test_ord_second_field_greater() -> I32 {
+    let p1: OrdPoint = OrdPoint { x: 1, y: 8 }
+    let p2: OrdPoint = OrdPoint { x: 1, y: 5 }
+    let result: Ordering = p1.cmp(ref p2)
+    assert(result == Ordering::Greater, "p1.y > p2.y should be Greater")
+    return 0
+}
+
+// --- Multiple Field Types - Ord ---
+
+@derive(Ord)
+type OrdRect {
+    x: I32,
+    y: I32,
+    width: I64,
+    height: I64
+}
+
+@test
+func test_ord_rect_equal() -> I32 {
+    let r1: OrdRect = OrdRect { x: 0, y: 0, width: 100, height: 50 }
+    let r2: OrdRect = OrdRect { x: 0, y: 0, width: 100, height: 50 }
+    let result: Ordering = r1.cmp(ref r2)
+    assert(result == Ordering::Equal, "Same rectangles should be Equal")
+    return 0
+}
+
+@test
+func test_ord_rect_different_height() -> I32 {
+    let r1: OrdRect = OrdRect { x: 0, y: 0, width: 100, height: 50 }
+    let r2: OrdRect = OrdRect { x: 0, y: 0, width: 100, height: 51 }
+    let result: Ordering = r1.cmp(ref r2)
+    assert(result == Ordering::Less, "r1.height < r2.height should be Less")
+    return 0
+}
+
+// --- PartialOrd Tests (partial_cmp returning Maybe[Ordering]) ---
+
+@derive(PartialOrd)
+type PartialOrdPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_partial_ord_same_values() -> I32 {
+    let p1: PartialOrdPoint = PartialOrdPoint { x: 1, y: 2 }
+    let p2: PartialOrdPoint = PartialOrdPoint { x: 1, y: 2 }
+    let result: Maybe[Ordering] = p1.partial_cmp(ref p2)
+    when result {
+        Just(ord) => {
+            assert(ord == Ordering::Equal, "Same values should be Equal")
+        }
+        Nothing => {
+            assert(false, "Should return Just(Equal)")
+        }
+    }
+    return 0
+}
+
+@test
+func test_partial_ord_less() -> I32 {
+    let p1: PartialOrdPoint = PartialOrdPoint { x: 1, y: 2 }
+    let p2: PartialOrdPoint = PartialOrdPoint { x: 3, y: 2 }
+    let result: Maybe[Ordering] = p1.partial_cmp(ref p2)
+    when result {
+        Just(ord) => {
+            assert(ord == Ordering::Less, "p1.x < p2.x should be Less")
+        }
+        Nothing => {
+            assert(false, "Should return Just(Less)")
+        }
+    }
+    return 0
+}
+
+@test
+func test_partial_ord_greater() -> I32 {
+    let p1: PartialOrdPoint = PartialOrdPoint { x: 5, y: 2 }
+    let p2: PartialOrdPoint = PartialOrdPoint { x: 3, y: 2 }
+    let result: Maybe[Ordering] = p1.partial_cmp(ref p2)
+    when result {
+        Just(ord) => {
+            assert(ord == Ordering::Greater, "p1.x > p2.x should be Greater")
+        }
+        Nothing => {
+            assert(false, "Should return Just(Greater)")
+        }
+    }
+    return 0
+}
+
+// ============================================================================
+// Section: Debug
+// ============================================================================
+
+// --- Simple Struct Tests ---
+
+@derive(Debug)
+type DebugPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_debug_point() -> I32 {
+    let p: DebugPoint = DebugPoint { x: 10, y: 20 }
+    let s: Str = p.debug_string()
+    // Expected: "DebugPoint { x: 10, y: 20 }"
+    assert(s.contains("DebugPoint"), "Should contain type name")
+    assert(s.contains("x:"), "Should contain field name x")
+    assert(s.contains("y:"), "Should contain field name y")
+    assert(s.contains("10"), "Should contain value 10")
+    assert(s.contains("20"), "Should contain value 20")
+    return 0
+}
+
+// --- Multiple Field Types ---
+
+@derive(Debug)
+type DebugPerson {
+    age: I32,
+    height: I64,
+    active: Bool
+}
+
+@test
+func test_debug_person() -> I32 {
+    let p: DebugPerson = DebugPerson { age: 25, height: 180, active: true }
+    let s: Str = p.debug_string()
+    assert(s.contains("DebugPerson"), "Should contain type name")
+    assert(s.contains("age:"), "Should contain field age")
+    assert(s.contains("25"), "Should contain age value")
+    assert(s.contains("height:"), "Should contain field height")
+    assert(s.contains("180"), "Should contain height value")
+    assert(s.contains("active:"), "Should contain field active")
+    return 0
+}
+
+// --- Simple Enum Tests ---
+
+@derive(Debug)
+type DebugStatus = Active | Inactive | Pending
+
+@test
+func test_debug_enum_active() -> I32 {
+    let s: DebugStatus = DebugStatus::Active
+    let str: Str = s.debug_string()
+    assert(str.contains("Active"), "Should contain variant name Active")
+    return 0
+}
+
+@test
+func test_debug_enum_inactive() -> I32 {
+    let s: DebugStatus = DebugStatus::Inactive
+    let str: Str = s.debug_string()
+    assert(str.contains("Inactive"), "Should contain variant name Inactive")
+    return 0
+}
+
+@test
+func test_debug_enum_pending() -> I32 {
+    let s: DebugStatus = DebugStatus::Pending
+    let str: Str = s.debug_string()
+    assert(str.contains("Pending"), "Should contain variant name Pending")
+    return 0
+}
+
+// ============================================================================
+// Section: Display
+// ============================================================================
+
+// --- Simple Struct Tests ---
+
+@derive(Display)
+type DisplayPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_display_point() -> I32 {
+    let p: DisplayPoint = DisplayPoint { x: 10, y: 20 }
+    let s: Str = p.to_string()
+    // Display produces just the values: "10, 20"
+    assert(s.contains("10"), "Should contain value 10")
+    assert(s.contains("20"), "Should contain value 20")
+    return 0
+}
+
+// --- Multiple Field Types ---
+
+@derive(Display)
+type DisplayPerson {
+    age: I32,
+    height: I64
+}
+
+@test
+func test_display_person() -> I32 {
+    let p: DisplayPerson = DisplayPerson { age: 25, height: 180 }
+    let s: Str = p.to_string()
+    assert(s.contains("25"), "Should contain age value")
+    assert(s.contains("180"), "Should contain height value")
+    return 0
+}
+
+// --- Simple Enum Tests ---
+
+@derive(Display)
+type DisplayStatus = Active | Inactive | Pending
+
+@test
+func test_display_enum_active() -> I32 {
+    let s: DisplayStatus = DisplayStatus::Active
+    let str: Str = s.to_string()
+    assert(str.contains("Active"), "Should contain variant name Active")
+    return 0
+}
+
+@test
+func test_display_enum_inactive() -> I32 {
+    let s: DisplayStatus = DisplayStatus::Inactive
+    let str: Str = s.to_string()
+    assert(str.contains("Inactive"), "Should contain variant name Inactive")
+    return 0
+}
+
+@test
+func test_display_enum_pending() -> I32 {
+    let s: DisplayStatus = DisplayStatus::Pending
+    let str: Str = s.to_string()
+    assert(str.contains("Pending"), "Should contain variant name Pending")
+    return 0
+}
+
+// ============================================================================
+// Section: Serialize
+// ============================================================================
+
+// --- Simple Struct Tests ---
+
+@derive(Serialize)
+type SerPoint {
+    x: I32,
+    y: I32
+}
+
+@test
+func test_serialize_point() -> I32 {
+    let p: SerPoint = SerPoint { x: 10, y: 20 }
+    let json: Str = p.to_json()
+    // Expected: {"x": 10, "y": 20}
+    assert(json.contains("\"x\":"), "Should contain field x")
+    assert(json.contains("\"y\":"), "Should contain field y")
+    assert(json.contains("10"), "Should contain value 10")
+    assert(json.contains("20"), "Should contain value 20")
+    assert(json.starts_with("{"), "Should start with {")
+    assert(json.ends_with("}"), "Should end with }")
+    return 0
+}
+
+// --- String Field Tests ---
+
+@derive(Serialize)
+type SerPerson {
+    name: Str,
+    age: I32
+}
+
+@test
+func test_serialize_string_field() -> I32 {
+    let p: SerPerson = SerPerson { name: "Alice", age: 30 }
+    let json: Str = p.to_json()
+    // String fields should be quoted in JSON
+    assert(json.contains("\"name\":"), "Should contain field name")
+    assert(json.contains("\"Alice\""), "Should contain quoted string value")
+    assert(json.contains("30"), "Should contain age value")
+    return 0
+}
+
+// --- Simple Enum Tests ---
+
+@derive(Serialize)
+type SerStatus = Active | Inactive | Pending
+
+@test
+func test_serialize_enum_active() -> I32 {
+    let s: SerStatus = SerStatus::Active
+    let json: Str = s.to_json()
+    // Expected: {"variant": "Active"}
+    assert(json.contains("\"variant\":"), "Should contain variant key")
+    assert(json.contains("\"Active\""), "Should contain variant name Active")
+    return 0
+}
+
+@test
+func test_serialize_enum_inactive() -> I32 {
+    let s: SerStatus = SerStatus::Inactive
+    let json: Str = s.to_json()
+    assert(json.contains("\"variant\":"), "Should contain variant key")
+    assert(json.contains("\"Inactive\""), "Should contain variant name Inactive")
+    return 0
+}
+
+// ============================================================================
+// Section: FromStr
+// ============================================================================
+
+// --- Simple Enum Tests ---
+
+@derive(FromStr)
+type Color = Red | Green | Blue
+
+@test
+func test_fromstr_enum_red() -> I32 {
+    let result: Outcome[Color, Str] = Color::from_str("Red")
+    when result {
+        Ok(c) => {
+            // Successfully parsed
+            return 0
+        }
+        Err(e) => {
+            // Should not happen
+            return 1
+        }
+    }
+}
+
+@test
+func test_fromstr_enum_green() -> I32 {
+    let result: Outcome[Color, Str] = Color::from_str("Green")
+    when result {
+        Ok(c) => {
+            return 0
+        }
+        Err(e) => {
+            return 1
+        }
+    }
+}
+
+@test
+func test_fromstr_enum_blue() -> I32 {
+    let result: Outcome[Color, Str] = Color::from_str("Blue")
+    when result {
+        Ok(c) => {
+            return 0
+        }
+        Err(e) => {
+            return 1
+        }
+    }
+}
+
+@test
+func test_fromstr_enum_invalid() -> I32 {
+    let result: Outcome[Color, Str] = Color::from_str("Yellow")
+    when result {
+        Ok(c) => {
+            // Should not happen
+            return 1
+        }
+        Err(e) => {
+            // Expected error for invalid variant
+            assert(e.contains("Unknown"), "Error should mention unknown variant")
+            return 0
+        }
+    }
+}

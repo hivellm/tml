@@ -1,0 +1,80 @@
+// Tests for more uncovered str functions
+use test
+use core::str
+
+@test
+func test_str_trim() -> I32 {
+    let s: Str = str::trim("  hello  ")
+    assert_eq(s, "hello", "trim removes whitespace")
+    return 0
+}
+
+@test
+func test_str_trim_start() -> I32 {
+    let s: Str = str::trim_start("  hello")
+    assert_eq(s, "hello", "trim_start removes leading whitespace")
+    return 0
+}
+
+@test
+func test_str_trim_end() -> I32 {
+    let s: Str = str::trim_end("hello  ")
+    assert_eq(s, "hello", "trim_end removes trailing whitespace")
+    return 0
+}
+
+@test
+func test_str_to_uppercase() -> I32 {
+    let s: Str = str::to_uppercase("hello")
+    assert_eq(s, "HELLO", "to_uppercase")
+    return 0
+}
+
+@test
+func test_str_to_lowercase() -> I32 {
+    let s: Str = str::to_lowercase("HELLO")
+    assert_eq(s, "hello", "to_lowercase")
+    return 0
+}
+
+@test
+func test_str_repeat() -> I32 {
+    let s: Str = str::repeat("ab", 3 as I64)
+    assert_eq(s, "ababab", "repeat ab 3 times")
+    return 0
+}
+
+@test
+func test_str_replace() -> I32 {
+    let s: Str = str::replace("hello world", "world", "tml")
+    assert_eq(s, "hello tml", "replace world with tml")
+    return 0
+}
+
+@test
+func test_str_concat() -> I32 {
+    let s: Str = str::concat("hello", " world")
+    assert_eq(s, "hello world", "concat two strings")
+    return 0
+}
+
+@test
+func test_str_substring() -> I32 {
+    let s: Str = str::substring("hello world", 0 as I64, 5 as I64)
+    assert_eq(s, "hello", "substring 0..5")
+    return 0
+}
+
+@test
+func test_str_substring_from() -> I32 {
+    let s: Str = str::substring_from("hello world", 6 as I64)
+    assert_eq(s, "world", "substring_from 6")
+    return 0
+}
+
+@test
+func test_str_substring_to() -> I32 {
+    let s: Str = str::substring_to("hello world", 5 as I64)
+    assert_eq(s, "hello", "substring_to 5")
+    return 0
+}

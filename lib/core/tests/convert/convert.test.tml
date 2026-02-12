@@ -1,0 +1,493 @@
+// Consolidated convert tests: Identity, From, Into, and TryInto basics
+// Sources: identity.test.tml, from.test.tml, from_extra.test.tml, into.test.tml, tryinto.test.tml
+// Total @test count: 45
+use test::{assert, assert_eq}
+use core::convert::*
+
+// ============================================================================
+// Custom types for testing From (from from.test.tml)
+// ============================================================================
+
+type Celsius {
+    value: I32
+}
+
+type Fahrenheit {
+    value: I32
+}
+
+impl From[Celsius] for Fahrenheit {
+    pub func from(c: Celsius) -> Fahrenheit {
+        return Fahrenheit { value: c.value * 9 / 5 + 32 }
+    }
+}
+
+impl From[Fahrenheit] for Celsius {
+    pub func from(f: Fahrenheit) -> Celsius {
+        return Celsius { value: (f.value - 32) * 5 / 9 }
+    }
+}
+
+// ============================================================================
+// Section 1: Identity conversions - From[T] for T (6 tests)
+// Source: identity.test.tml
+// ============================================================================
+
+@test
+func test_identity_i32() -> I32 {
+    let val: I32 = 42
+    let result: I32 = I32::from(val)
+    assert_eq(result, 42, "Identity conversion I32")
+    return 0
+}
+
+@test
+func test_identity_i64() -> I32 {
+    let val: I64 = 999999 as I64
+    let result: I64 = I64::from(val)
+    assert_eq(result, 999999 as I64, "Identity conversion I64")
+    return 0
+}
+
+@test
+func test_identity_bool_true() -> I32 {
+    let val: Bool = true
+    let result: Bool = Bool::from(val)
+    assert(result == true, "Identity conversion Bool true")
+    return 0
+}
+
+@test
+func test_identity_bool_false() -> I32 {
+    let val: Bool = false
+    let result: Bool = Bool::from(val)
+    assert(result == false, "Identity conversion Bool false")
+    return 0
+}
+
+@test
+func test_identity_u8() -> I32 {
+    let val: U8 = 255 as U8
+    let result: U8 = U8::from(val)
+    assert_eq(result as I32, 255, "Identity conversion U8")
+    return 0
+}
+
+@test
+func test_identity_negative() -> I32 {
+    let val: I32 = -100
+    let result: I32 = I32::from(val)
+    assert_eq(result, -100, "Identity conversion preserves negative")
+    return 0
+}
+
+// ============================================================================
+// Section 2: From tests with custom types (4 tests)
+// Source: from.test.tml
+// ============================================================================
+
+@test
+func test_from_celsius_to_fahrenheit() -> I32 {
+    let celsius: Celsius = Celsius { value: 0 }
+    let fahrenheit: Fahrenheit = Fahrenheit::from(celsius)
+    assert_eq(fahrenheit.value, 32, "0C should be 32F")
+    return 0
+}
+
+@test
+func test_from_celsius_100() -> I32 {
+    let celsius: Celsius = Celsius { value: 100 }
+    let fahrenheit: Fahrenheit = Fahrenheit::from(celsius)
+    assert_eq(fahrenheit.value, 212, "100C should be 212F")
+    return 0
+}
+
+@test
+func test_from_fahrenheit_to_celsius() -> I32 {
+    let fahrenheit: Fahrenheit = Fahrenheit { value: 32 }
+    let celsius: Celsius = Celsius::from(fahrenheit)
+    assert_eq(celsius.value, 0, "32F should be 0C")
+    return 0
+}
+
+@test
+func test_from_fahrenheit_212() -> I32 {
+    let fahrenheit: Fahrenheit = Fahrenheit { value: 212 }
+    let celsius: Celsius = Celsius::from(fahrenheit)
+    assert_eq(celsius.value, 100, "212F should be 100C")
+    return 0
+}
+
+// ============================================================================
+// Section 3: Primitive From tests - signed widening (5 tests)
+// Source: from.test.tml
+// ============================================================================
+
+@test
+func test_i64_from_i32() -> I32 {
+    let small: I32 = 42
+    let big: I64 = I64::from(small)
+    assert_eq(big, 42, "I64::from(I32) should work")
+    return 0
+}
+
+@test
+func test_i64_from_i16() -> I32 {
+    let small: I16 = 1000
+    let big: I64 = I64::from(small)
+    assert_eq(big, 1000, "I64::from(I16) should work")
+    return 0
+}
+
+@test
+func test_i32_from_i16() -> I32 {
+    let small: I16 = -500
+    let big: I32 = I32::from(small)
+    assert_eq(big, -500, "I32::from(I16) should preserve sign")
+    return 0
+}
+
+@test
+func test_i32_from_i8() -> I32 {
+    let small: I8 = 127
+    let big: I32 = I32::from(small)
+    assert_eq(big, 127, "I32::from(I8) max value")
+    return 0
+}
+
+@test
+func test_i32_from_i8_negative() -> I32 {
+    let small: I8 = -128
+    let big: I32 = I32::from(small)
+    assert_eq(big, -128, "I32::from(I8) min value")
+    return 0
+}
+
+// ============================================================================
+// Section 4: Unsigned From tests (3 tests)
+// Source: from.test.tml
+// ============================================================================
+
+@test
+func test_u64_from_u32() -> I32 {
+    let small: U32 = 4000000000
+    let big: U64 = U64::from(small)
+    assert_eq(big, 4000000000, "U64::from(U32) should work")
+    return 0
+}
+
+@test
+func test_u32_from_u16() -> I32 {
+    let small: U16 = 65535
+    let big: U32 = U32::from(small)
+    assert_eq(big, 65535, "U32::from(U16) max value")
+    return 0
+}
+
+@test
+func test_u16_from_u8() -> I32 {
+    let small: U8 = 255
+    let big: U16 = U16::from(small)
+    assert_eq(big, 255, "U16::from(U8) max value")
+    return 0
+}
+
+// ============================================================================
+// Section 5: Float From tests (2 tests)
+// Source: from.test.tml
+// ============================================================================
+
+@test
+func test_f64_from_f32() -> I32 {
+    let small: F32 = 3.14
+    let big: F64 = F64::from(small)
+    let int_val: I64 = (big * 100.0) as I64
+    assert_eq(int_val, 314, "F64::from(F32) should preserve value")
+    return 0
+}
+
+@test
+func test_f64_from_i32() -> I32 {
+    let int_val: I32 = 42
+    let float_val: F64 = F64::from(int_val)
+    let result: I64 = float_val as I64
+    assert_eq(result, 42, "F64::from(I32) should work")
+    return 0
+}
+
+// ============================================================================
+// Section 6: Bool -> numeric From conversions (4 tests)
+// Source: from_extra.test.tml
+// NOTE: Maybe::from and Outcome::from tests SKIPPED due to codegen bug
+// with generic static method resolution (struct.T not resolved properly)
+// ============================================================================
+
+@test
+func test_from_bool_true_to_i32() -> I32 {
+    let value: Bool = true
+    let result: I32 = I32::from(value)
+    assert_eq(result, 1, "true should convert to 1")
+    return 0
+}
+
+@test
+func test_from_bool_false_to_i32() -> I32 {
+    let value: Bool = false
+    let result: I32 = I32::from(value)
+    assert_eq(result, 0, "false should convert to 0")
+    return 0
+}
+
+@test
+func test_from_bool_true_to_i64() -> I32 {
+    let value: Bool = true
+    let result: I64 = I64::from(value)
+    assert_eq(result, 1, "true should convert to 1")
+    return 0
+}
+
+@test
+func test_from_bool_false_to_i64() -> I32 {
+    let value: Bool = false
+    let result: I64 = I64::from(value)
+    assert_eq(result, 0, "false should convert to 0")
+    return 0
+}
+
+// ============================================================================
+// Section 7: Into - Signed widening via From (5 tests)
+// Source: into.test.tml
+// ============================================================================
+
+@test
+func test_into_i8_to_i16() -> I32 {
+    let val: I8 = 42 as I8
+    let result: I16 = I16::from(val)
+    assert_eq(result, 42 as I16, "I8 -> I16 via From")
+    return 0
+}
+
+@test
+func test_into_i8_to_i32() -> I32 {
+    let val: I8 = -10 as I8
+    let result: I32 = I32::from(val)
+    assert_eq(result, -10, "I8 -> I32 preserves sign")
+    return 0
+}
+
+@test
+func test_into_i8_to_i64() -> I32 {
+    let val: I8 = 127 as I8
+    let result: I64 = I64::from(val)
+    assert_eq(result, 127 as I64, "I8 -> I64 max value")
+    return 0
+}
+
+@test
+func test_into_i16_to_i32() -> I32 {
+    let val: I16 = -1000 as I16
+    let result: I32 = I32::from(val)
+    assert_eq(result, -1000, "I16 -> I32 negative")
+    return 0
+}
+
+@test
+func test_into_i16_to_i64() -> I32 {
+    let val: I16 = 32767 as I16
+    let result: I64 = I64::from(val)
+    assert_eq(result, 32767 as I64, "I16 -> I64 max")
+    return 0
+}
+
+// ============================================================================
+// Section 8: Into - Unsigned widening via From (6 tests)
+// Source: into.test.tml
+// ============================================================================
+
+@test
+func test_into_u8_to_u16() -> I32 {
+    let val: U8 = 255 as U8
+    let result: U16 = U16::from(val)
+    assert_eq(result, 255 as U16, "U8 -> U16 max")
+    return 0
+}
+
+@test
+func test_into_u8_to_u32() -> I32 {
+    let val: U8 = 200 as U8
+    let result: U32 = U32::from(val)
+    assert_eq(result, 200 as U32, "U8 -> U32")
+    return 0
+}
+
+@test
+func test_into_u8_to_u64() -> I32 {
+    let val: U8 = 0 as U8
+    let result: U64 = U64::from(val)
+    assert_eq(result, 0 as U64, "U8 -> U64 zero")
+    return 0
+}
+
+@test
+func test_into_u16_to_u32() -> I32 {
+    let val: U16 = 50000 as U16
+    let result: U32 = U32::from(val)
+    assert_eq(result, 50000 as U32, "U16 -> U32")
+    return 0
+}
+
+@test
+func test_into_u16_to_u64() -> I32 {
+    let val: U16 = 65535 as U16
+    let result: U64 = U64::from(val)
+    assert_eq(result, 65535 as U64, "U16 -> U64 max")
+    return 0
+}
+
+@test
+func test_into_u32_to_u64() -> I32 {
+    let val: U32 = 4000000000 as U32
+    let result: U64 = U64::from(val)
+    assert_eq(result, 4000000000 as U64, "U32 -> U64 large")
+    return 0
+}
+
+// ============================================================================
+// Section 9: Into - Float widening (1 test)
+// Source: into.test.tml
+// ============================================================================
+
+@test
+func test_into_f32_to_f64() -> I32 {
+    let val: F32 = 1.5 as F32
+    let result: F64 = F64::from(val)
+    // F32 -> F64 should preserve value (approximately)
+    assert(result > 1.4 and result < 1.6, "F32 -> F64 should preserve value")
+    return 0
+}
+
+// ============================================================================
+// Section 10: TryFrom narrowing and cross conversions via TryInto patterns (9 tests)
+// Source: tryinto.test.tml
+// Many tests are SKIPPED due to codegen bug with static method overload selection
+// These tests also verify nested enum pattern matching with unit-only enums
+// ============================================================================
+
+@test
+func test_try_from_i64_to_i32_success() -> I32 {
+    let value: I64 = 100
+    when I32::try_from(value) {
+        Ok(n) => assert_eq(n, 100, "I64 100 -> I32 100"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i32_overflow_high() -> I32 {
+    let value: I64 = 3000000000  // > I32::MAX
+    when I32::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            // Test nested enum pattern matching with TryFromIntError (unit-only enum)
+            when e {
+                TryFromIntError::Overflow => {},
+                _ => panic("Should be Overflow")
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_i32_overflow_low() -> I32 {
+    let value: I64 = -3000000000  // < I32::MIN
+    when I32::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            when e {
+                TryFromIntError::Overflow => {},
+                _ => panic("Should be Overflow")
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_from_i32_to_u32_success() -> I32 {
+    let value: I32 = 1000
+    when U32::try_from(value) {
+        Ok(n) => assert_eq(n, 1000 as U32, "I32 1000 -> U32 1000"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i32_to_u32_negative() -> I32 {
+    let value: I32 = -1
+    when U32::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            when e {
+                TryFromIntError::NegativeToUnsigned => {},
+                _ => panic("Should be NegativeToUnsigned")
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_u64_success() -> I32 {
+    let value: I64 = 9000000000000
+    when U64::try_from(value) {
+        Ok(n) => assert_eq(n, 9000000000000 as U64, "I64 -> U64 success"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_i64_to_u64_negative() -> I32 {
+    let value: I64 = -100
+    when U64::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(e) => {
+            when e {
+                TryFromIntError::NegativeToUnsigned => {},
+                _ => panic("Should be NegativeToUnsigned")
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_from_u32_to_i32_success() -> I32 {
+    let value: U32 = 2000000000  // < I32::MAX
+    when I32::try_from(value) {
+        Ok(n) => assert_eq(n, 2000000000, "U32 -> I32 success"),
+        Err(_) => panic("Should succeed")
+    }
+    return 0
+}
+
+@test
+func test_try_from_u32_to_i32_overflow() -> I32 {
+    let value: U32 = 3000000000  // > I32::MAX
+    when I32::try_from(value) {
+        Ok(_) => panic("Should fail"),
+        Err(_) => {}
+    }
+    return 0
+}
+
+// BLOCKED: Codegen bug with static method overload selection
+// The following conversions fail because the codegen selects wrong try_from:
+// - I64 -> I16, I8 (expects I16/I8 but argument is I64)
+// - I32 -> I16, I8 (same issue)
+// - U64 -> U32, U16, U8 (same issue)
+// - U32 -> U16, U8 (same issue)
+// - I8/U8 cross conversions (same issue)

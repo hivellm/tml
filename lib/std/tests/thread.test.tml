@@ -1,0 +1,402 @@
+// Consolidated tests for std::thread (30 tests)
+
+use test::{assert, assert_eq}
+use std::thread
+use std::thread::local::LocalKey
+
+// ============================================================================
+// Thread Sleep Tests (from thread_management)
+// ============================================================================
+
+@test
+func test_thread_sleep_ms_short() -> I32 {
+    // Sleep for 1ms - should complete without error
+    thread::sleep_ms(1)
+    return 0
+}
+
+@test
+func test_thread_sleep_ms_10() -> I32 {
+    // Sleep for 10ms
+    thread::sleep_ms(10)
+    return 0
+}
+
+@test
+func test_thread_sleep_ms_zero() -> I32 {
+    // Sleep for 0ms - should return immediately
+    thread::sleep_ms(0)
+    return 0
+}
+
+@test
+func test_thread_sleep_multiple() -> I32 {
+    // Multiple short sleeps
+    thread::sleep_ms(5)
+    thread::sleep_ms(5)
+    thread::sleep_ms(5)
+    return 0
+}
+
+// ============================================================================
+// Thread Yield Tests (from thread_management)
+// ============================================================================
+
+@test
+func test_thread_yield_now() -> I32 {
+    // Yield should not cause any errors
+    thread::yield_now()
+    return 0
+}
+
+@test
+func test_thread_yield_multiple() -> I32 {
+    // Multiple yields in a row
+    thread::yield_now()
+    thread::yield_now()
+    thread::yield_now()
+    return 0
+}
+
+// ============================================================================
+// Available Parallelism Tests (from thread_management)
+// ============================================================================
+
+@test
+func test_available_parallelism() -> I32 {
+    let cores: U32 = thread::available_parallelism()
+    // Should have at least 1 core
+    assert(cores >= 1, "Should have at least 1 core")
+    return 0
+}
+
+@test
+func test_available_parallelism_reasonable() -> I32 {
+    let cores: U32 = thread::available_parallelism()
+    // Should have a reasonable number of cores (less than 1024)
+    assert(cores < 1024, "Should have less than 1024 cores")
+    return 0
+}
+
+@test
+func test_available_parallelism_consistent() -> I32 {
+    // Multiple calls should return the same value
+    let cores1: U32 = thread::available_parallelism()
+    let cores2: U32 = thread::available_parallelism()
+    assert_eq(cores1, cores2)
+    return 0
+}
+
+// ============================================================================
+// Combined Thread Operations Tests (from thread_management)
+// ============================================================================
+
+@test
+func test_thread_operations_combined() -> I32 {
+    // Test various thread operations in sequence
+    thread::yield_now()
+    thread::sleep_ms(1)
+
+    let cores: U32 = thread::available_parallelism()
+    assert(cores >= 1, "Should have at least 1 core")
+
+    thread::yield_now()
+    return 0
+}
+
+// Note: The following tests are disabled due to codegen issues:
+// - thread::spawn/join - JoinHandle[T] generic instantiation issues
+// These will be enabled once the codegen properly handles these cases.
+
+// ============================================================================
+// Scoped Threads Tests (from scoped_threads)
+// ============================================================================
+
+// BLOCKED: Most scoped thread tests are currently disabled due to:
+// 1. Generic codegen issues with scope[R] and ScopedJoinHandle[T]
+// 2. Thread spawning issues (JoinHandle[T] generic instantiation)
+// 3. Path resolution issues with thread submodules
+//
+// These tests will be enabled once the compiler's generic type instantiation
+// is fixed for struct types.
+
+@test
+func test_scoped_threads_placeholder() -> I32 {
+    // This is a placeholder test to ensure the test file compiles.
+    // Actual scoped thread tests require:
+    // - Working generic struct instantiation for ScopedJoinHandle[T]
+    // - Working thread spawning infrastructure
+    // - Fixed module path resolution for thread::scope
+    return 0
+}
+
+// Tests to enable when codegen is fixed:
+
+// @test
+// func test_scope_basic() -> I32 {
+//     use std::thread::{scope, Scope}
+//
+//     scope(do(s: mut ref Scope) -> Unit {
+//         // Empty scope should work
+//     })
+//     return 0
+// }
+
+// @test
+// func test_scope_returns_value() -> I32 {
+//     use std::thread::{scope, Scope}
+//
+//     let result: I32 = scope(do(s: mut ref Scope) -> I32 {
+//         return 42
+//     })
+//     assert_eq(result, 42)
+//     return 0
+// }
+
+// @test
+// func test_scope_spawn_single() -> I32 {
+//     use std::thread::{scope, Scope, ScopedJoinHandle}
+//
+//     scope(do(s: mut ref Scope) -> Unit {
+//         let handle: ScopedJoinHandle[I32] = s.spawn(do() -> I32 {
+//             return 100
+//         })
+//         let result: I32 = handle.join()
+//         assert_eq(result, 100)
+//     })
+//     return 0
+// }
+
+// @test
+// func test_scope_spawn_multiple() -> I32 {
+//     use std::thread::{scope, Scope}
+//
+//     scope(do(s: mut ref Scope) -> Unit {
+//         s.spawn(do() -> Unit {})
+//         s.spawn(do() -> Unit {})
+//         s.spawn(do() -> Unit {})
+//     })
+//     return 0
+// }
+
+// Note: Tests for borrowing from parent scope require closure capture
+// which is not yet fully supported in TML closures.
+
+// ============================================================================
+// LocalKey Creation Tests (from thread_local)
+// ============================================================================
+
+// Note: Full LocalKey tests are limited due to closure capture codegen issues.
+// These tests verify the basic LocalKey API compiles and basic operations work.
+
+@test
+func test_local_key_new() -> I32 {
+    // Create a LocalKey with an initializer
+    var key: LocalKey[I32] = LocalKey::new(do() -> I32 42)
+    return 0
+}
+
+@test
+func test_local_key_new_zero() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() -> I32 0)
+    return 0
+}
+
+@test
+func test_local_key_new_negative() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() -> I32 -100)
+    return 0
+}
+
+@test
+func test_local_key_new_large_value() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() -> I32 2147483647)
+    return 0
+}
+
+// ============================================================================
+// LocalKey is_initialized() Tests (from thread_local)
+// ============================================================================
+
+@test
+func test_local_key_is_initialized_before_access() -> I32 {
+    var key: LocalKey[I32] = LocalKey::new(do() -> I32 0)
+
+    // Before first access, not initialized
+    let initialized: Bool = key.is_initialized()
+    assert(not initialized, "Should not be initialized before access")
+    return 0
+}
+
+// ============================================================================
+// Multiple LocalKey Tests (from thread_local)
+// ============================================================================
+
+@test
+func test_multiple_local_keys_creation() -> I32 {
+    var key1: LocalKey[I32] = LocalKey::new(do() -> I32 1)
+    var key2: LocalKey[I32] = LocalKey::new(do() -> I32 2)
+    var key3: LocalKey[I32] = LocalKey::new(do() -> I32 3)
+
+    // All should be uninitialized
+    assert(not key1.is_initialized(), "key1 not initialized")
+    assert(not key2.is_initialized(), "key2 not initialized")
+    assert(not key3.is_initialized(), "key3 not initialized")
+    return 0
+}
+
+@test
+func test_local_key_with_computation() -> I32 {
+    // Lazy initialization with computation
+    var key: LocalKey[I32] = LocalKey::new(do() -> I32 {
+        return 7 * 6
+    })
+    // Should not be initialized yet (lazy)
+    assert(not key.is_initialized(), "Should be lazy initialized")
+    return 0
+}
+
+// Note: Full access/access_mut tests require fixing closure capture codegen
+// for mutable references. See compiler/src/codegen/expr/closure.cpp
+
+// ============================================================================
+// thread::current() Tests (from thread_current)
+// ============================================================================
+
+@test
+func test_current_thread_returns_thread() -> I32 {
+    // thread::current() should return a Thread object
+    let t: thread::Thread = thread::current()
+    // Should complete without error
+    return 0
+}
+
+@test
+func test_current_thread_has_id() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    // Thread ID should be obtainable
+    return 0
+}
+
+@test
+func test_current_thread_id_as_u64() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    let raw: U64 = id.as_u64()
+    // Raw ID should be non-zero for the main thread
+    assert(raw > 0, "Thread ID should be non-zero")
+    return 0
+}
+
+@test
+func test_current_thread_name_is_nothing() -> I32 {
+    // Default main thread has no name in our implementation
+    let t: thread::Thread = thread::current()
+    let name: Maybe[Str] = t.name()
+    when name {
+        Just(_) => {
+            // Some implementations may have a name
+            return 0
+        },
+        Nothing => {
+            // Expected: no name for main thread
+            return 0
+        }
+    }
+}
+
+@test
+func test_current_thread_consistent() -> I32 {
+    // Multiple calls to current() should return same thread ID
+    let t1: thread::Thread = thread::current()
+    let t2: thread::Thread = thread::current()
+    let id1: U64 = t1.id().as_u64()
+    let id2: U64 = t2.id().as_u64()
+    assert_eq(id1, id2)
+    return 0
+}
+
+// ============================================================================
+// ThreadId Tests (from thread_current)
+// ============================================================================
+
+@test
+func test_thread_id_equality() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id1: thread::ThreadId = t.id()
+    let id2: thread::ThreadId = t.id()
+    // Same thread should have equal IDs
+    assert(id1 == id2, "Same thread IDs should be equal")
+    return 0
+}
+
+@test
+func test_thread_id_as_u64_consistent() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    let raw1: U64 = id.as_u64()
+    let raw2: U64 = id.as_u64()
+    assert_eq(raw1, raw2)
+    return 0
+}
+
+@test
+func test_thread_id_positive() -> I32 {
+    let t: thread::Thread = thread::current()
+    let id: thread::ThreadId = t.id()
+    let raw: U64 = id.as_u64()
+    // Thread IDs are positive (non-zero)
+    assert(raw != 0, "Thread ID should not be zero")
+    return 0
+}
+
+// ============================================================================
+// Thread Type Tests (from thread_current)
+// ============================================================================
+
+@test
+func test_thread_id_method() -> I32 {
+    let t: thread::Thread = thread::current()
+    // Calling id() should work
+    let _: thread::ThreadId = t.id()
+    return 0
+}
+
+@test
+func test_thread_name_method() -> I32 {
+    let t: thread::Thread = thread::current()
+    // Calling name() should work
+    let _: Maybe[Str] = t.name()
+    return 0
+}
+
+// ============================================================================
+// Integration Tests (from thread_current)
+// ============================================================================
+
+@test
+func test_thread_current_with_sleep() -> I32 {
+    // Get thread before and after sleep - should be same
+    let t1: thread::Thread = thread::current()
+    thread::sleep_ms(1)
+    let t2: thread::Thread = thread::current()
+
+    let id1: U64 = t1.id().as_u64()
+    let id2: U64 = t2.id().as_u64()
+    assert_eq(id1, id2)
+    return 0
+}
+
+@test
+func test_thread_current_with_yield() -> I32 {
+    // Get thread before and after yield - should be same
+    let t1: thread::Thread = thread::current()
+    thread::yield_now()
+    let t2: thread::Thread = thread::current()
+
+    let id1: U64 = t1.id().as_u64()
+    let id2: U64 = t2.id().as_u64()
+    assert_eq(id1, id2)
+    return 0
+}

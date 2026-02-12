@@ -1,10 +1,12 @@
-// Tests for core::cmp module
-// Force cache invalidation (2026-02-04)
+// Consolidated cmp tests - File 1 of 3
+// Primitive equality, comparison operators, cmp methods, small integer types, float comparisons
+// Total @test count: 50
+// Sources: cmp.test.tml, cmp_eq_small.test.tml, cmp_float.test.tml (partial)
 use test
 use core::cmp::{Ordering, min, max}
 
 // ============================================================================
-// Ordering tests using pattern matching
+// Ordering tests using pattern matching (from cmp.test.tml)
 // ============================================================================
 
 @test
@@ -47,7 +49,7 @@ func test_ordering_equal() -> I32 {
 }
 
 // ============================================================================
-// PartialEq tests on primitives
+// PartialEq tests on primitives (from cmp.test.tml)
 // ============================================================================
 
 @test
@@ -55,7 +57,7 @@ func test_i32_eq() -> I32 {
     let a: I32 = 42
     let b: I32 = 42
     let c: I32 = 0
-    
+
     assert(a == b, "42 == 42")
     assert(a != c, "42 != 0")
     return 0
@@ -66,14 +68,14 @@ func test_i64_eq() -> I32 {
     let a: I64 = 1000000
     let b: I64 = 1000000
     let c: I64 = 0
-    
+
     assert(a == b, "1000000 == 1000000")
     assert(a != c, "1000000 != 0")
     return 0
 }
 
 // ============================================================================
-// min/max tests
+// min/max free function tests (from cmp.test.tml)
 // ============================================================================
 
 @test
@@ -119,7 +121,7 @@ func test_max_equal() -> I32 {
 }
 
 // ============================================================================
-// Ordering method tests
+// Ordering method tests (from cmp.test.tml)
 // ============================================================================
 
 @test
@@ -188,7 +190,7 @@ func test_ordering_then_cmp() -> I32 {
 }
 
 // ============================================================================
-// Comparison operator tests (using <, <=, >, >= operators)
+// Comparison operator tests (from cmp.test.tml)
 // ============================================================================
 
 @test
@@ -240,7 +242,7 @@ func test_i32_greater_equal() -> I32 {
 }
 
 // ============================================================================
-// Ord method tests (cmp, partial_cmp, max, min, clamp)
+// Ord method tests - cmp, partial_cmp, max, min (from cmp.test.tml)
 // ============================================================================
 
 @test
@@ -315,7 +317,7 @@ func test_i32_ord_min() -> I32 {
 // }
 
 // ============================================================================
-// Ordering equality tests
+// Ordering equality tests (from cmp.test.tml)
 // ============================================================================
 
 @test
@@ -334,7 +336,7 @@ func test_ordering_eq() -> I32 {
 }
 
 // ============================================================================
-// Different integer type tests (U32, I64, U64)
+// Different integer type tests - U32, I64, U64 (from cmp.test.tml)
 // ============================================================================
 
 @test
@@ -374,19 +376,11 @@ func test_u64_cmp() -> I32 {
     return 0
 }
 
-// ============================================================================
-// Bool comparison tests (disabled - Bool.cmp method not emitted correctly)
-// ============================================================================
-
 // Note: Bool.cmp method has codegen issues - skipping for now
 // @test
 // func test_bool_cmp() -> I32 { ... }
 // @test
 // func test_bool_lt_gt() -> I32 { ... }
-
-// ============================================================================
-// Floating point partial comparison tests (disabled - codegen issues)
-// ============================================================================
 
 // Note: F64.partial_cmp method has codegen issues - skipping for now
 // These can be re-enabled once behavior method codegen is fixed for primitive types
@@ -404,5 +398,256 @@ func test_f64_operators() -> I32 {
     assert(b > a, "2.0 > 1.0")
     assert(b >= a, "2.0 >= 1.0")
     assert(a >= c, "1.0 >= 1.0")
+    return 0
+}
+
+// ============================================================================
+// Small integer type equality and comparison (from cmp_eq_small.test.tml)
+// ============================================================================
+
+// --- I8 ---
+
+@test
+func test_i8_equality() -> I32 {
+    let a: I8 = 42
+    let b: I8 = 42
+    let c: I8 = 10
+    assert(a == b, "I8 42 == 42")
+    assert(a != c, "I8 42 != 10")
+    return 0
+}
+
+@test
+func test_i8_comparison() -> I32 {
+    let a: I8 = 5
+    let b: I8 = 10
+    assert(a < b, "I8 5 < 10")
+    assert(b > a, "I8 10 > 5")
+    assert(a <= b, "I8 5 <= 10")
+    assert(b >= a, "I8 10 >= 5")
+    assert(a <= a, "I8 5 <= 5")
+    assert(a >= a, "I8 5 >= 5")
+    return 0
+}
+
+@test
+func test_i8_cmp_method() -> I32 {
+    let a: I8 = 5
+    let b: I8 = 10
+    let c: I8 = 5
+    let ord1 = a.cmp(ref b)
+    assert(ord1.is_less(), "I8 5.cmp(10) is Less")
+    let ord2 = b.cmp(ref a)
+    assert(ord2.is_greater(), "I8 10.cmp(5) is Greater")
+    let ord3 = a.cmp(ref c)
+    assert(ord3.is_equal(), "I8 5.cmp(5) is Equal")
+    return 0
+}
+
+// --- I16 ---
+
+@test
+func test_i16_equality() -> I32 {
+    let a: I16 = 1000
+    let b: I16 = 1000
+    let c: I16 = 500
+    assert(a == b, "I16 1000 == 1000")
+    assert(a != c, "I16 1000 != 500")
+    return 0
+}
+
+@test
+func test_i16_comparison() -> I32 {
+    let a: I16 = 100
+    let b: I16 = 200
+    assert(a < b, "I16 100 < 200")
+    assert(b > a, "I16 200 > 100")
+    assert(a <= b, "I16 100 <= 200")
+    assert(b >= a, "I16 200 >= 100")
+    return 0
+}
+
+@test
+func test_i16_cmp_method() -> I32 {
+    let a: I16 = 100
+    let b: I16 = 200
+    let c: I16 = 100
+    let ord1 = a.cmp(ref b)
+    assert(ord1.is_less(), "I16 100.cmp(200) is Less")
+    let ord2 = b.cmp(ref a)
+    assert(ord2.is_greater(), "I16 200.cmp(100) is Greater")
+    let ord3 = a.cmp(ref c)
+    assert(ord3.is_equal(), "I16 100.cmp(100) is Equal")
+    return 0
+}
+
+// --- U8 ---
+
+@test
+func test_u8_equality() -> I32 {
+    let a: U8 = 255
+    let b: U8 = 255
+    let c: U8 = 0
+    assert(a == b, "U8 255 == 255")
+    assert(a != c, "U8 255 != 0")
+    return 0
+}
+
+@test
+func test_u8_comparison() -> I32 {
+    let a: U8 = 10
+    let b: U8 = 200
+    assert(a < b, "U8 10 < 200")
+    assert(b > a, "U8 200 > 10")
+    assert(a <= b, "U8 10 <= 200")
+    assert(b >= a, "U8 200 >= 10")
+    return 0
+}
+
+@test
+func test_u8_cmp_method() -> I32 {
+    let a: U8 = 10
+    let b: U8 = 200
+    let c: U8 = 10
+    let ord1 = a.cmp(ref b)
+    assert(ord1.is_less(), "U8 10.cmp(200) is Less")
+    let ord2 = b.cmp(ref a)
+    assert(ord2.is_greater(), "U8 200.cmp(10) is Greater")
+    let ord3 = a.cmp(ref c)
+    assert(ord3.is_equal(), "U8 10.cmp(10) is Equal")
+    return 0
+}
+
+// --- U16 ---
+
+@test
+func test_u16_equality() -> I32 {
+    let a: U16 = 65535
+    let b: U16 = 65535
+    let c: U16 = 0
+    assert(a == b, "U16 65535 == 65535")
+    assert(a != c, "U16 65535 != 0")
+    return 0
+}
+
+@test
+func test_u16_comparison() -> I32 {
+    let a: U16 = 100
+    let b: U16 = 60000
+    assert(a < b, "U16 100 < 60000")
+    assert(b > a, "U16 60000 > 100")
+    assert(a <= b, "U16 100 <= 60000")
+    assert(b >= a, "U16 60000 >= 100")
+    return 0
+}
+
+@test
+func test_u16_cmp_method() -> I32 {
+    let a: U16 = 100
+    let b: U16 = 60000
+    let c: U16 = 100
+    let ord1 = a.cmp(ref b)
+    assert(ord1.is_less(), "U16 100.cmp(60000) is Less")
+    let ord2 = b.cmp(ref a)
+    assert(ord2.is_greater(), "U16 60000.cmp(100) is Greater")
+    let ord3 = a.cmp(ref c)
+    assert(ord3.is_equal(), "U16 100.cmp(100) is Equal")
+    return 0
+}
+
+// ============================================================================
+// Float comparison operators (from cmp_float.test.tml)
+// ============================================================================
+
+// --- F32 ---
+
+@test
+func test_f32_equality() -> I32 {
+    let a: F32 = 3.14
+    let b: F32 = 3.14
+    let c: F32 = 2.71
+    assert(a == b, "F32 3.14 == 3.14")
+    assert(a != c, "F32 3.14 != 2.71")
+    return 0
+}
+
+@test
+func test_f32_less_than() -> I32 {
+    let a: F32 = 1.0
+    let b: F32 = 2.0
+    assert(a < b, "F32 1.0 < 2.0")
+    assert((b < a) == false, "F32 2.0 < 1.0 false")
+    assert((a < a) == false, "F32 1.0 < 1.0 false")
+    return 0
+}
+
+@test
+func test_f32_less_equal() -> I32 {
+    let a: F32 = 1.0
+    let b: F32 = 2.0
+    let c: F32 = 1.0
+    assert(a <= b, "F32 1.0 <= 2.0")
+    assert(a <= c, "F32 1.0 <= 1.0")
+    assert((b <= a) == false, "F32 2.0 <= 1.0 false")
+    return 0
+}
+
+@test
+func test_f32_greater_than() -> I32 {
+    let a: F32 = 2.0
+    let b: F32 = 1.0
+    assert(a > b, "F32 2.0 > 1.0")
+    assert((b > a) == false, "F32 1.0 > 2.0 false")
+    return 0
+}
+
+@test
+func test_f32_greater_equal() -> I32 {
+    let a: F32 = 2.0
+    let b: F32 = 1.0
+    let c: F32 = 2.0
+    assert(a >= b, "F32 2.0 >= 1.0")
+    assert(a >= c, "F32 2.0 >= 2.0")
+    assert((b >= a) == false, "F32 1.0 >= 2.0 false")
+    return 0
+}
+
+// --- F64 ---
+
+@test
+func test_f64_equality() -> I32 {
+    let a: F64 = 3.14159
+    let b: F64 = 3.14159
+    let c: F64 = 2.71828
+    assert(a == b, "F64 3.14159 == 3.14159")
+    assert(a != c, "F64 3.14159 != 2.71828")
+    return 0
+}
+
+@test
+func test_f64_less_than() -> I32 {
+    let a: F64 = 1.0
+    let b: F64 = 2.0
+    assert(a < b, "F64 1.0 < 2.0")
+    assert((b < a) == false, "F64 2.0 < 1.0 false")
+    return 0
+}
+
+@test
+func test_f64_greater_than() -> I32 {
+    let a: F64 = 100.0
+    let b: F64 = 50.0
+    assert(a > b, "F64 100.0 > 50.0")
+    assert((b > a) == false, "F64 50.0 > 100.0 false")
+    return 0
+}
+
+@test
+func test_f64_less_equal() -> I32 {
+    let a: F64 = 1.0
+    let b: F64 = 2.0
+    let c: F64 = 1.0
+    assert(a <= b, "F64 1.0 <= 2.0")
+    assert(a <= c, "F64 1.0 <= 1.0")
     return 0
 }

@@ -344,36 +344,40 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     std::string cwd = fs::current_path().string();
     std::vector<std::string> test_files = discover_test_files(cwd);
+    std::vector<std::string> diag_files = discover_diagnostic_files(cwd);
 
-    if (test_files.empty()) {
+    if (test_files.empty() && diag_files.empty()) {
         if (!opts.quiet) {
             TML_LOG_INFO("test", c.yellow() << "No test files found" << c.reset()
-                                            << " (looking for *.test.tml)");
+                                            << " (looking for *.test.tml, *.error.tml)");
         }
         return 0;
     }
 
     // Filter test files by pattern
     if (!opts.patterns.empty()) {
-        std::vector<std::string> filtered;
-        for (const auto& file : test_files) {
-            for (const auto& pattern : opts.patterns) {
-                // Normalize slashes for cross-platform matching
-                // (MCP sends forward slashes, Windows paths use backslashes)
-                std::string norm_pattern = pattern;
+        auto filter_by_pattern = [&](std::vector<std::string>& files) {
+            std::vector<std::string> filtered;
+            for (const auto& file : files) {
+                for (const auto& pattern : opts.patterns) {
+                    std::string norm_pattern = pattern;
 #ifdef _WIN32
-                std::replace(norm_pattern.begin(), norm_pattern.end(), '/', '\\');
+                    std::replace(norm_pattern.begin(), norm_pattern.end(), '/', '\\');
 #endif
-                if (file.find(norm_pattern) != std::string::npos) {
-                    filtered.push_back(file);
-                    break;
+                    if (file.find(norm_pattern) != std::string::npos) {
+                        filtered.push_back(file);
+                        break;
+                    }
                 }
             }
-        }
-        test_files = filtered;
+            files = std::move(filtered);
+        };
+
+        filter_by_pattern(test_files);
+        filter_by_pattern(diag_files);
     }
 
-    if (test_files.empty()) {
+    if (test_files.empty() && diag_files.empty()) {
         if (!opts.quiet) {
             TML_LOG_INFO("test", c.yellow()
                                      << "No tests matched the specified pattern(s)" << c.reset());
@@ -389,8 +393,12 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     // Print header (Rust-style)
     if (!opts.quiet) {
-        TML_LOG_INFO("test", "running " << test_files.size() << " test file"
-                                        << (test_files.size() != 1 ? "s" : ""));
+        size_t total_files = test_files.size() + diag_files.size();
+        TML_LOG_INFO("test", "running "
+                                 << total_files << " test file" << (total_files != 1 ? "s" : "")
+                                 << (diag_files.empty() ? ""
+                                                        : " (" + std::to_string(diag_files.size()) +
+                                                              " diagnostic)"));
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -477,8 +485,15 @@ int run_test(int argc, char* argv[], bool verbose) {
         }
     }
 
-    // Unified execution: all tests go through suite mode
-    run_tests_suite_mode(test_files, opts, collector, c);
+    // Run normal tests through suite mode
+    if (!test_files.empty()) {
+        run_tests_suite_mode(test_files, opts, collector, c);
+    }
+
+    // Run diagnostic tests (*.error.tml) - these expect compilation errors
+    if (!diag_files.empty()) {
+        run_diagnostic_tests(diag_files, opts, collector, c);
+    }
 
     auto end_time = std::chrono::high_resolution_clock::now();
     int64_t total_duration_ms =

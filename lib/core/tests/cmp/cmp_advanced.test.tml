@@ -1,0 +1,284 @@
+// Consolidated cmp tests - File 3 of 3
+// Ordering coverage variants, extended ordering tests, primitive eq/ord coverage
+// Total @test count: 26
+// Sources: ordering_methods.test.tml, ordering_reverse.test.tml, cmp_ordering_ext.test.tml,
+//          cmp_ordering_coverage.test.tml, cmp_primitive_eq.test.tml, cmp_primitive_ord.test.tml
+// NOTE: Duplicate function names from different source files are renamed with _v2/_v3/_v4 suffixes
+use test
+use core::cmp::Ordering
+
+// ============================================================================
+// Ordering methods - compact style (from ordering_methods.test.tml)
+// Renamed with _v2 suffix to avoid duplicates with cmp.test.tml
+// ============================================================================
+
+@test
+func test_ordering_is_less_v2() -> I32 {
+    assert(Ordering::Less.is_less(), "Less.is_less() should be true")
+    assert(not Ordering::Equal.is_less(), "Equal.is_less() should be false")
+    assert(not Ordering::Greater.is_less(), "Greater.is_less() should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_equal_v2() -> I32 {
+    assert(not Ordering::Less.is_equal(), "Less.is_equal() should be false")
+    assert(Ordering::Equal.is_equal(), "Equal.is_equal() should be true")
+    assert(not Ordering::Greater.is_equal(), "Greater.is_equal() should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_greater_v2() -> I32 {
+    assert(not Ordering::Less.is_greater(), "Less.is_greater() should be false")
+    assert(not Ordering::Equal.is_greater(), "Equal.is_greater() should be false")
+    assert(Ordering::Greater.is_greater(), "Greater.is_greater() should be true")
+    return 0
+}
+
+// ============================================================================
+// Ordering reverse and then_cmp (from ordering_reverse.test.tml)
+// ============================================================================
+
+@test
+func test_ordering_reverse() -> I32 {
+    assert(Ordering::Less.reverse().is_greater(), "Less.reverse() should be Greater")
+    assert(Ordering::Equal.reverse().is_equal(), "Equal.reverse() should be Equal")
+    assert(Ordering::Greater.reverse().is_less(), "Greater.reverse() should be Less")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp_equal_first() -> I32 {
+    // When first is Equal, should return the second ordering
+    let r1: Ordering = Ordering::Equal.then_cmp(Ordering::Less)
+    assert(r1.is_less(), "Equal.then_cmp(Less) should be Less")
+
+    let r2: Ordering = Ordering::Equal.then_cmp(Ordering::Greater)
+    assert(r2.is_greater(), "Equal.then_cmp(Greater) should be Greater")
+
+    let r3: Ordering = Ordering::Equal.then_cmp(Ordering::Equal)
+    assert(r3.is_equal(), "Equal.then_cmp(Equal) should be Equal")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp_non_equal_first() -> I32 {
+    // When first is not Equal, should return the first ordering
+    let r1: Ordering = Ordering::Less.then_cmp(Ordering::Greater)
+    assert(r1.is_less(), "Less.then_cmp(Greater) should be Less")
+
+    let r2: Ordering = Ordering::Greater.then_cmp(Ordering::Less)
+    assert(r2.is_greater(), "Greater.then_cmp(Less) should be Greater")
+    return 0
+}
+
+// ============================================================================
+// Ordering ext - variable style (from cmp_ordering_ext.test.tml)
+// is_less/is_equal/is_greater renamed with _v3 suffix
+// ============================================================================
+
+@test
+func test_ordering_is_less_v3() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert(o.is_less() == true, "Less.is_less should be true")
+    assert(o.is_equal() == false, "Less.is_equal should be false")
+    assert(o.is_greater() == false, "Less.is_greater should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_equal_v3() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert(o.is_less() == false, "Equal.is_less should be false")
+    assert(o.is_equal() == true, "Equal.is_equal should be true")
+    assert(o.is_greater() == false, "Equal.is_greater should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_greater_v3() -> I32 {
+    let o: Ordering = Ordering::Greater
+    assert(o.is_less() == false, "Greater.is_less should be false")
+    assert(o.is_equal() == false, "Greater.is_equal should be false")
+    assert(o.is_greater() == true, "Greater.is_greater should be true")
+    return 0
+}
+
+@test
+func test_ordering_reverse_less() -> I32 {
+    let o: Ordering = Ordering::Less
+    let r: Ordering = o.reverse()
+    assert(r.is_greater(), "Less reversed should be Greater")
+    return 0
+}
+
+@test
+func test_ordering_reverse_greater() -> I32 {
+    let o: Ordering = Ordering::Greater
+    let r: Ordering = o.reverse()
+    assert(r.is_less(), "Greater reversed should be Less")
+    return 0
+}
+
+@test
+func test_ordering_reverse_equal() -> I32 {
+    let o: Ordering = Ordering::Equal
+    let r: Ordering = o.reverse()
+    assert(r.is_equal(), "Equal reversed should be Equal")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp_equal() -> I32 {
+    let first: Ordering = Ordering::Equal
+    let second: Ordering = Ordering::Less
+    let result: Ordering = first.then_cmp(second)
+    assert(result.is_less(), "Equal.then_cmp(Less) should be Less")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp_less() -> I32 {
+    let first: Ordering = Ordering::Less
+    let second: Ordering = Ordering::Greater
+    let result: Ordering = first.then_cmp(second)
+    assert(result.is_less(), "Less.then_cmp(Greater) should be Less")
+    return 0
+}
+
+// ============================================================================
+// Ordering coverage (from cmp_ordering_coverage.test.tml)
+// All renamed with _v4 suffix or _v2 suffix to avoid duplicates
+// ============================================================================
+
+@test
+func test_ordering_is_less_v4() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert(o.is_less(), "Less.is_less() should be true")
+    let e: Ordering = Ordering::Equal
+    assert(not e.is_less(), "Equal.is_less() should be false")
+    let g: Ordering = Ordering::Greater
+    assert(not g.is_less(), "Greater.is_less() should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_equal_v4() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert(o.is_equal(), "Equal.is_equal() should be true")
+    let l: Ordering = Ordering::Less
+    assert(not l.is_equal(), "Less.is_equal() should be false")
+    let g: Ordering = Ordering::Greater
+    assert(not g.is_equal(), "Greater.is_equal() should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_greater_v4() -> I32 {
+    let g: Ordering = Ordering::Greater
+    assert(g.is_greater(), "Greater.is_greater() should be true")
+    let l: Ordering = Ordering::Less
+    assert(not l.is_greater(), "Less.is_greater() should be false")
+    let e: Ordering = Ordering::Equal
+    assert(not e.is_greater(), "Equal.is_greater() should be false")
+    return 0
+}
+
+@test
+func test_ordering_reverse_v2() -> I32 {
+    let l: Ordering = Ordering::Less
+    let rl: Ordering = l.reverse()
+    assert(rl.is_greater(), "Less.reverse() should be Greater")
+    let e: Ordering = Ordering::Equal
+    let re: Ordering = e.reverse()
+    assert(re.is_equal(), "Equal.reverse() should be Equal")
+    let g: Ordering = Ordering::Greater
+    let rg: Ordering = g.reverse()
+    assert(rg.is_less(), "Greater.reverse() should be Less")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp() -> I32 {
+    let e: Ordering = Ordering::Equal
+    let l: Ordering = Ordering::Less
+    let r1: Ordering = e.then_cmp(l)
+    assert(r1.is_less(), "Equal.then_cmp(Less) should be Less")
+    let g: Ordering = Ordering::Greater
+    let r2: Ordering = l.then_cmp(g)
+    assert(r2.is_less(), "Less.then_cmp(Greater) should be Less")
+    let r3: Ordering = e.then_cmp(e)
+    assert(r3.is_equal(), "Equal.then_cmp(Equal) should be Equal")
+    return 0
+}
+
+// ============================================================================
+// Ordering chain and reverse coverage (from cmp_primitive_eq.test.tml)
+// NOTE: All primitive .eq()/.cmp()/.partial_cmp() calls fail with undefined symbol errors
+// The trait resolution generates function refs like @tml_s0_I16_eq that don't exist
+// This is a fundamental codegen limitation - only Ordering methods are testable
+// ============================================================================
+
+@test
+func test_ordering_chain_less_then_greater() -> I32 {
+    let a: Ordering = Ordering::Less
+    let b: Ordering = Ordering::Greater
+    let r: Ordering = a.then_cmp(b)
+    assert(r.is_less(), "Less.then_cmp(Greater) = Less")
+    return 0
+}
+
+@test
+func test_ordering_chain_equal_then_less() -> I32 {
+    let a: Ordering = Ordering::Equal
+    let b: Ordering = Ordering::Less
+    let r: Ordering = a.then_cmp(b)
+    assert(r.is_less(), "Equal.then_cmp(Less) = Less")
+    return 0
+}
+
+@test
+func test_ordering_chain_greater_then_equal() -> I32 {
+    let a: Ordering = Ordering::Greater
+    let b: Ordering = Ordering::Equal
+    let r: Ordering = a.then_cmp(b)
+    assert(r.is_greater(), "Greater.then_cmp(Equal) = Greater")
+    return 0
+}
+
+@test
+func test_ordering_reverse_all() -> I32 {
+    assert(Ordering::Less.reverse().is_greater(), "Less.reverse() = Greater")
+    assert(Ordering::Equal.reverse().is_equal(), "Equal.reverse() = Equal")
+    assert(Ordering::Greater.reverse().is_less(), "Greater.reverse() = Less")
+    return 0
+}
+
+// ============================================================================
+// Comprehensive ordering checks (from cmp_primitive_ord.test.tml)
+// ============================================================================
+
+@test
+func test_ordering_is_less_comprehensive() -> I32 {
+    assert(Ordering::Less.is_less(), "Less.is_less")
+    assert(not Ordering::Equal.is_less(), "Equal not is_less")
+    assert(not Ordering::Greater.is_less(), "Greater not is_less")
+    return 0
+}
+
+@test
+func test_ordering_is_equal_comprehensive() -> I32 {
+    assert(not Ordering::Less.is_equal(), "Less not is_equal")
+    assert(Ordering::Equal.is_equal(), "Equal.is_equal")
+    assert(not Ordering::Greater.is_equal(), "Greater not is_equal")
+    return 0
+}
+
+@test
+func test_ordering_is_greater_comprehensive() -> I32 {
+    assert(not Ordering::Less.is_greater(), "Less not is_greater")
+    assert(not Ordering::Equal.is_greater(), "Equal not is_greater")
+    assert(Ordering::Greater.is_greater(), "Greater.is_greater")
+    return 0
+}

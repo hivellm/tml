@@ -1,0 +1,655 @@
+// Consolidated advanced type tests (Duration, Range, Char decode, placeholders)
+// Source files: time.test.tml, range.test.tml, char_decode.test.tml,
+//   bstr.test.tml, unicode.test.tml
+// Total @test count: 50
+
+use test
+use core::time::Duration
+use core::range::{RangeIterI64, RangeInclusiveIterI64}
+use core::char::decode
+use core::slice::Slice
+
+// ============================================================================
+// Duration Construction Tests (from time.test.tml)
+// ============================================================================
+
+@test
+func test_duration_new() -> I32 {
+    let d: Duration = Duration::new(5, 500000000)
+    assert(d.as_secs() == 5, "should have 5 seconds")
+    assert(d.subsec_nanos() == 500000000, "should have 500M nanos")
+    return 0
+}
+
+@test
+func test_duration_from_secs() -> I32 {
+    let d: Duration = Duration::from_secs(10)
+    assert(d.as_secs() == 10, "should have 10 seconds")
+    assert(d.subsec_nanos() == 0, "should have 0 nanos")
+    return 0
+}
+
+@test
+func test_duration_from_millis() -> I32 {
+    let d: Duration = Duration::from_millis(2500)
+    assert(d.as_secs() == 2, "should have 2 seconds")
+    assert(d.subsec_millis() == 500, "should have 500 millis remainder")
+    return 0
+}
+
+@test
+func test_duration_from_micros() -> I32 {
+    let d: Duration = Duration::from_micros(1500000)
+    assert(d.as_secs() == 1, "should have 1 second")
+    assert(d.subsec_micros() == 500000, "should have 500000 micros remainder")
+    return 0
+}
+
+@test
+func test_duration_from_nanos() -> I32 {
+    let d: Duration = Duration::from_nanos(2500000000)
+    assert(d.as_secs() == 2, "should have 2 seconds")
+    assert(d.subsec_nanos() == 500000000, "should have 500M nanos remainder")
+    return 0
+}
+
+// ============================================================================
+// Duration Accessor Tests
+// ============================================================================
+
+@test
+func test_duration_is_zero() -> I32 {
+    let zero: Duration = Duration::new(0, 0)
+    let nonzero: Duration = Duration::from_secs(1)
+    assert(zero.is_zero(), "Duration(0, 0) should be zero")
+    assert(not nonzero.is_zero(), "Duration(1s) should not be zero")
+    return 0
+}
+
+@test
+func test_duration_as_millis() -> I32 {
+    let d: Duration = Duration::new(2, 500000000)
+    assert(d.as_millis() == 2500, "2.5 seconds should be 2500 millis")
+    return 0
+}
+
+@test
+func test_duration_as_micros() -> I32 {
+    let d: Duration = Duration::new(1, 500000000)
+    assert(d.as_micros() == 1500000, "1.5 seconds should be 1500000 micros")
+    return 0
+}
+
+@test
+func test_duration_as_nanos() -> I32 {
+    let d: Duration = Duration::new(1, 500000000)
+    assert(d.as_nanos() == 1500000000, "1.5 seconds should be 1500000000 nanos")
+    return 0
+}
+
+@test
+func test_duration_subsec_nanos() -> I32 {
+    let d: Duration = Duration::new(5, 123456789)
+    assert(d.subsec_nanos() == 123456789, "subsec_nanos should return 123456789")
+    return 0
+}
+
+@test
+func test_duration_subsec_millis() -> I32 {
+    let d: Duration = Duration::new(5, 123456789)
+    assert(d.subsec_millis() == 123, "subsec_millis should return 123")
+    return 0
+}
+
+@test
+func test_duration_subsec_micros() -> I32 {
+    let d: Duration = Duration::new(5, 123456789)
+    assert(d.subsec_micros() == 123456, "subsec_micros should return 123456")
+    return 0
+}
+
+// ============================================================================
+// Duration Arithmetic Tests
+// ============================================================================
+
+@test
+func test_duration_checked_add() -> I32 {
+    let d1: Duration = Duration::from_secs(1)
+    let d2: Duration = Duration::from_millis(500)
+    let result: Maybe[Duration] = d1.checked_add(d2)
+    when result {
+        Just(d) => {
+            assert(d.as_millis() == 1500, "1s + 500ms should be 1500ms")
+            return 0
+        },
+        Nothing => {
+            assert(false, "checked_add should not overflow")
+            return 1
+        }
+    }
+}
+
+@test
+func test_duration_checked_sub() -> I32 {
+    let d1: Duration = Duration::from_secs(2)
+    let d2: Duration = Duration::from_millis(500)
+    let result: Maybe[Duration] = d1.checked_sub(d2)
+    when result {
+        Just(d) => {
+            assert(d.as_millis() == 1500, "2s - 500ms should be 1500ms")
+            return 0
+        },
+        Nothing => {
+            assert(false, "checked_sub should not underflow")
+            return 1
+        }
+    }
+}
+
+@test
+func test_duration_checked_sub_underflow() -> I32 {
+    let d1: Duration = Duration::from_millis(500)
+    let d2: Duration = Duration::from_secs(2)
+    let result: Maybe[Duration] = d1.checked_sub(d2)
+    when result {
+        Just(_) => {
+            assert(false, "500ms - 2s should underflow")
+            return 1
+        },
+        Nothing => {
+            return 0
+        }
+    }
+}
+
+@test
+func test_duration_saturating_add() -> I32 {
+    let d1: Duration = Duration::from_secs(1)
+    let d2: Duration = Duration::from_millis(500)
+    let result: Duration = d1.saturating_add(d2)
+    assert(result.as_millis() == 1500, "saturating_add: 1s + 500ms should be 1500ms")
+    return 0
+}
+
+@test
+func test_duration_saturating_sub() -> I32 {
+    let d1: Duration = Duration::from_secs(2)
+    let d2: Duration = Duration::from_millis(500)
+    let result: Duration = d1.saturating_sub(d2)
+    assert(result.as_millis() == 1500, "saturating_sub: 2s - 500ms should be 1500ms")
+    return 0
+}
+
+@test
+func test_duration_saturating_sub_clamp() -> I32 {
+    let d1: Duration = Duration::from_millis(500)
+    let d2: Duration = Duration::from_secs(2)
+    let result: Duration = d1.saturating_sub(d2)
+    assert(result.is_zero(), "saturating_sub should clamp to zero")
+    return 0
+}
+
+// ============================================================================
+// Duration Multiplication and Division Tests
+// ============================================================================
+
+@test
+func test_duration_mul() -> I32 {
+    let d: Duration = Duration::from_millis(500)
+    let result: Duration = d.mul(3)
+    assert(result.as_millis() == 1500, "500ms * 3 should be 1500ms")
+    return 0
+}
+
+@test
+func test_duration_div() -> I32 {
+    let d: Duration = Duration::from_secs(6)
+    let result: Duration = d.div(2)
+    assert(result.as_secs() == 3, "6s / 2 should be 3s")
+    return 0
+}
+
+@test
+func test_duration_mul_with_nanos() -> I32 {
+    let d: Duration = Duration::new(1, 500000000)
+    let result: Duration = d.mul(2)
+    assert(result.as_secs() == 3, "1.5s * 2 should have 3 seconds")
+    assert(result.subsec_nanos() == 0, "1.5s * 2 should have 0 nanos")
+    return 0
+}
+
+// ============================================================================
+// Duration Comparison Tests
+// ============================================================================
+
+@test
+func test_duration_eq() -> I32 {
+    let d1: Duration = Duration::from_secs(5)
+    let d2: Duration = Duration::from_millis(5000)
+    assert(d1.eq(ref d2), "5s should equal 5000ms")
+    return 0
+}
+
+@test
+func test_duration_not_eq() -> I32 {
+    let d1: Duration = Duration::from_secs(5)
+    let d2: Duration = Duration::from_secs(6)
+    assert(not d1.eq(ref d2), "5s should not equal 6s")
+    return 0
+}
+
+@test
+func test_duration_ordering() -> I32 {
+    // Test ordering via as_nanos comparison
+    let d1: Duration = Duration::from_secs(1)
+    let d2: Duration = Duration::from_secs(2)
+    let d3: Duration = Duration::from_millis(1000)
+
+    // d1 < d2
+    assert(d1.as_nanos() < d2.as_nanos(), "1s should be less than 2s")
+
+    // d2 > d1
+    assert(d2.as_nanos() > d1.as_nanos(), "2s should be greater than 1s")
+
+    // d1 == d3 (both 1 second)
+    assert(d1.as_nanos() == d3.as_nanos(), "1s should equal 1000ms")
+
+    return 0
+}
+
+// ============================================================================
+// Duration Edge Cases
+// ============================================================================
+
+@test
+func test_duration_zero() -> I32 {
+    let zero: Duration = Duration::new(0, 0)
+    assert(zero.is_zero(), "zero Duration should be zero")
+    assert(zero.as_secs() == 0, "zero should have 0 secs")
+    assert(zero.as_nanos() == 0, "zero should have 0 nanos")
+    return 0
+}
+
+@test
+func test_duration_nanos_conversion() -> I32 {
+    // Use from_nanos which handles overflow properly
+    let d: Duration = Duration::from_nanos(2000000000)
+    assert(d.as_secs() == 2, "2B nanos should be 2 seconds")
+    assert(d.subsec_nanos() == 0, "should have no remaining nanos")
+    return 0
+}
+
+@test
+func test_duration_from_millis_large() -> I32 {
+    let d: Duration = Duration::from_millis(3600000)
+    assert(d.as_secs() == 3600, "3600000ms should be 3600 seconds (1 hour)")
+    return 0
+}
+
+// ============================================================================
+// Duration Behavior Implementation Tests
+// ============================================================================
+
+@test
+func test_duration_duplicate() -> I32 {
+    let d1: Duration = Duration::from_secs(5)
+    let d2: Duration = d1.duplicate()
+    assert(d1.eq(ref d2), "duplicated Duration should be equal")
+    return 0
+}
+
+@test
+func test_duration_default() -> I32 {
+    let d: Duration = Duration::default()
+    assert(d.is_zero(), "default Duration should be zero")
+    return 0
+}
+
+// ============================================================================
+// RangeIterI64 Tests (from range.test.tml)
+// ============================================================================
+
+@test
+func test_range_iter_basic() -> I32 {
+    let mut iter: RangeIterI64 = RangeIterI64 { current: 0, end: 5 }
+
+    let v0: Maybe[I64] = iter.next()
+    assert(v0.is_just(), "first should be Just")
+    assert_eq(v0.unwrap(), 0, "first value should be 0")
+
+    let v1: Maybe[I64] = iter.next()
+    assert_eq(v1.unwrap(), 1, "second value should be 1")
+
+    let v2: Maybe[I64] = iter.next()
+    assert_eq(v2.unwrap(), 2, "third value should be 2")
+
+    let v3: Maybe[I64] = iter.next()
+    assert_eq(v3.unwrap(), 3, "fourth value should be 3")
+
+    let v4: Maybe[I64] = iter.next()
+    assert_eq(v4.unwrap(), 4, "fifth value should be 4")
+
+    let v5: Maybe[I64] = iter.next()
+    assert(v5.is_nothing(), "should be Nothing after exhausted")
+
+    return 0
+}
+
+@test
+func test_range_iter_empty() -> I32 {
+    let mut iter: RangeIterI64 = RangeIterI64 { current: 5, end: 5 }
+    let v: Maybe[I64] = iter.next()
+    assert(v.is_nothing(), "empty range should return Nothing")
+    return 0
+}
+
+@test
+func test_range_iter_negative() -> I32 {
+    let mut iter: RangeIterI64 = RangeIterI64 { current: -2, end: 1 }
+
+    assert_eq(iter.next().unwrap(), -2, "should be -2")
+    assert_eq(iter.next().unwrap(), -1, "should be -1")
+    assert_eq(iter.next().unwrap(), 0, "should be 0")
+    assert(iter.next().is_nothing(), "should be exhausted")
+
+    return 0
+}
+
+// ============================================================================
+// RangeInclusiveIterI64 Tests
+// ============================================================================
+
+@test
+func test_range_inclusive_iter_basic() -> I32 {
+    let mut iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 1,
+        end: 3,
+        exhausted: false
+    }
+
+    let v1: Maybe[I64] = iter.next()
+    assert_eq(v1.unwrap(), 1, "first value should be 1")
+
+    let v2: Maybe[I64] = iter.next()
+    assert_eq(v2.unwrap(), 2, "second value should be 2")
+
+    let v3: Maybe[I64] = iter.next()
+    assert_eq(v3.unwrap(), 3, "third value should be 3 (inclusive)")
+
+    let v4: Maybe[I64] = iter.next()
+    assert(v4.is_nothing(), "should be Nothing after exhausted")
+
+    return 0
+}
+
+@test
+func test_range_inclusive_single_element() -> I32 {
+    let mut iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 42,
+        end: 42,
+        exhausted: false
+    }
+
+    let v1: Maybe[I64] = iter.next()
+    assert_eq(v1.unwrap(), 42, "single element should be 42")
+
+    let v2: Maybe[I64] = iter.next()
+    assert(v2.is_nothing(), "should be Nothing after single element")
+
+    return 0
+}
+
+@test
+func test_range_inclusive_empty() -> I32 {
+    // When start > end, range is empty
+    let mut iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 10,
+        end: 5,
+        exhausted: false
+    }
+
+    let v: Maybe[I64] = iter.next()
+    assert(v.is_nothing(), "empty inclusive range should return Nothing")
+
+    return 0
+}
+
+@test
+func test_range_inclusive_already_exhausted() -> I32 {
+    let mut iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 1,
+        end: 3,
+        exhausted: true  // already exhausted
+    }
+
+    let v: Maybe[I64] = iter.next()
+    assert(v.is_nothing(), "exhausted iterator should return Nothing")
+
+    return 0
+}
+
+// ============================================================================
+// Char Decode - Surrogate Detection Tests (from char_decode.test.tml)
+// ============================================================================
+
+@test
+func test_is_high_surrogate() -> I32 {
+    // Valid high surrogates
+    assert(decode::is_high_surrogate(0xD800), "0xD800 is high surrogate")
+    assert(decode::is_high_surrogate(0xDBFF), "0xDBFF is high surrogate")
+    assert(decode::is_high_surrogate(0xD900), "0xD900 is high surrogate")
+
+    // Not high surrogates
+    assert(not decode::is_high_surrogate(0xDC00), "0xDC00 is low, not high")
+    assert(not decode::is_high_surrogate(0x0041), "0x0041 is not surrogate")
+    assert(not decode::is_high_surrogate(0xD7FF), "0xD7FF is before surrogate range")
+
+    return 0
+}
+
+@test
+func test_is_low_surrogate() -> I32 {
+    // Valid low surrogates
+    assert(decode::is_low_surrogate(0xDC00), "0xDC00 is low surrogate")
+    assert(decode::is_low_surrogate(0xDFFF), "0xDFFF is low surrogate")
+    assert(decode::is_low_surrogate(0xDD00), "0xDD00 is low surrogate")
+
+    // Not low surrogates
+    assert(not decode::is_low_surrogate(0xD800), "0xD800 is high, not low")
+    assert(not decode::is_low_surrogate(0x0041), "0x0041 is not surrogate")
+    assert(not decode::is_low_surrogate(0xE000), "0xE000 is after surrogate range")
+
+    return 0
+}
+
+@test
+func test_is_surrogate() -> I32 {
+    // Any surrogate
+    assert(decode::is_surrogate(0xD800), "0xD800 is surrogate")
+    assert(decode::is_surrogate(0xDBFF), "0xDBFF is surrogate")
+    assert(decode::is_surrogate(0xDC00), "0xDC00 is surrogate")
+    assert(decode::is_surrogate(0xDFFF), "0xDFFF is surrogate")
+
+    // Not surrogates
+    assert(not decode::is_surrogate(0x0041), "0x0041 is not surrogate")
+    assert(not decode::is_surrogate(0xD7FF), "0xD7FF is not surrogate")
+    assert(not decode::is_surrogate(0xE000), "0xE000 is not surrogate")
+
+    return 0
+}
+
+// ============================================================================
+// Char Decode - Surrogate Pair Decoding Tests
+// ============================================================================
+
+@test
+func test_decode_surrogate_pair() -> I32 {
+    // U+1F600 (Grinning Face) = 0xD83D 0xDE00
+    let emoji: Char = decode::decode_surrogate_pair(0xD83D, 0xDE00)
+    assert((emoji as U32) == 0x1F600, "should decode to U+1F600")
+
+    // U+10000 (first supplementary character) = 0xD800 0xDC00
+    let first_supp: Char = decode::decode_surrogate_pair(0xD800, 0xDC00)
+    assert((first_supp as U32) == 0x10000, "should decode to U+10000")
+
+    // U+10FFFF (last valid Unicode) = 0xDBFF 0xDFFF
+    let last_valid: Char = decode::decode_surrogate_pair(0xDBFF, 0xDFFF)
+    assert((last_valid as U32) == 0x10FFFF, "should decode to U+10FFFF")
+
+    return 0
+}
+
+// ============================================================================
+// Char Decode - UTF-16 Validation Tests
+// ============================================================================
+
+@test
+func test_is_valid_utf16_bmp() -> I32 {
+    // Simple BMP string "Hi!" - allocate and fill
+    let ptr: *Unit = alloc(6)  // 3 x 2 bytes
+    let u16_ptr: *U16 = ptr as *U16
+    *u16_ptr = 0x0048          // H
+    *(u16_ptr + 1) = 0x0069    // i
+    *(u16_ptr + 2) = 0x0021    // !
+
+    let slice: Slice[U16] = Slice { data: ref *u16_ptr, len: 3 }
+    assert(decode::is_valid_utf16(slice), "BMP string should be valid")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_is_valid_utf16_surrogate_pair() -> I32 {
+    // Valid surrogate pair (emoji)
+    let ptr: *Unit = alloc(4)  // 2 x 2 bytes
+    let u16_ptr: *U16 = ptr as *U16
+    *u16_ptr = 0xD83D          // High surrogate
+    *(u16_ptr + 1) = 0xDE00    // Low surrogate
+
+    let slice: Slice[U16] = Slice { data: ref *u16_ptr, len: 2 }
+    assert(decode::is_valid_utf16(slice), "valid surrogate pair should be valid")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_is_valid_utf16_unpaired_high() -> I32 {
+    // Unpaired high surrogate
+    let ptr: *Unit = alloc(2)
+    let u16_ptr: *U16 = ptr as *U16
+    *u16_ptr = 0xD83D
+
+    let slice: Slice[U16] = Slice { data: ref *u16_ptr, len: 1 }
+    assert(not decode::is_valid_utf16(slice), "unpaired high surrogate should be invalid")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_is_valid_utf16_unpaired_low() -> I32 {
+    // Unpaired low surrogate
+    let ptr: *Unit = alloc(2)
+    let u16_ptr: *U16 = ptr as *U16
+    *u16_ptr = 0xDC00
+
+    let slice: Slice[U16] = Slice { data: ref *u16_ptr, len: 1 }
+    assert(not decode::is_valid_utf16(slice), "unpaired low surrogate should be invalid")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Char Decode - Character Count Tests
+// ============================================================================
+
+@test
+func test_count_chars_bmp() -> I32 {
+    // "Hello" - 5 BMP characters
+    let ptr: *Unit = alloc(10)  // 5 x 2 bytes
+    let u16_ptr: *U16 = ptr as *U16
+    *u16_ptr = 0x0048           // H
+    *(u16_ptr + 1) = 0x0065     // e
+    *(u16_ptr + 2) = 0x006C     // l
+    *(u16_ptr + 3) = 0x006C     // l
+    *(u16_ptr + 4) = 0x006F     // o
+
+    let slice: Slice[U16] = Slice { data: ref *u16_ptr, len: 5 }
+    assert(decode::count_chars_utf16(slice) == 5, "should count 5 chars")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_count_chars_with_surrogate() -> I32 {
+    // "A" + emoji + "B" = 3 characters but 4 code units
+    let ptr: *Unit = alloc(8)  // 4 x 2 bytes
+    let u16_ptr: *U16 = ptr as *U16
+    *u16_ptr = 0x0041           // A
+    *(u16_ptr + 1) = 0xD83D     // High surrogate
+    *(u16_ptr + 2) = 0xDE00     // Low surrogate
+    *(u16_ptr + 3) = 0x0042     // B
+
+    let slice: Slice[U16] = Slice { data: ref *u16_ptr, len: 4 }
+    assert(decode::count_chars_utf16(slice) == 3, "should count 3 chars")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Char Decode - Decoding to String Tests
+// ============================================================================
+
+@test
+func test_decode_ascii() -> I32 {
+    // "ABC"
+    let ptr: *Unit = alloc(6)  // 3 x 2 bytes
+    let u16_ptr: *U16 = ptr as *U16
+    *u16_ptr = 0x0041           // A
+    *(u16_ptr + 1) = 0x0042     // B
+    *(u16_ptr + 2) = 0x0043     // C
+
+    let slice: Slice[U16] = Slice { data: ref *u16_ptr, len: 3 }
+    let result: Str = decode::decode_utf16_to_string(slice)
+    assert(result == "ABC", "should decode to ABC")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Placeholder Tests
+// ============================================================================
+
+// BLOCKED: bstr module tests blocked on Slice::from_array returning () instead of Slice[T]
+// Actual tests to enable once Slice works:
+// - test_bstr_is_ascii_true
+// - test_bstr_is_ascii_false
+// - test_bstr_starts_with_true
+// - test_bstr_ends_with_true
+@test
+func test_bstr_placeholder() -> I32 {
+    // Placeholder until Slice creation is fixed
+    return 0
+}
+
+// BLOCKED: unicode module tests blocked on:
+// - unicode_data module missing exports
+// - Type mismatch in char_decode functions
+// Tests to enable once unicode module works:
+// - test_is_valid_scalar
+// - test_is_alphabetic_ascii
+// - test_is_alphabetic_unicode
+// - test_is_numeric
+// - test_is_whitespace
+// - test_case_conversion
+@test
+func test_unicode_placeholder() -> I32 {
+    // Placeholder until unicode module issues are fixed
+    return 0
+}

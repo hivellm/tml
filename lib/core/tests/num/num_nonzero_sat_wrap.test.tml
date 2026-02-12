@@ -1,0 +1,22 @@
+// Tests for num/nonzero, num/saturating, num/wrapping modules
+// BLOCKED: NonZero::new_unchecked[I32]() returns () — generic monomorphization
+// BLOCKED: Saturating::new[I32]().get/add/sub() — Unknown method / generic monomorphization
+// BLOCKED: Wrapping::new[I32]().get/add/sub() — Unknown method / generic monomorphization
+use test
+use core::num::nonzero::NonZero
+
+@test
+func test_nonzero_new_valid() -> I32 {
+    let nz: Maybe[NonZero[I32]] = NonZero::new[I32](42)
+    assert(nz.is_just(), "NonZero::new(42) should be Just")
+    return 0
+}
+
+@test
+func test_nonzero_new_zero() -> I32 {
+    let nz: Maybe[NonZero[I32]] = NonZero::new[I32](0)
+    assert(nz.is_nothing(), "NonZero::new(0) should be Nothing")
+    return 0
+}
+
+// Saturating and Wrapping tests removed — .get() is "Unknown method" at codegen

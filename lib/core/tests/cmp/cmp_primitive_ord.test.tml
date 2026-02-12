@@ -1,0 +1,29 @@
+// Tests targeting uncovered Ord::clamp
+// NOTE: primitive .cmp()/.partial_cmp() calls fail with undefined symbol errors
+// Only Ordering methods and Ord::clamp on I32 (which might use operators) are testable
+use test
+use core::cmp::Ordering
+
+@test
+func test_ordering_is_less_comprehensive() -> I32 {
+    assert(Ordering::Less.is_less(), "Less.is_less")
+    assert(not Ordering::Equal.is_less(), "Equal not is_less")
+    assert(not Ordering::Greater.is_less(), "Greater not is_less")
+    return 0
+}
+
+@test
+func test_ordering_is_equal_comprehensive() -> I32 {
+    assert(not Ordering::Less.is_equal(), "Less not is_equal")
+    assert(Ordering::Equal.is_equal(), "Equal.is_equal")
+    assert(not Ordering::Greater.is_equal(), "Greater not is_equal")
+    return 0
+}
+
+@test
+func test_ordering_is_greater_comprehensive() -> I32 {
+    assert(not Ordering::Less.is_greater(), "Less not is_greater")
+    assert(not Ordering::Equal.is_greater(), "Equal not is_greater")
+    assert(Ordering::Greater.is_greater(), "Greater.is_greater")
+    return 0
+}

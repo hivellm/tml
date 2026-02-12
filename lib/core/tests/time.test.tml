@@ -1,0 +1,190 @@
+// Consolidated tests for core::time::Duration
+use test
+use core::time::Duration
+
+// === Constructors and basic accessors ===
+
+@test
+func test_duration_from_secs() -> I32 {
+    let d: Duration = Duration::from_secs(5)
+    assert_eq(d.as_secs(), 5 as I64, "from_secs(5) should be 5 seconds")
+    assert_eq(d.subsec_nanos(), 0, "from_secs should have 0 nanos")
+    return 0
+}
+
+@test
+func test_duration_from_millis() -> I32 {
+    let d: Duration = Duration::from_millis(2500)
+    assert_eq(d.as_secs(), 2 as I64, "2500ms should be 2 seconds")
+    assert_eq(d.subsec_millis(), 500, "2500ms should have 500ms fractional")
+    assert_eq(d.as_millis(), 2500 as I64, "total should be 2500ms")
+    return 0
+}
+
+@test
+func test_duration_from_nanos() -> I32 {
+    let d: Duration = Duration::from_nanos(1500000000)
+    assert_eq(d.as_secs(), 1 as I64, "1.5B nanos should be 1 second")
+    assert_eq(d.subsec_nanos(), 500000000, "should have 500M nanos fractional")
+    return 0
+}
+
+@test
+func test_duration_from_micros() -> I32 {
+    let d: Duration = Duration::from_micros(2500000)
+    assert_eq(d.as_secs(), 2 as I64, "2.5M micros = 2 seconds")
+    assert_eq(d.subsec_millis(), 500, "fractional part should be 500ms")
+    return 0
+}
+
+// === Accessor methods ===
+
+@test
+func test_duration_as_nanos() -> I32 {
+    let d: Duration = Duration::new(2, 500000000)
+    let nanos: I64 = d.as_nanos()
+    assert_eq(nanos, 2500000000 as I64, "2.5 seconds = 2.5B nanos")
+    return 0
+}
+
+@test
+func test_duration_subsec_micros() -> I32 {
+    let d: Duration = Duration::new(1, 123456789)
+    let micros: I32 = d.subsec_micros()
+    assert_eq(micros, 123456, "fractional micros should be 123456")
+    return 0
+}
+
+@test
+func test_duration_as_millis() -> I32 {
+    let d: Duration = Duration::new(5, 500000000)
+    assert_eq(d.as_millis(), 5500 as I64, "5.5 seconds = 5500 millis")
+    return 0
+}
+
+@test
+func test_duration_as_micros() -> I32 {
+    let d: Duration = Duration::from_millis(100)
+    assert_eq(d.as_micros(), 100000 as I64, "100ms = 100000 micros")
+    return 0
+}
+
+// === Arithmetic ===
+
+@test
+func test_duration_is_zero() -> I32 {
+    let zero: Duration = Duration::from_secs(0)
+    let nonzero: Duration = Duration::from_secs(1)
+    assert(zero.is_zero(), "0 seconds should be zero")
+    assert(not nonzero.is_zero(), "1 second should not be zero")
+    return 0
+}
+
+@test
+func test_duration_mul() -> I32 {
+    let d: Duration = Duration::from_secs(5)
+    let doubled: Duration = d.mul(2)
+    assert_eq(doubled.as_secs(), 10 as I64, "5 * 2 = 10 seconds")
+    return 0
+}
+
+@test
+func test_duration_div() -> I32 {
+    let d: Duration = Duration::from_secs(10)
+    let halved: Duration = d.div(2)
+    assert_eq(halved.as_secs(), 5 as I64, "10 / 2 = 5 seconds")
+    return 0
+}
+
+@test
+func test_duration_add() -> I32 {
+    let a: Duration = Duration::from_secs(2 as I64)
+    let b: Duration = Duration::from_secs(3 as I64)
+    let c: Duration = a.add(b)
+    assert_eq(c.as_secs(), 5 as I64, "2s + 3s = 5s")
+    return 0
+}
+
+@test
+func test_duration_sub() -> I32 {
+    let a: Duration = Duration::from_secs(5 as I64)
+    let b: Duration = Duration::from_secs(2 as I64)
+    let c: Duration = a.sub(b)
+    assert_eq(c.as_secs(), 3 as I64, "5s - 2s = 3s")
+    return 0
+}
+
+// === Saturating arithmetic ===
+
+@test
+func test_duration_saturating_add() -> I32 {
+    let a: Duration = Duration::from_secs(5)
+    let b: Duration = Duration::from_secs(3)
+    let result: Duration = a.saturating_add(b)
+    assert_eq(result.as_secs(), 8 as I64, "5 + 3 = 8 seconds")
+    return 0
+}
+
+@test
+func test_duration_saturating_sub() -> I32 {
+    let a: Duration = Duration::from_secs(5)
+    let b: Duration = Duration::from_secs(3)
+    let result: Duration = a.saturating_sub(b)
+    assert_eq(result.as_secs(), 2 as I64, "5 - 3 = 2 seconds")
+    return 0
+}
+
+@test
+func test_duration_saturating_sub_underflow() -> I32 {
+    let a: Duration = Duration::from_secs(3)
+    let b: Duration = Duration::from_secs(5)
+    let result: Duration = a.saturating_sub(b)
+    assert(result.is_zero(), "3 - 5 should saturate to zero")
+    return 0
+}
+
+// === Comparison ===
+
+@test
+func test_duration_partial_cmp_less() -> I32 {
+    let a: Duration = Duration::from_secs(1 as I64)
+    let b: Duration = Duration::from_secs(2 as I64)
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    assert(r.is_just(), "partial_cmp should return Just")
+    return 0
+}
+
+@test
+func test_duration_partial_cmp_equal() -> I32 {
+    let a: Duration = Duration::from_secs(5 as I64)
+    let b: Duration = Duration::from_secs(5 as I64)
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    assert(r.is_just(), "partial_cmp equal should return Just")
+    return 0
+}
+
+@test
+func test_duration_cmp() -> I32 {
+    let a: Duration = Duration::from_secs(3 as I64)
+    let b: Duration = Duration::from_secs(1 as I64)
+    let r: Ordering = a.cmp(ref b)
+    return 0
+}
+
+// === Display ===
+
+@test
+func test_duration_to_string() -> I32 {
+    let d: Duration = Duration::from_secs(5)
+    let s: Str = d.to_string()
+    assert_eq(s, "5s", "5 seconds should display as '5s'")
+    return 0
+}
+
+@test
+func test_duration_debug_string() -> I32 {
+    let d: Duration = Duration::from_millis(1500 as I64)
+    let s: Str = d.debug_string()
+    assert(s.len() > 0, "debug_string should produce output")
+    return 0
+}

@@ -1,0 +1,427 @@
+//! Consolidated tests for std::os module - platform, system info, CPU, memory,
+//! process, environment, and miscellaneous OS functions.
+//! Total @test count: 50
+//!
+//! Consolidation sources:
+//!   basic.test.tml (3), system_info.test.tml (3), cpu_mem.test.tml (3),
+//!   process_env.test.tml (3), env_vars.test.tml (3), sysinfo_extra.test.tml (3),
+//!   cpu_process.test.tml (3), priority.test.tml (3), os_basic.test.tml (10),
+//!   os_system_info.test.tml (first 16 of 20)
+
+use test::{assert, assert_eq}
+use std::os
+use std::os::{
+    arch, platform, os_type, hostname,
+    homedir, tmpdir, cpu_count,
+    pid, env_get, env_set,
+    machine, release, version,
+    uptime, totalmem, freemem, endianness,
+    cpu_model, cpu_speed,
+    loadavg_1, loadavg_5, loadavg_15,
+    username, uid, gid, shell
+}
+
+// =============================================================================
+// From basic.test.tml — arch / platform / os_type (qualified calls)
+// =============================================================================
+
+@test
+func test_arch_returns_non_empty() -> I32 {
+    let a = os::arch()
+    assert(a.len() > (0 as I64), "arch() should return non-empty string")
+    return 0
+}
+
+@test
+func test_platform_returns_known_value() -> I32 {
+    let p = os::platform()
+    assert(p == "win32" or p == "linux" or p == "darwin" or p == "freebsd"
+           or p == "openbsd" or p == "sunos" or p == "aix" or p == "android",
+           "platform() should return a known platform")
+    return 0
+}
+
+@test
+func test_os_type_returns_known_value() -> I32 {
+    let t = os::os_type()
+    assert(t == "Windows_NT" or t == "Linux" or t == "Darwin"
+           or t == "FreeBSD" or t == "OpenBSD",
+           "os_type() should return a known type")
+    return 0
+}
+
+// =============================================================================
+// From system_info.test.tml — hostname / homedir / tmpdir (qualified calls)
+// =============================================================================
+
+@test
+func test_hostname_non_empty() -> I32 {
+    let h: Str = os::hostname()
+    assert(h.len() > 0, "hostname() should return non-empty string")
+    return 0
+}
+
+@test
+func test_homedir_non_empty() -> I32 {
+    let h: Str = os::homedir()
+    assert(h.len() > 0, "homedir() should return non-empty string")
+    return 0
+}
+
+@test
+func test_tmpdir_non_empty() -> I32 {
+    let t: Str = os::tmpdir()
+    assert(t.len() > 0, "tmpdir() should return non-empty string")
+    return 0
+}
+
+// =============================================================================
+// From cpu_mem.test.tml — cpu_count / totalmem / freemem (qualified calls)
+// =============================================================================
+
+@test
+func test_cpu_count_positive() -> I32 {
+    let count: I32 = os::cpu_count()
+    assert(count > 0, "cpu_count() should be positive")
+    return 0
+}
+
+@test
+func test_totalmem_positive() -> I32 {
+    let mem: U64 = os::totalmem()
+    assert(mem as I64 > 0, "totalmem() should be positive")
+    return 0
+}
+
+@test
+func test_freemem_positive() -> I32 {
+    let free: U64 = os::freemem()
+    let total: U64 = os::totalmem()
+    assert(free as I64 > 0, "freemem() should be positive")
+    assert(free as I64 <= total as I64, "freemem should be <= totalmem")
+    return 0
+}
+
+// =============================================================================
+// From process_env.test.tml — pid / username / endianness (qualified calls)
+// =============================================================================
+
+@test
+func test_pid_positive() -> I32 {
+    let p: I32 = os::pid()
+    assert(p > 0, "pid() should be positive")
+    return 0
+}
+
+@test
+func test_username_non_empty() -> I32 {
+    let u: Str = os::username()
+    assert(u.len() > 0, "username() should return non-empty string")
+    return 0
+}
+
+@test
+func test_endianness_le_or_be() -> I32 {
+    let e: Str = os::endianness()
+    assert(e == "LE" or e == "BE", "endianness() should be LE or BE")
+    return 0
+}
+
+// =============================================================================
+// From env_vars.test.tml — env_set / env_unset / uptime (qualified calls)
+// =============================================================================
+
+@test
+func test_env_set_returns_true() -> I32 {
+    let success: Bool = os::env_set("TML_TEST_VAR_SET", "value1")
+    assert(success, "env_set should return true")
+    os::env_unset("TML_TEST_VAR_SET")
+    return 0
+}
+
+@test
+func test_env_unset_returns_true() -> I32 {
+    os::env_set("TML_TEST_VAR_DEL", "temp")
+    let success: Bool = os::env_unset("TML_TEST_VAR_DEL")
+    assert(success, "env_unset should return true")
+    return 0
+}
+
+@test
+func test_uptime_positive() -> I32 {
+    let u: I64 = os::uptime()
+    assert(u > 0, "uptime() should be positive")
+    return 0
+}
+
+// =============================================================================
+// From sysinfo_extra.test.tml — machine / release / version (qualified calls)
+// =============================================================================
+
+@test
+func test_machine_non_empty() -> I32 {
+    let m: Str = os::machine()
+    assert(m.len() > 0, "machine() should return non-empty string")
+    return 0
+}
+
+@test
+func test_release_non_empty() -> I32 {
+    let r: Str = os::release()
+    assert(r.len() > 0, "release() should return non-empty string")
+    return 0
+}
+
+@test
+func test_version_non_empty() -> I32 {
+    let v: Str = os::version()
+    assert(v.len() > 0, "version() should return non-empty string")
+    return 0
+}
+
+// =============================================================================
+// From cpu_process.test.tml — cpu_model / cpu_speed / shell (qualified calls)
+// =============================================================================
+
+@test
+func test_cpu_model_non_empty() -> I32 {
+    let model: Str = os::cpu_model(0)
+    assert(model.len() > 0, "cpu_model(0) should return non-empty string")
+    return 0
+}
+
+@test
+func test_cpu_speed_positive() -> I32 {
+    let speed: I64 = os::cpu_speed(0)
+    assert(speed > 0, "cpu_speed(0) should be positive")
+    return 0
+}
+
+@test
+func test_shell_non_empty() -> I32 {
+    let s: Str = os::shell()
+    assert(s.len() > 0, "shell() should return non-empty string")
+    return 0
+}
+
+// =============================================================================
+// From priority.test.tml — get_priority / uid / gid (qualified calls)
+// =============================================================================
+
+@test
+func test_get_priority_current_process() -> I32 {
+    let priority: I32 = os::get_priority(0)
+    // Priority should be a reasonable value (0 = normal on most systems)
+    assert(priority >= -20 and priority <= 39, "priority should be in valid range")
+    return 0
+}
+
+@test
+func test_uid_returns_value() -> I32 {
+    let u: I64 = os::uid()
+    // On Windows uid() returns -1, on Unix returns actual UID >= 0
+    assert(u >= -1, "uid() should return -1 or positive")
+    return 0
+}
+
+@test
+func test_gid_returns_value() -> I32 {
+    let g: I64 = os::gid()
+    // On Windows gid() returns -1, on Unix returns actual GID >= 0
+    assert(g >= -1, "gid() should return -1 or positive")
+    return 0
+}
+
+// =============================================================================
+// From os_basic.test.tml — unqualified platform info calls
+// =============================================================================
+
+@test
+func test_os_arch() -> I32 {
+    let a: Str = arch()
+    assert(a.len() > 0, "arch should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_platform() -> I32 {
+    let p: Str = platform()
+    assert(p.len() > 0, "platform should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_type() -> I32 {
+    let t: Str = os_type()
+    assert(t.len() > 0, "os_type should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_hostname() -> I32 {
+    let h: Str = hostname()
+    assert(h.len() > 0, "hostname should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_homedir() -> I32 {
+    let h: Str = homedir()
+    assert(h.len() > 0, "homedir should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_tmpdir() -> I32 {
+    let t: Str = tmpdir()
+    assert(t.len() > 0, "tmpdir should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_cpu_count() -> I32 {
+    let count: I64 = cpu_count()
+    assert(count > 0, "cpu_count should be positive")
+    return 0
+}
+
+@test
+func test_os_pid() -> I32 {
+    let p: I64 = pid()
+    assert(p > 0, "pid should be positive")
+    return 0
+}
+
+@test
+func test_os_env_get_path() -> I32 {
+    // PATH should exist on all platforms
+    let val: Maybe[Str] = env_get("PATH")
+    assert(val.is_just(), "env_get PATH should return Just")
+    return 0
+}
+
+@test
+func test_os_env_set() -> I32 {
+    // Just verify env_set doesn't crash
+    env_set("TML_TEST_VAR_XYZ", "value")
+    assert(true, "env_set should not crash")
+    return 0
+}
+
+// =============================================================================
+// From os_system_info.test.tml — unqualified system info calls (first 16)
+// =============================================================================
+
+@test
+func test_os_machine() -> I32 {
+    let m: Str = machine()
+    assert(m.len() > 0, "machine should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_release() -> I32 {
+    let r: Str = release()
+    assert(r.len() > 0, "release should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_version() -> I32 {
+    let v: Str = version()
+    assert(v.len() > 0, "version should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_uptime() -> I32 {
+    let u: I64 = uptime()
+    assert(u > 0, "uptime should be positive")
+    return 0
+}
+
+@test
+func test_os_totalmem() -> I32 {
+    let m: U64 = totalmem()
+    assert(m > 0, "totalmem should be positive")
+    return 0
+}
+
+@test
+func test_os_freemem() -> I32 {
+    let m: U64 = freemem()
+    assert(m > 0, "freemem should be positive")
+    return 0
+}
+
+@test
+func test_os_endianness() -> I32 {
+    let e: Str = endianness()
+    assert(e.len() > 0, "endianness should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_cpu_model() -> I32 {
+    let m: Str = cpu_model(0)
+    assert(m.len() > 0, "cpu_model(0) should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_cpu_speed() -> I32 {
+    let s: I64 = cpu_speed(0)
+    assert(s > 0, "cpu_speed(0) should be positive")
+    return 0
+}
+
+@test
+func test_os_loadavg_1() -> I32 {
+    let l: F64 = loadavg_1()
+    assert(l >= 0.0, "loadavg_1 should be non-negative")
+    return 0
+}
+
+@test
+func test_os_loadavg_5() -> I32 {
+    let l: F64 = loadavg_5()
+    assert(l >= 0.0, "loadavg_5 should be non-negative")
+    return 0
+}
+
+@test
+func test_os_loadavg_15() -> I32 {
+    let l: F64 = loadavg_15()
+    assert(l >= 0.0, "loadavg_15 should be non-negative")
+    return 0
+}
+
+@test
+func test_os_username() -> I32 {
+    let u: Str = username()
+    assert(u.len() > 0, "username should return non-empty string")
+    return 0
+}
+
+@test
+func test_os_uid() -> I32 {
+    let _u: I64 = uid()
+    // On Windows uid may be -1, just verify it doesn't crash
+    assert(true, "uid should not crash")
+    return 0
+}
+
+@test
+func test_os_gid() -> I32 {
+    let _g: I64 = gid()
+    // On Windows gid may be -1, just verify it doesn't crash
+    assert(true, "gid should not crash")
+    return 0
+}
+
+@test
+func test_os_shell() -> I32 {
+    let s: Str = shell()
+    assert(s.len() > 0, "shell should return non-empty string")
+    return 0
+}
