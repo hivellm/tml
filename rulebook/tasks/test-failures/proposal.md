@@ -51,6 +51,28 @@ Total: 48 new trait implementations
 **Key file**: `lib/core/src/ops/arith.tml` (fixed)
 **Test coverage impact**: +460 passing tests (ops/arith module)
 
+### 1c. Missing Implementations (overflow behaviors)
+
+**Status**: IDENTIFIED - Not yet implemented (2026-02-12)
+
+The `lib/core/src/num/overflow.tml` file defines **19 overflow-handling behaviors** but has **zero implementations** for any primitive type:
+
+**Missing Behaviors:**
+- `CheckedAdd/Sub/Mul/Div/Rem/Neg/Shl/Shr` (8 behaviors)
+- `SaturatingAdd/Sub/Mul` (3 behaviors)
+- `WrappingAdd/Sub/Mul/Neg` (4 behaviors)
+- `OverflowingAdd/Sub/Mul/Neg` (4 behaviors)
+
+**Complexity**: These require LLVM intrinsics (`llvm.sadd.with.overflow`, `llvm.uadd.with.overflow`, etc.) or runtime implementations. Each behavior needs implementations for 8-10 integer types (I8-I64, U8-U64), totaling **~170 implementations**.
+
+**Recommendation**: This is a large task that requires either:
+1. Codegen support for emitting LLVM overflow intrinsics
+2. Runtime C functions wrapping compiler builtins (`__builtin_add_overflow`, etc.)
+3. Manual TML implementations using bit manipulation and range checks
+
+**Key file**: `lib/core/src/num/overflow.tml` (behaviors defined, implementations missing)
+**Blocked tests**: Phase 4 of test-failures task (~19 functions × 8-10 types = ~170+ methods)
+
 ### 2. Methods Returning `()` Instead of Correct Type
 
 Many trait methods on primitives return `()` (unit type) instead of their declared return type:
