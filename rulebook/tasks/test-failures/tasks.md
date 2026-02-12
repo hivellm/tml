@@ -24,12 +24,8 @@ This task tracks all compiler and runtime bugs discovered during test coverage w
 
 ## Phase 2: Assign Operators on Primitives
 
-- [ ] 2.1 Fix `ops::arith::AddAssign::add_assign` on primitives
-- [ ] 2.2 Fix `ops::arith::SubAssign::sub_assign` on primitives
-- [ ] 2.3 Fix `ops::arith::MulAssign::mul_assign` on primitives
-- [ ] 2.4 Fix `ops::arith::DivAssign::div_assign` on primitives
-- [ ] 2.5 Fix `ops::arith::RemAssign::rem_assign` on primitives
-- [ ] 2.6 Fix `ops::bit` assign variants (`bitand_assign`, `bitor_assign`, `bitxor_assign`, `shl_assign`, `shr_assign`) on primitives
+- [x] 2.1-2.5 Add missing `impl AddAssign/SubAssign/MulAssign/DivAssign/RemAssign` for all primitives in `lib/core/src/ops/arith.tml` (DONE 2026-02-12)
+- [ ] 2.6 Fix `ops::bit` assign variants (`bitand_assign`, `bitor_assign`, `bitxor_assign`, `shl_assign`, `shr_assign`) on primitives - implementations already exist in bit.tml
 
 ## Phase 3: Formatting Trait Methods
 

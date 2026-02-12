@@ -1,479 +1,655 @@
-//! Arithmetic operators.
-//!
-//! This module provides behaviors for arithmetic operations:
-//! - [`Add`] for `+`
-//! - [`Sub`] for `-`
-//! - [`Mul`] for `*`
-//! - [`Div`] for `/`
-//! - [`Rem`] for `%`
-//! - [`Neg`] for unary `-`
-//!
-//! # Examples
-//!
-//! ```tml
-//! use core::ops::Add
-//!
-//! pub type Point { x: F64, y: F64 }
-//!
-//! impl Add for Point {
-//!     type Output = Point
-//!     pub func add(this, rhs: Point) -> Point {
-//!         return Point { x: this.x + rhs.x, y: this.y + rhs.y }
-//!     }
-//! }
-//! ```
-
-// ============================================================================
-// Add Behavior
-// ============================================================================
-
-/// The addition operator `+`.
-///
-/// Types implementing `Add` can be added using the `+` operator.
-///
-/// # Examples
-///
-/// ```tml
-/// let sum = 2 + 3  // 5
-/// ```
-pub behavior Add[Rhs = Self] {
-    /// The resulting type after applying `+`.
-    type Output
-
-    /// Performs the `+` operation.
+pub behavior Add[Rhs] {
     func add(this, rhs: Rhs) -> This::Output
 }
 
-// ============================================================================
-// Sub Behavior
-// ============================================================================
-
-/// The subtraction operator `-`.
-///
-/// Types implementing `Sub` can be subtracted using the `-` operator.
-///
-/// # Examples
-///
-/// ```tml
-/// let diff = 5 - 3  // 2
-/// ```
-pub behavior Sub[Rhs = Self] {
-    /// The resulting type after applying `-`.
-    type Output
-
-    /// Performs the `-` operation.
+pub behavior Sub[Rhs] {
     func sub(this, rhs: Rhs) -> This::Output
 }
 
-// ============================================================================
-// Mul Behavior
-// ============================================================================
-
-/// The multiplication operator `*`.
-///
-/// Types implementing `Mul` can be multiplied using the `*` operator.
-///
-/// # Examples
-///
-/// ```tml
-/// let product = 4 * 5  // 20
-/// ```
-pub behavior Mul[Rhs = Self] {
-    /// The resulting type after applying `*`.
-    type Output
-
-    /// Performs the `*` operation.
+pub behavior Mul[Rhs] {
     func mul(this, rhs: Rhs) -> This::Output
 }
 
-// ============================================================================
-// Div Behavior
-// ============================================================================
-
-/// The division operator `/`.
-///
-/// Types implementing `Div` can be divided using the `/` operator.
-///
-/// # Examples
-///
-/// ```tml
-/// let quotient = 10 / 2  // 5
-/// ```
-pub behavior Div[Rhs = Self] {
-    /// The resulting type after applying `/`.
-    type Output
-
-    /// Performs the `/` operation.
+pub behavior Div[Rhs] {
     func div(this, rhs: Rhs) -> This::Output
 }
 
-// ============================================================================
-// Rem Behavior
-// ============================================================================
-
-/// The remainder operator `%`.
-///
-/// Types implementing `Rem` can compute the remainder using the `%` operator.
-///
-/// # Examples
-///
-/// ```tml
-/// let remainder = 17 % 5  // 2
-/// ```
-pub behavior Rem[Rhs = Self] {
-    /// The resulting type after applying `%`.
-    type Output
-
-    /// Performs the `%` operation.
+pub behavior Rem[Rhs] {
     func rem(this, rhs: Rhs) -> This::Output
 }
 
-// ============================================================================
-// Neg Behavior
-// ============================================================================
-
-/// The unary negation operator `-`.
-///
-/// Types implementing `Neg` can be negated using the unary `-` operator.
-///
-/// # Examples
-///
-/// ```tml
-/// let x = 5
-/// let neg_x = -x  // -5
-/// ```
 pub behavior Neg {
-    /// The resulting type after applying unary `-`.
-    type Output
-
-    /// Performs the unary `-` operation.
     func neg(this) -> This::Output
 }
 
-// ============================================================================
-// Add implementations for primitives
-// ============================================================================
-
 impl Add for I8 {
-    type Output = I8
-    pub func add(this, rhs: I8) -> I8 { return this + rhs }
+    pub func add(this, rhs: I8) -> I8 {
+        return this + rhs
+    }
 }
 
 impl Add for I16 {
-    type Output = I16
-    pub func add(this, rhs: I16) -> I16 { return this + rhs }
+    pub func add(this, rhs: I16) -> I16 {
+        return this + rhs
+    }
 }
 
 impl Add for I32 {
-    type Output = I32
-    pub func add(this, rhs: I32) -> I32 { return this + rhs }
+    pub func add(this, rhs: I32) -> I32 {
+        return this + rhs
+    }
 }
 
 impl Add for I64 {
-    type Output = I64
-    pub func add(this, rhs: I64) -> I64 { return this + rhs }
+    pub func add(this, rhs: I64) -> I64 {
+        return this + rhs
+    }
 }
 
 impl Add for U8 {
-    type Output = U8
-    pub func add(this, rhs: U8) -> U8 { return this + rhs }
+    pub func add(this, rhs: U8) -> U8 {
+        return this + rhs
+    }
 }
 
 impl Add for U16 {
-    type Output = U16
-    pub func add(this, rhs: U16) -> U16 { return this + rhs }
+    pub func add(this, rhs: U16) -> U16 {
+        return this + rhs
+    }
 }
 
 impl Add for U32 {
-    type Output = U32
-    pub func add(this, rhs: U32) -> U32 { return this + rhs }
+    pub func add(this, rhs: U32) -> U32 {
+        return this + rhs
+    }
 }
 
 impl Add for U64 {
-    type Output = U64
-    pub func add(this, rhs: U64) -> U64 { return this + rhs }
+    pub func add(this, rhs: U64) -> U64 {
+        return this + rhs
+    }
 }
 
 impl Add for F32 {
-    type Output = F32
-    pub func add(this, rhs: F32) -> F32 { return this + rhs }
+    pub func add(this, rhs: F32) -> F32 {
+        return this + rhs
+    }
 }
 
 impl Add for F64 {
-    type Output = F64
-    pub func add(this, rhs: F64) -> F64 { return this + rhs }
+    pub func add(this, rhs: F64) -> F64 {
+        return this + rhs
+    }
 }
 
-// ============================================================================
-// Sub implementations for primitives
-// ============================================================================
-
 impl Sub for I8 {
-    type Output = I8
-    pub func sub(this, rhs: I8) -> I8 { return this - rhs }
+    pub func sub(this, rhs: I8) -> I8 {
+        return this - rhs
+    }
 }
 
 impl Sub for I16 {
-    type Output = I16
-    pub func sub(this, rhs: I16) -> I16 { return this - rhs }
+    pub func sub(this, rhs: I16) -> I16 {
+        return this - rhs
+    }
 }
 
 impl Sub for I32 {
-    type Output = I32
-    pub func sub(this, rhs: I32) -> I32 { return this - rhs }
+    pub func sub(this, rhs: I32) -> I32 {
+        return this - rhs
+    }
 }
 
 impl Sub for I64 {
-    type Output = I64
-    pub func sub(this, rhs: I64) -> I64 { return this - rhs }
+    pub func sub(this, rhs: I64) -> I64 {
+        return this - rhs
+    }
 }
 
 impl Sub for U8 {
-    type Output = U8
-    pub func sub(this, rhs: U8) -> U8 { return this - rhs }
+    pub func sub(this, rhs: U8) -> U8 {
+        return this - rhs
+    }
 }
 
 impl Sub for U16 {
-    type Output = U16
-    pub func sub(this, rhs: U16) -> U16 { return this - rhs }
+    pub func sub(this, rhs: U16) -> U16 {
+        return this - rhs
+    }
 }
 
 impl Sub for U32 {
-    type Output = U32
-    pub func sub(this, rhs: U32) -> U32 { return this - rhs }
+    pub func sub(this, rhs: U32) -> U32 {
+        return this - rhs
+    }
 }
 
 impl Sub for U64 {
-    type Output = U64
-    pub func sub(this, rhs: U64) -> U64 { return this - rhs }
+    pub func sub(this, rhs: U64) -> U64 {
+        return this - rhs
+    }
 }
 
 impl Sub for F32 {
-    type Output = F32
-    pub func sub(this, rhs: F32) -> F32 { return this - rhs }
+    pub func sub(this, rhs: F32) -> F32 {
+        return this - rhs
+    }
 }
 
 impl Sub for F64 {
-    type Output = F64
-    pub func sub(this, rhs: F64) -> F64 { return this - rhs }
+    pub func sub(this, rhs: F64) -> F64 {
+        return this - rhs
+    }
 }
 
-// ============================================================================
-// Mul implementations for primitives
-// ============================================================================
-
 impl Mul for I8 {
-    type Output = I8
-    pub func mul(this, rhs: I8) -> I8 { return this * rhs }
+    pub func mul(this, rhs: I8) -> I8 {
+        return this * rhs
+    }
 }
 
 impl Mul for I16 {
-    type Output = I16
-    pub func mul(this, rhs: I16) -> I16 { return this * rhs }
+    pub func mul(this, rhs: I16) -> I16 {
+        return this * rhs
+    }
 }
 
 impl Mul for I32 {
-    type Output = I32
-    pub func mul(this, rhs: I32) -> I32 { return this * rhs }
+    pub func mul(this, rhs: I32) -> I32 {
+        return this * rhs
+    }
 }
 
 impl Mul for I64 {
-    type Output = I64
-    pub func mul(this, rhs: I64) -> I64 { return this * rhs }
+    pub func mul(this, rhs: I64) -> I64 {
+        return this * rhs
+    }
 }
 
 impl Mul for U8 {
-    type Output = U8
-    pub func mul(this, rhs: U8) -> U8 { return this * rhs }
+    pub func mul(this, rhs: U8) -> U8 {
+        return this * rhs
+    }
 }
 
 impl Mul for U16 {
-    type Output = U16
-    pub func mul(this, rhs: U16) -> U16 { return this * rhs }
+    pub func mul(this, rhs: U16) -> U16 {
+        return this * rhs
+    }
 }
 
 impl Mul for U32 {
-    type Output = U32
-    pub func mul(this, rhs: U32) -> U32 { return this * rhs }
+    pub func mul(this, rhs: U32) -> U32 {
+        return this * rhs
+    }
 }
 
 impl Mul for U64 {
-    type Output = U64
-    pub func mul(this, rhs: U64) -> U64 { return this * rhs }
+    pub func mul(this, rhs: U64) -> U64 {
+        return this * rhs
+    }
 }
 
 impl Mul for F32 {
-    type Output = F32
-    pub func mul(this, rhs: F32) -> F32 { return this * rhs }
+    pub func mul(this, rhs: F32) -> F32 {
+        return this * rhs
+    }
 }
 
 impl Mul for F64 {
-    type Output = F64
-    pub func mul(this, rhs: F64) -> F64 { return this * rhs }
+    pub func mul(this, rhs: F64) -> F64 {
+        return this * rhs
+    }
 }
 
-// ============================================================================
-// Div implementations for primitives
-// ============================================================================
-
 impl Div for I8 {
-    type Output = I8
-    pub func div(this, rhs: I8) -> I8 { return this / rhs }
+    pub func div(this, rhs: I8) -> I8 {
+        return this / rhs
+    }
 }
 
 impl Div for I16 {
-    type Output = I16
-    pub func div(this, rhs: I16) -> I16 { return this / rhs }
+    pub func div(this, rhs: I16) -> I16 {
+        return this / rhs
+    }
 }
 
 impl Div for I32 {
-    type Output = I32
-    pub func div(this, rhs: I32) -> I32 { return this / rhs }
+    pub func div(this, rhs: I32) -> I32 {
+        return this / rhs
+    }
 }
 
 impl Div for I64 {
-    type Output = I64
-    pub func div(this, rhs: I64) -> I64 { return this / rhs }
+    pub func div(this, rhs: I64) -> I64 {
+        return this / rhs
+    }
 }
 
 impl Div for U8 {
-    type Output = U8
-    pub func div(this, rhs: U8) -> U8 { return this / rhs }
+    pub func div(this, rhs: U8) -> U8 {
+        return this / rhs
+    }
 }
 
 impl Div for U16 {
-    type Output = U16
-    pub func div(this, rhs: U16) -> U16 { return this / rhs }
+    pub func div(this, rhs: U16) -> U16 {
+        return this / rhs
+    }
 }
 
 impl Div for U32 {
-    type Output = U32
-    pub func div(this, rhs: U32) -> U32 { return this / rhs }
+    pub func div(this, rhs: U32) -> U32 {
+        return this / rhs
+    }
 }
 
 impl Div for U64 {
-    type Output = U64
-    pub func div(this, rhs: U64) -> U64 { return this / rhs }
+    pub func div(this, rhs: U64) -> U64 {
+        return this / rhs
+    }
 }
 
 impl Div for F32 {
-    type Output = F32
-    pub func div(this, rhs: F32) -> F32 { return this / rhs }
+    pub func div(this, rhs: F32) -> F32 {
+        return this / rhs
+    }
 }
 
 impl Div for F64 {
-    type Output = F64
-    pub func div(this, rhs: F64) -> F64 { return this / rhs }
+    pub func div(this, rhs: F64) -> F64 {
+        return this / rhs
+    }
 }
 
-// ============================================================================
-// Rem implementations for primitives
-// ============================================================================
-
 impl Rem for I8 {
-    type Output = I8
-    pub func rem(this, rhs: I8) -> I8 { return this % rhs }
+    pub func rem(this, rhs: I8) -> I8 {
+        return this % rhs
+    }
 }
 
 impl Rem for I16 {
-    type Output = I16
-    pub func rem(this, rhs: I16) -> I16 { return this % rhs }
+    pub func rem(this, rhs: I16) -> I16 {
+        return this % rhs
+    }
 }
 
 impl Rem for I32 {
-    type Output = I32
-    pub func rem(this, rhs: I32) -> I32 { return this % rhs }
+    pub func rem(this, rhs: I32) -> I32 {
+        return this % rhs
+    }
 }
 
 impl Rem for I64 {
-    type Output = I64
-    pub func rem(this, rhs: I64) -> I64 { return this % rhs }
+    pub func rem(this, rhs: I64) -> I64 {
+        return this % rhs
+    }
 }
 
 impl Rem for U8 {
-    type Output = U8
-    pub func rem(this, rhs: U8) -> U8 { return this % rhs }
+    pub func rem(this, rhs: U8) -> U8 {
+        return this % rhs
+    }
 }
 
 impl Rem for U16 {
-    type Output = U16
-    pub func rem(this, rhs: U16) -> U16 { return this % rhs }
+    pub func rem(this, rhs: U16) -> U16 {
+        return this % rhs
+    }
 }
 
 impl Rem for U32 {
-    type Output = U32
-    pub func rem(this, rhs: U32) -> U32 { return this % rhs }
+    pub func rem(this, rhs: U32) -> U32 {
+        return this % rhs
+    }
 }
 
 impl Rem for U64 {
-    type Output = U64
-    pub func rem(this, rhs: U64) -> U64 { return this % rhs }
+    pub func rem(this, rhs: U64) -> U64 {
+        return this % rhs
+    }
 }
 
-// ============================================================================
-// Neg implementations for primitives
-// ============================================================================
-
 impl Neg for I8 {
-    type Output = I8
-    pub func neg(this) -> I8 { return (0 as I8) - this }
+    pub func neg(this) -> I8 {
+        return 0 as I8 - this
+    }
 }
 
 impl Neg for I16 {
-    type Output = I16
-    pub func neg(this) -> I16 { return (0 as I16) - this }
+    pub func neg(this) -> I16 {
+        return 0 as I16 - this
+    }
 }
 
 impl Neg for I32 {
-    type Output = I32
-    pub func neg(this) -> I32 { return 0 - this }
+    pub func neg(this) -> I32 {
+        return 0 - this
+    }
 }
 
 impl Neg for I64 {
-    type Output = I64
-    pub func neg(this) -> I64 { return 0 - this }
+    pub func neg(this) -> I64 {
+        return 0 - this
+    }
 }
 
 impl Neg for F32 {
-    type Output = F32
-    pub func neg(this) -> F32 { return lowlevel { fneg_f32(this) } }
+    pub func neg(this) -> F32 {
+        return /* unknown expr */
+    }
 }
 
 impl Neg for F64 {
-    type Output = F64
-    pub func neg(this) -> F64 { return lowlevel { fneg_f64(this) } }
+    pub func neg(this) -> F64 {
+        return /* unknown expr */
+    }
 }
 
-// ============================================================================
-// Compound Assignment Operators
-// ============================================================================
-
-/// The addition assignment operator `+=`.
-pub behavior AddAssign[Rhs = Self] {
-    /// Performs the `+=` operation.
+pub behavior AddAssign[Rhs] {
     func add_assign(mut this, rhs: Rhs)
 }
 
-/// The subtraction assignment operator `-=`.
-pub behavior SubAssign[Rhs = Self] {
-    /// Performs the `-=` operation.
+pub behavior SubAssign[Rhs] {
     func sub_assign(mut this, rhs: Rhs)
 }
 
-/// The multiplication assignment operator `*=`.
-pub behavior MulAssign[Rhs = Self] {
-    /// Performs the `*=` operation.
+pub behavior MulAssign[Rhs] {
     func mul_assign(mut this, rhs: Rhs)
 }
 
-/// The division assignment operator `/=`.
-pub behavior DivAssign[Rhs = Self] {
-    /// Performs the `/=` operation.
+pub behavior DivAssign[Rhs] {
     func div_assign(mut this, rhs: Rhs)
 }
 
-/// The remainder assignment operator `%=`.
-pub behavior RemAssign[Rhs = Self] {
-    /// Performs the `%=` operation.
+pub behavior RemAssign[Rhs] {
     func rem_assign(mut this, rhs: Rhs)
+}
+
+impl AddAssign for I8 {
+    pub func add_assign(mut this, rhs: I8) {
+        this = this + rhs
+    }
+}
+
+impl AddAssign for I16 {
+    pub func add_assign(mut this, rhs: I16) {
+        this = this + rhs
+    }
+}
+
+impl AddAssign for I32 {
+    pub func add_assign(mut this, rhs: I32) {
+        this = this + rhs
+    }
+}
+
+impl AddAssign for I64 {
+    pub func add_assign(mut this, rhs: I64) {
+        this = this + rhs
+    }
+}
+
+impl AddAssign for U8 {
+    pub func add_assign(mut this, rhs: U8) {
+        this = this + rhs
+    }
+}
+
+impl AddAssign for U16 {
+    pub func add_assign(mut this, rhs: U16) {
+        this = this + rhs
+    }
+}
+
+impl AddAssign for U32 {
+    pub func add_assign(mut this, rhs: U32) {
+        this = this + rhs
+    }
+}
+
+impl AddAssign for U64 {
+    pub func add_assign(mut this, rhs: U64) {
+        this = this + rhs
+    }
+}
+
+impl AddAssign for F32 {
+    pub func add_assign(mut this, rhs: F32) {
+        this = this + rhs
+    }
+}
+
+impl AddAssign for F64 {
+    pub func add_assign(mut this, rhs: F64) {
+        this = this + rhs
+    }
+}
+
+impl SubAssign for I8 {
+    pub func sub_assign(mut this, rhs: I8) {
+        this = this - rhs
+    }
+}
+
+impl SubAssign for I16 {
+    pub func sub_assign(mut this, rhs: I16) {
+        this = this - rhs
+    }
+}
+
+impl SubAssign for I32 {
+    pub func sub_assign(mut this, rhs: I32) {
+        this = this - rhs
+    }
+}
+
+impl SubAssign for I64 {
+    pub func sub_assign(mut this, rhs: I64) {
+        this = this - rhs
+    }
+}
+
+impl SubAssign for U8 {
+    pub func sub_assign(mut this, rhs: U8) {
+        this = this - rhs
+    }
+}
+
+impl SubAssign for U16 {
+    pub func sub_assign(mut this, rhs: U16) {
+        this = this - rhs
+    }
+}
+
+impl SubAssign for U32 {
+    pub func sub_assign(mut this, rhs: U32) {
+        this = this - rhs
+    }
+}
+
+impl SubAssign for U64 {
+    pub func sub_assign(mut this, rhs: U64) {
+        this = this - rhs
+    }
+}
+
+impl SubAssign for F32 {
+    pub func sub_assign(mut this, rhs: F32) {
+        this = this - rhs
+    }
+}
+
+impl SubAssign for F64 {
+    pub func sub_assign(mut this, rhs: F64) {
+        this = this - rhs
+    }
+}
+
+impl MulAssign for I8 {
+    pub func mul_assign(mut this, rhs: I8) {
+        this = this * rhs
+    }
+}
+
+impl MulAssign for I16 {
+    pub func mul_assign(mut this, rhs: I16) {
+        this = this * rhs
+    }
+}
+
+impl MulAssign for I32 {
+    pub func mul_assign(mut this, rhs: I32) {
+        this = this * rhs
+    }
+}
+
+impl MulAssign for I64 {
+    pub func mul_assign(mut this, rhs: I64) {
+        this = this * rhs
+    }
+}
+
+impl MulAssign for U8 {
+    pub func mul_assign(mut this, rhs: U8) {
+        this = this * rhs
+    }
+}
+
+impl MulAssign for U16 {
+    pub func mul_assign(mut this, rhs: U16) {
+        this = this * rhs
+    }
+}
+
+impl MulAssign for U32 {
+    pub func mul_assign(mut this, rhs: U32) {
+        this = this * rhs
+    }
+}
+
+impl MulAssign for U64 {
+    pub func mul_assign(mut this, rhs: U64) {
+        this = this * rhs
+    }
+}
+
+impl MulAssign for F32 {
+    pub func mul_assign(mut this, rhs: F32) {
+        this = this * rhs
+    }
+}
+
+impl MulAssign for F64 {
+    pub func mul_assign(mut this, rhs: F64) {
+        this = this * rhs
+    }
+}
+
+impl DivAssign for I8 {
+    pub func div_assign(mut this, rhs: I8) {
+        this = this / rhs
+    }
+}
+
+impl DivAssign for I16 {
+    pub func div_assign(mut this, rhs: I16) {
+        this = this / rhs
+    }
+}
+
+impl DivAssign for I32 {
+    pub func div_assign(mut this, rhs: I32) {
+        this = this / rhs
+    }
+}
+
+impl DivAssign for I64 {
+    pub func div_assign(mut this, rhs: I64) {
+        this = this / rhs
+    }
+}
+
+impl DivAssign for U8 {
+    pub func div_assign(mut this, rhs: U8) {
+        this = this / rhs
+    }
+}
+
+impl DivAssign for U16 {
+    pub func div_assign(mut this, rhs: U16) {
+        this = this / rhs
+    }
+}
+
+impl DivAssign for U32 {
+    pub func div_assign(mut this, rhs: U32) {
+        this = this / rhs
+    }
+}
+
+impl DivAssign for U64 {
+    pub func div_assign(mut this, rhs: U64) {
+        this = this / rhs
+    }
+}
+
+impl DivAssign for F32 {
+    pub func div_assign(mut this, rhs: F32) {
+        this = this / rhs
+    }
+}
+
+impl DivAssign for F64 {
+    pub func div_assign(mut this, rhs: F64) {
+        this = this / rhs
+    }
+}
+
+impl RemAssign for I8 {
+    pub func rem_assign(mut this, rhs: I8) {
+        this = this % rhs
+    }
+}
+
+impl RemAssign for I16 {
+    pub func rem_assign(mut this, rhs: I16) {
+        this = this % rhs
+    }
+}
+
+impl RemAssign for I32 {
+    pub func rem_assign(mut this, rhs: I32) {
+        this = this % rhs
+    }
+}
+
+impl RemAssign for I64 {
+    pub func rem_assign(mut this, rhs: I64) {
+        this = this % rhs
+    }
+}
+
+impl RemAssign for U8 {
+    pub func rem_assign(mut this, rhs: U8) {
+        this = this % rhs
+    }
+}
+
+impl RemAssign for U16 {
+    pub func rem_assign(mut this, rhs: U16) {
+        this = this % rhs
+    }
+}
+
+impl RemAssign for U32 {
+    pub func rem_assign(mut this, rhs: U32) {
+        this = this % rhs
+    }
+}
+
+impl RemAssign for U64 {
+    pub func rem_assign(mut this, rhs: U64) {
+        this = this % rhs
+    }
 }

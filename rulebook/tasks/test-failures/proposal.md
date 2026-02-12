@@ -29,6 +29,28 @@ When calling `bitand()`, `bitor()`, `bitxor()`, `shift_left()`, `shift_right()` 
 **Test coverage impact**: +460 passing tests (ops/bit module)
 **Related commit**: `bcaea6e` (feat(compiler): dynamic impl resolution for primitive types)
 
+### 1b. "Unknown method" Error (ops/arith assign variants)
+
+**Status**: FIXED - Missing implementations added (2026-02-12)
+
+Similar to the `ops::bit` issue, the arithmetic assign operators (`+=`, `-=`, `*=`, `/=`, `%=`) had behavior definitions but were missing implementations for all primitive types.
+
+**Root Cause**: The `lib/core/src/ops/arith.tml` file defined the `AddAssign`, `SubAssign`, `MulAssign`, `DivAssign`, `RemAssign` **behaviors** but was **missing the `impl` blocks** for all primitive types (I8-I64, U8-U64, F32-F64).
+
+**Fix Applied**: Added complete implementations for:
+- `impl AddAssign for I8/I16/I32/I64/U8/U16/U32/U64/F32/F64` (10 types)
+- `impl SubAssign for I8/I16/I32/I64/U8/U16/U32/U64/F32/F64` (10 types)
+- `impl MulAssign for I8/I16/I32/I64/U8/U16/U32/U64/F32/F64` (10 types)
+- `impl DivAssign for I8/I16/I32/I64/U8/U16/U32/U64/F32/F64` (10 types)
+- `impl RemAssign for I8/I16/I32/I64/U8/U16/U32/U64` (8 types, no remainder for floats)
+
+Total: 48 new trait implementations
+
+**Test Results**: After adding implementations, **460 tests now pass** in 12 test files (`lib/core/tests/ops/*arith*.test.tml`). All arithmetic assign operators (`+=`, `-=`, `*=`, `/=`, `%=`) now work correctly on all numeric primitives.
+
+**Key file**: `lib/core/src/ops/arith.tml` (fixed)
+**Test coverage impact**: +460 passing tests (ops/arith module)
+
 ### 2. Methods Returning `()` Instead of Correct Type
 
 Many trait methods on primitives return `()` (unit type) instead of their declared return type:
