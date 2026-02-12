@@ -1,13 +1,27 @@
 # Tasks: Standard Library Essentials
 
-**Status**: Planning (0%) - Core utilities needed for production use
+**Status**: In Progress (10%) - Core utilities needed for production use
 
-**Note**: This task covers essential standard library modules that make TML usable for real-world applications. These are the missing pieces between a working compiler and a production-ready language.
+**Note**: This task covers essential standard library modules that make TML usable for real-world applications. Some foundational modules already exist (HashMap, List, File, Path basics) but the higher-level APIs described here are not yet implemented.
+
+**Already implemented (partial overlap)**:
+- `std::collections::HashMap` — exists in `lib/std/src/collections/hashmap.tml`
+- `std::collections::List` — exists in `lib/std/src/collections/list.tml`
+- `std::file` — file/dir/path operations exist in `lib/std/src/file/`
+- `core::time` — basic time module exists in `lib/core/src/time.tml`
+
+**Still needed (this task)**:
+- HashSet, BTreeMap, BTreeSet, Deque — NOT yet implemented
+- env, args, process modules — NOT yet implemented
+- BufReader/BufWriter — NOT yet implemented
+- Path/PathBuf types — basic path exists in file module, needs enhancement
+- DateTime — NOT yet implemented
+- Random — NOT yet implemented
 
 **Related Tasks**:
-- Network I/O → [add-network-stdlib](../add-network-stdlib/tasks.md)
-- Concurrency → [thread-safe-native](../thread-safe-native/tasks.md)
-- JSON → [json-native-implementation](../json-native-implementation/tasks.md)
+- Network I/O → `async-network-stack` (sync net already implemented)
+- JSON → already implemented in `lib/std/src/json/`
+- Sync → already implemented in `lib/std/src/sync/`
 
 ## Phase 1: Collection Aliases and Additions
 

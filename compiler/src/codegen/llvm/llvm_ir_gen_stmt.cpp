@@ -1002,8 +1002,8 @@ void LLVMIRGen::gen_tuple_pattern_binding(const parser::TuplePattern& pattern,
                 // The element is an enum struct { i32, payload... }
                 // Extract payload pointer (field index 1)
                 std::string payload_ptr = fresh_reg();
-                emit_line("  " + payload_ptr + " = getelementptr inbounds " + elem_type +
-                          ", ptr " + elem_ptr + ", i32 0, i32 1");
+                emit_line("  " + payload_ptr + " = getelementptr inbounds " + elem_type + ", ptr " +
+                          elem_ptr + ", i32 0, i32 1");
 
                 // Determine the payload type from semantic type info
                 types::TypePtr payload_type = nullptr;
@@ -1041,7 +1041,7 @@ void LLVMIRGen::gen_tuple_pattern_binding(const parser::TuplePattern& pattern,
                             auto enum_def2 = env_.lookup_enum(named.name);
                             if (enum_def2 && !enum_def2->type_params.empty()) {
                                 for (size_t j = 0; j < enum_def2->type_params.size() &&
-                                                    j < named.type_args.size();
+                                                   j < named.type_args.size();
                                      ++j) {
                                     type_subs[enum_def2->type_params[j]] = named.type_args[j];
                                 }

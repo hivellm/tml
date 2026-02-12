@@ -1,0 +1,108 @@
+// Tests for enum types - creation, matching, payloads
+use test
+
+// =============================================================================
+// Simple enum (no payload)
+// =============================================================================
+
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+@test
+func test_enum_create_variants() -> I32 {
+    let r: Color = Color::Red
+    let g: Color = Color::Green
+    let b: Color = Color::Blue
+    // If we get here without crash, variants are constructible
+    assert(true, "enum variants should be constructible")
+    return 0
+}
+
+// =============================================================================
+// Enum with when matching
+// =============================================================================
+
+func color_value(c: Color) -> I32 {
+    when c {
+        Color::Red => return 1,
+        Color::Green => return 2,
+        Color::Blue => return 3
+    }
+}
+
+@test
+func test_enum_match_red() -> I32 {
+    assert_eq(color_value(Color::Red), 1, "Red should be 1")
+    return 0
+}
+
+@test
+func test_enum_match_green() -> I32 {
+    assert_eq(color_value(Color::Green), 2, "Green should be 2")
+    return 0
+}
+
+@test
+func test_enum_match_blue() -> I32 {
+    assert_eq(color_value(Color::Blue), 3, "Blue should be 3")
+    return 0
+}
+
+// =============================================================================
+// Enum with single payload
+// =============================================================================
+
+enum Value {
+    IntVal(I32),
+    Empty
+}
+
+func extract_or_default(v: Value, default_val: I32) -> I32 {
+    when v {
+        Value::IntVal(n) => return n,
+        Value::Empty => return default_val
+    }
+}
+
+@test
+func test_enum_payload_extract() -> I32 {
+    let v: Value = Value::IntVal(42)
+    assert_eq(extract_or_default(v, 0), 42, "IntVal(42) should extract 42")
+    return 0
+}
+
+@test
+func test_enum_payload_empty() -> I32 {
+    let v: Value = Value::Empty
+    assert_eq(extract_or_default(v, -1), -1, "Empty should use default -1")
+    return 0
+}
+
+// =============================================================================
+// Enum used with Maybe (builtin)
+// =============================================================================
+
+func safe_divide(a: I32, b: I32) -> Maybe[I32] {
+    if b == 0 {
+        return Nothing
+    }
+    return Just(a / b)
+}
+
+@test
+func test_safe_divide_ok() -> I32 {
+    let result: Maybe[I32] = safe_divide(10, 3)
+    assert(result.is_just(), "10/3 should be Just")
+    assert_eq(result.unwrap(), 3, "10/3 should be 3")
+    return 0
+}
+
+@test
+func test_safe_divide_by_zero() -> I32 {
+    let result: Maybe[I32] = safe_divide(10, 0)
+    assert(result.is_nothing(), "10/0 should be Nothing")
+    return 0
+}

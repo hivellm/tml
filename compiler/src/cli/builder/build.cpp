@@ -528,37 +528,68 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
                      "CGU: Partitioned into " << partition_result.cgus.size() << " codegen units");
 
         int cache_hits = 0;
-        int compiled = 0;
         std::string obj_ext = get_object_extension();
 
+        // Separate CGUs into cached (reuse) and uncached (need compilation)
+        std::vector<CGUCompileJob> compile_jobs;
+        // Track insertion order: pair<is_cached, index_into_cached_or_jobs>
+        struct CGUSlot {
+            bool cached;
+            size_t index;
+        };
+        std::vector<CGUSlot> slots;
+
+        std::vector<fs::path> cached_objects;
+
         for (const auto& cgu : partition_result.cgus) {
-            // Cache path: .cache/<module>.cgu<N>.<fingerprint_12chars>.obj
             std::string fp12 = cgu.fingerprint.substr(0, 12);
             std::string cgu_name =
                 module_name + ".cgu" + std::to_string(cgu.cgu_index) + "." + fp12 + obj_ext;
             fs::path cgu_obj_path = cache_dir / cgu_name;
 
             if (fs::exists(cgu_obj_path)) {
-                // Cache hit — reuse existing object file
-                object_files.push_back(cgu_obj_path);
+                slots.push_back({true, cached_objects.size()});
+                cached_objects.push_back(cgu_obj_path);
                 cache_hits++;
                 TML_LOG_INFO("build", "CGU " << cgu.cgu_index << ": cache hit (" << fp12 << ")");
             } else {
-                // Cache miss — compile this CGU's IR to object
-                auto obj_result =
-                    compile_ir_string_to_object(cgu.llvm_ir, cgu_obj_path, clang, obj_options);
-                if (!obj_result.success) {
-                    TML_LOG_ERROR("build", "CGU " << cgu.cgu_index << " compilation failed: "
-                                                  << obj_result.error_message);
-                    return 1;
-                }
-                object_files.push_back(obj_result.object_file);
-                compiled++;
-                TML_LOG_INFO("build", "CGU " << cgu.cgu_index << ": compiled (" << fp12 << ")");
+                CGUCompileJob job;
+                job.ir_content = cgu.llvm_ir;
+                job.output_path = cgu_obj_path;
+                job.cgu_index = cgu.cgu_index;
+                job.fingerprint_tag = fp12;
+                slots.push_back({false, compile_jobs.size()});
+                compile_jobs.push_back(std::move(job));
             }
         }
 
-        TML_LOG_INFO("build", "CGU: " << cache_hits << " cached, " << compiled << " compiled");
+        // Compile uncached CGUs in parallel
+        if (!compile_jobs.empty()) {
+            auto batch_result = compile_cgus_parallel(compile_jobs, clang, obj_options);
+            if (!batch_result.success) {
+                for (const auto& err : batch_result.errors) {
+                    TML_LOG_ERROR("build", err);
+                }
+                return 1;
+            }
+
+            // Reassemble object files in original CGU order
+            for (const auto& slot : slots) {
+                if (slot.cached) {
+                    object_files.push_back(cached_objects[slot.index]);
+                } else {
+                    object_files.push_back(batch_result.object_files[slot.index]);
+                }
+            }
+        } else {
+            // All cached
+            for (const auto& obj : cached_objects) {
+                object_files.push_back(obj);
+            }
+        }
+
+        TML_LOG_INFO("build",
+                     "CGU: " << cache_hits << " cached, " << compile_jobs.size() << " compiled");
     } else {
         // Monolithic path (AST codegen, single function, or --no-cache)
         fs::path obj_output = cache_dir / (module_name + get_object_extension());
@@ -1002,8 +1033,16 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
                                                                << " codegen units");
 
                 int cache_hits = 0;
-                int compiled = 0;
                 std::string obj_ext = get_object_extension();
+
+                // Separate cached vs uncached CGUs
+                std::vector<CGUCompileJob> compile_jobs;
+                struct CGUSlot {
+                    bool cached;
+                    size_t index;
+                };
+                std::vector<CGUSlot> slots;
+                std::vector<fs::path> cached_objects;
 
                 for (const auto& cgu : partition_result.cgus) {
                     std::string fp12 = cgu.fingerprint.substr(0, 12);
@@ -1012,28 +1051,47 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
                     fs::path cgu_obj_path = cache_dir / cgu_name;
 
                     if (fs::exists(cgu_obj_path)) {
-                        object_files.push_back(cgu_obj_path);
+                        slots.push_back({true, cached_objects.size()});
+                        cached_objects.push_back(cgu_obj_path);
                         cache_hits++;
                         TML_LOG_INFO("build",
                                      "CGU " << cgu.cgu_index << ": cache hit (" << fp12 << ")");
                     } else {
-                        auto obj_result = compile_ir_string_to_object(cgu.llvm_ir, cgu_obj_path,
-                                                                      clang, obj_options);
-                        if (!obj_result.success) {
-                            TML_LOG_ERROR("build", "CGU " << cgu.cgu_index
-                                                          << " compilation failed: "
-                                                          << obj_result.error_message);
-                            return 1;
-                        }
-                        object_files.push_back(obj_result.object_file);
-                        compiled++;
-                        TML_LOG_INFO("build",
-                                     "CGU " << cgu.cgu_index << ": compiled (" << fp12 << ")");
+                        CGUCompileJob job;
+                        job.ir_content = cgu.llvm_ir;
+                        job.output_path = cgu_obj_path;
+                        job.cgu_index = cgu.cgu_index;
+                        job.fingerprint_tag = fp12;
+                        slots.push_back({false, compile_jobs.size()});
+                        compile_jobs.push_back(std::move(job));
                     }
                 }
 
-                TML_LOG_INFO("build",
-                             "CGU: " << cache_hits << " cached, " << compiled << " compiled");
+                // Compile uncached CGUs in parallel
+                if (!compile_jobs.empty()) {
+                    auto batch_result = compile_cgus_parallel(compile_jobs, clang, obj_options);
+                    if (!batch_result.success) {
+                        for (const auto& err : batch_result.errors) {
+                            TML_LOG_ERROR("build", err);
+                        }
+                        return 1;
+                    }
+
+                    for (const auto& slot : slots) {
+                        if (slot.cached) {
+                            object_files.push_back(cached_objects[slot.index]);
+                        } else {
+                            object_files.push_back(batch_result.object_files[slot.index]);
+                        }
+                    }
+                } else {
+                    for (const auto& obj : cached_objects) {
+                        object_files.push_back(obj);
+                    }
+                }
+
+                TML_LOG_INFO("build", "CGU: " << cache_hits << " cached, " << compile_jobs.size()
+                                              << " compiled");
             } else {
                 use_cgu = false; // Fall through to monolithic
                 TML_LOG_INFO("build", "CGU partitioning failed, using monolithic path");

@@ -37,6 +37,7 @@ namespace tml::cli {
 struct ObjectCompileResult {
     bool success;
     fs::path object_file;
+    std::vector<uint8_t> object_data; ///< In-memory object bytes (from compile_ir_string_to_buffer)
     std::string error_message;
 };
 
@@ -140,6 +141,20 @@ ObjectCompileResult compile_ir_string_to_object(const std::string& ir_content,
                                                 const ObjectCompileOptions& options);
 
 /**
+ * Compile LLVM IR string to an in-memory object buffer (no disk I/O).
+ *
+ * Uses LLVMTargetMachineEmitToMemoryBuffer for zero-copy object generation.
+ * The result's object_data contains the raw object bytes.
+ * Falls back to temp file + disk compilation if LLVM backend is unavailable.
+ *
+ * @param ir_content The LLVM IR text content
+ * @param options Compilation options
+ * @return Compilation result with object_data populated
+ */
+ObjectCompileResult compile_ir_string_to_buffer(const std::string& ir_content,
+                                                const ObjectCompileOptions& options);
+
+/**
  * Batch compilation result
  */
 struct BatchCompileResult {
@@ -160,6 +175,32 @@ struct BatchCompileResult {
 BatchCompileResult compile_ll_batch(const std::vector<fs::path>& ll_files,
                                     const std::string& clang_path,
                                     const ObjectCompileOptions& options, int num_threads = 0);
+
+/**
+ * A CGU compilation job for parallel processing
+ */
+struct CGUCompileJob {
+    std::string ir_content;      // LLVM IR string
+    fs::path output_path;        // Output object file path
+    int cgu_index;               // CGU index for logging
+    std::string fingerprint_tag; // Short fingerprint for logging
+};
+
+/**
+ * Compile multiple CGU IR strings to object files in parallel.
+ *
+ * Each CGU's IR is compiled to its output path concurrently using a thread pool.
+ * The LLVM backend is initialized per-thread (each thread gets its own LLVMContext).
+ *
+ * @param jobs List of CGU compilation jobs
+ * @param clang_path Path to clang executable (fallback only)
+ * @param options Compilation options
+ * @param num_threads Number of parallel threads (0 = auto)
+ * @return Batch compilation result with object file paths in job order
+ */
+BatchCompileResult compile_cgus_parallel(const std::vector<CGUCompileJob>& jobs,
+                                         const std::string& clang_path,
+                                         const ObjectCompileOptions& options, int num_threads = 0);
 
 /**
  * Link object files to create final output

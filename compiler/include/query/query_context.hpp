@@ -134,6 +134,7 @@ private:
     std::unique_ptr<IncrCacheWriter> incr_writer_;
     std::unordered_map<QueryKey, QueryColor, QueryKeyHash, QueryKeyEqual> color_map_;
     Fingerprint lib_env_fp_;
+    Fingerprint codegen_opts_fp_; ///< Precomputed fingerprint for codegen-affecting options.
     bool incr_enabled_ = false;
     std::filesystem::path incr_cache_dir_;
     uint32_t options_hash_ = 0;

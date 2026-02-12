@@ -1475,11 +1475,71 @@ static std::vector<std::string> extract_pub_mod_names(const fs::path& mod_file) 
     return names;
 }
 
+// Helper: resolve a module path (e.g. "core::str") to its source file path.
+// Returns empty path if the source file cannot be found.
+static fs::path resolve_module_source_path(const std::string& module_path,
+                                           const fs::path& lib_root) {
+    if (lib_root.empty())
+        return {};
+
+    // Split module_path on "::" — first segment is the library (core, std, test)
+    std::string lib_name;
+    std::string rest;
+    auto sep = module_path.find("::");
+    if (sep == std::string::npos) {
+        lib_name = module_path;
+    } else {
+        lib_name = module_path.substr(0, sep);
+        rest = module_path.substr(sep + 2);
+    }
+
+    // Determine source subdirectory
+    std::string src_subdir = "src";
+
+    // Build the base path: lib/<lib_name>/src/
+    fs::path base = lib_root / lib_name / src_subdir;
+
+    if (rest.empty()) {
+        // Top-level module (e.g. "core" -> lib/core/src/mod.tml)
+        fs::path candidate = base / "mod.tml";
+        if (fs::exists(candidate))
+            return candidate;
+        return {};
+    }
+
+    // Replace "::" with "/" for nested modules
+    std::string fs_path = rest;
+    for (size_t i = 0; i < fs_path.size(); ++i) {
+        if (fs_path[i] == ':' && i + 1 < fs_path.size() && fs_path[i + 1] == ':') {
+            fs_path.replace(i, 2, "/");
+        }
+    }
+
+    // Try name.tml first, then name/mod.tml
+    fs::path candidate1 = base / (fs_path + ".tml");
+    if (fs::exists(candidate1))
+        return candidate1;
+
+    fs::path candidate2 = base / fs_path / "mod.tml";
+    if (fs::exists(candidate2))
+        return candidate2;
+
+    return {};
+}
+
 // Helper: load existing .tml.meta files from cache directory into GlobalModuleCache
+// Validates source hash for each module to detect stale caches.
 static int load_existing_meta_files(const fs::path& meta_dir) {
     TML_LOG_INFO("meta", "  Scanning " << meta_dir << " for .tml.meta files...");
     int loaded = 0;
+    int stale = 0;
     std::error_code ec;
+
+    // Find lib root for source hash validation
+    auto lib_root = find_lib_root_for_meta();
+
+    // Collect stale meta files to regenerate after loading valid ones
+    std::vector<std::pair<std::string, fs::path>> stale_modules; // {module_path, source_path}
 
     for (auto& entry : fs::recursive_directory_iterator(meta_dir, ec)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".meta") {
@@ -1509,6 +1569,34 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
             continue;
         }
 
+        // Validate source hash before loading
+        if (!lib_root.empty()) {
+            auto source_path = resolve_module_source_path(module_path, lib_root);
+            if (!source_path.empty()) {
+                // Compute current source hash
+                uint64_t current_hash = compute_module_source_hash(source_path.string());
+                if (current_hash != 0) {
+                    // Read just the header hash from the .tml.meta file
+                    std::ifstream hash_in(entry.path(), std::ios::binary);
+                    if (hash_in) {
+                        ModuleBinaryReader hash_reader(hash_in);
+                        uint64_t cached_hash = hash_reader.read_header_hash();
+                        hash_in.close();
+
+                        if (!hash_reader.has_error() && cached_hash != current_hash) {
+                            TML_LOG_INFO("meta", "  [STALE] "
+                                                     << module_path << " (source changed, hash "
+                                                     << cached_hash << " -> " << current_hash
+                                                     << ")");
+                            stale_modules.push_back({module_path, source_path});
+                            ++stale;
+                            continue; // Skip loading stale cache
+                        }
+                    }
+                }
+            }
+        }
+
         std::ifstream in(entry.path(), std::ios::binary);
         if (!in)
             continue;
@@ -1525,6 +1613,36 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
         GlobalModuleCache::instance().put(module_path, std::move(module));
         ++loaded;
         TML_LOG_INFO("meta", "  [LOADED] " << module_path);
+    }
+
+    // Regenerate stale modules from source
+    if (!stale_modules.empty()) {
+        TML_LOG_INFO("meta", "  Regenerating " << stale_modules.size()
+                                               << " stale module(s) from source...");
+        auto registry = std::make_shared<ModuleRegistry>();
+        TypeEnv env;
+        env.set_module_registry(registry);
+        env.set_abort_on_module_error(false);
+
+        for (const auto& [mod_path, source_path] : stale_modules) {
+            if (GlobalModuleCache::instance().get(mod_path)) {
+                ++loaded; // Was loaded transitively
+                continue;
+            }
+
+            bool ok = env.load_native_module(mod_path, /*silent=*/true);
+            if (ok) {
+                ++loaded;
+                TML_LOG_INFO("meta", "  [REGENERATED] " << mod_path);
+            } else {
+                TML_LOG_WARN("meta", "  [REGEN FAILED] " << mod_path);
+            }
+        }
+    }
+
+    if (stale > 0) {
+        TML_LOG_INFO("meta", "  Summary: " << loaded << " loaded, " << stale
+                                           << " stale (regenerated from source)");
     }
 
     return loaded;

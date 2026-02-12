@@ -1,0 +1,123 @@
+// Tests for str case conversion and char access with value assertions
+use test
+use core::str::{
+    to_uppercase, to_lowercase,
+    char_at, first_char, last_char,
+    len
+}
+
+// =============================================================================
+// to_uppercase
+// =============================================================================
+
+@test
+func test_uppercase_lower() -> I32 {
+    let s: Str = to_uppercase("hello")
+    assert_eq(s, "HELLO", "to_uppercase(hello) should be HELLO")
+    return 0
+}
+
+@test
+func test_uppercase_mixed() -> I32 {
+    let s: Str = to_uppercase("Hello World")
+    assert_eq(s, "HELLO WORLD", "to_uppercase mixed case")
+    return 0
+}
+
+@test
+func test_uppercase_already_upper() -> I32 {
+    let s: Str = to_uppercase("HELLO")
+    assert_eq(s, "HELLO", "to_uppercase already uppercase")
+    return 0
+}
+
+@test
+func test_uppercase_with_numbers() -> I32 {
+    let s: Str = to_uppercase("abc123")
+    assert_eq(s, "ABC123", "to_uppercase with numbers")
+    return 0
+}
+
+// =============================================================================
+// to_lowercase
+// =============================================================================
+
+@test
+func test_lowercase_upper() -> I32 {
+    let s: Str = to_lowercase("HELLO")
+    assert_eq(s, "hello", "to_lowercase(HELLO) should be hello")
+    return 0
+}
+
+@test
+func test_lowercase_mixed() -> I32 {
+    let s: Str = to_lowercase("Hello World")
+    assert_eq(s, "hello world", "to_lowercase mixed case")
+    return 0
+}
+
+@test
+func test_lowercase_already_lower() -> I32 {
+    let s: Str = to_lowercase("hello")
+    assert_eq(s, "hello", "to_lowercase already lowercase")
+    return 0
+}
+
+// =============================================================================
+// char_at value assertions
+// =============================================================================
+
+@test
+func test_char_at_first() -> I32 {
+    let c: I32 = char_at("hello", 0)
+    assert_eq(c, 104, "char_at(hello, 0) should be 104 (h)")
+    return 0
+}
+
+@test
+func test_char_at_middle() -> I32 {
+    let c: I32 = char_at("hello", 2)
+    assert_eq(c, 108, "char_at(hello, 2) should be 108 (l)")
+    return 0
+}
+
+@test
+func test_char_at_last() -> I32 {
+    let c: I32 = char_at("hello", 4)
+    assert_eq(c, 111, "char_at(hello, 4) should be 111 (o)")
+    return 0
+}
+
+// =============================================================================
+// first_char / last_char
+// =============================================================================
+
+@test
+func test_first_char_value() -> I32 {
+    let fc: Maybe[I32] = first_char("abc")
+    assert(fc.is_just(), "first_char of abc should be Just")
+    assert_eq(fc.unwrap(), 97, "first_char(abc) should be 97 (a)")
+    return 0
+}
+
+@test
+func test_first_char_empty() -> I32 {
+    let fc: Maybe[I32] = first_char("")
+    assert(fc.is_nothing(), "first_char of empty should be Nothing")
+    return 0
+}
+
+@test
+func test_last_char_value() -> I32 {
+    let lc: Maybe[I32] = last_char("abc")
+    assert(lc.is_just(), "last_char of abc should be Just")
+    assert_eq(lc.unwrap(), 99, "last_char(abc) should be 99 (c)")
+    return 0
+}
+
+@test
+func test_last_char_empty() -> I32 {
+    let lc: Maybe[I32] = last_char("")
+    assert(lc.is_nothing(), "last_char of empty should be Nothing")
+    return 0
+}

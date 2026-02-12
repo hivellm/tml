@@ -1,6 +1,6 @@
 # Tasks: TML Language Completeness Roadmap
 
-**Status**: Proposed (0%)
+**Status**: In Progress (20%) — M5 mostly done, M3/M4 partially done (net, TLS, sync), M2 partial (reflection), M1/M6 pending
 
 ---
 
@@ -8,47 +8,17 @@
 
 **Goal**: Linguagem usável para CLI tools e programas standalone
 
-### 1.1 Test Coverage (task: increase-library-coverage)
+### 1.1 Test Coverage
 
-- [ ] 1.1.1 Phase 1: convert, fmt/impls, fmt/float (0% → 80%)
-- [ ] 1.1.2 Phase 2: ops/arith, ops/bit (9% → 80%)
-- [ ] 1.1.3 Phase 3: cmp (17% → 80%)
-- [ ] 1.1.4 Phase 4: str (13% → 75%)
-- [ ] 1.1.5 Phase 5: array, array/iter, iter/range, iter/accumulators (0-25% → 70%)
-- [ ] 1.1.6 Phase 6: hash (25% → 75%)
-- [ ] 1.1.7 Phase 7: collections/class_collections (0% → 60%)
-- [ ] 1.1.8 Phase 8: alloc/heap, alloc/shared, alloc/sync (38-56% → 80%)
-- [ ] 1.1.9 Phase 9: sync/atomic, task (partial → 60%)
-- [ ] 1.1.10 Phase 10: json, pool, cache, arena, intrinsics
-- [ ] 1.1.11 Phase 11: Validar coverage >= 70% global
+Target: ≥70% global coverage. (Task archived — not current priority)
 
-### 1.2 Standard Library Essentials (task: stdlib-essentials)
+### 1.2 Standard Library Essentials
 
-- [ ] 1.2.1 `HashSet[T]` - Set baseado em hash com insert, remove, contains, iter
-- [ ] 1.2.2 `BTreeMap[K,V]` - Map ordenado com insert, get, remove, range queries
-- [ ] 1.2.3 `BTreeSet[T]` - Set ordenado
-- [ ] 1.2.4 `Deque[T]` - Double-ended queue com push_front/back, pop_front/back
-- [ ] 1.2.5 `std::env` - read env vars (`var()`, `vars()`), current dir, home dir
-- [ ] 1.2.6 `std::args` - Command-line argument parsing (positional, flags, options)
-- [ ] 1.2.7 `std::process` - Spawn subprocesses, pipe stdin/stdout/stderr, wait, kill
-- [ ] 1.2.8 `Path` / `PathBuf` - Cross-platform path manipulation (join, parent, extension, exists)
-- [ ] 1.2.9 Directory operations - list_dir, create_dir, remove_dir, walk_dir
-- [ ] 1.2.10 `Instant` / `SystemTime` - Wall clock, monotonic clock
-- [ ] 1.2.11 `DateTime` - Calendar date/time with formatting, parsing, arithmetic
-- [ ] 1.2.12 Timezone support - UTC, local, named timezones
-- [ ] 1.2.13 `Rng` trait, `ThreadRng` - Random number generation with distributions
-- [ ] 1.2.14 Testes para todos os novos módulos
+See [stdlib-essentials](../stdlib-essentials/tasks.md). HashSet, BTreeMap, env, process, Path, DateTime, Random.
 
-### 1.3 Buffered I/O (NEW - não tem task)
+### 1.3 Buffered I/O
 
-- [ ] 1.3.1 `BufReader[R]` - Buffered reader com configurable buffer size
-- [ ] 1.3.2 `BufWriter[W]` - Buffered writer com flush automático
-- [ ] 1.3.3 `LineWriter[W]` - Writer que faz flush a cada newline
-- [ ] 1.3.4 `Read` behavior - read, read_to_end, read_to_string, read_exact
-- [ ] 1.3.5 `Write` behavior - write, write_all, flush
-- [ ] 1.3.6 `Seek` behavior - seek, rewind, stream_position
-- [ ] 1.3.7 `stdin()`, `stdout()`, `stderr()` - Standard streams com locking
-- [ ] 1.3.8 Testes para buffered I/O
+See [stdlib-essentials](../stdlib-essentials/tasks.md) Phase 3. BufReader, BufWriter, LineWriter, Read/Write/Seek behaviors.
 
 ### 1.4 Error Context Chains (NEW - não tem task)
 
@@ -101,17 +71,9 @@
 - [ ] 2.1.8 Gerar docs para lib/core e lib/std completos
 - [ ] 2.1.9 Testes de geração de docs
 
-### 2.2 Reflection System (task: implement-reflection)
+### 2.2 Reflection System — PARTIAL
 
-- [ ] 2.2.1 Compile-time intrinsics: `field_count[T]()`, `variant_count[T]()`
-- [ ] 2.2.2 `TypeInfo` struct: name, size, align, kind, fields[], methods[]
-- [ ] 2.2.3 `FieldInfo` struct: name, type_id, offset, is_public
-- [ ] 2.2.4 `Reflect` behavior: `type_info()`, `field_value()`, `set_field()`
-- [ ] 2.2.5 `Any` type: type erasure com `downcast[T]()`, `is_type[T]()`
-- [ ] 2.2.6 `@derive(Reflect)` - geração automática de metadata
-- [ ] 2.2.7 Codegen: emitir TypeInfo como constantes globais no LLVM IR
-- [ ] 2.2.8 Fix: compute actual size/align em reflect.cpp (TODO existente)
-- [ ] 2.2.9 Testes para reflection
+See [implement-reflection](../implement-reflection/tasks.md). Phases 1-2, 4 complete (intrinsics, TypeInfo, Any type). Phase 3 partial, Phases 5-6 pending.
 
 ### 2.3 Logging Framework (NEW - não tem task)
 
@@ -162,28 +124,30 @@
 - [ ] 3.1.14 Benchmarks: sub-microsecond task switch, linear scaling com cores
 - [ ] 3.1.15 Testes para async runtime
 
-### 3.2 Networking (task: add-network-stdlib)
+### 3.2 Networking (task: add-network-stdlib) — PARTIAL
 
-- [ ] 3.2.1 `TcpListener` - bind, accept, incoming (sync)
-- [ ] 3.2.2 `TcpStream` - connect, read, write, shutdown (sync)
-- [ ] 3.2.3 `UdpSocket` - bind, send_to, recv_from (sync)
+- [x] 3.2.1 `TcpListener` - bind, accept, incoming (sync) — `lib/std/src/net/tcp.tml`
+- [x] 3.2.2 `TcpStream` - connect, read, write, shutdown (sync)
+- [x] 3.2.3 `UdpSocket` - bind, send_to, recv_from (sync) — `lib/std/src/net/udp.tml`
 - [ ] 3.2.4 `AsyncTcpListener` - async accept
 - [ ] 3.2.5 `AsyncTcpStream` - async read/write com reactor
 - [ ] 3.2.6 `AsyncUdpSocket` - async send/recv
 - [ ] 3.2.7 `UnixSocket` / `UnixListener` (POSIX only)
-- [ ] 3.2.8 Socket options: TCP_NODELAY, SO_REUSEADDR, timeouts, keepalive
-- [ ] 3.2.9 DNS resolution: `lookup_host()` sync e async
+- [x] 3.2.8 Socket options: TCP_NODELAY, SO_REUSEADDR, timeouts, keepalive — `lib/std/src/net/socket.tml`
+- [x] 3.2.9 DNS resolution: `lookup_host()` sync — `lib/std/src/net/dns.tml`
 - [ ] 3.2.10 Zero-copy buffer management para high-throughput
 - [ ] 3.2.11 Connection pooling
 - [ ] 3.2.12 Testes: echo server, concurrent clients, benchmarks
 
-### 3.3 Thread Safety Completion (task: thread-safe-native)
+### 3.3 Thread Safety Completion (task: thread-safe-native) — PARTIAL
 
-- [ ] 3.3.1 Fechar Phase 12: thread-safe collections (se pendente)
-- [ ] 3.3.2 Phase 13: thread-safe iterators
-- [ ] 3.3.3 Phase 14: stress tests com ThreadSanitizer
-- [ ] 3.3.4 Phase 15: documentação final
-- [ ] 3.3.5 Fix: closure Send/Sync analysis (`env_lookups.cpp:497`)
+Sync primitives implemented: Mutex, RwLock, CondVar, Barrier, Arc, Atomic, MPSC, Once — `lib/std/src/sync/`
+
+- [x] 3.3.1 Core sync primitives (mutex, rwlock, condvar, barrier, atomic, mpsc, once)
+- [ ] 3.3.2 Thread-safe iterators
+- [ ] 3.3.3 Stress tests com ThreadSanitizer
+- [ ] 3.3.4 Documentação final
+- [ ] 3.3.5 Fix: closure Send/Sync analysis
 
 **Gate M3**: TCP echo server funciona, async/await compila e executa, 10K conexões simultâneas
 
@@ -208,16 +172,16 @@
 - [ ] 4.1.11 WebSocket support
 - [ ] 4.1.12 Benchmarks: 500K req/s HTTP/1.1, <10ms p99 latency
 
-### 4.2 TLS Integration (NEW - não tem task)
+### 4.2 TLS Integration — DONE
 
-- [ ] 4.2.1 `TlsConfig` - carregar certificados (PEM, DER, PKCS12)
-- [ ] 4.2.2 `TlsStream` - wrapping de TcpStream com TLS handshake
-- [ ] 4.2.3 `TlsAcceptor` / `TlsConnector` - server e client TLS
-- [ ] 4.2.4 ALPN negotiation (para HTTP/2)
-- [ ] 4.2.5 SNI (Server Name Indication) support
-- [ ] 4.2.6 Certificate verification e chain validation (usar crypto/x509)
-- [ ] 4.2.7 HTTPS server e client
-- [ ] 4.2.8 Testes com self-signed certs
+- [x] 4.2.1 `TlsContext` - carregar certificados (PEM), client/server contexts, CA config
+- [x] 4.2.2 `TlsStream` - wrapping de TcpStream com TLS handshake (connect/accept)
+- [x] 4.2.3 `TlsContext::server()` / `TlsContext::client()` - server e client TLS
+- [x] 4.2.4 ALPN negotiation (get_alpn, e.g. "h2", "http/1.1")
+- [x] 4.2.5 SNI (Server Name Indication) support (set_hostname)
+- [x] 4.2.6 Certificate verification e chain validation (TlsVerifyMode, peer_verified, verify_result)
+- [ ] 4.2.7 HTTPS server e client (HTTP layer not yet implemented)
+- [x] 4.2.8 Testes em `lib/std/tests/net/tls.test.tml`
 
 ### 4.3 Promises & Reactivity (task: promises-reactivity)
 
@@ -240,39 +204,17 @@
 
 **Goal**: Developer experience profissional com IDE support e package management
 
-### 5.1 VSCode Extension (task: create-vscode-extension)
+### 5.1 VSCode Extension — DONE
 
-- [ ] 5.1.1 TextMate grammar para syntax highlighting (.tml files)
-- [ ] 5.1.2 Snippets: func, struct, enum, behavior, test, when, loop
-- [ ] 5.1.3 Bracket matching e auto-indentation
-- [ ] 5.1.4 Code folding para blocos
-- [ ] 5.1.5 Theme contributions (cores semânticas para TML keywords)
-- [ ] 5.1.6 Task provider (`tml build`, `tml test` integrados no VSCode)
-- [ ] 5.1.7 Problem matcher para diagnostics do compilador
-- [ ] 5.1.8 Publicar na VSCode Marketplace
+See [developer-tooling](../developer-tooling/tasks.md) Phase 3. Published v0.17.0 with syntax highlighting, snippets, build integration.
 
-### 5.2 Language Server Protocol (task: developer-tooling)
+### 5.2 Language Server Protocol — PARTIAL
 
-- [ ] 5.2.1 LSP server base com JSON-RPC sobre stdio
-- [ ] 5.2.2 `textDocument/completion` - autocomplete para types, functions, methods
-- [ ] 5.2.3 `textDocument/hover` - mostrar type info e doc comments
-- [ ] 5.2.4 `textDocument/definition` - go-to-definition (jump to source)
-- [ ] 5.2.5 `textDocument/references` - find all references
-- [ ] 5.2.6 `textDocument/rename` - rename symbol across files
-- [ ] 5.2.7 `textDocument/diagnostic` - erros em tempo real (type check, borrow check)
-- [ ] 5.2.8 `textDocument/formatting` - integrar tml format
-- [ ] 5.2.9 `textDocument/codeAction` - quick fixes e refactorings
-- [ ] 5.2.10 Incremental parsing para responsividade (<100ms response time)
-- [ ] 5.2.11 Integrar com VSCode extension
+See [developer-tooling](../developer-tooling/tasks.md) Phase 4. Completion, hover, diagnostics, formatting working. Missing: go-to-definition, references, rename.
 
-### 5.3 Compiler MCP (task: compiler-mcp-integration)
+### 5.3 Compiler MCP — DONE
 
-- [ ] 5.3.1 Separar compiler core em biblioteca reutilizável
-- [ ] 5.3.2 Compilation daemon com persistent workspace state
-- [ ] 5.3.3 MCP server JSON-RPC: analyze, lint, format, build, test
-- [ ] 5.3.4 File overlays (edição in-memory sem salvar)
-- [ ] 5.3.5 Auto-fix capabilities (sugerir e aplicar correções)
-- [ ] 5.3.6 Testes de integração MCP
+20 tools registered, docs search, project tools. (Task archived)
 
 ### 5.4 Package Manager (task: package-manager)
 
@@ -346,9 +288,9 @@
 | Milestone | Items | Done | Progress |
 |-----------|-------|------|----------|
 | M1: Foundation | 52 | 0 | 0% |
-| M2: Docs & Reflection | 35 | 0 | 0% |
-| M3: Async & Networking | 32 | 0 | 0% |
-| M4: Web & HTTP | 30 | 0 | 0% |
-| M5: Tooling | 35 | 0 | 0% |
+| M2: Docs & Reflection | 35 | 7 | 20% |
+| M3: Async & Networking | 32 | 6 | 19% |
+| M4: Web & HTTP | 30 | 6 | 20% |
+| M5: Tooling | 35 | 24 | 69% |
 | M6: Advanced | 33 | 0 | 0% |
-| **TOTAL** | **217** | **0** | **0%** |
+| **TOTAL** | **217** | **43** | **20%** |

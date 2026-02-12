@@ -68,6 +68,9 @@ struct LLVMCompileResult {
     /// Path to the generated object file.
     fs::path object_file;
 
+    /// In-memory object data (populated by compile_ir_to_buffer).
+    std::vector<uint8_t> object_data;
+
     /// Error message if compilation failed.
     std::string error_message;
 
@@ -109,6 +112,18 @@ public:
     /// @return Compilation result
     [[nodiscard]] auto compile_ir_to_object(const std::string& ir_content,
                                             const fs::path& output_path,
+                                            const LLVMCompileOptions& options) -> LLVMCompileResult;
+
+    /// Compile LLVM IR text to an in-memory object buffer.
+    ///
+    /// Skips disk I/O for the object file. The result's object_data
+    /// field contains the raw object bytes. Use this when the object
+    /// doesn't need to be cached (e.g., --no-cache builds).
+    ///
+    /// @param ir_content The LLVM IR text content
+    /// @param options Compilation options
+    /// @return Compilation result with object_data populated
+    [[nodiscard]] auto compile_ir_to_buffer(const std::string& ir_content,
                                             const LLVMCompileOptions& options) -> LLVMCompileResult;
 
     /// Compile LLVM IR file to an object file.

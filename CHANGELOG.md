@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **MCP Tools Enhancement — 20 Tools** (2026-02-11) - Complete project-level MCP tool suite
+  - **`project/build`** — Build the TML compiler from C++ sources via `_popen`, with `mode` (debug/release), `clean`, `tests`, `target` (compiler/mcp/all) parameters; 300s timeout
+  - **`project/coverage`** — Structured coverage data from `build/coverage/coverage.json` with `module`, `sort`, `limit`, `refresh` filters; dynamic `lib/` scanning
+  - **`project/structure`** — Module tree via `std::filesystem` with file/test counts, `module` filter, `depth`, `show_files` parameters
+  - **`project/affected-tests`** — Git diff detection mapping `lib/*/src/` changes to `lib/*/tests/` directories; `base` ref, `run` (auto-execute), `verbose` parameters
+  - **`project/artifacts`** — List executables, libraries, cache dirs, coverage files with size and age; `kind` and `config` filters
+  - **`explain`** — Error code explanation via `tml.exe explain` subprocess
+  - **`test` enhancements** — Added `no_cache`, `fail_fast`, `structured` parameters; structured mode parses output into `{ total, passed, failed, files, duration, failures[] }` JSON
+  - **`execute_command()` timeout** — All subprocess execution now supports configurable timeout (default 120s, project/build uses 300s)
+  - **ANSI stripping** — `strip_ansi()` applied to all `execute_command()` output; no escape codes in MCP responses
+  - **Doc search enhancements** — Dynamic `lib/` scanning for all subdirectories; `extract_hpp_docs()` indexes C++ compiler headers as `compiler::*` modules (8372 items total)
+  - **Bug fixes** — `format` tool calls `tml fmt` (not `tml format`); `format --check` returns green for informational results; compiler doc module paths fixed (`compiler::query::` not `compilerquery::`)
+  - Files: `compiler/src/mcp/mcp_tools.cpp`, `compiler/include/mcp/mcp_tools.hpp`
+
 - **`std::glob` Standard Library Module** (2026-02-11) - High-performance glob pattern matching and directory walking
   - `Glob` type with `find()`, `next()`, `count()`, `free()` for filesystem glob iteration
   - `matches()` function for in-memory pattern matching (no filesystem access)

@@ -20,12 +20,19 @@
 
 namespace tml::codegen {
 
+/// Per-function fingerprint for fine-grained cache invalidation.
+struct FunctionFingerprint {
+    std::string name;
+    size_t mir_hash = 0; ///< Hash of MIR content (params, blocks, instructions).
+};
+
 /// Result for a single codegen unit.
 struct CGUResult {
     int cgu_index = 0;
     std::string llvm_ir;
     std::vector<std::string> function_names;
-    std::string fingerprint; ///< Content hash of llvm_ir for caching.
+    std::string fingerprint; ///< Content hash derived from function MIR fingerprints.
+    std::vector<FunctionFingerprint> function_fingerprints; ///< Per-function MIR hashes.
 };
 
 /// Result of partitioning a module into CGUs.

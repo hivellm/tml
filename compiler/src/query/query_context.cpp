@@ -91,6 +91,15 @@ size_t QueryKeyHash::operator()(const QueryKey& key) const {
 
 QueryContext::QueryContext(const QueryOptions& options) : options_(options) {
     providers_.register_core_providers();
+
+    // Precompute codegen options fingerprint so we don't re-hash
+    // target_triple, optimization_level, coverage on every codegen query.
+    codegen_opts_fp_ = fingerprint_string(options_.target_triple);
+    codegen_opts_fp_ = fingerprint_combine(
+        codegen_opts_fp_,
+        fingerprint_bytes(&options_.optimization_level, sizeof(options_.optimization_level)));
+    uint8_t cov = options_.coverage ? 1 : 0;
+    codegen_opts_fp_ = fingerprint_combine(codegen_opts_fp_, fingerprint_bytes(&cov, sizeof(cov)));
 }
 
 ReadSourceResult QueryContext::read_source(const std::string& file_path) {
@@ -174,14 +183,9 @@ Fingerprint QueryContext::compute_input_fingerprint(const QueryKey& key,
         combined = fingerprint_combine(combined, lib_env_fp_);
     }
 
-    // For CodegenUnit, include target triple and options
+    // For CodegenUnit, include precomputed codegen options fingerprint
     if (kind == QueryKind::CodegenUnit) {
-        combined = fingerprint_combine(combined, fingerprint_string(options_.target_triple));
-        combined =
-            fingerprint_combine(combined, fingerprint_bytes(&options_.optimization_level,
-                                                            sizeof(options_.optimization_level)));
-        uint8_t cov = options_.coverage ? 1 : 0;
-        combined = fingerprint_combine(combined, fingerprint_bytes(&cov, sizeof(cov)));
+        combined = fingerprint_combine(combined, codegen_opts_fp_);
     }
 
     return combined;

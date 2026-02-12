@@ -1,6 +1,6 @@
 # Tasks: MCP Tools Enhancement
 
-**Status**: In Progress (90%)
+**Status**: Complete (100%)
 
 ## Phase 1: P0 — Critical Tools
 
@@ -37,16 +37,16 @@
 
 ## Phase 3: P2 — Quality of Life
 
-- [ ] 3.1.1 Implement `project/structure` tool with `std::filesystem`
-- [ ] 3.1.2 Module tree with file counts, test file counts, metadata
-- [ ] 3.2.1 Implement `project/affected-tests` with git diff detection
-- [ ] 3.2.2 Map changed files to affected test files
-- [ ] 3.2.3 Optional auto-run of affected tests
+- [x] 3.1.1 Implement `project/structure` tool with `std::filesystem`
+- [x] 3.1.2 Module tree with file counts, test file counts, metadata
+- [x] 3.2.1 Implement `project/affected-tests` with git diff detection
+- [x] 3.2.2 Map changed files to affected test files
+- [x] 3.2.3 Optional auto-run of affected tests
 
 ## Phase 4: P3 — Nice to Have
 
-- [ ] 4.1.1 Implement `project/artifacts` tool
-- [ ] 4.1.2 List executables, cache dirs, coverage files with metadata
+- [x] 4.1.1 Implement `project/artifacts` tool
+- [x] 4.1.2 List executables, cache dirs, coverage files with metadata
 
 ## Validation
 
@@ -55,9 +55,11 @@
 - [x] V.3 No ANSI escape codes in any MCP tool output
 - [x] V.4 `project/coverage` returns per-module coverage percentages
 - [x] V.5 `explain` returns useful error descriptions
-- [ ] V.6 `project/structure` shows module tree without shell commands
+- [x] V.6 `project/structure` shows module tree without shell commands
 - [x] V.7 Doc search returns compiler::* modules from .hpp headers
 - [x] V.8 Coverage and docs scan all lib/ subdirs dynamically
 - [x] V.9 `format` tool works (calls `tml fmt`, not `tml format`)
 - [x] V.10 `format --check` returns green for "needs formatting" (informational, not error)
 - [x] V.11 All 14 MCP-exposed tools tested and passing via native MCP
+- [x] V.12 `project/structure` and `project/affected-tests` registered and indexed in doc search
+- [x] V.13 `project/artifacts` registered and indexed in doc search (8372 items total)

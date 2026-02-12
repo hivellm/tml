@@ -189,8 +189,10 @@ std::any provide_typecheck_module(QueryContext& ctx, const QueryKey& key) {
         return result;
     }
 
-    // Pre-load library modules from binary cache
-    types::preload_all_meta_caches();
+    // Library modules are loaded on-demand by TypeChecker when `use` imports
+    // are resolved. load_native_module() checks GlobalModuleCache first, then
+    // falls back to .tml.meta binary cache files. This avoids eagerly loading
+    // all ~100+ library modules when only a few are needed.
 
     // Create module registry and type checker
     auto registry = std::make_shared<types::ModuleRegistry>();

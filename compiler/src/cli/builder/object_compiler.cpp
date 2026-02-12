@@ -323,6 +323,81 @@ ObjectCompileResult compile_ir_string_to_object(const std::string& ir_content,
 }
 
 // ============================================================================
+// In-Memory Buffer Compilation
+// ============================================================================
+
+/// Compiles LLVM IR string to an in-memory object buffer (no disk I/O).
+///
+/// Uses LLVMTargetMachineEmitToMemoryBuffer when the LLVM backend is available.
+ObjectCompileResult compile_ir_string_to_buffer(const std::string& ir_content,
+                                                const ObjectCompileOptions& options) {
+    ObjectCompileResult result;
+    result.success = false;
+
+#ifdef TML_HAS_LLVM_BACKEND
+    if (!CompilerOptions::use_external_tools && !options.lto && is_llvm_backend_available()) {
+        TML_LOG_DEBUG("build", "[object_compiler] Using LLVM backend (in-memory buffer)");
+
+        backend::LLVMBackend llvm_backend;
+        if (!llvm_backend.initialize()) {
+            result.error_message =
+                "Failed to initialize LLVM backend: " + llvm_backend.get_last_error();
+            return result;
+        }
+
+        backend::LLVMCompileOptions llvm_opts;
+        llvm_opts.optimization_level = options.optimization_level;
+        llvm_opts.debug_info = options.debug_info;
+        llvm_opts.target_triple = options.target_triple;
+        llvm_opts.position_independent = options.position_independent;
+        llvm_opts.verbose = options.verbose;
+        llvm_opts.cpu = "native";
+
+        auto llvm_result = llvm_backend.compile_ir_to_buffer(ir_content, llvm_opts);
+
+        if (!llvm_result.success) {
+            result.error_message =
+                "LLVM backend in-memory compilation failed: " + llvm_result.error_message;
+            return result;
+        }
+
+        result.success = true;
+        result.object_data = std::move(llvm_result.object_data);
+        return result;
+    }
+#endif
+
+    // Fallback: compile to temp file and read back
+    auto temp_dir = fs::temp_directory_path();
+    fs::path temp_obj = temp_dir / ("tml_tmp" + get_object_extension());
+
+    auto file_result = compile_ir_string_to_object(ir_content, temp_obj, "", options);
+    if (!file_result.success) {
+        result.error_message = file_result.error_message;
+        return result;
+    }
+
+    // Read the temp file into memory
+    std::ifstream ifs(temp_obj, std::ios::binary | std::ios::ate);
+    if (!ifs) {
+        result.error_message = "Failed to read temp object file: " + temp_obj.string();
+        return result;
+    }
+    auto size = ifs.tellg();
+    ifs.seekg(0, std::ios::beg);
+    result.object_data.resize(static_cast<size_t>(size));
+    ifs.read(reinterpret_cast<char*>(result.object_data.data()), size);
+    ifs.close();
+
+    // Clean up temp file
+    std::error_code ec;
+    fs::remove(temp_obj, ec);
+
+    result.success = true;
+    return result;
+}
+
+// ============================================================================
 // Clang Subprocess Compilation
 // ============================================================================
 
@@ -818,6 +893,105 @@ static bool is_lld_available() {
 // ============================================================================
 // Batch Compilation
 // ============================================================================
+
+/// Compiles multiple CGU IR strings to object files in parallel.
+///
+/// Uses a thread pool with atomic index for work distribution.
+/// Each thread initializes its own LLVM backend and compiles CGUs
+/// independently, enabling true parallel LLVM compilation.
+BatchCompileResult compile_cgus_parallel(const std::vector<CGUCompileJob>& jobs,
+                                         const std::string& clang_path,
+                                         const ObjectCompileOptions& options, int num_threads) {
+    BatchCompileResult result;
+    result.success = true;
+
+    if (jobs.empty()) {
+        return result;
+    }
+
+    // Determine number of threads
+    if (num_threads == 0) {
+        num_threads = std::thread::hardware_concurrency();
+        if (num_threads == 0)
+            num_threads = 4;
+    }
+
+    // Limit threads to number of jobs
+    if (jobs.size() < static_cast<size_t>(num_threads)) {
+        num_threads = static_cast<int>(jobs.size());
+    }
+
+    // Pre-allocate result slots (one per job, in order)
+    result.object_files.resize(jobs.size());
+    std::vector<bool> slot_ok(jobs.size(), false);
+
+    // Thread-safe error collection
+    std::mutex error_mutex;
+    std::atomic<size_t> current_index{0};
+    std::atomic<bool> any_failure{false};
+
+    // Worker function
+    auto worker = [&]() {
+        while (!any_failure.load(std::memory_order_relaxed)) {
+            size_t index = current_index.fetch_add(1);
+            if (index >= jobs.size()) {
+                break;
+            }
+
+            const auto& job = jobs[index];
+
+            // Compile this CGU's IR string to object file
+            auto compile_result =
+                compile_ir_string_to_object(job.ir_content, job.output_path, clang_path, options);
+
+            if (compile_result.success) {
+                result.object_files[index] = compile_result.object_file;
+                slot_ok[index] = true;
+                TML_LOG_INFO("build", "CGU " << job.cgu_index << ": compiled ("
+                                             << job.fingerprint_tag << ")");
+            } else {
+                any_failure.store(true, std::memory_order_relaxed);
+                std::lock_guard<std::mutex> lock(error_mutex);
+                result.success = false;
+                result.errors.push_back("CGU " + std::to_string(job.cgu_index) +
+                                        " compilation failed: " + compile_result.error_message);
+            }
+        }
+    };
+
+    TML_LOG_INFO("build", "Parallel CGU compilation: " << jobs.size() << " CGUs, " << num_threads
+                                                       << " threads");
+
+    // Launch worker threads
+    std::vector<std::thread> workers;
+    for (int i = 0; i < num_threads; ++i) {
+        workers.emplace_back(worker);
+    }
+
+    // Wait for completion
+    for (auto& thread : workers) {
+        thread.join();
+    }
+
+    // If there was a failure, clear the object files
+    if (!result.success) {
+        result.object_files.clear();
+        return result;
+    }
+
+    // Verify all slots were filled
+    for (size_t i = 0; i < jobs.size(); ++i) {
+        if (!slot_ok[i]) {
+            result.success = false;
+            result.errors.push_back("CGU " + std::to_string(jobs[i].cgu_index) +
+                                    " produced no output");
+            result.object_files.clear();
+            return result;
+        }
+    }
+
+    return result;
+}
 
 /// Compiles multiple LLVM IR files to objects in parallel.
 ///

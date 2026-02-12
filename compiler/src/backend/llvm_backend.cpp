@@ -267,6 +267,140 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
     return result;
 }
 
+auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
+                                       const LLVMCompileOptions& options) -> LLVMCompileResult {
+    LLVMCompileResult result;
+    result.success = false;
+
+    if (!initialized_) {
+        result.error_message = "LLVM backend not initialized";
+        return result;
+    }
+
+    auto ctx = static_cast<LLVMContextRef>(context_);
+
+    // Create a memory buffer from the IR content
+    LLVMMemoryBufferRef buffer =
+        LLVMCreateMemoryBufferWithMemoryRangeCopy(ir_content.c_str(), ir_content.size(), "ir");
+
+    if (!buffer) {
+        result.error_message = "Failed to create memory buffer for IR";
+        return result;
+    }
+
+    // Parse the LLVM IR
+    LLVMModuleRef module = nullptr;
+    char* error = nullptr;
+
+    if (LLVMParseIRInContext(ctx, buffer, &module, &error) != 0) {
+        result.error_message = "Failed to parse LLVM IR: " + consume_error_message(error);
+        return result;
+    }
+
+    // Determine target triple
+    std::string target_triple = options.target_triple;
+    if (target_triple.empty()) {
+        target_triple = get_default_target_triple();
+    }
+
+    LLVMSetTarget(module, target_triple.c_str());
+
+    // Look up the target
+    LLVMTargetRef target = nullptr;
+    error = nullptr;
+    if (LLVMGetTargetFromTriple(target_triple.c_str(), &target, &error) != 0) {
+        result.error_message = "Failed to get target: " + consume_error_message(error);
+        LLVMDisposeModule(module);
+        return result;
+    }
+
+    // Determine CPU and features
+    std::string cpu = options.cpu;
+    if (cpu.empty() || cpu == "native") {
+        char* host_cpu = LLVMGetHostCPUName();
+        cpu = host_cpu;
+        LLVMDisposeMessage(host_cpu);
+    }
+
+    std::string features = options.features;
+    if (features.empty()) {
+        char* host_features = LLVMGetHostCPUFeatures();
+        features = host_features;
+        LLVMDisposeMessage(host_features);
+    }
+
+    // Determine optimization level
+    LLVMCodeGenOptLevel opt_level;
+    switch (options.optimization_level) {
+    case 0:
+        opt_level = LLVMCodeGenLevelNone;
+        break;
+    case 1:
+        opt_level = LLVMCodeGenLevelLess;
+        break;
+    case 2:
+        opt_level = LLVMCodeGenLevelDefault;
+        break;
+    case 3:
+    default:
+        opt_level = LLVMCodeGenLevelAggressive;
+        break;
+    }
+
+    LLVMRelocMode reloc_mode = options.position_independent ? LLVMRelocPIC : LLVMRelocDefault;
+
+    // Create target machine
+    LLVMTargetMachineRef target_machine =
+        LLVMCreateTargetMachine(target, target_triple.c_str(), cpu.c_str(), features.c_str(),
+                                opt_level, reloc_mode, LLVMCodeModelDefault);
+
+    if (!target_machine) {
+        result.error_message = "Failed to create target machine";
+        LLVMDisposeModule(module);
+        return result;
+    }
+
+    // Set data layout
+    LLVMTargetDataRef data_layout = LLVMCreateTargetDataLayout(target_machine);
+    char* data_layout_str = LLVMCopyStringRepOfTargetData(data_layout);
+    LLVMSetDataLayout(module, data_layout_str);
+    LLVMDisposeMessage(data_layout_str);
+    LLVMDisposeTargetData(data_layout);
+
+    // Run optimization passes if optimization level > 0
+    if (options.optimization_level > 0) {
+        LLVMPassBuilderOptionsRef pass_opts = LLVMCreatePassBuilderOptions();
+        LLVMPassBuilderOptionsSetDebugLogging(pass_opts, options.verbose ? 1 : 0);
+        const char* passes = get_opt_level_string(options.optimization_level);
+        LLVMRunPasses(module, passes, target_machine, pass_opts);
+        LLVMDisposePassBuilderOptions(pass_opts);
+    }
+
+    // Emit to memory buffer instead of file
+    LLVMMemoryBufferRef obj_buffer = nullptr;
+    error = nullptr;
+    if (LLVMTargetMachineEmitToMemoryBuffer(target_machine, module, LLVMObjectFile, &error,
+                                            &obj_buffer) != 0) {
+        result.error_message = "Failed to emit object to memory: " + consume_error_message(error);
+        LLVMDisposeTargetMachine(target_machine);
+        LLVMDisposeModule(module);
+        return result;
+    }
+
+    // Copy memory buffer to result
+    const char* buf_start = LLVMGetBufferStart(obj_buffer);
+    size_t buf_size = LLVMGetBufferSize(obj_buffer);
+    result.object_data.assign(reinterpret_cast<const uint8_t*>(buf_start),
+                              reinterpret_cast<const uint8_t*>(buf_start) + buf_size);
+
+    LLVMDisposeMemoryBuffer(obj_buffer);
+    LLVMDisposeTargetMachine(target_machine);
+    LLVMDisposeModule(module);
+
+    result.success = true;
+    return result;
+}
+
 auto LLVMBackend::compile_ir_file_to_object(const fs::path& ir_file,
                                             const std::optional<fs::path>& output_path,
                                             const LLVMCompileOptions& options)

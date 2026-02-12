@@ -174,8 +174,8 @@ pub func last_char(s: Str) -> Maybe[I32] {
 /// ```
 pub func substring(s: Str, start: I64, end: I64) -> Str {
     let start32: I32 = start as I32
-    let end32: I32 = end as I32
-    return lowlevel { str_substring(s, start32, end32) }
+    let len32: I32 = (end - start) as I32
+    return lowlevel { str_substring(s, start32, len32) }
 }
 
 /// Returns a substring from `start` to the end of the string.

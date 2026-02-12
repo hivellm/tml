@@ -1,6 +1,24 @@
 # Tasks: Expand Core and Standard Library Modules
 
-**Status**: Planning (0%)
+**Status**: Planning (5%) — Most modules in this task are NOT yet implemented
+
+**Note**: Many stdlib modules exist but are tracked by OTHER tasks (not this one). This task covers modules that don't have their own task.
+
+**Already implemented (by other tasks)**:
+- `std::collections` (HashMap, List, Buffer) — see `stdlib-essentials`
+- `std::crypto` (15 files: cipher, RSA, ECDH, HMAC, X.509, etc.)
+- `std::net` (TCP, UDP, DNS, TLS, IP, Sockets) — see `async-network-stack`
+- `std::json` (builder, serialize, types) — see `json-native-implementation`
+- `std::zlib` (gzip, brotli, deflate, zstd, CRC32)
+- `std::sync` (Mutex, RwLock, CondVar, Barrier, Arc, Atomic, MPSC, Once)
+- `std::thread` (threads, scopes, thread-local)
+- `std::file` (files, directories, paths)
+- `std::search` (BM25, HNSW, string distance)
+- `std::hash` (hash traits in core)
+- `std::os` (OS interface)
+- `core::cell` (Cell, RefCell, UnsafeCell, Lazy, Once)
+- `core::iter` (20+ adapter files, sources, traits)
+- `core::future`, `core::task` (minimal/stub)
 
 **Related Tasks**:
 - Collections, Env, Process, Path, DateTime, Random -> [stdlib-essentials](../stdlib-essentials/tasks.md)

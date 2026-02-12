@@ -22,6 +22,8 @@
 #include "log/log.hpp"
 #include "tester_internal.hpp"
 
+#include <algorithm>
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -356,7 +358,13 @@ int run_test(int argc, char* argv[], bool verbose) {
         std::vector<std::string> filtered;
         for (const auto& file : test_files) {
             for (const auto& pattern : opts.patterns) {
-                if (file.find(pattern) != std::string::npos) {
+                // Normalize slashes for cross-platform matching
+                // (MCP sends forward slashes, Windows paths use backslashes)
+                std::string norm_pattern = pattern;
+#ifdef _WIN32
+                std::replace(norm_pattern.begin(), norm_pattern.end(), '/', '\\');
+#endif
+                if (file.find(norm_pattern) != std::string::npos) {
                     filtered.push_back(file);
                     break;
                 }

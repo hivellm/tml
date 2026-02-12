@@ -1,0 +1,139 @@
+// Tests for str parse and find functions - value assertions
+use test
+use core::str::{
+    parse_i32, parse_i64, parse_f64,
+    find, rfind
+}
+
+// =============================================================================
+// parse_i32 value assertions
+// =============================================================================
+
+@test
+func test_parse_i32_positive() -> I32 {
+    let result: Maybe[I32] = parse_i32("42")
+    assert(result.is_just(), "parse_i32(42) should be Just")
+    assert_eq(result.unwrap(), 42, "parse_i32(42) should be 42")
+    return 0
+}
+
+@test
+func test_parse_i32_negative() -> I32 {
+    let result: Maybe[I32] = parse_i32("-17")
+    assert(result.is_just(), "parse_i32(-17) should be Just")
+    assert_eq(result.unwrap(), -17, "parse_i32(-17) should be -17")
+    return 0
+}
+
+@test
+func test_parse_i32_zero() -> I32 {
+    let result: Maybe[I32] = parse_i32("0")
+    assert(result.is_just(), "parse_i32(0) should be Just")
+    assert_eq(result.unwrap(), 0, "parse_i32(0) should be 0")
+    return 0
+}
+
+// =============================================================================
+// parse_i64 value assertions
+// =============================================================================
+
+@test
+func test_parse_i64_positive() -> I32 {
+    let result: Maybe[I64] = parse_i64("123456")
+    assert(result.is_just(), "parse_i64(123456) should be Just")
+    assert_eq(result.unwrap(), 123456, "parse_i64(123456) should be 123456")
+    return 0
+}
+
+@test
+func test_parse_i64_negative() -> I32 {
+    let result: Maybe[I64] = parse_i64("-999")
+    assert(result.is_just(), "parse_i64(-999) should be Just")
+    assert_eq(result.unwrap(), -999, "parse_i64(-999) should be -999")
+    return 0
+}
+
+// =============================================================================
+// parse_f64 value assertions
+// =============================================================================
+
+@test
+func test_parse_f64_integer() -> I32 {
+    let result: Maybe[F64] = parse_f64("3")
+    assert(result.is_just(), "parse_f64(3) should be Just")
+    assert(result.unwrap() == 3.0, "parse_f64(3) should be 3.0")
+    return 0
+}
+
+@test
+func test_parse_f64_decimal() -> I32 {
+    let result: Maybe[F64] = parse_f64("3.14")
+    assert(result.is_just(), "parse_f64(3.14) should be Just")
+    let val: F64 = result.unwrap()
+    // Check approximate equality (floating point)
+    assert(val > 3.13, "parse_f64(3.14) should be > 3.13")
+    assert(val < 3.15, "parse_f64(3.14) should be < 3.15")
+    return 0
+}
+
+// =============================================================================
+// find value assertions
+// =============================================================================
+
+@test
+func test_find_at_start() -> I32 {
+    let idx: Maybe[I64] = find("hello world", "hello")
+    assert(idx.is_just(), "find hello should be Just")
+    assert_eq(idx.unwrap(), 0, "find hello should be at index 0")
+    return 0
+}
+
+@test
+func test_find_in_middle() -> I32 {
+    let idx: Maybe[I64] = find("hello world", "world")
+    assert(idx.is_just(), "find world should be Just")
+    assert_eq(idx.unwrap(), 6, "find world should be at index 6")
+    return 0
+}
+
+@test
+func test_find_single_char() -> I32 {
+    let idx: Maybe[I64] = find("abcde", "c")
+    assert(idx.is_just(), "find c should be Just")
+    assert_eq(idx.unwrap(), 2, "find c should be at index 2")
+    return 0
+}
+
+@test
+func test_find_not_found() -> I32 {
+    let idx: Maybe[I64] = find("hello", "xyz")
+    assert(idx.is_nothing(), "find xyz should be Nothing")
+    return 0
+}
+
+// =============================================================================
+// rfind value assertions
+// =============================================================================
+
+@test
+func test_rfind_last_occurrence() -> I32 {
+    let idx: Maybe[I64] = rfind("hello hello", "hello")
+    assert(idx.is_just(), "rfind hello should be Just")
+    assert_eq(idx.unwrap(), 6, "rfind hello should be at index 6 (last occurrence)")
+    return 0
+}
+
+@test
+func test_rfind_single_occurrence() -> I32 {
+    let idx: Maybe[I64] = rfind("hello world", "world")
+    assert(idx.is_just(), "rfind world should be Just")
+    assert_eq(idx.unwrap(), 6, "rfind world should be at index 6")
+    return 0
+}
+
+@test
+func test_rfind_not_found() -> I32 {
+    let idx: Maybe[I64] = rfind("hello", "xyz")
+    assert(idx.is_nothing(), "rfind xyz should be Nothing")
+    return 0
+}

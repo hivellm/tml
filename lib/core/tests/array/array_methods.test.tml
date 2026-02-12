@@ -1,0 +1,121 @@
+// Tests for core::array - map variants, get edge cases, mutation patterns
+use test
+
+// =============================================================================
+// map - additional patterns
+// =============================================================================
+
+@test
+func test_array_map_negate() -> I32 {
+    let arr: [I32; 3] = [1, -2, 3]
+    let negated: [I32; 3] = arr.map(do(x: I32) -> I32 { return 0 - x })
+    assert(negated[0] == -1, "negated[0] should be -1")
+    assert(negated[1] == 2, "negated[1] should be 2")
+    assert(negated[2] == -3, "negated[2] should be -3")
+    return 0
+}
+
+@test
+func test_array_map_add_offset() -> I32 {
+    let arr: [I32; 4] = [10, 20, 30, 40]
+    let shifted: [I32; 4] = arr.map(do(x: I32) -> I32 { return x + 5 })
+    assert(shifted[0] == 15, "shifted[0] should be 15")
+    assert(shifted[1] == 25, "shifted[1] should be 25")
+    assert(shifted[2] == 35, "shifted[2] should be 35")
+    assert(shifted[3] == 45, "shifted[3] should be 45")
+    return 0
+}
+
+@test
+func test_array_map_square() -> I32 {
+    let arr: [I32; 3] = [2, 3, 4]
+    let squared: [I32; 3] = arr.map(do(x: I32) -> I32 { return x * x })
+    assert(squared[0] == 4, "squared[0] should be 4")
+    assert(squared[1] == 9, "squared[1] should be 9")
+    assert(squared[2] == 16, "squared[2] should be 16")
+    return 0
+}
+
+// =============================================================================
+// get with various sizes and boundary conditions
+// =============================================================================
+
+@test
+func test_array_get_5_elements() -> I32 {
+    let arr: [I32; 5] = [100, 200, 300, 400, 500]
+    let v0: Maybe[ref I32] = arr.get(0)
+    let v4: Maybe[ref I32] = arr.get(4)
+    let v5: Maybe[ref I32] = arr.get(5)
+    assert(v0.is_just(), "get(0) should be Just")
+    assert(v4.is_just(), "get(4) should be Just")
+    assert(v5.is_nothing(), "get(5) should be Nothing for 5-elem array")
+    return 0
+}
+
+@test
+func test_array_get_boundary() -> I32 {
+    let arr: [I32; 2] = [77, 88]
+    assert(arr.get(0).is_just(), "get(0) valid")
+    assert(arr.get(1).is_just(), "get(1) valid")
+    assert(arr.get(2).is_nothing(), "get(2) out of bounds")
+    assert(arr.get(-1).is_nothing(), "get(-1) out of bounds")
+    return 0
+}
+
+// =============================================================================
+// Mutation patterns
+// =============================================================================
+
+@test
+func test_array_swap_elements() -> I32 {
+    let mut arr: [I32; 3] = [1, 2, 3]
+    let tmp: I32 = arr[0]
+    arr[0] = arr[2]
+    arr[2] = tmp
+    assert(arr[0] == 3, "arr[0] should be 3 after swap")
+    assert(arr[1] == 2, "arr[1] should still be 2")
+    assert(arr[2] == 1, "arr[2] should be 1 after swap")
+    return 0
+}
+
+@test
+func test_array_fill_with_loop() -> I32 {
+    let mut arr: [I32; 4] = [0, 0, 0, 0]
+    let mut i: I64 = 0
+    loop (i < 4) {
+        arr[i] = (i as I32) * 10
+        i = i + 1
+    }
+    assert(arr[0] == 0, "arr[0] should be 0")
+    assert(arr[1] == 10, "arr[1] should be 10")
+    assert(arr[2] == 20, "arr[2] should be 20")
+    assert(arr[3] == 30, "arr[3] should be 30")
+    return 0
+}
+
+@test
+func test_array_accumulate() -> I32 {
+    let arr: [I32; 5] = [1, 2, 3, 4, 5]
+    let mut sum: I32 = 0
+    let mut i: I64 = 0
+    loop (i < 5) {
+        sum = sum + arr[i]
+        i = i + 1
+    }
+    assert(sum == 15, "sum of 1..5 should be 15")
+    return 0
+}
+
+// =============================================================================
+// first/last on larger arrays
+// =============================================================================
+
+@test
+func test_array_first_last_large() -> I32 {
+    let arr: [I32; 6] = [10, 20, 30, 40, 50, 60]
+    let f: Maybe[ref I32] = arr.first()
+    let l: Maybe[ref I32] = arr.last()
+    assert(f.is_just(), "first() should be Just")
+    assert(l.is_just(), "last() should be Just")
+    return 0
+}
