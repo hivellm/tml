@@ -241,6 +241,55 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
         return "null";
     }
 
+    // mem::forget(value) / mem_forget(value) - consume value without dropping
+    // This is a no-op: just evaluate the argument (for side effects) and discard
+    if (fn_name == "mem_forget" || fn_name == "mem::forget") {
+        if (!call.args.empty()) {
+            gen_expr(*call.args[0]); // Evaluate but discard
+        }
+        last_expr_type_ = "void";
+        return "0";
+    }
+
+    // mem::zeroed[T]() / mem_zeroed() - return a zero-initialized value of type T
+    if (fn_name == "mem_zeroed" || fn_name == "mem::zeroed") {
+        // Determine the target type from context (return type or explicit type annotation)
+        std::string zero_type = "i32"; // default
+
+        // Check for explicit type args on the call
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& path_expr = call.callee->as<parser::PathExpr>();
+            if (path_expr.generics.has_value() && !path_expr.generics->args.empty()) {
+                auto& type_arg = path_expr.generics->args[0];
+                zero_type = llvm_type_from_semantic(type_arg);
+            }
+        }
+
+        // Use expected_literal_type_ or current_ret_type_ as fallback
+        if (zero_type == "i32" && !expected_literal_type_.empty()) {
+            zero_type = expected_literal_type_;
+        }
+
+        // Return the appropriate zero value
+        if (zero_type == "float") {
+            last_expr_type_ = "float";
+            return "0.0";
+        } else if (zero_type == "double") {
+            last_expr_type_ = "double";
+            return "0.0";
+        } else if (zero_type == "i1") {
+            last_expr_type_ = "i1";
+            return "false";
+        } else if (zero_type == "ptr") {
+            last_expr_type_ = "ptr";
+            return "null";
+        } else {
+            // Integer types (i8, i16, i32, i64, i128)
+            last_expr_type_ = zero_type;
+            return "0";
+        }
+    }
+
     return std::nullopt;
 }
 
