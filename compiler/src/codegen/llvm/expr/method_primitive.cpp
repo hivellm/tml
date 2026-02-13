@@ -170,6 +170,7 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // Comparison methods
         if (method == "cmp") {
+            emit_coverage(types::primitive_kind_to_string(kind) + "::cmp");
             emit_coverage("Ord::cmp");
             if (call.args.empty()) {
                 report_error("cmp() requires an argument", call.span, "C008");
@@ -203,7 +204,8 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
 
         // partial_cmp - returns Maybe[Ordering] (Just(ordering) for numeric types)
         if (method == "partial_cmp") {
-            emit_coverage("PartialOrd::partial_cmp");
+            emit_coverage(types::primitive_kind_to_string(kind) + "::partial_cmp");
+            emit_coverage("Ord::partial_cmp");
             if (call.args.empty()) {
                 report_error("partial_cmp() requires an argument", call.span, "C008");
                 return "0";
@@ -306,6 +308,65 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             std::string result = fresh_reg();
             emit_line("  " + result + " = select i1 " + cmp + ", " + llvm_ty + " " + receiver +
                       ", " + llvm_ty + " " + other);
+            last_expr_type_ = llvm_ty;
+            return result;
+        }
+
+        // clamp(min_val, max_val) -> Self
+        if (method == "clamp") {
+            emit_coverage("Ord::clamp");
+            if (call.args.size() < 2) {
+                report_error("clamp() requires two arguments", call.span, "C008");
+                return "0";
+            }
+            std::string min_raw = gen_expr(*call.args[0]);
+            std::string min_type = last_expr_type_;
+            std::string max_raw = gen_expr(*call.args[1]);
+            std::string max_type = last_expr_type_;
+            // Arguments may be pointers (ref params) — load to get values
+            // But if they're already immediate values (e.g. literals), use directly
+            std::string min_val = min_raw;
+            if (min_type == "ptr" || min_type.find("*") != std::string::npos) {
+                min_val = fresh_reg();
+                emit_line("  " + min_val + " = load " + llvm_ty + ", ptr " + min_raw);
+            }
+            std::string max_val = max_raw;
+            if (max_type == "ptr" || max_type.find("*") != std::string::npos) {
+                max_val = fresh_reg();
+                emit_line("  " + max_val + " = load " + llvm_ty + ", ptr " + max_raw);
+            }
+            // clamp = max(min_val, min(max_val, self))
+            // Step 1: clamped_high = self < max_val ? self : max_val (i.e. min(self, max_val))
+            std::string cmp_high = fresh_reg();
+            if (is_float) {
+                emit_line("  " + cmp_high + " = fcmp olt " + llvm_ty + " " + receiver + ", " +
+                          max_val);
+            } else if (is_signed) {
+                emit_line("  " + cmp_high + " = icmp slt " + llvm_ty + " " + receiver + ", " +
+                          max_val);
+            } else {
+                emit_line("  " + cmp_high + " = icmp ult " + llvm_ty + " " + receiver + ", " +
+                          max_val);
+            }
+            std::string clamped_high = fresh_reg();
+            emit_line("  " + clamped_high + " = select i1 " + cmp_high + ", " + llvm_ty + " " +
+                      receiver + ", " + llvm_ty + " " + max_val);
+            // Step 2: result = clamped_high > min_val ? clamped_high : min_val (i.e.
+            // max(clamped_high, min_val))
+            std::string cmp_low = fresh_reg();
+            if (is_float) {
+                emit_line("  " + cmp_low + " = fcmp ogt " + llvm_ty + " " + clamped_high + ", " +
+                          min_val);
+            } else if (is_signed) {
+                emit_line("  " + cmp_low + " = icmp sgt " + llvm_ty + " " + clamped_high + ", " +
+                          min_val);
+            } else {
+                emit_line("  " + cmp_low + " = icmp ugt " + llvm_ty + " " + clamped_high + ", " +
+                          min_val);
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = select i1 " + cmp_low + ", " + llvm_ty + " " +
+                      clamped_high + ", " + llvm_ty + " " + min_val);
             last_expr_type_ = llvm_ty;
             return result;
         }
@@ -622,6 +683,549 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_line("  " + result + " = call ptr @i64_to_string(i64 " + ext + ")");
         }
         last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // fmt_binary() -> Str (Binary behavior)
+    if (method == "fmt_binary" && is_integer) {
+        emit_coverage("Binary::fmt_binary");
+        // Extend/truncate receiver to i64 for the runtime call
+        std::string val64 = receiver;
+        if (llvm_ty != "i64") {
+            val64 = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + val64 + " = sext " + llvm_ty + " " + receiver + " to i64");
+            } else {
+                emit_line("  " + val64 + " = zext " + llvm_ty + " " + receiver + " to i64");
+            }
+        }
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = call ptr @i64_to_binary_str(i64 " + val64 + ")");
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // fmt_octal() -> Str (Octal behavior)
+    if (method == "fmt_octal" && is_integer) {
+        emit_coverage("Octal::fmt_octal");
+        std::string val64 = receiver;
+        if (llvm_ty != "i64") {
+            val64 = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + val64 + " = sext " + llvm_ty + " " + receiver + " to i64");
+            } else {
+                emit_line("  " + val64 + " = zext " + llvm_ty + " " + receiver + " to i64");
+            }
+        }
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = call ptr @i64_to_octal_str(i64 " + val64 + ")");
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // fmt_lower_hex() -> Str (LowerHex behavior)
+    if (method == "fmt_lower_hex" && is_integer) {
+        emit_coverage("LowerHex::fmt_lower_hex");
+        std::string val64 = receiver;
+        if (llvm_ty != "i64") {
+            val64 = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + val64 + " = sext " + llvm_ty + " " + receiver + " to i64");
+            } else {
+                emit_line("  " + val64 + " = zext " + llvm_ty + " " + receiver + " to i64");
+            }
+        }
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = call ptr @i64_to_lower_hex_str(i64 " + val64 + ")");
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // fmt_upper_hex() -> Str (UpperHex behavior)
+    if (method == "fmt_upper_hex" && is_integer) {
+        emit_coverage("UpperHex::fmt_upper_hex");
+        std::string val64 = receiver;
+        if (llvm_ty != "i64") {
+            val64 = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + val64 + " = sext " + llvm_ty + " " + receiver + " to i64");
+            } else {
+                emit_line("  " + val64 + " = zext " + llvm_ty + " " + receiver + " to i64");
+            }
+        }
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = call ptr @i64_to_upper_hex_str(i64 " + val64 + ")");
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // fmt_lower_exp() -> Str (LowerExp behavior) for floats
+    if (method == "fmt_lower_exp" && is_float) {
+        emit_coverage("LowerExp::fmt_lower_exp");
+        std::string result = fresh_reg();
+        if (kind == types::PrimitiveKind::F32) {
+            emit_line("  " + result + " = call ptr @f32_to_exp_string(float " + receiver +
+                      ", i32 0)");
+        } else {
+            emit_line("  " + result + " = call ptr @f64_to_exp_string(double " + receiver +
+                      ", i32 0)");
+        }
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // fmt_upper_exp() -> Str (UpperExp behavior) for floats
+    if (method == "fmt_upper_exp" && is_float) {
+        emit_coverage("UpperExp::fmt_upper_exp");
+        std::string result = fresh_reg();
+        if (kind == types::PrimitiveKind::F32) {
+            emit_line("  " + result + " = call ptr @f32_to_exp_string(float " + receiver +
+                      ", i32 1)");
+        } else {
+            emit_line("  " + result + " = call ptr @f64_to_exp_string(double " + receiver +
+                      ", i32 1)");
+        }
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // ========================================================================
+    // Wrapping arithmetic (integers wrap naturally in LLVM)
+    // ========================================================================
+
+    if (method == "wrapping_add" && is_integer) {
+        emit_coverage("WrappingAdd::wrapping_add");
+        if (call.args.empty()) {
+            report_error("wrapping_add() requires an argument", call.span, "C008");
+            return "0";
+        }
+        std::string other = gen_expr(*call.args[0]);
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = add " + llvm_ty + " " + receiver + ", " + other);
+        last_expr_type_ = llvm_ty;
+        return result;
+    }
+
+    if (method == "wrapping_sub" && is_integer) {
+        emit_coverage("WrappingSub::wrapping_sub");
+        if (call.args.empty()) {
+            report_error("wrapping_sub() requires an argument", call.span, "C008");
+            return "0";
+        }
+        std::string other = gen_expr(*call.args[0]);
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = sub " + llvm_ty + " " + receiver + ", " + other);
+        last_expr_type_ = llvm_ty;
+        return result;
+    }
+
+    if (method == "wrapping_mul" && is_integer) {
+        emit_coverage("WrappingMul::wrapping_mul");
+        if (call.args.empty()) {
+            report_error("wrapping_mul() requires an argument", call.span, "C008");
+            return "0";
+        }
+        std::string other = gen_expr(*call.args[0]);
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = mul " + llvm_ty + " " + receiver + ", " + other);
+        last_expr_type_ = llvm_ty;
+        return result;
+    }
+
+    if (method == "wrapping_neg" && is_integer) {
+        emit_coverage("WrappingNeg::wrapping_neg");
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = sub " + llvm_ty + " 0, " + receiver);
+        last_expr_type_ = llvm_ty;
+        return result;
+    }
+
+    // ========================================================================
+    // Saturating arithmetic
+    // ========================================================================
+
+    if (method == "saturating_add" && is_integer) {
+        emit_coverage("SaturatingAdd::saturating_add");
+        if (call.args.empty()) {
+            report_error("saturating_add() requires an argument", call.span, "C008");
+            return "0";
+        }
+        std::string other = gen_expr(*call.args[0]);
+        std::string result = fresh_reg();
+        std::string prefix = is_signed ? "s" : "u";
+        emit_line("  " + result + " = call " + llvm_ty + " @llvm." + prefix + "add.sat." + llvm_ty +
+                  "(" + llvm_ty + " " + receiver + ", " + llvm_ty + " " + other + ")");
+        last_expr_type_ = llvm_ty;
+        return result;
+    }
+
+    if (method == "saturating_sub" && is_integer) {
+        emit_coverage("SaturatingSub::saturating_sub");
+        if (call.args.empty()) {
+            report_error("saturating_sub() requires an argument", call.span, "C008");
+            return "0";
+        }
+        std::string other = gen_expr(*call.args[0]);
+        std::string result = fresh_reg();
+        std::string prefix = is_signed ? "s" : "u";
+        emit_line("  " + result + " = call " + llvm_ty + " @llvm." + prefix + "sub.sat." + llvm_ty +
+                  "(" + llvm_ty + " " + receiver + ", " + llvm_ty + " " + other + ")");
+        last_expr_type_ = llvm_ty;
+        return result;
+    }
+
+    if (method == "saturating_mul" && is_integer) {
+        emit_coverage("SaturatingMul::saturating_mul");
+        if (call.args.empty()) {
+            report_error("saturating_mul() requires an argument", call.span, "C008");
+            return "0";
+        }
+        std::string other = gen_expr(*call.args[0]);
+        // No LLVM intrinsic for saturating multiply — use overflow detection + select
+        std::string op = is_signed ? "smul" : "umul";
+        std::string overflow_type = "{ " + llvm_ty + ", i1 }";
+        std::string ov_result = fresh_reg();
+        emit_line("  " + ov_result + " = call " + overflow_type + " @llvm." + op +
+                  ".with.overflow." + llvm_ty + "(" + llvm_ty + " " + receiver + ", " + llvm_ty +
+                  " " + other + ")");
+        std::string value = fresh_reg();
+        std::string overflow = fresh_reg();
+        emit_line("  " + value + " = extractvalue " + overflow_type + " " + ov_result + ", 0");
+        emit_line("  " + overflow + " = extractvalue " + overflow_type + " " + ov_result + ", 1");
+        if (is_signed) {
+            // For signed: if overflow, check sign of inputs to decide MAX or MIN
+            std::string xor_signs = fresh_reg();
+            emit_line("  " + xor_signs + " = xor " + llvm_ty + " " + receiver + ", " + other);
+            std::string is_neg = fresh_reg();
+            emit_line("  " + is_neg + " = icmp slt " + llvm_ty + " " + xor_signs + ", 0");
+            // If product of signs is negative -> MIN, else -> MAX
+            std::string sat_min = fresh_reg();
+            std::string sat_max = fresh_reg();
+            // Get the bit width for the type
+            int bits = 32;
+            if (llvm_ty == "i8")
+                bits = 8;
+            else if (llvm_ty == "i16")
+                bits = 16;
+            else if (llvm_ty == "i32")
+                bits = 32;
+            else if (llvm_ty == "i64")
+                bits = 64;
+            else if (llvm_ty == "i128")
+                bits = 128;
+            int64_t min_val = (bits == 8)    ? -128
+                              : (bits == 16) ? -32768
+                              : (bits == 32) ? (int64_t)INT32_MIN
+                                             : INT64_MIN;
+            int64_t max_val = (bits == 8)    ? 127
+                              : (bits == 16) ? 32767
+                              : (bits == 32) ? (int64_t)INT32_MAX
+                                             : INT64_MAX;
+            std::string sat_val = fresh_reg();
+            emit_line("  " + sat_val + " = select i1 " + is_neg + ", " + llvm_ty + " " +
+                      std::to_string(min_val) + ", " + llvm_ty + " " + std::to_string(max_val));
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = select i1 " + overflow + ", " + llvm_ty + " " + sat_val +
+                      ", " + llvm_ty + " " + value);
+            last_expr_type_ = llvm_ty;
+            return result;
+        } else {
+            // For unsigned: if overflow, saturate to MAX (all ones)
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = select i1 " + overflow + ", " + llvm_ty + " -1, " +
+                      llvm_ty + " " + value);
+            last_expr_type_ = llvm_ty;
+            return result;
+        }
+    }
+
+    // ========================================================================
+    // Checked arithmetic (returns Maybe[Self])
+    // ========================================================================
+
+    if ((method == "checked_add" || method == "checked_sub" || method == "checked_mul") &&
+        is_integer) {
+        std::string behavior_name = method == "checked_add"   ? "CheckedAdd"
+                                    : method == "checked_sub" ? "CheckedSub"
+                                                              : "CheckedMul";
+        emit_coverage(behavior_name + "::" + method);
+        if (call.args.empty()) {
+            report_error(method + "() requires an argument", call.span, "C008");
+            return "0";
+        }
+        std::string other = gen_expr(*call.args[0]);
+
+        // Determine LLVM overflow op
+        std::string op;
+        if (method == "checked_add")
+            op = is_signed ? "sadd" : "uadd";
+        else if (method == "checked_sub")
+            op = is_signed ? "ssub" : "usub";
+        else
+            op = is_signed ? "smul" : "umul";
+
+        // Instantiate Maybe[T] enum
+        std::vector<types::TypePtr> maybe_type_args = {inner_type};
+        std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+        std::string maybe_type = "%struct." + maybe_mangled;
+
+        // Call overflow intrinsic: returns { T, i1 }
+        std::string overflow_type = "{ " + llvm_ty + ", i1 }";
+        std::string ov_result = fresh_reg();
+        emit_line("  " + ov_result + " = call " + overflow_type + " @llvm." + op +
+                  ".with.overflow." + llvm_ty + "(" + llvm_ty + " " + receiver + ", " + llvm_ty +
+                  " " + other + ")");
+
+        // Extract value and overflow flag
+        std::string value = fresh_reg();
+        std::string overflow = fresh_reg();
+        emit_line("  " + value + " = extractvalue " + overflow_type + " " + ov_result + ", 0");
+        emit_line("  " + overflow + " = extractvalue " + overflow_type + " " + ov_result + ", 1");
+
+        // Extend value to i64 for enum payload
+        std::string store_value = value;
+        if (llvm_ty != "i64") {
+            store_value = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + store_value + " = sext " + llvm_ty + " " + value + " to i64");
+            } else {
+                emit_line("  " + store_value + " = zext " + llvm_ty + " " + value + " to i64");
+            }
+        }
+
+        // Build Maybe[T] with alloca/store pattern
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + maybe_type);
+
+        std::string label_just = "checked.just." + std::to_string(label_counter_++);
+        std::string label_nothing = "checked.nothing." + std::to_string(label_counter_++);
+        std::string label_end = "checked.end." + std::to_string(label_counter_++);
+
+        emit_line("  br i1 " + overflow + ", label %" + label_nothing + ", label %" + label_just);
+
+        // Just branch: tag=0, store value
+        emit_line(label_just + ":");
+        std::string tag_ptr_j = fresh_reg();
+        emit_line("  " + tag_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + tag_ptr_j);
+        std::string data_ptr_j = fresh_reg();
+        emit_line("  " + data_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 1");
+        emit_line("  store i64 " + store_value + ", ptr " + data_ptr_j);
+        emit_line("  br label %" + label_end);
+
+        // Nothing branch: tag=1
+        emit_line(label_nothing + ":");
+        std::string tag_ptr_n = fresh_reg();
+        emit_line("  " + tag_ptr_n + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + tag_ptr_n);
+        emit_line("  br label %" + label_end);
+
+        // End: load result
+        emit_line(label_end + ":");
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + maybe_type + ", ptr " + alloca_reg);
+        last_expr_type_ = maybe_type;
+        return result;
+    }
+
+    if (method == "checked_div" && is_integer) {
+        emit_coverage("CheckedDiv::checked_div");
+        if (call.args.empty()) {
+            report_error("checked_div() requires an argument", call.span, "C008");
+            return "0";
+        }
+        std::string other = gen_expr(*call.args[0]);
+
+        // Instantiate Maybe[T] enum
+        std::vector<types::TypePtr> maybe_type_args = {inner_type};
+        std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+        std::string maybe_type = "%struct." + maybe_mangled;
+
+        // Check for division by zero
+        std::string is_zero = fresh_reg();
+        emit_line("  " + is_zero + " = icmp eq " + llvm_ty + " " + other + ", 0");
+
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + maybe_type);
+
+        std::string label_ok = "checked.div.ok." + std::to_string(label_counter_++);
+        std::string label_zero = "checked.div.zero." + std::to_string(label_counter_++);
+        std::string label_end = "checked.div.end." + std::to_string(label_counter_++);
+
+        emit_line("  br i1 " + is_zero + ", label %" + label_zero + ", label %" + label_ok);
+
+        // OK branch: compute division, return Just(result)
+        emit_line(label_ok + ":");
+        std::string div_result = fresh_reg();
+        if (is_signed) {
+            emit_line("  " + div_result + " = sdiv " + llvm_ty + " " + receiver + ", " + other);
+        } else {
+            emit_line("  " + div_result + " = udiv " + llvm_ty + " " + receiver + ", " + other);
+        }
+        std::string store_val = div_result;
+        if (llvm_ty != "i64") {
+            store_val = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + store_val + " = sext " + llvm_ty + " " + div_result + " to i64");
+            } else {
+                emit_line("  " + store_val + " = zext " + llvm_ty + " " + div_result + " to i64");
+            }
+        }
+        std::string tag_ptr_j = fresh_reg();
+        emit_line("  " + tag_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + tag_ptr_j);
+        std::string data_ptr_j = fresh_reg();
+        emit_line("  " + data_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 1");
+        emit_line("  store i64 " + store_val + ", ptr " + data_ptr_j);
+        emit_line("  br label %" + label_end);
+
+        // Zero branch: return Nothing
+        emit_line(label_zero + ":");
+        std::string tag_ptr_n = fresh_reg();
+        emit_line("  " + tag_ptr_n + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + tag_ptr_n);
+        emit_line("  br label %" + label_end);
+
+        // End: load result
+        emit_line(label_end + ":");
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + maybe_type + ", ptr " + alloca_reg);
+        last_expr_type_ = maybe_type;
+        return result;
+    }
+
+    if (method == "checked_rem" && is_integer) {
+        emit_coverage("CheckedRem::checked_rem");
+        if (call.args.empty()) {
+            report_error("checked_rem() requires an argument", call.span, "C008");
+            return "0";
+        }
+        std::string other = gen_expr(*call.args[0]);
+
+        std::vector<types::TypePtr> maybe_type_args = {inner_type};
+        std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+        std::string maybe_type = "%struct." + maybe_mangled;
+
+        std::string is_zero = fresh_reg();
+        emit_line("  " + is_zero + " = icmp eq " + llvm_ty + " " + other + ", 0");
+
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + maybe_type);
+
+        std::string label_ok = "checked.rem.ok." + std::to_string(label_counter_++);
+        std::string label_zero = "checked.rem.zero." + std::to_string(label_counter_++);
+        std::string label_end = "checked.rem.end." + std::to_string(label_counter_++);
+
+        emit_line("  br i1 " + is_zero + ", label %" + label_zero + ", label %" + label_ok);
+
+        emit_line(label_ok + ":");
+        std::string rem_result = fresh_reg();
+        if (is_signed) {
+            emit_line("  " + rem_result + " = srem " + llvm_ty + " " + receiver + ", " + other);
+        } else {
+            emit_line("  " + rem_result + " = urem " + llvm_ty + " " + receiver + ", " + other);
+        }
+        std::string store_val = rem_result;
+        if (llvm_ty != "i64") {
+            store_val = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + store_val + " = sext " + llvm_ty + " " + rem_result + " to i64");
+            } else {
+                emit_line("  " + store_val + " = zext " + llvm_ty + " " + rem_result + " to i64");
+            }
+        }
+        std::string tag_ptr_j = fresh_reg();
+        emit_line("  " + tag_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + tag_ptr_j);
+        std::string data_ptr_j = fresh_reg();
+        emit_line("  " + data_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 1");
+        emit_line("  store i64 " + store_val + ", ptr " + data_ptr_j);
+        emit_line("  br label %" + label_end);
+
+        emit_line(label_zero + ":");
+        std::string tag_ptr_n = fresh_reg();
+        emit_line("  " + tag_ptr_n + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + tag_ptr_n);
+        emit_line("  br label %" + label_end);
+
+        emit_line(label_end + ":");
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + maybe_type + ", ptr " + alloca_reg);
+        last_expr_type_ = maybe_type;
+        return result;
+    }
+
+    if (method == "checked_neg" && is_integer) {
+        emit_coverage("CheckedNeg::checked_neg");
+        // For signed: overflow only when value == MIN
+        // For unsigned: overflow unless value == 0
+        std::vector<types::TypePtr> maybe_type_args = {inner_type};
+        std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+        std::string maybe_type = "%struct." + maybe_mangled;
+
+        // Use ssub.with.overflow(0, x) for signed
+        std::string overflow_type = "{ " + llvm_ty + ", i1 }";
+        std::string ov_result = fresh_reg();
+        std::string op = is_signed ? "ssub" : "usub";
+        emit_line("  " + ov_result + " = call " + overflow_type + " @llvm." + op +
+                  ".with.overflow." + llvm_ty + "(" + llvm_ty + " 0, " + llvm_ty + " " + receiver +
+                  ")");
+
+        std::string value = fresh_reg();
+        std::string overflow = fresh_reg();
+        emit_line("  " + value + " = extractvalue " + overflow_type + " " + ov_result + ", 0");
+        emit_line("  " + overflow + " = extractvalue " + overflow_type + " " + ov_result + ", 1");
+
+        std::string store_value = value;
+        if (llvm_ty != "i64") {
+            store_value = fresh_reg();
+            if (is_signed) {
+                emit_line("  " + store_value + " = sext " + llvm_ty + " " + value + " to i64");
+            } else {
+                emit_line("  " + store_value + " = zext " + llvm_ty + " " + value + " to i64");
+            }
+        }
+
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + maybe_type);
+
+        std::string label_just = "checked.neg.just." + std::to_string(label_counter_++);
+        std::string label_nothing = "checked.neg.nothing." + std::to_string(label_counter_++);
+        std::string label_end = "checked.neg.end." + std::to_string(label_counter_++);
+
+        emit_line("  br i1 " + overflow + ", label %" + label_nothing + ", label %" + label_just);
+
+        emit_line(label_just + ":");
+        std::string tag_ptr_j = fresh_reg();
+        emit_line("  " + tag_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + tag_ptr_j);
+        std::string data_ptr_j = fresh_reg();
+        emit_line("  " + data_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 1");
+        emit_line("  store i64 " + store_value + ", ptr " + data_ptr_j);
+        emit_line("  br label %" + label_end);
+
+        emit_line(label_nothing + ":");
+        std::string tag_ptr_n = fresh_reg();
+        emit_line("  " + tag_ptr_n + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + tag_ptr_n);
+        emit_line("  br label %" + label_end);
+
+        emit_line(label_end + ":");
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + maybe_type + ", ptr " + alloca_reg);
+        last_expr_type_ = maybe_type;
         return result;
     }
 
@@ -1034,6 +1638,99 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             last_expr_type_ = "i1";
             return result;
         }
+    }
+
+    // checked_shl / checked_shr: check if shift amount >= bit width
+    if (is_integer && (method == "checked_shl" || method == "checked_shr")) {
+        emit_coverage("overflow::" + method);
+
+        if (call.args.empty()) {
+            report_error(method + "() requires one argument", call.span, "C008");
+            return "0";
+        }
+        std::string rhs = gen_expr(*call.args[0]);
+
+        // Get bit width
+        int bits = 32;
+        if (llvm_ty == "i8")
+            bits = 8;
+        else if (llvm_ty == "i16")
+            bits = 16;
+        else if (llvm_ty == "i32")
+            bits = 32;
+        else if (llvm_ty == "i64")
+            bits = 64;
+        else if (llvm_ty == "i128")
+            bits = 128;
+
+        // Instantiate Maybe[T] enum
+        std::vector<types::TypePtr> maybe_type_args = {inner_type};
+        std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+        std::string maybe_type = "%struct." + maybe_mangled;
+
+        // Check if shift >= bit_width (overflow)
+        std::string is_overflow = fresh_reg();
+        emit_line("  " + is_overflow + " = icmp uge " + llvm_ty + " " + rhs + ", " +
+                  std::to_string(bits));
+
+        // Safe shift
+        std::string value = fresh_reg();
+        std::string safe_rhs = fresh_reg();
+        emit_line("  " + safe_rhs + " = select i1 " + is_overflow + ", " + llvm_ty + " 0, " +
+                  llvm_ty + " " + rhs);
+        if (method == "checked_shl") {
+            emit_line("  " + value + " = shl " + llvm_ty + " " + receiver + ", " + safe_rhs);
+        } else {
+            if (is_signed)
+                emit_line("  " + value + " = ashr " + llvm_ty + " " + receiver + ", " + safe_rhs);
+            else
+                emit_line("  " + value + " = lshr " + llvm_ty + " " + receiver + ", " + safe_rhs);
+        }
+
+        // Build Maybe[T] using proper named type
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + maybe_type);
+
+        std::string label_ok = "checked.shift.ok." + std::to_string(label_counter_++);
+        std::string label_overflow = "checked.shift.overflow." + std::to_string(label_counter_++);
+        std::string label_end = "checked.shift.end." + std::to_string(label_counter_++);
+
+        emit_line("  br i1 " + is_overflow + ", label %" + label_overflow + ", label %" + label_ok);
+
+        // OK branch: return Just(result)
+        emit_line(label_ok + ":");
+        std::string store_val = value;
+        if (llvm_ty != "i64") {
+            store_val = fresh_reg();
+            if (is_signed)
+                emit_line("  " + store_val + " = sext " + llvm_ty + " " + value + " to i64");
+            else
+                emit_line("  " + store_val + " = zext " + llvm_ty + " " + value + " to i64");
+        }
+        std::string tag_ptr_j = fresh_reg();
+        emit_line("  " + tag_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + tag_ptr_j);
+        std::string data_ptr_j = fresh_reg();
+        emit_line("  " + data_ptr_j + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 1");
+        emit_line("  store i64 " + store_val + ", ptr " + data_ptr_j);
+        emit_line("  br label %" + label_end);
+
+        // Overflow branch: return Nothing
+        emit_line(label_overflow + ":");
+        std::string tag_ptr_n = fresh_reg();
+        emit_line("  " + tag_ptr_n + " = getelementptr inbounds " + maybe_type + ", ptr " +
+                  alloca_reg + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + tag_ptr_n);
+        emit_line("  br label %" + label_end);
+
+        // End: load result
+        emit_line(label_end + ":");
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + maybe_type + ", ptr " + alloca_reg);
+        last_expr_type_ = maybe_type;
+        return result;
     }
 
     std::string qualified_name = type_name + "::" + method;

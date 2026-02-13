@@ -1,0 +1,25 @@
+use test
+
+@test
+func test_fmt_lower_exp_f64() -> I32 {
+    let x: F64 = 1234.5
+    let s: Str = x.fmt_lower_exp()
+    assert_eq(s, "1.234500e+03", "F64 fmt_lower_exp")
+    return 0
+}
+
+@test
+func test_fmt_upper_exp_f64() -> I32 {
+    let x: F64 = 1234.5
+    let s: Str = x.fmt_upper_exp()
+    assert_eq(s, "1.234500E+03", "F64 fmt_upper_exp")
+    return 0
+}
+
+@test
+func test_fmt_lower_exp_f32() -> I32 {
+    let x: F32 = 42.0
+    let s: Str = x.fmt_lower_exp()
+    assert_eq(s, "4.200000e+01", "F32 fmt_lower_exp")
+    return 0
+}

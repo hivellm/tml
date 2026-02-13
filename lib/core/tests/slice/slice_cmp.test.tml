@@ -1,0 +1,11 @@
+// Tests for core::slice - basic array indexing
+use test::{assert, assert_eq}
+
+@test
+func test_array_index_basic() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    assert_eq(arr[0], 10, "first element should be 10")
+    assert_eq(arr[1], 20, "second element should be 20")
+    assert_eq(arr[2], 30, "third element should be 30")
+    return 0
+}

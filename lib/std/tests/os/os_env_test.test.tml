@@ -1,0 +1,9 @@
+use test
+use std::os
+
+@test
+func test_os_env_set() -> I32 {
+    let ok: Bool = os::env_set("TML_TEST_VAR_123", "hello")
+    assert(ok, "env_set should succeed")
+    return 0
+}

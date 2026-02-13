@@ -1,0 +1,56 @@
+use test
+
+@test
+func test_checked_add_ok() -> I32 {
+    let x: I32 = 10
+    let result: Maybe[I32] = x.checked_add(20)
+    when result {
+        Just(v) => assert_eq(v, 30, "checked_add ok"),
+        Nothing => assert(false, "checked_add should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_add_overflow() -> I32 {
+    let x: I32 = 2147483647
+    let result: Maybe[I32] = x.checked_add(1)
+    when result {
+        Just(v) => assert(false, "checked_add should overflow"),
+        Nothing => assert(true, "checked_add overflow returns Nothing")
+    }
+    return 0
+}
+
+@test
+func test_checked_sub_ok() -> I32 {
+    let x: I32 = 10
+    let result: Maybe[I32] = x.checked_sub(3)
+    when result {
+        Just(v) => assert_eq(v, 7, "checked_sub ok"),
+        Nothing => assert(false, "checked_sub should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_div_ok() -> I32 {
+    let x: I32 = 42
+    let result: Maybe[I32] = x.checked_div(6)
+    when result {
+        Just(v) => assert_eq(v, 7, "checked_div ok"),
+        Nothing => assert(false, "checked_div should not fail")
+    }
+    return 0
+}
+
+@test
+func test_checked_div_zero() -> I32 {
+    let x: I32 = 42
+    let result: Maybe[I32] = x.checked_div(0)
+    when result {
+        Just(v) => assert(false, "checked_div by zero should return Nothing"),
+        Nothing => assert(true, "checked_div by zero returns Nothing")
+    }
+    return 0
+}

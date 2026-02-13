@@ -294,91 +294,91 @@ impl[T] From[T] for T {
 /// `I8` -> `I16` (widening conversion, always safe)
 impl From[I8] for I16 {
     pub func from(value: I8) -> I16 {
-        return lowlevel { i8_to_i16(value) }
+        return value as I16
     }
 }
 
 /// `I8` -> `I32` (widening conversion, always safe)
 impl From[I8] for I32 {
     pub func from(value: I8) -> I32 {
-        return lowlevel { i8_to_i32(value) }
+        return value as I32
     }
 }
 
 /// `I8` -> `I64` (widening conversion, always safe)
 impl From[I8] for I64 {
     pub func from(value: I8) -> I64 {
-        return lowlevel { i8_to_i64(value) }
+        return value as I64
     }
 }
 
 /// `I16` -> `I32` (widening conversion, always safe)
 impl From[I16] for I32 {
     pub func from(value: I16) -> I32 {
-        return lowlevel { i16_to_i32(value) }
+        return value as I32
     }
 }
 
 /// `I16` -> `I64` (widening conversion, always safe)
 impl From[I16] for I64 {
     pub func from(value: I16) -> I64 {
-        return lowlevel { i16_to_i64(value) }
+        return value as I64
     }
 }
 
 /// `I32` -> `I64` (widening conversion, always safe)
 impl From[I32] for I64 {
     pub func from(value: I32) -> I64 {
-        return lowlevel { i32_to_i64(value) }
+        return value as I64
     }
 }
 
 /// `U8` -> `U16` (widening conversion, always safe)
 impl From[U8] for U16 {
     pub func from(value: U8) -> U16 {
-        return lowlevel { u8_to_u16(value) }
+        return value as U16
     }
 }
 
 /// `U8` -> `U32` (widening conversion, always safe)
 impl From[U8] for U32 {
     pub func from(value: U8) -> U32 {
-        return lowlevel { u8_to_u32(value) }
+        return value as U32
     }
 }
 
 /// `U8` -> `U64` (widening conversion, always safe)
 impl From[U8] for U64 {
     pub func from(value: U8) -> U64 {
-        return lowlevel { u8_to_u64(value) }
+        return value as U64
     }
 }
 
 /// `U16` -> `U32` (widening conversion, always safe)
 impl From[U16] for U32 {
     pub func from(value: U16) -> U32 {
-        return lowlevel { u16_to_u32(value) }
+        return value as U32
     }
 }
 
 /// `U16` -> `U64` (widening conversion, always safe)
 impl From[U16] for U64 {
     pub func from(value: U16) -> U64 {
-        return lowlevel { u16_to_u64(value) }
+        return value as U64
     }
 }
 
 /// `U32` -> `U64` (widening conversion, always safe)
 impl From[U32] for U64 {
     pub func from(value: U32) -> U64 {
-        return lowlevel { u32_to_u64(value) }
+        return value as U64
     }
 }
 
 /// `F32` -> `F64` (widening conversion, always safe)
 impl From[F32] for F64 {
     pub func from(value: F32) -> F64 {
-        return lowlevel { f32_to_f64(value) }
+        return value as F64
     }
 }
 

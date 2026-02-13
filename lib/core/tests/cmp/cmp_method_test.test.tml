@@ -1,0 +1,153 @@
+// Tests for primitive .cmp() and .partial_cmp() methods
+use test
+use core::cmp::Ordering
+
+// =============================================================================
+// .cmp() on integer types — covers I8::cmp through U64::cmp, Bool::cmp
+// =============================================================================
+
+@test
+func test_i8_cmp() -> I32 {
+    let a: I8 = -5
+    let b: I8 = 10
+    let r: Ordering = a.cmp(ref b)
+    assert(r.is_less(), "I8: -5.cmp(10) Less")
+    let c: I8 = -5
+    let r2: Ordering = a.cmp(ref c)
+    assert(r2.is_equal(), "I8: -5.cmp(-5) Equal")
+    return 0
+}
+
+@test
+func test_i16_cmp() -> I32 {
+    let a: I16 = 500
+    let b: I16 = 100
+    let r: Ordering = a.cmp(ref b)
+    assert(r.is_greater(), "I16: 500.cmp(100) Greater")
+    let c: I16 = 500
+    let r2: Ordering = a.cmp(ref c)
+    assert(r2.is_equal(), "I16: 500.cmp(500) Equal")
+    return 0
+}
+
+@test
+func test_i32_cmp() -> I32 {
+    let a: I32 = 5
+    let b: I32 = 10
+    let r: Ordering = a.cmp(ref b)
+    assert(r.is_less(), "I32: 5.cmp(10) Less")
+    let c: I32 = 5
+    let r2: Ordering = a.cmp(ref c)
+    assert(r2.is_equal(), "I32: 5.cmp(5) Equal")
+    return 0
+}
+
+@test
+func test_i64_cmp() -> I32 {
+    let a: I64 = 999999
+    let b: I64 = 1
+    let r: Ordering = a.cmp(ref b)
+    assert(r.is_greater(), "I64: 999999.cmp(1) Greater")
+    return 0
+}
+
+@test
+func test_u8_cmp() -> I32 {
+    let a: U8 = 0
+    let b: U8 = 255
+    let r: Ordering = a.cmp(ref b)
+    assert(r.is_less(), "U8: 0.cmp(255) Less")
+    return 0
+}
+
+@test
+func test_u16_cmp() -> I32 {
+    let a: U16 = 1000
+    let b: U16 = 1000
+    let r: Ordering = a.cmp(ref b)
+    assert(r.is_equal(), "U16: 1000.cmp(1000) Equal")
+    return 0
+}
+
+@test
+func test_u32_cmp() -> I32 {
+    let a: U32 = 50000
+    let b: U32 = 10000
+    let r: Ordering = a.cmp(ref b)
+    assert(r.is_greater(), "U32: 50000.cmp(10000) Greater")
+    return 0
+}
+
+@test
+func test_u64_cmp() -> I32 {
+    let a: U64 = 1
+    let b: U64 = 2
+    let r: Ordering = a.cmp(ref b)
+    assert(r.is_less(), "U64: 1.cmp(2) Less")
+    return 0
+}
+
+@test
+func test_bool_cmp() -> I32 {
+    let a: Bool = false
+    let b: Bool = true
+    let r: Ordering = a.cmp(ref b)
+    assert(r.is_less(), "Bool: false.cmp(true) Less")
+    let c: Bool = false
+    let r2: Ordering = a.cmp(ref c)
+    assert(r2.is_equal(), "Bool: false.cmp(false) Equal")
+    return 0
+}
+
+// =============================================================================
+// .partial_cmp() on types not yet covered in cmp_partial_cmp.test.tml
+// Covers: I16, U16, F32, Bool
+// =============================================================================
+
+@test
+func test_i16_partial_cmp() -> I32 {
+    let a: I16 = -100
+    let b: I16 = 100
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_less(), "I16: -100.partial_cmp(100) Less"),
+        Nothing => assert(false, "I16 partial_cmp should return Just"),
+    }
+    return 0
+}
+
+@test
+func test_u16_partial_cmp() -> I32 {
+    let a: U16 = 500
+    let b: U16 = 500
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_equal(), "U16: 500.partial_cmp(500) Equal"),
+        Nothing => assert(false, "U16 partial_cmp should return Just"),
+    }
+    return 0
+}
+
+@test
+func test_f32_partial_cmp() -> I32 {
+    let a: F32 = 1.5
+    let b: F32 = 2.5
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_less(), "F32: 1.5.partial_cmp(2.5) Less"),
+        Nothing => assert(false, "F32 partial_cmp should return Just"),
+    }
+    return 0
+}
+
+@test
+func test_bool_partial_cmp() -> I32 {
+    let a: Bool = true
+    let b: Bool = true
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_equal(), "Bool: true.partial_cmp(true) Equal"),
+        Nothing => assert(false, "Bool partial_cmp should return Just"),
+    }
+    return 0
+}

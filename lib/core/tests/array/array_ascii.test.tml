@@ -1,0 +1,14 @@
+// Tests for core::array - basic array operations with ASCII byte values
+use test::{assert, assert_eq}
+
+// ============================================================================
+// Section 1: Array of U8 values (1 test)
+// ============================================================================
+
+@test
+func test_array_u8_values() -> I32 {
+    let bytes: [U8; 5] = [72, 101, 108, 108, 111]
+    assert_eq(bytes[0] as I32, 72, "first byte should be 72 (H)")
+    assert_eq(bytes[4] as I32, 111, "last byte should be 111 (o)")
+    return 0
+}

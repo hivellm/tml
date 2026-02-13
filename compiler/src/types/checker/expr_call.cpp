@@ -202,6 +202,86 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
             if (name == "type_name") {
                 return make_primitive(PrimitiveKind::Str);
             }
+
+            // Handle generic free function calls with explicit type args: func[T](args)
+            auto func = env_.lookup_func(name);
+            if (func) {
+                // Build substitutions from explicit type arguments
+                std::unordered_map<std::string, TypePtr> substitutions;
+                if (path.generics.has_value() && !func->type_params.empty()) {
+                    const auto& gen_args = path.generics.value().args;
+                    for (size_t i = 0; i < func->type_params.size() && i < gen_args.size(); ++i) {
+                        if (gen_args[i].is_type()) {
+                            substitutions[func->type_params[i]] =
+                                resolve_type(*gen_args[i].as_type());
+                        }
+                    }
+                }
+
+                // Type check arguments with expected param types (after substitution)
+                for (size_t i = 0; i < call.args.size() && i < func->params.size(); ++i) {
+                    TypePtr expected_param = func->params[i];
+                    if (!substitutions.empty()) {
+                        expected_param = substitute_type(expected_param, substitutions);
+                    }
+                    check_expr(*call.args[i], expected_param);
+                }
+
+                // Also infer type params from arguments if not all provided explicitly
+                if (!func->type_params.empty()) {
+                    for (size_t i = 0; i < call.args.size() && i < func->params.size(); ++i) {
+                        auto arg_type = check_expr(*call.args[i]);
+                        extract_type_params(func->params[i], arg_type, func->type_params,
+                                            substitutions);
+                    }
+                }
+
+                return substitute_type(func->return_type, substitutions);
+            }
+
+            // Check imported module functions with explicit type args
+            auto imported_path = env_.resolve_imported_symbol(name);
+            if (imported_path.has_value()) {
+                size_t pos = imported_path->rfind("::");
+                if (pos != std::string::npos) {
+                    std::string module_path = imported_path->substr(0, pos);
+                    auto module = env_.get_module(module_path);
+                    if (module) {
+                        auto func_it = module->functions.find(name);
+                        if (func_it != module->functions.end()) {
+                            const auto& func_sig = func_it->second;
+                            std::unordered_map<std::string, TypePtr> substitutions;
+                            if (path.generics.has_value() && !func_sig.type_params.empty()) {
+                                const auto& gen_args = path.generics.value().args;
+                                for (size_t i = 0;
+                                     i < func_sig.type_params.size() && i < gen_args.size(); ++i) {
+                                    if (gen_args[i].is_type()) {
+                                        substitutions[func_sig.type_params[i]] =
+                                            resolve_type(*gen_args[i].as_type());
+                                    }
+                                }
+                            }
+                            for (size_t i = 0; i < call.args.size() && i < func_sig.params.size();
+                                 ++i) {
+                                TypePtr expected_param = func_sig.params[i];
+                                if (!substitutions.empty()) {
+                                    expected_param = substitute_type(expected_param, substitutions);
+                                }
+                                check_expr(*call.args[i], expected_param);
+                            }
+                            if (!func_sig.type_params.empty()) {
+                                for (size_t i = 0;
+                                     i < call.args.size() && i < func_sig.params.size(); ++i) {
+                                    auto arg_type = check_expr(*call.args[i]);
+                                    extract_type_params(func_sig.params[i], arg_type,
+                                                        func_sig.type_params, substitutions);
+                                }
+                            }
+                            return substitute_type(func_sig.return_type, substitutions);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -532,20 +612,33 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                         if (func_it != module->functions.end()) {
                             const auto& func = func_it->second;
 
+                            // Handle generic functions - apply explicit type args first
+                            std::unordered_map<std::string, TypePtr> substitutions;
+                            if (!func.type_params.empty() && path.generics.has_value()) {
+                                const auto& gen_args = path.generics.value().args;
+                                for (size_t i = 0;
+                                     i < func.type_params.size() && i < gen_args.size(); ++i) {
+                                    if (gen_args[i].is_type()) {
+                                        substitutions[func.type_params[i]] =
+                                            resolve_type(*gen_args[i].as_type());
+                                    }
+                                }
+                            }
+
                             // Type check arguments and collect their types
                             std::vector<TypePtr> arg_types;
                             for (size_t i = 0; i < call.args.size(); ++i) {
                                 // Pass expected param type for numeric literal coercion
                                 TypePtr expected_param =
                                     (i < func.params.size()) ? func.params[i] : nullptr;
+                                if (expected_param && !substitutions.empty()) {
+                                    expected_param = substitute_type(expected_param, substitutions);
+                                }
                                 arg_types.push_back(check_expr(*call.args[i], expected_param));
                             }
 
-                            // Handle generic functions - infer type params from arguments
+                            // Infer remaining type params from arguments
                             if (!func.type_params.empty()) {
-                                std::unordered_map<std::string, TypePtr> substitutions;
-
-                                // Same logic as local functions above
                                 for (size_t i = 0; i < arg_types.size() && i < func.params.size();
                                      ++i) {
                                     const auto& arg_type = arg_types[i];
@@ -570,6 +663,8 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                                     extract_type_params(param_type, arg_type, func.type_params,
                                                         substitutions);
                                 }
+                            }
+                            if (!substitutions.empty()) {
                                 return substitute_type(func.return_type, substitutions);
                             }
                             return func.return_type;
@@ -1105,12 +1200,12 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             return receiver_type;
         }
 
-        // Comparison methods - cmp returns Ordering, max/min return Self
+        // Comparison methods - cmp returns Ordering, max/min/clamp return Self
         if (is_numeric) {
             if (call.method == "cmp") {
                 return std::make_shared<Type>(Type{NamedType{"Ordering", "", {}}});
             }
-            if (call.method == "max" || call.method == "min") {
+            if (call.method == "max" || call.method == "min" || call.method == "clamp") {
                 return receiver_type;
             }
         }
@@ -1133,9 +1228,33 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             return receiver_type;
         }
 
-        // to_string() returns Str for all primitives (Display behavior)
-        if (call.method == "to_string") {
+        // to_string() / debug_string() returns Str for all primitives (Display/Debug behavior)
+        if (call.method == "to_string" || call.method == "debug_string") {
             return make_primitive(PrimitiveKind::Str);
+        }
+
+        // fmt_binary/fmt_octal/fmt_lower_hex/fmt_upper_hex return Str for integer types
+        if (is_integer && (call.method == "fmt_binary" || call.method == "fmt_octal" ||
+                           call.method == "fmt_lower_hex" || call.method == "fmt_upper_hex")) {
+            return make_primitive(PrimitiveKind::Str);
+        }
+
+        // fmt_lower_exp/fmt_upper_exp return Str for float types
+        if ((kind == PrimitiveKind::F32 || kind == PrimitiveKind::F64) &&
+            (call.method == "fmt_lower_exp" || call.method == "fmt_upper_exp")) {
+            return make_primitive(PrimitiveKind::Str);
+        }
+
+        // partial_cmp() returns Maybe[Ordering] for all numeric types
+        if (is_numeric && call.method == "partial_cmp") {
+            auto ordering = std::make_shared<Type>(Type{NamedType{"Ordering", "", {}}});
+            auto maybe = std::make_shared<Type>(Type{NamedType{"Maybe", "", {ordering}}});
+            return maybe;
+        }
+
+        // is_zero() / is_one() return Bool for all numeric types
+        if (is_numeric && (call.method == "is_zero" || call.method == "is_one")) {
+            return make_primitive(PrimitiveKind::Bool);
         }
 
         // hash() returns I64 for all primitives (Hash behavior)
@@ -1145,6 +1264,23 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
         // to_owned() returns Self for all primitives (ToOwned behavior)
         if (call.method == "to_owned") {
+            return receiver_type;
+        }
+
+        // checked_* arithmetic returns Maybe[Self] for integer types
+        if (is_integer && (call.method == "checked_add" || call.method == "checked_sub" ||
+                           call.method == "checked_mul" || call.method == "checked_div" ||
+                           call.method == "checked_rem" || call.method == "checked_neg" ||
+                           call.method == "checked_shl" || call.method == "checked_shr")) {
+            auto maybe = std::make_shared<Type>(Type{NamedType{"Maybe", "", {prim_type}}});
+            return maybe;
+        }
+
+        // saturating_* / wrapping_* arithmetic returns Self for integer types
+        if (is_integer && (call.method == "saturating_add" || call.method == "saturating_sub" ||
+                           call.method == "saturating_mul" || call.method == "wrapping_add" ||
+                           call.method == "wrapping_sub" || call.method == "wrapping_mul" ||
+                           call.method == "wrapping_neg")) {
             return receiver_type;
         }
 

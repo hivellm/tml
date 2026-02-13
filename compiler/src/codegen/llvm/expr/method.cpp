@@ -1573,6 +1573,91 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     // =========================================================================
+    // 4a. Inline codegen for comparison methods on primitives (eq/ne/lt/le/gt/ge)
+    // =========================================================================
+    // These methods from PartialEq/PartialOrd must be handled before any other dispatch
+    // because default behavior methods (ne, le, ge) may not have generated LLVM functions,
+    // and module registry lookups can produce incorrect parameter types.
+    if (receiver_type && receiver_type->is<types::PrimitiveType>() &&
+        (method == "eq" || method == "ne" || method == "lt" || method == "le" || method == "gt" ||
+         method == "ge") &&
+        call.args.size() == 1) {
+        const auto& prim = receiver_type->as<types::PrimitiveType>();
+        std::string llvm_ty = llvm_type_from_semantic(receiver_type);
+        bool is_signed =
+            (prim.kind == types::PrimitiveKind::I8 || prim.kind == types::PrimitiveKind::I16 ||
+             prim.kind == types::PrimitiveKind::I32 || prim.kind == types::PrimitiveKind::I64 ||
+             prim.kind == types::PrimitiveKind::I128);
+        bool is_unsigned =
+            (prim.kind == types::PrimitiveKind::U8 || prim.kind == types::PrimitiveKind::U16 ||
+             prim.kind == types::PrimitiveKind::U32 || prim.kind == types::PrimitiveKind::U64 ||
+             prim.kind == types::PrimitiveKind::U128);
+        bool is_float =
+            (prim.kind == types::PrimitiveKind::F32 || prim.kind == types::PrimitiveKind::F64);
+        bool is_bool = (prim.kind == types::PrimitiveKind::Bool);
+
+        if (is_signed || is_unsigned || is_float || is_bool) {
+            // Emit type-specific coverage
+            std::string prim_name = types::primitive_kind_to_string(prim.kind);
+            if (method == "eq" || method == "ne") {
+                emit_coverage(prim_name + "::" + method);
+            } else {
+                // lt, le, gt, ge are PartialOrd defaults
+                emit_coverage("PartialOrd::" + method);
+            }
+            // Load other value from ref parameter
+            std::string other_ref = gen_expr(*call.args[0]);
+            std::string other = fresh_reg();
+            emit_line("  " + other + " = load " + llvm_ty + ", ptr " + other_ref);
+
+            // Get receiver value (may need to load if it was a reference)
+            std::string receiver_val = receiver;
+            if (receiver_was_ref) {
+                receiver_val = fresh_reg();
+                emit_line("  " + receiver_val + " = load " + llvm_ty + ", ptr " + receiver);
+            }
+
+            std::string result = fresh_reg();
+            if (is_float) {
+                std::string op;
+                if (method == "eq")
+                    op = "oeq";
+                else if (method == "ne")
+                    op = "une";
+                else if (method == "lt")
+                    op = "olt";
+                else if (method == "le")
+                    op = "ole";
+                else if (method == "gt")
+                    op = "ogt";
+                else
+                    op = "oge";
+                emit_line("  " + result + " = fcmp " + op + " " + llvm_ty + " " + receiver_val +
+                          ", " + other);
+            } else {
+                std::string op;
+                if (method == "eq")
+                    op = "eq";
+                else if (method == "ne")
+                    op = "ne";
+                else if (method == "lt")
+                    op = is_signed ? "slt" : "ult";
+                else if (method == "le")
+                    op = is_signed ? "sle" : "ule";
+                else if (method == "gt")
+                    op = is_signed ? "sgt" : "ugt";
+                else
+                    op = is_signed ? "sge" : "uge";
+                emit_line("  " + result + " = icmp " + op + " " + llvm_ty + " " + receiver_val +
+                          ", " + other);
+            }
+
+            last_expr_type_ = "i1";
+            return result;
+        }
+    }
+
+    // =========================================================================
     // 4b. Handle method calls on bounded generics (e.g., C: Container[T])
     // =========================================================================
     // When the receiver is a type parameter with behavior bounds from where clauses,
@@ -2061,24 +2146,28 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             emit_line("  " + tag_val + " = extractvalue %struct.Ordering " + receiver + ", 0");
 
             if (method == "is_less") {
+                emit_coverage("Ordering::is_less");
                 std::string result = fresh_reg();
                 emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 0");
                 last_expr_type_ = "i1";
                 return result;
             }
             if (method == "is_equal") {
+                emit_coverage("Ordering::is_equal");
                 std::string result = fresh_reg();
                 emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 1");
                 last_expr_type_ = "i1";
                 return result;
             }
             if (method == "is_greater") {
+                emit_coverage("Ordering::is_greater");
                 std::string result = fresh_reg();
                 emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 2");
                 last_expr_type_ = "i1";
                 return result;
             }
             if (method == "reverse") {
+                emit_coverage("Ordering::reverse");
                 std::string is_less = fresh_reg();
                 emit_line("  " + is_less + " = icmp eq i32 " + tag_val + ", 0");
                 std::string is_greater = fresh_reg();
@@ -2094,6 +2183,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 return result;
             }
             if (method == "then_cmp") {
+                emit_coverage("Ordering::then_cmp");
                 if (call.args.empty()) {
                     report_error("then_cmp() requires an argument", call.span, "C008");
                     return "0";
@@ -2113,6 +2203,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 return result;
             }
             if (method == "to_string") {
+                emit_coverage("Ordering::to_string");
                 std::string less_str = add_string_literal("Less");
                 std::string equal_str = add_string_literal("Equal");
                 std::string greater_str = add_string_literal("Greater");
@@ -2130,6 +2221,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 return result;
             }
             if (method == "debug_string") {
+                emit_coverage("Ordering::debug_string");
                 std::string less_str = add_string_literal("Ordering::Less");
                 std::string equal_str = add_string_literal("Ordering::Equal");
                 std::string greater_str = add_string_literal("Ordering::Greater");

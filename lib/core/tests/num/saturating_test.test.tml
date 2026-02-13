@@ -1,0 +1,33 @@
+use test
+
+@test
+func test_saturating_add_basic() -> I32 {
+    let x: I32 = 10
+    let result: I32 = x.saturating_add(20)
+    assert_eq(result, 30, "saturating_add basic")
+    return 0
+}
+
+@test
+func test_saturating_add_overflow() -> I32 {
+    let x: I32 = 2147483647
+    let result: I32 = x.saturating_add(1)
+    assert_eq(result, 2147483647, "saturating_add overflow clamps to MAX")
+    return 0
+}
+
+@test
+func test_saturating_sub_basic() -> I32 {
+    let x: I32 = 10
+    let result: I32 = x.saturating_sub(3)
+    assert_eq(result, 7, "saturating_sub basic")
+    return 0
+}
+
+@test
+func test_saturating_mul_basic() -> I32 {
+    let x: I32 = 6
+    let result: I32 = x.saturating_mul(7)
+    assert_eq(result, 42, "saturating_mul basic")
+    return 0
+}

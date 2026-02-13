@@ -1,0 +1,29 @@
+// Tests for Ord::partial_cmp default implementation
+// Maybe::eq and Outcome::eq are blocked by codegen bug (undefined @tml_Maybe__T_eq)
+use test
+use core::cmp::Ordering
+
+@test
+func test_ord_partial_cmp_i32() -> I32 {
+    // Ord types have a default partial_cmp that wraps cmp() in Just()
+    let a: I32 = 3
+    let b: I32 = 7
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_less(), "Ord::partial_cmp delegates to cmp"),
+        Nothing => assert(false, "Ord::partial_cmp should not return Nothing"),
+    }
+    return 0
+}
+
+@test
+func test_ord_partial_cmp_u32() -> I32 {
+    let a: U32 = 100
+    let b: U32 = 100
+    let r: Maybe[Ordering] = a.partial_cmp(ref b)
+    when r {
+        Just(ord) => assert(ord.is_equal(), "U32 Ord::partial_cmp equal"),
+        Nothing => assert(false, "should not be Nothing"),
+    }
+    return 0
+}

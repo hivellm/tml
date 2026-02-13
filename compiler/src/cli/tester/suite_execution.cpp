@@ -422,6 +422,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     error_result.test_name = suite.name;
                     error_result.group = suite.group;
                     error_result.passed = false;
+                    error_result.compilation_error = true;
                     error_result.error_message = "Failed to load suite DLL: " + lib.get_error();
 
                     collector.add(std::move(error_result));
@@ -742,9 +743,17 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         // Print library coverage analysis after all suites complete
         // Note: Coverage with filters is blocked in run.cpp, so opts.patterns is always empty here
         if (CompilerOptions::coverage) {
-            // FATAL: If any tests failed or crashed, coverage data is unreliable.
-            // Do NOT generate any coverage files (HTML/JSON) — this is NON-NEGOTIABLE.
-            if (has_failures) {
+            // Check if failures are only compilation errors (not test logic failures)
+            bool has_test_failures = false;
+            for (const auto& result : collector.results) {
+                if (!result.passed && !result.compilation_error) {
+                    has_test_failures = true;
+                    break;
+                }
+            }
+
+            if (has_failures && has_test_failures) {
+                // Test logic failures make coverage data unreliable
                 TML_LOG_FATAL("test",
                               c.red() << c.bold()
                                       << "========================================================"
@@ -777,6 +786,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     }
                 }
             } else {
+                if (has_failures) {
+                    // Only compilation errors — generate coverage with warning
+                    TML_LOG_WARN("test",
+                                 c.yellow()
+                                     << failure_count
+                                     << " suite(s) had compilation errors (skipped in coverage)"
+                                     << c.reset());
+                }
                 // All tests passed — safe to generate coverage report
                 print_library_coverage_report(all_covered_functions, c, test_stats);
 

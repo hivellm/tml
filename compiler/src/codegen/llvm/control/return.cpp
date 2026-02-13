@@ -167,15 +167,41 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
                 }
             }
 
-            // Handle value class/struct return by value: if returning a ptr but expecting a struct
-            // type, load the struct from the pointer. This fixes dangling pointer bug for value
-            // classes and runtime wrapper types like Text that are returned as ptr from FFI but
-            // expected as struct.
+            // Handle FFI wrapper struct return: if returning a ptr but expecting a struct
+            // type that is a single-ptr wrapper (e.g., List[Str] = { ptr }, File = { ptr }),
+            // wrap the pointer using insertvalue. For other structs (multi-field or non-ptr
+            // first field), load from the pointer instead.
             if (val_type == "ptr" && (current_ret_type_.starts_with("%class.") ||
                                       current_ret_type_.starts_with("%struct."))) {
-                std::string loaded_struct = fresh_reg();
-                emit_line("  " + loaded_struct + " = load " + current_ret_type_ + ", ptr " + val);
-                emit_line("  ret " + current_ret_type_ + " " + loaded_struct);
+                // Extract struct name to check if it's a single-ptr wrapper
+                std::string struct_name;
+                if (current_ret_type_.starts_with("%struct.")) {
+                    struct_name = current_ret_type_.substr(8); // skip "%struct."
+                } else {
+                    struct_name = current_ret_type_.substr(7); // skip "%class."
+                }
+
+                // Check if struct is a single-field { ptr } wrapper
+                bool is_ptr_wrapper = false;
+                auto fields_it = struct_fields_.find(struct_name);
+                if (fields_it != struct_fields_.end() && fields_it->second.size() == 1 &&
+                    fields_it->second[0].llvm_type == "ptr") {
+                    is_ptr_wrapper = true;
+                }
+
+                if (is_ptr_wrapper) {
+                    // Wrap the ptr as field 0 of the wrapper struct
+                    std::string wrapped = fresh_reg();
+                    emit_line("  " + wrapped + " = insertvalue " + current_ret_type_ +
+                              " undef, ptr " + val + ", 0");
+                    emit_line("  ret " + current_ret_type_ + " " + wrapped);
+                } else {
+                    // Load the struct from the pointer (ptr points to struct memory)
+                    std::string loaded_struct = fresh_reg();
+                    emit_line("  " + loaded_struct + " = load " + current_ret_type_ + ", ptr " +
+                              val);
+                    emit_line("  ret " + current_ret_type_ + " " + loaded_struct);
+                }
                 block_terminated_ = true;
                 return "void";
             }

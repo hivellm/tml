@@ -989,6 +989,53 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       display: block;
     }
 
+    /* Search */
+    .search-box {
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .search-input {
+      width: 100%;
+      padding: 10px 16px 10px 40px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: monospace;
+      outline: none;
+      box-sizing: border-box;
+    }
+    .search-input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+    }
+    .search-input::placeholder {
+      color: var(--text-dim);
+    }
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      font-size: 14px;
+      pointer-events: none;
+    }
+    .search-count {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+    .highlight {
+      background: rgba(210, 153, 34, 0.4);
+      border-radius: 2px;
+      padding: 0 1px;
+    }
+
     /* Test suites */
     .suite-list {
       display: flex;
@@ -1112,14 +1159,19 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
         f << "        </div>\n";
     }
 
-    f << R"(      </div>
+    f << R"HTML(      </div>
     </div>
 
     <!-- Modules Tab -->
     <div id="modules" class="tab-panel">
       <h2 class="section-title">Module Coverage</h2>
+      <div class="search-box">
+        <span class="search-icon">&#128269;</span>
+        <input type="text" class="search-input" id="moduleSearch" placeholder="Filter modules and functions..." oninput="filterModules(this.value)">
+        <span class="search-count" id="moduleSearchCount"></span>
+      </div>
       <div class="module-groups">
-)";
+)HTML";
 
     // Group modules by top-level category
     struct GroupStats {
@@ -1378,8 +1430,13 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
     <!-- Uncovered Tab -->
     <div id="uncovered" class="tab-panel">
       <h2 class="section-title">Uncovered Functions ()"
-      << (total_funcs - total_covered) << R"( total)</h2>
-)";
+      << (total_funcs - total_covered) << R"HTML( total)</h2>
+      <div class="search-box">
+        <span class="search-icon">&#128269;</span>
+        <input type="text" class="search-input" id="uncoveredSearch" placeholder="Filter uncovered modules and functions..." oninput="filterUncovered(this.value)">
+        <span class="search-count" id="uncoveredSearchCount"></span>
+      </div>
+)HTML";
 
     if (!uncovered_by_module.empty()) {
         f << R"(      <div class="uncovered-section">
@@ -1464,15 +1521,82 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
 
   <script>
     function showTab(tabId) {
-      // Hide all panels
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-
-      // Show selected panel
       document.getElementById(tabId).classList.add('active');
-
-      // Mark selected tab
       event.target.classList.add('active');
+    }
+
+    function filterModules(query) {
+      const q = query.toLowerCase().trim();
+      const panel = document.getElementById('modules');
+      const groups = panel.querySelectorAll('.module-group');
+      let visibleCount = 0;
+
+      groups.forEach(group => {
+        const title = group.querySelector('.group-title');
+        const groupName = title ? title.textContent.toLowerCase() : '';
+        const subRows = group.querySelectorAll('.submodule-row');
+        let groupMatch = q === '' || groupName.includes(q);
+        let anySubVisible = false;
+
+        subRows.forEach(row => {
+          const subName = row.querySelector('.submodule-name');
+          const funcDivs = row.querySelectorAll('.func-list > div');
+          const subText = subName ? subName.textContent.toLowerCase() : '';
+          let subMatch = q === '' || groupMatch || subText.includes(q);
+          let anyFuncMatch = false;
+
+          funcDivs.forEach(fd => {
+            const funcText = fd.textContent.toLowerCase();
+            const funcMatch = q === '' || funcText.includes(q);
+            fd.style.display = (q === '' || subMatch || funcMatch) ? '' : 'none';
+            if (funcMatch && q !== '') anyFuncMatch = true;
+          });
+
+          if (anyFuncMatch) subMatch = true;
+          row.style.display = subMatch ? '' : 'none';
+          if (subMatch) anySubVisible = true;
+        });
+
+        const visible = q === '' || groupMatch || anySubVisible;
+        group.style.display = visible ? '' : 'none';
+        if (visible) visibleCount++;
+        if (anySubVisible && q !== '') group.classList.add('expanded');
+      });
+
+      const countEl = document.getElementById('moduleSearchCount');
+      countEl.textContent = q ? visibleCount + ' group' + (visibleCount !== 1 ? 's' : '') : '';
+    }
+
+    function filterUncovered(query) {
+      const q = query.toLowerCase().trim();
+      const panel = document.getElementById('uncovered');
+      const modules = panel.querySelectorAll('.uncovered-module');
+      let visibleCount = 0;
+
+      modules.forEach(mod => {
+        const modName = mod.querySelector('.module-name');
+        const modText = modName ? modName.textContent.toLowerCase() : '';
+        const funcs = mod.querySelectorAll('.uncovered-func');
+        let modMatch = q === '' || modText.includes(q);
+        let anyFuncMatch = false;
+
+        funcs.forEach(fd => {
+          const funcText = fd.textContent.toLowerCase();
+          const funcMatch = q === '' || funcText.includes(q);
+          fd.style.display = (q === '' || modMatch || funcMatch) ? '' : 'none';
+          if (funcMatch && q !== '') anyFuncMatch = true;
+        });
+
+        const visible = q === '' || modMatch || anyFuncMatch;
+        mod.style.display = visible ? '' : 'none';
+        if (visible) visibleCount++;
+        if ((anyFuncMatch || modMatch) && q !== '') mod.classList.add('expanded');
+      });
+
+      const countEl = document.getElementById('uncoveredSearchCount');
+      countEl.textContent = q ? visibleCount + ' module' + (visibleCount !== 1 ? 's' : '') : '';
     }
   </script>
 </body>

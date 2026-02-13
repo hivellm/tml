@@ -1,0 +1,33 @@
+use test
+
+@test
+func test_wrapping_add_basic() -> I32 {
+    let x: I32 = 10
+    let result: I32 = x.wrapping_add(20)
+    assert_eq(result, 30, "wrapping_add basic")
+    return 0
+}
+
+@test
+func test_wrapping_sub_basic() -> I32 {
+    let x: I32 = 10
+    let result: I32 = x.wrapping_sub(3)
+    assert_eq(result, 7, "wrapping_sub basic")
+    return 0
+}
+
+@test
+func test_wrapping_mul_basic() -> I32 {
+    let x: I32 = 6
+    let result: I32 = x.wrapping_mul(7)
+    assert_eq(result, 42, "wrapping_mul basic")
+    return 0
+}
+
+@test
+func test_wrapping_neg_basic() -> I32 {
+    let x: I32 = 42
+    let result: I32 = x.wrapping_neg()
+    assert_eq(result, -42, "wrapping_neg basic")
+    return 0
+}

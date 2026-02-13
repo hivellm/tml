@@ -42,7 +42,12 @@
 #include <utility>
 #include <vector>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <sys/wait.h>
 #endif
 
@@ -3319,9 +3324,122 @@ auto handle_project_build(const json::JsonValue& params) -> ToolResult {
     }
 #endif
 
-    // Execute the build with 300s timeout
+    // Execute the build using CreateProcess (Windows) or fork/exec (Unix)
+    // to isolate the MCP server from build crashes/hangs.
+    // Output is captured via a temp file to avoid pipe buffer deadlocks.
     auto start = std::chrono::steady_clock::now();
-    auto [output, exit_code] = execute_command(cmd.str(), 300);
+    std::string output;
+    int exit_code = -1;
+    constexpr int timeout_seconds = 300;
+
+#ifdef _WIN32
+    // Create a temp file for capturing build output
+    char temp_dir[MAX_PATH];
+    char temp_file[MAX_PATH];
+    GetTempPathA(MAX_PATH, temp_dir);
+    GetTempFileNameA(temp_dir, "tml", 0, temp_file);
+    std::string temp_path(temp_file);
+
+    // Set up security attributes for handle inheritance
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = nullptr;
+    sa.bInheritHandle = TRUE;
+
+    // Open temp file for writing (inheritable handle)
+    HANDLE hFile = CreateFileA(temp_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, &sa,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return ToolResult::error("Failed to create temp file for build output.");
+    }
+
+    // Set up process startup info — redirect stdout+stderr to temp file
+    STARTUPINFOA si = {};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = hFile;
+    si.hStdError = hFile;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+
+    PROCESS_INFORMATION pi = {};
+
+    // Build command line — must be mutable for CreateProcessA
+    std::string cmd_line = cmd.str() + " 2>&1";
+    std::vector<char> cmd_buf(cmd_line.begin(), cmd_line.end());
+    cmd_buf.push_back('\0');
+
+    // Launch the build subprocess
+    BOOL created = CreateProcessA(nullptr,               // lpApplicationName
+                                  cmd_buf.data(),        // lpCommandLine (mutable)
+                                  nullptr,               // lpProcessAttributes
+                                  nullptr,               // lpThreadAttributes
+                                  TRUE,                  // bInheritHandles
+                                  CREATE_NO_WINDOW,      // dwCreationFlags
+                                  nullptr,               // lpEnvironment (inherit)
+                                  root.string().c_str(), // lpCurrentDirectory
+                                  &si,                   // lpStartupInfo
+                                  &pi                    // lpProcessInformation
+    );
+
+    if (!created) {
+        CloseHandle(hFile);
+        DeleteFileA(temp_path.c_str());
+        DWORD err = GetLastError();
+        return ToolResult::error("Failed to launch build process (error " + std::to_string(err) +
+                                 ").\nCommand: " + cmd.str());
+    }
+
+    // Wait for the process with timeout
+    DWORD wait_result = WaitForSingleObject(pi.hProcess, timeout_seconds * 1000);
+
+    if (wait_result == WAIT_TIMEOUT) {
+        TerminateProcess(pi.hProcess, 1);
+        WaitForSingleObject(pi.hProcess, 5000); // Wait for termination
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        CloseHandle(hFile);
+        // Read whatever output was captured
+        std::ifstream tf(temp_path);
+        if (tf.is_open()) {
+            std::ostringstream oss;
+            oss << tf.rdbuf();
+            output = strip_ansi(oss.str());
+            tf.close();
+        }
+        DeleteFileA(temp_path.c_str());
+        return ToolResult::error("Build timed out after " + std::to_string(timeout_seconds) +
+                                 "s.\n\n--- Partial Output ---\n" + output);
+    }
+
+    // Get exit code
+    DWORD dwExitCode = 0;
+    GetExitCodeProcess(pi.hProcess, &dwExitCode);
+    exit_code = static_cast<int>(dwExitCode);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(hFile);
+
+    // Read captured output from temp file
+    {
+        std::ifstream tf(temp_path);
+        if (tf.is_open()) {
+            std::ostringstream oss;
+            oss << tf.rdbuf();
+            output = strip_ansi(oss.str());
+            tf.close();
+        }
+    }
+    DeleteFileA(temp_path.c_str());
+
+#else
+    // Unix: use popen as before (safer on Unix — no self-replacing binary issue)
+    auto result_pair = execute_command(cmd.str(), timeout_seconds);
+    output = result_pair.first;
+    exit_code = result_pair.second;
+#endif
+
     auto end = std::chrono::steady_clock::now();
     auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -3345,7 +3463,16 @@ auto handle_project_build(const json::JsonValue& params) -> ToolResult {
     }
 
     if (!output.empty()) {
-        result << "\n--- Build Output ---\n" << output;
+        // Truncate output if too large to avoid overwhelming MCP response
+        constexpr size_t max_output = 32000;
+        if (output.size() > max_output) {
+            auto truncated = output.substr(0, 4000) + "\n\n... [" +
+                             std::to_string(output.size() - 8000) + " bytes truncated] ...\n\n" +
+                             output.substr(output.size() - 4000);
+            result << "\n--- Build Output ---\n" << truncated;
+        } else {
+            result << "\n--- Build Output ---\n" << output;
+        }
     }
 
     if (exit_code != 0) {
@@ -3418,220 +3545,103 @@ auto handle_project_coverage(const json::JsonValue& params) -> ToolResult {
 
     const auto& data = unwrap(parse_result);
 
-    // Extract high-level stats
+    // The coverage.json structure:
+    //   { "summary": { ... }, "modules": [ { "name", "total", "covered", "percent",
+    //   "uncovered_functions": [...] }, ... ] }
     std::stringstream result;
     result << "=== TML Library Coverage Report ===\n\n";
 
-    auto get_int = [&](const char* key) -> int {
-        auto* v = data.get(key);
+    // Read summary from nested "summary" object
+    const auto* summary = data.get("summary");
+    if (summary == nullptr || !summary->is_object()) {
+        return ToolResult::error("Coverage JSON missing 'summary' object. "
+                                 "The coverage.json format may have changed. "
+                                 "Re-run tests with --coverage to regenerate.");
+    }
+
+    auto get_int = [&](const json::JsonValue& obj, const char* key) -> int {
+        auto* v = obj.get(key);
         return (v && v->is_number()) ? static_cast<int>(v->as_i64()) : 0;
     };
-    auto get_double = [&](const char* key) -> double {
-        auto* v = data.get(key);
+    auto get_double = [&](const json::JsonValue& obj, const char* key) -> double {
+        auto* v = obj.get(key);
         return (v && v->is_number()) ? v->as_f64() : 0.0;
     };
 
-    int lib_funcs = get_int("library_functions");
-    int lib_covered = get_int("library_covered");
-    double lib_pct = get_double("library_coverage_percent");
-    int total_called = get_int("total_functions_called");
-    int tests_passed = get_int("tests_passed");
-    int test_files = get_int("test_files");
-    int duration_ms = get_int("duration_ms");
-    int mods_100 = get_int("modules_100_percent");
-    int mods_partial = get_int("modules_partial");
-    int mods_zero = get_int("modules_zero_coverage");
+    int lib_funcs = get_int(*summary, "library_functions");
+    int lib_covered = get_int(*summary, "library_covered");
+    double lib_pct = get_double(*summary, "coverage_percent");
+    int tests_passed = get_int(*summary, "tests_passed");
+    int test_files = get_int(*summary, "test_files");
+    int duration_ms = get_int(*summary, "duration_ms");
+    int mods_full = get_int(*summary, "modules_full");
+    int mods_partial = get_int(*summary, "modules_partial");
+    int mods_zero = get_int(*summary, "modules_zero");
 
     result << std::fixed << std::setprecision(1);
     result << "Library Coverage: " << lib_covered << "/" << lib_funcs << " functions (" << lib_pct
            << "%)\n";
-    result << "Total Functions Called: " << total_called << "\n";
     result << "Tests: " << tests_passed << " passed across " << test_files << " files\n";
     result << "Duration: " << duration_ms << "ms\n";
-    result << "Modules: " << mods_100 << " at 100%, " << mods_partial << " partial, " << mods_zero
+    result << "Modules: " << mods_full << " at 100%, " << mods_partial << " partial, " << mods_zero
            << " at 0%\n\n";
 
-    // Suite breakdown
-    auto* suites = data.get("suites");
-    if (suites != nullptr && suites->is_array()) {
-        result << "--- Test Suites ---\n";
-        const auto& suites_arr = suites->as_array();
-        for (size_t si = 0; si < suites_arr.size(); ++si) {
-            const auto& suite = suites_arr[si];
-            const json::JsonValue* sname = suite.get("name");
-            const json::JsonValue* stests = suite.get("tests");
-            const json::JsonValue* sdur = suite.get("duration_ms");
-            if (sname != nullptr && sname->is_string()) {
-                result << "  " << sname->as_string();
-                if (stests != nullptr && stests->is_number()) {
-                    result << ": " << static_cast<int>(stests->as_i64()) << " tests";
-                }
-                if (sdur != nullptr && sdur->is_number()) {
-                    result << " (" << static_cast<int>(sdur->as_i64()) << "ms)";
-                }
-                result << "\n";
-            }
-        }
-        result << "\n";
-    }
-
-    // Now scan library source files to build per-module coverage breakdown
-    // by cross-referencing non_library_functions with source file function declarations
-    auto* non_lib_funcs = data.get("non_library_functions");
-    if (non_lib_funcs != nullptr && non_lib_funcs->is_array()) {
-        // Build a set of all called functions for quick lookup
-        std::set<std::string> called_functions;
-        const auto& func_arr = non_lib_funcs->as_array();
-        for (size_t fi = 0; fi < func_arr.size(); ++fi) {
-            if (func_arr[fi].is_string()) {
-                called_functions.insert(func_arr[fi].as_string());
+    // Read per-module data from "modules" array
+    const auto* modules = data.get("modules");
+    if (modules != nullptr && modules->is_array()) {
+        // Apply module filter if specified
+        std::string filter_str;
+        auto* module_filter = params.get("module");
+        if (module_filter != nullptr && module_filter->is_string()) {
+            filter_str = module_filter->as_string();
+            // Normalize :: to / for matching against module names in JSON
+            size_t pos = 0;
+            while ((pos = filter_str.find("::", pos)) != std::string::npos) {
+                filter_str.replace(pos, 2, "/");
             }
         }
 
-        // Scan library source files to build per-module function lists
-        struct ModuleInfo {
+        // Collect modules into a sortable structure
+        struct ModEntry {
             std::string name;
-            std::vector<std::string> all_functions;
-            std::vector<std::string> covered;
+            int covered;
+            int total;
+            double pct;
             std::vector<std::string> uncovered;
         };
 
-        std::map<std::string, ModuleInfo> module_map;
-
-        // Dynamically scan all lib/ subdirectories (core, std, test, backtrace, etc.)
-        std::vector<fs::path> lib_dirs;
-        auto lib_root = root / "lib";
-        if (fs::exists(lib_root) && fs::is_directory(lib_root)) {
-            for (const auto& entry : fs::directory_iterator(lib_root)) {
-                if (entry.is_directory()) {
-                    auto src_dir = entry.path() / "src";
-                    if (fs::exists(src_dir)) {
-                        lib_dirs.push_back(src_dir);
-                    }
-                }
-            }
-        }
-
-        for (const auto& lib_dir : lib_dirs) {
-            if (!fs::exists(lib_dir))
+        std::vector<ModEntry> entries;
+        const auto& mod_arr = modules->as_array();
+        for (size_t i = 0; i < mod_arr.size(); ++i) {
+            const auto& m = mod_arr[i];
+            auto* mname = m.get("name");
+            if (mname == nullptr || !mname->is_string())
                 continue;
 
-            for (const auto& entry : fs::recursive_directory_iterator(lib_dir)) {
-                if (!entry.is_regular_file())
-                    continue;
-                if (entry.path().extension() != ".tml")
-                    continue;
+            std::string name = mname->as_string();
 
-                // Extract module name from path
-                auto rel = fs::relative(entry.path(), root / "lib");
-                std::string mod_name = rel.parent_path().string();
-                // Normalize separators
-                std::replace(mod_name.begin(), mod_name.end(), '\\', '/');
-
-                // Remove "<libname>/src/" prefix to get clean module name
-                // e.g. "core/src/str" -> "str", "test/src" -> "test"
-                auto slash_pos = mod_name.find('/');
-                if (slash_pos != std::string::npos) {
-                    std::string lib_name = mod_name.substr(0, slash_pos);
-                    std::string rest = mod_name.substr(slash_pos + 1);
-                    // Remove "src/" prefix from rest
-                    if (rest.find("src/") == 0) {
-                        mod_name = lib_name + "/" + rest.substr(4);
-                    } else if (rest == "src") {
-                        mod_name = lib_name;
-                    }
-                }
-
-                if (mod_name.empty())
-                    continue;
-
-                // Read file and extract function/method names
-                std::ifstream src_file(entry.path());
-                if (!src_file.is_open())
-                    continue;
-
-                std::string line;
-                std::string current_type;
-                while (std::getline(src_file, line)) {
-                    // Track impl blocks: "impl Type {" or "impl Behavior for Type {"
-                    if (line.find("impl ") != std::string::npos) {
-                        // Extract the type name
-                        auto pos = line.find("impl ");
-                        auto rest = line.substr(pos + 5);
-                        // Handle "impl Behavior for Type {"
-                        auto for_pos = rest.find(" for ");
-                        if (for_pos != std::string::npos) {
-                            rest = rest.substr(for_pos + 5);
-                        }
-                        // Extract just the type name (before [ or { or space)
-                        std::string type_name;
-                        for (char c : rest) {
-                            if (c == '[' || c == '{' || c == ' ' || c == '(')
-                                break;
-                            type_name += c;
-                        }
-                        if (!type_name.empty()) {
-                            current_type = type_name;
-                        }
-                    }
-
-                    // Track "func name(" declarations
-                    auto func_pos = line.find("func ");
-                    if (func_pos != std::string::npos) {
-                        auto rest = line.substr(func_pos + 5);
-                        std::string func_name;
-                        for (char c : rest) {
-                            if (c == '(' || c == '[' || c == ' ' || c == '<')
-                                break;
-                            func_name += c;
-                        }
-                        if (!func_name.empty()) {
-                            std::string qualified_name;
-                            if (!current_type.empty()) {
-                                qualified_name = current_type + "::" + func_name;
-                            } else {
-                                qualified_name = func_name;
-                            }
-                            module_map[mod_name].name = mod_name;
-                            module_map[mod_name].all_functions.push_back(qualified_name);
-
-                            if (called_functions.count(qualified_name) > 0) {
-                                module_map[mod_name].covered.push_back(qualified_name);
-                            } else {
-                                module_map[mod_name].uncovered.push_back(qualified_name);
-                            }
-                        }
-                    }
-
-                    // Reset current_type at end of impl block (simple heuristic)
-                    // Only reset when we see a top-level closing brace
-                    // This is approximate but good enough for coverage analysis
-                }
-            }
-        }
-
-        // Apply module filter if specified
-        auto* module_filter = params.get("module");
-        std::string filter_str;
-        if (module_filter != nullptr && module_filter->is_string()) {
-            filter_str = module_filter->as_string();
-            // Normalize :: to /
-            std::string normalized = filter_str;
-            size_t pos = 0;
-            while ((pos = normalized.find("::", pos)) != std::string::npos) {
-                normalized.replace(pos, 2, "/");
-            }
-            filter_str = normalized;
-        }
-
-        // Build sorted module list
-        std::vector<ModuleInfo> sorted_modules;
-        for (auto& [name, info] : module_map) {
-            if (info.all_functions.empty())
-                continue;
+            // Apply filter
             if (!filter_str.empty() && name.find(filter_str) == std::string::npos)
                 continue;
-            sorted_modules.push_back(std::move(info));
+
+            ModEntry entry;
+            entry.name = name;
+            entry.total = get_int(m, "total");
+            entry.covered = get_int(m, "covered");
+            entry.pct = get_double(m, "percent");
+
+            // Collect uncovered function names
+            auto* uncov = m.get("uncovered_functions");
+            if (uncov != nullptr && uncov->is_array()) {
+                const auto& uncov_arr = uncov->as_array();
+                for (size_t j = 0; j < uncov_arr.size(); ++j) {
+                    if (uncov_arr[j].is_string()) {
+                        entry.uncovered.push_back(uncov_arr[j].as_string());
+                    }
+                }
+            }
+
+            entries.push_back(std::move(entry));
         }
 
         // Sort
@@ -3642,34 +3652,18 @@ auto handle_project_coverage(const json::JsonValue& params) -> ToolResult {
         }
 
         if (sort_order == "name") {
-            std::sort(sorted_modules.begin(), sorted_modules.end(),
+            std::sort(entries.begin(), entries.end(),
                       [](const auto& a, const auto& b) { return a.name < b.name; });
         } else if (sort_order == "highest") {
-            std::sort(sorted_modules.begin(), sorted_modules.end(),
-                      [](const auto& a, const auto& b) {
-                          double pct_a = a.all_functions.empty()
-                                             ? 0
-                                             : (100.0 * a.covered.size() / a.all_functions.size());
-                          double pct_b = b.all_functions.empty()
-                                             ? 0
-                                             : (100.0 * b.covered.size() / b.all_functions.size());
-                          return pct_a > pct_b;
-                      });
+            std::sort(entries.begin(), entries.end(),
+                      [](const auto& a, const auto& b) { return a.pct > b.pct; });
         } else { // lowest (default)
-            std::sort(sorted_modules.begin(), sorted_modules.end(),
-                      [](const auto& a, const auto& b) {
-                          double pct_a = a.all_functions.empty()
-                                             ? 0
-                                             : (100.0 * a.covered.size() / a.all_functions.size());
-                          double pct_b = b.all_functions.empty()
-                                             ? 0
-                                             : (100.0 * b.covered.size() / b.all_functions.size());
-                          return pct_a < pct_b;
-                      });
+            std::sort(entries.begin(), entries.end(),
+                      [](const auto& a, const auto& b) { return a.pct < b.pct; });
         }
 
         // Apply limit
-        int limit = static_cast<int>(sorted_modules.size());
+        int limit = static_cast<int>(entries.size());
         auto* limit_param = params.get("limit");
         if (limit_param != nullptr && limit_param->is_number()) {
             int requested = static_cast<int>(limit_param->as_i64());
@@ -3684,18 +3678,23 @@ auto handle_project_coverage(const json::JsonValue& params) -> ToolResult {
                << std::setw(10) << "Total" << std::setw(10) << "Pct" << "\n";
         result << std::string(60, '-') << "\n";
 
-        for (int i = 0; i < limit && i < static_cast<int>(sorted_modules.size()); ++i) {
-            const auto& mod = sorted_modules[i];
-            double pct = mod.all_functions.empty()
-                             ? 0.0
-                             : (100.0 * mod.covered.size() / mod.all_functions.size());
+        for (int i = 0; i < limit && i < static_cast<int>(entries.size()); ++i) {
+            const auto& mod = entries[i];
             result << std::left << std::setw(30) << mod.name << std::right << std::setw(10)
-                   << mod.covered.size() << std::setw(10) << mod.all_functions.size()
-                   << std::setw(9) << std::fixed << std::setprecision(1) << pct << "%\n";
+                   << mod.covered << std::setw(10) << mod.total << std::setw(9) << std::fixed
+                   << std::setprecision(1) << mod.pct << "%\n";
+
+            // When filtering to a specific module, show uncovered functions
+            if (!filter_str.empty() && !mod.uncovered.empty()) {
+                result << "  Uncovered functions:\n";
+                for (const auto& fn : mod.uncovered) {
+                    result << "    - " << fn << "\n";
+                }
+            }
         }
 
-        if (limit < static_cast<int>(sorted_modules.size())) {
-            result << "... and " << (sorted_modules.size() - limit) << " more modules\n";
+        if (limit < static_cast<int>(entries.size())) {
+            result << "... and " << (entries.size() - limit) << " more modules\n";
         }
     }
 

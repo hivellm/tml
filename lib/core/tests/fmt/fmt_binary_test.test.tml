@@ -1,0 +1,74 @@
+use test
+use core::fmt::num::{Binary, Octal, LowerHex, UpperHex}
+
+@test
+func test_fmt_binary_i32() -> I32 {
+    let x: I32 = 10
+    let s: Str = x.fmt_binary()
+    assert_eq(s, "0b1010", "I32 fmt_binary")
+    return 0
+}
+
+@test
+func test_fmt_binary_zero() -> I32 {
+    let x: I32 = 0
+    let s: Str = x.fmt_binary()
+    assert_eq(s, "0b0", "I32 fmt_binary zero")
+    return 0
+}
+
+@test
+func test_fmt_binary_u8() -> I32 {
+    let x: U8 = 255
+    let s: Str = x.fmt_binary()
+    assert_eq(s, "0b11111111", "U8 fmt_binary 255")
+    return 0
+}
+
+@test
+func test_fmt_octal_i32() -> I32 {
+    let x: I32 = 8
+    let s: Str = x.fmt_octal()
+    assert_eq(s, "0o10", "I32 fmt_octal 8")
+    return 0
+}
+
+@test
+func test_fmt_octal_255() -> I32 {
+    let x: I32 = 255
+    let s: Str = x.fmt_octal()
+    assert_eq(s, "0o377", "I32 fmt_octal 255")
+    return 0
+}
+
+@test
+func test_fmt_lower_hex_i32() -> I32 {
+    let x: I32 = 255
+    let s: Str = x.fmt_lower_hex()
+    assert_eq(s, "0xff", "I32 fmt_lower_hex 255")
+    return 0
+}
+
+@test
+func test_fmt_lower_hex_u64() -> I32 {
+    let x: U64 = 48879
+    let s: Str = x.fmt_lower_hex()
+    assert_eq(s, "0xbeef", "U64 fmt_lower_hex")
+    return 0
+}
+
+@test
+func test_fmt_upper_hex_i32() -> I32 {
+    let x: I32 = 255
+    let s: Str = x.fmt_upper_hex()
+    assert_eq(s, "0xFF", "I32 fmt_upper_hex 255")
+    return 0
+}
+
+@test
+func test_fmt_upper_hex_u64() -> I32 {
+    let x: U64 = 48879
+    let s: Str = x.fmt_upper_hex()
+    assert_eq(s, "0xBEEF", "U64 fmt_upper_hex")
+    return 0
+}

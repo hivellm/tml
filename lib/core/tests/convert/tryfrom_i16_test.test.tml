@@ -1,0 +1,12 @@
+use test
+use core::convert::TryFromIntError
+
+@test
+func test_i16_try_from_i64() -> I32 {
+    let value: I64 = 1000
+    when I16::try_from(value) {
+        Ok(result) => assert_eq(result as I32, 1000, "1000 should convert to I16"),
+        Err(_) => assert(false, "should not fail")
+    }
+    return 0
+}

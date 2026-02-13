@@ -255,6 +255,14 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @bool_to_string(i1)");
     emit_line("");
 
+    // Integer formatting (binary, octal, hex)
+    emit_line("; Integer formatting");
+    emit_line("declare ptr @i64_to_binary_str(i64)");
+    emit_line("declare ptr @i64_to_octal_str(i64)");
+    emit_line("declare ptr @i64_to_lower_hex_str(i64)");
+    emit_line("declare ptr @i64_to_upper_hex_str(i64)");
+    emit_line("");
+
     // Overloaded abs functions
     emit_line("; Overloaded abs");
     emit_line("declare i32 @abs_i32(i32)");
@@ -1726,8 +1734,18 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 // Skip impl blocks for types that aren't actually imported
                 // This dramatically reduces codegen time (e.g., don't generate AtomicBool when only
                 // Arc is used). Uses dynamic_always_generate computed based on actual imports.
+                // IMPORTANT: Never skip impl blocks for primitive types (I32, U8, etc.)
+                // because behavior impls like `impl PartialEq for I32` must always be
+                // generated — primitives are builtin types that are never "imported".
+                auto is_primitive_type = [](const std::string& name) {
+                    return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+                           name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
+                           name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
+                           name == "Bool" || name == "Str";
+                };
                 if (!type_name.empty() && !imported_types.empty() &&
-                    imported_types.find(type_name) == imported_types.end()) {
+                    imported_types.find(type_name) == imported_types.end() &&
+                    !is_primitive_type(type_name)) {
                     if (dynamic_always_generate.find(type_name) == dynamic_always_generate.end() &&
                         module_defined_types.find(type_name) == module_defined_types.end()) {
                         TML_DEBUG_LN("[MODULE] Skipping impl for non-imported type: " << type_name);

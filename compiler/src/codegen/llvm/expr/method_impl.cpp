@@ -605,7 +605,7 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     } else {
         emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str + ")");
         last_expr_type_ = ret_type;
-        last_semantic_type_ = func_sig->return_type; // Track semantic type for deref assignments
+        last_semantic_type_ = return_type; // Track substituted semantic type for type inference
         return result;
     }
 }

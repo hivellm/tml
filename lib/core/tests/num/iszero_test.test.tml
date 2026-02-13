@@ -1,0 +1,29 @@
+use test
+
+@test
+func test_is_zero_true() -> I32 {
+    let x: I32 = 0
+    assert(x.is_zero(), "0 is_zero")
+    return 0
+}
+
+@test
+func test_is_zero_false() -> I32 {
+    let x: I32 = 42
+    assert(not x.is_zero(), "42 is not zero")
+    return 0
+}
+
+@test
+func test_is_one_true() -> I32 {
+    let x: I32 = 1
+    assert(x.is_one(), "1 is_one")
+    return 0
+}
+
+@test
+func test_is_one_false() -> I32 {
+    let x: I32 = 0
+    assert(not x.is_one(), "0 is not one")
+    return 0
+}

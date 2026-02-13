@@ -116,7 +116,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id", "ptr_offset",
         "ptr_read", "ptr_write", "ptr_copy", "store_byte", "volatile_read", "volatile_write",
         "atomic_load", "atomic_store", "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub",
-        "atomic_and", "atomic_or", "atomic_xor", "fence", "black_box",
+        "atomic_and", "atomic_or", "atomic_xor", "fence", "compiler_fence", "black_box",
         // Slice intrinsics
         "slice_get", "slice_get_mut", "slice_set",
         // Math intrinsics
@@ -1079,6 +1079,15 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // fence()
     if (intrinsic_name == "fence") {
         emit_line("  fence seq_cst");
+        last_expr_type_ = "void";
+        return "0";
+    }
+
+    // compiler_fence() — prevents compiler reordering without hardware fence
+    if (intrinsic_name == "compiler_fence") {
+        // LLVM's compiler fence is just a barrier for the optimizer
+        // In LLVM IR, this is expressed with "fence singlethread seq_cst"
+        emit_line("  fence syncscope(\"singlethread\") seq_cst");
         last_expr_type_ = "void";
         return "0";
     }

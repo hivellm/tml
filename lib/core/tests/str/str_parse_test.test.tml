@@ -1,0 +1,35 @@
+use test
+use core::str
+
+@test
+func test_str_parse_i32() -> I32 {
+    let s: Str = "42"
+    let result: Maybe[I32] = str::parse_i32(s)
+    when result {
+        Just(v) => assert_eq(v, 42, "parse_i32"),
+        Nothing => assert(false, "parse_i32 should succeed")
+    }
+    return 0
+}
+
+@test
+func test_str_parse_i64() -> I32 {
+    let s: Str = "123456"
+    let result: Maybe[I64] = str::parse_i64(s)
+    when result {
+        Just(v) => assert_eq(v, 123456, "parse_i64"),
+        Nothing => assert(false, "parse_i64 should succeed")
+    }
+    return 0
+}
+
+@test
+func test_str_parse_bool_true() -> I32 {
+    let s: Str = "true"
+    let result: Maybe[Bool] = str::parse_bool(s)
+    when result {
+        Just(v) => assert(v, "parse_bool true"),
+        Nothing => assert(false, "parse_bool should succeed")
+    }
+    return 0
+}

@@ -155,6 +155,12 @@ auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser:
         return "0";
     }
 
+    // compiler_fence() - Compiler-only barrier (no hardware fence)
+    if (fn_name == "compiler_fence") {
+        emit_line("  fence syncscope(\"singlethread\") seq_cst");
+        return "0";
+    }
+
     // fence_acquire() - Acquire fence
     if (fn_name == "fence_acquire") {
         emit_line("  fence acquire");

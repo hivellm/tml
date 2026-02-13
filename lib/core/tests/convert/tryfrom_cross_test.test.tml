@@ -1,0 +1,13 @@
+use test
+use core::convert::TryFromIntError
+
+@test
+func test_i32_try_from_i64() -> I32 {
+    let big: I64 = 42
+    let result: Outcome[I32, TryFromIntError] = I32::try_from(big)
+    when result {
+        Ok(v) => assert_eq(v, 42, "I32::try_from(I64) basic"),
+        Err(_) => assert(false, "should not fail"),
+    }
+    return 0
+}

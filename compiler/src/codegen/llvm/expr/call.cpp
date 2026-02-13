@@ -973,6 +973,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
     // Check if this is a generic function call
     auto pending_func_it = pending_generic_funcs_.find(fn_name);
+    // For module-qualified calls like "mem::forget", also try the bare name "forget"
+    // since module functions are registered by bare name during gen_func_decl
+    if (pending_func_it == pending_generic_funcs_.end() &&
+        fn_name.find("::") != std::string::npos) {
+        size_t last_sep = fn_name.rfind("::");
+        std::string bare_name = fn_name.substr(last_sep + 2);
+        pending_func_it = pending_generic_funcs_.find(bare_name);
+    }
     if (pending_func_it != pending_generic_funcs_.end()) {
         const auto& gen_func = *pending_func_it->second;
 
@@ -1027,7 +1035,10 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
 
         // Register and get mangled name
-        std::string mangled_name = require_func_instantiation(fn_name, inferred_type_args);
+        // Use the key from pending_generic_funcs_ (bare name like "forget")
+        // rather than fn_name ("mem::forget") so generate_pending_instantiations can find it
+        std::string base_name = pending_func_it->first;
+        std::string mangled_name = require_func_instantiation(base_name, inferred_type_args);
 
         // Use bindings as substitution map for return type
         std::unordered_map<std::string, types::TypePtr>& subs = bindings;
@@ -2115,6 +2126,27 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         func_it = functions_.find(sanitized_name);
     }
 
+    // For primitive try_from/from calls, we MUST NOT use a cached func_it entry
+    // because these methods have multiple overloads (e.g., I16_try_from could be
+    // TryFrom[I32] or TryFrom[I64]) and the cached entry may be the wrong overload.
+    // Force the special try_from handling below to determine the correct suffix.
+    {
+        size_t sep_pos = fn_name.find("::");
+        if (sep_pos != std::string::npos && func_it != functions_.end()) {
+            std::string type_name = fn_name.substr(0, sep_pos);
+            std::string method = fn_name.substr(sep_pos + 2);
+            auto is_primitive = [](const std::string& name) {
+                return name == "I8" || name == "I16" || name == "I32" || name == "I64" ||
+                       name == "I128" || name == "U8" || name == "U16" || name == "U32" ||
+                       name == "U64" || name == "U128" || name == "F32" || name == "F64" ||
+                       name == "Bool";
+            };
+            if ((method == "try_from" || method == "from") && is_primitive(type_name)) {
+                func_it = functions_.end();
+            }
+        }
+    }
+
     // If function not found in functions_ map but we have an @extern func_sig,
     // emit a late 'declare' and register it. This handles cases where module
     // re-parsing fails (e.g., due to 'use super::') but the function signature
@@ -2330,13 +2362,44 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         mangled = "@tml_" + prefix + sanitized_name;
     }
 
+    // For generic functions, build type substitution map from actual arguments.
+    // This handles cases like mem::forget[T](value: T) where T needs to be
+    // resolved to the concrete type (e.g., I32) from the actual argument.
+    std::unordered_map<std::string, types::TypePtr> free_func_type_subs;
+    if (func_sig.has_value() && !func_sig->type_params.empty()) {
+        // Infer type params from arguments by looking at local variable types
+        for (size_t i = 0; i < call.args.size() && i < func_sig->params.size(); ++i) {
+            auto param_type = func_sig->params[i];
+            if (!param_type)
+                continue;
+            // Check if this parameter uses a generic type directly
+            if (param_type->is<types::GenericType>()) {
+                const auto& generic = param_type->as<types::GenericType>();
+                if (free_func_type_subs.count(generic.name))
+                    continue;
+                // Try to get semantic type from local variable
+                if (call.args[i]->is<parser::IdentExpr>()) {
+                    const auto& ident = call.args[i]->as<parser::IdentExpr>();
+                    auto loc_it = locals_.find(ident.name);
+                    if (loc_it != locals_.end() && loc_it->second.semantic_type) {
+                        free_func_type_subs[generic.name] = loc_it->second.semantic_type;
+                    }
+                }
+            }
+        }
+    }
+
     // Determine return type
     std::string ret_type = "i32"; // Default
     if (func_it != functions_.end()) {
         // Use return type from registered function (handles @extern correctly)
         ret_type = func_it->second.ret_type;
     } else if (func_sig.has_value()) {
-        ret_type = llvm_type_from_semantic(func_sig->return_type);
+        auto resolved_ret = func_sig->return_type;
+        if (!free_func_type_subs.empty()) {
+            resolved_ret = types::substitute_type(resolved_ret, free_func_type_subs);
+        }
+        ret_type = llvm_type_from_semantic(resolved_ret);
     }
 
     // Generate arguments with proper type conversion
@@ -2346,7 +2409,11 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         bool param_takes_ownership = true;
         bool param_is_ref = false;
         if (func_sig.has_value() && i < func_sig->params.size()) {
-            if (func_sig->params[i]->is<types::RefType>()) {
+            auto resolved_param = func_sig->params[i];
+            if (!free_func_type_subs.empty()) {
+                resolved_param = types::substitute_type(resolved_param, free_func_type_subs);
+            }
+            if (resolved_param->is<types::RefType>()) {
                 param_takes_ownership = false;
                 param_is_ref = true;
             }
@@ -2402,8 +2469,13 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         std::string expected_type = actual_type; // Default to actual type from expression
 
         // If we have function signature from TypeEnv, use parameter type
+        // (with generic type substitution applied)
         if (func_sig.has_value() && i < func_sig->params.size()) {
-            expected_type = llvm_type_from_semantic(func_sig->params[i]);
+            auto resolved_param = func_sig->params[i];
+            if (!free_func_type_subs.empty()) {
+                resolved_param = types::substitute_type(resolved_param, free_func_type_subs);
+            }
+            expected_type = llvm_type_from_semantic(resolved_param);
         }
         // Otherwise, try to get parameter type from registered functions (codegen's FuncInfo)
         else if (func_it != functions_.end() && i < func_it->second.param_types.size()) {

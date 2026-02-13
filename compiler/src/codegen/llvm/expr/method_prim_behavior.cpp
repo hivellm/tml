@@ -240,6 +240,78 @@ auto LLVMIRGen::try_gen_primitive_behavior_method(
         }
     }
 
+    // Handle eq/ne/lt/le/gt/ge inline for numeric and Bool types - returns Bool (i1)
+    // These are the PartialEq and PartialOrd comparison methods
+    if ((method == "eq" || method == "ne" || method == "lt" || method == "le" || method == "gt" ||
+         method == "ge") &&
+        call.args.size() == 1) {
+        bool is_signed =
+            (prim.kind == types::PrimitiveKind::I8 || prim.kind == types::PrimitiveKind::I16 ||
+             prim.kind == types::PrimitiveKind::I32 || prim.kind == types::PrimitiveKind::I64 ||
+             prim.kind == types::PrimitiveKind::I128);
+        bool is_unsigned =
+            (prim.kind == types::PrimitiveKind::U8 || prim.kind == types::PrimitiveKind::U16 ||
+             prim.kind == types::PrimitiveKind::U32 || prim.kind == types::PrimitiveKind::U64 ||
+             prim.kind == types::PrimitiveKind::U128);
+        bool is_float =
+            (prim.kind == types::PrimitiveKind::F32 || prim.kind == types::PrimitiveKind::F64);
+        bool is_bool = (prim.kind == types::PrimitiveKind::Bool);
+
+        if (is_signed || is_unsigned || is_float || is_bool) {
+            // Load other value from ref
+            std::string other_ref = gen_expr(*call.args[0]);
+            std::string other = fresh_reg();
+            emit_line("  " + other + " = load " + llvm_ty + ", ptr " + other_ref);
+
+            // If receiver was originally a reference, load through the pointer
+            std::string receiver_val = receiver;
+            if (receiver_was_ref) {
+                receiver_val = fresh_reg();
+                emit_line("  " + receiver_val + " = load " + llvm_ty + ", ptr " + receiver);
+            }
+
+            std::string result = fresh_reg();
+            if (is_float) {
+                // Float comparisons use fcmp
+                std::string op;
+                if (method == "eq")
+                    op = "oeq";
+                else if (method == "ne")
+                    op = "une";
+                else if (method == "lt")
+                    op = "olt";
+                else if (method == "le")
+                    op = "ole";
+                else if (method == "gt")
+                    op = "ogt";
+                else
+                    op = "oge"; // ge
+                emit_line("  " + result + " = fcmp " + op + " " + llvm_ty + " " + receiver_val +
+                          ", " + other);
+            } else {
+                // Integer/Bool comparisons use icmp
+                std::string op;
+                if (method == "eq")
+                    op = "eq";
+                else if (method == "ne")
+                    op = "ne";
+                else if (method == "lt")
+                    op = is_signed ? "slt" : "ult";
+                else if (method == "le")
+                    op = is_signed ? "sle" : "ule";
+                else if (method == "gt")
+                    op = is_signed ? "sgt" : "ugt";
+                else
+                    op = is_signed ? "sge" : "uge"; // ge
+                emit_line("  " + result + " = icmp " + op + " " + llvm_ty + " " + receiver_val +
+                          ", " + other);
+            }
+
+            last_expr_type_ = "i1";
+            return result;
+        }
+    }
+
     // Look for impl methods on primitive types (e.g., impl PartialOrd for I64)
     std::string qualified_name = receiver_type_name + "::" + method;
     types::FuncSig func_sig_value;
@@ -301,6 +373,51 @@ auto LLVMIRGen::try_gen_primitive_behavior_method(
         std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
         if (method_it != functions_.end() && !method_it->second.ret_type.empty()) {
             ret_type = method_it->second.ret_type;
+        }
+
+        // WORKAROUND: Fix behavior methods on primitives returning void
+        // The metadata loader sometimes loses the return type for behavior impls
+        // Force correct return types for known behavior methods
+        if (ret_type == "void" || ret_type == "{}") {
+            if (method == "eq" || method == "ne") {
+                ret_type = "i1"; // Bool
+            } else if (method == "lt" || method == "le" || method == "gt" || method == "ge") {
+                ret_type = "i1"; // Bool
+            } else if (method == "is_zero" || method == "is_one") {
+                ret_type = "i1"; // Bool
+            } else if (method == "hash") {
+                ret_type = "i64"; // U64
+            } else if (method == "duplicate" || method == "clone") {
+                ret_type = recv_llvm_ty; // Self
+            } else if (method == "to_owned") {
+                ret_type = recv_llvm_ty; // Self
+            } else if (method == "to_string" || method == "debug_string") {
+                ret_type = "ptr"; // Str
+            } else if (method == "fmt_binary" || method == "fmt_octal" ||
+                       method == "fmt_lower_hex" || method == "fmt_upper_hex" ||
+                       method == "fmt_lower_exp" || method == "fmt_upper_exp") {
+                ret_type = "ptr"; // Str
+            } else if (method == "partial_cmp") {
+                // Maybe[Ordering]
+                auto ordering_type = std::make_shared<types::Type>();
+                ordering_type->kind = types::NamedType{"Ordering", "", {}};
+                std::vector<types::TypePtr> maybe_type_args = {ordering_type};
+                std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+                ret_type = "%struct." + maybe_mangled;
+            } else if (method == "checked_add" || method == "checked_sub" ||
+                       method == "checked_mul" || method == "checked_div" ||
+                       method == "checked_rem" || method == "checked_neg" ||
+                       method == "checked_shl" || method == "checked_shr") {
+                // Maybe[Self]
+                std::vector<types::TypePtr> maybe_type_args = {receiver_type};
+                std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+                ret_type = "%struct." + maybe_mangled;
+            } else if (method == "saturating_add" || method == "saturating_sub" ||
+                       method == "saturating_mul" || method == "wrapping_add" ||
+                       method == "wrapping_sub" || method == "wrapping_mul" ||
+                       method == "wrapping_neg") {
+                ret_type = recv_llvm_ty; // Self
+            }
         }
 
         std::string args_str;

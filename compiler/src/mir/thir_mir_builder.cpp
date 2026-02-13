@@ -1002,9 +1002,17 @@ auto ThirMirBuilder::build_await(const thir::ThirAwaitExpr& await_expr) -> Value
 }
 
 auto ThirMirBuilder::build_assign(const thir::ThirAssignExpr& assign) -> Value {
-    auto target = build_expr(assign.target);
     auto value = build_expr(assign.value);
 
+    // For simple variable targets, use SSA-style set_variable (no alloca/store)
+    if (assign.target->is<thir::ThirVarExpr>()) {
+        const auto& var = assign.target->as<thir::ThirVarExpr>();
+        set_variable(var.name, value);
+        return const_unit();
+    }
+
+    // For non-variable targets (field access, index, etc.), use memory store
+    auto target = build_expr(assign.target);
     StoreInst store;
     store.ptr = target;
     store.value = value;
@@ -1026,6 +1034,13 @@ auto ThirMirBuilder::build_compound_assign(const thir::ThirCompoundAssignExpr& a
         call.return_type = result_type;
         auto result = emit(std::move(call), result_type);
 
+        // For simple variable targets, use SSA-style set_variable
+        if (assign.target->is<thir::ThirVarExpr>()) {
+            const auto& var = assign.target->as<thir::ThirVarExpr>();
+            set_variable(var.name, result);
+            return const_unit();
+        }
+
         StoreInst store;
         store.ptr = target;
         store.value = result;
@@ -1034,10 +1049,28 @@ auto ThirMirBuilder::build_compound_assign(const thir::ThirCompoundAssignExpr& a
         return const_unit();
     }
 
-    auto target = build_expr(assign.target);
     auto value = build_expr(assign.value);
     auto op = convert_compound_op(assign.op);
     auto result_type = convert_type(assign.target->type());
+
+    // For simple variable targets, use SSA-style (no alloca/load/store)
+    if (assign.target->is<thir::ThirVarExpr>()) {
+        const auto& var = assign.target->as<thir::ThirVarExpr>();
+        auto current = get_variable(var.name);
+
+        BinaryInst bin;
+        bin.op = op;
+        bin.left = current;
+        bin.right = value;
+        bin.result_type = result_type;
+        auto result = emit(std::move(bin), result_type);
+
+        set_variable(var.name, result);
+        return const_unit();
+    }
+
+    // For non-variable targets (field access, index, etc.), use memory load/store
+    auto target = build_expr(assign.target);
 
     LoadInst load;
     load.ptr = target;

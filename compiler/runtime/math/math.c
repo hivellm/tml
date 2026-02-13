@@ -156,6 +156,122 @@ const char* f32_to_exp_string(float value, int32_t uppercase) {
     return f64_to_exp_string((double)value, uppercase);
 }
 
+// ============================================================================
+// Integer formatting functions (binary, octal, hex)
+// ============================================================================
+
+static char* fmt_alloc_copy(const char* src, int start, int end) {
+    int len = end - start;
+    char* buf = (char*)malloc(len + 1);
+    if (!buf)
+        return "";
+    memcpy(buf, src + start, len);
+    buf[len] = '\0';
+    return buf;
+}
+
+// i64_to_binary_str(value: I64) -> Str (binary with "0b" prefix)
+const char* i64_to_binary_str(int64_t value) {
+    if (value == 0) {
+        char* r = (char*)malloc(4);
+        if (!r)
+            return "";
+        r[0] = '0';
+        r[1] = 'b';
+        r[2] = '0';
+        r[3] = '\0';
+        return r;
+    }
+    uint64_t uval = (uint64_t)value;
+    char temp[67];
+    int pos = 66;
+    temp[pos] = '\0';
+    while (uval != 0 && pos > 2) {
+        temp[--pos] = (uval & 1) ? '1' : '0';
+        uval >>= 1;
+    }
+    temp[--pos] = 'b';
+    temp[--pos] = '0';
+    return fmt_alloc_copy(temp, pos, 67);
+}
+
+// i64_to_octal_str(value: I64) -> Str (octal with "0o" prefix)
+const char* i64_to_octal_str(int64_t value) {
+    if (value == 0) {
+        char* r = (char*)malloc(4);
+        if (!r)
+            return "";
+        r[0] = '0';
+        r[1] = 'o';
+        r[2] = '0';
+        r[3] = '\0';
+        return r;
+    }
+    uint64_t uval = (uint64_t)value;
+    char temp[25];
+    int pos = 24;
+    temp[pos] = '\0';
+    while (uval != 0 && pos > 2) {
+        temp[--pos] = '0' + (char)(uval & 7);
+        uval >>= 3;
+    }
+    temp[--pos] = 'o';
+    temp[--pos] = '0';
+    return fmt_alloc_copy(temp, pos, 25);
+}
+
+// i64_to_lower_hex_str(value: I64) -> Str (hex with "0x" prefix, lowercase)
+const char* i64_to_lower_hex_str(int64_t value) {
+    if (value == 0) {
+        char* r = (char*)malloc(4);
+        if (!r)
+            return "";
+        r[0] = '0';
+        r[1] = 'x';
+        r[2] = '0';
+        r[3] = '\0';
+        return r;
+    }
+    uint64_t uval = (uint64_t)value;
+    char temp[19];
+    int pos = 18;
+    temp[pos] = '\0';
+    const char* digits = "0123456789abcdef";
+    while (uval != 0 && pos > 2) {
+        temp[--pos] = digits[uval & 0xF];
+        uval >>= 4;
+    }
+    temp[--pos] = 'x';
+    temp[--pos] = '0';
+    return fmt_alloc_copy(temp, pos, 19);
+}
+
+// i64_to_upper_hex_str(value: I64) -> Str (hex with "0x" prefix, uppercase)
+const char* i64_to_upper_hex_str(int64_t value) {
+    if (value == 0) {
+        char* r = (char*)malloc(4);
+        if (!r)
+            return "";
+        r[0] = '0';
+        r[1] = 'x';
+        r[2] = '0';
+        r[3] = '\0';
+        return r;
+    }
+    uint64_t uval = (uint64_t)value;
+    char temp[19];
+    int pos = 18;
+    temp[pos] = '\0';
+    const char* digits = "0123456789ABCDEF";
+    while (uval != 0 && pos > 2) {
+        temp[--pos] = digits[uval & 0xF];
+        uval >>= 4;
+    }
+    temp[--pos] = 'x';
+    temp[--pos] = '0';
+    return fmt_alloc_copy(temp, pos, 19);
+}
+
 // f32_is_nan(value: F32) -> Bool
 int32_t f32_is_nan(float value) {
     return value != value ? 1 : 0;

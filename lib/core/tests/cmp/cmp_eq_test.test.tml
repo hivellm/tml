@@ -1,0 +1,112 @@
+// Tests for primitive .eq() method - coverage for I8::eq through Bool::eq
+use test
+
+@test
+func test_i8_eq() -> I32 {
+    let a: I8 = 10
+    let b: I8 = 10
+    assert(a.eq(ref b), "I8: 10.eq(10)")
+    let c: I8 = -5
+    assert(not a.eq(ref c), "I8: 10.eq(-5)")
+    return 0
+}
+
+@test
+func test_i16_eq() -> I32 {
+    let a: I16 = 300
+    let b: I16 = 300
+    assert(a.eq(ref b), "I16: 300.eq(300)")
+    let c: I16 = 0
+    assert(not a.eq(ref c), "I16: 300.eq(0)")
+    return 0
+}
+
+@test
+func test_i32_eq() -> I32 {
+    let a: I32 = 42
+    let b: I32 = 42
+    assert(a.eq(ref b), "I32: 42.eq(42)")
+    let c: I32 = 99
+    assert(not a.eq(ref c), "I32: 42.eq(99)")
+    return 0
+}
+
+@test
+func test_i64_eq() -> I32 {
+    let a: I64 = 100000
+    let b: I64 = 100000
+    assert(a.eq(ref b), "I64: 100000.eq(100000)")
+    let c: I64 = -1
+    assert(not a.eq(ref c), "I64: 100000.eq(-1)")
+    return 0
+}
+
+@test
+func test_u8_eq() -> I32 {
+    let a: U8 = 255
+    let b: U8 = 255
+    assert(a.eq(ref b), "U8: 255.eq(255)")
+    let c: U8 = 0
+    assert(not a.eq(ref c), "U8: 255.eq(0)")
+    return 0
+}
+
+@test
+func test_u16_eq() -> I32 {
+    let a: U16 = 1000
+    let b: U16 = 1000
+    assert(a.eq(ref b), "U16: 1000.eq(1000)")
+    let c: U16 = 999
+    assert(not a.eq(ref c), "U16: 1000.eq(999)")
+    return 0
+}
+
+@test
+func test_u32_eq() -> I32 {
+    let a: U32 = 50000
+    let b: U32 = 50000
+    assert(a.eq(ref b), "U32: 50000.eq(50000)")
+    let c: U32 = 1
+    assert(not a.eq(ref c), "U32: 50000.eq(1)")
+    return 0
+}
+
+@test
+func test_u64_eq() -> I32 {
+    let a: U64 = 9999999
+    let b: U64 = 9999999
+    assert(a.eq(ref b), "U64: eq same")
+    let c: U64 = 0
+    assert(not a.eq(ref c), "U64: eq diff")
+    return 0
+}
+
+@test
+func test_f32_eq() -> I32 {
+    let a: F32 = 3.14
+    let b: F32 = 3.14
+    assert(a.eq(ref b), "F32: 3.14.eq(3.14)")
+    let c: F32 = 2.71
+    assert(not a.eq(ref c), "F32: 3.14.eq(2.71)")
+    return 0
+}
+
+@test
+func test_f64_eq() -> I32 {
+    let a: F64 = 1.0
+    let b: F64 = 1.0
+    assert(a.eq(ref b), "F64: 1.0.eq(1.0)")
+    let c: F64 = 2.0
+    assert(not a.eq(ref c), "F64: 1.0.eq(2.0)")
+    return 0
+}
+
+@test
+func test_bool_eq() -> I32 {
+    let a: Bool = true
+    let b: Bool = true
+    assert(a.eq(ref b), "Bool: true.eq(true)")
+    let c: Bool = false
+    assert(not a.eq(ref c), "Bool: true.eq(false)")
+    return 0
+}
