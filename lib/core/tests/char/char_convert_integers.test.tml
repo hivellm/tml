@@ -1,0 +1,40 @@
+// Tests for core::char::convert — integer conversions, from_u8, try_to_u8/u16
+use test::{assert, assert_eq}
+use core::char::convert
+
+@test
+func test_to_u32() -> I32 {
+    let v = convert::to_u32('A')
+    assert_eq(v as I64, 65, "A should be 65")
+    return 0
+}
+
+@test
+func test_to_u64() -> I32 {
+    let v = convert::to_u64('Z')
+    assert_eq(v as I64, 90, "Z should be 90")
+    return 0
+}
+
+@test
+func test_from_u8() -> I32 {
+    let ch = convert::from_u8(97 as U8)
+    assert_eq(ch as I32, 97, "from_u8(97) should be 'a'")
+    return 0
+}
+
+@test
+func test_try_to_u8_valid() -> I32 {
+    let result = convert::try_to_u8('A')
+    assert(result.is_ok(), "A should fit in U8")
+    assert_eq(result.unwrap() as I32, 65, "A as U8 should be 65")
+    return 0
+}
+
+@test
+func test_try_to_u16_valid() -> I32 {
+    let result = convert::try_to_u16('A')
+    assert(result.is_ok(), "A should fit in U16")
+    assert_eq(result.unwrap() as I32, 65, "A as U16 should be 65")
+    return 0
+}

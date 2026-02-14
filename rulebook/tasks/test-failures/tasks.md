@@ -8,8 +8,8 @@
 
 This task tracks all compiler and runtime bugs discovered during test coverage work. These bugs prevent tests from compiling or running correctly. As new failures are found, they should be added here.
 
-**Last updated**: 2026-02-13 (coverage at 50.3%, 2088/4153 functions)
-**Tests executed**: 6,551+ tests across 486+ test files — **0 failures**
+**Last updated**: 2026-02-14 (coverage at 51.2%, 2125/4153 functions)
+**Tests executed**: 6,778 tests across 514 test files — **0 failures**
 
 **See also**: [modules-without-tests.md](./modules-without-tests.md) - Complete list of implemented modules without tests
 
@@ -123,6 +123,9 @@ This task tracks all compiler and runtime bugs discovered during test coverage w
 ## Phase 10: Slice and Array Creation
 
 - [ ] 10.1 Fix `Slice::from_array` returning `()` instead of `Slice[U8]` (needs test — note: bstr.test.tml 6/6 passes using manual Slice construction)
+- [ ] 10.2 Fix `Slice[T].split_at()` — tuple return from generic method causes LLVM type mismatch
+- [ ] 10.3 Fix `Slice[T].binary_search()` — `Outcome[I64, I64]` return from generic method causes codegen error
+- [ ] 10.4 Fix `Slice[T].sort()` — private method resolution fails in generic impl (sort uses partition/swap internally)
 
 ## Phase 11: Generic Option/Result Codegen
 
@@ -135,3 +138,8 @@ This task tracks all compiler and runtime bugs discovered during test coverage w
 - [x] 12.1 Fix external module method linking for `std::types::Object` (DONE 2026-02-13 — object.test.tml 7/7 passed including inheritance, virtual dispatch, reference_equals)
 - [ ] 12.2 Fix `unicode_data::UNICODE_VERSION` constant not found (needs test)
 - [ ] 12.3 Fix external inheritance for exception subclasses (needs test — note: in-file exception subclasses work, see 6f.1)
+- [ ] 12.4 Fix const-generic impl method resolution — `impl[const N: I64] Array[U8, N]` methods (e.g. `is_ascii()`) fail with "Unknown method" at codegen
+
+## Phase 13: Test Runner Performance
+
+- [x] 13.1 Fix test runner 100% CPU saturation — thread explosion from nested parallelism (DONE 2026-02-14 — capped concurrent suite compilations to 2 in suite_execution.cpp)

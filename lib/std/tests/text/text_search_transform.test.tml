@@ -1,0 +1,101 @@
+// Tests for std::text — search and transformation methods
+use test::{assert, assert_eq}
+use std::text::Text
+
+@test
+func test_text_index_of() -> I32 {
+    let t = Text::from("hello world")
+    assert_eq(t.index_of("world"), 6, "index_of 'world' should be 6")
+    assert_eq(t.index_of("xyz"), -1, "index_of missing should be -1")
+    return 0
+}
+
+@test
+func test_text_starts_with() -> I32 {
+    let t = Text::from("hello world")
+    assert(t.starts_with("hello"), "should start with hello")
+    assert(not t.starts_with("world"), "should not start with world")
+    return 0
+}
+
+@test
+func test_text_ends_with() -> I32 {
+    let t = Text::from("hello world")
+    assert(t.ends_with("world"), "should end with world")
+    assert(not t.ends_with("hello"), "should not end with hello")
+    return 0
+}
+
+@test
+func test_text_contains() -> I32 {
+    let t = Text::from("hello world")
+    assert(t.contains("lo wo"), "should contain 'lo wo'")
+    assert(not t.contains("xyz"), "should not contain 'xyz'")
+    return 0
+}
+
+@test
+func test_text_to_upper_case() -> I32 {
+    let t = Text::from("hello")
+    let u = t.to_upper_case()
+    assert_eq(u.as_str(), "HELLO", "to_upper_case should uppercase")
+    return 0
+}
+
+@test
+func test_text_to_lower_case() -> I32 {
+    let t = Text::from("HELLO")
+    let l = t.to_lower_case()
+    assert_eq(l.as_str(), "hello", "to_lower_case should lowercase")
+    return 0
+}
+
+@test
+func test_text_trim() -> I32 {
+    let t = Text::from("  hello  ")
+    let trimmed = t.trim()
+    assert_eq(trimmed.as_str(), "hello", "trim should remove whitespace")
+    return 0
+}
+
+@test
+func test_text_substring() -> I32 {
+    let t = Text::from("hello world")
+    let sub = t.substring(0, 5)
+    assert_eq(sub.as_str(), "hello", "substring(0,5) should be hello")
+    return 0
+}
+
+@test
+func test_text_repeat() -> I32 {
+    let t = Text::from("ab")
+    let r = t.repeat(3)
+    assert_eq(r.as_str(), "ababab", "repeat(3) should triple")
+    return 0
+}
+
+@test
+func test_text_replace_all() -> I32 {
+    let t = Text::from("aXbXc")
+    let r = t.replace_all("X", "-")
+    assert_eq(r.as_str(), "a-b-c", "replace_all should replace all")
+    return 0
+}
+
+@test
+func test_text_reverse() -> I32 {
+    let t = Text::from("abc")
+    let r = t.reverse()
+    assert_eq(r.as_str(), "cba", "reverse should reverse")
+    return 0
+}
+
+@test
+func test_text_equals() -> I32 {
+    let a = Text::from("hello")
+    let b = Text::from("hello")
+    let c = Text::from("world")
+    assert(a.equals(ref b), "same content should be equal")
+    assert(not a.equals(ref c), "different content should not be equal")
+    return 0
+}

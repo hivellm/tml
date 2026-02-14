@@ -1,0 +1,47 @@
+// Tests for core::str — string transformation functions
+use test::{assert, assert_eq}
+
+@test
+func test_str_to_uppercase() -> I32 {
+    assert_eq("hello".to_uppercase(), "HELLO", "to_uppercase")
+    assert_eq("Hello World".to_uppercase(), "HELLO WORLD", "mixed case")
+    return 0
+}
+
+@test
+func test_str_to_lowercase() -> I32 {
+    assert_eq("HELLO".to_lowercase(), "hello", "to_lowercase")
+    assert_eq("Hello World".to_lowercase(), "hello world", "mixed case")
+    return 0
+}
+
+@test
+func test_str_trim() -> I32 {
+    assert_eq("  hello  ".trim(), "hello", "trim whitespace")
+    assert_eq("hello".trim(), "hello", "trim no-op")
+    return 0
+}
+
+@test
+func test_str_trim_start() -> I32 {
+    assert_eq("  hello  ".trim_start(), "hello  ", "trim_start")
+    return 0
+}
+
+@test
+func test_str_trim_end() -> I32 {
+    assert_eq("  hello  ".trim_end(), "  hello", "trim_end")
+    return 0
+}
+
+@test
+func test_str_replace() -> I32 {
+    assert_eq("hello world".replace("world", "TML"), "hello TML", "replace")
+    return 0
+}
+
+@test
+func test_str_slice_str() -> I32 {
+    assert_eq("hello world".slice_str(0, 5), "hello", "slice_str(0,5)")
+    return 0
+}

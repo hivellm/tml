@@ -1,0 +1,76 @@
+// Tests for core::default::Default — primitive type defaults
+use test::{assert, assert_eq}
+use core::default::Default
+
+@test
+func test_default_i8() -> I32 {
+    let v: I8 = I8::default()
+    assert_eq(v as I32, 0, "I8::default should be 0")
+    return 0
+}
+
+@test
+func test_default_i16() -> I32 {
+    let v: I16 = I16::default()
+    assert_eq(v as I32, 0, "I16::default should be 0")
+    return 0
+}
+
+@test
+func test_default_i32() -> I32 {
+    let v: I32 = I32::default()
+    assert_eq(v, 0, "I32::default should be 0")
+    return 0
+}
+
+@test
+func test_default_i64() -> I32 {
+    let v: I64 = I64::default()
+    assert_eq(v as I32, 0, "I64::default should be 0")
+    return 0
+}
+
+@test
+func test_default_u8() -> I32 {
+    let v: U8 = U8::default()
+    assert_eq(v as I32, 0, "U8::default should be 0")
+    return 0
+}
+
+@test
+func test_default_u16() -> I32 {
+    let v: U16 = U16::default()
+    assert_eq(v as I32, 0, "U16::default should be 0")
+    return 0
+}
+
+@test
+func test_default_u32() -> I32 {
+    let v: U32 = U32::default()
+    assert_eq(v as I32, 0, "U32::default should be 0")
+    return 0
+}
+
+@test
+func test_default_u64() -> I32 {
+    let v: U64 = U64::default()
+    assert_eq(v as I32, 0, "U64::default should be 0")
+    return 0
+}
+
+@test
+func test_default_bool() -> I32 {
+    let v: Bool = Bool::default()
+    assert(not v, "Bool::default should be false")
+    return 0
+}
+
+@test
+func test_default_str() -> I32 {
+    let v: Str = Str::default()
+    assert_eq(v, "", "Str::default should be empty string")
+    return 0
+}
+
+// NOTE: Maybe::default() causes generic enum codegen bug (Maybe__T vs Maybe__I32)
+// Tracked in tasks.md Phase 11

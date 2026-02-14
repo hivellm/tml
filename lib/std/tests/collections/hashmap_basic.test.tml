@@ -1,0 +1,65 @@
+// Tests for std::collections::hashmap — basic HashMap operations
+use test::{assert, assert_eq}
+use std::collections::hashmap::HashMap
+
+@test
+func test_hashmap_new() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+    assert_eq(map.len(), 0, "new map should be empty")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_set_get() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+    map.set("hello", 42)
+    assert_eq(map.get("hello"), 42, "get hello should be 42")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_has() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+    map.set("key", 1)
+    assert(map.has("key"), "should have key")
+    assert(not map.has("missing"), "should not have missing")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_len() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+    assert_eq(map.len(), 0, "initially empty")
+    map.set("a", 1)
+    assert_eq(map.len(), 1, "len after one insert")
+    map.set("b", 2)
+    assert_eq(map.len(), 2, "len after two inserts")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_remove() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+    map.set("x", 10)
+    assert(map.has("x"), "has x before remove")
+    let removed = map.remove("x")
+    assert(removed, "remove should return true")
+    assert(not map.has("x"), "should not have x after remove")
+    map.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_clear() -> I32 {
+    let map = HashMap::new[Str, I64](16)
+    map.set("a", 1)
+    map.set("b", 2)
+    map.clear()
+    assert_eq(map.len(), 0, "len after clear")
+    map.destroy()
+    return 0
+}

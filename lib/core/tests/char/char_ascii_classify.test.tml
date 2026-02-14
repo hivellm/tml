@@ -1,0 +1,30 @@
+// Tests for core::char::methods — ASCII classification functions
+use test::{assert, assert_eq}
+use core::char::methods
+
+@test
+func test_is_alphabetic() -> I32 {
+    assert(methods::is_alphabetic('A'), "A is alphabetic")
+    assert(methods::is_alphabetic('z'), "z is alphabetic")
+    assert(not methods::is_alphabetic('1'), "1 is not alphabetic")
+    assert(not methods::is_alphabetic(' '), "space is not alphabetic")
+    return 0
+}
+
+@test
+func test_is_lowercase() -> I32 {
+    assert(methods::is_lowercase('a'), "a is lowercase")
+    assert(methods::is_lowercase('z'), "z is lowercase")
+    assert(not methods::is_lowercase('A'), "A is not lowercase")
+    assert(not methods::is_lowercase('5'), "5 is not lowercase")
+    return 0
+}
+
+@test
+func test_is_uppercase() -> I32 {
+    assert(methods::is_uppercase('A'), "A is uppercase")
+    assert(methods::is_uppercase('Z'), "Z is uppercase")
+    assert(not methods::is_uppercase('a'), "a is not uppercase")
+    assert(not methods::is_uppercase('3'), "3 is not uppercase")
+    return 0
+}

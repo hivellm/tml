@@ -13,7 +13,7 @@
 //! - Certificate chain verification
 //! - Access certificate fields (subject, issuer, extensions)
 
-use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::error::{CryptoError, CryptoResult}
 use std::crypto::key::{PublicKey, KeyType}
 use std::collections::{Buffer, List}
 

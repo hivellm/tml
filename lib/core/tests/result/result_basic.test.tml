@@ -1,0 +1,46 @@
+// Tests for core::result — Outcome[T, E] basic methods
+use test::{assert, assert_eq}
+
+@test
+func test_outcome_is_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    assert(x.is_ok(), "Ok should be ok")
+    assert(not x.is_err(), "Ok should not be err")
+    return 0
+}
+
+@test
+func test_outcome_is_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    assert(x.is_err(), "Err should be err")
+    assert(not x.is_ok(), "Err should not be ok")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(99)
+    assert_eq(x.unwrap(), 99, "unwrap Ok should return value")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_or_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(10)
+    assert_eq(x.unwrap_or(0), 10, "unwrap_or Ok returns value")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_or_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    assert_eq(x.unwrap_or(42), 42, "unwrap_or Err returns default")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("bad")
+    assert_eq(x.unwrap_err(), "bad", "unwrap_err should return error")
+    return 0
+}

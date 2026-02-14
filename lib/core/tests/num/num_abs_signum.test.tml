@@ -1,0 +1,58 @@
+// Tests for core::num — abs, signum, pow functions
+use test::{assert, assert_eq}
+use core::num
+
+@test
+func test_abs_i32_positive() -> I32 {
+    assert_eq(num::abs_i32(42), 42, "abs of 42")
+    return 0
+}
+
+@test
+func test_abs_i32_negative() -> I32 {
+    assert_eq(num::abs_i32(-42), 42, "abs of -42")
+    return 0
+}
+
+@test
+func test_abs_i32_zero() -> I32 {
+    assert_eq(num::abs_i32(0), 0, "abs of 0")
+    return 0
+}
+
+@test
+func test_signum_i32() -> I32 {
+    assert_eq(num::signum_i32(10), 1, "signum positive")
+    assert_eq(num::signum_i32(-10), -1, "signum negative")
+    assert_eq(num::signum_i32(0), 0, "signum zero")
+    return 0
+}
+
+@test
+func test_pow_i32() -> I32 {
+    assert_eq(num::pow_i32(2, 10), 1024, "2^10")
+    assert_eq(num::pow_i32(3, 3), 27, "3^3")
+    assert_eq(num::pow_i32(5, 0), 1, "5^0")
+    return 0
+}
+
+@test
+func test_abs_i64() -> I32 {
+    assert_eq(num::abs_i64(-100), 100, "abs_i64 -100")
+    assert_eq(num::abs_i64(100), 100, "abs_i64 100")
+    return 0
+}
+
+@test
+func test_signum_i64() -> I32 {
+    assert_eq(num::signum_i64(99), 1, "signum_i64 positive")
+    assert_eq(num::signum_i64(0), 0, "signum_i64 zero")
+    return 0
+}
+
+@test
+func test_pow_i64() -> I32 {
+    assert_eq(num::pow_i64(2, 20), 1048576, "2^20")
+    assert_eq(num::pow_i64(10, 0), 1, "10^0")
+    return 0
+}

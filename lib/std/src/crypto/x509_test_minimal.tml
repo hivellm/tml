@@ -1,4 +1,4 @@
-use std::crypto::error::{CryptoError, CryptoErrorKind}
+use std::crypto::error::{CryptoError}
 use std::crypto::key::{PublicKey, KeyType}
 use std::collections::{Buffer, List}
 
@@ -19,7 +19,7 @@ impl X509CertMin {
     pub func from_pem(pem: Str) -> Outcome[X509CertMin, CryptoError] {
         let handle: *Unit = ffi_crypto_x509_from_pem(pem)
         if handle == null {
-            return Err(CryptoError::from_kind(CryptoErrorKind::CertificateParseError))
+            return Err(CryptoError::operation_failed("certificate parsing failed"))
         }
         return Ok(X509CertMin { handle: handle })
     }

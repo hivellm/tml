@@ -1,0 +1,45 @@
+// Tests for core::num — I32 methods (abs, signum, is_positive, is_negative, pow)
+use test::{assert, assert_eq}
+
+@test
+func test_i32_abs() -> I32 {
+    let v: I32 = -5
+    assert_eq(v.abs(), 5, "abs of -5")
+    let w: I32 = 10
+    assert_eq(w.abs(), 10, "abs of 10")
+    return 0
+}
+
+@test
+func test_i32_signum() -> I32 {
+    let pos: I32 = 42
+    assert_eq(pos.signum(), 1, "signum of 42")
+    let zero: I32 = 0
+    assert_eq(zero.signum(), 0, "signum of 0")
+    return 0
+}
+
+@test
+func test_i32_is_positive() -> I32 {
+    let v: I32 = 5
+    assert(v.is_positive(), "5 is positive")
+    let z: I32 = 0
+    assert(not z.is_positive(), "0 is not positive")
+    return 0
+}
+
+@test
+func test_i32_is_negative() -> I32 {
+    let v: I32 = -5
+    assert(v.is_negative(), "-5 is negative")
+    let z: I32 = 0
+    assert(not z.is_negative(), "0 is not negative")
+    return 0
+}
+
+@test
+func test_i32_pow() -> I32 {
+    let v: I32 = 2
+    assert_eq(v.pow(8), 256, "2^8 = 256")
+    return 0
+}

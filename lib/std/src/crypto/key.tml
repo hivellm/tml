@@ -67,8 +67,148 @@
 //! let der_bytes = private_key.to_der()
 //! ```
 
-use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::error::{CryptoError, CryptoResult}
 use std::collections::Buffer
+
+// ============================================================================
+// FFI declarations for C runtime functions
+// ============================================================================
+
+// SecretKey operations
+@extern("crypto_secret_key_create")
+func ffi_secret_key_create(handle: *Unit) -> *Unit
+
+@extern("crypto_secret_key_export")
+func ffi_secret_key_export(handle: *Unit) -> *Unit
+
+@extern("crypto_secret_key_destroy")
+func ffi_secret_key_destroy(handle: *Unit)
+
+@extern("crypto_generate_secret_key")
+func ffi_generate_secret_key(size: I64) -> *Unit
+
+// PrivateKey operations
+@extern("crypto_private_key_from_pem")
+func ffi_private_key_from_pem(pem: Str) -> *Unit
+
+@extern("crypto_private_key_from_pem_encrypted")
+func ffi_private_key_from_pem_encrypted(pem: Str, passphrase: Str) -> *Unit
+
+@extern("crypto_private_key_from_der")
+func ffi_private_key_from_der(buffer_handle: *Unit) -> *Unit
+
+@extern("crypto_private_key_from_jwk")
+func ffi_private_key_from_jwk(jwk: Str) -> *Unit
+
+@extern("crypto_private_key_to_pem")
+func ffi_private_key_to_pem(handle: *Unit) -> Str
+
+@extern("crypto_private_key_to_pem_encrypted")
+func ffi_private_key_to_pem_encrypted(handle: *Unit, passphrase: Str, cipher: Str) -> Str
+
+@extern("crypto_private_key_to_der")
+func ffi_private_key_to_der(handle: *Unit) -> *Unit
+
+@extern("crypto_private_key_to_jwk")
+func ffi_private_key_to_jwk(handle: *Unit) -> Str
+
+@extern("crypto_private_key_get_public")
+func ffi_private_key_get_public(handle: *Unit) -> *Unit
+
+@extern("crypto_private_key_destroy")
+func ffi_private_key_destroy(handle: *Unit)
+
+// PublicKey operations
+@extern("crypto_public_key_from_pem")
+func ffi_public_key_from_pem(pem: Str) -> *Unit
+
+@extern("crypto_public_key_from_der")
+func ffi_public_key_from_der(buffer_handle: *Unit) -> *Unit
+
+@extern("crypto_public_key_from_jwk")
+func ffi_public_key_from_jwk(jwk: Str) -> *Unit
+
+@extern("crypto_public_key_to_pem")
+func ffi_public_key_to_pem(handle: *Unit) -> Str
+
+@extern("crypto_public_key_to_der")
+func ffi_public_key_to_der(handle: *Unit) -> *Unit
+
+@extern("crypto_public_key_to_jwk")
+func ffi_public_key_to_jwk(handle: *Unit) -> Str
+
+@extern("crypto_public_key_destroy")
+func ffi_public_key_destroy(handle: *Unit)
+
+// Key metadata
+@extern("crypto_key_get_type")
+func ffi_key_get_type(handle: *Unit) -> Str
+
+@extern("crypto_key_size_bits")
+func ffi_key_size_bits(handle: *Unit) -> I64
+
+@extern("crypto_key_equals")
+func ffi_key_equals(handle1: *Unit, handle2: *Unit) -> Bool
+
+@extern("crypto_rsa_get_modulus_length")
+func ffi_rsa_get_modulus_length(handle: *Unit) -> I64
+
+@extern("crypto_rsa_get_public_exponent")
+func ffi_rsa_get_public_exponent(handle: *Unit) -> I64
+
+@extern("crypto_ec_get_curve_name")
+func ffi_ec_get_curve_name(handle: *Unit) -> Str
+
+@extern("crypto_jwk_extract_k")
+func ffi_jwk_extract_k(jwk: Str) -> Str
+
+// Key generation
+@extern("crypto_generate_rsa_key")
+func ffi_generate_rsa_key(bits: I64, exponent: I64) -> *Unit
+
+@extern("crypto_generate_rsa_pss_key")
+func ffi_generate_rsa_pss_key(bits: I64, exponent: I64) -> *Unit
+
+@extern("crypto_generate_dsa_key")
+func ffi_generate_dsa_key(bits: I64) -> *Unit
+
+@extern("crypto_generate_ec_key")
+func ffi_generate_ec_key(curve_name: Str) -> *Unit
+
+@extern("crypto_generate_ed25519_key")
+func ffi_generate_ed25519_key() -> *Unit
+
+@extern("crypto_generate_ed448_key")
+func ffi_generate_ed448_key() -> *Unit
+
+@extern("crypto_generate_x25519_key")
+func ffi_generate_x25519_key() -> *Unit
+
+@extern("crypto_generate_x448_key")
+func ffi_generate_x448_key() -> *Unit
+
+@extern("crypto_generate_dh_key")
+func ffi_generate_dh_key(bits: I64) -> *Unit
+
+// Conversion helpers
+@extern("crypto_base64_to_bytes")
+func ffi_base64_to_bytes(b64: Str) -> *Unit
+
+@extern("crypto_hex_to_bytes")
+func ffi_hex_to_bytes(hex: Str) -> *Unit
+
+@extern("crypto_str_to_bytes")
+func ffi_str_to_bytes(s: Str) -> *Unit
+
+@extern("crypto_bytes_to_base64")
+func ffi_bytes_to_base64(handle: *Unit) -> Str
+
+@extern("crypto_bytes_to_hex")
+func ffi_bytes_to_hex(handle: *Unit) -> Str
+
+// ============================================================================
+// Type definitions
+// ============================================================================
 
 /// Key types for asymmetric cryptography.
 pub type KeyType {
@@ -201,29 +341,29 @@ pub type SecretKey {
 impl SecretKey {
     /// Creates a SecretKey from raw bytes.
     pub func from_bytes(data: ref Buffer) -> SecretKey {
-        let handle: *Unit = lowlevel { crypto_secret_key_create(data.handle) }
+        let handle: *Unit = ffi_secret_key_create(data.handle)
         return SecretKey { handle: handle, size: data.len() }
     }
 
     /// Creates a SecretKey from a base64 string.
     pub func from_base64(b64: Str) -> CryptoResult[SecretKey] {
-        let data_handle: *Unit = lowlevel { crypto_base64_to_bytes(b64) }
+        let data_handle: *Unit = ffi_base64_to_bytes(b64)
         if data_handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid base64"))
+            return Err(CryptoError::invalid_key("invalid base64"))
         }
         let data = Buffer { handle: data_handle }
-        let handle: *Unit = lowlevel { crypto_secret_key_create(data.handle) }
+        let handle: *Unit = ffi_secret_key_create(data.handle)
         return Ok(SecretKey { handle: handle, size: data.len() })
     }
 
     /// Creates a SecretKey from a hex string.
     pub func from_hex(hex: Str) -> CryptoResult[SecretKey] {
-        let data_handle: *Unit = lowlevel { crypto_hex_to_bytes(hex) }
+        let data_handle: *Unit = ffi_hex_to_bytes(hex)
         if data_handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid hex"))
+            return Err(CryptoError::invalid_key("invalid hex"))
         }
         let data = Buffer { handle: data_handle }
-        let handle: *Unit = lowlevel { crypto_secret_key_create(data.handle) }
+        let handle: *Unit = ffi_secret_key_create(data.handle)
         return Ok(SecretKey { handle: handle, size: data.len() })
     }
 
@@ -239,28 +379,28 @@ impl SecretKey {
 
     /// Exports the key as raw bytes.
     pub func to_bytes(this) -> Buffer {
-        let handle: *Unit = lowlevel { crypto_secret_key_export(this.handle) }
+        let handle: *Unit = ffi_secret_key_export(this.handle)
         return Buffer { handle: handle }
     }
 
     /// Exports the key as base64.
     pub func to_base64(this) -> Str {
         let bytes = this.to_bytes()
-        let b64: Str = lowlevel { crypto_bytes_to_base64(bytes.handle) }
+        let b64: Str = ffi_bytes_to_base64(bytes.handle)
         return b64
     }
 
     /// Exports the key as hex.
     pub func to_hex(this) -> Str {
         let bytes = this.to_bytes()
-        let hex: Str = lowlevel { crypto_bytes_to_hex(bytes.handle) }
+        let hex: Str = ffi_bytes_to_hex(bytes.handle)
         return hex
     }
 
     /// Frees the key resources (securely zeroes memory).
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { crypto_secret_key_destroy(this.handle) }
+            ffi_secret_key_destroy(this.handle)
             this.handle = null
         }
     }
@@ -275,44 +415,44 @@ pub type PrivateKey {
 impl PrivateKey {
     /// Creates a PrivateKey from PEM format.
     pub func from_pem(pem: Str) -> CryptoResult[PrivateKey] {
-        let handle: *Unit = lowlevel { crypto_private_key_from_pem(pem) }
+        let handle: *Unit = ffi_private_key_from_pem(pem)
         if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid PEM private key"))
+            return Err(CryptoError::invalid_key("invalid PEM private key"))
         }
-        let key_type_str: Str = lowlevel { crypto_key_get_type(handle) }
+        let key_type_str: Str = ffi_key_get_type(handle)
         let key_type = KeyType::from_name(key_type_str).unwrap_or(KeyType::Rsa)
         return Ok(PrivateKey { handle: handle, key_type: key_type })
     }
 
     /// Creates a PrivateKey from PEM format with passphrase.
     pub func from_pem_encrypted(pem: Str, passphrase: Str) -> CryptoResult[PrivateKey] {
-        let handle: *Unit = lowlevel { crypto_private_key_from_pem_encrypted(pem, passphrase) }
+        let handle: *Unit = ffi_private_key_from_pem_encrypted(pem, passphrase)
         if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid encrypted PEM or wrong passphrase"))
+            return Err(CryptoError::invalid_key("invalid encrypted PEM or wrong passphrase"))
         }
-        let key_type_str: Str = lowlevel { crypto_key_get_type(handle) }
+        let key_type_str: Str = ffi_key_get_type(handle)
         let key_type = KeyType::from_name(key_type_str).unwrap_or(KeyType::Rsa)
         return Ok(PrivateKey { handle: handle, key_type: key_type })
     }
 
     /// Creates a PrivateKey from DER format.
     pub func from_der(der: ref Buffer) -> CryptoResult[PrivateKey] {
-        let handle: *Unit = lowlevel { crypto_private_key_from_der(der.handle) }
+        let handle: *Unit = ffi_private_key_from_der(der.handle)
         if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid DER private key"))
+            return Err(CryptoError::invalid_key("invalid DER private key"))
         }
-        let key_type_str: Str = lowlevel { crypto_key_get_type(handle) }
+        let key_type_str: Str = ffi_key_get_type(handle)
         let key_type = KeyType::from_name(key_type_str).unwrap_or(KeyType::Rsa)
         return Ok(PrivateKey { handle: handle, key_type: key_type })
     }
 
     /// Creates a PrivateKey from JWK format.
     pub func from_jwk(jwk: Str) -> CryptoResult[PrivateKey] {
-        let handle: *Unit = lowlevel { crypto_private_key_from_jwk(jwk) }
+        let handle: *Unit = ffi_private_key_from_jwk(jwk)
         if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid JWK private key"))
+            return Err(CryptoError::invalid_key("invalid JWK private key"))
         }
-        let key_type_str: Str = lowlevel { crypto_key_get_type(handle) }
+        let key_type_str: Str = ffi_key_get_type(handle)
         let key_type = KeyType::from_name(key_type_str).unwrap_or(KeyType::Rsa)
         return Ok(PrivateKey { handle: handle, key_type: key_type })
     }
@@ -324,37 +464,37 @@ impl PrivateKey {
 
     /// Returns the key size in bits.
     pub func size_bits(this) -> I64 {
-        let size: I64 = lowlevel { crypto_key_size_bits(this.handle) }
+        let size: I64 = ffi_key_size_bits(this.handle)
         return size
     }
 
     /// Exports the key to PEM format.
     pub func to_pem(this) -> Str {
-        let pem: Str = lowlevel { crypto_private_key_to_pem(this.handle) }
+        let pem: Str = ffi_private_key_to_pem(this.handle)
         return pem
     }
 
     /// Exports the key to encrypted PEM format.
     pub func to_pem_encrypted(this, passphrase: Str, cipher: Str) -> Str {
-        let pem: Str = lowlevel { crypto_private_key_to_pem_encrypted(this.handle, passphrase, cipher) }
+        let pem: Str = ffi_private_key_to_pem_encrypted(this.handle, passphrase, cipher)
         return pem
     }
 
     /// Exports the key to DER format.
     pub func to_der(this) -> Buffer {
-        let handle: *Unit = lowlevel { crypto_private_key_to_der(this.handle) }
+        let handle: *Unit = ffi_private_key_to_der(this.handle)
         return Buffer { handle: handle }
     }
 
     /// Exports the key to JWK format.
     pub func to_jwk(this) -> Str {
-        let jwk: Str = lowlevel { crypto_private_key_to_jwk(this.handle) }
+        let jwk: Str = ffi_private_key_to_jwk(this.handle)
         return jwk
     }
 
     /// Derives the public key from this private key.
     pub func public_key(this) -> PublicKey {
-        let handle: *Unit = lowlevel { crypto_private_key_get_public(this.handle) }
+        let handle: *Unit = ffi_private_key_get_public(this.handle)
         return PublicKey { handle: handle, key_type: this.key_type }
     }
 
@@ -363,8 +503,8 @@ impl PrivateKey {
         if not this.key_type.is_rsa() {
             return Nothing
         }
-        let modulus_length: I64 = lowlevel { crypto_rsa_get_modulus_length(this.handle) }
-        let public_exponent: I64 = lowlevel { crypto_rsa_get_public_exponent(this.handle) }
+        let modulus_length: I64 = ffi_rsa_get_modulus_length(this.handle)
+        let public_exponent: I64 = ffi_rsa_get_public_exponent(this.handle)
         return Just(RsaKeyDetails {
             modulus_length: modulus_length,
             public_exponent: public_exponent,
@@ -376,20 +516,20 @@ impl PrivateKey {
         if not this.key_type.is_ec() {
             return Nothing
         }
-        let curve: Str = lowlevel { crypto_ec_get_curve_name(this.handle) }
+        let curve: Str = ffi_ec_get_curve_name(this.handle)
         return Just(EcKeyDetails { named_curve: curve })
     }
 
     /// Compares two private keys for equality.
     pub func equals(this, other: ref PrivateKey) -> Bool {
-        let result: Bool = lowlevel { crypto_key_equals(this.handle, other.handle) }
+        let result: Bool = ffi_key_equals(this.handle, other.handle)
         return result
     }
 
     /// Frees the key resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { crypto_private_key_destroy(this.handle) }
+            ffi_private_key_destroy(this.handle)
             this.handle = null
         }
     }
@@ -404,33 +544,33 @@ pub type PublicKey {
 impl PublicKey {
     /// Creates a PublicKey from PEM format.
     pub func from_pem(pem: Str) -> CryptoResult[PublicKey] {
-        let handle: *Unit = lowlevel { crypto_public_key_from_pem(pem) }
+        let handle: *Unit = ffi_public_key_from_pem(pem)
         if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid PEM public key"))
+            return Err(CryptoError::invalid_key("invalid PEM public key"))
         }
-        let key_type_str: Str = lowlevel { crypto_key_get_type(handle) }
+        let key_type_str: Str = ffi_key_get_type(handle)
         let key_type = KeyType::from_name(key_type_str).unwrap_or(KeyType::Rsa)
         return Ok(PublicKey { handle: handle, key_type: key_type })
     }
 
     /// Creates a PublicKey from DER format.
     pub func from_der(der: ref Buffer) -> CryptoResult[PublicKey] {
-        let handle: *Unit = lowlevel { crypto_public_key_from_der(der.handle) }
+        let handle: *Unit = ffi_public_key_from_der(der.handle)
         if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid DER public key"))
+            return Err(CryptoError::invalid_key("invalid DER public key"))
         }
-        let key_type_str: Str = lowlevel { crypto_key_get_type(handle) }
+        let key_type_str: Str = ffi_key_get_type(handle)
         let key_type = KeyType::from_name(key_type_str).unwrap_or(KeyType::Rsa)
         return Ok(PublicKey { handle: handle, key_type: key_type })
     }
 
     /// Creates a PublicKey from JWK format.
     pub func from_jwk(jwk: Str) -> CryptoResult[PublicKey] {
-        let handle: *Unit = lowlevel { crypto_public_key_from_jwk(jwk) }
+        let handle: *Unit = ffi_public_key_from_jwk(jwk)
         if handle == null {
-            return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid JWK public key"))
+            return Err(CryptoError::invalid_key("invalid JWK public key"))
         }
-        let key_type_str: Str = lowlevel { crypto_key_get_type(handle) }
+        let key_type_str: Str = ffi_key_get_type(handle)
         let key_type = KeyType::from_name(key_type_str).unwrap_or(KeyType::Rsa)
         return Ok(PublicKey { handle: handle, key_type: key_type })
     }
@@ -442,25 +582,25 @@ impl PublicKey {
 
     /// Returns the key size in bits.
     pub func size_bits(this) -> I64 {
-        let size: I64 = lowlevel { crypto_key_size_bits(this.handle) }
+        let size: I64 = ffi_key_size_bits(this.handle)
         return size
     }
 
     /// Exports the key to PEM format.
     pub func to_pem(this) -> Str {
-        let pem: Str = lowlevel { crypto_public_key_to_pem(this.handle) }
+        let pem: Str = ffi_public_key_to_pem(this.handle)
         return pem
     }
 
     /// Exports the key to DER format.
     pub func to_der(this) -> Buffer {
-        let handle: *Unit = lowlevel { crypto_public_key_to_der(this.handle) }
+        let handle: *Unit = ffi_public_key_to_der(this.handle)
         return Buffer { handle: handle }
     }
 
     /// Exports the key to JWK format.
     pub func to_jwk(this) -> Str {
-        let jwk: Str = lowlevel { crypto_public_key_to_jwk(this.handle) }
+        let jwk: Str = ffi_public_key_to_jwk(this.handle)
         return jwk
     }
 
@@ -469,8 +609,8 @@ impl PublicKey {
         if not this.key_type.is_rsa() {
             return Nothing
         }
-        let modulus_length: I64 = lowlevel { crypto_rsa_get_modulus_length(this.handle) }
-        let public_exponent: I64 = lowlevel { crypto_rsa_get_public_exponent(this.handle) }
+        let modulus_length: I64 = ffi_rsa_get_modulus_length(this.handle)
+        let public_exponent: I64 = ffi_rsa_get_public_exponent(this.handle)
         return Just(RsaKeyDetails {
             modulus_length: modulus_length,
             public_exponent: public_exponent,
@@ -482,20 +622,20 @@ impl PublicKey {
         if not this.key_type.is_ec() {
             return Nothing
         }
-        let curve: Str = lowlevel { crypto_ec_get_curve_name(this.handle) }
+        let curve: Str = ffi_ec_get_curve_name(this.handle)
         return Just(EcKeyDetails { named_curve: curve })
     }
 
     /// Compares two public keys for equality.
     pub func equals(this, other: ref PublicKey) -> Bool {
-        let result: Bool = lowlevel { crypto_key_equals(this.handle, other.handle) }
+        let result: Bool = ffi_key_equals(this.handle, other.handle)
         return result
     }
 
     /// Frees the key resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { crypto_public_key_destroy(this.handle) }
+            ffi_public_key_destroy(this.handle)
             this.handle = null
         }
     }
@@ -546,14 +686,11 @@ pub type EcKeyDetails {
 /// Generates a symmetric key of the specified size in bytes.
 pub func generate_key(size: I64) -> CryptoResult[SecretKey] {
     if size <= 0 or size > 1024 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key size must be between 1 and 1024 bytes"
-        ))
+        return Err(CryptoError::invalid_parameter("key size must be between 1 and 1024 bytes"))
     }
-    let handle: *Unit = lowlevel { crypto_generate_secret_key(size) }
+    let handle: *Unit = ffi_generate_secret_key(size)
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::RandomGenerationFailed))
+        return Err(CryptoError::random_failed())
     }
     return Ok(SecretKey { handle: handle, size: size })
 }
@@ -629,16 +766,13 @@ pub func generate_key_pair(key_type: KeyType, param: I64) -> CryptoResult[KeyPai
     when key_type {
         KeyType::Rsa => {
             if param < 1024 or param > 8192 {
-                return Err(CryptoError::with_details(
-                    CryptoErrorKind::InvalidParameter,
-                    "RSA modulus length must be between 1024 and 8192 bits"
-                ))
+                return Err(CryptoError::invalid_parameter("RSA modulus length must be between 1024 and 8192 bits"))
             }
-            let private_handle: *Unit = lowlevel { crypto_generate_rsa_key(param, 65537) }
+            let private_handle: *Unit = ffi_generate_rsa_key(param, 65537)
             if private_handle == null {
-                return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+                return Err(CryptoError::operation_failed("RSA key generation"))
             }
-            let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+            let public_handle: *Unit = ffi_private_key_get_public(private_handle)
             return Ok(KeyPair {
                 public_key: PublicKey { handle: public_handle, key_type: KeyType::Rsa },
                 private_key: PrivateKey { handle: private_handle, key_type: KeyType::Rsa },
@@ -646,16 +780,13 @@ pub func generate_key_pair(key_type: KeyType, param: I64) -> CryptoResult[KeyPai
         }
         KeyType::RsaPss => {
             if param < 1024 or param > 8192 {
-                return Err(CryptoError::with_details(
-                    CryptoErrorKind::InvalidParameter,
-                    "RSA-PSS modulus length must be between 1024 and 8192 bits"
-                ))
+                return Err(CryptoError::invalid_parameter("RSA-PSS modulus length must be between 1024 and 8192 bits"))
             }
-            let private_handle: *Unit = lowlevel { crypto_generate_rsa_pss_key(param, 65537) }
+            let private_handle: *Unit = ffi_generate_rsa_pss_key(param, 65537)
             if private_handle == null {
-                return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+                return Err(CryptoError::operation_failed("RSA-PSS key generation"))
             }
-            let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+            let public_handle: *Unit = ffi_private_key_get_public(private_handle)
             return Ok(KeyPair {
                 public_key: PublicKey { handle: public_handle, key_type: KeyType::RsaPss },
                 private_key: PrivateKey { handle: private_handle, key_type: KeyType::RsaPss },
@@ -663,11 +794,11 @@ pub func generate_key_pair(key_type: KeyType, param: I64) -> CryptoResult[KeyPai
         }
         KeyType::Dsa => {
             let bits = if param == 0 { 2048 } else { param }
-            let private_handle: *Unit = lowlevel { crypto_generate_dsa_key(bits) }
+            let private_handle: *Unit = ffi_generate_dsa_key(bits)
             if private_handle == null {
-                return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+                return Err(CryptoError::operation_failed("DSA key generation"))
             }
-            let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+            let public_handle: *Unit = ffi_private_key_get_public(private_handle)
             return Ok(KeyPair {
                 public_key: PublicKey { handle: public_handle, key_type: KeyType::Dsa },
                 private_key: PrivateKey { handle: private_handle, key_type: KeyType::Dsa },
@@ -675,55 +806,55 @@ pub func generate_key_pair(key_type: KeyType, param: I64) -> CryptoResult[KeyPai
         }
         KeyType::Ec => {
             // Default to P-256 if no specific curve
-            let private_handle: *Unit = lowlevel { crypto_generate_ec_key("P-256") }
+            let private_handle: *Unit = ffi_generate_ec_key("P-256")
             if private_handle == null {
-                return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+                return Err(CryptoError::operation_failed("EC key generation"))
             }
-            let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+            let public_handle: *Unit = ffi_private_key_get_public(private_handle)
             return Ok(KeyPair {
                 public_key: PublicKey { handle: public_handle, key_type: KeyType::Ec },
                 private_key: PrivateKey { handle: private_handle, key_type: KeyType::Ec },
             })
         }
         KeyType::Ed25519 => {
-            let private_handle: *Unit = lowlevel { crypto_generate_ed25519_key() }
+            let private_handle: *Unit = ffi_generate_ed25519_key()
             if private_handle == null {
-                return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+                return Err(CryptoError::operation_failed("Ed25519 key generation"))
             }
-            let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+            let public_handle: *Unit = ffi_private_key_get_public(private_handle)
             return Ok(KeyPair {
                 public_key: PublicKey { handle: public_handle, key_type: KeyType::Ed25519 },
                 private_key: PrivateKey { handle: private_handle, key_type: KeyType::Ed25519 },
             })
         }
         KeyType::Ed448 => {
-            let private_handle: *Unit = lowlevel { crypto_generate_ed448_key() }
+            let private_handle: *Unit = ffi_generate_ed448_key()
             if private_handle == null {
-                return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+                return Err(CryptoError::operation_failed("Ed448 key generation"))
             }
-            let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+            let public_handle: *Unit = ffi_private_key_get_public(private_handle)
             return Ok(KeyPair {
                 public_key: PublicKey { handle: public_handle, key_type: KeyType::Ed448 },
                 private_key: PrivateKey { handle: private_handle, key_type: KeyType::Ed448 },
             })
         }
         KeyType::X25519 => {
-            let private_handle: *Unit = lowlevel { crypto_generate_x25519_key() }
+            let private_handle: *Unit = ffi_generate_x25519_key()
             if private_handle == null {
-                return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+                return Err(CryptoError::operation_failed("X25519 key generation"))
             }
-            let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+            let public_handle: *Unit = ffi_private_key_get_public(private_handle)
             return Ok(KeyPair {
                 public_key: PublicKey { handle: public_handle, key_type: KeyType::X25519 },
                 private_key: PrivateKey { handle: private_handle, key_type: KeyType::X25519 },
             })
         }
         KeyType::X448 => {
-            let private_handle: *Unit = lowlevel { crypto_generate_x448_key() }
+            let private_handle: *Unit = ffi_generate_x448_key()
             if private_handle == null {
-                return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+                return Err(CryptoError::operation_failed("X448 key generation"))
             }
-            let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+            let public_handle: *Unit = ffi_private_key_get_public(private_handle)
             return Ok(KeyPair {
                 public_key: PublicKey { handle: public_handle, key_type: KeyType::X448 },
                 private_key: PrivateKey { handle: private_handle, key_type: KeyType::X448 },
@@ -731,11 +862,11 @@ pub func generate_key_pair(key_type: KeyType, param: I64) -> CryptoResult[KeyPai
         }
         KeyType::Dh => {
             let bits = if param == 0 { 2048 } else { param }
-            let private_handle: *Unit = lowlevel { crypto_generate_dh_key(bits) }
+            let private_handle: *Unit = ffi_generate_dh_key(bits)
             if private_handle == null {
-                return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+                return Err(CryptoError::operation_failed("DH key generation"))
             }
-            let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+            let public_handle: *Unit = ffi_private_key_get_public(private_handle)
             return Ok(KeyPair {
                 public_key: PublicKey { handle: public_handle, key_type: KeyType::Dh },
                 private_key: PrivateKey { handle: private_handle, key_type: KeyType::Dh },
@@ -746,13 +877,11 @@ pub func generate_key_pair(key_type: KeyType, param: I64) -> CryptoResult[KeyPai
 
 /// Generates an RSA key pair with custom options.
 pub func generate_rsa_key_pair(options: ref RsaKeyGenOptions) -> CryptoResult[KeyPair] {
-    let private_handle: *Unit = lowlevel {
-        crypto_generate_rsa_key(options.modulus_length, options.public_exponent)
-    }
+    let private_handle: *Unit = ffi_generate_rsa_key(options.modulus_length, options.public_exponent)
     if private_handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        return Err(CryptoError::operation_failed("RSA key generation"))
     }
-    let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+    let public_handle: *Unit = ffi_private_key_get_public(private_handle)
     return Ok(KeyPair {
         public_key: PublicKey { handle: public_handle, key_type: KeyType::Rsa },
         private_key: PrivateKey { handle: private_handle, key_type: KeyType::Rsa },
@@ -761,14 +890,11 @@ pub func generate_rsa_key_pair(options: ref RsaKeyGenOptions) -> CryptoResult[Ke
 
 /// Generates an EC key pair with custom options.
 pub func generate_ec_key_pair(options: ref EcKeyGenOptions) -> CryptoResult[KeyPair] {
-    let private_handle: *Unit = lowlevel { crypto_generate_ec_key(options.named_curve) }
+    let private_handle: *Unit = ffi_generate_ec_key(options.named_curve)
     if private_handle == null {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::UnsupportedAlgorithm,
-            "unsupported curve: {options.named_curve}"
-        ))
+        return Err(CryptoError::unsupported_algorithm("unsupported curve: {options.named_curve}"))
     }
-    let public_handle: *Unit = lowlevel { crypto_private_key_get_public(private_handle) }
+    let public_handle: *Unit = ffi_private_key_get_public(private_handle)
     return Ok(KeyPair {
         public_key: PublicKey { handle: public_handle, key_type: KeyType::Ec },
         private_key: PrivateKey { handle: private_handle, key_type: KeyType::Ec },
@@ -785,18 +911,15 @@ pub func create_private_key(data: Str, format: KeyFormat) -> CryptoResult[Privat
         KeyFormat::Pem => return PrivateKey::from_pem(data)
         KeyFormat::Jwk => return PrivateKey::from_jwk(data)
         KeyFormat::Der => {
-            let buf_handle: *Unit = lowlevel { crypto_base64_to_bytes(data) }
+            let buf_handle: *Unit = ffi_base64_to_bytes(data)
             if buf_handle == null {
-                return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid base64 DER"))
+                return Err(CryptoError::invalid_key("invalid base64 DER"))
             }
             let buf = Buffer { handle: buf_handle }
             return PrivateKey::from_der(ref buf)
         }
         KeyFormat::Raw => {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidParameter,
-                "raw format not supported for asymmetric keys"
-            ))
+            return Err(CryptoError::invalid_parameter("raw format not supported for asymmetric keys"))
         }
     }
 }
@@ -807,18 +930,15 @@ pub func create_public_key(data: Str, format: KeyFormat) -> CryptoResult[PublicK
         KeyFormat::Pem => return PublicKey::from_pem(data)
         KeyFormat::Jwk => return PublicKey::from_jwk(data)
         KeyFormat::Der => {
-            let buf_handle: *Unit = lowlevel { crypto_base64_to_bytes(data) }
+            let buf_handle: *Unit = ffi_base64_to_bytes(data)
             if buf_handle == null {
-                return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid base64 DER"))
+                return Err(CryptoError::invalid_key("invalid base64 DER"))
             }
             let buf = Buffer { handle: buf_handle }
             return PublicKey::from_der(ref buf)
         }
         KeyFormat::Raw => {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::InvalidParameter,
-                "raw format not supported for asymmetric keys"
-            ))
+            return Err(CryptoError::invalid_parameter("raw format not supported for asymmetric keys"))
         }
     }
 }
@@ -827,7 +947,7 @@ pub func create_public_key(data: Str, format: KeyFormat) -> CryptoResult[PublicK
 pub func create_secret_key(data: Str, format: KeyFormat) -> CryptoResult[SecretKey] {
     when format {
         KeyFormat::Raw => {
-            let buf_handle: *Unit = lowlevel { crypto_str_to_bytes(data) }
+            let buf_handle: *Unit = ffi_str_to_bytes(data)
             let buf = Buffer { handle: buf_handle }
             return Ok(SecretKey::from_bytes(ref buf))
         }
@@ -839,9 +959,9 @@ pub func create_secret_key(data: Str, format: KeyFormat) -> CryptoResult[SecretK
         }
         KeyFormat::Jwk => {
             // Extract 'k' field from JWK and decode
-            let k_value: Str = lowlevel { crypto_jwk_extract_k(data) }
+            let k_value: Str = ffi_jwk_extract_k(data)
             if k_value == "" {
-                return Err(CryptoError::with_details(CryptoErrorKind::InvalidKey, "invalid JWK secret key"))
+                return Err(CryptoError::invalid_key("invalid JWK secret key"))
             }
             return SecretKey::from_base64(k_value)
         }

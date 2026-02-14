@@ -1,0 +1,52 @@
+// Tests for core::num — U32 bit operations
+use test::{assert, assert_eq}
+use core::num
+
+@test
+func test_count_ones_u32() -> I32 {
+    assert_eq(num::count_ones_u32(0 as U32), 0 as U32, "count_ones 0")
+    assert_eq(num::count_ones_u32(1 as U32), 1 as U32, "count_ones 1")
+    assert_eq(num::count_ones_u32(255 as U32), 8 as U32, "count_ones 255")
+    return 0
+}
+
+@test
+func test_count_zeros_u32() -> I32 {
+    assert_eq(num::count_zeros_u32(0 as U32), 32 as U32, "count_zeros 0")
+    return 0
+}
+
+@test
+func test_leading_zeros_u32() -> I32 {
+    assert_eq(num::leading_zeros_u32(1 as U32), 31 as U32, "leading_zeros 1")
+    assert_eq(num::leading_zeros_u32(0 as U32), 32 as U32, "leading_zeros 0")
+    return 0
+}
+
+@test
+func test_trailing_zeros_u32() -> I32 {
+    assert_eq(num::trailing_zeros_u32(1 as U32), 0 as U32, "trailing_zeros 1")
+    assert_eq(num::trailing_zeros_u32(8 as U32), 3 as U32, "trailing_zeros 8")
+    return 0
+}
+
+@test
+func test_swap_bytes_u32() -> I32 {
+    let v = num::swap_bytes_u32(0x01020304 as U32)
+    assert_eq(v, 0x04030201 as U32, "swap_bytes_u32")
+    return 0
+}
+
+@test
+func test_rotate_left_u32() -> I32 {
+    let v = num::rotate_left_u32(1 as U32, 1 as U32)
+    assert_eq(v, 2 as U32, "rotate_left 1 by 1")
+    return 0
+}
+
+@test
+func test_rotate_right_u32() -> I32 {
+    let v = num::rotate_right_u32(2 as U32, 1 as U32)
+    assert_eq(v, 1 as U32, "rotate_right 2 by 1")
+    return 0
+}

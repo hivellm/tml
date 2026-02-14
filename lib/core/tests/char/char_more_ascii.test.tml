@@ -1,0 +1,43 @@
+// Tests for core::char::methods — more ASCII classification
+use test::{assert, assert_eq}
+use core::char::methods
+
+@test
+func test_is_ascii_octdigit() -> I32 {
+    assert(methods::is_ascii_octdigit('0'), "0 is octdigit")
+    assert(methods::is_ascii_octdigit('7'), "7 is octdigit")
+    assert(not methods::is_ascii_octdigit('8'), "8 is not octdigit")
+    assert(not methods::is_ascii_octdigit('a'), "a is not octdigit")
+    return 0
+}
+
+@test
+func test_is_ascii_whitespace() -> I32 {
+    assert(methods::is_ascii_whitespace(' '), "space")
+    assert(not methods::is_ascii_whitespace('a'), "a is not whitespace")
+    return 0
+}
+
+@test
+func test_is_ascii_control() -> I32 {
+    assert(not methods::is_ascii_control('A'), "A is not control")
+    assert(not methods::is_ascii_control(' '), "space is not control")
+    return 0
+}
+
+@test
+func test_is_ascii_graphic() -> I32 {
+    assert(methods::is_ascii_graphic('A'), "A is graphic")
+    assert(methods::is_ascii_graphic('!'), "! is graphic")
+    assert(not methods::is_ascii_graphic(' '), "space is not graphic")
+    return 0
+}
+
+@test
+func test_is_ascii_punctuation() -> I32 {
+    assert(methods::is_ascii_punctuation('!'), "! is punctuation")
+    assert(methods::is_ascii_punctuation('.'), ". is punctuation")
+    assert(not methods::is_ascii_punctuation('a'), "a is not punctuation")
+    assert(not methods::is_ascii_punctuation('5'), "5 is not punctuation")
+    return 0
+}

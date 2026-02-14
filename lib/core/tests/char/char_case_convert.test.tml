@@ -1,0 +1,43 @@
+// Tests for core::char::methods — case conversion functions
+use test::{assert, assert_eq}
+use core::char::methods
+
+@test
+func test_to_lowercase() -> I32 {
+    assert_eq(methods::to_lowercase('A'), 'a', "A -> a")
+    assert_eq(methods::to_lowercase('Z'), 'z', "Z -> z")
+    assert_eq(methods::to_lowercase('a'), 'a', "a stays a")
+    assert_eq(methods::to_lowercase('5'), '5', "5 stays 5")
+    return 0
+}
+
+@test
+func test_to_uppercase() -> I32 {
+    assert_eq(methods::to_uppercase('a'), 'A', "a -> A")
+    assert_eq(methods::to_uppercase('z'), 'Z', "z -> Z")
+    assert_eq(methods::to_uppercase('A'), 'A', "A stays A")
+    assert_eq(methods::to_uppercase('9'), '9', "9 stays 9")
+    return 0
+}
+
+@test
+func test_to_ascii_lowercase() -> I32 {
+    assert_eq(methods::to_ascii_lowercase('A'), 'a', "A -> a")
+    assert_eq(methods::to_ascii_lowercase('z'), 'z', "z stays z")
+    return 0
+}
+
+@test
+func test_to_ascii_uppercase() -> I32 {
+    assert_eq(methods::to_ascii_uppercase('a'), 'A', "a -> A")
+    assert_eq(methods::to_ascii_uppercase('Z'), 'Z', "Z stays Z")
+    return 0
+}
+
+@test
+func test_eq_ignore_ascii_case() -> I32 {
+    assert(methods::eq_ignore_ascii_case('A', 'a'), "A eq a")
+    assert(methods::eq_ignore_ascii_case('z', 'Z'), "z eq Z")
+    assert(not methods::eq_ignore_ascii_case('A', 'b'), "A ne b")
+    return 0
+}

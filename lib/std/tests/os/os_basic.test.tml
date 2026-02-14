@@ -1,0 +1,45 @@
+// Tests for std::os — basic system info functions
+use test::{assert, assert_eq}
+use std::os
+
+@test
+func test_os_arch() -> I32 {
+    let a = os::arch()
+    assert(a.len() > 0, "arch should not be empty")
+    return 0
+}
+
+@test
+func test_os_platform() -> I32 {
+    let p = os::platform()
+    assert(p.len() > 0, "platform should not be empty")
+    return 0
+}
+
+@test
+func test_os_type() -> I32 {
+    let t = os::os_type()
+    assert(t.len() > 0, "os_type should not be empty")
+    return 0
+}
+
+@test
+func test_os_hostname() -> I32 {
+    let h = os::hostname()
+    assert(h.len() > 0, "hostname should not be empty")
+    return 0
+}
+
+@test
+func test_os_homedir() -> I32 {
+    let d = os::homedir()
+    assert(d.len() > 0, "homedir should not be empty")
+    return 0
+}
+
+@test
+func test_os_tmpdir() -> I32 {
+    let t = os::tmpdir()
+    assert(t.len() > 0, "tmpdir should not be empty")
+    return 0
+}

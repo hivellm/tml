@@ -1,0 +1,24 @@
+// Tests for core::char::convert — from_digit, try_from_u32, error types, integer conversions
+use test::{assert, assert_eq}
+use core::char::convert
+
+@test
+func test_from_digit_decimal() -> I32 {
+    let ch = convert::from_digit(4 as U32, 10 as U32)
+    assert(ch.is_just(), "digit 4 base 10 should work")
+    return 0
+}
+
+@test
+func test_from_digit_hex() -> I32 {
+    let ch = convert::from_digit(10 as U32, 16 as U32)
+    assert(ch.is_just(), "digit 10 base 16 should be 'a'")
+    return 0
+}
+
+@test
+func test_from_digit_out_of_range() -> I32 {
+    let ch = convert::from_digit(17 as U32, 16 as U32)
+    assert(ch.is_nothing(), "17 >= 16 should be Nothing")
+    return 0
+}

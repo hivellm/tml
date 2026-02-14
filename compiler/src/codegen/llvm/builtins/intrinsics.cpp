@@ -118,7 +118,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "atomic_load", "atomic_store", "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub",
         "atomic_and", "atomic_or", "atomic_xor", "fence", "compiler_fence", "black_box",
         // Slice intrinsics
-        "slice_get", "slice_get_mut", "slice_set",
+        "slice_get", "slice_get_mut", "slice_set", "slice_swap", "slice_offset",
         // Math intrinsics
         "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc",
         // Drop intrinsic - for explicit destruction

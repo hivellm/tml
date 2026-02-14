@@ -298,17 +298,18 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                              << " suites cached, skipping compilation");
             }
         } else {
-            // Parallel suite compilation (Rust-style).
-            // compile_test_suite() parallelizes internally but each suite still has
-            // significant sequential overhead (typecheck, linking). Running N suites
-            // in parallel (N = num_cpus) overlaps these serial phases, similar to
-            // how Rust's cargo test compiles multiple crates concurrently.
+            // Parallel suite compilation.
+            // Each suite spawns internal threads for IR generation and object
+            // compilation (up to hardware_concurrency() each). Running too many
+            // suites in parallel causes thread explosion (N suites * M internal
+            // threads) which saturates the CPU at 100%.
+            // Cap at 2 concurrent suites to keep CPU usage reasonable.
             unsigned int hw = std::thread::hardware_concurrency();
             if (hw == 0)
                 hw = 8;
-            // Cap at 75% of cores to avoid saturating the CPU and starving
-            // the OS / other processes (each suite also spawns internal threads)
-            unsigned int max_suite_threads = std::max(1u, hw * 3 / 4);
+            // Limit concurrent suite compilations: each suite uses up to hw
+            // internal threads, so 2 suites already use 2*hw threads.
+            unsigned int max_suite_threads = std::min(2u, hw);
             unsigned int num_compile_threads =
                 std::min(max_suite_threads, static_cast<unsigned int>(suites_to_compile.size()));
 

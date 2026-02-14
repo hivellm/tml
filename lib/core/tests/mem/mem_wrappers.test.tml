@@ -1,0 +1,19 @@
+// Tests for core::mem — ManuallyDrop, MaybeUninit::new
+use test::{assert, assert_eq}
+use core::mem::{ManuallyDrop, MaybeUninit}
+
+@test
+func test_manually_drop_new_into_inner() -> I32 {
+    let w = ManuallyDrop::new(42)
+    let v = w.into_inner()
+    assert_eq(v, 42, "into_inner should return original value")
+    return 0
+}
+
+@test
+func test_maybe_uninit_new_assume_init() -> I32 {
+    let m = MaybeUninit::new(99)
+    let v = m.assume_init()
+    assert_eq(v, 99, "assume_init should return initialized value")
+    return 0
+}

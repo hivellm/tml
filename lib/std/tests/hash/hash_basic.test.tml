@@ -1,0 +1,78 @@
+// Tests for std::hash — hashing functions
+use test::{assert, assert_eq}
+use std::hash
+
+@test
+func test_fnv1a32() -> I32 {
+    let h = hash::fnv1a32("hello")
+    assert(h.raw() != 0 as U32, "hash should not be zero")
+    return 0
+}
+
+@test
+func test_fnv1a32_deterministic() -> I32 {
+    let h1 = hash::fnv1a32("test")
+    let h2 = hash::fnv1a32("test")
+    assert_eq(h1.raw(), h2.raw(), "same input should give same hash")
+    return 0
+}
+
+@test
+func test_fnv1a64() -> I32 {
+    let h = hash::fnv1a64("hello")
+    assert(h.raw() != 0 as U64, "hash64 should not be zero")
+    return 0
+}
+
+@test
+func test_fnv1a64_deterministic() -> I32 {
+    let h1 = hash::fnv1a64("test")
+    let h2 = hash::fnv1a64("test")
+    assert_eq(h1.raw(), h2.raw(), "same input same hash64")
+    return 0
+}
+
+@test
+func test_hash32_to_hex() -> I32 {
+    let h = hash::fnv1a32("hello")
+    let hex = h.to_hex()
+    assert(hex.len() > 0, "hex should not be empty")
+    return 0
+}
+
+@test
+func test_hash64_to_hex() -> I32 {
+    let h = hash::fnv1a64("hello")
+    let hex = h.to_hex()
+    assert(hex.len() > 0, "hex64 should not be empty")
+    return 0
+}
+
+@test
+func test_hash32_to_i64() -> I32 {
+    let h = hash::fnv1a32("hello")
+    let v = h.to_i64()
+    assert(v != 0, "to_i64 should not be zero")
+    return 0
+}
+
+@test
+func test_murmur2_32() -> I32 {
+    let h = hash::murmur2_32("hello", 0 as U32)
+    assert(h.raw() != 0 as U32, "murmur2 should not be zero")
+    return 0
+}
+
+@test
+func test_etag_weak() -> I32 {
+    let e = hash::etag_weak("hello world")
+    assert(e.len() > 0, "etag_weak should not be empty")
+    return 0
+}
+
+@test
+func test_etag_strong() -> I32 {
+    let e = hash::etag_strong("hello world")
+    assert(e.len() > 0, "etag_strong should not be empty")
+    return 0
+}

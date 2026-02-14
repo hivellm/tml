@@ -1,0 +1,71 @@
+// Tests for core::error::IoError and IoErrorKind
+use test::{assert, assert_eq}
+use core::error::{IoError, IoErrorKind}
+
+@test
+func test_io_error_not_found() -> I32 {
+    let err = IoError::new(IoErrorKind::NotFound)
+    assert_eq(err.to_string(), "entity not found", "NotFound message")
+    return 0
+}
+
+@test
+func test_io_error_permission_denied() -> I32 {
+    let err = IoError::new(IoErrorKind::PermissionDenied)
+    assert_eq(err.to_string(), "permission denied", "PermissionDenied message")
+    return 0
+}
+
+@test
+func test_io_error_with_message() -> I32 {
+    let err = IoError::with_message(IoErrorKind::NotFound, "config.json")
+    let s = err.to_string()
+    assert(s.contains("entity not found"), "should contain kind")
+    assert(s.contains("config.json"), "should contain custom message")
+    return 0
+}
+
+@test
+func test_io_error_debug() -> I32 {
+    let err = IoError::new(IoErrorKind::TimedOut)
+    let dbg = err.debug_string()
+    assert(dbg.contains("IoError"), "debug should contain type")
+    assert(dbg.contains("timed out"), "debug should contain kind message")
+    return 0
+}
+
+@test
+func test_io_error_kind_connection_refused() -> I32 {
+    let err = IoError::new(IoErrorKind::ConnectionRefused)
+    assert_eq(err.to_string(), "connection refused", "ConnectionRefused message")
+    return 0
+}
+
+@test
+func test_io_error_kind_broken_pipe() -> I32 {
+    let err = IoError::new(IoErrorKind::BrokenPipe)
+    assert_eq(err.to_string(), "broken pipe", "BrokenPipe message")
+    return 0
+}
+
+@test
+func test_io_error_kind_already_exists() -> I32 {
+    let err = IoError::new(IoErrorKind::AlreadyExists)
+    assert_eq(err.to_string(), "entity already exists", "AlreadyExists message")
+    return 0
+}
+
+@test
+func test_io_error_kind_unexpected_eof() -> I32 {
+    let err = IoError::new(IoErrorKind::UnexpectedEof)
+    assert_eq(err.to_string(), "unexpected end of file", "UnexpectedEof message")
+    return 0
+}
+
+@test
+func test_io_error_kind_debug() -> I32 {
+    let kind = IoErrorKind::InvalidInput
+    let dbg = kind.debug_string()
+    assert_eq(dbg, "InvalidInput", "IoErrorKind debug should be variant name")
+    return 0
+}

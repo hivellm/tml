@@ -1367,19 +1367,34 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         if (!imported_module_paths.empty()) {
             bool should_process = false;
 
-            // Check if this module path matches or is a parent of an imported module
+            // Check if this module path matches, is a parent/child, or sibling of an imported
+            // module
             for (const auto& imported_path : imported_module_paths) {
                 if (module_name == imported_path) {
                     should_process = true;
                     break;
                 }
+                // Module is parent of imported (e.g., core::unicode for core::unicode::char)
                 if (imported_path.find(module_name + "::") == 0) {
                     should_process = true;
                     break;
                 }
+                // Module is child of imported (e.g., core::unicode::char for core::unicode)
                 if (module_name.find(imported_path + "::") == 0) {
                     should_process = true;
                     break;
+                }
+                // Sibling module: same parent prefix (e.g., core::unicode::unicode_data
+                // is sibling of core::unicode::char — both under core::unicode)
+                auto mod_sep = module_name.rfind("::");
+                auto imp_sep = imported_path.rfind("::");
+                if (mod_sep != std::string::npos && imp_sep != std::string::npos) {
+                    std::string mod_parent = module_name.substr(0, mod_sep);
+                    std::string imp_parent = imported_path.substr(0, imp_sep);
+                    if (mod_parent == imp_parent) {
+                        should_process = true;
+                        break;
+                    }
                 }
             }
 

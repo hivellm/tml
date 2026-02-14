@@ -1,0 +1,52 @@
+// Tests for std::os — system resources and env
+use test::{assert, assert_eq}
+use std::os
+
+@test
+func test_os_uptime() -> I32 {
+    let u = os::uptime()
+    assert(u > 0, "uptime should be positive")
+    return 0
+}
+
+@test
+func test_os_cpu_count() -> I32 {
+    let c = os::cpu_count()
+    assert(c > 0, "cpu_count should be at least 1")
+    return 0
+}
+
+@test
+func test_os_endianness() -> I32 {
+    let e = os::endianness()
+    assert(e == "LE" or e == "BE", "endianness should be LE or BE")
+    return 0
+}
+
+@test
+func test_os_pid() -> I32 {
+    let p = os::pid()
+    assert(p > 0, "pid should be positive")
+    return 0
+}
+
+@test
+func test_os_username() -> I32 {
+    let u = os::username()
+    assert(u.len() > 0, "username should not be empty")
+    return 0
+}
+
+@test
+func test_os_env_get_path() -> I32 {
+    let path = os::env_get("PATH")
+    assert(path.is_just(), "PATH env var should exist")
+    return 0
+}
+
+@test
+func test_os_env_get_missing() -> I32 {
+    let v = os::env_get("TML_NONEXISTENT_VAR_12345")
+    assert(v.is_nothing(), "missing env var should be Nothing")
+    return 0
+}

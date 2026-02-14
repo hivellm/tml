@@ -84,29 +84,43 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
                 return "0";
             }
 
-            // Handle type mismatches (e.g., i32 vs i64)
+            // Handle type mismatches for all integer widths (i8, i16, i32, i64)
             if (left_type != right_type) {
-                // If types differ, convert smaller to larger
-                if (left_type == "i32" && right_type == "i64") {
-                    // Extend i32 left value to i64 (zext for unsigned, sext for signed)
-                    std::string ext_reg = fresh_reg();
-                    if (left_unsigned) {
-                        emit_line("  " + ext_reg + " = zext i32 " + left + " to i64");
+                auto get_int_bits = [](const std::string& ty) -> int {
+                    if (ty == "i1")
+                        return 1;
+                    if (ty == "i8")
+                        return 8;
+                    if (ty == "i16")
+                        return 16;
+                    if (ty == "i32")
+                        return 32;
+                    if (ty == "i64")
+                        return 64;
+                    if (ty == "i128")
+                        return 128;
+                    return 0;
+                };
+                int left_bits = get_int_bits(left_type);
+                int right_bits = get_int_bits(right_type);
+
+                if (left_bits > 0 && right_bits > 0 && left_bits != right_bits) {
+                    // Extend the smaller operand to match the larger one
+                    if (left_bits < right_bits) {
+                        std::string ext_reg = fresh_reg();
+                        std::string ext_op = left_unsigned ? "zext" : "sext";
+                        emit_line("  " + ext_reg + " = " + ext_op + " " + left_type + " " + left +
+                                  " to " + right_type);
+                        left = ext_reg;
+                        cmp_type = right_type;
                     } else {
-                        emit_line("  " + ext_reg + " = sext i32 " + left + " to i64");
+                        std::string ext_reg = fresh_reg();
+                        std::string ext_op = right_unsigned ? "zext" : "sext";
+                        emit_line("  " + ext_reg + " = " + ext_op + " " + right_type + " " + right +
+                                  " to " + left_type);
+                        right = ext_reg;
+                        cmp_type = left_type;
                     }
-                    left = ext_reg;
-                    cmp_type = "i64";
-                } else if (left_type == "i64" && right_type == "i32") {
-                    // Extend i32 right value to i64 (zext for unsigned, sext for signed)
-                    std::string ext_reg = fresh_reg();
-                    if (right_unsigned) {
-                        emit_line("  " + ext_reg + " = zext i32 " + right + " to i64");
-                    } else {
-                        emit_line("  " + ext_reg + " = sext i32 " + right + " to i64");
-                    }
-                    right = ext_reg;
-                    cmp_type = "i64";
                 }
             }
 
@@ -161,27 +175,42 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             if (cmp_type.empty())
                 cmp_type = "i32";
 
-            // Handle type mismatches (e.g., i32 vs i64)
+            // Handle type mismatches for all integer widths (i8, i16, i32, i64)
             if (left_type != right_type) {
-                // If types differ, convert smaller to larger
-                if (left_type == "i32" && right_type == "i64") {
-                    std::string ext_reg = fresh_reg();
-                    if (left_unsigned) {
-                        emit_line("  " + ext_reg + " = zext i32 " + left + " to i64");
+                auto get_int_bits = [](const std::string& ty) -> int {
+                    if (ty == "i1")
+                        return 1;
+                    if (ty == "i8")
+                        return 8;
+                    if (ty == "i16")
+                        return 16;
+                    if (ty == "i32")
+                        return 32;
+                    if (ty == "i64")
+                        return 64;
+                    if (ty == "i128")
+                        return 128;
+                    return 0;
+                };
+                int left_bits = get_int_bits(left_type);
+                int right_bits = get_int_bits(right_type);
+
+                if (left_bits > 0 && right_bits > 0 && left_bits != right_bits) {
+                    if (left_bits < right_bits) {
+                        std::string ext_reg = fresh_reg();
+                        std::string ext_op = left_unsigned ? "zext" : "sext";
+                        emit_line("  " + ext_reg + " = " + ext_op + " " + left_type + " " + left +
+                                  " to " + right_type);
+                        left = ext_reg;
+                        cmp_type = right_type;
                     } else {
-                        emit_line("  " + ext_reg + " = sext i32 " + left + " to i64");
+                        std::string ext_reg = fresh_reg();
+                        std::string ext_op = right_unsigned ? "zext" : "sext";
+                        emit_line("  " + ext_reg + " = " + ext_op + " " + right_type + " " + right +
+                                  " to " + left_type);
+                        right = ext_reg;
+                        cmp_type = left_type;
                     }
-                    left = ext_reg;
-                    cmp_type = "i64";
-                } else if (left_type == "i64" && right_type == "i32") {
-                    std::string ext_reg = fresh_reg();
-                    if (right_unsigned) {
-                        emit_line("  " + ext_reg + " = zext i32 " + right + " to i64");
-                    } else {
-                        emit_line("  " + ext_reg + " = sext i32 " + right + " to i64");
-                    }
-                    right = ext_reg;
-                    cmp_type = "i64";
                 }
             }
 
@@ -215,6 +244,16 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
     if (fn_name == "assert") {
         if (!call.args.empty()) {
             std::string cond = gen_expr(*call.args[0]);
+            std::string cond_type = last_expr_type_;
+
+            // Convert non-i1 integer conditions to i1 (e.g., C runtime functions returning i32)
+            if (cond_type != "i1" &&
+                (cond_type == "i8" || cond_type == "i16" || cond_type == "i32" ||
+                 cond_type == "i64" || cond_type == "i128")) {
+                std::string bool_cond = fresh_reg();
+                emit_line("  " + bool_cond + " = icmp ne " + cond_type + " " + cond + ", 0");
+                cond = bool_cond;
+            }
 
             // Get optional message argument
             std::string msg_literal;
@@ -252,6 +291,16 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
     if (fn_name == "assert_true") {
         if (!call.args.empty()) {
             std::string cond = gen_expr(*call.args[0]);
+            std::string cond_type = last_expr_type_;
+
+            // Convert non-i1 integer conditions to i1
+            if (cond_type != "i1" &&
+                (cond_type == "i8" || cond_type == "i16" || cond_type == "i32" ||
+                 cond_type == "i64" || cond_type == "i128")) {
+                std::string bool_cond = fresh_reg();
+                emit_line("  " + bool_cond + " = icmp ne " + cond_type + " " + cond + ", 0");
+                cond = bool_cond;
+            }
 
             std::string msg_literal;
             if (call.args.size() >= 2) {
@@ -284,6 +333,16 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
     if (fn_name == "assert_false") {
         if (!call.args.empty()) {
             std::string cond = gen_expr(*call.args[0]);
+            std::string cond_type = last_expr_type_;
+
+            // Convert non-i1 integer conditions to i1
+            if (cond_type != "i1" &&
+                (cond_type == "i8" || cond_type == "i16" || cond_type == "i32" ||
+                 cond_type == "i64" || cond_type == "i128")) {
+                std::string bool_cond = fresh_reg();
+                emit_line("  " + bool_cond + " = icmp ne " + cond_type + " " + cond + ", 0");
+                cond = bool_cond;
+            }
 
             std::string msg_literal;
             if (call.args.size() >= 2) {

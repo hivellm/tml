@@ -34,6 +34,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
         if (call.args.empty()) {
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @list_create(i64 4)");
+            last_expr_type_ = "ptr";
             return result;
         } else {
             std::string cap_val = gen_expr(*call.args[0]);
@@ -47,6 +48,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @list_create(i64 " + cap + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
     }
@@ -202,6 +204,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
         if (call.args.empty()) {
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @hashmap_create(i64 16)");
+            last_expr_type_ = "ptr";
             return result;
         } else {
             std::string cap_expr = gen_expr(*call.args[0]);
@@ -215,6 +218,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @hashmap_create(i64 " + cap + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
     }
@@ -388,6 +392,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             std::string map = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @hashmap_iter_create(ptr " + map + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
         return "null";
@@ -457,6 +462,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
         if (call.args.empty()) {
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @buffer_create(i64 16)");
+            last_expr_type_ = "ptr";
             return result;
         } else {
             std::string cap_expr = gen_expr(*call.args[0]);
@@ -470,6 +476,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @buffer_create(i64 " + cap + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
     }

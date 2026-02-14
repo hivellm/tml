@@ -1,0 +1,74 @@
+// Tests for core::char::convert — CharTryFromError, TryFromCharError display/debug
+use test::{assert, assert_eq}
+use core::char::convert
+
+@test
+func test_char_try_from_error_surrogate_msg() -> I32 {
+    let result = convert::try_from_u32(0xD800 as U32)
+    let err = result.unwrap_err()
+    let msg = err.to_string()
+    assert(msg.contains("surrogate"), "surrogate error msg should say surrogate")
+    return 0
+}
+
+@test
+func test_char_try_from_error_out_of_range_msg() -> I32 {
+    let result = convert::try_from_u32(0x110000 as U32)
+    let err = result.unwrap_err()
+    let msg = err.to_string()
+    assert(msg.contains("out of range"), "out of range error msg")
+    return 0
+}
+
+@test
+func test_char_try_from_error_debug() -> I32 {
+    let result = convert::try_from_u32(0xD800 as U32)
+    let err = result.unwrap_err()
+    let dbg = err.debug_string()
+    assert(dbg.contains("CharTryFromError"), "debug should contain type name")
+    return 0
+}
+
+@test
+func test_char_try_from_error_description() -> I32 {
+    let result = convert::try_from_u32(0xD800 as U32)
+    let err = result.unwrap_err()
+    let d = err.description()
+    assert_eq(d, "invalid char conversion", "description should match")
+    return 0
+}
+
+@test
+func test_try_from_char_error_display() -> I32 {
+    // try_to_u8 with a char > 255 should fail
+    // Use from_u32 to get a char with code point > 255
+    let ch_opt = convert::from_u32(0x100 as U32)
+    assert(ch_opt.is_just(), "0x100 should be valid char")
+    let ch = ch_opt.unwrap()
+    let result = convert::try_to_u8(ch)
+    assert(result.is_err(), "char > 255 should not fit in U8")
+    let err = result.unwrap_err()
+    let msg = err.to_string()
+    assert(msg.contains("too large"), "should say too large")
+    return 0
+}
+
+@test
+func test_try_from_char_error_debug() -> I32 {
+    let ch = convert::from_u32(0x100 as U32).unwrap()
+    let result = convert::try_to_u8(ch)
+    let err = result.unwrap_err()
+    let dbg = err.debug_string()
+    assert(dbg.contains("TryFromCharError"), "debug should contain type name")
+    return 0
+}
+
+@test
+func test_try_from_char_error_source_char() -> I32 {
+    let ch = convert::from_u32(0x100 as U32).unwrap()
+    let result = convert::try_to_u8(ch)
+    let err = result.unwrap_err()
+    let src = err.source_char()
+    assert_eq(src as I32, 0x100, "source_char should be the original char")
+    return 0
+}

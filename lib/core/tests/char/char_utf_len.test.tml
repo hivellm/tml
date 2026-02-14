@@ -1,0 +1,39 @@
+// Tests for core::char::methods — UTF encoding length functions
+use test::{assert, assert_eq}
+use core::char::methods
+
+@test
+func test_len_utf8_ascii() -> I32 {
+    assert_eq(methods::len_utf8('A'), 1, "A is 1 byte UTF-8")
+    assert_eq(methods::len_utf8('z'), 1, "z is 1 byte UTF-8")
+    assert_eq(methods::len_utf8('0'), 1, "0 is 1 byte UTF-8")
+    return 0
+}
+
+@test
+func test_len_utf16_ascii() -> I32 {
+    assert_eq(methods::len_utf16('A'), 1, "A is 1 unit UTF-16")
+    assert_eq(methods::len_utf16('z'), 1, "z is 1 unit UTF-16")
+    return 0
+}
+
+@test
+func test_escape_unicode() -> I32 {
+    let s = methods::escape_unicode('A')
+    assert(s.len() > 0, "escape_unicode should not be empty")
+    return 0
+}
+
+@test
+func test_escape_default() -> I32 {
+    let s = methods::escape_default('A')
+    assert(s.len() > 0, "escape_default A should not be empty")
+    return 0
+}
+
+@test
+func test_escape_debug() -> I32 {
+    let s = methods::escape_debug('A')
+    assert(s.len() > 0, "escape_debug A should not be empty")
+    return 0
+}

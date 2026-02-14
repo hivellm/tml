@@ -1505,6 +1505,59 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             return result;
         }
 
+        // parse_i32() -> Maybe[I32]
+        if (method == "parse_i32") {
+            emit_coverage("Str::parse_i32");
+            std::string value = fresh_reg();
+            emit_line("  " + value + " = call i32 @str_parse_i32(ptr " + receiver + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result +
+                      " = insertvalue %struct.Maybe__I32 { i32 0, i32 undef }, i32 " + value +
+                      ", 1");
+            last_expr_type_ = "%struct.Maybe__I32";
+            return result;
+        }
+
+        // parse_f64() -> F64
+        if (method == "parse_f64") {
+            emit_coverage("Str::parse_f64");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call double @str_parse_f64(ptr " + receiver + ")");
+            last_expr_type_ = "double";
+            return result;
+        }
+
+        // parse_bool() -> Maybe[Bool]
+        if (method == "parse_bool") {
+            emit_coverage("Str::parse_bool");
+            // Compare against "true" and "false" using str_eq (returns i32: 0 or 1)
+            std::string true_lit = add_string_literal("true");
+            std::string false_lit = add_string_literal("false");
+            std::string is_true = fresh_reg();
+            emit_line("  " + is_true + " = call i32 @str_eq(ptr " + receiver + ", ptr " + true_lit +
+                      ")");
+            std::string is_false = fresh_reg();
+            emit_line("  " + is_false + " = call i32 @str_eq(ptr " + receiver + ", ptr " +
+                      false_lit + ")");
+            std::string is_valid = fresh_reg();
+            emit_line("  " + is_valid + " = or i32 " + is_true + ", " + is_false);
+            std::string is_valid_bool = fresh_reg();
+            emit_line("  " + is_valid_bool + " = icmp ne i32 " + is_valid + ", 0");
+            // tag: 0=Just, 1=Nothing
+            std::string tag = fresh_reg();
+            emit_line("  " + tag + " = select i1 " + is_valid_bool + ", i32 0, i32 1");
+            // value: is_true as i1
+            std::string val_bool = fresh_reg();
+            emit_line("  " + val_bool + " = icmp ne i32 " + is_true + ", 0");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = insertvalue { i32, i1 } undef, i32 " + tag + ", 0");
+            std::string result2 = fresh_reg();
+            emit_line("  " + result2 + " = insertvalue { i32, i1 } " + result + ", i1 " + val_bool +
+                      ", 1");
+            last_expr_type_ = "%struct.Maybe__Bool";
+            return result2;
+        }
+
         // parse_u16() -> Maybe[U16]
         if (method == "parse_u16") {
             emit_coverage("Str::parse_u16");

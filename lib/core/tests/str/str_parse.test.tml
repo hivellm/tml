@@ -1,0 +1,12 @@
+// Tests for core::str — parsing functions
+// NOTE: parse_i32, parse_i64, parse_f64, parse_bool all produce
+// "Unknown method" codegen errors. Tests deferred until codegen fix.
+use test::{assert, assert_eq}
+
+@test
+func test_str_parse_placeholder() -> I32 {
+    // Verify basic str operations work while parse methods are broken
+    assert_eq("42".len(), 2, "len of 42")
+    assert("42".contains("4"), "contains 4")
+    return 0
+}

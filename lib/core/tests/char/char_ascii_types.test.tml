@@ -1,0 +1,41 @@
+// Tests for core::char::methods — ASCII type checking functions
+use test::{assert, assert_eq}
+use core::char::methods
+
+@test
+func test_is_whitespace() -> I32 {
+    assert(methods::is_whitespace(' '), "space is whitespace")
+    assert(not methods::is_whitespace('a'), "a is not whitespace")
+    return 0
+}
+
+@test
+func test_is_alphanumeric() -> I32 {
+    assert(methods::is_alphanumeric('A'), "A is alphanumeric")
+    assert(methods::is_alphanumeric('5'), "5 is alphanumeric")
+    assert(not methods::is_alphanumeric(' '), "space is not alphanumeric")
+    return 0
+}
+
+@test
+func test_is_numeric() -> I32 {
+    assert(methods::is_numeric('0'), "0 is numeric")
+    assert(methods::is_numeric('9'), "9 is numeric")
+    assert(not methods::is_numeric('a'), "a is not numeric")
+    return 0
+}
+
+@test
+func test_is_control() -> I32 {
+    assert(not methods::is_control('A'), "A is not control")
+    assert(not methods::is_control(' '), "space is not control")
+    return 0
+}
+
+@test
+func test_is_ascii() -> I32 {
+    assert(methods::is_ascii('A'), "A is ascii")
+    assert(methods::is_ascii('0'), "0 is ascii")
+    assert(methods::is_ascii(' '), "space is ascii")
+    return 0
+}

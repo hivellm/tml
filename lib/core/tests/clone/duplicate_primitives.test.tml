@@ -1,0 +1,101 @@
+// Tests for core::clone::Duplicate — primitive type duplication
+use test::{assert, assert_eq}
+use core::clone::Duplicate
+
+@test
+func test_duplicate_i8() -> I32 {
+    let x: I8 = 42 as I8
+    let y: I8 = x.duplicate()
+    assert_eq(y as I32, 42, "I8 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_i16() -> I32 {
+    let x: I16 = 1000 as I16
+    let y: I16 = x.duplicate()
+    assert_eq(y as I32, 1000, "I16 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_i32() -> I32 {
+    let x: I32 = 99999
+    let y: I32 = x.duplicate()
+    assert_eq(y, 99999, "I32 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_i64() -> I32 {
+    let x: I64 = 123456789
+    let y: I64 = x.duplicate()
+    assert_eq(y as I32, 123456789 as I32, "I64 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_u8() -> I32 {
+    let x: U8 = 255 as U8
+    let y: U8 = x.duplicate()
+    assert_eq(y as I32, 255, "U8 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_u16() -> I32 {
+    let x: U16 = 65535 as U16
+    let y: U16 = x.duplicate()
+    assert_eq(y as I32, 65535, "U16 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_u32() -> I32 {
+    let x: U32 = 100 as U32
+    let y: U32 = x.duplicate()
+    assert_eq(y as I32, 100, "U32 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_u64() -> I32 {
+    let x: U64 = 200 as U64
+    let y: U64 = x.duplicate()
+    assert_eq(y as I32, 200, "U64 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_f32() -> I32 {
+    let x: F32 = 3.14 as F32
+    let y: F32 = x.duplicate()
+    assert(y > 3.13 as F32, "F32 duplicate should preserve value")
+    assert(y < 3.15 as F32, "F32 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_f64() -> I32 {
+    let x: F64 = 2.71828
+    let y: F64 = x.duplicate()
+    assert(y > 2.718, "F64 duplicate should preserve value")
+    assert(y < 2.719, "F64 duplicate should preserve value")
+    return 0
+}
+
+@test
+func test_duplicate_bool_true() -> I32 {
+    let x: Bool = true
+    let y: Bool = x.duplicate()
+    assert(y, "Bool true duplicate should be true")
+    return 0
+}
+
+@test
+func test_duplicate_bool_false() -> I32 {
+    let x: Bool = false
+    let y: Bool = x.duplicate()
+    assert(not y, "Bool false duplicate should be false")
+    return 0
+}

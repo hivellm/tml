@@ -1,0 +1,27 @@
+// Tests for core::unicode::char — cased and format classification
+use test::{assert, assert_eq}
+use core::unicode::char
+
+@test
+func test_is_cased() -> I32 {
+    assert(char::is_cased(0x0041), "A is cased")
+    assert(char::is_cased(0x0061), "a is cased")
+    assert(not char::is_cased(0x0031), "1 is not cased")
+    return 0
+}
+
+@test
+func test_is_format() -> I32 {
+    assert(char::is_format(0x200B), "ZWSP is format")
+    assert(char::is_format(0xFEFF), "BOM is format")
+    assert(not char::is_format(0x0041), "A is not format")
+    return 0
+}
+
+@test
+func test_is_private_use() -> I32 {
+    assert(char::is_private_use(0xE000), "E000 is private use")
+    assert(char::is_private_use(0xF8FF), "F8FF is private use")
+    assert(not char::is_private_use(0x0041), "A is not private use")
+    return 0
+}

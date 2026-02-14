@@ -1,0 +1,55 @@
+// Tests for std::text — Text mutation and search methods
+use test::{assert, assert_eq}
+use std::text::Text
+
+@test
+func test_text_push_str() -> I32 {
+    let t = Text::from("hello")
+    t.push_str(" world")
+    assert_eq(t.as_str(), "hello world", "push_str should append")
+    return 0
+}
+
+@test
+func test_text_clear() -> I32 {
+    let t = Text::from("hello")
+    t.clear()
+    assert(t.is_empty(), "after clear, should be empty")
+    assert_eq(t.len(), 0, "after clear, len should be 0")
+    return 0
+}
+
+@test
+func test_text_with_capacity() -> I32 {
+    let t = Text::with_capacity(100)
+    assert(t.capacity() >= 100, "capacity should be at least 100")
+    assert(t.is_empty(), "with_capacity should start empty")
+    return 0
+}
+
+@test
+func test_text_push_i64() -> I32 {
+    let t = Text::from("val=")
+    t.push_i64(42)
+    assert_eq(t.as_str(), "val=42", "push_i64 should append number")
+    return 0
+}
+
+@test
+func test_text_byte_at() -> I32 {
+    let t = Text::from("ABC")
+    assert_eq(t.byte_at(0), 65, "byte_at(0) should be 65 (A)")
+    assert_eq(t.byte_at(1), 66, "byte_at(1) should be 66 (B)")
+    assert_eq(t.byte_at(3), -1, "byte_at out of bounds should be -1")
+    return 0
+}
+
+@test
+func test_text_clone() -> I32 {
+    let t = Text::from("original")
+    let c = t.clone()
+    assert_eq(c.as_str(), "original", "clone should have same content")
+    t.push_str("!")
+    assert_eq(c.as_str(), "original", "clone should be independent")
+    return 0
+}

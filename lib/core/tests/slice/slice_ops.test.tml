@@ -1,0 +1,85 @@
+// Tests for core::slice Slice operations — first, last, take, skip, empty
+use test::{assert, assert_eq}
+use core::slice::Slice
+
+@test
+func test_slice_first() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 100)
+    atomic_store(ptr_offset(ptr, 1), 200)
+    atomic_store(ptr_offset(ptr, 2), 300)
+    let s: Slice[I32] = Slice { data: ptr, len: 3 }
+
+    let f = s.first()
+    assert(f.is_just(), "first should be Just")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_last() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 100)
+    atomic_store(ptr_offset(ptr, 1), 200)
+    atomic_store(ptr_offset(ptr, 2), 300)
+    let s: Slice[I32] = Slice { data: ptr, len: 3 }
+
+    let l = s.last()
+    assert(l.is_just(), "last should be Just")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_take() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 1), 20)
+    atomic_store(ptr_offset(ptr, 2), 30)
+    atomic_store(ptr_offset(ptr, 3), 40)
+    atomic_store(ptr_offset(ptr, 4), 50)
+    let s: Slice[I32] = Slice { data: ptr, len: 5 }
+
+    let taken: Slice[I32] = s.take(3)
+    assert_eq(taken.len(), 3, "take(3) should have 3 elements")
+    assert_eq(*taken.get(0).unwrap(), 10, "taken[0] should be 10")
+    assert_eq(*taken.get(2).unwrap(), 30, "taken[2] should be 30")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_skip() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 1), 20)
+    atomic_store(ptr_offset(ptr, 2), 30)
+    atomic_store(ptr_offset(ptr, 3), 40)
+    atomic_store(ptr_offset(ptr, 4), 50)
+    let s: Slice[I32] = Slice { data: ptr, len: 5 }
+
+    let skipped: Slice[I32] = s.skip(2)
+    assert_eq(skipped.len(), 3, "skip(2) should have 3 elements")
+    assert_eq(*skipped.get(0).unwrap(), 30, "skipped[0] should be 30")
+    assert_eq(*skipped.get(2).unwrap(), 50, "skipped[2] should be 50")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_empty_operations() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let s: Slice[I32] = Slice { data: ptr, len: 0 }
+
+    assert(s.is_empty(), "empty slice should be empty")
+    assert(s.first().is_nothing(), "empty first should be Nothing")
+    assert(s.last().is_nothing(), "empty last should be Nothing")
+    assert(s.get(0).is_nothing(), "empty get(0) should be Nothing")
+
+    dealloc(ptr)
+    return 0
+}

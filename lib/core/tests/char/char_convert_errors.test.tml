@@ -1,0 +1,29 @@
+// Tests for core::char::convert — try_from_u32, error types, integer conversions
+use test::{assert, assert_eq}
+use core::char::convert
+
+@test
+func test_try_from_u32_valid() -> I32 {
+    let result = convert::try_from_u32(65 as U32)
+    assert(result.is_ok(), "65 should be valid char")
+    return 0
+}
+
+@test
+func test_try_from_u32_surrogate() -> I32 {
+    let result = convert::try_from_u32(0xD800 as U32)
+    assert(result.is_err(), "surrogate should fail")
+    let err = result.unwrap_err()
+    assert_eq(err.invalid_value(), 0xD800 as U32, "error should contain invalid value")
+    return 0
+}
+
+@test
+func test_try_from_u32_above_max() -> I32 {
+    let result = convert::try_from_u32(0x110000 as U32)
+    assert(result.is_err(), "above max should fail")
+    let err = result.unwrap_err()
+    let msg = err.to_string()
+    assert(msg.contains("out of range"), "should say out of range")
+    return 0
+}

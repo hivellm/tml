@@ -1,0 +1,104 @@
+// Tests for core::borrow::ToOwned — primitive type to_owned
+use test::{assert, assert_eq}
+use core::borrow::ToOwned
+
+@test
+func test_to_owned_i32() -> I32 {
+    let x: I32 = 42
+    let y: I32 = x.to_owned()
+    assert_eq(y, 42, "I32 to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_i64() -> I32 {
+    let x: I64 = 99999
+    let y: I64 = x.to_owned()
+    assert_eq(y as I32, 99999 as I32, "I64 to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_i8() -> I32 {
+    let x: I8 = -10 as I8
+    let y: I8 = x.to_owned()
+    assert_eq(y as I32, -10, "I8 to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_i16() -> I32 {
+    let x: I16 = 1000 as I16
+    let y: I16 = x.to_owned()
+    assert_eq(y as I32, 1000, "I16 to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_u8() -> I32 {
+    let x: U8 = 200 as U8
+    let y: U8 = x.to_owned()
+    assert_eq(y as I32, 200, "U8 to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_u16() -> I32 {
+    let x: U16 = 50000 as U16
+    let y: U16 = x.to_owned()
+    assert_eq(y as I32, 50000, "U16 to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_u32() -> I32 {
+    let x: U32 = 100 as U32
+    let y: U32 = x.to_owned()
+    assert_eq(y as I32, 100, "U32 to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_u64() -> I32 {
+    let x: U64 = 500 as U64
+    let y: U64 = x.to_owned()
+    assert_eq(y as I32, 500, "U64 to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_bool() -> I32 {
+    let x: Bool = true
+    let y: Bool = x.to_owned()
+    assert(y, "Bool to_owned should preserve true")
+    let z: Bool = false
+    let w: Bool = z.to_owned()
+    assert(not w, "Bool to_owned should preserve false")
+    return 0
+}
+
+@test
+func test_to_owned_str() -> I32 {
+    let x: Str = "hello"
+    let y: Str = x.to_owned()
+    assert_eq(y, "hello", "Str to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_f32() -> I32 {
+    let x: F32 = 1.5 as F32
+    let y: F32 = x.to_owned()
+    assert(y > 1.4 as F32, "F32 to_owned should preserve value")
+    assert(y < 1.6 as F32, "F32 to_owned should preserve value")
+    return 0
+}
+
+@test
+func test_to_owned_f64() -> I32 {
+    let x: F64 = 3.14
+    let y: F64 = x.to_owned()
+    assert(y > 3.13, "F64 to_owned should preserve value")
+    assert(y < 3.15, "F64 to_owned should preserve value")
+    return 0
+}

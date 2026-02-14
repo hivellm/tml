@@ -1,0 +1,71 @@
+// Tests for core::char::methods — character classification functions
+use test::{assert, assert_eq}
+use core::char
+
+@test
+func test_char_is_valid() -> I32 {
+    assert(char::is_valid(0x0041 as U32), "A should be valid")
+    assert(char::is_valid(0 as U32), "0 should be valid")
+    assert(char::is_valid(0x10FFFF as U32), "max codepoint should be valid")
+    assert(not char::is_valid(0xD800 as U32), "surrogate should be invalid")
+    assert(not char::is_valid(0xDFFF as U32), "surrogate end should be invalid")
+    assert(not char::is_valid(0x110000 as U32), "above max should be invalid")
+    return 0
+}
+
+@test
+func test_char_is_alphabetic() -> I32 {
+    let a: Char = 97 as Char
+    assert(char::is_alphabetic(a), "a should be alphabetic")
+    let z: Char = 90 as Char
+    assert(char::is_alphabetic(z), "Z should be alphabetic")
+    let digit: Char = 48 as Char
+    assert(not char::is_alphabetic(digit), "0 should not be alphabetic")
+    return 0
+}
+
+@test
+func test_char_is_lowercase_uppercase() -> I32 {
+    let lower_a: Char = 97 as Char
+    assert(char::is_lowercase(lower_a), "a should be lowercase")
+    assert(not char::is_uppercase(lower_a), "a should not be uppercase")
+    let upper_a: Char = 65 as Char
+    assert(char::is_uppercase(upper_a), "A should be uppercase")
+    assert(not char::is_lowercase(upper_a), "A should not be lowercase")
+    return 0
+}
+
+@test
+func test_char_is_whitespace() -> I32 {
+    let space: Char = 32 as Char
+    assert(char::is_whitespace(space), "space should be whitespace")
+    let tab: Char = 9 as Char
+    assert(char::is_whitespace(tab), "tab should be whitespace")
+    let newline: Char = 10 as Char
+    assert(char::is_whitespace(newline), "LF should be whitespace")
+    let a: Char = 65 as Char
+    assert(not char::is_whitespace(a), "A should not be whitespace")
+    return 0
+}
+
+@test
+func test_char_is_numeric() -> I32 {
+    let zero: Char = 48 as Char
+    assert(char::is_numeric(zero), "0 should be numeric")
+    let nine: Char = 57 as Char
+    assert(char::is_numeric(nine), "9 should be numeric")
+    let a: Char = 65 as Char
+    assert(not char::is_numeric(a), "A should not be numeric")
+    return 0
+}
+
+@test
+func test_char_is_alphanumeric() -> I32 {
+    let a: Char = 97 as Char
+    assert(char::is_alphanumeric(a), "a should be alphanumeric")
+    let five: Char = 53 as Char
+    assert(char::is_alphanumeric(five), "5 should be alphanumeric")
+    let space: Char = 32 as Char
+    assert(not char::is_alphanumeric(space), "space should not be alphanumeric")
+    return 0
+}

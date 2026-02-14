@@ -1,0 +1,191 @@
+// Tests for core::ascii::AsciiChar — construction, classification, case conversion
+use test::{assert, assert_eq}
+use core::ascii::AsciiChar
+
+@test
+func test_ascii_from_u8_valid() -> I32 {
+    let ch = AsciiChar::from_u8(65)
+    assert(ch.is_just(), "65 should be valid ASCII")
+    assert_eq(ch.unwrap().to_u8() as I32, 65, "should be 65")
+    return 0
+}
+
+@test
+func test_ascii_from_u8_invalid() -> I32 {
+    let ch = AsciiChar::from_u8(128)
+    assert(ch.is_nothing(), "128 should be invalid ASCII")
+    let ch2 = AsciiChar::from_u8(255)
+    assert(ch2.is_nothing(), "255 should be invalid ASCII")
+    return 0
+}
+
+@test
+func test_ascii_from_u8_boundary() -> I32 {
+    let zero = AsciiChar::from_u8(0)
+    assert(zero.is_just(), "0 should be valid ASCII")
+    let max = AsciiChar::from_u8(127)
+    assert(max.is_just(), "127 should be valid ASCII")
+    return 0
+}
+
+@test
+func test_ascii_is_alphabetic() -> I32 {
+    let a = AsciiChar::from_u8(65).unwrap()
+    assert(a.is_alphabetic(), "A should be alphabetic")
+    let z = AsciiChar::from_u8(122).unwrap()
+    assert(z.is_alphabetic(), "z should be alphabetic")
+    let digit = AsciiChar::from_u8(48).unwrap()
+    assert(not digit.is_alphabetic(), "0 should not be alphabetic")
+    return 0
+}
+
+@test
+func test_ascii_is_digit() -> I32 {
+    let zero = AsciiChar::from_u8(48).unwrap()
+    assert(zero.is_digit(), "0 should be digit")
+    let nine = AsciiChar::from_u8(57).unwrap()
+    assert(nine.is_digit(), "9 should be digit")
+    let a = AsciiChar::from_u8(65).unwrap()
+    assert(not a.is_digit(), "A should not be digit")
+    return 0
+}
+
+@test
+func test_ascii_is_uppercase_lowercase() -> I32 {
+    let upper = AsciiChar::from_u8(65).unwrap()
+    assert(upper.is_uppercase(), "A should be uppercase")
+    assert(not upper.is_lowercase(), "A should not be lowercase")
+    let lower = AsciiChar::from_u8(97).unwrap()
+    assert(lower.is_lowercase(), "a should be lowercase")
+    assert(not lower.is_uppercase(), "a should not be uppercase")
+    return 0
+}
+
+@test
+func test_ascii_to_lowercase() -> I32 {
+    let upper = AsciiChar::from_u8(65).unwrap()
+    let lower = upper.to_lowercase()
+    assert_eq(lower.to_u8() as I32, 97, "A.to_lowercase should be a")
+    let digit = AsciiChar::from_u8(48).unwrap()
+    let same = digit.to_lowercase()
+    assert_eq(same.to_u8() as I32, 48, "0.to_lowercase should be 0")
+    return 0
+}
+
+@test
+func test_ascii_to_uppercase() -> I32 {
+    let lower = AsciiChar::from_u8(97).unwrap()
+    let upper = lower.to_uppercase()
+    assert_eq(upper.to_u8() as I32, 65, "a.to_uppercase should be A")
+    return 0
+}
+
+@test
+func test_ascii_is_whitespace() -> I32 {
+    let space = AsciiChar::from_u8(32).unwrap()
+    assert(space.is_whitespace(), "space should be whitespace")
+    let tab = AsciiChar::from_u8(9).unwrap()
+    assert(tab.is_whitespace(), "tab should be whitespace")
+    let a = AsciiChar::from_u8(65).unwrap()
+    assert(not a.is_whitespace(), "A should not be whitespace")
+    return 0
+}
+
+@test
+func test_ascii_is_control() -> I32 {
+    let nul = AsciiChar::from_u8(0).unwrap()
+    assert(nul.is_control(), "null should be control")
+    let del = AsciiChar::from_u8(127).unwrap()
+    assert(del.is_control(), "DEL should be control")
+    let a = AsciiChar::from_u8(65).unwrap()
+    assert(not a.is_control(), "A should not be control")
+    return 0
+}
+
+@test
+func test_ascii_is_printable() -> I32 {
+    let space = AsciiChar::from_u8(32).unwrap()
+    assert(space.is_printable(), "space should be printable")
+    let tilde = AsciiChar::from_u8(126).unwrap()
+    assert(tilde.is_printable(), "tilde should be printable")
+    let ctrl = AsciiChar::from_u8(10).unwrap()
+    assert(not ctrl.is_printable(), "LF should not be printable")
+    return 0
+}
+
+@test
+func test_ascii_is_hexdigit() -> I32 {
+    let zero = AsciiChar::from_u8(48).unwrap()
+    assert(zero.is_hexdigit(), "0 should be hexdigit")
+    let f_upper = AsciiChar::from_u8(70).unwrap()
+    assert(f_upper.is_hexdigit(), "F should be hexdigit")
+    let f_lower = AsciiChar::from_u8(102).unwrap()
+    assert(f_lower.is_hexdigit(), "f should be hexdigit")
+    let g = AsciiChar::from_u8(103).unwrap()
+    assert(not g.is_hexdigit(), "g should not be hexdigit")
+    return 0
+}
+
+@test
+func test_ascii_is_alphanumeric() -> I32 {
+    let a = AsciiChar::from_u8(65).unwrap()
+    assert(a.is_alphanumeric(), "A should be alphanumeric")
+    let five = AsciiChar::from_u8(53).unwrap()
+    assert(five.is_alphanumeric(), "5 should be alphanumeric")
+    let space = AsciiChar::from_u8(32).unwrap()
+    assert(not space.is_alphanumeric(), "space should not be alphanumeric")
+    return 0
+}
+
+@test
+func test_ascii_digit_constructor() -> I32 {
+    let five = AsciiChar::digit(5)
+    assert(five.is_just(), "digit(5) should be Just")
+    assert_eq(five.unwrap().to_u8() as I32, 53, "digit(5) should be '5' (53)")
+    let invalid = AsciiChar::digit(10)
+    assert(invalid.is_nothing(), "digit(10) should be Nothing")
+    return 0
+}
+
+@test
+func test_ascii_to_digit() -> I32 {
+    let five = AsciiChar::from_u8(53).unwrap()
+    let d = five.to_digit()
+    assert(d.is_just(), "to_digit on '5' should be Just")
+    assert_eq(d.unwrap() as I32, 5, "to_digit on '5' should be 5")
+    let a = AsciiChar::from_u8(65).unwrap()
+    assert(a.to_digit().is_nothing(), "to_digit on 'A' should be Nothing")
+    return 0
+}
+
+@test
+func test_ascii_eq_ignore_case() -> I32 {
+    let upper_a = AsciiChar::from_u8(65).unwrap()
+    let lower_a = AsciiChar::from_u8(97).unwrap()
+    assert(upper_a.eq_ignore_case(lower_a), "A should eq_ignore_case a")
+    let b = AsciiChar::from_u8(66).unwrap()
+    assert(not upper_a.eq_ignore_case(b), "A should not eq_ignore_case B")
+    return 0
+}
+
+@test
+func test_ascii_is_punctuation() -> I32 {
+    let bang = AsciiChar::from_u8(33).unwrap()
+    assert(bang.is_punctuation(), "! should be punctuation")
+    let at = AsciiChar::from_u8(64).unwrap()
+    assert(at.is_punctuation(), "@ should be punctuation")
+    let a = AsciiChar::from_u8(65).unwrap()
+    assert(not a.is_punctuation(), "A should not be punctuation")
+    return 0
+}
+
+@test
+func test_ascii_to_string() -> I32 {
+    let a = AsciiChar::from_u8(65).unwrap()
+    let s = core::ascii::to_string(a)
+    assert_eq(s, "A", "AsciiChar 65 to_string should be A")
+    let zero = AsciiChar::from_u8(48).unwrap()
+    let s2 = core::ascii::to_string(zero)
+    assert_eq(s2, "0", "AsciiChar 48 to_string should be 0")
+    return 0
+}

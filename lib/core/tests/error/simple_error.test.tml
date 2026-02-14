@@ -1,0 +1,60 @@
+// Tests for core::error — SimpleError, BoxedError, ParseError, IoError
+use test::{assert, assert_eq}
+use core::error::{SimpleError, BoxedError, ParseError, IoError, IoErrorKind}
+
+@test
+func test_simple_error_new() -> I32 {
+    let err = SimpleError::new("something went wrong")
+    assert_eq(err.to_string(), "something went wrong", "SimpleError message")
+    return 0
+}
+
+@test
+func test_simple_error_debug() -> I32 {
+    let err = SimpleError::new("oops")
+    let dbg = err.debug_string()
+    assert(dbg.contains("oops"), "debug should contain message")
+    return 0
+}
+
+@test
+func test_boxed_error_from_message() -> I32 {
+    let err = BoxedError::from_message("boxed error msg")
+    assert_eq(err.to_string(), "boxed error msg", "BoxedError from_message")
+    return 0
+}
+
+@test
+func test_boxed_error_debug() -> I32 {
+    let err = BoxedError::from_message("test")
+    let dbg = err.debug_string()
+    assert(dbg.contains("test"), "BoxedError debug should contain message")
+    return 0
+}
+
+@test
+func test_parse_error_no_position() -> I32 {
+    let err = ParseError::new("unexpected token")
+    let s = err.to_string()
+    assert(s.contains("unexpected token"), "ParseError should contain message")
+    assert(s.contains("parse error"), "ParseError should say parse error")
+    return 0
+}
+
+@test
+func test_parse_error_with_position() -> I32 {
+    let err = ParseError::with_position("expected '}'", 42)
+    let s = err.to_string()
+    assert(s.contains("42"), "ParseError should contain position")
+    assert(s.contains("expected '}'"), "ParseError should contain message")
+    return 0
+}
+
+@test
+func test_parse_error_debug() -> I32 {
+    let err = ParseError::new("bad input")
+    let dbg = err.debug_string()
+    assert(dbg.contains("ParseError"), "ParseError debug should contain type name")
+    assert(dbg.contains("bad input"), "ParseError debug should contain message")
+    return 0
+}

@@ -1,0 +1,46 @@
+// Tests for core::mem — swap, replace, drop, forget
+use test::{assert, assert_eq}
+use core::mem
+
+@test
+func test_swap_i32() -> I32 {
+    let mut a: I32 = 10
+    let mut b: I32 = 20
+    mem::swap(mut ref a, mut ref b)
+    assert_eq(a, 20, "a should be 20 after swap")
+    assert_eq(b, 10, "b should be 10 after swap")
+    return 0
+}
+
+@test
+func test_replace_i32() -> I32 {
+    let mut x: I32 = 5
+    let old = mem::replace(mut ref x, 100)
+    assert_eq(x, 100, "x should be 100 after replace")
+    assert_eq(old, 5, "old should be 5")
+    return 0
+}
+
+@test
+func test_drop_is_noop() -> I32 {
+    let v: I32 = 42
+    mem::drop(v)
+    // drop just consumes the value, no assertion needed
+    return 0
+}
+
+@test
+func test_forget_is_noop() -> I32 {
+    let v: I32 = 42
+    mem::forget(v)
+    // forget prevents destructor, for primitives this is just consuming
+    return 0
+}
+
+@test
+func test_size_of_val() -> I32 {
+    let x: I32 = 42
+    let s = mem::size_of_val(ref x)
+    assert_eq(s, 4, "size_of_val for I32 should be 4")
+    return 0
+}

@@ -13,8 +13,9 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     // Use last_expr_type_ which is set by gen_expr for accurate type info
     if (last_expr_type_ != "i1") {
         // Condition is not i1, convert to i1 by comparing with 0
+        std::string cond_type = last_expr_type_.empty() ? "i32" : last_expr_type_;
         std::string bool_cond = fresh_reg();
-        emit_line("  " + bool_cond + " = icmp ne i32 " + cond + ", 0");
+        emit_line("  " + bool_cond + " = icmp ne " + cond_type + " " + cond + ", 0");
         cond = bool_cond;
     }
 
@@ -134,8 +135,9 @@ auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
 
     // Convert condition to i1 if needed
     if (last_expr_type_ != "i1") {
+        std::string cond_type = last_expr_type_.empty() ? "i32" : last_expr_type_;
         std::string bool_cond = fresh_reg();
-        emit_line("  " + bool_cond + " = icmp ne i32 " + cond + ", 0");
+        emit_line("  " + bool_cond + " = icmp ne " + cond_type + " " + cond + ", 0");
         cond = bool_cond;
     }
 

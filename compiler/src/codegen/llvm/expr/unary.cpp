@@ -850,7 +850,16 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
         }
         break;
     case parser::UnaryOp::Not:
-        emit_line("  " + result + " = xor i1 " + operand + ", 1");
+        // Convert non-i1 integer operands to i1 first (e.g., C runtime functions returning i32)
+        if (operand_type != "i1" &&
+            (operand_type == "i8" || operand_type == "i16" || operand_type == "i32" ||
+             operand_type == "i64" || operand_type == "i128")) {
+            std::string bool_op = fresh_reg();
+            emit_line("  " + bool_op + " = icmp ne " + operand_type + " " + operand + ", 0");
+            emit_line("  " + result + " = xor i1 " + bool_op + ", 1");
+        } else {
+            emit_line("  " + result + " = xor i1 " + operand + ", 1");
+        }
         last_expr_type_ = "i1";
         break;
     case parser::UnaryOp::BitNot:

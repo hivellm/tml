@@ -597,6 +597,17 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         std::string ptr_val = gen_expr(*let.init.value());
         std::string expr_type = last_expr_type_;
 
+        // Handle lowlevel C runtime calls returning i32 when ptr is expected.
+        // Functions called inside lowlevel blocks without @extern declarations
+        // default to i32 return type, but may actually return void* (ptr).
+        // Convert via inttoptr when the variable type annotation says *Unit/ptr.
+        if (expr_type != "ptr" && (expr_type == "i32" || expr_type == "i64") && var_type == "ptr") {
+            std::string converted = fresh_reg();
+            emit_line("  " + converted + " = inttoptr " + expr_type + " " + ptr_val + " to ptr");
+            ptr_val = converted;
+            expr_type = "ptr";
+        }
+
         // Handle value class returned by value: if var_type is ptr (class type) but
         // last_expr_type_ is a struct type, use the struct type for storage
         if (expr_type.starts_with("%class.")) {
@@ -718,8 +729,9 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         expected_literal_is_unsigned_ = false;
         // If type wasn't explicitly annotated and expression has a known type, use it
         if (!let.type_annotation && last_expr_type_ != "i32") {
-            if (last_expr_type_ == "double" || last_expr_type_ == "i64" ||
-                last_expr_type_ == "i1" || last_expr_type_ == "ptr" ||
+            if (last_expr_type_ == "float" || last_expr_type_ == "double" ||
+                last_expr_type_ == "i8" || last_expr_type_ == "i16" || last_expr_type_ == "i64" ||
+                last_expr_type_ == "i128" || last_expr_type_ == "i1" || last_expr_type_ == "ptr" ||
                 last_expr_type_.starts_with("%struct.") || last_expr_type_.starts_with("%union.") ||
                 last_expr_type_.starts_with("%class.") || last_expr_type_.starts_with("{")) {
                 var_type = last_expr_type_;

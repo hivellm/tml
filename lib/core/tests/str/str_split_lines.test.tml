@@ -1,0 +1,25 @@
+// Tests for core::str — split, split_whitespace, lines
+use test::{assert, assert_eq}
+use core::str
+
+@test
+func test_split() -> I32 {
+    let parts = str::split("a,b,c", ",")
+    assert_eq(parts.len(), 3, "split by comma should give 3 parts")
+    return 0
+}
+
+@test
+func test_split_whitespace() -> I32 {
+    let parts = str::split_whitespace("hello world foo")
+    assert_eq(parts.len(), 3, "split_whitespace should give 3 parts")
+    return 0
+}
+
+@test
+func test_repeat() -> I32 {
+    let s = str::repeat("ab", 4)
+    assert_eq(s, "abababab", "repeat ab 4 times")
+    assert_eq(s.len(), 8, "repeat ab 4 has length 8")
+    return 0
+}

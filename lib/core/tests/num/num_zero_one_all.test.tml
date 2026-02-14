@@ -1,0 +1,144 @@
+// Tests for core::num — Zero and One traits for all numeric types
+use test::{assert, assert_eq}
+
+@test
+func test_zero_i32() -> I32 {
+    let z = I32::zero()
+    assert_eq(z, 0, "I32 zero")
+    assert(z.is_zero(), "I32 zero is_zero")
+    return 0
+}
+
+@test
+func test_zero_i64() -> I32 {
+    let z = I64::zero()
+    assert_eq(z, 0, "I64 zero")
+    assert(z.is_zero(), "I64 zero is_zero")
+    return 0
+}
+
+@test
+func test_zero_u32() -> I32 {
+    let z = U32::zero()
+    assert_eq(z, 0 as U32, "U32 zero")
+    assert(z.is_zero(), "U32 zero is_zero")
+    return 0
+}
+
+@test
+func test_zero_u64() -> I32 {
+    let z = U64::zero()
+    assert_eq(z, 0 as U64, "U64 zero")
+    assert(z.is_zero(), "U64 zero is_zero")
+    return 0
+}
+
+@test
+func test_one_i32() -> I32 {
+    let o = I32::one()
+    assert_eq(o, 1, "I32 one")
+    assert(o.is_one(), "I32 one is_one")
+    return 0
+}
+
+@test
+func test_one_i64() -> I32 {
+    let o = I64::one()
+    assert_eq(o, 1, "I64 one")
+    assert(o.is_one(), "I64 one is_one")
+    return 0
+}
+
+@test
+func test_one_u32() -> I32 {
+    let o = U32::one()
+    assert_eq(o, 1 as U32, "U32 one")
+    assert(o.is_one(), "U32 one is_one")
+    return 0
+}
+
+@test
+func test_one_u64() -> I32 {
+    let o = U64::one()
+    assert_eq(o, 1 as U64, "U64 one")
+    assert(o.is_one(), "U64 one is_one")
+    return 0
+}
+
+@test
+func test_zero_i8() -> I32 {
+    let z: I8 = I8::zero()
+    assert_eq(z, 0i8, "I8 zero")
+    assert(z.is_zero(), "I8 zero is_zero")
+    return 0
+}
+
+@test
+func test_one_i8() -> I32 {
+    let o: I8 = I8::one()
+    assert_eq(o, 1i8, "I8 one")
+    assert(o.is_one(), "I8 one is_one")
+    return 0
+}
+
+@test
+func test_zero_i16() -> I32 {
+    let z: I16 = I16::zero()
+    assert_eq(z, 0i16, "I16 zero")
+    assert(z.is_zero(), "I16 zero is_zero")
+    return 0
+}
+
+@test
+func test_one_i16() -> I32 {
+    let o: I16 = I16::one()
+    assert_eq(o, 1i16, "I16 one")
+    assert(o.is_one(), "I16 one is_one")
+    return 0
+}
+
+@test
+func test_zero_f32() -> I32 {
+    let z: F32 = F32::zero()
+    assert_eq(z, 0.0f32, "F32 zero")
+    assert(z.is_zero(), "F32 zero is_zero")
+    return 0
+}
+
+@test
+func test_one_f32() -> I32 {
+    let o: F32 = F32::one()
+    assert_eq(o, 1.0f32, "F32 one")
+    assert(o.is_one(), "F32 one is_one")
+    return 0
+}
+
+@test
+func test_zero_f64() -> I32 {
+    let z: F64 = F64::zero()
+    assert_eq(z, 0.0, "F64 zero")
+    assert(z.is_zero(), "F64 zero is_zero")
+    return 0
+}
+
+@test
+func test_one_f64() -> I32 {
+    let o: F64 = F64::one()
+    assert_eq(o, 1.0, "F64 one")
+    assert(o.is_one(), "F64 one is_one")
+    return 0
+}
+
+@test
+func test_not_zero_i32() -> I32 {
+    let v: I32 = 5
+    assert(not v.is_zero(), "5 is not zero")
+    return 0
+}
+
+@test
+func test_not_one_i32() -> I32 {
+    let v: I32 = 5
+    assert(not v.is_one(), "5 is not one")
+    return 0
+}

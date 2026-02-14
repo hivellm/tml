@@ -1,0 +1,49 @@
+// Tests for core::str — pad_left, pad_right, replace_first, char_at, first_char, last_char
+use test::{assert, assert_eq}
+use core::str
+
+@test
+func test_pad_left() -> I32 {
+    let s = str::pad_left("hi", 5, " ")
+    assert_eq(s.len(), 5, "pad_left should produce length 5")
+    assert(s.ends_with("hi"), "pad_left should end with hi")
+    return 0
+}
+
+@test
+func test_pad_right() -> I32 {
+    let s = str::pad_right("hi", 5, " ")
+    assert_eq(s.len(), 5, "pad_right should produce length 5")
+    assert(s.starts_with("hi"), "pad_right should start with hi")
+    return 0
+}
+
+@test
+func test_replace_first() -> I32 {
+    let s = str::replace_first("aaa", "a", "b")
+    assert(s.starts_with("b"), "replace_first should replace first a")
+    return 0
+}
+
+@test
+func test_char_at() -> I32 {
+    let c = str::char_at("hello", 0)
+    assert_eq(c, 104, "char_at(0) should be 'h' = 104")
+    let c2 = str::char_at("hello", 4)
+    assert_eq(c2, 111, "char_at(4) should be 'o' = 111")
+    return 0
+}
+
+@test
+func test_is_empty() -> I32 {
+    assert(str::is_empty(""), "empty string is empty")
+    assert(not str::is_empty("x"), "x is not empty")
+    return 0
+}
+
+@test
+func test_concat() -> I32 {
+    let s = str::concat("hello", " world")
+    assert_eq(s, "hello world", "concat two strings")
+    return 0
+}

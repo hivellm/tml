@@ -66,9 +66,39 @@
 //! let key = hkdf(HashAlgorithm::Sha256, ikm, salt, info, 32)?
 //! ```
 
-use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::error::{CryptoError, CryptoResult}
 use std::crypto::hash::HashAlgorithm
 use std::collections::Buffer
+
+// FFI declarations for C crypto runtime functions
+@extern("crypto_pbkdf2")
+func crypto_pbkdf2(password: Str, salt: *Unit, iterations: I64, key_length: I64, digest: Str) -> *Unit
+@extern("crypto_pbkdf2_bytes")
+func crypto_pbkdf2_bytes(password: *Unit, salt: *Unit, iterations: I64, key_length: I64, digest: Str) -> *Unit
+@extern("crypto_scrypt")
+func crypto_scrypt(password: Str, salt: *Unit, key_length: I64, n: I64, r: I64, p: I64, maxmem: I64) -> *Unit
+@extern("crypto_scrypt_bytes")
+func crypto_scrypt_bytes(password: *Unit, salt: *Unit, key_length: I64, n: I64, r: I64, p: I64, maxmem: I64) -> *Unit
+@extern("crypto_hkdf")
+func crypto_hkdf(digest: Str, ikm: *Unit, salt: *Unit, info: Str, key_length: I64) -> *Unit
+@extern("crypto_hkdf_bytes")
+func crypto_hkdf_bytes(digest: Str, ikm: *Unit, salt: *Unit, info: *Unit, key_length: I64) -> *Unit
+@extern("crypto_hkdf_extract")
+func crypto_hkdf_extract(digest: Str, ikm: *Unit, salt: *Unit) -> *Unit
+@extern("crypto_hkdf_expand")
+func crypto_hkdf_expand(digest: Str, prk: *Unit, info: *Unit, key_length: I64) -> *Unit
+@extern("crypto_argon2")
+func crypto_argon2(variant: Str, password: Str, salt: *Unit, key_length: I64, time_cost: I64, memory_cost: I64, parallelism: I64) -> *Unit
+@extern("crypto_argon2_bytes")
+func crypto_argon2_bytes(variant: Str, password: *Unit, salt: *Unit, key_length: I64, time_cost: I64, memory_cost: I64, parallelism: I64) -> *Unit
+@extern("crypto_argon2_verify")
+func crypto_argon2_verify(encoded_hash: Str, password: Str) -> Bool
+@extern("crypto_argon2_hash")
+func crypto_argon2_hash(variant: Str, password: Str, time_cost: I64, memory_cost: I64, parallelism: I64) -> Str
+@extern("crypto_bcrypt_hash")
+func crypto_bcrypt_hash(password: Str, rounds: I64) -> Str
+@extern("crypto_bcrypt_verify")
+func crypto_bcrypt_verify(hash: Str, password: Str) -> Bool
 
 // ============================================================================
 // PBKDF2
@@ -100,23 +130,15 @@ pub func pbkdf2(
     digest: HashAlgorithm,
 ) -> CryptoResult[Buffer] {
     if iterations < 1 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "iterations must be at least 1"
-        ))
+        return Err(CryptoError::invalid_parameter("iterations must be at least 1"))
     }
     if key_length < 1 or key_length > 1024 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key length must be between 1 and 1024"
-        ))
+        return Err(CryptoError::invalid_parameter("key length must be between 1 and 1024"))
     }
 
-    let handle: *Unit = lowlevel {
-        crypto_pbkdf2(password, salt.handle, iterations, key_length, digest.name())
-    }
+    let handle: *Unit = crypto_pbkdf2(password, salt.handle, iterations, key_length, digest.name())
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -130,23 +152,15 @@ pub func pbkdf2_bytes(
     digest: HashAlgorithm,
 ) -> CryptoResult[Buffer] {
     if iterations < 1 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "iterations must be at least 1"
-        ))
+        return Err(CryptoError::invalid_parameter("iterations must be at least 1"))
     }
     if key_length < 1 or key_length > 1024 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key length must be between 1 and 1024"
-        ))
+        return Err(CryptoError::invalid_parameter("key length must be between 1 and 1024"))
     }
 
-    let handle: *Unit = lowlevel {
-        crypto_pbkdf2_bytes(password.handle, salt.handle, iterations, key_length, digest.name())
-    }
+    let handle: *Unit = crypto_pbkdf2_bytes(password.handle, salt.handle, iterations, key_length, digest.name())
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -238,17 +252,12 @@ pub func scrypt(
     params: ref ScryptParams,
 ) -> CryptoResult[Buffer] {
     if key_length < 1 or key_length > 1024 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key length must be between 1 and 1024"
-        ))
+        return Err(CryptoError::invalid_parameter("key length must be between 1 and 1024"))
     }
 
-    let handle: *Unit = lowlevel {
-        crypto_scrypt(password, salt.handle, key_length, params.n, params.r, params.p, params.maxmem)
-    }
+    let handle: *Unit = crypto_scrypt(password, salt.handle, key_length, params.n, params.r, params.p, params.maxmem)
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -261,17 +270,12 @@ pub func scrypt_bytes(
     params: ref ScryptParams,
 ) -> CryptoResult[Buffer] {
     if key_length < 1 or key_length > 1024 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key length must be between 1 and 1024"
-        ))
+        return Err(CryptoError::invalid_parameter("key length must be between 1 and 1024"))
     }
 
-    let handle: *Unit = lowlevel {
-        crypto_scrypt_bytes(password.handle, salt.handle, key_length, params.n, params.r, params.p, params.maxmem)
-    }
+    let handle: *Unit = crypto_scrypt_bytes(password.handle, salt.handle, key_length, params.n, params.r, params.p, params.maxmem)
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -307,17 +311,12 @@ pub func hkdf(
 ) -> CryptoResult[Buffer] {
     let max_length = digest.digest_size() * 255
     if key_length < 1 or key_length > max_length {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key length must be between 1 and {max_length}"
-        ))
+        return Err(CryptoError::invalid_parameter("key length must be between 1 and {max_length}"))
     }
 
-    let handle: *Unit = lowlevel {
-        crypto_hkdf(digest.name(), ikm.handle, salt.handle, info, key_length)
-    }
+    let handle: *Unit = crypto_hkdf(digest.name(), ikm.handle, salt.handle, info, key_length)
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -332,17 +331,12 @@ pub func hkdf_bytes(
 ) -> CryptoResult[Buffer] {
     let max_length = digest.digest_size() * 255
     if key_length < 1 or key_length > max_length {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key length must be between 1 and {max_length}"
-        ))
+        return Err(CryptoError::invalid_parameter("key length must be between 1 and {max_length}"))
     }
 
-    let handle: *Unit = lowlevel {
-        crypto_hkdf_bytes(digest.name(), ikm.handle, salt.handle, info.handle, key_length)
-    }
+    let handle: *Unit = crypto_hkdf_bytes(digest.name(), ikm.handle, salt.handle, info.handle, key_length)
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -355,11 +349,9 @@ pub func hkdf_extract(
     ikm: ref Buffer,
     salt: ref Buffer,
 ) -> CryptoResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        crypto_hkdf_extract(digest.name(), ikm.handle, salt.handle)
-    }
+    let handle: *Unit = crypto_hkdf_extract(digest.name(), ikm.handle, salt.handle)
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -375,17 +367,12 @@ pub func hkdf_expand(
 ) -> CryptoResult[Buffer] {
     let max_length = digest.digest_size() * 255
     if key_length < 1 or key_length > max_length {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key length must be between 1 and {max_length}"
-        ))
+        return Err(CryptoError::invalid_parameter("key length must be between 1 and {max_length}"))
     }
 
-    let handle: *Unit = lowlevel {
-        crypto_hkdf_expand(digest.name(), prk.handle, info.handle, key_length)
-    }
+    let handle: *Unit = crypto_hkdf_expand(digest.name(), prk.handle, info.handle, key_length)
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -497,49 +484,32 @@ pub func argon2(
     params: ref Argon2Params,
 ) -> CryptoResult[Buffer] {
     if salt.len() < 8 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "salt must be at least 8 bytes"
-        ))
+        return Err(CryptoError::invalid_parameter("salt must be at least 8 bytes"))
     }
     if key_length < 4 or key_length > 1024 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key length must be between 4 and 1024"
-        ))
+        return Err(CryptoError::invalid_parameter("key length must be between 4 and 1024"))
     }
     if params.time_cost < 1 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "time cost must be at least 1"
-        ))
+        return Err(CryptoError::invalid_parameter("time cost must be at least 1"))
     }
     if params.memory_cost < 8 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "memory cost must be at least 8 KiB"
-        ))
+        return Err(CryptoError::invalid_parameter("memory cost must be at least 8 KiB"))
     }
     if params.parallelism < 1 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "parallelism must be at least 1"
-        ))
+        return Err(CryptoError::invalid_parameter("parallelism must be at least 1"))
     }
 
-    let handle: *Unit = lowlevel {
-        crypto_argon2(
-            variant.name(),
-            password,
-            salt.handle,
-            key_length,
-            params.time_cost,
-            params.memory_cost,
-            params.parallelism
-        )
-    }
+    let handle: *Unit = crypto_argon2(
+        variant.name(),
+        password,
+        salt.handle,
+        key_length,
+        params.time_cost,
+        params.memory_cost,
+        params.parallelism
+    )
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -553,31 +523,23 @@ pub func argon2_bytes(
     params: ref Argon2Params,
 ) -> CryptoResult[Buffer] {
     if salt.len() < 8 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "salt must be at least 8 bytes"
-        ))
+        return Err(CryptoError::invalid_parameter("salt must be at least 8 bytes"))
     }
     if key_length < 4 or key_length > 1024 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "key length must be between 4 and 1024"
-        ))
+        return Err(CryptoError::invalid_parameter("key length must be between 4 and 1024"))
     }
 
-    let handle: *Unit = lowlevel {
-        crypto_argon2_bytes(
-            variant.name(),
-            password.handle,
-            salt.handle,
-            key_length,
-            params.time_cost,
-            params.memory_cost,
-            params.parallelism
-        )
-    }
+    let handle: *Unit = crypto_argon2_bytes(
+        variant.name(),
+        password.handle,
+        salt.handle,
+        key_length,
+        params.time_cost,
+        params.memory_cost,
+        params.parallelism
+    )
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -587,7 +549,7 @@ pub func argon2_bytes(
 /// The hash should be in the standard encoded format:
 /// $argon2id$v=19$m=65536,t=3,p=4$salt$hash
 pub func argon2_verify(encoded_hash: Str, password: Str) -> Bool {
-    let result: Bool = lowlevel { crypto_argon2_verify(encoded_hash, password) }
+    let result: Bool = crypto_argon2_verify(encoded_hash, password)
     return result
 }
 
@@ -600,17 +562,15 @@ pub func argon2_hash(
     password: Str,
     params: ref Argon2Params,
 ) -> CryptoResult[Str] {
-    let result: Str = lowlevel {
-        crypto_argon2_hash(
-            variant.name(),
-            password,
-            params.time_cost,
-            params.memory_cost,
-            params.parallelism
-        )
-    }
+    let result: Str = crypto_argon2_hash(
+        variant.name(),
+        password,
+        params.time_cost,
+        params.memory_cost,
+        params.parallelism
+    )
     if result == "" {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(result)
 }
@@ -624,20 +584,17 @@ pub func argon2_hash(
 /// **Note**: For new applications, prefer Argon2.
 pub func bcrypt_hash(password: Str, rounds: I64) -> CryptoResult[Str] {
     if rounds < 4 or rounds > 31 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "bcrypt rounds must be between 4 and 31"
-        ))
+        return Err(CryptoError::invalid_parameter("bcrypt rounds must be between 4 and 31"))
     }
-    let result: Str = lowlevel { crypto_bcrypt_hash(password, rounds) }
+    let result: Str = crypto_bcrypt_hash(password, rounds)
     if result == "" {
-        return Err(CryptoError::new(CryptoErrorKind::KeyDerivationFailed))
+        return Err(CryptoError::operation_failed("key derivation failed"))
     }
     return Ok(result)
 }
 
 /// Verifies a password against a bcrypt hash.
 pub func bcrypt_verify(hash: Str, password: Str) -> Bool {
-    let result: Bool = lowlevel { crypto_bcrypt_verify(hash, password) }
+    let result: Bool = crypto_bcrypt_verify(hash, password)
     return result
 }

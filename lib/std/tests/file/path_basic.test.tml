@@ -1,0 +1,46 @@
+// Tests for std::file::path — path manipulation functions
+use test::{assert, assert_eq}
+use std::file::path::Path
+
+@test
+func test_path_join() -> I32 {
+    let p = Path::join("foo", "bar.txt")
+    assert(p.len() > 0, "join should produce non-empty")
+    return 0
+}
+
+@test
+func test_path_filename() -> I32 {
+    let f = Path::filename("foo/bar.txt")
+    assert_eq(f, "bar.txt", "filename of foo/bar.txt")
+    return 0
+}
+
+@test
+func test_path_extension() -> I32 {
+    let e = Path::extension("foo/bar.txt")
+    // extension may return "txt" or ".txt" depending on implementation
+    assert(e.contains("txt"), "extension should contain txt")
+    return 0
+}
+
+@test
+func test_path_parent() -> I32 {
+    let p = Path::parent("foo/bar.txt")
+    assert_eq(p, "foo", "parent of foo/bar.txt")
+    return 0
+}
+
+@test
+func test_path_exists() -> I32 {
+    // Current directory should exist
+    assert(Path::exists("."), "current dir exists")
+    assert(not Path::exists("__nonexistent_path_12345__"), "fake path does not exist")
+    return 0
+}
+
+@test
+func test_path_is_dir() -> I32 {
+    assert(Path::is_dir("."), ". is a directory")
+    return 0
+}

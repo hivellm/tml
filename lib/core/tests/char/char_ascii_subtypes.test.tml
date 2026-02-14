@@ -1,0 +1,50 @@
+// Tests for core::char::methods — ASCII subtype classification
+use test::{assert, assert_eq}
+use core::char::methods
+
+@test
+func test_is_ascii_alphabetic() -> I32 {
+    assert(methods::is_ascii_alphabetic('A'), "A")
+    assert(methods::is_ascii_alphabetic('z'), "z")
+    assert(not methods::is_ascii_alphabetic('1'), "1")
+    return 0
+}
+
+@test
+func test_is_ascii_uppercase() -> I32 {
+    assert(methods::is_ascii_uppercase('A'), "A")
+    assert(not methods::is_ascii_uppercase('a'), "a")
+    return 0
+}
+
+@test
+func test_is_ascii_lowercase() -> I32 {
+    assert(methods::is_ascii_lowercase('a'), "a")
+    assert(not methods::is_ascii_lowercase('A'), "A")
+    return 0
+}
+
+@test
+func test_is_ascii_alphanumeric() -> I32 {
+    assert(methods::is_ascii_alphanumeric('A'), "A")
+    assert(methods::is_ascii_alphanumeric('5'), "5")
+    assert(not methods::is_ascii_alphanumeric(' '), "space")
+    return 0
+}
+
+@test
+func test_is_ascii_digit() -> I32 {
+    assert(methods::is_ascii_digit('0'), "0")
+    assert(methods::is_ascii_digit('9'), "9")
+    assert(not methods::is_ascii_digit('a'), "a")
+    return 0
+}
+
+@test
+func test_is_ascii_hexdigit() -> I32 {
+    assert(methods::is_ascii_hexdigit('0'), "0")
+    assert(methods::is_ascii_hexdigit('a'), "a")
+    assert(methods::is_ascii_hexdigit('F'), "F")
+    assert(not methods::is_ascii_hexdigit('g'), "g")
+    return 0
+}

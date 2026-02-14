@@ -1,0 +1,30 @@
+// Tests for core::char::convert — char conversion functions
+use test::{assert, assert_eq}
+use core::char::convert
+
+@test
+func test_to_u32() -> I32 {
+    assert_eq(convert::to_u32('A'), 65 as U32, "A is 65")
+    assert_eq(convert::to_u32('0'), 48 as U32, "0 is 48")
+    return 0
+}
+
+@test
+func test_to_u64() -> I32 {
+    assert_eq(convert::to_u64('A'), 65 as U64, "A is 65")
+    return 0
+}
+
+@test
+func test_from_u8() -> I32 {
+    let c = convert::from_u8(65 as U8)
+    assert_eq(c, 'A', "65 is A")
+    return 0
+}
+
+@test
+func test_from_u32_unchecked() -> I32 {
+    let c = convert::from_u32_unchecked(65 as U32)
+    assert_eq(c, 'A', "65 is A")
+    return 0
+}

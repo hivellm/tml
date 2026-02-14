@@ -1,0 +1,41 @@
+// Tests for core::str — string search functions
+use test::{assert, assert_eq}
+
+@test
+func test_str_contains() -> I32 {
+    let s = "hello world"
+    assert(s.contains("world"), "should contain world")
+    assert(s.contains("hello"), "should contain hello")
+    assert(not s.contains("xyz"), "should not contain xyz")
+    return 0
+}
+
+@test
+func test_str_starts_with() -> I32 {
+    let s = "hello world"
+    assert(s.starts_with("hello"), "should start with hello")
+    assert(not s.starts_with("world"), "should not start with world")
+    return 0
+}
+
+@test
+func test_str_ends_with() -> I32 {
+    let s = "hello world"
+    assert(s.ends_with("world"), "should end with world")
+    assert(not s.ends_with("hello"), "should not end with hello")
+    return 0
+}
+
+@test
+func test_str_len() -> I32 {
+    assert_eq("hello".len(), 5, "hello len should be 5")
+    assert_eq("".len(), 0, "empty len should be 0")
+    return 0
+}
+
+@test
+func test_str_is_empty() -> I32 {
+    assert("".is_empty(), "empty string should be empty")
+    assert(not "x".is_empty(), "x should not be empty")
+    return 0
+}

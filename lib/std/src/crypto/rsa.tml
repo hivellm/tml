@@ -74,9 +74,38 @@
 //! }
 //! ```
 
-use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
+use std::crypto::error::{CryptoError, CryptoResult}
 use std::crypto::key::{PublicKey, PrivateKey}
 use std::collections::Buffer
+
+@extern("crypto_rsa_public_encrypt")
+func crypto_rsa_public_encrypt(key: *Unit, data: *Unit, padding: Str) -> *Unit
+@extern("crypto_rsa_public_encrypt_oaep")
+func crypto_rsa_public_encrypt_oaep(key: *Unit, data: *Unit, hash: Str, mgf1_hash: Str, label: *Unit) -> *Unit
+@extern("crypto_str_to_bytes")
+func crypto_str_to_bytes(data: Str) -> *Unit
+@extern("crypto_rsa_private_decrypt")
+func crypto_rsa_private_decrypt(key: *Unit, data: *Unit, padding: Str) -> *Unit
+@extern("crypto_rsa_private_decrypt_oaep")
+func crypto_rsa_private_decrypt_oaep(key: *Unit, data: *Unit, hash: Str, mgf1_hash: Str, label: *Unit) -> *Unit
+@extern("crypto_bytes_to_str")
+func crypto_bytes_to_str(handle: *Unit) -> Str
+@extern("crypto_rsa_private_encrypt")
+func crypto_rsa_private_encrypt(key: *Unit, data: *Unit, padding: Str) -> *Unit
+@extern("crypto_rsa_public_decrypt")
+func crypto_rsa_public_decrypt(key: *Unit, data: *Unit, padding: Str) -> *Unit
+@extern("crypto_random_bytes")
+func crypto_random_bytes(size: I64) -> *Unit
+@extern("crypto_aes_gcm_encrypt")
+func crypto_aes_gcm_encrypt(key: *Unit, nonce: *Unit, data: *Unit, aad: *Unit) -> *Unit
+@extern("crypto_aes_gcm_get_tag")
+func crypto_aes_gcm_get_tag(ciphertext: *Unit) -> *Unit
+@extern("crypto_concat_buffers3")
+func crypto_concat_buffers3(a: *Unit, b: *Unit, c: *Unit) -> *Unit
+@extern("crypto_buffer_slice")
+func crypto_buffer_slice(buf: *Unit, offset: I64, length: I64) -> *Unit
+@extern("crypto_aes_gcm_decrypt")
+func crypto_aes_gcm_decrypt(key: *Unit, nonce: *Unit, ciphertext: *Unit, aad: *Unit, tag: *Unit) -> *Unit
 
 /// RSA padding schemes.
 pub type RsaPadding {
@@ -202,15 +231,12 @@ pub func public_encrypt(
     let max_size = padding.max_data_size(key_bits)
 
     if data.len() > max_size {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "data too large for RSA encryption (max {max_size} bytes with {padding.name()})"
-        ))
+        return Err(CryptoError::invalid_parameter("data too large for RSA encryption (max {max_size} bytes with {padding.name()})"))
     }
 
-    let handle: *Unit = lowlevel { crypto_rsa_public_encrypt(key.handle, data.handle, padding.name()) }
+    let handle: *Unit = crypto_rsa_public_encrypt(key.handle, data.handle, padding.name())
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        return Err(CryptoError::operation_failed("RSA operation"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -221,17 +247,15 @@ pub func public_encrypt_oaep(
     data: ref Buffer,
     options: ref OaepOptions,
 ) -> CryptoResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        crypto_rsa_public_encrypt_oaep(
-            key.handle,
-            data.handle,
-            options.hash,
-            options.mgf1_hash,
-            options.label.handle
-        )
-    }
+    let handle: *Unit = crypto_rsa_public_encrypt_oaep(
+        key.handle,
+        data.handle,
+        options.hash,
+        options.mgf1_hash,
+        options.label.handle
+    )
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        return Err(CryptoError::operation_failed("RSA operation"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -242,7 +266,7 @@ pub func public_encrypt_str(
     data: Str,
     padding: RsaPadding,
 ) -> CryptoResult[Buffer] {
-    let data_buf_handle: *Unit = lowlevel { crypto_str_to_bytes(data) }
+    let data_buf_handle: *Unit = crypto_str_to_bytes(data)
     let data_buf = Buffer { handle: data_buf_handle }
     return public_encrypt(key, ref data_buf, padding)
 }
@@ -257,9 +281,9 @@ pub func private_decrypt(
     data: ref Buffer,
     padding: RsaPadding,
 ) -> CryptoResult[Buffer] {
-    let handle: *Unit = lowlevel { crypto_rsa_private_decrypt(key.handle, data.handle, padding.name()) }
+    let handle: *Unit = crypto_rsa_private_decrypt(key.handle, data.handle, padding.name())
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        return Err(CryptoError::operation_failed("RSA operation"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -270,17 +294,15 @@ pub func private_decrypt_oaep(
     data: ref Buffer,
     options: ref OaepOptions,
 ) -> CryptoResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        crypto_rsa_private_decrypt_oaep(
-            key.handle,
-            data.handle,
-            options.hash,
-            options.mgf1_hash,
-            options.label.handle
-        )
-    }
+    let handle: *Unit = crypto_rsa_private_decrypt_oaep(
+        key.handle,
+        data.handle,
+        options.hash,
+        options.mgf1_hash,
+        options.label.handle
+    )
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        return Err(CryptoError::operation_failed("RSA operation"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -291,8 +313,12 @@ pub func private_decrypt_str(
     data: ref Buffer,
     padding: RsaPadding,
 ) -> CryptoResult[Str] {
-    let decrypted = private_decrypt(key, data, padding)?
-    let result: Str = lowlevel { crypto_bytes_to_str(decrypted.handle) }
+    let decrypt_result = private_decrypt(key, data, padding)
+    if decrypt_result.is_err() {
+        return Err(CryptoError::operation_failed("RSA decryption"))
+    }
+    let decrypted = decrypt_result.unwrap()
+    let result: Str = crypto_bytes_to_str(decrypted.handle)
     return Ok(result)
 }
 
@@ -308,9 +334,9 @@ pub func private_encrypt(
     data: ref Buffer,
     padding: RsaPadding,
 ) -> CryptoResult[Buffer] {
-    let handle: *Unit = lowlevel { crypto_rsa_private_encrypt(key.handle, data.handle, padding.name()) }
+    let handle: *Unit = crypto_rsa_private_encrypt(key.handle, data.handle, padding.name())
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        return Err(CryptoError::operation_failed("RSA operation"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -327,9 +353,9 @@ pub func public_decrypt(
     data: ref Buffer,
     padding: RsaPadding,
 ) -> CryptoResult[Buffer] {
-    let handle: *Unit = lowlevel { crypto_rsa_public_decrypt(key.handle, data.handle, padding.name()) }
+    let handle: *Unit = crypto_rsa_public_decrypt(key.handle, data.handle, padding.name())
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        return Err(CryptoError::operation_failed("RSA operation"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -347,32 +373,32 @@ pub func hybrid_encrypt(
     data: ref Buffer,
 ) -> CryptoResult[(Buffer, Buffer)] {
     // Generate random AES key and nonce
-    let aes_key_handle: *Unit = lowlevel { crypto_random_bytes(32) }
+    let aes_key_handle: *Unit = crypto_random_bytes(32)
     let aes_key = Buffer { handle: aes_key_handle }
-    let nonce_handle: *Unit = lowlevel { crypto_random_bytes(12) }
+    let nonce_handle: *Unit = crypto_random_bytes(12)
     let nonce = Buffer { handle: nonce_handle }
 
     // Encrypt the AES key with RSA-OAEP
-    let encrypted_key = public_encrypt(public_key, ref aes_key, RsaPadding::OaepSha256)?
+    let encrypt_result = public_encrypt(public_key, ref aes_key, RsaPadding::OaepSha256)
+    if encrypt_result.is_err() {
+        return Err(CryptoError::operation_failed("RSA-OAEP key encryption"))
+    }
+    let encrypted_key = encrypt_result.unwrap()
 
     // Encrypt the data with AES-GCM
     let aad = Buffer::new(0)
-    let ciphertext_handle: *Unit = lowlevel {
-        crypto_aes_gcm_encrypt(aes_key.handle, nonce.handle, data.handle, aad.handle)
-    }
+    let ciphertext_handle: *Unit = crypto_aes_gcm_encrypt(aes_key.handle, nonce.handle, data.handle, aad.handle)
     if ciphertext_handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::OperationFailed))
+        return Err(CryptoError::operation_failed("RSA operation"))
     }
 
     // Get auth tag
-    let tag_handle: *Unit = lowlevel { crypto_aes_gcm_get_tag(ciphertext_handle) }
+    let tag_handle: *Unit = crypto_aes_gcm_get_tag(ciphertext_handle)
     let ciphertext = Buffer { handle: ciphertext_handle }
     let tag = Buffer { handle: tag_handle }
 
     // Combine nonce + ciphertext + tag
-    let result_handle: *Unit = lowlevel {
-        crypto_concat_buffers3(nonce.handle, ciphertext.handle, tag.handle)
-    }
+    let result_handle: *Unit = crypto_concat_buffers3(nonce.handle, ciphertext.handle, tag.handle)
     let encrypted_data = Buffer { handle: result_handle }
 
     return Ok((encrypted_key, encrypted_data))
@@ -385,33 +411,32 @@ pub func hybrid_decrypt(
     encrypted_data: ref Buffer,
 ) -> CryptoResult[Buffer] {
     // Decrypt the AES key
-    let aes_key = private_decrypt(private_key, encrypted_key, RsaPadding::OaepSha256)?
+    let decrypt_result = private_decrypt(private_key, encrypted_key, RsaPadding::OaepSha256)
+    if decrypt_result.is_err() {
+        return Err(CryptoError::operation_failed("RSA-OAEP key decryption"))
+    }
+    let aes_key = decrypt_result.unwrap()
 
     // Extract nonce (12 bytes), ciphertext, and tag (16 bytes)
     if encrypted_data.len() < 28 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidParameter,
-            "encrypted data too short"
-        ))
+        return Err(CryptoError::invalid_parameter("encrypted data too short"))
     }
 
-    let nonce_handle: *Unit = lowlevel { crypto_buffer_slice(encrypted_data.handle, 0, 12) }
+    let nonce_handle: *Unit = crypto_buffer_slice(encrypted_data.handle, 0, 12)
     let nonce = Buffer { handle: nonce_handle }
 
     let ciphertext_len = encrypted_data.len() - 28
-    let ciphertext_handle: *Unit = lowlevel { crypto_buffer_slice(encrypted_data.handle, 12, ciphertext_len) }
+    let ciphertext_handle: *Unit = crypto_buffer_slice(encrypted_data.handle, 12, ciphertext_len)
     let ciphertext = Buffer { handle: ciphertext_handle }
 
-    let tag_handle: *Unit = lowlevel { crypto_buffer_slice(encrypted_data.handle, 12 + ciphertext_len, 16) }
+    let tag_handle: *Unit = crypto_buffer_slice(encrypted_data.handle, 12 + ciphertext_len, 16)
     let tag = Buffer { handle: tag_handle }
 
     // Decrypt with AES-GCM
     let aad = Buffer::new(0)
-    let plaintext_handle: *Unit = lowlevel {
-        crypto_aes_gcm_decrypt(aes_key.handle, nonce.handle, ciphertext.handle, aad.handle, tag.handle)
-    }
+    let plaintext_handle: *Unit = crypto_aes_gcm_decrypt(aes_key.handle, nonce.handle, ciphertext.handle, aad.handle, tag.handle)
     if plaintext_handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::AuthenticationFailed))
+        return Err(CryptoError::auth_failed())
     }
 
     return Ok(Buffer { handle: plaintext_handle })

@@ -1,0 +1,50 @@
+// Tests for core::num — endianness conversion functions
+use test::{assert, assert_eq}
+use core::num
+
+@test
+func test_from_be_i32() -> I32 {
+    let v = num::from_be_i32(0x01020304)
+    // on little-endian, from_be swaps bytes
+    // on big-endian, from_be is identity
+    // either way, from_be(to_be(x)) == x
+    let roundtrip = num::from_be_i32(num::to_be_i32(42))
+    assert_eq(roundtrip, 42, "from_be(to_be(42)) == 42")
+    return 0
+}
+
+@test
+func test_from_le_i32() -> I32 {
+    let roundtrip = num::from_le_i32(num::to_le_i32(42))
+    assert_eq(roundtrip, 42, "from_le(to_le(42)) == 42")
+    return 0
+}
+
+@test
+func test_from_be_i64() -> I32 {
+    let roundtrip = num::from_be_i64(num::to_be_i64(123456789))
+    assert_eq(roundtrip, 123456789, "from_be(to_be(x)) == x")
+    return 0
+}
+
+@test
+func test_from_le_i64() -> I32 {
+    let roundtrip = num::from_le_i64(num::to_le_i64(123456789))
+    assert_eq(roundtrip, 123456789, "from_le(to_le(x)) == x")
+    return 0
+}
+
+@test
+func test_reverse_bits_i32() -> I32 {
+    // reversing bits twice should give back original
+    let v = num::reverse_bits_i32(num::reverse_bits_i32(0x12345678))
+    assert_eq(v, 0x12345678, "double reverse_bits is identity")
+    return 0
+}
+
+@test
+func test_reverse_bits_i64() -> I32 {
+    let v = num::reverse_bits_i64(num::reverse_bits_i64(0x123456789ABCDEF0))
+    assert_eq(v, 0x123456789ABCDEF0, "double reverse_bits is identity")
+    return 0
+}

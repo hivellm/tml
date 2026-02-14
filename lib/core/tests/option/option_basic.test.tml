@@ -1,0 +1,59 @@
+// Tests for core::option — Maybe[T] basic methods
+use test::{assert, assert_eq}
+
+@test
+func test_is_just() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    assert(x.is_just(), "Just should be just")
+    return 0
+}
+
+@test
+func test_is_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    assert(x.is_nothing(), "Nothing should be nothing")
+    assert(not x.is_just(), "Nothing should not be just")
+    return 0
+}
+
+@test
+func test_unwrap_just() -> I32 {
+    let x: Maybe[I32] = Just(99)
+    assert_eq(x.unwrap(), 99, "unwrap Just should return value")
+    return 0
+}
+
+@test
+func test_unwrap_or_just() -> I32 {
+    let x: Maybe[I32] = Just(10)
+    assert_eq(x.unwrap_or(0), 10, "unwrap_or Just should return value")
+    return 0
+}
+
+@test
+func test_unwrap_or_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    assert_eq(x.unwrap_or(42), 42, "unwrap_or Nothing should return default")
+    return 0
+}
+
+@test
+func test_alt_just() -> I32 {
+    let x: Maybe[I32] = Just(1)
+    let y: Maybe[I32] = Just(2)
+    let r = x.alt(y)
+    assert_eq(r.unwrap(), 1, "alt on Just should return first")
+    return 0
+}
+
+@test
+func test_alt_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = Just(2)
+    let r = x.alt(y)
+    assert_eq(r.unwrap(), 2, "alt on Nothing should return second")
+    return 0
+}
+
+// NOTE: also[U] method causes undefined symbol error (generic method codegen)
+// Tracked in tasks.md

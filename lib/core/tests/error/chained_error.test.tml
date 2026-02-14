@@ -1,0 +1,30 @@
+// Tests for core::error — ParseError with position, description
+use test::{assert, assert_eq}
+use core::error::{SimpleError, ParseError}
+
+@test
+func test_parse_error_with_position_fmt() -> I32 {
+    let err = ParseError::with_position("bad token", 10)
+    let s = err.to_string()
+    assert(s.contains("10"), "should contain position 10")
+    assert(s.contains("bad token"), "should contain message")
+    assert(s.contains("position"), "should say position")
+    return 0
+}
+
+@test
+func test_parse_error_debug_with_pos() -> I32 {
+    let err = ParseError::with_position("x", 5)
+    let dbg = err.debug_string()
+    assert(dbg.contains("Just"), "debug should show Just for position")
+    assert(dbg.contains("5"), "debug should contain position value")
+    return 0
+}
+
+@test
+func test_simple_error_description() -> I32 {
+    let err = SimpleError::new("desc test")
+    let d = err.description()
+    assert_eq(d, "desc test", "description should match to_string")
+    return 0
+}

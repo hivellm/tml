@@ -103,8 +103,9 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
 
     // If condition is not already i1 (bool), convert it
     if (last_expr_type_ != "i1") {
+        std::string cond_type = last_expr_type_.empty() ? "i32" : last_expr_type_;
         std::string bool_cond = fresh_reg();
-        emit_line("  " + bool_cond + " = icmp ne i32 " + cond + ", 0");
+        emit_line("  " + bool_cond + " = icmp ne " + cond_type + " " + cond + ", 0");
         cond = bool_cond;
     }
 
@@ -190,8 +191,9 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
 
     // If condition is not already i1 (bool), convert it
     if (last_expr_type_ != "i1") {
+        std::string cond_type = last_expr_type_.empty() ? "i32" : last_expr_type_;
         std::string bool_cond = fresh_reg();
-        emit_line("  " + bool_cond + " = icmp ne i32 " + cond + ", 0");
+        emit_line("  " + bool_cond + " = icmp ne " + cond_type + " " + cond + ", 0");
         cond = bool_cond;
     }
 

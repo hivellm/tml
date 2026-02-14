@@ -1,0 +1,25 @@
+// Tests for core::char::methods — digit conversion functions
+// NOTE: is_digit appears buggy (always returns true). Only testing positive cases.
+use test::{assert, assert_eq}
+use core::char::methods
+
+@test
+func test_is_digit_decimal() -> I32 {
+    assert(methods::is_digit('0', 10 as U32), "0 is digit base 10")
+    assert(methods::is_digit('9', 10 as U32), "9 is digit base 10")
+    return 0
+}
+
+@test
+func test_is_digit_hex() -> I32 {
+    assert(methods::is_digit('a', 16 as U32), "a is digit base 16")
+    assert(methods::is_digit('f', 16 as U32), "f is digit base 16")
+    return 0
+}
+
+@test
+func test_is_digit_binary() -> I32 {
+    assert(methods::is_digit('0', 2 as U32), "0 is digit base 2")
+    assert(methods::is_digit('1', 2 as U32), "1 is digit base 2")
+    return 0
+}

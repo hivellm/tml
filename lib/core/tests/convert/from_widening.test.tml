@@ -1,0 +1,24 @@
+// Tests for core::convert — From widening conversions
+use test::{assert, assert_eq}
+use core::convert::From
+
+@test
+func test_from_i8_to_i32() -> I32 {
+    let v: I32 = I32::from(42 as I8)
+    assert_eq(v, 42, "I8 42 to I32")
+    return 0
+}
+
+@test
+func test_from_i16_to_i32() -> I32 {
+    let v: I32 = I32::from(1000 as I16)
+    assert_eq(v, 1000, "I16 1000 to I32")
+    return 0
+}
+
+@test
+func test_from_i32_to_i64() -> I32 {
+    let v: I64 = I64::from(999 as I32)
+    assert_eq(v, 999, "I32 999 to I64")
+    return 0
+}

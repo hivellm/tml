@@ -1,0 +1,55 @@
+// Tests for core::num — I32 bit operations
+use test::{assert, assert_eq}
+use core::num
+
+@test
+func test_count_ones_i32() -> I32 {
+    assert_eq(num::count_ones_i32(0), 0, "count_ones 0")
+    assert_eq(num::count_ones_i32(1), 1, "count_ones 1")
+    assert_eq(num::count_ones_i32(7), 3, "count_ones 7 = 0b111")
+    assert_eq(num::count_ones_i32(255), 8, "count_ones 255")
+    return 0
+}
+
+@test
+func test_count_zeros_i32() -> I32 {
+    assert_eq(num::count_zeros_i32(0), 32, "count_zeros 0")
+    assert_eq(num::count_zeros_i32(-1), 0, "count_zeros -1 (all ones)")
+    return 0
+}
+
+@test
+func test_leading_zeros_i32() -> I32 {
+    assert_eq(num::leading_zeros_i32(1), 31, "leading_zeros 1")
+    assert_eq(num::leading_zeros_i32(0), 32, "leading_zeros 0")
+    return 0
+}
+
+@test
+func test_trailing_zeros_i32() -> I32 {
+    assert_eq(num::trailing_zeros_i32(1), 0, "trailing_zeros 1")
+    assert_eq(num::trailing_zeros_i32(4), 2, "trailing_zeros 4")
+    assert_eq(num::trailing_zeros_i32(16), 4, "trailing_zeros 16")
+    return 0
+}
+
+@test
+func test_swap_bytes_i32() -> I32 {
+    let v = num::swap_bytes_i32(0x01020304)
+    assert_eq(v, 0x04030201, "swap_bytes 0x01020304")
+    return 0
+}
+
+@test
+func test_rotate_left_i32() -> I32 {
+    let v = num::rotate_left_i32(1, 1)
+    assert_eq(v, 2, "rotate_left 1 by 1")
+    return 0
+}
+
+@test
+func test_rotate_right_i32() -> I32 {
+    let v = num::rotate_right_i32(2, 1)
+    assert_eq(v, 1, "rotate_right 2 by 1")
+    return 0
+}

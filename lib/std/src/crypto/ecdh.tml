@@ -72,8 +72,43 @@
 //! let key = hkdf(HashAlgorithm::Sha256, shared_secret, salt, "encryption", 32)?
 //! ```
 
-use std::crypto::error::{CryptoError, CryptoErrorKind, CryptoResult}
-use std::collections::Buffer
+use std::crypto::error::{CryptoError, CryptoResult}
+use std::collections::{Buffer, List}
+
+@extern("crypto_ecdh_create")
+func crypto_ecdh_create(curve_name: Str) -> *Unit
+@extern("crypto_ecdh_generate_keys")
+func crypto_ecdh_generate_keys(handle: *Unit)
+@extern("crypto_ecdh_get_public_key")
+func crypto_ecdh_get_public_key(handle: *Unit, format: Str) -> *Unit
+@extern("crypto_ecdh_get_private_key")
+func crypto_ecdh_get_private_key(handle: *Unit) -> *Unit
+@extern("crypto_ecdh_set_public_key")
+func crypto_ecdh_set_public_key(handle: *Unit, key_handle: *Unit) -> Bool
+@extern("crypto_ecdh_set_private_key")
+func crypto_ecdh_set_private_key(handle: *Unit, key_handle: *Unit) -> Bool
+@extern("crypto_ecdh_compute_secret")
+func crypto_ecdh_compute_secret(handle: *Unit, other_handle: *Unit) -> *Unit
+@extern("crypto_ecdh_destroy")
+func crypto_ecdh_destroy(handle: *Unit)
+@extern("crypto_ecdh_convert_key")
+func crypto_ecdh_convert_key(key_handle: *Unit, curve_name: Str, from_format: Str, to_format: Str) -> *Unit
+@extern("crypto_x25519")
+func crypto_x25519(private_handle: *Unit, public_handle: *Unit) -> *Unit
+@extern("crypto_x448")
+func crypto_x448(private_handle: *Unit, public_handle: *Unit) -> *Unit
+@extern("crypto_x25519_generate_private")
+func crypto_x25519_generate_private() -> *Unit
+@extern("crypto_x25519_public_from_private")
+func crypto_x25519_public_from_private(private_handle: *Unit) -> *Unit
+@extern("crypto_x448_generate_private")
+func crypto_x448_generate_private() -> *Unit
+@extern("crypto_x448_public_from_private")
+func crypto_x448_public_from_private(private_handle: *Unit) -> *Unit
+@extern("crypto_get_curves")
+func crypto_get_curves() -> *Unit
+@extern("crypto_is_curve_supported")
+func crypto_is_curve_supported(curve_name: Str) -> Bool
 
 /// Supported elliptic curves for ECDH.
 pub type EcCurve {
@@ -204,24 +239,21 @@ pub type Ecdh {
 impl Ecdh {
     /// Creates an ECDH object for the specified curve.
     pub func new(curve: EcCurve) -> CryptoResult[Ecdh] {
-        let handle: *Unit = lowlevel { crypto_ecdh_create(curve.name()) }
+        let handle: *Unit = crypto_ecdh_create(curve.name())
         if handle == null {
-            return Err(CryptoError::with_details(
-                CryptoErrorKind::UnsupportedAlgorithm,
-                "unsupported curve: {curve.name()}"
-            ))
+            return Err(CryptoError::unsupported_algorithm("unsupported curve: {curve.name()}"))
         }
         return Ok(Ecdh { handle: handle, curve: curve })
     }
 
     /// Generates the public/private key pair.
     pub func generate_keys(mut this) {
-        lowlevel { crypto_ecdh_generate_keys(this.handle) }
+        crypto_ecdh_generate_keys(this.handle)
     }
 
     /// Returns the public key in the specified format.
     pub func public_key_format(this, format: EcPointFormat) -> Buffer {
-        let handle: *Unit = lowlevel { crypto_ecdh_get_public_key(this.handle, format.name()) }
+        let handle: *Unit = crypto_ecdh_get_public_key(this.handle, format.name())
         return Buffer { handle: handle }
     }
 
@@ -232,33 +264,33 @@ impl Ecdh {
 
     /// Returns the private key.
     pub func private_key(this) -> Buffer {
-        let handle: *Unit = lowlevel { crypto_ecdh_get_private_key(this.handle) }
+        let handle: *Unit = crypto_ecdh_get_private_key(this.handle)
         return Buffer { handle: handle }
     }
 
     /// Sets the public key.
     pub func set_public_key(mut this, key: ref Buffer) -> CryptoResult[Unit] {
-        let success: Bool = lowlevel { crypto_ecdh_set_public_key(this.handle, key.handle) }
+        let success: Bool = crypto_ecdh_set_public_key(this.handle, key.handle)
         if not success {
-            return Err(CryptoError::new(CryptoErrorKind::InvalidKey))
+            return Err(CryptoError::invalid_key("invalid key"))
         }
         return Ok(())
     }
 
     /// Sets the private key.
     pub func set_private_key(mut this, key: ref Buffer) -> CryptoResult[Unit] {
-        let success: Bool = lowlevel { crypto_ecdh_set_private_key(this.handle, key.handle) }
+        let success: Bool = crypto_ecdh_set_private_key(this.handle, key.handle)
         if not success {
-            return Err(CryptoError::new(CryptoErrorKind::InvalidKey))
+            return Err(CryptoError::invalid_key("invalid key"))
         }
         return Ok(())
     }
 
     /// Computes the shared secret using the other party's public key.
     pub func compute_secret(this, other_public_key: ref Buffer) -> CryptoResult[Buffer] {
-        let handle: *Unit = lowlevel { crypto_ecdh_compute_secret(this.handle, other_public_key.handle) }
+        let handle: *Unit = crypto_ecdh_compute_secret(this.handle, other_public_key.handle)
         if handle == null {
-            return Err(CryptoError::new(CryptoErrorKind::KeyExchangeFailed))
+            return Err(CryptoError::operation_failed("key exchange failed"))
         }
         return Ok(Buffer { handle: handle })
     }
@@ -271,7 +303,7 @@ impl Ecdh {
     /// Frees the ECDH resources.
     pub func destroy(mut this) {
         if this.handle != null {
-            lowlevel { crypto_ecdh_destroy(this.handle) }
+            crypto_ecdh_destroy(this.handle)
             this.handle = null
         }
     }
@@ -295,11 +327,9 @@ pub func convert_ec_key(
     from_format: EcPointFormat,
     to_format: EcPointFormat,
 ) -> CryptoResult[Buffer] {
-    let handle: *Unit = lowlevel {
-        crypto_ecdh_convert_key(key.handle, curve.name(), from_format.name(), to_format.name())
-    }
+    let handle: *Unit = crypto_ecdh_convert_key(key.handle, curve.name(), from_format.name(), to_format.name())
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::InvalidKey))
+        return Err(CryptoError::invalid_key("invalid key"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -309,21 +339,15 @@ pub func convert_ec_key(
 /// Convenience function for the most common ECDH operation.
 pub func x25519(private_key: ref Buffer, public_key: ref Buffer) -> CryptoResult[Buffer] {
     if private_key.len() != 32 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "X25519 private key must be 32 bytes"
-        ))
+        return Err(CryptoError::invalid_key("X25519 private key must be 32 bytes"))
     }
     if public_key.len() != 32 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "X25519 public key must be 32 bytes"
-        ))
+        return Err(CryptoError::invalid_key("X25519 public key must be 32 bytes"))
     }
 
-    let handle: *Unit = lowlevel { crypto_x25519(private_key.handle, public_key.handle) }
+    let handle: *Unit = crypto_x25519(private_key.handle, public_key.handle)
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyExchangeFailed))
+        return Err(CryptoError::operation_failed("key exchange failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -331,21 +355,15 @@ pub func x25519(private_key: ref Buffer, public_key: ref Buffer) -> CryptoResult
 /// Performs X448 key exchange.
 pub func x448(private_key: ref Buffer, public_key: ref Buffer) -> CryptoResult[Buffer] {
     if private_key.len() != 56 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "X448 private key must be 56 bytes"
-        ))
+        return Err(CryptoError::invalid_key("X448 private key must be 56 bytes"))
     }
     if public_key.len() != 56 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "X448 public key must be 56 bytes"
-        ))
+        return Err(CryptoError::invalid_key("X448 public key must be 56 bytes"))
     }
 
-    let handle: *Unit = lowlevel { crypto_x448(private_key.handle, public_key.handle) }
+    let handle: *Unit = crypto_x448(private_key.handle, public_key.handle)
     if handle == null {
-        return Err(CryptoError::new(CryptoErrorKind::KeyExchangeFailed))
+        return Err(CryptoError::operation_failed("key exchange failed"))
     }
     return Ok(Buffer { handle: handle })
 }
@@ -354,8 +372,8 @@ pub func x448(private_key: ref Buffer, public_key: ref Buffer) -> CryptoResult[B
 ///
 /// Returns (private_key, public_key).
 pub func generate_x25519_keypair() -> (Buffer, Buffer) {
-    let private_handle: *Unit = lowlevel { crypto_x25519_generate_private() }
-    let public_handle: *Unit = lowlevel { crypto_x25519_public_from_private(private_handle) }
+    let private_handle: *Unit = crypto_x25519_generate_private()
+    let public_handle: *Unit = crypto_x25519_public_from_private(private_handle)
     return (Buffer { handle: private_handle }, Buffer { handle: public_handle })
 }
 
@@ -363,32 +381,26 @@ pub func generate_x25519_keypair() -> (Buffer, Buffer) {
 ///
 /// Returns (private_key, public_key).
 pub func generate_x448_keypair() -> (Buffer, Buffer) {
-    let private_handle: *Unit = lowlevel { crypto_x448_generate_private() }
-    let public_handle: *Unit = lowlevel { crypto_x448_public_from_private(private_handle) }
+    let private_handle: *Unit = crypto_x448_generate_private()
+    let public_handle: *Unit = crypto_x448_public_from_private(private_handle)
     return (Buffer { handle: private_handle }, Buffer { handle: public_handle })
 }
 
 /// Derives the public key from an X25519 private key.
 pub func x25519_public_from_private(private_key: ref Buffer) -> CryptoResult[Buffer] {
     if private_key.len() != 32 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "X25519 private key must be 32 bytes"
-        ))
+        return Err(CryptoError::invalid_key("X25519 private key must be 32 bytes"))
     }
-    let handle: *Unit = lowlevel { crypto_x25519_public_from_private(private_key.handle) }
+    let handle: *Unit = crypto_x25519_public_from_private(private_key.handle)
     return Ok(Buffer { handle: handle })
 }
 
 /// Derives the public key from an X448 private key.
 pub func x448_public_from_private(private_key: ref Buffer) -> CryptoResult[Buffer] {
     if private_key.len() != 56 {
-        return Err(CryptoError::with_details(
-            CryptoErrorKind::InvalidKey,
-            "X448 private key must be 56 bytes"
-        ))
+        return Err(CryptoError::invalid_key("X448 private key must be 56 bytes"))
     }
-    let handle: *Unit = lowlevel { crypto_x448_public_from_private(private_key.handle) }
+    let handle: *Unit = crypto_x448_public_from_private(private_key.handle)
     return Ok(Buffer { handle: handle })
 }
 
@@ -398,12 +410,12 @@ pub func x448_public_from_private(private_key: ref Buffer) -> CryptoResult[Buffe
 
 /// Returns a list of all supported curve names.
 pub func get_curves() -> List[Str] {
-    let handle: *Unit = lowlevel { crypto_get_curves() }
+    let handle: *Unit = crypto_get_curves()
     return List[Str] { handle: handle }
 }
 
 /// Returns true if the specified curve is supported.
 pub func is_curve_supported(curve_name: Str) -> Bool {
-    let result: Bool = lowlevel { crypto_is_curve_supported(curve_name) }
+    let result: Bool = crypto_is_curve_supported(curve_name)
     return result
 }
