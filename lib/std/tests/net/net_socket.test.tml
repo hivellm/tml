@@ -205,10 +205,6 @@ func test_net_error_kinds() {
 // SocketAddrV4 Tests (from socket_addr.test.tml, renamed dupes)
 // ============================================================================
 
-// BLOCKED: All SocketAddrV4/SocketAddr trait impls (eq, cmp, partial_cmp, duplicate, hash, fmt)
-// -- "Unknown method" at codegen for behavior dispatch on struct
-// BLOCKED: SocketAddr::from_v4() returns () -- can't construct SocketAddr
-
 @test
 func test_socket_addr_v4_new() -> I32 {
     let addr: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 8080 as U16)
@@ -230,6 +226,22 @@ func test_socket_addr_v4_set_ip_v2() -> I32 {
     var addr: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16)
     addr.set_ip(Ipv4Addr::UNSPECIFIED())
     assert(addr.ip().is_unspecified(), "ip should be updated to unspecified")
+    return 0
+}
+
+@test
+func test_socket_addr_v4_eq_consolidated() -> I32 {
+    let a = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16)
+    let b = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16)
+    assert(a == b, "same addr should be equal")
+    return 0
+}
+
+@test
+func test_socket_addr_from_v4_consolidated() -> I32 {
+    let v4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 3000 as U16)
+    let addr = SocketAddr::V4(v4)
+    assert(addr.port() == 3000 as U16, "SocketAddr port should be 3000")
     return 0
 }
 

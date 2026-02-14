@@ -81,13 +81,15 @@ namespace fs = std::filesystem;
 namespace tml::cli {
 
 /// Calculate thread count for internal compilation parallelism.
-/// Returns 4-8 threads based on hardware cores, never exceeding 50% of total cores.
+/// Returns 2-6 threads based on hardware cores, capped to avoid oversubscription
+/// when multiple suites compile in parallel (each suite calls this independently).
 static unsigned int calc_codegen_threads(unsigned int task_count) {
     unsigned int hw = std::thread::hardware_concurrency();
     if (hw == 0)
         hw = 8; // Fallback for unknown hardware
-    unsigned int half_cores = hw / 2;
-    unsigned int clamped = std::clamp(half_cores, 4u, 8u);
+    // Use at most 40% of cores per suite, clamped to [2, 6]
+    unsigned int per_suite = hw * 2 / 5;
+    unsigned int clamped = std::clamp(per_suite, 2u, 6u);
     return std::min(clamped, task_count);
 }
 
@@ -1815,7 +1817,14 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         fs::path shared_lib_obj;
         bool use_shared_lib = false;
 
-        if (tasks.size() >= 2 && all_imports_match) {
+        // When coverage is enabled, disable shared library optimization.
+        // The shared library is generated from ONE test file's imports, so it only
+        // contains a subset of library functions. With library_decls_only=true,
+        // worker threads only get declarations for library functions, meaning
+        // coverage instrumentation calls (tml_cover_func) are NOT present in the
+        // library function bodies. By disabling this optimization in coverage mode,
+        // each test file gets full library function definitions with coverage calls.
+        if (tasks.size() >= 2 && all_imports_match && !CompilerOptions::coverage) {
             // Use a hash of all imported module paths to identify the shared library
             std::string import_hash;
             for (const auto& path : imported_module_paths) {
@@ -1863,7 +1872,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                 lib_options.force_internal_linkage = false;
                                 lib_options.library_ir_only = true;
                                 lib_options.emit_debug_info = false;
-                                lib_options.coverage_enabled = false;
+                                lib_options.coverage_enabled = CompilerOptions::coverage;
+                                lib_options.coverage_quiet = CompilerOptions::coverage;
                                 codegen::LLVMIRGen lib_gen(env, lib_options);
 
                                 auto gen_result = lib_gen.generate(module);
@@ -2226,7 +2236,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                             lib_options.force_internal_linkage = true;
                             lib_options.library_decls_only = use_shared_lib;
                             lib_options.emit_debug_info = false;
-                            lib_options.coverage_enabled = false;
+                            lib_options.coverage_enabled = CompilerOptions::coverage;
+                            lib_options.coverage_quiet = CompilerOptions::coverage;
 
                             codegen::LLVMIRGen lib_gen(env, lib_options);
                             auto lib_gen_result = lib_gen.generate(module);
@@ -2358,11 +2369,13 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                         if (!fn_name.empty()) {
                                             llvm_func_names.push_back(fn_name);
                                         }
-                                        // Promote to external linkage
+                                        // Promote to linkonce_odr linkage (deduplicated by linker)
+                                        // This prevents duplicate symbol errors when multiple
+                                        // test files in the same suite import the same library
                                         std::string modified = line;
                                         auto ipos = modified.find("define internal ");
                                         if (ipos != std::string::npos) {
-                                            modified.replace(ipos, 16, "define ");
+                                            modified.replace(ipos, 16, "define linkonce_odr ");
                                         }
                                         result_ir += modified + "\n";
                                     } else {

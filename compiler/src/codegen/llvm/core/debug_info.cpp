@@ -27,6 +27,7 @@
 //! | `emit_debug_location`   | Emit source location marker   |
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
+#include "version_generated.hpp"
 
 #include <filesystem>
 #include <sstream>

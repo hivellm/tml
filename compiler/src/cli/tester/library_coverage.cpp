@@ -7,9 +7,13 @@
 #include "tester_internal.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <regex>
 #include <set>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -1717,6 +1721,69 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
 
         json_file << "}\n";
         json_file.close();
+    }
+
+    // Write coverage history log (appended, one JSON line per run)
+    {
+        fs::path history_path = fs::path(output_path).parent_path() / "coverage_history.jsonl";
+        fs::create_directories(history_path.parent_path());
+        std::ofstream history_file(history_path, std::ios::app);
+        if (history_file.is_open()) {
+            // Get current timestamp in ISO 8601 format
+            auto now = std::chrono::system_clock::now();
+            auto time_t_now = std::chrono::system_clock::to_time_t(now);
+            auto ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) %
+                1000;
+            struct tm tm_buf;
+#ifdef _WIN32
+            localtime_s(&tm_buf, &time_t_now);
+#else
+            localtime_r(&time_t_now, &tm_buf);
+#endif
+            std::ostringstream ts;
+            ts << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%S") << "." << std::setfill('0')
+               << std::setw(3) << ms.count();
+
+            // Build JSONL entry (single line)
+            history_file << "{";
+            history_file << "\"timestamp\":\"" << ts.str() << "\",";
+            history_file << "\"coverage_percent\":" << std::fixed << std::setprecision(2)
+                         << overall_pct << ",";
+            history_file << "\"library_functions\":" << total_funcs << ",";
+            history_file << "\"library_covered\":" << total_covered << ",";
+            history_file << "\"runtime_covered_functions\":"
+                         << static_cast<int>(covered_functions.size()) << ",";
+            history_file << "\"modules_full\":" << full_coverage << ",";
+            history_file << "\"modules_partial\":" << partial_coverage << ",";
+            history_file << "\"modules_zero\":" << zero_coverage << ",";
+            history_file << "\"tests_passed\":" << tml_tests << ",";
+            history_file << "\"tests_failed\":" << test_stats.failed_count << ",";
+            history_file << "\"compilation_errors\":" << test_stats.compilation_error_count << ",";
+            history_file << "\"test_files\":" << tml_files << ",";
+            history_file << "\"no_cache\":" << (test_stats.no_cache ? "true" : "false") << ",";
+            history_file << "\"duration_ms\":" << test_stats.total_duration_ms << ",";
+
+            // Per-module snapshot: array of {name, total, covered}
+            history_file << "\"modules\":[";
+            bool first_mod = true;
+            for (const auto& mod : modules) {
+                if (mod.functions.empty())
+                    continue;
+                if (!first_mod)
+                    history_file << ",";
+                first_mod = false;
+                history_file << "{\"n\":\"" << mod.name
+                             << "\",\"t\":" << static_cast<int>(mod.functions.size())
+                             << ",\"c\":" << mod.covered_count << "}";
+            }
+            history_file << "]";
+
+            history_file << "}\n";
+            history_file.close();
+
+            TML_LOG_INFO("test", "Coverage history appended to " << history_path.string());
+        }
     }
 }
 

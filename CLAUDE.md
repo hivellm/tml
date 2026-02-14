@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Sandbox Directory (`.sandbox/`)
+
+The `.sandbox/` directory at the project root is **your scratch space**. Use it freely for:
+- Temporary source files (Rust IR samples, TML experiments, etc.)
+- Debug output, IR dumps, investigation notes
+- Any throwaway file generation during development
+
+**Rules:**
+- `.sandbox/` is gitignored — nothing in it will be committed
+- **ALWAYS** create temp files here instead of polluting the project root
+- No need to ask permission to create/delete files inside `.sandbox/`
+- Clean up when done with an investigation, but don't stress about it
+
 ## ⛔ MANDATORY: Use MCP Tools First ⛔
 
 **YOU MUST USE MCP TOOLS AS YOUR PRIMARY INTERFACE FOR ALL TML OPERATIONS.**
@@ -76,6 +89,56 @@ This is a HARD REQUIREMENT because rushing to execute tasks without analysis lea
 - Adding new modules → Check existing module structures
 
 **WHY:** Executing quickly without analysis causes MORE errors, which requires MORE fixes, which wastes MORE tokens and time. Taking 30 seconds to analyze saves minutes of corrections.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
+## ⛔ MANDATORY: Minimize C and C++ Code ⛔
+
+**The TML project is actively migrating away from C/C++ toward pure TML. You MUST NOT add new C or C++ code unless absolutely necessary.**
+
+This is a HARD REQUIREMENT aligned with the project roadmap (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+
+### Three-Tier Rule for New Implementations
+
+When implementing new functionality, follow this decision hierarchy:
+
+1. **Pure TML** (STRONGLY PREFERRED) — Use TML's existing memory intrinsics (`ptr_read`, `ptr_write`, `ptr_offset`, `mem_alloc`, `mem_free`, `copy_nonoverlapping`) to implement algorithms directly in `.tml` files. This includes: string operations, collections, formatting, sorting, search algorithms, data structures, math utilities, parsers, serialization.
+
+2. **`@extern("c")` FFI to existing libraries** (ACCEPTABLE) — When calling external system libraries (LLVM, OpenSSL/BCrypt, zlib, libc, OS APIs). Do NOT reimplement what these libraries already provide. Declare `@extern("c")` bindings in TML and call them.
+
+3. **New C/C++ code** (LAST RESORT ONLY) — Only for functionality that genuinely cannot be expressed in TML or as FFI bindings. Examples: OS-level I/O (print, file read/write), panic/abort handlers, test harness DLL entry points.
+
+### What This Means in Practice
+
+**NEVER do this:**
+- ❌ Add new `.c` files to `compiler/runtime/` for algorithms that TML can express
+- ❌ Add new `lowlevel` blocks in `.tml` files that call C functions for pure logic (string manipulation, collection operations, math formatting)
+- ❌ Create C wrapper functions when `@extern("c")` to an existing library suffices
+- ❌ Add new C++ code to the compiler for features that could be implemented as TML library code
+- ❌ Use the C runtime as a shortcut instead of implementing properly in TML
+
+**ALWAYS do this:**
+- ✅ Implement new algorithms in pure TML using memory intrinsics
+- ✅ Use `@extern("c")` for system APIs, crypto, compression, networking
+- ✅ Keep `compiler/runtime/core/essential.c` as the ONLY essential C runtime (I/O, panic, test harness)
+- ✅ When fixing a bug in existing C runtime code, consider if it's an opportunity to migrate that function to TML
+
+### Current C Code That MUST NOT Grow
+
+| Location | Purpose | Status |
+|----------|---------|--------|
+| `compiler/runtime/core/essential.c` | I/O, panic, test harness | KEEP — essential |
+| `compiler/runtime/memory/mem.c` | malloc/free wrappers | KEEP — OS interface |
+| `compiler/runtime/collections/` | List, HashMap, Buffer | MIGRATE — do not add code here |
+| `compiler/runtime/text/` | String/Text algorithms | MIGRATE — do not add code here |
+| `compiler/runtime/math/` | Number formatting | MIGRATE — do not add code here |
+| `compiler/runtime/search/` | BM25, HNSW, distance | MIGRATE — do not add code here |
+| `lib/std/runtime/` | Duplicate C files | MIGRATE — do not add code here |
+| `lib/test/runtime/` | Coverage tracking | KEEP — lock-free atomics |
+
+**WHY:** The project is on a path to self-hosting (compiler rewritten in TML). Every new line of C/C++ code is debt that must be rewritten later. Pure TML implementations serve double duty: they work today AND they prepare for self-hosting.
+
+**See also:** [ROADMAP.md](docs/ROADMAP.md) Phase 4 (Runtime Migration), Phase 6 (Self-Hosting)
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
@@ -423,6 +486,71 @@ func feature_a_only() { ... }
 - `compiler/include/preprocessor/preprocessor.hpp` - Preprocessor interface
 - `compiler/src/preprocessor/preprocessor.cpp` - Full implementation
 - `compiler/src/cli/builder/helpers.cpp` - CLI integration helpers
+
+## MANDATORY: Rust-as-Reference IR Methodology
+
+**When fixing codegen bugs or optimizing the TML compiler's LLVM IR output, you MUST use Rust as the reference implementation.**
+
+This is a HARD REQUIREMENT. The TML compiler aims to produce IR of the same quality as `rustc`. Rust's IR is the gold standard for correctness, safety, and optimization.
+
+### Workflow (MUST follow for every codegen task)
+
+1. **Write equivalent code in BOTH languages:**
+   - Create `.sandbox/temp_<feature>.rs` (Rust version)
+   - Create `.sandbox/temp_<feature>.tml` (TML version with equivalent semantics)
+   - Both files must exercise the EXACT same pattern (same struct, same methods, same calls)
+
+2. **Generate IR from both compilers:**
+   ```bash
+   # Rust IR (debug)
+   rustc --edition 2021 --emit=llvm-ir -C opt-level=0 .sandbox/temp_<feature>.rs -o .sandbox/temp_<feature>_rust_debug.ll
+
+   # Rust IR (release)
+   rustc --edition 2021 --emit=llvm-ir -C opt-level=3 .sandbox/temp_<feature>.rs -o .sandbox/temp_<feature>_rust_release.ll
+
+   # TML IR (debug)
+   tml build .sandbox/temp_<feature>.tml --emit-ir --legacy
+   # Then copy: cp build/debug/temp_<feature>.ll .sandbox/temp_<feature>_tml_debug.ll
+
+   # TML IR (release)
+   tml build .sandbox/temp_<feature>.tml --emit-ir --legacy --release
+   # Then copy: cp build/debug/temp_<feature>.ll .sandbox/temp_<feature>_tml_release.ll
+   ```
+
+3. **Compare function-by-function:**
+   - Instruction count (TML must not exceed 2x Rust for equivalent logic)
+   - Type layouts (struct/enum sizes should match)
+   - Alloca count (TML should not have allocas that Rust avoids)
+   - Safety features (overflow checks, null checks)
+   - Call overhead (unnecessary wrappers, extra indirection)
+
+4. **Fix the TML codegen** to match or exceed Rust's quality, then verify with the test suite.
+
+### When to Use This Methodology
+
+- Fixing ANY bug in `compiler/src/codegen/`
+- Implementing new codegen features (new expressions, new types)
+- Optimizing IR output for specific patterns
+- Investigating "wrong code" or "miscompilation" bugs
+- Adding new type layouts (enums, generics, closures)
+
+### Key Optimization Targets (from IR comparison)
+
+| Issue | Current TML | Rust Reference | Priority |
+|-------|-------------|---------------|----------|
+| `Maybe[I32]` layout | 16 bytes `{ i32, [1 x i64] }` | 8 bytes `{ i32, i32 }` | HIGH |
+| Struct constructors | alloca+store+load (10 instr) | `insertvalue` (3 instr) | HIGH |
+| Runtime declarations | 500+ lines unconditionally | Only what's used | MEDIUM |
+| Integer arithmetic | `add nsw` (UB on overflow) | Checked with panic | MEDIUM |
+| Exception handling | None | `invoke` + `cleanuppad` | LOW |
+
+### Rulebook Task (Living Document)
+
+Full task details: `rulebook/tasks/optimize-codegen-like-rust/`
+
+**This task is incremental and deferred.** Whenever you discover a codegen inefficiency, bug, or interesting pattern during ANY work (iterator fixes, closure fixes, generic instantiation, etc.), you MUST update the task's `tasks.md` with the new finding — add new checklist items, add notes to existing items, or create new phases. The task serves as a running log of everything that needs optimization. Dedicated execution happens later when the compiler is stable.
+
+**VIOLATION OF THIS METHODOLOGY IS UNACCEPTABLE when working on codegen.**
 
 ## Important Development Rules
 

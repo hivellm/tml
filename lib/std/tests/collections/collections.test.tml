@@ -281,7 +281,6 @@ func test_hashmap_clear_reuse() -> I32 {
 
 // ============================================================================
 // HashMap Iterator (from hashmap_iter.test.tml)
-// BLOCKED: HashMapIter::key() returns K, value() returns V -- generic monomorphization bug
 // ============================================================================
 
 @test
@@ -294,6 +293,21 @@ func test_hashmap_iter_has_next() -> I32 {
     iter.next()
     iter.next()
     assert(not iter.has_next(), "iter should be exhausted after 2 next calls")
+    iter.destroy()
+    m.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_iter_key_value_consolidated() -> I32 {
+    var m: HashMap[I32, I32] = HashMap[I32, I32].new(16)
+    m.set(42, 100)
+    var iter: HashMapIter[I32, I32] = m.iter()
+    assert(iter.has_next(), "should have next")
+    let k: I32 = iter.key()
+    let v: I32 = iter.value()
+    assert_eq(k, 42, "key should be 42")
+    assert_eq(v, 100, "value should be 100")
     iter.destroy()
     m.destroy()
     return 0

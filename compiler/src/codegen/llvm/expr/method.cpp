@@ -1700,6 +1700,17 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             }
             TML_DEBUG_LN("[METHOD 4b] concrete_type_name=" << concrete_type_name);
 
+            // Skip this constraint if receiver's actual type doesn't match the
+            // constraint's concrete type. This prevents matching Y: Debug when the
+            // receiver is actually of type R (both bounded by Debug).
+            if (!concrete_type_name.empty() && !receiver_type_name.empty() &&
+                concrete_type_name != receiver_type_name) {
+                TML_DEBUG_LN("[METHOD 4b] SKIP: receiver_type_name=" << receiver_type_name
+                                                                     << " != concrete_type_name="
+                                                                     << concrete_type_name);
+                continue;
+            }
+
             // Look through parameterized bounds for a behavior with this method
             for (const auto& bound : constraint.parameterized_bounds) {
                 TML_DEBUG_LN("[METHOD 4b] checking bound.behavior_name=" << bound.behavior_name);
@@ -2142,8 +2153,19 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     if (receiver_type && receiver_type->is<types::NamedType>()) {
         const auto& named = receiver_type->as<types::NamedType>();
         if (named.name == "Ordering") {
+            // When receiver is a pointer (e.g., in default method bodies where this is ptr),
+            // load the struct value first before extractvalue
+            std::string ordering_val = receiver;
+            if (last_expr_type_ == "ptr" || receiver.find("%this") != std::string::npos) {
+                // Check if receiver is actually a pointer by looking at the local type
+                auto it = locals_.find("this");
+                if (it != locals_.end() && it->second.type == "ptr" && receiver == "%this") {
+                    ordering_val = fresh_reg();
+                    emit_line("  " + ordering_val + " = load %struct.Ordering, ptr " + receiver);
+                }
+            }
             std::string tag_val = fresh_reg();
-            emit_line("  " + tag_val + " = extractvalue %struct.Ordering " + receiver + ", 0");
+            emit_line("  " + tag_val + " = extractvalue %struct.Ordering " + ordering_val + ", 0");
 
             if (method == "is_less") {
                 emit_coverage("Ordering::is_less");
@@ -2352,12 +2374,27 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // call(), call_mut(), call_once() invoke the callable
     if (method == "call" || method == "call_mut" || method == "call_once") {
         if (receiver_type) {
-            // Handle ClosureType
+            // Handle ClosureType — receiver is a fat pointer { fn_ptr, env_ptr }
             if (receiver_type->is<types::ClosureType>()) {
                 const auto& closure_type = receiver_type->as<types::ClosureType>();
+                bool is_capturing = !closure_type.captures.empty();
 
-                // Generate arguments for the closure call
+                // Extract fn_ptr from fat pointer receiver
+                std::string fn_ptr = fresh_reg();
+                emit_line("  " + fn_ptr + " = extractvalue { ptr, ptr } " + receiver + ", 0");
+
+                // Build argument list
                 std::string args_str;
+                std::vector<std::string> arg_types;
+
+                if (is_capturing) {
+                    // Capturing closure: prepend env_ptr
+                    std::string env_ptr = fresh_reg();
+                    emit_line("  " + env_ptr + " = extractvalue { ptr, ptr } " + receiver + ", 1");
+                    args_str = "ptr " + env_ptr;
+                    arg_types.push_back("ptr");
+                }
+
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     std::string arg_val = gen_expr(*call.args[i]);
                     std::string arg_type = "i32"; // default
@@ -2367,6 +2404,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     if (!args_str.empty())
                         args_str += ", ";
                     args_str += arg_type + " " + arg_val;
+                    arg_types.push_back(arg_type);
                 }
 
                 // Determine return type
@@ -2375,14 +2413,23 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     ret_type = llvm_type_from_semantic(closure_type.return_type);
                 }
 
-                // Call the closure (receiver is function pointer)
+                // Build function type signature for indirect call
+                std::string func_type_sig = ret_type + " (";
+                for (size_t i = 0; i < arg_types.size(); ++i) {
+                    if (i > 0)
+                        func_type_sig += ", ";
+                    func_type_sig += arg_types[i];
+                }
+                func_type_sig += ")";
+
+                // Call through fn_ptr with env as first arg
                 std::string result = fresh_reg();
                 if (ret_type == "void") {
-                    emit_line("  call void " + receiver + "(" + args_str + ")");
+                    emit_line("  call " + func_type_sig + " " + fn_ptr + "(" + args_str + ")");
                     last_expr_type_ = "void";
                     return "void";
                 } else {
-                    emit_line("  " + result + " = call " + ret_type + " " + receiver + "(" +
+                    emit_line("  " + result + " = call " + func_type_sig + " " + fn_ptr + "(" +
                               args_str + ")");
                     last_expr_type_ = ret_type;
                     return result;
@@ -2393,8 +2440,40 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             if (receiver_type->is<types::FuncType>()) {
                 const auto& func_type = receiver_type->as<types::FuncType>();
 
-                // Generate arguments for the function call
+                // Check if receiver is actually a fat pointer (closure stored as func type)
+                bool is_fat_ptr = (last_expr_type_ == "{ ptr, ptr }");
+
+                // Check if it's a capturing closure via receiver VarInfo
+                bool is_capturing = false;
+                if (is_fat_ptr && call.receiver->is<parser::IdentExpr>()) {
+                    const auto& ident = call.receiver->as<parser::IdentExpr>();
+                    auto var_it = locals_.find(ident.name);
+                    if (var_it != locals_.end()) {
+                        is_capturing = var_it->second.is_capturing_closure;
+                    }
+                }
+
+                std::string call_target = receiver;
                 std::string args_str;
+                std::vector<std::string> arg_types;
+
+                if (is_fat_ptr) {
+                    // Fat pointer — extract fn_ptr
+                    std::string fn_ptr = fresh_reg();
+                    emit_line("  " + fn_ptr + " = extractvalue { ptr, ptr } " + receiver + ", 0");
+                    call_target = fn_ptr;
+
+                    if (is_capturing) {
+                        // Capturing closure: also extract and prepend env_ptr
+                        std::string env_ptr = fresh_reg();
+                        emit_line("  " + env_ptr + " = extractvalue { ptr, ptr } " + receiver +
+                                  ", 1");
+                        args_str = "ptr " + env_ptr;
+                        arg_types.push_back("ptr");
+                    }
+                }
+
+                // Generate user arguments
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     std::string arg_val = gen_expr(*call.args[i]);
                     std::string arg_type = "i32"; // default
@@ -2404,6 +2483,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     if (!args_str.empty())
                         args_str += ", ";
                     args_str += arg_type + " " + arg_val;
+                    arg_types.push_back(arg_type);
                 }
 
                 // Determine return type
@@ -2412,19 +2492,76 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     ret_type = llvm_type_from_semantic(func_type.return_type);
                 }
 
+                // Build function type signature for indirect call
+                std::string func_type_sig = ret_type + " (";
+                for (size_t i = 0; i < arg_types.size(); ++i) {
+                    if (i > 0)
+                        func_type_sig += ", ";
+                    func_type_sig += arg_types[i];
+                }
+                func_type_sig += ")";
+
                 // Call the function pointer
                 std::string result = fresh_reg();
                 if (ret_type == "void") {
-                    emit_line("  call void " + receiver + "(" + args_str + ")");
+                    emit_line("  call " + func_type_sig + " " + call_target + "(" + args_str + ")");
                     last_expr_type_ = "void";
                     return "void";
                 } else {
-                    emit_line("  " + result + " = call " + ret_type + " " + receiver + "(" +
+                    emit_line("  " + result + " = call " + func_type_sig + " " + call_target + "(" +
                               args_str + ")");
                     last_expr_type_ = ret_type;
                     return result;
                 }
             }
+        }
+
+        // Fallback: if no semantic type but last_expr_type_ is fat pointer
+        if (last_expr_type_ == "{ ptr, ptr }") {
+            // Check if capturing via VarInfo
+            bool is_capturing = false;
+            if (call.receiver->is<parser::IdentExpr>()) {
+                const auto& ident = call.receiver->as<parser::IdentExpr>();
+                auto var_it = locals_.find(ident.name);
+                if (var_it != locals_.end()) {
+                    is_capturing = var_it->second.is_capturing_closure;
+                }
+            }
+
+            std::string fn_ptr = fresh_reg();
+            emit_line("  " + fn_ptr + " = extractvalue { ptr, ptr } " + receiver + ", 0");
+
+            std::string args_str;
+            std::vector<std::string> arg_types;
+            if (is_capturing) {
+                std::string env_ptr = fresh_reg();
+                emit_line("  " + env_ptr + " = extractvalue { ptr, ptr } " + receiver + ", 1");
+                args_str = "ptr " + env_ptr;
+                arg_types.push_back("ptr");
+            }
+            for (size_t i = 0; i < call.args.size(); ++i) {
+                std::string arg_val = gen_expr(*call.args[i]);
+                std::string arg_type = last_expr_type_.empty() ? "i32" : last_expr_type_;
+                if (!args_str.empty())
+                    args_str += ", ";
+                args_str += arg_type + " " + arg_val;
+                arg_types.push_back(arg_type);
+            }
+
+            std::string ret_type = "i32"; // default
+            std::string func_type_sig = ret_type + " (";
+            for (size_t i = 0; i < arg_types.size(); ++i) {
+                if (i > 0)
+                    func_type_sig += ", ";
+                func_type_sig += arg_types[i];
+            }
+            func_type_sig += ")";
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call " + func_type_sig + " " + fn_ptr + "(" + args_str +
+                      ")");
+            last_expr_type_ = ret_type;
+            return result;
         }
     }
 

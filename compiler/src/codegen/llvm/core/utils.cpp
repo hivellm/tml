@@ -79,6 +79,17 @@ void LLVMIRGen::report_error(const std::string& msg, const SourceSpan& span,
     errors_.push_back(LLVMGenError{msg, span, {}, code});
 }
 
+auto LLVMIRGen::coerce_closure_to_fn_ptr(const std::string& val) -> std::string {
+    if (last_expr_type_ == "{ ptr, ptr }") {
+        // Extract fn_ptr (index 0) from the fat pointer
+        std::string fn_ptr = fresh_reg();
+        emit_line("  " + fn_ptr + " = extractvalue { ptr, ptr } " + val + ", 0");
+        last_expr_type_ = "ptr";
+        return fn_ptr;
+    }
+    return val;
+}
+
 auto LLVMIRGen::add_string_literal(const std::string& value) -> std::string {
     std::string name = "@.str." + std::to_string(string_literals_.size());
     string_literals_.emplace_back(name, value);

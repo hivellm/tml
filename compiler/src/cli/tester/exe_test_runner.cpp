@@ -118,8 +118,9 @@ static unsigned int exe_calc_codegen_threads(unsigned int task_count) {
     unsigned int hw = std::thread::hardware_concurrency();
     if (hw == 0)
         hw = 8;
-    unsigned int half_cores = hw / 2;
-    unsigned int clamped = std::clamp(half_cores, 4u, 8u);
+    // Use at most 40% of cores per suite, clamped to [2, 6]
+    unsigned int per_suite = hw * 2 / 5;
+    unsigned int clamped = std::clamp(per_suite, 2u, 6u);
     return std::min(clamped, task_count);
 }
 

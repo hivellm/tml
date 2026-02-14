@@ -229,9 +229,21 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                 // Or try to infer from function return type
                 else if (!current_ret_type_.empty()) {
                     std::string prefix = "%struct." + enum_name + "__";
-                    if (current_ret_type_.starts_with(prefix) ||
-                        current_ret_type_.find(enum_name + "__") != std::string::npos) {
+                    if (current_ret_type_.starts_with(prefix)) {
                         enum_type = current_ret_type_;
+                    }
+                    // If current_ret_type_ is a composite (e.g. tuple like "{ i64,
+                    // %struct.Maybe__I64 }"), extract just the %struct.EnumName__* substring
+                    else {
+                        auto pos = current_ret_type_.find(prefix);
+                        if (pos != std::string::npos) {
+                            // Extract from %struct. to the end of the type name (next , or } or
+                            // space)
+                            auto end = current_ret_type_.find_first_of(",} ", pos + prefix.size());
+                            if (end == std::string::npos)
+                                end = current_ret_type_.size();
+                            enum_type = current_ret_type_.substr(pos, end - pos);
+                        }
                     }
                 }
                 // Try to use current type substitutions (e.g., when inside generic impl method)
@@ -333,9 +345,19 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                 // Or try to infer from function return type
                 else if (!enum_def.type_params.empty() && !current_ret_type_.empty()) {
                     std::string prefix = "%struct." + enum_name + "__";
-                    if (current_ret_type_.starts_with(prefix) ||
-                        current_ret_type_.find(enum_name + "__") != std::string::npos) {
+                    if (current_ret_type_.starts_with(prefix)) {
                         enum_type = current_ret_type_;
+                    }
+                    // If current_ret_type_ is a composite (e.g. tuple like "{ i64,
+                    // %struct.Maybe__I64 }"), extract just the %struct.EnumName__* substring
+                    else {
+                        auto pos = current_ret_type_.find(prefix);
+                        if (pos != std::string::npos) {
+                            auto end = current_ret_type_.find_first_of(",} ", pos + prefix.size());
+                            if (end == std::string::npos)
+                                end = current_ret_type_.size();
+                            enum_type = current_ret_type_.substr(pos, end - pos);
+                        }
                     }
                 }
                 // Try to use current type substitutions (e.g., when inside generic impl method)

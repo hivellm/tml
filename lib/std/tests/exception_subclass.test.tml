@@ -1,0 +1,64 @@
+// Test REAL exception subclass allocation
+// Previously blocked by "Cannot allocate unsized type %struct.Exception" (Phase 6f)
+use test
+use std::exception::*
+
+@test
+func test_real_arg_null_alloc() -> I32 {
+    let e = ArgumentNullException::create("myParam")
+    return 0
+}
+
+@test
+func test_real_io_exception_alloc() -> I32 {
+    let e = IOException::create("disk full")
+    return 0
+}
+
+@test
+func test_real_invalid_op_alloc() -> I32 {
+    let e = InvalidOperationException::create("not allowed")
+    return 0
+}
+
+@test
+func test_real_not_supported_alloc() -> I32 {
+    let e = NotSupportedException::create()
+    return 0
+}
+
+@test
+func test_real_not_implemented_alloc() -> I32 {
+    let e = NotImplementedException::create()
+    return 0
+}
+
+@test
+func test_real_timeout_alloc() -> I32 {
+    let e = TimeoutException::create()
+    return 0
+}
+
+@test
+func test_real_format_exception_alloc() -> I32 {
+    let e = FormatException::create("bad format")
+    return 0
+}
+
+@test
+func test_real_index_out_of_range_alloc() -> I32 {
+    let e = IndexOutOfRangeException::create(5 as I64, 3 as I64)
+    return 0
+}
+
+@test
+func test_real_arg_out_of_range_alloc() -> I32 {
+    let e = ArgumentOutOfRangeException::create("idx", 10 as I64, "too big")
+    return 0
+}
+
+@test
+func test_real_file_not_found_alloc() -> I32 {
+    let e = FileNotFoundException::create("/etc/missing.txt")
+    return 0
+}

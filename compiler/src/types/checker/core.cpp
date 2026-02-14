@@ -29,6 +29,8 @@
 #include "lexer/token.hpp"
 #include "types/builtins_cache.hpp"
 #include "types/checker.hpp"
+#include "types/module.hpp"
+#include "types/module_binary.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -1004,6 +1006,49 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
         env_.register_impl(type_name, behavior_name);
 
         auto behavior_def = env_.lookup_behavior(behavior_name);
+
+        // If not found, try loading the behavior's module from GlobalModuleCache.
+        // This handles behaviors like Iterator that are defined in library modules
+        // not explicitly imported by user code.
+        // If behavior not found, try loading its definition from binary
+        // cache on-demand. This handles behaviors like Iterator that are
+        // defined in library modules not explicitly imported by user code.
+        // We load ONLY the behavior definition, not the full module, to
+        // avoid pulling in all library code during codegen.
+        if (!behavior_def) {
+            static const std::unordered_map<std::string, std::string> behavior_modules = {
+                {"Iterator", "core::iter::traits::iterator"},
+                {"IntoIterator", "core::iter::traits::into_iterator"},
+                {"FromIterator", "core::iter::traits::from_iterator"},
+                {"Display", "core::fmt::traits"},
+                {"Debug", "core::fmt::traits"},
+                {"Duplicate", "core::clone"},
+                {"Hash", "core::hash"},
+                {"Default", "core::default"},
+                {"Error", "core::error"},
+                {"From", "core::convert"},
+                {"Into", "core::convert"},
+                {"TryFrom", "core::convert"},
+                {"TryInto", "core::convert"},
+                {"PartialEq", "core::cmp"},
+                {"Eq", "core::cmp"},
+                {"PartialOrd", "core::cmp"},
+                {"Ord", "core::cmp"},
+            };
+            auto mod_it = behavior_modules.find(behavior_name);
+            if (mod_it != behavior_modules.end()) {
+                auto cached_mod = types::load_module_from_cache(mod_it->second);
+                if (cached_mod) {
+                    auto bit = cached_mod->behaviors.find(behavior_name);
+                    if (bit != cached_mod->behaviors.end()) {
+                        // Register behavior directly in the env
+                        env_.define_behavior(bit->second);
+                        behavior_def = env_.lookup_behavior(behavior_name);
+                    }
+                }
+            }
+        }
+
         if (behavior_def) {
             for (const auto& behavior_method : behavior_def->methods) {
                 // Skip if impl provides this method

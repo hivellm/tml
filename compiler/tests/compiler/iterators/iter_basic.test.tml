@@ -1,0 +1,44 @@
+// Test basic iterator functionality
+// Probes Phase 1.3: iterator associated types and default methods
+use test
+
+// Define a simple range iterator
+pub type SimpleRange {
+    current: I32,
+    end: I32
+}
+
+impl SimpleRange {
+    pub func new(start: I32, end: I32) -> SimpleRange {
+        return SimpleRange { current: start, end: end }
+    }
+}
+
+impl Iterator for SimpleRange {
+    type Item = I32
+
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.end {
+            return Nothing
+        }
+        let val = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_simple_range_next() -> I32 {
+    var range = SimpleRange::new(0, 3)
+    let first = range.next()
+    assert_eq(first.is_just(), true, "first should be Just")
+    return 0
+}
+
+@test
+func test_iterator_count() -> I32 {
+    var range = SimpleRange::new(0, 5)
+    let n = range.count()
+    assert_eq(n, 5, "count should be 5")
+    return 0
+}

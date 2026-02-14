@@ -228,8 +228,9 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
             return "0";
         }
 
-        // Get closure
+        // Get closure (may be fat pointer { ptr, ptr } or thin ptr)
         std::string closure_val = gen_expr(*call.args[0]);
+        closure_val = coerce_closure_to_fn_ptr(closure_val);
 
         // For now, we assume closure output type matches input type (simplified)
         std::string result_type = array_llvm_type;

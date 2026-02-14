@@ -336,13 +336,13 @@ impl Neg for I64 {
 
 impl Neg for F32 {
     pub func neg(this) -> F32 {
-        return /* unknown expr */
+        return 0.0 as F32 - this
     }
 }
 
 impl Neg for F64 {
     pub func neg(this) -> F64 {
-        return /* unknown expr */
+        return 0.0 - this
     }
 }
 

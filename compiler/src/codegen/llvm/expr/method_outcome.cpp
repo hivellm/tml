@@ -1017,6 +1017,109 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         return receiver;
     }
 
+    // to_string() -> Str / debug_string() -> Str
+    if (method == "to_string" || method == "debug_string") {
+        emit_coverage("Outcome::" + method);
+
+        std::string is_ok_label = fresh_label("outcome_tostr_ok");
+        std::string is_err_label = fresh_label("outcome_tostr_err");
+        std::string end_label = fresh_label("outcome_tostr_end");
+
+        std::string is_ok = fresh_reg();
+        emit_line("  " + is_ok + " = icmp eq i32 " + tag_val + ", 0");
+        emit_line("  br i1 " + is_ok + ", label %" + is_ok_label + ", label %" + is_err_label);
+
+        // Helper lambda to convert a value to string based on its LLVM type
+        auto val_to_string = [&](const std::string& val,
+                                 const std::string& llvm_type) -> std::string {
+            std::string str_val;
+            if (llvm_type == "i32") {
+                str_val = fresh_reg();
+                emit_line("  " + str_val + " = call ptr @i32_to_string(i32 " + val + ")");
+            } else if (llvm_type == "i64") {
+                str_val = fresh_reg();
+                emit_line("  " + str_val + " = call ptr @i64_to_string(i64 " + val + ")");
+            } else if (llvm_type == "i8") {
+                std::string ext = fresh_reg();
+                emit_line("  " + ext + " = sext i8 " + val + " to i32");
+                str_val = fresh_reg();
+                emit_line("  " + str_val + " = call ptr @i32_to_string(i32 " + ext + ")");
+            } else if (llvm_type == "i16") {
+                std::string ext = fresh_reg();
+                emit_line("  " + ext + " = sext i16 " + val + " to i32");
+                str_val = fresh_reg();
+                emit_line("  " + str_val + " = call ptr @i32_to_string(i32 " + ext + ")");
+            } else if (llvm_type == "float") {
+                str_val = fresh_reg();
+                emit_line("  " + str_val + " = call ptr @f32_to_string(float " + val + ")");
+            } else if (llvm_type == "double") {
+                str_val = fresh_reg();
+                emit_line("  " + str_val + " = call ptr @f64_to_string(double " + val + ")");
+            } else if (llvm_type == "i1") {
+                str_val = fresh_reg();
+                emit_line("  " + str_val + " = call ptr @bool_to_string(i1 " + val + ")");
+            } else if (llvm_type == "ptr") {
+                str_val = val; // Already a string
+            } else {
+                str_val = add_string_literal("...");
+            }
+            return str_val;
+        };
+
+        // Ok block: "Ok(value)"
+        emit_line(is_ok_label + ":");
+        current_block_ = is_ok_label;
+        std::string ok_alloca = fresh_reg();
+        emit_line("  " + ok_alloca + " = alloca " + enum_type_name);
+        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + ok_alloca);
+        std::string ok_data_ptr = fresh_reg();
+        emit_line("  " + ok_data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                  ok_alloca + ", i32 0, i32 1");
+        std::string ok_val = fresh_reg();
+        emit_line("  " + ok_val + " = load " + ok_llvm_type + ", ptr " + ok_data_ptr);
+
+        std::string ok_str = val_to_string(ok_val, ok_llvm_type);
+        std::string ok_prefix = add_string_literal("Ok(");
+        std::string ok_suffix = add_string_literal(")");
+        std::string ok_with_prefix = fresh_reg();
+        emit_line("  " + ok_with_prefix + " = call ptr @str_concat_opt(ptr " + ok_prefix +
+                  ", ptr " + ok_str + ")");
+        std::string ok_result = fresh_reg();
+        emit_line("  " + ok_result + " = call ptr @str_concat_opt(ptr " + ok_with_prefix +
+                  ", ptr " + ok_suffix + ")");
+        emit_line("  br label %" + end_label);
+
+        // Err block: "Err(error)"
+        emit_line(is_err_label + ":");
+        current_block_ = is_err_label;
+        std::string err_alloca = fresh_reg();
+        emit_line("  " + err_alloca + " = alloca " + enum_type_name);
+        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + err_alloca);
+        std::string err_data_ptr = fresh_reg();
+        emit_line("  " + err_data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                  err_alloca + ", i32 0, i32 1");
+        std::string err_val = fresh_reg();
+        emit_line("  " + err_val + " = load " + err_llvm_type + ", ptr " + err_data_ptr);
+
+        std::string err_str = val_to_string(err_val, err_llvm_type);
+        std::string err_prefix = add_string_literal("Err(");
+        std::string err_with_prefix = fresh_reg();
+        emit_line("  " + err_with_prefix + " = call ptr @str_concat_opt(ptr " + err_prefix +
+                  ", ptr " + err_str + ")");
+        std::string err_result = fresh_reg();
+        emit_line("  " + err_result + " = call ptr @str_concat_opt(ptr " + err_with_prefix +
+                  ", ptr " + ok_suffix + ")");
+        emit_line("  br label %" + end_label);
+
+        emit_line(end_label + ":");
+        current_block_ = end_label;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi ptr [ " + ok_result + ", %" + is_ok_label + " ], [ " +
+                  err_result + ", %" + is_err_label + " ]");
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
     // Method not handled
     return std::nullopt;
 }

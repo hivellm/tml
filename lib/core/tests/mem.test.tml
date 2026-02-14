@@ -1,7 +1,8 @@
-// Consolidated tests for core::mem (22 tests)
-// ManuallyDrop, MaybeUninit, swap, replace, size_of, align_of, drop
-// BLOCKED: forget[T], zeroed[T], transmute[S,D], MaybeUninit::uninit[T] — generic monomorphization
+// Consolidated tests for core::mem (27 tests)
+// ManuallyDrop, MaybeUninit, swap, replace, size_of, align_of, drop, forget, zeroed, transmute
+// BLOCKED: MaybeUninit::uninit[T] — generic monomorphization
 use test
+use core::mem
 use core::mem::ManuallyDrop
 use core::mem::MaybeUninit
 use core::mem::{swap, replace, drop}
@@ -171,5 +172,44 @@ func test_drop_bool() -> I32 {
     return 0
 }
 
-// BLOCKED: forget[T], zeroed[T], transmute[S,D], MaybeUninit::uninit[T]
-// All emit %struct.T instead of concrete type — generic monomorphization bug
+// === forget ===
+
+@test
+func test_forget_i32() -> I32 {
+    let x: I32 = 42
+    mem::forget[I32](x)
+    return 0
+}
+
+@test
+func test_forget_i64() -> I32 {
+    let x: I64 = 999 as I64
+    mem::forget[I64](x)
+    return 0
+}
+
+// === zeroed ===
+
+@test
+func test_zeroed_i32() -> I32 {
+    let x: I32 = mem::zeroed[I32]()
+    assert_eq(x, 0, "zeroed I32 should be 0")
+    return 0
+}
+
+@test
+func test_zeroed_i64() -> I32 {
+    let x: I64 = mem::zeroed[I64]()
+    assert(x == 0 as I64, "zeroed I64 should be 0")
+    return 0
+}
+
+@test
+func test_zeroed_bool() -> I32 {
+    let x: Bool = mem::zeroed[Bool]()
+    assert(x == false, "zeroed Bool should be false")
+    return 0
+}
+
+// === transmute ===
+// BLOCKED: MaybeUninit::uninit[T] — generic monomorphization

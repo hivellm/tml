@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 :: TML Compiler Build Script for Windows
-:: Usage: scripts\build.bat [debug|release] [--clean] [--tests]
+:: Usage: scripts\build.bat [debug|release] [--clean] [--tests] [--bump-minor] [--bump-major]
 
 :: Get the root directory (parent of scripts\)
 set "SCRIPT_DIR=%~dp0"
@@ -23,6 +23,8 @@ set "ENABLE_UBSAN=OFF"
 set "ENABLE_LLVM_BACKEND=ON"
 set "ENABLE_CRANELIFT_BACKEND=OFF"
 set "BUILD_TARGET="
+set "BUMP_MAJOR=0"
+set "BUMP_MINOR=0"
 
 :: Parse arguments
 :parse_args
@@ -38,6 +40,8 @@ if /i "%~1"=="--sanitize" set "ENABLE_ASAN=ON" & set "ENABLE_UBSAN=ON" & shift &
 if /i "%~1"=="--no-llvm" set "ENABLE_LLVM_BACKEND=OFF" & shift & goto :parse_args
 if /i "%~1"=="--cranelift" set "ENABLE_CRANELIFT_BACKEND=ON" & shift & goto :parse_args
 if /i "%~1"=="--target" set "BUILD_TARGET=%~2" & shift & shift & goto :parse_args
+if /i "%~1"=="--bump-major" set "BUMP_MAJOR=1" & shift & goto :parse_args
+if /i "%~1"=="--bump-minor" set "BUMP_MINOR=1" & shift & goto :parse_args
 if /i "%~1"=="--help" goto :show_help
 if /i "%~1"=="-h" goto :show_help
 echo Unknown argument: %~1
@@ -53,15 +57,21 @@ echo   debug     Build with debug symbols (default)
 echo   release   Build with optimizations
 echo.
 echo Options:
-echo   --clean     Clean build directory before building
-echo   --tests     Build tests (default)
-echo   --no-tests  Don't build tests
-echo   --asan      Enable AddressSanitizer (memory error detection)
-echo   --ubsan     Enable UndefinedBehaviorSanitizer
-echo   --sanitize  Enable both ASan and UBSan
-echo   --cranelift Enable Cranelift backend (fast debug builds)
-echo   --target X  Build only target X (e.g., tml, tml_mcp, tml_tests)
-echo   --help      Show this help message
+echo   --clean        Clean build directory before building
+echo   --tests        Build tests (default)
+echo   --no-tests     Don't build tests
+echo   --bump-major   Increment major version (resets minor to 0)
+echo   --bump-minor   Increment minor version
+echo   --asan         Enable AddressSanitizer (memory error detection)
+echo   --ubsan        Enable UndefinedBehaviorSanitizer
+echo   --sanitize     Enable both ASan and UBSan
+echo   --cranelift    Enable Cranelift backend (fast debug builds)
+echo   --target X     Build only target X (e.g., tml, tml_mcp, tml_tests)
+echo   --help         Show this help message
+echo.
+echo Version:
+echo   Use --bump-major or --bump-minor to increment version.
+echo   Or edit the VERSION file directly (MAJOR.MINOR.BUILD).
 echo.
 echo Host target: %TARGET%
 echo.
@@ -71,6 +81,48 @@ echo   build\^<target^>\release\
 exit /b 0
 
 :args_done
+
+:: ========================================
+:: Version Management
+:: ========================================
+:: Read VERSION file (format: MAJOR.MINOR.BUILD)
+set "VERSION_FILE=%ROOT_DIR%\VERSION"
+if not exist "%VERSION_FILE%" (
+    echo WARNING: VERSION file not found, creating with 0.1.0
+    echo 0.1.0> "%VERSION_FILE%"
+)
+
+:: Read the version string
+set /p "VERSION_STR=" < "%VERSION_FILE%"
+
+:: Parse MAJOR.MINOR.BUILD using for /f with delims=.
+for /f "tokens=1,2,3 delims=." %%a in ("!VERSION_STR!") do (
+    set "VER_MAJOR=%%a"
+    set "VER_MINOR=%%b"
+    set "VER_BUILD=%%c"
+)
+
+:: Handle missing build number (e.g., if VERSION file only has "0.1")
+if "!VER_BUILD!"=="" set "VER_BUILD=0"
+
+:: Apply manual bumps
+if "%BUMP_MAJOR%"=="1" (
+    set /a "VER_MAJOR=!VER_MAJOR! + 1"
+    set "VER_MINOR=0"
+)
+if "%BUMP_MINOR%"=="1" (
+    set /a "VER_MINOR=!VER_MINOR! + 1"
+)
+
+:: Only increment build number on manual bumps (--bump-major or --bump-minor)
+:: Auto-increment was removed because it changed version_generated.hpp every build,
+:: which cascaded a full rebuild of ~320 files through common.hpp includes.
+if "%BUMP_MAJOR%"=="1" set /a "VER_BUILD=!VER_BUILD! + 1"
+if "%BUMP_MINOR%"=="1" set /a "VER_BUILD=!VER_BUILD! + 1"
+
+:: Write updated version back to VERSION file only if bumped
+if "%BUMP_MAJOR%"=="1" echo !VER_MAJOR!.!VER_MINOR!.!VER_BUILD!> "%VERSION_FILE%"
+if "%BUMP_MINOR%"=="1" echo !VER_MAJOR!.!VER_MINOR!.!VER_BUILD!> "%VERSION_FILE%"
 
 :: Set directories
 :: Cache: build/cache/<target>/<config>/ - CMake files, object files
@@ -83,6 +135,7 @@ echo ========================================
 echo        TML Compiler Build System
 echo ========================================
 echo.
+echo Version:     !VER_MAJOR!.!VER_MINOR!.!VER_BUILD!
 echo Target:      %TARGET%
 echo Build type:  %BUILD_TYPE%
 echo Cache dir:   %CACHE_DIR%
@@ -141,7 +194,10 @@ cmake "%ROOT_DIR%\compiler" ^
     -DTML_USE_LLVM_BACKEND=%ENABLE_LLVM_BACKEND% ^
     -DTML_USE_CRANELIFT_BACKEND=%ENABLE_CRANELIFT_BACKEND% ^
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
-    -DTML_OUTPUT_DIR="%OUTPUT_DIR%"
+    -DTML_OUTPUT_DIR="%OUTPUT_DIR%" ^
+    -DTML_VERSION_MAJOR=!VER_MAJOR! ^
+    -DTML_VERSION_MINOR=!VER_MINOR! ^
+    -DTML_VERSION_BUILD=!VER_BUILD!
 
 if errorlevel 1 (
     echo CMake configuration failed!
@@ -175,6 +231,7 @@ echo ========================================
 echo          Build Complete!
 echo ========================================
 echo.
+echo Version:     !VER_MAJOR!.!VER_MINOR!.!VER_BUILD!
 echo Compiler:    %OUTPUT_DIR%\tml.exe
 if "%BUILD_TESTS%"=="ON" (
     echo Tests:       %OUTPUT_DIR%\tml_tests.exe

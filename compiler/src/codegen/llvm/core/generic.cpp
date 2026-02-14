@@ -691,6 +691,35 @@ void LLVMIRGen::generate_pending_instantiations() {
     }
 }
 
+// Recursively walk a semantic type tree and ensure all generic enums/structs are instantiated.
+// This is needed for default behavior method generation where return types like
+// Outcome[Unit, I64] or (I64, Maybe[I64]) may not have been instantiated yet.
+void LLVMIRGen::ensure_generic_types_instantiated(const types::TypePtr& type) {
+    if (!type)
+        return;
+
+    if (type->is<types::NamedType>()) {
+        const auto& named = type->as<types::NamedType>();
+        if (!named.type_args.empty()) {
+            // Try as enum first, then as struct
+            if (env_.all_enums().find(named.name) != env_.all_enums().end()) {
+                require_enum_instantiation(named.name, named.type_args);
+            } else if (env_.lookup_struct(named.name)) {
+                require_struct_instantiation(named.name, named.type_args);
+            }
+            // Recursively check type args
+            for (const auto& arg : named.type_args) {
+                ensure_generic_types_instantiated(arg);
+            }
+        }
+    } else if (type->is<types::TupleType>()) {
+        const auto& tuple = type->as<types::TupleType>();
+        for (const auto& elem : tuple.elements) {
+            ensure_generic_types_instantiated(elem);
+        }
+    }
+}
+
 // Request enum instantiation - returns mangled name
 // Immediately generates the type definition to type_defs_buffer_ if not already generated
 auto LLVMIRGen::require_enum_instantiation(const std::string& base_name,

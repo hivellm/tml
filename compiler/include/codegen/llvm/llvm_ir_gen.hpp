@@ -268,6 +268,27 @@ struct CodegenLibraryState {
     // External function names declared during library codegen (prevents duplicate declarations)
     std::set<std::string> declared_externals;
 
+    // Class type mapping (class_name -> LLVM type name, e.g. "Exception" -> "%class.Exception")
+    std::unordered_map<std::string, std::string> class_types;
+
+    // Class field info (class_name -> field info list)
+    struct ClassFieldInfoData {
+        std::string name;
+        int index;
+        std::string llvm_type;
+        int vis; // parser::MemberVisibility as int
+        bool is_inherited = false;
+        struct PathStep {
+            std::string class_name;
+            int index;
+        };
+        std::vector<PathStep> inheritance_path;
+    };
+    std::unordered_map<std::string, std::vector<ClassFieldInfoData>> class_fields;
+
+    // Value classes (classes with @value decorator - no vtable)
+    std::unordered_set<std::string> value_classes;
+
     bool valid = false; ///< True if state has been captured
 };
 
@@ -418,6 +439,8 @@ public:
         std::optional<ClosureCaptureInfo> closure_captures; ///< Capture info if closure.
         bool is_ptr_to_value = false; ///< True if reg is a pointer to the value (needs loading).
         bool is_direct_param = false; ///< True if reg is a direct parameter (not an alloca).
+        bool is_capturing_closure =
+            false; ///< True if this is a capturing closure (fat ptr with env).
     };
 
     /// Drop tracking information for RAII.
@@ -506,7 +529,8 @@ private:
     std::vector<std::string> module_functions_; // Generated closure functions
     uint32_t closure_counter_ = 0;              // For unique closure names
     std::optional<ClosureCaptureInfo>
-        last_closure_captures_; // Capture info from last gen_closure call
+        last_closure_captures_;              // Legacy: capture info from last gen_closure call
+    bool last_closure_is_capturing_ = false; // Whether last closure had captures (fat ptr)
 
     // ============ Vtable Support for Trait Objects ============
     // Tracks behavior implementations and generates vtables for dyn dispatch
@@ -544,6 +568,12 @@ private:
 
     // Get vtable global name for a type/behavior pair
     auto get_vtable(const std::string& type_name, const std::string& behavior_name) -> std::string;
+
+    // Generate a default behavior method implementation for a given type
+    // Returns true if generation succeeded, false if skipped
+    bool generate_default_method(const std::string& type_name, const parser::TraitDecl* trait_decl,
+                                 const parser::FuncDecl& trait_method,
+                                 const parser::ImplDecl* impl);
 
     // ============ OOP Class Support (C#-style) ============
     // Tracks classes with single inheritance and virtual dispatch
@@ -1181,6 +1211,7 @@ private:
                           const std::vector<types::TypePtr>& type_args) -> std::string;
 
     // Generic instantiation management
+    void ensure_generic_types_instantiated(const types::TypePtr& type);
     auto require_struct_instantiation(const std::string& base_name,
                                       const std::vector<types::TypePtr>& type_args) -> std::string;
     auto require_enum_instantiation(const std::string& base_name,
@@ -1446,6 +1477,11 @@ private:
     // Utility
     void report_error(const std::string& msg, const SourceSpan& span);
     void report_error(const std::string& msg, const SourceSpan& span, const std::string& code);
+
+    // Closure fat pointer helpers
+    // If last_expr_type_ == "{ ptr, ptr }", extract fn_ptr (index 0) and return it.
+    // Also sets last_expr_type_ to "ptr". If not a fat pointer, returns the value unchanged.
+    auto coerce_closure_to_fn_ptr(const std::string& val) -> std::string;
 
     // Struct field access helpers
     auto get_field_index(const std::string& struct_name, const std::string& field_name) -> int;

@@ -675,6 +675,94 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         return result;
     }
 
+    // to_string() -> Str / debug_string() -> Str
+    if (method == "to_string" || method == "debug_string") {
+        emit_coverage("Maybe::" + method);
+
+        std::string is_just_label = fresh_label("maybe_tostr_just");
+        std::string is_nothing_label = fresh_label("maybe_tostr_nothing");
+        std::string end_label = fresh_label("maybe_tostr_end");
+
+        std::string is_just = fresh_reg();
+        emit_line("  " + is_just + " = icmp eq i32 " + tag_val + ", 0");
+        emit_line("  br i1 " + is_just + ", label %" + is_just_label + ", label %" +
+                  is_nothing_label);
+
+        // Just block: extract value, call to_string on it, wrap with "Just(...)"
+        emit_line(is_just_label + ":");
+        current_block_ = is_just_label;
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + enum_type_name);
+        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + alloca_reg);
+        std::string data_ptr = fresh_reg();
+        emit_line("  " + data_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                  alloca_reg + ", i32 0, i32 1");
+        std::string just_val = fresh_reg();
+        emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+
+        // Call to_string on inner value
+        std::string inner_str;
+        if (inner_llvm_type == "i32") {
+            inner_str = fresh_reg();
+            emit_line("  " + inner_str + " = call ptr @i32_to_string(i32 " + just_val + ")");
+        } else if (inner_llvm_type == "i64") {
+            inner_str = fresh_reg();
+            emit_line("  " + inner_str + " = call ptr @i64_to_string(i64 " + just_val + ")");
+        } else if (inner_llvm_type == "i8") {
+            // Extend to i32, then call i32 to_string
+            std::string ext = fresh_reg();
+            emit_line("  " + ext + " = sext i8 " + just_val + " to i32");
+            inner_str = fresh_reg();
+            emit_line("  " + inner_str + " = call ptr @i32_to_string(i32 " + ext + ")");
+        } else if (inner_llvm_type == "i16") {
+            std::string ext = fresh_reg();
+            emit_line("  " + ext + " = sext i16 " + just_val + " to i32");
+            inner_str = fresh_reg();
+            emit_line("  " + inner_str + " = call ptr @i32_to_string(i32 " + ext + ")");
+        } else if (inner_llvm_type == "float") {
+            inner_str = fresh_reg();
+            emit_line("  " + inner_str + " = call ptr @f32_to_string(float " + just_val + ")");
+        } else if (inner_llvm_type == "double") {
+            inner_str = fresh_reg();
+            emit_line("  " + inner_str + " = call ptr @f64_to_string(double " + just_val + ")");
+        } else if (inner_llvm_type == "i1") {
+            inner_str = fresh_reg();
+            emit_line("  " + inner_str + " = call ptr @bool_to_string(i1 " + just_val + ")");
+        } else if (inner_llvm_type == "ptr") {
+            // Str type — already a string, just use it
+            inner_str = just_val;
+        } else {
+            // Fallback: use a generic representation
+            std::string fallback = add_string_literal("...");
+            inner_str = fallback;
+        }
+
+        // Concatenate "Just(" + inner_str + ")"
+        std::string prefix_str = add_string_literal("Just(");
+        std::string suffix_str = add_string_literal(")");
+        std::string with_prefix = fresh_reg();
+        emit_line("  " + with_prefix + " = call ptr @str_concat_opt(ptr " + prefix_str + ", ptr " +
+                  inner_str + ")");
+        std::string just_result = fresh_reg();
+        emit_line("  " + just_result + " = call ptr @str_concat_opt(ptr " + with_prefix + ", ptr " +
+                  suffix_str + ")");
+        emit_line("  br label %" + end_label);
+
+        // Nothing block: return "Nothing"
+        emit_line(is_nothing_label + ":");
+        current_block_ = is_nothing_label;
+        std::string nothing_str = add_string_literal("Nothing");
+        emit_line("  br label %" + end_label);
+
+        emit_line(end_label + ":");
+        current_block_ = end_label;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi ptr [ " + just_result + ", %" + is_just_label + " ], [ " +
+                  nothing_str + ", %" + is_nothing_label + " ]");
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
     // Method not handled
     return std::nullopt;
 }

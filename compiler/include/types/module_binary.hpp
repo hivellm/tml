@@ -48,8 +48,9 @@ namespace tml::types {
 constexpr uint32_t MODULE_META_MAGIC = 0x544D4D54;
 
 /// Format version.
-constexpr uint16_t MODULE_META_VERSION_MAJOR = 3;
-constexpr uint16_t MODULE_META_VERSION_MINOR = 1;
+/// v5: Include behavior impl methods regardless of pub visibility + source hash check
+constexpr uint16_t MODULE_META_VERSION_MAJOR = 5;
+constexpr uint16_t MODULE_META_VERSION_MINOR = 0;
 
 // ============================================================================
 // Source Hash

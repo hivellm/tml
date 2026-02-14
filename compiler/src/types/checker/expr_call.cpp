@@ -557,9 +557,21 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                         arg_types.push_back(check_expr(*call.args[i], expected_param));
                     }
 
-                    // Handle generic functions - infer type params from arguments
+                    // Handle generic functions - apply explicit type args then infer from arguments
                     if (!local_func->type_params.empty()) {
                         std::unordered_map<std::string, TypePtr> substitutions;
+
+                        // First: apply explicit type arguments (e.g., mem::zeroed[I32]())
+                        if (path.generics.has_value()) {
+                            const auto& gen_args = path.generics.value().args;
+                            for (size_t i = 0;
+                                 i < local_func->type_params.size() && i < gen_args.size(); ++i) {
+                                if (gen_args[i].is_type()) {
+                                    substitutions[local_func->type_params[i]] =
+                                        resolve_type(*gen_args[i].as_type());
+                                }
+                            }
+                        }
 
                         // For static methods on generic types (like Wrapper[T]::unwrap),
                         // extract type args from arguments that match the type pattern.
@@ -725,6 +737,18 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
         }
 
         return return_type;
+    }
+
+    // Handle closure types (closures that capture variables)
+    if (callee_type->is<ClosureType>()) {
+        auto& closure = callee_type->as<ClosureType>();
+        if (call.args.size() != closure.params.size()) {
+            error("Wrong number of arguments", call.callee->span, "T004");
+        }
+        for (size_t i = 0; i < std::min(call.args.size(), closure.params.size()); ++i) {
+            check_expr(*call.args[i], closure.params[i]);
+        }
+        return closure.return_type;
     }
 
     return make_unit();
@@ -1420,6 +1444,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (call.method == "duplicate") {
                 return receiver_type;
             }
+
+            // to_string(), debug_string() return Str (Display/Debug behavior)
+            if (call.method == "to_string" || call.method == "debug_string") {
+                return make_primitive(PrimitiveKind::Str);
+            }
         }
 
         // Handle atomic type methods that return Outcome
@@ -1586,6 +1615,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             // duplicate() returns Outcome[T, E]
             if (call.method == "duplicate") {
                 return receiver_type;
+            }
+
+            // to_string(), debug_string() return Str (Display/Debug behavior)
+            if (call.method == "to_string" || call.method == "debug_string") {
+                return make_primitive(PrimitiveKind::Str);
             }
         }
 

@@ -272,6 +272,9 @@ struct SuiteStats {
 struct TestRunStats {
     int total_tests = 0;
     int total_files = 0;
+    int failed_count = 0;
+    int compilation_error_count = 0;
+    bool no_cache = false;
     int64_t total_duration_ms = 0;
     std::vector<SuiteStats> suites;
 };

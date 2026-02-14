@@ -1,0 +1,40 @@
+// Test generic enum method instantiation
+// Covers Phase 1.2 of the roadmap:
+// - CoroutineState[T] methods
+// - Poll[T] methods (is_ready, is_pending)
+// - Behavior constraint methods (debug_string, to_string) on generic enums
+use test
+use core::ops::CoroutineState
+use core::task::Poll
+
+@test
+func test_coroutine_state_yielded() -> I32 {
+    let state: CoroutineState[I32, Str] = CoroutineState::Yielded(42)
+    assert_eq(state.is_yielded(), true, "Yielded should be yielded")
+    assert_eq(state.is_complete(), false, "Yielded should not be complete")
+    return 0
+}
+
+@test
+func test_coroutine_state_complete() -> I32 {
+    let state: CoroutineState[I32, Str] = CoroutineState::Complete("done")
+    assert_eq(state.is_yielded(), false, "Complete should not be yielded")
+    assert_eq(state.is_complete(), true, "Complete should be complete")
+    return 0
+}
+
+@test
+func test_poll_is_ready() -> I32 {
+    let p: Poll[I32] = Poll::Ready(42)
+    assert_eq(p.is_ready(), true, "Ready should be ready")
+    assert_eq(p.is_pending(), false, "Ready should not be pending")
+    return 0
+}
+
+@test
+func test_poll_is_pending() -> I32 {
+    let p: Poll[I32] = Poll::Pending
+    assert_eq(p.is_ready(), false, "Pending should not be ready")
+    assert_eq(p.is_pending(), true, "Pending should be pending")
+    return 0
+}

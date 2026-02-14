@@ -1,0 +1,33 @@
+use test
+use std::sync::mutex::Mutex
+
+@test
+func test_mutex_new() -> I32 {
+    let mut m = Mutex::new(42)
+    return 0
+}
+
+@test
+func test_mutex_lock_get() -> I32 {
+    let mut m = Mutex::new(100)
+    let guard = m.lock()
+    let val = guard.get()
+    return 0
+}
+
+@test
+func test_mutex_lock_deref() -> I32 {
+    let mut m = Mutex::new(99)
+    let guard = m.lock()
+    let val = guard.deref()
+    return 0
+}
+
+@test
+func test_mutex_deref_star() -> I32 {
+    let mut m = Mutex::new(55)
+    let guard = m.lock()
+    let val: I32 = *guard
+    assert(val == 55, "deref should return 55")
+    return 0
+}

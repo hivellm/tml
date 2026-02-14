@@ -40,22 +40,6 @@
 namespace tml {
 
 // ============================================================================
-// Version Information
-// ============================================================================
-
-/// The compiler version string (e.g., "0.1.0").
-constexpr const char* VERSION = "0.1.0";
-
-/// Major version number.
-constexpr int VERSION_MAJOR = 0;
-
-/// Minor version number.
-constexpr int VERSION_MINOR = 1;
-
-/// Patch version number.
-constexpr int VERSION_PATCH = 0;
-
-// ============================================================================
 // Compiler Configuration
 // ============================================================================
 

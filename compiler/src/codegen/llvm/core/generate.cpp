@@ -26,7 +26,11 @@
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "common.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
 
+#include <filesystem>
 #include <iomanip>
 #include <set>
 
@@ -471,6 +475,39 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // when user code has @extern functions with the same symbol names
         for (const auto& name : state.declared_externals) {
             declared_externals_.insert(name);
+        }
+
+        // Restore class types (class_name -> LLVM type name)
+        for (const auto& [k, v] : state.class_types) {
+            if (class_types_.find(k) == class_types_.end()) {
+                class_types_[k] = v;
+            }
+        }
+
+        // Restore class field info
+        for (const auto& [class_name, fields] : state.class_fields) {
+            if (class_fields_.find(class_name) == class_fields_.end()) {
+                std::vector<ClassFieldInfo> fi;
+                fi.reserve(fields.size());
+                for (const auto& f : fields) {
+                    ClassFieldInfo cfi;
+                    cfi.name = f.name;
+                    cfi.index = f.index;
+                    cfi.llvm_type = f.llvm_type;
+                    cfi.vis = static_cast<parser::MemberVisibility>(f.vis);
+                    cfi.is_inherited = f.is_inherited;
+                    for (const auto& step : f.inheritance_path) {
+                        cfi.inheritance_path.push_back({step.class_name, step.index});
+                    }
+                    fi.push_back(std::move(cfi));
+                }
+                class_fields_[class_name] = std::move(fi);
+            }
+        }
+
+        // Restore value classes
+        for (const auto& name : state.value_classes) {
+            value_classes_.insert(name);
         }
 
         // Re-parse library module ASTs for pending generic registration.
@@ -1019,6 +1056,116 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 }
                 if (!trait_name.empty()) {
                     auto trait_it = trait_decls_.find(trait_name);
+                    // If not found in trait_decls_, load the behavior's source
+                    // file from disk and parse it to get the TraitDecl AST.
+                    // This handles behaviors like Iterator that are defined
+                    // in library modules not explicitly imported by user code.
+                    if (trait_it == trait_decls_.end()) {
+                        // Map behavior names to their module source paths
+                        static const std::unordered_map<std::string, std::string> behavior_source =
+                            {
+                                {"Iterator", "core/src/iter/traits/iterator"},
+                                {"IntoIterator", "core/src/iter/traits/into_iterator"},
+                                {"FromIterator", "core/src/iter/traits/from_iterator"},
+                                {"Display", "core/src/fmt/traits"},
+                                {"Debug", "core/src/fmt/traits"},
+                                {"Duplicate", "core/src/clone"},
+                                {"Hash", "core/src/hash"},
+                                {"Default", "core/src/default"},
+                                {"Error", "core/src/error"},
+                                {"From", "core/src/convert"},
+                                {"Into", "core/src/convert"},
+                                {"TryFrom", "core/src/convert"},
+                                {"TryInto", "core/src/convert"},
+                                {"PartialEq", "core/src/cmp"},
+                                {"Eq", "core/src/cmp"},
+                                {"PartialOrd", "core/src/cmp"},
+                                {"Ord", "core/src/cmp"},
+                                {"Add", "core/src/ops/arith"},
+                                {"Sub", "core/src/ops/arith"},
+                                {"Mul", "core/src/ops/arith"},
+                                {"Div", "core/src/ops/arith"},
+                                {"Rem", "core/src/ops/arith"},
+                                {"Neg", "core/src/ops/arith"},
+                            };
+                        // Build module path key for GlobalASTCache
+                        auto src_it = behavior_source.find(trait_name);
+                        if (src_it != behavior_source.end()) {
+                            std::string cache_key = src_it->second;
+                            // Replace / with :: for cache key
+                            std::string mod_key = cache_key;
+                            for (auto& ch : mod_key) {
+                                if (ch == '/')
+                                    ch = ':';
+                            }
+                            // Remove "src:" prefix segments
+                            // e.g. "core:src:iter:traits:iterator" ->
+                            // "core::iter::traits::iterator"
+                            std::string clean_key;
+                            std::istringstream kss(mod_key);
+                            std::string seg;
+                            while (std::getline(kss, seg, ':')) {
+                                if (seg.empty() || seg == "src")
+                                    continue;
+                                if (!clean_key.empty())
+                                    clean_key += "::";
+                                clean_key += seg;
+                            }
+
+                            // Check GlobalASTCache first
+                            const parser::Module* mod_ast =
+                                GlobalASTCache::instance().get(clean_key);
+                            if (!mod_ast) {
+                                // Find lib root and parse source file
+                                namespace fs = std::filesystem;
+                                auto cwd = fs::current_path();
+                                std::vector<fs::path> candidates = {
+                                    cwd / "lib",
+                                    fs::path("lib"),
+                                    fs::path("F:/Node/hivellm/tml/lib"),
+                                    cwd.parent_path() / "lib",
+                                    cwd.parent_path().parent_path() / "lib",
+                                };
+                                for (const auto& lib_root : candidates) {
+                                    fs::path src_path = lib_root / (src_it->second + ".tml");
+                                    if (fs::exists(src_path)) {
+                                        auto source_result =
+                                            lexer::Source::from_file(src_path.string());
+                                        if (is_err(source_result))
+                                            break;
+                                        auto source =
+                                            std::move(std::get<lexer::Source>(source_result));
+                                        lexer::Lexer lex(source);
+                                        auto tokens = lex.tokenize();
+                                        if (lex.has_errors())
+                                            break;
+                                        auto stem = src_path.stem().string();
+                                        parser::Parser p(std::move(tokens));
+                                        auto result = p.parse_module(stem);
+                                        if (std::holds_alternative<parser::Module>(result)) {
+                                            GlobalASTCache::instance().put(
+                                                clean_key,
+                                                std::get<parser::Module>(std::move(result)));
+                                            mod_ast = GlobalASTCache::instance().get(clean_key);
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                            if (mod_ast) {
+                                for (const auto& d : mod_ast->decls) {
+                                    if (d->is<parser::TraitDecl>()) {
+                                        const auto& t = d->as<parser::TraitDecl>();
+                                        if (t.name == trait_name) {
+                                            trait_decls_[t.name] = &t;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        trait_it = trait_decls_.find(trait_name);
+                    }
                     if (trait_it != trait_decls_.end()) {
                         const auto* trait_decl = trait_it->second;
 
@@ -1033,139 +1180,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             // Skip if impl provides this method
                             if (impl_method_names.count(trait_method.name) > 0)
                                 continue;
-
-                            // Skip if trait method has no default implementation
-                            if (!trait_method.body.has_value())
-                                continue;
-
-                            // Generate default implementation with type substitution
-                            // Default implementations DON'T use suite_prefix - they're shared
-                            std::string method_name = type_name + "_" + trait_method.name;
-
-                            // Skip if this default implementation was already generated
-                            if (functions_.find(method_name) != functions_.end()) {
-                                continue;
-                            }
-
-                            current_func_ = method_name;
-                            current_impl_type_ = type_name;
-                            locals_.clear();
-                            block_terminated_ = false;
-
-                            // Determine return type
-                            std::string ret_type = "void";
-                            if (trait_method.return_type.has_value()) {
-                                ret_type = llvm_type_ptr(*trait_method.return_type);
-                                // Substitute 'This' with actual type
-                                if (ret_type.find("This") != std::string::npos) {
-                                    ret_type = "%struct." + type_name;
-                                }
-                            }
-                            current_ret_type_ = ret_type;
-
-                            // Build parameter list
-                            std::string params;
-                            std::string param_types;
-                            std::vector<std::string> param_types_vec;
-
-                            // Determine the LLVM type for 'this' based on the impl type
-                            // For primitive types, pass by value; for structs/enums, pass by
-                            // pointer
-                            std::string trait_impl_llvm_type = llvm_type_name(type_name);
-                            bool trait_is_primitive_impl = (trait_impl_llvm_type[0] != '%');
-
-                            for (size_t i = 0; i < trait_method.params.size(); ++i) {
-                                if (i > 0) {
-                                    params += ", ";
-                                    param_types += ", ";
-                                }
-                                std::string param_type = llvm_type_ptr(trait_method.params[i].type);
-                                std::string param_name;
-                                if (trait_method.params[i].pattern &&
-                                    trait_method.params[i].pattern->is<parser::IdentPattern>()) {
-                                    param_name = trait_method.params[i]
-                                                     .pattern->as<parser::IdentPattern>()
-                                                     .name;
-                                } else {
-                                    param_name = "_anon";
-                                }
-                                // Handle 'this' parameter: primitive types pass by value, others by
-                                // pointer
-                                if (param_name == "this" &&
-                                    param_type.find("This") != std::string::npos) {
-                                    param_type =
-                                        trait_is_primitive_impl ? trait_impl_llvm_type : "ptr";
-                                }
-                                params += param_type + " %" + param_name;
-                                param_types += param_type;
-                                param_types_vec.push_back(param_type);
-                            }
-
-                            // Register function
-                            std::string func_type = ret_type + " (" + param_types + ")";
-                            functions_[method_name] = FuncInfo{"@tml_" + method_name, func_type,
-                                                               ret_type, param_types_vec};
-
-                            // Generate function
-                            emit_line("");
-                            emit_line("; Default implementation from behavior " + trait_name);
-                            emit_line("define internal " + ret_type + " @tml_" + method_name + "(" +
-                                      params + ") #0 {");
-                            emit_line("entry:");
-
-                            // Register params in locals
-                            for (size_t i = 0; i < trait_method.params.size(); ++i) {
-                                std::string param_type = llvm_type_ptr(trait_method.params[i].type);
-                                std::string param_name;
-                                if (trait_method.params[i].pattern &&
-                                    trait_method.params[i].pattern->is<parser::IdentPattern>()) {
-                                    param_name = trait_method.params[i]
-                                                     .pattern->as<parser::IdentPattern>()
-                                                     .name;
-                                } else {
-                                    param_name = "_anon";
-                                }
-
-                                // Create semantic type for this parameter
-                                types::TypePtr semantic_type = nullptr;
-                                if (param_name == "this" &&
-                                    param_type.find("This") != std::string::npos) {
-                                    // Handle 'this': primitive types use value type, others use ptr
-                                    param_type =
-                                        trait_is_primitive_impl ? trait_impl_llvm_type : "ptr";
-                                    // Create semantic type as the concrete impl type
-                                    semantic_type = std::make_shared<types::Type>();
-                                    semantic_type->kind = types::NamedType{type_name, "", {}};
-                                }
-
-                                // 'this' is passed directly (by value for primitives, by pointer
-                                // for structs) Don't create alloca for it
-                                if (param_name == "this") {
-                                    locals_[param_name] = VarInfo{"%" + param_name, param_type,
-                                                                  semantic_type, std::nullopt};
-                                } else {
-                                    std::string alloca_reg = fresh_reg();
-                                    emit_line("  " + alloca_reg + " = alloca " + param_type);
-                                    emit_line("  store " + param_type + " %" + param_name +
-                                              ", ptr " + alloca_reg);
-                                    locals_[param_name] = VarInfo{alloca_reg, param_type,
-                                                                  semantic_type, std::nullopt};
-                                }
-                            }
-
-                            // Generate body
-                            gen_block(*trait_method.body);
-                            if (!block_terminated_) {
-                                if (ret_type == "void") {
-                                    emit_line("  ret void");
-                                } else if (ret_type == "ptr") {
-                                    emit_line("  ret ptr null");
-                                } else {
-                                    emit_line("  ret " + ret_type + " 0");
-                                }
-                            }
-                            emit_line("}");
-                            current_impl_type_.clear();
+                            generate_default_method(type_name, trait_decl, trait_method, &impl);
                         }
                     }
                 }
@@ -1209,7 +1224,34 @@ auto LLVMIRGen::generate(const parser::Module& module)
     }
 
     // Emit vtables for trait objects (dyn dispatch)
+    // Note: generate_default_method() called during emit_vtables() may generate new
+    // generic type instantiations (e.g. Outcome__Unit__I64). These go to type_defs_buffer_.
+    // We need to capture and prepend any new type defs before the functions.
+    type_defs_buffer_.str(""); // Clear before vtable generation
     emit_vtables();
+    {
+        std::string vtable_type_defs = type_defs_buffer_.str();
+        if (!vtable_type_defs.empty()) {
+            // Prepend type defs to the output - they must appear before functions
+            std::string current_output = output_.str();
+            output_.str("");
+            // Find the position after the "; Generic type instantiations" header
+            // by looking for the first "define" or "@vtable" line
+            auto define_pos = current_output.find("\ndefine ");
+            if (define_pos == std::string::npos)
+                define_pos = current_output.find("\n@vtable.");
+            if (define_pos != std::string::npos) {
+                output_ << current_output.substr(0, define_pos + 1);
+                output_ << "; Additional generic type instantiations (from vtable generation)\n";
+                output_ << vtable_type_defs;
+                output_ << current_output.substr(define_pos + 1);
+            } else {
+                output_ << vtable_type_defs;
+                output_ << current_output;
+            }
+            type_defs_buffer_.str("");
+        }
+    }
 
     // Collect test, benchmark, and fuzz functions BEFORE emitting string constants
     // so we can pre-register expected panic message strings
@@ -2141,6 +2183,31 @@ auto LLVMIRGen::capture_library_state(const std::string& full_ir,
 
     // Capture declared externals (to prevent duplicate declarations in worker threads)
     state->declared_externals = declared_externals_;
+
+    // Capture class types (class_name -> LLVM type name)
+    state->class_types = class_types_;
+
+    // Capture class field info
+    for (const auto& [class_name, fields] : class_fields_) {
+        std::vector<CodegenLibraryState::ClassFieldInfoData> field_data;
+        field_data.reserve(fields.size());
+        for (const auto& f : fields) {
+            CodegenLibraryState::ClassFieldInfoData fd;
+            fd.name = f.name;
+            fd.index = f.index;
+            fd.llvm_type = f.llvm_type;
+            fd.vis = static_cast<int>(f.vis);
+            fd.is_inherited = f.is_inherited;
+            for (const auto& step : f.inheritance_path) {
+                fd.inheritance_path.push_back({step.class_name, step.index});
+            }
+            field_data.push_back(std::move(fd));
+        }
+        state->class_fields[class_name] = std::move(field_data);
+    }
+
+    // Capture value classes
+    state->value_classes = value_classes_;
 
     state->valid = true;
 

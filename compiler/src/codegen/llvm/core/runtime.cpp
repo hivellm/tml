@@ -1515,7 +1515,13 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 // Register class types so %class.ClassName is properly sized.
                 // Use emit_external_class_type for type + field registration,
                 // then gen_class_vtable for vtable type + global.
+                // First try the env's lookup (works for imported classes), then
+                // fall back to direct module registry lookup (for non-imported
+                // classes in the same module file, e.g. exception subclasses).
                 auto class_def = env_.lookup_class(c.name);
+                if (!class_def.has_value() && env_.module_registry()) {
+                    class_def = env_.module_registry()->lookup_class(info.module_name, c.name);
+                }
                 if (class_def.has_value()) {
                     emit_external_class_type(c.name, *class_def);
                     // Generate vtable type and global constant.
@@ -1632,6 +1638,13 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                             }
                         }
                     }
+                }
+            } else if (decl->is<parser::TraitDecl>()) {
+                // Register behavior/trait declarations so that default method
+                // bodies can be generated for impl blocks in Phase 2.
+                const auto& trait = decl->as<parser::TraitDecl>();
+                if (trait_decls_.find(trait.name) == trait_decls_.end()) {
+                    trait_decls_[trait.name] = &trait;
                 }
             }
         }

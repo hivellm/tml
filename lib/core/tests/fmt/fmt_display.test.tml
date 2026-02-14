@@ -83,16 +83,44 @@ func test_debug_bool() -> I32 {
 // }
 
 // ============================================================================
-// Display and Debug for Maybe[T] - SKIPPED (codegen bug: zext i64 to i64)
+// Display and Debug for Maybe[T]
 // ============================================================================
 
-// TODO: Fix codegen for generic type Display/Debug methods
+@test
+func test_maybe_just_to_string() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    let s: Str = m.to_string()
+    assert_eq(s, "Just(42)", "Maybe Just to_string")
+    return 0
+}
+
+@test
+func test_maybe_nothing_to_string() -> I32 {
+    let m: Maybe[I32] = Nothing
+    let s: Str = m.to_string()
+    assert_eq(s, "Nothing", "Maybe Nothing to_string")
+    return 0
+}
 
 // ============================================================================
-// Display and Debug for Outcome[T, E] - SKIPPED (codegen bug)
+// Display and Debug for Outcome[T, E]
 // ============================================================================
 
-// TODO: Fix codegen for Outcome Display/Debug
+@test
+func test_outcome_ok_to_string() -> I32 {
+    let r: Outcome[I32, Str] = Ok(42)
+    let s: Str = r.to_string()
+    assert_eq(s, "Ok(42)", "Outcome Ok to_string")
+    return 0
+}
+
+@test
+func test_outcome_err_to_string() -> I32 {
+    let r: Outcome[I32, Str] = Err("oops")
+    let s: Str = r.to_string()
+    assert_eq(s, "Err(oops)", "Outcome Err to_string")
+    return 0
+}
 
 // ============================================================================
 // Display and Debug for Ordering - from impls.test.tml

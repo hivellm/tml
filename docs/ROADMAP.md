@@ -1,0 +1,602 @@
+# TML Roadmap
+
+**Last updated**: 2026-02-13
+**Current state**: Compiler functional, 50.3% library coverage, 6,523 tests passing
+
+---
+
+## Overview
+
+```
+Phase 1  [NOW 32%]    Fix codegen bugs (closures, generics, iterators)
+Phase 2  [NEXT]       Tests for working features → coverage 50% → 75%
+Phase 3  [THEN]       Standard library essentials (HashSet, Math, DateTime)
+Phase 4  [FUTURE]     Migrate C runtime → pure TML
+Phase 5  [LATER]      Async runtime, networking, HTTP
+Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
+```
+
+### Why this order
+
+| Phase | Rationale |
+|-------|-----------|
+| 1. Codegen bugs | Blocks everything else. Without working closures, iterators never work. Without generic enums, `Maybe`/`Outcome` are unusable idiomatically. |
+| 2. Test coverage | Proves what works, catches regressions, builds confidence for bigger changes. |
+| 3. Stdlib essentials | Makes TML usable for real programs. Collections, math, datetime are table stakes. |
+| 4. Runtime migration | Architectural cleanup. C runtime works fine but blocks self-hosting long-term. |
+| 5. Async + networking | Enables servers and networked applications. Depends on stable closures + iterators. |
+| 6. Self-hosting | Ultimate goal. Requires everything above to be solid. |
+
+### Current metrics
+
+| Metric | Value |
+|--------|-------|
+| Library function coverage | 2,088 / 4,153 (50.3%) |
+| Tests passing | 6,523 across 482 files |
+| Modules at 100% coverage | 36 |
+| Modules at 0% coverage | 60 |
+| C++ compiler size | ~238,000 lines |
+| C runtime to migrate | ~4,585 lines |
+| TML standard library | ~137,300 lines |
+
+---
+
+## Phase 1: Fix Codegen Bugs
+
+**Goal**: Unblock ~365+ library functions currently broken by compiler bugs
+**Priority**: CRITICAL — blocks Phases 2-6
+**Tracking**: [test-failures/tasks.md](../rulebook/tasks/test-failures/tasks.md)
+
+### 1.1 Closures with variable capture
+
+Closures are the single largest functional gap. They block iterators, functional patterns, and test framework features.
+
+- [x] 1.1.1 Fix capturing closures — fat pointer `{ func_ptr, env_ptr }` architecture implemented, captures heap-allocated
+- [ ] 1.1.2 Fix tuple type arguments in trait definitions — `Fn[(I32,)]` not parseable
+- [ ] 1.1.3 Fix returning closures with captures from functions
+- [ ] 1.1.4 Fix function pointer field calling — calling function stored in struct field
+
+### 1.2 Generic enum method instantiation
+
+Blocks idiomatic use of `Maybe`, `Outcome`, `Poll`, `Bound`, and all generic enums.
+
+- [x] 1.2.1 Fix `CoroutineState[T]` methods — type parameters not substituted
+- [x] 1.2.2 Fix `Poll[T]` methods `is_ready`/`is_pending` — generic enum variant resolution
+- [ ] 1.2.3 Fix `Bound::Unbounded` resolution in generic contexts
+- [x] 1.2.4 Fix behavior constraint methods (`debug_string`, `to_string`) on generic enums
+- [ ] 1.2.5 Fix generic closures in `Maybe` methods (`.map()`, `.and_then()`, etc.)
+- [ ] 1.2.6 Fix nested `Outcome` drop function generation
+- [ ] 1.2.7 Fix auto-drop glue for enums with non-trivial payloads (`Maybe[Arc[I32]]`)
+
+### 1.3 Iterator associated types
+
+Blocks the entire iterator system — 45 source files, ~200+ functions at 0% coverage.
+
+- [ ] 1.3.1 Fix associated type substitution (`I::Item` to concrete type) in iterator adapters
+- [x] 1.3.2 Fix default behavior method dispatch returning `()` on concrete types (`iter.count()`, `iter.last()`, etc.)
+- [ ] 1.3.3 Fix higher-order generic types — `OnceWith`, `FromFn`, `Successors` emit `Maybe__Fn` vs `Maybe__T` mismatch
+- [ ] 1.3.4 Fix async iterator support — depends on `task::Waker` function pointer field calling
+
+### 1.4 Generic function monomorphization
+
+- [x] 1.4.1 Fix `mem::zeroed[T]`, `mem::transmute[S,D]` — generic type resolution for module-qualified calls
+- [ ] 1.4.2 Fix `HashMapIter::key()` / `HashMapIter::value()` — return generic `K`/`V` instead of concrete type
+- [ ] 1.4.3 Fix `Slice::from_array` returning `()` instead of `Slice[U8]`
+
+### 1.5 Behavior dispatch on generic structs
+
+- [x] 1.5.1 Fix `MutexGuard::deref` / `::deref_mut` — return `()` instead of `ref T`
+- [x] 1.5.2 Fix `RwLockReadGuard::deref` / `RwLockWriteGuard::deref` — same issue
+- [x] 1.5.3 Fix `SocketAddrV4`/`SocketAddr` trait impls — "Unknown method" at codegen
+- [ ] 1.5.4 Fix `SocketAddr::from_v4()` — returns `()` instead of `SocketAddr`
+
+### 1.6 LLVM type mismatches
+
+- [ ] 1.6.1 Fix `Maybe[ref T]` vs `Maybe[T]` LLVM type mismatch (`OnceCell::get()`, `OnceLock::get()`)
+- [ ] 1.6.2 Fix `Maybe`/`Outcome` `to_string` — type mismatch in inner type codegen
+
+### 1.7 Other blocking bugs
+
+- [x] 1.7.1 Fix exception subclass allocation — class_types_/class_fields_/value_classes_ state preserved across library modules
+- [ ] 1.7.2 Fix external module method linking for `std::types::Object`
+- [ ] 1.7.3 Fix `unicode_data::UNICODE_VERSION` constant + i16/i32 type mismatch
+- [ ] 1.7.4 Fix external inheritance for exception subclasses
+- [ ] 1.7.5 Fix `Text::data_ptr` — pointer-to-null comparison crashes
+- [ ] 1.7.6 Fix `Saturating[T]::add/sub()`, `Wrapping[T]::add/sub()` — methods not defined
+- [ ] 1.7.7 Fix `clone::Duplicate::duplicate` coverage tracking for primitive types
+
+### 1.8 Performance fix
+
+- [ ] 1.8.1 Fix generic cache O(n^2) in test suites (`codegen/core/generic.cpp:303`)
+
+**Progress**: 10/31 items fixed. Coverage jumped from 43.7% to 50.3% (+273 functions). Remaining items would push to ~65%.
+**Gate**: All items above fixed. Coverage reaches ~65% with zero new tests.
+
+---
+
+## Phase 2: Test Coverage
+
+**Goal**: 50% → 75%+ function coverage
+**Priority**: HIGH — proves stability, catches regressions
+**Tracking**: Coverage reports via `tml test --coverage`
+
+### 2.1 Iterator system (LARGEST GAP — ~200+ functions at 0%)
+
+| Module | Functions | Coverage |
+|--------|-----------|----------|
+| `iter/traits/iterator` | 19 | 0% |
+| `iter/traits/accumulators` | 22 | 0% |
+| `iter/traits/double_ended` | 5 | 0% |
+| `iter/traits/exact_size` | 2 | 0% |
+| `iter/traits/into_iterator` | 1 | 0% |
+| `iter/traits/from_iterator` | 1 | 0% |
+| `iter/traits/extend` | 1 | 0% |
+| `iter/range` | 33 (1 covered) | 3% |
+| `iter/adapters/*` (15 modules) | ~40 | 0% |
+| `iter/sources/*` (4 modules) | ~12 | 0% |
+| `slice/iter` | 19 | 0% |
+| `array/iter` | 19 | 0% |
+
+- [ ] 2.1.1 Test `Iterator` trait core methods: `next`, `size_hint`, `count`, `last`, `nth`
+- [ ] 2.1.2 Test accumulator methods: `sum`, `product`, `fold`, `reduce`, `all`, `any`, `find`
+- [ ] 2.1.3 Test `DoubleEndedIterator`: `next_back`, `rfold`, `rfind`
+- [ ] 2.1.4 Test iterator adapters: `map`, `filter`, `enumerate`, `zip`, `chain`, `take`, `skip`
+- [ ] 2.1.5 Test iterator adapters: `flat_map`, `flatten`, `peekable`, `scan`, `fuse`
+- [ ] 2.1.6 Test iterator adapters: `inspect`, `intersperse`, `step_by`, `cycle`
+- [ ] 2.1.7 Test iterator adapters: `take_while`, `skip_while`, `map_while`, `filter_map`
+- [ ] 2.1.8 Test iterator sources: `empty`, `once_with`, `repeat_with`, `from_fn`, `successors`
+- [ ] 2.1.9 Test `iter/range` — range iteration for all integer types
+- [ ] 2.1.10 Test `slice/iter` and `array/iter` — slice and array iteration
+- [ ] 2.1.11 Test `IntoIterator`, `FromIterator`, `Extend` traits
+- [ ] 2.1.12 Test `ExactSizeIterator` trait
+
+> **Note**: This section depends on Phase 1.1 (closures) and Phase 1.3 (iterator codegen) being fixed first.
+
+### 2.2 Operators (205 functions, ~8% coverage)
+
+| Module | Functions | Covered | Coverage |
+|--------|-----------|---------|----------|
+| `ops/arith` | 113 | 6 | 5.3% |
+| `ops/bit` | 92 | 11 | 12.0% |
+
+- [ ] 2.2.1 Test `Add/Sub/Mul/Div/Rem` for all integer and float types
+- [ ] 2.2.2 Test `AddAssign/SubAssign/MulAssign/DivAssign/RemAssign` for all types
+- [ ] 2.2.3 Test `BitAnd/BitOr/BitXor/Shl/Shr` for all integer types
+- [ ] 2.2.4 Test `BitAndAssign/BitOrAssign/BitXorAssign/ShlAssign/ShrAssign` for all types
+- [ ] 2.2.5 Test `Neg` (unary minus) for signed types and floats
+- [ ] 2.2.6 Test `Not` (bitwise not) for integer types and Bool
+
+### 2.3 Formatting implementations (72 functions, 5.6% coverage)
+
+| Module | Functions | Covered | Coverage |
+|--------|-----------|---------|----------|
+| `fmt/impls` | 72 | 4 | 5.6% |
+
+- [ ] 2.3.1 Test `Display` impl for all primitive types (I8-I128, U8-U128, F32, F64, Bool, Char, Str)
+- [ ] 2.3.2 Test `Debug` impl for all primitive types
+- [ ] 2.3.3 Test `Binary`, `Octal`, `LowerHex`, `UpperHex` for integer types
+- [ ] 2.3.4 Test `LowerExp`, `UpperExp` for float types
+- [ ] 2.3.5 Test `Display`/`Debug` for compound types (Maybe, Outcome, List, tuples)
+
+### 2.4 Slices and arrays (50+ functions, mostly 0%)
+
+| Module | Functions | Coverage |
+|--------|-----------|----------|
+| `slice/cmp` | 9 | 0% |
+| `slice/sort` | 12 | 0% |
+| `array/ascii` | 9 | 0% |
+
+- [ ] 2.4.1 Test slice comparison methods
+- [ ] 2.4.2 Test slice sorting (sort, sort_by, sort_unstable)
+- [ ] 2.4.3 Test array ASCII methods
+
+### 2.5 Convert and type coercion (6 functions, 0%)
+
+- [ ] 2.5.1 Test `From`/`Into` implementations
+- [ ] 2.5.2 Test `TryFrom`/`TryInto` implementations
+
+### 2.6 String module gaps (42/54 covered, 77.8% — close to completion)
+
+- [ ] 2.6.1 Test remaining 12 uncovered `str` functions
+- [ ] 2.6.2 Test `bstr` module (4/5 covered)
+
+### 2.7 Memory module (17/20 covered, 85%)
+
+- [ ] 2.7.1 Test remaining 4 uncovered `mem` functions (`zeroed`, `transmute`, etc.)
+
+> **Note**: Depends on Phase 1.4.1 being fixed first.
+
+### 2.8 Pointer module (14/19 covered, 73.7%)
+
+- [ ] 2.8.1 Test remaining 5 uncovered `ptr/const_ptr` functions
+
+### 2.9 Other gaps with existing implementations
+
+- [ ] 2.9.1 Test `cell/lazy` — 5 functions at 0%
+- [ ] 2.9.2 Test `thread/scope` — 9 functions at 0%
+- [ ] 2.9.3 Test `ops/function` — 3 functions at 0%
+- [ ] 2.9.4 Test `future` — 12 functions at 0%
+- [ ] 2.9.5 Test `runner` (test framework) — 9 functions at 0%
+
+**Gate**: Coverage >= 75%. All modules with implementations have at least one test.
+
+---
+
+## Phase 3: Standard Library Essentials
+
+**Goal**: Make TML usable for real programs
+**Priority**: HIGH
+**Tracking**: [stdlib-essentials/tasks.md](../rulebook/tasks/stdlib-essentials/tasks.md)
+
+### 3.1 Collections
+
+- [ ] 3.1.1 Implement `HashSet[T]` — insert, remove, contains, union, intersection, difference
+- [ ] 3.1.2 Implement `BTreeMap[K, V]` — ordered map with O(log n) operations
+- [ ] 3.1.3 Implement `BTreeSet[T]` — ordered set
+- [ ] 3.1.4 Implement `Deque[T]` — double-ended queue
+- [ ] 3.1.5 Implement `Vec[T]` alias for `List[T]` (ergonomic)
+- [ ] 3.1.6 Tests for all new collections
+
+### 3.2 Math module
+
+- [ ] 3.2.1 Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
+- [ ] 3.2.2 Hyperbolic: `sinh`, `cosh`, `tanh`
+- [ ] 3.2.3 Exponential: `exp`, `ln`, `log2`, `log10`, `pow`
+- [ ] 3.2.4 Rounding: `floor`, `ceil`, `round`, `trunc`
+- [ ] 3.2.5 Utility: `abs`, `sqrt`, `cbrt`, `min`, `max`, `clamp`
+- [ ] 3.2.6 Constants: `PI`, `E`, `TAU`, `SQRT_2`, `LN_2`, `LN_10`
+- [ ] 3.2.7 Tests for math module
+
+### 3.3 Environment and process
+
+- [ ] 3.3.1 `env::args()` — command-line arguments as `List[Str]`
+- [ ] 3.3.2 `env::var()` / `env::set_var()` — environment variables
+- [ ] 3.3.3 `env::current_dir()` / `env::set_current_dir()`
+- [ ] 3.3.4 `process::exit(code)` — exit with status code
+- [ ] 3.3.5 `process::Command` — spawn subprocesses with stdin/stdout/stderr
+- [ ] 3.3.6 Tests for env and process
+
+### 3.4 DateTime
+
+- [ ] 3.4.1 `Instant` — monotonic clock for measuring elapsed time
+- [ ] 3.4.2 `SystemTime` — wall clock time
+- [ ] 3.4.3 `DateTime` — date + time with timezone support
+- [ ] 3.4.4 Formatting: ISO 8601, RFC 2822, custom formats
+- [ ] 3.4.5 Parsing: string → DateTime
+- [ ] 3.4.6 Tests for datetime
+
+### 3.5 Random number generation
+
+- [ ] 3.5.1 `Rng` behavior — `next_u32`, `next_u64`, `next_f64`
+- [ ] 3.5.2 `ThreadRng` — per-thread CSPRNG
+- [ ] 3.5.3 `random[T]()` — convenience function for random value
+- [ ] 3.5.4 `rng.range(min, max)` — random integer in range
+- [ ] 3.5.5 `rng.shuffle(list)` — Fisher-Yates shuffle
+- [ ] 3.5.6 Tests for random
+
+### 3.6 Buffered I/O
+
+- [ ] 3.6.1 `BufReader[R]` — buffered wrapper for Read types
+- [ ] 3.6.2 `BufWriter[W]` — buffered wrapper for Write types
+- [ ] 3.6.3 `Read` / `Write` / `Seek` behaviors
+- [ ] 3.6.4 `LineWriter` — flush on newline
+- [ ] 3.6.5 Tests for buffered I/O
+
+### 3.7 Error context chains
+
+- [ ] 3.7.1 `Context` behavior — `.context("msg")` on errors
+- [ ] 3.7.2 `Error` source chain — `.source()` for error chaining
+- [ ] 3.7.3 `AnyError` type — anyhow-style generic errors
+- [ ] 3.7.4 Display with backtrace and chain
+- [ ] 3.7.5 Tests for error chains
+
+### 3.8 Regex engine
+
+- [ ] 3.8.1 `Regex` type — compile pattern
+- [ ] 3.8.2 `is_match()`, `find()`, `find_all()`
+- [ ] 3.8.3 `captures()` — named and positional groups
+- [ ] 3.8.4 `replace()`, `replace_all()`, `split()`
+- [ ] 3.8.5 Character classes, quantifiers, Unicode support
+- [ ] 3.8.6 NFA/DFA hybrid engine (no exponential backtracking)
+- [ ] 3.8.7 Tests for regex
+
+**Gate**: `HashSet`, `BTreeMap`, `Math`, `DateTime`, `Random`, `BufReader/BufWriter` all working with tests.
+
+---
+
+## Phase 4: Migrate C Runtime to Pure TML
+
+**Goal**: Eliminate ~4,585 lines of unnecessary C runtime code
+**Priority**: MEDIUM — architectural cleanup, prerequisite for self-hosting
+**Tracking**: [migrate-runtime-to-tml/tasks.md](../rulebook/tasks/migrate-runtime-to-tml/tasks.md)
+
+### Architecture
+
+```
+KEEP as C (@extern / @intrinsic):          MIGRATE to pure TML:
+  - mem_alloc / mem_free (OS interface)      - String algorithms (1,201 lines)
+  - ptr_read / ptr_write (LLVM intrinsics)   - Text utilities (1,057 lines)
+  - print / panic / exit (I/O)               - Collections logic (1,353 lines)
+  - File I/O (OS syscalls)                   - Math formatting (411 lines)
+  - Crypto (OpenSSL/BCrypt FFI)              - Search algorithms (98 lines)
+  - Compression (zlib FFI)                   - Logging internals
+  - Networking (OS sockets)                  - JSON helpers
+```
+
+### 4.1 Collections (List, HashMap, Buffer)
+
+- [ ] 4.1.1 Rewrite `List[T]` — replace C `list_create`/`list_push`/`list_get` with TML using `ptr_read`/`ptr_write`/`mem_alloc`
+- [ ] 4.1.2 Rewrite `HashMap[K, V]` — replace C `hashmap_create`/`hashmap_set`/`hashmap_get` with TML
+- [ ] 4.1.3 Rewrite `Buffer` — replace C `buffer_create`/`buffer_push`/`buffer_data` with TML
+- [ ] 4.1.4 Remove `compiler/runtime/collections/collections.c` (1,353 lines)
+- [ ] 4.1.5 Remove `lib/std/runtime/collections.c` (duplicate)
+- [ ] 4.1.6 All existing collection tests pass
+
+### 4.2 Strings (core::str)
+
+- [ ] 4.2.1 Rewrite read-only operations: `str_len`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_index_of`
+- [ ] 4.2.2 Rewrite transformations: `str_to_upper`, `str_to_lower`, `str_trim`, `str_trim_start`, `str_trim_end`
+- [ ] 4.2.3 Rewrite splitting: `str_split`, `str_split_at`, `str_lines`
+- [ ] 4.2.4 Rewrite allocating: `str_concat`, `str_repeat`, `str_replace`, `str_join`
+- [ ] 4.2.5 Rewrite parsing: `str_parse_i32`, `str_parse_i64`, `str_parse_f64`, `str_parse_bool`
+- [ ] 4.2.6 Remove `compiler/runtime/text/string.c` (1,201 lines)
+- [ ] 4.2.7 All existing string tests pass
+
+### 4.3 Text utilities (std::text)
+
+- [ ] 4.3.1 Rewrite `Text` builder: `text_new`, `text_push`, `text_push_str`, `text_to_str`
+- [ ] 4.3.2 Rewrite text operations: `text_trim`, `text_contains`, `text_replace`
+- [ ] 4.3.3 Remove `compiler/runtime/text/text.c` (1,057 lines)
+- [ ] 4.3.4 All existing text tests pass
+
+### 4.4 Formatting (core::fmt)
+
+- [ ] 4.4.1 Rewrite integer formatting: `i32_to_string`, `i64_to_string`, `u32_to_string`, etc.
+- [ ] 4.4.2 Rewrite float formatting: `f32_to_string`, `f64_to_string` (Ryu or similar algorithm)
+- [ ] 4.4.3 Rewrite `char_to_string`, UTF-8 encoding
+- [ ] 4.4.4 Rewrite hex/octal/binary formatting
+- [ ] 4.4.5 Remove `compiler/runtime/math/math.c` (411 lines)
+- [ ] 4.4.6 All existing formatting tests pass
+
+### 4.5 Search algorithms
+
+- [ ] 4.5.1 Rewrite BM25 scoring in pure TML
+- [ ] 4.5.2 Rewrite HNSW vector search in pure TML
+- [ ] 4.5.3 Rewrite distance metrics (cosine, euclidean, dot product)
+- [ ] 4.5.4 Remove `compiler/runtime/search/search.c` (98 lines)
+- [ ] 4.5.5 All existing search tests pass
+
+### 4.6 Cleanup
+
+- [ ] 4.6.1 Remove all migrated C files from `compiler/runtime/`
+- [ ] 4.6.2 Remove duplicate C files from `lib/std/runtime/`
+- [ ] 4.6.3 Update build scripts to exclude removed files
+- [ ] 4.6.4 Verify: zero `lowlevel` blocks call migrated C functions
+- [ ] 4.6.5 Verify: `compiler/runtime/core/essential.c` is the ONLY remaining C runtime (I/O, panic, test harness)
+
+**Gate**: ~229 `lowlevel` blocks eliminated. C runtime reduced from ~19K lines to ~14K lines (only essential I/O remains).
+
+---
+
+## Phase 5: Async Runtime and Networking
+
+**Goal**: Enable servers and networked applications
+**Priority**: MEDIUM
+**Dependencies**: Phase 1 (closures must work), Phase 3 (buffered I/O)
+**Tracking**: [language-completeness-roadmap/tasks.md](../rulebook/tasks/language-completeness-roadmap/tasks.md) M3-M4
+
+### 5.1 Async runtime
+
+- [ ] 5.1.1 Event loop (epoll/IOCP/kqueue)
+- [ ] 5.1.2 `async func` — state machine codegen
+- [ ] 5.1.3 `await` expression — suspension and resumption
+- [ ] 5.1.4 `Executor` with work-stealing scheduler
+- [ ] 5.1.5 `spawn()`, `block_on()`, `sleep()`, `timeout()`
+- [ ] 5.1.6 `AsyncMutex[T]`, `AsyncChannel[T]`, `AsyncSemaphore`
+- [ ] 5.1.7 `select!`, `join!`
+- [ ] 5.1.8 Tests and benchmarks
+
+### 5.2 Networking (async layer on existing sync)
+
+> Sync TCP/UDP/DNS/TLS already implemented
+
+- [ ] 5.2.1 `AsyncTcpListener` / `AsyncTcpStream`
+- [ ] 5.2.2 `AsyncUdpSocket`
+- [ ] 5.2.3 Zero-copy buffer management
+- [ ] 5.2.4 Connection pooling
+- [ ] 5.2.5 Tests: async echo server, concurrent clients
+
+### 5.3 HTTP
+
+- [ ] 5.3.1 HTTP/1.1 parser and server
+- [ ] 5.3.2 HTTP/1.1 client with connection pooling
+- [ ] 5.3.3 HTTP/2 multiplexing
+- [ ] 5.3.4 Router with path matching and method routing
+- [ ] 5.3.5 Middleware pipeline (logging, auth, CORS, compression)
+- [ ] 5.3.6 Decorator-based routing: `@Controller`, `@Get`, `@Post`
+- [ ] 5.3.7 WebSocket support
+- [ ] 5.3.8 HTTPS (TLS integration already done)
+- [ ] 5.3.9 Tests and benchmarks
+
+### 5.4 Promises and reactivity
+
+- [ ] 5.4.1 `Promise[T]` — then, catch, finally, map, flat_map
+- [ ] 5.4.2 `Observable[T]` — subscribe, map, filter, merge, zip
+- [ ] 5.4.3 Operators: debounce, throttle, distinct, buffer
+- [ ] 5.4.4 Pipe operator `|>` for fluent composition
+- [ ] 5.4.5 Tests
+
+**Gate**: TCP echo server runs, async/await compiles and executes, HTTP server serves routes.
+
+---
+
+## Phase 6: Self-Hosting Compiler
+
+**Goal**: Rewrite the C++ compiler in TML
+**Priority**: STRATEGIC (long-term)
+**Dependencies**: Phases 1-4 must be complete
+**Tracking**: [self-hosting-compiler/tasks.md](../rulebook/tasks/self-hosting-compiler/tasks.md)
+
+### The bootstrap path
+
+```
+Stage 0: C++ compiler compiles TML code           (TODAY)
+Stage 1: C++ compiler compiles TML-compiler-in-TML → tml_stage1.exe
+Stage 2: tml_stage1.exe compiles itself            → tml_stage2.exe
+Stage 3: tml_stage2.exe compiles itself            → tml_stage3.exe
+         Verify: stage2 == stage3 (byte-identical) → SELF-HOSTING ACHIEVED
+```
+
+### What gets rewritten (~195K lines C++)
+
+| Component | C++ Lines | Difficulty | Stage |
+|-----------|----------:|------------|-------|
+| Lexer | 3,183 | Easy | 1 |
+| Preprocessor | 1,168 | Easy | 1 |
+| Parser | 9,384 | Medium | 1 |
+| Type Checker | 20,205 | Very Hard | 2 |
+| HIR | 14,295 | Hard | 2 |
+| LLVM Codegen | 52,907 | Very Hard | 2 |
+| Borrow Checker | 6,579 | Very Hard | 3 |
+| MIR + 49 passes | 36,951 | Very Hard | 3 |
+| CLI/Builder | 26,975 | Medium | 4 |
+| Test Runner | 12,899 | Medium | 4 |
+| Query System | 2,736 | Hard | 3 |
+| Formatter/Linter | 2,516 | Easy | 4 |
+| Documentation | 4,303 | Medium | 4 |
+
+### What stays as FFI (not rewritten)
+
+- LLVM library — accessed via `@extern("c")` to LLVM C API
+- LLD linker — accessed via `@extern("c")`
+- OS syscalls — accessed via `@extern("c")` to libc
+- Crypto libraries — accessed via `@extern("c")` to OpenSSL/BCrypt
+
+### Prerequisites
+
+- [ ] 6.0.1 `migrate-runtime-to-tml` complete (Phase 4)
+- [ ] 6.0.2 Closures with variable capture working
+- [ ] 6.0.3 Recursive enums working (AST nodes)
+- [ ] 6.0.4 `HashMap[Str, T]` with 10K+ entries
+- [ ] 6.0.5 File I/O reliable (read source, write object files)
+- [ ] 6.0.6 LLVM C API bindings written as `@extern("c")` (~500 functions)
+- [ ] 6.0.7 LLD bindings written
+
+### Stage 1: Frontend in TML
+
+- [ ] 6.1.1 Lexer — tokenize TML source (32 keywords, 80+ token kinds)
+- [ ] 6.1.2 Preprocessor — `#if`/`#elif`/`#else`/`#endif`, `defined()`, predefined symbols
+- [ ] 6.1.3 Parser — Pratt expression parser, declarations, statements, patterns, types
+- [ ] 6.1.4 Validation — TML frontend produces identical output to C++ frontend on full test suite
+
+### Stage 2: Middle-end in TML
+
+- [ ] 6.2.1 Type system data structures — `Type` enum, `TypeContext`, `SymbolTable`
+- [ ] 6.2.2 Type checker — inference, unification, method resolution, exhaustiveness
+- [ ] 6.2.3 HIR lowering — desugar, monomorphize, coercion materialization
+- [ ] 6.2.4 LLVM codegen — all instruction types via LLVM C API FFI
+- [ ] 6.2.5 Backend integration — verification, optimization, object emission, linking
+
+### Stage 3: Optimizations in TML
+
+- [ ] 6.3.1 MIR construction — HIR to SSA-like CFG
+- [ ] 6.3.2 MIR optimization passes (49 passes, ported incrementally)
+- [ ] 6.3.3 Borrow checker — lifetime tracking, NLL
+- [ ] 6.3.4 Query system — incremental compilation
+
+### Stage 4: Tooling in TML
+
+- [ ] 6.4.1 Full CLI — build, run, check, test, format, lint
+- [ ] 6.4.2 Test runner — DLL-based execution, coverage
+- [ ] 6.4.3 Formatter and linter
+
+### Stage 5: Bootstrap validation
+
+- [ ] 6.5.1 Bootstrap chain: C++ → Stage1 → Stage2 → Stage3 (byte-identical)
+- [ ] 6.5.2 Full test suite passes on self-hosted compiler (6,400+ tests)
+- [ ] 6.5.3 Performance within 3x of C++ compiler
+- [ ] 6.5.4 C++ compiler relegated to bootstrap-only role
+
+**Gate**: TML compiler compiles itself. Bootstrap chain produces byte-identical output.
+
+---
+
+## Parallel Tracks (independent of main phases)
+
+These can be worked on alongside the main phases without blocking or being blocked.
+
+### Developer Tooling
+
+**Status**: 65% complete
+**Tracking**: [developer-tooling/tasks.md](../rulebook/tasks/developer-tooling/tasks.md)
+
+- [x] VSCode extension (published v0.17.0)
+- [x] Compiler MCP server (20 tools)
+- [x] Code formatter
+- [x] Linter
+- [ ] LSP: go-to-definition, references, rename
+- [ ] `tml doc` — HTML documentation generation
+- [ ] Doc comment preservation in compiler pipeline
+
+### Reflection System
+
+**Status**: 48% complete
+**Tracking**: [implement-reflection/tasks.md](../rulebook/tasks/implement-reflection/tasks.md)
+
+- [x] Core intrinsics (field_count, variant_count, field_name, etc.)
+- [x] TypeInfo generation and @derive(Reflect)
+- [x] Any type with downcast
+- [ ] OOP reflection (class/method introspection)
+- [ ] Integration tests
+
+### Serialization
+
+- [ ] `Serialize` / `Deserialize` generic behaviors
+- [ ] `@derive(Serialize, Deserialize)`
+- [ ] TOML, YAML, MessagePack, CSV parsers
+
+### Package Manager
+
+- [ ] `tml.toml` manifest format
+- [ ] Git-based dependencies
+- [ ] Version resolution and lock files
+- [ ] Package registry
+
+### Cross-Compilation
+
+- [ ] Target triple support (`--target=x86_64-linux-gnu`)
+- [ ] Tier 1: Windows, Linux (x86_64), macOS
+- [ ] Tier 2: WebAssembly, Linux ARM64
+- [ ] CI/CD cross-compile matrix
+
+---
+
+## Progress Tracking
+
+| Phase | Items | Done | Progress | Status |
+|-------|-------|------|----------|--------|
+| 1. Codegen bugs | 31 | 10 | 32% | IN PROGRESS |
+| 2. Test coverage | 38 | 0 | 0% | PARTIALLY UNBLOCKED |
+| 3. Stdlib essentials | 42 | 0 | 0% | NOT STARTED |
+| 4. Runtime migration | 28 | 0 | 0% | NOT STARTED |
+| 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
+| 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
+| Parallel: Tooling | 7 | 4 | 57% | IN PROGRESS |
+| Parallel: Reflection | 5 | 3 | 60% | IN PROGRESS |
+| **TOTAL** | **200** | **17** | **8.5%** | |
+
+---
+
+## References
+
+| Document | Location |
+|----------|----------|
+| Migrate Runtime to TML | [rulebook/tasks/migrate-runtime-to-tml/](../rulebook/tasks/migrate-runtime-to-tml/) |
+| Self-Hosting Compiler | [rulebook/tasks/self-hosting-compiler/](../rulebook/tasks/self-hosting-compiler/) |
+| Test Failures (Codegen Bugs) | [rulebook/tasks/test-failures/](../rulebook/tasks/test-failures/) |
+| Language Completeness | [rulebook/tasks/language-completeness-roadmap/](../rulebook/tasks/language-completeness-roadmap/) |
+| Stdlib Essentials | [rulebook/tasks/stdlib-essentials/](../rulebook/tasks/stdlib-essentials/) |
+| Developer Tooling | [rulebook/tasks/developer-tooling/](../rulebook/tasks/developer-tooling/) |
+| Reflection System | [rulebook/tasks/implement-reflection/](../rulebook/tasks/implement-reflection/) |
+| Expand Core/Std Modules | [rulebook/tasks/expand-core-std-modules/](../rulebook/tasks/expand-core-std-modules/) |
+| Test Infrastructure | [rulebook/tasks/improve-test-infrastructure/](../rulebook/tasks/improve-test-infrastructure/) |

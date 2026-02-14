@@ -1381,8 +1381,10 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
         return;
     }
 
-    // Function signature
-    std::string sig = "define " + ret_type + " " + func_name + "(";
+    // Function signature - use internal linkage in suite mode to prevent duplicates
+    std::string class_linkage =
+        (options_.suite_test_index >= 0 && options_.force_internal_linkage) ? "internal " : "";
+    std::string sig = "define " + class_linkage + ret_type + " " + func_name + "(";
     for (size_t i = 0; i < param_types.size(); ++i) {
         if (i > 0)
             sig += ", ";
@@ -1626,10 +1628,24 @@ void LLVMIRGen::emit_external_class_type(const std::string& name, const types::C
     // If base class, recursively emit it first
     if (def.base_class) {
         auto base_class = env_.lookup_class(*def.base_class);
+        // Fallback: try module registry for non-imported base classes
+        if (!base_class && env_.module_registry()) {
+            // Search all modules for the base class
+            for (const auto& [mod_name, mod] : env_.module_registry()->get_all_modules()) {
+                auto found = env_.module_registry()->lookup_class(mod_name, *def.base_class);
+                if (found) {
+                    base_class = found;
+                    break;
+                }
+            }
+        }
         if (base_class) {
             if (class_types_.find(*def.base_class) == class_types_.end()) {
                 emit_external_class_type(*def.base_class, *base_class);
             }
+            field_types.push_back("%class." + *def.base_class);
+        } else if (class_types_.find(*def.base_class) != class_types_.end()) {
+            // Base class already registered (e.g., from earlier in this module)
             field_types.push_back("%class." + *def.base_class);
         }
     }

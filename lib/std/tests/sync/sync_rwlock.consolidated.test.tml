@@ -217,11 +217,23 @@ func test_rwlock_sequential_writes() {
 }
 
 // ============================================================================
-// BLOCKED: RwLockReadGuard::deref, RwLockWriteGuard::deref, deref_mut
-// BLOCKED: behavior dispatch on generics
+// RwLockReadGuard::deref, RwLockWriteGuard::deref
 // ============================================================================
 
 @test
-func test_rwlock_guard_blocked() -> I32 {
+func test_rwlock_read_guard_deref_consolidated() -> I32 {
+    let mut rw = RwLock::new(66)
+    let guard = rw.read()
+    let val: I32 = *guard
+    assert(val == 66, "read guard deref should return 66")
+    return 0
+}
+
+@test
+func test_rwlock_write_guard_deref_consolidated() -> I32 {
+    let mut rw = RwLock::new(44)
+    let mut guard = rw.write()
+    let val: I32 = *guard
+    assert(val == 44, "write guard deref should return 44")
     return 0
 }

@@ -427,12 +427,88 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
         if (method == "key") {
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @hashmap_iter_key(ptr " + handle + ")");
+            // Cast i64 to the actual key type K from HashMapIter[K, V]
+            if (receiver_type && receiver_type->is<types::NamedType>()) {
+                const auto& named = receiver_type->as<types::NamedType>();
+                if (!named.type_args.empty()) {
+                    std::string key_type = llvm_type_from_semantic(named.type_args[0], true);
+                    if (key_type == "i32" || key_type == "i16" || key_type == "i8" ||
+                        key_type == "i1") {
+                        std::string truncated = fresh_reg();
+                        emit_line("  " + truncated + " = trunc i64 " + result + " to " + key_type);
+                        last_expr_type_ = key_type;
+                        return truncated;
+                    } else if (key_type == "ptr") {
+                        std::string ptr_reg = fresh_reg();
+                        emit_line("  " + ptr_reg + " = inttoptr i64 " + result + " to ptr");
+                        last_expr_type_ = "ptr";
+                        return ptr_reg;
+                    } else if (key_type == "float") {
+                        std::string trunc32 = fresh_reg();
+                        emit_line("  " + trunc32 + " = trunc i64 " + result + " to i32");
+                        std::string cast = fresh_reg();
+                        emit_line("  " + cast + " = bitcast i32 " + trunc32 + " to float");
+                        last_expr_type_ = "float";
+                        return cast;
+                    } else if (key_type == "double") {
+                        std::string cast = fresh_reg();
+                        emit_line("  " + cast + " = bitcast i64 " + result + " to double");
+                        last_expr_type_ = "double";
+                        return cast;
+                    } else if (key_type.starts_with("%struct.")) {
+                        std::string ptr_reg = fresh_reg();
+                        emit_line("  " + ptr_reg + " = inttoptr i64 " + result + " to ptr");
+                        std::string loaded = fresh_reg();
+                        emit_line("  " + loaded + " = load " + key_type + ", ptr " + ptr_reg);
+                        last_expr_type_ = key_type;
+                        return loaded;
+                    }
+                }
+            }
             last_expr_type_ = "i64";
             return result;
         }
         if (method == "value") {
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @hashmap_iter_value(ptr " + handle + ")");
+            // Cast i64 to the actual value type V from HashMapIter[K, V]
+            if (receiver_type && receiver_type->is<types::NamedType>()) {
+                const auto& named = receiver_type->as<types::NamedType>();
+                if (named.type_args.size() >= 2) {
+                    std::string val_type = llvm_type_from_semantic(named.type_args[1], true);
+                    if (val_type == "i32" || val_type == "i16" || val_type == "i8" ||
+                        val_type == "i1") {
+                        std::string truncated = fresh_reg();
+                        emit_line("  " + truncated + " = trunc i64 " + result + " to " + val_type);
+                        last_expr_type_ = val_type;
+                        return truncated;
+                    } else if (val_type == "ptr") {
+                        std::string ptr_reg = fresh_reg();
+                        emit_line("  " + ptr_reg + " = inttoptr i64 " + result + " to ptr");
+                        last_expr_type_ = "ptr";
+                        return ptr_reg;
+                    } else if (val_type == "float") {
+                        std::string trunc32 = fresh_reg();
+                        emit_line("  " + trunc32 + " = trunc i64 " + result + " to i32");
+                        std::string cast = fresh_reg();
+                        emit_line("  " + cast + " = bitcast i32 " + trunc32 + " to float");
+                        last_expr_type_ = "float";
+                        return cast;
+                    } else if (val_type == "double") {
+                        std::string cast = fresh_reg();
+                        emit_line("  " + cast + " = bitcast i64 " + result + " to double");
+                        last_expr_type_ = "double";
+                        return cast;
+                    } else if (val_type.starts_with("%struct.")) {
+                        std::string ptr_reg = fresh_reg();
+                        emit_line("  " + ptr_reg + " = inttoptr i64 " + result + " to ptr");
+                        std::string loaded = fresh_reg();
+                        emit_line("  " + loaded + " = load " + val_type + ", ptr " + ptr_reg);
+                        last_expr_type_ = val_type;
+                        return loaded;
+                    }
+                }
+            }
             last_expr_type_ = "i64";
             return result;
         }

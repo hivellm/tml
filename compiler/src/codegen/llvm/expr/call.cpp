@@ -880,50 +880,35 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
     // Check if this is an indirect call through a function pointer variable
     auto local_it = locals_.find(fn_name);
-    if (local_it != locals_.end() && local_it->second.type == "ptr") {
-        // This is a function pointer variable - generate indirect call
-        std::string fn_ptr;
-        if (local_it->second.reg[0] == '@') {
-            // Direct function reference (closure stored as @tml_closure_0)
-            fn_ptr = local_it->second.reg;
-        } else {
-            // Load the function pointer from the alloca
-            fn_ptr = fresh_reg();
-            emit_line("  " + fn_ptr + " = load ptr, ptr " + local_it->second.reg);
-        }
 
-        // Generate arguments - first add captured variables if this is a closure with captures
+    // Fat pointer closure call: variable type is "{ ptr, ptr }" (fn_ptr + env_ptr)
+    if (local_it != locals_.end() && local_it->second.type == "{ ptr, ptr }") {
+        bool is_capturing = local_it->second.is_capturing_closure;
+
+        // Load the fat pointer from the alloca
+        std::string fat_ptr = fresh_reg();
+        emit_line("  " + fat_ptr + " = load { ptr, ptr }, ptr " + local_it->second.reg);
+
+        // Extract fn_ptr (and env_ptr if capturing)
+        std::string fn_ptr = fresh_reg();
+        emit_line("  " + fn_ptr + " = extractvalue { ptr, ptr } " + fat_ptr + ", 0");
+
+        // Build argument list
         std::vector<std::pair<std::string, std::string>> arg_vals;
-
-        // Prepend captured variables if present
-        if (local_it->second.closure_captures.has_value()) {
-            const auto& captures = local_it->second.closure_captures.value();
-            for (size_t i = 0; i < captures.captured_names.size(); ++i) {
-                const std::string& cap_name = captures.captured_names[i];
-                const std::string& cap_type = captures.captured_types[i];
-
-                // Look up the captured variable and load its value
-                auto cap_it = locals_.find(cap_name);
-                if (cap_it != locals_.end()) {
-                    std::string cap_val = fresh_reg();
-                    emit_line("  " + cap_val + " = load " + cap_type + ", ptr " +
-                              cap_it->second.reg);
-                    arg_vals.push_back({cap_val, cap_type});
-                } else {
-                    // Captured variable not found - this shouldn't happen but handle gracefully
-                    arg_vals.push_back({"0", cap_type});
-                }
-            }
+        if (is_capturing) {
+            // Capturing closure: prepend env_ptr as first argument
+            std::string env_ptr = fresh_reg();
+            emit_line("  " + env_ptr + " = extractvalue { ptr, ptr } " + fat_ptr + ", 1");
+            arg_vals.push_back({env_ptr, "ptr"});
         }
 
-        // Add regular call arguments
         for (size_t i = 0; i < call.args.size(); ++i) {
             std::string val = gen_expr(*call.args[i]);
             arg_vals.push_back({val, last_expr_type_});
         }
 
         // Determine return type from semantic type if available
-        std::string ret_type = "i32"; // Default fallback
+        std::string ret_type = "i32";
         if (local_it->second.semantic_type) {
             if (local_it->second.semantic_type->is<types::FuncType>()) {
                 const auto& func_type = local_it->second.semantic_type->as<types::FuncType>();
@@ -934,17 +919,95 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             }
         }
 
-        // Build function type signature for indirect call using argument types
-        // Use the types of the arguments being passed, not the semantic type params
+        // Build function type signature
         std::string func_type_sig = ret_type + " (";
         for (size_t i = 0; i < arg_vals.size(); ++i) {
             if (i > 0)
                 func_type_sig += ", ";
-            func_type_sig += arg_vals[i].second; // Use the type from arg_vals
+            func_type_sig += arg_vals[i].second;
         }
         func_type_sig += ")";
 
-        // Handle void return type - don't assign result
+        if (ret_type == "void") {
+            emit("  call " + func_type_sig + " " + fn_ptr + "(");
+            for (size_t i = 0; i < arg_vals.size(); ++i) {
+                if (i > 0)
+                    emit(", ");
+                emit(arg_vals[i].second + " " + arg_vals[i].first);
+            }
+            emit_line(")");
+            last_expr_type_ = "void";
+            return "0";
+        }
+
+        std::string result = fresh_reg();
+        emit("  " + result + " = call " + func_type_sig + " " + fn_ptr + "(");
+        for (size_t i = 0; i < arg_vals.size(); ++i) {
+            if (i > 0)
+                emit(", ");
+            emit(arg_vals[i].second + " " + arg_vals[i].first);
+        }
+        emit_line(")");
+        last_expr_type_ = ret_type;
+        return result;
+    }
+
+    // Thin function pointer call: variable type is "ptr" (plain func pointer, no env)
+    if (local_it != locals_.end() && local_it->second.type == "ptr") {
+        // This is a plain function pointer variable - generate indirect call
+        std::string fn_ptr;
+        if (local_it->second.reg[0] == '@') {
+            fn_ptr = local_it->second.reg;
+        } else {
+            fn_ptr = fresh_reg();
+            emit_line("  " + fn_ptr + " = load ptr, ptr " + local_it->second.reg);
+        }
+
+        // Generate arguments (no env pointer for thin function pointers)
+        std::vector<std::pair<std::string, std::string>> arg_vals;
+
+        // Legacy: prepend captured variables if present (backward compat)
+        if (local_it->second.closure_captures.has_value()) {
+            const auto& captures = local_it->second.closure_captures.value();
+            for (size_t i = 0; i < captures.captured_names.size(); ++i) {
+                const std::string& cap_name = captures.captured_names[i];
+                const std::string& cap_type = captures.captured_types[i];
+                auto cap_it = locals_.find(cap_name);
+                if (cap_it != locals_.end()) {
+                    std::string cap_val = fresh_reg();
+                    emit_line("  " + cap_val + " = load " + cap_type + ", ptr " +
+                              cap_it->second.reg);
+                    arg_vals.push_back({cap_val, cap_type});
+                } else {
+                    arg_vals.push_back({"0", cap_type});
+                }
+            }
+        }
+
+        for (size_t i = 0; i < call.args.size(); ++i) {
+            std::string val = gen_expr(*call.args[i]);
+            arg_vals.push_back({val, last_expr_type_});
+        }
+
+        std::string ret_type = "i32";
+        if (local_it->second.semantic_type) {
+            if (local_it->second.semantic_type->is<types::FuncType>()) {
+                const auto& func_type = local_it->second.semantic_type->as<types::FuncType>();
+                ret_type = llvm_type_from_semantic(func_type.return_type);
+            } else if (local_it->second.semantic_type->is<types::ClosureType>()) {
+                const auto& closure_type = local_it->second.semantic_type->as<types::ClosureType>();
+                ret_type = llvm_type_from_semantic(closure_type.return_type);
+            }
+        }
+
+        std::string func_type_sig = ret_type + " (";
+        for (size_t i = 0; i < arg_vals.size(); ++i) {
+            if (i > 0)
+                func_type_sig += ", ";
+            func_type_sig += arg_vals[i].second;
+        }
+        func_type_sig += ")";
+
         if (ret_type == "void") {
             emit("  call " + func_type_sig + " " + fn_ptr + "(");
             for (size_t i = 0; i < arg_vals.size(); ++i) {
@@ -975,11 +1038,21 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     auto pending_func_it = pending_generic_funcs_.find(fn_name);
     // For module-qualified calls like "mem::forget", also try the bare name "forget"
     // since module functions are registered by bare name during gen_func_decl
+    // BUT: skip this for Type::method patterns (e.g., RawMutPtr::from_addr)
+    // where the first segment is a type name (starts with uppercase).
+    // Those are struct static methods, not module-qualified standalone functions.
     if (pending_func_it == pending_generic_funcs_.end() &&
         fn_name.find("::") != std::string::npos) {
         size_t last_sep = fn_name.rfind("::");
+        std::string prefix = fn_name.substr(0, last_sep);
         std::string bare_name = fn_name.substr(last_sep + 2);
-        pending_func_it = pending_generic_funcs_.find(bare_name);
+        // Only do bare name fallback for module-qualified calls (lowercase prefix)
+        // Skip for Type::method patterns where prefix is a type name (uppercase)
+        bool is_type_static_method =
+            !prefix.empty() && std::isupper(prefix[0]) && prefix.find("::") == std::string::npos;
+        if (!is_type_static_method) {
+            pending_func_it = pending_generic_funcs_.find(bare_name);
+        }
     }
     if (pending_func_it != pending_generic_funcs_.end()) {
         const auto& gen_func = *pending_func_it->second;
@@ -1071,6 +1144,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             }
             std::string val = gen_expr(*call.args[i]);
             expected_enum_type_.clear(); // Clear after generating argument
+            // Coerce closure fat pointer to thin fn ptr when parameter expects ptr
+            if (i < gen_func.params.size()) {
+                types::TypePtr param_type =
+                    resolve_parser_type_with_subs(*gen_func.params[i].type, subs);
+                if (param_type->is<types::FuncType>() || param_type->is<types::ClosureType>()) {
+                    val = coerce_closure_to_fn_ptr(val);
+                }
+            }
             std::string arg_type = last_expr_type_;
             arg_vals.push_back({val, arg_type});
 
@@ -1453,6 +1534,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         std::vector<std::pair<std::string, std::string>> typed_args;
                         for (size_t i = 0; i < call.args.size(); ++i) {
                             std::string val = gen_expr(*call.args[i]);
+                            // Coerce closure fat pointer if parameter expects a function type
+                            if (i < func_sig->params.size()) {
+                                auto param_type =
+                                    types::substitute_type(func_sig->params[i], type_subs);
+                                if (param_type->is<types::FuncType>() ||
+                                    param_type->is<types::ClosureType>()) {
+                                    val = coerce_closure_to_fn_ptr(val);
+                                }
+                            }
                             std::string arg_type = last_expr_type_;
                             if (i < func_sig->params.size()) {
                                 auto param_type =
@@ -1508,6 +1598,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         std::vector<std::pair<std::string, std::string>> typed_args;
                         for (size_t i = 0; i < call.args.size(); ++i) {
                             std::string val = gen_expr(*call.args[i]);
+                            // Coerce closure fat pointer to thin fn_ptr when needed
+                            val = coerce_closure_to_fn_ptr(val);
                             std::string arg_type = last_expr_type_;
                             typed_args.push_back({arg_type, val});
                         }
@@ -1853,8 +1945,40 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             auto arg_type = infer_expr_type(*call.args[i]);
                             const auto& param_type = func_sig->params[i];
 
-                            // If arg is NamedType[X] and param is NamedType[T], map T -> X
-                            if (arg_type && arg_type->is<types::NamedType>() &&
+                            if (!arg_type || !param_type)
+                                continue;
+
+                            // Case 1: param is a bare generic type param (e.g., T)
+                            // and arg is any concrete type (primitive, struct, etc.)
+                            // E.g., Mutex::new(42) where param is T, arg is I32 -> T = I32
+                            if (param_type->is<types::NamedType>()) {
+                                const auto& param_named = param_type->as<types::NamedType>();
+                                if (param_named.type_args.empty()) {
+                                    // Check if param name matches a generic parameter
+                                    for (const auto& gname : generic_names) {
+                                        if (param_named.name == gname) {
+                                            type_subs[gname] = arg_type;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Case 2: param is GenericType (e.g., from local AST)
+                            if (param_type->is<types::GenericType>()) {
+                                const auto& param_generic = param_type->as<types::GenericType>();
+                                for (const auto& gname : generic_names) {
+                                    if (param_generic.name == gname) {
+                                        type_subs[gname] = arg_type;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // Case 3: arg is NamedType[X] and param is NamedType[T],
+                            // map T -> X (e.g., ManuallyDrop::into_inner(md) where
+                            // md: ManuallyDrop[I64])
+                            if (arg_type->is<types::NamedType>() &&
                                 param_type->is<types::NamedType>()) {
                                 const auto& arg_named = arg_type->as<types::NamedType>();
                                 const auto& param_named = param_type->as<types::NamedType>();
@@ -1867,22 +1991,21 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                                          ++j) {
                                         type_subs[generic_names[j]] = arg_named.type_args[j];
                                     }
-                                    // Update mangled type name
-                                    if (!type_subs.empty()) {
-                                        std::vector<types::TypePtr> type_args;
-                                        for (const auto& gname : generic_names) {
-                                            auto it = type_subs.find(gname);
-                                            if (it != type_subs.end()) {
-                                                type_args.push_back(it->second);
-                                            }
-                                        }
-                                        if (!type_args.empty()) {
-                                            mangled_type_name =
-                                                type_name + "__" + mangle_type_args(type_args);
-                                        }
-                                    }
-                                    break;
                                 }
+                            }
+                        }
+
+                        // Update mangled type name from inferred type_subs
+                        if (!type_subs.empty()) {
+                            std::vector<types::TypePtr> type_args;
+                            for (const auto& gname : generic_names) {
+                                auto it = type_subs.find(gname);
+                                if (it != type_subs.end()) {
+                                    type_args.push_back(it->second);
+                                }
+                            }
+                            if (!type_args.empty()) {
+                                mangled_type_name = type_name + "__" + mangle_type_args(type_args);
                             }
                         }
                     }
@@ -1980,6 +2103,13 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                             std::string val = gen_expr(*call.args[i]);
                             expected_enum_type_ = saved_expected_enum;
+
+                            // Coerce closure fat pointer if parameter expects fn ptr
+                            if (param_semantic_type &&
+                                (param_semantic_type->is<types::FuncType>() ||
+                                 param_semantic_type->is<types::ClosureType>())) {
+                                val = coerce_closure_to_fn_ptr(val);
+                            }
 
                             std::string arg_type = last_expr_type_;
                             if (param_semantic_type) {
@@ -2513,6 +2643,13 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             else if (actual_type.starts_with("%struct.") && expected_type == "ptr") {
                 std::string converted = fresh_reg();
                 emit_line("  " + converted + " = extractvalue " + actual_type + " " + val + ", 0");
+                val = converted;
+            }
+            // { ptr, ptr } -> ptr conversion: extract fn_ptr from fat pointer closure
+            // This happens when a closure is passed to a func(...) parameter
+            else if (actual_type == "{ ptr, ptr }" && expected_type == "ptr") {
+                std::string converted = fresh_reg();
+                emit_line("  " + converted + " = extractvalue { ptr, ptr } " + val + ", 0");
                 val = converted;
             }
         }

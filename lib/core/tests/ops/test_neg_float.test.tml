@@ -1,0 +1,18 @@
+use test
+use core::ops::arith::Neg
+
+@test
+func test_f32_neg() -> I32 {
+    let a: F32 = 3.14 as F32
+    let r: F32 = a.neg()
+    assert(r < 0.0 as F32, "F32 neg should be negative")
+    return 0
+}
+
+@test
+func test_f64_neg() -> I32 {
+    let a: F64 = 2.718
+    let r: F64 = a.neg()
+    assert(r < 0.0, "F64 neg should be negative")
+    return 0
+}

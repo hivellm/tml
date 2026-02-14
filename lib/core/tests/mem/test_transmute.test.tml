@@ -1,0 +1,10 @@
+use test
+use core::mem
+
+@test
+func test_mem_transmute_i32_u32() -> I32 {
+    let x: I32 = -1
+    let y: U32 = mem::transmute[I32, U32](x)
+    assert(y == 4294967295 as U32, "transmute -1 I32 should be U32 max")
+    return 0
+}

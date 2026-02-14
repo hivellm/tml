@@ -1,5 +1,4 @@
 // Tests for collections/hashmap - HashMapIter methods
-// BLOCKED: HashMapIter::key() returns K, value() returns V — generic monomorphization bug
 use test
 use std::collections::{HashMap, HashMapIter}
 
@@ -13,6 +12,45 @@ func test_hashmap_iter_has_next() -> I32 {
     iter.next()
     iter.next()
     assert(not iter.has_next(), "iter should be exhausted after 2 next calls")
+    iter.destroy()
+    m.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_iter_key_value() -> I32 {
+    var m: HashMap[I32, I32] = HashMap[I32, I32].new(16)
+    m.set(42, 100)
+    var iter: HashMapIter[I32, I32] = m.iter()
+    assert(iter.has_next(), "should have next")
+    let k: I32 = iter.key()
+    let v: I32 = iter.value()
+    assert_eq(k, 42, "key should be 42")
+    assert_eq(v, 100, "value should be 100")
+    iter.destroy()
+    m.destroy()
+    return 0
+}
+
+@test
+func test_hashmap_iter_multiple() -> I32 {
+    var m: HashMap[I32, I32] = HashMap[I32, I32].new(16)
+    m.set(1, 10)
+    m.set(2, 20)
+    m.set(3, 30)
+    var iter: HashMapIter[I32, I32] = m.iter()
+    var total_keys: I32 = 0
+    var total_values: I32 = 0
+    var count: I32 = 0
+    loop (iter.has_next()) {
+        total_keys = total_keys + iter.key()
+        total_values = total_values + iter.value()
+        count = count + 1
+        iter.next()
+    }
+    assert_eq(count, 3, "should iterate 3 entries")
+    assert_eq(total_keys, 6, "sum of keys should be 6")
+    assert_eq(total_values, 60, "sum of values should be 60")
     iter.destroy()
     m.destroy()
     return 0

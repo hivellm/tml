@@ -302,8 +302,10 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     // This provides consistent behavior for features like volatile that are implemented in MIR
     // But fall back to AST codegen when TML imports need codegen (MIR doesn't support this yet)
     // Also fall back to AST codegen when there are local generic types
+    // Also fall back to AST codegen when --emit-ir is requested (AST produces more complete IR)
     int opt_level = tml::CompilerOptions::optimization_level;
-    if (!has_tml_imports_needing_codegen && !has_local_generics) { // Use MIR when safe
+    if (!has_tml_imports_needing_codegen && !has_local_generics &&
+        !emit_ir_only) { // Use MIR when safe
         // Build MIR from HIR for optimized codegen
         auto env_copy = env;
         hir::HirBuilder hir_builder(env_copy);
@@ -334,11 +336,14 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
         // Run memory leak detection (early static analysis)
         // This is a compile-time error - memory leaks are not allowed
-        mir::MemoryLeakCheckPass leak_check;
-        leak_check.run(mir_module);
-        if (leak_check.has_errors()) {
-            leak_check.print_warnings();
-            return 1; // Memory leak detected - compilation aborted
+        // Skip when --emit-ir is requested (user wants to inspect IR, not build)
+        if (!emit_ir_only) {
+            mir::MemoryLeakCheckPass leak_check;
+            leak_check.run(mir_module);
+            if (leak_check.has_errors()) {
+                leak_check.print_warnings();
+                return 1; // Memory leak detected - compilation aborted
+            }
         }
 
         // Apply MIR optimizations
@@ -867,6 +872,9 @@ int run_build_ex(const std::string& path, const BuildOptions& options) {
 // ============================================================================
 
 int run_build_with_queries(const std::string& path, const BuildOptions& options) {
+    // Pre-load all library modules from .tml.meta binary cache
+    types::preload_all_meta_caches();
+
     // Set up query options from build options
     query::QueryOptions qopts;
     qopts.verbose = options.verbose;

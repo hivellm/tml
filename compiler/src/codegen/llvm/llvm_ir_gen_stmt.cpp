@@ -547,29 +547,33 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         }
     }
 
-    // For function/closure types, allocate and store the function pointer
-    // This ensures consistency: local vars always point to allocas that hold the value
+    // For function/closure types, allocate and store the value
+    // Closures produce { ptr, ptr } fat pointers; plain func refs produce ptr
     if (let.type_annotation) {
         if (let.type_annotation.value()->is<parser::FuncType>()) {
             if (let.init.has_value()) {
                 std::string closure_fn = gen_expr(*let.init.value());
-                // closure_fn could be "@tml_closure_0" for direct closures
-                // or "%reg" for function pointers loaded from struct fields
-
-                // Allocate space to hold the function pointer
-                std::string alloca_reg = fresh_reg();
-                emit_line("  " + alloca_reg + " = alloca ptr");
-                emit_line("  store ptr " + closure_fn + ", ptr " + alloca_reg);
 
                 // Resolve semantic type for FuncType - needed for Fn trait method dispatch
                 types::TypePtr semantic_type =
                     resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
-                VarInfo info{alloca_reg, "ptr", semantic_type, std::nullopt};
-                if (last_closure_captures_.has_value()) {
-                    info.closure_captures = last_closure_captures_;
-                    last_closure_captures_ = std::nullopt; // Clear after use
+
+                // Check if the expression produced a fat pointer (closure)
+                if (last_expr_type_ == "{ ptr, ptr }") {
+                    // Store the full fat pointer { fn_ptr, env_ptr }
+                    std::string alloca_reg = fresh_reg();
+                    emit_line("  " + alloca_reg + " = alloca { ptr, ptr }");
+                    emit_line("  store { ptr, ptr } " + closure_fn + ", ptr " + alloca_reg);
+                    VarInfo info{alloca_reg, "{ ptr, ptr }", semantic_type, std::nullopt};
+                    info.is_capturing_closure = last_closure_is_capturing_;
+                    locals_[var_name] = info;
+                } else {
+                    // Plain function pointer (thin pointer) — store as ptr
+                    std::string alloca_reg = fresh_reg();
+                    emit_line("  " + alloca_reg + " = alloca ptr");
+                    emit_line("  store ptr " + closure_fn + ", ptr " + alloca_reg);
+                    locals_[var_name] = VarInfo{alloca_reg, "ptr", semantic_type, std::nullopt};
                 }
-                locals_[var_name] = info;
                 return;
             }
         }
@@ -912,7 +916,11 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     if (let.type_annotation) {
         semantic_type = resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
     }
-    locals_[var_name] = VarInfo{alloca_reg, var_type, semantic_type, std::nullopt};
+    VarInfo var_info{alloca_reg, var_type, semantic_type, std::nullopt};
+    if (var_type == "{ ptr, ptr }") {
+        var_info.is_capturing_closure = last_closure_is_capturing_;
+    }
+    locals_[var_name] = var_info;
 
     // Register for drop if type implements Drop
     std::string type_name = extract_type_name_for_drop(var_type);

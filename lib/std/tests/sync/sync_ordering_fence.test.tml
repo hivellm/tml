@@ -1,9 +1,21 @@
-// Tests for compiler_fence
-// BLOCKED: compiler_fence intrinsic emits @tml_compiler_fence instead of LLVM intrinsic
+// Tests for fence intrinsic
 use test
+use std::sync::ordering::{Ordering, fence}
 
 @test
-func test_compiler_fence_placeholder() -> I32 {
-    // compiler_fence(Ordering::SeqCst) — blocked by intrinsic codegen
+func test_fence_seqcst() -> I32 {
+    fence(Ordering::SeqCst())
+    return 0
+}
+
+@test
+func test_fence_release() -> I32 {
+    fence(Ordering::Release())
+    return 0
+}
+
+@test
+func test_fence_acquire() -> I32 {
+    fence(Ordering::Acquire())
     return 0
 }

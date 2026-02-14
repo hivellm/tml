@@ -14,7 +14,7 @@ if(TML_USE_LLVM_BACKEND AND WIN32)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endif()
 
-project(tml VERSION 0.1.0 LANGUAGES CXX C)
+project(tml LANGUAGES CXX C)
 
 # Re-apply after project() and forcefully strip /MDd from debug flags.
 # The VS multi-config generator injects /MDd for Debug configs, which conflicts
@@ -150,6 +150,32 @@ endif()
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)  # version_generated.hpp
+
+# ============================================================================
+# Version Management
+# ============================================================================
+# Version is passed from build.bat via -DTML_VERSION_MAJOR/MINOR/BUILD.
+# The build script reads/increments the VERSION file at the project root.
+if(NOT DEFINED TML_VERSION_MAJOR)
+    set(TML_VERSION_MAJOR 0)
+endif()
+if(NOT DEFINED TML_VERSION_MINOR)
+    set(TML_VERSION_MINOR 1)
+endif()
+if(NOT DEFINED TML_VERSION_BUILD)
+    set(TML_VERSION_BUILD 0)
+endif()
+
+message(STATUS "TML version: ${TML_VERSION_MAJOR}.${TML_VERSION_MINOR}.${TML_VERSION_BUILD}")
+
+# Generate version header into build dir (NOT source dir) to avoid full rebuilds.
+# Only the 2 files that use VERSION include this header directly.
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/version_generated.hpp.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/version_generated.hpp"
+    @ONLY
+)
 
 # ============================================================================
 # Pre-compiled C Runtime Library

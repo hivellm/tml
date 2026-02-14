@@ -614,6 +614,78 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 }
             }
 
+            // Handle RwLockReadGuard[T] / RwLockWriteGuard[T] - deref returns ref T via lock.data
+            if ((named.name == "RwLockReadGuard" || named.name == "RwLockWriteGuard") &&
+                !named.type_args.empty()) {
+                TML_DEBUG_LN("[DEREF] " << named.name << " detected, type_arg="
+                                        << types::type_to_string(named.type_args[0]));
+
+                // Get pointer to the guard (not the value)
+                std::string guard_ptr;
+                if (unary.operand->is<parser::IdentExpr>()) {
+                    const auto& ident = unary.operand->as<parser::IdentExpr>();
+                    auto it = locals_.find(ident.name);
+                    if (it != locals_.end()) {
+                        guard_ptr = it->second.reg;
+                    }
+                } else {
+                    std::string guard_value = gen_expr(*unary.operand);
+                    types::TypePtr concrete_inner = named.type_args[0];
+                    if (!current_type_subs_.empty()) {
+                        concrete_inner =
+                            apply_type_substitutions(concrete_inner, current_type_subs_);
+                    }
+                    std::string guard_mangled_temp = require_struct_instantiation(
+                        named.name, std::vector<types::TypePtr>{concrete_inner});
+                    std::string guard_type_temp = "%struct." + guard_mangled_temp;
+
+                    guard_ptr = fresh_reg();
+                    emit_line("  " + guard_ptr + " = alloca " + guard_type_temp);
+                    emit_line("  store " + guard_type_temp + " " + guard_value + ", ptr " +
+                              guard_ptr);
+                }
+
+                if (!guard_ptr.empty()) {
+                    // RwLockReadGuard/RwLockWriteGuard layout: { lock: mut ref RwLock[T] }
+                    // RwLock layout: { data: T, raw: RawRwLock, state: AtomicU32 }
+                    // To get the data: guard.lock.data
+
+                    types::TypePtr concrete_inner = named.type_args[0];
+                    if (!current_type_subs_.empty()) {
+                        concrete_inner =
+                            apply_type_substitutions(concrete_inner, current_type_subs_);
+                    }
+
+                    std::string guard_mangled = require_struct_instantiation(
+                        named.name, std::vector<types::TypePtr>{concrete_inner});
+                    std::string rwlock_mangled = require_struct_instantiation(
+                        "RwLock", std::vector<types::TypePtr>{concrete_inner});
+                    std::string guard_type = "%struct." + guard_mangled;
+                    std::string rwlock_type = "%struct." + rwlock_mangled;
+
+                    // GEP to get lock field (field 0) of guard
+                    std::string lock_field_ptr = fresh_reg();
+                    emit_line("  " + lock_field_ptr + " = getelementptr " + guard_type + ", ptr " +
+                              guard_ptr + ", i32 0, i32 0");
+
+                    // Load the rwlock pointer (since lock is a mut ref, stored as ptr)
+                    std::string rwlock_ptr = fresh_reg();
+                    emit_line("  " + rwlock_ptr + " = load ptr, ptr " + lock_field_ptr);
+
+                    // GEP to get data field (field 0) of RwLock
+                    std::string data_ptr = fresh_reg();
+                    emit_line("  " + data_ptr + " = getelementptr " + rwlock_type + ", ptr " +
+                              rwlock_ptr + ", i32 0, i32 0");
+
+                    // Load the data value
+                    inner_llvm_type = llvm_type_from_semantic(concrete_inner);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = load " + inner_llvm_type + ", ptr " + data_ptr);
+                    last_expr_type_ = inner_llvm_type;
+                    return result;
+                }
+            }
+
             // Handle Arc[T] - deref returns T via ptr->data
             // Arc[T] { ptr: Ptr[ArcInner[T]] }
             // ArcInner[T] { strong, weak, data: T }

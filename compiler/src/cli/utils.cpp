@@ -13,6 +13,7 @@
 #include "utils.hpp"
 
 #include "common.hpp"
+#include "version_generated.hpp"
 
 #include <fstream>
 #include <iostream>

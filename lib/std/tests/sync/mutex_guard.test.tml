@@ -1,9 +1,28 @@
 // Tests for sync/mutex - MutexGuard::deref, MutexGuard::deref_mut
-// BLOCKED: deref() returns () instead of ref T, deref_mut() returns () — behavior dispatch on generics
 use test
+use std::sync::mutex::Mutex
 
 @test
-func test_mutex_guard_blocked() -> I32 {
-    // MutexGuard::deref and deref_mut blocked by behavior dispatch on generics
+func test_mutex_guard_deref() -> I32 {
+    let mut m = Mutex::new(99)
+    let guard = m.lock()
+    let val = guard.deref()
+    return 0
+}
+
+@test
+func test_mutex_guard_deref_star() -> I32 {
+    let mut m = Mutex::new(55)
+    let guard = m.lock()
+    let val: I32 = *guard
+    assert(val == 55, "deref should return 55")
+    return 0
+}
+
+@test
+func test_mutex_guard_get() -> I32 {
+    let mut m = Mutex::new(100)
+    let guard = m.lock()
+    let val = guard.get()
     return 0
 }

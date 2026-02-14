@@ -9,6 +9,7 @@ use std::sync::condvar::Condvar
 use std::sync::mutex::{Mutex, MutexGuard}
 use std::sync::atomic::{AtomicI32, AtomicU32, AtomicBool, AtomicI64, AtomicU64, AtomicUsize}
 use std::sync::Ordering
+use std::sync::ordering::fence
 use core::marker::{Send, Sync}
 
 // Helper types
@@ -103,9 +104,15 @@ func test_isolation_condvar_creation() -> I32 {
     return 0
 }
 
-// BLOCKED: compiler_fence intrinsic emits @tml_compiler_fence instead of LLVM intrinsic
 @test
-func test_compiler_fence_placeholder() -> I32 {
+func test_fence_seqcst_consolidated() -> I32 {
+    fence(Ordering::SeqCst())
+    return 0
+}
+
+@test
+func test_fence_acquire_consolidated() -> I32 {
+    fence(Ordering::Acquire())
     return 0
 }
 

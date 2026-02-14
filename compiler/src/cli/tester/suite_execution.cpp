@@ -306,8 +306,11 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             unsigned int hw = std::thread::hardware_concurrency();
             if (hw == 0)
                 hw = 8;
+            // Cap at 75% of cores to avoid saturating the CPU and starving
+            // the OS / other processes (each suite also spawns internal threads)
+            unsigned int max_suite_threads = std::max(1u, hw * 3 / 4);
             unsigned int num_compile_threads =
-                std::min(hw, static_cast<unsigned int>(suites_to_compile.size()));
+                std::min(max_suite_threads, static_cast<unsigned int>(suites_to_compile.size()));
 
             // Structure to hold compilation results
             struct CompileJob {
@@ -727,10 +730,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         bool has_crashes = false;
         int failure_count = 0;
         int crash_count = 0;
+        int compilation_error_count = 0;
         for (const auto& result : collector.results) {
             if (!result.passed) {
                 has_failures = true;
                 failure_count++;
+                if (result.compilation_error) {
+                    compilation_error_count++;
+                }
                 // Detect crashes: negative exit codes (Windows STATUS codes) or
                 // specific crash indicators
                 if (result.exit_code < 0 || result.exit_code == -2 || result.compilation_error) {
@@ -739,6 +746,11 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 }
             }
         }
+
+        // Populate failure info in test_stats for coverage logging
+        test_stats.failed_count = failure_count;
+        test_stats.compilation_error_count = compilation_error_count;
+        test_stats.no_cache = opts.no_cache;
 
         // Print library coverage analysis after all suites complete
         // Note: Coverage with filters is blocked in run.cpp, so opts.patterns is always empty here
@@ -752,23 +764,27 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 }
             }
 
-            if (has_failures && has_test_failures) {
-                // Test logic failures make coverage data unreliable
+            if (has_failures) {
+                // ANY failure (test logic or compilation) makes coverage data unreliable.
+                // Compilation errors mean entire suites didn't run, so modules tested
+                // by those suites will show 0% even if they have tests.
+                std::string failure_type =
+                    has_test_failures ? "test(s) failed" : "suite(s) had compilation errors";
                 TML_LOG_FATAL("test",
                               c.red() << c.bold()
                                       << "========================================================"
                                       << c.reset());
                 TML_LOG_FATAL(
                     "test",
-                    c.red() << c.bold() << "  COVERAGE ABORTED: " << failure_count
-                            << " test(s) failed"
+                    c.red() << c.bold() << "  COVERAGE ABORTED: " << failure_count << " "
+                            << failure_type
                             << (has_crashes ? " (" + std::to_string(crash_count) + " crashed)" : "")
                             << c.reset());
                 TML_LOG_FATAL("test", c.red()
                                           << c.bold() << "  Coverage report will NOT be generated."
                                           << c.reset());
                 TML_LOG_FATAL("test", c.red() << c.bold()
-                                              << "  Fix all test failures before running coverage."
+                                              << "  Fix all failures before running coverage."
                                               << c.reset());
                 TML_LOG_FATAL("test",
                               c.red() << c.bold()
@@ -786,14 +802,6 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     }
                 }
             } else {
-                if (has_failures) {
-                    // Only compilation errors — generate coverage with warning
-                    TML_LOG_WARN("test",
-                                 c.yellow()
-                                     << failure_count
-                                     << " suite(s) had compilation errors (skipped in coverage)"
-                                     << c.reset());
-                }
                 // All tests passed — safe to generate coverage report
                 print_library_coverage_report(all_covered_functions, c, test_stats);
 
@@ -850,22 +858,21 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                             should_update = current_percent >= previous.percent;
                         }
 
-                        if (should_update) {
-                            // Write to temp files first, then atomically rename
-                            // This prevents partial/corrupt files if the process crashes
-                            // during exit (e.g., OpenSSL cleanup, atexit handlers)
-                            std::string tmp_output = CompilerOptions::coverage_output + ".tmp";
-                            write_library_coverage_html(all_covered_functions, tmp_output,
-                                                        test_stats);
+                        // Always write to temp files — this ensures coverage history
+                        // log is appended even when HTML/JSON won't be promoted
+                        std::string tmp_output = CompilerOptions::coverage_output + ".tmp";
+                        write_library_coverage_html(all_covered_functions, tmp_output, test_stats);
 
-                            // The JSON is written alongside HTML by write_library_coverage_html
-                            // with replace_extension(".json") — so for "X.html.tmp" it becomes
-                            // "X.html.json". We need to find and rename that too.
-                            std::string tmp_json =
-                                fs::path(tmp_output).replace_extension(".json").string();
-                            std::string final_json = fs::path(CompilerOptions::coverage_output)
-                                                         .replace_extension(".json")
-                                                         .string();
+                        // The JSON is written alongside HTML by write_library_coverage_html
+                        // with replace_extension(".json") — so for "X.html.tmp" it becomes
+                        // "X.html.json". We need to find and rename that too.
+                        std::string tmp_json =
+                            fs::path(tmp_output).replace_extension(".json").string();
+                        std::string final_json = fs::path(CompilerOptions::coverage_output)
+                                                     .replace_extension(".json")
+                                                     .string();
+
+                        if (should_update) {
                             bool html_ok = fs::exists(tmp_output) && fs::file_size(tmp_output) > 0;
                             bool json_ok = fs::exists(tmp_json) && fs::file_size(tmp_json) > 0;
 
@@ -919,7 +926,15 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                 } catch (...) {}
                             }
                         } else {
-                            // Coverage regression detected
+                            // Coverage regression detected — clean up temp files
+                            // (history log was already appended by write_library_coverage_html)
+                            try {
+                                fs::remove(tmp_output);
+                            } catch (...) {}
+                            try {
+                                fs::remove(tmp_json);
+                            } catch (...) {}
+
                             TML_LOG_WARN(
                                 "test",
                                 c.yellow()

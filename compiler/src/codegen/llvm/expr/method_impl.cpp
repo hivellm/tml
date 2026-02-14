@@ -309,8 +309,17 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     if (method_it != functions_.end()) {
         fn_name = method_it->second.llvm_name;
     } else {
-        std::string prefix = is_imported ? "" : get_suite_prefix();
-        fn_name = "@tml_" + prefix + mangled_type_name + "_" + full_method_name;
+        // Also try without suite prefix in case it's defined in a library module
+        if (!get_suite_prefix().empty()) {
+            method_it = functions_.find(mangled_type_name + "_" + full_method_name);
+            if (method_it != functions_.end()) {
+                fn_name = method_it->second.llvm_name;
+            }
+        }
+        if (fn_name.empty()) {
+            std::string prefix = is_imported ? "" : get_suite_prefix();
+            fn_name = "@tml_" + prefix + mangled_type_name + "_" + full_method_name;
+        }
     }
 
     std::string impl_receiver_val;
@@ -362,6 +371,16 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
 
     for (size_t i = 0; i < call.args.size(); ++i) {
         std::string val = gen_expr(*call.args[i]);
+        // Coerce closure fat pointer to thin fn_ptr when parameter expects a function type
+        if (func_sig && i + 1 < func_sig->params.size()) {
+            auto param_type = func_sig->params[i + 1];
+            if (!type_subs.empty()) {
+                param_type = types::substitute_type(param_type, type_subs);
+            }
+            if (param_type->is<types::FuncType>() || param_type->is<types::ClosureType>()) {
+                val = coerce_closure_to_fn_ptr(val);
+            }
+        }
         std::string actual_type = last_expr_type_;
         std::string expected_type = "i32";
         if (func_sig && i + 1 < func_sig->params.size()) {
@@ -372,6 +391,12 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             expected_type = llvm_type_from_semantic(param_type);
         }
         if (actual_type != expected_type) {
+            // { ptr, ptr } -> ptr: extract fn_ptr from fat pointer closure
+            if (actual_type == "{ ptr, ptr }" && expected_type == "ptr") {
+                std::string converted = fresh_reg();
+                emit_line("  " + converted + " = extractvalue { ptr, ptr } " + val + ", 0");
+                val = converted;
+            }
             bool is_int_actual = (actual_type[0] == 'i' && actual_type != "i1");
             bool is_int_expected = (expected_type[0] == 'i' && expected_type != "i1");
             if (is_int_actual && is_int_expected) {
@@ -549,9 +574,22 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
 
     for (size_t i = 0; i < call.args.size(); ++i) {
         std::string val = gen_expr(*call.args[i]);
+        // Coerce closure fat pointer to thin fn_ptr when parameter expects a function type
+        if (func_sig && i + 1 < func_sig->params.size()) {
+            auto param_type = func_sig->params[i + 1];
+            if (param_type->is<types::FuncType>() || param_type->is<types::ClosureType>()) {
+                val = coerce_closure_to_fn_ptr(val);
+            }
+        }
         std::string arg_type = "i32";
         if (func_sig && i + 1 < func_sig->params.size()) {
             arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+        }
+        // Fallback: if actual type is { ptr, ptr } but expected is ptr, extract fn_ptr
+        if (last_expr_type_ == "{ ptr, ptr }" && arg_type == "ptr") {
+            std::string converted = fresh_reg();
+            emit_line("  " + converted + " = extractvalue { ptr, ptr } " + val + ", 0");
+            val = converted;
         }
         typed_args.push_back({arg_type, val});
     }

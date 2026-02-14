@@ -1,12 +1,34 @@
-// Tests targeting uncovered fmt/impls format methods
-// NOTE: fmt_binary/octal/hex/exp all have undefined symbol codegen errors
-// NOTE: Maybe/Outcome to_string has type mismatch in inner type codegen
-// Only primitive to_string() and debug_string() are testable (covered in other files)
+// Tests for fmt format methods (binary, octal, hex, exp)
 use test
 
 @test
-func test_placeholder_fmt() -> I32 {
-    // This file documents blocked fmt functions
-    // See fmt_to_string.test.tml and fmt_debug_string.test.tml for working tests
+func test_fmt_binary_i32() -> I32 {
+    let x: I32 = 42
+    let s: Str = x.fmt_binary()
+    assert(s.len() > 0, "fmt_binary should produce output")
+    return 0
+}
+
+@test
+func test_fmt_octal_i32() -> I32 {
+    let x: I32 = 42
+    let s: Str = x.fmt_octal()
+    assert(s.len() > 0, "fmt_octal should produce output")
+    return 0
+}
+
+@test
+func test_fmt_lower_hex_i32() -> I32 {
+    let x: I32 = 255
+    let s: Str = x.fmt_lower_hex()
+    assert(s.len() > 0, "fmt_lower_hex should produce output")
+    return 0
+}
+
+@test
+func test_fmt_upper_hex_i32() -> I32 {
+    let x: I32 = 255
+    let s: Str = x.fmt_upper_hex()
+    assert(s.len() > 0, "fmt_upper_hex should produce output")
     return 0
 }

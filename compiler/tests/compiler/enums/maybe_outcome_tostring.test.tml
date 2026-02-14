@@ -1,0 +1,34 @@
+// Test Maybe/Outcome to_string inline codegen
+use test
+
+@test
+func test_maybe_just_to_string() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    let s: Str = m.to_string()
+    assert_eq(s, "Just(42)", "to_string should produce Just(42)")
+    return 0
+}
+
+@test
+func test_maybe_nothing_to_string() -> I32 {
+    let m: Maybe[I32] = Nothing
+    let s: Str = m.to_string()
+    assert_eq(s, "Nothing", "Nothing to_string")
+    return 0
+}
+
+@test
+func test_outcome_ok_to_string() -> I32 {
+    let r: Outcome[I32, Str] = Ok(42)
+    let s: Str = r.to_string()
+    assert_eq(s, "Ok(42)", "Ok to_string should produce Ok(42)")
+    return 0
+}
+
+@test
+func test_outcome_err_to_string() -> I32 {
+    let r: Outcome[I32, Str] = Err("oops")
+    let s: Str = r.to_string()
+    assert_eq(s, "Err(oops)", "Err to_string should produce Err(oops)")
+    return 0
+}

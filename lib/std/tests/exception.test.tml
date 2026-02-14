@@ -1,6 +1,6 @@
-// Consolidated tests for std::exception (18 tests)
-// BLOCKED: Real exception subclass allocation fails with "Cannot allocate unsized type %struct.Exception"
-// Tests use mock classes to test exception patterns
+// Consolidated tests for std::exception (17 tests)
+// Tests base Exception class and mock classes for exception patterns
+// Real exception subclass allocation tests are in exception_subclass.test.tml
 use test
 use std::exception::*
 

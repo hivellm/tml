@@ -1,9 +1,10 @@
 // Tests for num/nonzero, num/saturating, num/wrapping modules
-// BLOCKED: NonZero::new_unchecked[I32]() returns () — generic monomorphization
-// BLOCKED: Saturating::new[I32]().get/add/sub() — Unknown method / generic monomorphization
-// BLOCKED: Wrapping::new[I32]().get/add/sub() — Unknown method / generic monomorphization
+// BLOCKED: Saturating[T]::add/sub() — no add/sub methods defined in saturating.tml
+// BLOCKED: Wrapping[T]::add/sub() — no add/sub methods defined in wrapping.tml
 use test
 use core::num::nonzero::NonZero
+use core::num::saturating::Saturating
+use core::num::wrapping::Wrapping
 
 @test
 func test_nonzero_new_valid() -> I32 {
@@ -19,4 +20,31 @@ func test_nonzero_new_zero() -> I32 {
     return 0
 }
 
-// Saturating and Wrapping tests removed — .get() is "Unknown method" at codegen
+@test
+func test_nonzero_get() -> I32 {
+    let nz: Maybe[NonZero[I32]] = NonZero::new[I32](42)
+    when nz {
+        Just(n) => {
+            let val: I32 = n.get()
+            assert_eq(val, 42, "get should return 42")
+        },
+        Nothing => assert(false, "should be Just")
+    }
+    return 0
+}
+
+@test
+func test_saturating_value() -> I32 {
+    let s: Saturating[I32] = Saturating::new[I32](42)
+    let v: I32 = s.value()
+    assert_eq(v, 42, "Saturating value should be 42")
+    return 0
+}
+
+@test
+func test_wrapping_value() -> I32 {
+    let w: Wrapping[I32] = Wrapping::new[I32](99)
+    let v: I32 = w.value()
+    assert_eq(v, 99, "Wrapping value should be 99")
+    return 0
+}

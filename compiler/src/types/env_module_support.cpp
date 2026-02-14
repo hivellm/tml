@@ -944,10 +944,14 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     }
                 }
 
+                // Check if this is a behavior impl (has trait_type)
+                bool is_behavior_impl = impl_decl.trait_type != nullptr;
+
                 // Extract methods from impl block (methods is std::vector<FuncDecl>)
                 for (const auto& func : impl_decl.methods) {
-                    // Only include public methods
-                    if (func.vis != parser::Visibility::Public) {
+                    // Include public methods, and all methods from behavior impls
+                    // (behavior impl methods implement a public interface even without 'pub')
+                    if (func.vis != parser::Visibility::Public && !is_behavior_impl) {
                         continue;
                     }
 
@@ -1473,6 +1477,13 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     sig.name = method.name;
                     sig.is_async = false;
                     sig.span = method.span;
+
+                    // Extract method's own type parameters
+                    for (const auto& gp : method.generics) {
+                        if (!gp.is_const) {
+                            sig.type_params.push_back(gp.name);
+                        }
+                    }
 
                     // Convert param types (skip 'this')
                     for (const auto& param : method.params) {

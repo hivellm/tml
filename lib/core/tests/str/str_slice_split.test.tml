@@ -1,11 +1,65 @@
-// Tests for str module
-// BLOCKED: Str::slice_str — runtime crash
-// BLOCKED: split/lines/join/concat_all/split_whitespace/Str::split — List[Str] LLVM type mismatch
+// Tests for str slice_str, split, lines
+// NOTE: List[Str].get() has codegen issue (i64 vs ptr), so element access is not tested here
+// NOTE: Str.split() method has codegen issue, use str::split free function instead
 // BLOCKED: Str::as_bytes — returns ref [U8] slice type
 use test
+use core::str
 
 @test
-func test_str_blocked_placeholder() -> I32 {
-    // All remaining str functions blocked by runtime crashes or type issues
+func test_slice_str_prefix() -> I32 {
+    let s: Str = "hello world"
+    let sub: Str = s.slice_str(0, 5)
+    assert_eq(sub, "hello", "slice_str 0..5")
+    return 0
+}
+
+@test
+func test_slice_str_suffix() -> I32 {
+    let s: Str = "hello world"
+    let sub: Str = s.slice_str(6, 11)
+    assert_eq(sub, "world", "slice_str 6..11")
+    return 0
+}
+
+@test
+func test_slice_str_full() -> I32 {
+    let s: Str = "abcdef"
+    let sub: Str = s.slice_str(0, 6)
+    assert_eq(sub, "abcdef", "slice_str full string")
+    return 0
+}
+
+@test
+func test_split_count_comma() -> I32 {
+    let parts: List[Str] = str::split("a,b,c", ",")
+    assert_eq(parts.len(), 3 as I64, "split by comma should produce 3 parts")
+    return 0
+}
+
+@test
+func test_split_count_no_delimiter() -> I32 {
+    let parts: List[Str] = str::split("hello", ",")
+    assert_eq(parts.len(), 1 as I64, "no delimiter = 1 part")
+    return 0
+}
+
+@test
+func test_split_count_spaces() -> I32 {
+    let parts: List[Str] = str::split("one two three four", " ")
+    assert_eq(parts.len(), 4 as I64, "split by space should produce 4 parts")
+    return 0
+}
+
+@test
+func test_lines_count() -> I32 {
+    let ls: List[Str] = str::lines("hello\nworld\nfoo")
+    assert_eq(ls.len(), 3 as I64, "lines should produce 3 lines")
+    return 0
+}
+
+@test
+func test_lines_single() -> I32 {
+    let ls: List[Str] = str::lines("single line")
+    assert_eq(ls.len(), 1 as I64, "no newlines = 1 line")
     return 0
 }

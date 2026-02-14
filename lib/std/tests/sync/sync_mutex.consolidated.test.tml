@@ -429,13 +429,15 @@ func test_condvar_data_preserved_after_wait() -> I32 {
 }
 
 // ============================================================================
-// BLOCKED: MutexGuard::deref, deref_mut
-// BLOCKED: behavior dispatch on generics
+// MutexGuard::deref, deref_mut
 // ============================================================================
 
 @test
-func test_mutex_guard_blocked() -> I32 {
-    // MutexGuard::deref and deref_mut blocked by behavior dispatch on generics
+func test_mutex_guard_deref_consolidated() -> I32 {
+    let mut m = Mutex::new(88)
+    let guard = m.lock()
+    let val: I32 = *guard
+    assert(val == 88, "deref should return 88")
     return 0
 }
 

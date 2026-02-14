@@ -100,7 +100,7 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
     // Note: Mutex[T] is a generic struct now, not a runtime handle.
     // It will be handled via generic struct instantiation.
 
-    // Check if this is a class type
+    // Check if this is a class type (via type environment or codegen registry)
     auto class_def = env_.lookup_class(name);
     if (class_def.has_value()) {
         // Value class candidates (sealed, no virtual methods) use struct type
@@ -109,6 +109,16 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
             return "%class." + name;
         }
         // Regular classes are reference types (heap allocated)
+        return "ptr";
+    }
+    // Also check codegen's own class_types_ registry — classes from imported
+    // modules that aren't directly imported by the user (e.g. exception subclasses
+    // in the same module file) are registered here during Phase 1 of
+    // emit_module_pure_tml_functions but aren't in env_.lookup_class().
+    if (class_types_.find(name) != class_types_.end()) {
+        if (value_classes_.find(name) != value_classes_.end()) {
+            return "%class." + name;
+        }
         return "ptr";
     }
 
@@ -400,6 +410,13 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                 return "%class." + named.name;
             }
             // Regular classes are reference types - variables store pointers
+            return "ptr";
+        }
+        // Also check codegen's class_types_ registry for non-imported classes
+        if (class_types_.find(named.name) != class_types_.end()) {
+            if (value_classes_.find(named.name) != value_classes_.end()) {
+                return "%class." + named.name;
+            }
             return "ptr";
         }
 

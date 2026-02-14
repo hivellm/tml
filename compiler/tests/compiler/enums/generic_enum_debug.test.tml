@@ -1,0 +1,20 @@
+// Test behavior constraint methods on generic enums
+// Specifically debug_string and to_string via Debug/Display behaviors
+use test
+use core::ops::CoroutineState
+
+@test
+func test_coroutine_state_debug_yielded() -> I32 {
+    let state: CoroutineState[I32, Str] = CoroutineState::Yielded(42)
+    let s = state.debug_string()
+    assert_eq(s, "Yielded(42)", "debug_string of Yielded(42)")
+    return 0
+}
+
+@test
+func test_coroutine_state_debug_complete() -> I32 {
+    let state: CoroutineState[I32, Str] = CoroutineState::Complete("done")
+    let s = state.debug_string()
+    assert_eq(s, "Complete(done)", "debug_string of Complete(done)")
+    return 0
+}

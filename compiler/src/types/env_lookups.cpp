@@ -92,6 +92,22 @@ auto TypeEnv::lookup_behavior(const std::string& name) const -> std::optional<Be
                 return module_registry_->lookup_behavior(module_path, symbol_name);
             }
         }
+        // Fallback: search all modules for the behavior by name.
+        // This handles well-known behaviors like Iterator that may not
+        // be explicitly imported but are used in impl blocks.
+        const auto& all_modules = module_registry_->get_all_modules();
+        size_t total_mods = 0;
+        size_t mods_with_behaviors = 0;
+        for (const auto& [mod_name, mod] : all_modules) {
+            total_mods++;
+            if (!mod.behaviors.empty()) {
+                mods_with_behaviors++;
+            }
+            auto bit = mod.behaviors.find(name);
+            if (bit != mod.behaviors.end()) {
+                return bit->second;
+            }
+        }
     }
     return std::nullopt;
 }

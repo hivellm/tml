@@ -25,6 +25,7 @@
 
 #include "linter_internal.hpp"
 #include "log/log.hpp"
+#include "version_generated.hpp"
 
 #include <sstream>
 

@@ -360,12 +360,4 @@ func test_last_char_empty_v2() -> I32 {
     return 0
 }
 
-// =============================================================================
-// blocked placeholder (from str_slice_split.test.tml)
-// =============================================================================
-
-@test
-func test_str_blocked_placeholder() -> I32 {
-    // All remaining str functions blocked by runtime crashes or type issues
-    return 0
-}
+// NOTE: str slice_str/split/lines tests moved to str_slice_split.test.tml

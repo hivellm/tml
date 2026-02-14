@@ -572,13 +572,27 @@ func test_nonzero_new_zero() -> I32 {
 }
 
 // ============================================================================
-// Placeholder (from num_checked.test.tml)
-// NOTE: checked_* methods return () instead of Maybe[I32] - codegen limitation
+// Checked arithmetic (from num_checked.test.tml)
 // ============================================================================
 
 @test
-func test_placeholder_num_checked() -> I32 {
-    // All checked_add/sub/mul/div/rem/neg/shl/shr return () on primitives
-    // Same codegen issue as eq/cmp on primitives
+func test_checked_add_ok_consolidated() -> I32 {
+    let x: I32 = 10
+    let result: Maybe[I32] = x.checked_add(20)
+    when result {
+        Just(v) => assert_eq(v, 30, "checked_add ok"),
+        Nothing => assert(false, "should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_add_overflow_consolidated() -> I32 {
+    let x: I32 = 2147483647
+    let result: Maybe[I32] = x.checked_add(1)
+    when result {
+        Just(v) => assert(false, "should overflow"),
+        Nothing => assert(true, "overflow returns Nothing")
+    }
     return 0
 }

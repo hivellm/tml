@@ -253,21 +253,14 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
 
     // mem::zeroed[T]() / mem_zeroed() - return a zero-initialized value of type T
     if (fn_name == "mem_zeroed" || fn_name == "mem::zeroed") {
-        // Determine the target type from context (return type or explicit type annotation)
+        // Determine the target type from context
         std::string zero_type = "i32"; // default
 
-        // Check for explicit type args on the call
-        if (call.callee->is<parser::PathExpr>()) {
-            const auto& path_expr = call.callee->as<parser::PathExpr>();
-            if (path_expr.generics.has_value() && !path_expr.generics->args.empty()) {
-                auto& type_arg = path_expr.generics->args[0];
-                zero_type = llvm_type_from_semantic(type_arg);
-            }
-        }
-
-        // Use expected_literal_type_ or current_ret_type_ as fallback
-        if (zero_type == "i32" && !expected_literal_type_.empty()) {
+        // Use expected_literal_type_ or current_ret_type_ as type hint
+        if (!expected_literal_type_.empty()) {
             zero_type = expected_literal_type_;
+        } else if (!current_ret_type_.empty() && current_ret_type_ != "void") {
+            zero_type = current_ret_type_;
         }
 
         // Return the appropriate zero value

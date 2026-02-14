@@ -230,6 +230,13 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 field_type = last_expr_type_;
             }
 
+            // Coerce { ptr, ptr } (fat pointer closure) to ptr (thin func pointer)
+            if (last_expr_type_ == "{ ptr, ptr }" && field_type == "ptr") {
+                std::string extracted = fresh_reg();
+                emit_line("  " + extracted + " = extractvalue { ptr, ptr } " + field_val + ", 0");
+                field_val = extracted;
+            }
+
             std::string field_ptr = fresh_reg();
             emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
                       ", i32 0, i32 " + std::to_string(field_idx));
@@ -293,6 +300,13 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
 
             if (field_type.empty()) {
                 field_type = last_expr_type_;
+            }
+
+            // Coerce { ptr, ptr } (fat pointer closure) to ptr (thin func pointer)
+            if (last_expr_type_ == "{ ptr, ptr }" && field_type == "ptr") {
+                std::string extracted = fresh_reg();
+                emit_line("  " + extracted + " = extractvalue { ptr, ptr } " + field_val + ", 0");
+                field_val = extracted;
             }
 
             std::string field_ptr = fresh_reg();
@@ -419,9 +433,9 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             struct_type = "%struct." + mangled;
         }
     } else {
-        // Check if it's a class type
+        // Check if it's a class type (via env or codegen registry)
         auto class_def = env_.lookup_class(base_name);
-        if (class_def.has_value()) {
+        if (class_def.has_value() || class_types_.find(base_name) != class_types_.end()) {
             struct_type = "%class." + base_name;
         } else {
             // Non-generic struct - ensure type is defined (handles imported structs)
@@ -624,6 +638,12 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                         emit_line("  " + casted + " = trunc i64 " + field_val + " to i32");
                         field_val = casted;
                     }
+                }
+                // Handle { ptr, ptr } -> ptr coercion (fat pointer closure -> thin func pointer)
+                else if (actual_llvm_type == "{ ptr, ptr }" && target_field_type == "ptr") {
+                    std::string casted = fresh_reg();
+                    emit_line("  " + casted + " = extractvalue { ptr, ptr } " + field_val + ", 0");
+                    field_val = casted;
                 }
                 // Handle float/double conversions
                 // LLVM float literals are always double, so truncate to float if needed
