@@ -150,3 +150,390 @@ func test_decipher_algorithm_getter() -> I32 {
     assert_eq(alg.name(), "aes-256-gcm", "decipher algorithm should be AES-256-GCM")
     return 0
 }
+
+// --- CipherAlgorithm::aes_cbc_for_key_len ---
+
+@test
+func test_aes_cbc_for_key_len_128() -> I32 {
+    let result = CipherAlgorithm::aes_cbc_for_key_len(16 as I64)
+    assert(result.is_ok(), "16 bytes = AES-128")
+    assert_eq(result.unwrap().name(), "aes-128-cbc", "correct algorithm")
+    return 0
+}
+
+@test
+func test_aes_cbc_for_key_len_192() -> I32 {
+    let result = CipherAlgorithm::aes_cbc_for_key_len(24 as I64)
+    assert(result.is_ok(), "24 bytes = AES-192")
+    assert_eq(result.unwrap().name(), "aes-192-cbc", "correct algorithm")
+    return 0
+}
+
+@test
+func test_aes_cbc_for_key_len_256() -> I32 {
+    let result = CipherAlgorithm::aes_cbc_for_key_len(32 as I64)
+    assert(result.is_ok(), "32 bytes = AES-256")
+    assert_eq(result.unwrap().name(), "aes-256-cbc", "correct algorithm")
+    return 0
+}
+
+@test
+func test_aes_cbc_for_key_len_invalid() -> I32 {
+    let result = CipherAlgorithm::aes_cbc_for_key_len(10 as I64)
+    assert(result.is_err(), "10 bytes is invalid")
+    return 0
+}
+
+// --- CipherAlgorithm::aes_gcm_for_key_len ---
+
+@test
+func test_aes_gcm_for_key_len_128() -> I32 {
+    let result = CipherAlgorithm::aes_gcm_for_key_len(16 as I64)
+    assert(result.is_ok(), "16 bytes = AES-128-GCM")
+    assert_eq(result.unwrap().name(), "aes-128-gcm", "correct algorithm")
+    return 0
+}
+
+@test
+func test_aes_gcm_for_key_len_192() -> I32 {
+    let result = CipherAlgorithm::aes_gcm_for_key_len(24 as I64)
+    assert(result.is_ok(), "24 bytes = AES-192-GCM")
+    assert_eq(result.unwrap().name(), "aes-192-gcm", "correct algorithm")
+    return 0
+}
+
+@test
+func test_aes_gcm_for_key_len_256() -> I32 {
+    let result = CipherAlgorithm::aes_gcm_for_key_len(32 as I64)
+    assert(result.is_ok(), "32 bytes = AES-256-GCM")
+    assert_eq(result.unwrap().name(), "aes-256-gcm", "correct algorithm")
+    return 0
+}
+
+@test
+func test_aes_gcm_for_key_len_invalid() -> I32 {
+    let result = CipherAlgorithm::aes_gcm_for_key_len(15 as I64)
+    assert(result.is_err(), "15 bytes is invalid")
+    return 0
+}
+
+// --- CipherAlgorithm::from_name all variants ---
+
+@test
+func test_cipher_from_name_all_cbc() -> I32 {
+    assert(CipherAlgorithm::from_name("aes-128-cbc").is_just(), "aes-128-cbc")
+    assert(CipherAlgorithm::from_name("aes-192-cbc").is_just(), "aes-192-cbc")
+    assert(CipherAlgorithm::from_name("aes-256-cbc").is_just(), "aes-256-cbc")
+    return 0
+}
+
+@test
+func test_cipher_from_name_all_ctr() -> I32 {
+    assert(CipherAlgorithm::from_name("aes-128-ctr").is_just(), "aes-128-ctr")
+    assert(CipherAlgorithm::from_name("aes-192-ctr").is_just(), "aes-192-ctr")
+    assert(CipherAlgorithm::from_name("aes-256-ctr").is_just(), "aes-256-ctr")
+    return 0
+}
+
+@test
+func test_cipher_from_name_all_gcm() -> I32 {
+    assert(CipherAlgorithm::from_name("aes-128-gcm").is_just(), "aes-128-gcm")
+    assert(CipherAlgorithm::from_name("aes-192-gcm").is_just(), "aes-192-gcm")
+    assert(CipherAlgorithm::from_name("aes-256-gcm").is_just(), "aes-256-gcm")
+    return 0
+}
+
+@test
+func test_cipher_from_name_aead_modes() -> I32 {
+    assert(CipherAlgorithm::from_name("aes-128-ccm").is_just(), "aes-128-ccm")
+    assert(CipherAlgorithm::from_name("aes-256-ccm").is_just(), "aes-256-ccm")
+    assert(CipherAlgorithm::from_name("aes-128-ocb").is_just(), "aes-128-ocb")
+    assert(CipherAlgorithm::from_name("aes-256-ocb").is_just(), "aes-256-ocb")
+    return 0
+}
+
+@test
+func test_cipher_from_name_legacy() -> I32 {
+    assert(CipherAlgorithm::from_name("aes-128-ecb").is_just(), "aes-128-ecb")
+    assert(CipherAlgorithm::from_name("aes-256-ecb").is_just(), "aes-256-ecb")
+    assert(CipherAlgorithm::from_name("des-ede3-cbc").is_just(), "des-ede3-cbc")
+    assert(CipherAlgorithm::from_name("bf-cbc").is_just(), "bf-cbc")
+    return 0
+}
+
+// --- CipherAlgorithm::name completeness ---
+
+@test
+func test_cipher_algorithm_name_ctr() -> I32 {
+    assert_eq(CipherAlgorithm::Aes128Ctr.name(), "aes-128-ctr", "AES-128-CTR name")
+    assert_eq(CipherAlgorithm::Aes192Ctr.name(), "aes-192-ctr", "AES-192-CTR name")
+    assert_eq(CipherAlgorithm::Aes256Ctr.name(), "aes-256-ctr", "AES-256-CTR name")
+    return 0
+}
+
+@test
+func test_cipher_algorithm_name_ccm_ocb() -> I32 {
+    assert_eq(CipherAlgorithm::Aes128Ccm.name(), "aes-128-ccm", "AES-128-CCM name")
+    assert_eq(CipherAlgorithm::Aes256Ccm.name(), "aes-256-ccm", "AES-256-CCM name")
+    assert_eq(CipherAlgorithm::Aes128Ocb.name(), "aes-128-ocb", "AES-128-OCB name")
+    assert_eq(CipherAlgorithm::Aes256Ocb.name(), "aes-256-ocb", "AES-256-OCB name")
+    return 0
+}
+
+@test
+func test_cipher_algorithm_name_ecb() -> I32 {
+    assert_eq(CipherAlgorithm::Aes128Ecb.name(), "aes-128-ecb", "AES-128-ECB name")
+    assert_eq(CipherAlgorithm::Aes256Ecb.name(), "aes-256-ecb", "AES-256-ECB name")
+    return 0
+}
+
+@test
+func test_cipher_algorithm_name_chacha20() -> I32 {
+    assert_eq(CipherAlgorithm::ChaCha20.name(), "chacha20", "ChaCha20 name")
+    return 0
+}
+
+// --- Key size completeness ---
+
+@test
+func test_cipher_key_size_ctr() -> I32 {
+    assert_eq(CipherAlgorithm::Aes128Ctr.key_size(), 16 as I64, "AES-128-CTR key")
+    assert_eq(CipherAlgorithm::Aes192Ctr.key_size(), 24 as I64, "AES-192-CTR key")
+    assert_eq(CipherAlgorithm::Aes256Ctr.key_size(), 32 as I64, "AES-256-CTR key")
+    return 0
+}
+
+@test
+func test_cipher_key_size_gcm() -> I32 {
+    assert_eq(CipherAlgorithm::Aes128Gcm.key_size(), 16 as I64, "AES-128-GCM key")
+    assert_eq(CipherAlgorithm::Aes192Gcm.key_size(), 24 as I64, "AES-192-GCM key")
+    assert_eq(CipherAlgorithm::Aes256Gcm.key_size(), 32 as I64, "AES-256-GCM key")
+    return 0
+}
+
+@test
+func test_cipher_key_size_ccm_ocb() -> I32 {
+    assert_eq(CipherAlgorithm::Aes128Ccm.key_size(), 16 as I64, "AES-128-CCM key")
+    assert_eq(CipherAlgorithm::Aes256Ccm.key_size(), 32 as I64, "AES-256-CCM key")
+    assert_eq(CipherAlgorithm::Aes128Ocb.key_size(), 16 as I64, "AES-128-OCB key")
+    assert_eq(CipherAlgorithm::Aes256Ocb.key_size(), 32 as I64, "AES-256-OCB key")
+    return 0
+}
+
+@test
+func test_cipher_key_size_chacha_ecb() -> I32 {
+    assert_eq(CipherAlgorithm::ChaCha20.key_size(), 32 as I64, "ChaCha20 key")
+    assert_eq(CipherAlgorithm::XChaCha20Poly1305.key_size(), 32 as I64, "XChaCha20 key")
+    assert_eq(CipherAlgorithm::Aes128Ecb.key_size(), 16 as I64, "AES-128-ECB key")
+    assert_eq(CipherAlgorithm::Aes256Ecb.key_size(), 32 as I64, "AES-256-ECB key")
+    return 0
+}
+
+// --- AES-CTR encrypt/decrypt roundtrip ---
+
+@test
+func test_aes_256_ctr_roundtrip() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes256Ctr, ref key, ref iv).unwrap()
+    cipher.update("hello CTR mode")
+    let ct: Buffer = cipher.finalize().unwrap()
+    assert(ct.len() > (0 as I64), "ciphertext not empty")
+
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::Aes256Ctr, ref key, ref iv).unwrap()
+    decipher.update_bytes(ref ct)
+    let pt: Buffer = decipher.finalize().unwrap()
+    assert(pt.len() > (0 as I64), "plaintext not empty")
+
+    cipher.destroy()
+    decipher.destroy()
+    key.destroy()
+    iv.destroy()
+    return 0
+}
+
+@test
+func test_aes_128_ctr_roundtrip() -> I32 {
+    let key: Buffer = random_bytes(16 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes128Ctr, ref key, ref iv).unwrap()
+    cipher.update("CTR 128")
+    let ct: Buffer = cipher.finalize().unwrap()
+
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::Aes128Ctr, ref key, ref iv).unwrap()
+    decipher.update_bytes(ref ct)
+    let pt: Buffer = decipher.finalize().unwrap()
+    assert(pt.len() > (0 as I64), "decrypted CTR-128")
+
+    cipher.destroy()
+    decipher.destroy()
+    key.destroy()
+    iv.destroy()
+    return 0
+}
+
+// --- AES-128-GCM and AES-192-GCM ---
+
+@test
+func test_aes_128_gcm_roundtrip() -> I32 {
+    let key: Buffer = random_bytes(16 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+    let aad: Buffer = Buffer::new(0)
+    let plaintext: Buffer = Buffer::from_string("GCM-128 test")
+
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes128Gcm, ref key, ref nonce).unwrap()
+    cipher.set_aad(ref aad)
+    cipher.update_bytes(ref plaintext)
+    let ct: Buffer = cipher.finalize().unwrap()
+    let tag = cipher.get_auth_tag().unwrap()
+
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::Aes128Gcm, ref key, ref nonce).unwrap()
+    decipher.set_aad(ref aad)
+    decipher.set_auth_tag(ref tag)
+    decipher.update_bytes(ref ct)
+    let pt: Buffer = decipher.finalize().unwrap()
+    assert(pt.len() > (0 as I64), "decrypted GCM-128")
+
+    cipher.destroy()
+    decipher.destroy()
+    key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+@test
+func test_aes_192_gcm_roundtrip() -> I32 {
+    let key: Buffer = random_bytes(24 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+    let aad: Buffer = Buffer::new(0)
+    let plaintext: Buffer = Buffer::from_string("GCM-192 test")
+
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes192Gcm, ref key, ref nonce).unwrap()
+    cipher.set_aad(ref aad)
+    cipher.update_bytes(ref plaintext)
+    let ct: Buffer = cipher.finalize().unwrap()
+    let tag = cipher.get_auth_tag().unwrap()
+
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::Aes192Gcm, ref key, ref nonce).unwrap()
+    decipher.set_aad(ref aad)
+    decipher.set_auth_tag(ref tag)
+    decipher.update_bytes(ref ct)
+    let pt: Buffer = decipher.finalize().unwrap()
+    assert(pt.len() > (0 as I64), "decrypted GCM-192")
+
+    cipher.destroy()
+    decipher.destroy()
+    key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+// --- AES-CBC with different key sizes ---
+
+@test
+func test_aes_128_cbc_roundtrip() -> I32 {
+    let key: Buffer = random_bytes(16 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes128Cbc, ref key, ref iv).unwrap()
+    cipher.update("CBC 128")
+    let ct: Buffer = cipher.finalize().unwrap()
+
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::Aes128Cbc, ref key, ref iv).unwrap()
+    decipher.update_bytes(ref ct)
+    let pt: Buffer = decipher.finalize().unwrap()
+    assert(pt.len() > (0 as I64), "decrypted CBC-128")
+
+    cipher.destroy()
+    decipher.destroy()
+    key.destroy()
+    iv.destroy()
+    return 0
+}
+
+@test
+func test_aes_192_cbc_roundtrip() -> I32 {
+    let key: Buffer = random_bytes(24 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes192Cbc, ref key, ref iv).unwrap()
+    cipher.update("CBC 192")
+    let ct: Buffer = cipher.finalize().unwrap()
+
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::Aes192Cbc, ref key, ref iv).unwrap()
+    decipher.update_bytes(ref ct)
+    let pt: Buffer = decipher.finalize().unwrap()
+    assert(pt.len() > (0 as I64), "decrypted CBC-192")
+
+    cipher.destroy()
+    decipher.destroy()
+    key.destroy()
+    iv.destroy()
+    return 0
+}
+
+// --- AEAD OCB mode ---
+
+@test
+func test_cipher_is_aead_ocb() -> I32 {
+    assert(CipherAlgorithm::Aes128Ocb.is_aead(), "AES-128-OCB is AEAD")
+    assert(CipherAlgorithm::Aes256Ocb.is_aead(), "AES-256-OCB is AEAD")
+    return 0
+}
+
+@test
+func test_cipher_is_aead_ccm() -> I32 {
+    assert(CipherAlgorithm::Aes256Ccm.is_aead(), "AES-256-CCM is AEAD")
+    return 0
+}
+
+// --- GCM with non-empty AAD ---
+
+@test
+func test_aes_256_gcm_with_aad() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let nonce: Buffer = random_bytes(12 as I64)
+    let aad: Buffer = Buffer::from_string("metadata")
+    let plaintext: Buffer = Buffer::from_string("secret data")
+
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref nonce).unwrap()
+    cipher.set_aad(ref aad)
+    cipher.update_bytes(ref plaintext)
+    let ct: Buffer = cipher.finalize().unwrap()
+    let tag = cipher.get_auth_tag().unwrap()
+
+    // Decrypt with same AAD
+    let mut decipher: Decipher = Decipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref nonce).unwrap()
+    decipher.set_aad(ref aad)
+    decipher.set_auth_tag(ref tag)
+    decipher.update_bytes(ref ct)
+    let pt: Buffer = decipher.finalize().unwrap()
+    assert(pt.len() > (0 as I64), "decrypted with AAD")
+
+    cipher.destroy()
+    decipher.destroy()
+    key.destroy()
+    nonce.destroy()
+    return 0
+}
+
+// --- Get auth tag on non-AEAD fails ---
+
+@test
+func test_get_auth_tag_non_aead_fails() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+
+    let mut cipher: Cipher = Cipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref iv).unwrap()
+    cipher.update("test")
+    let ct: Buffer = cipher.finalize().unwrap()
+    let result = cipher.get_auth_tag()
+    assert(result.is_err(), "CBC should not have auth tag")
+
+    cipher.destroy()
+    key.destroy()
+    iv.destroy()
+    return 0
+}

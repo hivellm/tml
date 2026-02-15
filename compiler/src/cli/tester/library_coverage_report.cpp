@@ -513,7 +513,7 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       color: var(--text-dim);
     }
     .uncovered-func::before {
-      content: "\u2717 ";
+      content: "\2717 ";
       color: var(--red);
     }
 
@@ -558,7 +558,7 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
       gap: 8px;
     }
     .group-title::before {
-      content: "\u25b6";
+      content: "\25B6";
       font-size: 10px;
       transition: transform 0.2s;
     }

@@ -97,6 +97,19 @@ int call_test_with_seh(TestMainFunc func) {
     }
     return result;
 }
+
+int call_run_with_catch_seh(TmlRunTestWithCatchFn run_with_catch, TestMainFunc test_func) {
+    g_crash_occurred = false;
+    g_crash_msg[0] = '\0';
+
+    int result = 0;
+    __try {
+        result = run_with_catch(test_func);
+    } __except (crash_filter(GetExceptionInformation())) {
+        return -2;
+    }
+    return result;
+}
 #ifdef __clang__
 #pragma clang diagnostic pop
 #endif
@@ -670,8 +683,35 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     // Execute test with crash protection
     if (run_with_catch) {
         TML_LOG_INFO("test", "  Calling tml_run_test_with_catch wrapper...");
+#ifdef _WIN32
+        // Suppress the VEH handler in the C runtime so that hardware exceptions
+        // (ACCESS_VIOLATION, etc.) are NOT caught by the longjmp-based VEH handler.
+        // Instead, they propagate to our SEH __try/__except wrapper which can safely
+        // recover without risking STATUS_BAD_STACK from a corrupted longjmp.
+        // Panics still work normally (they go through panic() -> longjmp directly).
+        auto veh_suppressed_ptr = lib.get_function<volatile int32_t*>("tml_veh_suppressed");
+        if (veh_suppressed_ptr) {
+            *veh_suppressed_ptr = 1;
+        }
+
+        // Wrap in SEH to catch crashes that the VEH handler would otherwise
+        // try to longjmp from (risking STATUS_BAD_STACK)
+        result.exit_code = call_run_with_catch_seh(run_with_catch, test_func);
+
+        // Restore VEH handler for next test
+        if (veh_suppressed_ptr) {
+            *veh_suppressed_ptr = 0;
+        }
+
+        if (g_crash_occurred) {
+            result.success = false;
+            result.error = std::string("Test crashed: ") + g_crash_msg;
+            TML_LOG_INFO("test", "[DEBUG]   tml_run_test_with_catch crashed (SEH caught)");
+        } else
+#else
         result.exit_code = run_with_catch(test_func);
-        if (result.exit_code == -1) {
+#endif
+            if (result.exit_code == -1) {
             result.success = false;
             std::string error_msg = "Test panicked";
             if (get_panic_msg) {
@@ -805,8 +845,27 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
     // Phase: Execute the test
     phase_start = Clock::now();
     if (run_with_catch) {
+#ifdef _WIN32
+        // Suppress VEH handler so crashes go to our SEH wrapper instead
+        auto veh_suppressed_ptr = lib.get_function<volatile int32_t*>("tml_veh_suppressed");
+        if (veh_suppressed_ptr) {
+            *veh_suppressed_ptr = 1;
+        }
+
+        result.exit_code = call_run_with_catch_seh(run_with_catch, test_func);
+
+        if (veh_suppressed_ptr) {
+            *veh_suppressed_ptr = 0;
+        }
+
+        if (g_crash_occurred) {
+            result.success = false;
+            result.error = std::string("Test crashed: ") + g_crash_msg;
+        } else
+#else
         result.exit_code = run_with_catch(test_func);
-        if (result.exit_code == -1) {
+#endif
+            if (result.exit_code == -1) {
             result.success = false;
             std::string error_msg = "Test panicked";
             if (get_panic_msg) {

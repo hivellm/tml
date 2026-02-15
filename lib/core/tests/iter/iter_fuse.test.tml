@@ -1,0 +1,50 @@
+// Tests for Fuse iterator adapter
+use test
+use core::iter::adapters::fuse::{Fuse, fuse}
+
+// An iterator that yields 1, Nothing, 3 (buggy behavior)
+type Alternating { count: I32 }
+impl Iterator for Alternating {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        this.count = this.count + 1
+        if this.count == 1 { return Just(1) }
+        if this.count == 2 { return Nothing }
+        if this.count == 3 { return Just(3) }
+        return Nothing
+    }
+}
+
+// A normal counter
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_fuse_stops_after_nothing() -> I32 {
+    let mut iter: Fuse[Alternating] = fuse(Alternating { count: 0 })
+    assert_eq(iter.next().unwrap(), 1, "first")
+    assert(iter.next().is_nothing(), "second is Nothing")
+    // Without fuse, Alternating would yield 3 here
+    assert(iter.next().is_nothing(), "fuse ensures Nothing forever")
+    assert(iter.next().is_nothing(), "still Nothing")
+    return 0
+}
+
+@test
+func test_fuse_normal_iter() -> I32 {
+    let mut iter: Fuse[Counter] = fuse(Counter { current: 0, max: 3 })
+    assert_eq(iter.next().unwrap(), 0, "0")
+    assert_eq(iter.next().unwrap(), 1, "1")
+    assert_eq(iter.next().unwrap(), 2, "2")
+    assert(iter.next().is_nothing(), "exhausted")
+    assert(iter.next().is_nothing(), "stays exhausted")
+    return 0
+}

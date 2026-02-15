@@ -1,0 +1,47 @@
+// Tests for Cycle iterator adapter
+use test
+use core::iter::adapters::cycle::{Cycle, cycle}
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+impl Duplicate for Counter {
+    pub func duplicate(this) -> Counter {
+        return Counter { current: this.current, max: this.max }
+    }
+}
+
+impl Duplicate for I32 {
+    pub func duplicate(this) -> I32 { return this }
+}
+
+@test
+func test_cycle_repeats() -> I32 {
+    let mut iter: Cycle[Counter] = cycle(Counter { current: 0, max: 2 })
+    // First pass: 0, 1
+    assert_eq(iter.next().unwrap(), 0, "first pass: 0")
+    assert_eq(iter.next().unwrap(), 1, "first pass: 1")
+    // Second pass: 0, 1
+    assert_eq(iter.next().unwrap(), 0, "second pass: 0")
+    assert_eq(iter.next().unwrap(), 1, "second pass: 1")
+    // Third pass: 0
+    assert_eq(iter.next().unwrap(), 0, "third pass: 0")
+    return 0
+}
+
+@test
+func test_cycle_single_element() -> I32 {
+    let mut iter: Cycle[Counter] = cycle(Counter { current: 5, max: 6 })
+    assert_eq(iter.next().unwrap(), 5, "first")
+    assert_eq(iter.next().unwrap(), 5, "second")
+    assert_eq(iter.next().unwrap(), 5, "third")
+    return 0
+}

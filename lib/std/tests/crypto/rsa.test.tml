@@ -1,6 +1,6 @@
 // Tests for crypto RSA encryption/decryption
 use test::{assert, assert_eq}
-use std::crypto::rsa::{RsaPadding, OaepOptions, public_encrypt, private_decrypt, public_encrypt_oaep, private_decrypt_oaep, public_encrypt_str, private_decrypt_str, private_encrypt, public_decrypt, hybrid_encrypt}
+use std::crypto::rsa::{RsaPadding, OaepOptions, public_encrypt, private_decrypt, public_encrypt_oaep, private_decrypt_oaep, public_encrypt_str, private_decrypt_str, private_encrypt, public_decrypt, hybrid_encrypt, hybrid_decrypt}
 use std::crypto::key::{generate_rsa_key_pair, RsaKeyGenOptions, KeyPair}
 use std::collections::Buffer
 
@@ -166,9 +166,64 @@ func test_rsa_private_encrypt_public_decrypt() -> I32 {
     return 0
 }
 
+// --- OAEP with SHA1 ---
+
+@test
+func test_rsa_encrypt_decrypt_oaep_sha1() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let data: Buffer = Buffer::from_string("OAEP SHA1")
+    let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::OaepSha1)
+    assert(enc_result.is_ok(), "RSA OAEP SHA1 encrypt should succeed")
+    let encrypted: Buffer = enc_result.unwrap()
+    let dec_result = private_decrypt(ref kp.private_key, ref encrypted, RsaPadding::OaepSha1)
+    assert(dec_result.is_ok(), "RSA OAEP SHA1 decrypt should succeed")
+    let decrypted: Buffer = dec_result.unwrap()
+    assert_eq(decrypted.len(), 9 as I64, "decrypted length should be 9")
+    return 0
+}
+
+// --- OAEP with SHA512 ---
+
+@test
+func test_rsa_encrypt_decrypt_oaep_sha512() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let data: Buffer = Buffer::from_string("SHA512")
+    let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::OaepSha512)
+    assert(enc_result.is_ok(), "RSA OAEP SHA512 encrypt should succeed")
+    let encrypted: Buffer = enc_result.unwrap()
+    let dec_result = private_decrypt(ref kp.private_key, ref encrypted, RsaPadding::OaepSha512)
+    assert(dec_result.is_ok(), "RSA OAEP SHA512 decrypt should succeed")
+    let decrypted: Buffer = dec_result.unwrap()
+    assert_eq(decrypted.len(), 6 as I64, "decrypted length should be 6")
+    return 0
+}
+
+// --- max_data_size for different key sizes ---
+
+@test
+func test_rsa_max_data_size_4096() -> I32 {
+    assert_eq(RsaPadding::Pkcs1.max_data_size(4096 as I64), 501 as I64, "Pkcs1 max_data 4096")
+    assert_eq(RsaPadding::OaepSha256.max_data_size(4096 as I64), 446 as I64, "OaepSha256 max_data 4096")
+    assert_eq(RsaPadding::OaepSha512.max_data_size(4096 as I64), 382 as I64, "OaepSha512 max_data 4096")
+    return 0
+}
+
+// --- OaepOptions sha256 explicit ---
+
+@test
+func test_oaep_options_sha256() -> I32 {
+    let opts: OaepOptions = OaepOptions::default()
+    assert_eq(opts.hash, "sha256", "default sha256 hash")
+    assert_eq(opts.mgf1_hash, "sha256", "default sha256 mgf1")
+    return 0
+}
+
 // --- hybrid_encrypt ---
-// NOTE: hybrid_decrypt cannot be tested because Outcome[(Buffer, Buffer)] unwrap
+// NOTE: hybrid_decrypt cannot be fully roundtrip tested because Outcome[(Buffer, Buffer)] unwrap
 // crashes due to compiler ABI bug with tuple types inside generic Outcome.
+// We test hybrid_decrypt error paths to exercise the function for coverage.
 
 @test
 func test_rsa_hybrid_encrypt_ok() -> I32 {
@@ -177,5 +232,18 @@ func test_rsa_hybrid_encrypt_ok() -> I32 {
     let data: Buffer = Buffer::from_string("hello hybrid")
     let enc_result = hybrid_encrypt(ref kp.public_key, ref data)
     assert(enc_result.is_ok(), "hybrid_encrypt should succeed")
+    return 0
+}
+
+// --- hybrid_decrypt ---
+
+@test
+func test_rsa_hybrid_decrypt_too_short() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let fake_key: Buffer = Buffer::from_string("not-a-real-encrypted-key")
+    let short_data: Buffer = Buffer::from_string("short")
+    let result = hybrid_decrypt(ref kp.private_key, ref fake_key, ref short_data)
+    assert(result.is_err(), "hybrid_decrypt should fail with short data")
     return 0
 }

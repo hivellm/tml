@@ -1,0 +1,102 @@
+// Tests for crypto/x509_test_minimal module
+use test::{assert, assert_eq}
+use std::crypto::x509_test_minimal::{X509CertMin, X509ChainMin}
+
+func get_min_test_cert_pem() -> Str {
+    return "-----BEGIN CERTIFICATE-----\nMIIDyTCCArGgAwIBAgIUaCPVlOIx5CPDFZq1Pa88HunX0UswDQYJKoZIhvcNAQEL\nBQAwbDEZMBcGA1UEAwwQdGVzdC5leGFtcGxlLmNvbTEVMBMGA1UECgwMVE1MIFRl\nc3QgT3JnMQswCQYDVQQGEwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UE\nBwwNU2FuIEZyYW5jaXNjbzAeFw0yNjAyMTAxMTIyNTVaFw0zNjAyMDgxMTIyNTVa\nMGwxGTAXBgNVBAMMEHRlc3QuZXhhbXBsZS5jb20xFTATBgNVBAoMDFRNTCBUZXN0\nIE9yZzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDVNhbiBGcmFuY2lzY28wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC0\nCdN1Q9zDtNHRfCEkUvX1oNCOoX1HAi4jtsrQd2WRC/BmPWeZtylPy+X+PJ2t340o\ndgZ7ec5aP+/0fsrq6fA2f6VtMOeEV/kP44jkzEDmmcGLxEyl6nfbL4twyc0+IkSy\nzZgw28P809G3/NxXg+PQS2DRgVoWuaqvWoOEmx0R/jGvSrNsMwbHc1vBN525flOu\n6dPErbIKYHRJmvHF+HqxADi47jl1roBLeBia5+WGY+koWA2bq2a/JGIGgXabDgFu\nOuGmNvcEFM6lm45nCqWxwLEN2Ij81ZrUhk1JJxqfSC0YBva6mwBjP0rAqSrR5OLO\nCLd0B3RSCBVu01ejiuTfAgMBAAGjYzBhMB0GA1UdDgQWBBRH3/kmqJpIR/A28aiZ\nYQpZILLrAzAfBgNVHSMEGDAWgBRH3/kmqJpIR/A28aiZYQpZILLrAzAPBgNVHRMB\nAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjANBgkqhkiG9w0BAQsFAAOCAQEAegD/\nPDDhy12rpq/MC9bcq+hMlGBAFzrk1rcouu5Tlqcmv4pAJi6U8VXf4NSccHtw6uDC\nyc3PdW2PxFERnbChyhtvC9z9z6DlywVfath1WnOcABm87gLYN2H4nlLlfy5PEx8n\npEhblS7go+LmNLgobGO5Kc+oGf5ifU9VImaRcQEMCGGOiubtsiI5kv+HU0JRPwhR\nxhEe266ktBt4785HOJ3kB/yPjXNZjrHv6hWWYkyhj5DVgE1XICWRAcjq88L5dzpx\nCs053i7wUgjToNXGW7jGAxtU9AOgPQGgFhlXF1PbDBc3oj4A+fxXs1xpyyHQ2x97\nZUrbOqIoKzjUm7+kNw==\n-----END CERTIFICATE-----\n"
+}
+
+// --- X509CertMin::from_pem ---
+
+@test
+func test_x509_cert_min_from_pem() -> I32 {
+    let result = X509CertMin::from_pem(get_min_test_cert_pem())
+    assert(result.is_ok(), "from_pem should succeed")
+    let mut cert: X509CertMin = result.unwrap()
+    cert.destroy()
+    return 0
+}
+
+@test
+func test_x509_cert_min_from_pem_invalid() -> I32 {
+    let result = X509CertMin::from_pem("not a certificate")
+    assert(result.is_err(), "invalid PEM should fail")
+    return 0
+}
+
+// --- X509CertMin::destroy (double destroy safe) ---
+
+@test
+func test_x509_cert_min_destroy() -> I32 {
+    let mut cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    cert.destroy()
+    cert.destroy()
+    return 0
+}
+
+// --- X509CertMin::check_issued ---
+
+@test
+func test_x509_cert_min_check_issued() -> I32 {
+    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let cert2: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let issued: Bool = cert.check_issued(ref cert2)
+    assert(issued, "self-signed cert should pass check_issued")
+    return 0
+}
+
+// --- X509CertMin::public_key ---
+
+@test
+func test_x509_cert_min_public_key() -> I32 {
+    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let pk = cert.public_key()
+    assert(pk.size_bits() > (0 as I64), "public key has positive size")
+    return 0
+}
+
+// --- X509CertMin::verify ---
+
+@test
+func test_x509_cert_min_verify() -> I32 {
+    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let pk = cert.public_key()
+    let result = cert.verify(ref pk)
+    assert(result.is_ok(), "verify should not error")
+    assert(result.unwrap(), "self-signed cert should verify with own public key")
+    return 0
+}
+
+// --- X509ChainMin::new ---
+
+@test
+func test_x509_chain_min_new() -> I32 {
+    let chain: X509ChainMin = X509ChainMin::new()
+    assert(true, "X509ChainMin::new should succeed")
+    return 0
+}
+
+// --- X509ChainMin::verify ---
+
+@test
+func test_x509_chain_min_verify() -> I32 {
+    let chain: X509ChainMin = X509ChainMin::new()
+    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let result = chain.verify(ref cert)
+    assert(result.is_ok(), "verify should not error")
+    // Empty chain, so cert won't be verified
+    assert(not result.unwrap(), "empty chain should not verify cert")
+    return 0
+}
+
+// --- X509ChainMin::verify_chain ---
+
+@test
+func test_x509_chain_min_verify_chain() -> I32 {
+    let chain: X509ChainMin = X509ChainMin::new()
+    let cert: X509CertMin = X509CertMin::from_pem(get_min_test_cert_pem()).unwrap()
+    let result = chain.verify_chain(ref cert)
+    assert(result.is_ok(), "verify_chain should not error")
+    assert(not result.unwrap(), "empty chain should not verify_chain cert")
+    return 0
+}

@@ -15,6 +15,18 @@ pub type X509CertMin {
     handle: *Unit
 }
 
+@extern("crypto_x509_check_issued")
+func ffi_crypto_x509_check_issued(handle: *Unit, issuer_handle: *Unit) -> Bool
+
+@extern("crypto_x509_verify")
+func ffi_crypto_x509_verify(handle: *Unit, key_handle: *Unit) -> Bool
+
+@extern("crypto_x509_get_public_key")
+func ffi_crypto_x509_get_public_key(handle: *Unit) -> *Unit
+
+@extern("crypto_key_get_type")
+func ffi_crypto_key_get_type(handle: *Unit) -> Str
+
 impl X509CertMin {
     pub func from_pem(pem: Str) -> Outcome[X509CertMin, CryptoError] {
         let handle: *Unit = ffi_crypto_x509_from_pem(pem)
@@ -30,21 +42,7 @@ impl X509CertMin {
             this.handle = null
         }
     }
-}
 
-@extern("crypto_x509_check_issued")
-func ffi_crypto_x509_check_issued(handle: *Unit, issuer_handle: *Unit) -> Bool
-
-@extern("crypto_x509_verify")
-func ffi_crypto_x509_verify(handle: *Unit, key_handle: *Unit) -> Bool
-
-@extern("crypto_x509_get_public_key")
-func ffi_crypto_x509_get_public_key(handle: *Unit) -> *Unit
-
-@extern("crypto_key_get_type")
-func ffi_crypto_key_get_type(handle: *Unit) -> Str
-
-impl X509CertMin {
     pub func check_issued(this, issuer_cert: ref X509CertMin) -> Bool {
         let result: Bool = ffi_crypto_x509_check_issued(this.handle, issuer_cert.handle)
         return result
@@ -80,9 +78,10 @@ impl X509ChainMin {
             if i >= this.certificates.len() {
                 break
             }
-            let ca = ref this.certificates[i]
-            if cert.check_issued(ca) {
-                let verify_result = cert.verify(ca.public_key())
+            let ca: X509CertMin = this.certificates.get(i)
+            if cert.check_issued(ref ca) {
+                let pk: PublicKey = ca.public_key()
+                let verify_result = cert.verify(ref pk)
                 when verify_result {
                     Err(e) => return Err(e),
                     Ok(valid) => {
@@ -106,7 +105,7 @@ impl X509ChainMin {
             let ca: X509CertMin = this.certificates.get(i)
             if cert.check_issued(ref ca) {
                 let pk: PublicKey = ca.public_key()
-                let verify_result = cert.verify(pk)
+                let verify_result = cert.verify(ref pk)
                 when verify_result {
                     Err(e) => return Err(e),
                     Ok(valid) => {

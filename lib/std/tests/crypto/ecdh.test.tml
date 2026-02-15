@@ -258,3 +258,130 @@ func test_is_curve_supported() -> I32 {
     assert(not is_curve_supported("fake_curve"), "fake not supported")
     return 0
 }
+
+// --- P-384 key exchange ---
+
+@test
+func test_ecdh_key_exchange_p384() -> I32 {
+    let mut alice = Ecdh::new(EcCurve::P384).unwrap()
+    alice.generate_keys()
+    let alice_pub = alice.public_key()
+
+    let mut bob = Ecdh::new(EcCurve::P384).unwrap()
+    bob.generate_keys()
+    let bob_pub = bob.public_key()
+
+    let alice_secret = alice.compute_secret(ref bob_pub)
+    assert(alice_secret.is_ok(), "alice P384 ok")
+    let bob_secret = bob.compute_secret(ref alice_pub)
+    assert(bob_secret.is_ok(), "bob P384 ok")
+
+    let a = alice_secret.unwrap()
+    let b = bob_secret.unwrap()
+    assert_eq(a.len(), 48 as I64, "P384 secret is 48 bytes")
+    assert_eq(b.len(), 48 as I64, "P384 secret is 48 bytes b")
+
+    alice.destroy()
+    bob.destroy()
+    return 0
+}
+
+// --- P-521 key exchange ---
+
+@test
+func test_ecdh_key_exchange_p521() -> I32 {
+    let mut alice = Ecdh::new(EcCurve::P521).unwrap()
+    alice.generate_keys()
+    let alice_pub = alice.public_key()
+
+    let mut bob = Ecdh::new(EcCurve::P521).unwrap()
+    bob.generate_keys()
+    let bob_pub = bob.public_key()
+
+    let alice_secret = alice.compute_secret(ref bob_pub)
+    assert(alice_secret.is_ok(), "alice P521 ok")
+    let bob_secret = bob.compute_secret(ref alice_pub)
+    assert(bob_secret.is_ok(), "bob P521 ok")
+
+    let a = alice_secret.unwrap()
+    let b = bob_secret.unwrap()
+    assert_eq(a.len(), 66 as I64, "P521 secret is 66 bytes")
+    assert_eq(b.len(), 66 as I64, "P521 secret is 66 bytes b")
+
+    alice.destroy()
+    bob.destroy()
+    return 0
+}
+
+// --- secp256k1 key exchange ---
+
+@test
+func test_ecdh_key_exchange_secp256k1() -> I32 {
+    let mut alice = Ecdh::new(EcCurve::Secp256k1).unwrap()
+    alice.generate_keys()
+    let alice_pub = alice.public_key()
+
+    let mut bob = Ecdh::new(EcCurve::Secp256k1).unwrap()
+    bob.generate_keys()
+    let bob_pub = bob.public_key()
+
+    let alice_secret = alice.compute_secret(ref bob_pub)
+    assert(alice_secret.is_ok(), "alice secp256k1 ok")
+    let bob_secret = bob.compute_secret(ref alice_pub)
+    assert(bob_secret.is_ok(), "bob secp256k1 ok")
+
+    let a = alice_secret.unwrap()
+    let b = bob_secret.unwrap()
+    assert_eq(a.len(), 32 as I64, "secp256k1 secret is 32 bytes")
+
+    alice.destroy()
+    bob.destroy()
+    return 0
+}
+
+// --- Ecdh::curve getter ---
+
+@test
+func test_ecdh_curve_getter() -> I32 {
+    let ecdh = Ecdh::new(EcCurve::P384).unwrap()
+    assert_eq(ecdh.curve().name(), "secp384r1", "P384 curve name")
+    return 0
+}
+
+// --- is_curve_supported extended ---
+
+@test
+func test_is_curve_supported_all() -> I32 {
+    assert(is_curve_supported("secp521r1"), "P521 supported")
+    assert(is_curve_supported("secp256k1"), "secp256k1 supported")
+    assert(is_curve_supported("X25519"), "X25519 supported")
+    assert(is_curve_supported("X448"), "X448 supported")
+    return 0
+}
+
+// --- EcCurve::from_name extended aliases ---
+
+@test
+func test_ec_curve_from_name_aliases() -> I32 {
+    assert(EcCurve::from_name("P-384").is_just(), "P-384 alias")
+    assert(EcCurve::from_name("secp384r1").is_just(), "secp384r1")
+    assert(EcCurve::from_name("P-521").is_just(), "P-521 alias")
+    assert(EcCurve::from_name("secp521r1").is_just(), "secp521r1")
+    assert(EcCurve::from_name("X448").is_just(), "X448")
+    assert(EcCurve::from_name("x448").is_just(), "x448 lowercase")
+    return 0
+}
+
+// --- X25519 determinism (same keys produce same secret) ---
+
+@test
+func test_x25519_determinism() -> I32 {
+    let (alice_priv, alice_pub) = generate_x25519_keypair()
+    let (bob_priv, bob_pub) = generate_x25519_keypair()
+
+    let secret1 = x25519(ref alice_priv, ref bob_pub).unwrap()
+    let secret2 = x25519(ref alice_priv, ref bob_pub).unwrap()
+
+    assert_eq(secret1.len(), secret2.len(), "same key pair produces same length")
+    return 0
+}

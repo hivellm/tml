@@ -330,3 +330,16 @@ func test_secure_random_next_bool() -> I32 {
     assert(saw_false, "should see false in 100 calls")
     return 0
 }
+
+// --- SecureRandom::fill ---
+
+@test
+func test_secure_random_fill() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let mut buf: Buffer = random_bytes(32 as I64)
+    assert_eq(buf.len(), 32 as I64, "buffer should be 32 bytes before fill")
+    rng.fill(mut ref buf)
+    assert_eq(buf.len(), 32 as I64, "buffer should remain 32 bytes after fill")
+    buf.destroy()
+    return 0
+}

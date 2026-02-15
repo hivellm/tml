@@ -124,7 +124,7 @@ static int32_t tml_catching_panic = 0;
  * to prevent the VEH handler from intercepting exceptions that the SEH
  * handler should catch instead. Exported so runtime components can set it.
  */
-volatile int32_t tml_veh_suppressed = 0;
+TML_EXPORT volatile int32_t tml_veh_suppressed = 0;
 
 /** @brief Buffer to store the panic message when caught. */
 static char tml_panic_msg[1024] = {0};

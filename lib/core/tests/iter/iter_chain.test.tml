@@ -1,0 +1,54 @@
+// Tests for Chain iterator adapter
+use test
+use core::iter::adapters::chain::{Chain, chain}
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_chain_basic() -> I32 {
+    let mut iter: Chain[Counter, Counter] = chain(
+        Counter { current: 0, max: 3 },
+        Counter { current: 10, max: 13 }
+    )
+    assert_eq(iter.next().unwrap(), 0, "A: 0")
+    assert_eq(iter.next().unwrap(), 1, "A: 1")
+    assert_eq(iter.next().unwrap(), 2, "A: 2")
+    assert_eq(iter.next().unwrap(), 10, "B: 10")
+    assert_eq(iter.next().unwrap(), 11, "B: 11")
+    assert_eq(iter.next().unwrap(), 12, "B: 12")
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_chain_first_empty() -> I32 {
+    let mut iter: Chain[Counter, Counter] = chain(
+        Counter { current: 0, max: 0 },
+        Counter { current: 5, max: 7 }
+    )
+    assert_eq(iter.next().unwrap(), 5, "skips empty A")
+    assert_eq(iter.next().unwrap(), 6, "B: 6")
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_chain_second_empty() -> I32 {
+    let mut iter: Chain[Counter, Counter] = chain(
+        Counter { current: 1, max: 3 },
+        Counter { current: 0, max: 0 }
+    )
+    assert_eq(iter.next().unwrap(), 1, "A: 1")
+    assert_eq(iter.next().unwrap(), 2, "A: 2")
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}

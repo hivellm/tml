@@ -1,0 +1,50 @@
+// Tests for TakeWhile iterator adapter
+use test
+use core::iter::adapters::take_while::{TakeWhile, take_while}
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_take_while_basic() -> I32 {
+    let mut iter: TakeWhile[Counter, func(ref I32) -> Bool] = take_while(
+        Counter { current: 0, max: 10 },
+        do(x: ref I32) -> Bool { *x < 3 }
+    )
+    assert_eq(iter.next().unwrap(), 0, "0<3")
+    assert_eq(iter.next().unwrap(), 1, "1<3")
+    assert_eq(iter.next().unwrap(), 2, "2<3")
+    assert(iter.next().is_nothing(), "3 not <3, stops")
+    return 0
+}
+
+@test
+func test_take_while_take_all() -> I32 {
+    let mut iter: TakeWhile[Counter, func(ref I32) -> Bool] = take_while(
+        Counter { current: 0, max: 3 },
+        do(x: ref I32) -> Bool { *x < 100 }
+    )
+    assert_eq(iter.next().unwrap(), 0, "0")
+    assert_eq(iter.next().unwrap(), 1, "1")
+    assert_eq(iter.next().unwrap(), 2, "2")
+    assert(iter.next().is_nothing(), "exhausted naturally")
+    return 0
+}
+
+@test
+func test_take_while_take_none() -> I32 {
+    let mut iter: TakeWhile[Counter, func(ref I32) -> Bool] = take_while(
+        Counter { current: 5, max: 10 },
+        do(x: ref I32) -> Bool { *x < 0 }
+    )
+    assert(iter.next().is_nothing(), "none taken")
+    return 0
+}

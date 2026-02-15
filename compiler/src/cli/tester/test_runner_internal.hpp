@@ -83,6 +83,13 @@ LONG WINAPI crash_filter(EXCEPTION_POINTERS* info);
 /// Can't be in same function as C++ try/catch, so it's a separate function.
 /// Returns: function result, or -2 on crash.
 int call_test_with_seh(TestMainFunc func);
+
+/// SEH wrapper for calling tml_run_test_with_catch(test_func).
+/// Catches STATUS_BAD_STACK and other fatal crashes that the VEH handler
+/// cannot recover from (e.g., when longjmp corrupts the stack).
+/// Returns: run_with_catch result, or -2 on crash.
+using TmlRunTestWithCatchFn = int32_t (*)(TestMainFunc);
+int call_run_with_catch_seh(TmlRunTestWithCatchFn run_with_catch, TestMainFunc test_func);
 #endif
 
 // ============================================================================

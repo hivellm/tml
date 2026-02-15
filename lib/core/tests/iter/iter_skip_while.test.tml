@@ -1,0 +1,50 @@
+// Tests for SkipWhile iterator adapter
+use test
+use core::iter::adapters::skip_while::{SkipWhile, skip_while}
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_skip_while_basic() -> I32 {
+    let mut iter: SkipWhile[Counter, func(ref I32) -> Bool] = skip_while(
+        Counter { current: 0, max: 6 },
+        do(x: ref I32) -> Bool { *x < 3 }
+    )
+    assert_eq(iter.next().unwrap(), 3, "first after skip")
+    assert_eq(iter.next().unwrap(), 4, "second")
+    assert_eq(iter.next().unwrap(), 5, "third")
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_skip_while_skip_none() -> I32 {
+    let mut iter: SkipWhile[Counter, func(ref I32) -> Bool] = skip_while(
+        Counter { current: 10, max: 13 },
+        do(x: ref I32) -> Bool { *x < 0 }
+    )
+    assert_eq(iter.next().unwrap(), 10, "no skip")
+    assert_eq(iter.next().unwrap(), 11, "11")
+    assert_eq(iter.next().unwrap(), 12, "12")
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_skip_while_skip_all() -> I32 {
+    let mut iter: SkipWhile[Counter, func(ref I32) -> Bool] = skip_while(
+        Counter { current: 0, max: 3 },
+        do(x: ref I32) -> Bool { *x < 100 }
+    )
+    assert(iter.next().is_nothing(), "all skipped")
+    return 0
+}

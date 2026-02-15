@@ -23,33 +23,33 @@
 /// // Yields 1, then 2
 /// ```
 pub type Chain[A, B] {
-    first: Maybe[A],
-    second: B
+    first: A,
+    second: B,
+    first_done: Bool
 }
 
 impl[A: Iterator, B: Iterator] Iterator for Chain[A, B] where A::Item = B::Item {
     type Item = A::Item
 
     pub func next(mut this) -> Maybe[A::Item] {
-        when this.first {
-            Just(iter) => {
-                when iter.next() {
-                    Just(item) => return Just(item),
-                    Nothing => {
-                        this.first = Nothing
-                        return this.second.next()
-                    }
+        if not this.first_done {
+            when this.first.next() {
+                Just(item) => return Just(item),
+                Nothing => {
+                    this.first_done = true
+                    return this.second.next()
                 }
-            },
-            Nothing => return this.second.next()
+            }
         }
+        return this.second.next()
     }
 
     pub func size_hint(this) -> (I64, Maybe[I64]) {
         let zero: I64 = 0
-        let first_hint: (I64, Maybe[I64]) = when this.first {
-            Just(iter) => iter.size_hint(),
-            Nothing => (zero, Just(zero))
+        let first_hint: (I64, Maybe[I64]) = if this.first_done {
+            (zero, Just(zero))
+        } else {
+            this.first.size_hint()
         }
         let second_hint: (I64, Maybe[I64]) = this.second.size_hint()
 
@@ -88,5 +88,5 @@ impl[A: Iterator, B: Iterator] Iterator for Chain[A, B] where A::Item = B::Item 
 /// let combined: Chain[OnceI32, OnceI32] = chain(a, b)
 /// ```
 pub func chain[A: Iterator, B: Iterator](first: A, second: B) -> Chain[A, B] where A::Item = B::Item {
-    return Chain { first: Just(first), second: second }
+    return Chain { first: first, second: second, first_done: false }
 }

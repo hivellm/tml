@@ -290,3 +290,149 @@ func test_sha512_256_bytes() -> I32 {
     buf.destroy()
     return 0
 }
+
+// --- Hash determinism ---
+
+@test
+func test_hash_determinism() -> I32 {
+    let d1: Digest = sha256("same input")
+    let d2: Digest = sha256("same input")
+    assert_eq(d1.to_hex(), d2.to_hex(), "sha256 is deterministic")
+    return 0
+}
+
+@test
+func test_hash_different_inputs() -> I32 {
+    let d1: Digest = sha256("input1")
+    let d2: Digest = sha256("input2")
+    assert(d1.to_hex() != d2.to_hex(), "different inputs produce different hashes")
+    return 0
+}
+
+// --- Streaming all algorithms ---
+
+@test
+func test_hash_streaming_sha512() -> I32 {
+    let mut hash: Hash = Hash::create(HashAlgorithm::Sha512)
+    hash.update("hello")
+    hash.update(" ")
+    hash.update("world")
+    let mut digest: Digest = hash.digest()
+
+    let mut oneshot: Digest = sha512("hello world")
+    assert_eq(digest.to_hex(), oneshot.to_hex(), "streaming sha512 matches oneshot")
+
+    digest.destroy()
+    oneshot.destroy()
+    hash.destroy()
+    return 0
+}
+
+@test
+func test_hash_streaming_sha384() -> I32 {
+    let mut hash: Hash = Hash::create(HashAlgorithm::Sha384)
+    hash.update("test")
+    hash.update(" data")
+    let mut digest: Digest = hash.digest()
+
+    let mut oneshot: Digest = sha384("test data")
+    assert_eq(digest.to_hex(), oneshot.to_hex(), "streaming sha384 matches oneshot")
+
+    digest.destroy()
+    oneshot.destroy()
+    hash.destroy()
+    return 0
+}
+
+@test
+func test_hash_streaming_sha1() -> I32 {
+    let mut hash: Hash = Hash::create(HashAlgorithm::Sha1)
+    hash.update("abc")
+    let mut digest: Digest = hash.digest()
+
+    let mut oneshot: Digest = sha1("abc")
+    assert_eq(digest.to_hex(), oneshot.to_hex(), "streaming sha1 matches oneshot")
+
+    digest.destroy()
+    oneshot.destroy()
+    hash.destroy()
+    return 0
+}
+
+@test
+func test_hash_streaming_sha512_256() -> I32 {
+    let mut hash: Hash = Hash::create(HashAlgorithm::Sha512_256)
+    hash.update("test")
+    let mut digest: Digest = hash.digest()
+
+    let mut oneshot: Digest = sha512_256("test")
+    assert_eq(digest.to_hex(), oneshot.to_hex(), "streaming sha512-256 matches oneshot")
+
+    digest.destroy()
+    oneshot.destroy()
+    hash.destroy()
+    return 0
+}
+
+// --- Known test vectors ---
+
+@test
+func test_sha256_abc() -> I32 {
+    let mut digest: Digest = sha256("abc")
+    assert_eq(digest.to_hex(), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "sha256 abc")
+    digest.destroy()
+    return 0
+}
+
+@test
+func test_sha384_known() -> I32 {
+    let mut digest: Digest = sha384("abc")
+    assert_eq(digest.to_hex(), "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7", "sha384 abc")
+    digest.destroy()
+    return 0
+}
+
+@test
+func test_sha1_abc() -> I32 {
+    let mut digest: Digest = sha1("abc")
+    assert_eq(digest.to_hex(), "a9993e364706816aba3e25717850c26c9cd0d89d", "sha1 abc")
+    digest.destroy()
+    return 0
+}
+
+@test
+func test_md5_abc() -> I32 {
+    let mut digest: Digest = md5("abc")
+    assert_eq(digest.to_hex(), "900150983cd24fb0d6963f7d28e17f72", "md5 abc")
+    digest.destroy()
+    return 0
+}
+
+// --- Digest length verification ---
+
+@test
+func test_digest_lengths() -> I32 {
+    let d_md5: Digest = md5("x")
+    let d_sha1: Digest = sha1("x")
+    let d_sha256: Digest = sha256("x")
+    let d_sha384: Digest = sha384("x")
+    let d_sha512: Digest = sha512("x")
+
+    assert_eq(d_md5.bytes().len(), 16 as I64, "MD5 = 16 bytes")
+    assert_eq(d_sha1.bytes().len(), 20 as I64, "SHA1 = 20 bytes")
+    assert_eq(d_sha256.bytes().len(), 32 as I64, "SHA256 = 32 bytes")
+    assert_eq(d_sha384.bytes().len(), 48 as I64, "SHA384 = 48 bytes")
+    assert_eq(d_sha512.bytes().len(), 64 as I64, "SHA512 = 64 bytes")
+    return 0
+}
+
+// --- Base64 known vectors ---
+
+@test
+func test_sha256_base64_empty() -> I32 {
+    let mut d: Digest = sha256("")
+    let b64: Str = d.to_base64()
+    assert_eq(b64, "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", "sha256 empty base64")
+    d.destroy()
+    return 0
+}

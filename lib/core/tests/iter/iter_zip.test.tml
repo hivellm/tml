@@ -1,0 +1,80 @@
+// Tests for Zip iterator adapter
+use test
+use core::iter::adapters::zip::{Zip, zip}
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_zip_basic() -> I32 {
+    let mut iter: Zip[Counter, Counter] = zip(
+        Counter { current: 0, max: 3 },
+        Counter { current: 10, max: 13 }
+    )
+    when iter.next() {
+        Just(pair) => {
+            assert_eq(pair.0, 0, "a=0")
+            assert_eq(pair.1, 10, "b=10")
+        },
+        Nothing => assert(false, "expected pair")
+    }
+    when iter.next() {
+        Just(pair) => {
+            assert_eq(pair.0, 1, "a=1")
+            assert_eq(pair.1, 11, "b=11")
+        },
+        Nothing => assert(false, "expected pair")
+    }
+    when iter.next() {
+        Just(pair) => {
+            assert_eq(pair.0, 2, "a=2")
+            assert_eq(pair.1, 12, "b=12")
+        },
+        Nothing => assert(false, "expected pair")
+    }
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_zip_uneven_first_shorter() -> I32 {
+    let mut iter: Zip[Counter, Counter] = zip(
+        Counter { current: 0, max: 2 },
+        Counter { current: 10, max: 15 }
+    )
+    when iter.next() {
+        Just(pair) => assert_eq(pair.0, 0, "a=0"),
+        Nothing => assert(false, "expected pair")
+    }
+    when iter.next() {
+        Just(pair) => assert_eq(pair.0, 1, "a=1"),
+        Nothing => assert(false, "expected pair")
+    }
+    assert(iter.next().is_nothing(), "stops at shorter")
+    return 0
+}
+
+@test
+func test_zip_uneven_second_shorter() -> I32 {
+    let mut iter: Zip[Counter, Counter] = zip(
+        Counter { current: 0, max: 5 },
+        Counter { current: 10, max: 11 }
+    )
+    when iter.next() {
+        Just(pair) => {
+            assert_eq(pair.0, 0, "a=0")
+            assert_eq(pair.1, 10, "b=10")
+        },
+        Nothing => assert(false, "expected pair")
+    }
+    assert(iter.next().is_nothing(), "stops at shorter")
+    return 0
+}

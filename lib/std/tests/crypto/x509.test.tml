@@ -2,7 +2,7 @@
 use test::{assert, assert_eq}
 use std::crypto::x509::{X509Certificate, X509Name, X509Chain, X509Store, KeyUsage}
 use std::crypto::key::{generate_rsa_key_pair, RsaKeyGenOptions, KeyPair, PublicKey}
-use std::collections::Buffer
+use std::collections::{Buffer, List}
 
 func get_test_cert_pem() -> Str {
     return "-----BEGIN CERTIFICATE-----\nMIIDyTCCArGgAwIBAgIUaCPVlOIx5CPDFZq1Pa88HunX0UswDQYJKoZIhvcNAQEL\nBQAwbDEZMBcGA1UEAwwQdGVzdC5leGFtcGxlLmNvbTEVMBMGA1UECgwMVE1MIFRl\nc3QgT3JnMQswCQYDVQQGEwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UE\nBwwNU2FuIEZyYW5jaXNjbzAeFw0yNjAyMTAxMTIyNTVaFw0zNjAyMDgxMTIyNTVa\nMGwxGTAXBgNVBAMMEHRlc3QuZXhhbXBsZS5jb20xFTATBgNVBAoMDFRNTCBUZXN0\nIE9yZzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDVNhbiBGcmFuY2lzY28wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC0\nCdN1Q9zDtNHRfCEkUvX1oNCOoX1HAi4jtsrQd2WRC/BmPWeZtylPy+X+PJ2t340o\ndgZ7ec5aP+/0fsrq6fA2f6VtMOeEV/kP44jkzEDmmcGLxEyl6nfbL4twyc0+IkSy\nzZgw28P809G3/NxXg+PQS2DRgVoWuaqvWoOEmx0R/jGvSrNsMwbHc1vBN525flOu\n6dPErbIKYHRJmvHF+HqxADi47jl1roBLeBia5+WGY+koWA2bq2a/JGIGgXabDgFu\nOuGmNvcEFM6lm45nCqWxwLEN2Ij81ZrUhk1JJxqfSC0YBva6mwBjP0rAqSrR5OLO\nCLd0B3RSCBVu01ejiuTfAgMBAAGjYzBhMB0GA1UdDgQWBBRH3/kmqJpIR/A28aiZ\nYQpZILLrAzAfBgNVHSMEGDAWgBRH3/kmqJpIR/A28aiZYQpZILLrAzAPBgNVHRMB\nAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjANBgkqhkiG9w0BAQsFAAOCAQEAegD/\nPDDhy12rpq/MC9bcq+hMlGBAFzrk1rcouu5Tlqcmv4pAJi6U8VXf4NSccHtw6uDC\nyc3PdW2PxFERnbChyhtvC9z9z6DlywVfath1WnOcABm87gLYN2H4nlLlfy5PEx8n\npEhblS7go+LmNLgobGO5Kc+oGf5ifU9VImaRcQEMCGGOiubtsiI5kv+HU0JRPwhR\nxhEe266ktBt4785HOJ3kB/yPjXNZjrHv6hWWYkyhj5DVgE1XICWRAcjq88L5dzpx\nCs053i7wUgjToNXGW7jGAxtU9AOgPQGgFhlXF1PbDBc3oj4A+fxXs1xpyyHQ2x97\nZUrbOqIoKzjUm7+kNw==\n-----END CERTIFICATE-----\n"
@@ -428,6 +428,25 @@ func test_x509_chain_add_pem_bundle() -> I32 {
     return 0
 }
 
-// --- Deferred ---
-// NOTE: subject_alt_names() crashes under coverage instrumentation in suite mode.
-// NOTE: add_pem_file causes BAD_STACK crash. Deferred until ABI is fixed.
+// --- subject_alt_names ---
+
+@test
+func test_x509_subject_alt_names() -> I32 {
+    let mut cert: X509Certificate = parse_test_cert()
+    let names: List[Str] = cert.subject_alt_names()
+    // test cert has no SANs, so the list should be empty (null handle returns empty list)
+    assert_eq(names.len(), 0 as I64, "no SANs in test cert")
+    cert.destroy()
+    return 0
+}
+
+// --- X509Store::add_pem_file ---
+
+@test
+func test_x509_store_add_pem_file_nonexistent() -> I32 {
+    let mut store: X509Store = X509Store::new()
+    let result = store.add_pem_file("nonexistent_file.pem")
+    assert(result.is_err(), "add_pem_file with nonexistent file should fail")
+    store.destroy()
+    return 0
+}

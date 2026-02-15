@@ -26,35 +26,32 @@
 /// // After yielding 42, always returns Nothing
 /// ```
 pub type Fuse[I] {
-    iter: Maybe[I]
+    iter: I,
+    done: Bool
 }
 
 impl[I: Iterator] Iterator for Fuse[I] {
     type Item = I::Item
 
     pub func next(mut this) -> Maybe[I::Item] {
-        when this.iter {
-            Just(it) => {
-                when it.next() {
-                    Just(item) => return Just(item),
-                    Nothing => {
-                        this.iter = Nothing
-                        return Nothing
-                    }
-                }
-            },
-            Nothing => return Nothing
+        if this.done {
+            return Nothing
+        }
+        when this.iter.next() {
+            Just(item) => return Just(item),
+            Nothing => {
+                this.done = true
+                return Nothing
+            }
         }
     }
 
     pub func size_hint(this) -> (I64, Maybe[I64]) {
-        when this.iter {
-            Just(it) => return it.size_hint(),
-            Nothing => {
-                let zero: I64 = 0
-                return (zero, Just(zero))
-            }
+        if this.done {
+            let zero: I64 = 0
+            return (zero, Just(zero))
         }
+        return this.iter.size_hint()
     }
 }
 
@@ -77,5 +74,5 @@ impl[I: Iterator] Iterator for Fuse[I] {
 /// let safe: Fuse[OnceI32] = fuse(iter)
 /// ```
 pub func fuse[I: Iterator](iter: I) -> Fuse[I] {
-    return Fuse { iter: Just(iter) }
+    return Fuse { iter: iter, done: false }
 }

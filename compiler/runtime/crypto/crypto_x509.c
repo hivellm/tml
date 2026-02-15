@@ -549,11 +549,11 @@ TML_EXPORT int32_t crypto_x509_store_add_cert(void* store, void* cert) {
 TML_EXPORT int64_t crypto_x509_store_add_pem_file(void* store, const char* path) {
     X509_STORE* s = (X509_STORE*)store;
     if (!s || !path)
-        return 0;
+        return -1;
     /* Load all certificates from a PEM file into the store */
     BIO* bio = BIO_new_file(path, "r");
     if (!bio)
-        return 0;
+        return -1;
     int64_t count = 0;
     X509* cert = NULL;
     while ((cert = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL) {

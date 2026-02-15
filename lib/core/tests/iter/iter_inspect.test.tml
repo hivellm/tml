@@ -1,0 +1,41 @@
+// Tests for Inspect iterator adapter
+use test
+use core::iter::adapters::inspect::{Inspect, inspect}
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_inspect_passes_through() -> I32 {
+    var count: I32 = 0
+    let mut iter: Inspect[Counter, func(ref I32)] = inspect(
+        Counter { current: 0, max: 3 },
+        do(x: ref I32) { count = count + 1 }
+    )
+    assert_eq(iter.next().unwrap(), 0, "value 0")
+    assert_eq(iter.next().unwrap(), 1, "value 1")
+    assert_eq(iter.next().unwrap(), 2, "value 2")
+    assert(iter.next().is_nothing(), "exhausted")
+    assert_eq(count, 3, "callback called 3 times")
+    return 0
+}
+
+@test
+func test_inspect_empty() -> I32 {
+    var count: I32 = 0
+    let mut iter: Inspect[Counter, func(ref I32)] = inspect(
+        Counter { current: 0, max: 0 },
+        do(x: ref I32) { count = count + 1 }
+    )
+    assert(iter.next().is_nothing(), "empty")
+    assert_eq(count, 0, "callback not called")
+    return 0
+}

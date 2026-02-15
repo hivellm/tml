@@ -1,0 +1,53 @@
+// Tests for Enumerate iterator adapter
+use test
+use core::iter::adapters::enumerate::{Enumerate, enumerate}
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_enumerate_basic() -> I32 {
+    let mut iter: Enumerate[Counter] = enumerate(
+        Counter { current: 10, max: 13 }
+    )
+    when iter.next() {
+        Just(pair) => {
+            assert_eq(pair.0, 0_i64, "idx 0")
+            assert_eq(pair.1, 10, "val 10")
+        },
+        Nothing => assert(false, "expected element")
+    }
+    when iter.next() {
+        Just(pair) => {
+            assert_eq(pair.0, 1_i64, "idx 1")
+            assert_eq(pair.1, 11, "val 11")
+        },
+        Nothing => assert(false, "expected element")
+    }
+    when iter.next() {
+        Just(pair) => {
+            assert_eq(pair.0, 2_i64, "idx 2")
+            assert_eq(pair.1, 12, "val 12")
+        },
+        Nothing => assert(false, "expected element")
+    }
+    assert(iter.next().is_nothing(), "exhausted")
+    return 0
+}
+
+@test
+func test_enumerate_empty() -> I32 {
+    let mut iter: Enumerate[Counter] = enumerate(
+        Counter { current: 0, max: 0 }
+    )
+    assert(iter.next().is_nothing(), "empty")
+    return 0
+}

@@ -197,3 +197,149 @@ func test_hmac_different_data() -> I32 {
     mac2.destroy()
     return 0
 }
+
+// ============================================================================
+// RFC 4231 Test Vectors - HMAC-SHA512
+// ============================================================================
+
+@test
+func test_hmac_sha512_rfc4231_test2() -> I32 {
+    // RFC 4231 Test Case 2
+    // Key = "Jefe", Data = "what do ya want for nothing?"
+    let mut mac: HmacDigest = hmac_sha512("Jefe", "what do ya want for nothing?")
+    let hex: Str = mac.to_hex()
+    assert_eq(hex, "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737", "rfc4231 sha512 test 2")
+    mac.destroy()
+    return 0
+}
+
+// ============================================================================
+// RFC 4231 Test Vectors - HMAC-SHA384
+// ============================================================================
+
+@test
+func test_hmac_sha384_rfc4231_test2() -> I32 {
+    let mut mac: HmacDigest = hmac_sha384("Jefe", "what do ya want for nothing?")
+    let hex: Str = mac.to_hex()
+    assert_eq(hex, "af45d2e376484031617f78d2b58a6b1b9c7ef464f5a01b47e42ec3736322445e8e2240ca5e69e2c78b3239ecfab21649", "rfc4231 sha384 test 2")
+    mac.destroy()
+    return 0
+}
+
+// ============================================================================
+// RFC 2202 Test Vectors - HMAC-SHA1
+// ============================================================================
+
+@test
+func test_hmac_sha1_rfc2202_test2() -> I32 {
+    // RFC 2202 Test Case 2
+    // Key = "Jefe", Data = "what do ya want for nothing?"
+    let mut mac: HmacDigest = hmac_sha1("Jefe", "what do ya want for nothing?")
+    let hex: Str = mac.to_hex()
+    assert_eq(hex, "effcdf6ae5eb2fa2d27416d5f184df9c259a7c79", "rfc2202 sha1 test 2")
+    mac.destroy()
+    return 0
+}
+
+// ============================================================================
+// RFC 2104 Test Vectors - HMAC-MD5
+// ============================================================================
+
+@test
+func test_hmac_md5_rfc2104_test2() -> I32 {
+    // Key = "Jefe", Data = "what do ya want for nothing?"
+    let mut mac: HmacDigest = hmac_md5("Jefe", "what do ya want for nothing?")
+    let hex: Str = mac.to_hex()
+    assert_eq(hex, "750c783e6ab0b503eaa86e310a5db738", "rfc2104 md5 test 2")
+    mac.destroy()
+    return 0
+}
+
+// ============================================================================
+// Streaming HMAC with all algorithms
+// ============================================================================
+
+@test
+func test_hmac_streaming_sha384() -> I32 {
+    let mut hmac: Hmac = Hmac::create(HashAlgorithm::Sha384, "secret")
+    hmac.update("hello ")
+    hmac.update("world")
+    let mut mac: HmacDigest = hmac.digest()
+
+    let mut oneshot: HmacDigest = hmac_sha384("secret", "hello world")
+    assert_eq(mac.to_hex(), oneshot.to_hex(), "streaming sha384 matches oneshot")
+
+    mac.destroy()
+    oneshot.destroy()
+    hmac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_streaming_sha1() -> I32 {
+    let mut hmac: Hmac = Hmac::create(HashAlgorithm::Sha1, "mykey")
+    hmac.update("data")
+    let mut mac: HmacDigest = hmac.digest()
+
+    let mut oneshot: HmacDigest = hmac_sha1("mykey", "data")
+    assert_eq(mac.to_hex(), oneshot.to_hex(), "streaming sha1 matches oneshot")
+
+    mac.destroy()
+    oneshot.destroy()
+    hmac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_streaming_md5() -> I32 {
+    let mut hmac: Hmac = Hmac::create(HashAlgorithm::Md5, "key")
+    hmac.update("test")
+    let mut mac: HmacDigest = hmac.digest()
+
+    let mut oneshot: HmacDigest = hmac_md5("key", "test")
+    assert_eq(mac.to_hex(), oneshot.to_hex(), "streaming md5 matches oneshot")
+
+    mac.destroy()
+    oneshot.destroy()
+    hmac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_streaming_multiple_updates() -> I32 {
+    let mut hmac: Hmac = Hmac::create(HashAlgorithm::Sha256, "key")
+    hmac.update("a")
+    hmac.update("b")
+    hmac.update("c")
+    hmac.update("d")
+    hmac.update("e")
+    let mut mac: HmacDigest = hmac.digest()
+
+    let mut oneshot: HmacDigest = hmac_sha256("key", "abcde")
+    assert_eq(mac.to_hex(), oneshot.to_hex(), "5 updates match oneshot")
+
+    mac.destroy()
+    oneshot.destroy()
+    hmac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_empty_key() -> I32 {
+    let mut mac: HmacDigest = hmac_sha256("", "hello")
+    let hex: Str = mac.to_hex()
+    assert_eq(hex.len(), 64 as I64, "empty key still produces valid hmac")
+    mac.destroy()
+    return 0
+}
+
+@test
+func test_hmac_long_key() -> I32 {
+    // Key longer than block size (64 bytes for SHA-256) is hashed first per RFC
+    let long_key: Str = "this key is definitely longer than sixty four bytes which is the block size for sha256"
+    let mut mac: HmacDigest = hmac_sha256(long_key, "test")
+    let hex: Str = mac.to_hex()
+    assert_eq(hex.len(), 64 as I64, "long key produces valid hmac")
+    mac.destroy()
+    return 0
+}
