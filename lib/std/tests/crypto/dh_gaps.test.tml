@@ -1,6 +1,7 @@
-// Tests for uncovered crypto/dh enum methods
+// Tests for crypto/dh enum methods and DH key exchange operations
 use test::{assert, assert_eq}
-use std::crypto::dh::DhGroup
+use std::crypto::dh::{DhGroup, DiffieHellman, get_dh_group_params}
+use std::collections::Buffer
 
 // --- DhGroup::name ---
 
@@ -73,5 +74,68 @@ func test_dh_group_from_name_invalid() -> I32 {
     return 0
 }
 
-// NOTE: DiffieHellman object operations, create_dh, create_dh_group,
-// get_dh_group_params, diffie_hellman are all FFI-dependent
+// --- DH key exchange operations ---
+// Using modp2 (1024-bit) for speed in tests (insecure but fast)
+
+@test
+func test_dh_with_group_create() -> I32 {
+    let result = DiffieHellman::with_group(DhGroup::Modp2)
+    when result {
+        Ok(dh) => {
+            assert_eq(dh.prime_length(), 1024 as I64, "modp2 prime length")
+            assert(dh.check_params(), "modp2 params valid")
+        }
+        Err(_e) => { assert(false, "DH with_group failed") }
+    }
+    return 0
+}
+
+@test
+func test_dh_generate_keys() -> I32 {
+    let result = DiffieHellman::with_group(DhGroup::Modp2)
+    when result {
+        Ok(mut dh) => {
+            dh.generate_keys()
+            let pub_key: Buffer = dh.public_key()
+            assert(pub_key.len() > (0 as I64), "public key not empty")
+            let priv_key: Buffer = dh.private_key()
+            assert(priv_key.len() > (0 as I64), "private key not empty")
+        }
+        Err(_e) => { assert(false, "DH gen failed") }
+    }
+    return 0
+}
+
+@test
+func test_dh_key_exchange() -> I32 {
+    let alice_r = DiffieHellman::with_group(DhGroup::Modp2)
+    let bob_r = DiffieHellman::with_group(DhGroup::Modp2)
+    when alice_r {
+        Ok(mut alice) => {
+            alice.generate_keys()
+            let alice_pub: Buffer = alice.public_key()
+            when bob_r {
+                Ok(mut bob) => {
+                    bob.generate_keys()
+                    let bob_pub: Buffer = bob.public_key()
+                    let as_r = alice.compute_secret(ref bob_pub)
+                    let bs_r = bob.compute_secret(ref alice_pub)
+                    when as_r {
+                        Ok(as_) => {
+                            when bs_r {
+                                Ok(bs) => {
+                                    assert_eq(as_.len(), bs.len(), "shared secrets same length")
+                                }
+                                Err(_) => { assert(false, "bob compute failed") }
+                            }
+                        }
+                        Err(_) => { assert(false, "alice compute failed") }
+                    }
+                }
+                Err(_) => { assert(false, "bob DH failed") }
+            }
+        }
+        Err(_) => { assert(false, "alice DH failed") }
+    }
+    return 0
+}

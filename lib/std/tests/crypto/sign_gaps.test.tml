@@ -1,6 +1,8 @@
-// Tests for uncovered SignatureAlgorithm and PssOptions methods
+// Tests for uncovered SignatureAlgorithm, PssOptions, and sign/verify operations
 use test::{assert, assert_eq}
-use std::crypto::sign::{SignatureAlgorithm, PssOptions}
+use std::crypto::sign::{SignatureAlgorithm, PssOptions, Signer, Verifier, Signature, sign, verify, sign_rsa_sha256, verify_rsa_sha256}
+use std::crypto::key::{generate_rsa_key_pair, generate_ec_key_pair, RsaKeyGenOptions, EcKeyGenOptions, KeyPair}
+use std::collections::Buffer
 
 // --- SignatureAlgorithm::name ---
 
@@ -101,5 +103,43 @@ func test_pss_options_with_salt_length() -> I32 {
     let opts: PssOptions = PssOptions::with_salt_length(32 as I64)
     assert_eq(opts.salt_length, 32 as I64, "salt_length 32")
     assert_eq(opts.mgf1_hash, "sha256", "mgf1_hash sha256")
+    return 0
+}
+
+// --- RSA sign/verify operations ---
+
+@test
+func test_rsa_sha256_sign_verify() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let sig_result = sign(SignatureAlgorithm::RsaSha256, ref kp.private_key, "hello world")
+    assert(sig_result.is_ok(), "RSA-SHA256 sign should succeed")
+    let sig: Signature = sig_result.unwrap()
+    assert(sig.len() > (0 as I64), "signature not empty")
+    let verify_result = verify(SignatureAlgorithm::RsaSha256, ref kp.public_key, "hello world", ref sig)
+    assert(verify_result.is_ok(), "RSA-SHA256 verify should succeed")
+    assert(verify_result.unwrap(), "RSA-SHA256 signature should be valid")
+    return 0
+}
+
+@test
+func test_rsa_sha256_verify_wrong_data() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let sig: Signature = sign(SignatureAlgorithm::RsaSha256, ref kp.private_key, "hello").unwrap()
+    let verify_result = verify(SignatureAlgorithm::RsaSha256, ref kp.public_key, "wrong", ref sig)
+    assert(verify_result.is_ok(), "verify call should succeed")
+    assert(not verify_result.unwrap(), "signature should be invalid for wrong data")
+    return 0
+}
+
+@test
+func test_rsa_sha256_helper_functions() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let sig: Signature = sign_rsa_sha256(ref kp.private_key, "test data").unwrap()
+    assert(sig.len() > (0 as I64), "helper sig not empty")
+    let valid: Bool = verify_rsa_sha256(ref kp.public_key, "test data", ref sig).unwrap()
+    assert(valid, "helper verify should pass")
     return 0
 }

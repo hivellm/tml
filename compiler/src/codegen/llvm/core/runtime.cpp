@@ -120,6 +120,12 @@ void LLVMIRGen::emit_runtime_decls() {
         emit_line("declare void @write_coverage_json(ptr)");
         emit_line("declare void @write_coverage_html(ptr)");
         emit_line("");
+        // Register in declared_externals_ to prevent duplicate declarations
+        // when test::coverage module is imported (it has @extern("tml_cover_func"))
+        declared_externals_.insert("tml_cover_func");
+        declared_externals_.insert("print_coverage_report");
+        declared_externals_.insert("write_coverage_json");
+        declared_externals_.insert("write_coverage_html");
     }
 
     // Debug intrinsics (for DWARF debug info)

@@ -1,13 +1,48 @@
 // Tests for crypto digital signature functions
-// BLOCKED: Signature::from_der calls Buffer.duplicate() which doesn't exist.
-// Importing any type from std::crypto::sign triggers compilation of the full
-// module including from_der, causing codegen failure.
-// Tests will be added once Buffer.duplicate() is implemented.
+use test::{assert, assert_eq}
+use std::crypto::sign::{SignatureAlgorithm}
 
-use test::{assert}
+// --- SignatureAlgorithm additional coverage ---
 
 @test
-func test_sign_placeholder() -> I32 {
-    assert(true, "placeholder - sign module blocked on Buffer.duplicate()")
+func test_signature_algorithm_remaining_names() -> I32 {
+    assert_eq(SignatureAlgorithm::RsaSha384.name(), "RSA-SHA384", "RSA-SHA384")
+    assert_eq(SignatureAlgorithm::RsaPssSha256.name(), "RSA-PSS-SHA256", "RSA-PSS-SHA256")
+    assert_eq(SignatureAlgorithm::RsaPssSha384.name(), "RSA-PSS-SHA384", "RSA-PSS-SHA384")
+    assert_eq(SignatureAlgorithm::RsaPssSha512.name(), "RSA-PSS-SHA512", "RSA-PSS-SHA512")
+    assert_eq(SignatureAlgorithm::EcdsaSha384.name(), "ECDSA-SHA384", "ECDSA-SHA384")
+    assert_eq(SignatureAlgorithm::EcdsaSha512.name(), "ECDSA-SHA512", "ECDSA-SHA512")
+    return 0
+}
+
+@test
+func test_signature_from_name_pss_variants() -> I32 {
+    let r1 = SignatureAlgorithm::from_name("RSA-PSS-SHA256")
+    assert(r1.is_just(), "RSA-PSS-SHA256 found")
+    assert(r1.unwrap().is_pss(), "RSA-PSS-SHA256 is PSS")
+    let r2 = SignatureAlgorithm::from_name("RSA-PSS-SHA384")
+    assert(r2.is_just(), "RSA-PSS-SHA384 found")
+    let r3 = SignatureAlgorithm::from_name("RSA-PSS-SHA512")
+    assert(r3.is_just(), "RSA-PSS-SHA512 found")
+    return 0
+}
+
+@test
+func test_signature_from_name_ecdsa_variants() -> I32 {
+    let r1 = SignatureAlgorithm::from_name("ECDSA-SHA256")
+    assert(r1.is_just(), "ECDSA-SHA256 found")
+    assert(r1.unwrap().is_ecdsa(), "ECDSA-SHA256 is ECDSA")
+    let r2 = SignatureAlgorithm::from_name("ECDSA-SHA384")
+    assert(r2.is_just(), "ECDSA-SHA384 found")
+    let r3 = SignatureAlgorithm::from_name("ECDSA-SHA512")
+    assert(r3.is_just(), "ECDSA-SHA512 found")
+    return 0
+}
+
+@test
+func test_signature_from_name_ed448() -> I32 {
+    let result = SignatureAlgorithm::from_name("Ed448")
+    assert(result.is_just(), "Ed448 found")
+    assert(result.unwrap().is_eddsa(), "Ed448 is EdDSA")
     return 0
 }

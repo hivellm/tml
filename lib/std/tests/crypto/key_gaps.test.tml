@@ -1,6 +1,6 @@
-// Tests for uncovered crypto/key enum and struct methods
+// Tests for crypto/key enum, struct, and key generation operations
 use test::{assert, assert_eq}
-use std::crypto::key::{KeyType, KeyFormat, KeyEncoding, RsaKeyGenOptions, EcKeyGenOptions}
+use std::crypto::key::{KeyType, KeyFormat, KeyEncoding, RsaKeyGenOptions, EcKeyGenOptions, generate_key, generate_key_pair, generate_ec_key_pair}
 
 // --- KeyType::name ---
 
@@ -146,6 +146,28 @@ func test_ec_key_gen_options_secp256k1() -> I32 {
     return 0
 }
 
-// NOTE: SecretKey, PrivateKey, PublicKey, KeyPair operations, and
-// generate_key, generate_key_pair, create_*_key are all FFI-dependent
-// and may require crypto backend to be linked properly
+// --- Real key generation tests ---
+// NOTE: generate_key(KeyType) and generate_key_pair(KeyType, I64) have
+// enum-by-value codegen ABI mismatch (i32 vs i64). Use generate_ec_key_pair instead.
+
+@test
+func test_generate_ec_key_pair_p256() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p256()
+    let result = generate_ec_key_pair(ref opts)
+    when result {
+        Ok(_kp) => { assert(true, "P-256 key pair generated") }
+        Err(_e) => { assert(false, "P-256 key pair gen failed") }
+    }
+    return 0
+}
+
+@test
+func test_generate_ec_key_pair_p384() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p384()
+    let result = generate_ec_key_pair(ref opts)
+    when result {
+        Ok(_kp) => { assert(true, "P-384 key pair generated") }
+        Err(_e) => { assert(false, "P-384 key pair gen failed") }
+    }
+    return 0
+}

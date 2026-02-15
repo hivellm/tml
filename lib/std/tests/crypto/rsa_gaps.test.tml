@@ -1,6 +1,8 @@
 // Tests for uncovered crypto/rsa enum and struct methods
 use test::{assert, assert_eq}
-use std::crypto::rsa::{RsaPadding, OaepOptions}
+use std::crypto::rsa::{RsaPadding, OaepOptions, public_encrypt, private_decrypt}
+use std::crypto::key::{generate_rsa_key_pair, RsaKeyGenOptions, KeyPair}
+use std::collections::Buffer
 
 // --- RsaPadding::name ---
 
@@ -91,5 +93,46 @@ func test_oaep_options_sha512() -> I32 {
     return 0
 }
 
-// NOTE: public_encrypt, private_decrypt, hybrid_encrypt, etc. are
-// all FFI-dependent and require actual key handles
+// --- RSA key generation and encrypt/decrypt operations ---
+
+@test
+func test_rsa_keygen_2048() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let result = generate_rsa_key_pair(ref opts)
+    assert(result.is_ok(), "RSA 2048 keygen should succeed")
+    let kp: KeyPair = result.unwrap()
+    let bits: I64 = kp.public_key.size_bits()
+    assert_eq(bits, 2048 as I64, "RSA pub key should be 2048 bits")
+    return 0
+}
+
+@test
+func test_rsa_encrypt_decrypt_pkcs1() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let data: Buffer = Buffer::from_string("hello RSA")
+    let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::Pkcs1)
+    assert(enc_result.is_ok(), "RSA PKCS1 encrypt should succeed")
+    let encrypted: Buffer = enc_result.unwrap()
+    assert(encrypted.len() > (0 as I64), "encrypted not empty")
+    let dec_result = private_decrypt(ref kp.private_key, ref encrypted, RsaPadding::Pkcs1)
+    assert(dec_result.is_ok(), "RSA PKCS1 decrypt should succeed")
+    let decrypted: Buffer = dec_result.unwrap()
+    assert_eq(decrypted.len(), 9 as I64, "decrypted length should be 9")
+    return 0
+}
+
+@test
+func test_rsa_encrypt_decrypt_oaep_sha256() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let data: Buffer = Buffer::from_string("OAEP test")
+    let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::OaepSha256)
+    assert(enc_result.is_ok(), "RSA OAEP encrypt should succeed")
+    let encrypted: Buffer = enc_result.unwrap()
+    let dec_result = private_decrypt(ref kp.private_key, ref encrypted, RsaPadding::OaepSha256)
+    assert(dec_result.is_ok(), "RSA OAEP decrypt should succeed")
+    let decrypted: Buffer = dec_result.unwrap()
+    assert_eq(decrypted.len(), 9 as I64, "decrypted length should be 9")
+    return 0
+}

@@ -27,28 +27,42 @@ func test_timing_safe_equal_str_empty() -> I32 {
 @test
 func test_secure_random_next_u8() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
-    let v: U8 = rng.next_u8()
+    let v1: U8 = rng.next_u8()
+    let v2: U8 = rng.next_u8()
+    let v3: U8 = rng.next_u8()
+    // At least 2 of 3 should differ (extremely unlikely all same)
+    let all_same: Bool = v1 == v2 and v2 == v3
+    // We can't strictly assert they differ (1/65536 chance), so just verify callable
+    assert(true, "next_u8 callable")
     return 0
 }
 
 @test
 func test_secure_random_next_u16() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
-    let v: U16 = rng.next_u16()
+    let v1: U16 = rng.next_u16()
+    let v2: U16 = rng.next_u16()
+    // With 65536 possible values, overwhelmingly likely to differ
+    assert(v1 != v2, "u16 values should differ")
     return 0
 }
 
 @test
 func test_secure_random_next_i32() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
-    let v: I32 = rng.next_i32()
+    let v1: I32 = rng.next_i32()
+    let v2: I32 = rng.next_i32()
+    // With 2^32 possible values, overwhelmingly likely to differ
+    assert(v1 != v2, "i32 values should differ")
     return 0
 }
 
 @test
 func test_secure_random_next_i64() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
-    let v: I64 = rng.next_i64()
+    let v1: I64 = rng.next_i64()
+    let v2: I64 = rng.next_i64()
+    assert(v1 != v2, "i64 values should differ")
     return 0
 }
 

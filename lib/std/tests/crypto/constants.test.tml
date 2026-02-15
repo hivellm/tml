@@ -1,15 +1,141 @@
-// Tests for crypto constants module
-// NOTE: Most functions in this module require FFI bindings that are not yet
-// implemented in the C runtime (crypto_get_hashes, crypto_fips_mode, etc.)
-// Tests are deferred until the missing FFI functions are added.
-// See: compiler/runtime/crypto/crypto.c — only bytes_to_hex, hex_to_bytes,
-// bytes_to_base64, base64_to_bytes are implemented.
+//! Tests for std::crypto::constants module.
 
 use test
+use std::crypto::constants
+use std::collections::{List, Buffer}
 
 @test
-func test_constants_deferred() -> I32 {
-    // Module has unimplemented FFI bindings that cause link errors
-    // when any function from the module is referenced
+func test_fips_mode_default() -> I32 {
+    let fips: Bool = constants::fips_enabled()
+    assert_false(fips, "FIPS mode should not be enabled by default")
     return 0
 }
+
+@test
+func test_set_fips_mode() -> I32 {
+    let _result: Bool = constants::set_fips_mode(false)
+    return 0
+}
+
+@test
+func test_secure_heap_used() -> I32 {
+    let used: I64 = constants::secure_heap_used()
+    assert_eq(used, 0 as I64, "secure heap should report 0 by default")
+    return 0
+}
+
+// --- get_hashes ---
+
+@test
+func test_get_hashes_not_empty() -> I32 {
+    let hashes: List[Str] = constants::get_hashes()
+    let count: I64 = hashes.len()
+    assert(count > (0 as I64), "get_hashes should return non-empty list")
+    return 0
+}
+
+// --- get_ciphers ---
+
+@test
+func test_get_ciphers_not_empty() -> I32 {
+    let ciphers: List[Str] = constants::get_ciphers()
+    let count: I64 = ciphers.len()
+    assert(count > (0 as I64), "get_ciphers should return non-empty list")
+    return 0
+}
+
+// --- get_curves ---
+
+@test
+func test_get_curves_not_empty() -> I32 {
+    let curves: List[Str] = constants::get_curves()
+    let count: I64 = curves.len()
+    assert(count > (0 as I64), "get_curves should return non-empty list")
+    return 0
+}
+
+// --- get_cipher_info ---
+
+@test
+func test_get_cipher_info_aes256cbc() -> I32 {
+    let info = constants::get_cipher_info("aes-256-cbc")
+    assert(info.is_just(), "aes-256-cbc should exist")
+    let ci = info.unwrap()
+    assert_eq(ci.key_length, 32 as I64, "aes-256-cbc key length")
+    assert_eq(ci.iv_length, 16 as I64, "aes-256-cbc iv length")
+    assert_eq(ci.block_size, 16 as I64, "aes-256-cbc block size")
+    return 0
+}
+
+@test
+func test_get_cipher_info_nonexistent() -> I32 {
+    let info = constants::get_cipher_info("not-a-cipher")
+    assert(info.is_nothing(), "nonexistent cipher should return Nothing")
+    return 0
+}
+
+// --- set_engine ---
+
+@test
+func test_set_engine_invalid() -> I32 {
+    let result: Bool = constants::set_engine("nonexistent-engine")
+    assert_false(result, "invalid engine should return false")
+    return 0
+}
+
+// --- encoding utilities ---
+
+@test
+func test_bytes_to_hex_roundtrip() -> I32 {
+    let buf: Buffer = Buffer::from_string("hello")
+    let hex: Str = constants::bytes_to_hex(ref buf)
+    assert_eq(hex, "68656c6c6f", "hello hex encoding")
+    return 0
+}
+
+@test
+func test_hex_to_bytes_valid() -> I32 {
+    let result = constants::hex_to_bytes("68656c6c6f")
+    assert(result.is_just(), "valid hex should decode")
+    return 0
+}
+
+@test
+func test_hex_to_bytes_invalid() -> I32 {
+    let result = constants::hex_to_bytes("xyz")
+    assert(result.is_nothing(), "invalid hex should return Nothing")
+    return 0
+}
+
+@test
+func test_bytes_to_base64() -> I32 {
+    let buf: Buffer = Buffer::from_string("hello")
+    let b64: Str = constants::bytes_to_base64(ref buf)
+    assert_eq(b64, "aGVsbG8=", "hello base64 encoding")
+    return 0
+}
+
+@test
+func test_base64_to_bytes_valid() -> I32 {
+    let result = constants::base64_to_bytes("aGVsbG8=")
+    assert(result.is_just(), "valid base64 should decode")
+    return 0
+}
+
+@test
+func test_bytes_to_base64url() -> I32 {
+    let buf: Buffer = Buffer::from_string("hello")
+    let b64url: Str = constants::bytes_to_base64url(ref buf)
+    assert_eq(b64url, "aGVsbG8", "hello base64url encoding")
+    return 0
+}
+
+@test
+func test_base64url_to_bytes_valid() -> I32 {
+    let result = constants::base64url_to_bytes("aGVsbG8")
+    assert(result.is_just(), "valid base64url should decode")
+    return 0
+}
+
+// NOTE: base64_to_bytes, base64url_to_bytes return Maybe[Buffer]
+// which hangs at runtime - likely Outcome[Buffer, _] codegen issue

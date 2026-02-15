@@ -6,16 +6,17 @@ use std::crypto::random::{random_u32, random_u64, random_fill_range, random_byte
 
 @test
 func test_random_u32() -> I32 {
-    let val: U32 = random_u32()
-    // Just check it doesn't crash - any value is valid
-    assert(true, "random_u32 returns")
+    let v1: U32 = random_u32()
+    let v2: U32 = random_u32()
+    assert(v1 != v2, "random_u32 values should differ")
     return 0
 }
 
 @test
 func test_random_u64() -> I32 {
-    let val: U64 = random_u64()
-    assert(true, "random_u64 returns")
+    let v1: U64 = random_u64()
+    let v2: U64 = random_u64()
+    assert(v1 != v2, "random_u64 values should differ")
     return 0
 }
 

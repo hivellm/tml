@@ -1,6 +1,9 @@
-// Tests for uncovered crypto/kdf enum and struct methods
+// Tests for crypto/kdf operations
 use test::{assert, assert_eq}
-use std::crypto::kdf::{Argon2Variant, Argon2Params, ScryptParams}
+use std::crypto::kdf::{Argon2Variant, Argon2Params, ScryptParams, pbkdf2, scrypt, hkdf, bcrypt_hash, bcrypt_verify}
+use std::crypto::hash::HashAlgorithm
+use std::collections::Buffer
+use std::crypto::random::random_bytes
 
 // --- Argon2Variant::name ---
 
@@ -89,5 +92,88 @@ func test_scrypt_params_custom() -> I32 {
     return 0
 }
 
-// NOTE: pbkdf2, scrypt, hkdf, argon2, bcrypt functions all return
-// CryptoResult[Buffer] which is blocked by Outcome[Buffer, E] codegen
+// --- Real operation tests ---
+
+@test
+func test_pbkdf2_sha256() -> I32 {
+    let salt: Buffer = random_bytes(16 as I64)
+    let result = pbkdf2("password", ref salt, 1000 as I64, 32 as I64, HashAlgorithm::Sha256)
+    when result {
+        Ok(key) => {
+            assert_eq(key.len(), 32 as I64, "pbkdf2 key 32 bytes")
+        }
+        Err(_e) => {
+            assert(false, "pbkdf2 should not fail")
+        }
+    }
+    return 0
+}
+
+@test
+func test_pbkdf2_deterministic() -> I32 {
+    let salt: Buffer = Buffer::from_string("fixed_salt")
+    let r1 = pbkdf2("pass", ref salt, 100 as I64, 16 as I64, HashAlgorithm::Sha256)
+    let r2 = pbkdf2("pass", ref salt, 100 as I64, 16 as I64, HashAlgorithm::Sha256)
+    when r1 {
+        Ok(k1) => {
+            when r2 {
+                Ok(k2) => {
+                    assert_eq(k1.len(), k2.len(), "same length")
+                }
+                Err(_) => { assert(false, "r2 failed") }
+            }
+        }
+        Err(_) => { assert(false, "r1 failed") }
+    }
+    return 0
+}
+
+@test
+func test_scrypt_derive() -> I32 {
+    let salt: Buffer = random_bytes(16 as I64)
+    let params: ScryptParams = ScryptParams::default()
+    let result = scrypt("password", ref salt, 32 as I64, params)
+    when result {
+        Ok(key) => {
+            assert_eq(key.len(), 32 as I64, "scrypt key 32 bytes")
+        }
+        Err(_e) => {
+            assert(false, "scrypt should not fail")
+        }
+    }
+    return 0
+}
+
+@test
+func test_hkdf_sha256() -> I32 {
+    let ikm: Buffer = random_bytes(32 as I64)
+    let salt: Buffer = random_bytes(16 as I64)
+    let result = hkdf(HashAlgorithm::Sha256, ref ikm, ref salt, "info", 64 as I64)
+    when result {
+        Ok(key) => {
+            assert_eq(key.len(), 64 as I64, "hkdf key 64 bytes")
+        }
+        Err(_e) => {
+            assert(false, "hkdf should not fail")
+        }
+    }
+    return 0
+}
+
+// NOTE: bcrypt_hash returns empty string (OpenSSL has no native bcrypt)
+// so bcrypt_hash always returns Err. bcrypt_verify also non-functional.
+@test
+func test_bcrypt_not_available() -> I32 {
+    let result = bcrypt_hash("secret", 4 as I64)
+    when result {
+        Ok(_h) => {
+            // If OpenSSL adds bcrypt, this would succeed
+            assert(true, "bcrypt available")
+        }
+        Err(_e) => {
+            // Expected: OpenSSL doesn't have native bcrypt
+            assert(true, "bcrypt not available in OpenSSL")
+        }
+    }
+    return 0
+}

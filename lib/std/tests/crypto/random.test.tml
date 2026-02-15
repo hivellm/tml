@@ -121,13 +121,10 @@ func test_secure_random_bytes() -> I32 {
 func test_secure_random_next_u32() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
 
-    // Generate several random u32 values
     let v1: U32 = rng.next_u32()
     let v2: U32 = rng.next_u32()
-    let v3: U32 = rng.next_u32()
 
-    // They should likely be different (extremely unlikely to be same)
-    // We just check that we can call it without error
+    assert(v1 != v2, "u32 values should differ")
     return 0
 }
 
@@ -163,10 +160,21 @@ func test_secure_random_int_range() -> I32 {
 func test_secure_random_next_bool() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
 
-    // Just verify we can call it
-    let _b1: Bool = rng.next_bool()
-    let _b2: Bool = rng.next_bool()
-
+    // Call many times - should get both true and false
+    let mut saw_true: Bool = false
+    let mut saw_false: Bool = false
+    let mut i: I64 = 0
+    loop (i < (100 as I64)) {
+        let b: Bool = rng.next_bool()
+        if b {
+            saw_true = true
+        } else {
+            saw_false = true
+        }
+        i = i + (1 as I64)
+    }
+    assert(saw_true, "should see true in 100 calls")
+    assert(saw_false, "should see false in 100 calls")
     return 0
 }
 

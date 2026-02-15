@@ -171,22 +171,21 @@ pub const KEY_TYPE_PRIVATE: I64 = 3
 // ============================================================================
 
 @extern("crypto_fips_mode")
-func ffi_crypto_fips_mode() -> Bool
+func ffi_crypto_fips_mode() -> I32
 @extern("crypto_set_fips_mode")
-func ffi_crypto_set_fips_mode(enabled: Bool) -> Bool
+func ffi_crypto_set_fips_mode(enabled: I32) -> I32
 
 /// Returns true if FIPS mode is enabled.
 pub func fips_enabled() -> Bool {
-    let result: Bool = ffi_crypto_fips_mode()
-    return result
+    return ffi_crypto_fips_mode() != 0
 }
 
 /// Enables or disables FIPS mode.
 ///
 /// Note: This may fail if the crypto library was not compiled with FIPS support.
 pub func set_fips_mode(enabled: Bool) -> Bool {
-    let result: Bool = ffi_crypto_set_fips_mode(enabled)
-    return result
+    let flag: I32 = if enabled { 1 } else { 0 }
+    return ffi_crypto_set_fips_mode(flag) != 0
 }
 
 // ============================================================================
