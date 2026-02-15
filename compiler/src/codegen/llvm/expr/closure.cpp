@@ -30,8 +30,87 @@
 #include "codegen/llvm/llvm_ir_gen.hpp"
 
 #include <sstream>
+#include <unordered_set>
 
 namespace tml::codegen {
+
+// Codegen-time capture analysis: walk closure body AST to find identifiers
+// referencing variables from the enclosing scope. This is needed because library
+// methods skip the type checker, so closure.captured_vars may be empty.
+static void
+collect_codegen_captures(const parser::Expr& expr,
+                         const std::unordered_set<std::string>& param_names,
+                         const std::unordered_map<std::string, LLVMIRGen::VarInfo>& locals,
+                         std::vector<std::string>& captures) {
+    if (expr.is<parser::IdentExpr>()) {
+        const auto& e = expr.as<parser::IdentExpr>();
+        if (param_names.count(e.name))
+            return;
+        for (const auto& cap : captures) {
+            if (cap == e.name)
+                return;
+        }
+        if (locals.count(e.name)) {
+            captures.push_back(e.name);
+        }
+    } else if (expr.is<parser::BinaryExpr>()) {
+        const auto& e = expr.as<parser::BinaryExpr>();
+        collect_codegen_captures(*e.left, param_names, locals, captures);
+        collect_codegen_captures(*e.right, param_names, locals, captures);
+    } else if (expr.is<parser::UnaryExpr>()) {
+        const auto& e = expr.as<parser::UnaryExpr>();
+        collect_codegen_captures(*e.operand, param_names, locals, captures);
+    } else if (expr.is<parser::CallExpr>()) {
+        const auto& e = expr.as<parser::CallExpr>();
+        collect_codegen_captures(*e.callee, param_names, locals, captures);
+        for (const auto& arg : e.args) {
+            collect_codegen_captures(*arg, param_names, locals, captures);
+        }
+    } else if (expr.is<parser::BlockExpr>()) {
+        const auto& e = expr.as<parser::BlockExpr>();
+        for (const auto& stmt : e.stmts) {
+            if (auto* expr_stmt = std::get_if<parser::ExprStmt>(&stmt->kind)) {
+                collect_codegen_captures(*expr_stmt->expr, param_names, locals, captures);
+            } else if (auto* let_stmt = std::get_if<parser::LetStmt>(&stmt->kind)) {
+                if (let_stmt->init) {
+                    collect_codegen_captures(**let_stmt->init, param_names, locals, captures);
+                }
+            }
+        }
+        if (e.expr) {
+            collect_codegen_captures(**e.expr, param_names, locals, captures);
+        }
+    } else if (expr.is<parser::IfExpr>()) {
+        const auto& e = expr.as<parser::IfExpr>();
+        collect_codegen_captures(*e.condition, param_names, locals, captures);
+        collect_codegen_captures(*e.then_branch, param_names, locals, captures);
+        if (e.else_branch) {
+            collect_codegen_captures(**e.else_branch, param_names, locals, captures);
+        }
+    } else if (expr.is<parser::ReturnExpr>()) {
+        const auto& e = expr.as<parser::ReturnExpr>();
+        if (e.value) {
+            collect_codegen_captures(**e.value, param_names, locals, captures);
+        }
+    } else if (expr.is<parser::FieldExpr>()) {
+        const auto& e = expr.as<parser::FieldExpr>();
+        collect_codegen_captures(*e.object, param_names, locals, captures);
+    } else if (expr.is<parser::MethodCallExpr>()) {
+        const auto& e = expr.as<parser::MethodCallExpr>();
+        collect_codegen_captures(*e.receiver, param_names, locals, captures);
+        for (const auto& arg : e.args) {
+            collect_codegen_captures(*arg, param_names, locals, captures);
+        }
+    } else if (expr.is<parser::WhenExpr>()) {
+        const auto& e = expr.as<parser::WhenExpr>();
+        collect_codegen_captures(*e.scrutinee, param_names, locals, captures);
+        for (const auto& arm : e.arms) {
+            collect_codegen_captures(*arm.body, param_names, locals, captures);
+        }
+    }
+    // ClosureExpr: don't recurse into nested closures
+    // LiteralExpr, PathExpr, etc.: no variables to capture
+}
 
 auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // Generate a unique function name
@@ -44,17 +123,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     std::string closure_name =
         "tml_" + suite_prefix + "closure_" + std::to_string(closure_counter_++);
 
-    bool has_captures = !closure.captured_vars.empty();
-
-    // Collect capture info: (name, llvm_type) for each captured variable
-    std::vector<std::pair<std::string, std::string>> captured_info;
-    for (const auto& captured_name : closure.captured_vars) {
-        auto it = locals_.find(captured_name);
-        std::string captured_type = (it != locals_.end()) ? it->second.type : "i32";
-        captured_info.push_back({captured_name, captured_type});
-    }
-
-    // Determine parameter types from type annotations or inference
+    // Determine parameter types and names first (needed for capture analysis)
     std::vector<std::string> param_llvm_types;
     std::vector<std::string> param_names;
     for (size_t i = 0; i < closure.params.size(); ++i) {
@@ -72,6 +141,26 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         } else {
             param_names.push_back("_p" + std::to_string(i));
         }
+    }
+
+    // Codegen-time capture analysis: if the type checker didn't populate captured_vars
+    // (happens for library methods that are re-parsed without type checking), walk the
+    // closure body to find references to enclosing scope variables.
+    std::vector<std::string> effective_captures = closure.captured_vars;
+    if (effective_captures.empty() && closure.body && !locals_.empty()) {
+        std::unordered_set<std::string> param_set(param_names.begin(), param_names.end());
+        collect_codegen_captures(*closure.body, param_set, locals_, effective_captures);
+    }
+
+    bool has_captures = !effective_captures.empty();
+
+    // Collect capture info: (name, llvm_type) for each captured variable
+    // All captures are by-reference: we store a ptr in the env struct
+    std::vector<std::pair<std::string, std::string>> captured_info;
+    for (const auto& captured_name : effective_captures) {
+        auto it = locals_.find(captured_name);
+        std::string captured_type = (it != locals_.end()) ? it->second.type : "i32";
+        captured_info.push_back({captured_name, captured_type});
     }
 
     // Determine return type from closure annotation or infer from body
@@ -126,13 +215,14 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     emit_line("entry:");
 
     // Load captured variables from env struct via GEP
+    // Captures are by-reference: env contains pointers to original variables
     if (has_captures) {
-        // Build the env struct type for GEP: { capture0_type, capture1_type, ... }
+        // Build the env struct type for GEP: all captures are ptr (by-reference)
         std::string env_struct_type = "{ ";
         for (size_t i = 0; i < captured_info.size(); ++i) {
             if (i > 0)
                 env_struct_type += ", ";
-            env_struct_type += captured_info[i].second;
+            env_struct_type += "ptr";
         }
         env_struct_type += " }";
 
@@ -140,12 +230,15 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
             const auto& [cap_name, cap_type] = captured_info[i];
             std::string gep_reg = fresh_reg();
 
-            // GEP into the env struct to get pointer to this capture field
+            // GEP into the env struct to get pointer to the pointer slot
             emit_line("  " + gep_reg + " = getelementptr inbounds " + env_struct_type +
                       ", ptr %env, i32 0, i32 " + std::to_string(i));
-            // Use env pointer directly as local — reads/writes go to the env struct
-            // This enables mutable capture: mutations persist across closure calls
-            locals_[cap_name] = VarInfo{gep_reg, cap_type, nullptr, std::nullopt};
+            // Load the pointer to the original variable
+            std::string ptr_reg = fresh_reg();
+            emit_line("  " + ptr_reg + " = load ptr, ptr " + gep_reg);
+            // Use the loaded pointer as the local — reads/writes go to the original variable
+            // This enables mutable capture: mutations persist in the caller's scope
+            locals_[cap_name] = VarInfo{ptr_reg, cap_type, nullptr, std::nullopt};
         }
     }
 
@@ -160,9 +253,16 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // Generate body
     std::string body_val = gen_expr(*closure.body);
 
-    // Return the result
+    // After generating the body, check if the actual body type differs from inferred ret_type.
+    // This handles closures like `do() { this.value = Just(f()) }` where the body is
+    // a block with only statements (assignment) — should return void, not the RHS type.
     if (!block_terminated_) {
-        emit_line("  ret " + ret_type + " " + body_val);
+        if (last_expr_type_ == "void" || ret_type == "void") {
+            ret_type = "void";
+            emit_line("  ret void");
+        } else {
+            emit_line("  ret " + ret_type + " " + body_val);
+        }
     }
 
     emit_line("}");
@@ -187,12 +287,12 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // ================================================================
 
     if (has_captures) {
-        // Build the env struct type
+        // Build the env struct type: all captures are ptr (by-reference)
         std::string env_struct_type = "{ ";
         for (size_t i = 0; i < captured_info.size(); ++i) {
             if (i > 0)
                 env_struct_type += ", ";
-            env_struct_type += captured_info[i].second;
+            env_struct_type += "ptr";
         }
         env_struct_type += " }";
 
@@ -206,25 +306,43 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         std::string env_ptr = fresh_reg();
         emit_line("  " + env_ptr + " = call ptr @malloc(i64 " + size_int_reg + ")");
 
-        // Store captured values into the env struct
+        // Store pointers to captured variables into the env struct (capture by reference)
         for (size_t i = 0; i < captured_info.size(); ++i) {
             const auto& [cap_name, cap_type] = captured_info[i];
 
-            // Load captured variable value from current scope
+            // Get the pointer to the captured variable from current scope
             auto cap_it = locals_.find(cap_name);
-            std::string cap_val = fresh_reg();
+            std::string cap_ptr;
             if (cap_it != locals_.end()) {
-                emit_line("  " + cap_val + " = load " + cap_type + ", ptr " + cap_it->second.reg);
+                const auto& var = cap_it->second;
+                // Check if this is an alloca'd variable (has memory address)
+                // vs a direct SSA parameter (like %this, %f)
+                bool is_alloca = var.reg.size() > 2 && var.reg[0] == '%' && var.reg[1] == 't' &&
+                                 std::isdigit(static_cast<unsigned char>(var.reg[2]));
+                if (is_alloca) {
+                    // Alloca — use it directly as the capture pointer
+                    cap_ptr = var.reg;
+                } else {
+                    // Direct SSA parameter — create an alloca to hold it
+                    // so we can capture its address
+                    cap_ptr = fresh_reg();
+                    emit_line("  " + cap_ptr + " = alloca " + cap_type);
+                    emit_line("  store " + cap_type + " " + var.reg + ", ptr " + cap_ptr);
+                    // Update the local to point to the alloca so subsequent
+                    // code in the same function also uses the alloca
+                    locals_[cap_name] = VarInfo{cap_ptr, cap_type, var.semantic_type, std::nullopt};
+                }
             } else {
-                // Should not happen, but fallback to zero
-                emit_line("  " + cap_val + " = add " + cap_type + " 0, 0");
+                // Should not happen — create a dummy alloca
+                cap_ptr = fresh_reg();
+                emit_line("  " + cap_ptr + " = alloca " + cap_type);
             }
 
-            // GEP to the field in env struct and store
+            // GEP to the field in env struct and store the pointer
             std::string field_ptr = fresh_reg();
             emit_line("  " + field_ptr + " = getelementptr inbounds " + env_struct_type + ", ptr " +
                       env_ptr + ", i32 0, i32 " + std::to_string(i));
-            emit_line("  store " + cap_type + " " + cap_val + ", ptr " + field_ptr);
+            emit_line("  store ptr " + cap_ptr + ", ptr " + field_ptr);
         }
 
         // Build the fat pointer { fn_ptr, env_ptr }

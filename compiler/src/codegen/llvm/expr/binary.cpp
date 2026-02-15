@@ -278,8 +278,6 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     // Special handling for 'this' in impl methods
                     if (ident.name == "this" && !current_impl_type_.empty()) {
                         struct_type = "%struct." + current_impl_type_;
-                        // 'this' is already a pointer parameter, not an alloca - use it directly
-                        // struct_ptr is already "%this" which is the direct pointer
                     }
 
                     // Handle ref types - resolve the actual struct type from semantic type

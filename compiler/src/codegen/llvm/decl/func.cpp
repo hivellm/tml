@@ -308,6 +308,11 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             param_types += ", ";
         }
         std::string param_type = llvm_type_ptr(func.params[i].type);
+        // Function-typed parameters use fat pointer { ptr, ptr } to support closures
+        // This matches the generic function path (gen_generic_func) and struct field storage
+        if (func.params[i].type && func.params[i].type->is<parser::FuncType>()) {
+            param_type = "{ ptr, ptr }";
+        }
         std::string param_name = get_param_name(func.params[i], i);
         params += param_type + " %" + param_name;
         param_types += param_type;
@@ -558,6 +563,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Register function parameters in locals_ by creating allocas
     for (size_t i = 0; i < func.params.size(); ++i) {
         std::string param_type = llvm_type_ptr(func.params[i].type);
+        // Function-typed parameters use fat pointer { ptr, ptr } to support closures
+        if (func.params[i].type && func.params[i].type->is<parser::FuncType>()) {
+            param_type = "{ ptr, ptr }";
+        }
         std::string param_name = get_param_name(func.params[i], i);
         // Resolve semantic type for the parameter
         types::TypePtr semantic_type = resolve_parser_type_with_subs(*func.params[i].type, {});

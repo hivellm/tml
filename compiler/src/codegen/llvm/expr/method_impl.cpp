@@ -227,6 +227,17 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             const auto& impl = *impl_it->second;
             for (size_t i = 0; i < impl.generics.size() && i < named.type_args.size(); ++i) {
                 type_subs[impl.generics[i].name] = named.type_args[i];
+                // Also resolve associated types for concrete type arguments
+                // e.g., for I: Iterator where I = Counter, resolve I::Item = Counter::Item = I32
+                if (named.type_args[i] && named.type_args[i]->is<types::NamedType>()) {
+                    const auto& arg_named = named.type_args[i]->as<types::NamedType>();
+                    auto item_type = lookup_associated_type(arg_named.name, "Item");
+                    if (item_type) {
+                        std::string assoc_key = impl.generics[i].name + "::Item";
+                        type_subs[assoc_key] = item_type;
+                        type_subs["Item"] = item_type;
+                    }
+                }
             }
         }
 
@@ -518,16 +529,8 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
 
     for (size_t i = 0; i < call.args.size(); ++i) {
         std::string val = gen_expr(*call.args[i]);
-        // Coerce closure fat pointer to thin fn_ptr when parameter expects a function type
-        if (func_sig && i + 1 < func_sig->params.size()) {
-            auto param_type = func_sig->params[i + 1];
-            if (!type_subs.empty()) {
-                param_type = types::substitute_type(param_type, type_subs);
-            }
-            if (param_type->is<types::FuncType>() || param_type->is<types::ClosureType>()) {
-                val = coerce_closure_to_fn_ptr(val);
-            }
-        }
+        // Function/closure parameters now use fat pointer { ptr, ptr } — no coercion needed
+        // The fat pointer preserves the env_ptr for capturing closures
         std::string actual_type = last_expr_type_;
         std::string expected_type = "i32";
         if (func_sig && i + 1 < func_sig->params.size()) {
@@ -536,14 +539,12 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 param_type = types::substitute_type(param_type, type_subs);
             }
             expected_type = llvm_type_from_semantic(param_type);
+            // Function-typed parameters use fat pointer { ptr, ptr }
+            if (param_type->is<types::FuncType>()) {
+                expected_type = "{ ptr, ptr }";
+            }
         }
         if (actual_type != expected_type) {
-            // { ptr, ptr } -> ptr: extract fn_ptr from fat pointer closure
-            if (actual_type == "{ ptr, ptr }" && expected_type == "ptr") {
-                std::string converted = fresh_reg();
-                emit_line("  " + converted + " = extractvalue { ptr, ptr } " + val + ", 0");
-                val = converted;
-            }
             bool is_int_actual = (actual_type[0] == 'i' && actual_type != "i1");
             bool is_int_expected = (expected_type[0] == 'i' && expected_type != "i1");
             if (is_int_actual && is_int_expected) {
@@ -558,6 +559,14 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                               expected_type);
                 }
                 val = coerced;
+            }
+            // ptr -> { ptr, ptr } conversion: wrap bare function pointer in fat pointer
+            else if (actual_type == "ptr" && expected_type == "{ ptr, ptr }") {
+                std::string fat1 = fresh_reg();
+                std::string fat2 = fresh_reg();
+                emit_line("  " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " + val + ", 0");
+                emit_line("  " + fat2 + " = insertvalue { ptr, ptr } " + fat1 + ", ptr null, 1");
+                val = fat2;
             }
         }
         typed_args.push_back({expected_type, val});
@@ -721,22 +730,23 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
 
     for (size_t i = 0; i < call.args.size(); ++i) {
         std::string val = gen_expr(*call.args[i]);
-        // Coerce closure fat pointer to thin fn_ptr when parameter expects a function type
-        if (func_sig && i + 1 < func_sig->params.size()) {
-            auto param_type = func_sig->params[i + 1];
-            if (param_type->is<types::FuncType>() || param_type->is<types::ClosureType>()) {
-                val = coerce_closure_to_fn_ptr(val);
-            }
-        }
+        std::string actual_type = last_expr_type_;
         std::string arg_type = "i32";
         if (func_sig && i + 1 < func_sig->params.size()) {
-            arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+            auto param_type = func_sig->params[i + 1];
+            arg_type = llvm_type_from_semantic(param_type);
+            // Function-typed parameters use fat pointer to support closures
+            if (param_type->is<types::FuncType>()) {
+                arg_type = "{ ptr, ptr }";
+            }
         }
-        // Fallback: if actual type is { ptr, ptr } but expected is ptr, extract fn_ptr
-        if (last_expr_type_ == "{ ptr, ptr }" && arg_type == "ptr") {
-            std::string converted = fresh_reg();
-            emit_line("  " + converted + " = extractvalue { ptr, ptr } " + val + ", 0");
-            val = converted;
+        // ptr -> { ptr, ptr } conversion: wrap bare function pointer in fat pointer
+        if (actual_type == "ptr" && arg_type == "{ ptr, ptr }") {
+            std::string fat1 = fresh_reg();
+            std::string fat2 = fresh_reg();
+            emit_line("  " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " + val + ", 0");
+            emit_line("  " + fat2 + " = insertvalue { ptr, ptr } " + fat1 + ", ptr null, 1");
+            val = fat2;
         }
         typed_args.push_back({arg_type, val});
     }

@@ -387,6 +387,12 @@ private:
     // Maps associated type names to their concrete types (e.g., "Item" -> I32)
     std::unordered_map<std::string, types::TypePtr> current_associated_types_;
 
+    // Persistent per-type associated type registry (populated from concrete impl blocks)
+    // Maps "TypeName::AssocName" to the resolved type (e.g., "Counter::Item" -> I32)
+    // Unlike current_associated_types_ which is scope-local and can be overwritten,
+    // this map persists across all impl blocks and allows lookup by type.
+    std::unordered_map<std::string, types::TypePtr> type_associated_types_;
+
     // Current generic type parameter substitutions (for resolving T in impl[T] blocks)
     // Maps type parameter names to their concrete types (e.g., "T" -> I64)
     std::unordered_map<std::string, types::TypePtr> current_type_subs_;

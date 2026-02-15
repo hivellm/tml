@@ -466,8 +466,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
     }
     if (expr.is<parser::BinaryExpr>()) {
         const auto& bin = expr.as<parser::BinaryExpr>();
-        // Comparison and logical operators return Bool
         switch (bin.op) {
+        // Comparison and logical operators return Bool
         case parser::BinaryOp::Eq:
         case parser::BinaryOp::Ne:
         case parser::BinaryOp::Lt:
@@ -477,6 +477,19 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         case parser::BinaryOp::And:
         case parser::BinaryOp::Or:
             return types::make_bool();
+        // Assignment operators return Unit (void)
+        case parser::BinaryOp::Assign:
+        case parser::BinaryOp::AddAssign:
+        case parser::BinaryOp::SubAssign:
+        case parser::BinaryOp::MulAssign:
+        case parser::BinaryOp::DivAssign:
+        case parser::BinaryOp::ModAssign:
+        case parser::BinaryOp::BitAndAssign:
+        case parser::BinaryOp::BitOrAssign:
+        case parser::BinaryOp::BitXorAssign:
+        case parser::BinaryOp::ShlAssign:
+        case parser::BinaryOp::ShrAssign:
+            return types::make_unit();
         default:
             // Arithmetic/other operators: infer from left operand
             return infer_expr_type(*bin.left);
@@ -1081,6 +1094,16 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 current_class = class_def->base_class.value_or("");
             }
         }
+    }
+    // Handle block expressions
+    if (expr.is<parser::BlockExpr>()) {
+        const auto& block = expr.as<parser::BlockExpr>();
+        if (block.expr.has_value()) {
+            // Block has trailing expression — infer from that
+            return infer_expr_type(*block.expr.value());
+        }
+        // Block has no trailing expression (only statements) — returns Unit
+        return types::make_unit();
     }
     // Handle closure expressions
     if (expr.is<parser::ClosureExpr>()) {

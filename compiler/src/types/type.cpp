@@ -473,14 +473,14 @@ auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, 
                     return it->second;
                 }
 
-                // Handle unresolved associated types like "T::Owned"
+                // Handle unresolved associated types like "T::Owned", "This::Item"
                 // These are stored as a single name string by the type checker
                 auto colon_pos = t.name.find("::");
                 if (colon_pos != std::string::npos) {
                     std::string first_part = t.name.substr(0, colon_pos);
                     std::string second_part = t.name.substr(colon_pos + 2);
 
-                    // Try to resolve the first part (e.g., "T" -> I32)
+                    // Try to resolve the first part (e.g., "T" -> I32, "This" -> I)
                     auto param_it = subs.find(first_part);
                     if (param_it != subs.end() && param_it->second) {
                         const auto& concrete_type = param_it->second;
@@ -489,9 +489,25 @@ auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, 
                             return concrete_type;
                         }
                         // For named types, the associated type would need further resolution
-                        // For now, just return the concrete type for "Owned" (common case)
                         if (second_part == "Owned") {
                             return concrete_type;
+                        }
+                        // When the substitution target is still a generic type parameter
+                        // (e.g., This -> I), rewrite to "I::Item" so codegen resolves it later
+                        if (concrete_type->is<NamedType>()) {
+                            const auto& target_named = concrete_type->as<NamedType>();
+                            if (target_named.type_args.empty()) {
+                                // Check if the full path "I::Item" also has a substitution
+                                std::string new_path = target_named.name + "::" + second_part;
+                                auto full_it = subs.find(new_path);
+                                if (full_it != subs.end()) {
+                                    return full_it->second;
+                                }
+                                // Otherwise, produce "I::Item" as a placeholder
+                                auto result = std::make_shared<Type>();
+                                result->kind = NamedType{new_path, "", {}};
+                                return result;
+                            }
                         }
                     }
                 }

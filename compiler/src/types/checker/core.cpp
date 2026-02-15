@@ -782,8 +782,11 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
     in_async_func_ = func.is_async;
 
     // Extract and store where constraints for method lookup on bounded generics
+    // NOTE: We do NOT clear current_where_constraints_ here — impl-level constraints
+    // (e.g., I: Iterator from impl[I: Iterator]) must remain visible inside methods.
+    // We save and restore so function-level constraints are scoped properly.
     auto saved_where_constraints = current_where_constraints_;
-    current_where_constraints_.clear();
+    // Keep existing constraints (from impl block) and add function-level ones on top
 
     // First, process inline bounds from generic parameters (e.g., [T: Addable])
     for (const auto& generic : func.generics) {
@@ -1114,6 +1117,84 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
         current_type_params_[param.name] = type_var;
     }
 
+    // Extract where constraints from impl block's generic bounds
+    // so method bodies can resolve calls like I.next() via Iterator bound
+    current_where_constraints_.clear();
+    for (const auto& generic : impl.generics) {
+        if (!generic.bounds.empty()) {
+            std::vector<std::string> behavior_names;
+            std::vector<BoundConstraint> parameterized_bounds;
+
+            for (const auto& bound : generic.bounds) {
+                if (bound->is<parser::NamedType>()) {
+                    const auto& named = bound->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        std::string behavior_name = named.path.segments.back();
+                        if (named.generics && !named.generics->args.empty()) {
+                            std::vector<TypePtr> type_args;
+                            for (const auto& arg : named.generics->args) {
+                                if (arg.is_type()) {
+                                    type_args.push_back(resolve_type(*arg.as_type()));
+                                }
+                            }
+                            parameterized_bounds.push_back(
+                                BoundConstraint{behavior_name, std::move(type_args)});
+                        } else {
+                            behavior_names.push_back(behavior_name);
+                        }
+                    }
+                }
+            }
+
+            if (!behavior_names.empty() || !parameterized_bounds.empty()) {
+                current_where_constraints_.push_back(WhereConstraint{
+                    generic.name, std::move(behavior_names), std::move(parameterized_bounds)});
+            }
+        }
+    }
+
+    // Also process explicit where clause on impl block
+    if (impl.where_clause) {
+        for (const auto& [type_ptr, behaviors] : impl.where_clause->constraints) {
+            std::string type_param_name;
+            if (type_ptr->is<parser::NamedType>()) {
+                const auto& named = type_ptr->as<parser::NamedType>();
+                if (!named.path.segments.empty()) {
+                    type_param_name = named.path.segments[0];
+                }
+            }
+
+            std::vector<std::string> behavior_names;
+            std::vector<BoundConstraint> parameterized_bounds;
+            for (const auto& behavior_type : behaviors) {
+                if (behavior_type->is<parser::NamedType>()) {
+                    const auto& named = behavior_type->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        std::string behavior_name = named.path.segments.back();
+                        if (named.generics && !named.generics->args.empty()) {
+                            std::vector<TypePtr> type_args;
+                            for (const auto& arg : named.generics->args) {
+                                if (arg.is_type()) {
+                                    type_args.push_back(resolve_type(*arg.as_type()));
+                                }
+                            }
+                            parameterized_bounds.push_back(
+                                BoundConstraint{behavior_name, std::move(type_args)});
+                        } else {
+                            behavior_names.push_back(behavior_name);
+                        }
+                    }
+                }
+            }
+
+            if (!type_param_name.empty() &&
+                (!behavior_names.empty() || !parameterized_bounds.empty())) {
+                current_where_constraints_.push_back(WhereConstraint{
+                    type_param_name, std::move(behavior_names), std::move(parameterized_bounds)});
+            }
+        }
+    }
+
     // Check constant initializers
     for (const auto& const_decl : impl.constants) {
         TypePtr declared_type = resolve_type(*const_decl.type);
@@ -1133,6 +1214,7 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
     current_self_type_ = nullptr;
     current_associated_types_.clear();
     current_type_params_.clear();
+    current_where_constraints_.clear();
 }
 
 // Note: OOP type checking (interface/class registration, validation,

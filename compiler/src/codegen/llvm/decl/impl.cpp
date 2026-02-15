@@ -243,6 +243,10 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
             param_types += ", ";
         }
         std::string param_type = llvm_type_ptr(method.params[i].type);
+        // Function-typed parameters use fat pointer { ptr, ptr } to support closures
+        if (method.params[i].type && method.params[i].type->is<parser::FuncType>()) {
+            param_type = "{ ptr, ptr }";
+        }
         std::string param_name = get_param_name(method.params[i], i);
         params += param_type + " %" + param_name;
         param_types += param_type;
@@ -414,6 +418,10 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     // Register other parameters in locals by creating allocas
     for (size_t i = param_start; i < method.params.size(); ++i) {
         std::string param_type = llvm_type_ptr(method.params[i].type);
+        // Function-typed parameters use fat pointer { ptr, ptr } to support closures
+        if (method.params[i].type && method.params[i].type->is<parser::FuncType>()) {
+            param_type = "{ ptr, ptr }";
+        }
         std::string param_name = get_param_name(method.params[i], i);
         // Resolve semantic type for the parameter
         types::TypePtr semantic_type = resolve_parser_type_with_subs(*method.params[i].type, {});
@@ -726,6 +734,10 @@ void LLVMIRGen::gen_impl_method_instantiation(
         }
         auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, full_type_subs);
         std::string param_type = llvm_type_from_semantic(resolved_param);
+        // Function-typed parameters use fat pointer { ptr, ptr } to support closures
+        if (resolved_param && resolved_param->is<types::FuncType>()) {
+            param_type = "{ ptr, ptr }";
+        }
         std::string param_name = get_param_name(method.params[i], i);
         params += param_type + " %" + param_name;
         param_types += param_type;
@@ -749,7 +761,11 @@ void LLVMIRGen::gen_impl_method_instantiation(
     }
     for (size_t i = param_start; i < method.params.size(); ++i) {
         auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, full_type_subs);
-        param_types_vec.push_back(llvm_type_from_semantic(resolved_param));
+        std::string pt = llvm_type_from_semantic(resolved_param);
+        if (resolved_param && resolved_param->is<types::FuncType>()) {
+            pt = "{ ptr, ptr }";
+        }
+        param_types_vec.push_back(pt);
     }
     functions_[method_name] = FuncInfo{"@" + func_llvm_name, func_type, ret_type, param_types_vec};
 
@@ -818,6 +834,10 @@ void LLVMIRGen::gen_impl_method_instantiation(
         std::string param_name = get_param_name(method.params[i], i);
         auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, full_type_subs);
         std::string param_type = llvm_type_from_semantic(resolved_param);
+        // Function-typed parameters use fat pointer { ptr, ptr } to support closures
+        if (resolved_param && resolved_param->is<types::FuncType>()) {
+            param_type = "{ ptr, ptr }";
+        }
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + param_type);
         emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);

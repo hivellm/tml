@@ -164,8 +164,6 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             if (ident.name == "this" && !current_impl_type_.empty()) {
                 // 'this' is a pointer to the impl type
                 struct_type = "%struct." + current_impl_type_;
-                // 'this' is already a pointer parameter, not an alloca - use it directly
-                // struct_ptr is already "%this" which is the direct pointer
 
                 // Ensure the generic struct is instantiated so its fields are registered
                 // Parse the mangled name to get base_name and type_args

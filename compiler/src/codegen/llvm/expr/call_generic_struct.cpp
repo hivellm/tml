@@ -199,20 +199,25 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                         std::vector<std::pair<std::string, std::string>> typed_args;
                         for (size_t i = 0; i < call.args.size(); ++i) {
                             std::string val = gen_expr(*call.args[i]);
-                            // Coerce closure fat pointer if parameter expects a function type
-                            if (i < func_sig->params.size()) {
-                                auto param_type =
-                                    types::substitute_type(func_sig->params[i], type_subs);
-                                if (param_type->is<types::FuncType>() ||
-                                    param_type->is<types::ClosureType>()) {
-                                    val = coerce_closure_to_fn_ptr(val);
-                                }
-                            }
-                            std::string arg_type = last_expr_type_;
+                            std::string actual_type = last_expr_type_;
+                            std::string arg_type = actual_type;
                             if (i < func_sig->params.size()) {
                                 auto param_type =
                                     types::substitute_type(func_sig->params[i], type_subs);
                                 arg_type = llvm_type_from_semantic(param_type);
+                                if (param_type->is<types::FuncType>()) {
+                                    arg_type = "{ ptr, ptr }";
+                                }
+                            }
+                            // ptr -> { ptr, ptr }: wrap bare function pointer in fat pointer
+                            if (actual_type == "ptr" && arg_type == "{ ptr, ptr }") {
+                                std::string fat1 = fresh_reg();
+                                std::string fat2 = fresh_reg();
+                                emit_line("  " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " +
+                                          val + ", 0");
+                                emit_line("  " + fat2 + " = insertvalue { ptr, ptr } " + fat1 +
+                                          ", ptr null, 1");
+                                val = fat2;
                             }
                             typed_args.push_back({arg_type, val});
                         }
@@ -263,8 +268,7 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                         std::vector<std::pair<std::string, std::string>> typed_args;
                         for (size_t i = 0; i < call.args.size(); ++i) {
                             std::string val = gen_expr(*call.args[i]);
-                            // Coerce closure fat pointer to thin fn_ptr when needed
-                            val = coerce_closure_to_fn_ptr(val);
+                            // Function-typed args keep fat pointer { ptr, ptr } — no coercion
                             std::string arg_type = last_expr_type_;
                             typed_args.push_back({arg_type, val});
                         }
@@ -769,16 +773,23 @@ auto LLVMIRGen::gen_call_generic_struct_method(const parser::CallExpr& call,
                             std::string val = gen_expr(*call.args[i]);
                             expected_enum_type_ = saved_expected_enum;
 
-                            // Coerce closure fat pointer if parameter expects fn ptr
-                            if (param_semantic_type &&
-                                (param_semantic_type->is<types::FuncType>() ||
-                                 param_semantic_type->is<types::ClosureType>())) {
-                                val = coerce_closure_to_fn_ptr(val);
-                            }
-
-                            std::string arg_type = last_expr_type_;
+                            std::string actual_type = last_expr_type_;
+                            std::string arg_type = actual_type;
                             if (param_semantic_type) {
                                 arg_type = llvm_type_from_semantic(param_semantic_type);
+                                if (param_semantic_type->is<types::FuncType>()) {
+                                    arg_type = "{ ptr, ptr }";
+                                }
+                            }
+                            // ptr -> { ptr, ptr }: wrap bare function pointer in fat pointer
+                            if (actual_type == "ptr" && arg_type == "{ ptr, ptr }") {
+                                std::string fat1 = fresh_reg();
+                                std::string fat2 = fresh_reg();
+                                emit_line("  " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " +
+                                          val + ", 0");
+                                emit_line("  " + fat2 + " = insertvalue { ptr, ptr } " + fat1 +
+                                          ", ptr null, 1");
+                                val = fat2;
                             }
                             typed_args.push_back({arg_type, val});
                         }

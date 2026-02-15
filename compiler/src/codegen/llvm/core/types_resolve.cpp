@@ -635,13 +635,22 @@ auto LLVMIRGen::semantic_type_from_llvm(const std::string& llvm_type) -> types::
 
 auto LLVMIRGen::lookup_associated_type(const std::string& type_name, const std::string& assoc_name)
     -> types::TypePtr {
-    // First check current_associated_types_ (might already be resolved)
-    auto current_it = current_associated_types_.find(assoc_name);
-    if (current_it != current_associated_types_.end()) {
-        return current_it->second;
+    // NOTE: We intentionally do NOT check current_associated_types_ here.
+    // current_associated_types_ holds the CURRENT impl's associated type bindings
+    // (e.g., MyEnum's "Item = (I64, I::Item)"), but this function is called to
+    // look up a SPECIFIC type's associated type (e.g., Counter's "Item = I32").
+    // Using current_associated_types_ here would return the wrong impl's binding
+    // when inner iterator types shadow the outer adapter's associated type.
+    // Callers that need the current scope fallback (like resolve_parser_type_with_subs)
+    // already check current_associated_types_ after this function returns nullptr.
+
+    // Check persistent per-type registry (populated from concrete impl blocks)
+    auto registry_it = type_associated_types_.find(type_name + "::" + assoc_name);
+    if (registry_it != type_associated_types_.end()) {
+        return registry_it->second;
     }
 
-    // Check local impl blocks
+    // Check local generic impl blocks
     auto impl_it = pending_generic_impls_.find(type_name);
     if (impl_it != pending_generic_impls_.end()) {
         const auto& impl = *impl_it->second;

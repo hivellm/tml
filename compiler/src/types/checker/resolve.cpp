@@ -227,19 +227,16 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
             // Fall through to try as a regular path
         }
 
-        // Handle T::AssociatedType where T is a type parameter (e.g., T::Owned)
+        // Handle T::AssociatedType where T is a type parameter (e.g., T::Owned, I::Item)
         auto param_it = current_type_params_.find(first);
         if (param_it != current_type_params_.end()) {
-            // For now, if T is a type parameter and second is an associated type name,
-            // return the associated type. This is a simplification - in full Rust semantics,
-            // we'd need to look up which trait T implements to find the associated type.
-            auto assoc_it = current_associated_types_.find(second);
-            if (assoc_it != current_associated_types_.end()) {
-                return assoc_it->second;
-            }
-            // If the associated type is not defined locally, return a named type placeholder
-            // that preserves the full path (e.g., "T::Owned") so codegen can resolve it
-            // when the type parameter T is substituted with a concrete type.
+            // T is a generic type parameter. We must NOT use current_associated_types_ here
+            // because those hold the CURRENT impl's associated type bindings (e.g., MyEnum's
+            // "Item = (I64, I::Item)"), not the inner type T's bindings (e.g., Counter's
+            // "Item = I32"). Using current_associated_types_ would incorrectly resolve
+            // I::Item to (I64, I::Item) causing infinite type expansion.
+            // Instead, always produce a placeholder path that codegen resolves when T is
+            // substituted with a concrete type.
             auto type = std::make_shared<Type>();
             type->kind = NamedType{first + "::" + second, "", {}};
             return type;

@@ -750,6 +750,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 for (const auto& binding : impl.type_bindings) {
                     types::TypePtr resolved = resolve_parser_type_with_subs(*binding.type, {});
                     current_associated_types_[binding.name] = resolved;
+                    // Also register in persistent per-type registry for cross-impl lookups
+                    type_associated_types_[type_name + "::" + binding.name] = resolved;
                 }
                 // In suite mode, add prefix to avoid symbol collisions when linking multiple test
                 // files Only for test-local types (not library types)

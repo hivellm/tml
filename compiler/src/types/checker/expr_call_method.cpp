@@ -578,19 +578,16 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                     if (behavior_def) {
                         for (const auto& method : behavior_def->methods) {
                             if (method.name == call.method) {
-                                // Substitute Self with the type parameter
-                                // e.g., for T: Addable, Self in add() -> Self becomes T
+                                // Substitute Self/This with the type parameter
+                                // e.g., for I: Iterator, This::Item in next() -> Maybe[This::Item]
+                                // becomes Maybe[I::Item], and This -> I
                                 TypePtr return_type = method.return_type;
-                                if (return_type && return_type->is<NamedType>()) {
-                                    auto& named = return_type->as<NamedType>();
-                                    if (named.name == "Self" || named.name == "This") {
-                                        // Return the type parameter itself
-                                        auto type_param = std::make_shared<Type>();
-                                        type_param->kind = NamedType{constraint.type_param, "", {}};
-                                        return type_param;
-                                    }
-                                }
-                                return return_type;
+                                auto type_param = std::make_shared<Type>();
+                                type_param->kind = NamedType{constraint.type_param, "", {}};
+                                std::unordered_map<std::string, TypePtr> subs;
+                                subs["This"] = type_param;
+                                subs["Self"] = type_param;
+                                return substitute_type(return_type, subs);
                             }
                         }
                     }

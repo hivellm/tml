@@ -1,6 +1,6 @@
 # Tasks: Test Failures — Compiler/Runtime Bugs Blocking Coverage
 
-**Status**: In Progress (90%)
+**Status**: Complete (100% — only 8.4 async iterators deferred)
 **Priority**: High
 **Impact**: Unblocks ~365+ library functions from test coverage
 
@@ -8,8 +8,8 @@
 
 This task tracks all compiler and runtime bugs discovered during test coverage work. These bugs prevent tests from compiling or running correctly. As new failures are found, they should be added here.
 
-**Last updated**: 2026-02-15 (coverage at 58.1%, 2418/4161 functions)
-**Tests executed**: 7,134 tests across 558 test files — **0 failures**
+**Last updated**: 2026-02-15 (coverage at 62%, 7,631 tests passing)
+**Tests executed**: 7,631 tests across 570+ test files — **0 failures**
 
 **See also**: [modules-without-tests.md](./modules-without-tests.md) - Complete list of implemented modules without tests
 
@@ -86,7 +86,7 @@ This task tracks all compiler and runtime bugs discovered during test coverage w
 
 - [x] 6e.1 Fix `OnceCell::get()` — unit variant ident binding shadowed Nothing in when arms (DONE 2026-02-14 — fixed in when.cpp, test_oncecell_get_full 3/3 passed)
 - [x] 6e.2 Fix `OnceLock::get()` — returns `Maybe[ref T]` correctly (DONE 2026-02-15 — OnceLock type fully implemented; sync_once_lock.test.tml 6/6 passed; manual verification of `get()` returning `Maybe[ref I32]` confirmed working)
-- [ ] 6e.3 Fix `OnceLock::get_or_init()` — closure return type mismatch: inline closure returns `Maybe[I32]` instead of `I32`; `ret i32 %t` fails when value is `%struct.Maybe__I32`
+- [x] 6e.3 Fix `OnceLock::get_or_init()` — closures captured variables by value instead of by reference; mutations inside closure (like `lock.value = Just(f())`) went to a copy; fixed capture-by-reference in closure.cpp; added ptr→{ptr,ptr} wrapping in call_user.cpp, method_impl.cpp, call_generic_struct.cpp (DONE 2026-02-15 — test_get_or_init.test.tml passed; full suite 7631/7631 passed)
 
 ## Phase 6f: Exception Class Inheritance
 
@@ -117,7 +117,7 @@ This task tracks all compiler and runtime bugs discovered during test coverage w
 - [x] 9.0 Fix closures capturing fat pointers (DONE 2026-02-13 — closure_capture_fat_ptr.test.tml 5/5 passed)
 - [x] 9.1 Fix capturing closures in struct fields (DONE 2026-02-14 — changed `func(...)` struct fields from thin `ptr` to fat `{ ptr, ptr }` to store both fn_ptr and env_ptr; struct construction promotes thin ptrs with null env; method dispatch checks env null/non-null and passes env as first arg for closures; test_fn_struct.test.tml 2/2 passed)
 - [x] 9.2 Fix tuple type arguments in trait definitions (DONE 2026-02-14 — tested behavior returning `(I32, I32)` implemented on struct; test_tuple_trait.test.tml 1/1 passed)
-- [ ] 9.3 Fix returning closures from functions — `func() -> func(I32) -> I32` declared as `ptr` return but closures are `{ ptr, ptr }` fat pointers; need to either coerce closures to thin pointers (non-capturing only) or make `func(...)` type a fat pointer
+- [x] 9.3 Fix returning closures from functions — changed `func(...)` type from thin `ptr` to fat `{ ptr, ptr }` throughout; closures with captures can now be stored in struct fields, returned from functions, and called through fat pointer dispatch (DONE 2026-02-15 — covered by 9.1 fat pointer changes and closure capture-by-reference fix)
 - [x] 9.4 Fix function pointer field calling (DONE 2026-02-14 — confirmed working via test_fn_struct.test.tml; `cb.action(21)` dispatches correctly through struct field)
 - [x] 9.5 Fix `this.field()` calls for func-typed fields in generic impl methods (DONE 2026-02-14 — `receiver_ptr` fallback for `this`; generic field type resolution via `current_type_subs_`)
 - [x] 9.6 Fix `expected_enum_type_` leaking into closure bodies (DONE 2026-02-14 — save/restore in `gen_closure()`)
@@ -136,14 +136,14 @@ This task tracks all compiler and runtime bugs discovered during test coverage w
 - [x] 11.1 Fix generic closures in `Maybe` methods (DONE 2026-02-14 — map/and_then/or_else/filter/unwrap_or_else/map_or all work with closures using both trailing expr and `return`; fixed: get_closure_value_expr ReturnExpr unwrapping, phi predecessor tracking, ref T param binding, closure return redirect mechanism, type checker save/restore current_return_type_)
 - [x] 11.1b Fix generic closures in `Outcome` methods (DONE 2026-02-14 — map/map_or/and_then/or_else/unwrap_or_else/is_ok_and/is_err_and all work with closures; added closure return redirect + phi predecessor tracking to all 7 methods)
 - [x] 11.2 Fix nested `Outcome` drop function generation (DONE 2026-02-14 — tested `Outcome[Outcome[I32, Str], Str]` construction and unwrapping; works correctly)
-- [ ] 11.3 Fix auto-drop glue for `Maybe[Arc[I32]]` — requires either `impl[T: Drop] Drop for Maybe[T]` with trait-bounded drop dispatch, or compiler-level auto-drop glue for enums whose variants contain droppable payloads; `register_for_drop` only checks if the base type itself implements Drop, not if payload types do
+- [x] 11.3 Fix auto-drop glue for `Maybe[Arc[I32]]` — implemented auto-drop glue for enums with droppable payloads; compiler now generates drop functions that check variant discriminant and call payload's drop if applicable (DONE 2026-02-15)
 - [x] 11.4 Fix Outcome variant constructors inside closures (DONE 2026-02-14 — `Ok(expr)`/`Err(expr)` inside inline-evaluated closures now checks `closure_return_type_` for the full generic enum type; fixed in call.cpp and core.cpp)
 
 ## Phase 12: Module and Linking Issues
 
 - [x] 12.1 Fix external module method linking for `std::types::Object` (DONE 2026-02-13 — object.test.tml 7/7 passed including inheritance, virtual dispatch, reference_equals)
 - [x] 12.2 Fix `unicode_data::UNICODE_VERSION` constant — tuple constants `(U8, U8, U8)` now supported (DONE 2026-02-15 — commit 7538307 added tuple constant support; char_unicode_version.test.tml 3/3 passed; destructuring `let (major, minor, patch) = UNICODE_VERSION` works correctly)
-- [ ] 12.3 Fix external inheritance for exception subclasses — transitive cross-module class dependency resolution fails; `ArgumentNullException extends Exception extends Object` across two modules causes "Cannot allocate unsized type" when base class LLVM struct types aren't fully resolved in `emit_external_class_type()`; workaround uses mock type+impl patterns
+- [x] 12.3 Fix external inheritance for exception subclasses — fixed transitive cross-module class dependency resolution for `ArgumentNullException extends Exception extends Object`; base class LLVM struct types now fully resolved in `emit_external_class_type()` (DONE 2026-02-15)
 - [x] 12.4 Fix const-generic impl method resolution — basic `[I32; 3].is_empty()` works (DONE 2026-02-14 — confirmed via test_const_generic.test.tml); more complex cases may still need work
 
 ## Phase 13: Test Runner Performance
@@ -153,10 +153,10 @@ This task tracks all compiler and runtime bugs discovered during test coverage w
 ## Phase 14: Nested Generic Type Codegen
 
 - [x] 14.1 Fix `%struct.T` generic type param not substituted in nested context — generic struct fields using type param `T` produced `%struct.T` instead of `%struct.I32`; fixed in `generate.cpp` to apply `current_type_subs_` when resolving struct field LLVM types (DONE 2026-02-14)
-- [ ] 14.2 Fix nested adapter type generation — `Take[Skip[FromFn[...]]]` produces recursive LLVM struct `Skip__Skip__Skip__I` instead of properly substituting type parameters
-- [ ] 14.3 Fix `FromFn[F]` as adapter input — `Take[FromFn[func() -> Maybe[I32]]]` produces `Cannot allocate unsized type %struct.FromFn__F`; generic type param `F` not substituted in nested context
-- [ ] 14.4 Fix tuple-returning adapters with associated types — `Enumerate[I]` returns `Maybe[(I64, I::Item)]`, `Zip[A,B]` returns `Maybe[(A::Item, B::Item)]`; associated type not resolved in tuple context
-- [ ] 14.5 Fix `Maybe[StructType]` in generic adapters — `Fuse[I]` stores `iter: Maybe[I]`, crashes at runtime when `I` is a concrete struct; `Chain[A,B]` has same issue with `first: Maybe[A]`
+- [x] 14.2 Fix nested adapter type generation — `Take[Skip[FromFn[...]]]` now properly substitutes type parameters instead of producing recursive struct names (DONE 2026-02-15)
+- [x] 14.3 Fix `FromFn[F]` as adapter input — generic type param `F` now properly substituted in nested context; `Take[FromFn[func() -> Maybe[I32]]]` allocates correctly (DONE 2026-02-15)
+- [x] 14.4 Fix tuple-returning adapters with associated types — fixed 7 interconnected bugs across type checker and codegen for associated type resolution: (1) resolve.cpp: stopped current_associated_types_ shadowing for type params, (2) expr_call_method.cpp: recursive substitute_type for behavior method return types, (3) core.cpp: impl-level where constraints visible in methods, (4) type.cpp: This::Item → I::Item substitution, (5) types_resolve.cpp: persistent type_associated_types_ registry, (6) generate.cpp: populate registry from concrete impls, (7) method_impl.cpp: I::Item in local generic impl type_subs (DONE 2026-02-15 — Enumerate and Zip both pass)
+- [x] 14.5 Fix `Maybe[StructType]` in generic adapters — already fixed by 14.4's associated type resolution improvements; Fuse[Counter] and Chain[Counter,Counter] both work correctly with Maybe[I] fields (DONE 2026-02-15 — Fuse and Chain both pass)
 
 ## Phase 15: Generic Method Instantiation for Library-Internal Types
 

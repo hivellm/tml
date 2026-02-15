@@ -473,6 +473,10 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 resolved_param = types::substitute_type(resolved_param, free_func_type_subs);
             }
             expected_type = llvm_type_from_semantic(resolved_param);
+            // Function-typed parameters use fat pointer { ptr, ptr }
+            if (resolved_param && resolved_param->is<types::FuncType>()) {
+                expected_type = "{ ptr, ptr }";
+            }
         }
         // Otherwise, try to get parameter type from registered functions (codegen's FuncInfo)
         else if (func_it != functions_.end() && i < func_it->second.param_types.size()) {
@@ -518,6 +522,15 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                 std::string converted = fresh_reg();
                 emit_line("  " + converted + " = extractvalue { ptr, ptr } " + val + ", 0");
                 val = converted;
+            }
+            // ptr -> { ptr, ptr } conversion: wrap bare function pointer in fat pointer
+            // This happens when a named function is passed to a func() parameter
+            else if (actual_type == "ptr" && expected_type == "{ ptr, ptr }") {
+                std::string fat1 = fresh_reg();
+                std::string fat2 = fresh_reg();
+                emit_line("  " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " + val + ", 0");
+                emit_line("  " + fat2 + " = insertvalue { ptr, ptr } " + fat1 + ", ptr null, 1");
+                val = fat2;
             }
         }
 
