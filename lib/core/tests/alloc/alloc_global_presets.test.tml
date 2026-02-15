@@ -1,0 +1,86 @@
+// Tests for core::alloc::global — layout presets and utility functions
+use test::{assert, assert_eq}
+use core::alloc::Layout
+use core::alloc::global::{layout_u8, layout_u16, layout_u32, layout_u64, layout_u128, layout_ptr, default_alloc_align, min_alloc_size, alloc_array, alloc_array_zeroed, dealloc_array}
+
+// === Layout presets ===
+
+@test
+func test_layout_u8() -> I32 {
+    let l: Layout = layout_u8()
+    assert_eq(l.size(), 1 as I64, "layout_u8 size")
+    assert_eq(l.align(), 1 as I64, "layout_u8 align")
+    return 0
+}
+
+@test
+func test_layout_u16() -> I32 {
+    let l: Layout = layout_u16()
+    assert_eq(l.size(), 2 as I64, "layout_u16 size")
+    assert_eq(l.align(), 2 as I64, "layout_u16 align")
+    return 0
+}
+
+@test
+func test_layout_u32() -> I32 {
+    let l: Layout = layout_u32()
+    assert_eq(l.size(), 4 as I64, "layout_u32 size")
+    assert_eq(l.align(), 4 as I64, "layout_u32 align")
+    return 0
+}
+
+@test
+func test_layout_u64() -> I32 {
+    let l: Layout = layout_u64()
+    assert_eq(l.size(), 8 as I64, "layout_u64 size")
+    assert_eq(l.align(), 8 as I64, "layout_u64 align")
+    return 0
+}
+
+@test
+func test_layout_u128() -> I32 {
+    let l: Layout = layout_u128()
+    assert_eq(l.size(), 16 as I64, "layout_u128 size")
+    assert_eq(l.align(), 16 as I64, "layout_u128 align")
+    return 0
+}
+
+@test
+func test_layout_ptr() -> I32 {
+    let l: Layout = layout_ptr()
+    assert_eq(l.size(), 8 as I64, "layout_ptr size")
+    assert_eq(l.align(), 8 as I64, "layout_ptr align")
+    return 0
+}
+
+// === Utility functions ===
+
+@test
+func test_default_alloc_align() -> I32 {
+    let align: I64 = default_alloc_align()
+    assert_eq(align, 16 as I64, "default alignment is 16")
+    return 0
+}
+
+@test
+func test_min_alloc_size() -> I32 {
+    let size: I64 = min_alloc_size()
+    assert_eq(size, 16 as I64, "min alloc size is 16")
+    return 0
+}
+
+// === Array allocation ===
+
+@test
+func test_alloc_array_dealloc_array() -> I32 {
+    let ptr = alloc_array(4, 4, 10)
+    dealloc_array(ptr, 4, 4, 10)
+    return 0
+}
+
+@test
+func test_alloc_array_zeroed_dealloc_array() -> I32 {
+    let ptr = alloc_array_zeroed(8, 8, 5)
+    dealloc_array(ptr, 8, 8, 5)
+    return 0
+}

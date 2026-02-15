@@ -1,0 +1,26 @@
+// Tests for core::intrinsics — type_name, type_id
+use test::{assert, assert_eq}
+use core::intrinsics::{type_name, type_id}
+
+@test
+func test_type_name_i32() -> I32 {
+    let name: Str = type_name[I32]()
+    assert(name.len() > 0, "type_name[I32] should return non-empty string")
+    return 0
+}
+
+@test
+func test_type_id_i32_consistent() -> I32 {
+    let id1: U64 = type_id[I32]()
+    let id2: U64 = type_id[I32]()
+    assert_eq(id1, id2, "type_id[I32] should be consistent")
+    return 0
+}
+
+@test
+func test_type_id_different_types() -> I32 {
+    let id_i32: U64 = type_id[I32]()
+    let id_i64: U64 = type_id[I64]()
+    assert(id_i32 != id_i64, "type_id for I32 and I64 should differ")
+    return 0
+}

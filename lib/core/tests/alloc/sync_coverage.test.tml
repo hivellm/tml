@@ -1,0 +1,32 @@
+// Tests for alloc/sync — uncovered: new, get, strong_count, is_unique, sync() free fn
+use test
+use core::alloc::sync::{Sync, sync}
+
+@test
+func test_sync_new_and_get() -> I32 {
+    let s: Sync[I32] = Sync::new(42)
+    assert_eq(s.get(), 42, "Sync::new(42) get should be 42")
+    return 0
+}
+
+@test
+func test_sync_strong_count() -> I32 {
+    let s: Sync[I32] = Sync::new(10)
+    assert_eq(s.strong_count(), 1, "new Sync strong_count should be 1")
+    return 0
+}
+
+@test
+func test_sync_is_unique() -> I32 {
+    let s: Sync[I32] = Sync::new(99)
+    assert(s.is_unique(), "new Sync should be unique")
+    return 0
+}
+
+@test
+func test_sync_free_function() -> I32 {
+    let s: Sync[I32] = sync[I32](77)
+    assert_eq(s.get(), 77, "sync(77) should create Sync with value 77")
+    assert_eq(s.strong_count(), 1, "sync() should have refcount 1")
+    return 0
+}

@@ -1,0 +1,765 @@
+// Tests for zlib streaming compression classes (Deflate, DeflateRaw, Inflate, InflateRaw, Unzip)
+// and factory functions.
+// Note: Gzip/Gunzip stream tests are in zlib_gzip.test.tml
+
+use test
+use std::zlib::stream::{Deflate, DeflateRaw, Inflate, InflateRaw, Unzip, Gunzip}
+use std::zlib::stream::{create_deflate, create_deflate_with_options}
+use std::zlib::stream::{create_deflate_raw, create_deflate_raw_with_options}
+use std::zlib::stream::{create_inflate, create_inflate_with_options}
+use std::zlib::stream::{create_inflate_raw, create_inflate_raw_with_options}
+use std::zlib::stream::{create_gunzip, create_gunzip_with_options}
+use std::zlib::stream::{create_unzip, create_unzip_with_options}
+use std::zlib::{deflate, deflate_raw, gzip}
+use std::zlib::options::ZlibOptions
+use std::zlib::error::ZlibError
+use std::zlib::constants::*
+use std::collections::Buffer
+
+// ============================================================================
+// Deflate Stream Tests
+// ============================================================================
+
+@test
+func test_deflate_new() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        assert(false, "Deflate::new should succeed")
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default().with_level(6)
+    let result: Outcome[Deflate, ZlibError] = Deflate::with_options(opts)
+    if result.is_err() {
+        assert(false, "Deflate::with_options should succeed")
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_write() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("Hello, World!")
+    if wr.is_err() {
+        d.destroy()
+        assert(false, "Deflate::write should succeed")
+        return 1
+    }
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_finish() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("Hello, World!")
+    let fin: Outcome[Buffer, ZlibError] = d.finish()
+    if fin.is_err() {
+        d.destroy()
+        assert(false, "Deflate::finish should succeed")
+        return 1
+    }
+    let buf: Buffer = fin.unwrap()
+    assert(buf.len() > 0, "finish should produce output")
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_flush() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("Test data for flush")
+    let fl: Outcome[Buffer, ZlibError] = d.flush()
+    if fl.is_err() {
+        d.destroy()
+        assert(false, "Deflate::flush should succeed")
+        return 1
+    }
+    let buf: Buffer = fl.unwrap()
+    assert(buf.len() > 0, "flush should produce output")
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_full_flush() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("Test data for full flush")
+    let fl: Outcome[Buffer, ZlibError] = d.full_flush()
+    if fl.is_err() {
+        d.destroy()
+        assert(false, "Deflate::full_flush should succeed")
+        return 1
+    }
+    let buf: Buffer = fl.unwrap()
+    assert(buf.len() > 0, "full_flush should produce output")
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_reset() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("Some data")
+    let reset_result: Outcome[Unit, ZlibError] = d.reset()
+    if reset_result.is_err() {
+        d.destroy()
+        assert(false, "Deflate::reset should succeed")
+        return 1
+    }
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_bytes_written() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = Deflate::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("Hello bytes written test data")
+    let bytes: I64 = d.bytes_written()
+    assert(bytes >= 0 as I64, "bytes_written should be non-negative")
+    d.destroy()
+    return 0
+}
+
+// ============================================================================
+// Deflate + Inflate Roundtrip
+// ============================================================================
+
+@test
+func test_deflate_write_multiple_chunks() -> I32 {
+    let dr: Outcome[Deflate, ZlibError] = Deflate::new()
+    if dr.is_err() {
+        return 1
+    }
+    let d: Deflate = dr.unwrap()
+    let w1: Outcome[Buffer, ZlibError] = d.write("Chunk one. ")
+    let w2: Outcome[Buffer, ZlibError] = d.write("Chunk two. ")
+    let w3: Outcome[Buffer, ZlibError] = d.write("Chunk three.")
+    let fin: Outcome[Buffer, ZlibError] = d.finish()
+    if fin.is_err() {
+        d.destroy()
+        assert(false, "finish after multi-write should succeed")
+        return 1
+    }
+    let buf: Buffer = fin.unwrap()
+    assert(buf.len() > 0, "multi-chunk finish should produce output")
+    d.destroy()
+    return 0
+}
+
+// ============================================================================
+// Inflate Stream Tests (use one-shot deflate for input)
+// ============================================================================
+
+@test
+func test_inflate_new() -> I32 {
+    let result: Outcome[Inflate, ZlibError] = Inflate::new()
+    if result.is_err() {
+        assert(false, "Inflate::new should succeed")
+        return 1
+    }
+    let inf: Inflate = result.unwrap()
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_inflate_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Inflate, ZlibError] = Inflate::with_options(opts)
+    if result.is_err() {
+        assert(false, "Inflate::with_options should succeed")
+        return 1
+    }
+    let inf: Inflate = result.unwrap()
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_inflate_write() -> I32 {
+    // Compress with one-shot deflate, then decompress with streaming Inflate
+    let original: Str = "Hello, Inflate stream test!"
+    let comp: Outcome[Buffer, ZlibError] = deflate(original)
+    if comp.is_err() {
+        return 1
+    }
+    var compressed: Buffer = comp.unwrap()
+
+    let ir: Outcome[Inflate, ZlibError] = Inflate::new()
+    if ir.is_err() {
+        return 1
+    }
+    let inf: Inflate = ir.unwrap()
+    let decomp: Outcome[Buffer, ZlibError] = inf.write(ref compressed)
+    if decomp.is_err() {
+        inf.destroy()
+        assert(false, "Inflate::write should succeed")
+        return 1
+    }
+    let out: Buffer = decomp.unwrap()
+    assert(out.len() > 0, "decompressed output should not be empty")
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_inflate_is_finished() -> I32 {
+    let ir: Outcome[Inflate, ZlibError] = Inflate::new()
+    if ir.is_err() {
+        return 1
+    }
+    let inf: Inflate = ir.unwrap()
+    // Before any data, should not be finished
+    let finished: Bool = inf.is_finished()
+    assert_eq(finished, false, "should not be finished before data")
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_inflate_bytes_written() -> I32 {
+    let ir: Outcome[Inflate, ZlibError] = Inflate::new()
+    if ir.is_err() {
+        return 1
+    }
+    let inf: Inflate = ir.unwrap()
+    let bytes: I64 = inf.bytes_written()
+    assert(bytes >= 0 as I64, "bytes_written should be non-negative")
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_inflate_reset() -> I32 {
+    let ir: Outcome[Inflate, ZlibError] = Inflate::new()
+    if ir.is_err() {
+        return 1
+    }
+    let inf: Inflate = ir.unwrap()
+    let reset_result: Outcome[Unit, ZlibError] = inf.reset()
+    if reset_result.is_err() {
+        inf.destroy()
+        assert(false, "Inflate::reset should succeed")
+        return 1
+    }
+    inf.destroy()
+    return 0
+}
+
+// ============================================================================
+// DeflateRaw Stream Tests
+// ============================================================================
+
+@test
+func test_deflate_raw_new() -> I32 {
+    let result: Outcome[DeflateRaw, ZlibError] = DeflateRaw::new()
+    if result.is_err() {
+        assert(false, "DeflateRaw::new should succeed")
+        return 1
+    }
+    let d: DeflateRaw = result.unwrap()
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_raw_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(6)
+    let result: Outcome[DeflateRaw, ZlibError] = DeflateRaw::with_options(opts)
+    if result.is_err() {
+        assert(false, "DeflateRaw::with_options should succeed")
+        return 1
+    }
+    let d: DeflateRaw = result.unwrap()
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_raw_write() -> I32 {
+    let result: Outcome[DeflateRaw, ZlibError] = DeflateRaw::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: DeflateRaw = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("Raw deflate write test")
+    if wr.is_err() {
+        d.destroy()
+        assert(false, "DeflateRaw::write should succeed")
+        return 1
+    }
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_raw_finish() -> I32 {
+    let result: Outcome[DeflateRaw, ZlibError] = DeflateRaw::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: DeflateRaw = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("Raw finish test data")
+    let fin: Outcome[Buffer, ZlibError] = d.finish()
+    if fin.is_err() {
+        d.destroy()
+        assert(false, "DeflateRaw::finish should succeed")
+        return 1
+    }
+    let buf: Buffer = fin.unwrap()
+    assert(buf.len() > 0, "raw finish should produce output")
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_raw_flush() -> I32 {
+    let result: Outcome[DeflateRaw, ZlibError] = DeflateRaw::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: DeflateRaw = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("Raw flush test data")
+    let fl: Outcome[Buffer, ZlibError] = d.flush()
+    if fl.is_err() {
+        d.destroy()
+        assert(false, "DeflateRaw::flush should succeed")
+        return 1
+    }
+    let buf: Buffer = fl.unwrap()
+    assert(buf.len() > 0, "raw flush should produce output")
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_raw_reset() -> I32 {
+    let result: Outcome[DeflateRaw, ZlibError] = DeflateRaw::new()
+    if result.is_err() {
+        return 1
+    }
+    let d: DeflateRaw = result.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write("data")
+    let reset_result: Outcome[Unit, ZlibError] = d.reset()
+    if reset_result.is_err() {
+        d.destroy()
+        assert(false, "DeflateRaw::reset should succeed")
+        return 1
+    }
+    d.destroy()
+    return 0
+}
+
+// ============================================================================
+// InflateRaw Stream Tests
+// ============================================================================
+
+@test
+func test_inflate_raw_new() -> I32 {
+    let result: Outcome[InflateRaw, ZlibError] = InflateRaw::new()
+    if result.is_err() {
+        assert(false, "InflateRaw::new should succeed")
+        return 1
+    }
+    let inf: InflateRaw = result.unwrap()
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_inflate_raw_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::deflate_raw()
+    let result: Outcome[InflateRaw, ZlibError] = InflateRaw::with_options(opts)
+    if result.is_err() {
+        assert(false, "InflateRaw::with_options should succeed")
+        return 1
+    }
+    let inf: InflateRaw = result.unwrap()
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_inflate_raw_write() -> I32 {
+    // Compress with one-shot deflate_raw, then decompress with streaming InflateRaw
+    let original: Str = "Hello, InflateRaw stream test!"
+    let comp: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if comp.is_err() {
+        return 1
+    }
+    var compressed: Buffer = comp.unwrap()
+
+    let ir: Outcome[InflateRaw, ZlibError] = InflateRaw::new()
+    if ir.is_err() {
+        return 1
+    }
+    let inf: InflateRaw = ir.unwrap()
+    let decomp: Outcome[Buffer, ZlibError] = inf.write(ref compressed)
+    if decomp.is_err() {
+        inf.destroy()
+        assert(false, "InflateRaw::write should succeed")
+        return 1
+    }
+    let out: Buffer = decomp.unwrap()
+    assert(out.len() > 0, "raw decompressed output should not be empty")
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_inflate_raw_reset() -> I32 {
+    let ir: Outcome[InflateRaw, ZlibError] = InflateRaw::new()
+    if ir.is_err() {
+        return 1
+    }
+    let inf: InflateRaw = ir.unwrap()
+    let reset_result: Outcome[Unit, ZlibError] = inf.reset()
+    if reset_result.is_err() {
+        inf.destroy()
+        assert(false, "InflateRaw::reset should succeed")
+        return 1
+    }
+    inf.destroy()
+    return 0
+}
+
+// ============================================================================
+// Unzip Stream Tests
+// ============================================================================
+
+@test
+func test_unzip_new() -> I32 {
+    let result: Outcome[Unzip, ZlibError] = Unzip::new()
+    if result.is_err() {
+        assert(false, "Unzip::new should succeed")
+        return 1
+    }
+    let uz: Unzip = result.unwrap()
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_unzip_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::auto_detect()
+    let result: Outcome[Unzip, ZlibError] = Unzip::with_options(opts)
+    if result.is_err() {
+        assert(false, "Unzip::with_options should succeed")
+        return 1
+    }
+    let uz: Unzip = result.unwrap()
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_unzip_write_zlib() -> I32 {
+    // Unzip should auto-detect zlib format
+    let original: Str = "Unzip zlib auto-detect test data!"
+    let comp: Outcome[Buffer, ZlibError] = deflate(original)
+    if comp.is_err() {
+        return 1
+    }
+    var compressed: Buffer = comp.unwrap()
+
+    let ur: Outcome[Unzip, ZlibError] = Unzip::new()
+    if ur.is_err() {
+        return 1
+    }
+    let uz: Unzip = ur.unwrap()
+    let decomp: Outcome[Buffer, ZlibError] = uz.write(ref compressed)
+    if decomp.is_err() {
+        uz.destroy()
+        assert(false, "Unzip::write should succeed for zlib data")
+        return 1
+    }
+    let out: Buffer = decomp.unwrap()
+    assert(out.len() > 0, "unzip decompressed output should not be empty")
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_unzip_write_gzip() -> I32 {
+    // Unzip should auto-detect gzip format
+    let original: Str = "Unzip gzip auto-detect test data!"
+    let comp: Outcome[Buffer, ZlibError] = gzip(original)
+    if comp.is_err() {
+        return 1
+    }
+    var compressed: Buffer = comp.unwrap()
+
+    let ur: Outcome[Unzip, ZlibError] = Unzip::new()
+    if ur.is_err() {
+        return 1
+    }
+    let uz: Unzip = ur.unwrap()
+    let decomp: Outcome[Buffer, ZlibError] = uz.write(ref compressed)
+    if decomp.is_err() {
+        uz.destroy()
+        assert(false, "Unzip::write should succeed for gzip data")
+        return 1
+    }
+    let out: Buffer = decomp.unwrap()
+    assert(out.len() > 0, "unzip gzip output should not be empty")
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_unzip_reset() -> I32 {
+    let ur: Outcome[Unzip, ZlibError] = Unzip::new()
+    if ur.is_err() {
+        return 1
+    }
+    let uz: Unzip = ur.unwrap()
+    let reset_result: Outcome[Unit, ZlibError] = uz.reset()
+    if reset_result.is_err() {
+        uz.destroy()
+        assert(false, "Unzip::reset should succeed")
+        return 1
+    }
+    uz.destroy()
+    return 0
+}
+
+// ============================================================================
+// Factory Function Tests
+// ============================================================================
+
+@test
+func test_create_deflate() -> I32 {
+    let result: Outcome[Deflate, ZlibError] = create_deflate()
+    if result.is_err() {
+        assert(false, "create_deflate should succeed")
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    d.destroy()
+    return 0
+}
+
+@test
+func test_create_deflate_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default().with_level(9)
+    let result: Outcome[Deflate, ZlibError] = create_deflate_with_options(opts)
+    if result.is_err() {
+        assert(false, "create_deflate_with_options should succeed")
+        return 1
+    }
+    let d: Deflate = result.unwrap()
+    d.destroy()
+    return 0
+}
+
+@test
+func test_create_deflate_raw() -> I32 {
+    let result: Outcome[DeflateRaw, ZlibError] = create_deflate_raw()
+    if result.is_err() {
+        assert(false, "create_deflate_raw should succeed")
+        return 1
+    }
+    let d: DeflateRaw = result.unwrap()
+    d.destroy()
+    return 0
+}
+
+@test
+func test_create_deflate_raw_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::deflate_raw().with_level(3)
+    let result: Outcome[DeflateRaw, ZlibError] = create_deflate_raw_with_options(opts)
+    if result.is_err() {
+        assert(false, "create_deflate_raw_with_options should succeed")
+        return 1
+    }
+    let d: DeflateRaw = result.unwrap()
+    d.destroy()
+    return 0
+}
+
+@test
+func test_create_inflate() -> I32 {
+    let result: Outcome[Inflate, ZlibError] = create_inflate()
+    if result.is_err() {
+        assert(false, "create_inflate should succeed")
+        return 1
+    }
+    let inf: Inflate = result.unwrap()
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_create_inflate_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Inflate, ZlibError] = create_inflate_with_options(opts)
+    if result.is_err() {
+        assert(false, "create_inflate_with_options should succeed")
+        return 1
+    }
+    let inf: Inflate = result.unwrap()
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_create_inflate_raw() -> I32 {
+    let result: Outcome[InflateRaw, ZlibError] = create_inflate_raw()
+    if result.is_err() {
+        assert(false, "create_inflate_raw should succeed")
+        return 1
+    }
+    let inf: InflateRaw = result.unwrap()
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_create_inflate_raw_with_options() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::deflate_raw()
+    let result: Outcome[InflateRaw, ZlibError] = create_inflate_raw_with_options(opts)
+    if result.is_err() {
+        assert(false, "create_inflate_raw_with_options should succeed")
+        return 1
+    }
+    let inf: InflateRaw = result.unwrap()
+    inf.destroy()
+    return 0
+}
+
+@test
+func test_create_gunzip_factory() -> I32 {
+    let result: Outcome[Gunzip, ZlibError] = create_gunzip()
+    if result.is_err() {
+        assert(false, "create_gunzip should succeed")
+        return 1
+    }
+    let gz: Gunzip = result.unwrap()
+    gz.destroy()
+    return 0
+}
+
+@test
+func test_create_gunzip_with_options_factory() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::default()
+    let result: Outcome[Gunzip, ZlibError] = create_gunzip_with_options(opts)
+    if result.is_err() {
+        assert(false, "create_gunzip_with_options should succeed")
+        return 1
+    }
+    let gz: Gunzip = result.unwrap()
+    gz.destroy()
+    return 0
+}
+
+@test
+func test_create_unzip_factory() -> I32 {
+    let result: Outcome[Unzip, ZlibError] = create_unzip()
+    if result.is_err() {
+        assert(false, "create_unzip should succeed")
+        return 1
+    }
+    let uz: Unzip = result.unwrap()
+    uz.destroy()
+    return 0
+}
+
+@test
+func test_create_unzip_with_options_factory() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::auto_detect()
+    let result: Outcome[Unzip, ZlibError] = create_unzip_with_options(opts)
+    if result.is_err() {
+        assert(false, "create_unzip_with_options should succeed")
+        return 1
+    }
+    let uz: Unzip = result.unwrap()
+    uz.destroy()
+    return 0
+}
+
+// ============================================================================
+// Deflate write_buffer Tests
+// ============================================================================
+
+@test
+func test_deflate_write_buffer() -> I32 {
+    // Create a buffer from one-shot deflate, then feed to streaming Deflate::write_buffer
+    let original: Str = "Test data for write_buffer"
+    let comp: Outcome[Buffer, ZlibError] = deflate(original)
+    if comp.is_err() {
+        return 1
+    }
+    var buf: Buffer = comp.unwrap()
+
+    let dr: Outcome[Deflate, ZlibError] = Deflate::new()
+    if dr.is_err() {
+        return 1
+    }
+    let d: Deflate = dr.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write_buffer(ref buf)
+    if wr.is_err() {
+        d.destroy()
+        assert(false, "Deflate::write_buffer should succeed")
+        return 1
+    }
+    d.destroy()
+    return 0
+}
+
+@test
+func test_deflate_raw_write_buffer() -> I32 {
+    let original: Str = "Test data for raw write_buffer"
+    let comp: Outcome[Buffer, ZlibError] = deflate_raw(original)
+    if comp.is_err() {
+        return 1
+    }
+    var buf: Buffer = comp.unwrap()
+
+    let dr: Outcome[DeflateRaw, ZlibError] = DeflateRaw::new()
+    if dr.is_err() {
+        return 1
+    }
+    let d: DeflateRaw = dr.unwrap()
+    let wr: Outcome[Buffer, ZlibError] = d.write_buffer(ref buf)
+    if wr.is_err() {
+        d.destroy()
+        assert(false, "DeflateRaw::write_buffer should succeed")
+        return 1
+    }
+    d.destroy()
+    return 0
+}

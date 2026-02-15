@@ -1,0 +1,51 @@
+// Tests for core::fmt::rt — Count::resolve, Placeholder::new, UnsafeArg, format_join
+use test::{assert, assert_eq}
+use core::fmt::rt::{Count, Argument, Placeholder, UnsafeArg, format_join}
+
+// === Count::resolve ===
+
+@test
+func test_count_is_resolve() -> I32 {
+    let c: Count = Count::Is(42)
+    let args: [Argument; 0] = []
+    let result = c.resolve(ref args)
+    assert(result.is_just(), "Count::Is should resolve to Just")
+    assert_eq(result.unwrap(), 42 as I64, "Count::Is(42) resolves to 42")
+    return 0
+}
+
+@test
+func test_count_implied_resolve() -> I32 {
+    let c: Count = Count::Implied
+    let args: [Argument; 0] = []
+    let result = c.resolve(ref args)
+    assert(result.is_nothing(), "Count::Implied resolves to Nothing")
+    return 0
+}
+
+@test
+func test_count_param_resolve() -> I32 {
+    let c: Count = Count::Param(0)
+    let args: [Argument; 0] = []
+    let result = c.resolve(ref args)
+    assert(result.is_nothing(), "Count::Param resolves to Nothing (stub)")
+    return 0
+}
+
+// === Placeholder::new ===
+
+@test
+func test_placeholder_new() -> I32 {
+    let ph: Placeholder = Placeholder::new(5)
+    assert_eq(ph.position, 5 as I64, "Placeholder::new position")
+    return 0
+}
+
+// === UnsafeArg::new ===
+
+@test
+func test_unsafe_arg_new() -> I32 {
+    let _ua: UnsafeArg = UnsafeArg::new()
+    assert(true, "UnsafeArg::new should not crash")
+    return 0
+}

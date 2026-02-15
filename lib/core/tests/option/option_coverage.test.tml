@@ -1,0 +1,16 @@
+// Tests for uncovered Maybe[T] methods
+// Most are BLOCKED by generic codegen bugs:
+// - flatten: nested Maybe[Maybe[I32]] layout mismatch
+// - also[U]: multi-type generic monomorphization fails
+// - ok_or[E]: generic param E not substituted
+// Keeping file as placeholder until codegen is fixed
+use test::{assert, assert_eq}
+
+@test
+func test_maybe_placeholder() -> I32 {
+    // Maybe method tests deferred — generic codegen blocked
+    let x: Maybe[I32] = Just(42)
+    assert(x.is_just(), "Just is just")
+    assert_eq(x.unwrap(), 42, "unwrap gives 42")
+    return 0
+}

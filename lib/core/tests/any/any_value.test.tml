@@ -1,0 +1,58 @@
+// Tests for core::any — TypeId::of generic instantiation and debug_string
+use test
+use core::any::TypeId
+
+// =============================================================================
+// TypeId::of — generic instantiation with concrete types
+// =============================================================================
+
+@test
+func test_typeid_of_i32() -> I32 {
+    let id: TypeId = TypeId::of[I32]()
+    // Just verify it doesn't crash and produces a value
+    assert(id.id >= 0, "TypeId::of[I32] should produce a valid id")
+    return 0
+}
+
+@test
+func test_typeid_of_same_type_equal() -> I32 {
+    let id1: TypeId = TypeId::of[I32]()
+    let id2: TypeId = TypeId::of[I32]()
+    assert(id1.eq(ref id2), "TypeId::of[I32] should be consistent")
+    return 0
+}
+
+@test
+func test_typeid_of_str() -> I32 {
+    let id: TypeId = TypeId::of[Str]()
+    // Just verify it doesn't crash
+    assert(id.id >= 0, "TypeId::of[Str] should produce a valid id")
+    return 0
+}
+
+@test
+func test_typeid_of_bool() -> I32 {
+    let id: TypeId = TypeId::of[Bool]()
+    assert(id.id >= 0, "TypeId::of[Bool] should produce a valid id")
+    return 0
+}
+
+// =============================================================================
+// TypeId debug_string
+// =============================================================================
+
+@test
+func test_typeid_debug_string() -> I32 {
+    let id: TypeId = TypeId { id: 12345 }
+    let dbg: Str = id.debug_string()
+    assert_eq(dbg, "TypeId(12345)", "TypeId debug_string")
+    return 0
+}
+
+@test
+func test_typeid_debug_string_zero() -> I32 {
+    let id: TypeId = TypeId { id: 0 }
+    let dbg: Str = id.debug_string()
+    assert_eq(dbg, "TypeId(0)", "TypeId debug_string zero")
+    return 0
+}

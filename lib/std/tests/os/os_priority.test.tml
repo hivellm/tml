@@ -1,0 +1,16 @@
+// Tests for os::set_priority
+use test::{assert, assert_eq}
+use std::os
+
+@test
+func test_set_priority_current_process() -> I32 {
+    // pid 0 means current process
+    let current_priority: I32 = os::get_priority(0)
+    // set priority to the same value (no real change, safe)
+    let success: Bool = os::set_priority(0, current_priority)
+    assert(success, "set_priority with current value should succeed")
+    // verify it didn't change
+    let after: I32 = os::get_priority(0)
+    assert_eq(after, current_priority, "priority should remain the same")
+    return 0
+}

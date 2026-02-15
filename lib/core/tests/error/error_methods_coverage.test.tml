@@ -1,0 +1,75 @@
+// Tests for uncovered error module methods
+// IoError::kind, IoError::with_message, ParseError/SimpleError fields
+use test::{assert, assert_eq}
+use core::error::{IoError, IoErrorKind, ParseError, SimpleError}
+
+// === IoError::kind() ===
+
+@test
+func test_io_error_kind_method_not_found() -> I32 {
+    let err = IoError::new(IoErrorKind::NotFound)
+    let k: IoErrorKind = err.kind()
+    assert_eq(k.debug_string(), "NotFound", "kind() should return NotFound")
+    return 0
+}
+
+@test
+func test_io_error_kind_method_timed_out() -> I32 {
+    let err = IoError::new(IoErrorKind::TimedOut)
+    let k: IoErrorKind = err.kind()
+    assert_eq(k.debug_string(), "TimedOut", "kind() should return TimedOut")
+    return 0
+}
+
+@test
+func test_io_error_kind_method_other() -> I32 {
+    let err = IoError::new(IoErrorKind::Other)
+    let k: IoErrorKind = err.kind()
+    assert_eq(k.debug_string(), "Other", "kind() should return Other")
+    return 0
+}
+
+// === IoError::with_message debug ===
+
+@test
+func test_io_error_with_message_debug() -> I32 {
+    let err = IoError::with_message(IoErrorKind::NotFound, "config.json")
+    let dbg: Str = err.debug_string()
+    assert(dbg.contains("IoError"), "debug should contain IoError")
+    return 0
+}
+
+@test
+func test_io_error_with_message_kind_preserved() -> I32 {
+    let err = IoError::with_message(IoErrorKind::PermissionDenied, "/etc/shadow")
+    let k: IoErrorKind = err.kind()
+    assert_eq(k.debug_string(), "PermissionDenied", "kind preserved with message")
+    return 0
+}
+
+// === ParseError field access (message only, position is Maybe[I64] which is blocked) ===
+
+@test
+func test_parse_error_message_field() -> I32 {
+    let err = ParseError::new("syntax error")
+    assert_eq(err.message, "syntax error", "ParseError message field")
+    return 0
+}
+
+// === SimpleError field access ===
+
+@test
+func test_simple_error_message_field() -> I32 {
+    let err = SimpleError::new("test msg")
+    assert_eq(err.message, "test msg", "SimpleError message field")
+    return 0
+}
+
+// === IoError kind field access ===
+
+@test
+func test_io_error_kind_field() -> I32 {
+    let err = IoError::new(IoErrorKind::BrokenPipe)
+    assert_eq(err.kind.debug_string(), "BrokenPipe", "IoError kind field")
+    return 0
+}

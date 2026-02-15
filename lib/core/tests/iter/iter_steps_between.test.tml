@@ -1,0 +1,12 @@
+// Tests for Step::steps_between — concrete impls for I8, I16, I32, I64, U8, U16, U32, U64
+// BLOCKED: Static trait method dispatch — function not emitted to LLVM IR
+// Error: 'use of undefined value @tml_s0_I32_steps_between'
+// Keeping file as placeholder until codegen is fixed
+use test::{assert, assert_eq}
+
+@test
+func test_steps_between_placeholder() -> I32 {
+    // steps_between tests deferred — static trait dispatch codegen blocked
+    assert(true, "placeholder")
+    return 0
+}

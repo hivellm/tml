@@ -1,0 +1,154 @@
+// Tests for IoErrorKind to_string and debug_string — uncovered variants
+use test::{assert, assert_eq}
+use core::error::{IoError, IoErrorKind}
+
+// === to_string coverage for untested variants ===
+
+@test
+func test_io_kind_connection_reset_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::ConnectionReset)
+    assert_eq(err.to_string(), "connection reset", "ConnectionReset message")
+    return 0
+}
+
+@test
+func test_io_kind_connection_aborted_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::ConnectionAborted)
+    assert_eq(err.to_string(), "connection aborted", "ConnectionAborted message")
+    return 0
+}
+
+@test
+func test_io_kind_not_connected_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::NotConnected)
+    assert_eq(err.to_string(), "not connected", "NotConnected message")
+    return 0
+}
+
+@test
+func test_io_kind_addr_in_use_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::AddrInUse)
+    assert_eq(err.to_string(), "address in use", "AddrInUse message")
+    return 0
+}
+
+@test
+func test_io_kind_addr_not_available_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::AddrNotAvailable)
+    assert_eq(err.to_string(), "address not available", "AddrNotAvailable message")
+    return 0
+}
+
+@test
+func test_io_kind_would_block_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::WouldBlock)
+    assert_eq(err.to_string(), "operation would block", "WouldBlock message")
+    return 0
+}
+
+@test
+func test_io_kind_invalid_input_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::InvalidInput)
+    assert_eq(err.to_string(), "invalid input parameter", "InvalidInput message")
+    return 0
+}
+
+@test
+func test_io_kind_invalid_data_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::InvalidData)
+    assert_eq(err.to_string(), "invalid data", "InvalidData message")
+    return 0
+}
+
+@test
+func test_io_kind_write_zero_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::WriteZero)
+    assert_eq(err.to_string(), "write zero", "WriteZero message")
+    return 0
+}
+
+@test
+func test_io_kind_interrupted_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::Interrupted)
+    assert_eq(err.to_string(), "operation interrupted", "Interrupted message")
+    return 0
+}
+
+@test
+func test_io_kind_out_of_memory_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::OutOfMemory)
+    assert_eq(err.to_string(), "out of memory", "OutOfMemory message")
+    return 0
+}
+
+@test
+func test_io_kind_other_to_string() -> I32 {
+    let err = IoError::new(IoErrorKind::Other)
+    assert_eq(err.to_string(), "other error", "Other message")
+    return 0
+}
+
+// === debug_string coverage for untested variants ===
+
+@test
+func test_io_kind_connection_reset_debug() -> I32 {
+    let k: IoErrorKind = IoErrorKind::ConnectionReset
+    assert_eq(k.debug_string(), "ConnectionReset", "ConnectionReset debug")
+    return 0
+}
+
+@test
+func test_io_kind_connection_aborted_debug() -> I32 {
+    let k: IoErrorKind = IoErrorKind::ConnectionAborted
+    assert_eq(k.debug_string(), "ConnectionAborted", "ConnectionAborted debug")
+    return 0
+}
+
+@test
+func test_io_kind_not_connected_debug() -> I32 {
+    let k: IoErrorKind = IoErrorKind::NotConnected
+    assert_eq(k.debug_string(), "NotConnected", "NotConnected debug")
+    return 0
+}
+
+@test
+func test_io_kind_addr_not_available_debug() -> I32 {
+    let k: IoErrorKind = IoErrorKind::AddrNotAvailable
+    assert_eq(k.debug_string(), "AddrNotAvailable", "AddrNotAvailable debug")
+    return 0
+}
+
+@test
+func test_io_kind_invalid_data_debug() -> I32 {
+    let k: IoErrorKind = IoErrorKind::InvalidData
+    assert_eq(k.debug_string(), "InvalidData", "InvalidData debug")
+    return 0
+}
+
+@test
+func test_io_kind_write_zero_debug() -> I32 {
+    let k: IoErrorKind = IoErrorKind::WriteZero
+    assert_eq(k.debug_string(), "WriteZero", "WriteZero debug")
+    return 0
+}
+
+@test
+func test_io_kind_interrupted_debug() -> I32 {
+    let k: IoErrorKind = IoErrorKind::Interrupted
+    assert_eq(k.debug_string(), "Interrupted", "Interrupted debug")
+    return 0
+}
+
+@test
+func test_io_kind_out_of_memory_debug() -> I32 {
+    let k: IoErrorKind = IoErrorKind::OutOfMemory
+    assert_eq(k.debug_string(), "OutOfMemory", "OutOfMemory debug")
+    return 0
+}
+
+@test
+func test_io_kind_not_found_debug() -> I32 {
+    let k: IoErrorKind = IoErrorKind::NotFound
+    assert_eq(k.debug_string(), "NotFound", "NotFound debug")
+    return 0
+}

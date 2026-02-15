@@ -1,0 +1,47 @@
+// Tests for fmt::float — is_finite, infinity_str, nan_str, round_to_precision
+use test::{assert, assert_eq}
+use core::fmt::float::{is_finite_f64, is_finite_f32, infinity_str, neg_infinity_str, nan_str, round_to_precision}
+
+@test
+func test_is_finite_f64_normal() -> I32 {
+    assert(is_finite_f64(3.14), "3.14 should be finite")
+    assert(is_finite_f64(0.0), "0.0 should be finite")
+    assert(is_finite_f64(-100.5), "-100.5 should be finite")
+    return 0
+}
+
+@test
+func test_is_finite_f32_normal() -> I32 {
+    let x: F32 = 3.14 as F32
+    assert(is_finite_f32(x), "3.14f should be finite")
+    let zero: F32 = 0.0 as F32
+    assert(is_finite_f32(zero), "0.0f should be finite")
+    return 0
+}
+
+@test
+func test_infinity_str() -> I32 {
+    assert_eq(infinity_str(), "inf", "infinity_str should return inf")
+    return 0
+}
+
+@test
+func test_neg_infinity_str() -> I32 {
+    assert_eq(neg_infinity_str(), "-inf", "neg_infinity_str should return -inf")
+    return 0
+}
+
+@test
+func test_nan_str() -> I32 {
+    assert_eq(nan_str(), "NaN", "nan_str should return NaN")
+    return 0
+}
+
+@test
+func test_round_to_precision_2() -> I32 {
+    let result: F64 = round_to_precision(3.14159, 2)
+    // Should round to 3.14
+    assert(result > 3.13, "rounded value should be > 3.13")
+    assert(result < 3.15, "rounded value should be < 3.15")
+    return 0
+}

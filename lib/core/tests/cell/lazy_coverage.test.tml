@@ -1,0 +1,12 @@
+// Tests for core::cell::lazy — LazyCell coverage
+// BLOCKED: LazyCell requires closure codegen (FnOnce) which is broken
+// Generic monomorphization error: '%struct.LazyCell__T__Fn' vs '%struct.LazyCell__I32__Fn'
+// Keeping file as placeholder until codegen is fixed
+use test::{assert, assert_eq}
+
+@test
+func test_lazy_placeholder() -> I32 {
+    // LazyCell tests deferred — generic + closure codegen blocked
+    assert(true, "placeholder")
+    return 0
+}

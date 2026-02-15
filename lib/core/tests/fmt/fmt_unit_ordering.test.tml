@@ -1,0 +1,49 @@
+// Tests for uncovered Display/Debug impls: Ordering
+use test::{assert, assert_eq}
+use core::cmp::Ordering
+
+// --- Ordering Display ---
+
+@test
+func test_ordering_less_to_string() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert_eq(o.to_string(), "Less", "Less to_string")
+    return 0
+}
+
+@test
+func test_ordering_equal_to_string() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert_eq(o.to_string(), "Equal", "Equal to_string")
+    return 0
+}
+
+@test
+func test_ordering_greater_to_string() -> I32 {
+    let o: Ordering = Ordering::Greater
+    assert_eq(o.to_string(), "Greater", "Greater to_string")
+    return 0
+}
+
+// --- Ordering Debug ---
+
+@test
+func test_ordering_less_debug() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert_eq(o.debug_string(), "Ordering::Less", "Less debug_string")
+    return 0
+}
+
+@test
+func test_ordering_equal_debug() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert_eq(o.debug_string(), "Ordering::Equal", "Equal debug_string")
+    return 0
+}
+
+@test
+func test_ordering_greater_debug() -> I32 {
+    let o: Ordering = Ordering::Greater
+    assert_eq(o.debug_string(), "Ordering::Greater", "Greater debug_string")
+    return 0
+}

@@ -1,0 +1,90 @@
+// Tests for fmt/rt — uncovered functions: format_args, format_join, Count methods
+use test
+use core::fmt::rt::{Count, FormatSpec, Argument, Placeholder, format_args, format_join}
+
+// =============================================================================
+// Count::to_string (Display impl)
+// =============================================================================
+
+@test
+func test_count_is_to_string() -> I32 {
+    let c: Count = Count::Is(42)
+    let s: Str = c.to_string()
+    assert(s.len() > 0, "Count::Is to_string should produce output")
+    return 0
+}
+
+@test
+func test_count_param_to_string() -> I32 {
+    let c: Count = Count::Param(3)
+    let s: Str = c.to_string()
+    assert(s.len() > 0, "Count::Param to_string should produce output")
+    return 0
+}
+
+@test
+func test_count_implied_to_string() -> I32 {
+    let c: Count = Count::Implied
+    let s: Str = c.to_string()
+    assert(s.len() > 0, "Count::Implied to_string should produce output")
+    return 0
+}
+
+// =============================================================================
+// FormatSpec::debug_string
+// =============================================================================
+
+@test
+func test_format_spec_debug() -> I32 {
+    let spec: FormatSpec = FormatSpec::new()
+    let dbg: Str = spec.debug_string()
+    assert(dbg.len() > 10, "FormatSpec debug_string should produce meaningful output")
+    return 0
+}
+
+@test
+func test_format_spec_with_width_debug() -> I32 {
+    let spec: FormatSpec = FormatSpec::with_width(20)
+    let dbg: Str = spec.debug_string()
+    assert(dbg.len() > 0, "FormatSpec with_width debug_string")
+    return 0
+}
+
+@test
+func test_format_spec_with_precision_debug() -> I32 {
+    let spec: FormatSpec = FormatSpec::with_precision(5)
+    let dbg: Str = spec.debug_string()
+    assert(dbg.len() > 0, "FormatSpec with_precision debug_string")
+    return 0
+}
+
+// =============================================================================
+// Placeholder::with_format
+// =============================================================================
+
+@test
+func test_placeholder_with_format() -> I32 {
+    let spec: FormatSpec = FormatSpec::with_width(10)
+    let ph: Placeholder = Placeholder::with_format(2, spec)
+    assert_eq(ph.position, 2, "Placeholder with_format position")
+    return 0
+}
+
+// =============================================================================
+// Argument::new_with more tests
+// =============================================================================
+
+@test
+func test_argument_new_with_number() -> I32 {
+    let arg: Argument = Argument::new_with("42")
+    assert_eq(arg.as_str(), "42", "Argument::new_with number string")
+    return 0
+}
+
+@test
+func test_argument_formatted_field() -> I32 {
+    let arg: Argument = Argument::new_with("test_value")
+    assert_eq(arg.formatted, "test_value", "Argument formatted field access")
+    return 0
+}
+

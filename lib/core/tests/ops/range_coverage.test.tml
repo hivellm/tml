@@ -1,0 +1,107 @@
+// Tests for ops/range — Range, RangeInclusive, RangeFrom, RangeTo, RangeFull
+// NOTE: contains() methods are blocked by ref T codegen bug (ptr literal)
+use test::{assert, assert_eq}
+use core::ops::range::{Range, RangeInclusive, RangeFrom, RangeTo, RangeToInclusive, RangeFull}
+use core::ops::range::{bound_included, bound_excluded, bound_unbounded}
+
+// =============================================================================
+// Range[I32]
+// =============================================================================
+
+@test
+func test_range_new() -> I32 {
+    let r: Range[I32] = Range::new(1, 5)
+    assert_eq(r.start, 1, "Range start should be 1")
+    assert_eq(r.end, 5, "Range end should be 5")
+    return 0
+}
+
+@test
+func test_range_is_empty() -> I32 {
+    let full: Range[I32] = Range::new(1, 5)
+    assert(not full.is_empty(), "Range 1..5 is not empty")
+    let empty: Range[I32] = Range::new(5, 5)
+    assert(empty.is_empty(), "Range 5..5 is empty")
+    return 0
+}
+
+@test
+func test_range_to_string() -> I32 {
+    let r: Range[I32] = Range::new(1, 10)
+    let s: Str = r.to_string()
+    assert(s.len() > 0, "Range to_string should produce output")
+    return 0
+}
+
+// =============================================================================
+// RangeInclusive[I32]
+// =============================================================================
+
+@test
+func test_range_inclusive_new() -> I32 {
+    let r: RangeInclusive[I32] = RangeInclusive::new(1, 5)
+    assert_eq(*r.start(), 1, "RangeInclusive start should be 1")
+    assert_eq(*r.end(), 5, "RangeInclusive end should be 5")
+    return 0
+}
+
+@test
+func test_range_inclusive_is_empty() -> I32 {
+    let full: RangeInclusive[I32] = RangeInclusive::new(1, 5)
+    assert(not full.is_empty(), "RangeInclusive 1..=5 is not empty")
+    let empty: RangeInclusive[I32] = RangeInclusive::new(5, 1)
+    assert(empty.is_empty(), "RangeInclusive 5..=1 is empty")
+    return 0
+}
+
+@test
+func test_range_inclusive_into_inner() -> I32 {
+    let r: RangeInclusive[I32] = RangeInclusive::new(3, 7)
+    let pair: (I32, I32) = r.into_inner()
+    assert_eq(pair.0, 3, "into_inner start")
+    assert_eq(pair.1, 7, "into_inner end")
+    return 0
+}
+
+@test
+func test_range_inclusive_to_string() -> I32 {
+    let r: RangeInclusive[I32] = RangeInclusive::new(1, 10)
+    let s: Str = r.to_string()
+    assert(s.len() > 0, "RangeInclusive to_string should produce output")
+    return 0
+}
+
+// =============================================================================
+// RangeFull
+// =============================================================================
+
+@test
+func test_range_full_new() -> I32 {
+    let r: RangeFull = RangeFull::new()
+    let s: Str = r.to_string()
+    assert(s.len() > 0, "RangeFull to_string should produce output")
+    return 0
+}
+
+@test
+func test_range_full_debug() -> I32 {
+    let r: RangeFull = RangeFull::new()
+    let s: Str = r.debug_string()
+    assert(s.len() > 0, "RangeFull debug_string should produce output")
+    return 0
+}
+
+// =============================================================================
+// Free functions for Bound
+// =============================================================================
+
+@test
+func test_bound_free_functions() -> I32 {
+    let inc: Bound[I32] = bound_included[I32](42)
+    assert(inc.is_included(), "bound_included creates Included")
+    let exc: Bound[I32] = bound_excluded[I32](10)
+    assert(exc.is_excluded(), "bound_excluded creates Excluded")
+    let unb: Bound[I32] = bound_unbounded[I32]()
+    assert(unb.is_unbounded(), "bound_unbounded creates Unbounded")
+    return 0
+}

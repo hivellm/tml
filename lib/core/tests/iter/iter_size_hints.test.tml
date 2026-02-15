@@ -1,0 +1,12 @@
+// Tests for size_hint() on iterator adapters
+// BLOCKED: Tuple return type (I64, Maybe[I64]) codegen bug
+// Error: '%struct.Maybe__I64' but expected 'ptr'
+// Keeping file as placeholder until codegen is fixed
+use test::{assert, assert_eq}
+
+@test
+func test_size_hint_placeholder() -> I32 {
+    // size_hint tests deferred — tuple return type codegen blocked
+    assert(true, "placeholder")
+    return 0
+}

@@ -1,0 +1,12 @@
+// Tests for core::array::iter
+// BLOCKED: ArrayIter const generic instantiation has LLVM IR codegen issues
+// ArrayIter::new produces [0 x %struct.T] instead of [N x i32]
+// Arr.iter() method is unresolved without importing array/iter module
+// Re-enable when const generic monomorphization is fixed
+use test
+
+@test
+func test_array_iter_placeholder() -> I32 {
+    // Placeholder — real tests blocked on const generic codegen
+    return 0
+}

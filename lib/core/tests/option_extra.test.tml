@@ -1,0 +1,14 @@
+// Tests for uncovered Maybe methods
+// BLOCKED: Maybe::also has codegen issue — generic [U] instantiation fails
+// BLOCKED: Maybe::ok_or — Outcome generic E type mismatch
+// BLOCKED: Maybe[Maybe[T]]::flatten — nested Maybe layout mismatch
+// BLOCKED: Maybe::zip — tuple return type issues
+// BLOCKED: MaybeIter — unsized type allocation
+// Re-enable when generic method codegen is fixed
+use test
+
+@test
+func test_option_extra_placeholder() -> I32 {
+    // Placeholder — real tests blocked on generic method codegen
+    return 0
+}

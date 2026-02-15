@@ -1,0 +1,66 @@
+// Tests for fmt::helpers — pad_left, pad_right, string_len, char_to_str, string_slice
+use test::{assert, assert_eq}
+use core::fmt::helpers::{pad_left, pad_right, string_len, char_to_str, string_slice}
+
+@test
+func test_string_len_hello() -> I32 {
+    let len: I64 = string_len("hello")
+    assert_eq(len, 5 as I64, "string_len of hello should be 5")
+    return 0
+}
+
+@test
+func test_string_len_empty() -> I32 {
+    let len: I64 = string_len("")
+    assert_eq(len, 0 as I64, "string_len of empty should be 0")
+    return 0
+}
+
+@test
+func test_pad_left_shorter() -> I32 {
+    let result: Str = pad_left("hi", 5 as I64, " ")
+    assert_eq(result, "   hi", "pad_left should left-pad with spaces")
+    return 0
+}
+
+@test
+func test_pad_left_longer() -> I32 {
+    let result: Str = pad_left("hello world", 5 as I64, " ")
+    assert_eq(result, "hello world", "pad_left should not truncate")
+    return 0
+}
+
+@test
+func test_pad_right_shorter() -> I32 {
+    let result: Str = pad_right("hi", 5 as I64, " ")
+    assert_eq(result, "hi   ", "pad_right should right-pad with spaces")
+    return 0
+}
+
+@test
+func test_pad_right_longer() -> I32 {
+    let result: Str = pad_right("hello world", 5 as I64, " ")
+    assert_eq(result, "hello world", "pad_right should not truncate")
+    return 0
+}
+
+@test
+func test_char_to_str() -> I32 {
+    let s: Str = char_to_str('A')
+    assert_eq(s, "A", "char_to_str of 'A' should be A")
+    return 0
+}
+
+@test
+func test_string_slice_middle() -> I32 {
+    let s: Str = string_slice("hello world", 0 as I64, 5 as I64)
+    assert_eq(s, "hello", "string_slice 0..5 should be hello")
+    return 0
+}
+
+@test
+func test_string_slice_end() -> I32 {
+    let s: Str = string_slice("hello world", 6 as I64, 11 as I64)
+    assert_eq(s, "world", "string_slice 6..11 should be world")
+    return 0
+}

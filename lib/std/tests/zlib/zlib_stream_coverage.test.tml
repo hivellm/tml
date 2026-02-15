@@ -1,0 +1,174 @@
+// Tests for uncovered zlib/stream functions:
+// Deflate::params, Gzip::write_buffer, Inflate::flush, Gunzip::write,
+// create_gzip, create_gzip_with_options
+use test
+use std::zlib::stream::{Deflate, Inflate, Gzip, Gunzip, create_gzip, create_gzip_with_options}
+use std::zlib::options::ZlibOptions
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+// =============================================================================
+// create_gzip / create_gzip_with_options factory functions
+// =============================================================================
+
+@test
+func test_create_gzip_factory() -> I32 {
+    let result: Outcome[Gzip, ZlibError] = create_gzip()
+    assert(result.is_ok(), "create_gzip should succeed")
+    var gz: Gzip = result.unwrap()
+    gz.destroy()
+    return 0
+}
+
+@test
+func test_create_gzip_with_options_factory() -> I32 {
+    let opts: ZlibOptions = ZlibOptions::gzip()
+    let result: Outcome[Gzip, ZlibError] = create_gzip_with_options(opts)
+    assert(result.is_ok(), "create_gzip_with_options should succeed")
+    var gz: Gzip = result.unwrap()
+    gz.destroy()
+    return 0
+}
+
+// =============================================================================
+// Gzip::write_buffer
+// =============================================================================
+
+@test
+func test_gzip_write_buffer() -> I32 {
+    let gz_result: Outcome[Gzip, ZlibError] = Gzip::new()
+    assert(gz_result.is_ok(), "Gzip::new should succeed")
+    var gz: Gzip = gz_result.unwrap()
+
+    // Create a buffer with data
+    var buf: Buffer = Buffer::from_string("Hello from buffer!")
+
+    // Write buffer data
+    let write_result: Outcome[Buffer, ZlibError] = gz.write_buffer(ref buf)
+    assert(write_result.is_ok(), "Gzip::write_buffer should succeed")
+    var chunk: Buffer = write_result.unwrap()
+
+    // Finish compression
+    let finish_result: Outcome[Buffer, ZlibError] = gz.finish()
+    assert(finish_result.is_ok(), "Gzip::finish should succeed")
+    var final_chunk: Buffer = finish_result.unwrap()
+
+    chunk.destroy()
+    final_chunk.destroy()
+    buf.destroy()
+    gz.destroy()
+    return 0
+}
+
+// =============================================================================
+// Deflate::params — change compression params mid-stream
+// =============================================================================
+
+@test
+func test_deflate_params() -> I32 {
+    let def_result: Outcome[Deflate, ZlibError] = Deflate::new()
+    assert(def_result.is_ok(), "Deflate::new should succeed")
+    var def: Deflate = def_result.unwrap()
+
+    // Write some data first
+    let w1: Outcome[Buffer, ZlibError] = def.write("first chunk of data")
+    assert(w1.is_ok(), "first write should succeed")
+    var c1: Buffer = w1.unwrap()
+
+    // Flush before changing params
+    let flush_result: Outcome[Buffer, ZlibError] = def.flush()
+    assert(flush_result.is_ok(), "flush before params should succeed")
+    var flushed: Buffer = flush_result.unwrap()
+
+    // Change params: level 1 (fast), strategy 0 (default)
+    let params_result: Outcome[Buffer, ZlibError] = def.params(1, 0)
+    assert(params_result.is_ok(), "params change should succeed")
+    var params_buf: Buffer = params_result.unwrap()
+
+    // Write more data after params change
+    let w2: Outcome[Buffer, ZlibError] = def.write("second chunk after params change")
+    assert(w2.is_ok(), "second write should succeed")
+    var c2: Buffer = w2.unwrap()
+
+    c1.destroy()
+    flushed.destroy()
+    params_buf.destroy()
+    c2.destroy()
+    def.destroy()
+    return 0
+}
+
+// =============================================================================
+// Inflate::flush
+// =============================================================================
+
+@test
+func test_inflate_flush() -> I32 {
+    // First compress some data with sync flush
+    let def_result: Outcome[Deflate, ZlibError] = Deflate::new()
+    assert(def_result.is_ok(), "Deflate::new should succeed")
+    var def: Deflate = def_result.unwrap()
+
+    let w: Outcome[Buffer, ZlibError] = def.write("test data for inflate flush")
+    assert(w.is_ok(), "write should succeed")
+    var chunk: Buffer = w.unwrap()
+
+    let fin: Outcome[Buffer, ZlibError] = def.finish()
+    assert(fin.is_ok(), "finish should succeed")
+    var final_chunk: Buffer = fin.unwrap()
+
+    // Decompress
+    let inf_result: Outcome[Inflate, ZlibError] = Inflate::new()
+    assert(inf_result.is_ok(), "Inflate::new should succeed")
+    var inf: Inflate = inf_result.unwrap()
+
+    // Write compressed data
+    let iw: Outcome[Buffer, ZlibError] = inf.write(ref chunk)
+    // The write_result may or may not succeed depending on chunk boundaries
+
+    // Call flush — tests the uncovered method
+    let flush_result: Outcome[Buffer, ZlibError] = inf.flush()
+
+    chunk.destroy()
+    final_chunk.destroy()
+    inf.destroy()
+    def.destroy()
+    return 0
+}
+
+// =============================================================================
+// Gunzip::write — decompress gzip data
+// =============================================================================
+
+@test
+func test_gunzip_write() -> I32 {
+    // Compress with Gzip, using write then finish
+    let gz_result: Outcome[Gzip, ZlibError] = Gzip::new()
+    assert(gz_result.is_ok(), "Gzip::new should succeed")
+    var gz: Gzip = gz_result.unwrap()
+
+    // Use finish directly with data written
+    let w: Outcome[Buffer, ZlibError] = gz.write("hello gunzip")
+    assert(w.is_ok(), "gzip write should succeed")
+    var chunk: Buffer = w.unwrap()
+
+    let fin: Outcome[Buffer, ZlibError] = gz.finish()
+    assert(fin.is_ok(), "gzip finish should succeed")
+    var final_chunk: Buffer = fin.unwrap()
+
+    // Decompress chunk with Gunzip (chunk contains partial gzip data)
+    let gunzip_result: Outcome[Gunzip, ZlibError] = Gunzip::new()
+    assert(gunzip_result.is_ok(), "Gunzip::new should succeed")
+    var gunz: Gunzip = gunzip_result.unwrap()
+
+    // Write first chunk
+    let d1: Outcome[Buffer, ZlibError] = gunz.write(ref chunk)
+    // Write final chunk
+    let d2: Outcome[Buffer, ZlibError] = gunz.write(ref final_chunk)
+
+    chunk.destroy()
+    final_chunk.destroy()
+    gunz.destroy()
+    gz.destroy()
+    return 0
+}

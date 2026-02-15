@@ -1,0 +1,54 @@
+// Tests for core::mem — swap, replace, drop, forget, size_of_val, align_of_val
+use test::{assert, assert_eq}
+use core::mem
+
+@test
+func test_swap_i32() -> I32 {
+    var a: I32 = 10
+    var b: I32 = 20
+    mem::swap(mut ref a, mut ref b)
+    assert_eq(a, 20, "a should be 20 after swap")
+    assert_eq(b, 10, "b should be 10 after swap")
+    return 0
+}
+
+@test
+func test_replace_i32() -> I32 {
+    var x: I32 = 5
+    let old: I32 = mem::replace(mut ref x, 99)
+    assert_eq(old, 5, "replace should return old value")
+    assert_eq(x, 99, "x should be 99 after replace")
+    return 0
+}
+
+@test
+func test_drop_i32() -> I32 {
+    let x: I32 = 42
+    mem::drop(x)
+    assert(true, "drop should not crash")
+    return 0
+}
+
+@test
+func test_forget_i32() -> I32 {
+    let x: I32 = 100
+    mem::forget(x)
+    assert(true, "forget should not crash")
+    return 0
+}
+
+@test
+func test_size_of_val_i32() -> I32 {
+    let x: I32 = 42
+    let s: I64 = mem::size_of_val(ref x)
+    assert_eq(s, 4 as I64, "size_of_val for I32 should be 4")
+    return 0
+}
+
+@test
+func test_align_of_val_i64() -> I32 {
+    let x: I64 = 42 as I64
+    let a: I64 = mem::align_of_val(ref x)
+    assert_eq(a, 8 as I64, "align_of_val for I64 should be 8")
+    return 0
+}

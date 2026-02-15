@@ -1,0 +1,407 @@
+// Tests for Zstd compression and decompression
+use test
+use std::zlib::{zstd_compress, zstd_decompress, zstd_min_level, zstd_max_level, zstd_default_level}
+use std::zlib::{zstd_compress_with_options, zstd_decompress_with_options}
+use std::zlib::{zstd_compress_buffer, zstd_decompress_to_buffer}
+use std::zlib::{zstd_compress_sync, zstd_decompress_sync}
+use std::zlib::{zstd_content_size, zstd_is_frame, zstd_decompress_bound, zstd_frame_dict_id}
+use std::zlib::{ZstdCompress, ZstdDecompress}
+use std::zlib::options::ZstdOptions
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+// --- Utility level functions ---
+
+@test
+func test_zstd_min_level() -> I32 {
+    assert_eq(zstd_min_level(), 1, "min level is 1")
+    return 0
+}
+
+@test
+func test_zstd_max_level() -> I32 {
+    assert_eq(zstd_max_level(), 22, "max level is 22")
+    return 0
+}
+
+@test
+func test_zstd_default_level() -> I32 {
+    assert_eq(zstd_default_level(), 3, "default level is 3")
+    return 0
+}
+
+// --- Basic compress/decompress ---
+
+@test
+func test_zstd_compress_basic() -> I32 {
+    let original: Str = "Hello, World! This is some test data to compress with Zstd."
+    let result: Outcome[Buffer, ZlibError] = zstd_compress(original)
+    assert(result.is_ok(), "zstd_compress should succeed")
+    let compressed: Buffer = result.unwrap()
+    assert(compressed.len() > (0 as I64), "compressed not empty")
+    return 0
+}
+
+@test
+func test_zstd_compress_smaller() -> I32 {
+    let original: Str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    let result = zstd_compress(original)
+    assert(result.is_ok(), "compress repetitive data should succeed")
+    let compressed: Buffer = result.unwrap()
+    assert(compressed.len() < (64 as I64), "repetitive data should compress well")
+    return 0
+}
+
+@test
+func test_zstd_roundtrip() -> I32 {
+    let original: Str = "Hello, World! This is a test for Zstd roundtrip compression."
+    let c_result = zstd_compress(original)
+    assert(c_result.is_ok(), "compress should succeed")
+    var compressed: Buffer = c_result.unwrap()
+
+    let d_result = zstd_decompress(ref compressed)
+    assert(d_result.is_ok(), "decompress should succeed")
+    let decompressed: Str = d_result.unwrap()
+    assert_eq(decompressed, original, "roundtrip matches")
+    return 0
+}
+
+@test
+func test_zstd_roundtrip_empty() -> I32 {
+    let original: Str = ""
+    let c_result = zstd_compress(original)
+    assert(c_result.is_ok(), "compress empty should succeed")
+    var compressed: Buffer = c_result.unwrap()
+
+    let d_result = zstd_decompress(ref compressed)
+    assert(d_result.is_ok(), "decompress empty should succeed")
+    let decompressed: Str = d_result.unwrap()
+    assert_eq(decompressed, original, "empty roundtrip matches")
+    return 0
+}
+
+@test
+func test_zstd_roundtrip_long() -> I32 {
+    let mut s: Str = ""
+    let mut i: I32 = 0
+    loop (i < 100) {
+        s = s + "The quick brown fox jumps over the lazy dog. "
+        i = i + 1
+    }
+    let c_result = zstd_compress(s)
+    assert(c_result.is_ok(), "compress long should succeed")
+    var compressed: Buffer = c_result.unwrap()
+    assert(compressed.len() < s.len(), "long data should compress")
+
+    let d_result = zstd_decompress(ref compressed)
+    assert(d_result.is_ok(), "decompress long should succeed")
+    let decompressed: Str = d_result.unwrap()
+    assert_eq(decompressed, s, "long roundtrip matches")
+    return 0
+}
+
+// --- Compress with options ---
+
+@test
+func test_zstd_compress_with_options_fast() -> I32 {
+    let original: Str = "Test data for fast compression with Zstd options."
+    let opts: ZstdOptions = ZstdOptions::fast()
+    let result = zstd_compress_with_options(original, opts)
+    assert(result.is_ok(), "fast compress should succeed")
+    var compressed: Buffer = result.unwrap()
+    assert(compressed.len() > (0 as I64), "fast compressed not empty")
+
+    let d_result = zstd_decompress(ref compressed)
+    assert(d_result.is_ok(), "decompress fast should succeed")
+    assert_eq(d_result.unwrap(), original, "fast roundtrip matches")
+    return 0
+}
+
+@test
+func test_zstd_compress_with_options_best() -> I32 {
+    let original: Str = "Test data for best compression with Zstd options."
+    let opts: ZstdOptions = ZstdOptions::best()
+    let result = zstd_compress_with_options(original, opts)
+    assert(result.is_ok(), "best compress should succeed")
+    var compressed: Buffer = result.unwrap()
+    assert(compressed.len() > (0 as I64), "best compressed not empty")
+
+    let d_result = zstd_decompress(ref compressed)
+    assert(d_result.is_ok(), "decompress best should succeed")
+    assert_eq(d_result.unwrap(), original, "best roundtrip matches")
+    return 0
+}
+
+@test
+func test_zstd_compress_with_options_custom_level() -> I32 {
+    let original: Str = "Test data for custom level compression."
+    let opts: ZstdOptions = ZstdOptions::default().with_level(10)
+    let result = zstd_compress_with_options(original, opts)
+    assert(result.is_ok(), "custom level compress should succeed")
+    var compressed: Buffer = result.unwrap()
+
+    let d_result = zstd_decompress(ref compressed)
+    assert(d_result.is_ok(), "decompress custom level should succeed")
+    assert_eq(d_result.unwrap(), original, "custom level roundtrip matches")
+    return 0
+}
+
+@test
+func test_zstd_compress_with_checksum() -> I32 {
+    let original: Str = "Test data with checksum enabled."
+    let opts: ZstdOptions = ZstdOptions::default().with_checksum()
+    let result = zstd_compress_with_options(original, opts)
+    assert(result.is_ok(), "compress with checksum should succeed")
+    var compressed: Buffer = result.unwrap()
+
+    let d_result = zstd_decompress(ref compressed)
+    assert(d_result.is_ok(), "decompress with checksum should succeed")
+    assert_eq(d_result.unwrap(), original, "checksum roundtrip matches")
+    return 0
+}
+
+// --- Sync aliases ---
+
+@test
+func test_zstd_compress_sync_basic() -> I32 {
+    let original: Str = "Sync compress test data."
+    let result = zstd_compress_sync(original)
+    assert(result.is_ok(), "sync compress should succeed")
+    var compressed: Buffer = result.unwrap()
+
+    let d_result = zstd_decompress_sync(ref compressed)
+    assert(d_result.is_ok(), "sync decompress should succeed")
+    assert_eq(d_result.unwrap(), original, "sync roundtrip matches")
+    return 0
+}
+
+// --- Buffer compress/decompress ---
+
+@test
+func test_zstd_compress_buffer_roundtrip() -> I32 {
+    let original: Str = "Buffer compress test data for Zstd."
+    let str_result = zstd_compress(original)
+    assert(str_result.is_ok(), "compress to get source buffer")
+    var source: Buffer = str_result.unwrap()
+
+    let d_result = zstd_decompress_to_buffer(ref source)
+    assert(d_result.is_ok(), "decompress to buffer should succeed")
+    let decompressed_buf: Buffer = d_result.unwrap()
+    assert(decompressed_buf.len() > (0 as I64), "decompressed buffer not empty")
+    return 0
+}
+
+// --- Frame utility functions ---
+
+@test
+func test_zstd_is_frame_valid() -> I32 {
+    let original: Str = "Test frame detection."
+    let c_result = zstd_compress(original)
+    assert(c_result.is_ok(), "compress for frame check")
+    var compressed: Buffer = c_result.unwrap()
+    assert(zstd_is_frame(ref compressed), "compressed data should be valid zstd frame")
+    return 0
+}
+
+@test
+func test_zstd_content_size_known() -> I32 {
+    let original: Str = "Test content size detection."
+    let c_result = zstd_compress(original)
+    assert(c_result.is_ok(), "compress for content size check")
+    var compressed: Buffer = c_result.unwrap()
+    let size: Maybe[I64] = zstd_content_size(ref compressed)
+    assert(size.is_just(), "content size should be known")
+    assert_eq(size.unwrap(), original.len(), "content size matches original length")
+    return 0
+}
+
+@test
+func test_zstd_decompress_bound_valid() -> I32 {
+    let original: Str = "Test decompress bound."
+    let c_result = zstd_compress(original)
+    assert(c_result.is_ok(), "compress for bound check")
+    var compressed: Buffer = c_result.unwrap()
+    let bound: I64 = zstd_decompress_bound(ref compressed)
+    assert(bound >= original.len(), "bound should be at least original length")
+    return 0
+}
+
+@test
+func test_zstd_frame_dict_id_no_dict() -> I32 {
+    let original: Str = "Test dict id without dictionary."
+    let c_result = zstd_compress(original)
+    assert(c_result.is_ok(), "compress for dict id check")
+    var compressed: Buffer = c_result.unwrap()
+    let dict_id: I32 = zstd_frame_dict_id(ref compressed)
+    assert_eq(dict_id, 0, "dict id should be 0 when no dictionary used")
+    return 0
+}
+
+// --- Streaming compression ---
+
+@test
+func test_zstd_streaming_compress_new() -> I32 {
+    let result = ZstdCompress::new()
+    assert(result.is_ok(), "ZstdCompress::new should succeed")
+    var compressor: ZstdCompress = result.unwrap()
+    compressor.destroy()
+    return 0
+}
+
+@test
+func test_zstd_streaming_compress_with_options() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default().with_level(5)
+    let result = ZstdCompress::with_options(opts)
+    assert(result.is_ok(), "ZstdCompress::with_options should succeed")
+    var compressor: ZstdCompress = result.unwrap()
+    compressor.destroy()
+    return 0
+}
+
+@test
+func test_zstd_streaming_compress_write_finish() -> I32 {
+    let c_result = ZstdCompress::new()
+    assert(c_result.is_ok(), "create compressor")
+    let compressor: ZstdCompress = c_result.unwrap()
+
+    let w_result = compressor.write("Hello, streaming Zstd!")
+    assert(w_result.is_ok(), "write should succeed")
+
+    let f_result = compressor.finish()
+    assert(f_result.is_ok(), "finish should succeed")
+    let final_buf: Buffer = f_result.unwrap()
+    assert(final_buf.len() >= (0 as I64), "finish buffer exists")
+    return 0
+}
+
+@test
+func test_zstd_streaming_compress_flush() -> I32 {
+    let c_result = ZstdCompress::new()
+    assert(c_result.is_ok(), "create compressor")
+    let compressor: ZstdCompress = c_result.unwrap()
+
+    let w_result = compressor.write("Some data to flush.")
+    assert(w_result.is_ok(), "write should succeed")
+
+    let fl_result = compressor.flush()
+    assert(fl_result.is_ok(), "flush should succeed")
+    return 0
+}
+
+@test
+func test_zstd_streaming_compress_reset() -> I32 {
+    let c_result = ZstdCompress::new()
+    assert(c_result.is_ok(), "create compressor")
+    let compressor: ZstdCompress = c_result.unwrap()
+
+    let w1 = compressor.write("First stream.")
+    assert(w1.is_ok(), "first write ok")
+    let f1 = compressor.finish()
+    assert(f1.is_ok(), "first finish ok")
+
+    let r_result = compressor.reset()
+    assert(r_result.is_ok(), "reset should succeed")
+
+    let w2 = compressor.write("Second stream after reset.")
+    assert(w2.is_ok(), "write after reset ok")
+    let f2 = compressor.finish()
+    assert(f2.is_ok(), "finish after reset ok")
+    return 0
+}
+
+@test
+func test_zstd_streaming_compress_double_destroy() -> I32 {
+    let c_result = ZstdCompress::new()
+    assert(c_result.is_ok(), "create compressor")
+    var compressor: ZstdCompress = c_result.unwrap()
+    compressor.destroy()
+    compressor.destroy()
+    return 0
+}
+
+// --- Streaming decompression ---
+
+@test
+func test_zstd_streaming_decompress_new() -> I32 {
+    let result = ZstdDecompress::new()
+    assert(result.is_ok(), "ZstdDecompress::new should succeed")
+    var decompressor: ZstdDecompress = result.unwrap()
+    decompressor.destroy()
+    return 0
+}
+
+@test
+func test_zstd_streaming_decompress_with_options() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    let result = ZstdDecompress::with_options(opts)
+    assert(result.is_ok(), "ZstdDecompress::with_options should succeed")
+    var decompressor: ZstdDecompress = result.unwrap()
+    decompressor.destroy()
+    return 0
+}
+
+@test
+func test_zstd_streaming_decompress_reset() -> I32 {
+    let d_result = ZstdDecompress::new()
+    assert(d_result.is_ok(), "create decompressor")
+    let decompressor: ZstdDecompress = d_result.unwrap()
+    let r_result = decompressor.reset()
+    assert(r_result.is_ok(), "reset should succeed")
+    return 0
+}
+
+@test
+func test_zstd_streaming_decompress_double_destroy() -> I32 {
+    let d_result = ZstdDecompress::new()
+    assert(d_result.is_ok(), "create decompressor")
+    var decompressor: ZstdDecompress = d_result.unwrap()
+    decompressor.destroy()
+    decompressor.destroy()
+    return 0
+}
+
+// --- Decompress with options ---
+
+@test
+func test_zstd_decompress_with_options_default() -> I32 {
+    let original: Str = "Decompress with default options test."
+    let c_result = zstd_compress(original)
+    assert(c_result.is_ok(), "compress for decompression")
+    var compressed: Buffer = c_result.unwrap()
+
+    let opts: ZstdOptions = ZstdOptions::default()
+    let d_result = zstd_decompress_with_options(ref compressed, opts)
+    assert(d_result.is_ok(), "decompress with options should succeed")
+    assert_eq(d_result.unwrap(), original, "decompressed matches")
+    return 0
+}
+
+// --- ZstdOptions builder methods ---
+
+@test
+func test_zstd_options_with_strategy() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default().with_strategy(1)
+    let original: Str = "Strategy test data for Zstd compression."
+    let result = zstd_compress_with_options(original, opts)
+    assert(result.is_ok(), "compress with strategy should succeed")
+    var compressed: Buffer = result.unwrap()
+
+    let d_result = zstd_decompress(ref compressed)
+    assert(d_result.is_ok(), "decompress should succeed")
+    assert_eq(d_result.unwrap(), original, "strategy roundtrip matches")
+    return 0
+}
+
+@test
+func test_zstd_options_parallel() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::parallel(2)
+    let original: Str = "Parallel compression test data for Zstd."
+    let result = zstd_compress_with_options(original, opts)
+    assert(result.is_ok(), "parallel compress should succeed")
+    var compressed: Buffer = result.unwrap()
+
+    let d_result = zstd_decompress(ref compressed)
+    assert(d_result.is_ok(), "decompress parallel should succeed")
+    assert_eq(d_result.unwrap(), original, "parallel roundtrip matches")
+    return 0
+}

@@ -1,0 +1,25 @@
+// Tests for core::any — TypeId::of additional type instantiations
+// AnyValue::from[T] blocked by generic codegen (%struct.T not monomorphized)
+use test::{assert}
+use core::any::TypeId
+
+@test
+func test_typeid_of_f64() -> I32 {
+    let id: TypeId = TypeId::of[F64]()
+    assert(id.id >= 0, "TypeId::of[F64] should produce a valid id")
+    return 0
+}
+
+@test
+func test_typeid_of_i64() -> I32 {
+    let id: TypeId = TypeId::of[I64]()
+    assert(id.id >= 0, "TypeId::of[I64] should produce a valid id")
+    return 0
+}
+
+@test
+func test_typeid_of_u8() -> I32 {
+    let id: TypeId = TypeId::of[U8]()
+    assert(id.id >= 0, "TypeId::of[U8] should produce a valid id")
+    return 0
+}

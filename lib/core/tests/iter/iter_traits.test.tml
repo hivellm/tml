@@ -1,0 +1,80 @@
+// Tests for Iterator default trait methods (count, advance_by)
+use test
+
+type Counter { current: I32, max: I32 }
+impl Iterator for Counter {
+    type Item = I32
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max { return Nothing }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+// --- count ---
+
+@test
+func test_count_basic() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 5 }
+    assert_eq(iter.count(), 5 as I64, "count 0..5 = 5")
+    return 0
+}
+
+@test
+func test_count_empty() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 0 }
+    assert_eq(iter.count(), 0 as I64, "count empty = 0")
+    return 0
+}
+
+@test
+func test_count_partial() -> I32 {
+    let mut iter: Counter = Counter { current: 3, max: 7 }
+    assert_eq(iter.count(), 4 as I64, "count 3..7 = 4")
+    return 0
+}
+
+@test
+func test_count_single() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 1 }
+    assert_eq(iter.count(), 1 as I64, "count single = 1")
+    return 0
+}
+
+// --- advance_by ---
+
+@test
+func test_advance_by_basic() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 10 }
+    let r = iter.advance_by(3 as I64)
+    assert(r.is_ok(), "advance_by 3 should succeed")
+    assert_eq(iter.next().unwrap(), 3, "after advance_by 3, next=3")
+    return 0
+}
+
+@test
+func test_advance_by_zero() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 5 }
+    let r = iter.advance_by(0 as I64)
+    assert(r.is_ok(), "advance_by 0 should succeed")
+    assert_eq(iter.next().unwrap(), 0, "after advance_by 0, next=0")
+    return 0
+}
+
+@test
+func test_advance_by_exact() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 5 }
+    let r = iter.advance_by(5 as I64)
+    assert(r.is_ok(), "advance_by exact count should succeed")
+    assert(iter.next().is_nothing(), "iterator exhausted after advance_by all")
+    return 0
+}
+
+@test
+func test_advance_by_too_many() -> I32 {
+    let mut iter: Counter = Counter { current: 0, max: 3 }
+    let r = iter.advance_by(10 as I64)
+    assert(r.is_err(), "advance_by past end should fail")
+    return 0
+}

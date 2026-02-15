@@ -1,0 +1,42 @@
+// Tests for ChainedError — new, cause, to_string, debug_string
+use test::{assert, assert_eq}
+use core::error::{ChainedError, SimpleError}
+
+@test
+func test_chained_error_new_to_string() -> I32 {
+    let cause: SimpleError = SimpleError::new("disk full")
+    let err: ChainedError[SimpleError] = ChainedError::new("write failed", cause)
+    let s: Str = err.to_string()
+    assert(s.contains("write failed"), "should contain message")
+    assert(s.contains("disk full"), "should contain cause")
+    return 0
+}
+
+@test
+func test_chained_error_debug_string() -> I32 {
+    let cause: SimpleError = SimpleError::new("timeout")
+    let err: ChainedError[SimpleError] = ChainedError::new("connection failed", cause)
+    let dbg: Str = err.debug_string()
+    assert(dbg.contains("ChainedError"), "debug should contain type name")
+    assert(dbg.contains("connection failed"), "debug should contain message")
+    return 0
+}
+
+@test
+func test_chained_error_cause() -> I32 {
+    let cause: SimpleError = SimpleError::new("root cause")
+    let err: ChainedError[SimpleError] = ChainedError::new("wrapper", cause)
+    let c: ref SimpleError = err.cause()
+    assert_eq(c.message, "root cause", "cause() should return the underlying error")
+    return 0
+}
+
+@test
+func test_chained_error_nested() -> I32 {
+    let inner: SimpleError = SimpleError::new("disk failure")
+    let mid: ChainedError[SimpleError] = ChainedError::new("write failed", inner)
+    let s: Str = mid.to_string()
+    assert(s.contains("write failed"), "should contain outer message")
+    assert(s.contains("disk failure"), "should contain inner message")
+    return 0
+}

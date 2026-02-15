@@ -1,0 +1,165 @@
+// Tests for uncovered zstd functions:
+// zstd_compress_buffer, zstd_compress_buffer_with_options,
+// zstd_compress_sync_with_options, zstd_decompress_sync_with_options,
+// ZstdCompress::write_buffer, ZstdCompress::set_pledged_size,
+// ZstdDecompress::write, ZstdDecompress::content_size
+use test
+use std::zlib::zstd::{zstd_compress, zstd_compress_buffer, zstd_compress_buffer_with_options, zstd_compress_sync_with_options, zstd_decompress, zstd_decompress_sync_with_options, ZstdCompress, ZstdDecompress}
+use std::zlib::options::ZstdOptions
+use std::zlib::error::ZlibError
+use std::collections::Buffer
+
+// =============================================================================
+// zstd_compress_buffer — compress from Buffer
+// =============================================================================
+
+@test
+func test_zstd_compress_buffer() -> I32 {
+    var buf: Buffer = Buffer::from_string("hello zstd buffer compression test")
+    let result: Outcome[Buffer, ZlibError] = zstd_compress_buffer(ref buf)
+    assert(result.is_ok(), "zstd_compress_buffer should succeed")
+    var compressed: Buffer = result.unwrap()
+    assert(compressed.len() > 0, "compressed data should not be empty")
+    compressed.destroy()
+    buf.destroy()
+    return 0
+}
+
+// =============================================================================
+// zstd_compress_buffer_with_options — compress from Buffer with options
+// =============================================================================
+
+@test
+func test_zstd_compress_buffer_with_options() -> I32 {
+    var buf: Buffer = Buffer::from_string("test data with options")
+    let opts: ZstdOptions = ZstdOptions::fast()
+    let result: Outcome[Buffer, ZlibError] = zstd_compress_buffer_with_options(ref buf, opts)
+    assert(result.is_ok(), "zstd_compress_buffer_with_options should succeed")
+    var compressed: Buffer = result.unwrap()
+    compressed.destroy()
+    buf.destroy()
+    return 0
+}
+
+// =============================================================================
+// zstd_compress_sync_with_options
+// =============================================================================
+
+@test
+func test_zstd_compress_sync_with_options() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    let result: Outcome[Buffer, ZlibError] = zstd_compress_sync_with_options("sync compress test", opts)
+    assert(result.is_ok(), "zstd_compress_sync_with_options should succeed")
+    var compressed: Buffer = result.unwrap()
+    compressed.destroy()
+    return 0
+}
+
+// =============================================================================
+// zstd_decompress_sync_with_options
+// =============================================================================
+
+@test
+func test_zstd_decompress_sync_with_options() -> I32 {
+    // First compress some data
+    let comp_result: Outcome[Buffer, ZlibError] = zstd_compress("decompress sync test data")
+    assert(comp_result.is_ok(), "compression should succeed")
+    var compressed: Buffer = comp_result.unwrap()
+
+    // Decompress with options
+    let opts: ZstdOptions = ZstdOptions::default()
+    let dec_result: Outcome[Str, ZlibError] = zstd_decompress_sync_with_options(ref compressed, opts)
+    assert(dec_result.is_ok(), "zstd_decompress_sync_with_options should succeed")
+    let decompressed: Str = dec_result.unwrap()
+    assert_eq(decompressed, "decompress sync test data", "roundtrip should preserve data")
+    compressed.destroy()
+    return 0
+}
+
+// =============================================================================
+// ZstdCompress::write_buffer — compress from Buffer through stream
+// =============================================================================
+
+@test
+func test_zstd_compress_write_buffer() -> I32 {
+    let comp_result: Outcome[ZstdCompress, ZlibError] = ZstdCompress::new()
+    assert(comp_result.is_ok(), "ZstdCompress::new should succeed")
+    var comp: ZstdCompress = comp_result.unwrap()
+
+    var buf: Buffer = Buffer::from_string("streaming buffer data")
+    let write_result: Outcome[Buffer, ZlibError] = comp.write_buffer(ref buf)
+    assert(write_result.is_ok(), "write_buffer should succeed")
+    var chunk: Buffer = write_result.unwrap()
+
+    let fin_result: Outcome[Buffer, ZlibError] = comp.finish()
+    assert(fin_result.is_ok(), "finish should succeed")
+    var final_chunk: Buffer = fin_result.unwrap()
+
+    chunk.destroy()
+    final_chunk.destroy()
+    buf.destroy()
+    comp.destroy()
+    return 0
+}
+
+// =============================================================================
+// ZstdCompress::set_pledged_size
+// =============================================================================
+
+@test
+func test_zstd_compress_set_pledged_size() -> I32 {
+    let comp_result: Outcome[ZstdCompress, ZlibError] = ZstdCompress::new()
+    assert(comp_result.is_ok(), "ZstdCompress::new should succeed")
+    var comp: ZstdCompress = comp_result.unwrap()
+
+    // Set pledged size (may or may not affect output)
+    let pledge_result: Outcome[Unit, ZlibError] = comp.set_pledged_size(100 as I64)
+    // Just verify it doesn't crash — some implementations may not support this
+
+    comp.destroy()
+    return 0
+}
+
+// =============================================================================
+// ZstdDecompress::write — decompress chunk by chunk
+// =============================================================================
+
+@test
+func test_zstd_decompress_write() -> I32 {
+    // Compress data first
+    let comp_result: Outcome[Buffer, ZlibError] = zstd_compress("hello zstd decompressor")
+    assert(comp_result.is_ok(), "compression should succeed")
+    var compressed: Buffer = comp_result.unwrap()
+
+    // Decompress via stream
+    let dec_result: Outcome[ZstdDecompress, ZlibError] = ZstdDecompress::new()
+    assert(dec_result.is_ok(), "ZstdDecompress::new should succeed")
+    var dec: ZstdDecompress = dec_result.unwrap()
+
+    let write_result: Outcome[Buffer, ZlibError] = dec.write(ref compressed)
+    assert(write_result.is_ok(), "ZstdDecompress write should succeed")
+    var decompressed: Buffer = write_result.unwrap()
+
+    decompressed.destroy()
+    compressed.destroy()
+    dec.destroy()
+    return 0
+}
+
+// =============================================================================
+// ZstdDecompress::content_size — query frame content size
+// =============================================================================
+
+@test
+func test_zstd_decompress_content_size() -> I32 {
+    let dec_result: Outcome[ZstdDecompress, ZlibError] = ZstdDecompress::new()
+    assert(dec_result.is_ok(), "ZstdDecompress::new should succeed")
+    var dec: ZstdDecompress = dec_result.unwrap()
+
+    // Content size on empty stream — may return Nothing or 0
+    let cs: Maybe[I64] = dec.content_size()
+    // Just verify it doesn't crash
+
+    dec.destroy()
+    return 0
+}

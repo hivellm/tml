@@ -1,0 +1,184 @@
+// Tests for std::net::sys — RawSocket property accessors and socket options
+use test::{assert, assert_eq}
+use std::net::sys::{RawSocket, SocketType, AddressFamily}
+
+// === RawSocket property accessors ===
+
+@test
+func test_raw_socket_tcp_type() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "RawSocket::tcp() should succeed")
+    let sock: RawSocket = result.unwrap()
+    let st: SocketType = sock.socket_type()
+    assert_eq(st.to_raw(), 1 as I32, "TCP socket type should be Stream(1)")
+    sock.close()
+    return 0
+}
+
+@test
+func test_raw_socket_udp_type() -> I32 {
+    let result = RawSocket::udp()
+    assert(result.is_ok(), "RawSocket::udp() should succeed")
+    let sock: RawSocket = result.unwrap()
+    let st: SocketType = sock.socket_type()
+    assert_eq(st.to_raw(), 2 as I32, "UDP socket type should be Datagram(2)")
+    sock.close()
+    return 0
+}
+
+@test
+func test_raw_socket_family() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "RawSocket::tcp() should succeed")
+    let sock: RawSocket = result.unwrap()
+    let fam: AddressFamily = sock.family()
+    assert_eq(fam.to_raw(), 2 as I32, "TCP socket family should be Inet(2)")
+    sock.close()
+    return 0
+}
+
+@test
+func test_raw_socket_is_nonblocking_default() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "RawSocket::tcp() should succeed")
+    let sock: RawSocket = result.unwrap()
+    assert_eq(sock.is_nonblocking(), false, "default should be blocking")
+    sock.close()
+    return 0
+}
+
+// === Socket options: set then get ===
+
+@test
+func test_set_nodelay_tcp() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_result = sock.set_nodelay(true)
+    assert(set_result.is_ok(), "set_nodelay should succeed on TCP")
+    let get_result = sock.get_nodelay()
+    assert(get_result.is_ok(), "get_nodelay should succeed")
+    assert_eq(get_result.unwrap(), true, "nodelay should be true after set")
+    sock.close()
+    return 0
+}
+
+@test
+func test_set_keepalive() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_result = sock.set_keepalive(true)
+    assert(set_result.is_ok(), "set_keepalive should succeed")
+    let get_result = sock.get_keepalive()
+    assert(get_result.is_ok(), "get_keepalive should succeed")
+    assert_eq(get_result.unwrap(), true, "keepalive should be true after set")
+    sock.close()
+    return 0
+}
+
+@test
+func test_set_reuse_addr() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_result = sock.set_reuse_addr(true)
+    assert(set_result.is_ok(), "set_reuse_addr should succeed")
+    sock.close()
+    return 0
+}
+
+@test
+func test_set_ttl() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_result = sock.set_ttl(64 as I32)
+    assert(set_result.is_ok(), "set_ttl should succeed")
+    let get_result = sock.get_ttl()
+    assert(get_result.is_ok(), "get_ttl should succeed")
+    assert_eq(get_result.unwrap(), 64 as I32, "ttl should be 64 after set")
+    sock.close()
+    return 0
+}
+
+@test
+func test_set_broadcast_udp() -> I32 {
+    let result = RawSocket::udp()
+    assert(result.is_ok(), "udp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_result = sock.set_broadcast(true)
+    assert(set_result.is_ok(), "set_broadcast should succeed on UDP")
+    let get_result = sock.get_broadcast()
+    assert(get_result.is_ok(), "get_broadcast should succeed")
+    assert_eq(get_result.unwrap(), true, "broadcast should be true after set")
+    sock.close()
+    return 0
+}
+
+// === Timeout options ===
+
+@test
+func test_set_recv_timeout() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_result = sock.set_recv_timeout(5000 as I64)
+    assert(set_result.is_ok(), "set_recv_timeout should succeed")
+    let get_result = sock.get_recv_timeout()
+    assert(get_result.is_ok(), "get_recv_timeout should succeed")
+    sock.close()
+    return 0
+}
+
+@test
+func test_set_send_timeout() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_result = sock.set_send_timeout(3000 as I64)
+    assert(set_result.is_ok(), "set_send_timeout should succeed")
+    let get_result = sock.get_send_timeout()
+    assert(get_result.is_ok(), "get_send_timeout should succeed")
+    sock.close()
+    return 0
+}
+
+// === Buffer size options ===
+
+@test
+func test_set_recv_buffer_size() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_result = sock.set_recv_buffer_size(65536 as I32)
+    assert(set_result.is_ok(), "set_recv_buffer_size should succeed")
+    sock.close()
+    return 0
+}
+
+@test
+func test_set_send_buffer_size() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    let sock: RawSocket = result.unwrap()
+    let set_result = sock.set_send_buffer_size(65536 as I32)
+    assert(set_result.is_ok(), "set_send_buffer_size should succeed")
+    sock.close()
+    return 0
+}
+
+// === Non-blocking mode ===
+
+@test
+func test_set_nonblocking() -> I32 {
+    let result = RawSocket::tcp()
+    assert(result.is_ok(), "tcp should succeed")
+    var sock: RawSocket = result.unwrap()
+    assert_eq(sock.is_nonblocking(), false, "initially blocking")
+    let set_result = sock.set_nonblocking(true)
+    assert(set_result.is_ok(), "set_nonblocking should succeed")
+    assert_eq(sock.is_nonblocking(), true, "should be nonblocking after set")
+    sock.close()
+    return 0
+}

@@ -1,0 +1,18 @@
+// Tests for alloc/shared — uncovered: is_unique, shared() free function
+use test
+use core::alloc::shared::{Shared, shared}
+
+@test
+func test_shared_is_unique_true() -> I32 {
+    let s: Shared[I32] = Shared::new(42)
+    assert(s.is_unique(), "new Shared should be unique")
+    return 0
+}
+
+@test
+func test_shared_free_function() -> I32 {
+    let s: Shared[I32] = shared[I32](77)
+    assert_eq(s.get(), 77, "shared(77) should create Shared with value 77")
+    assert_eq(s.strong_count(), 1, "shared() should have refcount 1")
+    return 0
+}

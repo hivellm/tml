@@ -1,0 +1,64 @@
+// Tests for cache module — uncovered: get_mut, prefetch, prefetch_next
+use test::{assert, assert_eq}
+use core::cache::{CacheAligned, Padded, PrefetchHint, prefetch, prefetch_next}
+
+// === CacheAligned::get_mut ===
+
+@test
+func test_cache_aligned_get_mut() -> I32 {
+    var aligned: CacheAligned[I32] = CacheAligned::new(10)
+    let ptr: mut ref I32 = aligned.get_mut()
+    *ptr = 20
+    assert_eq(*aligned.get(), 20, "get_mut allows mutation")
+    return 0
+}
+
+// === Padded::get_mut ===
+
+@test
+func test_padded_get_mut() -> I32 {
+    var p: Padded[I32] = Padded::new(5)
+    let ptr: mut ref I32 = p.get_mut()
+    *ptr = 50
+    assert_eq(*p.get(), 50, "Padded get_mut allows mutation")
+    return 0
+}
+
+// === prefetch (no-op, just ensure no crash) ===
+
+@test
+func test_prefetch_read() -> I32 {
+    prefetch(0, PrefetchHint::Read)
+    assert(true, "prefetch Read does not crash")
+    return 0
+}
+
+@test
+func test_prefetch_write() -> I32 {
+    prefetch(0, PrefetchHint::Write)
+    assert(true, "prefetch Write does not crash")
+    return 0
+}
+
+@test
+func test_prefetch_high_locality() -> I32 {
+    prefetch(0, PrefetchHint::HighLocality)
+    assert(true, "prefetch HighLocality does not crash")
+    return 0
+}
+
+@test
+func test_prefetch_low_locality() -> I32 {
+    prefetch(0, PrefetchHint::LowLocality)
+    assert(true, "prefetch LowLocality does not crash")
+    return 0
+}
+
+// === prefetch_next ===
+
+@test
+func test_prefetch_next_no_crash() -> I32 {
+    prefetch_next(0)
+    assert(true, "prefetch_next does not crash")
+    return 0
+}

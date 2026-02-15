@@ -1,0 +1,45 @@
+// Tests for core::intrinsics — compiler hints: likely, unlikely, assume, fence
+use test::{assert, assert_eq}
+use core::intrinsics::{likely, unlikely, assume, fence}
+
+@test
+func test_likely_true() -> I32 {
+    let result: Bool = likely(true)
+    assert(result, "likely(true) should return true")
+    return 0
+}
+
+@test
+func test_likely_false() -> I32 {
+    let result: Bool = likely(false)
+    assert(not result, "likely(false) should return false")
+    return 0
+}
+
+@test
+func test_unlikely_true() -> I32 {
+    let result: Bool = unlikely(true)
+    assert(result, "unlikely(true) should return true")
+    return 0
+}
+
+@test
+func test_unlikely_false() -> I32 {
+    let result: Bool = unlikely(false)
+    assert(not result, "unlikely(false) should return false")
+    return 0
+}
+
+@test
+func test_assume_true() -> I32 {
+    assume(true)
+    assert(true, "assume(true) should not crash")
+    return 0
+}
+
+@test
+func test_fence_no_crash() -> I32 {
+    fence()
+    assert(true, "fence() should not crash")
+    return 0
+}

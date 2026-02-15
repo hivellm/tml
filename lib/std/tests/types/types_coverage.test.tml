@@ -1,0 +1,105 @@
+// Tests for uncovered std::types free functions:
+// unwrap, expect, ok_or, unwrap_ok, expect_ok, unwrap_err, expect_err, unwrap_or_err
+use test
+use std::types::{unwrap, expect, ok_or, unwrap_ok, expect_ok, unwrap_err, expect_err, unwrap_or_err}
+
+// =============================================================================
+// Maybe unwrap / expect (happy paths only — panic on Nothing is not testable)
+// =============================================================================
+
+@test
+func test_free_unwrap_just() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    let v: I32 = unwrap[I32](m)
+    assert_eq(v, 42, "unwrap(Just(42)) should be 42")
+    return 0
+}
+
+@test
+func test_free_expect_just() -> I32 {
+    let m: Maybe[I32] = Just(99)
+    let v: I32 = expect[I32](m, "should not panic")
+    assert_eq(v, 99, "expect(Just(99)) should be 99")
+    return 0
+}
+
+// =============================================================================
+// Maybe ok_or — converts Maybe to Outcome
+// =============================================================================
+
+@test
+func test_free_ok_or_just() -> I32 {
+    let m: Maybe[I32] = Just(10)
+    let o: Outcome[I32, Str] = ok_or[I32, Str](m, "error")
+    assert(o.is_ok(), "ok_or(Just(10)) should be Ok")
+    assert_eq(o.unwrap(), 10, "ok_or(Just(10)) value")
+    return 0
+}
+
+@test
+func test_free_ok_or_nothing() -> I32 {
+    let m: Maybe[I32] = Nothing
+    let o: Outcome[I32, Str] = ok_or[I32, Str](m, "missing")
+    assert(o.is_err(), "ok_or(Nothing) should be Err")
+    return 0
+}
+
+// =============================================================================
+// Outcome unwrap_ok / expect_ok (happy paths)
+// =============================================================================
+
+@test
+func test_free_unwrap_ok() -> I32 {
+    let o: Outcome[I32, Str] = Ok(55)
+    let v: I32 = unwrap_ok[I32, Str](o)
+    assert_eq(v, 55, "unwrap_ok(Ok(55)) should be 55")
+    return 0
+}
+
+@test
+func test_free_expect_ok() -> I32 {
+    let o: Outcome[I32, Str] = Ok(77)
+    let v: I32 = expect_ok[I32, Str](o, "should not fail")
+    assert_eq(v, 77, "expect_ok(Ok(77)) should be 77")
+    return 0
+}
+
+// =============================================================================
+// Outcome unwrap_err / expect_err (happy paths)
+// =============================================================================
+
+@test
+func test_free_unwrap_err() -> I32 {
+    let o: Outcome[I32, Str] = Err("bad")
+    let e: Str = unwrap_err[I32, Str](o)
+    assert_eq(e, "bad", "unwrap_err(Err(bad)) should be bad")
+    return 0
+}
+
+@test
+func test_free_expect_err() -> I32 {
+    let o: Outcome[I32, Str] = Err("fail")
+    let e: Str = expect_err[I32, Str](o, "should not fail")
+    assert_eq(e, "fail", "expect_err(Err(fail)) should be fail")
+    return 0
+}
+
+// =============================================================================
+// Outcome unwrap_or_err — returns Err value or default
+// =============================================================================
+
+@test
+func test_free_unwrap_or_err_on_err() -> I32 {
+    let o: Outcome[I32, Str] = Err("real error")
+    let e: Str = unwrap_or_err[I32, Str](o, "default")
+    assert_eq(e, "real error", "unwrap_or_err on Err returns the error")
+    return 0
+}
+
+@test
+func test_free_unwrap_or_err_on_ok() -> I32 {
+    let o: Outcome[I32, Str] = Ok(42)
+    let e: Str = unwrap_or_err[I32, Str](o, "default")
+    assert_eq(e, "default", "unwrap_or_err on Ok returns default")
+    return 0
+}

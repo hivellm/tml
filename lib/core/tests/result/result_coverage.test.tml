@@ -1,0 +1,77 @@
+// Tests for core::result — additional Outcome method coverage
+use test
+
+// =============================================================================
+// Outcome Debug/Display implementations
+// =============================================================================
+
+@test
+func test_outcome_ok_to_string() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    let s: Str = x.to_string()
+    assert(s.len() > 0, "Ok to_string should produce output")
+    return 0
+}
+
+@test
+func test_outcome_err_to_string() -> I32 {
+    let x: Outcome[I32, Str] = Err("bad")
+    let s: Str = x.to_string()
+    assert(s.len() > 0, "Err to_string should produce output")
+    return 0
+}
+
+@test
+func test_outcome_ok_debug() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    let s: Str = x.debug_string()
+    assert(s.len() > 0, "Ok debug_string should produce output")
+    return 0
+}
+
+@test
+func test_outcome_err_debug() -> I32 {
+    let x: Outcome[I32, Str] = Err("bad")
+    let s: Str = x.debug_string()
+    assert(s.len() > 0, "Err debug_string should produce output")
+    return 0
+}
+
+// =============================================================================
+// Outcome::unwrap_or_default
+// =============================================================================
+
+@test
+func test_outcome_unwrap_or_default_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    let v: I32 = x.unwrap_or_default()
+    assert_eq(v, 42, "unwrap_or_default on Ok returns value")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_or_default_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    let v: I32 = x.unwrap_or_default()
+    assert_eq(v, 0, "unwrap_or_default on Err returns default (0 for I32)")
+    return 0
+}
+
+// =============================================================================
+// Outcome::contains / contains_err
+// =============================================================================
+
+@test
+func test_outcome_contains_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    assert(x.contains(42), "Ok(42) should contain 42")
+    assert(not x.contains(99), "Ok(42) should not contain 99")
+    return 0
+}
+
+@test
+func test_outcome_contains_err_value() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    assert(not x.contains(42), "Err should not contain any Ok value")
+    return 0
+}
