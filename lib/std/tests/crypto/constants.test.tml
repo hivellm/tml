@@ -1,10 +1,15 @@
-//! Tests for crypto constants module
-//! NOTE: constants module has a codegen bug with lowlevel blocks returning *Unit
-//! (generates i32 instead of ptr). Tests deferred until bug is fixed.
+// Tests for crypto constants module
+// NOTE: Most functions in this module require FFI bindings that are not yet
+// implemented in the C runtime (crypto_get_hashes, crypto_fips_mode, etc.)
+// Tests are deferred until the missing FFI functions are added.
+// See: compiler/runtime/crypto/crypto.c — only bytes_to_hex, hex_to_bytes,
+// bytes_to_base64, base64_to_bytes are implemented.
 
-use test::{assert}
+use test
 
 @test
-func test_constants_placeholder() -> I32 {
+func test_constants_deferred() -> I32 {
+    // Module has unimplemented FFI bindings that cause link errors
+    // when any function from the module is referenced
     return 0
 }

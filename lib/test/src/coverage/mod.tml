@@ -5,96 +5,61 @@
 
 /// Mark a function as covered
 /// Call this at the start of a function to track coverage
-pub func cover_func(name: Str) {
-    lowlevel {
-        tml_cover_func(name)
-    }
-}
+@extern("tml_cover_func")
+pub func cover_func(name: Str)
 
 /// Mark a line as covered
 /// Use this to track specific line coverage
-pub func cover_line(file: Str, line: I32) {
-    lowlevel {
-        tml_cover_line(file, line)
-    }
-}
+@extern("tml_cover_line")
+pub func cover_line(file: Str, line: I32)
 
 /// Mark a branch as covered
 /// branch_id: unique identifier for this branch (e.g., 0 = if, 1 = else)
-pub func cover_branch(file: Str, line: I32, branch_id: I32) {
-    lowlevel {
-        tml_cover_branch(file, line, branch_id)
-    }
-}
+@extern("tml_cover_branch")
+pub func cover_branch(file: Str, line: I32, branch_id: I32)
 
 // ============ Coverage Reporting ============
 
 /// Print coverage summary to stdout
-pub func print_coverage_report() {
-    lowlevel {
-        tml_print_coverage_report()
-    }
-}
+@extern("tml_print_coverage_report")
+pub func print_coverage_report()
 
 /// Get total number of covered functions
-pub func get_covered_func_count() -> I32 {
-    lowlevel {
-        return tml_get_covered_func_count()
-    }
-}
+@extern("tml_get_covered_func_count")
+pub func get_covered_func_count() -> I32
 
 /// Get total number of covered lines
-pub func get_covered_line_count() -> I32 {
-    lowlevel {
-        return tml_get_covered_line_count()
-    }
-}
+@extern("tml_get_covered_line_count")
+pub func get_covered_line_count() -> I32
 
 /// Get total number of covered branches
-pub func get_covered_branch_count() -> I32 {
-    lowlevel {
-        return tml_get_covered_branch_count()
-    }
-}
+@extern("tml_get_covered_branch_count")
+pub func get_covered_branch_count() -> I32
 
 /// Reset all coverage data
-pub func reset_coverage() {
-    lowlevel {
-        tml_reset_coverage()
-    }
-}
+@extern("tml_reset_coverage")
+pub func reset_coverage()
 
 /// Get current coverage percentage (0-100)
-pub func get_coverage_percent() -> I32 {
-    lowlevel {
-        return tml_get_coverage_percent()
-    }
-}
+@extern("tml_get_coverage_percent")
+pub func get_coverage_percent() -> I32
 
 /// Check if a specific function has been covered
-pub func is_func_covered(name: Str) -> Bool {
-    lowlevel {
-        return tml_is_func_covered(name)
-    }
-}
+@extern("tml_is_func_covered")
+pub func is_func_covered(name: Str) -> Bool
 
 // ============ Coverage Assertions ============
 
 /// Assert that a function has been covered
 pub func assert_func_covered(name: Str, message: Str) {
-    let is_covered: Bool = lowlevel {
-        return tml_is_func_covered(name)
-    }
-    if not is_covered {
+    if not is_func_covered(name) {
         panic("coverage assertion failed: " + message)
     }
 }
 
 /// Assert minimum function coverage percentage
 pub func assert_coverage_percent(min_percent: I32, message: Str) {
-    let actual: I32 = lowlevel {
-        return tml_get_coverage_percent()
-    }
+    let actual: I32 = get_coverage_percent()
     if actual < min_percent {
         panic("coverage assertion failed (below threshold): " + message)
     }

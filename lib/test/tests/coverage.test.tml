@@ -1,0 +1,79 @@
+//! Tests for test::coverage module — coverage tracking functions.
+
+use test
+use test::coverage
+
+@test
+func test_reset_and_count() -> I32 {
+    coverage::reset_coverage()
+    let count: I32 = coverage::get_covered_func_count()
+    assert_eq(count, 0, "after reset, func count should be 0")
+    return 0
+}
+
+@test
+func test_cover_func_basic() -> I32 {
+    coverage::reset_coverage()
+    coverage::cover_func("my_function")
+    let count: I32 = coverage::get_covered_func_count()
+    assert_eq(count, 1, "after covering 1 function, count should be 1")
+    return 0
+}
+
+@test
+func test_cover_multiple_funcs() -> I32 {
+    coverage::reset_coverage()
+    coverage::cover_func("func_a")
+    coverage::cover_func("func_b")
+    coverage::cover_func("func_c")
+    let count: I32 = coverage::get_covered_func_count()
+    assert_eq(count, 3, "after covering 3 functions, count should be 3")
+    return 0
+}
+
+@test
+func test_is_func_covered() -> I32 {
+    coverage::reset_coverage()
+    let before: Bool = coverage::is_func_covered("target_fn")
+    assert_false(before, "function should not be covered before marking")
+    coverage::cover_func("target_fn")
+    let after: Bool = coverage::is_func_covered("target_fn")
+    assert_true(after, "function should be covered after marking")
+    return 0
+}
+
+@test
+func test_cover_line() -> I32 {
+    coverage::reset_coverage()
+    coverage::cover_line("test.tml", 10)
+    coverage::cover_line("test.tml", 20)
+    let count: I32 = coverage::get_covered_line_count()
+    assert_eq(count, 2, "after covering 2 lines, count should be 2")
+    return 0
+}
+
+@test
+func test_cover_branch() -> I32 {
+    coverage::reset_coverage()
+    coverage::cover_branch("test.tml", 10, 0)
+    coverage::cover_branch("test.tml", 10, 1)
+    let count: I32 = coverage::get_covered_branch_count()
+    assert_eq(count, 2, "after covering 2 branches, count should be 2")
+    return 0
+}
+
+@test
+func test_assert_func_covered_passes() -> I32 {
+    coverage::reset_coverage()
+    coverage::cover_func("assert_target")
+    coverage::assert_func_covered("assert_target", "should pass")
+    return 0
+}
+
+@test
+func test_get_coverage_percent() -> I32 {
+    coverage::reset_coverage()
+    let pct: I32 = coverage::get_coverage_percent()
+    assert_gte(pct, 0, "coverage percent should be >= 0")
+    return 0
+}

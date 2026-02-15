@@ -51,18 +51,16 @@ Of **50 modules with 0% coverage** (439 functions):
 
 ---
 
-## 2. Not Implemented Modules (4 modules, 36 functions)
+## 2. Previously "Not Implemented" Modules — RESOLVED
 
-**No code implemented**, so nothing to test:
+**Investigation (2026-02-15)**: All 4 modules were found to be implemented. Status:
 
-1. `crypto/constants` — 14 functions
-2. `coverage` — 12 functions
-3. `future` — 12 functions (requires async runtime)
-4. `precompiled_symbols` — 1 function
+1. `crypto/constants` — 14 functions. **BLOCKED**: FFI bindings (`crypto_get_hashes`, `crypto_fips_mode`, etc.) not implemented in C runtime. Compiler links all module functions even with selective imports, so any test importing the module fails with link errors. Placeholder test exists.
+2. `coverage` — 12 functions. **FIXED & TESTED**: Rewrote module from `lowlevel` blocks to `@extern("symbol")` declarations. All 12 functions now have tests (8 tests in `lib/test/tests/coverage.test.tml`). Also fixed compiler bug: missing `i32→i1` truncation in return codegen (`compiler/src/codegen/llvm/control/return.cpp`).
+3. `future` — 12 functions. **PARTIALLY TESTED**: `Poll[T]` methods (is_ready, is_pending, ready), `Ready::new`, `ready()` helper tested (9 tests in `lib/core/tests/task/poll.test.tml`). `Pending::new()` and `pending()` have a codegen bug (generic PhantomData specialization). `Waker` methods are stubs (panic). `Map`, `AndThen`, `Flatten` have no `Future` impls yet.
+4. `precompiled_symbols` — 1 function. **ALREADY TESTED**: 3 tests exist in `lib/std/tests/sync/precompiled_symbols.test.tml`.
 
 **Note**: `runner` (9 functions) is the test runner itself — not a testable module.
-
-**Action**: Wait for implementation or remove from library.
 
 ---
 

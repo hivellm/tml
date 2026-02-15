@@ -1,6 +1,6 @@
-// Tests for core::task - Poll[T] enum
+// Tests for core::task - Poll[T], Ready[T], Pending[T]
 use test
-use core::task::{Poll}
+use core::task::{Poll, Ready, Pending, ready, pending}
 
 @test
 func test_poll_ready() -> I32 {
@@ -26,5 +26,37 @@ func test_poll_ready_to_maybe() -> I32 {
     let p2: Poll[I32] = Poll::Pending
     let m2: Maybe[I32] = p2.ready()
     assert(m2.is_nothing(), "Pending.ready() should be Nothing")
+    return 0
+}
+
+@test
+func test_ready_new() -> I32 {
+    let r: Ready[I32] = Ready::new(42)
+    assert(true, "Ready::new should construct without error")
+    return 0
+}
+
+@test
+func test_ready_helper() -> I32 {
+    let r: Ready[I32] = ready(100)
+    assert(true, "ready() helper should construct without error")
+    return 0
+}
+
+@test
+func test_poll_ready_with_string() -> I32 {
+    let p: Poll[Str] = Poll::Ready("hello")
+    assert(p.is_ready(), "Ready[Str] should be ready")
+    assert(not p.is_pending(), "Ready[Str] should not be pending")
+    return 0
+}
+
+@test
+func test_poll_ready_extract_value() -> I32 {
+    let p: Poll[I32] = Poll::Ready(77)
+    when p {
+        Ready(v) => assert_eq(v, 77, "should extract 77 from Ready"),
+        Pending => panic("should not be Pending")
+    }
     return 0
 }
