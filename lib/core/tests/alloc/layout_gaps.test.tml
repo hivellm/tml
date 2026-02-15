@@ -1,0 +1,374 @@
+// Tests for core::alloc::layout — Layout, LayoutError, and utility functions
+use test::{assert, assert_eq}
+use core::alloc::layout::{Layout, LayoutError, is_power_of_two, is_valid_align, is_aligned, padding_needed, align_up, align_down, next_power_of_two}
+
+// ============================================================================
+// LayoutError
+// ============================================================================
+
+@test
+func test_layout_error_new() -> I32 {
+    let e: LayoutError = LayoutError::new()
+    assert_eq(e.to_string(), "invalid parameters to Layout::from_size_align", "error message")
+    assert_eq(e.debug_string(), "LayoutError", "debug string")
+    return 0
+}
+
+// ============================================================================
+// Layout constructors
+// ============================================================================
+
+@test
+func test_layout_from_size_align_valid() -> I32 {
+    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(64 as I64, 8 as I64)
+    assert(result.is_ok(), "64,8 should be valid")
+    let layout: Layout = result.unwrap()
+    assert_eq(layout.size(), 64 as I64, "size 64")
+    assert_eq(layout.align(), 8 as I64, "align 8")
+    return 0
+}
+
+@test
+func test_layout_from_size_align_zero_size() -> I32 {
+    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(0 as I64, 4 as I64)
+    assert(result.is_ok(), "zero size should be valid")
+    let layout: Layout = result.unwrap()
+    assert(layout.is_zero_sized(), "should be zero sized")
+    return 0
+}
+
+@test
+func test_layout_from_size_align_invalid() -> I32 {
+    let r1: Outcome[Layout, LayoutError] = Layout::from_size_align(8 as I64, 3 as I64)
+    assert(r1.is_err(), "align=3 should fail")
+    let r2: Outcome[Layout, LayoutError] = Layout::from_size_align(8 as I64, 0 as I64)
+    assert(r2.is_err(), "align=0 should fail")
+    let r3: Outcome[Layout, LayoutError] = Layout::from_size_align(-1 as I64, 4 as I64)
+    assert(r3.is_err(), "negative size should fail")
+    return 0
+}
+
+// ============================================================================
+// Layout accessors
+// ============================================================================
+
+@test
+func test_layout_accessors() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(32 as I64, 16 as I64)
+    assert_eq(layout.size(), 32 as I64, "size")
+    assert_eq(layout.align(), 16 as I64, "align")
+    assert(not layout.is_zero_sized(), "not zero sized")
+    assert_eq(layout.dangling(), 16 as I64, "dangling = align")
+    return 0
+}
+
+@test
+func test_layout_zero_sized() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(0 as I64, 8 as I64)
+    assert(layout.is_zero_sized(), "zero sized")
+    assert_eq(layout.dangling(), 8 as I64, "dangling = align")
+    return 0
+}
+
+// ============================================================================
+// Layout::padding_needed_for
+// ============================================================================
+
+@test
+func test_layout_padding_needed_for() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(8 as I64, 4 as I64)
+    assert_eq(layout.padding_needed_for(0 as I64), 0 as I64, "pad(0)")
+    assert_eq(layout.padding_needed_for(1 as I64), 3 as I64, "pad(1)")
+    assert_eq(layout.padding_needed_for(4 as I64), 0 as I64, "pad(4)")
+    assert_eq(layout.padding_needed_for(5 as I64), 3 as I64, "pad(5)")
+
+    let layout8: Layout = Layout::from_size_align_unchecked(16 as I64, 8 as I64)
+    assert_eq(layout8.padding_needed_for(7 as I64), 1 as I64, "pad8(7)")
+    assert_eq(layout8.padding_needed_for(8 as I64), 0 as I64, "pad8(8)")
+    return 0
+}
+
+// ============================================================================
+// Layout::pad_to_align
+// ============================================================================
+
+@test
+func test_layout_pad_to_align() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(5 as I64, 4 as I64)
+    let result: Outcome[Layout, LayoutError] = layout.pad_to_align()
+    assert(result.is_ok(), "pad_to_align should succeed")
+    let padded: Layout = result.unwrap()
+    assert_eq(padded.size(), 8 as I64, "padded size 8")
+    assert_eq(padded.align(), 4 as I64, "padded align 4")
+    return 0
+}
+
+@test
+func test_layout_pad_to_align_already_aligned() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(8 as I64, 4 as I64)
+    let result: Outcome[Layout, LayoutError] = layout.pad_to_align()
+    assert(result.is_ok(), "pad_to_align already aligned")
+    let padded: Layout = result.unwrap()
+    assert_eq(padded.size(), 8 as I64, "stays 8")
+    return 0
+}
+
+// ============================================================================
+// Layout::align_to
+// ============================================================================
+
+@test
+func test_layout_align_to() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(8 as I64, 4 as I64)
+    let result: Outcome[Layout, LayoutError] = layout.align_to(16 as I64)
+    assert(result.is_ok(), "align_to 16")
+    let aligned: Layout = result.unwrap()
+    assert_eq(aligned.align(), 16 as I64, "new align 16")
+    assert_eq(aligned.size(), 8 as I64, "size unchanged")
+    return 0
+}
+
+@test
+func test_layout_align_to_smaller() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(8 as I64, 16 as I64)
+    let result: Outcome[Layout, LayoutError] = layout.align_to(4 as I64)
+    assert(result.is_ok(), "align_to smaller")
+    let aligned: Layout = result.unwrap()
+    assert_eq(aligned.align(), 16 as I64, "stays 16")
+    return 0
+}
+
+// ============================================================================
+// Layout::with_size / with_align
+// ============================================================================
+
+@test
+func test_layout_with_size() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(8 as I64, 4 as I64)
+    let result: Outcome[Layout, LayoutError] = layout.with_size(16 as I64)
+    assert(result.is_ok(), "with_size 16")
+    let new_layout: Layout = result.unwrap()
+    assert_eq(new_layout.size(), 16 as I64, "new size 16")
+    assert_eq(new_layout.align(), 4 as I64, "align preserved")
+    return 0
+}
+
+@test
+func test_layout_with_align() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(8 as I64, 4 as I64)
+    let result: Outcome[Layout, LayoutError] = layout.with_align(16 as I64)
+    assert(result.is_ok(), "with_align 16")
+    let new_layout: Layout = result.unwrap()
+    assert_eq(new_layout.size(), 8 as I64, "size preserved")
+    assert_eq(new_layout.align(), 16 as I64, "new align 16")
+    return 0
+}
+
+// ============================================================================
+// Layout::extend_packed
+// ============================================================================
+
+@test
+func test_layout_extend_packed() -> I32 {
+    let a: Layout = Layout::from_size_align_unchecked(8 as I64, 4 as I64)
+    let b: Layout = Layout::from_size_align_unchecked(16 as I64, 8 as I64)
+    let result: Outcome[Layout, LayoutError] = a.extend_packed(b)
+    assert(result.is_ok(), "extend_packed")
+    let packed: Layout = result.unwrap()
+    assert_eq(packed.size(), 24 as I64, "packed size 24")
+    assert_eq(packed.align(), 1 as I64, "packed align 1")
+    return 0
+}
+
+// ============================================================================
+// Layout::repeat_packed
+// ============================================================================
+
+@test
+func test_layout_repeat_packed() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(3 as I64, 4 as I64)
+    let result: Outcome[Layout, LayoutError] = layout.repeat_packed(5 as I64)
+    assert(result.is_ok(), "repeat_packed 5")
+    let repeated: Layout = result.unwrap()
+    assert_eq(repeated.size(), 15 as I64, "size 3*5=15")
+    assert_eq(repeated.align(), 4 as I64, "align preserved")
+    return 0
+}
+
+// ============================================================================
+// Layout::array / array_of
+// ============================================================================
+
+@test
+func test_layout_array() -> I32 {
+    let result: Outcome[Layout, LayoutError] = Layout::array(4 as I64, 4 as I64, 10 as I64)
+    assert(result.is_ok(), "array 4,4,10")
+    let arr: Layout = result.unwrap()
+    assert_eq(arr.size(), 40 as I64, "size 4*10=40")
+    assert_eq(arr.align(), 4 as I64, "align 4")
+    return 0
+}
+
+@test
+func test_layout_array_with_padding() -> I32 {
+    let result: Outcome[Layout, LayoutError] = Layout::array(3 as I64, 4 as I64, 3 as I64)
+    assert(result.is_ok(), "array 3,4,3")
+    let arr: Layout = result.unwrap()
+    assert_eq(arr.size(), 12 as I64, "size with stride padding")
+    assert_eq(arr.align(), 4 as I64, "align 4")
+    return 0
+}
+
+@test
+func test_layout_array_of() -> I32 {
+    let result: Outcome[Layout, LayoutError] = Layout::array_of(8 as I64, 8 as I64, 4 as I64)
+    assert(result.is_ok(), "array_of 8,8,4")
+    let arr: Layout = result.unwrap()
+    assert_eq(arr.size(), 32 as I64, "size 8*4=32")
+    assert_eq(arr.align(), 8 as I64, "align 8")
+    return 0
+}
+
+// ============================================================================
+// Layout::equals
+// ============================================================================
+
+@test
+func test_layout_equals() -> I32 {
+    let a: Layout = Layout::from_size_align_unchecked(8 as I64, 4 as I64)
+    let b: Layout = Layout::from_size_align_unchecked(8 as I64, 4 as I64)
+    let c: Layout = Layout::from_size_align_unchecked(16 as I64, 4 as I64)
+    let d: Layout = Layout::from_size_align_unchecked(8 as I64, 8 as I64)
+    assert(a.equals(b), "a == b")
+    assert(not a.equals(c), "a != c (different size)")
+    assert(not a.equals(d), "a != d (different align)")
+    return 0
+}
+
+// ============================================================================
+// Layout::to_string / debug_string
+// ============================================================================
+
+@test
+func test_layout_to_string() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(64 as I64, 8 as I64)
+    assert_eq(layout.to_string(), "Layout(size=64, align=8)", "to_string")
+    assert_eq(layout.debug_string(), "Layout(size_=64, align_=8)", "debug_string")
+    return 0
+}
+
+// ============================================================================
+// Utility functions: is_power_of_two
+// ============================================================================
+
+@test
+func test_is_power_of_two() -> I32 {
+    assert(is_power_of_two(1 as I64), "1 is power of two")
+    assert(is_power_of_two(2 as I64), "2 is power of two")
+    assert(is_power_of_two(4 as I64), "4 is power of two")
+    assert(is_power_of_two(1024 as I64), "1024 is power of two")
+    assert(not is_power_of_two(0 as I64), "0 is not power of two")
+    assert(not is_power_of_two(3 as I64), "3 is not power of two")
+    assert(not is_power_of_two(6 as I64), "6 is not power of two")
+    assert(not is_power_of_two(-1 as I64), "-1 is not power of two")
+    return 0
+}
+
+// ============================================================================
+// Utility functions: is_valid_align
+// ============================================================================
+
+@test
+func test_is_valid_align() -> I32 {
+    assert(is_valid_align(1 as I64), "1 valid align")
+    assert(is_valid_align(2 as I64), "2 valid align")
+    assert(is_valid_align(8 as I64), "8 valid align")
+    assert(is_valid_align(4096 as I64), "4096 valid align")
+    assert(not is_valid_align(0 as I64), "0 not valid align")
+    assert(not is_valid_align(3 as I64), "3 not valid align")
+    assert(not is_valid_align(-1 as I64), "-1 not valid align")
+    return 0
+}
+
+// ============================================================================
+// Utility functions: is_aligned
+// ============================================================================
+
+@test
+func test_is_aligned() -> I32 {
+    assert(is_aligned(0 as I64, 4 as I64), "0 aligned to 4")
+    assert(is_aligned(4 as I64, 4 as I64), "4 aligned to 4")
+    assert(is_aligned(8 as I64, 4 as I64), "8 aligned to 4")
+    assert(is_aligned(16 as I64, 8 as I64), "16 aligned to 8")
+    assert(not is_aligned(1 as I64, 4 as I64), "1 not aligned to 4")
+    assert(not is_aligned(3 as I64, 4 as I64), "3 not aligned to 4")
+    assert(not is_aligned(5 as I64, 4 as I64), "5 not aligned to 4")
+    return 0
+}
+
+// ============================================================================
+// Utility functions: padding_needed
+// ============================================================================
+
+@test
+func test_padding_needed() -> I32 {
+    assert_eq(padding_needed(0 as I64, 4 as I64), 0 as I64, "0 mod 4 = 0")
+    assert_eq(padding_needed(4 as I64, 4 as I64), 0 as I64, "4 mod 4 = 0")
+    assert_eq(padding_needed(1 as I64, 4 as I64), 3 as I64, "1 needs 3 to reach 4")
+    assert_eq(padding_needed(5 as I64, 4 as I64), 3 as I64, "5 needs 3 to reach 8")
+    assert_eq(padding_needed(7 as I64, 8 as I64), 1 as I64, "7 needs 1 to reach 8")
+    assert_eq(padding_needed(16 as I64, 8 as I64), 0 as I64, "16 mod 8 = 0")
+    return 0
+}
+
+// ============================================================================
+// Utility functions: align_up
+// ============================================================================
+
+@test
+func test_align_up() -> I32 {
+    assert_eq(align_up(0 as I64, 4 as I64), 0 as I64, "align_up(0,4)")
+    assert_eq(align_up(1 as I64, 4 as I64), 4 as I64, "align_up(1,4)")
+    assert_eq(align_up(4 as I64, 4 as I64), 4 as I64, "align_up(4,4)")
+    assert_eq(align_up(5 as I64, 4 as I64), 8 as I64, "align_up(5,4)")
+    assert_eq(align_up(7 as I64, 8 as I64), 8 as I64, "align_up(7,8)")
+    assert_eq(align_up(8 as I64, 8 as I64), 8 as I64, "align_up(8,8)")
+    assert_eq(align_up(9 as I64, 8 as I64), 16 as I64, "align_up(9,8)")
+    return 0
+}
+
+// ============================================================================
+// Utility functions: align_down
+// ============================================================================
+
+@test
+func test_align_down() -> I32 {
+    assert_eq(align_down(0 as I64, 4 as I64), 0 as I64, "align_down(0,4)")
+    assert_eq(align_down(3 as I64, 4 as I64), 0 as I64, "align_down(3,4)")
+    assert_eq(align_down(4 as I64, 4 as I64), 4 as I64, "align_down(4,4)")
+    assert_eq(align_down(7 as I64, 4 as I64), 4 as I64, "align_down(7,4)")
+    assert_eq(align_down(15 as I64, 8 as I64), 8 as I64, "align_down(15,8)")
+    assert_eq(align_down(16 as I64, 8 as I64), 16 as I64, "align_down(16,8)")
+    return 0
+}
+
+// ============================================================================
+// Utility functions: next_power_of_two
+// ============================================================================
+
+@test
+func test_next_power_of_two() -> I32 {
+    assert_eq(next_power_of_two(0 as I64), 1 as I64, "npo2(0)")
+    assert_eq(next_power_of_two(1 as I64), 1 as I64, "npo2(1)")
+    assert_eq(next_power_of_two(2 as I64), 2 as I64, "npo2(2)")
+    assert_eq(next_power_of_two(3 as I64), 4 as I64, "npo2(3)")
+    assert_eq(next_power_of_two(5 as I64), 8 as I64, "npo2(5)")
+    assert_eq(next_power_of_two(7 as I64), 8 as I64, "npo2(7)")
+    assert_eq(next_power_of_two(8 as I64), 8 as I64, "npo2(8)")
+    assert_eq(next_power_of_two(9 as I64), 16 as I64, "npo2(9)")
+    assert_eq(next_power_of_two(1000 as I64), 1024 as I64, "npo2(1000)")
+    return 0
+}
+
+// NOTE: Layout::extend and Layout::repeat return Outcome[(Layout, I64), LayoutError]
+// which requires tuple-in-Outcome codegen — skipped for now

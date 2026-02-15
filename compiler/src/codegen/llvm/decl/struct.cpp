@@ -23,6 +23,10 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
         std::vector<FieldInfo> fields;
         for (size_t i = 0; i < s.fields.size(); ++i) {
             std::string ft = llvm_type_ptr(s.fields[i].type);
+            // Function pointer fields use fat pointer to support closures
+            if (s.fields[i].type && s.fields[i].type->is<parser::FuncType>()) {
+                ft = "{ ptr, ptr }";
+            }
             types::TypePtr sem_type = resolve_parser_type_with_subs(*s.fields[i].type, {});
             fields.push_back({s.fields[i].name, static_cast<int>(i), ft, sem_type});
         }
@@ -54,6 +58,10 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
         // Unit type as struct field must be {} not void (LLVM doesn't allow void in structs)
         if (ft == "void")
             ft = "{}";
+        // Function pointer fields use fat pointer { fn_ptr, env_ptr } to support closures
+        if (s.fields[i].type && s.fields[i].type->is<parser::FuncType>()) {
+            ft = "{ ptr, ptr }";
+        }
         field_types.push_back(ft);
         types::TypePtr sem_type = resolve_parser_type_with_subs(*s.fields[i].type, {});
         fields.push_back({s.fields[i].name, static_cast<int>(i), ft, sem_type});
@@ -109,6 +117,10 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
         types::TypePtr field_type = resolve_parser_type_with_subs(*decl.fields[i].type, subs);
         // Use for_data=true since struct fields need concrete types (Unit -> {} not void)
         std::string ft = llvm_type_from_semantic(field_type, true);
+        // Function pointer fields use fat pointer { fn_ptr, env_ptr } to support closures
+        if (field_type && field_type->is<types::FuncType>()) {
+            ft = "{ ptr, ptr }";
+        }
         field_types.push_back(ft);
         fields.push_back({decl.fields[i].name, static_cast<int>(i), ft, field_type});
     }

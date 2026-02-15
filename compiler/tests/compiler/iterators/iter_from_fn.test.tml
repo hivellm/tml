@@ -1,0 +1,32 @@
+use test
+use core::iter::sources::from_fn::{FromFn, from_fn}
+
+// Test 8.3b: FromFn iterator source with where clause type equality
+// FromFn uses: impl[F, T] Iterator for FromFn[F] where F = func() -> Maybe[T]
+
+@test
+func test_from_fn_countdown() -> I32 {
+    var n: I32 = 3
+    let mut iter: FromFn[func() -> Maybe[I32]] = from_fn(do() -> Maybe[I32] {
+        if n <= 0 {
+            return Nothing
+        }
+        let current: I32 = n
+        n = n - 1
+        return Just(current)
+    })
+
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 3, "first")
+
+    let v2: Maybe[I32] = iter.next()
+    assert_eq(v2.unwrap(), 2, "second")
+
+    let v3: Maybe[I32] = iter.next()
+    assert_eq(v3.unwrap(), 1, "third")
+
+    let v4: Maybe[I32] = iter.next()
+    assert(v4.is_nothing(), "exhausted")
+
+    return 0
+}

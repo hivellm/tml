@@ -98,6 +98,38 @@ func test_one_i16() -> I32 {
 }
 
 @test
+func test_zero_u8() -> I32 {
+    let z: U8 = U8::zero()
+    assert_eq(z, 0u8, "U8 zero")
+    assert(z.is_zero(), "U8 zero is_zero")
+    return 0
+}
+
+@test
+func test_one_u8() -> I32 {
+    let o: U8 = U8::one()
+    assert_eq(o, 1u8, "U8 one")
+    assert(o.is_one(), "U8 one is_one")
+    return 0
+}
+
+@test
+func test_zero_u16() -> I32 {
+    let z: U16 = U16::zero()
+    assert_eq(z, 0u16, "U16 zero")
+    assert(z.is_zero(), "U16 zero is_zero")
+    return 0
+}
+
+@test
+func test_one_u16() -> I32 {
+    let o: U16 = U16::one()
+    assert_eq(o, 1u16, "U16 one")
+    assert(o.is_one(), "U16 one is_one")
+    return 0
+}
+
+@test
 func test_zero_f32() -> I32 {
     let z: F32 = F32::zero()
     assert_eq(z, 0.0f32, "F32 zero")

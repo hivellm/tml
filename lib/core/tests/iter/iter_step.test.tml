@@ -1,0 +1,206 @@
+// Tests for Step behavior implementations on all integer types
+// Covers: forward_checked, backward_checked for I8, I16, I32, I64, U8, U16, U32, U64
+use test::{assert, assert_eq}
+use core::iter::range::Step
+
+// --- I32 Step ---
+
+@test
+func test_i32_forward_checked() -> I32 {
+    let v: I32 = 5
+    let r: Maybe[I32] = v.forward_checked(3)
+    assert(r.is_just(), "forward should succeed")
+    assert_eq(r.unwrap(), 8, "5 + 3 = 8")
+    return 0
+}
+
+@test
+func test_i32_forward_checked_overflow() -> I32 {
+    let v: I32 = 2147483647
+    let r: Maybe[I32] = v.forward_checked(1)
+    assert(r.is_nothing(), "forward overflow should be Nothing")
+    return 0
+}
+
+@test
+func test_i32_backward_checked() -> I32 {
+    let v: I32 = 10
+    let r: Maybe[I32] = v.backward_checked(3)
+    assert(r.is_just(), "backward should succeed")
+    assert_eq(r.unwrap(), 7, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_i32_backward_checked_underflow() -> I32 {
+    let v: I32 = -2147483648
+    let r: Maybe[I32] = v.backward_checked(1)
+    assert(r.is_nothing(), "backward underflow should be Nothing")
+    return 0
+}
+
+// --- I64 Step ---
+
+@test
+func test_i64_forward_checked() -> I32 {
+    let v: I64 = 100i64
+    let r: Maybe[I64] = v.forward_checked(50i64)
+    assert(r.is_just(), "i64 forward should succeed")
+    assert_eq(r.unwrap(), 150i64, "100 + 50 = 150")
+    return 0
+}
+
+@test
+func test_i64_backward_checked() -> I32 {
+    let v: I64 = 100i64
+    let r: Maybe[I64] = v.backward_checked(50i64)
+    assert(r.is_just(), "i64 backward should succeed")
+    assert_eq(r.unwrap(), 50i64, "100 - 50 = 50")
+    return 0
+}
+
+// --- I8 Step ---
+
+@test
+func test_i8_forward_checked() -> I32 {
+    let v: I8 = 10i8
+    let r: Maybe[I8] = v.forward_checked(5i64)
+    assert(r.is_just(), "i8 forward should succeed")
+    assert_eq(r.unwrap(), 15i8, "10 + 5 = 15")
+    return 0
+}
+
+@test
+func test_i8_forward_checked_overflow() -> I32 {
+    let v: I8 = 127i8
+    let r: Maybe[I8] = v.forward_checked(1i64)
+    assert(r.is_nothing(), "i8 forward overflow")
+    return 0
+}
+
+@test
+func test_i8_backward_checked() -> I32 {
+    let v: I8 = 10i8
+    let r: Maybe[I8] = v.backward_checked(5i64)
+    assert(r.is_just(), "i8 backward should succeed")
+    assert_eq(r.unwrap(), 5i8, "10 - 5 = 5")
+    return 0
+}
+
+// --- I16 Step ---
+
+@test
+func test_i16_forward_checked() -> I32 {
+    let v: I16 = 100i16
+    let r: Maybe[I16] = v.forward_checked(50i64)
+    assert(r.is_just(), "i16 forward should succeed")
+    assert_eq(r.unwrap(), 150i16, "100 + 50 = 150")
+    return 0
+}
+
+@test
+func test_i16_backward_checked_underflow() -> I32 {
+    let v: I16 = -32768i16
+    let r: Maybe[I16] = v.backward_checked(1i64)
+    assert(r.is_nothing(), "i16 backward underflow")
+    return 0
+}
+
+// --- U8 Step ---
+
+@test
+func test_u8_forward_checked() -> I32 {
+    let v: U8 = 200u8
+    let r: Maybe[U8] = v.forward_checked(50i64)
+    assert(r.is_just(), "u8 forward should succeed")
+    assert_eq(r.unwrap(), 250u8, "200 + 50 = 250")
+    return 0
+}
+
+@test
+func test_u8_forward_checked_overflow() -> I32 {
+    let v: U8 = 255u8
+    let r: Maybe[U8] = v.forward_checked(1i64)
+    assert(r.is_nothing(), "u8 forward overflow")
+    return 0
+}
+
+// --- U16 Step ---
+
+@test
+func test_u16_forward_checked() -> I32 {
+    let v: U16 = 1000u16
+    let r: Maybe[U16] = v.forward_checked(500i64)
+    assert(r.is_just(), "u16 forward should succeed")
+    assert_eq(r.unwrap(), 1500u16, "1000 + 500 = 1500")
+    return 0
+}
+
+// --- U32 Step ---
+
+@test
+func test_u32_forward_checked() -> I32 {
+    let v: U32 = 10u32
+    let r: Maybe[U32] = v.forward_checked(5i64)
+    assert(r.is_just(), "u32 forward should succeed")
+    assert_eq(r.unwrap(), 15u32, "10 + 5 = 15")
+    return 0
+}
+
+@test
+func test_u32_forward_checked_overflow() -> I32 {
+    let v: U32 = 4294967295u32
+    let r: Maybe[U32] = v.forward_checked(1i64)
+    assert(r.is_nothing(), "u32 forward overflow")
+    return 0
+}
+
+@test
+func test_u32_backward_checked() -> I32 {
+    let v: U32 = 10u32
+    let r: Maybe[U32] = v.backward_checked(3i64)
+    assert(r.is_just(), "u32 backward should succeed")
+    assert_eq(r.unwrap(), 7u32, "10 - 3 = 7")
+    return 0
+}
+
+@test
+func test_u32_backward_checked_underflow() -> I32 {
+    let v: U32 = 0u32
+    let r: Maybe[U32] = v.backward_checked(1i64)
+    assert(r.is_nothing(), "u32 backward underflow")
+    return 0
+}
+
+// --- U64 Step ---
+
+@test
+func test_u64_forward_checked() -> I32 {
+    let v: U64 = 100u64
+    let r: Maybe[U64] = v.forward_checked(50i64)
+    assert(r.is_just(), "u64 forward should succeed")
+    assert_eq(r.unwrap(), 150u64, "100 + 50 = 150")
+    return 0
+}
+
+@test
+func test_u64_backward_checked() -> I32 {
+    let v: U64 = 100u64
+    let r: Maybe[U64] = v.backward_checked(30i64)
+    assert(r.is_just(), "u64 backward should succeed")
+    assert_eq(r.unwrap(), 70u64, "100 - 30 = 70")
+    return 0
+}
+
+@test
+func test_u64_backward_checked_underflow() -> I32 {
+    let v: U64 = 0u64
+    let r: Maybe[U64] = v.backward_checked(1i64)
+    assert(r.is_nothing(), "u64 backward underflow")
+    return 0
+}
+
+// NOTE: Step::steps_between() is a static method — blocked by behavior static method dispatch
+// NOTE: Range[T]::next() generic iterator blocked by behavior method dispatch returns ()
+// NOTE: RangeInclusive[T]::next() same issue
+// NOTE: RangeFrom[T]::next() same issue

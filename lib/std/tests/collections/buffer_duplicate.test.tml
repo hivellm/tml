@@ -1,0 +1,22 @@
+// Tests for Buffer::duplicate
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_duplicate() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u8(0xAB, 0)
+    buf.write_u8(0xCD, 1)
+    buf.write_u8(0xEF, 2)
+
+    let copy: Buffer = buf.duplicate()
+
+    assert_eq(copy.len(), buf.len(), "duplicate length matches")
+    assert_eq(copy.read_u8(0), 0xAB, "duplicate byte 0")
+    assert_eq(copy.read_u8(1), 0xCD, "duplicate byte 1")
+    assert_eq(copy.read_u8(2), 0xEF, "duplicate byte 2")
+
+    copy.destroy()
+    buf.destroy()
+    return 0
+}

@@ -53,6 +53,20 @@ static std::vector<std::string> parse_tuple_types_for_coercion(const std::string
 }
 
 auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
+    // Check if we're inside an inlined closure body (e.g., Maybe::map, and_then, etc.).
+    // In that case, `return` should store the value and branch to the merge label
+    // instead of emitting a function-level `ret`.
+    if (!closure_return_alloca_.empty()) {
+        if (ret.value.has_value()) {
+            std::string val = gen_expr(*ret.value.value());
+            emit_line("  store " + closure_return_type_ + " " + val + ", ptr " +
+                      closure_return_alloca_);
+        }
+        emit_line("  br label %" + closure_return_label_);
+        block_terminated_ = true;
+        return "void";
+    }
+
     // IMPORTANT: Generate return expression FIRST, before dropping
     // This allows mark_var_consumed to be called for variables used in the return value
     std::string val;

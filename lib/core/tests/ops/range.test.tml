@@ -1,0 +1,50 @@
+// Tests for core::ops::range - Bound enum
+use test::{assert, assert_eq}
+use core::ops::range::Bound
+
+@test
+func test_bound_is_included() -> I32 {
+    let b: Bound[I32] = Bound::Included(42)
+    assert(b.is_included(), "Included is_included")
+    assert(not b.is_excluded(), "Included not is_excluded")
+    assert(not b.is_unbounded(), "Included not is_unbounded")
+    return 0
+}
+
+@test
+func test_bound_is_excluded() -> I32 {
+    let b: Bound[I32] = Bound::Excluded(10)
+    assert(not b.is_included(), "Excluded not is_included")
+    assert(b.is_excluded(), "Excluded is_excluded")
+    assert(not b.is_unbounded(), "Excluded not is_unbounded")
+    return 0
+}
+
+@test
+func test_bound_is_unbounded() -> I32 {
+    let b: Bound[I32] = Bound::Unbounded
+    assert(not b.is_included(), "Unbounded not is_included")
+    assert(not b.is_excluded(), "Unbounded not is_excluded")
+    assert(b.is_unbounded(), "Unbounded is_unbounded")
+    return 0
+}
+
+@test
+func test_bound_to_string() -> I32 {
+    let inc: Bound[I32] = Bound::Included(42)
+    assert_eq(inc.to_string(), "Included(42)", "Included to_string")
+    let exc: Bound[I32] = Bound::Excluded(10)
+    assert_eq(exc.to_string(), "Excluded(10)", "Excluded to_string")
+    let unb: Bound[I32] = Bound::Unbounded
+    assert_eq(unb.to_string(), "Unbounded", "Unbounded to_string")
+    return 0
+}
+
+@test
+func test_bound_debug_string() -> I32 {
+    let inc: Bound[I32] = Bound::Included(5)
+    assert_eq(inc.debug_string(), "Included(5)", "Included debug")
+    let unb: Bound[I32] = Bound::Unbounded
+    assert_eq(unb.debug_string(), "Unbounded", "Unbounded debug")
+    return 0
+}

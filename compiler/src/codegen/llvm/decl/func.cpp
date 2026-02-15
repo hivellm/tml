@@ -907,6 +907,11 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
         // Resolve param type with substitution
         types::TypePtr resolved_param = resolve_parser_type_with_subs(*func.params[i].type, subs);
         std::string param_type = llvm_type_from_semantic(resolved_param);
+        // Function-typed parameters use fat pointer { ptr, ptr } to support closures
+        // This matches struct field storage (see types.cpp struct field generation)
+        if (resolved_param && resolved_param->is<types::FuncType>()) {
+            param_type = "{ ptr, ptr }";
+        }
         std::string param_name = get_param_name(func.params[i], i);
 
         params += param_type + " %" + param_name;

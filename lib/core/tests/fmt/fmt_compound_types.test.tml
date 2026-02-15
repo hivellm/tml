@@ -1,0 +1,115 @@
+// Tests for Display/Debug implementations on compound types (Ordering, Maybe, Outcome)
+use test::{assert, assert_eq}
+use core::cmp::Ordering
+
+// --- Ordering Display ---
+
+@test
+func test_ordering_display_less() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert_eq(o.to_string(), "Less", "Ordering::Less display")
+    return 0
+}
+
+@test
+func test_ordering_display_equal() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert_eq(o.to_string(), "Equal", "Ordering::Equal display")
+    return 0
+}
+
+@test
+func test_ordering_display_greater() -> I32 {
+    let o: Ordering = Ordering::Greater
+    assert_eq(o.to_string(), "Greater", "Ordering::Greater display")
+    return 0
+}
+
+// --- Ordering Debug ---
+
+@test
+func test_ordering_debug_less() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert_eq(o.debug_string(), "Ordering::Less", "Ordering::Less debug")
+    return 0
+}
+
+@test
+func test_ordering_debug_equal() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert_eq(o.debug_string(), "Ordering::Equal", "Ordering::Equal debug")
+    return 0
+}
+
+@test
+func test_ordering_debug_greater() -> I32 {
+    let o: Ordering = Ordering::Greater
+    assert_eq(o.debug_string(), "Ordering::Greater", "Ordering::Greater debug")
+    return 0
+}
+
+// --- Maybe Display ---
+
+@test
+func test_maybe_display_just() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    assert_eq(m.to_string(), "Just(42)", "Maybe Just display")
+    return 0
+}
+
+@test
+func test_maybe_display_nothing() -> I32 {
+    let m: Maybe[I32] = Nothing
+    assert_eq(m.to_string(), "Nothing", "Maybe Nothing display")
+    return 0
+}
+
+// --- Maybe Debug ---
+
+@test
+func test_maybe_debug_just() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    assert_eq(m.debug_string(), "Just(42)", "Maybe Just debug")
+    return 0
+}
+
+@test
+func test_maybe_debug_nothing() -> I32 {
+    let m: Maybe[I32] = Nothing
+    assert_eq(m.debug_string(), "Nothing", "Maybe Nothing debug")
+    return 0
+}
+
+// --- Outcome Display ---
+
+@test
+func test_outcome_display_ok() -> I32 {
+    let r: Outcome[I32, Str] = Ok(42)
+    assert_eq(r.to_string(), "Ok(42)", "Outcome Ok display")
+    return 0
+}
+
+@test
+func test_outcome_display_err() -> I32 {
+    let r: Outcome[I32, Str] = Err("fail")
+    assert_eq(r.to_string(), "Err(fail)", "Outcome Err display")
+    return 0
+}
+
+// --- Outcome Debug ---
+
+@test
+func test_outcome_debug_ok() -> I32 {
+    let r: Outcome[I32, Str] = Ok(42)
+    assert_eq(r.debug_string(), "Ok(42)", "Outcome Ok debug")
+    return 0
+}
+
+@test
+func test_outcome_debug_err() -> I32 {
+    let r: Outcome[I32, Str] = Err("fail")
+    assert_eq(r.debug_string(), "Err(fail)", "Outcome Err debug")
+    return 0
+}
+
+// NOTE: Tuple Display/Debug blocked by tuple formatting codegen issues

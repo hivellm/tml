@@ -1,0 +1,427 @@
+// Tests for ops::arith assign trait methods via explicit .add_assign() etc.
+// Covers all types: I8, I16, I32, I64, U8, U16, U32, U64, F32, F64
+use test
+
+// =============================================================================
+// I8 assign methods
+// =============================================================================
+
+@test
+func test_i8_add_assign() -> I32 {
+    var a: I8 = 10
+    a.add_assign(5)
+    assert_eq(a as I32, 15, "I8.add_assign()")
+    return 0
+}
+
+@test
+func test_i8_sub_assign() -> I32 {
+    var a: I8 = 20
+    a.sub_assign(5)
+    assert_eq(a as I32, 15, "I8.sub_assign()")
+    return 0
+}
+
+@test
+func test_i8_mul_assign() -> I32 {
+    var a: I8 = 6
+    a.mul_assign(7)
+    assert_eq(a as I32, 42, "I8.mul_assign()")
+    return 0
+}
+
+@test
+func test_i8_div_assign() -> I32 {
+    var a: I8 = 100
+    a.div_assign(5)
+    assert_eq(a as I32, 20, "I8.div_assign()")
+    return 0
+}
+
+@test
+func test_i8_rem_assign() -> I32 {
+    var a: I8 = 17
+    a.rem_assign(5)
+    assert_eq(a as I32, 2, "I8.rem_assign()")
+    return 0
+}
+
+// =============================================================================
+// I16 assign methods
+// =============================================================================
+
+@test
+func test_i16_add_assign() -> I32 {
+    var a: I16 = 100
+    a.add_assign(200)
+    assert_eq(a as I32, 300, "I16.add_assign()")
+    return 0
+}
+
+@test
+func test_i16_sub_assign() -> I32 {
+    var a: I16 = 500
+    a.sub_assign(200)
+    assert_eq(a as I32, 300, "I16.sub_assign()")
+    return 0
+}
+
+@test
+func test_i16_mul_assign() -> I32 {
+    var a: I16 = 6
+    a.mul_assign(7)
+    assert_eq(a as I32, 42, "I16.mul_assign()")
+    return 0
+}
+
+@test
+func test_i16_div_assign() -> I32 {
+    var a: I16 = 100
+    a.div_assign(5)
+    assert_eq(a as I32, 20, "I16.div_assign()")
+    return 0
+}
+
+@test
+func test_i16_rem_assign() -> I32 {
+    var a: I16 = 17
+    a.rem_assign(5)
+    assert_eq(a as I32, 2, "I16.rem_assign()")
+    return 0
+}
+
+// =============================================================================
+// I32 assign methods
+// =============================================================================
+
+@test
+func test_i32_add_assign() -> I32 {
+    var a: I32 = 10
+    a.add_assign(20)
+    assert_eq(a, 30, "I32.add_assign()")
+    return 0
+}
+
+@test
+func test_i32_sub_assign() -> I32 {
+    var a: I32 = 50
+    a.sub_assign(20)
+    assert_eq(a, 30, "I32.sub_assign()")
+    return 0
+}
+
+@test
+func test_i32_mul_assign() -> I32 {
+    var a: I32 = 6
+    a.mul_assign(7)
+    assert_eq(a, 42, "I32.mul_assign()")
+    return 0
+}
+
+@test
+func test_i32_div_assign() -> I32 {
+    var a: I32 = 100
+    a.div_assign(5)
+    assert_eq(a, 20, "I32.div_assign()")
+    return 0
+}
+
+@test
+func test_i32_rem_assign() -> I32 {
+    var a: I32 = 17
+    a.rem_assign(5)
+    assert_eq(a, 2, "I32.rem_assign()")
+    return 0
+}
+
+// =============================================================================
+// I64 assign methods
+// =============================================================================
+
+@test
+func test_i64_add_assign() -> I32 {
+    var a: I64 = 100
+    a.add_assign(200)
+    assert_eq(a, 300, "I64.add_assign()")
+    return 0
+}
+
+@test
+func test_i64_sub_assign() -> I32 {
+    var a: I64 = 500
+    a.sub_assign(200)
+    assert_eq(a, 300, "I64.sub_assign()")
+    return 0
+}
+
+@test
+func test_i64_mul_assign() -> I32 {
+    var a: I64 = 60
+    a.mul_assign(70)
+    assert_eq(a, 4200, "I64.mul_assign()")
+    return 0
+}
+
+@test
+func test_i64_div_assign() -> I32 {
+    var a: I64 = 1000
+    a.div_assign(50)
+    assert_eq(a, 20, "I64.div_assign()")
+    return 0
+}
+
+@test
+func test_i64_rem_assign() -> I32 {
+    var a: I64 = 17
+    a.rem_assign(5)
+    assert_eq(a, 2, "I64.rem_assign()")
+    return 0
+}
+
+// =============================================================================
+// U8 assign methods
+// =============================================================================
+
+@test
+func test_u8_add_assign() -> I32 {
+    var a: U8 = 10 as U8
+    a.add_assign(20 as U8)
+    assert_eq(a as I32, 30, "U8.add_assign()")
+    return 0
+}
+
+@test
+func test_u8_sub_assign() -> I32 {
+    var a: U8 = 50 as U8
+    a.sub_assign(20 as U8)
+    assert_eq(a as I32, 30, "U8.sub_assign()")
+    return 0
+}
+
+@test
+func test_u8_mul_assign() -> I32 {
+    var a: U8 = 6 as U8
+    a.mul_assign(7 as U8)
+    assert_eq(a as I32, 42, "U8.mul_assign()")
+    return 0
+}
+
+@test
+func test_u8_div_assign() -> I32 {
+    var a: U8 = 100 as U8
+    a.div_assign(5 as U8)
+    assert_eq(a as I32, 20, "U8.div_assign()")
+    return 0
+}
+
+@test
+func test_u8_rem_assign() -> I32 {
+    var a: U8 = 17 as U8
+    a.rem_assign(5 as U8)
+    assert_eq(a as I32, 2, "U8.rem_assign()")
+    return 0
+}
+
+// =============================================================================
+// U16 assign methods
+// =============================================================================
+
+@test
+func test_u16_add_assign() -> I32 {
+    var a: U16 = 100 as U16
+    a.add_assign(200 as U16)
+    assert_eq(a as I32, 300, "U16.add_assign()")
+    return 0
+}
+
+@test
+func test_u16_sub_assign() -> I32 {
+    var a: U16 = 500 as U16
+    a.sub_assign(200 as U16)
+    assert_eq(a as I32, 300, "U16.sub_assign()")
+    return 0
+}
+
+@test
+func test_u16_mul_assign() -> I32 {
+    var a: U16 = 6 as U16
+    a.mul_assign(7 as U16)
+    assert_eq(a as I32, 42, "U16.mul_assign()")
+    return 0
+}
+
+@test
+func test_u16_div_assign() -> I32 {
+    var a: U16 = 100 as U16
+    a.div_assign(5 as U16)
+    assert_eq(a as I32, 20, "U16.div_assign()")
+    return 0
+}
+
+@test
+func test_u16_rem_assign() -> I32 {
+    var a: U16 = 17 as U16
+    a.rem_assign(5 as U16)
+    assert_eq(a as I32, 2, "U16.rem_assign()")
+    return 0
+}
+
+// =============================================================================
+// U32 assign methods
+// =============================================================================
+
+@test
+func test_u32_add_assign() -> I32 {
+    var a: U32 = 10 as U32
+    a.add_assign(20 as U32)
+    assert_eq(a, 30 as U32, "U32.add_assign()")
+    return 0
+}
+
+@test
+func test_u32_sub_assign() -> I32 {
+    var a: U32 = 50 as U32
+    a.sub_assign(20 as U32)
+    assert_eq(a, 30 as U32, "U32.sub_assign()")
+    return 0
+}
+
+@test
+func test_u32_mul_assign() -> I32 {
+    var a: U32 = 6 as U32
+    a.mul_assign(7 as U32)
+    assert_eq(a, 42 as U32, "U32.mul_assign()")
+    return 0
+}
+
+@test
+func test_u32_div_assign() -> I32 {
+    var a: U32 = 100 as U32
+    a.div_assign(5 as U32)
+    assert_eq(a, 20 as U32, "U32.div_assign()")
+    return 0
+}
+
+@test
+func test_u32_rem_assign() -> I32 {
+    var a: U32 = 17 as U32
+    a.rem_assign(5 as U32)
+    assert_eq(a, 2 as U32, "U32.rem_assign()")
+    return 0
+}
+
+// =============================================================================
+// U64 assign methods
+// =============================================================================
+
+@test
+func test_u64_add_assign() -> I32 {
+    var a: U64 = 10 as U64
+    a.add_assign(20 as U64)
+    assert_eq(a, 30 as U64, "U64.add_assign()")
+    return 0
+}
+
+@test
+func test_u64_sub_assign() -> I32 {
+    var a: U64 = 50 as U64
+    a.sub_assign(20 as U64)
+    assert_eq(a, 30 as U64, "U64.sub_assign()")
+    return 0
+}
+
+@test
+func test_u64_mul_assign() -> I32 {
+    var a: U64 = 6 as U64
+    a.mul_assign(7 as U64)
+    assert_eq(a, 42 as U64, "U64.mul_assign()")
+    return 0
+}
+
+@test
+func test_u64_div_assign() -> I32 {
+    var a: U64 = 100 as U64
+    a.div_assign(5 as U64)
+    assert_eq(a, 20 as U64, "U64.div_assign()")
+    return 0
+}
+
+@test
+func test_u64_rem_assign() -> I32 {
+    var a: U64 = 17 as U64
+    a.rem_assign(5 as U64)
+    assert_eq(a, 2 as U64, "U64.rem_assign()")
+    return 0
+}
+
+// =============================================================================
+// F32 assign methods
+// =============================================================================
+
+@test
+func test_f32_add_assign() -> I32 {
+    var a: F32 = 1.5 as F32
+    a.add_assign(2.5 as F32)
+    assert_eq(a, 4.0 as F32, "F32.add_assign()")
+    return 0
+}
+
+@test
+func test_f32_sub_assign() -> I32 {
+    var a: F32 = 5.0 as F32
+    a.sub_assign(2.0 as F32)
+    assert_eq(a, 3.0 as F32, "F32.sub_assign()")
+    return 0
+}
+
+@test
+func test_f32_mul_assign() -> I32 {
+    var a: F32 = 3.0 as F32
+    a.mul_assign(4.0 as F32)
+    assert_eq(a, 12.0 as F32, "F32.mul_assign()")
+    return 0
+}
+
+@test
+func test_f32_div_assign() -> I32 {
+    var a: F32 = 10.0 as F32
+    a.div_assign(4.0 as F32)
+    assert_eq(a, 2.5 as F32, "F32.div_assign()")
+    return 0
+}
+
+// =============================================================================
+// F64 assign methods
+// =============================================================================
+
+@test
+func test_f64_add_assign() -> I32 {
+    var a: F64 = 1.5
+    a.add_assign(2.5)
+    assert_eq(a, 4.0, "F64.add_assign()")
+    return 0
+}
+
+@test
+func test_f64_sub_assign() -> I32 {
+    var a: F64 = 5.0
+    a.sub_assign(2.0)
+    assert_eq(a, 3.0, "F64.sub_assign()")
+    return 0
+}
+
+@test
+func test_f64_mul_assign() -> I32 {
+    var a: F64 = 3.0
+    a.mul_assign(4.0)
+    assert_eq(a, 12.0, "F64.mul_assign()")
+    return 0
+}
+
+@test
+func test_f64_div_assign() -> I32 {
+    var a: F64 = 10.0
+    a.div_assign(4.0)
+    assert_eq(a, 2.5, "F64.div_assign()")
+    return 0
+}

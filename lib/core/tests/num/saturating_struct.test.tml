@@ -1,0 +1,52 @@
+// Tests for Saturating[T] struct methods
+use test
+use core::num::saturating::Saturating
+
+@test
+func test_saturating_new_value() -> I32 {
+    let s: Saturating[I32] = Saturating::new(42)
+    assert_eq(s.value(), 42, "Saturating::new + value")
+    return 0
+}
+
+@test
+func test_saturating_into_inner() -> I32 {
+    let s: Saturating[I32] = Saturating::new(99)
+    assert_eq(s.into_inner(), 99, "Saturating::into_inner")
+    return 0
+}
+
+@test
+func test_saturating_add() -> I32 {
+    let a: Saturating[I32] = Saturating::new(10)
+    let b: Saturating[I32] = Saturating::new(20)
+    let c: Saturating[I32] = a.add(b)
+    assert_eq(c.value(), 30, "Saturating::add")
+    return 0
+}
+
+@test
+func test_saturating_sub() -> I32 {
+    let a: Saturating[I32] = Saturating::new(50)
+    let b: Saturating[I32] = Saturating::new(20)
+    let c: Saturating[I32] = a.sub(b)
+    assert_eq(c.value(), 30, "Saturating::sub")
+    return 0
+}
+
+@test
+func test_saturating_mul() -> I32 {
+    let a: Saturating[I32] = Saturating::new(6)
+    let b: Saturating[I32] = Saturating::new(7)
+    let c: Saturating[I32] = a.mul(b)
+    assert_eq(c.value(), 42, "Saturating::mul")
+    return 0
+}
+
+@test
+func test_saturating_duplicate() -> I32 {
+    let a: Saturating[I32] = Saturating::new(77)
+    let b: Saturating[I32] = a.duplicate()
+    assert_eq(b.value(), 77, "Saturating::duplicate")
+    return 0
+}

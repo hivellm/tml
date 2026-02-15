@@ -1,0 +1,18 @@
+use test
+use core::iter::sources::once_with::{OnceWith, once_with}
+
+// Test 8.3: Higher-order generic types — iterator sources with closures
+
+@test
+func test_once_with() -> I32 {
+    // OnceWith stores a closure in Maybe[F] field
+    let mut iter: OnceWith[func() -> I32] = once_with(do() -> I32 { 42 })
+
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 42, "once_with first")
+
+    let v2: Maybe[I32] = iter.next()
+    assert(v2.is_nothing(), "once_with exhausted")
+
+    return 0
+}

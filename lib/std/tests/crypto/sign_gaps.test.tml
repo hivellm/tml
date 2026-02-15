@@ -1,0 +1,105 @@
+// Tests for uncovered SignatureAlgorithm and PssOptions methods
+use test::{assert, assert_eq}
+use std::crypto::sign::{SignatureAlgorithm, PssOptions}
+
+// --- SignatureAlgorithm::name ---
+
+@test
+func test_signature_algorithm_names() -> I32 {
+    assert_eq(SignatureAlgorithm::RsaSha256.name(), "RSA-SHA256", "RSA-SHA256")
+    assert_eq(SignatureAlgorithm::RsaSha384.name(), "RSA-SHA384", "RSA-SHA384")
+    assert_eq(SignatureAlgorithm::RsaSha512.name(), "RSA-SHA512", "RSA-SHA512")
+    assert_eq(SignatureAlgorithm::EcdsaSha256.name(), "ECDSA-SHA256", "ECDSA-SHA256")
+    assert_eq(SignatureAlgorithm::Ed25519.name(), "Ed25519", "Ed25519")
+    assert_eq(SignatureAlgorithm::Ed448.name(), "Ed448", "Ed448")
+    return 0
+}
+
+// --- SignatureAlgorithm::is_rsa ---
+
+@test
+func test_signature_is_rsa() -> I32 {
+    assert(SignatureAlgorithm::RsaSha256.is_rsa(), "RSA-SHA256 is RSA")
+    assert(SignatureAlgorithm::RsaSha512.is_rsa(), "RSA-SHA512 is RSA")
+    assert(SignatureAlgorithm::RsaPssSha256.is_rsa(), "RSA-PSS is RSA")
+    assert(not SignatureAlgorithm::EcdsaSha256.is_rsa(), "ECDSA not RSA")
+    assert(not SignatureAlgorithm::Ed25519.is_rsa(), "Ed25519 not RSA")
+    return 0
+}
+
+// --- SignatureAlgorithm::is_ecdsa ---
+
+@test
+func test_signature_is_ecdsa() -> I32 {
+    assert(SignatureAlgorithm::EcdsaSha256.is_ecdsa(), "ECDSA-SHA256 is ECDSA")
+    assert(SignatureAlgorithm::EcdsaSha384.is_ecdsa(), "ECDSA-SHA384 is ECDSA")
+    assert(not SignatureAlgorithm::RsaSha256.is_ecdsa(), "RSA not ECDSA")
+    assert(not SignatureAlgorithm::Ed25519.is_ecdsa(), "Ed25519 not ECDSA")
+    return 0
+}
+
+// --- SignatureAlgorithm::is_eddsa ---
+
+@test
+func test_signature_is_eddsa() -> I32 {
+    assert(SignatureAlgorithm::Ed25519.is_eddsa(), "Ed25519 is EdDSA")
+    assert(SignatureAlgorithm::Ed448.is_eddsa(), "Ed448 is EdDSA")
+    assert(not SignatureAlgorithm::RsaSha256.is_eddsa(), "RSA not EdDSA")
+    assert(not SignatureAlgorithm::EcdsaSha256.is_eddsa(), "ECDSA not EdDSA")
+    return 0
+}
+
+// --- SignatureAlgorithm::is_pss ---
+
+@test
+func test_signature_is_pss() -> I32 {
+    assert(SignatureAlgorithm::RsaPssSha256.is_pss(), "RSA-PSS-SHA256 is PSS")
+    assert(SignatureAlgorithm::RsaPssSha384.is_pss(), "RSA-PSS-SHA384 is PSS")
+    assert(SignatureAlgorithm::RsaPssSha512.is_pss(), "RSA-PSS-SHA512 is PSS")
+    assert(not SignatureAlgorithm::RsaSha256.is_pss(), "RSA-SHA256 not PSS")
+    assert(not SignatureAlgorithm::Ed25519.is_pss(), "Ed25519 not PSS")
+    return 0
+}
+
+// --- SignatureAlgorithm::from_name ---
+
+@test
+func test_signature_from_name_valid() -> I32 {
+    let result: Maybe[SignatureAlgorithm] = SignatureAlgorithm::from_name("RSA-SHA256")
+    assert(result.is_just(), "RSA-SHA256 found")
+    assert_eq(result.unwrap().name(), "RSA-SHA256", "round-trip name")
+    return 0
+}
+
+@test
+func test_signature_from_name_eddsa() -> I32 {
+    let result: Maybe[SignatureAlgorithm] = SignatureAlgorithm::from_name("Ed25519")
+    assert(result.is_just(), "Ed25519 found")
+    assert(result.unwrap().is_eddsa(), "Ed25519 is EdDSA")
+    return 0
+}
+
+@test
+func test_signature_from_name_invalid() -> I32 {
+    let result: Maybe[SignatureAlgorithm] = SignatureAlgorithm::from_name("INVALID")
+    assert(result.is_nothing(), "invalid returns Nothing")
+    return 0
+}
+
+// --- PssOptions ---
+
+@test
+func test_pss_options_default() -> I32 {
+    let opts: PssOptions = PssOptions::default()
+    assert_eq(opts.salt_length, -1 as I64, "default salt_length -1")
+    assert_eq(opts.mgf1_hash, "sha256", "default mgf1_hash sha256")
+    return 0
+}
+
+@test
+func test_pss_options_with_salt_length() -> I32 {
+    let opts: PssOptions = PssOptions::with_salt_length(32 as I64)
+    assert_eq(opts.salt_length, 32 as I64, "salt_length 32")
+    assert_eq(opts.mgf1_hash, "sha256", "mgf1_hash sha256")
+    return 0
+}

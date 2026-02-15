@@ -1,6 +1,6 @@
-// Consolidated tests for core::cache (6 tests)
+// Consolidated tests for core::cache (9 tests)
 use test
-use core::cache::{CacheAligned, Padded, CACHE_LINE_SIZE, HALF_CACHE_LINE, DOUBLE_CACHE_LINE}
+use core::cache::{CacheAligned, Padded, SoaVec, CACHE_LINE_SIZE, HALF_CACHE_LINE, DOUBLE_CACHE_LINE}
 
 // --- CacheAligned tests ---
 
@@ -49,5 +49,33 @@ func test_padded_into_inner() -> I32 {
     let p: Padded[I64] = Padded::new(777 as I64)
     let val: I64 = p.into_inner()
     assert_eq(val, 777 as I64, "into_inner returns stored value")
+    return 0
+}
+
+// --- SoaVec tests ---
+
+@test
+func test_soavec_new() -> I32 {
+    let soa: SoaVec = SoaVec::new()
+    assert_eq(soa.len(), 0 as I64, "new len 0")
+    assert_eq(soa.column_count(), 0 as I64, "new column_count 0")
+    assert(soa.is_empty(), "new is_empty")
+    return 0
+}
+
+@test
+func test_soavec_with_capacity() -> I32 {
+    let soa: SoaVec = SoaVec::with_capacity(100 as I64)
+    assert_eq(soa.len(), 0 as I64, "with_capacity len 0")
+    assert(soa.is_empty(), "with_capacity is_empty")
+    return 0
+}
+
+@test
+func test_soavec_clear() -> I32 {
+    var soa: SoaVec = SoaVec::new()
+    soa.clear()
+    assert_eq(soa.len(), 0 as I64, "clear len 0")
+    assert(soa.is_empty(), "clear is_empty")
     return 0
 }

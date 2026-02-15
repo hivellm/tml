@@ -517,6 +517,71 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
                         return make_primitive(PrimitiveKind::U32);
                     if (tml_type == "Bool")
                         return make_primitive(PrimitiveKind::Bool);
+                    if (tml_type == "F32")
+                        return make_primitive(PrimitiveKind::F32);
+                    if (tml_type == "F64")
+                        return make_primitive(PrimitiveKind::F64);
+                    if (tml_type == "Str")
+                        return make_primitive(PrimitiveKind::Str);
+                    // Handle tuple types like "(U8, U8, U8)"
+                    if (tml_type.size() >= 2 && tml_type.front() == '(' && tml_type.back() == ')') {
+                        std::string inner = tml_type.substr(1, tml_type.size() - 2);
+                        std::vector<TypePtr> elem_types;
+                        size_t start = 0;
+                        int depth = 0;
+                        for (size_t ci = 0; ci <= inner.size(); ++ci) {
+                            if (ci < inner.size() && inner[ci] == '(')
+                                depth++;
+                            else if (ci < inner.size() && inner[ci] == ')')
+                                depth--;
+                            else if ((ci == inner.size() || (inner[ci] == ',' && depth == 0))) {
+                                std::string elem = inner.substr(start, ci - start);
+                                // Trim whitespace
+                                size_t fs = elem.find_first_not_of(' ');
+                                size_t ls = elem.find_last_not_of(' ');
+                                if (fs != std::string::npos)
+                                    elem = elem.substr(fs, ls - fs + 1);
+                                if (!elem.empty()) {
+                                    // Recursively resolve element type
+                                    if (elem == "I8")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::I8));
+                                    else if (elem == "I16")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::I16));
+                                    else if (elem == "I32")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::I32));
+                                    else if (elem == "I64")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::I64));
+                                    else if (elem == "I128")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::I128));
+                                    else if (elem == "U8")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::U8));
+                                    else if (elem == "U16")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::U16));
+                                    else if (elem == "U32")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::U32));
+                                    else if (elem == "U64")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::U64));
+                                    else if (elem == "U128")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::U128));
+                                    else if (elem == "F32")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::F32));
+                                    else if (elem == "F64")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::F64));
+                                    else if (elem == "Bool")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::Bool));
+                                    else if (elem == "Char")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::U32));
+                                    else if (elem == "Str")
+                                        elem_types.push_back(make_primitive(PrimitiveKind::Str));
+                                    else
+                                        elem_types.push_back(make_primitive(PrimitiveKind::I64));
+                                }
+                                start = ci + 1;
+                            }
+                        }
+                        if (!elem_types.empty())
+                            return make_tuple(std::move(elem_types));
+                    }
                     // Fallback for backward compatibility
                     if (const_module_path.find("char") != std::string::npos) {
                         return make_primitive(PrimitiveKind::U32);

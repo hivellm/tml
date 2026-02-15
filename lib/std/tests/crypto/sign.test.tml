@@ -1,14 +1,13 @@
-//! Tests for crypto digital signature functions
-//!
-//! NOTE: Signature functionality is not yet implemented.
-//! This file contains placeholder tests that will be enabled
-//! once ECDSA, Ed25519, and RSA-PSS signatures are implemented.
+// Tests for crypto digital signature functions
+// BLOCKED: Signature::from_der calls Buffer.duplicate() which doesn't exist.
+// Importing any type from std::crypto::sign triggers compilation of the full
+// module including from_der, causing codegen failure.
+// Tests will be added once Buffer.duplicate() is implemented.
 
 use test::{assert}
 
 @test
 func test_sign_placeholder() -> I32 {
-    // Digital signature functionality will be added in a future release.
-    assert(true, "placeholder test")
+    assert(true, "placeholder - sign module blocked on Buffer.duplicate()")
     return 0
 }

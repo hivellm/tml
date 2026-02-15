@@ -69,3 +69,49 @@ func test_char_is_alphanumeric() -> I32 {
     assert(not char::is_alphanumeric(space), "space should not be alphanumeric")
     return 0
 }
+
+// =============================================================================
+// Non-ASCII classification (exercises *_nonascii internal helpers)
+// =============================================================================
+
+@test
+func test_is_lowercase_nonascii() -> I32 {
+    // Greek lowercase alpha (U+03B1)
+    assert(char::is_lowercase(0x03B1 as Char), "Greek alpha is lowercase")
+    // Greek uppercase Alpha (U+0391) is not lowercase
+    assert(not char::is_lowercase(0x0391 as Char), "Greek Alpha is not lowercase")
+    return 0
+}
+
+@test
+func test_is_uppercase_nonascii() -> I32 {
+    // Greek uppercase Alpha (U+0391)
+    assert(char::is_uppercase(0x0391 as Char), "Greek Alpha is uppercase")
+    // Greek lowercase alpha (U+03B1) is not uppercase
+    assert(not char::is_uppercase(0x03B1 as Char), "Greek alpha is not uppercase")
+    return 0
+}
+
+@test
+func test_is_whitespace_nonascii() -> I32 {
+    // Em space (U+2003) is whitespace
+    assert(char::is_whitespace(0x2003 as Char), "em space is whitespace")
+    // Regular letter is not whitespace
+    assert(not char::is_whitespace(0x03B1 as Char), "Greek alpha is not whitespace")
+    return 0
+}
+
+@test
+func test_is_numeric_nonascii() -> I32 {
+    // Arabic-Indic digit zero (U+0660)
+    assert(char::is_numeric(0x0660 as Char), "Arabic-Indic 0 is numeric")
+    // Extended Arabic-Indic digit 5 (U+06F5)
+    assert(char::is_numeric(0x06F5 as Char), "Extended Arabic-Indic 5 is numeric")
+    // Fullwidth digit 3 (U+FF13)
+    assert(char::is_numeric(0xFF13 as Char), "Fullwidth 3 is numeric")
+    // Superscript 2 (U+00B2)
+    assert(char::is_numeric(0x00B2 as Char), "Superscript 2 is numeric")
+    // Greek alpha (not a digit)
+    assert(not char::is_numeric(0x03B1 as Char), "Greek alpha is not numeric")
+    return 0
+}

@@ -1,0 +1,117 @@
+// Tests for core::hash - combine_hashes, DefaultHasher, RandomState
+use test::{assert, assert_eq}
+use core::hash::{combine_hashes, DefaultHasher, RandomState}
+
+// --- combine_hashes ---
+
+@test
+func test_combine_hashes_basic() -> I32 {
+    // combine_hashes(h1, h2) = h1 * 31 + h2
+    let result: I64 = combine_hashes(10, 5)
+    assert_eq(result, 315, "10*31 + 5 = 315")
+    return 0
+}
+
+@test
+func test_combine_hashes_zero() -> I32 {
+    let result: I64 = combine_hashes(0, 0)
+    assert_eq(result, 0, "0*31 + 0 = 0")
+    let result2: I64 = combine_hashes(1, 0)
+    assert_eq(result2, 31, "1*31 + 0 = 31")
+    return 0
+}
+
+@test
+func test_combine_hashes_order_matters() -> I32 {
+    let ab: I64 = combine_hashes(10, 5)
+    let ba: I64 = combine_hashes(5, 10)
+    assert(ab != ba, "combine_hashes is not commutative")
+    return 0
+}
+
+// --- DefaultHasher ---
+
+@test
+func test_default_hasher_new() -> I32 {
+    let h: DefaultHasher = DefaultHasher::new()
+    let result: I64 = h.finish()
+    assert(result != 0, "default hasher has non-zero initial state")
+    return 0
+}
+
+@test
+func test_default_hasher_with_seed() -> I32 {
+    let h1: DefaultHasher = DefaultHasher::with_seed(0 as U64)
+    let h2: DefaultHasher = DefaultHasher::with_seed(42 as U64)
+    assert(h1.finish() != h2.finish(), "different seeds produce different states")
+    return 0
+}
+
+@test
+func test_default_hasher_deterministic() -> I32 {
+    let mut h1: DefaultHasher = DefaultHasher::new()
+    h1.write_u8(42 as U8)
+    let mut h2: DefaultHasher = DefaultHasher::new()
+    h2.write_u8(42 as U8)
+    assert_eq(h1.finish(), h2.finish(), "same input produces same hash")
+    return 0
+}
+
+@test
+func test_hasher_write_i32() -> I32 {
+    let mut h: DefaultHasher = DefaultHasher::new()
+    h.write_i32(42)
+    let hash1: I64 = h.finish()
+    let mut h2: DefaultHasher = DefaultHasher::new()
+    h2.write_i32(43)
+    let hash2: I64 = h2.finish()
+    assert(hash1 != hash2, "different i32 values produce different hashes")
+    return 0
+}
+
+@test
+func test_hasher_write_i64() -> I32 {
+    let mut h: DefaultHasher = DefaultHasher::new()
+    h.write_i64(100)
+    let hash1: I64 = h.finish()
+    let mut h2: DefaultHasher = DefaultHasher::new()
+    h2.write_i64(200)
+    let hash2: I64 = h2.finish()
+    assert(hash1 != hash2, "different i64 values produce different hashes")
+    return 0
+}
+
+@test
+func test_hasher_multiple_writes_order() -> I32 {
+    let mut h1: DefaultHasher = DefaultHasher::new()
+    h1.write_u8(1 as U8)
+    h1.write_u8(2 as U8)
+    let mut h2: DefaultHasher = DefaultHasher::new()
+    h2.write_u8(2 as U8)
+    h2.write_u8(1 as U8)
+    assert(h1.finish() != h2.finish(), "order of writes matters")
+    return 0
+}
+
+// --- RandomState ---
+
+@test
+func test_random_state_with_keys() -> I32 {
+    let rs: RandomState = RandomState::with_keys(100 as U64, 200 as U64)
+    let h = rs.build_hasher()
+    let result: I64 = h.finish()
+    let rs2: RandomState = RandomState::with_keys(100 as U64, 200 as U64)
+    let h2 = rs2.build_hasher()
+    assert_eq(result, h2.finish(), "same keys produce same hasher state")
+    return 0
+}
+
+@test
+func test_random_state_different_keys() -> I32 {
+    let rs1: RandomState = RandomState::with_keys(1 as U64, 2 as U64)
+    let rs2: RandomState = RandomState::with_keys(3 as U64, 4 as U64)
+    let h1 = rs1.build_hasher()
+    let h2 = rs2.build_hasher()
+    assert(h1.finish() != h2.finish(), "different keys produce different hasher states")
+    return 0
+}

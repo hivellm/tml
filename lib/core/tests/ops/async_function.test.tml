@@ -1,0 +1,47 @@
+// Tests for core::ops::async_function - Poll enum
+use test::{assert, assert_eq}
+use core::ops::async_function::Poll
+
+@test
+func test_poll_ready_is_ready() -> I32 {
+    let p: Poll[I32] = Poll::Ready(1)
+    assert(p.is_ready(), "Ready is_ready")
+    assert(not p.is_pending(), "Ready not is_pending")
+    return 0
+}
+
+@test
+func test_poll_pending_is_pending() -> I32 {
+    let p: Poll[I32] = Poll::Pending
+    assert(p.is_pending(), "Pending is_pending")
+    assert(not p.is_ready(), "Pending not is_ready")
+    return 0
+}
+
+@test
+func test_poll_ready_to_string() -> I32 {
+    let p: Poll[I32] = Poll::Ready(42)
+    assert_eq(p.to_string(), "Ready(42)", "Ready to_string")
+    return 0
+}
+
+@test
+func test_poll_pending_to_string() -> I32 {
+    let p: Poll[I32] = Poll::Pending
+    assert_eq(p.to_string(), "Pending", "Pending to_string")
+    return 0
+}
+
+@test
+func test_poll_ready_debug_string() -> I32 {
+    let p: Poll[I32] = Poll::Ready(99)
+    assert_eq(p.debug_string(), "Ready(99)", "Ready debug_string")
+    return 0
+}
+
+@test
+func test_poll_pending_debug_string() -> I32 {
+    let p: Poll[I32] = Poll::Pending
+    assert_eq(p.debug_string(), "Pending", "Pending debug_string")
+    return 0
+}

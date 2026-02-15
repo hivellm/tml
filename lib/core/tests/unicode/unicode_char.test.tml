@@ -27,3 +27,84 @@ func test_is_surrogate() -> I32 {
     assert(not char::is_surrogate(0x0041), "A is not surrogate")
     return 0
 }
+
+// =============================================================================
+// Extended classification (grapheme extend, case comparison, titlecase)
+// =============================================================================
+
+@test
+func test_is_grapheme_extend_ascii() -> I32 {
+    assert(not char::is_grapheme_extend(0x41), "A is not grapheme extend")
+    assert(not char::is_grapheme_extend(0x20), "space is not grapheme extend")
+    return 0
+}
+
+@test
+func test_eq_ignore_case_ascii() -> I32 {
+    assert(char::eq_ignore_case(0x41, 0x61), "A == a case-insensitive")
+    assert(char::eq_ignore_case(0x5A, 0x7A), "Z == z case-insensitive")
+    assert(not char::eq_ignore_case(0x41, 0x42), "A != B")
+    return 0
+}
+
+@test
+func test_to_titlecase_ascii() -> I32 {
+    assert_eq(char::to_titlecase(0x61), 0x41, "a -> A titlecase")
+    assert_eq(char::to_titlecase(0x7A), 0x5A, "z -> Z titlecase")
+    assert_eq(char::to_titlecase(0x41), 0x41, "A stays A")
+    assert_eq(char::to_titlecase(0x31), 0x31, "1 stays 1")
+    return 0
+}
+
+// =============================================================================
+// General Category classification
+// =============================================================================
+
+@test
+func test_is_letter() -> I32 {
+    assert(char::is_letter(0x41), "A is letter")
+    assert(char::is_letter(0x61), "a is letter")
+    assert(not char::is_letter(0x31), "1 is not letter")
+    assert(not char::is_letter(0x20), "space is not letter")
+    return 0
+}
+
+@test
+func test_is_number() -> I32 {
+    assert(char::is_number(0x30), "0 is number")
+    assert(char::is_number(0x39), "9 is number")
+    assert(not char::is_number(0x41), "A is not number")
+    return 0
+}
+
+@test
+func test_is_punctuation() -> I32 {
+    assert(char::is_punctuation(0x21), "! is punctuation")
+    assert(char::is_punctuation(0x2E), ". is punctuation")
+    assert(char::is_punctuation(0x2C), ", is punctuation")
+    assert(not char::is_punctuation(0x41), "A is not punctuation")
+    return 0
+}
+
+@test
+func test_is_symbol() -> I32 {
+    assert(char::is_symbol(0x2B), "+ is symbol")
+    assert(char::is_symbol(0x3D), "= is symbol")
+    assert(char::is_symbol(0x24), "$ is symbol")
+    assert(not char::is_symbol(0x41), "A is not symbol")
+    return 0
+}
+
+@test
+func test_is_separator() -> I32 {
+    assert(char::is_separator(0x20), "space is separator")
+    assert(not char::is_separator(0x41), "A is not separator")
+    return 0
+}
+
+@test
+func test_is_mark() -> I32 {
+    assert(char::is_mark(0x0301), "combining acute is mark")
+    assert(not char::is_mark(0x41), "A is not mark")
+    return 0
+}

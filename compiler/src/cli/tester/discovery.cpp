@@ -14,6 +14,7 @@
 //! ## Excluded Directories
 //!
 //! - `pending/`: Tests for unimplemented features
+//! - `.sandbox/`: Scratch space for temporary experiments (never included in discovery)
 //!
 //! ## Caching
 //!
@@ -52,7 +53,8 @@ std::vector<std::string> discover_bench_files(const std::string& root_dir) {
                         continue;
                     }
                     if (dirname == ".git" || dirname == "node_modules" || dirname == "build" ||
-                        dirname == "gcc" || dirname == "llvm-project" || dirname == ".hg") {
+                        dirname == "gcc" || dirname == "llvm-project" || dirname == ".hg" ||
+                        dirname == ".sandbox") {
                         it.disable_recursion_pending();
                         ++it;
                         continue;
@@ -120,7 +122,8 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
                         continue;
                     }
                     if (dirname == ".git" || dirname == "node_modules" || dirname == "build" ||
-                        dirname == "gcc" || dirname == "llvm-project" || dirname == ".hg") {
+                        dirname == "gcc" || dirname == "llvm-project" || dirname == ".hg" ||
+                        dirname == ".sandbox") {
                         it.disable_recursion_pending();
                         ++it;
                         continue;
@@ -195,7 +198,8 @@ std::vector<std::string> discover_diagnostic_files(const std::string& root_dir) 
                         continue;
                     }
                     if (dirname == ".git" || dirname == "node_modules" || dirname == "build" ||
-                        dirname == "gcc" || dirname == "llvm-project" || dirname == ".hg") {
+                        dirname == "gcc" || dirname == "llvm-project" || dirname == ".hg" ||
+                        dirname == ".sandbox") {
                         it.disable_recursion_pending();
                         ++it;
                         continue;

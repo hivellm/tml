@@ -49,7 +49,8 @@ constexpr uint32_t MODULE_META_MAGIC = 0x544D4D54;
 
 /// Format version.
 /// v5: Include behavior impl methods regardless of pub visibility + source hash check
-constexpr uint16_t MODULE_META_VERSION_MAJOR = 5;
+/// v6: Support tuple constants in module metadata (e.g., UNICODE_VERSION: (U8, U8, U8))
+constexpr uint16_t MODULE_META_VERSION_MAJOR = 6;
 constexpr uint16_t MODULE_META_VERSION_MINOR = 0;
 
 // ============================================================================

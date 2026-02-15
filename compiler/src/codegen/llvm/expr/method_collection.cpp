@@ -1347,6 +1347,21 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             last_expr_type_ = "%struct.Buffer";
             return result;
         }
+        if (method == "duplicate") {
+            emit_coverage("Buffer::duplicate");
+            // duplicate() is slice(0, len()) - creates a copy of the entire buffer
+            std::string len = fresh_reg();
+            emit_line("  " + len + " = call i64 @buffer_len(ptr " + handle + ")");
+            std::string new_handle = fresh_reg();
+            emit_line("  " + new_handle + " = call ptr @buffer_slice(ptr " + handle +
+                      ", i64 0, i64 " + len + ")");
+            // Return as Buffer struct
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = insertvalue %struct.Buffer undef, ptr " + new_handle +
+                      ", 0");
+            last_expr_type_ = "%struct.Buffer";
+            return result;
+        }
         if (method == "swap16") {
             emit_coverage("Buffer::swap16");
             emit_line("  call void @buffer_swap16(ptr " + handle + ")");

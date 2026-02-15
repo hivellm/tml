@@ -1,0 +1,134 @@
+// Tests for fmt/impls Binary and Octal implementations across all integer types
+use test
+
+// ==================== fmt_binary ====================
+
+@test
+func test_u8_fmt_binary() -> I32 {
+    let a: U8 = 5 as U8
+    let s: Str = a.fmt_binary()
+    assert(s.len() > 0, "U8.fmt_binary()")
+    return 0
+}
+
+@test
+func test_u16_fmt_binary() -> I32 {
+    let a: U16 = 10 as U16
+    let s: Str = a.fmt_binary()
+    assert(s.len() > 0, "U16.fmt_binary()")
+    return 0
+}
+
+@test
+func test_u32_fmt_binary() -> I32 {
+    let a: U32 = 255 as U32
+    let s: Str = a.fmt_binary()
+    assert(s.len() > 0, "U32.fmt_binary()")
+    return 0
+}
+
+@test
+func test_u64_fmt_binary() -> I32 {
+    let a: U64 = 1024 as U64
+    let s: Str = a.fmt_binary()
+    assert(s.len() > 0, "U64.fmt_binary()")
+    return 0
+}
+
+@test
+func test_i8_fmt_binary() -> I32 {
+    let a: I8 = 7 as I8
+    let s: Str = a.fmt_binary()
+    assert(s.len() > 0, "I8.fmt_binary()")
+    return 0
+}
+
+@test
+func test_i16_fmt_binary() -> I32 {
+    let a: I16 = 15 as I16
+    let s: Str = a.fmt_binary()
+    assert(s.len() > 0, "I16.fmt_binary()")
+    return 0
+}
+
+@test
+func test_i32_fmt_binary() -> I32 {
+    let a: I32 = 42
+    let s: Str = a.fmt_binary()
+    assert(s.len() > 0, "I32.fmt_binary()")
+    return 0
+}
+
+@test
+func test_i64_fmt_binary() -> I32 {
+    let a: I64 = 100 as I64
+    let s: Str = a.fmt_binary()
+    assert(s.len() > 0, "I64.fmt_binary()")
+    return 0
+}
+
+// ==================== fmt_octal ====================
+
+@test
+func test_u8_fmt_octal() -> I32 {
+    let a: U8 = 8 as U8
+    let s: Str = a.fmt_octal()
+    assert(s.len() > 0, "U8.fmt_octal()")
+    return 0
+}
+
+@test
+func test_u16_fmt_octal() -> I32 {
+    let a: U16 = 64 as U16
+    let s: Str = a.fmt_octal()
+    assert(s.len() > 0, "U16.fmt_octal()")
+    return 0
+}
+
+@test
+func test_u32_fmt_octal() -> I32 {
+    let a: U32 = 511 as U32
+    let s: Str = a.fmt_octal()
+    assert(s.len() > 0, "U32.fmt_octal()")
+    return 0
+}
+
+@test
+func test_u64_fmt_octal() -> I32 {
+    let a: U64 = 4096 as U64
+    let s: Str = a.fmt_octal()
+    assert(s.len() > 0, "U64.fmt_octal()")
+    return 0
+}
+
+@test
+func test_i8_fmt_octal() -> I32 {
+    let a: I8 = 7 as I8
+    let s: Str = a.fmt_octal()
+    assert(s.len() > 0, "I8.fmt_octal()")
+    return 0
+}
+
+@test
+func test_i16_fmt_octal() -> I32 {
+    let a: I16 = 63 as I16
+    let s: Str = a.fmt_octal()
+    assert(s.len() > 0, "I16.fmt_octal()")
+    return 0
+}
+
+@test
+func test_i32_fmt_octal() -> I32 {
+    let a: I32 = 255
+    let s: Str = a.fmt_octal()
+    assert(s.len() > 0, "I32.fmt_octal()")
+    return 0
+}
+
+@test
+func test_i64_fmt_octal() -> I32 {
+    let a: I64 = 1000 as I64
+    let s: Str = a.fmt_octal()
+    assert(s.len() > 0, "I64.fmt_octal()")
+    return 0
+}

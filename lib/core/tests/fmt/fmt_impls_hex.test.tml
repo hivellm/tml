@@ -1,0 +1,134 @@
+// Tests for fmt/impls LowerHex and UpperHex implementations across all integer types
+use test
+
+// ==================== fmt_lower_hex ====================
+
+@test
+func test_u8_fmt_lower_hex() -> I32 {
+    let a: U8 = 255 as U8
+    let s: Str = a.fmt_lower_hex()
+    assert(s.len() > 0, "U8.fmt_lower_hex()")
+    return 0
+}
+
+@test
+func test_u16_fmt_lower_hex() -> I32 {
+    let a: U16 = 4096 as U16
+    let s: Str = a.fmt_lower_hex()
+    assert(s.len() > 0, "U16.fmt_lower_hex()")
+    return 0
+}
+
+@test
+func test_u32_fmt_lower_hex() -> I32 {
+    let a: U32 = 65535 as U32
+    let s: Str = a.fmt_lower_hex()
+    assert(s.len() > 0, "U32.fmt_lower_hex()")
+    return 0
+}
+
+@test
+func test_u64_fmt_lower_hex() -> I32 {
+    let a: U64 = 1048576 as U64
+    let s: Str = a.fmt_lower_hex()
+    assert(s.len() > 0, "U64.fmt_lower_hex()")
+    return 0
+}
+
+@test
+func test_i8_fmt_lower_hex() -> I32 {
+    let a: I8 = 127 as I8
+    let s: Str = a.fmt_lower_hex()
+    assert(s.len() > 0, "I8.fmt_lower_hex()")
+    return 0
+}
+
+@test
+func test_i16_fmt_lower_hex() -> I32 {
+    let a: I16 = 256 as I16
+    let s: Str = a.fmt_lower_hex()
+    assert(s.len() > 0, "I16.fmt_lower_hex()")
+    return 0
+}
+
+@test
+func test_i32_fmt_lower_hex() -> I32 {
+    let a: I32 = 255
+    let s: Str = a.fmt_lower_hex()
+    assert(s.len() > 0, "I32.fmt_lower_hex()")
+    return 0
+}
+
+@test
+func test_i64_fmt_lower_hex() -> I32 {
+    let a: I64 = 65535 as I64
+    let s: Str = a.fmt_lower_hex()
+    assert(s.len() > 0, "I64.fmt_lower_hex()")
+    return 0
+}
+
+// ==================== fmt_upper_hex ====================
+
+@test
+func test_u8_fmt_upper_hex() -> I32 {
+    let a: U8 = 171 as U8
+    let s: Str = a.fmt_upper_hex()
+    assert(s.len() > 0, "U8.fmt_upper_hex()")
+    return 0
+}
+
+@test
+func test_u16_fmt_upper_hex() -> I32 {
+    let a: U16 = 43981 as U16
+    let s: Str = a.fmt_upper_hex()
+    assert(s.len() > 0, "U16.fmt_upper_hex()")
+    return 0
+}
+
+@test
+func test_u32_fmt_upper_hex() -> I32 {
+    let a: U32 = 3735928559 as U32
+    let s: Str = a.fmt_upper_hex()
+    assert(s.len() > 0, "U32.fmt_upper_hex()")
+    return 0
+}
+
+@test
+func test_u64_fmt_upper_hex() -> I32 {
+    let a: U64 = 305419896 as U64
+    let s: Str = a.fmt_upper_hex()
+    assert(s.len() > 0, "U64.fmt_upper_hex()")
+    return 0
+}
+
+@test
+func test_i8_fmt_upper_hex() -> I32 {
+    let a: I8 = 15 as I8
+    let s: Str = a.fmt_upper_hex()
+    assert(s.len() > 0, "I8.fmt_upper_hex()")
+    return 0
+}
+
+@test
+func test_i16_fmt_upper_hex() -> I32 {
+    let a: I16 = 4095 as I16
+    let s: Str = a.fmt_upper_hex()
+    assert(s.len() > 0, "I16.fmt_upper_hex()")
+    return 0
+}
+
+@test
+func test_i32_fmt_upper_hex() -> I32 {
+    let a: I32 = 255
+    let s: Str = a.fmt_upper_hex()
+    assert(s.len() > 0, "I32.fmt_upper_hex()")
+    return 0
+}
+
+@test
+func test_i64_fmt_upper_hex() -> I32 {
+    let a: I64 = 1048575 as I64
+    let s: Str = a.fmt_upper_hex()
+    assert(s.len() > 0, "I64.fmt_upper_hex()")
+    return 0
+}

@@ -1,0 +1,55 @@
+// Tests for core::cmp - Ordering enum methods
+use test::{assert, assert_eq}
+use core::cmp::Ordering
+
+@test
+func test_ordering_is_less() -> I32 {
+    assert(Ordering::Less.is_less(), "Less.is_less")
+    assert(not Ordering::Equal.is_less(), "Equal not is_less")
+    assert(not Ordering::Greater.is_less(), "Greater not is_less")
+    return 0
+}
+
+@test
+func test_ordering_is_equal() -> I32 {
+    assert(not Ordering::Less.is_equal(), "Less not is_equal")
+    assert(Ordering::Equal.is_equal(), "Equal.is_equal")
+    assert(not Ordering::Greater.is_equal(), "Greater not is_equal")
+    return 0
+}
+
+@test
+func test_ordering_is_greater() -> I32 {
+    assert(not Ordering::Less.is_greater(), "Less not is_greater")
+    assert(not Ordering::Equal.is_greater(), "Equal not is_greater")
+    assert(Ordering::Greater.is_greater(), "Greater.is_greater")
+    return 0
+}
+
+@test
+func test_ordering_reverse() -> I32 {
+    assert(Ordering::Less.reverse().is_greater(), "Less reversed is Greater")
+    assert(Ordering::Equal.reverse().is_equal(), "Equal reversed is Equal")
+    assert(Ordering::Greater.reverse().is_less(), "Greater reversed is Less")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp_equal() -> I32 {
+    let r1: Ordering = Ordering::Equal.then_cmp(Ordering::Less)
+    assert(r1.is_less(), "Equal then Less = Less")
+    let r2: Ordering = Ordering::Equal.then_cmp(Ordering::Greater)
+    assert(r2.is_greater(), "Equal then Greater = Greater")
+    let r3: Ordering = Ordering::Equal.then_cmp(Ordering::Equal)
+    assert(r3.is_equal(), "Equal then Equal = Equal")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp_not_equal() -> I32 {
+    let r1: Ordering = Ordering::Less.then_cmp(Ordering::Greater)
+    assert(r1.is_less(), "Less then Greater = Less")
+    let r2: Ordering = Ordering::Greater.then_cmp(Ordering::Less)
+    assert(r2.is_greater(), "Greater then Less = Greater")
+    return 0
+}

@@ -1,0 +1,102 @@
+// Tests for uncovered NetErrorKind constructors and NetError methods
+use test::{assert, assert_eq}
+use std::net::error::{NetErrorKind, NetError}
+
+// --- NetErrorKind constructors ---
+
+@test
+func test_net_error_kind_connection_reset() -> I32 {
+    assert_eq(NetErrorKind::ConnectionReset().raw(), 2, "ConnectionReset is 2")
+    return 0
+}
+
+@test
+func test_net_error_kind_connection_aborted() -> I32 {
+    assert_eq(NetErrorKind::ConnectionAborted().raw(), 3, "ConnectionAborted is 3")
+    return 0
+}
+
+@test
+func test_net_error_kind_host_unreachable() -> I32 {
+    assert_eq(NetErrorKind::HostUnreachable().raw(), 4, "HostUnreachable is 4")
+    return 0
+}
+
+@test
+func test_net_error_kind_network_unreachable() -> I32 {
+    assert_eq(NetErrorKind::NetworkUnreachable().raw(), 5, "NetworkUnreachable is 5")
+    return 0
+}
+
+@test
+func test_net_error_kind_addr_in_use() -> I32 {
+    assert_eq(NetErrorKind::AddrInUse().raw(), 7, "AddrInUse is 7")
+    return 0
+}
+
+@test
+func test_net_error_kind_addr_not_available() -> I32 {
+    assert_eq(NetErrorKind::AddrNotAvailable().raw(), 8, "AddrNotAvailable is 8")
+    return 0
+}
+
+@test
+func test_net_error_kind_already_connected() -> I32 {
+    assert_eq(NetErrorKind::AlreadyConnected().raw(), 10, "AlreadyConnected is 10")
+    return 0
+}
+
+@test
+func test_net_error_kind_permission_denied() -> I32 {
+    assert_eq(NetErrorKind::PermissionDenied().raw(), 12, "PermissionDenied is 12")
+    return 0
+}
+
+@test
+func test_net_error_kind_invalid_data() -> I32 {
+    assert_eq(NetErrorKind::InvalidData().raw(), 14, "InvalidData is 14")
+    return 0
+}
+
+@test
+func test_net_error_kind_interrupted() -> I32 {
+    assert_eq(NetErrorKind::Interrupted().raw(), 15, "Interrupted is 15")
+    return 0
+}
+
+@test
+func test_net_error_kind_unexpected_eof() -> I32 {
+    assert_eq(NetErrorKind::UnexpectedEof().raw(), 16, "UnexpectedEof is 16")
+    return 0
+}
+
+@test
+func test_net_error_kind_other() -> I32 {
+    assert_eq(NetErrorKind::Other().raw(), 17, "Other is 17")
+    return 0
+}
+
+// --- NetError methods ---
+
+@test
+func test_net_error_kind_method() -> I32 {
+    let err: NetError = NetError::new(NetErrorKind::TimedOut())
+    let k: NetErrorKind = err.kind()
+    assert_eq(k.raw(), 6, "kind() returns TimedOut")
+    return 0
+}
+
+@test
+func test_net_error_would_block_factory() -> I32 {
+    let err: NetError = NetError::would_block()
+    assert(err.is_would_block(), "would_block() creates WouldBlock error")
+    return 0
+}
+
+@test
+func test_net_error_from_last_error() -> I32 {
+    let err: NetError = NetError::from_last_error()
+    let k: NetErrorKind = err.kind()
+    assert_eq(k.raw(), 17, "from_last_error returns Other")
+    return 0
+}

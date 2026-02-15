@@ -1,0 +1,66 @@
+// Tests for MutSlice sort
+use test::{assert, assert_eq}
+use core::slice::{Slice, MutSlice}
+
+@test
+func test_sort_basic() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 5)
+    atomic_store(ptr_offset(ptr, 1), 3)
+    atomic_store(ptr_offset(ptr, 2), 1)
+    atomic_store(ptr_offset(ptr, 3), 4)
+    atomic_store(ptr_offset(ptr, 4), 2)
+
+    let mut s: MutSlice[I32] = MutSlice { data: ptr, len: 5 }
+    s.sort()
+
+    let check: Slice[I32] = Slice { data: ptr, len: 5 }
+    assert_eq(*check.get(0).unwrap(), 1, "sort[0] = 1")
+    assert_eq(*check.get(1).unwrap(), 2, "sort[1] = 2")
+    assert_eq(*check.get(2).unwrap(), 3, "sort[2] = 3")
+    assert_eq(*check.get(3).unwrap(), 4, "sort[3] = 4")
+    assert_eq(*check.get(4).unwrap(), 5, "sort[4] = 5")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_sort_already_sorted() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 1), 2)
+    atomic_store(ptr_offset(ptr, 2), 3)
+
+    let mut s: MutSlice[I32] = MutSlice { data: ptr, len: 3 }
+    s.sort()
+
+    let check: Slice[I32] = Slice { data: ptr, len: 3 }
+    assert_eq(*check.get(0).unwrap(), 1, "sorted[0] = 1")
+    assert_eq(*check.get(2).unwrap(), 3, "sorted[2] = 3")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_sort_reverse_order() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 3)
+    atomic_store(ptr_offset(ptr, 1), 2)
+    atomic_store(ptr_offset(ptr, 2), 1)
+
+    let mut s: MutSlice[I32] = MutSlice { data: ptr, len: 3 }
+    s.sort()
+
+    let check: Slice[I32] = Slice { data: ptr, len: 3 }
+    assert_eq(*check.get(0).unwrap(), 1, "rev sort[0] = 1")
+    assert_eq(*check.get(1).unwrap(), 2, "rev sort[1] = 2")
+    assert_eq(*check.get(2).unwrap(), 3, "rev sort[2] = 3")
+
+    dealloc(ptr)
+    return 0
+}
+
+// NOTE: sort_by, sort_by_key blocked by closure codegen with ref parameters
+// NOTE: binary_search blocked by Outcome return type with generic E

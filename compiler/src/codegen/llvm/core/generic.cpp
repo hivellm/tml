@@ -161,6 +161,102 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
     return t;
 }
 
+// Helper: Recursively match a parser type pattern against a concrete semantic type
+// to extract type parameter bindings. For example:
+//   pattern = Maybe[T], concrete = Maybe[I32] -> extracts T = I32
+//   pattern = T, concrete = I32 -> extracts T = I32
+static void match_pattern_type(const parser::Type& pattern, const types::TypePtr& concrete,
+                               std::unordered_map<std::string, types::TypePtr>& type_subs) {
+    if (!concrete)
+        return;
+
+    if (pattern.is<parser::NamedType>()) {
+        const auto& named = pattern.as<parser::NamedType>();
+        if (named.path.segments.empty())
+            return;
+        const std::string& name = named.path.segments.back();
+
+        bool has_type_args = named.generics.has_value() && !named.generics->args.empty();
+
+        if (!has_type_args) {
+            // Simple name like "T" — check if it's a type parameter (not already resolved)
+            if (type_subs.find(name) == type_subs.end()) {
+                type_subs[name] = concrete;
+                TML_DEBUG_LN("[WHERE_EQ] Resolved " << name << " via pattern matching");
+            }
+        } else {
+            // Generic type like Maybe[T] — recurse into type args
+            if (concrete->is<types::NamedType>()) {
+                const auto& concrete_named = concrete->as<types::NamedType>();
+                if (concrete_named.name == name) {
+                    const auto& pattern_args = named.generics->args;
+                    size_t min_args =
+                        std::min(pattern_args.size(), concrete_named.type_args.size());
+                    for (size_t i = 0; i < min_args; ++i) {
+                        if (pattern_args[i].is_type() && concrete_named.type_args[i]) {
+                            const auto& pattern_type = pattern_args[i].as_type();
+                            if (pattern_type) {
+                                match_pattern_type(*pattern_type, concrete_named.type_args[i],
+                                                   type_subs);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Helper: Extract additional type substitutions from where clause type equalities.
+// For example, given `where F = func() -> Maybe[T]` and `F` mapped to `func() -> Maybe[I32]`,
+// this will extract `T -> I32` by recursively matching the pattern against the concrete type.
+static void
+resolve_where_clause_type_equalities(const std::optional<parser::WhereClause>& where_clause,
+                                     std::unordered_map<std::string, types::TypePtr>& type_subs) {
+    if (!where_clause || where_clause->type_equalities.empty())
+        return;
+
+    for (const auto& [lhs, rhs] : where_clause->type_equalities) {
+        if (!lhs || !rhs)
+            continue;
+
+        // LHS should be a simple name like "F" that's already in type_subs
+        if (!lhs->is<parser::NamedType>())
+            continue;
+        const auto& lhs_named = lhs->as<parser::NamedType>();
+        if (lhs_named.path.segments.empty())
+            continue;
+        const std::string& param_name = lhs_named.path.segments.back();
+
+        auto it = type_subs.find(param_name);
+        if (it == type_subs.end() || !it->second)
+            continue;
+
+        // RHS is the pattern type (e.g., func() -> T or func(A) -> Maybe[B])
+        // The concrete type is it->second
+        const auto& concrete = it->second;
+
+        // Match func types: where F = func(params...) -> ReturnPattern
+        if (rhs->is<parser::FuncType>() && concrete->is<types::FuncType>()) {
+            const auto& pattern_func = rhs->as<parser::FuncType>();
+            const auto& concrete_func = concrete->as<types::FuncType>();
+
+            // Match return type pattern against concrete return type
+            if (pattern_func.return_type && concrete_func.return_type) {
+                match_pattern_type(*pattern_func.return_type, concrete_func.return_type, type_subs);
+            }
+
+            // Match parameter type patterns
+            size_t min_params = std::min(pattern_func.params.size(), concrete_func.params.size());
+            for (size_t i = 0; i < min_params; ++i) {
+                if (pattern_func.params[i] && concrete_func.params[i]) {
+                    match_pattern_type(*pattern_func.params[i], concrete_func.params[i], type_subs);
+                }
+            }
+        }
+    }
+}
+
 // ============ Generate Pending Generic Instantiations ============
 // Iteratively generate all pending struct/enum/func instantiations
 // Loops until no new instantiations are added (handles recursive types)
@@ -415,6 +511,12 @@ void LLVMIRGen::generate_pending_instantiations() {
                             }
                         }
 
+                        // Resolve where clause type equalities to derive additional
+                        // type substitutions (e.g., `where F = func() -> T` with F=func()->I32
+                        // derives T=I32)
+                        resolve_where_clause_type_equalities(impl.where_clause,
+                                                             effective_type_subs);
+
                         // Now resolve the impl's own type bindings with the substitutions
                         for (const auto& binding : impl.type_bindings) {
                             // Resolve the binding type with the current type substitutions
@@ -453,17 +555,20 @@ void LLVMIRGen::generate_pending_instantiations() {
                         if (found)
                             break;
 
-                        // Check if this module has the struct (for exported types)
+                        // Check if this module has the struct (public or internal)
                         // For library-internal types (pim.is_library_type), skip this check
                         // and search the source code directly
                         auto struct_it = mod.structs.find(pim.base_type_name);
-                        if (struct_it == mod.structs.end() && !pim.is_library_type)
+                        auto internal_struct_it = mod.internal_structs.find(pim.base_type_name);
+                        bool has_struct = struct_it != mod.structs.end() ||
+                                          internal_struct_it != mod.internal_structs.end();
+                        if (!has_struct && !pim.is_library_type)
                             continue;
 
                         TML_DEBUG_LN("[IMPL_INST]   Checking module: "
-                                     << mod_name << " has_source="
-                                     << (!mod.source_code.empty() ? "yes" : "no") << " has_struct="
-                                     << (struct_it != mod.structs.end() ? "yes" : "no"));
+                                     << mod_name
+                                     << " has_source=" << (!mod.source_code.empty() ? "yes" : "no")
+                                     << " has_struct=" << (has_struct ? "yes" : "no"));
 
                         // Get parsed AST from global cache or parse if not cached
                         if (mod.source_code.empty()) {
@@ -644,6 +749,10 @@ void LLVMIRGen::generate_pending_instantiations() {
                                     }
                                 }
                             }
+
+                            // Resolve where clause type equalities for imported impls
+                            resolve_where_clause_type_equalities(impl_decl.where_clause,
+                                                                 effective_type_subs);
 
                             // Then resolve the impl's own type bindings
                             for (const auto& binding : impl_decl.type_bindings) {

@@ -188,3 +188,128 @@ func test_duration_debug_string() -> I32 {
     assert(s.len() > 0, "debug_string should produce output")
     return 0
 }
+
+// === Checked arithmetic ===
+
+@test
+func test_duration_checked_add_basic() -> I32 {
+    let a: Duration = Duration::from_secs(3)
+    let b: Duration = Duration::from_secs(2)
+    let result: Maybe[Duration] = a.checked_add(b)
+    assert(result.is_just(), "checked_add should succeed")
+    let d: Duration = result.unwrap()
+    assert_eq(d.as_secs(), 5 as I64, "3+2=5 secs")
+    return 0
+}
+
+@test
+func test_duration_checked_add_nanos_carry() -> I32 {
+    let a: Duration = Duration::new(1, 800000000)  // 1.8s
+    let b: Duration = Duration::new(0, 400000000)  // 0.4s
+    let result: Maybe[Duration] = a.checked_add(b)
+    assert(result.is_just(), "should succeed")
+    let d: Duration = result.unwrap()
+    assert_eq(d.as_secs(), 2 as I64, "nanos carry to secs")
+    assert_eq(d.subsec_nanos(), 200000000, "remaining 200ms nanos")
+    return 0
+}
+
+@test
+func test_duration_checked_sub_basic() -> I32 {
+    let a: Duration = Duration::from_secs(5)
+    let b: Duration = Duration::from_secs(3)
+    let result: Maybe[Duration] = a.checked_sub(b)
+    assert(result.is_just(), "checked_sub should succeed")
+    let d: Duration = result.unwrap()
+    assert_eq(d.as_secs(), 2 as I64, "5-3=2 secs")
+    return 0
+}
+
+@test
+func test_duration_checked_sub_underflow() -> I32 {
+    let a: Duration = Duration::from_secs(2)
+    let b: Duration = Duration::from_secs(5)
+    let result: Maybe[Duration] = a.checked_sub(b)
+    assert(result.is_nothing(), "2-5 should underflow to Nothing")
+    return 0
+}
+
+@test
+func test_duration_checked_sub_nanos_borrow() -> I32 {
+    let a: Duration = Duration::new(5, 100000000)  // 5.1s
+    let b: Duration = Duration::new(2, 300000000)  // 2.3s
+    let result: Maybe[Duration] = a.checked_sub(b)
+    assert(result.is_just(), "should succeed")
+    let d: Duration = result.unwrap()
+    assert_eq(d.as_secs(), 2 as I64, "5.1 - 2.3 = 2.8 secs part")
+    assert_eq(d.subsec_nanos(), 800000000, "nanos part is 800ms")
+    return 0
+}
+
+// === Equality ===
+
+@test
+func test_duration_eq() -> I32 {
+    let a: Duration = Duration::from_millis(1000)
+    let b: Duration = Duration::from_secs(1)
+    assert(a.eq(ref b), "1000ms == 1s")
+    return 0
+}
+
+// === Display with fractional ===
+
+@test
+func test_duration_display_millis() -> I32 {
+    let d: Duration = Duration::from_millis(1500)
+    let s: Str = d.to_string()
+    assert_eq(s, "1.500s", "1500ms displays as 1.500s")
+    return 0
+}
+
+// === Arithmetic with nanos ===
+
+@test
+func test_duration_mul_with_nanos() -> I32 {
+    let d: Duration = Duration::new(1, 500000000)  // 1.5s
+    let result: Duration = d.mul(3)
+    assert_eq(result.as_secs(), 4 as I64, "1.5 * 3 = 4.5 secs part")
+    assert_eq(result.subsec_nanos(), 500000000, "nanos part = 500ms")
+    return 0
+}
+
+@test
+func test_duration_div_with_nanos() -> I32 {
+    let d: Duration = Duration::from_secs(10)
+    let result: Duration = d.div(3)
+    assert_eq(result.as_secs(), 3 as I64, "10/3 = 3 secs")
+    return 0
+}
+
+// === Edge cases ===
+
+@test
+func test_duration_zero_check() -> I32 {
+    let d: Duration = Duration::from_secs(0)
+    assert(d.is_zero(), "zero is zero")
+    assert_eq(d.as_secs(), 0 as I64, "zero secs")
+    assert_eq(d.subsec_nanos(), 0, "zero nanos")
+    return 0
+}
+
+@test
+func test_duration_saturating_add_nanos_carry() -> I32 {
+    let a: Duration = Duration::new(1, 900000000)  // 1.9s
+    let b: Duration = Duration::new(0, 200000000)  // 0.2s
+    let result: Duration = a.saturating_add(b)
+    assert_eq(result.as_secs(), 2 as I64, "1.9 + 0.2 = 2.1 secs part")
+    assert_eq(result.subsec_nanos(), 100000000, "100ms nanos")
+    return 0
+}
+
+@test
+func test_duration_display_zero() -> I32 {
+    let d: Duration = Duration::from_secs(0)
+    let s: Str = d.to_string()
+    assert_eq(s, "0s", "zero displays as 0s")
+    return 0
+}

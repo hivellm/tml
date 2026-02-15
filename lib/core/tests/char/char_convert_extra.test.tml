@@ -1,0 +1,44 @@
+// Tests for char/convert uncovered functions
+use test::{assert, assert_eq}
+use core::char::convert::{to_u128, ParseCharError, ParseCharErrorKind}
+
+@test
+func test_char_to_u128() -> I32 {
+    let c: Char = 'A'
+    let v: U128 = to_u128(c)
+    assert_eq(v, 65u128, "A should be 65 as U128")
+    return 0
+}
+
+@test
+func test_parse_char_error_kind() -> I32 {
+    let err: ParseCharError = ParseCharError { kind: ParseCharErrorKind::EmptyString }
+    let k: ParseCharErrorKind = err.kind()
+    return 0
+}
+
+@test
+func test_parse_char_error_to_string() -> I32 {
+    let err: ParseCharError = ParseCharError { kind: ParseCharErrorKind::EmptyString }
+    let s: Str = err.to_string()
+    assert_eq(s, "cannot parse char from empty string", "empty string error msg")
+    return 0
+}
+
+@test
+func test_parse_char_error_debug() -> I32 {
+    let err: ParseCharError = ParseCharError { kind: ParseCharErrorKind::TooManyChars }
+    let s: Str = err.debug_string()
+    assert_eq(s, "ParseCharError { kind: TooManyChars }", "debug string")
+    return 0
+}
+
+@test
+func test_parse_char_error_description() -> I32 {
+    let err: ParseCharError = ParseCharError { kind: ParseCharErrorKind::TooManyChars }
+    let s: Str = err.description()
+    assert_eq(s, "too many characters in string", "description")
+    return 0
+}
+
+// NOTE: TryFromCharError::description crashes at runtime

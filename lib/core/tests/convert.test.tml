@@ -1,0 +1,77 @@
+// Tests for core::convert - From behavior (signed widening + float + bool)
+use test::{assert, assert_eq}
+use core::convert::From
+
+// --- Signed integer widening ---
+
+@test
+func test_from_i8_to_i16() -> I32 {
+    let val: I16 = I16::from(42 as I8)
+    assert_eq(val, 42 as I16, "I8 -> I16")
+    return 0
+}
+
+@test
+func test_from_i8_to_i32() -> I32 {
+    let val: I32 = I32::from(42 as I8)
+    assert_eq(val, 42, "I8 -> I32")
+    return 0
+}
+
+@test
+func test_from_i8_to_i64() -> I32 {
+    let val: I64 = I64::from(-10 as I8)
+    assert_eq(val, -10 as I64, "I8 -> I64 negative")
+    return 0
+}
+
+@test
+func test_from_i16_to_i32() -> I32 {
+    let val: I32 = I32::from(1000 as I16)
+    assert_eq(val, 1000, "I16 -> I32")
+    return 0
+}
+
+@test
+func test_from_i16_to_i64() -> I32 {
+    let val: I64 = I64::from(-500 as I16)
+    assert_eq(val, -500 as I64, "I16 -> I64")
+    return 0
+}
+
+@test
+func test_from_i32_to_i64() -> I32 {
+    let val: I64 = I64::from(2147483647)
+    assert_eq(val, 2147483647 as I64, "I32 -> I64 max")
+    return 0
+}
+
+// --- Float widening ---
+
+@test
+func test_from_f32_to_f64() -> I32 {
+    let val: F64 = F64::from(3.14 as F32)
+    assert(val > 3.13, "F32 -> F64 lower bound")
+    assert(val < 3.15, "F32 -> F64 upper bound")
+    return 0
+}
+
+// --- Bool conversions ---
+
+@test
+func test_from_bool_to_i32() -> I32 {
+    let t: I32 = I32::from(true)
+    let f: I32 = I32::from(false)
+    assert_eq(t, 1, "true -> 1")
+    assert_eq(f, 0, "false -> 0")
+    return 0
+}
+
+@test
+func test_from_bool_to_i64() -> I32 {
+    let t: I64 = I64::from(true)
+    let f: I64 = I64::from(false)
+    assert_eq(t, 1 as I64, "true -> 1")
+    assert_eq(f, 0 as I64, "false -> 0")
+    return 0
+}

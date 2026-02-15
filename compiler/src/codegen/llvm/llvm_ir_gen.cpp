@@ -15,7 +15,9 @@
 //
 // Core utilities (core/):
 //   - core/utils.cpp:    Constructor, fresh_reg, emit, emit_line, report_error
-//   - core/types.cpp:    Type conversion, mangling, resolve_parser_type_with_subs, unify_types
+//   - core/types.cpp:         Type conversion, mangling (llvm_type, mangle_type,
+//   ensure_type_defined)
+//   - core/types_resolve.cpp: Type resolution, substitution, unification, associated type lookup
 //   - core/generic.cpp:  Generic instantiation (generate_pending_instantiations)
 //   - core/runtime.cpp:  Runtime declarations, module imports, string constants
 //   - core/dyn.cpp:      Dynamic dispatch and vtables

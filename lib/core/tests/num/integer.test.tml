@@ -1,0 +1,94 @@
+// Tests for core::num::integer - abs, signum, pow, is_positive, is_negative
+use test::{assert, assert_eq}
+use core::num::integer::{abs_i32, signum_i32, pow_i32, abs_i64, signum_i64, pow_i64}
+
+// --- Standalone functions (I32) ---
+
+@test
+func test_abs_i32() -> I32 {
+    assert_eq(abs_i32(-5), 5, "abs(-5) = 5")
+    assert_eq(abs_i32(5), 5, "abs(5) = 5")
+    assert_eq(abs_i32(0), 0, "abs(0) = 0")
+    return 0
+}
+
+@test
+func test_signum_i32() -> I32 {
+    assert_eq(signum_i32(10), 1, "signum(10) = 1")
+    assert_eq(signum_i32(0), 0, "signum(0) = 0")
+    assert_eq(signum_i32(-10), -1, "signum(-10) = -1")
+    return 0
+}
+
+@test
+func test_pow_i32() -> I32 {
+    assert_eq(pow_i32(2, 10), 1024, "2^10 = 1024")
+    assert_eq(pow_i32(3, 3), 27, "3^3 = 27")
+    assert_eq(pow_i32(5, 0), 1, "5^0 = 1")
+    assert_eq(pow_i32(7, 1), 7, "7^1 = 7")
+    return 0
+}
+
+// --- Standalone functions (I64) ---
+
+@test
+func test_abs_i64() -> I32 {
+    assert_eq(abs_i64(-100), 100, "abs(-100) = 100")
+    assert_eq(abs_i64(100), 100, "abs(100) = 100")
+    assert_eq(abs_i64(0), 0, "abs(0) = 0")
+    return 0
+}
+
+@test
+func test_signum_i64() -> I32 {
+    let s1: I64 = signum_i64(42)
+    let one: I64 = 1
+    assert(s1 == one, "signum(42) = 1")
+    let s2: I64 = signum_i64(0)
+    let zero: I64 = 0
+    assert(s2 == zero, "signum(0) = 0")
+    let s3: I64 = signum_i64(-42)
+    let neg_one: I64 = -1
+    assert(s3 == neg_one, "signum(-42) = -1")
+    return 0
+}
+
+@test
+func test_pow_i64() -> I32 {
+    assert_eq(pow_i64(2, 20), 1048576, "2^20 = 1048576")
+    assert_eq(pow_i64(10, 0), 1, "10^0 = 1")
+    assert_eq(pow_i64(10, 1), 10, "10^1 = 10")
+    return 0
+}
+
+// --- I32 method-based API ---
+
+@test
+func test_i32_abs_method() -> I32 {
+    let x: I32 = -42
+    assert_eq(x.abs(), 42, "(-42).abs() = 42")
+    let y: I32 = 42
+    assert_eq(y.abs(), 42, "42.abs() = 42")
+    return 0
+}
+
+@test
+func test_i32_signum_method() -> I32 {
+    assert_eq(10.signum(), 1, "10.signum() = 1")
+    assert_eq(0.signum(), 0, "0.signum() = 0")
+    let neg: I32 = -10
+    assert_eq(neg.signum(), -1, "(-10).signum() = -1")
+    return 0
+}
+
+@test
+func test_i32_is_positive_negative() -> I32 {
+    assert(5.is_positive(), "5 is positive")
+    assert(not 5.is_negative(), "5 is not negative")
+    let neg: I32 = -5
+    assert(neg.is_negative(), "-5 is negative")
+    assert(not neg.is_positive(), "-5 is not positive")
+    assert(not 0.is_positive(), "0 is not positive")
+    assert(not 0.is_negative(), "0 is not negative")
+    return 0
+}

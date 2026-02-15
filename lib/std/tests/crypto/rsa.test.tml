@@ -1,14 +1,67 @@
-//! Tests for crypto RSA encryption/decryption
-//!
-//! NOTE: RSA functionality is not yet implemented.
-//! This file contains placeholder tests that will be enabled
-//! once RSA-OAEP, RSA-PKCS1, and hybrid encryption are implemented.
+// Tests for crypto RSA encryption/decryption
+// NOTE: RSA FFI encrypt/decrypt tests are excluded due to runtime crash (ACCESS_VIOLATION)
+// in generate_key_pair(KeyType::Rsa, 2048). Only enum/struct tests included.
+use test
+use std::crypto::rsa::{RsaPadding, OaepOptions}
 
-use test::{assert}
+// === RsaPadding enum tests ===
 
 @test
-func test_rsa_placeholder() -> I32 {
-    // RSA functionality will be added in a future release.
-    assert(true, "placeholder test")
+func test_rsa_padding_names() -> I32 {
+    assert_eq(RsaPadding::Pkcs1.name(), "pkcs1", "pkcs1")
+    assert_eq(RsaPadding::OaepSha1.name(), "oaep-sha1", "oaep-sha1")
+    assert_eq(RsaPadding::OaepSha256.name(), "oaep-sha256", "oaep-sha256")
+    assert_eq(RsaPadding::OaepSha384.name(), "oaep-sha384", "oaep-sha384")
+    assert_eq(RsaPadding::OaepSha512.name(), "oaep-sha512", "oaep-sha512")
+    assert_eq(RsaPadding::None.name(), "none", "none")
+    return 0
+}
+
+@test
+func test_rsa_padding_overhead() -> I32 {
+    assert_eq(RsaPadding::Pkcs1.overhead(2048), 11 as I64, "pkcs1 overhead")
+    assert_eq(RsaPadding::OaepSha1.overhead(2048), 42 as I64, "oaep-sha1 overhead")
+    assert_eq(RsaPadding::OaepSha256.overhead(2048), 66 as I64, "oaep-sha256 overhead")
+    assert_eq(RsaPadding::OaepSha384.overhead(2048), 98 as I64, "oaep-sha384 overhead")
+    assert_eq(RsaPadding::OaepSha512.overhead(2048), 130 as I64, "oaep-sha512 overhead")
+    assert_eq(RsaPadding::None.overhead(2048), 0 as I64, "none overhead")
+    return 0
+}
+
+@test
+func test_rsa_padding_max_data_size() -> I32 {
+    // 2048-bit key = 256 bytes
+    assert_eq(RsaPadding::Pkcs1.max_data_size(2048), 245 as I64, "pkcs1 max")
+    assert_eq(RsaPadding::OaepSha256.max_data_size(2048), 190 as I64, "oaep256 max")
+    assert_eq(RsaPadding::None.max_data_size(2048), 256 as I64, "none max")
+    return 0
+}
+
+@test
+func test_rsa_padding_is_oaep() -> I32 {
+    assert_eq(RsaPadding::OaepSha1.is_oaep(), true, "sha1")
+    assert_eq(RsaPadding::OaepSha256.is_oaep(), true, "sha256")
+    assert_eq(RsaPadding::OaepSha384.is_oaep(), true, "sha384")
+    assert_eq(RsaPadding::OaepSha512.is_oaep(), true, "sha512")
+    assert_eq(RsaPadding::Pkcs1.is_oaep(), false, "pkcs1 not oaep")
+    assert_eq(RsaPadding::None.is_oaep(), false, "none not oaep")
+    return 0
+}
+
+@test
+func test_oaep_options() -> I32 {
+    let d = OaepOptions::default()
+    assert_eq(d.hash, "sha256", "default hash")
+    assert_eq(d.mgf1_hash, "sha256", "default mgf1")
+
+    let s1 = OaepOptions::sha1()
+    assert_eq(s1.hash, "sha1", "sha1 hash")
+    assert_eq(s1.mgf1_hash, "sha1", "sha1 mgf1")
+
+    let s3 = OaepOptions::sha384()
+    assert_eq(s3.hash, "sha384", "sha384 hash")
+
+    let s5 = OaepOptions::sha512()
+    assert_eq(s5.hash, "sha512", "sha512 hash")
     return 0
 }

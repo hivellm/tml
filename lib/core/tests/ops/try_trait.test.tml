@@ -1,0 +1,19 @@
+// Tests for core::ops::try_trait - ControlFlow enum
+use test::{assert, assert_eq}
+use core::ops::try_trait::ControlFlow
+
+@test
+func test_control_flow_continue() -> I32 {
+    let cf: ControlFlow[I32, Str] = ControlFlow::Continue(42)
+    assert(cf.is_continue(), "Continue is_continue")
+    assert(not cf.is_break(), "Continue not is_break")
+    return 0
+}
+
+@test
+func test_control_flow_break() -> I32 {
+    let cf: ControlFlow[I32, Str] = ControlFlow::Break("error")
+    assert(cf.is_break(), "Break is_break")
+    assert(not cf.is_continue(), "Break not is_continue")
+    return 0
+}

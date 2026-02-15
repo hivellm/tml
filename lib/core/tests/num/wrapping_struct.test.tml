@@ -1,0 +1,63 @@
+// Tests for Wrapping[T] struct methods
+use test
+use core::num::wrapping::Wrapping
+
+@test
+func test_wrapping_new_value() -> I32 {
+    let w: Wrapping[I32] = Wrapping::new(42)
+    assert_eq(w.value(), 42, "Wrapping::new + value")
+    return 0
+}
+
+@test
+func test_wrapping_into_inner() -> I32 {
+    let w: Wrapping[I32] = Wrapping::new(99)
+    assert_eq(w.into_inner(), 99, "Wrapping::into_inner")
+    return 0
+}
+
+@test
+func test_wrapping_add() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(10)
+    let b: Wrapping[I32] = Wrapping::new(20)
+    let c: Wrapping[I32] = a.add(b)
+    assert_eq(c.value(), 30, "Wrapping::add")
+    return 0
+}
+
+@test
+func test_wrapping_sub() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(50)
+    let b: Wrapping[I32] = Wrapping::new(20)
+    let c: Wrapping[I32] = a.sub(b)
+    assert_eq(c.value(), 30, "Wrapping::sub")
+    return 0
+}
+
+@test
+func test_wrapping_mul() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(6)
+    let b: Wrapping[I32] = Wrapping::new(7)
+    let c: Wrapping[I32] = a.mul(b)
+    assert_eq(c.value(), 42, "Wrapping::mul")
+    return 0
+}
+
+@test
+func test_wrapping_neg() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(42)
+    let c: Wrapping[I32] = a.neg()
+    assert_eq(c.value(), -42, "Wrapping::neg")
+    return 0
+}
+
+@test
+func test_wrapping_duplicate() -> I32 {
+    let a: Wrapping[I32] = Wrapping::new(77)
+    let b: Wrapping[I32] = a.duplicate()
+    assert_eq(b.value(), 77, "Wrapping::duplicate")
+    return 0
+}
+
+// Note: Wrapping::eq, partial_cmp, cmp, default tests deferred —
+// ref-passing on generic structs needs investigation

@@ -739,6 +739,11 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                             var_type.starts_with("%class.");
             }
         }
+        // Infer semantic type from init expression when no annotation is present.
+        // This is needed for method dispatch on variables holding slice/tuple results.
+        if (!let.type_annotation && !semantic_var_type) {
+            semantic_var_type = infer_expr_type(*let.init.value());
+        }
     }
 
     // Handle value class returned by value: if var_type is ptr (class type) but
@@ -927,6 +932,10 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     types::TypePtr semantic_type = nullptr;
     if (let.type_annotation) {
         semantic_type = resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
+    } else if (let.init.has_value() && var_type.starts_with("{")) {
+        // For tuple types without type annotation, infer semantic type from the initializer
+        // This is needed for tuple field access (pair.0, pair.1) to work correctly
+        semantic_type = infer_expr_type(*let.init.value());
     }
     VarInfo var_info{alloca_reg, var_type, semantic_type, std::nullopt};
     if (var_type == "{ ptr, ptr }") {

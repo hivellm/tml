@@ -1,0 +1,127 @@
+// Tests for core::unicode::unicode_data - non-ASCII property functions
+use test::{assert, assert_eq}
+use core::unicode::unicode_data::{is_alphabetic_nonascii, is_lowercase_nonascii, is_uppercase_nonascii, is_whitespace_nonascii, is_numeric_nonascii, is_control_nonascii, is_grapheme_extend_nonascii, is_printable_nonascii, to_uppercase_nonascii, to_lowercase_nonascii, to_titlecase_nonascii}
+
+// --- is_alphabetic_nonascii ---
+
+@test
+func test_is_alphabetic_nonascii() -> I32 {
+    // Greek alpha (U+03B1) is alphabetic
+    assert(is_alphabetic_nonascii(0x03B1 as U32), "Greek alpha is alphabetic")
+    // CJK Ideograph (U+4E00) is alphabetic
+    assert(is_alphabetic_nonascii(0x4E00 as U32), "CJK ideograph is alphabetic")
+    // Arabic-Indic digit (U+0660) is NOT alphabetic
+    assert(not is_alphabetic_nonascii(0x0660 as U32), "Arabic-Indic digit not alphabetic")
+    return 0
+}
+
+// --- is_lowercase_nonascii ---
+
+@test
+func test_is_lowercase_nonascii() -> I32 {
+    assert(is_lowercase_nonascii(0x0101 as U32), "U+0101 lowercase")
+    assert(is_lowercase_nonascii(0x03B1 as U32), "U+03B1 greek alpha lowercase")
+    assert(not is_lowercase_nonascii(0x0041 as U32), "U+0041 not nonascii lowercase")
+    return 0
+}
+
+// --- is_uppercase_nonascii ---
+
+@test
+func test_is_uppercase_nonascii() -> I32 {
+    assert(is_uppercase_nonascii(0x0100 as U32), "U+0100 uppercase")
+    assert(is_uppercase_nonascii(0x0391 as U32), "U+0391 greek Alpha uppercase")
+    return 0
+}
+
+// --- is_whitespace_nonascii ---
+
+@test
+func test_is_whitespace_nonascii() -> I32 {
+    assert(is_whitespace_nonascii(0x00A0 as U32), "U+00A0 NBSP whitespace")
+    assert(is_whitespace_nonascii(0x2002 as U32), "U+2002 En Space whitespace")
+    assert(not is_whitespace_nonascii(0x0041 as U32), "U+0041 not whitespace")
+    return 0
+}
+
+// --- is_numeric_nonascii ---
+
+@test
+func test_is_numeric_nonascii() -> I32 {
+    assert(is_numeric_nonascii(0x00B2 as U32), "U+00B2 superscript 2 numeric")
+    assert(not is_numeric_nonascii(0x0041 as U32), "U+0041 not numeric")
+    return 0
+}
+
+// --- is_control_nonascii ---
+
+@test
+func test_is_control_nonascii() -> I32 {
+    assert(is_control_nonascii(0x0080 as U32), "U+0080 C1 control")
+    assert(is_control_nonascii(0x009F as U32), "U+009F C1 control end")
+    assert(not is_control_nonascii(0x00A0 as U32), "U+00A0 not control")
+    return 0
+}
+
+// --- is_grapheme_extend_nonascii ---
+
+@test
+func test_is_grapheme_extend_nonascii() -> I32 {
+    assert(is_grapheme_extend_nonascii(0x0300 as U32), "U+0300 combining grave accent")
+    assert(not is_grapheme_extend_nonascii(0x0041 as U32), "U+0041 not grapheme extend")
+    return 0
+}
+
+// --- is_printable_nonascii ---
+
+@test
+func test_is_printable_nonascii() -> I32 {
+    assert(is_printable_nonascii(0x00C0 as U32), "U+00C0 A-grave printable")
+    assert(not is_printable_nonascii(0x0080 as U32), "U+0080 not printable")
+    return 0
+}
+
+// --- to_titlecase_nonascii ---
+
+@test
+func test_to_titlecase_nonascii() -> I32 {
+    assert_eq(to_titlecase_nonascii(0x01C6 as U32), 0x01C5 as U32, "DZ -> Dz")
+    assert_eq(to_titlecase_nonascii(0x01C9 as U32), 0x01C8 as U32, "LJ -> Lj")
+    return 0
+}
+
+// --- to_uppercase_nonascii ---
+
+@test
+func test_to_uppercase_nonascii_greek() -> I32 {
+    // Greek lowercase alpha (U+03B1) -> uppercase Alpha (U+0391)
+    assert_eq(to_uppercase_nonascii(0x03B1 as U32), 0x0391 as U32, "Greek alpha -> Alpha")
+    // Already uppercase unchanged
+    assert_eq(to_uppercase_nonascii(0x0391 as U32), 0x0391 as U32, "Already uppercase")
+    return 0
+}
+
+@test
+func test_to_uppercase_nonascii_cyrillic() -> I32 {
+    // Cyrillic lowercase a (U+0430) -> uppercase A (U+0410)
+    assert_eq(to_uppercase_nonascii(0x0430 as U32), 0x0410 as U32, "Cyrillic a -> A")
+    return 0
+}
+
+// --- to_lowercase_nonascii ---
+
+@test
+func test_to_lowercase_nonascii_greek() -> I32 {
+    // Greek uppercase Alpha (U+0391) -> lowercase alpha (U+03B1)
+    assert_eq(to_lowercase_nonascii(0x0391 as U32), 0x03B1 as U32, "Greek Alpha -> alpha")
+    // Already lowercase unchanged
+    assert_eq(to_lowercase_nonascii(0x03B1 as U32), 0x03B1 as U32, "Already lowercase")
+    return 0
+}
+
+@test
+func test_to_lowercase_nonascii_cyrillic() -> I32 {
+    // Cyrillic uppercase A (U+0410) -> lowercase a (U+0430)
+    assert_eq(to_lowercase_nonascii(0x0410 as U32), 0x0430 as U32, "Cyrillic A -> a")
+    return 0
+}

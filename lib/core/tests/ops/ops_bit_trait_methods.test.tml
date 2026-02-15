@@ -1,0 +1,356 @@
+// Tests for ops/bit trait methods: bitand, bitor, bitxor, negate, shift_left, shift_right
+// Covers BitAnd, BitOr, BitXor, Not, Shl, Shr behaviors for all integer types
+use test
+
+// ==================== I8 ====================
+@test
+func test_i8_bitand() -> I32 {
+    let a: I8 = 12 as I8
+    let r: I8 = a.bitand(10 as I8)
+    assert_eq(r, 8 as I8, "I8.bitand()")
+    return 0
+}
+
+@test
+func test_i8_bitor() -> I32 {
+    let a: I8 = 12 as I8
+    let r: I8 = a.bitor(10 as I8)
+    assert_eq(r, 14 as I8, "I8.bitor()")
+    return 0
+}
+
+@test
+func test_i8_bitxor() -> I32 {
+    let a: I8 = 12 as I8
+    let r: I8 = a.bitxor(10 as I8)
+    assert_eq(r, 6 as I8, "I8.bitxor()")
+    return 0
+}
+
+@test
+func test_i8_shift_left() -> I32 {
+    let a: I8 = 1 as I8
+    let r: I8 = a.shift_left(4 as I8)
+    assert_eq(r, 16 as I8, "I8.shift_left()")
+    return 0
+}
+
+@test
+func test_i8_shift_right() -> I32 {
+    let a: I8 = 16 as I8
+    let r: I8 = a.shift_right(4 as I8)
+    assert_eq(r, 1 as I8, "I8.shift_right()")
+    return 0
+}
+
+// ==================== I16 ====================
+@test
+func test_i16_bitand() -> I32 {
+    let a: I16 = 0b1100 as I16
+    let r: I16 = a.bitand(0b1010 as I16)
+    assert_eq(r, 0b1000 as I16, "I16.bitand()")
+    return 0
+}
+
+@test
+func test_i16_bitor() -> I32 {
+    let a: I16 = 0b1100 as I16
+    let r: I16 = a.bitor(0b1010 as I16)
+    assert_eq(r, 0b1110 as I16, "I16.bitor()")
+    return 0
+}
+
+@test
+func test_i16_bitxor() -> I32 {
+    let a: I16 = 0b1100 as I16
+    let r: I16 = a.bitxor(0b1010 as I16)
+    assert_eq(r, 0b0110 as I16, "I16.bitxor()")
+    return 0
+}
+
+@test
+func test_i16_shift_left() -> I32 {
+    let a: I16 = 1 as I16
+    let r: I16 = a.shift_left(8 as I16)
+    assert_eq(r, 256 as I16, "I16.shift_left()")
+    return 0
+}
+
+@test
+func test_i16_shift_right() -> I32 {
+    let a: I16 = 256 as I16
+    let r: I16 = a.shift_right(8 as I16)
+    assert_eq(r, 1 as I16, "I16.shift_right()")
+    return 0
+}
+
+// ==================== I32 ====================
+@test
+func test_i32_bitand() -> I32 {
+    let a: I32 = 0b1100
+    let r: I32 = a.bitand(0b1010)
+    assert_eq(r, 0b1000, "I32.bitand()")
+    return 0
+}
+
+@test
+func test_i32_bitor() -> I32 {
+    let a: I32 = 0b1100
+    let r: I32 = a.bitor(0b1010)
+    assert_eq(r, 0b1110, "I32.bitor()")
+    return 0
+}
+
+@test
+func test_i32_bitxor() -> I32 {
+    let a: I32 = 0b1100
+    let r: I32 = a.bitxor(0b1010)
+    assert_eq(r, 0b0110, "I32.bitxor()")
+    return 0
+}
+
+@test
+func test_i32_negate() -> I32 {
+    let a: I32 = 0
+    let r: I32 = a.negate()
+    assert_eq(r, -1, "I32.negate()")
+    return 0
+}
+
+@test
+func test_i32_shift_left() -> I32 {
+    let a: I32 = 1
+    let r: I32 = a.shift_left(4)
+    assert_eq(r, 16, "I32.shift_left()")
+    return 0
+}
+
+@test
+func test_i32_shift_right() -> I32 {
+    let a: I32 = 16
+    let r: I32 = a.shift_right(4)
+    assert_eq(r, 1, "I32.shift_right()")
+    return 0
+}
+
+// ==================== I64 ====================
+@test
+func test_i64_bitand() -> I32 {
+    let a: I64 = 0b1100 as I64
+    let r: I64 = a.bitand(0b1010 as I64)
+    assert_eq(r, 0b1000 as I64, "I64.bitand()")
+    return 0
+}
+
+@test
+func test_i64_bitor() -> I32 {
+    let a: I64 = 0b1100 as I64
+    let r: I64 = a.bitor(0b1010 as I64)
+    assert_eq(r, 0b1110 as I64, "I64.bitor()")
+    return 0
+}
+
+@test
+func test_i64_bitxor() -> I32 {
+    let a: I64 = 0b1100 as I64
+    let r: I64 = a.bitxor(0b1010 as I64)
+    assert_eq(r, 0b0110 as I64, "I64.bitxor()")
+    return 0
+}
+
+@test
+func test_i64_shift_left() -> I32 {
+    let a: I64 = 1 as I64
+    let r: I64 = a.shift_left(16 as I64)
+    assert_eq(r, 65536 as I64, "I64.shift_left()")
+    return 0
+}
+
+@test
+func test_i64_shift_right() -> I32 {
+    let a: I64 = 65536 as I64
+    let r: I64 = a.shift_right(16 as I64)
+    assert_eq(r, 1 as I64, "I64.shift_right()")
+    return 0
+}
+
+// ==================== U8 ====================
+@test
+func test_u8_bitand() -> I32 {
+    let a: U8 = 0b1100 as U8
+    let r: U8 = a.bitand(0b1010 as U8)
+    assert_eq(r, 0b1000 as U8, "U8.bitand()")
+    return 0
+}
+
+@test
+func test_u8_bitor() -> I32 {
+    let a: U8 = 0b1100 as U8
+    let r: U8 = a.bitor(0b1010 as U8)
+    assert_eq(r, 0b1110 as U8, "U8.bitor()")
+    return 0
+}
+
+@test
+func test_u8_bitxor() -> I32 {
+    let a: U8 = 0b1100 as U8
+    let r: U8 = a.bitxor(0b1010 as U8)
+    assert_eq(r, 0b0110 as U8, "U8.bitxor()")
+    return 0
+}
+
+@test
+func test_u8_shift_left() -> I32 {
+    let a: U8 = 1 as U8
+    let r: U8 = a.shift_left(4 as U8)
+    assert_eq(r, 16 as U8, "U8.shift_left()")
+    return 0
+}
+
+@test
+func test_u8_shift_right() -> I32 {
+    let a: U8 = 16 as U8
+    let r: U8 = a.shift_right(4 as U8)
+    assert_eq(r, 1 as U8, "U8.shift_right()")
+    return 0
+}
+
+// ==================== U16 ====================
+@test
+func test_u16_bitand() -> I32 {
+    let a: U16 = 0b1100 as U16
+    let r: U16 = a.bitand(0b1010 as U16)
+    assert_eq(r, 0b1000 as U16, "U16.bitand()")
+    return 0
+}
+
+@test
+func test_u16_bitor() -> I32 {
+    let a: U16 = 0b1100 as U16
+    let r: U16 = a.bitor(0b1010 as U16)
+    assert_eq(r, 0b1110 as U16, "U16.bitor()")
+    return 0
+}
+
+@test
+func test_u16_bitxor() -> I32 {
+    let a: U16 = 0b1100 as U16
+    let r: U16 = a.bitxor(0b1010 as U16)
+    assert_eq(r, 0b0110 as U16, "U16.bitxor()")
+    return 0
+}
+
+@test
+func test_u16_shift_left() -> I32 {
+    let a: U16 = 1 as U16
+    let r: U16 = a.shift_left(8 as U16)
+    assert_eq(r, 256 as U16, "U16.shift_left()")
+    return 0
+}
+
+@test
+func test_u16_shift_right() -> I32 {
+    let a: U16 = 256 as U16
+    let r: U16 = a.shift_right(8 as U16)
+    assert_eq(r, 1 as U16, "U16.shift_right()")
+    return 0
+}
+
+// ==================== U32 ====================
+@test
+func test_u32_bitand() -> I32 {
+    let a: U32 = 0b1100 as U32
+    let r: U32 = a.bitand(0b1010 as U32)
+    assert_eq(r, 0b1000 as U32, "U32.bitand()")
+    return 0
+}
+
+@test
+func test_u32_bitor() -> I32 {
+    let a: U32 = 0b1100 as U32
+    let r: U32 = a.bitor(0b1010 as U32)
+    assert_eq(r, 0b1110 as U32, "U32.bitor()")
+    return 0
+}
+
+@test
+func test_u32_bitxor() -> I32 {
+    let a: U32 = 0b1100 as U32
+    let r: U32 = a.bitxor(0b1010 as U32)
+    assert_eq(r, 0b0110 as U32, "U32.bitxor()")
+    return 0
+}
+
+@test
+func test_u32_shift_left() -> I32 {
+    let a: U32 = 1 as U32
+    let r: U32 = a.shift_left(16 as U32)
+    assert_eq(r, 65536 as U32, "U32.shift_left()")
+    return 0
+}
+
+@test
+func test_u32_shift_right() -> I32 {
+    let a: U32 = 65536 as U32
+    let r: U32 = a.shift_right(16 as U32)
+    assert_eq(r, 1 as U32, "U32.shift_right()")
+    return 0
+}
+
+// ==================== U64 ====================
+@test
+func test_u64_bitand() -> I32 {
+    let a: U64 = 0b1100 as U64
+    let r: U64 = a.bitand(0b1010 as U64)
+    assert_eq(r, 0b1000 as U64, "U64.bitand()")
+    return 0
+}
+
+@test
+func test_u64_bitor() -> I32 {
+    let a: U64 = 0b1100 as U64
+    let r: U64 = a.bitor(0b1010 as U64)
+    assert_eq(r, 0b1110 as U64, "U64.bitor()")
+    return 0
+}
+
+@test
+func test_u64_bitxor() -> I32 {
+    let a: U64 = 0b1100 as U64
+    let r: U64 = a.bitxor(0b1010 as U64)
+    assert_eq(r, 0b0110 as U64, "U64.bitxor()")
+    return 0
+}
+
+@test
+func test_u64_shift_left() -> I32 {
+    let a: U64 = 1 as U64
+    let r: U64 = a.shift_left(32 as U64)
+    assert_eq(r, 4294967296 as U64, "U64.shift_left()")
+    return 0
+}
+
+@test
+func test_u64_shift_right() -> I32 {
+    let a: U64 = 4294967296 as U64
+    let r: U64 = a.shift_right(32 as U64)
+    assert_eq(r, 1 as U64, "U64.shift_right()")
+    return 0
+}
+
+// ==================== Bool Not ====================
+@test
+func test_bool_negate_true() -> I32 {
+    let a: Bool = true
+    let r: Bool = a.negate()
+    assert_eq(r, false, "Bool.negate(true)")
+    return 0
+}
+
+@test
+func test_bool_negate_false() -> I32 {
+    let a: Bool = false
+    let r: Bool = a.negate()
+    assert_eq(r, true, "Bool.negate(false)")
+    return 0
+}

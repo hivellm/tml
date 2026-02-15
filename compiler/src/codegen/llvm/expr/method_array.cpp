@@ -452,6 +452,56 @@ auto LLVMIRGen::gen_array_method(const parser::MethodCallExpr& call, const std::
         return result;
     }
 
+    // as_slice() returns Slice[T] (fat pointer { ptr, i64 })
+    if (method == "as_slice") {
+        emit_coverage("Array::as_slice");
+        std::string slice_llvm_type = "{ ptr, i64 }";
+        std::string result_ptr = fresh_reg();
+        emit_line("  " + result_ptr + " = alloca " + slice_llvm_type);
+
+        // Store the array pointer as the data field
+        std::string data_ptr = fresh_reg();
+        emit_line("  " + data_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + result_ptr +
+                  ", i32 0, i32 0");
+        emit_line("  store ptr " + arr_ptr + ", ptr " + data_ptr);
+
+        // Store the array length
+        std::string len_ptr = fresh_reg();
+        emit_line("  " + len_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + result_ptr +
+                  ", i32 0, i32 1");
+        emit_line("  store i64 " + std::to_string(arr_size) + ", ptr " + len_ptr);
+
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + slice_llvm_type + ", ptr " + result_ptr);
+        last_expr_type_ = slice_llvm_type;
+        return result;
+    }
+
+    // as_mut_slice() returns MutSlice[T] (fat pointer { ptr, i64 })
+    if (method == "as_mut_slice") {
+        emit_coverage("Array::as_mut_slice");
+        std::string slice_llvm_type = "{ ptr, i64 }";
+        std::string result_ptr = fresh_reg();
+        emit_line("  " + result_ptr + " = alloca " + slice_llvm_type);
+
+        // Store the array pointer as the data field
+        std::string data_ptr = fresh_reg();
+        emit_line("  " + data_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + result_ptr +
+                  ", i32 0, i32 0");
+        emit_line("  store ptr " + arr_ptr + ", ptr " + data_ptr);
+
+        // Store the array length
+        std::string len_ptr = fresh_reg();
+        emit_line("  " + len_ptr + " = getelementptr " + slice_llvm_type + ", ptr " + result_ptr +
+                  ", i32 0, i32 1");
+        emit_line("  store i64 " + std::to_string(arr_size) + ", ptr " + len_ptr);
+
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + slice_llvm_type + ", ptr " + result_ptr);
+        last_expr_type_ = slice_llvm_type;
+        return result;
+    }
+
     // Not a recognized array method
     return std::nullopt;
 }

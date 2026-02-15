@@ -377,8 +377,10 @@ add_library(tml_parser STATIC
     src/parser/ast.cpp
     src/parser/parser_core.cpp
     src/parser/parser_decl.cpp
+    src/parser/parser_decl_impl.cpp
     src/parser/parser_oop.cpp
     src/parser/parser_expr.cpp
+    src/parser/parser_expr_complex.cpp
     src/parser/parser_stmt.cpp
     src/parser/parser_type.cpp
     src/parser/parser_pattern.cpp
@@ -395,9 +397,11 @@ add_library(tml_types STATIC
     src/types/env_lookups.cpp
     src/types/module.cpp
     src/types/env_module_support.cpp
+    src/types/env_module_loading.cpp
     # Checker modules (split from checker.cpp)
     src/types/checker/helpers.cpp
     src/types/checker/core.cpp
+    src/types/checker/core_oop.cpp
     src/types/checker/const_eval.cpp
     src/types/checker/expr.cpp
     src/types/checker/stmt.cpp
@@ -406,6 +410,7 @@ add_library(tml_types STATIC
     src/types/checker/resolve.cpp
     src/types/checker/decl_struct.cpp
     src/types/checker/expr_call.cpp
+    src/types/checker/expr_call_method.cpp
     # Builtin modules (moved from env_builtins*.cpp)
     src/types/builtins/register.cpp
     src/types/builtins/types.cpp
@@ -421,6 +426,7 @@ add_library(tml_types STATIC
     # Caching
     src/types/builtins_cache.cpp
     src/types/module_binary.cpp
+    src/types/module_binary_read.cpp
 )
 target_link_libraries(tml_types PUBLIC tml_parser)
 target_include_directories(tml_types PUBLIC include src)
@@ -476,6 +482,7 @@ add_library(tml_hir STATIC
     src/hir/hir_builder_stmt.cpp
     src/hir/hir_builder_pattern.cpp
     src/hir/hir_pass.cpp
+    src/hir/hir_pass_inline.cpp
     src/hir/hir_serialize.cpp
     # Serializer modules (split from hir_serialize.cpp for maintainability)
     src/hir/serializer/binary_writer.cpp
@@ -514,10 +521,12 @@ add_library(tml_mir STATIC
     # HIR to MIR builder (uses HIR instead of AST)
     src/mir/hir_mir_builder.cpp
     src/mir/builder/hir_expr.cpp
+    src/mir/builder/hir_expr_control.cpp
     src/mir/builder/hir_stmt.cpp
     src/mir/builder/hir_pattern.cpp
     # THIR to MIR builder (uses THIR with explicit coercions)
     src/mir/thir_mir_builder.cpp
+    src/mir/thir_mir_builder_expr.cpp
     # Serializer modules (split from mir_serialize.cpp for maintainability)
     src/mir/serializer/binary_writer.cpp
     src/mir/serializer/binary_reader.cpp
@@ -590,6 +599,8 @@ add_library(tml_codegen STATIC
     src/codegen/mir/types.cpp
     src/codegen/mir/terminators.cpp
     src/codegen/mir/instructions.cpp
+    src/codegen/mir/instructions_method.cpp
+    src/codegen/mir/instructions_misc.cpp
     # LLVM backend implementation
     src/codegen/llvm/llvm_codegen_backend.cpp
     src/codegen/llvm/llvm_ir_gen_stmt.cpp
@@ -619,30 +630,44 @@ add_library(tml_codegen STATIC
     # LLVM core codegen
     src/codegen/llvm/core/utils.cpp
     src/codegen/llvm/core/types.cpp
+    src/codegen/llvm/core/types_resolve.cpp
     src/codegen/llvm/core/generic.cpp
     src/codegen/llvm/core/runtime.cpp
+    src/codegen/llvm/core/runtime_modules.cpp
     src/codegen/llvm/core/dyn.cpp
     src/codegen/llvm/core/generate.cpp
+    src/codegen/llvm/core/generate_cache.cpp
+    src/codegen/llvm/core/generate_support.cpp
     src/codegen/llvm/core/debug_info.cpp
     src/codegen/llvm/core/target.cpp
     src/codegen/llvm/core/drop.cpp
     src/codegen/llvm/core/class_codegen.cpp
+    src/codegen/llvm/core/class_codegen_generic.cpp
+    src/codegen/llvm/core/class_codegen_virtual.cpp
     src/codegen/llvm/core/optimization_passes.cpp
     # LLVM expression codegen
     src/codegen/llvm/expr/core.cpp
     src/codegen/llvm/expr/call.cpp
+    src/codegen/llvm/expr/call_generic_struct.cpp
+    src/codegen/llvm/expr/call_user.cpp
     src/codegen/llvm/expr/binary.cpp
+    src/codegen/llvm/expr/binary_ops.cpp
     src/codegen/llvm/expr/unary.cpp
     src/codegen/llvm/expr/cast.cpp
     src/codegen/llvm/expr/closure.cpp
     src/codegen/llvm/expr/infer.cpp
+    src/codegen/llvm/expr/infer_methods.cpp
     src/codegen/llvm/expr/struct.cpp
+    src/codegen/llvm/expr/struct_field.cpp
     src/codegen/llvm/expr/tuple.cpp
     src/codegen/llvm/expr/print.cpp
     src/codegen/llvm/expr/collections.cpp
     src/codegen/llvm/expr/method.cpp
+    src/codegen/llvm/expr/method_static_dispatch.cpp
+    src/codegen/llvm/expr/method_generic.cpp
     src/codegen/llvm/expr/method_static.cpp
     src/codegen/llvm/expr/method_primitive.cpp
+    src/codegen/llvm/expr/method_primitive_ext.cpp
     src/codegen/llvm/expr/method_collection.cpp
     src/codegen/llvm/expr/method_slice.cpp
     src/codegen/llvm/expr/method_maybe.cpp
@@ -666,6 +691,7 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/builtins/assert.cpp
     src/codegen/llvm/builtins/async.cpp
     src/codegen/llvm/builtins/intrinsics.cpp
+    src/codegen/llvm/builtins/intrinsics_extended.cpp
 )
 target_link_libraries(tml_codegen PUBLIC tml_mir)
 target_include_directories(tml_codegen PUBLIC include src)
@@ -997,6 +1023,7 @@ add_library(tml_doc STATIC
     src/doc/signature.cpp
     src/doc/extractor.cpp
     src/doc/generators.cpp
+    src/doc/generators_html.cpp
 )
 target_link_libraries(tml_doc PUBLIC tml_parser)
 target_include_directories(tml_doc PUBLIC include src)
@@ -1015,6 +1042,9 @@ add_library(tml_mcp_lib STATIC
     src/mcp/mcp_types.cpp
     src/mcp/mcp_server.cpp
     src/mcp/mcp_tools.cpp
+    src/mcp/mcp_tools_docs.cpp
+    src/mcp/mcp_tools_docs_handlers.cpp
+    src/mcp/mcp_tools_project.cpp
 )
 target_link_libraries(tml_mcp_lib PUBLIC tml_json tml_codegen tml_search)
 target_include_directories(tml_mcp_lib PUBLIC include src)
@@ -1402,8 +1432,11 @@ add_library(tml_cli STATIC
     src/cli/tester/run.cpp
     src/cli/tester/suite_execution.cpp
     src/cli/tester/test_runner.cpp
+    src/cli/tester/test_runner_exec.cpp
+    src/cli/tester/test_runner_single.cpp
     src/cli/tester/test_cache.cpp
     src/cli/tester/library_coverage.cpp
+    src/cli/tester/library_coverage_report.cpp
     # EXE-based test runner (v2 / Go-style)
     src/cli/tester/exe_test_runner.cpp
     src/cli/tester/exe_dispatcher_gen.cpp

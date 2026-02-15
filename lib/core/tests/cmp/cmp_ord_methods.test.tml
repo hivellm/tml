@@ -1,0 +1,121 @@
+// Tests for Ord::max, Ord::min, Ord::clamp methods and cmp::max/min free functions
+use test::{assert, assert_eq}
+use core::cmp::{max, min}
+
+// --- Ord::max method ---
+
+@test
+func test_max_method() -> I32 {
+    let a: I32 = 3
+    let b: I32 = 7
+    assert_eq(a.max(b), 7, "max(3, 7) = 7")
+    return 0
+}
+
+@test
+func test_max_method_equal() -> I32 {
+    let a: I32 = 5
+    let b: I32 = 5
+    assert_eq(a.max(b), 5, "max(5, 5) = 5")
+    return 0
+}
+
+@test
+func test_max_method_negative() -> I32 {
+    let a: I32 = -10
+    let b: I32 = -3
+    assert_eq(a.max(b), -3, "max(-10, -3) = -3")
+    return 0
+}
+
+// --- Ord::min method ---
+
+@test
+func test_min_method() -> I32 {
+    let a: I32 = 3
+    let b: I32 = 7
+    assert_eq(a.min(b), 3, "min(3, 7) = 3")
+    return 0
+}
+
+@test
+func test_min_method_equal() -> I32 {
+    let a: I32 = 5
+    let b: I32 = 5
+    assert_eq(a.min(b), 5, "min(5, 5) = 5")
+    return 0
+}
+
+@test
+func test_min_method_negative() -> I32 {
+    let a: I32 = -10
+    let b: I32 = -3
+    assert_eq(a.min(b), -10, "min(-10, -3) = -10")
+    return 0
+}
+
+// --- Ord::clamp method ---
+
+@test
+func test_clamp_in_range() -> I32 {
+    let v: I32 = 5
+    assert_eq(v.clamp(0, 10), 5, "clamp 5 in [0,10] = 5")
+    return 0
+}
+
+@test
+func test_clamp_below() -> I32 {
+    let v: I32 = -5
+    assert_eq(v.clamp(0, 10), 0, "clamp -5 in [0,10] = 0")
+    return 0
+}
+
+@test
+func test_clamp_above() -> I32 {
+    let v: I32 = 15
+    assert_eq(v.clamp(0, 10), 10, "clamp 15 in [0,10] = 10")
+    return 0
+}
+
+@test
+func test_clamp_at_min() -> I32 {
+    let v: I32 = 0
+    assert_eq(v.clamp(0, 10), 0, "clamp 0 in [0,10] = 0")
+    return 0
+}
+
+@test
+func test_clamp_at_max() -> I32 {
+    let v: I32 = 10
+    assert_eq(v.clamp(0, 10), 10, "clamp 10 in [0,10] = 10")
+    return 0
+}
+
+// --- Free functions ---
+
+@test
+func test_free_max() -> I32 {
+    assert_eq(max(3, 7), 7, "max(3, 7) = 7")
+    return 0
+}
+
+@test
+func test_free_max_neg() -> I32 {
+    assert_eq(max(-10, -3), -3, "max(-10, -3) = -3")
+    return 0
+}
+
+@test
+func test_free_min() -> I32 {
+    assert_eq(min(3, 7), 3, "min(3, 7) = 3")
+    return 0
+}
+
+@test
+func test_free_min_neg() -> I32 {
+    assert_eq(min(-10, -3), -10, "min(-10, -3) = -10")
+    return 0
+}
+
+// NOTE: PartialEq::eq/ne, PartialOrd::lt/le/gt/ge on primitives blocked by codegen bug
+// NOTE: Maybe[T]::eq blocked by generic enum codegen bug

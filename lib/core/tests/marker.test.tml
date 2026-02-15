@@ -1,0 +1,24 @@
+// Tests for core::marker - PhantomPinned
+use test::{assert, assert_eq}
+use core::marker::PhantomPinned
+
+@test
+func test_phantom_pinned_new() -> I32 {
+    let pp: PhantomPinned = PhantomPinned::new()
+    assert_eq(pp.to_string(), "PhantomPinned", "to_string")
+    return 0
+}
+
+@test
+func test_phantom_pinned_debug() -> I32 {
+    let pp: PhantomPinned = PhantomPinned::new()
+    assert_eq(pp.debug_string(), "PhantomPinned", "debug_string")
+    return 0
+}
+
+@test
+func test_phantom_pinned_default() -> I32 {
+    let pp: PhantomPinned = PhantomPinned::default()
+    assert_eq(pp.to_string(), "PhantomPinned", "default to_string")
+    return 0
+}

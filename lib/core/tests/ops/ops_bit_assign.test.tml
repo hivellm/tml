@@ -1,0 +1,210 @@
+// Tests for ops/bit assign operators across all integer types (23 tests)
+// Covers: bitand_assign, bitor_assign, bitxor_assign, shl_assign, shr_assign
+// for I8, I16, I64, U8, U16, U32, U64
+use test::{assert, assert_eq}
+
+// =============================================================================
+// Bitwise AND assign
+// =============================================================================
+
+@test
+func test_i8_bitand() -> I32 {
+    let mut a: I8 = 0xFF as I8
+    a = a & (0x0F as I8)
+    assert_eq(a as I32, 0x0F, "I8 bitand")
+    return 0
+}
+
+@test
+func test_u8_bitand() -> I32 {
+    let mut a: U8 = 0xFF as U8
+    a = a & (0x0F as U8)
+    assert_eq(a as I32, 0x0F, "U8 bitand")
+    return 0
+}
+
+@test
+func test_i16_bitand() -> I32 {
+    let mut a: I16 = 0xFF as I16
+    a = a & (0x0F as I16)
+    assert_eq(a as I32, 0x0F, "I16 bitand")
+    return 0
+}
+
+@test
+func test_u16_bitand() -> I32 {
+    let mut a: U16 = 0xFF as U16
+    a = a & (0x0F as U16)
+    assert_eq(a as I32, 0x0F, "U16 bitand")
+    return 0
+}
+
+@test
+func test_u64_bitand() -> I32 {
+    let mut a: U64 = 0xFF as U64
+    a = a & (0x0F as U64)
+    assert_eq(a as I32, 0x0F, "U64 bitand")
+    return 0
+}
+
+// =============================================================================
+// Bitwise OR assign
+// =============================================================================
+
+@test
+func test_i8_bitor() -> I32 {
+    let mut a: I8 = 0x0F as I8
+    a = a | (0xF0 as I8)
+    let result: I32 = a as I32
+    assert_eq(result, -1, "I8 bitor 0x0F|0xF0 = 0xFF = -1")
+    return 0
+}
+
+@test
+func test_u8_bitor() -> I32 {
+    let mut a: U8 = 0x0F as U8
+    a = a | (0xF0 as U8)
+    assert_eq(a as I32, 0xFF, "U8 bitor")
+    return 0
+}
+
+@test
+func test_i64_bitor() -> I32 {
+    let mut a: I64 = 0x0F as I64
+    a = a | (0xF0 as I64)
+    assert_eq(a as I32, 0xFF, "I64 bitor")
+    return 0
+}
+
+@test
+func test_u16_bitor() -> I32 {
+    let mut a: U16 = 0x0F as U16
+    a = a | (0xF0 as U16)
+    assert_eq(a as I32, 0xFF, "U16 bitor")
+    return 0
+}
+
+@test
+func test_u64_bitor() -> I32 {
+    let mut a: U64 = 0x0F as U64
+    a = a | (0xF0 as U64)
+    assert_eq(a as I32, 0xFF, "U64 bitor")
+    return 0
+}
+
+// =============================================================================
+// Bitwise XOR assign
+// =============================================================================
+
+@test
+func test_i8_bitxor() -> I32 {
+    let mut a: I8 = 0xFF as I8
+    a = a ^ (0x0F as I8)
+    let result: I32 = a as I32
+    assert_eq(result, -16, "I8 bitxor 0xFF^0x0F = 0xF0 = -16")
+    return 0
+}
+
+@test
+func test_i16_bitxor() -> I32 {
+    let mut a: I16 = 0xFF as I16
+    a = a ^ (0x0F as I16)
+    assert_eq(a as I32, 0xF0, "I16 bitxor")
+    return 0
+}
+
+@test
+func test_i64_bitxor() -> I32 {
+    let mut a: I64 = 0xFF as I64
+    a = a ^ (0x0F as I64)
+    assert_eq(a as I32, 0xF0, "I64 bitxor")
+    return 0
+}
+
+@test
+func test_u16_bitxor() -> I32 {
+    let mut a: U16 = 0xFF as U16
+    a = a ^ (0x0F as U16)
+    assert_eq(a as I32, 0xF0, "U16 bitxor")
+    return 0
+}
+
+@test
+func test_u32_bitxor() -> I32 {
+    let mut a: U32 = 0xFF as U32
+    a = a ^ (0x0F as U32)
+    assert_eq(a as I32, 0xF0, "U32 bitxor")
+    return 0
+}
+
+// =============================================================================
+// Shift left assign
+// =============================================================================
+
+@test
+func test_i8_shl() -> I32 {
+    let mut a: I8 = 1 as I8
+    a = a << (3 as I8)
+    assert_eq(a as I32, 8, "I8 shl 3")
+    return 0
+}
+
+@test
+func test_i16_shl() -> I32 {
+    let mut a: I16 = 1 as I16
+    a = a << (4 as I16)
+    assert_eq(a as I32, 16, "I16 shl 4")
+    return 0
+}
+
+@test
+func test_u8_shl() -> I32 {
+    let mut a: U8 = 1 as U8
+    a = a << (5 as U8)
+    assert_eq(a as I32, 32, "U8 shl 5")
+    return 0
+}
+
+@test
+func test_u64_shl() -> I32 {
+    let mut a: U64 = 1 as U64
+    a = a << (10 as U64)
+    assert_eq(a as I32, 1024, "U64 shl 10")
+    return 0
+}
+
+// =============================================================================
+// Shift right assign
+// =============================================================================
+
+@test
+func test_i8_shr() -> I32 {
+    let mut a: I8 = 64 as I8
+    a = a >> (3 as I8)
+    assert_eq(a as I32, 8, "I8 shr 3")
+    return 0
+}
+
+@test
+func test_i16_shr() -> I32 {
+    let mut a: I16 = 256 as I16
+    a = a >> (4 as I16)
+    assert_eq(a as I32, 16, "I16 shr 4")
+    return 0
+}
+
+@test
+func test_u16_shr() -> I32 {
+    let mut a: U16 = 256 as U16
+    a = a >> (4 as U16)
+    assert_eq(a as I32, 16, "U16 shr 4")
+    return 0
+}
+
+@test
+func test_u64_shr() -> I32 {
+    let mut a: U64 = 1024 as U64
+    a = a >> (5 as U64)
+    assert_eq(a as I32, 32, "U64 shr 5")
+    return 0
+}

@@ -24,3 +24,10 @@ func test_has_release_true() -> I32 {
     assert(Ordering::SeqCst.has_release(), "SeqCst should have release semantics")
     return 0
 }
+
+@test
+func test_has_release_false() -> I32 {
+    assert(not Ordering::Relaxed.has_release(), "Relaxed should not have release semantics")
+    assert(not Ordering::Acquire.has_release(), "Acquire should not have release semantics")
+    return 0
+}

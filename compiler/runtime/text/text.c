@@ -292,23 +292,25 @@ TML_EXPORT void tml_text_clear(TmlText* t) {
     }
 }
 
-// UNSAFE: Get raw data pointer (assumes heap mode)
+// Get raw data pointer (handles both SSO and heap mode)
 TML_EXPORT uint8_t* tml_text_data_ptr(TmlText* t) {
     if (!t)
         return NULL;
-    // For performance, assume heap mode (caller responsibility)
-    return t->heap.data;
+    return text_data_mut(t);
 }
 
-// UNSAFE: Set length directly (no bounds checking)
+// Set length directly (no bounds checking, handles SSO)
 TML_EXPORT void tml_text_set_len(TmlText* t, uint64_t new_len) {
     if (!t)
         return;
-    // For performance, assume heap mode (caller responsibility)
-    t->heap.len = new_len;
-    // Null terminate
-    if (t->heap.data)
-        t->heap.data[new_len] = '\0';
+    if (text_is_inline(t)) {
+        t->sso.len = (uint8_t)new_len;
+        t->sso.data[new_len] = '\0';
+    } else {
+        t->heap.len = new_len;
+        if (t->heap.data)
+            t->heap.data[new_len] = '\0';
+    }
 }
 
 TML_EXPORT void tml_text_push(TmlText* t, int32_t c) {

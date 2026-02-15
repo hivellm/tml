@@ -1,0 +1,57 @@
+// Tests for core::fmt::traits - FmtError, Alignment, Sign
+use test::{assert, assert_eq}
+use core::fmt::traits::{FmtError, Alignment, Sign}
+
+// --- FmtError ---
+
+@test
+func test_fmt_error_new() -> I32 {
+    let err: FmtError = FmtError::new()
+    let s: Str = err.to_string()
+    assert_eq(s, "formatting error", "FmtError to_string")
+    return 0
+}
+
+@test
+func test_fmt_error_debug() -> I32 {
+    let err: FmtError = FmtError::new()
+    let s: Str = err.debug_string()
+    assert_eq(s, "FmtError", "FmtError debug_string")
+    return 0
+}
+
+// --- Alignment ---
+
+@test
+func test_alignment_to_string() -> I32 {
+    assert_eq(Alignment::Left.to_string(), "Left", "Left")
+    assert_eq(Alignment::Right.to_string(), "Right", "Right")
+    assert_eq(Alignment::Center.to_string(), "Center", "Center")
+    return 0
+}
+
+@test
+func test_alignment_debug_string() -> I32 {
+    assert_eq(Alignment::Left.debug_string(), "Alignment::Left", "Left debug")
+    assert_eq(Alignment::Right.debug_string(), "Alignment::Right", "Right debug")
+    assert_eq(Alignment::Center.debug_string(), "Alignment::Center", "Center debug")
+    return 0
+}
+
+// --- Sign ---
+
+@test
+func test_sign_to_string() -> I32 {
+    assert_eq(Sign::Minus.to_string(), "Minus", "Minus")
+    assert_eq(Sign::Plus.to_string(), "Plus", "Plus")
+    assert_eq(Sign::Space.to_string(), "Space", "Space")
+    return 0
+}
+
+@test
+func test_sign_debug_string() -> I32 {
+    assert_eq(Sign::Minus.debug_string(), "Sign::Minus", "Minus debug")
+    assert_eq(Sign::Plus.debug_string(), "Sign::Plus", "Plus debug")
+    assert_eq(Sign::Space.debug_string(), "Sign::Space", "Space debug")
+    return 0
+}

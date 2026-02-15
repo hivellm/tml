@@ -1,0 +1,83 @@
+// Tests for alloc/global helper functions - layout_bytes, alloc_single, etc.
+// Total @test count: 6
+use test::{assert, assert_eq}
+use core::alloc::{Layout, LayoutError}
+use core::alloc::global::{layout_bytes, layout_bytes_aligned, alloc_single, dealloc_single, alloc_global, alloc_global_zeroed, dealloc_global, realloc_global}
+
+// =============================================================================
+// Layout helper functions
+// =============================================================================
+
+@test
+func test_layout_bytes_valid() -> I32 {
+    let result = layout_bytes(64)
+    when result {
+        Ok(layout) => {
+            assert_eq(layout.size(), 64 as I64, "layout_bytes size 64")
+            assert_eq(layout.align(), 1 as I64, "layout_bytes align 1")
+        }
+        Err(_) => {
+            assert(false, "layout_bytes(64) should succeed")
+        }
+    }
+    return 0
+}
+
+@test
+func test_layout_bytes_aligned_valid() -> I32 {
+    let result = layout_bytes_aligned(128, 16)
+    when result {
+        Ok(layout) => {
+            assert_eq(layout.size(), 128 as I64, "layout_bytes_aligned size 128")
+            assert_eq(layout.align(), 16 as I64, "layout_bytes_aligned align 16")
+        }
+        Err(_) => {
+            assert(false, "layout_bytes_aligned(128, 16) should succeed")
+        }
+    }
+    return 0
+}
+
+// =============================================================================
+// Memory allocation helpers
+// =============================================================================
+
+@test
+func test_alloc_single_dealloc_single() -> I32 {
+    let ptr = alloc_single(8, 8)
+    dealloc_single(ptr, 8, 8)
+    return 0
+}
+
+@test
+func test_alloc_global_zeroed_dealloc() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(16, 8)
+    let ptr = alloc_global_zeroed(layout)
+    dealloc_global(ptr, layout)
+    return 0
+}
+
+@test
+func test_realloc_global() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(16, 8)
+    let ptr = alloc_global(layout)
+    let new_ptr = realloc_global(ptr, layout, 32)
+    let new_layout: Layout = Layout::from_size_align_unchecked(32, 8)
+    dealloc_global(new_ptr, new_layout)
+    return 0
+}
+
+@test
+func test_layout_bytes_aligned_bad_align() -> I32 {
+    // Non-power-of-two alignment should fail
+    let result = layout_bytes_aligned(64, 3)
+    when result {
+        Ok(_) => {
+            assert(false, "layout_bytes_aligned(64, 3) should fail")
+        }
+        Err(_) => {
+            // Expected
+        }
+    }
+    return 0
+}

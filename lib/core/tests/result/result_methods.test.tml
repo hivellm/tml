@@ -1,0 +1,148 @@
+// Tests for Outcome[T, E] methods — extracting, chaining, closures
+use test::{assert, assert_eq}
+
+// --- Extracting Values ---
+
+@test
+func test_expect_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    assert_eq(x.expect("should be ok"), 42, "expect Ok")
+    return 0
+}
+
+@test
+func test_expect_err_val() -> I32 {
+    let x: Outcome[I32, Str] = Err("bad")
+    assert_eq(x.expect_err("should be err"), "bad", "expect_err Err")
+    return 0
+}
+
+@test
+func test_unwrap_or_default_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(77)
+    assert_eq(x.unwrap_or_default(), 77, "unwrap_or_default Ok")
+    return 0
+}
+
+@test
+func test_unwrap_or_default_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    assert_eq(x.unwrap_or_default(), 0, "unwrap_or_default Err")
+    return 0
+}
+
+@test
+func test_unwrap_or_else_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    let r: I32 = x.unwrap_or_else(do(e: Str) -> I32 { return -1 })
+    assert_eq(r, 42, "unwrap_or_else Ok")
+    return 0
+}
+
+@test
+func test_unwrap_or_else_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    let r: I32 = x.unwrap_or_else(do(e: Str) -> I32 { return -1 })
+    assert_eq(r, -1, "unwrap_or_else Err")
+    return 0
+}
+
+// --- Predicate Methods ---
+
+@test
+func test_is_ok_and_true() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    assert(x.is_ok_and(do(n: I32) -> Bool { return n > 0 }), "is_ok_and true")
+    return 0
+}
+
+@test
+func test_is_ok_and_false() -> I32 {
+    let x: Outcome[I32, Str] = Ok(-1)
+    assert(not x.is_ok_and(do(n: I32) -> Bool { return n > 0 }), "is_ok_and false")
+    return 0
+}
+
+@test
+func test_is_ok_and_on_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    assert(not x.is_ok_and(do(n: I32) -> Bool { return n > 0 }), "is_ok_and on Err")
+    return 0
+}
+
+@test
+func test_is_err_and_true() -> I32 {
+    let x: Outcome[I32, Str] = Err("not found")
+    assert(x.is_err_and(do(e: Str) -> Bool { return e.len() > 0 }), "is_err_and true")
+    return 0
+}
+
+@test
+func test_is_err_and_on_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(10)
+    assert(not x.is_err_and(do(e: Str) -> Bool { return e.len() > 0 }), "is_err_and on Ok")
+    return 0
+}
+
+// --- Chaining ---
+
+@test
+func test_alt_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(1)
+    let y: Outcome[I32, Str] = Ok(2)
+    let r: Outcome[I32, Str] = x.alt(y)
+    assert_eq(r.unwrap(), 1, "alt Ok keeps first")
+    return 0
+}
+
+@test
+func test_alt_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    let y: Outcome[I32, Str] = Ok(99)
+    let r: Outcome[I32, Str] = x.alt(y)
+    assert_eq(r.unwrap(), 99, "alt Err takes second")
+    return 0
+}
+
+// --- Converting to Maybe ---
+
+@test
+func test_ok_from_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(42)
+    let m: Maybe[I32] = x.ok()
+    assert(m.is_just(), "ok() from Ok is Just")
+    assert_eq(m.unwrap(), 42, "ok() value")
+    return 0
+}
+
+@test
+func test_ok_from_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    let m: Maybe[I32] = x.ok()
+    assert(m.is_nothing(), "ok() from Err is Nothing")
+    return 0
+}
+
+// --- Converting to Maybe (err) ---
+
+@test
+func test_err_from_err() -> I32 {
+    let x: Outcome[I32, I32] = Err(42)
+    let e: Maybe[I32] = x.err()
+    assert(e.is_just(), "err() from Err is Just")
+    assert_eq(e.unwrap(), 42, "err() value")
+    return 0
+}
+
+@test
+func test_err_from_ok() -> I32 {
+    let x: Outcome[I32, I32] = Ok(10)
+    let e: Maybe[I32] = x.err()
+    assert(e.is_nothing(), "err() from Ok is Nothing")
+    return 0
+}
+
+// NOTE: map[U], map_err[F], and_then[U], or_else[F], also[U] blocked by generic method codegen
+// NOTE: inspect, inspect_err blocked by codegen (undefined value for Outcome inspect)
+// NOTE: transpose, flatten blocked by nested generic type codegen
+// NOTE: as_ref, as_mut, copied, duplicated blocked by ref-returning generic codegen

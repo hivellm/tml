@@ -1,0 +1,175 @@
+// Tests for generic iterator adapters: Take, Skip, StepBy
+// Previously blocked by associated type substitution bugs (now fixed)
+
+use test
+use core::iter::adapters::take::{Take, take}
+use core::iter::adapters::skip::{Skip, skip}
+use core::iter::adapters::step_by::{StepBy, step_by}
+
+// A simple custom iterator for testing
+type CountUp {
+    current: I32,
+    max: I32
+}
+
+impl Iterator for CountUp {
+    type Item = I32
+
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max {
+            return Nothing
+        }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+// ============================================================================
+// Take tests
+// ============================================================================
+
+@test
+func test_take_basic() -> I32 {
+    let mut iter: Take[CountUp] = take(CountUp { current: 0, max: 10 }, 3)
+
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 0, "first")
+    let v2: Maybe[I32] = iter.next()
+    assert_eq(v2.unwrap(), 1, "second")
+    let v3: Maybe[I32] = iter.next()
+    assert_eq(v3.unwrap(), 2, "third")
+    let v4: Maybe[I32] = iter.next()
+    assert(v4.is_nothing(), "take(3) exhausted after 3")
+
+    return 0
+}
+
+@test
+func test_take_more_than_available() -> I32 {
+    let mut iter: Take[CountUp] = take(CountUp { current: 0, max: 2 }, 10)
+
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 0, "first")
+    let v2: Maybe[I32] = iter.next()
+    assert_eq(v2.unwrap(), 1, "second")
+    let v3: Maybe[I32] = iter.next()
+    assert(v3.is_nothing(), "underlying exhausted before take limit")
+
+    return 0
+}
+
+@test
+func test_take_zero() -> I32 {
+    let mut iter: Take[CountUp] = take(CountUp { current: 0, max: 5 }, 0)
+
+    let v1: Maybe[I32] = iter.next()
+    assert(v1.is_nothing(), "take(0) yields nothing")
+
+    return 0
+}
+
+// ============================================================================
+// Skip tests
+// ============================================================================
+
+@test
+func test_skip_basic() -> I32 {
+    let mut iter: Skip[CountUp] = skip(CountUp { current: 0, max: 5 }, 2)
+
+    // Skips 0 and 1, yields 2, 3, 4
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 2, "after skipping 2")
+    let v2: Maybe[I32] = iter.next()
+    assert_eq(v2.unwrap(), 3, "second after skip")
+    let v3: Maybe[I32] = iter.next()
+    assert_eq(v3.unwrap(), 4, "third after skip")
+    let v4: Maybe[I32] = iter.next()
+    assert(v4.is_nothing(), "exhausted")
+
+    return 0
+}
+
+@test
+func test_skip_all() -> I32 {
+    let mut iter: Skip[CountUp] = skip(CountUp { current: 0, max: 2 }, 5)
+
+    let v1: Maybe[I32] = iter.next()
+    assert(v1.is_nothing(), "skip more than available yields nothing")
+
+    return 0
+}
+
+@test
+func test_skip_zero() -> I32 {
+    let mut iter: Skip[CountUp] = skip(CountUp { current: 0, max: 3 }, 0)
+
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 0, "skip(0) yields first element")
+
+    return 0
+}
+
+// ============================================================================
+// StepBy tests
+// ============================================================================
+
+@test
+func test_step_by_two() -> I32 {
+    let mut iter: StepBy[CountUp] = step_by(CountUp { current: 1, max: 7 }, 2)
+
+    // Elements: 1, 2, 3, 4, 5, 6
+    // step_by(2): yields 1 (first always), skip 2, yield 3, skip 4, yield 5
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 1, "first (always yielded)")
+    let v2: Maybe[I32] = iter.next()
+    assert_eq(v2.unwrap(), 3, "step over 2")
+    let v3: Maybe[I32] = iter.next()
+    assert_eq(v3.unwrap(), 5, "step over 4")
+    let v4: Maybe[I32] = iter.next()
+    assert(v4.is_nothing(), "exhausted")
+
+    return 0
+}
+
+@test
+func test_step_by_three() -> I32 {
+    let mut iter: StepBy[CountUp] = step_by(CountUp { current: 0, max: 9 }, 3)
+
+    // Elements: 0,1,2,3,4,5,6,7,8
+    // step_by(3): 0 (first), skip 1,2, yield 3, skip 4,5, yield 6
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 0, "first")
+    let v2: Maybe[I32] = iter.next()
+    assert_eq(v2.unwrap(), 3, "after step 3")
+    let v3: Maybe[I32] = iter.next()
+    assert_eq(v3.unwrap(), 6, "after step 6")
+    let v4: Maybe[I32] = iter.next()
+    assert(v4.is_nothing(), "exhausted")
+
+    return 0
+}
+
+@test
+func test_step_by_one() -> I32 {
+    let mut iter: StepBy[CountUp] = step_by(CountUp { current: 0, max: 3 }, 1)
+
+    // step_by(1) yields every element
+    let v1: Maybe[I32] = iter.next()
+    assert_eq(v1.unwrap(), 0, "first")
+    let v2: Maybe[I32] = iter.next()
+    assert_eq(v2.unwrap(), 1, "second")
+    let v3: Maybe[I32] = iter.next()
+    assert_eq(v3.unwrap(), 2, "third")
+    let v4: Maybe[I32] = iter.next()
+    assert(v4.is_nothing(), "exhausted")
+
+    return 0
+}
+
+// NOTE: Fuse, Chain, Zip, Enumerate adapters are blocked by codegen bugs:
+// - Fuse[I] wraps iter in Maybe[I] — nested generic struct crashes at runtime
+// - Chain[A,B] wraps first in Maybe[A] — same issue
+// - Enumerate/Zip return tuples with associated types — (I64, I::Item) not resolved
+// - Nested adapter combinations (Take[Skip[...]]) produce recursive LLVM struct types
+// Tracked in test-failures tasks.md.

@@ -1,0 +1,77 @@
+// Tests for uncovered crypto/dh enum methods
+use test::{assert, assert_eq}
+use std::crypto::dh::DhGroup
+
+// --- DhGroup::name ---
+
+@test
+func test_dh_group_name() -> I32 {
+    assert_eq(DhGroup::Modp1.name(), "modp1", "Modp1 name")
+    assert_eq(DhGroup::Modp2.name(), "modp2", "Modp2 name")
+    assert_eq(DhGroup::Modp5.name(), "modp5", "Modp5 name")
+    assert_eq(DhGroup::Modp14.name(), "modp14", "Modp14 name")
+    assert_eq(DhGroup::Modp15.name(), "modp15", "Modp15 name")
+    assert_eq(DhGroup::Modp16.name(), "modp16", "Modp16 name")
+    assert_eq(DhGroup::Modp17.name(), "modp17", "Modp17 name")
+    assert_eq(DhGroup::Modp18.name(), "modp18", "Modp18 name")
+    assert_eq(DhGroup::Ffdhe2048.name(), "ffdhe2048", "Ffdhe2048 name")
+    assert_eq(DhGroup::Ffdhe3072.name(), "ffdhe3072", "Ffdhe3072 name")
+    assert_eq(DhGroup::Ffdhe4096.name(), "ffdhe4096", "Ffdhe4096 name")
+    assert_eq(DhGroup::Ffdhe6144.name(), "ffdhe6144", "Ffdhe6144 name")
+    assert_eq(DhGroup::Ffdhe8192.name(), "ffdhe8192", "Ffdhe8192 name")
+    return 0
+}
+
+// --- DhGroup::prime_bits ---
+
+@test
+func test_dh_group_prime_bits() -> I32 {
+    assert_eq(DhGroup::Modp1.prime_bits(), 768 as I64, "Modp1 bits")
+    assert_eq(DhGroup::Modp2.prime_bits(), 1024 as I64, "Modp2 bits")
+    assert_eq(DhGroup::Modp5.prime_bits(), 1536 as I64, "Modp5 bits")
+    assert_eq(DhGroup::Modp14.prime_bits(), 2048 as I64, "Modp14 bits")
+    assert_eq(DhGroup::Modp15.prime_bits(), 3072 as I64, "Modp15 bits")
+    assert_eq(DhGroup::Modp16.prime_bits(), 4096 as I64, "Modp16 bits")
+    assert_eq(DhGroup::Modp17.prime_bits(), 6144 as I64, "Modp17 bits")
+    assert_eq(DhGroup::Modp18.prime_bits(), 8192 as I64, "Modp18 bits")
+    assert_eq(DhGroup::Ffdhe2048.prime_bits(), 2048 as I64, "Ffdhe2048 bits")
+    assert_eq(DhGroup::Ffdhe3072.prime_bits(), 3072 as I64, "Ffdhe3072 bits")
+    assert_eq(DhGroup::Ffdhe4096.prime_bits(), 4096 as I64, "Ffdhe4096 bits")
+    assert_eq(DhGroup::Ffdhe6144.prime_bits(), 6144 as I64, "Ffdhe6144 bits")
+    assert_eq(DhGroup::Ffdhe8192.prime_bits(), 8192 as I64, "Ffdhe8192 bits")
+    return 0
+}
+
+// --- DhGroup::is_deprecated ---
+
+@test
+func test_dh_group_is_deprecated() -> I32 {
+    assert(DhGroup::Modp1.is_deprecated(), "Modp1 deprecated")
+    assert(DhGroup::Modp2.is_deprecated(), "Modp2 deprecated")
+    assert(DhGroup::Modp5.is_deprecated(), "Modp5 deprecated")
+    assert(not DhGroup::Modp14.is_deprecated(), "Modp14 not deprecated")
+    assert(not DhGroup::Modp15.is_deprecated(), "Modp15 not deprecated")
+    assert(not DhGroup::Ffdhe2048.is_deprecated(), "Ffdhe2048 not deprecated")
+    return 0
+}
+
+// --- DhGroup::from_name ---
+
+@test
+func test_dh_group_from_name_valid() -> I32 {
+    let m14: Maybe[DhGroup] = DhGroup::from_name("modp14")
+    assert(m14.is_just(), "modp14 found")
+    let ff: Maybe[DhGroup] = DhGroup::from_name("ffdhe2048")
+    assert(ff.is_just(), "ffdhe2048 found")
+    return 0
+}
+
+@test
+func test_dh_group_from_name_invalid() -> I32 {
+    let result: Maybe[DhGroup] = DhGroup::from_name("invalid")
+    assert(result.is_nothing(), "invalid group is Nothing")
+    return 0
+}
+
+// NOTE: DiffieHellman object operations, create_dh, create_dh_group,
+// get_dh_group_params, diffie_hellman are all FFI-dependent

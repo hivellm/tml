@@ -246,6 +246,22 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         }
                     }
                 }
+                // Inside inline closure evaluation: check closure_return_type_
+                else if (!closure_return_type_.empty()) {
+                    std::string prefix = "%struct." + enum_name + "__";
+                    if (closure_return_type_.starts_with(prefix)) {
+                        enum_type = closure_return_type_;
+                    } else {
+                        auto pos = closure_return_type_.find(prefix);
+                        if (pos != std::string::npos) {
+                            auto end =
+                                closure_return_type_.find_first_of(",} ", pos + prefix.size());
+                            if (end == std::string::npos)
+                                end = closure_return_type_.size();
+                            enum_type = closure_return_type_.substr(pos, end - pos);
+                        }
+                    }
+                }
                 // Try to use current type substitutions (e.g., when inside generic impl method)
                 // This handles cases like `Ready { value: Nothing }` inside Ready[I64]::exhausted()
                 else if (!current_type_subs_.empty() && !enum_decl->generics.empty()) {
@@ -360,6 +376,22 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         }
                     }
                 }
+                // Inside inline closure evaluation: check closure_return_type_
+                else if (!enum_def.type_params.empty() && !closure_return_type_.empty()) {
+                    std::string prefix = "%struct." + enum_name + "__";
+                    if (closure_return_type_.starts_with(prefix)) {
+                        enum_type = closure_return_type_;
+                    } else {
+                        auto pos = closure_return_type_.find(prefix);
+                        if (pos != std::string::npos) {
+                            auto end =
+                                closure_return_type_.find_first_of(",} ", pos + prefix.size());
+                            if (end == std::string::npos)
+                                end = closure_return_type_.size();
+                            enum_type = closure_return_type_.substr(pos, end - pos);
+                        }
+                    }
+                }
                 // Try to use current type substitutions (e.g., when inside generic impl method)
                 if (enum_type == "%struct." + enum_name && !enum_def.type_params.empty() &&
                     !current_type_subs_.empty()) {
@@ -421,6 +453,14 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                         if (current_ret_type_.starts_with(prefix) ||
                             current_ret_type_.find(enum_name + "__") != std::string::npos) {
                             enum_type = current_ret_type_;
+                        }
+                    }
+                    // Inside inline closure evaluation: check closure_return_type_
+                    else if (!enum_def.type_params.empty() && !closure_return_type_.empty()) {
+                        std::string prefix = "%struct." + enum_name + "__";
+                        if (closure_return_type_.starts_with(prefix) ||
+                            closure_return_type_.find(enum_name + "__") != std::string::npos) {
+                            enum_type = closure_return_type_;
                         }
                     }
                     // Try to use current type substitutions (e.g., when inside generic impl method)

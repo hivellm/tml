@@ -1,0 +1,158 @@
+// Tests for crypto key management (types, generation, import/export)
+use test
+use std::crypto::key::{
+    KeyType, KeyFormat, KeyEncoding,
+    SecretKey, PrivateKey, PublicKey, KeyPair,
+    EcKeyGenOptions,
+    generate_key, generate_key_pair, generate_ec_key_pair,
+    create_private_key, create_public_key
+}
+
+// === Enum tests ===
+
+@test
+func test_key_type_names() -> I32 {
+    assert_eq(KeyType::Rsa.name(), "rsa", "rsa")
+    assert_eq(KeyType::Ed25519.name(), "ed25519", "ed25519")
+    assert_eq(KeyType::X25519.name(), "x25519", "x25519")
+    assert_eq(KeyType::Ec.name(), "ec", "ec")
+    assert_eq(KeyType::Dh.name(), "dh", "dh")
+    return 0
+}
+
+@test
+func test_key_type_predicates() -> I32 {
+    assert_eq(KeyType::Rsa.is_rsa(), true, "Rsa")
+    assert_eq(KeyType::RsaPss.is_rsa(), true, "RsaPss")
+    assert_eq(KeyType::Ec.is_rsa(), false, "Ec not rsa")
+    assert_eq(KeyType::Ec.is_ec(), true, "Ec")
+    assert_eq(KeyType::Ed25519.is_ec(), true, "Ed25519")
+    assert_eq(KeyType::X25519.is_ec(), true, "X25519")
+    assert_eq(KeyType::Rsa.is_ec(), false, "Rsa not ec")
+    return 0
+}
+
+@test
+func test_key_type_from_name() -> I32 {
+    assert_eq(KeyType::from_name("rsa").is_just(), true, "rsa")
+    assert_eq(KeyType::from_name("ed25519").is_just(), true, "ed25519")
+    assert_eq(KeyType::from_name("blah").is_nothing(), true, "unknown")
+    return 0
+}
+
+@test
+func test_key_format_and_encoding_names() -> I32 {
+    assert_eq(KeyFormat::Pem.name(), "pem", "pem")
+    assert_eq(KeyFormat::Der.name(), "der", "der")
+    assert_eq(KeyFormat::Jwk.name(), "jwk", "jwk")
+    assert_eq(KeyFormat::Raw.name(), "raw", "raw")
+    assert_eq(KeyEncoding::Pkcs1.name(), "pkcs1", "pkcs1")
+    assert_eq(KeyEncoding::Pkcs8.name(), "pkcs8", "pkcs8")
+    return 0
+}
+
+@test
+func test_ec_options() -> I32 {
+    assert_eq(EcKeyGenOptions::p256().named_curve, "P-256", "p256")
+    assert_eq(EcKeyGenOptions::p384().named_curve, "P-384", "p384")
+    assert_eq(EcKeyGenOptions::p521().named_curve, "P-521", "p521")
+    assert_eq(EcKeyGenOptions::secp256k1().named_curve, "secp256k1", "secp256k1")
+    return 0
+}
+
+// === SecretKey tests (avoid size()/size_bits() - compiler bug in suite context) ===
+
+@test
+func test_secret_key_generate_and_export() -> I32 {
+    let key = generate_key(32).unwrap()
+    let hex = key.to_hex()
+    // 32 bytes = 64 hex chars
+    assert_eq(hex.len(), 64 as I64, "hex len")
+    let b64 = key.to_base64()
+    assert_eq(b64.len() > 0 as I64, true, "b64 not empty")
+    return 0
+}
+
+@test
+func test_secret_key_roundtrip() -> I32 {
+    let key = generate_key(32).unwrap()
+    let hex = key.to_hex()
+    let key2 = SecretKey::from_hex(hex).unwrap()
+    let hex2 = key2.to_hex()
+    assert_eq(hex, hex2, "hex roundtrip")
+    let b64 = key.to_base64()
+    let key3 = SecretKey::from_base64(b64).unwrap()
+    let hex3 = key3.to_hex()
+    assert_eq(hex, hex3, "b64 roundtrip")
+    return 0
+}
+
+@test
+func test_secret_key_errors() -> I32 {
+    assert_eq(generate_key(0).is_err(), true, "size 0")
+    assert_eq(generate_key(2000).is_err(), true, "size 2000")
+    assert_eq(SecretKey::from_hex("zzzz").is_err(), true, "invalid hex")
+    return 0
+}
+
+// === Ed25519 keypair ===
+
+@test
+func test_ed25519_full() -> I32 {
+    let kp = generate_key_pair(KeyType::Ed25519, 0).unwrap()
+    assert_eq(kp.private_key.key_type().name(), "ed25519", "key type")
+    assert_eq(kp.private_key.to_pem().starts_with("-----BEGIN"), true, "priv pem")
+    assert_eq(kp.public_key.to_pem().starts_with("-----BEGIN"), true, "pub pem")
+    let pub2 = kp.private_key.public_key()
+    assert_eq(kp.public_key.to_pem(), pub2.to_pem(), "derived matches")
+    let pem = kp.private_key.to_pem()
+    let key2 = PrivateKey::from_pem(pem).unwrap()
+    assert_eq(kp.private_key.equals(ref key2), true, "roundtrip equal")
+    let r1 = create_private_key(kp.private_key.to_pem(), KeyFormat::Pem)
+    assert_eq(r1.is_ok(), true, "create priv")
+    let r2 = create_public_key(kp.public_key.to_pem(), KeyFormat::Pem)
+    assert_eq(r2.is_ok(), true, "create pub")
+    return 0
+}
+
+// === Key equality ===
+
+@test
+func test_key_equality() -> I32 {
+    let kp1 = generate_key_pair(KeyType::Ed25519, 0).unwrap()
+    let kp2 = generate_key_pair(KeyType::Ed25519, 0).unwrap()
+    assert_eq(kp1.private_key.equals(ref kp2.private_key), false, "diff keys")
+    let pub2 = kp1.private_key.public_key()
+    assert_eq(kp1.public_key.equals(ref pub2), true, "same pub")
+    return 0
+}
+
+// === Invalid PEM ===
+
+@test
+func test_invalid_pem() -> I32 {
+    assert_eq(PrivateKey::from_pem("bad").is_err(), true, "bad priv")
+    assert_eq(PublicKey::from_pem("bad").is_err(), true, "bad pub")
+    return 0
+}
+
+// === EC P-256 ===
+
+@test
+func test_ec_p256_full() -> I32 {
+    let opts = EcKeyGenOptions::p256()
+    let kp = generate_ec_key_pair(ref opts).unwrap()
+    assert_eq(kp.private_key.key_type().name(), "ec", "ec type")
+    assert_eq(kp.private_key.to_pem().starts_with("-----BEGIN"), true, "ec priv pem")
+    assert_eq(kp.public_key.to_pem().starts_with("-----BEGIN"), true, "ec pub pem")
+    return 0
+}
+
+// === X25519 ===
+
+@test
+func test_x25519_keygen() -> I32 {
+    let result = generate_key_pair(KeyType::X25519, 0)
+    assert_eq(result.is_ok(), true, "x25519")
+    return 0
+}

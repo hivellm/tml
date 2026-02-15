@@ -879,20 +879,34 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             }
         }
         // Bind ident pattern (simple variable binding to scrutinee)
+        // Skip binding if the ident is a known enum unit variant (e.g., Nothing, None)
+        // to avoid shadowing the variant name with a local variable.
         else if (arm.pattern->is<parser::IdentPattern>()) {
             const auto& ident = arm.pattern->as<parser::IdentPattern>();
             if (!ident.name.empty() && ident.name != "_") {
-                // Bind the entire scrutinee to the variable
-                if (scrutinee_type.starts_with("%struct.") || scrutinee_type.starts_with("{")) {
-                    locals_[ident.name] =
-                        VarInfo{scrutinee_ptr, scrutinee_type, nullptr, std::nullopt};
-                } else {
-                    std::string var_alloca = fresh_reg();
-                    emit_line("  " + var_alloca + " = alloca " + scrutinee_type);
-                    emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " +
-                              var_alloca);
-                    locals_[ident.name] =
-                        VarInfo{var_alloca, scrutinee_type, nullptr, std::nullopt};
+                // Check if this ident is actually a unit variant of the scrutinee enum
+                bool is_unit_variant = false;
+                if (scrutinee_type.starts_with("%struct.")) {
+                    std::string enum_name = scrutinee_type.substr(8);
+                    std::string key = enum_name + "::" + ident.name;
+                    if (enum_variants_.find(key) != enum_variants_.end()) {
+                        is_unit_variant = true;
+                    }
+                }
+
+                if (!is_unit_variant) {
+                    // Bind the entire scrutinee to the variable
+                    if (scrutinee_type.starts_with("%struct.") || scrutinee_type.starts_with("{")) {
+                        locals_[ident.name] =
+                            VarInfo{scrutinee_ptr, scrutinee_type, nullptr, std::nullopt};
+                    } else {
+                        std::string var_alloca = fresh_reg();
+                        emit_line("  " + var_alloca + " = alloca " + scrutinee_type);
+                        emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " +
+                                  var_alloca);
+                        locals_[ident.name] =
+                            VarInfo{var_alloca, scrutinee_type, nullptr, std::nullopt};
+                    }
                 }
             }
         }

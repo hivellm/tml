@@ -636,7 +636,7 @@ func test_outcome_expect_ok() -> I32 {
 // ============================================================================
 
 @test
-func test_outcome_unwrap_err() -> I32 {
+func test_outcome_unwrap_err_v2() -> I32 {
     let result: Outcome[I32, Str] = Err("my error")
     let err: Str = result.unwrap_err()
     assert(err == "my error", "unwrap_err should return error")

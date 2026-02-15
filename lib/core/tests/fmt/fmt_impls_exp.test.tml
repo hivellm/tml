@@ -1,0 +1,70 @@
+// Tests for fmt/impls LowerExp and UpperExp implementations for float types
+use test
+
+// ==================== fmt_lower_exp ====================
+
+@test
+func test_f32_fmt_lower_exp() -> I32 {
+    let a: F32 = 3.14 as F32
+    let s: Str = a.fmt_lower_exp()
+    assert(s.len() > 0, "F32.fmt_lower_exp()")
+    return 0
+}
+
+@test
+func test_f64_fmt_lower_exp() -> I32 {
+    let a: F64 = 2.71828
+    let s: Str = a.fmt_lower_exp()
+    assert(s.len() > 0, "F64.fmt_lower_exp()")
+    return 0
+}
+
+@test
+func test_f32_fmt_lower_exp_large() -> I32 {
+    let a: F32 = 1000000.0 as F32
+    let s: Str = a.fmt_lower_exp()
+    assert(s.len() > 0, "F32.fmt_lower_exp(large)")
+    return 0
+}
+
+@test
+func test_f64_fmt_lower_exp_small() -> I32 {
+    let a: F64 = 0.00123
+    let s: Str = a.fmt_lower_exp()
+    assert(s.len() > 0, "F64.fmt_lower_exp(small)")
+    return 0
+}
+
+// ==================== fmt_upper_exp ====================
+
+@test
+func test_f32_fmt_upper_exp() -> I32 {
+    let a: F32 = 3.14 as F32
+    let s: Str = a.fmt_upper_exp()
+    assert(s.len() > 0, "F32.fmt_upper_exp()")
+    return 0
+}
+
+@test
+func test_f64_fmt_upper_exp() -> I32 {
+    let a: F64 = 2.71828
+    let s: Str = a.fmt_upper_exp()
+    assert(s.len() > 0, "F64.fmt_upper_exp()")
+    return 0
+}
+
+@test
+func test_f32_fmt_upper_exp_large() -> I32 {
+    let a: F32 = 1000000.0 as F32
+    let s: Str = a.fmt_upper_exp()
+    assert(s.len() > 0, "F32.fmt_upper_exp(large)")
+    return 0
+}
+
+@test
+func test_f64_fmt_upper_exp_small() -> I32 {
+    let a: F64 = 0.00123
+    let s: Str = a.fmt_upper_exp()
+    assert(s.len() > 0, "F64.fmt_upper_exp(small)")
+    return 0
+}

@@ -72,5 +72,19 @@ func test_default_str() -> I32 {
     return 0
 }
 
+@test
+func test_default_f32() -> I32 {
+    let v: F32 = F32::default()
+    assert_eq(v as I32, 0, "F32::default should be 0.0")
+    return 0
+}
+
+@test
+func test_default_f64() -> I32 {
+    let v: F64 = F64::default()
+    assert_eq(v as I32, 0, "F64::default should be 0.0")
+    return 0
+}
+
 // NOTE: Maybe::default() causes generic enum codegen bug (Maybe__T vs Maybe__I32)
 // Tracked in tasks.md Phase 11

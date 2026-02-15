@@ -226,8 +226,19 @@ auto TypeChecker::check_closure(const parser::ClosureExpr& closure) -> TypePtr {
         closure.captured_vars.push_back(cap.name);
     }
 
+    // Save the enclosing function's return type and set the closure's
+    // return type so that `return` statements inside the closure body
+    // are type-checked against the closure's declared return type.
+    TypePtr saved_return_type = current_return_type_;
+    if (closure.return_type) {
+        current_return_type_ = resolve_type(**closure.return_type);
+    }
+
     auto body_type = check_expr(*closure.body);
-    TypePtr return_type = closure.return_type ? resolve_type(**closure.return_type) : body_type;
+    TypePtr return_type = closure.return_type ? current_return_type_ : body_type;
+
+    // Restore the enclosing function's return type
+    current_return_type_ = saved_return_type;
 
     env_.pop_scope();
 

@@ -1,0 +1,62 @@
+use test
+use core::iter::adapters::take::{Take, take}
+use core::iter::adapters::skip::{Skip, skip}
+
+// Test 8.1: Associated type substitution in iterator adapters
+// Tests whether I::Item -> concrete type substitution works correctly
+
+// A simple custom iterator that yields I32 values
+type CountUp {
+    current: I32
+    max: I32
+}
+
+impl Iterator for CountUp {
+    type Item = I32
+
+    pub func next(mut this) -> Maybe[I32] {
+        if this.current >= this.max {
+            return Nothing
+        }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+@test
+func test_take_adapter() -> I32 {
+    let iter: CountUp = CountUp { current: 0, max: 10 }
+    let mut taken: Take[CountUp] = take(iter, 3)
+
+    let v1: Maybe[I32] = taken.next()
+    assert_eq(v1.unwrap(), 0, "take first")
+
+    let v2: Maybe[I32] = taken.next()
+    assert_eq(v2.unwrap(), 1, "take second")
+
+    let v3: Maybe[I32] = taken.next()
+    assert_eq(v3.unwrap(), 2, "take third")
+
+    let v4: Maybe[I32] = taken.next()
+    assert(v4.is_nothing(), "take exhausted")
+
+    return 0
+}
+
+@test
+func test_skip_adapter() -> I32 {
+    let iter: CountUp = CountUp { current: 0, max: 5 }
+    let mut skipped: Skip[CountUp] = skip(iter, 3)
+
+    let v1: Maybe[I32] = skipped.next()
+    assert_eq(v1.unwrap(), 3, "skip first result")
+
+    let v2: Maybe[I32] = skipped.next()
+    assert_eq(v2.unwrap(), 4, "skip second result")
+
+    let v3: Maybe[I32] = skipped.next()
+    assert(v3.is_nothing(), "skip exhausted")
+
+    return 0
+}

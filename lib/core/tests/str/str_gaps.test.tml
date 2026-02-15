@@ -1,0 +1,28 @@
+// Tests for uncovered str module functions
+use test
+
+@test
+func test_str_slice_str_basic() -> I32 {
+    let s: Str = "hello world"
+    let sub: Str = s.slice_str(0, 5)
+    assert_eq(sub, "hello", "Str::slice_str start")
+    return 0
+}
+
+@test
+func test_str_slice_str_middle() -> I32 {
+    let s: Str = "hello world"
+    let sub: Str = s.slice_str(6, 11)
+    assert_eq(sub, "world", "Str::slice_str end")
+    return 0
+}
+
+@test
+func test_str_slice_str_empty() -> I32 {
+    let s: Str = "hello"
+    let sub: Str = s.slice_str(2, 2)
+    assert_eq(sub, "", "Str::slice_str empty")
+    return 0
+}
+
+// Note: parse_u16, parse_i64 tests deferred — Maybe[U16]/Maybe[I64] LLVM struct layout bug

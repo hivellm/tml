@@ -78,6 +78,26 @@ impl[T] Wrapping[T] {
     pub func into_inner(this) -> T {
         return this.inner
     }
+
+    /// Wrapping addition. Wraps around at the type boundary.
+    pub func add(this, other: Wrapping[T]) -> Wrapping[T] {
+        return Wrapping::new(this.inner.wrapping_add(other.inner))
+    }
+
+    /// Wrapping subtraction. Wraps around at the type boundary.
+    pub func sub(this, other: Wrapping[T]) -> Wrapping[T] {
+        return Wrapping::new(this.inner.wrapping_sub(other.inner))
+    }
+
+    /// Wrapping multiplication. Wraps around at the type boundary.
+    pub func mul(this, other: Wrapping[T]) -> Wrapping[T] {
+        return Wrapping::new(this.inner.wrapping_mul(other.inner))
+    }
+
+    /// Wrapping negation. Wraps around on overflow.
+    pub func neg(this) -> Wrapping[T] {
+        return Wrapping::new(this.inner.wrapping_neg())
+    }
 }
 
 // ============================================================================

@@ -1,7 +1,7 @@
 // Consolidated tests for core::error (23 tests)
 
 use test
-use core::error::{IoErrorKind, IoError, SimpleError, ParseError}
+use core::error::{IoErrorKind, IoError, SimpleError, ParseError, BoxedError}
 
 // =============================================================================
 // IoErrorKind Tests - These work because IoErrorKind has explicit Display impl
@@ -186,5 +186,152 @@ func test_io_error_kind_method() -> I32 {
     let kind: IoErrorKind = err.kind()
     let s: Str = kind.to_string()
     assert_eq(s, "operation timed out", "IoError kind method")
+    return 0
+}
+
+// =============================================================================
+// IoErrorKind Extended Variant Tests
+// =============================================================================
+
+@test
+func test_io_error_kind_connection_reset() -> I32 {
+    let k: IoErrorKind = IoErrorKind::ConnectionReset
+    assert_eq(k.to_string(), "connection reset", "ConnectionReset display")
+    assert_eq(k.debug_string(), "ConnectionReset", "ConnectionReset debug")
+    return 0
+}
+
+@test
+func test_io_error_kind_not_connected() -> I32 {
+    let k: IoErrorKind = IoErrorKind::NotConnected
+    assert_eq(k.to_string(), "not connected", "NotConnected display")
+    assert_eq(k.debug_string(), "NotConnected", "NotConnected debug")
+    return 0
+}
+
+@test
+func test_io_error_kind_addr_in_use() -> I32 {
+    let k: IoErrorKind = IoErrorKind::AddrInUse
+    assert_eq(k.to_string(), "address in use", "AddrInUse display")
+    return 0
+}
+
+@test
+func test_io_error_kind_would_block() -> I32 {
+    let k: IoErrorKind = IoErrorKind::WouldBlock
+    assert_eq(k.to_string(), "operation would block", "WouldBlock display")
+    return 0
+}
+
+@test
+func test_io_error_kind_invalid_input() -> I32 {
+    let k: IoErrorKind = IoErrorKind::InvalidInput
+    assert_eq(k.to_string(), "invalid input parameter", "InvalidInput display")
+    return 0
+}
+
+@test
+func test_io_error_kind_unexpected_eof() -> I32 {
+    let k: IoErrorKind = IoErrorKind::UnexpectedEof
+    assert_eq(k.to_string(), "unexpected end of file", "UnexpectedEof display")
+    return 0
+}
+
+@test
+func test_io_error_kind_connection_aborted() -> I32 {
+    let k: IoErrorKind = IoErrorKind::ConnectionAborted
+    assert_eq(k.to_string(), "connection aborted", "ConnectionAborted display")
+    assert_eq(k.debug_string(), "ConnectionAborted", "ConnectionAborted debug")
+    return 0
+}
+
+@test
+func test_io_error_kind_addr_not_available() -> I32 {
+    let k: IoErrorKind = IoErrorKind::AddrNotAvailable
+    assert_eq(k.to_string(), "address not available", "AddrNotAvailable display")
+    assert_eq(k.debug_string(), "AddrNotAvailable", "AddrNotAvailable debug")
+    return 0
+}
+
+@test
+func test_io_error_kind_invalid_data() -> I32 {
+    let k: IoErrorKind = IoErrorKind::InvalidData
+    assert_eq(k.to_string(), "invalid data", "InvalidData display")
+    assert_eq(k.debug_string(), "InvalidData", "InvalidData debug")
+    return 0
+}
+
+@test
+func test_io_error_kind_write_zero() -> I32 {
+    let k: IoErrorKind = IoErrorKind::WriteZero
+    assert_eq(k.to_string(), "write zero", "WriteZero display")
+    assert_eq(k.debug_string(), "WriteZero", "WriteZero debug")
+    return 0
+}
+
+@test
+func test_io_error_kind_interrupted() -> I32 {
+    let k: IoErrorKind = IoErrorKind::Interrupted
+    assert_eq(k.to_string(), "operation interrupted", "Interrupted display")
+    assert_eq(k.debug_string(), "Interrupted", "Interrupted debug")
+    return 0
+}
+
+@test
+func test_io_error_kind_out_of_memory() -> I32 {
+    let k: IoErrorKind = IoErrorKind::OutOfMemory
+    assert_eq(k.to_string(), "out of memory", "OutOfMemory display")
+    assert_eq(k.debug_string(), "OutOfMemory", "OutOfMemory debug")
+    return 0
+}
+
+// =============================================================================
+// IoError Debug Tests
+// =============================================================================
+
+@test
+func test_io_error_debug_no_message() -> I32 {
+    let err: IoError = IoError::new(IoErrorKind::NotFound)
+    let s: Str = err.debug_string()
+    assert_eq(s, "IoError { kind: entity not found, message: Nothing }", "IoError debug no message")
+    return 0
+}
+
+@test
+func test_io_error_debug_with_message() -> I32 {
+    let err: IoError = IoError::with_message(IoErrorKind::PermissionDenied, "/etc/shadow")
+    let s: Str = err.debug_string()
+    assert_eq(s, "IoError { kind: permission denied, message: Just(\"/etc/shadow\") }", "IoError debug with message")
+    return 0
+}
+
+// =============================================================================
+// BoxedError Tests
+// =============================================================================
+
+@test
+func test_boxed_error_from_message() -> I32 {
+    let err: BoxedError = BoxedError::from_message("something failed")
+    assert_eq(err.to_string(), "something failed", "BoxedError from_message display")
+    return 0
+}
+
+@test
+func test_boxed_error_debug() -> I32 {
+    let err: BoxedError = BoxedError::from_message("oops")
+    let s: Str = err.debug_string()
+    assert_eq(s, "BoxedError { message: oops }", "BoxedError debug")
+    return 0
+}
+
+// =============================================================================
+// ParseError Extended Tests
+// =============================================================================
+
+@test
+func test_parse_error_debug_with_position() -> I32 {
+    let err: ParseError = ParseError::with_position("bad token", 10)
+    let s: Str = err.debug_string()
+    assert_eq(s, "ParseError { message: \"bad token\", position: Just(10) }", "ParseError debug with position")
     return 0
 }

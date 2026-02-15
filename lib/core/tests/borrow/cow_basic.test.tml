@@ -1,0 +1,35 @@
+// Tests for Cow[T] clone-on-write smart pointer
+use test::{assert, assert_eq}
+use core::borrow::{Cow, ToOwned}
+
+@test
+func test_cow_owned_is_owned() -> I32 {
+    let c: Cow[I32] = Cow::Owned(42)
+    assert(c.is_owned(), "Cow::Owned is_owned")
+    assert(not c.is_borrowed(), "Cow::Owned not is_borrowed")
+    return 0
+}
+
+@test
+func test_cow_owned_into_owned() -> I32 {
+    let c: Cow[I32] = Cow::Owned(42)
+    assert_eq(c.into_owned(), 42, "Cow::Owned into_owned")
+    return 0
+}
+
+@test
+func test_cow_borrowed_is_borrowed() -> I32 {
+    let val: I32 = 99
+    let c: Cow[I32] = Cow::Borrowed(ref val)
+    assert(c.is_borrowed(), "Cow::Borrowed is_borrowed")
+    assert(not c.is_owned(), "Cow::Borrowed not is_owned")
+    return 0
+}
+
+@test
+func test_cow_borrowed_into_owned() -> I32 {
+    let val: I32 = 77
+    let c: Cow[I32] = Cow::Borrowed(ref val)
+    assert_eq(c.into_owned(), 77, "Cow::Borrowed into_owned clones")
+    return 0
+}

@@ -1,0 +1,117 @@
+// Tests for Maybe[T] methods — extracting, chaining, closures
+use test::{assert, assert_eq}
+
+// --- Extracting Values ---
+
+@test
+func test_expect_just() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    assert_eq(x.expect("should have value"), 42, "expect Just")
+    return 0
+}
+
+@test
+func test_unwrap_or_default_just() -> I32 {
+    let x: Maybe[I32] = Just(99)
+    assert_eq(x.unwrap_or_default(), 99, "unwrap_or_default Just")
+    return 0
+}
+
+@test
+func test_unwrap_or_default_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    assert_eq(x.unwrap_or_default(), 0, "unwrap_or_default Nothing")
+    return 0
+}
+
+@test
+func test_unwrap_or_else_just() -> I32 {
+    let x: Maybe[I32] = Just(7)
+    let r: I32 = x.unwrap_or_else(do() -> I32 { return 99 })
+    assert_eq(r, 7, "unwrap_or_else Just")
+    return 0
+}
+
+@test
+func test_unwrap_or_else_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let r: I32 = x.unwrap_or_else(do() -> I32 { return 42 })
+    assert_eq(r, 42, "unwrap_or_else Nothing")
+    return 0
+}
+
+// --- Chaining Operations ---
+
+@test
+func test_or_else_just() -> I32 {
+    let x: Maybe[I32] = Just(10)
+    let r: Maybe[I32] = x.or_else(do() -> Maybe[I32] { return Just(99) })
+    assert_eq(r.unwrap(), 10, "or_else Just returns original")
+    return 0
+}
+
+@test
+func test_or_else_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let r: Maybe[I32] = x.or_else(do() -> Maybe[I32] { return Just(99) })
+    assert_eq(r.unwrap(), 99, "or_else Nothing calls closure")
+    return 0
+}
+
+@test
+func test_one_of_just_nothing() -> I32 {
+    let x: Maybe[I32] = Just(1)
+    let y: Maybe[I32] = Nothing
+    let r: Maybe[I32] = x.one_of(y)
+    assert_eq(r.unwrap(), 1, "one_of Just+Nothing = Just")
+    return 0
+}
+
+@test
+func test_one_of_nothing_just() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = Just(2)
+    let r: Maybe[I32] = x.one_of(y)
+    assert_eq(r.unwrap(), 2, "one_of Nothing+Just = Just")
+    return 0
+}
+
+@test
+func test_one_of_both_just() -> I32 {
+    let x: Maybe[I32] = Just(1)
+    let y: Maybe[I32] = Just(2)
+    let r: Maybe[I32] = x.one_of(y)
+    assert(r.is_nothing(), "one_of Just+Just = Nothing")
+    return 0
+}
+
+@test
+func test_one_of_both_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = Nothing
+    let r: Maybe[I32] = x.one_of(y)
+    assert(r.is_nothing(), "one_of Nothing+Nothing = Nothing")
+    return 0
+}
+
+// --- Closure-based transforms ---
+
+@test
+func test_map_or_just() -> I32 {
+    let x: Maybe[I32] = Just(5)
+    let r: I32 = x.map_or(0, do(v: I32) -> I32 { return v * 2 })
+    assert_eq(r, 10, "map_or Just")
+    return 0
+}
+
+@test
+func test_map_or_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let r: I32 = x.map_or(42, do(v: I32) -> I32 { return v * 2 })
+    assert_eq(r, 42, "map_or Nothing")
+    return 0
+}
+
+// NOTE: map_or_else, filter, and_then blocked by closure/generic codegen bugs
+// NOTE: map[U], also[U], ok_or[E] blocked by generic method codegen
+// NOTE: contains blocked by PartialEq on generic structs

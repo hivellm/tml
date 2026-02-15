@@ -1,0 +1,151 @@
+// Tests for BrotliOptions and ZstdOptions constructors and builder methods.
+// Note: ZlibOptions tests are blocked by Maybe[Buffer] codegen bug.
+use test::{assert, assert_eq}
+use std::zlib::options::{BrotliOptions, ZstdOptions}
+use std::zlib::constants::*
+
+// ============================================================================
+// BrotliOptions
+// ============================================================================
+
+// --- BrotliOptions::default ---
+
+@test
+func test_brotli_options_default() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default()
+    assert_eq(opts.flush, BROTLI_OPERATION_PROCESS, "flush")
+    assert_eq(opts.finish_flush, BROTLI_OPERATION_FINISH, "finish_flush")
+    assert_eq(opts.chunk_size, DEFAULT_CHUNK_SIZE, "chunk_size")
+    assert_eq(opts.quality, BROTLI_DEFAULT_QUALITY, "quality")
+    assert_eq(opts.mode, BROTLI_MODE_GENERIC, "mode")
+    assert_eq(opts.lgwin, BROTLI_DEFAULT_WINDOW, "lgwin")
+    assert_eq(opts.lgblock, 0, "lgblock")
+    assert_eq(opts.size_hint, 0 as I64, "size_hint")
+    assert_eq(opts.large_window, false, "large_window")
+    assert_eq(opts.disable_literal_context_modeling, false, "disable_literal_context_modeling")
+    assert_eq(opts.max_output_length, 0 as I64, "max_output_length")
+    return 0
+}
+
+// --- BrotliOptions::text ---
+
+@test
+func test_brotli_options_text() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::text()
+    assert_eq(opts.mode, BROTLI_MODE_TEXT, "text mode")
+    assert_eq(opts.quality, BROTLI_DEFAULT_QUALITY, "default quality")
+    return 0
+}
+
+// --- BrotliOptions::font ---
+
+@test
+func test_brotli_options_font() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::font()
+    assert_eq(opts.mode, BROTLI_MODE_FONT, "font mode")
+    return 0
+}
+
+// --- BrotliOptions::fast ---
+
+@test
+func test_brotli_options_fast() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::fast()
+    assert_eq(opts.quality, BROTLI_MIN_QUALITY, "min quality")
+    assert_eq(opts.mode, BROTLI_MODE_GENERIC, "generic mode")
+    return 0
+}
+
+// --- BrotliOptions::best ---
+
+@test
+func test_brotli_options_best() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::best()
+    assert_eq(opts.quality, BROTLI_MAX_QUALITY, "max quality")
+    assert_eq(opts.mode, BROTLI_MODE_GENERIC, "generic mode")
+    return 0
+}
+
+// --- BrotliOptions::with_quality ---
+
+@test
+func test_brotli_with_quality() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default().with_quality(7)
+    assert_eq(opts.quality, 7, "quality 7")
+    assert_eq(opts.mode, BROTLI_MODE_GENERIC, "mode preserved")
+    assert_eq(opts.lgwin, BROTLI_DEFAULT_WINDOW, "lgwin preserved")
+    return 0
+}
+
+// ============================================================================
+// ZstdOptions
+// ============================================================================
+
+// --- ZstdOptions::default ---
+
+@test
+func test_zstd_options_default() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+    assert_eq(opts.flush, ZSTD_E_CONTINUE, "flush")
+    assert_eq(opts.finish_flush, ZSTD_E_END, "finish_flush")
+    assert_eq(opts.chunk_size, DEFAULT_CHUNK_SIZE, "chunk_size")
+    assert_eq(opts.level, ZSTD_DEFAULT_CLEVEL, "level")
+    assert_eq(opts.strategy, 0, "strategy")
+    assert_eq(opts.window_log, 0, "window_log")
+    assert_eq(opts.enable_ldm, false, "enable_ldm")
+    assert_eq(opts.content_size, true, "content_size")
+    assert_eq(opts.checksum, false, "checksum")
+    assert_eq(opts.dict_id, true, "dict_id")
+    assert_eq(opts.nb_workers, 0, "nb_workers")
+    assert_eq(opts.pledged_src_size, 0 as I64, "pledged_src_size")
+    assert_eq(opts.max_output_length, 0 as I64, "max_output_length")
+    return 0
+}
+
+// --- ZstdOptions::fast ---
+
+@test
+func test_zstd_options_fast() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::fast()
+    assert_eq(opts.level, ZSTD_MIN_CLEVEL, "min level")
+    return 0
+}
+
+// --- ZstdOptions::best ---
+
+@test
+func test_zstd_options_best() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::best()
+    assert_eq(opts.level, ZSTD_MAX_CLEVEL, "max level")
+    return 0
+}
+
+// --- ZstdOptions::parallel ---
+
+@test
+func test_zstd_options_parallel() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::parallel(4)
+    assert_eq(opts.nb_workers, 4, "4 workers")
+    assert_eq(opts.level, ZSTD_DEFAULT_CLEVEL, "default level")
+    return 0
+}
+
+// --- ZstdOptions::with_level ---
+
+@test
+func test_zstd_with_level() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default().with_level(10)
+    assert_eq(opts.level, 10, "level 10")
+    assert_eq(opts.nb_workers, 0, "workers preserved")
+    return 0
+}
+
+// --- ZstdOptions::with_checksum ---
+
+@test
+func test_zstd_with_checksum() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default().with_checksum()
+    assert_eq(opts.checksum, true, "checksum enabled")
+    assert_eq(opts.level, ZSTD_DEFAULT_CLEVEL, "level preserved")
+    return 0
+}

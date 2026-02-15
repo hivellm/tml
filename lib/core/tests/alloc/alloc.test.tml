@@ -235,6 +235,12 @@ func test_alloc_error_new() {
     assert_eq(msg, expected, "AllocError message mismatch")
 }
 
+@test
+func test_alloc_error_debug_string() {
+    let err: AllocError = AllocError::new()
+    assert_eq(err.debug_string(), "AllocError", "AllocError debug_string")
+}
+
 // ============================================================================
 // Layout New Methods Tests
 // ============================================================================

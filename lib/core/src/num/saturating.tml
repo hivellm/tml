@@ -78,6 +78,21 @@ impl[T] Saturating[T] {
     pub func into_inner(this) -> T {
         return this.inner
     }
+
+    /// Saturating addition. Clamps at the numeric bounds instead of overflowing.
+    pub func add(this, other: Saturating[T]) -> Saturating[T] {
+        return Saturating::new(this.inner.saturating_add(other.inner))
+    }
+
+    /// Saturating subtraction. Clamps at the numeric bounds instead of underflowing.
+    pub func sub(this, other: Saturating[T]) -> Saturating[T] {
+        return Saturating::new(this.inner.saturating_sub(other.inner))
+    }
+
+    /// Saturating multiplication. Clamps at the numeric bounds instead of overflowing.
+    pub func mul(this, other: Saturating[T]) -> Saturating[T] {
+        return Saturating::new(this.inner.saturating_mul(other.inner))
+    }
 }
 
 // ============================================================================

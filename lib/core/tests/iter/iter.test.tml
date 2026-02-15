@@ -409,35 +409,15 @@ func test_map_once_simple() -> I32 {
 // Section: Iterator Adapters (from iter_adapters.test.tml)
 // ============================================================================
 
-// BLOCKED: All generic iterator adapter tests are blocked by a compiler codegen
-// limitation where associated types (I::Item) are not properly substituted to
-// concrete types when the type parameter I is instantiated.
-//
-// For example, Take[RangeIterI64]::next() returns Maybe[I] instead of Maybe[I64],
-// where I is the unsubstituted generic parameter name.
-//
-// The adapter implementations in lib/core/src/iter/adapters.tml are correct:
-// - Take, Skip, Chain, Enumerate, Zip, StepBy, Fuse (non-closure adapters)
-// - Map, Filter, FilterMap, MapWhile, TakeWhile, SkipWhile, Scan, Inspect,
-//   Intersperse (closure-based adapters)
-//
-// When the codegen properly resolves associated types in generic impl blocks,
-// these tests should be enabled:
-//
-// - test_take_basic, test_take_more_than_available, test_take_zero
-// - test_skip_basic, test_skip_all, test_skip_zero
-// - test_enumerate_basic, test_enumerate_empty
-// - test_zip_same_length, test_zip_first_shorter, test_zip_second_shorter
-// - test_step_by_two, test_step_by_three, test_step_by_one
-// - test_fuse_basic, test_fuse_empty
-// - test_chain_basic, test_chain_first_empty, test_chain_second_empty
-// - test_take_skip_combination, test_skip_take_combination
-// - test_chain_take_combination, test_enumerate_take_combination
+// PARTIALLY FIXED: Take, Skip, StepBy adapters now work (Phase 8.1 fix).
+// Tests moved to iter_adapters.test.tml.
+// Still blocked: Fuse, Chain (Maybe[StructType] crash), Enumerate, Zip
+// (tuple-returning with associated types), nested adapters (recursive types).
+// See Phase 14 in test-failures/tasks.md.
 
 @test
 func test_placeholder() -> I32 {
-    // This test exists to verify the test framework works.
-    // Actual adapter tests are blocked on codegen improvements.
+    // Placeholder — actual adapter tests are in iter_adapters.test.tml
     assert(true, "placeholder passes")
     return 0
 }
@@ -615,5 +595,5 @@ func test_repeat_n_one_generic() -> I32 {
     return 0
 }
 
-// Note: OnceWith, FromFn, Successors tests skipped due to codegen limitations
-// with higher-order generic types (Maybe__Fn vs Maybe__T mismatch)
+// Note: OnceWith and FromFn tests are in iter_sources.test.tml (fixed in Phase 8.3)
+// Successors tests still blocked — requires closure-based generic sources

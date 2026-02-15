@@ -1,0 +1,65 @@
+// Tests for CheckedShl and CheckedShr behaviors on I32
+use test::{assert, assert_eq}
+
+@test
+func test_checked_shl_normal() -> I32 {
+    let v: I32 = 1
+    when v.checked_shl(4u32) {
+        Just(n) => assert_eq(n, 16, "1 << 4 = 16"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_shl_zero_shift() -> I32 {
+    let v: I32 = 42
+    when v.checked_shl(0u32) {
+        Just(n) => assert_eq(n, 42, "42 << 0 = 42"),
+        Nothing => panic("shift by 0 should succeed")
+    }
+    return 0
+}
+
+@test
+func test_checked_shl_overflow() -> I32 {
+    let v: I32 = 1
+    when v.checked_shl(32u32) {
+        Just(_) => panic("shift by 32 should return Nothing"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_checked_shr_normal() -> I32 {
+    let v: I32 = 16
+    when v.checked_shr(4u32) {
+        Just(n) => assert_eq(n, 1, "16 >> 4 = 1"),
+        Nothing => panic("should not overflow")
+    }
+    return 0
+}
+
+@test
+func test_checked_shr_zero_shift() -> I32 {
+    let v: I32 = 42
+    when v.checked_shr(0u32) {
+        Just(n) => assert_eq(n, 42, "42 >> 0 = 42"),
+        Nothing => panic("shift by 0 should succeed")
+    }
+    return 0
+}
+
+@test
+func test_checked_shr_overflow() -> I32 {
+    let v: I32 = 16
+    when v.checked_shr(32u32) {
+        Just(_) => panic("shift by 32 should return Nothing"),
+        Nothing => {}
+    }
+    return 0
+}
+
+// NOTE: OverflowingAdd, OverflowingSub, OverflowingMul, OverflowingNeg
+// behaviors are declared but not implemented in codegen yet

@@ -1,28 +1,11 @@
 //! # LLVM IR Generator - Main Entry Point
 //!
-//! This file implements the main code generation entry point.
+//! This file implements the main `generate()` code generation entry point.
 //!
-//! ## `generate()` Pipeline
-//!
-//! 1. **Reset state**: Clear buffers, counters, and caches
-//! 2. **Register builtins**: Ordering, Maybe, Outcome enums
-//! 3. **Emit preamble**: Target triple, data layout
-//! 4. **Process declarations**: Structs, enums, functions
-//! 5. **Generate pending generics**: Monomorphized instantiations
-//! 6. **Emit string literals**: Global string constants
-//! 7. **Assemble output**: Combine all sections
-//!
-//! ## Builtin Enums
-//!
-//! Pre-registered for immediate use:
-//! - `Ordering { Less=0, Equal=1, Greater=2 }`
-//! - `Maybe[T] { Just(T), Nothing }`
-//! - `Outcome[T, E] { Ok(T), Err(E) }`
-//! - `Poll[T] { Ready(T), Pending }`
-//!
-//! ## Print Type Inference
-//!
-//! `infer_print_type()` determines the format specifier for print calls.
+//! Related files:
+//! - generate_cache.cpp: GlobalASTCache and GlobalLibraryIRCache implementations
+//! - generate_support.cpp: Loop metadata, lifetime intrinsics, print type inference,
+//!   namespace support, and library state capture
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "common.hpp"
@@ -35,184 +18,6 @@
 #include <set>
 
 namespace tml::codegen {
-
-// ============================================================================
-// GlobalASTCache Implementation
-// ============================================================================
-
-GlobalASTCache& GlobalASTCache::instance() {
-    static GlobalASTCache cache;
-    return cache;
-}
-
-bool GlobalASTCache::has(const std::string& module_path) const {
-    std::shared_lock lock(mutex_);
-    return cache_.find(module_path) != cache_.end();
-}
-
-const parser::Module* GlobalASTCache::get(const std::string& module_path) const {
-    std::shared_lock lock(mutex_);
-    auto it = cache_.find(module_path);
-    if (it != cache_.end()) {
-        ++hits_;
-        return &it->second;
-    }
-    ++misses_;
-    return nullptr;
-}
-
-void GlobalASTCache::put(const std::string& module_path, parser::Module module) {
-    // Only cache library modules
-    if (!should_cache(module_path)) {
-        return;
-    }
-
-    std::unique_lock lock(mutex_);
-    // Only insert if not already present (first parse wins)
-    if (cache_.find(module_path) == cache_.end()) {
-        cache_.emplace(module_path, std::move(module));
-    }
-}
-
-void GlobalASTCache::clear() {
-    std::unique_lock lock(mutex_);
-    cache_.clear();
-    hits_ = 0;
-    misses_ = 0;
-}
-
-GlobalASTCache::Stats GlobalASTCache::get_stats() const {
-    std::shared_lock lock(mutex_);
-    return Stats{.total_entries = cache_.size(), .cache_hits = hits_, .cache_misses = misses_};
-}
-
-bool GlobalASTCache::should_cache(const std::string& module_path) {
-    // Cache library modules: core::*, std::*, test
-    if (module_path.starts_with("core::") || module_path.starts_with("std::") ||
-        module_path == "test" || module_path.starts_with("test::")) {
-        return true;
-    }
-    return false;
-}
-
-// ============================================================================
-// GlobalLibraryIRCache Implementation
-// ============================================================================
-
-GlobalLibraryIRCache& GlobalLibraryIRCache::instance() {
-    static GlobalLibraryIRCache cache;
-    return cache;
-}
-
-bool GlobalLibraryIRCache::has(const std::string& key) const {
-    std::shared_lock lock(mutex_);
-    return cache_.find(key) != cache_.end();
-}
-
-const CachedIREntry* GlobalLibraryIRCache::get(const std::string& key) const {
-    std::shared_lock lock(mutex_);
-    auto it = cache_.find(key);
-    if (it != cache_.end()) {
-        ++hits_;
-        return &it->second;
-    }
-    ++misses_;
-    return nullptr;
-}
-
-void GlobalLibraryIRCache::put(const std::string& key, CachedIREntry entry) {
-    std::unique_lock lock(mutex_);
-    // Only insert if not already present (first generation wins)
-    if (cache_.find(key) == cache_.end()) {
-        cache_.emplace(key, std::move(entry));
-    }
-}
-
-std::vector<const CachedIREntry*> GlobalLibraryIRCache::get_by_type(CachedIRType type) const {
-    std::shared_lock lock(mutex_);
-    std::vector<const CachedIREntry*> result;
-    for (const auto& [key, entry] : cache_) {
-        if (entry.type == type) {
-            result.push_back(&entry);
-        }
-    }
-    return result;
-}
-
-std::vector<const CachedIREntry*> GlobalLibraryIRCache::get_all() const {
-    std::shared_lock lock(mutex_);
-    std::vector<const CachedIREntry*> result;
-    result.reserve(cache_.size());
-    for (const auto& [key, entry] : cache_) {
-        result.push_back(&entry);
-    }
-    return result;
-}
-
-void GlobalLibraryIRCache::clear() {
-    std::unique_lock lock(mutex_);
-    cache_.clear();
-    in_progress_.clear();
-    hits_ = 0;
-    misses_ = 0;
-}
-
-GlobalLibraryIRCache::Stats GlobalLibraryIRCache::get_stats() const {
-    std::shared_lock lock(mutex_);
-    Stats stats{};
-    stats.total_entries = cache_.size();
-    stats.cache_hits = hits_;
-    stats.cache_misses = misses_;
-
-    for (const auto& [key, entry] : cache_) {
-        switch (entry.type) {
-        case CachedIRType::StructDef:
-            ++stats.struct_defs;
-            break;
-        case CachedIRType::EnumDef:
-            ++stats.enum_defs;
-            break;
-        case CachedIRType::Function:
-            ++stats.functions;
-            break;
-        case CachedIRType::ImplMethod:
-            ++stats.impl_methods;
-            break;
-        case CachedIRType::GenericInst:
-            ++stats.generic_insts;
-            break;
-        }
-    }
-    return stats;
-}
-
-bool GlobalLibraryIRCache::try_claim(const std::string& key) {
-    std::unique_lock lock(mutex_);
-    // If already cached or in progress, don't claim
-    if (cache_.find(key) != cache_.end()) {
-        return false;
-    }
-    if (in_progress_.find(key) != in_progress_.end()) {
-        return false;
-    }
-    // Claim this key for generation
-    in_progress_.insert(key);
-    return true;
-}
-
-void GlobalLibraryIRCache::release_claim(const std::string& key) {
-    std::unique_lock lock(mutex_);
-    in_progress_.erase(key);
-}
-
-void GlobalLibraryIRCache::preload_library_definitions() {
-    // TODO: Pre-generate common library instantiations
-    // This will scan library modules and generate IR for:
-    // - TryFrom/From for all numeric type pairs
-    // - Common generic instantiations (List[I32], etc.)
-    // - Frequently used library functions
-    TML_DEBUG_LN("[IR_CACHE] Preload library definitions (not yet implemented)");
-}
 
 // Helper: Convert a parser::Type to a string for name mangling
 // Used to extract behavior type parameters for impl method names
@@ -280,8 +85,151 @@ static std::string get_const_llvm_type(const parser::TypePtr& type) {
             if (name == "Isize" || name == "Usize")
                 return "i64";
         }
+    } else if (type->is<parser::TupleType>()) {
+        const auto& tuple = type->as<parser::TupleType>();
+        if (tuple.elements.empty())
+            return "{}";
+        std::string result = "{ ";
+        for (size_t i = 0; i < tuple.elements.size(); ++i) {
+            if (i > 0)
+                result += ", ";
+            result += get_const_llvm_type(tuple.elements[i]);
+        }
+        result += " }";
+        return result;
     }
     return "i64"; // Default for unknown types
+}
+
+/// Try to extract a compile-time constant scalar value from an expression.
+/// Handles: LiteralExpr, CastExpr(LiteralExpr), UnaryExpr(-LiteralExpr),
+/// and CastExpr(UnaryExpr(-LiteralExpr)).
+/// Returns empty string if the expression is not a constant scalar.
+static std::string try_extract_scalar_const(const parser::Expr* expr) {
+    if (!expr)
+        return "";
+
+    // Unwrap cast expressions (e.g., "15 as U8")
+    if (expr->is<parser::CastExpr>()) {
+        const auto& cast = expr->as<parser::CastExpr>();
+        if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+            expr = cast.expr.get();
+        } else if (cast.expr && cast.expr->is<parser::UnaryExpr>()) {
+            const auto& unary = cast.expr->as<parser::UnaryExpr>();
+            if (unary.op == parser::UnaryOp::Neg && unary.operand->is<parser::LiteralExpr>()) {
+                const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                    int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
+                    return std::to_string(-int_val);
+                }
+            }
+            return "";
+        } else {
+            return "";
+        }
+    }
+
+    // Unary negation (e.g., -128)
+    if (expr->is<parser::UnaryExpr>()) {
+        const auto& unary = expr->as<parser::UnaryExpr>();
+        if (unary.op == parser::UnaryOp::Neg && unary.operand->is<parser::LiteralExpr>()) {
+            const auto& lit = unary.operand->as<parser::LiteralExpr>();
+            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
+                return std::to_string(-int_val);
+            }
+        }
+        return "";
+    }
+
+    // Direct literal
+    if (expr->is<parser::LiteralExpr>()) {
+        const auto& lit = expr->as<parser::LiteralExpr>();
+        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+            return std::to_string(lit.token.int_value().value);
+        } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
+            return lit.token.bool_value() ? "1" : "0";
+        } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
+            return "null";
+        }
+    }
+
+    return "";
+}
+
+/// Try to extract a compile-time constant value (scalar or tuple) from an expression.
+/// For tuples, returns the full LLVM aggregate constant (e.g., "{ i8 15, i8 1, i8 0 }").
+/// For scalars, returns just the value (e.g., "42").
+/// Also sets out_llvm_type to the corresponding LLVM type.
+/// Returns empty string if the expression is not a compile-time constant.
+static std::string try_extract_const_value(const parser::Expr* expr, const parser::TypePtr& type,
+                                           std::string& out_llvm_type) {
+    if (!expr)
+        return "";
+
+    // Handle tuple expressions
+    if (expr->is<parser::TupleExpr>()) {
+        const auto& tuple = expr->as<parser::TupleExpr>();
+        if (tuple.elements.empty()) {
+            out_llvm_type = "{}";
+            return "zeroinitializer";
+        }
+
+        // Get element types from the declared type
+        std::vector<std::string> elem_types;
+        if (type && type->is<parser::TupleType>()) {
+            const auto& tuple_type = type->as<parser::TupleType>();
+            for (const auto& et : tuple_type.elements) {
+                elem_types.push_back(get_const_llvm_type(et));
+            }
+        }
+
+        // Extract each element value
+        std::vector<std::string> elem_values;
+        for (size_t i = 0; i < tuple.elements.size(); ++i) {
+            std::string val = try_extract_scalar_const(tuple.elements[i].get());
+            if (val.empty())
+                return ""; // Non-constant element
+            elem_values.push_back(val);
+        }
+
+        // If we don't have declared types, default each element to i64
+        if (elem_types.size() != elem_values.size()) {
+            elem_types.clear();
+            for (size_t i = 0; i < elem_values.size(); ++i) {
+                elem_types.push_back("i64");
+            }
+        }
+
+        // Build LLVM type: { i8, i8, i8 }
+        std::string llvm_type = "{ ";
+        for (size_t i = 0; i < elem_types.size(); ++i) {
+            if (i > 0)
+                llvm_type += ", ";
+            llvm_type += elem_types[i];
+        }
+        llvm_type += " }";
+        out_llvm_type = llvm_type;
+
+        // Build LLVM value: { i8 15, i8 1, i8 0 }
+        std::string llvm_value = "{ ";
+        for (size_t i = 0; i < elem_values.size(); ++i) {
+            if (i > 0)
+                llvm_value += ", ";
+            llvm_value += elem_types[i] + " " + elem_values[i];
+        }
+        llvm_value += " }";
+        return llvm_value;
+    }
+
+    // Handle scalar expressions
+    std::string scalar = try_extract_scalar_const(expr);
+    if (!scalar.empty()) {
+        out_llvm_type = get_const_llvm_type(type);
+        return scalar;
+    }
+
+    return "";
 }
 
 auto LLVMIRGen::generate(const parser::Module& module)
@@ -651,25 +599,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
     for (const auto& decl : module.decls) {
         if (decl->is<parser::ConstDecl>()) {
             const auto& const_decl = decl->as<parser::ConstDecl>();
-            // Support literal constants and cast expressions wrapping literals
-            const parser::Expr* expr = const_decl.value.get();
-
-            // Unwrap cast expressions (e.g., "0 as I32")
-            if (expr->is<parser::CastExpr>()) {
-                expr = expr->as<parser::CastExpr>().expr.get();
-            }
-
-            if (expr->is<parser::LiteralExpr>()) {
-                const auto& lit = expr->as<parser::LiteralExpr>();
-                std::string value;
-                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
-                    value = std::to_string(lit.token.int_value().value);
-                } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                    value = lit.token.bool_value() ? "1" : "0";
-                } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
-                    value = "null";
-                }
-                std::string llvm_type = get_const_llvm_type(const_decl.type);
+            std::string llvm_type;
+            std::string value =
+                try_extract_const_value(const_decl.value.get(), const_decl.type, llvm_type);
+            if (!value.empty()) {
                 global_constants_[const_decl.name] = {value, llvm_type};
             }
         } else if (decl->is<parser::StructDecl>()) {
@@ -700,65 +633,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
             if (!type_name.empty()) {
                 for (const auto& const_decl : impl.constants) {
                     std::string qualified_name = type_name + "::" + const_decl.name;
-                    std::string value;
-
-                    // Support: literal constants
-                    if (const_decl.value->is<parser::LiteralExpr>()) {
-                        const auto& lit = const_decl.value->as<parser::LiteralExpr>();
-                        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
-                            value = std::to_string(lit.token.int_value().value);
-                        } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                            value = lit.token.bool_value() ? "1" : "0";
-                        } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
-                            value = "null";
-                        }
-                    }
-                    // Support: cast expressions (e.g., -2147483648 as I32)
-                    else if (const_decl.value->is<parser::CastExpr>()) {
-                        const auto& cast = const_decl.value->as<parser::CastExpr>();
-                        if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
-                            const auto& lit = cast.expr->as<parser::LiteralExpr>();
-                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
-                                value = std::to_string(lit.token.int_value().value);
-                            }
-                        } else if (cast.expr && cast.expr->is<parser::UnaryExpr>()) {
-                            const auto& unary = cast.expr->as<parser::UnaryExpr>();
-                            if (unary.op == parser::UnaryOp::Neg &&
-                                unary.operand->is<parser::LiteralExpr>()) {
-                                const auto& lit = unary.operand->as<parser::LiteralExpr>();
-                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
-                                    int64_t int_val =
-                                        static_cast<int64_t>(lit.token.int_value().value);
-                                    value = std::to_string(-int_val);
-                                }
-                            }
-                        }
-                    }
-                    // Support: unary expressions (e.g., -128)
-                    else if (const_decl.value->is<parser::UnaryExpr>()) {
-                        const auto& unary = const_decl.value->as<parser::UnaryExpr>();
-                        if (unary.op == parser::UnaryOp::Neg &&
-                            unary.operand->is<parser::LiteralExpr>()) {
-                            const auto& lit = unary.operand->as<parser::LiteralExpr>();
-                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
-                                int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
-                                value = std::to_string(-int_val);
-                            }
-                        } else if (unary.operand->is<parser::CastExpr>()) {
-                            const auto& cast = unary.operand->as<parser::CastExpr>();
-                            if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
-                                const auto& lit = cast.expr->as<parser::LiteralExpr>();
-                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
-                                    int64_t int_val =
-                                        static_cast<int64_t>(lit.token.int_value().value);
-                                    value = std::to_string(-int_val);
-                                }
-                            }
-                        }
-                    }
-
+                    std::string llvm_type;
+                    std::string value =
+                        try_extract_const_value(const_decl.value.get(), const_decl.type, llvm_type);
                     if (!value.empty()) {
-                        std::string llvm_type = get_const_llvm_type(const_decl.type);
                         global_constants_[qualified_name] = {value, llvm_type};
                     }
                 }
@@ -937,6 +815,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
                     // Determine the LLVM type for 'this' based on the impl type
                     // For primitive types, pass by value; for structs/enums, pass by pointer
+                    // For 'mut this' on primitives, pass by pointer so mutations propagate
                     std::string impl_llvm_type = llvm_type_name(type_name);
                     bool is_primitive_impl = (impl_llvm_type[0] != '%');
 
@@ -947,17 +826,27 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         }
                         std::string param_type = llvm_type_ptr(method.params[i].type);
                         std::string param_name;
+                        bool param_is_mut = false;
                         if (method.params[i].pattern &&
                             method.params[i].pattern->is<parser::IdentPattern>()) {
                             param_name = method.params[i].pattern->as<parser::IdentPattern>().name;
+                            param_is_mut =
+                                method.params[i].pattern->as<parser::IdentPattern>().is_mut;
                         } else {
                             param_name = "_anon";
                         }
-                        // Handle 'this'/'self' parameter: primitive types pass by value, others by
-                        // pointer 'self' is an alias for 'this' (Rust compatibility)
+                        // Handle 'this'/'self' parameter:
+                        // - For 'mut this' on primitives: pass by pointer (ptr) so mutations
+                        // propagate
+                        // - For immutable 'this' on primitives: pass by value
+                        // - For structs/enums: always pass by pointer
                         if ((param_name == "this" || param_name == "self") &&
                             param_type.find("This") != std::string::npos) {
-                            param_type = is_primitive_impl ? impl_llvm_type : "ptr";
+                            if (is_primitive_impl && !param_is_mut) {
+                                param_type = impl_llvm_type;
+                            } else {
+                                param_type = "ptr";
+                            }
                         }
                         params += param_type + " %" + param_name;
                         param_types += param_type;
@@ -976,20 +865,34 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     emit_line("entry:");
 
                     // Register params in locals
+                    // Track whether this method has 'mut this' for body generation
+                    bool method_has_mut_this = false;
                     for (size_t i = 0; i < method.params.size(); ++i) {
                         std::string param_type = llvm_type_ptr(method.params[i].type);
                         std::string param_name;
+                        bool param_is_mut = false;
                         if (method.params[i].pattern &&
                             method.params[i].pattern->is<parser::IdentPattern>()) {
                             param_name = method.params[i].pattern->as<parser::IdentPattern>().name;
+                            param_is_mut =
+                                method.params[i].pattern->as<parser::IdentPattern>().is_mut;
                         } else {
                             param_name = "_anon";
                         }
-                        // Handle 'this'/'self' parameter: primitive types use value type, others
-                        // use ptr 'self' is an alias for 'this' (Rust compatibility)
+                        // Handle 'this'/'self' parameter:
+                        // - For 'mut this' on primitives: ptr (so mutations propagate)
+                        // - For immutable 'this' on primitives: pass by value
+                        // - For structs/enums: always ptr
                         if ((param_name == "this" || param_name == "self") &&
                             param_type.find("This") != std::string::npos) {
-                            param_type = is_primitive_impl ? impl_llvm_type : "ptr";
+                            if (is_primitive_impl && !param_is_mut) {
+                                param_type = impl_llvm_type;
+                            } else {
+                                param_type = "ptr";
+                            }
+                            if (param_is_mut && is_primitive_impl) {
+                                method_has_mut_this = true;
+                            }
                         }
 
                         // 'this'/'self' is passed directly (by value for primitives, by pointer for
@@ -998,11 +901,23 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             // Create semantic type as the concrete impl type for field access
                             types::TypePtr semantic_type = std::make_shared<types::Type>();
                             semantic_type->kind = types::NamedType{type_name, "", {}};
-                            // Register the parameter under both 'this' and 'self' for flexibility
-                            locals_["this"] =
-                                VarInfo{"%" + param_name, param_type, semantic_type, std::nullopt};
-                            locals_["self"] =
-                                VarInfo{"%" + param_name, param_type, semantic_type, std::nullopt};
+
+                            if (method_has_mut_this) {
+                                // For 'mut this' on primitives, the parameter is a ptr.
+                                // Register with the inner primitive type and is_ptr_to_value=true
+                                // so gen_ident will load the value from the pointer.
+                                locals_["this"] = VarInfo{"%" + param_name, impl_llvm_type,
+                                                          semantic_type, std::nullopt, true};
+                                locals_["self"] = VarInfo{"%" + param_name, impl_llvm_type,
+                                                          semantic_type, std::nullopt, true};
+                            } else {
+                                // Register the parameter under both 'this' and 'self' for
+                                // flexibility
+                                locals_["this"] = VarInfo{"%" + param_name, param_type,
+                                                          semantic_type, std::nullopt};
+                                locals_["self"] = VarInfo{"%" + param_name, param_type,
+                                                          semantic_type, std::nullopt};
+                            }
                         } else {
                             std::string alloca_reg = fresh_reg();
                             emit_line("  " + alloca_reg + " = alloca " + param_type);
@@ -1738,484 +1653,6 @@ auto LLVMIRGen::generate(const parser::Module& module)
     }
 
     return output_.str();
-}
-
-// ============ Loop Metadata Implementation ============
-
-auto LLVMIRGen::create_loop_metadata(bool enable_vectorize, int unroll_count) -> int {
-    int loop_id = loop_metadata_counter_++;
-
-    // Build the loop metadata node
-    // Format: !N = distinct !{!N, !M, !O, ...} where M, O are property nodes
-    std::stringstream meta;
-    meta << "!" << loop_id << " = distinct !{!" << loop_id;
-
-    // Add property nodes
-    std::vector<int> prop_ids;
-
-    // Vectorization hint
-    if (enable_vectorize) {
-        int vec_id = loop_metadata_counter_++;
-        loop_metadata_.push_back("!" + std::to_string(vec_id) +
-                                 " = !{!\"llvm.loop.vectorize.enable\", i1 true}");
-        prop_ids.push_back(vec_id);
-    }
-
-    // Unroll hint
-    if (unroll_count > 0) {
-        int unroll_id = loop_metadata_counter_++;
-        loop_metadata_.push_back("!" + std::to_string(unroll_id) +
-                                 " = !{!\"llvm.loop.unroll.count\", i32 " +
-                                 std::to_string(unroll_count) + "}");
-        prop_ids.push_back(unroll_id);
-    }
-
-    // Add property references to loop node
-    for (int prop_id : prop_ids) {
-        meta << ", !" << prop_id;
-    }
-    meta << "}";
-
-    loop_metadata_.push_back(meta.str());
-    return loop_id;
-}
-
-void LLVMIRGen::emit_loop_metadata() {
-    if (loop_metadata_.empty()) {
-        return;
-    }
-
-    emit_line("");
-    emit_line("; Loop optimization metadata");
-    for (const auto& meta : loop_metadata_) {
-        emit_line(meta);
-    }
-}
-
-// ============ Lifetime Intrinsics Implementation ============
-
-void LLVMIRGen::push_lifetime_scope() {
-    scope_allocas_.push_back({});
-}
-
-void LLVMIRGen::pop_lifetime_scope() {
-    if (scope_allocas_.empty()) {
-        return;
-    }
-
-    // Emit lifetime.end for all allocas in this scope (in reverse order)
-    auto& allocas = scope_allocas_.back();
-    for (auto it = allocas.rbegin(); it != allocas.rend(); ++it) {
-        emit_lifetime_end(it->reg, it->size);
-    }
-
-    scope_allocas_.pop_back();
-}
-
-void LLVMIRGen::clear_lifetime_scope() {
-    // Just pop the scope without emitting lifetime.end
-    // Used when lifetime.end was already emitted via emit_scope_lifetime_ends()
-    if (!scope_allocas_.empty()) {
-        scope_allocas_.pop_back();
-    }
-}
-
-void LLVMIRGen::emit_lifetime_start(const std::string& alloca_reg, int64_t size) {
-    // Use -1 for unknown size (LLVM will figure it out)
-    std::string size_str = size > 0 ? std::to_string(size) : "-1";
-    emit_line("  call void @llvm.lifetime.start.p0(i64 " + size_str + ", ptr " + alloca_reg + ")");
-}
-
-void LLVMIRGen::emit_lifetime_end(const std::string& alloca_reg, int64_t size) {
-    // Use -1 for unknown size (LLVM will figure it out)
-    std::string size_str = size > 0 ? std::to_string(size) : "-1";
-    emit_line("  call void @llvm.lifetime.end.p0(i64 " + size_str + ", ptr " + alloca_reg + ")");
-}
-
-void LLVMIRGen::register_alloca_in_scope(const std::string& alloca_reg, int64_t size) {
-    if (scope_allocas_.empty()) {
-        return; // No scope to register in
-    }
-    scope_allocas_.back().push_back(AllocaInfo{alloca_reg, size});
-}
-
-void LLVMIRGen::emit_all_lifetime_ends() {
-    // Emit lifetime.end for all allocas in all scopes (innermost first)
-    // Used for early return - doesn't pop the scopes since we're exiting
-    for (auto scope_it = scope_allocas_.rbegin(); scope_it != scope_allocas_.rend(); ++scope_it) {
-        for (auto it = scope_it->rbegin(); it != scope_it->rend(); ++it) {
-            emit_lifetime_end(it->reg, it->size);
-        }
-    }
-}
-
-void LLVMIRGen::emit_scope_lifetime_ends() {
-    // Emit lifetime.end for allocas in current scope only (for break/continue)
-    // Doesn't pop the scope since the block will handle that
-    if (scope_allocas_.empty()) {
-        return;
-    }
-    auto& allocas = scope_allocas_.back();
-    for (auto it = allocas.rbegin(); it != allocas.rend(); ++it) {
-        emit_lifetime_end(it->reg, it->size);
-    }
-}
-
-auto LLVMIRGen::get_type_size(const std::string& llvm_type) -> int64_t {
-    // Return size in bytes for common LLVM types
-    if (llvm_type == "i1")
-        return 1;
-    if (llvm_type == "i8")
-        return 1;
-    if (llvm_type == "i16")
-        return 2;
-    if (llvm_type == "i32")
-        return 4;
-    if (llvm_type == "i64")
-        return 8;
-    if (llvm_type == "i128")
-        return 16;
-    if (llvm_type == "float")
-        return 4;
-    if (llvm_type == "double")
-        return 8;
-    if (llvm_type == "ptr")
-        return 8; // 64-bit pointers
-
-    // For struct types, tuples, etc. - return -1 (unknown, LLVM will compute)
-    return -1;
-}
-
-// Infer print argument type from expression
-auto LLVMIRGen::infer_print_type(const parser::Expr& expr) -> PrintArgType {
-    if (expr.is<parser::LiteralExpr>()) {
-        const auto& lit = expr.as<parser::LiteralExpr>();
-        switch (lit.token.kind) {
-        case lexer::TokenKind::IntLiteral:
-            return PrintArgType::Int;
-        case lexer::TokenKind::FloatLiteral:
-            return PrintArgType::Float;
-        case lexer::TokenKind::BoolLiteral:
-            return PrintArgType::Bool;
-        case lexer::TokenKind::StringLiteral:
-            return PrintArgType::Str;
-        default:
-            return PrintArgType::Unknown;
-        }
-    }
-    if (expr.is<parser::BinaryExpr>()) {
-        const auto& bin = expr.as<parser::BinaryExpr>();
-        switch (bin.op) {
-        case parser::BinaryOp::Add:
-            // Check if operands are strings (string concatenation)
-            if (infer_print_type(*bin.left) == PrintArgType::Str ||
-                infer_print_type(*bin.right) == PrintArgType::Str) {
-                return PrintArgType::Str;
-            }
-            // Check if operands are float
-            if (infer_print_type(*bin.left) == PrintArgType::Float ||
-                infer_print_type(*bin.right) == PrintArgType::Float) {
-                return PrintArgType::Float;
-            }
-            return PrintArgType::Int;
-        case parser::BinaryOp::Sub:
-        case parser::BinaryOp::Mul:
-        case parser::BinaryOp::Div:
-        case parser::BinaryOp::Mod:
-            // Check if operands are float
-            if (infer_print_type(*bin.left) == PrintArgType::Float ||
-                infer_print_type(*bin.right) == PrintArgType::Float) {
-                return PrintArgType::Float;
-            }
-            return PrintArgType::Int;
-        case parser::BinaryOp::Eq:
-        case parser::BinaryOp::Ne:
-        case parser::BinaryOp::Lt:
-        case parser::BinaryOp::Gt:
-        case parser::BinaryOp::Le:
-        case parser::BinaryOp::Ge:
-        case parser::BinaryOp::And:
-        case parser::BinaryOp::Or:
-            return PrintArgType::Bool;
-        default:
-            return PrintArgType::Int;
-        }
-    }
-    if (expr.is<parser::UnaryExpr>()) {
-        const auto& un = expr.as<parser::UnaryExpr>();
-        if (un.op == parser::UnaryOp::Not)
-            return PrintArgType::Bool;
-        if (un.op == parser::UnaryOp::Neg) {
-            // Check if operand is float
-            if (infer_print_type(*un.operand) == PrintArgType::Float) {
-                return PrintArgType::Float;
-            }
-            return PrintArgType::Int;
-        }
-    }
-    if (expr.is<parser::IdentExpr>()) {
-        // For identifiers, we need to check the variable type
-        // For now, default to Unknown (will be checked by caller)
-        return PrintArgType::Unknown;
-    }
-    if (expr.is<parser::CallExpr>()) {
-        const auto& call = expr.as<parser::CallExpr>();
-        // Check for known I64-returning functions
-        if (call.callee->is<parser::IdentExpr>()) {
-            const auto& fn_name = call.callee->as<parser::IdentExpr>().name;
-            if (fn_name == "time_us" || fn_name == "time_ns") {
-                return PrintArgType::I64;
-            }
-        }
-        return PrintArgType::Int; // Assume functions return int
-    }
-    if (expr.is<parser::MethodCallExpr>()) {
-        const auto& call = expr.as<parser::MethodCallExpr>();
-        // to_string() methods return strings
-        if (call.method == "to_string" || call.method == "debug_string") {
-            return PrintArgType::Str;
-        }
-        return PrintArgType::Unknown;
-    }
-    return PrintArgType::Unknown;
-}
-
-// ============================================================================
-// Namespace Support
-// ============================================================================
-
-auto LLVMIRGen::qualified_name(const std::string& name) const -> std::string {
-    if (current_namespace_.empty()) {
-        return name;
-    }
-    std::string result;
-    for (const auto& seg : current_namespace_) {
-        result += seg + ".";
-    }
-    return result + name;
-}
-
-void LLVMIRGen::gen_namespace_decl(const parser::NamespaceDecl& ns) {
-    // Save current namespace and extend it
-    auto saved_namespace = current_namespace_;
-    for (const auto& seg : ns.path) {
-        current_namespace_.push_back(seg);
-    }
-
-    // Process all declarations in this namespace
-    for (const auto& decl : ns.items) {
-        if (decl->is<parser::StructDecl>()) {
-            gen_struct_decl(decl->as<parser::StructDecl>());
-        } else if (decl->is<parser::UnionDecl>()) {
-            gen_union_decl(decl->as<parser::UnionDecl>());
-        } else if (decl->is<parser::EnumDecl>()) {
-            gen_enum_decl(decl->as<parser::EnumDecl>());
-        } else if (decl->is<parser::ClassDecl>()) {
-            gen_class_decl(decl->as<parser::ClassDecl>());
-        } else if (decl->is<parser::InterfaceDecl>()) {
-            gen_interface_decl(decl->as<parser::InterfaceDecl>());
-        } else if (decl->is<parser::NamespaceDecl>()) {
-            // Nested namespace - recurse
-            gen_namespace_decl(decl->as<parser::NamespaceDecl>());
-        } else if (decl->is<parser::ImplDecl>()) {
-            register_impl(&decl->as<parser::ImplDecl>());
-        } else if (decl->is<parser::FuncDecl>()) {
-            gen_func_decl(decl->as<parser::FuncDecl>());
-        } else if (decl->is<parser::ConstDecl>()) {
-            const auto& const_decl = decl->as<parser::ConstDecl>();
-            const parser::Expr* expr = const_decl.value.get();
-
-            // Unwrap cast expressions (e.g., "0 as I32")
-            if (expr->is<parser::CastExpr>()) {
-                expr = expr->as<parser::CastExpr>().expr.get();
-            }
-
-            if (expr->is<parser::LiteralExpr>()) {
-                const auto& lit = expr->as<parser::LiteralExpr>();
-                std::string value;
-                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
-                    value = std::to_string(lit.token.int_value().value);
-                } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                    value = lit.token.bool_value() ? "1" : "0";
-                }
-                std::string llvm_type = get_const_llvm_type(const_decl.type);
-                global_constants_[qualified_name(const_decl.name)] = {value, llvm_type};
-            }
-        }
-    }
-
-    // Restore namespace
-    current_namespace_ = saved_namespace;
-}
-
-// ============================================================================
-// Library State Capture
-// ============================================================================
-
-/// Generate declaration-only IR from full library IR text.
-/// Scans for `define` lines and converts them to `declare` statements.
-/// Only converts TML-generated functions (tml_ prefix), skipping C runtime functions
-/// that are already declared in the preamble.
-/// Extract a set of function names declared in the preamble headers.
-/// Used to filter out preamble declarations when generating library decls.
-static std::set<std::string> extract_preamble_func_names(const std::string& headers) {
-    std::set<std::string> names;
-    std::istringstream stream(headers);
-    std::string line;
-    while (std::getline(stream, line)) {
-        // Match "declare ... @funcname(...)"
-        if (line.size() > 8 && line.substr(0, 8) == "declare ") {
-            auto at_pos = line.find('@');
-            if (at_pos != std::string::npos) {
-                auto paren_pos = line.find('(', at_pos);
-                if (paren_pos != std::string::npos) {
-                    names.insert(line.substr(at_pos, paren_pos - at_pos));
-                }
-            }
-        }
-    }
-    return names;
-}
-
-/// Generate declaration-only IR from the full library IR.
-/// Converts `define` to `declare` for TML library functions.
-/// Also includes `declare` lines for FFI functions that are NOT in the preamble.
-static std::string generate_decls_from_ir(const std::string& full_ir,
-                                          const std::set<std::string>& preamble_funcs) {
-    std::ostringstream decls;
-    decls << "; Declarations extracted from shared library IR\n";
-
-    std::istringstream stream(full_ir);
-    std::string line;
-    while (std::getline(stream, line)) {
-        // Match lines starting with "define " (function definitions) → convert to declare
-        if (line.size() > 7 && line.substr(0, 7) == "define ") {
-            auto brace_pos = line.find('{');
-            if (brace_pos != std::string::npos) {
-                std::string signature = line.substr(7, brace_pos - 7);
-                // Trim trailing whitespace
-                while (!signature.empty() && (signature.back() == ' ' || signature.back() == '\t'))
-                    signature.pop_back();
-                // Remove attributes like #0
-                auto hash_pos = signature.rfind(" #");
-                if (hash_pos != std::string::npos)
-                    signature = signature.substr(0, hash_pos);
-                decls << "declare " << signature << "\n";
-            }
-        }
-        // Include `declare` lines for FFI functions NOT already in preamble.
-        // This is needed for FFI bindings like brotli_*, zlib_* that are declared
-        // during emit_module_pure_tml_functions() but not in the preamble.
-        else if (line.size() > 8 && line.substr(0, 8) == "declare ") {
-            // Extract function name (@funcname) to check against preamble
-            auto at_pos = line.find('@');
-            if (at_pos != std::string::npos) {
-                auto paren_pos = line.find('(', at_pos);
-                if (paren_pos != std::string::npos) {
-                    std::string func_ref = line.substr(at_pos, paren_pos - at_pos);
-                    if (preamble_funcs.count(func_ref) == 0) {
-                        decls << line << "\n";
-                    }
-                }
-            }
-        }
-    }
-    return decls.str();
-}
-
-auto LLVMIRGen::capture_library_state(const std::string& full_ir,
-                                      const std::string& /*preamble_headers*/) const
-    -> std::shared_ptr<CodegenLibraryState> {
-    auto state = std::make_shared<CodegenLibraryState>();
-
-    // Capture library IR text (saved during generate())
-    state->imported_func_code = cached_imported_func_code_;
-    state->imported_type_defs = cached_imported_type_defs_;
-
-    // Generate declarations-only IR from the full library IR.
-    // Includes define→declare conversions AND non-preamble declare lines (FFI functions).
-    if (!full_ir.empty()) {
-        auto preamble_funcs = extract_preamble_func_names(cached_preamble_headers_);
-        state->imported_func_decls = generate_decls_from_ir(full_ir, preamble_funcs);
-    }
-
-    // Capture struct types
-    state->struct_types = struct_types_;
-    state->union_types = union_types_;
-
-    // Capture enum variants
-    state->enum_variants = enum_variants_;
-
-    // Capture global constants
-    for (const auto& [k, v] : global_constants_) {
-        state->global_constants[k] = {v.value, v.llvm_type};
-    }
-
-    // Capture struct fields
-    for (const auto& [struct_name, fields] : struct_fields_) {
-        std::vector<CodegenLibraryState::FieldInfoData> field_data;
-        field_data.reserve(fields.size());
-        for (const auto& f : fields) {
-            field_data.push_back({f.name, f.index, f.llvm_type});
-        }
-        state->struct_fields[struct_name] = std::move(field_data);
-    }
-
-    // Capture function signatures
-    for (const auto& [k, v] : functions_) {
-        state->functions[k] = {v.llvm_name, v.llvm_func_type, v.ret_type, v.param_types,
-                               v.is_extern};
-    }
-
-    // Capture function return types
-    state->func_return_types = func_return_types_;
-
-    // Capture trait declaration names
-    for (const auto& [name, _] : trait_decls_) {
-        state->trait_decl_names.insert(name);
-    }
-
-    // Capture generated functions
-    state->generated_functions = generated_functions_;
-
-    // Capture string literals (needed when restoring full function definitions)
-    state->string_literals = string_literals_;
-
-    // Capture declared externals (to prevent duplicate declarations in worker threads)
-    state->declared_externals = declared_externals_;
-
-    // Capture class types (class_name -> LLVM type name)
-    state->class_types = class_types_;
-
-    // Capture class field info
-    for (const auto& [class_name, fields] : class_fields_) {
-        std::vector<CodegenLibraryState::ClassFieldInfoData> field_data;
-        field_data.reserve(fields.size());
-        for (const auto& f : fields) {
-            CodegenLibraryState::ClassFieldInfoData fd;
-            fd.name = f.name;
-            fd.index = f.index;
-            fd.llvm_type = f.llvm_type;
-            fd.vis = static_cast<int>(f.vis);
-            fd.is_inherited = f.is_inherited;
-            for (const auto& step : f.inheritance_path) {
-                fd.inheritance_path.push_back({step.class_name, step.index});
-            }
-            field_data.push_back(std::move(fd));
-        }
-        state->class_fields[class_name] = std::move(field_data);
-    }
-
-    // Capture value classes
-    state->value_classes = value_classes_;
-
-    state->valid = true;
-
-    TML_DEBUG_LN("[CODEGEN] Captured library state: "
-                 << state->struct_types.size() << " struct types, " << state->functions.size()
-                 << " functions, " << state->enum_variants.size() << " enum variants");
-
-    return state;
 }
 
 } // namespace tml::codegen

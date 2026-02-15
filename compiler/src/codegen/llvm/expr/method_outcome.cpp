@@ -17,6 +17,43 @@
 
 namespace tml::codegen {
 
+// Helper: extract the effective value expression from a closure body.
+// See method_maybe.cpp for the canonical version.
+static const parser::Expr& get_closure_value_expr_outcome(const parser::Expr& body) {
+    if (body.is<parser::BlockExpr>()) {
+        const auto& block = body.as<parser::BlockExpr>();
+        if (block.stmts.size() == 1 && !block.expr.has_value()) {
+            const auto& stmt = *block.stmts[0];
+            if (stmt.is<parser::ExprStmt>()) {
+                const auto& expr_stmt = stmt.as<parser::ExprStmt>();
+                if (expr_stmt.expr->is<parser::ReturnExpr>()) {
+                    const auto& ret = expr_stmt.expr->as<parser::ReturnExpr>();
+                    if (ret.value.has_value()) {
+                        return *ret.value.value();
+                    }
+                }
+            }
+        }
+        if (block.stmts.empty() && block.expr.has_value()) {
+            // If the trailing expression is itself a ReturnExpr, unwrap it
+            if (block.expr.value()->is<parser::ReturnExpr>()) {
+                const auto& ret = block.expr.value()->as<parser::ReturnExpr>();
+                if (ret.value.has_value()) {
+                    return *ret.value.value();
+                }
+            }
+            return *block.expr.value();
+        }
+    }
+    if (body.is<parser::ReturnExpr>()) {
+        const auto& ret = body.as<parser::ReturnExpr>();
+        if (ret.value.has_value()) {
+            return *ret.value.value();
+        }
+    }
+    return body;
+}
+
 auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std::string& receiver,
                                    const std::string& enum_type_name, const std::string& tag_val,
                                    const types::NamedType& named) -> std::optional<std::string> {
@@ -502,7 +539,32 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
             emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
             locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
-            pred_result = gen_expr(*closure.body);
+
+            std::string merge = fresh_label("is_ok_and_merge");
+            std::string ret_alloca = fresh_reg();
+            emit_line("  " + ret_alloca + " = alloca i1");
+            std::string saved_ca = closure_return_alloca_;
+            std::string saved_ct = closure_return_type_;
+            std::string saved_cl = closure_return_label_;
+            closure_return_alloca_ = ret_alloca;
+            closure_return_type_ = "i1";
+            closure_return_label_ = merge;
+
+            pred_result = gen_expr(get_closure_value_expr_outcome(*closure.body));
+
+            closure_return_alloca_ = saved_ca;
+            closure_return_type_ = saved_ct;
+            closure_return_label_ = saved_cl;
+
+            if (!block_terminated_) {
+                emit_line("  store i1 " + pred_result + ", ptr " + ret_alloca);
+                emit_line("  br label %" + merge);
+            }
+            emit_line(merge + ":");
+            current_block_ = merge;
+            block_terminated_ = false;
+            pred_result = fresh_reg();
+            emit_line("  " + pred_result + " = load i1, ptr " + ret_alloca);
             locals_.erase(param_name);
         } else {
             // Function reference - generate a call
@@ -512,6 +574,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + pred_result + " = call i1 " + fn_name + "(" + ok_llvm_type + " " +
                       ok_val + ")");
         }
+        std::string ok_end_block = current_block_;
         emit_line("  br label %" + end_label);
 
         emit_line(is_err_label + ":");
@@ -521,7 +584,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         emit_line(end_label + ":");
         current_block_ = end_label;
         std::string result = fresh_reg();
-        emit_line("  " + result + " = phi i1 [ " + pred_result + ", %" + is_ok_label +
+        emit_line("  " + result + " = phi i1 [ " + pred_result + ", %" + ok_end_block +
                   " ], [ false, %" + is_err_label + " ]");
         last_expr_type_ = "i1";
         return result;
@@ -571,7 +634,32 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
             emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
             locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
-            pred_result = gen_expr(*closure.body);
+
+            std::string merge = fresh_label("is_err_and_merge");
+            std::string ret_alloca = fresh_reg();
+            emit_line("  " + ret_alloca + " = alloca i1");
+            std::string saved_ca = closure_return_alloca_;
+            std::string saved_ct = closure_return_type_;
+            std::string saved_cl = closure_return_label_;
+            closure_return_alloca_ = ret_alloca;
+            closure_return_type_ = "i1";
+            closure_return_label_ = merge;
+
+            pred_result = gen_expr(get_closure_value_expr_outcome(*closure.body));
+
+            closure_return_alloca_ = saved_ca;
+            closure_return_type_ = saved_ct;
+            closure_return_label_ = saved_cl;
+
+            if (!block_terminated_) {
+                emit_line("  store i1 " + pred_result + ", ptr " + ret_alloca);
+                emit_line("  br label %" + merge);
+            }
+            emit_line(merge + ":");
+            current_block_ = merge;
+            block_terminated_ = false;
+            pred_result = fresh_reg();
+            emit_line("  " + pred_result + " = load i1, ptr " + ret_alloca);
             locals_.erase(param_name);
         } else {
             // Function reference - generate a call
@@ -581,6 +669,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + pred_result + " = call i1 " + fn_name + "(" + err_llvm_type + " " +
                       err_val + ")");
         }
+        std::string err_end_block = current_block_;
         emit_line("  br label %" + end_label);
 
         emit_line(is_ok_label + ":");
@@ -590,7 +679,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         emit_line(end_label + ":");
         current_block_ = end_label;
         std::string result = fresh_reg();
-        emit_line("  " + result + " = phi i1 [ " + pred_result + ", %" + is_err_label +
+        emit_line("  " + result + " = phi i1 [ " + pred_result + ", %" + err_end_block +
                   " ], [ false, %" + is_ok_label + " ]");
         last_expr_type_ = "i1";
         return result;
@@ -653,7 +742,32 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
             emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
             locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
-            closure_result = gen_expr(*closure.body);
+
+            std::string merge = fresh_label("unwrap_else_merge");
+            std::string ret_alloca = fresh_reg();
+            emit_line("  " + ret_alloca + " = alloca " + ok_llvm_type);
+            std::string saved_ca = closure_return_alloca_;
+            std::string saved_ct = closure_return_type_;
+            std::string saved_cl = closure_return_label_;
+            closure_return_alloca_ = ret_alloca;
+            closure_return_type_ = ok_llvm_type;
+            closure_return_label_ = merge;
+
+            closure_result = gen_expr(get_closure_value_expr_outcome(*closure.body));
+
+            closure_return_alloca_ = saved_ca;
+            closure_return_type_ = saved_ct;
+            closure_return_label_ = saved_cl;
+
+            if (!block_terminated_) {
+                emit_line("  store " + ok_llvm_type + " " + closure_result + ", ptr " + ret_alloca);
+                emit_line("  br label %" + merge);
+            }
+            emit_line(merge + ":");
+            current_block_ = merge;
+            block_terminated_ = false;
+            closure_result = fresh_reg();
+            emit_line("  " + closure_result + " = load " + ok_llvm_type + ", ptr " + ret_alloca);
             locals_.erase(param_name);
         } else {
             auto& ident = call.args[0]->as<parser::IdentExpr>();
@@ -662,13 +776,14 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + closure_result + " = call " + ok_llvm_type + " " + fn_name + "(" +
                       err_llvm_type + " " + err_val + ")");
         }
+        std::string err_end_block = current_block_;
         emit_line("  br label %" + end_label);
 
         emit_line(end_label + ":");
         current_block_ = end_label;
         std::string result = fresh_reg();
         emit_line("  " + result + " = phi " + ok_llvm_type + " [ " + ok_val + ", %" + is_ok_label +
-                  " ], [ " + closure_result + ", %" + is_err_label + " ]");
+                  " ], [ " + closure_result + ", %" + err_end_block + " ]");
         last_expr_type_ = ok_llvm_type;
         return result;
     }
@@ -718,8 +833,33 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
             emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
             locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
-            mapped_val = gen_expr(*closure.body);
+
+            std::string merge = fresh_label("map_ok_merge");
+            std::string ret_alloca = fresh_reg();
+            emit_line("  " + ret_alloca + " = alloca " + ok_llvm_type);
+            std::string saved_ca = closure_return_alloca_;
+            std::string saved_ct = closure_return_type_;
+            std::string saved_cl = closure_return_label_;
+            closure_return_alloca_ = ret_alloca;
+            closure_return_type_ = ok_llvm_type;
+            closure_return_label_ = merge;
+
+            mapped_val = gen_expr(get_closure_value_expr_outcome(*closure.body));
             mapped_type = last_expr_type_;
+
+            closure_return_alloca_ = saved_ca;
+            closure_return_type_ = saved_ct;
+            closure_return_label_ = saved_cl;
+
+            if (!block_terminated_) {
+                emit_line("  store " + mapped_type + " " + mapped_val + ", ptr " + ret_alloca);
+                emit_line("  br label %" + merge);
+            }
+            emit_line(merge + ":");
+            current_block_ = merge;
+            block_terminated_ = false;
+            mapped_val = fresh_reg();
+            emit_line("  " + mapped_val + " = load " + mapped_type + ", ptr " + ret_alloca);
             locals_.erase(param_name);
         } else {
             // Function reference - we need to infer the return type
@@ -753,6 +893,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         emit_line("  store " + mapped_type + " " + mapped_val + ", ptr " + ok_data_ptr);
         std::string ok_result = fresh_reg();
         emit_line("  " + ok_result + " = load " + result_type_name + ", ptr " + ok_alloca);
+        std::string ok_end_block = current_block_;
         emit_line("  br label %" + end_label);
 
         emit_line(is_err_label + ":");
@@ -792,7 +933,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         current_block_ = end_label;
         std::string result = fresh_reg();
         emit_line("  " + result + " = phi " + result_type_name + " [ " + ok_result + ", %" +
-                  is_ok_label + " ], [ " + err_result + ", %" + is_err_label + " ]");
+                  ok_end_block + " ], [ " + err_result + ", %" + is_err_label + " ]");
         last_expr_type_ = result_type_name;
         return result;
     }
@@ -844,7 +985,32 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
             emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
             locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
-            mapped_val = gen_expr(*closure.body);
+
+            std::string merge = fresh_label("map_or_ok_merge");
+            std::string ret_alloca = fresh_reg();
+            emit_line("  " + ret_alloca + " = alloca " + default_type);
+            std::string saved_ca = closure_return_alloca_;
+            std::string saved_ct = closure_return_type_;
+            std::string saved_cl = closure_return_label_;
+            closure_return_alloca_ = ret_alloca;
+            closure_return_type_ = default_type;
+            closure_return_label_ = merge;
+
+            mapped_val = gen_expr(get_closure_value_expr_outcome(*closure.body));
+
+            closure_return_alloca_ = saved_ca;
+            closure_return_type_ = saved_ct;
+            closure_return_label_ = saved_cl;
+
+            if (!block_terminated_) {
+                emit_line("  store " + default_type + " " + mapped_val + ", ptr " + ret_alloca);
+                emit_line("  br label %" + merge);
+            }
+            emit_line(merge + ":");
+            current_block_ = merge;
+            block_terminated_ = false;
+            mapped_val = fresh_reg();
+            emit_line("  " + mapped_val + " = load " + default_type + ", ptr " + ret_alloca);
             locals_.erase(param_name);
         } else {
             auto& ident = call.args[1]->as<parser::IdentExpr>();
@@ -853,6 +1019,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + mapped_val + " = call " + default_type + " " + fn_name + "(" +
                       ok_llvm_type + " " + ok_val + ")");
         }
+        std::string ok_end_block = current_block_;
         emit_line("  br label %" + end_label);
 
         emit_line(is_err_label + ":");
@@ -863,7 +1030,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         current_block_ = end_label;
         std::string result = fresh_reg();
         emit_line("  " + result + " = phi " + default_type + " [ " + mapped_val + ", %" +
-                  is_ok_label + " ], [ " + default_val + ", %" + is_err_label + " ]");
+                  ok_end_block + " ], [ " + default_val + ", %" + is_err_label + " ]");
         last_expr_type_ = default_type;
         return result;
     }
@@ -912,7 +1079,33 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + param_alloca + " = alloca " + ok_llvm_type);
             emit_line("  store " + ok_llvm_type + " " + ok_val + ", ptr " + param_alloca);
             locals_[param_name] = VarInfo{param_alloca, ok_llvm_type, nullptr, std::nullopt};
-            closure_result = gen_expr(*closure.body);
+
+            std::string merge = fresh_label("and_then_merge");
+            std::string ret_alloca = fresh_reg();
+            emit_line("  " + ret_alloca + " = alloca " + enum_type_name);
+            std::string saved_ca = closure_return_alloca_;
+            std::string saved_ct = closure_return_type_;
+            std::string saved_cl = closure_return_label_;
+            closure_return_alloca_ = ret_alloca;
+            closure_return_type_ = enum_type_name;
+            closure_return_label_ = merge;
+
+            closure_result = gen_expr(get_closure_value_expr_outcome(*closure.body));
+
+            closure_return_alloca_ = saved_ca;
+            closure_return_type_ = saved_ct;
+            closure_return_label_ = saved_cl;
+
+            if (!block_terminated_) {
+                emit_line("  store " + enum_type_name + " " + closure_result + ", ptr " +
+                          ret_alloca);
+                emit_line("  br label %" + merge);
+            }
+            emit_line(merge + ":");
+            current_block_ = merge;
+            block_terminated_ = false;
+            closure_result = fresh_reg();
+            emit_line("  " + closure_result + " = load " + enum_type_name + ", ptr " + ret_alloca);
             locals_.erase(param_name);
         } else {
             auto& ident = call.args[0]->as<parser::IdentExpr>();
@@ -986,7 +1179,33 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
             emit_line("  " + param_alloca + " = alloca " + err_llvm_type);
             emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + param_alloca);
             locals_[param_name] = VarInfo{param_alloca, err_llvm_type, nullptr, std::nullopt};
-            closure_result = gen_expr(*closure.body);
+
+            std::string merge = fresh_label("or_else_merge");
+            std::string ret_alloca = fresh_reg();
+            emit_line("  " + ret_alloca + " = alloca " + enum_type_name);
+            std::string saved_ca = closure_return_alloca_;
+            std::string saved_ct = closure_return_type_;
+            std::string saved_cl = closure_return_label_;
+            closure_return_alloca_ = ret_alloca;
+            closure_return_type_ = enum_type_name;
+            closure_return_label_ = merge;
+
+            closure_result = gen_expr(get_closure_value_expr_outcome(*closure.body));
+
+            closure_return_alloca_ = saved_ca;
+            closure_return_type_ = saved_ct;
+            closure_return_label_ = saved_cl;
+
+            if (!block_terminated_) {
+                emit_line("  store " + enum_type_name + " " + closure_result + ", ptr " +
+                          ret_alloca);
+                emit_line("  br label %" + merge);
+            }
+            emit_line(merge + ":");
+            current_block_ = merge;
+            block_terminated_ = false;
+            closure_result = fresh_reg();
+            emit_line("  " + closure_result + " = load " + enum_type_name + ", ptr " + ret_alloca);
             locals_.erase(param_name);
         } else {
             auto& ident = call.args[0]->as<parser::IdentExpr>();

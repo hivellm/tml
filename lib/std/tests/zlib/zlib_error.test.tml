@@ -1,0 +1,144 @@
+use test::{assert, assert_eq}
+use std::zlib::error::{ZlibError, ZlibErrorKind, zlib_error_kind_from_code}
+
+// --- zlib_error_kind_from_code ---
+
+@test
+func test_zlib_error_kind_from_code_ok() -> I32 {
+    let kind: ZlibErrorKind = zlib_error_kind_from_code(0)
+    let msg: Str = kind.to_message()
+    assert_eq(msg, "no error", "code 0 = Ok")
+    return 0
+}
+
+@test
+func test_zlib_error_kind_from_code_stream() -> I32 {
+    let kind: ZlibErrorKind = zlib_error_kind_from_code(-2)
+    let msg: Str = kind.to_message()
+    assert_eq(msg, "stream error: invalid stream state", "code -2 = StreamError")
+    return 0
+}
+
+@test
+func test_zlib_error_kind_from_code_data() -> I32 {
+    let kind: ZlibErrorKind = zlib_error_kind_from_code(-3)
+    let msg: Str = kind.to_message()
+    assert_eq(msg, "data error: corrupted or invalid input", "code -3 = DataError")
+    return 0
+}
+
+@test
+func test_zlib_error_kind_from_code_memory() -> I32 {
+    let kind: ZlibErrorKind = zlib_error_kind_from_code(-4)
+    let msg: Str = kind.to_message()
+    assert_eq(msg, "memory error: allocation failed", "code -4 = MemoryError")
+    return 0
+}
+
+@test
+func test_zlib_error_kind_from_code_buffer() -> I32 {
+    let kind: ZlibErrorKind = zlib_error_kind_from_code(-5)
+    let msg: Str = kind.to_message()
+    assert_eq(msg, "buffer error: insufficient output space", "code -5 = BufferError")
+    return 0
+}
+
+@test
+func test_zlib_error_kind_from_code_version() -> I32 {
+    let kind: ZlibErrorKind = zlib_error_kind_from_code(-6)
+    let msg: Str = kind.to_message()
+    assert_eq(msg, "version error: incompatible library", "code -6 = VersionError")
+    return 0
+}
+
+@test
+func test_zlib_error_kind_from_code_need_dict() -> I32 {
+    let kind: ZlibErrorKind = zlib_error_kind_from_code(2)
+    let msg: Str = kind.to_message()
+    assert_eq(msg, "dictionary needed for decompression", "code 2 = NeedDict")
+    return 0
+}
+
+@test
+func test_zlib_error_kind_from_code_unknown() -> I32 {
+    let kind: ZlibErrorKind = zlib_error_kind_from_code(-1)
+    let msg: Str = kind.to_message()
+    assert_eq(msg, "unknown error", "code -1 = Unknown")
+    return 0
+}
+
+@test
+func test_zlib_error_kind_from_code_unmapped() -> I32 {
+    let kind: ZlibErrorKind = zlib_error_kind_from_code(99)
+    let msg: Str = kind.to_message()
+    assert_eq(msg, "unknown error", "unmapped code = Unknown")
+    return 0
+}
+
+// --- ZlibError::with_code ---
+
+@test
+func test_zlib_error_with_code() -> I32 {
+    let err: ZlibError = ZlibError::with_code(ZlibErrorKind::DataError, -3)
+    assert_eq(err.code, -3, "code field")
+    let s: Str = err.to_string()
+    assert_eq(s, "data error: corrupted or invalid input (code: -3)", "to_string with code")
+    return 0
+}
+
+// --- ZlibError::with_message ---
+
+@test
+func test_zlib_error_with_message() -> I32 {
+    let err: ZlibError = ZlibError::with_message(ZlibErrorKind::MemoryError, "custom msg")
+    assert_eq(err.message, "custom msg", "message field")
+    assert_eq(err.code, 0, "code is 0")
+    let s: Str = err.to_string()
+    assert_eq(s, "custom msg", "to_string without code")
+    return 0
+}
+
+// --- ZlibError::from_code ---
+
+@test
+func test_zlib_error_from_code() -> I32 {
+    let err: ZlibError = ZlibError::from_code(-4)
+    assert_eq(err.code, -4, "code from from_code")
+    let s: Str = err.to_string()
+    assert_eq(s, "memory error: allocation failed (code: -4)", "from_code -4")
+    return 0
+}
+
+// --- ZlibError::is_ok ---
+
+@test
+func test_zlib_error_is_ok_true() -> I32 {
+    let err: ZlibError = ZlibError::new(ZlibErrorKind::Ok)
+    assert(err.is_ok(), "Ok kind should be is_ok")
+    return 0
+}
+
+@test
+func test_zlib_error_is_ok_false() -> I32 {
+    let err: ZlibError = ZlibError::new(ZlibErrorKind::DataError)
+    assert(not err.is_ok(), "DataError should not be is_ok")
+    return 0
+}
+
+// --- ZlibError::to_string ---
+
+@test
+func test_zlib_error_to_string_no_code() -> I32 {
+    let err: ZlibError = ZlibError::new(ZlibErrorKind::StreamError)
+    let s: Str = err.to_string()
+    assert_eq(s, "stream error: invalid stream state", "to_string without code")
+    return 0
+}
+
+@test
+func test_zlib_error_to_string_with_code() -> I32 {
+    let err: ZlibError = ZlibError::from_code(-5)
+    let s: Str = err.to_string()
+    assert_eq(s, "buffer error: insufficient output space (code: -5)", "to_string with code")
+    return 0
+}

@@ -1,0 +1,95 @@
+// Tests for uncovered crypto/rsa enum and struct methods
+use test::{assert, assert_eq}
+use std::crypto::rsa::{RsaPadding, OaepOptions}
+
+// --- RsaPadding::name ---
+
+@test
+func test_rsa_padding_name() -> I32 {
+    assert_eq(RsaPadding::Pkcs1.name(), "pkcs1", "Pkcs1 name")
+    assert_eq(RsaPadding::OaepSha1.name(), "oaep-sha1", "OaepSha1 name")
+    assert_eq(RsaPadding::OaepSha256.name(), "oaep-sha256", "OaepSha256 name")
+    assert_eq(RsaPadding::OaepSha384.name(), "oaep-sha384", "OaepSha384 name")
+    assert_eq(RsaPadding::OaepSha512.name(), "oaep-sha512", "OaepSha512 name")
+    assert_eq(RsaPadding::None.name(), "none", "None name")
+    return 0
+}
+
+// --- RsaPadding::is_oaep ---
+
+@test
+func test_rsa_padding_is_oaep() -> I32 {
+    assert(not RsaPadding::Pkcs1.is_oaep(), "Pkcs1 not oaep")
+    assert(RsaPadding::OaepSha1.is_oaep(), "OaepSha1 is_oaep")
+    assert(RsaPadding::OaepSha256.is_oaep(), "OaepSha256 is_oaep")
+    assert(RsaPadding::OaepSha384.is_oaep(), "OaepSha384 is_oaep")
+    assert(RsaPadding::OaepSha512.is_oaep(), "OaepSha512 is_oaep")
+    assert(not RsaPadding::None.is_oaep(), "None not oaep")
+    return 0
+}
+
+// --- RsaPadding::overhead ---
+
+@test
+func test_rsa_padding_overhead() -> I32 {
+    assert_eq(RsaPadding::Pkcs1.overhead(2048 as I64), 11 as I64, "Pkcs1 overhead")
+    assert_eq(RsaPadding::OaepSha1.overhead(2048 as I64), 42 as I64, "OaepSha1 overhead")
+    assert_eq(RsaPadding::OaepSha256.overhead(2048 as I64), 66 as I64, "OaepSha256 overhead")
+    assert_eq(RsaPadding::OaepSha384.overhead(2048 as I64), 98 as I64, "OaepSha384 overhead")
+    assert_eq(RsaPadding::OaepSha512.overhead(2048 as I64), 130 as I64, "OaepSha512 overhead")
+    assert_eq(RsaPadding::None.overhead(2048 as I64), 0 as I64, "None overhead")
+    return 0
+}
+
+// --- RsaPadding::max_data_size ---
+
+@test
+func test_rsa_padding_max_data_size() -> I32 {
+    // 2048-bit key = 256 bytes; max_data_size = key_bytes - overhead
+    let pkcs1_max: I64 = RsaPadding::Pkcs1.max_data_size(2048 as I64)
+    assert_eq(pkcs1_max, 245 as I64, "Pkcs1 max_data 2048")
+
+    let oaep256_max: I64 = RsaPadding::OaepSha256.max_data_size(2048 as I64)
+    assert_eq(oaep256_max, 190 as I64, "OaepSha256 max_data 2048")
+
+    let none_max: I64 = RsaPadding::None.max_data_size(2048 as I64)
+    assert_eq(none_max, 256 as I64, "None max_data 2048")
+    return 0
+}
+
+// --- OaepOptions ---
+
+@test
+func test_oaep_options_default() -> I32 {
+    let opts: OaepOptions = OaepOptions::default()
+    assert_eq(opts.hash, "sha256", "default hash")
+    assert_eq(opts.mgf1_hash, "sha256", "default mgf1_hash")
+    return 0
+}
+
+@test
+func test_oaep_options_sha1() -> I32 {
+    let opts: OaepOptions = OaepOptions::sha1()
+    assert_eq(opts.hash, "sha1", "sha1 hash")
+    assert_eq(opts.mgf1_hash, "sha1", "sha1 mgf1_hash")
+    return 0
+}
+
+@test
+func test_oaep_options_sha384() -> I32 {
+    let opts: OaepOptions = OaepOptions::sha384()
+    assert_eq(opts.hash, "sha384", "sha384 hash")
+    assert_eq(opts.mgf1_hash, "sha384", "sha384 mgf1_hash")
+    return 0
+}
+
+@test
+func test_oaep_options_sha512() -> I32 {
+    let opts: OaepOptions = OaepOptions::sha512()
+    assert_eq(opts.hash, "sha512", "sha512 hash")
+    assert_eq(opts.mgf1_hash, "sha512", "sha512 mgf1_hash")
+    return 0
+}
+
+// NOTE: public_encrypt, private_decrypt, hybrid_encrypt, etc. are
+// all FFI-dependent and require actual key handles

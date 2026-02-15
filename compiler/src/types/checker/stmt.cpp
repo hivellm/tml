@@ -247,14 +247,75 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
             } else if constexpr (std::is_same_v<T, parser::WildcardPattern>) {
                 // Wildcard pattern matches any type, doesn't bind anything
             } else if constexpr (std::is_same_v<T, parser::EnumPattern>) {
-                // Extract enum name from type
+                // Extract enum name from type, resolving type aliases
                 if (!type->is<NamedType>()) {
                     error("Pattern expects enum type, but got different type", pattern.span,
                           "T035");
                     return;
                 }
 
-                auto& named = type->as<NamedType>();
+                // Resolve type aliases: e.g., CryptoResult[T] -> Outcome[T, CryptoError]
+                TypePtr resolved_type = type;
+                if (type->is<NamedType>()) {
+                    auto& orig_named = type->as<NamedType>();
+
+                    // Try local lookup first, then search all loaded modules
+                    auto alias_type = env_.lookup_type_alias(orig_named.name);
+                    std::optional<std::vector<std::string>> alias_generics;
+                    if (alias_type) {
+                        alias_generics = env_.lookup_type_alias_generics(orig_named.name);
+                    } else if (env_.module_registry()) {
+                        // Local lookup failed — search all loaded modules for the type alias
+                        // (module_path may be empty for deserialized types from .tml.meta)
+                        for (const auto& [mod_path, mod] :
+                             env_.module_registry()->get_all_modules()) {
+                            auto it = mod.type_aliases.find(orig_named.name);
+                            if (it != mod.type_aliases.end()) {
+                                alias_type = it->second;
+                                auto gen_it = mod.type_alias_generics.find(orig_named.name);
+                                if (gen_it != mod.type_alias_generics.end()) {
+                                    alias_generics = gen_it->second;
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    if (alias_type && (*alias_type)->is<NamedType>()) {
+                        if (alias_generics && !alias_generics->empty()) {
+                            // Build substitution: alias generic params -> actual type args
+                            std::unordered_map<std::string, TypePtr> alias_subs;
+                            for (size_t i = 0;
+                                 i < alias_generics->size() && i < orig_named.type_args.size();
+                                 ++i) {
+                                alias_subs[(*alias_generics)[i]] = orig_named.type_args[i];
+                            }
+                            // Apply substitution to the alias target type
+                            auto& alias_named = (*alias_type)->as<NamedType>();
+                            std::vector<TypePtr> resolved_args;
+                            for (const auto& arg : alias_named.type_args) {
+                                if (arg->is<NamedType>()) {
+                                    auto& arg_named = arg->as<NamedType>();
+                                    auto sub_it = alias_subs.find(arg_named.name);
+                                    if (sub_it != alias_subs.end()) {
+                                        resolved_args.push_back(sub_it->second);
+                                    } else {
+                                        resolved_args.push_back(arg);
+                                    }
+                                } else {
+                                    resolved_args.push_back(arg);
+                                }
+                            }
+                            resolved_type = std::make_shared<Type>(
+                                Type{NamedType{alias_named.name, alias_named.module_path,
+                                               std::move(resolved_args)}});
+                        } else {
+                            resolved_type = *alias_type;
+                        }
+                    }
+                }
+
+                auto& named = resolved_type->as<NamedType>();
                 std::string enum_name = named.name;
 
                 // Lookup enum definition

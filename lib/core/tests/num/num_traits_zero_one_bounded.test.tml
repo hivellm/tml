@@ -1,0 +1,153 @@
+// Tests for num/traits: Zero, One, Bounded behaviors across integer types
+use test
+
+// ==================== Zero::zero ====================
+
+@test
+func test_i8_zero() -> I32 {
+    let z: I8 = I8::zero()
+    assert_eq(z, 0 as I8, "I8::zero()")
+    return 0
+}
+
+@test
+func test_i16_zero() -> I32 {
+    let z: I16 = I16::zero()
+    assert_eq(z, 0 as I16, "I16::zero()")
+    return 0
+}
+
+@test
+func test_i32_zero() -> I32 {
+    let z: I32 = I32::zero()
+    assert_eq(z, 0, "I32::zero()")
+    return 0
+}
+
+@test
+func test_i64_zero() -> I32 {
+    let z: I64 = I64::zero()
+    assert_eq(z, 0 as I64, "I64::zero()")
+    return 0
+}
+
+@test
+func test_u8_zero() -> I32 {
+    let z: U8 = U8::zero()
+    assert_eq(z, 0 as U8, "U8::zero()")
+    return 0
+}
+
+@test
+func test_u32_zero() -> I32 {
+    let z: U32 = U32::zero()
+    assert_eq(z, 0 as U32, "U32::zero()")
+    return 0
+}
+
+@test
+func test_u64_zero() -> I32 {
+    let z: U64 = U64::zero()
+    assert_eq(z, 0 as U64, "U64::zero()")
+    return 0
+}
+
+// ==================== Zero::is_zero ====================
+
+@test
+func test_i32_is_zero_true() -> I32 {
+    let z: I32 = 0
+    assert(z.is_zero(), "0.is_zero()")
+    return 0
+}
+
+@test
+func test_i32_is_zero_false() -> I32 {
+    let nz: I32 = 5
+    assert(not nz.is_zero(), "5.is_zero() should be false")
+    return 0
+}
+
+// ==================== One::one ====================
+
+@test
+func test_i8_one() -> I32 {
+    let o: I8 = I8::one()
+    assert_eq(o, 1 as I8, "I8::one()")
+    return 0
+}
+
+@test
+func test_i32_one() -> I32 {
+    let o: I32 = I32::one()
+    assert_eq(o, 1, "I32::one()")
+    return 0
+}
+
+@test
+func test_u32_one() -> I32 {
+    let o: U32 = U32::one()
+    assert_eq(o, 1 as U32, "U32::one()")
+    return 0
+}
+
+@test
+func test_u64_one() -> I32 {
+    let o: U64 = U64::one()
+    assert_eq(o, 1 as U64, "U64::one()")
+    return 0
+}
+
+// ==================== One::is_one ====================
+
+@test
+func test_i32_is_one_true() -> I32 {
+    let o: I32 = 1
+    assert(o.is_one(), "1.is_one()")
+    return 0
+}
+
+@test
+func test_i32_is_one_false() -> I32 {
+    let no: I32 = 5
+    assert(not no.is_one(), "5.is_one() should be false")
+    return 0
+}
+
+// ==================== Bounded ====================
+
+@test
+func test_i32_bounded() -> I32 {
+    let min: I32 = I32::min_value()
+    let max: I32 = I32::max_value()
+    assert_eq(min, -2147483648, "I32::min_value()")
+    assert_eq(max, 2147483647, "I32::max_value()")
+    return 0
+}
+
+@test
+func test_i8_bounded() -> I32 {
+    let min: I8 = I8::min_value()
+    let max: I8 = I8::max_value()
+    assert_eq(min, -128 as I8, "I8::min_value()")
+    assert_eq(max, 127 as I8, "I8::max_value()")
+    return 0
+}
+
+@test
+func test_u8_bounded() -> I32 {
+    let min: U8 = U8::min_value()
+    let max: U8 = U8::max_value()
+    assert_eq(min, 0 as U8, "U8::min_value()")
+    assert_eq(max, 255 as U8, "U8::max_value()")
+    return 0
+}
+
+@test
+func test_i64_bounded() -> I32 {
+    let min: I64 = I64::min_value()
+    assert(min < 0 as I64, "I64::min_value() < 0")
+    let max: I64 = I64::max_value()
+    assert(max > 0 as I64, "I64::max_value() > 0")
+    return 0
+}

@@ -1,0 +1,93 @@
+// Tests for uncovered crypto/kdf enum and struct methods
+use test::{assert, assert_eq}
+use std::crypto::kdf::{Argon2Variant, Argon2Params, ScryptParams}
+
+// --- Argon2Variant::name ---
+
+@test
+func test_argon2_variant_name() -> I32 {
+    assert_eq(Argon2Variant::Argon2d.name(), "argon2d", "Argon2d name")
+    assert_eq(Argon2Variant::Argon2i.name(), "argon2i", "Argon2i name")
+    assert_eq(Argon2Variant::Argon2id.name(), "argon2id", "Argon2id name")
+    return 0
+}
+
+// --- Argon2Params ---
+
+@test
+func test_argon2_params_default() -> I32 {
+    let p: Argon2Params = Argon2Params::default()
+    assert_eq(p.time_cost, 3 as I64, "default time_cost")
+    assert_eq(p.memory_cost, 65536 as I64, "default memory_cost 64MB")
+    assert_eq(p.parallelism, 4 as I64, "default parallelism")
+    return 0
+}
+
+@test
+func test_argon2_params_high_security() -> I32 {
+    let p: Argon2Params = Argon2Params::high_security()
+    assert_eq(p.time_cost, 4 as I64, "high time_cost")
+    assert_eq(p.memory_cost, 131072 as I64, "high memory_cost 128MB")
+    assert_eq(p.parallelism, 4 as I64, "high parallelism")
+    return 0
+}
+
+@test
+func test_argon2_params_low_memory() -> I32 {
+    let p: Argon2Params = Argon2Params::low_memory()
+    assert_eq(p.time_cost, 6 as I64, "low time_cost")
+    assert_eq(p.memory_cost, 16384 as I64, "low memory_cost 16MB")
+    assert_eq(p.parallelism, 2 as I64, "low parallelism")
+    return 0
+}
+
+@test
+func test_argon2_params_custom() -> I32 {
+    let p: Argon2Params = Argon2Params::custom(10 as I64, 32768 as I64, 8 as I64)
+    assert_eq(p.time_cost, 10 as I64, "custom time_cost")
+    assert_eq(p.memory_cost, 32768 as I64, "custom memory_cost")
+    assert_eq(p.parallelism, 8 as I64, "custom parallelism")
+    return 0
+}
+
+// --- ScryptParams ---
+
+@test
+func test_scrypt_params_default() -> I32 {
+    let p: ScryptParams = ScryptParams::default()
+    assert_eq(p.n, 16384 as I64, "default N")
+    assert_eq(p.r, 8 as I64, "default r")
+    assert_eq(p.p, 1 as I64, "default p")
+    assert_eq(p.maxmem, 0 as I64, "default maxmem")
+    return 0
+}
+
+@test
+func test_scrypt_params_high_security() -> I32 {
+    let p: ScryptParams = ScryptParams::high_security()
+    assert_eq(p.n, 1048576 as I64, "high N")
+    assert_eq(p.r, 8 as I64, "high r")
+    assert_eq(p.p, 1 as I64, "high p")
+    return 0
+}
+
+@test
+func test_scrypt_params_low_memory() -> I32 {
+    let p: ScryptParams = ScryptParams::low_memory()
+    assert_eq(p.n, 16384 as I64, "low N")
+    assert_eq(p.maxmem, 33554432 as I64, "low maxmem 32MB")
+    return 0
+}
+
+@test
+func test_scrypt_params_custom() -> I32 {
+    let p: ScryptParams = ScryptParams::custom(32768 as I64, 16 as I64, 2 as I64)
+    assert_eq(p.n, 32768 as I64, "custom N")
+    assert_eq(p.r, 16 as I64, "custom r")
+    assert_eq(p.p, 2 as I64, "custom p")
+    assert_eq(p.maxmem, 0 as I64, "custom maxmem 0")
+    return 0
+}
+
+// NOTE: pbkdf2, scrypt, hkdf, argon2, bcrypt functions all return
+// CryptoResult[Buffer] which is blocked by Outcome[Buffer, E] codegen

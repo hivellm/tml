@@ -1,0 +1,53 @@
+// Tests for core::num — U32/U64 is_zero/is_one and Bounded traits
+use test::{assert, assert_eq}
+use core::num
+
+@test
+func test_u32_is_zero() -> I32 {
+    let z: U32 = 0 as U32
+    assert(z.is_zero(), "0 is zero")
+    let n: U32 = 5 as U32
+    assert(not n.is_zero(), "5 is not zero")
+    return 0
+}
+
+@test
+func test_u64_is_zero() -> I32 {
+    let z: U64 = 0 as U64
+    assert(z.is_zero(), "0 is zero")
+    let n: U64 = 42 as U64
+    assert(not n.is_zero(), "42 is not zero")
+    return 0
+}
+
+@test
+func test_u32_is_one() -> I32 {
+    let o: U32 = 1 as U32
+    assert(o.is_one(), "1 is one")
+    let z: U32 = 0 as U32
+    assert(not z.is_one(), "0 is not one")
+    return 0
+}
+
+@test
+func test_u64_is_one() -> I32 {
+    let o: U64 = 1 as U64
+    assert(o.is_one(), "1 is one")
+    let z: U64 = 0 as U64
+    assert(not z.is_one(), "0 is not one")
+    return 0
+}
+
+@test
+func test_bounded_u32_min() -> I32 {
+    let mn = U32::min_value()
+    assert_eq(mn, 0 as U32, "U32 min is 0")
+    return 0
+}
+
+@test
+func test_bounded_u64_min() -> I32 {
+    let mn = U64::min_value()
+    assert_eq(mn, 0 as U64, "U64 min is 0")
+    return 0
+}

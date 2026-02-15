@@ -749,6 +749,12 @@ impl Buffer {
         Buffer { handle: h }
     }
 
+    /// Creates a copy of this buffer.
+    pub func duplicate(this) -> Buffer {
+        let h: *Unit = ffi_buffer_slice(this.handle, 0, this.len())
+        Buffer { handle: h }
+    }
+
     /// Swaps byte order for 16-bit values in place.
     ///
     /// Useful for converting between little-endian and big-endian.

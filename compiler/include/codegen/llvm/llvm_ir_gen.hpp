@@ -43,6 +43,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <shared_mutex>
 #include <sstream>
@@ -365,6 +366,13 @@ private:
     bool current_func_is_async_ = false;  // Whether current function is async
     std::string current_poll_type_;       // Poll[T] type for async functions
     std::string current_poll_inner_type_; // Inner T type for Poll[T] in async functions
+
+    // Inline closure return redirect: when set, `return` inside an inlined
+    // closure body stores the value into this alloca and branches to the
+    // end label instead of emitting a function-level `ret`.
+    std::string closure_return_alloca_; // alloca for closure return value (empty = disabled)
+    std::string closure_return_type_;   // LLVM type of the closure return value
+    std::string closure_return_label_;  // label to branch to after storing
 
     // Current namespace context for qualified names
     std::vector<std::string> current_namespace_;
@@ -1359,8 +1367,16 @@ private:
     auto gen_literal(const parser::LiteralExpr& lit) -> std::string;
     auto gen_ident(const parser::IdentExpr& ident) -> std::string;
     auto gen_binary(const parser::BinaryExpr& bin) -> std::string;
+    auto gen_binary_ops(const parser::BinaryExpr& bin) -> std::string;
     auto gen_unary(const parser::UnaryExpr& unary) -> std::string;
     auto gen_call(const parser::CallExpr& call) -> std::string;
+
+    // gen_call sub-dispatchers (split for file size management)
+    auto gen_call_generic_struct_method(const parser::CallExpr& call, const std::string& fn_name)
+        -> std::optional<std::string>;
+    auto gen_call_user_function(const parser::CallExpr& call, const std::string& fn_name)
+        -> std::string;
+
     auto gen_if(const parser::IfExpr& if_expr) -> std::string;
     auto gen_ternary(const parser::TernaryExpr& ternary) -> std::string;
     auto gen_if_let(const parser::IfLetExpr& if_let) -> std::string;
@@ -1390,6 +1406,11 @@ private:
     auto gen_primitive_method(const parser::MethodCallExpr& call, const std::string& receiver,
                               const std::string& receiver_ptr, types::TypePtr receiver_type)
         -> std::optional<std::string>;
+    auto gen_primitive_method_ext(const parser::MethodCallExpr& call, const std::string& receiver,
+                                  const std::string& receiver_ptr, types::TypePtr receiver_type,
+                                  types::TypePtr inner_type, types::PrimitiveKind kind,
+                                  bool is_integer, bool is_signed, bool is_float,
+                                  const std::string& llvm_ty) -> std::optional<std::string>;
     auto gen_collection_method(const parser::MethodCallExpr& call, const std::string& receiver,
                                const std::string& receiver_type_name, types::TypePtr receiver_type)
         -> std::optional<std::string>;
@@ -1405,6 +1426,21 @@ private:
     auto gen_array_method(const parser::MethodCallExpr& call, const std::string& method)
         -> std::optional<std::string>;
     auto gen_slice_type_method(const parser::MethodCallExpr& call, const std::string& method)
+        -> std::optional<std::string>;
+
+    // Static method dispatch (extracted from gen_method_call section 1)
+    auto gen_method_static_dispatch(const parser::MethodCallExpr& call, const std::string& method)
+        -> std::optional<std::string>;
+    // Bounded generic dispatch (extracted from gen_method_call section 4b)
+    auto gen_method_bounded_generic_dispatch(const parser::MethodCallExpr& call,
+                                             const std::string& method, const std::string& receiver,
+                                             const std::string& receiver_ptr,
+                                             const types::TypePtr& receiver_type,
+                                             const std::string& receiver_type_name,
+                                             bool receiver_was_ref) -> std::optional<std::string>;
+    // Fn trait method calls (extracted from gen_method_call section 13)
+    auto gen_method_fn_trait_call(const parser::MethodCallExpr& call, const std::string& method,
+                                  const std::string& receiver, const types::TypePtr& receiver_type)
         -> std::optional<std::string>;
 
     // Impl method helpers (extracted from gen_method_call)
@@ -1473,6 +1509,8 @@ private:
         -> std::optional<std::string>;
     auto try_gen_intrinsic(const std::string& fn_name, const parser::CallExpr& call)
         -> std::optional<std::string>;
+    auto try_gen_intrinsic_extended(const std::string& intrinsic_name, const parser::CallExpr& call,
+                                    const std::string& fn_name) -> std::optional<std::string>;
 
     // Utility
     void report_error(const std::string& msg, const SourceSpan& span);
@@ -1494,6 +1532,8 @@ private:
 
     // Type inference for generics instantiation
     auto infer_expr_type(const parser::Expr& expr) -> types::TypePtr;
+    // Continuation of infer_expr_type for method calls, tuples, arrays, index, cast
+    auto infer_expr_type_continued(const parser::Expr& expr) -> types::TypePtr;
 
     // Deref coercion helpers - for auto-deref on field access
     // Returns the Deref target type for smart pointers like Arc[T], Box[T], etc.

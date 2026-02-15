@@ -1,0 +1,59 @@
+// Tests for core::cell::once - OnceCell[I32], BorrowError, BorrowMutError
+use test::{assert, assert_eq}
+use core::cell::once::{OnceCell, BorrowError, BorrowMutError}
+
+// --- OnceCell ---
+
+@test
+func test_oncecell_new_empty() -> I32 {
+    let cell: OnceCell[I32] = OnceCell::new()
+    assert(cell.is_empty(), "new cell is empty")
+    assert(not cell.is_initialized(), "new cell not initialized")
+    return 0
+}
+
+@test
+func test_oncecell_with_value() -> I32 {
+    let cell: OnceCell[I32] = OnceCell::with_value(42)
+    assert(not cell.is_empty(), "with_value is not empty")
+    assert(cell.is_initialized(), "with_value is initialized")
+    return 0
+}
+
+@test
+func test_oncecell_into_inner() -> I32 {
+    let cell: OnceCell[I32] = OnceCell::with_value(42)
+    let val: Maybe[I32] = cell.into_inner()
+    assert(val.is_just(), "into_inner returns Just")
+    assert_eq(val.unwrap(), 42, "into_inner value is 42")
+    return 0
+}
+
+@test
+func test_oncecell_set() -> I32 {
+    var cell: OnceCell[I32] = OnceCell::new()
+    let result = cell.set(42)
+    assert(result.is_ok(), "first set succeeds")
+    assert(cell.is_initialized(), "cell is initialized after set")
+    return 0
+}
+
+@test
+func test_oncecell_set_twice_fails() -> I32 {
+    var cell: OnceCell[I32] = OnceCell::new()
+    cell.set(42)
+    let result = cell.set(99)
+    assert(result.is_err(), "second set returns Err")
+    return 0
+}
+
+// --- BorrowError ---
+
+@test
+func test_borrow_error_strings() -> I32 {
+    let be: BorrowError = BorrowError::new()
+    assert_eq(be.to_string(), "already mutably borrowed", "BorrowError message")
+    let bme: BorrowMutError = BorrowMutError::new()
+    assert_eq(bme.to_string(), "already borrowed", "BorrowMutError message")
+    return 0
+}

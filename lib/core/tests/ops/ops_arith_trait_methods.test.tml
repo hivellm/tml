@@ -1,0 +1,271 @@
+// Tests for ops::arith trait methods via explicit .add(), .sub() etc. calls
+// Covers: I32, I64, U32, U64, F32, F64 (I8, I16, U8, U16 already covered in ops_arith_methods.test.tml)
+use test
+
+// =============================================================================
+// I32 trait methods
+// =============================================================================
+
+@test
+func test_i32_add_trait() -> I32 {
+    let a: I32 = 10
+    assert_eq(a.add(20), 30, "I32.add()")
+    return 0
+}
+
+@test
+func test_i32_sub_trait() -> I32 {
+    let a: I32 = 50
+    assert_eq(a.sub(20), 30, "I32.sub()")
+    return 0
+}
+
+@test
+func test_i32_mul_trait() -> I32 {
+    let a: I32 = 6
+    assert_eq(a.mul(7), 42, "I32.mul()")
+    return 0
+}
+
+@test
+func test_i32_div_trait() -> I32 {
+    let a: I32 = 100
+    assert_eq(a.div(5), 20, "I32.div()")
+    return 0
+}
+
+@test
+func test_i32_rem_trait() -> I32 {
+    let a: I32 = 17
+    assert_eq(a.rem(5), 2, "I32.rem()")
+    return 0
+}
+
+@test
+func test_i32_neg_trait() -> I32 {
+    let a: I32 = 42
+    assert_eq(a.neg(), -42, "I32.neg()")
+    return 0
+}
+
+// =============================================================================
+// I64 trait methods
+// =============================================================================
+
+@test
+func test_i64_add_trait() -> I32 {
+    let a: I64 = 100
+    assert_eq(a.add(200), 300, "I64.add()")
+    return 0
+}
+
+@test
+func test_i64_sub_trait() -> I32 {
+    let a: I64 = 500
+    assert_eq(a.sub(200), 300, "I64.sub()")
+    return 0
+}
+
+@test
+func test_i64_mul_trait() -> I32 {
+    let a: I64 = 60
+    assert_eq(a.mul(70), 4200, "I64.mul()")
+    return 0
+}
+
+@test
+func test_i64_div_trait() -> I32 {
+    let a: I64 = 1000
+    assert_eq(a.div(50), 20, "I64.div()")
+    return 0
+}
+
+@test
+func test_i64_rem_trait() -> I32 {
+    let a: I64 = 17
+    assert_eq(a.rem(5), 2, "I64.rem()")
+    return 0
+}
+
+@test
+func test_i64_neg_trait() -> I32 {
+    let a: I64 = 42
+    assert_eq(a.neg(), -42, "I64.neg()")
+    return 0
+}
+
+// =============================================================================
+// U32 trait methods
+// =============================================================================
+
+@test
+func test_u32_add_trait() -> I32 {
+    let a: U32 = 10 as U32
+    let r: U32 = a.add(20 as U32)
+    assert_eq(r, 30 as U32, "U32.add()")
+    return 0
+}
+
+@test
+func test_u32_sub_trait() -> I32 {
+    let a: U32 = 50 as U32
+    let r: U32 = a.sub(20 as U32)
+    assert_eq(r, 30 as U32, "U32.sub()")
+    return 0
+}
+
+@test
+func test_u32_mul_trait() -> I32 {
+    let a: U32 = 6 as U32
+    let r: U32 = a.mul(7 as U32)
+    assert_eq(r, 42 as U32, "U32.mul()")
+    return 0
+}
+
+@test
+func test_u32_div_trait() -> I32 {
+    let a: U32 = 100 as U32
+    let r: U32 = a.div(5 as U32)
+    assert_eq(r, 20 as U32, "U32.div()")
+    return 0
+}
+
+@test
+func test_u32_rem_trait() -> I32 {
+    let a: U32 = 17 as U32
+    let r: U32 = a.rem(5 as U32)
+    assert_eq(r, 2 as U32, "U32.rem()")
+    return 0
+}
+
+// =============================================================================
+// U64 trait methods
+// =============================================================================
+
+@test
+func test_u64_add_trait() -> I32 {
+    let a: U64 = 10 as U64
+    let r: U64 = a.add(20 as U64)
+    assert_eq(r, 30 as U64, "U64.add()")
+    return 0
+}
+
+@test
+func test_u64_sub_trait() -> I32 {
+    let a: U64 = 50 as U64
+    let r: U64 = a.sub(20 as U64)
+    assert_eq(r, 30 as U64, "U64.sub()")
+    return 0
+}
+
+@test
+func test_u64_mul_trait() -> I32 {
+    let a: U64 = 6 as U64
+    let r: U64 = a.mul(7 as U64)
+    assert_eq(r, 42 as U64, "U64.mul()")
+    return 0
+}
+
+@test
+func test_u64_div_trait() -> I32 {
+    let a: U64 = 100 as U64
+    let r: U64 = a.div(5 as U64)
+    assert_eq(r, 20 as U64, "U64.div()")
+    return 0
+}
+
+@test
+func test_u64_rem_trait() -> I32 {
+    let a: U64 = 17 as U64
+    let r: U64 = a.rem(5 as U64)
+    assert_eq(r, 2 as U64, "U64.rem()")
+    return 0
+}
+
+// =============================================================================
+// F32 trait methods
+// =============================================================================
+
+@test
+func test_f32_add_trait() -> I32 {
+    let a: F32 = 1.5 as F32
+    let r: F32 = a.add(2.5 as F32)
+    assert_eq(r, 4.0 as F32, "F32.add()")
+    return 0
+}
+
+@test
+func test_f32_sub_trait() -> I32 {
+    let a: F32 = 5.0 as F32
+    let r: F32 = a.sub(2.0 as F32)
+    assert_eq(r, 3.0 as F32, "F32.sub()")
+    return 0
+}
+
+@test
+func test_f32_mul_trait() -> I32 {
+    let a: F32 = 3.0 as F32
+    let r: F32 = a.mul(4.0 as F32)
+    assert_eq(r, 12.0 as F32, "F32.mul()")
+    return 0
+}
+
+@test
+func test_f32_div_trait() -> I32 {
+    let a: F32 = 10.0 as F32
+    let r: F32 = a.div(4.0 as F32)
+    assert_eq(r, 2.5 as F32, "F32.div()")
+    return 0
+}
+
+@test
+func test_f32_neg_trait() -> I32 {
+    let a: F32 = 3.14 as F32
+    let r: F32 = a.neg()
+    assert_eq(r, -3.14 as F32, "F32.neg()")
+    return 0
+}
+
+// =============================================================================
+// F64 trait methods
+// =============================================================================
+
+@test
+func test_f64_add_trait() -> I32 {
+    let a: F64 = 1.5
+    let r: F64 = a.add(2.5)
+    assert_eq(r, 4.0, "F64.add()")
+    return 0
+}
+
+@test
+func test_f64_sub_trait() -> I32 {
+    let a: F64 = 5.0
+    let r: F64 = a.sub(2.0)
+    assert_eq(r, 3.0, "F64.sub()")
+    return 0
+}
+
+@test
+func test_f64_mul_trait() -> I32 {
+    let a: F64 = 3.0
+    let r: F64 = a.mul(4.0)
+    assert_eq(r, 12.0, "F64.mul()")
+    return 0
+}
+
+@test
+func test_f64_div_trait() -> I32 {
+    let a: F64 = 10.0
+    let r: F64 = a.div(4.0)
+    assert_eq(r, 2.5, "F64.div()")
+    return 0
+}
+
+@test
+func test_f64_neg_trait() -> I32 {
+    let a: F64 = 3.14
+    let r: F64 = a.neg()
+    assert_eq(r, -3.14, "F64.neg()")
+    return 0
+}

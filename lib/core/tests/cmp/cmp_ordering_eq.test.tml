@@ -1,0 +1,53 @@
+// Tests for Ordering PartialEq implementation
+use test::{assert}
+use core::cmp::Ordering
+
+@test
+func test_ordering_eq_less_less() -> I32 {
+    let a: Ordering = Ordering::Less
+    let b: Ordering = Ordering::Less
+    assert(a.eq(ref b), "Less == Less")
+    return 0
+}
+
+@test
+func test_ordering_eq_equal_equal() -> I32 {
+    let a: Ordering = Ordering::Equal
+    let b: Ordering = Ordering::Equal
+    assert(a.eq(ref b), "Equal == Equal")
+    return 0
+}
+
+@test
+func test_ordering_eq_greater_greater() -> I32 {
+    let a: Ordering = Ordering::Greater
+    let b: Ordering = Ordering::Greater
+    assert(a.eq(ref b), "Greater == Greater")
+    return 0
+}
+
+@test
+func test_ordering_neq_less_equal() -> I32 {
+    let a: Ordering = Ordering::Less
+    let b: Ordering = Ordering::Equal
+    assert(not a.eq(ref b), "Less != Equal")
+    return 0
+}
+
+@test
+func test_ordering_neq_less_greater() -> I32 {
+    let a: Ordering = Ordering::Less
+    let b: Ordering = Ordering::Greater
+    assert(not a.eq(ref b), "Less != Greater")
+    return 0
+}
+
+@test
+func test_ordering_neq_equal_greater() -> I32 {
+    let a: Ordering = Ordering::Equal
+    let b: Ordering = Ordering::Greater
+    assert(not a.eq(ref b), "Equal != Greater")
+    return 0
+}
+
+// NOTE: Ordering::ne() blocked by codegen bug (ref type mismatch in default impl)

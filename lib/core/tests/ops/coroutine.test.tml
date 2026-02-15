@@ -1,0 +1,55 @@
+// Tests for core::ops::coroutine - CoroutineState and CoroutineResumePoint
+use test::{assert, assert_eq}
+use core::ops::coroutine::{CoroutineState, CoroutineResumePoint}
+
+@test
+func test_coroutine_state_yielded() -> I32 {
+    let s: CoroutineState[I32, Str] = CoroutineState::Yielded(42)
+    assert(s.is_yielded(), "Yielded is_yielded")
+    assert(not s.is_complete(), "Yielded not is_complete")
+    return 0
+}
+
+@test
+func test_coroutine_state_complete() -> I32 {
+    let s: CoroutineState[I32, Str] = CoroutineState::Complete("done")
+    assert(s.is_complete(), "Complete is_complete")
+    assert(not s.is_yielded(), "Complete not is_yielded")
+    return 0
+}
+
+@test
+func test_coroutine_state_to_string() -> I32 {
+    let y: CoroutineState[I32, Str] = CoroutineState::Yielded(42)
+    assert_eq(y.to_string(), "Yielded(42)", "Yielded to_string")
+    let c: CoroutineState[I32, Str] = CoroutineState::Complete("done")
+    assert_eq(c.to_string(), "Complete(done)", "Complete to_string")
+    return 0
+}
+
+@test
+func test_coroutine_state_debug_string() -> I32 {
+    let y: CoroutineState[I32, Str] = CoroutineState::Yielded(42)
+    assert_eq(y.debug_string(), "Yielded(42)", "Yielded debug")
+    let c: CoroutineState[I32, Str] = CoroutineState::Complete("done")
+    assert_eq(c.debug_string(), "Complete(done)", "Complete debug")
+    return 0
+}
+
+// ============================================================================
+// CoroutineResumePoint tests (concrete enum, non-generic)
+// ============================================================================
+
+@test
+func test_resume_point_start_debug() -> I32 {
+    let rp: CoroutineResumePoint = CoroutineResumePoint::Start
+    assert_eq(rp.debug_string(), "Start", "Start debug_string")
+    return 0
+}
+
+@test
+func test_resume_point_finished_debug() -> I32 {
+    let rp: CoroutineResumePoint = CoroutineResumePoint::Finished
+    assert_eq(rp.debug_string(), "Finished", "Finished debug_string")
+    return 0
+}

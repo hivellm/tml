@@ -16,6 +16,49 @@
 
 namespace tml::codegen {
 
+// Helper: extract the effective value expression from a closure body.
+// Handles cases like `do(x) { return x * 2 }` where the `return` would
+// generate a function-level `ret` if inlined directly. Returns the inner
+// return-value expression, or the body itself if no return is present.
+static const parser::Expr& get_closure_value_expr(const parser::Expr& body) {
+    // Case 1: body is a BlockExpr with a single ExprStmt containing a ReturnExpr
+    if (body.is<parser::BlockExpr>()) {
+        const auto& block = body.as<parser::BlockExpr>();
+        if (block.stmts.size() == 1 && !block.expr.has_value()) {
+            const auto& stmt = *block.stmts[0];
+            if (stmt.is<parser::ExprStmt>()) {
+                const auto& expr_stmt = stmt.as<parser::ExprStmt>();
+                if (expr_stmt.expr->is<parser::ReturnExpr>()) {
+                    const auto& ret = expr_stmt.expr->as<parser::ReturnExpr>();
+                    if (ret.value.has_value()) {
+                        return *ret.value.value();
+                    }
+                }
+            }
+        }
+        // Case 2: body is a BlockExpr with a trailing expression (no stmts)
+        if (block.stmts.empty() && block.expr.has_value()) {
+            // If the trailing expression is itself a ReturnExpr, unwrap it
+            if (block.expr.value()->is<parser::ReturnExpr>()) {
+                const auto& ret = block.expr.value()->as<parser::ReturnExpr>();
+                if (ret.value.has_value()) {
+                    return *ret.value.value();
+                }
+            }
+            return *block.expr.value();
+        }
+    }
+    // Case 3: body is a ReturnExpr directly
+    if (body.is<parser::ReturnExpr>()) {
+        const auto& ret = body.as<parser::ReturnExpr>();
+        if (ret.value.has_value()) {
+            return *ret.value.value();
+        }
+    }
+    // Default: return the body as-is
+    return body;
+}
+
 auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::string& receiver,
                                  const std::string& enum_type_name, const std::string& tag_val,
                                  const types::NamedType& named) -> std::optional<std::string> {
@@ -129,7 +172,33 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // nothing block: call closure
         emit_line(is_nothing_label + ":");
         current_block_ = is_nothing_label;
-        std::string closure_result = gen_expr(*closure.body);
+
+        // Set up closure return redirect for unwrap_or_else
+        std::string uoe_merge = fresh_label("uoe_merge");
+        std::string uoe_alloca = fresh_reg();
+        emit_line("  " + uoe_alloca + " = alloca " + inner_llvm_type);
+        std::string saved_ca = closure_return_alloca_;
+        std::string saved_ct = closure_return_type_;
+        std::string saved_cl = closure_return_label_;
+        closure_return_alloca_ = uoe_alloca;
+        closure_return_type_ = inner_llvm_type;
+        closure_return_label_ = uoe_merge;
+
+        std::string closure_result = gen_expr(get_closure_value_expr(*closure.body));
+
+        closure_return_alloca_ = saved_ca;
+        closure_return_type_ = saved_ct;
+        closure_return_label_ = saved_cl;
+
+        if (!block_terminated_) {
+            emit_line("  store " + inner_llvm_type + " " + closure_result + ", ptr " + uoe_alloca);
+            emit_line("  br label %" + uoe_merge);
+        }
+        emit_line(uoe_merge + ":");
+        current_block_ = uoe_merge;
+        block_terminated_ = false;
+        std::string merged_uoe = fresh_reg();
+        emit_line("  " + merged_uoe + " = load " + inner_llvm_type + ", ptr " + uoe_alloca);
         std::string nothing_end_block = current_block_;
         emit_line("  br label %" + end_label);
 
@@ -137,7 +206,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         current_block_ = end_label;
         std::string result = fresh_reg();
         emit_line("  " + result + " = phi " + inner_llvm_type + " [ " + just_val + ", %" +
-                  is_just_label + " ], [ " + closure_result + ", %" + nothing_end_block + " ]");
+                  is_just_label + " ], [ " + merged_uoe + ", %" + nothing_end_block + " ]");
         last_expr_type_ = inner_llvm_type;
         return result;
     }
@@ -216,8 +285,40 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         emit_line("  " + param_alloca + " = alloca " + inner_llvm_type);
         emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + param_alloca);
         locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, nullptr, std::nullopt};
-        std::string mapped_val = gen_expr(*closure.body);
+
+        // Set up closure return redirect for `return` inside the map closure.
+        // The closure returns a mapped value (same type as inner_llvm_type for T->T map).
+        // We use inner_llvm_type as default; if the closure has a declared return type,
+        // we could use that, but inner_llvm_type works for the common T->T case.
+        std::string map_merge = fresh_label("map_closure_merge");
+        std::string map_ret_alloca = fresh_reg();
+        emit_line("  " + map_ret_alloca + " = alloca " + inner_llvm_type);
+        std::string saved_closure_alloca = closure_return_alloca_;
+        std::string saved_closure_type = closure_return_type_;
+        std::string saved_closure_label = closure_return_label_;
+        closure_return_alloca_ = map_ret_alloca;
+        closure_return_type_ = inner_llvm_type;
+        closure_return_label_ = map_merge;
+
+        const auto& value_expr = get_closure_value_expr(*closure.body);
+        std::string mapped_val = gen_expr(value_expr);
         std::string mapped_type = last_expr_type_;
+
+        // Restore redirect state
+        closure_return_alloca_ = saved_closure_alloca;
+        closure_return_type_ = saved_closure_type;
+        closure_return_label_ = saved_closure_label;
+
+        // If the body produced a value normally (no return), store it
+        if (!block_terminated_) {
+            emit_line("  store " + mapped_type + " " + mapped_val + ", ptr " + map_ret_alloca);
+            emit_line("  br label %" + map_merge);
+        }
+        emit_line(map_merge + ":");
+        current_block_ = map_merge;
+        block_terminated_ = false;
+        mapped_val = fresh_reg();
+        emit_line("  " + mapped_val + " = load " + mapped_type + ", ptr " + map_ret_alloca);
         locals_.erase(param_name);
 
         // Create Just(mapped_val)
@@ -241,6 +342,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         emit_line("  store " + mapped_type + " " + mapped_val + ", ptr " + just_data_ptr);
         std::string just_result = fresh_reg();
         emit_line("  " + just_result + " = load " + result_type_name + ", ptr " + just_alloca);
+        std::string just_end_block = current_block_;
         emit_line("  br label %" + end_label);
 
         // nothing block: return Nothing
@@ -261,7 +363,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         current_block_ = end_label;
         std::string result = fresh_reg();
         emit_line("  " + result + " = phi " + result_type_name + " [ " + just_result + ", %" +
-                  is_just_label + " ], [ " + nothing_result + ", %" + is_nothing_label + " ]");
+                  just_end_block + " ], [ " + nothing_result + ", %" + is_nothing_label + " ]");
         last_expr_type_ = result_type_name;
         return result;
     }
@@ -304,7 +406,37 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         emit_line("  " + param_alloca + " = alloca " + inner_llvm_type);
         emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + param_alloca);
         locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, nullptr, std::nullopt};
-        std::string closure_result = gen_expr(*closure.body);
+
+        // Set up closure return redirect so `return` inside the closure body
+        // stores the value and branches instead of emitting function-level `ret`
+        std::string closure_merge = fresh_label("closure_merge");
+        std::string ret_alloca = fresh_reg();
+        emit_line("  " + ret_alloca + " = alloca " + enum_type_name);
+        std::string saved_closure_alloca = closure_return_alloca_;
+        std::string saved_closure_type = closure_return_type_;
+        std::string saved_closure_label = closure_return_label_;
+        closure_return_alloca_ = ret_alloca;
+        closure_return_type_ = enum_type_name;
+        closure_return_label_ = closure_merge;
+
+        std::string closure_result = gen_expr(get_closure_value_expr(*closure.body));
+        std::string closure_type = last_expr_type_;
+
+        // Restore redirect state
+        closure_return_alloca_ = saved_closure_alloca;
+        closure_return_type_ = saved_closure_type;
+        closure_return_label_ = saved_closure_label;
+
+        // If the body produced a value normally (no return), store it
+        if (!block_terminated_) {
+            emit_line("  store " + enum_type_name + " " + closure_result + ", ptr " + ret_alloca);
+            emit_line("  br label %" + closure_merge);
+        }
+        emit_line(closure_merge + ":");
+        current_block_ = closure_merge;
+        block_terminated_ = false;
+        std::string merged_result = fresh_reg();
+        emit_line("  " + merged_result + " = load " + enum_type_name + ", ptr " + ret_alloca);
         std::string just_end_block = current_block_;
         locals_.erase(param_name);
         emit_line("  br label %" + end_label);
@@ -317,7 +449,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         emit_line(end_label + ":");
         current_block_ = end_label;
         std::string result = fresh_reg();
-        emit_line("  " + result + " = phi " + enum_type_name + " [ " + closure_result + ", %" +
+        emit_line("  " + result + " = phi " + enum_type_name + " [ " + merged_result + ", %" +
                   just_end_block + " ], [ " + receiver + ", %" + is_nothing_label + " ]");
         last_expr_type_ = enum_type_name;
         return result;
@@ -349,7 +481,34 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         // nothing block: call closure (which returns a Maybe)
         emit_line(is_nothing_label + ":");
         current_block_ = is_nothing_label;
-        std::string closure_result = gen_expr(*closure.body);
+
+        // Set up closure return redirect for or_else
+        std::string or_merge = fresh_label("or_else_merge");
+        std::string or_ret_alloca = fresh_reg();
+        emit_line("  " + or_ret_alloca + " = alloca " + enum_type_name);
+        std::string saved_ca = closure_return_alloca_;
+        std::string saved_ct = closure_return_type_;
+        std::string saved_cl = closure_return_label_;
+        closure_return_alloca_ = or_ret_alloca;
+        closure_return_type_ = enum_type_name;
+        closure_return_label_ = or_merge;
+
+        std::string closure_result = gen_expr(get_closure_value_expr(*closure.body));
+
+        closure_return_alloca_ = saved_ca;
+        closure_return_type_ = saved_ct;
+        closure_return_label_ = saved_cl;
+
+        if (!block_terminated_) {
+            emit_line("  store " + enum_type_name + " " + closure_result + ", ptr " +
+                      or_ret_alloca);
+            emit_line("  br label %" + or_merge);
+        }
+        emit_line(or_merge + ":");
+        current_block_ = or_merge;
+        block_terminated_ = false;
+        std::string merged_or = fresh_reg();
+        emit_line("  " + merged_or + " = load " + enum_type_name + ", ptr " + or_ret_alloca);
         std::string nothing_end_block = current_block_;
         emit_line("  br label %" + end_label);
 
@@ -357,7 +516,7 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         current_block_ = end_label;
         std::string result = fresh_reg();
         emit_line("  " + result + " = phi " + enum_type_name + " [ " + receiver + ", %" +
-                  is_just_label + " ], [ " + closure_result + ", %" + nothing_end_block + " ]");
+                  is_just_label + " ], [ " + merged_or + ", %" + nothing_end_block + " ]");
         last_expr_type_ = enum_type_name;
         return result;
     }
@@ -453,11 +612,55 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         if (!closure.params.empty() && closure.params[0].first->is<parser::IdentPattern>()) {
             param_name = closure.params[0].first->as<parser::IdentPattern>().name;
         }
-        std::string param_alloca = fresh_reg();
-        emit_line("  " + param_alloca + " = alloca " + inner_llvm_type);
-        emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + param_alloca);
-        locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, nullptr, std::nullopt};
-        std::string pred_result = gen_expr(*closure.body);
+        // filter's closure takes `ref T`. For primitive types (i32, i64, etc.),
+        // bind the value directly so comparisons like `x >= 5` work without
+        // an extra dereference. For struct/ptr types, bind as a pointer.
+        bool is_primitive =
+            (inner_llvm_type == "i8" || inner_llvm_type == "i16" || inner_llvm_type == "i32" ||
+             inner_llvm_type == "i64" || inner_llvm_type == "i128" || inner_llvm_type == "i1" ||
+             inner_llvm_type == "float" || inner_llvm_type == "double");
+        if (is_primitive) {
+            std::string val_alloca = fresh_reg();
+            emit_line("  " + val_alloca + " = alloca " + inner_llvm_type);
+            emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + val_alloca);
+            locals_[param_name] = VarInfo{val_alloca, inner_llvm_type, nullptr, std::nullopt};
+        } else {
+            // For struct types, create ref T indirection
+            std::string val_alloca = fresh_reg();
+            emit_line("  " + val_alloca + " = alloca " + inner_llvm_type);
+            emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + val_alloca);
+            std::string param_alloca = fresh_reg();
+            emit_line("  " + param_alloca + " = alloca ptr");
+            emit_line("  store ptr " + val_alloca + ", ptr " + param_alloca);
+            locals_[param_name] = VarInfo{param_alloca, "ptr", nullptr, std::nullopt};
+        }
+
+        // Set up closure return redirect for filter (returns Bool = i1)
+        std::string flt_merge = fresh_label("filter_merge");
+        std::string flt_alloca = fresh_reg();
+        emit_line("  " + flt_alloca + " = alloca i1");
+        std::string saved_ca = closure_return_alloca_;
+        std::string saved_ct = closure_return_type_;
+        std::string saved_cl = closure_return_label_;
+        closure_return_alloca_ = flt_alloca;
+        closure_return_type_ = "i1";
+        closure_return_label_ = flt_merge;
+
+        std::string pred_result = gen_expr(get_closure_value_expr(*closure.body));
+
+        closure_return_alloca_ = saved_ca;
+        closure_return_type_ = saved_ct;
+        closure_return_label_ = saved_cl;
+
+        if (!block_terminated_) {
+            emit_line("  store i1 " + pred_result + ", ptr " + flt_alloca);
+            emit_line("  br label %" + flt_merge);
+        }
+        emit_line(flt_merge + ":");
+        current_block_ = flt_merge;
+        block_terminated_ = false;
+        pred_result = fresh_reg();
+        emit_line("  " + pred_result + " = load i1, ptr " + flt_alloca);
         std::string just_end_block = current_block_;
         locals_.erase(param_name);
         emit_line("  br i1 " + pred_result + ", label %" + keep_label + ", label %" +
@@ -656,7 +859,34 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         emit_line("  " + param_alloca + " = alloca " + inner_llvm_type);
         emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + param_alloca);
         locals_[param_name] = VarInfo{param_alloca, inner_llvm_type, nullptr, std::nullopt};
-        std::string mapped_val = gen_expr(*closure.body);
+
+        // Set up closure return redirect for map_or
+        std::string mo_merge = fresh_label("map_or_merge");
+        std::string mo_alloca = fresh_reg();
+        emit_line("  " + mo_alloca + " = alloca " + default_type);
+        std::string saved_ca2 = closure_return_alloca_;
+        std::string saved_ct2 = closure_return_type_;
+        std::string saved_cl2 = closure_return_label_;
+        closure_return_alloca_ = mo_alloca;
+        closure_return_type_ = default_type;
+        closure_return_label_ = mo_merge;
+
+        const auto& value_expr2 = get_closure_value_expr(*closure.body);
+        std::string mapped_val = gen_expr(value_expr2);
+
+        closure_return_alloca_ = saved_ca2;
+        closure_return_type_ = saved_ct2;
+        closure_return_label_ = saved_cl2;
+
+        if (!block_terminated_) {
+            emit_line("  store " + default_type + " " + mapped_val + ", ptr " + mo_alloca);
+            emit_line("  br label %" + mo_merge);
+        }
+        emit_line(mo_merge + ":");
+        current_block_ = mo_merge;
+        block_terminated_ = false;
+        mapped_val = fresh_reg();
+        emit_line("  " + mapped_val + " = load " + default_type + ", ptr " + mo_alloca);
         std::string just_end_block = current_block_;
         locals_.erase(param_name);
         emit_line("  br label %" + end_label);

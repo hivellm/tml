@@ -113,11 +113,13 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     auto saved_locals = locals_;
     auto saved_ret_type = current_ret_type_;
     bool saved_terminated = block_terminated_;
+    auto saved_expected_enum_type = expected_enum_type_;
 
-    // Start new function
+    // Start new function — closure is an independent scope
     locals_.clear();
     current_ret_type_ = ret_type;
     block_terminated_ = false;
+    expected_enum_type_.clear();
 
     emit_line("define internal " + ret_type + " @" + closure_name + "(" + param_types_str +
               ") #0 {");
@@ -137,18 +139,13 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         for (size_t i = 0; i < captured_info.size(); ++i) {
             const auto& [cap_name, cap_type] = captured_info[i];
             std::string gep_reg = fresh_reg();
-            std::string load_reg = fresh_reg();
-            std::string alloca_reg = fresh_reg();
 
             // GEP into the env struct to get pointer to this capture field
             emit_line("  " + gep_reg + " = getelementptr inbounds " + env_struct_type +
                       ", ptr %env, i32 0, i32 " + std::to_string(i));
-            // Load the captured value
-            emit_line("  " + load_reg + " = load " + cap_type + ", ptr " + gep_reg);
-            // Store to local alloca (consistent with how locals work)
-            emit_line("  " + alloca_reg + " = alloca " + cap_type);
-            emit_line("  store " + cap_type + " " + load_reg + ", ptr " + alloca_reg);
-            locals_[cap_name] = VarInfo{alloca_reg, cap_type, nullptr, std::nullopt};
+            // Use env pointer directly as local — reads/writes go to the env struct
+            // This enables mutable capture: mutations persist across closure calls
+            locals_[cap_name] = VarInfo{gep_reg, cap_type, nullptr, std::nullopt};
         }
     }
 
@@ -180,6 +177,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     locals_ = saved_locals;
     current_ret_type_ = saved_ret_type;
     block_terminated_ = saved_terminated;
+    expected_enum_type_ = saved_expected_enum_type;
 
     // Add closure function to module-level code
     module_functions_.push_back(closure_code);

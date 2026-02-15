@@ -1,0 +1,66 @@
+// Tests for uncovered crypto/random functions
+use test::{assert, assert_eq}
+use std::crypto::random::{timing_safe_equal_str, SecureRandom}
+
+// --- timing_safe_equal_str ---
+
+@test
+func test_timing_safe_equal_str_same() -> I32 {
+    assert(timing_safe_equal_str("hello", "hello"), "same strings equal")
+    return 0
+}
+
+@test
+func test_timing_safe_equal_str_diff() -> I32 {
+    assert(not timing_safe_equal_str("hello", "world"), "different strings not equal")
+    return 0
+}
+
+@test
+func test_timing_safe_equal_str_empty() -> I32 {
+    assert(timing_safe_equal_str("", ""), "empty strings equal")
+    return 0
+}
+
+// --- SecureRandom ---
+
+@test
+func test_secure_random_next_u8() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v: U8 = rng.next_u8()
+    return 0
+}
+
+@test
+func test_secure_random_next_u16() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v: U16 = rng.next_u16()
+    return 0
+}
+
+@test
+func test_secure_random_next_i32() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v: I32 = rng.next_i32()
+    return 0
+}
+
+@test
+func test_secure_random_next_i64() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v: I64 = rng.next_i64()
+    return 0
+}
+
+@test
+func test_secure_random_next_f32() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v: F32 = rng.next_f32()
+    assert(v >= 0.0f32, "f32 >= 0.0")
+    assert(v < 1.0f32, "f32 < 1.0")
+    return 0
+}
+
+// NOTE: random_fill, timing_safe_equal (Buffer version), generate_prime,
+// generate_safe_prime, check_prime, check_prime_rounds, get_random_values
+// are blocked by Outcome[Buffer, CryptoError] codegen or runtime crash
