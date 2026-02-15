@@ -1,6 +1,6 @@
 // Tests for crypto/kdf operations
 use test::{assert, assert_eq}
-use std::crypto::kdf::{Argon2Variant, Argon2Params, ScryptParams, pbkdf2, scrypt, hkdf, bcrypt_hash, bcrypt_verify}
+use std::crypto::kdf::{Argon2Variant, Argon2Params, ScryptParams, pbkdf2, pbkdf2_bytes, scrypt, scrypt_bytes, hkdf, hkdf_bytes, hkdf_extract, hkdf_expand, argon2, argon2_bytes}
 use std::crypto::hash::HashAlgorithm
 use std::collections::Buffer
 use std::crypto::random::random_bytes
@@ -160,20 +160,72 @@ func test_hkdf_sha256() -> I32 {
     return 0
 }
 
-// NOTE: bcrypt_hash returns empty string (OpenSSL has no native bcrypt)
-// so bcrypt_hash always returns Err. bcrypt_verify also non-functional.
+// --- pbkdf2_bytes ---
+
 @test
-func test_bcrypt_not_available() -> I32 {
-    let result = bcrypt_hash("secret", 4 as I64)
-    when result {
-        Ok(_h) => {
-            // If OpenSSL adds bcrypt, this would succeed
-            assert(true, "bcrypt available")
-        }
-        Err(_e) => {
-            // Expected: OpenSSL doesn't have native bcrypt
-            assert(true, "bcrypt not available in OpenSSL")
-        }
-    }
+func test_pbkdf2_bytes() -> I32 {
+    let password: Buffer = Buffer::from_string("password")
+    let salt: Buffer = random_bytes(16 as I64)
+    let result = pbkdf2_bytes(ref password, ref salt, 1000 as I64, 32 as I64, HashAlgorithm::Sha256)
+    assert(result.is_ok(), "pbkdf2_bytes should succeed")
+    let key: Buffer = result.unwrap()
+    assert_eq(key.len(), 32 as I64, "pbkdf2_bytes key 32 bytes")
     return 0
 }
+
+// --- scrypt_bytes ---
+
+@test
+func test_scrypt_bytes() -> I32 {
+    let password: Buffer = Buffer::from_string("password")
+    let salt: Buffer = random_bytes(16 as I64)
+    let params: ScryptParams = ScryptParams::default()
+    let result = scrypt_bytes(ref password, ref salt, 32 as I64, ref params)
+    assert(result.is_ok(), "scrypt_bytes should succeed")
+    let key: Buffer = result.unwrap()
+    assert_eq(key.len(), 32 as I64, "scrypt_bytes key 32 bytes")
+    return 0
+}
+
+// --- hkdf_bytes / hkdf_extract / hkdf_expand ---
+
+@test
+func test_hkdf_bytes() -> I32 {
+    let ikm: Buffer = random_bytes(32 as I64)
+    let salt: Buffer = random_bytes(16 as I64)
+    let info: Buffer = Buffer::from_string("context info")
+    let result = hkdf_bytes(HashAlgorithm::Sha256, ref ikm, ref salt, ref info, 64 as I64)
+    assert(result.is_ok(), "hkdf_bytes should succeed")
+    let key: Buffer = result.unwrap()
+    assert_eq(key.len(), 64 as I64, "hkdf_bytes key 64 bytes")
+    return 0
+}
+
+@test
+func test_hkdf_extract() -> I32 {
+    let ikm: Buffer = random_bytes(32 as I64)
+    let salt: Buffer = random_bytes(16 as I64)
+    let result = hkdf_extract(HashAlgorithm::Sha256, ref ikm, ref salt)
+    assert(result.is_ok(), "hkdf_extract should succeed")
+    let prk: Buffer = result.unwrap()
+    assert(prk.len() > (0 as I64), "PRK not empty")
+    return 0
+}
+
+@test
+func test_hkdf_expand() -> I32 {
+    let ikm: Buffer = random_bytes(32 as I64)
+    let salt: Buffer = random_bytes(16 as I64)
+    let prk: Buffer = hkdf_extract(HashAlgorithm::Sha256, ref ikm, ref salt).unwrap()
+    let info: Buffer = Buffer::from_string("expand info")
+    let result = hkdf_expand(HashAlgorithm::Sha256, ref prk, ref info, 48 as I64)
+    assert(result.is_ok(), "hkdf_expand should succeed")
+    let okm: Buffer = result.unwrap()
+    assert_eq(okm.len(), 48 as I64, "hkdf_expand output 48 bytes")
+    return 0
+}
+
+// --- argon2 ---
+// NOTE: argon2/argon2_bytes require OpenSSL 3.2+ and are deferred for now.
+// argon2_hash/argon2_verify/bcrypt_hash/bcrypt_verify have been removed
+// (OpenSSL does not provide native PHC string format or bcrypt support).

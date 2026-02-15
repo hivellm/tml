@@ -1,12 +1,14 @@
 // Tests for crypto Elliptic Curve Diffie-Hellman key exchange
-use test
+use test::{assert, assert_eq}
 use std::crypto::ecdh::{
-    EcCurve, EcPointFormat, Ecdh, create_ecdh,
+    EcCurve, EcPointFormat, Ecdh, create_ecdh, convert_ec_key,
     generate_x25519_keypair, x25519, x25519_public_from_private,
+    generate_x448_keypair, x448, x448_public_from_private,
     is_curve_supported
 }
+use std::collections::Buffer
 
-// === EcCurve enum tests ===
+// --- EcCurve::name ---
 
 @test
 func test_ec_curve_names() -> I32 {
@@ -17,8 +19,12 @@ func test_ec_curve_names() -> I32 {
     assert_eq(EcCurve::X25519.name(), "X25519", "X25519")
     assert_eq(EcCurve::X448.name(), "X448", "X448")
     assert_eq(EcCurve::BrainpoolP256r1.name(), "brainpoolP256r1", "BP256")
+    assert_eq(EcCurve::BrainpoolP384r1.name(), "brainpoolP384r1", "BP384")
+    assert_eq(EcCurve::BrainpoolP512r1.name(), "brainpoolP512r1", "BP512")
     return 0
 }
+
+// --- EcCurve::key_bits ---
 
 @test
 func test_ec_curve_key_bits() -> I32 {
@@ -27,36 +33,51 @@ func test_ec_curve_key_bits() -> I32 {
     assert_eq(EcCurve::P521.key_bits(), 521 as I64, "P521 bits")
     assert_eq(EcCurve::X25519.key_bits(), 256 as I64, "X25519 bits")
     assert_eq(EcCurve::X448.key_bits(), 448 as I64, "X448 bits")
+    assert_eq(EcCurve::BrainpoolP256r1.key_bits(), 256 as I64, "BP256 bits")
+    assert_eq(EcCurve::BrainpoolP512r1.key_bits(), 512 as I64, "BP512 bits")
     return 0
 }
+
+// --- EcCurve::shared_secret_size ---
 
 @test
 func test_ec_curve_shared_secret_size() -> I32 {
     assert_eq(EcCurve::P256.shared_secret_size(), 32 as I64, "P256 ss")
     assert_eq(EcCurve::P384.shared_secret_size(), 48 as I64, "P384 ss")
+    assert_eq(EcCurve::P521.shared_secret_size(), 66 as I64, "P521 ss")
     assert_eq(EcCurve::X25519.shared_secret_size(), 32 as I64, "X25519 ss")
     assert_eq(EcCurve::X448.shared_secret_size(), 56 as I64, "X448 ss")
+    assert_eq(EcCurve::BrainpoolP256r1.shared_secret_size(), 32 as I64, "BP256 ss")
+    assert_eq(EcCurve::BrainpoolP384r1.shared_secret_size(), 48 as I64, "BP384 ss")
+    assert_eq(EcCurve::BrainpoolP512r1.shared_secret_size(), 64 as I64, "BP512 ss")
     return 0
 }
+
+// --- EcCurve::is_modern ---
 
 @test
 func test_ec_curve_is_modern() -> I32 {
-    assert_eq(EcCurve::X25519.is_modern(), true, "X25519 modern")
-    assert_eq(EcCurve::X448.is_modern(), true, "X448 modern")
-    assert_eq(EcCurve::P256.is_modern(), false, "P256 not modern")
-    assert_eq(EcCurve::Secp256k1.is_modern(), false, "secp256k1 not modern")
+    assert(EcCurve::X25519.is_modern(), "X25519 modern")
+    assert(EcCurve::X448.is_modern(), "X448 modern")
+    assert(not EcCurve::P256.is_modern(), "P256 not modern")
+    assert(not EcCurve::Secp256k1.is_modern(), "secp256k1 not modern")
     return 0
 }
 
+// --- EcCurve::from_name ---
+
 @test
 func test_ec_curve_from_name() -> I32 {
-    assert_eq(EcCurve::from_name("prime256v1").is_just(), true, "prime256v1")
-    assert_eq(EcCurve::from_name("P-256").is_just(), true, "P-256")
-    assert_eq(EcCurve::from_name("X25519").is_just(), true, "X25519")
-    assert_eq(EcCurve::from_name("x25519").is_just(), true, "x25519")
-    assert_eq(EcCurve::from_name("unknown").is_nothing(), true, "unknown")
+    assert(EcCurve::from_name("prime256v1").is_just(), "prime256v1")
+    assert(EcCurve::from_name("P-256").is_just(), "P-256")
+    assert(EcCurve::from_name("X25519").is_just(), "X25519")
+    assert(EcCurve::from_name("x25519").is_just(), "x25519")
+    assert(EcCurve::from_name("unknown").is_nothing(), "unknown")
+    assert(EcCurve::from_name("invalid").is_nothing(), "invalid")
     return 0
 }
+
+// --- EcPointFormat::name ---
 
 @test
 func test_ec_point_format_names() -> I32 {
@@ -66,12 +87,12 @@ func test_ec_point_format_names() -> I32 {
     return 0
 }
 
-// === ECDH FFI tests ===
+// --- ECDH P256 tests ---
 
 @test
 func test_ecdh_create_p256() -> I32 {
     let result = Ecdh::new(EcCurve::P256)
-    assert_eq(result.is_ok(), true, "P256 create ok")
+    assert(result.is_ok(), "P256 create ok")
     return 0
 }
 
@@ -80,9 +101,9 @@ func test_ecdh_generate_keys_p256() -> I32 {
     let mut ecdh = Ecdh::new(EcCurve::P256).unwrap()
     ecdh.generate_keys()
     let pub_key = ecdh.public_key()
-    assert_eq(pub_key.len() > 0 as I64, true, "pub key not empty")
+    assert(pub_key.len() > (0 as I64), "pub key not empty")
     let priv_key = ecdh.private_key()
-    assert_eq(priv_key.len() > 0 as I64, true, "priv key not empty")
+    assert(priv_key.len() > (0 as I64), "priv key not empty")
     return 0
 }
 
@@ -97,9 +118,9 @@ func test_ecdh_key_exchange_p256() -> I32 {
     let bob_pub = bob.public_key()
 
     let alice_secret = alice.compute_secret(ref bob_pub)
-    assert_eq(alice_secret.is_ok(), true, "alice ok")
+    assert(alice_secret.is_ok(), "alice ok")
     let bob_secret = bob.compute_secret(ref alice_pub)
-    assert_eq(bob_secret.is_ok(), true, "bob ok")
+    assert(bob_secret.is_ok(), "bob ok")
 
     let a = alice_secret.unwrap()
     let b = bob_secret.unwrap()
@@ -111,11 +132,52 @@ func test_ecdh_key_exchange_p256() -> I32 {
 @test
 func test_ecdh_create_convenience() -> I32 {
     let result = create_ecdh(EcCurve::P256)
-    assert_eq(result.is_ok(), true, "create_ecdh ok")
+    assert(result.is_ok(), "create_ecdh ok")
     let ecdh = result.unwrap()
     assert_eq(ecdh.curve().name(), "prime256v1", "curve name")
     return 0
 }
+
+// --- Ecdh::set_public_key / set_private_key / destroy ---
+
+@test
+func test_ecdh_set_keys() -> I32 {
+    let mut alice: Ecdh = Ecdh::new(EcCurve::P256).unwrap()
+    alice.generate_keys()
+    let pub_key: Buffer = alice.public_key()
+    let priv_key: Buffer = alice.private_key()
+
+    let mut bob: Ecdh = Ecdh::new(EcCurve::P256).unwrap()
+    let set_pub = bob.set_public_key(ref pub_key)
+    assert(set_pub.is_ok(), "set_public_key should succeed")
+    let set_priv = bob.set_private_key(ref priv_key)
+    assert(set_priv.is_ok(), "set_private_key should succeed")
+    return 0
+}
+
+@test
+func test_ecdh_destroy() -> I32 {
+    let mut ecdh: Ecdh = Ecdh::new(EcCurve::P256).unwrap()
+    ecdh.generate_keys()
+    ecdh.destroy()
+    return 0
+}
+
+// --- convert_ec_key ---
+
+@test
+func test_convert_ec_key() -> I32 {
+    let mut ecdh: Ecdh = Ecdh::new(EcCurve::P256).unwrap()
+    ecdh.generate_keys()
+    let pub_key: Buffer = ecdh.public_key()
+    let result = convert_ec_key(ref pub_key, EcCurve::P256, EcPointFormat::Uncompressed, EcPointFormat::Compressed)
+    assert(result.is_ok(), "convert_ec_key should succeed")
+    let compressed: Buffer = result.unwrap()
+    assert(compressed.len() > (0 as I64), "compressed key not empty")
+    return 0
+}
+
+// --- X25519 tests ---
 
 @test
 func test_x25519_keypair() -> I32 {
@@ -131,9 +193,9 @@ func test_x25519_exchange() -> I32 {
     let (bob_priv, bob_pub) = generate_x25519_keypair()
 
     let alice_secret = x25519(ref alice_priv, ref bob_pub)
-    assert_eq(alice_secret.is_ok(), true, "alice x25519 ok")
+    assert(alice_secret.is_ok(), "alice x25519 ok")
     let bob_secret = x25519(ref bob_priv, ref alice_pub)
-    assert_eq(bob_secret.is_ok(), true, "bob x25519 ok")
+    assert(bob_secret.is_ok(), "bob x25519 ok")
 
     let a = alice_secret.unwrap()
     let b = bob_secret.unwrap()
@@ -146,16 +208,53 @@ func test_x25519_exchange() -> I32 {
 func test_x25519_public_from_private() -> I32 {
     let (priv_key, pub_key) = generate_x25519_keypair()
     let derived = x25519_public_from_private(ref priv_key)
-    assert_eq(derived.is_ok(), true, "derive ok")
+    assert(derived.is_ok(), "derive ok")
     let derived_pub = derived.unwrap()
     assert_eq(derived_pub.len(), 32 as I64, "derived 32 bytes")
     return 0
 }
 
+// --- X448 tests ---
+
+@test
+func test_x448_keypair() -> I32 {
+    let (priv_key, pub_key) = generate_x448_keypair()
+    assert(priv_key.len() == (56 as I64), "x448 priv 56 bytes")
+    assert(pub_key.len() == (56 as I64), "x448 pub 56 bytes")
+    return 0
+}
+
+@test
+func test_x448_exchange() -> I32 {
+    let (alice_priv, alice_pub) = generate_x448_keypair()
+    let (bob_priv, bob_pub) = generate_x448_keypair()
+    let alice_secret = x448(ref alice_priv, ref bob_pub)
+    assert(alice_secret.is_ok(), "alice x448 ok")
+    let bob_secret = x448(ref bob_priv, ref alice_pub)
+    assert(bob_secret.is_ok(), "bob x448 ok")
+    let a: Buffer = alice_secret.unwrap()
+    let b: Buffer = bob_secret.unwrap()
+    assert(a.len() == (56 as I64), "x448 secret 56 bytes")
+    assert(b.len() == (56 as I64), "x448 secret 56 bytes b")
+    return 0
+}
+
+@test
+func test_x448_public_from_private() -> I32 {
+    let (priv_key, pub_key) = generate_x448_keypair()
+    let derived = x448_public_from_private(ref priv_key)
+    assert(derived.is_ok(), "derive ok")
+    let derived_pub: Buffer = derived.unwrap()
+    assert(derived_pub.len() == (56 as I64), "derived 56 bytes")
+    return 0
+}
+
+// --- is_curve_supported ---
+
 @test
 func test_is_curve_supported() -> I32 {
-    assert_eq(is_curve_supported("prime256v1"), true, "P256 supported")
-    assert_eq(is_curve_supported("secp384r1"), true, "P384 supported")
-    assert_eq(is_curve_supported("fake_curve"), false, "fake not supported")
+    assert(is_curve_supported("prime256v1"), "P256 supported")
+    assert(is_curve_supported("secp384r1"), "P384 supported")
+    assert(not is_curve_supported("fake_curve"), "fake not supported")
     return 0
 }

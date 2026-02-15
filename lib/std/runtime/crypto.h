@@ -8,9 +8,9 @@
 #ifndef TML_CRYPTO_H
 #define TML_CRYPTO_H
 
-#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -123,8 +123,10 @@ void crypto_cipher_set_tag(void* ctx, TmlBuffer* tag);
 void crypto_cipher_destroy(void* ctx);
 
 // AES-GCM helpers
-TmlBuffer* crypto_aes_gcm_encrypt(TmlBuffer* key, TmlBuffer* nonce, TmlBuffer* plaintext, TmlBuffer* aad);
-TmlBuffer* crypto_aes_gcm_decrypt(TmlBuffer* key, TmlBuffer* nonce, TmlBuffer* ciphertext, TmlBuffer* aad, TmlBuffer* tag);
+TmlBuffer* crypto_aes_gcm_encrypt(TmlBuffer* key, TmlBuffer* nonce, TmlBuffer* plaintext,
+                                  TmlBuffer* aad);
+TmlBuffer* crypto_aes_gcm_decrypt(TmlBuffer* key, TmlBuffer* nonce, TmlBuffer* ciphertext,
+                                  TmlBuffer* aad, TmlBuffer* tag);
 TmlBuffer* crypto_aes_gcm_get_tag(TmlBuffer* ciphertext);
 
 // ============================================================================
@@ -143,8 +145,10 @@ void crypto_verifier_update_bytes(void* ctx, TmlBuffer* data);
 bool crypto_verifier_verify(void* ctx, TmlBuffer* signature);
 void crypto_verifier_destroy(void* ctx);
 
-TmlBuffer* crypto_sign_rsa_pss(void* key, const char* data, int64_t salt_len, const char* mgf1_hash);
-bool crypto_verify_rsa_pss(void* key, const char* data, TmlBuffer* sig, int64_t salt_len, const char* mgf1_hash);
+TmlBuffer* crypto_sign_rsa_pss(void* key, const char* data, int64_t salt_len,
+                               const char* mgf1_hash);
+bool crypto_verify_rsa_pss(void* key, const char* data, TmlBuffer* sig, int64_t salt_len,
+                           const char* mgf1_hash);
 
 // ============================================================================
 // Key functions
@@ -200,20 +204,24 @@ void* crypto_generate_dh_key(int64_t bits);
 // KDF functions
 // ============================================================================
 
-TmlBuffer* crypto_pbkdf2(const char* password, TmlBuffer* salt, int64_t iterations, int64_t keylen, const char* digest);
-TmlBuffer* crypto_pbkdf2_bytes(TmlBuffer* password, TmlBuffer* salt, int64_t iterations, int64_t keylen, const char* digest);
-TmlBuffer* crypto_scrypt(const char* password, TmlBuffer* salt, int64_t keylen, int64_t n, int64_t r, int64_t p, int64_t maxmem);
-TmlBuffer* crypto_scrypt_bytes(TmlBuffer* password, TmlBuffer* salt, int64_t keylen, int64_t n, int64_t r, int64_t p, int64_t maxmem);
-TmlBuffer* crypto_hkdf(const char* digest, TmlBuffer* ikm, TmlBuffer* salt, const char* info, int64_t keylen);
-TmlBuffer* crypto_hkdf_bytes(const char* digest, TmlBuffer* ikm, TmlBuffer* salt, TmlBuffer* info, int64_t keylen);
+TmlBuffer* crypto_pbkdf2(const char* password, TmlBuffer* salt, int64_t iterations, int64_t keylen,
+                         const char* digest);
+TmlBuffer* crypto_pbkdf2_bytes(TmlBuffer* password, TmlBuffer* salt, int64_t iterations,
+                               int64_t keylen, const char* digest);
+TmlBuffer* crypto_scrypt(const char* password, TmlBuffer* salt, int64_t keylen, int64_t n,
+                         int64_t r, int64_t p, int64_t maxmem);
+TmlBuffer* crypto_scrypt_bytes(TmlBuffer* password, TmlBuffer* salt, int64_t keylen, int64_t n,
+                               int64_t r, int64_t p, int64_t maxmem);
+TmlBuffer* crypto_hkdf(const char* digest, TmlBuffer* ikm, TmlBuffer* salt, const char* info,
+                       int64_t keylen);
+TmlBuffer* crypto_hkdf_bytes(const char* digest, TmlBuffer* ikm, TmlBuffer* salt, TmlBuffer* info,
+                             int64_t keylen);
 TmlBuffer* crypto_hkdf_extract(const char* digest, TmlBuffer* ikm, TmlBuffer* salt);
 TmlBuffer* crypto_hkdf_expand(const char* digest, TmlBuffer* prk, TmlBuffer* info, int64_t keylen);
-TmlBuffer* crypto_argon2(const char* variant, const char* password, TmlBuffer* salt, int64_t keylen, int64_t t, int64_t m, int64_t p);
-TmlBuffer* crypto_argon2_bytes(const char* variant, TmlBuffer* password, TmlBuffer* salt, int64_t keylen, int64_t t, int64_t m, int64_t p);
-bool crypto_argon2_verify(const char* encoded, const char* password);
-char* crypto_argon2_hash(const char* variant, const char* password, int64_t t, int64_t m, int64_t p);
-char* crypto_bcrypt_hash(const char* password, int64_t rounds);
-bool crypto_bcrypt_verify(const char* hash, const char* password);
+TmlBuffer* crypto_argon2(const char* variant, const char* password, TmlBuffer* salt, int64_t keylen,
+                         int64_t t, int64_t m, int64_t p);
+TmlBuffer* crypto_argon2_bytes(const char* variant, TmlBuffer* password, TmlBuffer* salt,
+                               int64_t keylen, int64_t t, int64_t m, int64_t p);
 
 // ============================================================================
 // Random functions
@@ -325,7 +333,8 @@ bool crypto_ecdh_set_public_key(void* ecdh, TmlBuffer* key);
 bool crypto_ecdh_set_private_key(void* ecdh, TmlBuffer* key);
 TmlBuffer* crypto_ecdh_compute_secret(void* ecdh, TmlBuffer* other_public);
 void crypto_ecdh_destroy(void* ecdh);
-TmlBuffer* crypto_ecdh_convert_key(TmlBuffer* key, const char* curve, const char* from_fmt, const char* to_fmt);
+TmlBuffer* crypto_ecdh_convert_key(TmlBuffer* key, const char* curve, const char* from_fmt,
+                                   const char* to_fmt);
 TmlBuffer* crypto_x25519(TmlBuffer* private_key, TmlBuffer* public_key);
 TmlBuffer* crypto_x448(TmlBuffer* private_key, TmlBuffer* public_key);
 TmlBuffer* crypto_x25519_generate_private(void);
@@ -340,9 +349,11 @@ bool crypto_is_curve_supported(const char* curve_name);
 // ============================================================================
 
 TmlBuffer* crypto_rsa_public_encrypt(void* key, TmlBuffer* data, const char* padding);
-TmlBuffer* crypto_rsa_public_encrypt_oaep(void* key, TmlBuffer* data, const char* hash, const char* mgf1_hash, TmlBuffer* label);
+TmlBuffer* crypto_rsa_public_encrypt_oaep(void* key, TmlBuffer* data, const char* hash,
+                                          const char* mgf1_hash, TmlBuffer* label);
 TmlBuffer* crypto_rsa_private_decrypt(void* key, TmlBuffer* data, const char* padding);
-TmlBuffer* crypto_rsa_private_decrypt_oaep(void* key, TmlBuffer* data, const char* hash, const char* mgf1_hash, TmlBuffer* label);
+TmlBuffer* crypto_rsa_private_decrypt_oaep(void* key, TmlBuffer* data, const char* hash,
+                                           const char* mgf1_hash, TmlBuffer* label);
 TmlBuffer* crypto_rsa_private_encrypt(void* key, TmlBuffer* data, const char* padding);
 TmlBuffer* crypto_rsa_public_decrypt(void* key, TmlBuffer* data, const char* padding);
 

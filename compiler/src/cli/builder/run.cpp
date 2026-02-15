@@ -306,6 +306,34 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
             }
         }
 
+#ifdef _WIN32
+        // Add Windows system libraries for socket support
+        if ((compile.module && has_socket_functions(*compile.module)) ||
+            compile.registry->has_module("std::net") ||
+            compile.registry->has_module("std::net::sys") ||
+            compile.registry->has_module("std::net::tcp") ||
+            compile.registry->has_module("std::net::udp")) {
+            link_options.link_flags.push_back("-lws2_32");
+        }
+        // Add Windows system libraries for OS module (Registry, user info)
+        if (compile.registry->has_module("std::os")) {
+            link_options.link_flags.push_back("-ladvapi32");
+            link_options.link_flags.push_back("-luserenv");
+        }
+        // Add OpenSSL libraries for crypto modules
+        if (has_crypto_modules(compile.registry)) {
+            auto openssl = find_openssl();
+            if (openssl.found) {
+                link_options.link_flags.push_back(
+                    to_forward_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
+                link_options.link_flags.push_back(
+                    to_forward_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
+                link_options.link_flags.push_back("/DEFAULTLIB:crypt32");
+                link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
+            }
+        }
+#endif
+
         // Link to temporary location first
         fs::path temp_exe = cache_dir / (exe_hash + "_link_temp.exe");
 
@@ -471,6 +499,34 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
                 link_options.link_flags.push_back("-l" + lib);
             }
         }
+
+#ifdef _WIN32
+        // Add Windows system libraries for socket support
+        if ((compile.module && has_socket_functions(*compile.module)) ||
+            compile.registry->has_module("std::net") ||
+            compile.registry->has_module("std::net::sys") ||
+            compile.registry->has_module("std::net::tcp") ||
+            compile.registry->has_module("std::net::udp")) {
+            link_options.link_flags.push_back("-lws2_32");
+        }
+        // Add Windows system libraries for OS module (Registry, user info)
+        if (compile.registry->has_module("std::os")) {
+            link_options.link_flags.push_back("-ladvapi32");
+            link_options.link_flags.push_back("-luserenv");
+        }
+        // Add OpenSSL libraries for crypto modules
+        if (has_crypto_modules(compile.registry)) {
+            auto openssl = find_openssl();
+            if (openssl.found) {
+                link_options.link_flags.push_back(
+                    to_forward_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
+                link_options.link_flags.push_back(
+                    to_forward_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
+                link_options.link_flags.push_back("/DEFAULTLIB:crypt32");
+                link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
+            }
+        }
+#endif
 
         // Link to a unique temporary location (avoid race conditions)
         std::string temp_key = generate_cache_key(path);

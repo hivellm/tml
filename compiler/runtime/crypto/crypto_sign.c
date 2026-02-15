@@ -23,6 +23,10 @@
 typedef struct {
     EVP_MD_CTX* ctx;
     int is_pss;
+    int is_single_shot;  /* Ed25519/Ed448: must use one-shot EVP_DigestSign */
+    unsigned char* data; /* buffered data for single-shot algorithms */
+    size_t data_len;
+    size_t data_cap;
 } TmlSignCtx;
 
 // ============================================================================
@@ -149,8 +153,31 @@ TML_EXPORT void* crypto_signer_create(const char* algorithm, void* key_handle) {
     }
     sign_ctx->ctx = md_ctx;
     sign_ctx->is_pss = is_pss;
+    sign_ctx->is_single_shot = is_single_shot_algorithm(algorithm);
+    sign_ctx->data = NULL;
+    sign_ctx->data_len = 0;
+    sign_ctx->data_cap = 0;
 
     return (void*)sign_ctx;
+}
+
+/* Append data to the single-shot buffer */
+static void sign_ctx_append(TmlSignCtx* ctx, const unsigned char* buf, size_t len) {
+    if (len == 0)
+        return;
+    size_t need = ctx->data_len + len;
+    if (need > ctx->data_cap) {
+        size_t new_cap = (ctx->data_cap == 0) ? 256 : ctx->data_cap;
+        while (new_cap < need)
+            new_cap *= 2;
+        unsigned char* new_data = (unsigned char*)realloc(ctx->data, new_cap);
+        if (!new_data)
+            return;
+        ctx->data = new_data;
+        ctx->data_cap = new_cap;
+    }
+    memcpy(ctx->data + ctx->data_len, buf, len);
+    ctx->data_len += len;
 }
 
 TML_EXPORT void crypto_signer_update_str(void* handle, const char* data) {
@@ -160,7 +187,11 @@ TML_EXPORT void crypto_signer_update_str(void* handle, const char* data) {
     size_t len = strlen(data);
     if (len == 0)
         return;
-    EVP_DigestSignUpdate(sign_ctx->ctx, data, len);
+    if (sign_ctx->is_single_shot) {
+        sign_ctx_append(sign_ctx, (const unsigned char*)data, len);
+    } else {
+        EVP_DigestSignUpdate(sign_ctx->ctx, data, len);
+    }
 }
 
 TML_EXPORT void crypto_signer_update_bytes(void* handle, void* buffer_handle) {
@@ -170,7 +201,11 @@ TML_EXPORT void crypto_signer_update_bytes(void* handle, void* buffer_handle) {
     TmlBuffer* buf = (TmlBuffer*)buffer_handle;
     if (!buf->data || buf->length <= 0)
         return;
-    EVP_DigestSignUpdate(sign_ctx->ctx, buf->data, (size_t)buf->length);
+    if (sign_ctx->is_single_shot) {
+        sign_ctx_append(sign_ctx, buf->data, (size_t)buf->length);
+    } else {
+        EVP_DigestSignUpdate(sign_ctx->ctx, buf->data, (size_t)buf->length);
+    }
 }
 
 TML_EXPORT void* crypto_signer_sign(void* handle) {
@@ -178,19 +213,35 @@ TML_EXPORT void* crypto_signer_sign(void* handle) {
         return NULL;
     TmlSignCtx* sign_ctx = (TmlSignCtx*)handle;
 
-    // Determine the signature length
     size_t sig_len = 0;
-    if (EVP_DigestSignFinal(sign_ctx->ctx, NULL, &sig_len) != 1)
-        return NULL;
+    unsigned char* sig = NULL;
 
-    // Allocate buffer and produce signature
-    unsigned char* sig = (unsigned char*)malloc(sig_len);
-    if (!sig)
-        return NULL;
+    if (sign_ctx->is_single_shot) {
+        /* Ed25519/Ed448: use one-shot EVP_DigestSign */
+        if (EVP_DigestSign(sign_ctx->ctx, NULL, &sig_len, sign_ctx->data, sign_ctx->data_len) != 1)
+            return NULL;
 
-    if (EVP_DigestSignFinal(sign_ctx->ctx, sig, &sig_len) != 1) {
-        free(sig);
-        return NULL;
+        sig = (unsigned char*)malloc(sig_len);
+        if (!sig)
+            return NULL;
+
+        if (EVP_DigestSign(sign_ctx->ctx, sig, &sig_len, sign_ctx->data, sign_ctx->data_len) != 1) {
+            free(sig);
+            return NULL;
+        }
+    } else {
+        /* Streaming: use EVP_DigestSignFinal */
+        if (EVP_DigestSignFinal(sign_ctx->ctx, NULL, &sig_len) != 1)
+            return NULL;
+
+        sig = (unsigned char*)malloc(sig_len);
+        if (!sig)
+            return NULL;
+
+        if (EVP_DigestSignFinal(sign_ctx->ctx, sig, &sig_len) != 1) {
+            free(sig);
+            return NULL;
+        }
     }
 
     TmlBuffer* result = tml_create_buffer_with_data(sig, (int64_t)sig_len);
@@ -204,6 +255,7 @@ TML_EXPORT void crypto_signer_destroy(void* handle) {
     TmlSignCtx* sign_ctx = (TmlSignCtx*)handle;
     if (sign_ctx->ctx)
         EVP_MD_CTX_free(sign_ctx->ctx);
+    free(sign_ctx->data);
     free(sign_ctx);
 }
 
@@ -249,6 +301,10 @@ TML_EXPORT void* crypto_verifier_create(const char* algorithm, void* key_handle)
     }
     verify_ctx->ctx = md_ctx;
     verify_ctx->is_pss = is_pss;
+    verify_ctx->is_single_shot = is_single_shot_algorithm(algorithm);
+    verify_ctx->data = NULL;
+    verify_ctx->data_len = 0;
+    verify_ctx->data_cap = 0;
 
     return (void*)verify_ctx;
 }
@@ -260,7 +316,11 @@ TML_EXPORT void crypto_verifier_update_str(void* handle, const char* data) {
     size_t len = strlen(data);
     if (len == 0)
         return;
-    EVP_DigestVerifyUpdate(verify_ctx->ctx, data, len);
+    if (verify_ctx->is_single_shot) {
+        sign_ctx_append(verify_ctx, (const unsigned char*)data, len);
+    } else {
+        EVP_DigestVerifyUpdate(verify_ctx->ctx, data, len);
+    }
 }
 
 TML_EXPORT void crypto_verifier_update_bytes(void* handle, void* buffer_handle) {
@@ -270,7 +330,11 @@ TML_EXPORT void crypto_verifier_update_bytes(void* handle, void* buffer_handle) 
     TmlBuffer* buf = (TmlBuffer*)buffer_handle;
     if (!buf->data || buf->length <= 0)
         return;
-    EVP_DigestVerifyUpdate(verify_ctx->ctx, buf->data, (size_t)buf->length);
+    if (verify_ctx->is_single_shot) {
+        sign_ctx_append(verify_ctx, buf->data, (size_t)buf->length);
+    } else {
+        EVP_DigestVerifyUpdate(verify_ctx->ctx, buf->data, (size_t)buf->length);
+    }
 }
 
 TML_EXPORT int32_t crypto_verifier_verify(void* handle, void* sig_buffer_handle) {
@@ -281,7 +345,14 @@ TML_EXPORT int32_t crypto_verifier_verify(void* handle, void* sig_buffer_handle)
     if (!sig->data || sig->length <= 0)
         return 0;
 
-    int result = EVP_DigestVerifyFinal(verify_ctx->ctx, sig->data, (size_t)sig->length);
+    int result;
+    if (verify_ctx->is_single_shot) {
+        /* Ed25519/Ed448: use one-shot EVP_DigestVerify */
+        result = EVP_DigestVerify(verify_ctx->ctx, sig->data, (size_t)sig->length, verify_ctx->data,
+                                  verify_ctx->data_len);
+    } else {
+        result = EVP_DigestVerifyFinal(verify_ctx->ctx, sig->data, (size_t)sig->length);
+    }
     return (result == 1) ? 1 : 0;
 }
 
@@ -291,6 +362,7 @@ TML_EXPORT void crypto_verifier_destroy(void* handle) {
     TmlSignCtx* verify_ctx = (TmlSignCtx*)handle;
     if (verify_ctx->ctx)
         EVP_MD_CTX_free(verify_ctx->ctx);
+    free(verify_ctx->data);
     free(verify_ctx);
 }
 

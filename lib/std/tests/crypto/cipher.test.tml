@@ -1,41 +1,152 @@
-//! Tests for crypto cipher functions
-
+// Tests for crypto cipher functions
 use test::{assert, assert_eq}
-use std::crypto::cipher::{CipherAlgorithm}
+use std::crypto::cipher::{CipherAlgorithm, Cipher, Decipher}
+use std::crypto::random::random_bytes
+use std::collections::Buffer
 
-// ============================================================================
-// CipherAlgorithm enum tests
-// ============================================================================
+// --- CipherAlgorithm::name ---
 
 @test
 func test_cipher_algorithm_name() -> I32 {
-    // Test name() method returns correct OpenSSL algorithm names
     assert_eq(CipherAlgorithm::Aes128Cbc.name(), "aes-128-cbc", "AES-128-CBC name")
     assert_eq(CipherAlgorithm::Aes256Cbc.name(), "aes-256-cbc", "AES-256-CBC name")
     assert_eq(CipherAlgorithm::Aes256Gcm.name(), "aes-256-gcm", "AES-256-GCM name")
     assert_eq(CipherAlgorithm::ChaCha20Poly1305.name(), "chacha20-poly1305", "ChaCha20-Poly1305 name")
     assert_eq(CipherAlgorithm::XChaCha20Poly1305.name(), "xchacha20-poly1305", "XChaCha20-Poly1305 name")
+    assert_eq(CipherAlgorithm::Des3Cbc.name(), "des-ede3-cbc", "Des3Cbc name")
+    assert_eq(CipherAlgorithm::BlowfishCbc.name(), "bf-cbc", "BlowfishCbc name")
     return 0
 }
+
+// --- CipherAlgorithm::key_size ---
 
 @test
 func test_cipher_algorithm_key_size() -> I32 {
-    // Test key_size() returns correct byte counts
-    assert_eq(CipherAlgorithm::Aes128Cbc.key_size(), 16, "AES-128 key size")
-    assert_eq(CipherAlgorithm::Aes192Cbc.key_size(), 24, "AES-192 key size")
-    assert_eq(CipherAlgorithm::Aes256Cbc.key_size(), 32, "AES-256 key size")
-    assert_eq(CipherAlgorithm::ChaCha20Poly1305.key_size(), 32, "ChaCha20-Poly1305 key size")
-    assert_eq(CipherAlgorithm::Des3Cbc.key_size(), 24, "3DES key size")
+    assert_eq(CipherAlgorithm::Aes128Cbc.key_size(), 16 as I64, "AES-128 key size")
+    assert_eq(CipherAlgorithm::Aes192Cbc.key_size(), 24 as I64, "AES-192 key size")
+    assert_eq(CipherAlgorithm::Aes256Cbc.key_size(), 32 as I64, "AES-256 key size")
+    assert_eq(CipherAlgorithm::ChaCha20Poly1305.key_size(), 32 as I64, "ChaCha20-Poly1305 key size")
+    assert_eq(CipherAlgorithm::Des3Cbc.key_size(), 24 as I64, "3DES key size")
+    assert_eq(CipherAlgorithm::BlowfishCbc.key_size(), 16 as I64, "Blowfish key size")
+    return 0
+}
+
+// --- CipherAlgorithm::iv_size ---
+
+@test
+func test_cipher_algorithm_iv_size() -> I32 {
+    assert_eq(CipherAlgorithm::Aes128Cbc.iv_size(), 16 as I64, "AES-CBC IV size")
+    assert_eq(CipherAlgorithm::Aes256Cbc.iv_size(), 16 as I64, "AES-256-CBC IV size")
+    assert_eq(CipherAlgorithm::Aes256Gcm.iv_size(), 12 as I64, "AES-GCM nonce size")
+    assert_eq(CipherAlgorithm::ChaCha20Poly1305.iv_size(), 12 as I64, "ChaCha20-Poly1305 nonce size")
+    assert_eq(CipherAlgorithm::XChaCha20Poly1305.iv_size(), 24 as I64, "XChaCha20-Poly1305 nonce size")
+    assert_eq(CipherAlgorithm::Aes128Ecb.iv_size(), 0 as I64, "ECB has no IV")
+    assert_eq(CipherAlgorithm::Des3Cbc.iv_size(), 8 as I64, "Des3 iv 8")
+    return 0
+}
+
+// --- CipherAlgorithm::block_size ---
+
+@test
+func test_cipher_block_size_aes() -> I32 {
+    assert_eq(CipherAlgorithm::Aes256Cbc.block_size(), 16 as I64, "AES-CBC block 16")
+    assert_eq(CipherAlgorithm::Aes128Gcm.block_size(), 16 as I64, "AES-GCM block 16")
     return 0
 }
 
 @test
-func test_cipher_algorithm_iv_size() -> I32 {
-    // Test iv_size() returns correct byte counts
-    assert_eq(CipherAlgorithm::Aes128Cbc.iv_size(), 16, "AES-CBC IV size")
-    assert_eq(CipherAlgorithm::Aes256Gcm.iv_size(), 12, "AES-GCM nonce size")
-    assert_eq(CipherAlgorithm::ChaCha20Poly1305.iv_size(), 12, "ChaCha20-Poly1305 nonce size")
-    assert_eq(CipherAlgorithm::XChaCha20Poly1305.iv_size(), 24, "XChaCha20-Poly1305 nonce size")
-    assert_eq(CipherAlgorithm::Aes256Ecb.iv_size(), 0, "ECB has no IV")
+func test_cipher_block_size_stream() -> I32 {
+    assert_eq(CipherAlgorithm::ChaCha20.block_size(), 1 as I64, "ChaCha20 block 1")
+    assert_eq(CipherAlgorithm::ChaCha20Poly1305.block_size(), 1 as I64, "ChaCha20Poly1305 block 1")
+    assert_eq(CipherAlgorithm::XChaCha20Poly1305.block_size(), 1 as I64, "XChaCha20Poly1305 block 1")
+    assert_eq(CipherAlgorithm::Aes256Ctr.block_size(), 1 as I64, "AES-CTR block 1")
+    return 0
+}
+
+@test
+func test_cipher_block_size_legacy() -> I32 {
+    assert_eq(CipherAlgorithm::Des3Cbc.block_size(), 8 as I64, "3DES block 8")
+    assert_eq(CipherAlgorithm::BlowfishCbc.block_size(), 8 as I64, "Blowfish block 8")
+    return 0
+}
+
+// --- CipherAlgorithm::is_aead ---
+
+@test
+func test_cipher_is_aead_true() -> I32 {
+    assert(CipherAlgorithm::Aes128Gcm.is_aead(), "AES-128-GCM is AEAD")
+    assert(CipherAlgorithm::Aes256Gcm.is_aead(), "AES-256-GCM is AEAD")
+    assert(CipherAlgorithm::Aes128Ccm.is_aead(), "AES-128-CCM is AEAD")
+    assert(CipherAlgorithm::ChaCha20Poly1305.is_aead(), "ChaCha20Poly1305 is AEAD")
+    assert(CipherAlgorithm::XChaCha20Poly1305.is_aead(), "XChaCha20Poly1305 is AEAD")
+    return 0
+}
+
+@test
+func test_cipher_is_aead_false() -> I32 {
+    assert(not CipherAlgorithm::Aes256Cbc.is_aead(), "AES-CBC not AEAD")
+    assert(not CipherAlgorithm::Aes256Ctr.is_aead(), "AES-CTR not AEAD")
+    assert(not CipherAlgorithm::ChaCha20.is_aead(), "ChaCha20 not AEAD")
+    assert(not CipherAlgorithm::Des3Cbc.is_aead(), "3DES not AEAD")
+    return 0
+}
+
+// --- CipherAlgorithm::tag_size ---
+
+@test
+func test_cipher_tag_size() -> I32 {
+    assert_eq(CipherAlgorithm::Aes256Gcm.tag_size(), 16 as I64, "GCM tag 16")
+    assert_eq(CipherAlgorithm::ChaCha20Poly1305.tag_size(), 16 as I64, "ChaCha20Poly1305 tag 16")
+    assert_eq(CipherAlgorithm::Aes256Cbc.tag_size(), 0 as I64, "CBC tag 0")
+    assert_eq(CipherAlgorithm::Aes256Ctr.tag_size(), 0 as I64, "CTR tag 0")
+    return 0
+}
+
+// --- CipherAlgorithm::from_name ---
+
+@test
+func test_cipher_from_name_valid() -> I32 {
+    let result: Maybe[CipherAlgorithm] = CipherAlgorithm::from_name("aes-256-gcm")
+    assert(result.is_just(), "aes-256-gcm found")
+    assert_eq(result.unwrap().name(), "aes-256-gcm", "round-trip name")
+    return 0
+}
+
+@test
+func test_cipher_from_name_chacha() -> I32 {
+    let result: Maybe[CipherAlgorithm] = CipherAlgorithm::from_name("chacha20-poly1305")
+    assert(result.is_just(), "chacha20-poly1305 found")
+    assert(result.unwrap().is_aead(), "chacha20-poly1305 is AEAD")
+    return 0
+}
+
+@test
+func test_cipher_from_name_invalid() -> I32 {
+    let result: Maybe[CipherAlgorithm] = CipherAlgorithm::from_name("invalid-cipher")
+    assert(result.is_nothing(), "invalid cipher returns Nothing")
+    return 0
+}
+
+// --- Cipher::algorithm ---
+
+@test
+func test_cipher_algorithm_getter() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(16 as I64)
+    let cipher: Cipher = Cipher::new(CipherAlgorithm::Aes256Cbc, ref key, ref iv).unwrap()
+    let alg: CipherAlgorithm = cipher.algorithm()
+    assert_eq(alg.name(), "aes-256-cbc", "cipher algorithm should be AES-256-CBC")
+    return 0
+}
+
+// --- Decipher::algorithm ---
+
+@test
+func test_decipher_algorithm_getter() -> I32 {
+    let key: Buffer = random_bytes(32 as I64)
+    let iv: Buffer = random_bytes(12 as I64)
+    let decipher: Decipher = Decipher::new(CipherAlgorithm::Aes256Gcm, ref key, ref iv).unwrap()
+    let alg: CipherAlgorithm = decipher.algorithm()
+    assert_eq(alg.name(), "aes-256-gcm", "decipher algorithm should be AES-256-GCM")
     return 0
 }

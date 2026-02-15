@@ -8,9 +8,10 @@
 #define TML_CRYPTO_INTERNAL_H
 
 #include "../crypto.h"
+
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,20 +22,20 @@ extern "C" {
 // ============================================================================
 
 #if defined(_WIN32) || defined(_WIN64)
-    #define TML_PLATFORM_WINDOWS 1
-    #define TML_PLATFORM_NAME "windows"
+#define TML_PLATFORM_WINDOWS 1
+#define TML_PLATFORM_NAME "windows"
 #elif defined(__APPLE__)
-    #define TML_PLATFORM_MACOS 1
-    #define TML_PLATFORM_NAME "macos"
+#define TML_PLATFORM_MACOS 1
+#define TML_PLATFORM_NAME "macos"
 #elif defined(__linux__)
-    #define TML_PLATFORM_LINUX 1
-    #define TML_PLATFORM_NAME "linux"
+#define TML_PLATFORM_LINUX 1
+#define TML_PLATFORM_NAME "linux"
 #elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-    #define TML_PLATFORM_BSD 1
-    #define TML_PLATFORM_NAME "bsd"
+#define TML_PLATFORM_BSD 1
+#define TML_PLATFORM_NAME "bsd"
 #else
-    #define TML_PLATFORM_UNIX 1
-    #define TML_PLATFORM_NAME "unix"
+#define TML_PLATFORM_UNIX 1
+#define TML_PLATFORM_NAME "unix"
 #endif
 
 // ============================================================================
@@ -98,12 +99,13 @@ void hmac_context_destroy(TmlHmacContext* ctx);
 typedef struct TmlCipherContext TmlCipherContext;
 
 TmlCipherContext* cipher_context_create(const char* algorithm, const uint8_t* key, size_t key_len,
-                                         const uint8_t* iv, size_t iv_len, bool encrypt);
+                                        const uint8_t* iv, size_t iv_len, bool encrypt);
 void cipher_context_set_aad(TmlCipherContext* ctx, const uint8_t* aad, size_t aad_len);
 void cipher_context_set_padding(TmlCipherContext* ctx, bool enabled);
 size_t cipher_context_update(TmlCipherContext* ctx, const uint8_t* input, size_t input_len,
                              uint8_t* output, size_t output_size);
-size_t cipher_context_finalize(TmlCipherContext* ctx, uint8_t* output, size_t output_size, bool* success);
+size_t cipher_context_finalize(TmlCipherContext* ctx, uint8_t* output, size_t output_size,
+                               bool* success);
 TmlBuffer* cipher_context_get_tag(TmlCipherContext* ctx);
 void cipher_context_set_tag(TmlCipherContext* ctx, const uint8_t* tag, size_t tag_len);
 void cipher_context_destroy(TmlCipherContext* ctx);
@@ -182,39 +184,25 @@ bool random_bytes(uint8_t* buffer, size_t len);
 // KDF (platform-specific implementation)
 // ============================================================================
 
-TmlBuffer* kdf_pbkdf2(const uint8_t* password, size_t password_len,
-                      const uint8_t* salt, size_t salt_len,
-                      int64_t iterations, int64_t key_len, const char* digest);
+TmlBuffer* kdf_pbkdf2(const uint8_t* password, size_t password_len, const uint8_t* salt,
+                      size_t salt_len, int64_t iterations, int64_t key_len, const char* digest);
 
-TmlBuffer* kdf_scrypt(const uint8_t* password, size_t password_len,
-                      const uint8_t* salt, size_t salt_len,
-                      int64_t key_len, int64_t n, int64_t r, int64_t p, int64_t maxmem);
+TmlBuffer* kdf_scrypt(const uint8_t* password, size_t password_len, const uint8_t* salt,
+                      size_t salt_len, int64_t key_len, int64_t n, int64_t r, int64_t p,
+                      int64_t maxmem);
 
-TmlBuffer* kdf_hkdf(const char* digest,
-                    const uint8_t* ikm, size_t ikm_len,
-                    const uint8_t* salt, size_t salt_len,
-                    const uint8_t* info, size_t info_len,
-                    int64_t key_len);
+TmlBuffer* kdf_hkdf(const char* digest, const uint8_t* ikm, size_t ikm_len, const uint8_t* salt,
+                    size_t salt_len, const uint8_t* info, size_t info_len, int64_t key_len);
 
-TmlBuffer* kdf_hkdf_extract(const char* digest,
-                            const uint8_t* ikm, size_t ikm_len,
+TmlBuffer* kdf_hkdf_extract(const char* digest, const uint8_t* ikm, size_t ikm_len,
                             const uint8_t* salt, size_t salt_len);
 
-TmlBuffer* kdf_hkdf_expand(const char* digest,
-                           const uint8_t* prk, size_t prk_len,
-                           const uint8_t* info, size_t info_len,
-                           int64_t key_len);
+TmlBuffer* kdf_hkdf_expand(const char* digest, const uint8_t* prk, size_t prk_len,
+                           const uint8_t* info, size_t info_len, int64_t key_len);
 
-TmlBuffer* kdf_argon2(const char* variant,
-                      const uint8_t* password, size_t password_len,
-                      const uint8_t* salt, size_t salt_len,
-                      int64_t key_len, int64_t t, int64_t m, int64_t p);
-
-bool kdf_argon2_verify(const char* encoded, const char* password);
-char* kdf_argon2_hash(const char* variant, const char* password, int64_t t, int64_t m, int64_t p);
-
-char* kdf_bcrypt_hash(const char* password, int64_t rounds);
-bool kdf_bcrypt_verify(const char* hash, const char* password);
+TmlBuffer* kdf_argon2(const char* variant, const uint8_t* password, size_t password_len,
+                      const uint8_t* salt, size_t salt_len, int64_t key_len, int64_t t, int64_t m,
+                      int64_t p);
 
 // ============================================================================
 // X.509 (platform-specific implementation)
@@ -296,17 +284,21 @@ TmlBuffer* x448_public_from_private(const uint8_t* private_key);
 // RSA Encryption (platform-specific implementation)
 // ============================================================================
 
-TmlBuffer* rsa_public_encrypt(TmlPublicKey* key, const uint8_t* data, size_t len, const char* padding);
-TmlBuffer* rsa_private_decrypt(TmlPrivateKey* key, const uint8_t* data, size_t len, const char* padding);
-TmlBuffer* rsa_private_encrypt(TmlPrivateKey* key, const uint8_t* data, size_t len, const char* padding);
-TmlBuffer* rsa_public_decrypt(TmlPublicKey* key, const uint8_t* data, size_t len, const char* padding);
+TmlBuffer* rsa_public_encrypt(TmlPublicKey* key, const uint8_t* data, size_t len,
+                              const char* padding);
+TmlBuffer* rsa_private_decrypt(TmlPrivateKey* key, const uint8_t* data, size_t len,
+                               const char* padding);
+TmlBuffer* rsa_private_encrypt(TmlPrivateKey* key, const uint8_t* data, size_t len,
+                               const char* padding);
+TmlBuffer* rsa_public_decrypt(TmlPublicKey* key, const uint8_t* data, size_t len,
+                              const char* padding);
 
 TmlBuffer* rsa_public_encrypt_oaep(TmlPublicKey* key, const uint8_t* data, size_t len,
-                                   const char* hash, const char* mgf1_hash,
-                                   const uint8_t* label, size_t label_len);
+                                   const char* hash, const char* mgf1_hash, const uint8_t* label,
+                                   size_t label_len);
 TmlBuffer* rsa_private_decrypt_oaep(TmlPrivateKey* key, const uint8_t* data, size_t len,
-                                    const char* hash, const char* mgf1_hash,
-                                    const uint8_t* label, size_t label_len);
+                                    const char* hash, const char* mgf1_hash, const uint8_t* label,
+                                    size_t label_len);
 
 // ============================================================================
 // Algorithm Lists (platform-specific implementation)

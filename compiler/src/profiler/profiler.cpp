@@ -43,7 +43,7 @@ Profiler::~Profiler() {
 void Profiler::initialize(const std::string& output_path, uint64_t sampling_interval_us) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    output_path_ = output_path.empty() ? "profile.cpuprofile" : output_path;
+    output_path_ = output_path.empty() ? "build/debug/profile.cpuprofile" : output_path;
     sampling_interval_us_ = sampling_interval_us;
 
     // Clear any existing data
@@ -375,7 +375,7 @@ auto Profiler::to_cpuprofile_json() const -> std::string {
 extern "C" {
 
 void tml_profiler_init(const char* output_path) {
-    Profiler::instance().initialize(output_path ? output_path : "profile.cpuprofile");
+    Profiler::instance().initialize(output_path ? output_path : "build/debug/profile.cpuprofile");
 }
 
 void tml_profiler_start(void) {

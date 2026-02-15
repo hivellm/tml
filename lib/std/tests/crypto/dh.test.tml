@@ -1,8 +1,9 @@
 // Tests for crypto Diffie-Hellman key exchange
-use test
-use std::crypto::dh::{DhGroup, DiffieHellman, create_dh_group}
+use test::{assert, assert_eq}
+use std::crypto::dh::{DhGroup, DiffieHellman, create_dh, create_dh_group, get_dh_group_params}
+use std::collections::Buffer
 
-// === DhGroup enum tests ===
+// --- DhGroup::name ---
 
 @test
 func test_dh_group_names() -> I32 {
@@ -16,54 +17,141 @@ func test_dh_group_names() -> I32 {
     assert_eq(DhGroup::Modp18.name(), "modp18", "modp18")
     assert_eq(DhGroup::Ffdhe2048.name(), "ffdhe2048", "ffdhe2048")
     assert_eq(DhGroup::Ffdhe3072.name(), "ffdhe3072", "ffdhe3072")
+    assert_eq(DhGroup::Ffdhe4096.name(), "ffdhe4096", "ffdhe4096")
+    assert_eq(DhGroup::Ffdhe6144.name(), "ffdhe6144", "ffdhe6144")
+    assert_eq(DhGroup::Ffdhe8192.name(), "ffdhe8192", "ffdhe8192")
     return 0
 }
+
+// --- DhGroup::prime_bits ---
 
 @test
 func test_dh_group_prime_bits() -> I32 {
     assert_eq(DhGroup::Modp1.prime_bits(), 768 as I64, "modp1 bits")
     assert_eq(DhGroup::Modp2.prime_bits(), 1024 as I64, "modp2 bits")
+    assert_eq(DhGroup::Modp5.prime_bits(), 1536 as I64, "modp5 bits")
     assert_eq(DhGroup::Modp14.prime_bits(), 2048 as I64, "modp14 bits")
+    assert_eq(DhGroup::Modp15.prime_bits(), 3072 as I64, "modp15 bits")
     assert_eq(DhGroup::Modp16.prime_bits(), 4096 as I64, "modp16 bits")
+    assert_eq(DhGroup::Modp17.prime_bits(), 6144 as I64, "modp17 bits")
+    assert_eq(DhGroup::Modp18.prime_bits(), 8192 as I64, "modp18 bits")
     assert_eq(DhGroup::Ffdhe2048.prime_bits(), 2048 as I64, "ffdhe2048 bits")
+    assert_eq(DhGroup::Ffdhe3072.prime_bits(), 3072 as I64, "ffdhe3072 bits")
     assert_eq(DhGroup::Ffdhe4096.prime_bits(), 4096 as I64, "ffdhe4096 bits")
+    assert_eq(DhGroup::Ffdhe6144.prime_bits(), 6144 as I64, "ffdhe6144 bits")
+    assert_eq(DhGroup::Ffdhe8192.prime_bits(), 8192 as I64, "ffdhe8192 bits")
     return 0
 }
+
+// --- DhGroup::is_deprecated ---
 
 @test
 func test_dh_group_deprecated() -> I32 {
-    assert_eq(DhGroup::Modp1.is_deprecated(), true, "modp1 deprecated")
-    assert_eq(DhGroup::Modp2.is_deprecated(), true, "modp2 deprecated")
-    assert_eq(DhGroup::Modp5.is_deprecated(), true, "modp5 deprecated")
-    assert_eq(DhGroup::Modp14.is_deprecated(), false, "modp14 not deprecated")
-    assert_eq(DhGroup::Ffdhe2048.is_deprecated(), false, "ffdhe2048 not deprecated")
+    assert(DhGroup::Modp1.is_deprecated(), "modp1 deprecated")
+    assert(DhGroup::Modp2.is_deprecated(), "modp2 deprecated")
+    assert(DhGroup::Modp5.is_deprecated(), "modp5 deprecated")
+    assert(not DhGroup::Modp14.is_deprecated(), "modp14 not deprecated")
+    assert(not DhGroup::Modp15.is_deprecated(), "modp15 not deprecated")
+    assert(not DhGroup::Ffdhe2048.is_deprecated(), "ffdhe2048 not deprecated")
+    return 0
+}
+
+// --- DhGroup::from_name ---
+
+@test
+func test_dh_group_from_name_valid() -> I32 {
+    let m14: Maybe[DhGroup] = DhGroup::from_name("modp14")
+    assert(m14.is_just(), "modp14 found")
+    let ff: Maybe[DhGroup] = DhGroup::from_name("ffdhe2048")
+    assert(ff.is_just(), "ffdhe2048 found")
     return 0
 }
 
 @test
-func test_dh_group_from_name() -> I32 {
-    assert_eq(DhGroup::from_name("modp14").is_just(), true, "modp14 found")
-    assert_eq(DhGroup::from_name("ffdhe2048").is_just(), true, "ffdhe2048 found")
-    assert_eq(DhGroup::from_name("unknown").is_nothing(), true, "unknown")
+func test_dh_group_from_name_invalid() -> I32 {
+    let result: Maybe[DhGroup] = DhGroup::from_name("invalid")
+    assert(result.is_nothing(), "invalid group is Nothing")
     return 0
 }
 
-// === DH FFI tests ===
-// DISABLED: DH key generation takes ~15s (2048-bit), exceeds test runner
-// timeout (20s) and blocks coverage runs indefinitely.
-// Re-enable when test runner supports per-test timeout configuration.
-//
-// @test
-// func test_dh_with_group_and_keys() -> I32 {
-//     let mut dh = DiffieHellman::with_group(DhGroup::Modp14).unwrap()
-//     assert_eq(dh.prime_length(), 2048 as I64, "prime length")
-//     assert_eq(dh.check_params(), true, "params valid")
-//     dh.generate_keys()
-//     let pub_key = dh.public_key()
-//     assert_eq(pub_key.len() > 0 as I64, true, "pub key not empty")
-//     let p = dh.prime()
-//     assert_eq(p.len() > 0 as I64, true, "prime not empty")
-//     let g = dh.generator()
-//     assert_eq(g.len() > 0 as I64, true, "generator not empty")
-//     return 0
-// }
+// --- DH operations: with_group, prime_length, check_params, prime, generator, group, verify_error ---
+
+@test
+func test_dh_with_group_and_accessors() -> I32 {
+    let dh: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
+    assert_eq(dh.prime_length(), 768 as I64, "modp1 prime length")
+    assert(dh.check_params(), "modp1 params valid")
+    let p: Buffer = dh.prime()
+    assert(p.len() > (0 as I64), "prime not empty")
+    let g: Buffer = dh.generator()
+    assert(g.len() > (0 as I64), "generator not empty")
+    let grp: Maybe[DhGroup] = dh.group()
+    assert(grp.is_just(), "group should be Just")
+    let err: I64 = dh.verify_error()
+    assert_eq(err, 0 as I64, "verify_error should be 0 for valid params")
+    return 0
+}
+
+// --- DH keygen, set_keys, public_key, private_key, destroy ---
+
+@test
+func test_dh_keygen_set_destroy() -> I32 {
+    let mut dh1: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
+    dh1.generate_keys()
+    let pub_key: Buffer = dh1.public_key()
+    assert(pub_key.len() > (0 as I64), "public key not empty")
+    let priv_key: Buffer = dh1.private_key()
+    assert(priv_key.len() > (0 as I64), "private key not empty")
+
+    let mut dh2: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
+    dh2.set_public_key(ref pub_key)
+    dh2.set_private_key(ref priv_key)
+    let pub2: Buffer = dh2.public_key()
+    assert(pub2.len() > (0 as I64), "set pub key recoverable")
+
+    dh1.destroy()
+    dh1.destroy()
+    dh2.destroy()
+    return 0
+}
+
+// --- create_dh_group convenience function ---
+
+@test
+func test_create_dh_group() -> I32 {
+    let result = create_dh_group(DhGroup::Modp1)
+    assert(result.is_ok(), "create_dh_group should succeed")
+    let dh: DiffieHellman = result.unwrap()
+    assert_eq(dh.prime_length(), 768 as I64, "modp1 768 bits")
+    return 0
+}
+
+// --- DiffieHellman::new / create_dh with custom params ---
+
+@test
+func test_dh_new_and_create_dh() -> I32 {
+    let dh_source: DiffieHellman = DiffieHellman::with_group(DhGroup::Modp1).unwrap()
+    let p: Buffer = dh_source.prime()
+    let g: Buffer = dh_source.generator()
+
+    let result = DiffieHellman::new(ref p, ref g)
+    assert(result.is_ok(), "DH new with custom params should succeed")
+    let dh: DiffieHellman = result.unwrap()
+    assert(dh.check_params(), "custom params should be valid")
+
+    let result2 = create_dh(ref p, ref g)
+    assert(result2.is_ok(), "create_dh should succeed")
+    return 0
+}
+
+// --- get_dh_group_params (tuple return) ---
+
+@test
+func test_get_dh_group_params() -> I32 {
+    let pair: (Buffer, Buffer) = get_dh_group_params(DhGroup::Modp1)
+    return 0
+}
+
+// --- Deferred tests ---
+// NOTE: Full DH key exchange (compute_secret) is too slow for suite mode (>20s).
+// NOTE: DiffieHellman::generate(prime_length) generates a random prime (10+ seconds).

@@ -279,11 +279,15 @@ OpenSSLPaths find_openssl() {
 bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry) {
     if (!registry)
         return false;
-    return registry->has_module("std::crypto") || registry->has_module("std::crypto::x509") ||
-           registry->has_module("std::crypto::key") || registry->has_module("std::crypto::sign") ||
-           registry->has_module("std::crypto::dh") || registry->has_module("std::crypto::ecdh") ||
-           registry->has_module("std::crypto::kdf") || registry->has_module("std::crypto::rsa") ||
-           registry->has_module("std::hash") || registry->has_module("std::net::tls");
+    return registry->has_module("std::crypto") || registry->has_module("std::crypto::hash") ||
+           registry->has_module("std::crypto::hmac") ||
+           registry->has_module("std::crypto::cipher") ||
+           registry->has_module("std::crypto::random") ||
+           registry->has_module("std::crypto::x509") || registry->has_module("std::crypto::key") ||
+           registry->has_module("std::crypto::sign") || registry->has_module("std::crypto::dh") ||
+           registry->has_module("std::crypto::ecdh") || registry->has_module("std::crypto::kdf") ||
+           registry->has_module("std::crypto::rsa") || registry->has_module("std::hash") ||
+           registry->has_module("std::net::tls");
 }
 
 // ============================================================================

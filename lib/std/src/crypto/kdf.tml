@@ -5,8 +5,8 @@
 //!
 //! # Password Hashing
 //!
-//! For password hashing and verification, prefer:
-//! 1. **Argon2** (recommended) - Memory-hard, GPU-resistant
+//! For password hashing, derive a key using:
+//! 1. **Argon2** (recommended) - Memory-hard, GPU-resistant (OpenSSL 3.2+)
 //! 2. **scrypt** - Memory-hard, widely supported
 //! 3. **PBKDF2** - CPU-intensive, FIPS compliant
 //!
@@ -91,14 +91,6 @@ func crypto_hkdf_expand(digest: Str, prk: *Unit, info: *Unit, key_length: I64) -
 func crypto_argon2(variant: Str, password: Str, salt: *Unit, key_length: I64, time_cost: I64, memory_cost: I64, parallelism: I64) -> *Unit
 @extern("crypto_argon2_bytes")
 func crypto_argon2_bytes(variant: Str, password: *Unit, salt: *Unit, key_length: I64, time_cost: I64, memory_cost: I64, parallelism: I64) -> *Unit
-@extern("crypto_argon2_verify")
-func crypto_argon2_verify(encoded_hash: Str, password: Str) -> Bool
-@extern("crypto_argon2_hash")
-func crypto_argon2_hash(variant: Str, password: Str, time_cost: I64, memory_cost: I64, parallelism: I64) -> Str
-@extern("crypto_bcrypt_hash")
-func crypto_bcrypt_hash(password: Str, rounds: I64) -> Str
-@extern("crypto_bcrypt_verify")
-func crypto_bcrypt_verify(hash: Str, password: Str) -> Bool
 
 // ============================================================================
 // PBKDF2
@@ -544,57 +536,3 @@ pub func argon2_bytes(
     return Ok(Buffer { handle: handle })
 }
 
-/// Verifies a password against an Argon2 hash.
-///
-/// The hash should be in the standard encoded format:
-/// $argon2id$v=19$m=65536,t=3,p=4$salt$hash
-pub func argon2_verify(encoded_hash: Str, password: Str) -> Bool {
-    let result: Bool = crypto_argon2_verify(encoded_hash, password)
-    return result
-}
-
-/// Hashes a password with Argon2 and returns the encoded string.
-///
-/// Returns a string in the format:
-/// $argon2id$v=19$m=65536,t=3,p=4$salt$hash
-pub func argon2_hash(
-    variant: Argon2Variant,
-    password: Str,
-    params: ref Argon2Params,
-) -> CryptoResult[Str] {
-    let result: Str = crypto_argon2_hash(
-        variant.name(),
-        password,
-        params.time_cost,
-        params.memory_cost,
-        params.parallelism
-    )
-    if result == "" {
-        return Err(CryptoError::operation_failed("key derivation failed"))
-    }
-    return Ok(result)
-}
-
-// ============================================================================
-// bcrypt (for compatibility)
-// ============================================================================
-
-/// Hashes a password using bcrypt.
-///
-/// **Note**: For new applications, prefer Argon2.
-pub func bcrypt_hash(password: Str, rounds: I64) -> CryptoResult[Str] {
-    if rounds < 4 or rounds > 31 {
-        return Err(CryptoError::invalid_parameter("bcrypt rounds must be between 4 and 31"))
-    }
-    let result: Str = crypto_bcrypt_hash(password, rounds)
-    if result == "" {
-        return Err(CryptoError::operation_failed("key derivation failed"))
-    }
-    return Ok(result)
-}
-
-/// Verifies a password against a bcrypt hash.
-pub func bcrypt_verify(hash: Str, password: Str) -> Bool {
-    let result: Bool = crypto_bcrypt_verify(hash, password)
-    return result
-}

@@ -1,14 +1,10 @@
-//! Tests for crypto hash functions
-//!
-//! Tests MD5, SHA-1, SHA-2 family, and streaming hash API.
-
-use std::crypto::hash::{sha256, sha512, sha384, sha1, md5, sha512_256}
-use std::crypto::hash::{Hash, HashAlgorithm, Digest}
+// Tests for crypto hash functions
 use test::{assert, assert_eq}
+use std::crypto::hash::{sha256, sha512, sha384, sha1, md5, sha512_256, md5_bytes, sha1_bytes, sha256_bytes, sha384_bytes, sha512_bytes, sha512_256_bytes}
+use std::crypto::hash::{Hash, HashAlgorithm, Digest}
+use std::collections::Buffer
 
-// ============================================================================
-// SHA-256 Tests
-// ============================================================================
+// --- One-shot hash functions ---
 
 @test
 func test_sha256_empty_string() -> I32 {
@@ -37,10 +33,6 @@ func test_sha256_hello() -> I32 {
     return 0
 }
 
-// ============================================================================
-// SHA-512 Tests
-// ============================================================================
-
 @test
 func test_sha512_empty_string() -> I32 {
     let mut digest: Digest = sha512("")
@@ -59,10 +51,6 @@ func test_sha512_hello() -> I32 {
     return 0
 }
 
-// ============================================================================
-// SHA-384 Tests
-// ============================================================================
-
 @test
 func test_sha384_empty_string() -> I32 {
     let mut digest: Digest = sha384("")
@@ -71,10 +59,6 @@ func test_sha384_empty_string() -> I32 {
     digest.destroy()
     return 0
 }
-
-// ============================================================================
-// SHA-1 Tests (legacy, not for security)
-// ============================================================================
 
 @test
 func test_sha1_empty_string() -> I32 {
@@ -94,10 +78,6 @@ func test_sha1_hello() -> I32 {
     return 0
 }
 
-// ============================================================================
-// MD5 Tests (legacy, not for security)
-// ============================================================================
-
 @test
 func test_md5_empty_string() -> I32 {
     let mut digest: Digest = md5("")
@@ -116,10 +96,6 @@ func test_md5_hello() -> I32 {
     return 0
 }
 
-// ============================================================================
-// SHA-512/256 Tests
-// ============================================================================
-
 @test
 func test_sha512_256_empty() -> I32 {
     let mut digest: Digest = sha512_256("")
@@ -129,9 +105,7 @@ func test_sha512_256_empty() -> I32 {
     return 0
 }
 
-// ============================================================================
-// Streaming Hash API Tests
-// ============================================================================
+// --- Streaming Hash API ---
 
 @test
 func test_hash_streaming_sha256() -> I32 {
@@ -158,9 +132,7 @@ func test_hash_algorithm_md5() -> I32 {
     return 0
 }
 
-// ============================================================================
-// Digest Encoding Tests
-// ============================================================================
+// --- Digest encoding ---
 
 @test
 func test_digest_to_base64() -> I32 {
@@ -168,5 +140,153 @@ func test_digest_to_base64() -> I32 {
     let base64: Str = digest.to_base64()
     assert_eq(base64, "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=", "sha256 base64")
     digest.destroy()
+    return 0
+}
+
+// --- HashAlgorithm::name ---
+
+@test
+func test_hash_algorithm_names() -> I32 {
+    assert_eq(HashAlgorithm::Md5.name(), "md5", "MD5 name")
+    assert_eq(HashAlgorithm::Sha1.name(), "sha1", "SHA-1 name")
+    assert_eq(HashAlgorithm::Sha256.name(), "sha256", "SHA-256 name")
+    assert_eq(HashAlgorithm::Sha384.name(), "sha384", "SHA-384 name")
+    assert_eq(HashAlgorithm::Sha512.name(), "sha512", "SHA-512 name")
+    assert_eq(HashAlgorithm::Sha512_256.name(), "sha512-256", "SHA-512/256 name")
+    return 0
+}
+
+// --- HashAlgorithm::digest_size ---
+
+@test
+func test_hash_algorithm_digest_size() -> I32 {
+    assert_eq(HashAlgorithm::Md5.digest_size(), 16 as I64, "MD5 digest size")
+    assert_eq(HashAlgorithm::Sha1.digest_size(), 20 as I64, "SHA1 digest size")
+    assert_eq(HashAlgorithm::Sha256.digest_size(), 32 as I64, "SHA256 digest size")
+    assert_eq(HashAlgorithm::Sha384.digest_size(), 48 as I64, "SHA384 digest size")
+    assert_eq(HashAlgorithm::Sha512.digest_size(), 64 as I64, "SHA512 digest size")
+    assert_eq(HashAlgorithm::Sha512_256.digest_size(), 32 as I64, "SHA512_256 digest size")
+    return 0
+}
+
+// --- HashAlgorithm::block_size ---
+
+@test
+func test_hash_algorithm_block_size() -> I32 {
+    assert_eq(HashAlgorithm::Md5.block_size(), 64 as I64, "MD5 block size")
+    assert_eq(HashAlgorithm::Sha1.block_size(), 64 as I64, "SHA1 block size")
+    assert_eq(HashAlgorithm::Sha256.block_size(), 64 as I64, "SHA256 block size")
+    assert_eq(HashAlgorithm::Sha384.block_size(), 128 as I64, "SHA384 block size")
+    assert_eq(HashAlgorithm::Sha512.block_size(), 128 as I64, "SHA512 block size")
+    assert_eq(HashAlgorithm::Sha512_256.block_size(), 128 as I64, "SHA512_256 block size")
+    return 0
+}
+
+// --- Digest::bytes ---
+
+@test
+func test_digest_bytes() -> I32 {
+    let d: Digest = sha256("test")
+    let b: ref Buffer = d.bytes()
+    assert(b.len() > (0 as I64), "digest bytes should have length > 0")
+    return 0
+}
+
+// --- Hash::copy ---
+
+@test
+func test_hash_copy() -> I32 {
+    let h1: Hash = Hash::create(HashAlgorithm::Sha256)
+    h1.update("hello")
+    let h2: Hash = h1.copy()
+    h1.update(" world")
+    h2.update(" there")
+    let d1: Digest = h1.digest()
+    let d2: Digest = h2.digest()
+    let hex1: Str = d1.to_hex()
+    let hex2: Str = d2.to_hex()
+    assert(hex1 != hex2, "copied hashes with different data should differ")
+    h1.destroy()
+    h2.destroy()
+    return 0
+}
+
+// --- Hash::update_bytes ---
+
+@test
+func test_hash_update_bytes() -> I32 {
+    let buf: Buffer = Buffer.new(5)
+    buf.write_u8(0x68, 0)
+    buf.write_u8(0x69, 1)
+    let h: Hash = Hash::create(HashAlgorithm::Sha256)
+    h.update_bytes(ref buf)
+    let d: Digest = h.digest()
+    let hex: Str = d.to_hex()
+    assert(hex.len() > 0, "update_bytes should produce a valid hash")
+    h.destroy()
+    buf.destroy()
+    return 0
+}
+
+// --- One-shot *_bytes functions ---
+
+@test
+func test_md5_bytes() -> I32 {
+    let buf: Buffer = Buffer.new(3)
+    buf.write_u8(0x41, 0)
+    buf.write_u8(0x42, 1)
+    let d: Digest = md5_bytes(ref buf)
+    assert(d.to_hex().len() > 0, "md5_bytes hex")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_sha1_bytes() -> I32 {
+    let buf: Buffer = Buffer.new(3)
+    buf.write_u8(0x41, 0)
+    let d: Digest = sha1_bytes(ref buf)
+    assert(d.to_hex().len() > 0, "sha1_bytes hex")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_sha256_bytes() -> I32 {
+    let buf: Buffer = Buffer.new(3)
+    buf.write_u8(0x41, 0)
+    let d: Digest = sha256_bytes(ref buf)
+    assert(d.to_hex().len() > 0, "sha256_bytes hex")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_sha384_bytes() -> I32 {
+    let buf: Buffer = Buffer.new(3)
+    buf.write_u8(0x41, 0)
+    let d: Digest = sha384_bytes(ref buf)
+    assert(d.to_hex().len() > 0, "sha384_bytes hex")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_sha512_bytes() -> I32 {
+    let buf: Buffer = Buffer.new(3)
+    buf.write_u8(0x41, 0)
+    let d: Digest = sha512_bytes(ref buf)
+    assert(d.to_hex().len() > 0, "sha512_bytes hex")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_sha512_256_bytes() -> I32 {
+    let buf: Buffer = Buffer.new(3)
+    buf.write_u8(0x41, 0)
+    let d: Digest = sha512_256_bytes(ref buf)
+    assert(d.to_hex().len() > 0, "sha512_256_bytes hex")
+    buf.destroy()
     return 0
 }

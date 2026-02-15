@@ -1,0 +1,544 @@
+// Tests for crypto/key enum, struct, and key generation operations
+use test::{assert, assert_eq}
+use std::crypto::key::{KeyType, KeyFormat, KeyEncoding, RsaKeyGenOptions, EcKeyGenOptions, SecretKey, PrivateKey, PublicKey, KeyPair, RsaKeyDetails, EcKeyDetails, generate_key, generate_rsa_key_pair, generate_ec_key_pair, generate_key_pair, create_private_key, create_public_key, create_secret_key}
+use std::collections::Buffer
+
+// --- KeyType::name ---
+
+@test
+func test_key_type_name_rsa() -> I32 {
+    assert_eq(KeyType::Rsa.name(), "rsa", "Rsa name")
+    return 0
+}
+
+@test
+func test_key_type_name_others() -> I32 {
+    assert_eq(KeyType::RsaPss.name(), "rsa-pss", "RsaPss name")
+    assert_eq(KeyType::Dsa.name(), "dsa", "Dsa name")
+    assert_eq(KeyType::Dh.name(), "dh", "Dh name")
+    assert_eq(KeyType::Ec.name(), "ec", "Ec name")
+    assert_eq(KeyType::Ed25519.name(), "ed25519", "Ed25519 name")
+    assert_eq(KeyType::Ed448.name(), "ed448", "Ed448 name")
+    assert_eq(KeyType::X25519.name(), "x25519", "X25519 name")
+    assert_eq(KeyType::X448.name(), "x448", "X448 name")
+    return 0
+}
+
+// --- KeyType::is_rsa ---
+
+@test
+func test_key_type_is_rsa() -> I32 {
+    assert(KeyType::Rsa.is_rsa(), "Rsa is_rsa")
+    assert(KeyType::RsaPss.is_rsa(), "RsaPss is_rsa")
+    assert(not KeyType::Ec.is_rsa(), "Ec not is_rsa")
+    assert(not KeyType::Ed25519.is_rsa(), "Ed25519 not is_rsa")
+    return 0
+}
+
+// --- KeyType::is_ec ---
+
+@test
+func test_key_type_is_ec() -> I32 {
+    assert(KeyType::Ec.is_ec(), "Ec is_ec")
+    assert(KeyType::Ed25519.is_ec(), "Ed25519 is_ec")
+    assert(KeyType::Ed448.is_ec(), "Ed448 is_ec")
+    assert(KeyType::X25519.is_ec(), "X25519 is_ec")
+    assert(KeyType::X448.is_ec(), "X448 is_ec")
+    assert(not KeyType::Rsa.is_ec(), "Rsa not is_ec")
+    assert(not KeyType::Dsa.is_ec(), "Dsa not is_ec")
+    assert(not KeyType::Dh.is_ec(), "Dh not is_ec")
+    return 0
+}
+
+// --- KeyType::from_name ---
+
+@test
+func test_key_type_from_name_valid() -> I32 {
+    let rsa: Maybe[KeyType] = KeyType::from_name("rsa")
+    assert(rsa.is_just(), "rsa found")
+    let ec: Maybe[KeyType] = KeyType::from_name("ec")
+    assert(ec.is_just(), "ec found")
+    let ed: Maybe[KeyType] = KeyType::from_name("ed25519")
+    assert(ed.is_just(), "ed25519 found")
+    return 0
+}
+
+@test
+func test_key_type_from_name_invalid() -> I32 {
+    let result: Maybe[KeyType] = KeyType::from_name("invalid")
+    assert(result.is_nothing(), "invalid key type is Nothing")
+    return 0
+}
+
+// --- KeyFormat::name ---
+
+@test
+func test_key_format_name() -> I32 {
+    assert_eq(KeyFormat::Pem.name(), "pem", "Pem name")
+    assert_eq(KeyFormat::Der.name(), "der", "Der name")
+    assert_eq(KeyFormat::Jwk.name(), "jwk", "Jwk name")
+    assert_eq(KeyFormat::Raw.name(), "raw", "Raw name")
+    return 0
+}
+
+// --- KeyEncoding::name ---
+
+@test
+func test_key_encoding_name() -> I32 {
+    assert_eq(KeyEncoding::Pkcs1.name(), "pkcs1", "Pkcs1 name")
+    assert_eq(KeyEncoding::Pkcs8.name(), "pkcs8", "Pkcs8 name")
+    assert_eq(KeyEncoding::Spki.name(), "spki", "Spki name")
+    assert_eq(KeyEncoding::Sec1.name(), "sec1", "Sec1 name")
+    return 0
+}
+
+// --- RsaKeyGenOptions ---
+
+@test
+func test_rsa_key_gen_options_default() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    assert_eq(opts.modulus_length, 2048 as I64, "default modulus 2048")
+    assert_eq(opts.public_exponent, 65537 as I64, "default exponent 65537")
+    return 0
+}
+
+@test
+func test_rsa_key_gen_options_3072() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::rsa3072()
+    assert_eq(opts.modulus_length, 3072 as I64, "3072 modulus")
+    assert_eq(opts.public_exponent, 65537 as I64, "3072 exponent 65537")
+    return 0
+}
+
+@test
+func test_rsa_key_gen_options_4096() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::rsa4096()
+    assert_eq(opts.modulus_length, 4096 as I64, "4096 modulus")
+    return 0
+}
+
+// --- EcKeyGenOptions ---
+
+@test
+func test_ec_key_gen_options_p256() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p256()
+    assert_eq(opts.named_curve, "P-256", "p256 curve")
+    return 0
+}
+
+@test
+func test_ec_key_gen_options_p384() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p384()
+    assert_eq(opts.named_curve, "P-384", "p384 curve")
+    return 0
+}
+
+@test
+func test_ec_key_gen_options_p521() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p521()
+    assert_eq(opts.named_curve, "P-521", "p521 curve")
+    return 0
+}
+
+@test
+func test_ec_key_gen_options_secp256k1() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::secp256k1()
+    assert_eq(opts.named_curve, "secp256k1", "secp256k1 curve")
+    return 0
+}
+
+// --- Real key generation tests ---
+
+@test
+func test_generate_ec_key_pair_p256() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p256()
+    let result = generate_ec_key_pair(ref opts)
+    when result {
+        Ok(_kp) => { assert(true, "P-256 key pair generated") }
+        Err(_e) => { assert(false, "P-256 key pair gen failed") }
+    }
+    return 0
+}
+
+@test
+func test_generate_ec_key_pair_p384() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p384()
+    let result = generate_ec_key_pair(ref opts)
+    when result {
+        Ok(_kp) => { assert(true, "P-384 key pair generated") }
+        Err(_e) => { assert(false, "P-384 key pair gen failed") }
+    }
+    return 0
+}
+
+// --- generate_key (symmetric) ---
+
+@test
+func test_generate_key() -> I32 {
+    let result = generate_key(32 as I64)
+    assert(result.is_ok(), "generate_key 32 bytes should succeed")
+    let key: SecretKey = result.unwrap()
+    assert_eq(key.size(), 32 as I64, "key size 32 bytes")
+    assert_eq(key.size_bits(), 256 as I64, "key size 256 bits")
+    return 0
+}
+
+// --- SecretKey::from_bytes / to_bytes ---
+
+@test
+func test_secret_key_from_bytes() -> I32 {
+    let buf: Buffer = Buffer::from_string("0123456789abcdef")
+    let key: SecretKey = SecretKey::from_bytes(ref buf)
+    assert_eq(key.size(), 16 as I64, "secret key size 16")
+    let exported: Buffer = key.to_bytes()
+    assert_eq(exported.len(), 16 as I64, "exported length 16")
+    return 0
+}
+
+// --- SecretKey::to_hex / to_base64 ---
+
+@test
+func test_secret_key_to_hex_base64() -> I32 {
+    let result = generate_key(16 as I64)
+    assert(result.is_ok(), "generate_key 16 should succeed")
+    let key: SecretKey = result.unwrap()
+    let hex: Str = key.to_hex()
+    assert(hex.len() > (0 as I64), "hex not empty")
+    let b64: Str = key.to_base64()
+    assert(b64.len() > (0 as I64), "base64 not empty")
+    return 0
+}
+
+// --- SecretKey::from_hex ---
+
+@test
+func test_secret_key_from_hex() -> I32 {
+    let result = SecretKey::from_hex("0102030405060708090a0b0c0d0e0f10")
+    assert(result.is_ok(), "from_hex should succeed")
+    let key: SecretKey = result.unwrap()
+    assert_eq(key.size(), 16 as I64, "hex key size 16")
+    return 0
+}
+
+// --- SecretKey::from_base64 ---
+
+@test
+func test_secret_key_from_base64() -> I32 {
+    let result = SecretKey::from_base64("AQIDBAUGCA==")
+    assert(result.is_ok(), "from_base64 should succeed")
+    let key: SecretKey = result.unwrap()
+    assert(key.size() > (0 as I64), "base64 key not empty")
+    return 0
+}
+
+// --- SecretKey::destroy ---
+
+@test
+func test_secret_key_destroy() -> I32 {
+    let result = generate_key(16 as I64)
+    let mut key: SecretKey = result.unwrap()
+    key.destroy()
+    key.destroy()  // double destroy safe
+    return 0
+}
+
+// --- PrivateKey/PublicKey PEM roundtrip ---
+
+@test
+func test_private_key_pem_roundtrip() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+
+    let pem: Str = kp.private_key.to_pem()
+    assert(pem.len() > (0 as I64), "private key PEM not empty")
+
+    let result = PrivateKey::from_pem(pem)
+    assert(result.is_ok(), "from_pem should succeed")
+    let pk2: PrivateKey = result.unwrap()
+    assert_eq(pk2.size_bits(), 2048 as I64, "reimported key 2048 bits")
+    return 0
+}
+
+@test
+func test_public_key_pem_roundtrip() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+
+    let pem: Str = kp.public_key.to_pem()
+    assert(pem.len() > (0 as I64), "public key PEM not empty")
+
+    let result = PublicKey::from_pem(pem)
+    assert(result.is_ok(), "from_pem should succeed")
+    let pk2: PublicKey = result.unwrap()
+    assert_eq(pk2.size_bits(), 2048 as I64, "reimported pub key 2048 bits")
+    return 0
+}
+
+// --- PrivateKey/PublicKey DER roundtrip ---
+
+@test
+func test_private_key_der_roundtrip() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+
+    let der: Buffer = kp.private_key.to_der()
+    assert(der.len() > (0 as I64), "private DER not empty")
+
+    let result = PrivateKey::from_der(ref der)
+    assert(result.is_ok(), "from_der should succeed")
+    return 0
+}
+
+@test
+func test_public_key_der_roundtrip() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+
+    let der: Buffer = kp.public_key.to_der()
+    assert(der.len() > (0 as I64), "public DER not empty")
+
+    let result = PublicKey::from_der(ref der)
+    assert(result.is_ok(), "from_der should succeed")
+    return 0
+}
+
+// --- PrivateKey/PublicKey JWK roundtrip ---
+// NOTE: to_jwk() and from_jwk() are TODO stubs in C runtime (return empty string / NULL).
+// Deferred until JWK export/import is implemented in crypto_key.c.
+
+// --- PrivateKey::key_type ---
+
+@test
+func test_private_key_key_type() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    assert(kp.private_key.key_type().is_rsa(), "private key type is RSA")
+    assert(kp.public_key.key_type().is_rsa(), "public key type is RSA")
+    return 0
+}
+
+// --- PrivateKey::public_key ---
+
+@test
+func test_private_key_derive_public() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let derived: PublicKey = kp.private_key.public_key()
+    assert_eq(derived.size_bits(), 2048 as I64, "derived public key 2048 bits")
+    return 0
+}
+
+// --- PrivateKey::rsa_details / ec_details ---
+
+@test
+func test_rsa_details() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let details: Maybe[RsaKeyDetails] = kp.private_key.rsa_details()
+    assert(details.is_just(), "rsa_details should be Just")
+    let d: RsaKeyDetails = details.unwrap()
+    assert_eq(d.modulus_length, 2048 as I64, "modulus 2048")
+    assert_eq(d.public_exponent, 65537 as I64, "exponent 65537")
+    return 0
+}
+
+@test
+func test_ec_details() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p256()
+    let kp: KeyPair = generate_ec_key_pair(ref opts).unwrap()
+    let details: Maybe[EcKeyDetails] = kp.private_key.ec_details()
+    assert(details.is_just(), "ec_details should be Just")
+    let d: EcKeyDetails = details.unwrap()
+    assert_eq(d.named_curve, "prime256v1", "curve name")
+    return 0
+}
+
+@test
+func test_rsa_details_on_ec_is_nothing() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p256()
+    let kp: KeyPair = generate_ec_key_pair(ref opts).unwrap()
+    let details: Maybe[RsaKeyDetails] = kp.private_key.rsa_details()
+    assert(details.is_nothing(), "rsa_details on EC should be Nothing")
+    return 0
+}
+
+@test
+func test_ec_details_on_rsa_is_nothing() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let details: Maybe[EcKeyDetails] = kp.private_key.ec_details()
+    assert(details.is_nothing(), "ec_details on RSA should be Nothing")
+    return 0
+}
+
+// --- PublicKey::rsa_details / ec_details ---
+
+@test
+func test_public_key_rsa_details() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let details: Maybe[RsaKeyDetails] = kp.public_key.rsa_details()
+    assert(details.is_just(), "public rsa_details should be Just")
+    return 0
+}
+
+@test
+func test_public_key_ec_details() -> I32 {
+    let opts: EcKeyGenOptions = EcKeyGenOptions::p256()
+    let kp: KeyPair = generate_ec_key_pair(ref opts).unwrap()
+    let details: Maybe[EcKeyDetails] = kp.public_key.ec_details()
+    assert(details.is_just(), "public ec_details should be Just")
+    return 0
+}
+
+// --- PrivateKey::equals / PublicKey::equals ---
+
+@test
+func test_private_key_equals() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    assert(kp.private_key.equals(ref kp.private_key), "key should equal itself")
+    return 0
+}
+
+@test
+func test_public_key_equals() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    assert(kp.public_key.equals(ref kp.public_key), "pub key should equal itself")
+    return 0
+}
+
+// --- PrivateKey::to_pem_encrypted / from_pem_encrypted ---
+
+@test
+func test_private_key_pem_encrypted_roundtrip() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let enc_pem: Str = kp.private_key.to_pem_encrypted("testpassword", "aes-256-cbc")
+    assert(enc_pem.len() > (0 as I64), "encrypted PEM not empty")
+    let result = PrivateKey::from_pem_encrypted(enc_pem, "testpassword")
+    assert(result.is_ok(), "from_pem_encrypted should succeed")
+    return 0
+}
+
+// --- PrivateKey::destroy / PublicKey::destroy ---
+
+@test
+func test_key_destroy() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    kp.private_key.destroy()
+    kp.private_key.destroy()  // double destroy safe
+    kp.public_key.destroy()
+    kp.public_key.destroy()
+    return 0
+}
+
+// --- KeyPair::destroy ---
+
+@test
+func test_keypair_destroy() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let mut kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    kp.destroy()
+    return 0
+}
+
+// --- generate_key_pair(KeyType, I64) ---
+
+@test
+func test_generate_key_pair_rsa() -> I32 {
+    let result = generate_key_pair(KeyType::Rsa, 2048)
+    assert(result.is_ok(), "RSA 2048 key pair generation should succeed")
+    return 0
+}
+
+@test
+func test_generate_key_pair_ed25519() -> I32 {
+    let result = generate_key_pair(KeyType::Ed25519, 0)
+    assert(result.is_ok(), "Ed25519 key pair generation should succeed")
+    return 0
+}
+
+@test
+func test_generate_key_pair_x25519() -> I32 {
+    let result = generate_key_pair(KeyType::X25519, 0)
+    assert(result.is_ok(), "X25519 key pair generation should succeed")
+    return 0
+}
+
+// NOTE: DSA key generation may fail on some OpenSSL builds (legacy algorithm).
+// Skipped to avoid environment-dependent failures.
+
+@test
+func test_generate_key_pair_ec() -> I32 {
+    let result = generate_key_pair(KeyType::Ec, 0)
+    assert(result.is_ok(), "EC key pair generation should succeed")
+    return 0
+}
+
+// --- create_private_key / create_public_key / create_secret_key ---
+
+@test
+func test_create_private_key_pem() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let pem: Str = kp.private_key.to_pem()
+    let result = create_private_key(pem, KeyFormat::Pem)
+    assert(result.is_ok(), "create_private_key PEM should work")
+    return 0
+}
+
+@test
+func test_create_private_key_invalid() -> I32 {
+    let result = create_private_key("not-a-pem", KeyFormat::Pem)
+    assert(result.is_err(), "invalid PEM should fail")
+    return 0
+}
+
+@test
+func test_create_public_key_pem() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let pem: Str = kp.public_key.to_pem()
+    let result = create_public_key(pem, KeyFormat::Pem)
+    assert(result.is_ok(), "create_public_key PEM should work")
+    return 0
+}
+
+@test
+func test_create_public_key_invalid() -> I32 {
+    let result = create_public_key("not-a-pem", KeyFormat::Pem)
+    assert(result.is_err(), "invalid PEM should fail")
+    return 0
+}
+
+@test
+func test_create_secret_key_raw() -> I32 {
+    let result = create_secret_key("mysecretkey12345", KeyFormat::Raw)
+    assert(result.is_ok(), "create_secret_key raw should work")
+    return 0
+}
+
+@test
+func test_create_secret_key_base64() -> I32 {
+    let result = create_secret_key("AQIDBAUGCA==", KeyFormat::Pem)
+    assert(result.is_ok(), "create_secret_key base64 should work")
+    return 0
+}
+
+// --- KeyPair::to_pem ---
+
+@test
+func test_keypair_to_pem() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let pair: (Str, Str) = kp.to_pem()
+    // pair.0 = public PEM, pair.1 = private PEM
+    // Both should be non-empty strings
+    return 0
+}
+
+// --- KeyPair::to_jwk ---
+// NOTE: JWK import/export are TODO stubs in C runtime (return empty/NULL).

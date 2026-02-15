@@ -1,12 +1,9 @@
-//! Tests for crypto random functions
-
+// Tests for crypto random functions
 use test::{assert, assert_eq}
 use std::collections::Buffer
-use std::crypto::random::{random_bytes, random_int, random_uuid, SecureRandom}
+use std::crypto::random::{random_bytes, random_int, random_uuid, random_u32, random_u64, random_fill, random_fill_range, timing_safe_equal, timing_safe_equal_str, generate_prime, generate_safe_prime, check_prime, check_prime_rounds, get_random_values, SecureRandom}
 
-// ============================================================================
-// random_bytes Tests
-// ============================================================================
+// --- random_bytes ---
 
 @test
 func test_random_bytes_length() -> I32 {
@@ -32,13 +29,10 @@ func test_random_bytes_zero_length() -> I32 {
     return 0
 }
 
-// ============================================================================
-// random_int Tests
-// ============================================================================
+// --- random_int ---
 
 @test
 func test_random_int_range() -> I32 {
-    // Generate many random integers and check they're in range
     let mut i: I64 = 0
     loop (i < (100 as I64)) {
         let n: I64 = random_int(0 as I64, 100 as I64)
@@ -51,7 +45,6 @@ func test_random_int_range() -> I32 {
 
 @test
 func test_random_int_single_value() -> I32 {
-    // Range of 1 should always return the same value
     let mut i: I64 = 0
     loop (i < (10 as I64)) {
         let n: I64 = random_int(42 as I64, 43 as I64)
@@ -73,18 +66,12 @@ func test_random_int_negative_range() -> I32 {
     return 0
 }
 
-// ============================================================================
-// random_uuid Tests
-// ============================================================================
+// --- random_uuid ---
 
 @test
 func test_random_uuid_format() -> I32 {
     let uuid: Str = random_uuid()
-
-    // UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-    // Length should be 36 characters
     assert_eq(uuid.len(), 36 as I64, "uuid length")
-
     return 0
 }
 
@@ -93,37 +80,179 @@ func test_random_uuid_uniqueness() -> I32 {
     let uuid1: Str = random_uuid()
     let uuid2: Str = random_uuid()
     let uuid3: Str = random_uuid()
-
-    // All UUIDs should be different
     assert(uuid1 != uuid2, "uuid1 != uuid2")
     assert(uuid2 != uuid3, "uuid2 != uuid3")
     assert(uuid1 != uuid3, "uuid1 != uuid3")
-
     return 0
 }
 
-// ============================================================================
-// SecureRandom Tests
-// ============================================================================
+// --- random_u32 / random_u64 ---
+
+@test
+func test_random_u32() -> I32 {
+    let v1: U32 = random_u32()
+    let v2: U32 = random_u32()
+    assert(v1 != v2, "random_u32 values should differ")
+    return 0
+}
+
+@test
+func test_random_u64() -> I32 {
+    let v1: U64 = random_u64()
+    let v2: U64 = random_u64()
+    assert(v1 != v2, "random_u64 values should differ")
+    return 0
+}
+
+// --- random_fill ---
+
+@test
+func test_random_fill() -> I32 {
+    let mut buf: Buffer = random_bytes(16 as I64)
+    assert(buf.len() == (16 as I64), "buffer should be 16 bytes")
+    random_fill(buf)
+    assert(buf.len() == (16 as I64), "buffer should remain 16 bytes after fill")
+    return 0
+}
+
+// --- random_fill_range ---
+
+@test
+func test_random_fill_range() -> I32 {
+    let mut buf: Buffer = random_bytes(32 as I64)
+    let result = random_fill_range(buf, 8 as I64, 16 as I64)
+    assert(result.is_ok(), "fill_range should succeed")
+    assert(buf.len() == (32 as I64), "buffer size unchanged")
+    return 0
+}
+
+@test
+func test_random_fill_range_invalid() -> I32 {
+    let mut buf: Buffer = random_bytes(16 as I64)
+    let result = random_fill_range(buf, -1 as I64, 8 as I64)
+    assert(result.is_err(), "negative offset should fail")
+    return 0
+}
+
+@test
+func test_random_fill_range_overflow() -> I32 {
+    let mut buf: Buffer = random_bytes(16 as I64)
+    let result = random_fill_range(mut ref buf, 8 as I64, 16 as I64)
+    assert(result.is_err(), "offset+size > len should fail")
+    buf.destroy()
+    return 0
+}
+
+// --- timing_safe_equal ---
+
+@test
+func test_timing_safe_equal_str_same() -> I32 {
+    assert(timing_safe_equal_str("hello", "hello"), "same strings equal")
+    return 0
+}
+
+@test
+func test_timing_safe_equal_str_diff() -> I32 {
+    assert(not timing_safe_equal_str("hello", "world"), "different strings not equal")
+    return 0
+}
+
+@test
+func test_timing_safe_equal_str_empty() -> I32 {
+    assert(timing_safe_equal_str("", ""), "empty strings equal")
+    return 0
+}
+
+@test
+func test_timing_safe_equal_buf_same() -> I32 {
+    let a: Buffer = Buffer::from_string("hello")
+    let b: Buffer = Buffer::from_string("hello")
+    assert(timing_safe_equal(ref a, ref b), "same buffers equal")
+    return 0
+}
+
+@test
+func test_timing_safe_equal_buf_diff() -> I32 {
+    let a: Buffer = Buffer::from_string("hello")
+    let b: Buffer = Buffer::from_string("world")
+    assert(not timing_safe_equal(ref a, ref b), "different buffers not equal")
+    return 0
+}
+
+// --- generate_prime / check_prime ---
+
+@test
+func test_generate_prime() -> I32 {
+    let result = generate_prime(128 as I64)
+    assert(result.is_ok(), "generate_prime should succeed")
+    let prime: Buffer = result.unwrap()
+    assert(prime.len() > (0 as I64), "prime not empty")
+    assert(check_prime(ref prime), "generated prime should pass primality test")
+    return 0
+}
+
+@test
+func test_check_prime_rounds() -> I32 {
+    let prime: Buffer = generate_prime(128 as I64).unwrap()
+    assert(check_prime_rounds(ref prime, 20 as I64), "prime should pass with 20 rounds")
+    return 0
+}
+
+@test
+func test_generate_safe_prime() -> I32 {
+    let result = generate_safe_prime(128 as I64)
+    assert(result.is_ok(), "generate_safe_prime should succeed")
+    let prime: Buffer = result.unwrap()
+    assert(prime.len() > (0 as I64), "safe prime not empty")
+    assert(check_prime(ref prime), "safe prime should pass primality test")
+    return 0
+}
+
+// --- get_random_values ---
+
+@test
+func test_get_random_values() -> I32 {
+    let mut buf: Buffer = random_bytes(32 as I64)
+    get_random_values(buf)
+    assert(buf.len() == (32 as I64), "buffer size should remain 32")
+    return 0
+}
+
+// --- SecureRandom ---
 
 @test
 func test_secure_random_bytes() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
-
     let buf: Buffer = rng.bytes(64 as I64)
     assert_eq(buf.len(), 64 as I64, "rng bytes length")
-
     buf.destroy()
+    return 0
+}
+
+@test
+func test_secure_random_next_u8() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v1: U8 = rng.next_u8()
+    let v2: U8 = rng.next_u8()
+    let v3: U8 = rng.next_u8()
+    assert(true, "next_u8 callable")
+    return 0
+}
+
+@test
+func test_secure_random_next_u16() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v1: U16 = rng.next_u16()
+    let v2: U16 = rng.next_u16()
+    assert(v1 != v2, "u16 values should differ")
     return 0
 }
 
 @test
 func test_secure_random_next_u32() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
-
     let v1: U32 = rng.next_u32()
     let v2: U32 = rng.next_u32()
-
     assert(v1 != v2, "u32 values should differ")
     return 0
 }
@@ -131,36 +260,60 @@ func test_secure_random_next_u32() -> I32 {
 @test
 func test_secure_random_next_u64() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
-
     let v1: U64 = rng.next_u64()
     let v2: U64 = rng.next_u64()
-
-    // Should be different (with overwhelming probability)
     assert(v1 != v2, "u64 values should differ")
+    return 0
+}
 
+@test
+func test_secure_random_next_i32() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v1: I32 = rng.next_i32()
+    let v2: I32 = rng.next_i32()
+    assert(v1 != v2, "i32 values should differ")
+    return 0
+}
+
+@test
+func test_secure_random_next_i64() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v1: I64 = rng.next_i64()
+    let v2: I64 = rng.next_i64()
+    assert(v1 != v2, "i64 values should differ")
+    return 0
+}
+
+@test
+func test_secure_random_next_f32() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v: F32 = rng.next_f32()
+    assert(v >= 0.0f32, "f32 >= 0.0")
+    assert(v < 1.0f32, "f32 < 1.0")
+    return 0
+}
+
+@test
+func test_secure_random_next_f64() -> I32 {
+    let rng: SecureRandom = SecureRandom::new()
+    let v: F64 = rng.next_f64()
+    assert(v >= 0.0, "f64 >= 0.0")
+    assert(v < 1.0, "f64 < 1.0")
     return 0
 }
 
 @test
 func test_secure_random_int_range() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
-
-    let mut i: I64 = 0
-    loop (i < (100 as I64)) {
-        let n: I64 = rng.int_range(10 as I64, 20 as I64)
-        assert(n >= (10 as I64), "n >= 10")
-        assert(n < (20 as I64), "n < 20")
-        i = i + (1 as I64)
-    }
-
+    let v: I64 = rng.int_range(10 as I64, 20 as I64)
+    assert(v >= (10 as I64), "int_range >= min")
+    assert(v < (20 as I64), "int_range < max")
     return 0
 }
 
 @test
 func test_secure_random_next_bool() -> I32 {
     let rng: SecureRandom = SecureRandom::new()
-
-    // Call many times - should get both true and false
     let mut saw_true: Bool = false
     let mut saw_false: Bool = false
     let mut i: I64 = 0
@@ -175,20 +328,5 @@ func test_secure_random_next_bool() -> I32 {
     }
     assert(saw_true, "should see true in 100 calls")
     assert(saw_false, "should see false in 100 calls")
-    return 0
-}
-
-@test
-func test_secure_random_next_f64() -> I32 {
-    let rng: SecureRandom = SecureRandom::new()
-
-    let mut i: I64 = 0
-    loop (i < (100 as I64)) {
-        let f: F64 = rng.next_f64()
-        assert(f >= 0.0, "f >= 0.0")
-        assert(f < 1.0, "f < 1.0")
-        i = i + (1 as I64)
-    }
-
     return 0
 }

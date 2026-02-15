@@ -1,10 +1,10 @@
 // Tests for crypto RSA encryption/decryption
-// NOTE: RSA FFI encrypt/decrypt tests are excluded due to runtime crash (ACCESS_VIOLATION)
-// in generate_key_pair(KeyType::Rsa, 2048). Only enum/struct tests included.
-use test
-use std::crypto::rsa::{RsaPadding, OaepOptions}
+use test::{assert, assert_eq}
+use std::crypto::rsa::{RsaPadding, OaepOptions, public_encrypt, private_decrypt, public_encrypt_oaep, private_decrypt_oaep, public_encrypt_str, private_decrypt_str, private_encrypt, public_decrypt, hybrid_encrypt}
+use std::crypto::key::{generate_rsa_key_pair, RsaKeyGenOptions, KeyPair}
+use std::collections::Buffer
 
-// === RsaPadding enum tests ===
+// --- RsaPadding::name ---
 
 @test
 func test_rsa_padding_names() -> I32 {
@@ -17,36 +17,43 @@ func test_rsa_padding_names() -> I32 {
     return 0
 }
 
-@test
-func test_rsa_padding_overhead() -> I32 {
-    assert_eq(RsaPadding::Pkcs1.overhead(2048), 11 as I64, "pkcs1 overhead")
-    assert_eq(RsaPadding::OaepSha1.overhead(2048), 42 as I64, "oaep-sha1 overhead")
-    assert_eq(RsaPadding::OaepSha256.overhead(2048), 66 as I64, "oaep-sha256 overhead")
-    assert_eq(RsaPadding::OaepSha384.overhead(2048), 98 as I64, "oaep-sha384 overhead")
-    assert_eq(RsaPadding::OaepSha512.overhead(2048), 130 as I64, "oaep-sha512 overhead")
-    assert_eq(RsaPadding::None.overhead(2048), 0 as I64, "none overhead")
-    return 0
-}
-
-@test
-func test_rsa_padding_max_data_size() -> I32 {
-    // 2048-bit key = 256 bytes
-    assert_eq(RsaPadding::Pkcs1.max_data_size(2048), 245 as I64, "pkcs1 max")
-    assert_eq(RsaPadding::OaepSha256.max_data_size(2048), 190 as I64, "oaep256 max")
-    assert_eq(RsaPadding::None.max_data_size(2048), 256 as I64, "none max")
-    return 0
-}
+// --- RsaPadding::is_oaep ---
 
 @test
 func test_rsa_padding_is_oaep() -> I32 {
-    assert_eq(RsaPadding::OaepSha1.is_oaep(), true, "sha1")
-    assert_eq(RsaPadding::OaepSha256.is_oaep(), true, "sha256")
-    assert_eq(RsaPadding::OaepSha384.is_oaep(), true, "sha384")
-    assert_eq(RsaPadding::OaepSha512.is_oaep(), true, "sha512")
-    assert_eq(RsaPadding::Pkcs1.is_oaep(), false, "pkcs1 not oaep")
-    assert_eq(RsaPadding::None.is_oaep(), false, "none not oaep")
+    assert(RsaPadding::OaepSha1.is_oaep(), "OaepSha1 is_oaep")
+    assert(RsaPadding::OaepSha256.is_oaep(), "OaepSha256 is_oaep")
+    assert(RsaPadding::OaepSha384.is_oaep(), "OaepSha384 is_oaep")
+    assert(RsaPadding::OaepSha512.is_oaep(), "OaepSha512 is_oaep")
+    assert(not RsaPadding::Pkcs1.is_oaep(), "Pkcs1 not oaep")
+    assert(not RsaPadding::None.is_oaep(), "None not oaep")
     return 0
 }
+
+// --- RsaPadding::overhead ---
+
+@test
+func test_rsa_padding_overhead() -> I32 {
+    assert_eq(RsaPadding::Pkcs1.overhead(2048 as I64), 11 as I64, "Pkcs1 overhead")
+    assert_eq(RsaPadding::OaepSha1.overhead(2048 as I64), 42 as I64, "OaepSha1 overhead")
+    assert_eq(RsaPadding::OaepSha256.overhead(2048 as I64), 66 as I64, "OaepSha256 overhead")
+    assert_eq(RsaPadding::OaepSha384.overhead(2048 as I64), 98 as I64, "OaepSha384 overhead")
+    assert_eq(RsaPadding::OaepSha512.overhead(2048 as I64), 130 as I64, "OaepSha512 overhead")
+    assert_eq(RsaPadding::None.overhead(2048 as I64), 0 as I64, "None overhead")
+    return 0
+}
+
+// --- RsaPadding::max_data_size ---
+
+@test
+func test_rsa_padding_max_data_size() -> I32 {
+    assert_eq(RsaPadding::Pkcs1.max_data_size(2048 as I64), 245 as I64, "Pkcs1 max_data 2048")
+    assert_eq(RsaPadding::OaepSha256.max_data_size(2048 as I64), 190 as I64, "OaepSha256 max_data 2048")
+    assert_eq(RsaPadding::None.max_data_size(2048 as I64), 256 as I64, "None max_data 2048")
+    return 0
+}
+
+// --- OaepOptions ---
 
 @test
 func test_oaep_options() -> I32 {
@@ -60,8 +67,115 @@ func test_oaep_options() -> I32 {
 
     let s3 = OaepOptions::sha384()
     assert_eq(s3.hash, "sha384", "sha384 hash")
+    assert_eq(s3.mgf1_hash, "sha384", "sha384 mgf1_hash")
 
     let s5 = OaepOptions::sha512()
     assert_eq(s5.hash, "sha512", "sha512 hash")
+    assert_eq(s5.mgf1_hash, "sha512", "sha512 mgf1_hash")
+    return 0
+}
+
+// --- RSA key generation ---
+
+@test
+func test_rsa_keygen_2048() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let result = generate_rsa_key_pair(ref opts)
+    assert(result.is_ok(), "RSA 2048 keygen should succeed")
+    let kp: KeyPair = result.unwrap()
+    let bits: I64 = kp.public_key.size_bits()
+    assert_eq(bits, 2048 as I64, "RSA pub key should be 2048 bits")
+    return 0
+}
+
+// --- RSA encrypt/decrypt operations ---
+
+@test
+func test_rsa_encrypt_decrypt_pkcs1() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let data: Buffer = Buffer::from_string("hello RSA")
+    let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::Pkcs1)
+    assert(enc_result.is_ok(), "RSA PKCS1 encrypt should succeed")
+    let encrypted: Buffer = enc_result.unwrap()
+    assert(encrypted.len() > (0 as I64), "encrypted not empty")
+    let dec_result = private_decrypt(ref kp.private_key, ref encrypted, RsaPadding::Pkcs1)
+    assert(dec_result.is_ok(), "RSA PKCS1 decrypt should succeed")
+    let decrypted: Buffer = dec_result.unwrap()
+    assert_eq(decrypted.len(), 9 as I64, "decrypted length should be 9")
+    return 0
+}
+
+@test
+func test_rsa_encrypt_decrypt_oaep_sha256() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let data: Buffer = Buffer::from_string("OAEP test")
+    let enc_result = public_encrypt(ref kp.public_key, ref data, RsaPadding::OaepSha256)
+    assert(enc_result.is_ok(), "RSA OAEP encrypt should succeed")
+    let encrypted: Buffer = enc_result.unwrap()
+    let dec_result = private_decrypt(ref kp.private_key, ref encrypted, RsaPadding::OaepSha256)
+    assert(dec_result.is_ok(), "RSA OAEP decrypt should succeed")
+    let decrypted: Buffer = dec_result.unwrap()
+    assert_eq(decrypted.len(), 9 as I64, "decrypted length should be 9")
+    return 0
+}
+
+// --- public_encrypt_oaep / private_decrypt_oaep ---
+
+@test
+func test_rsa_encrypt_decrypt_oaep_custom() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let data: Buffer = Buffer::from_string("OAEP custom")
+    let oaep_opts: OaepOptions = OaepOptions::sha384()
+    let enc_result = public_encrypt_oaep(ref kp.public_key, ref data, ref oaep_opts)
+    assert(enc_result.is_ok(), "RSA OAEP custom encrypt should succeed")
+    let encrypted: Buffer = enc_result.unwrap()
+    let dec_result = private_decrypt_oaep(ref kp.private_key, ref encrypted, ref oaep_opts)
+    assert(dec_result.is_ok(), "RSA OAEP custom decrypt should succeed")
+    return 0
+}
+
+// --- public_encrypt_str / private_decrypt_str ---
+
+@test
+func test_rsa_encrypt_decrypt_str() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let enc_result = public_encrypt_str(ref kp.public_key, "hello RSA str", RsaPadding::Pkcs1)
+    assert(enc_result.is_ok(), "RSA str encrypt should succeed")
+    let encrypted: Buffer = enc_result.unwrap()
+    let dec_result = private_decrypt_str(ref kp.private_key, ref encrypted, RsaPadding::Pkcs1)
+    assert(dec_result.is_ok(), "RSA str decrypt should succeed")
+    return 0
+}
+
+// --- private_encrypt / public_decrypt ---
+
+@test
+func test_rsa_private_encrypt_public_decrypt() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let data: Buffer = Buffer::from_string("sign-like data")
+    let enc_result = private_encrypt(ref kp.private_key, ref data, RsaPadding::Pkcs1)
+    assert(enc_result.is_ok(), "private_encrypt should succeed")
+    let encrypted: Buffer = enc_result.unwrap()
+    let dec_result = public_decrypt(ref kp.public_key, ref encrypted, RsaPadding::Pkcs1)
+    assert(dec_result.is_ok(), "public_decrypt should succeed")
+    return 0
+}
+
+// --- hybrid_encrypt ---
+// NOTE: hybrid_decrypt cannot be tested because Outcome[(Buffer, Buffer)] unwrap
+// crashes due to compiler ABI bug with tuple types inside generic Outcome.
+
+@test
+func test_rsa_hybrid_encrypt_ok() -> I32 {
+    let opts: RsaKeyGenOptions = RsaKeyGenOptions::default()
+    let kp: KeyPair = generate_rsa_key_pair(ref opts).unwrap()
+    let data: Buffer = Buffer::from_string("hello hybrid")
+    let enc_result = hybrid_encrypt(ref kp.public_key, ref data)
+    assert(enc_result.is_ok(), "hybrid_encrypt should succeed")
     return 0
 }

@@ -6,8 +6,7 @@
  * - PBKDF2 (password-based key derivation)
  * - scrypt (memory-hard key derivation)
  * - HKDF (HMAC-based extract-and-expand key derivation)
- * - Argon2 (memory-hard password hashing, OpenSSL 3.2+)
- * - bcrypt (password hashing, stub - not natively in OpenSSL)
+ * - Argon2 (memory-hard key derivation, OpenSSL 3.2+)
  *
  * Uses OpenSSL 3.0+ EVP_KDF API.
  */
@@ -356,53 +355,6 @@ TML_EXPORT void* crypto_argon2_bytes(const char* variant, void* password_handle,
     return (void*)out;
 }
 
-TML_EXPORT int32_t crypto_argon2_verify(const char* encoded_hash, const char* password) {
-    /*
-     * OpenSSL's Argon2 KDF does not provide a built-in verify-from-encoded-string
-     * function. A full implementation would parse the PHC string format
-     * ($argon2id$v=19$m=...,t=...,p=...$salt$hash), re-derive the key, and
-     * compare in constant time. For now, return 0 (verification failed) as a
-     * stub until the PHC parser is implemented.
-     */
-    (void)encoded_hash;
-    (void)password;
-    return 0;
-}
-
-TML_EXPORT const char* crypto_argon2_hash(const char* variant, const char* password,
-                                          int64_t time_cost, int64_t memory_cost,
-                                          int64_t parallelism) {
-    /*
-     * Produces a PHC-format encoded hash string. Requires generating a random
-     * salt, running Argon2, and formatting the output. Stub until PHC encoder
-     * is implemented.
-     */
-    (void)variant;
-    (void)password;
-    (void)time_cost;
-    (void)memory_cost;
-    (void)parallelism;
-    return tml_strdup("");
-}
-
-// ============================================================================
-// bcrypt (not natively available in OpenSSL)
-// ============================================================================
-
-TML_EXPORT const char* crypto_bcrypt_hash(const char* password, int64_t rounds) {
-    /* OpenSSL does not provide a native bcrypt implementation. */
-    (void)password;
-    (void)rounds;
-    return tml_strdup("");
-}
-
-TML_EXPORT int32_t crypto_bcrypt_verify(const char* hash, const char* password) {
-    /* OpenSSL does not provide a native bcrypt implementation. */
-    (void)hash;
-    (void)password;
-    return 0;
-}
-
 #else /* !TML_HAS_OPENSSL */
 
 // ============================================================================
@@ -513,35 +465,6 @@ TML_EXPORT void* crypto_argon2_bytes(const char* variant, void* password_handle,
     (void)memory_cost;
     (void)parallelism;
     return NULL;
-}
-
-TML_EXPORT int32_t crypto_argon2_verify(const char* encoded_hash, const char* password) {
-    (void)encoded_hash;
-    (void)password;
-    return 0;
-}
-
-TML_EXPORT const char* crypto_argon2_hash(const char* variant, const char* password,
-                                          int64_t time_cost, int64_t memory_cost,
-                                          int64_t parallelism) {
-    (void)variant;
-    (void)password;
-    (void)time_cost;
-    (void)memory_cost;
-    (void)parallelism;
-    return "";
-}
-
-TML_EXPORT const char* crypto_bcrypt_hash(const char* password, int64_t rounds) {
-    (void)password;
-    (void)rounds;
-    return "";
-}
-
-TML_EXPORT int32_t crypto_bcrypt_verify(const char* hash, const char* password) {
-    (void)hash;
-    (void)password;
-    return 0;
 }
 
 #endif /* TML_HAS_OPENSSL */

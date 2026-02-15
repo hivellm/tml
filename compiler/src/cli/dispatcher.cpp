@@ -429,8 +429,8 @@ int tml_main(int argc, char* argv[]) {
                 << "Usage: tml run <file.tml> [args...] [--verbose] [--no-cache] [--coverage] "
                    "[--coverage-output=<file>] [--profile[=<file>]] [--backtrace]\n";
             std::cerr << "\nProfiling options:\n";
-            std::cerr
-                << "  --profile           Enable runtime profiling (output: profile.cpuprofile)\n";
+            std::cerr << "  --profile           Enable runtime profiling (output: "
+                         "build/debug/profile.cpuprofile)\n";
             std::cerr << "  --profile=<file>    Enable profiling with custom output path\n";
             std::cerr << "\nDebugging options:\n";
             std::cerr << "  --backtrace         Print stack trace on panic\n";
@@ -456,12 +456,12 @@ int tml_main(int argc, char* argv[]) {
                 opts.coverage = true; // Implicitly enable coverage
             } else if (arg == "--profile") {
                 opts.profile = true;
-                opts.profile_output = "profile.cpuprofile";
+                opts.profile_output = "build/debug/profile.cpuprofile";
             } else if (arg.starts_with("--profile=")) {
                 opts.profile = true;
                 opts.profile_output = arg.substr(10);
                 if (opts.profile_output.empty()) {
-                    opts.profile_output = "profile.cpuprofile";
+                    opts.profile_output = "build/debug/profile.cpuprofile";
                 }
             } else if (arg == "--backtrace") {
                 CompilerOptions::backtrace = true;
