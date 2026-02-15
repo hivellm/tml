@@ -1467,9 +1467,11 @@ add_executable(tml src/main.cpp)
 target_link_libraries(tml PRIVATE tml_cli)
 
 # Increase stack size on Windows to handle deep recursion during test execution
-# Default is 1MB, increase to 8MB for running large test suites
+# Default is 1MB, increase to 32MB for running large test suites with coverage.
+# Coverage mode disables shared library optimization, resulting in very large DLLs
+# with all library functions inlined. Processing 77+ suites requires more stack.
 if(MSVC)
-    target_link_options(tml PRIVATE /STACK:8388608)
+    target_link_options(tml PRIVATE /STACK:33554432)
 endif()
 
 # MCP server executable (separate from main tml to avoid file locking issues)

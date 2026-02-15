@@ -434,10 +434,23 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
                 return "0";
             }
             std::string start = gen_expr(*call.args[0]);
+            std::string start_type = last_expr_type_;
             std::string end = gen_expr(*call.args[1]);
+            std::string end_type = last_expr_type_;
+            // Ensure arguments are i64 to match str_slice(ptr, i64, i64) declaration
+            if (start_type == "i32") {
+                std::string ext = fresh_reg();
+                emit_line("  " + ext + " = sext i32 " + start + " to i64");
+                start = ext;
+            }
+            if (end_type == "i32") {
+                std::string ext = fresh_reg();
+                emit_line("  " + ext + " = sext i32 " + end + " to i64");
+                end = ext;
+            }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_substring(ptr " + receiver + ", i64 " +
-                      start + ", i64 " + end + ")");
+            emit_line("  " + result + " = call ptr @str_slice(ptr " + receiver + ", i64 " + start +
+                      ", i64 " + end + ")");
             last_expr_type_ = "ptr";
             return result;
         }

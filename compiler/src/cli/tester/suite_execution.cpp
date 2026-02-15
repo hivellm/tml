@@ -290,7 +290,13 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
         }
 
         // Compile remaining suites IN PARALLEL
-        std::vector<std::pair<TestSuite, DynamicLibrary>> loaded_suites;
+        // DLLs are loaded just-in-time during execution, not upfront, to avoid
+        // holding all DLLs in memory (critical for coverage mode with large DLLs).
+        struct CompiledSuite {
+            TestSuite suite;
+            std::string dll_path;
+        };
+        std::vector<CompiledSuite> compiled_suites;
 
         if (suites_to_compile.empty()) {
             if (!opts.quiet && !suites_fully_cached.empty()) {
@@ -379,7 +385,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                 .count());
             }
 
-            // Process compilation results and load DLLs (sequential for stability)
+            // Process compilation results — collect compiled suites for deferred loading.
             for (auto& job : jobs) {
                 auto& suite = job.suite;
                 auto& compile_result = job.result;
@@ -407,13 +413,45 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 }
 
                 suite.dll_path = compile_result.dll_path;
+                compiled_suites.push_back({std::move(suite), compile_result.dll_path});
+            }
+        } // end of suites_to_compile block
 
-                // Load the suite DLL
+        // Run all tests from compiled suites sequentially.
+        // DLLs are loaded just-in-time and unloaded after each suite to avoid
+        // holding all DLLs in memory (critical for coverage mode).
+        std::mutex output_mutex;
+        std::mutex cache_mutex;    // For synchronized cache updates
+        std::mutex coverage_mutex; // For synchronized coverage collection
+        std::atomic<bool> fail_fast_triggered{false};
+
+        // Single-threaded test execution to avoid global state conflicts
+        // between test DLLs (mem_track atexit, log sinks, etc.)
+        std::atomic<size_t> suite_index{0};
+
+        // Worker function that processes suites
+        auto suite_worker = [&]() {
+            while (true) {
+                // Check if fail-fast was triggered
+                if (fail_fast_triggered.load()) {
+                    return;
+                }
+
+                // Get next suite to process
+                size_t idx = suite_index.fetch_add(1);
+                if (idx >= compiled_suites.size()) {
+                    return;
+                }
+
+                auto& compiled = compiled_suites[idx];
+                auto& suite = compiled.suite;
+
+                // Load DLL just-in-time for this suite
                 set_crash_context("loading_dll", suite.name.c_str(), nullptr,
-                                  suite.dll_path.c_str());
+                                  compiled.dll_path.c_str());
                 phase_start = Clock::now();
                 DynamicLibrary lib;
-                bool load_ok = lib.load(suite.dll_path);
+                bool load_ok = lib.load(compiled.dll_path);
                 if (opts.profile) {
                     collector.profile_stats.add(
                         "suite_load", std::chrono::duration_cast<std::chrono::microseconds>(
@@ -434,55 +472,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     TML_LOG_ERROR("build", "DLL LOAD FAILED suite=" << suite.name << " error="
                                                                     << lib.get_error());
 
-                    continue; // Continue with other suites instead of stopping
+                    continue; // Continue with other suites
                 }
 
-                loaded_suites.push_back({std::move(suite), std::move(lib)});
-            }
-        } // end of suites_to_compile block
-
-        // Run all tests from loaded suites IN PARALLEL
-        // Each suite runs in its own thread with its own DLL
-        // Mutex for synchronized console output in parallel execution
-        std::mutex output_mutex;
-        std::mutex cache_mutex;    // For synchronized cache updates
-        std::mutex coverage_mutex; // For synchronized coverage collection
-        std::atomic<bool> fail_fast_triggered{false};
-
-        // Determine number of execution threads for running test functions.
-        // Test execution is I/O-bound (DLL function calls + output capture).
-        unsigned int hw_threads = std::thread::hardware_concurrency();
-        if (hw_threads == 0)
-            hw_threads = 8;
-        // Single-threaded test execution to avoid global state conflicts
-        // between test DLLs (mem_track atexit, log sinks, etc.)
-        // Compilation is still parallelized for speed.
-        unsigned int num_exec_threads = 1;
-        num_exec_threads =
-            std::min(num_exec_threads, static_cast<unsigned int>(loaded_suites.size()));
-
-        // Job queue for parallel suite execution
-        std::atomic<size_t> suite_index{0};
-
-        // Worker function that processes suites
-        auto suite_worker = [&]() {
-            while (true) {
-                // Check if fail-fast was triggered
-                if (fail_fast_triggered.load()) {
-                    return;
-                }
-
-                // Get next suite to process
-                size_t idx = suite_index.fetch_add(1);
-                if (idx >= loaded_suites.size()) {
-                    return;
-                }
-
-                auto& [suite, lib] = loaded_suites[idx];
-
-                TML_LOG_DEBUG("test", "Thread running suite: " << suite.name << " ("
-                                                               << suite.tests.size()
-                                                               << " test files)");
+                TML_LOG_INFO("test", "Running suite: " << suite.name << " (" << suite.tests.size()
+                                                       << " test files, " << (idx + 1) << "/"
+                                                       << compiled_suites.size() << ")");
+                // Flush log to ensure crash diagnostics are captured
+                tml::log::Logger::instance().flush();
 
                 for (size_t i = 0; i < suite.tests.size(); ++i) {
                     // Check fail-fast before each test
@@ -525,11 +522,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         }
                     }
 
-                    // Show which test is running
-                    TML_LOG_DEBUG("test", "Starting test " << (i + 1) << "/" << suite.tests.size()
-                                                           << ": " << test_info.test_name << " ("
-                                                           << test_info.test_count
-                                                           << " sub-tests)");
+                    // Show which test is running (INFO level for crash diagnostics)
+                    TML_LOG_INFO("test", "  Test " << (i + 1) << "/" << suite.tests.size() << ": "
+                                                   << test_info.test_name);
+                    tml::log::Logger::instance().flush();
 
                     // Track which test is running for crash diagnostics
                     set_crash_context("running", suite.name.c_str(), test_info.test_name.c_str(),
@@ -667,21 +663,13 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             }
         };
 
-        // Launch parallel suite execution threads
+        // Launch suite execution (single-threaded)
         if (!opts.quiet) {
-            TML_LOG_DEBUG("test", "Running " << loaded_suites.size() << " suites with "
-                                             << num_exec_threads << " threads...");
+            TML_LOG_DEBUG("test", "Running " << compiled_suites.size() << " suites...");
         }
 
         phase_start = Clock::now();
-        std::vector<std::thread> exec_threads;
-        for (unsigned int t = 0; t < std::min(num_exec_threads, (unsigned int)loaded_suites.size());
-             ++t) {
-            exec_threads.emplace_back(suite_worker);
-        }
-        for (auto& t : exec_threads) {
-            t.join();
-        }
+        suite_worker();
 
         if (opts.profile) {
             collector.profile_stats.add(

@@ -1,14 +1,14 @@
 # TML Roadmap
 
-**Last updated**: 2026-02-14
-**Current state**: Compiler functional, ~58% library coverage, ~7,200+ tests passing
+**Last updated**: 2026-02-15
+**Current state**: Compiler functional, 58.1% library coverage, 7,134 tests passing
 
 ---
 
 ## Overview
 
 ```
-Phase 1  [NOW 88%]    Fix codegen bugs (closures, generics, iterators)
+Phase 1  [NOW 90%]    Fix codegen bugs (closures, generics, iterators)
 Phase 2  [ACTIVE]     Tests for working features → coverage 58% → 75%
 Phase 3  [THEN]       Standard library essentials (HashSet, Math, DateTime)
 Phase 4  [FUTURE]     Migrate C runtime → pure TML
@@ -32,7 +32,7 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | Metric | Value |
 |--------|-------|
 | Library function coverage | 2,418 / 4,161 (58.1%) |
-| Tests passing | ~7,250+ across 570+ files |
+| Tests passing | 7,134 across 558 files |
 | Modules at 100% coverage | 40 |
 | Modules at 0% coverage | 52 |
 | C++ compiler size | ~238,000 lines |
@@ -92,18 +92,18 @@ Blocks the entire iterator system — 45 source files, ~200+ functions at 0% cov
 
 ### 1.6 LLVM type mismatches
 
-- [x] 1.6.1 Fix `Maybe[ref T]` — `OnceCell::get()` fixed (DONE 2026-02-14); `OnceLock` not yet implemented
+- [x] 1.6.1 Fix `Maybe[ref T]` — `OnceCell::get()` fixed (DONE 2026-02-14); `OnceLock::get()` also fixed (DONE 2026-02-15)
 - [x] 1.6.2 Fix `Maybe`/`Outcome` `to_string` (DONE 2026-02-13)
 
 ### 1.7 Other blocking bugs
 
 - [x] 1.7.1 Fix exception subclass allocation (DONE 2026-02-13)
 - [x] 1.7.2 Fix external module method linking for `std::types::Object` (DONE 2026-02-13)
-- [x] 1.7.3 Fix `unicode_data::UNICODE_VERSION` constant — tuple constants not supported
+- [x] 1.7.3 Fix `unicode_data::UNICODE_VERSION` constant — tuple constants now supported (DONE 2026-02-15)
 - [ ] 1.7.4 Fix external inheritance for exception subclasses
 - [x] 1.7.5 Fix `Text::data_ptr` — SSO mode crash (DONE 2026-02-14)
 - [x] 1.7.6 Fix `Saturating[T]::add/sub/mul()`, `Wrapping[T]::add/sub/mul/neg()` (DONE 2026-02-14)
-- [x] 1.7.7 Fix `clone::Duplicate::duplicate` coverage tracking for primitive types
+- [x] 1.7.7 Fix `clone::Duplicate::duplicate` coverage tracking for primitive types (DONE 2026-02-15 — clone module at 100%)
 
 ### 1.8 Nested generic type codegen
 
@@ -116,7 +116,7 @@ Blocks the entire iterator system — 45 source files, ~200+ functions at 0% cov
 
 - [ ] 1.9.1 Fix generic cache O(n^2) in test suites (`codegen/core/generic.cpp:303`)
 
-**Progress**: 30/33 items fixed (~91%). Coverage jumped from 43.7% to 58.1% (+1,373 functions). Remaining items: closures-return, auto-drop glue, external inheritance, nested generics, generic cache perf.
+**Progress**: 30/33 items fixed (~91%). Coverage jumped from 43.7% to 58.1% (+1,373 functions). Remaining items: closures-return (9.3), auto-drop glue (11.3), external inheritance (12.3), nested generics (14.2-14.5), `OnceLock::get_or_init` closure type mismatch (6e.3), generic cache perf (1.9.1).
 **Gate**: All items above fixed. Coverage reaches ~65% with zero new tests.
 
 ---
@@ -667,7 +667,7 @@ These can be worked on alongside the main phases without blocking or being block
 
 | Phase | Items | Done | Progress | Status |
 |-------|-------|------|----------|--------|
-| 1. Codegen bugs | 33 | 28 | 85% | NEARLY COMPLETE |
+| 1. Codegen bugs | 33 | 30 | 91% | NEARLY COMPLETE |
 | 2. Test coverage | 48 | 21 | 44% | IN PROGRESS |
 | 3. Stdlib essentials | 42 | 0 | 0% | NOT STARTED |
 | 4. Runtime migration | 28 | 0 | 0% | NOT STARTED |
@@ -675,7 +675,7 @@ These can be worked on alongside the main phases without blocking or being block
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
 | Parallel: Tooling | 7 | 4 | 57% | IN PROGRESS |
 | Parallel: Reflection | 5 | 3 | 60% | IN PROGRESS |
-| **TOTAL** | **212** | **56** | **26.4%** | |
+| **TOTAL** | **212** | **58** | **27.4%** | |
 
 ---
 

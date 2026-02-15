@@ -90,7 +90,20 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
         if (call.args.size() >= 3) {
             std::string s = gen_expr(*call.args[0]);
             std::string start = gen_expr(*call.args[1]);
+            std::string start_type = last_expr_type_;
             std::string len = gen_expr(*call.args[2]);
+            std::string len_type = last_expr_type_;
+            // Ensure arguments are i32 to match str_substring(ptr, i32, i32)
+            if (start_type == "i64") {
+                std::string trunc = fresh_reg();
+                emit_line("  " + trunc + " = trunc i64 " + start + " to i32");
+                start = trunc;
+            }
+            if (len_type == "i64") {
+                std::string trunc = fresh_reg();
+                emit_line("  " + trunc + " = trunc i64 " + len + " to i32");
+                len = trunc;
+            }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @str_substring(ptr " + s + ", i32 " + start +
                       ", i32 " + len + ")");
