@@ -8,6 +8,8 @@
 
 #include "crypto_common.h"
 
+#include <limits.h>
+
 #ifdef TML_HAS_OPENSSL
 #include <openssl/rand.h>
 #endif
@@ -20,6 +22,8 @@ static int fill_random_bytes(uint8_t* buffer, size_t size) {
     if (size == 0)
         return 0;
 #ifdef TML_HAS_OPENSSL
+    if (size > (size_t)INT_MAX)
+        return -1;
     return RAND_bytes(buffer, (int)size) == 1 ? 0 : -1;
 #else
     (void)buffer;
@@ -786,7 +790,7 @@ TML_EXPORT void* crypto_cipher_create(const char* algorithm, void* key_handle, v
 TML_EXPORT void crypto_cipher_set_aad(void* handle, void* aad_handle) {
     CipherContext* cctx = (CipherContext*)handle;
     TmlBuffer* aad = (TmlBuffer*)aad_handle;
-    if (!cctx || !aad)
+    if (!cctx || !aad || aad->length > INT_MAX)
         return;
     int outl;
     EVP_CipherUpdate(cctx->ctx, NULL, &outl, aad->data, (int)aad->length);
@@ -796,8 +800,11 @@ TML_EXPORT void crypto_cipher_set_aad_str(void* handle, const char* aad) {
     CipherContext* cctx = (CipherContext*)handle;
     if (!cctx || !aad)
         return;
+    size_t aad_len = strlen(aad);
+    if (aad_len > (size_t)INT_MAX)
+        return;
     int outl;
-    EVP_CipherUpdate(cctx->ctx, NULL, &outl, (const unsigned char*)aad, (int)strlen(aad));
+    EVP_CipherUpdate(cctx->ctx, NULL, &outl, (const unsigned char*)aad, (int)aad_len);
 }
 
 TML_EXPORT void crypto_cipher_set_padding(void* handle, int32_t enabled) {
@@ -812,15 +819,20 @@ TML_EXPORT void crypto_cipher_update_str(void* handle, const char* data, void* o
     TmlBuffer* output = (TmlBuffer*)output_handle;
     if (!cctx || !data || !output)
         return;
-    int data_len = (int)strlen(data);
-    int out_len = data_len + EVP_MAX_BLOCK_LENGTH;
-    if (output->capacity < out_len) {
-        uint8_t* new_data = (uint8_t*)realloc(output->data, out_len);
+    size_t str_len = strlen(data);
+    if (str_len > (size_t)INT_MAX)
+        return;
+    int data_len = (int)str_len;
+    int64_t needed = (int64_t)data_len + EVP_MAX_BLOCK_LENGTH;
+    if (output->capacity < output->length + needed) {
+        int64_t new_cap = output->length + needed;
+        uint8_t* new_data = (uint8_t*)realloc(output->data, new_cap);
         if (!new_data)
             return;
         output->data = new_data;
-        output->capacity = out_len;
+        output->capacity = new_cap;
     }
+    int out_len = 0;
     EVP_CipherUpdate(cctx->ctx, output->data + output->length, &out_len, (const unsigned char*)data,
                      data_len);
     output->length += out_len;
@@ -830,19 +842,20 @@ TML_EXPORT void crypto_cipher_update_bytes(void* handle, void* data_handle, void
     CipherContext* cctx = (CipherContext*)handle;
     TmlBuffer* data = (TmlBuffer*)data_handle;
     TmlBuffer* output = (TmlBuffer*)output_handle;
-    if (!cctx || !data || !output)
+    if (!cctx || !data || !output || data->length > INT_MAX)
         return;
-    int out_len = (int)data->length + EVP_MAX_BLOCK_LENGTH;
-    if (output->capacity < output->length + out_len) {
-        int64_t new_cap = output->length + out_len;
+    int data_len = (int)data->length;
+    int64_t needed = (int64_t)data_len + EVP_MAX_BLOCK_LENGTH;
+    if (output->capacity < output->length + needed) {
+        int64_t new_cap = output->length + needed;
         uint8_t* new_data = (uint8_t*)realloc(output->data, new_cap);
         if (!new_data)
             return;
         output->data = new_data;
         output->capacity = new_cap;
     }
-    EVP_CipherUpdate(cctx->ctx, output->data + output->length, &out_len, data->data,
-                     (int)data->length);
+    int out_len = 0;
+    EVP_CipherUpdate(cctx->ctx, output->data + output->length, &out_len, data->data, data_len);
     output->length += out_len;
 }
 
@@ -885,7 +898,7 @@ TML_EXPORT void* crypto_cipher_get_tag(void* handle) {
 TML_EXPORT void crypto_cipher_set_tag(void* handle, void* tag_handle) {
     CipherContext* cctx = (CipherContext*)handle;
     TmlBuffer* tag = (TmlBuffer*)tag_handle;
-    if (!cctx || !tag)
+    if (!cctx || !tag || tag->length > INT_MAX)
         return;
     EVP_CIPHER_CTX_ctrl(cctx->ctx, EVP_CTRL_AEAD_SET_TAG, (int)tag->length, tag->data);
 }
@@ -1271,7 +1284,7 @@ TML_EXPORT void* crypto_generate_safe_prime(int64_t bits) {
 
 TML_EXPORT int32_t crypto_check_prime(void* handle) {
     TmlBuffer* buf = (TmlBuffer*)handle;
-    if (!buf || buf->length <= 0)
+    if (!buf || buf->length <= 0 || buf->length > INT_MAX)
         return 0;
     BIGNUM* bn = BN_bin2bn(buf->data, (int)buf->length, NULL);
     if (!bn)

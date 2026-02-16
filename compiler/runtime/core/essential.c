@@ -924,12 +924,12 @@ static LONG WINAPI tml_veh_handler(EXCEPTION_POINTERS* info) {
                  tml_get_exception_name(code), (unsigned long)code);
     }
 
-    // VEH runs before SEH frame unwinding, so longjmp is safe here.
-    // The stack is still intact because no unwinding has occurred.
+    // Pass through to the SEH __try/__except in call_run_with_catch_seh().
+    // Previous approach used longjmp here, but it can fail when stack or
+    // jmp_buf is corrupted (e.g., null-pointer dereference in OpenSSL during
+    // suite mode), killing the entire process. SEH __except blocks handle
+    // hardware exceptions safely without longjmp.
     tml_catching_panic = 0;
-    longjmp(tml_panic_jmp_buf, 2);
-
-    // Should never reach here
     return EXCEPTION_CONTINUE_SEARCH;
 }
 

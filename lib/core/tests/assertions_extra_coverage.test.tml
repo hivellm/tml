@@ -1,0 +1,31 @@
+// Tests that call assert_lt, assert_lte, assert_str_empty, assert_str_not_empty
+// from a core test suite so call-site coverage tracking picks them up
+use test::{assert, assert_eq}
+use test::assertions::{assert_lt, assert_lte, assert_str_empty, assert_str_not_empty}
+
+@test
+func test_assert_lt_from_core() -> I32 {
+    assert_lt(1, 2, "1 < 2")
+    assert_lt(-5, 0, "-5 < 0")
+    return 0
+}
+
+@test
+func test_assert_lte_from_core() -> I32 {
+    assert_lte(3, 3, "3 <= 3")
+    assert_lte(1, 5, "1 <= 5")
+    return 0
+}
+
+@test
+func test_assert_str_empty_from_core() -> I32 {
+    assert_str_empty("", "empty string")
+    return 0
+}
+
+@test
+func test_assert_str_not_empty_from_core() -> I32 {
+    assert_str_not_empty("hello", "non-empty")
+    assert_str_not_empty(" ", "space is not empty")
+    return 0
+}

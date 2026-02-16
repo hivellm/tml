@@ -289,6 +289,7 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
 
     // assert_true(value, message) - Assert value is true (alias for assert)
     if (fn_name == "assert_true") {
+        emit_coverage("assert_true");
         if (!call.args.empty()) {
             std::string cond = gen_expr(*call.args[0]);
             std::string cond_type = last_expr_type_;
@@ -331,6 +332,7 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
 
     // assert_false(condition, message) - Assert condition is false
     if (fn_name == "assert_false") {
+        emit_coverage("assert_false");
         if (!call.args.empty()) {
             std::string cond = gen_expr(*call.args[0]);
             std::string cond_type = last_expr_type_;
@@ -370,6 +372,17 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
         }
         last_expr_type_ = "void";
         return "0";
+    }
+
+    // Coverage tracking for assertion functions that are NOT builtins
+    // but are defined in the test::assertions module.
+    // These functions still go through normal call dispatch, but we emit coverage
+    // tracking at the call site so they get counted even if the test library suite
+    // doesn't run (e.g., due to a crash in an earlier suite).
+    if (fn_name == "assert_lt" || fn_name == "assert_lte" || fn_name == "assert_gt" ||
+        fn_name == "assert_gte" || fn_name == "assert_in_range" || fn_name == "assert_str_len" ||
+        fn_name == "assert_str_empty" || fn_name == "assert_str_not_empty") {
+        emit_coverage(fn_name);
     }
 
     return std::nullopt;

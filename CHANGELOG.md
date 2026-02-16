@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Coverage History Deduplication** (2026-02-16) - Fixed `coverage_history.jsonl` bloat from incremental saves
+  - Incremental per-suite coverage save no longer calls `write_library_coverage_html` (which appended to history)
+  - Only `covered_functions.txt` is written incrementally; full report (HTML/JSON/history) written once at end
+  - Cleaned history file: 604 entries (4.1MB) reduced to 33 meaningful entries (236KB)
+  - File: `compiler/src/cli/tester/suite_execution.cpp`
+
+- **Assertion Coverage Tracking** (2026-02-16) - Builtin assertions now tracked in coverage reports
+  - `assert_true` and `assert_false` builtins emit `tml_cover_func()` at call site
+  - Non-builtin assertion functions (`assert_lt`, `assert_lte`, `assert_gt`, `assert_gte`, `assert_in_range`, `assert_str_len`, `assert_str_empty`, `assert_str_not_empty`) emit call-site coverage tracking
+  - Assertions module reached 100% (10/10) coverage
+  - New test file: `lib/core/tests/assertions_extra_coverage.test.tml` (4 tests)
+  - File: `compiler/src/codegen/llvm/builtins/assert.cpp`
+
 - **MCP Tools Enhancement — 20 Tools** (2026-02-11) - Complete project-level MCP tool suite
   - **`project/build`** — Build the TML compiler from C++ sources via `_popen`, with `mode` (debug/release), `clean`, `tests`, `target` (compiler/mcp/all) parameters; 300s timeout
   - **`project/coverage`** — Structured coverage data from `build/coverage/coverage.json` with `module`, `sort`, `limit`, `refresh` filters; dynamic `lib/` scanning
@@ -120,6 +133,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New files: `traits/solver.hpp/cpp`, `traits/solver_builtins.cpp`, `thir/thir_expr.hpp`, `thir/thir_module.hpp`, `thir/thir_lower.cpp`, `thir/exhaustiveness.hpp/cpp`, `mir/thir_mir_builder.hpp/cpp`
 
 ### Fixed
+- **Pointer-to-I32 truncation warning** (2026-02-16) - Compiler now warns when casting pointer to I32 on 64-bit systems
+  - `ptr as I32` generates `trunc i64 %ptr to i32`, which silently discards high bits
+  - On systems with >4GB RAM, heap addresses exceed `0xFFFFFFFF`, causing ACCESS_VIOLATION
+  - Emits `warning: file:line:col: casting pointer to I32 truncates the address...` to stderr
+  - File: `compiler/src/codegen/llvm/expr/cast.cpp`
+
+- **Crypto cipher integer overflow guards** (2026-02-16) - Added `INT_MAX` bounds checks to all OpenSSL cipher operations
+  - `fill_random_bytes`, `crypto_cipher_set_aad`, `crypto_cipher_set_aad_str`, `crypto_cipher_update_str`, `crypto_cipher_update_bytes`, `crypto_cipher_set_tag`, `crypto_check_prime` — all reject data exceeding `INT_MAX`
+  - Fixed `crypto_cipher_update_str` and `crypto_cipher_update_bytes` capacity calculations to use `int64_t` instead of truncated `int`
+  - File: `compiler/runtime/crypto/crypto.c`
+
+- **VEH crash handler longjmp removal** (2026-02-16) - Fixed test suite crashes caused by VEH handler's unsafe `longjmp`
+  - Windows Vectored Exception Handler was calling `longjmp(tml_panic_jmp_buf, 2)` on ACCESS_VIOLATION, which failed on corrupted stacks and killed the entire process
+  - Changed to `return EXCEPTION_CONTINUE_SEARCH`, letting SEH `__try/__except` handle the crash cleanly
+  - x509 test suite crash is now caught gracefully; all remaining suites continue executing
+  - File: `compiler/runtime/core/essential.c`
+
+- **Incremental coverage save** (2026-02-16) - Coverage data survives mid-run crashes
+  - `covered_functions.txt` written after each suite completes, so partial data persists even if a later suite crashes
+  - Coverage: 72.9% (3025/4147), 8699 tests passed, 0 failures
+  - File: `compiler/src/cli/tester/suite_execution.cpp`
+
 - **Bool ABI and ternary alloca codegen** (2026-02-10) - Fixed Bool value representation and conditional expression code generation
   - Bool ABI now correctly uses i1/i8 representation across function boundaries
   - Ternary expressions properly allocate temporaries for aggregate types

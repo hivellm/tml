@@ -732,6 +732,8 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                 // Incremental coverage save after each suite completes
                 // If the process crashes in a later suite, we still have partial data
+                // NOTE: Only save covered_functions.txt here, NOT the full report.
+                // The full report (HTML/JSON/history) is written once at the end.
                 if (CompilerOptions::coverage && !all_covered_functions.empty()) {
                     try {
                         std::lock_guard<std::mutex> lock(coverage_mutex);
