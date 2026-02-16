@@ -730,6 +730,25 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                     test_cache.save(cache_file.string());
                 }
 
+                // Incremental coverage save after each suite completes
+                // If the process crashes in a later suite, we still have partial data
+                if (CompilerOptions::coverage && !all_covered_functions.empty()) {
+                    try {
+                        std::lock_guard<std::mutex> lock(coverage_mutex);
+                        fs::path cov_dir = fs::path("build") / "coverage";
+                        fs::create_directories(cov_dir);
+                        fs::path partial_path = cov_dir / "covered_functions.txt";
+                        std::ofstream cov_out(partial_path, std::ios::trunc);
+                        if (cov_out) {
+                            for (const auto& fn : all_covered_functions) {
+                                cov_out << fn << "\n";
+                            }
+                        }
+                    } catch (...) {
+                        // Non-critical — don't let incremental save failures block tests
+                    }
+                }
+
                 // Suite completed - clear crash context
                 clear_crash_context();
             }
@@ -826,31 +845,29 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             }
 
             if (has_failures) {
-                // ANY failure (test logic or compilation) makes coverage data unreliable.
-                // Compilation errors mean entire suites didn't run, so modules tested
-                // by those suites will show 0% even if they have tests.
+                // Warn about failures but still generate coverage from passing suites.
+                // Partial coverage is far more useful than no coverage at all.
                 std::string failure_type =
                     has_test_failures ? "test(s) failed" : "suite(s) had compilation errors";
-                TML_LOG_FATAL("test",
-                              c.red() << c.bold()
-                                      << "========================================================"
-                                      << c.reset());
-                TML_LOG_FATAL(
-                    "test",
-                    c.red() << c.bold() << "  COVERAGE ABORTED: " << failure_count << " "
-                            << failure_type
-                            << (has_crashes ? " (" + std::to_string(crash_count) + " crashed)" : "")
-                            << c.reset());
-                TML_LOG_FATAL("test", c.red()
-                                          << c.bold() << "  Coverage report will NOT be generated."
-                                          << c.reset());
-                TML_LOG_FATAL("test", c.red() << c.bold()
-                                              << "  Fix all failures before running coverage."
-                                              << c.reset());
-                TML_LOG_FATAL("test",
-                              c.red() << c.bold()
-                                      << "========================================================"
-                                      << c.reset());
+                TML_LOG_WARN(
+                    "test", c.yellow() << c.bold()
+                                       << "========================================================"
+                                       << c.reset());
+                TML_LOG_WARN("test",
+                             c.yellow()
+                                 << c.bold() << "  COVERAGE WARNING: " << failure_count << " "
+                                 << failure_type
+                                 << (has_crashes ? " (" + std::to_string(crash_count) + " crashed)"
+                                                 : "")
+                                 << c.reset());
+                TML_LOG_WARN("test", c.yellow()
+                                         << c.bold()
+                                         << "  Generating partial coverage from passing tests."
+                                         << c.reset());
+                TML_LOG_WARN(
+                    "test", c.yellow() << c.bold()
+                                       << "========================================================"
+                                       << c.reset());
 
                 // Log each failure for diagnostics
                 for (const auto& result : collector.results) {
@@ -862,14 +879,15 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                          << " file=" << result.file_path);
                     }
                 }
-            } else {
-                // All tests passed — safe to generate coverage report
+            }
+
+            {
+                // Generate coverage report (even with failures — partial data is valuable)
                 print_library_coverage_report(all_covered_functions, c, test_stats);
 
                 // Write HTML report with proper library coverage data ONLY if:
-                // 1. All tests passed (already checked above)
-                // 2. Coverage is not zero
-                // 3. Coverage PERCENTAGE is not regressing from previous report
+                // 1. Coverage is not zero
+                // 2. Coverage PERCENTAGE is not regressing from previous report
                 if (!CompilerOptions::coverage_output.empty()) {
                     int current_covered = static_cast<int>(all_covered_functions.size());
 
@@ -884,11 +902,10 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                   << c.bold()
                                                   << "  COVERAGE ABORTED: Zero functions tracked"
                                                   << c.reset());
-                        TML_LOG_FATAL(
-                            "test", c.red()
-                                        << c.bold()
-                                        << "  All tests passed but no coverage data was collected."
-                                        << c.reset());
+                        TML_LOG_FATAL("test",
+                                      c.red() << c.bold()
+                                              << "  Tests ran but no coverage data was collected."
+                                              << c.reset());
                         TML_LOG_FATAL(
                             "test", c.red() << c.bold()
                                             << "  This indicates a bug in coverage instrumentation."

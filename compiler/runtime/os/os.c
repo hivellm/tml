@@ -13,10 +13,12 @@
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN
+// clang-format off
+#include <windows.h>
 #include <lmcons.h>  /* UNLEN - must come after windows.h */
+// clang-format on
 #include <process.h> /* _getpid */
 #include <userenv.h> /* GetUserProfileDirectoryA */
-#include <windows.h>
 #pragma comment(lib, "userenv.lib")
 #pragma comment(lib, "advapi32.lib")
 #else
