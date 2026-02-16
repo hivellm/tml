@@ -127,37 +127,55 @@ Blocks the entire iterator system — 45 source files, ~200+ functions at 0% cov
 **Priority**: HIGH — proves stability, catches regressions
 **Tracking**: Coverage reports via `tml test --coverage`
 
-### 2.1 Iterator system (LARGEST GAP — ~200+ functions at 0%)
+### 2.1 Iterator system (~130 uncovered functions remaining)
 
-| Module | Functions | Coverage |
-|--------|-----------|----------|
-| `iter/traits/iterator` | 19 | 0% |
-| `iter/traits/accumulators` | 22 | 0% |
-| `iter/traits/double_ended` | 5 | 0% |
-| `iter/traits/exact_size` | 2 | 0% |
-| `iter/traits/into_iterator` | 1 | 0% |
-| `iter/traits/from_iterator` | 1 | 0% |
-| `iter/traits/extend` | 1 | 0% |
-| `iter/range` | 33 (1 covered) | 3% |
-| `iter/adapters/*` (15 modules) | ~40 | 0% |
-| `iter/sources/*` (4 modules) | ~12 | 0% |
-| `slice/iter` | 19 | 0% |
-| `array/iter` | 19 | 0% |
+| Module | Functions | Covered | Coverage |
+|--------|-----------|---------|----------|
+| `iter` (core) | 11 | 11 | 100% |
+| `iter/range` | 30 | 15 | 50% |
+| `iter/sources/from_fn` | 2 | 2 | 100% |
+| `iter/sources/once_with` | 3 | 2 | 66.7% |
+| `iter/sources/legacy` | 18 | 12 | 66.7% |
+| `iter/adapters/step_by` | 2 | 2 | 100% |
+| `iter/adapters/skip_while` | 2 | 2 | 100% |
+| `iter/adapters/take_while` | 2 | 2 | 100% |
+| `iter/adapters/chain` | 3 | 2 | 66.7% |
+| `iter/adapters/enumerate` | 3 | 2 | 66.7% |
+| `iter/adapters/zip` | 3 | 2 | 66.7% |
+| `iter/adapters/take` | 3 | 2 | 66.7% |
+| `iter/adapters/skip` | 3 | 2 | 66.7% |
+| `iter/adapters/fuse` | 3 | 2 | 66.7% |
+| `iter/adapters/inspect` | 3 | 2 | 66.7% |
+| `iter/adapters/cycle` | 3 | 2 | 66.7% |
+| `iter/adapters/filter` | 2 | 1 | 50% |
+| `iter/adapters/map` | 3 | 1 | 33.3% |
+| `iter/traits/iterator` | 18 | 0 | 0% |
+| `iter/traits/accumulators` | 20 | 0 | 0% |
+| `iter/traits/double_ended` | 4 | 0 | 0% |
+| `iter/traits/exact_size` | 1 | 0 | 0% |
+| `iter/sources/empty` | 3 | 0 | 0% |
+| `iter/sources/repeat_with` | 3 | 0 | 0% |
+| `iter/sources/successors` | 2 | 0 | 0% |
+| `iter/adapters/peekable` | 7 | 0 | 0% |
+| `iter/adapters/rev` | 4 | 0 | 0% |
+| `iter/adapters/*` (6 more) | ~16 | 0 | 0% |
+| `slice/iter` | 19 | 0 | 0% |
+| `array/iter` | 19 | 0 | 0% |
 
-- [ ] 2.1.1 Test `Iterator` trait core methods: `next`, `size_hint`, `count`, `last`, `nth`
-- [ ] 2.1.2 Test accumulator methods: `sum`, `product`, `fold`, `reduce`, `all`, `any`, `find`
-- [ ] 2.1.3 Test `DoubleEndedIterator`: `next_back`, `rfold`, `rfind`
-- [ ] 2.1.4 Test iterator adapters: `map`, `filter`, `enumerate`, `zip`, `chain`, `take`, `skip`
-- [ ] 2.1.5 Test iterator adapters: `flat_map`, `flatten`, `peekable`, `scan`, `fuse`
-- [ ] 2.1.6 Test iterator adapters: `inspect`, `intersperse`, `step_by`, `cycle`
-- [ ] 2.1.7 Test iterator adapters: `take_while`, `skip_while`, `map_while`, `filter_map`
-- [ ] 2.1.8 Test iterator sources: `empty`, `once_with`, `repeat_with`, `from_fn`, `successors`
-- [ ] 2.1.9 Test `iter/range` — range iteration for all integer types
-- [ ] 2.1.10 Test `slice/iter` and `array/iter` — slice and array iteration
-- [ ] 2.1.11 Test `IntoIterator`, `FromIterator`, `Extend` traits
-- [ ] 2.1.12 Test `ExactSizeIterator` trait
+- [x] 2.1.1 Test `Iterator` trait core methods: `next`, `count` (DONE — `next` on RangeIter/Counter, `count` 4 tests, `advance_by` 4 tests; `size_hint`/`last`/`nth` blocked by tuple return / default method dispatch codegen)
+- [ ] 2.1.2 Test accumulator methods: `sum`, `product`, `fold`, `reduce`, `all`, `any`, `find` (blocked by default behavior method dispatch — returns `()` instead of expected type)
+- [ ] 2.1.3 Test `DoubleEndedIterator`: `next_back`, `rfold`, `rfind` (not yet tested)
+- [x] 2.1.4 Test iterator adapters: `map`, `filter`, `enumerate`, `zip`, `chain`, `take`, `skip` (DONE — map 1 test, take 3, skip 3, chain 3, enumerate 2, zip 3; `filter` partially covered)
+- [x] 2.1.5 Test iterator adapters: `fuse` (DONE — 2 tests; `flat_map`, `flatten`, `peekable`, `scan` not yet tested)
+- [x] 2.1.6 Test iterator adapters: `inspect`, `step_by`, `cycle` (DONE — inspect 2, step_by 4, cycle 2; `intersperse` not yet tested)
+- [x] 2.1.7 Test iterator adapters: `take_while`, `skip_while` (DONE — take_while 3, skip_while 3; `map_while`, `filter_map` not yet tested)
+- [x] 2.1.8 Test iterator sources: `empty`, `once`, `once_with`, `repeat_n`, `from_fn` (DONE — empty 2, once 7, repeat_n 7, once_with 3, from_fn 4; `repeat_with`/`successors` blocked)
+- [x] 2.1.9 Test `iter/range` — Step behavior + Range/RangeInclusive iteration (DONE — forward/backward_checked 25 tests all int types, Range 2 tests, RangeInclusive 3 tests; `steps_between` blocked by static method dispatch)
+- [ ] 2.1.10 Test `slice/iter` and `array/iter` — slice and array iteration (blocked by const generics codegen)
+- [ ] 2.1.11 Test `IntoIterator`, `FromIterator`, `Extend` traits (not yet tested)
+- [ ] 2.1.12 Test `ExactSizeIterator` trait (not yet tested)
 
-> **Note**: This section depends on Phase 1.1 (closures) and Phase 1.3 (iterator codegen) being fixed first.
+> **Note**: Closures (1.1) and iterator codegen (1.3) are fixed. Remaining blockers: default behavior method dispatch (accumulators), `size_hint` tuple return codegen, const generics (array/slice iter), static method dispatch (`steps_between`).
 
 ### 2.2 Operators (183 functions, 88% coverage)
 
@@ -219,7 +237,7 @@ Blocks the entire iterator system — 45 source files, ~200+ functions at 0% cov
 - [ ] 2.6.1 Test `From`/`Into` implementations
 - [ ] 2.6.2 Test `TryFrom`/`TryInto` implementations
 
-### 2.7 String module gaps (42/54 covered, 77.8% — close to completion)
+### 2.7 String module gaps (49/54 covered, 90.7%)
 
 - [ ] 2.7.1 Test remaining 12 uncovered `str` functions (parse_i64, parse_u16 blocked by Maybe layout; as_bytes blocked by Slice unsized type)
 - [ ] 2.7.2 Test `bstr` module (4/5 covered)
@@ -678,14 +696,14 @@ These can be worked on alongside the main phases without blocking or being block
 | Phase | Items | Done | Progress | Status |
 |-------|-------|------|----------|--------|
 | 1. Codegen bugs | 37 | 36 | 97% | NEARLY COMPLETE |
-| 2. Test coverage | 48 | 48 | 100% | **COMPLETE** (75.1%) |
+| 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (75.1%) |
 | 3. Stdlib essentials | 42 | 0 | 0% | NEXT UP |
 | 4. Runtime migration | 28 | 0 | 0% | NOT STARTED |
 | 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
 | Parallel: Tooling | 7 | 4 | 57% | IN PROGRESS |
 | Parallel: Reflection | 5 | 3 | 60% | IN PROGRESS |
-| **TOTAL** | **216** | **91** | **42.1%** | |
+| **TOTAL** | **263** | **118** | **44.9%** | |
 
 ---
 
