@@ -409,18 +409,25 @@ int tml_main(int argc, char* argv[]) {
         return run_build_with_queries(argv[2], opts);
     }
 
-    if (command == "fmt") {
-        if (argc < 3) {
-            std::cerr << "Usage: tml fmt <file.tml> [--check] [--verbose]\n";
-            return 1;
-        }
+    if (command == "fmt" || command == "format") {
         bool check_only = false;
-        for (int i = 3; i < argc; ++i) {
-            if (std::string(argv[i]) == "--check") {
+        std::string fmt_path = "."; // Default: current directory
+
+        // Parse arguments — path is the first non-flag argument after "fmt"
+        bool path_set = false;
+        for (int i = 2; i < argc; ++i) {
+            std::string arg(argv[i]);
+            if (arg == "--check") {
                 check_only = true;
+            } else if (arg == "--verbose" || arg == "-v") {
+                // Already handled above
+            } else if (!path_set) {
+                fmt_path = arg;
+                path_set = true;
             }
         }
-        return run_fmt(argv[2], check_only, verbose);
+
+        return run_fmt(fmt_path, check_only, verbose);
     }
 
     if (command == "run") {
