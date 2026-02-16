@@ -1,0 +1,97 @@
+// Additional coverage tests for core::alloc - global utility functions
+use test::{assert, assert_eq}
+use core::alloc::{Layout, LayoutError}
+use core::alloc::global::{
+    handle_alloc_error, default_alloc_align, min_alloc_size,
+    layout_bytes, layout_bytes_aligned,
+    alloc_global, alloc_global_zeroed, dealloc_global, realloc_global,
+    alloc_single, dealloc_single, alloc_array, alloc_array_zeroed, dealloc_array,
+    layout_u8, layout_u16, layout_u32, layout_u64, layout_u128, layout_ptr
+}
+
+@test
+func test_alloc_single_and_dealloc() -> I32 {
+    // Allocate 64 bytes aligned to 8
+    let ptr = alloc_single(64, 8)
+    assert(ptr != null, "alloc_single should succeed")
+    dealloc_single(ptr, 64, 8)
+    return 0
+}
+
+@test
+func test_alloc_array_10_elements() -> I32 {
+    // Allocate array of 10 x 8-byte elements
+    let ptr = alloc_array(8, 8, 10)
+    assert(ptr != null, "alloc_array should succeed")
+    dealloc_array(ptr, 8, 8, 10)
+    return 0
+}
+
+@test
+func test_alloc_array_zeroed_check() -> I32 {
+    let ptr = alloc_array_zeroed(4, 4, 5)
+    assert(ptr != null, "alloc_array_zeroed should succeed")
+    dealloc_array(ptr, 4, 4, 5)
+    return 0
+}
+
+@test
+func test_realloc_global_grow() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(32, 8)
+    let ptr = alloc_global(layout)
+    assert(ptr != null, "initial alloc should succeed")
+    let new_ptr = realloc_global(ptr, layout, 64)
+    assert(new_ptr != null, "realloc should succeed")
+    let new_layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    dealloc_global(new_ptr, new_layout)
+    return 0
+}
+
+@test
+func test_layout_bytes_zero_size() -> I32 {
+    let result = layout_bytes(0)
+    when result {
+        Ok(layout) => {
+            assert_eq(layout.size(), 0 as I64, "zero-size layout")
+            assert_eq(layout.align(), 1 as I64, "zero-size align is 1")
+        }
+        Err(_) => {
+            // Zero-size may or may not be valid; just testing the code path
+        }
+    }
+    return 0
+}
+
+@test
+func test_layout_bytes_large() -> I32 {
+    let result = layout_bytes(4096)
+    when result {
+        Ok(layout) => {
+            assert_eq(layout.size(), 4096 as I64, "4096 byte layout size")
+        }
+        Err(_) => {
+            assert(false, "layout_bytes(4096) should succeed")
+        }
+    }
+    return 0
+}
+
+@test
+func test_layout_bytes_aligned_various() -> I32 {
+    // Test valid alignments
+    let r1 = layout_bytes_aligned(256, 64)
+    when r1 {
+        Ok(l) => {
+            assert_eq(l.size(), 256 as I64, "size 256")
+            assert_eq(l.align(), 64 as I64, "align 64")
+        }
+        Err(_) => assert(false, "should succeed")
+    }
+    // Invalid alignment (not power of 2) should fail
+    let r2 = layout_bytes_aligned(100, 7)
+    when r2 {
+        Ok(_) => assert(false, "align 7 should fail")
+        Err(_) => {}
+    }
+    return 0
+}

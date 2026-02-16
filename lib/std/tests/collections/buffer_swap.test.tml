@@ -1,0 +1,49 @@
+// Tests for Buffer swap and write_i64/read_i64 methods
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_swap16() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    // Write 0x0102 at offset 0 (LE: stored as 02 01)
+    buf.write_u16_le(0x0102, 0)
+    buf.swap16()
+    // After swap16, bytes are swapped pairwise: 02 01 -> 01 02
+    let b0: I32 = buf.read_u8(0)
+    let b1: I32 = buf.read_u8(1)
+    assert_eq(b0, 0x01, "swap16 byte 0")
+    assert_eq(b1, 0x02, "swap16 byte 1")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_i64_sequential() -> I32 {
+    let buf: Buffer = Buffer.new(32)
+    buf.write_i64(1234567890123 as I64)
+    buf.write_i64(-99999 as I64)
+    buf.reset_read()
+    let v1: I64 = buf.read_i64()
+    let v2: I64 = buf.read_i64()
+    assert_eq(v1, 1234567890123 as I64, "sequential write/read i64 first")
+    assert_eq(v2, -99999 as I64, "sequential write/read i64 second")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_remaining_and_clear() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_byte(1)
+    buf.write_byte(2)
+    buf.write_byte(3)
+    assert_eq(buf.len(), 3 as I64, "len is 3")
+    buf.reset_read()
+    assert_eq(buf.remaining(), 3 as I64, "remaining is 3")
+    buf.read_byte()
+    assert_eq(buf.remaining(), 2 as I64, "remaining is 2 after read")
+    buf.clear()
+    assert_eq(buf.len(), 0 as I64, "len is 0 after clear")
+    buf.destroy()
+    return 0
+}

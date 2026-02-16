@@ -1,0 +1,33 @@
+// Tests for Buffer little-endian read/write methods
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_write_read_u16_le() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u16_le(0x1234, 0)
+    let v: I32 = buf.read_u16_le(0)
+    assert_eq(v, 0x1234, "u16 LE roundtrip")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_i16_le() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u16_le(0xFF80, 0)  // -128 as I16
+    let v: I32 = buf.read_i16_le(0)
+    assert_eq(v, -128, "i16 LE negative value")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_u32_le() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u32_le(0x12345678, 0)
+    let v: I64 = buf.read_u32_le(0)
+    assert_eq(v, 0x12345678, "u32 LE roundtrip")
+    buf.destroy()
+    return 0
+}

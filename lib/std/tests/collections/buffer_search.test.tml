@@ -1,0 +1,47 @@
+// Tests for Buffer search, comparison, and manipulation methods
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+// =============================================================================
+// Search methods
+// =============================================================================
+
+@test
+func test_buffer_index_of_found() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u8(0x10, 0)
+    buf.write_u8(0x20, 1)
+    buf.write_u8(0x30, 2)
+    buf.write_u8(0x40, 3)
+
+    let idx: I64 = buf.index_of(0x30, 0)
+    assert_eq(idx, 2 as I64, "index_of finds 0x30 at index 2")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_index_of_not_found() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u8(0x10, 0)
+    buf.write_u8(0x20, 1)
+
+    let idx: I64 = buf.index_of(0xFF, 0)
+    assert_eq(idx, -1 as I64, "index_of returns -1 when not found")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_last_index_of() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u8(0xAA, 0)
+    buf.write_u8(0xBB, 1)
+    buf.write_u8(0xAA, 2)
+    buf.write_u8(0xCC, 3)
+
+    let idx: I64 = buf.last_index_of(0xAA, 3)
+    assert_eq(idx, 2 as I64, "last_index_of finds last 0xAA at index 2")
+    buf.destroy()
+    return 0
+}

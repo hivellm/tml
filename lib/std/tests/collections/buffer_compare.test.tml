@@ -1,0 +1,106 @@
+// Tests for Buffer fill, fill_all, slice, includes, index_of, last_index_of
+// Note: compare/equals/copy_to are skipped due to `ref Buffer` codegen bug
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_fill_range() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u8(0x00, 0)
+    buf.write_u8(0x00, 1)
+    buf.write_u8(0x00, 2)
+    buf.write_u8(0x00, 3)
+    buf.fill(0xAA, 1, 3)
+    assert_eq(buf.read_u8(0), 0x00, "fill didn't touch index 0")
+    assert_eq(buf.read_u8(1), 0xAA, "fill set index 1")
+    assert_eq(buf.read_u8(2), 0xAA, "fill set index 2")
+    assert_eq(buf.read_u8(3), 0x00, "fill didn't touch index 3")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_fill_all() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u8(0x00, 0)
+    buf.write_u8(0x00, 1)
+    buf.write_u8(0x00, 2)
+    buf.fill_all(0xFF)
+    assert_eq(buf.read_u8(0), 0xFF, "fill_all byte 0")
+    assert_eq(buf.read_u8(1), 0xFF, "fill_all byte 1")
+    assert_eq(buf.read_u8(2), 0xFF, "fill_all byte 2")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_slice_copy() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u8(0x10, 0)
+    buf.write_u8(0x20, 1)
+    buf.write_u8(0x30, 2)
+    buf.write_u8(0x40, 3)
+    let sliced: Buffer = buf.slice(1, 3)
+    assert_eq(sliced.read_u8(0), 0x20, "slice byte 0")
+    assert_eq(sliced.read_u8(1), 0x30, "slice byte 1")
+    sliced.destroy()
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_includes_found() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u8(0x10, 0)
+    buf.write_u8(0x20, 1)
+    buf.write_u8(0x30, 2)
+    assert(buf.includes(0x20, 0), "includes should find 0x20")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_includes_not_found() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u8(0x10, 0)
+    assert(not buf.includes(0xFF, 0), "includes should not find 0xFF")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_index_of_found() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u8(0x10, 0)
+    buf.write_u8(0x20, 1)
+    buf.write_u8(0x30, 2)
+    buf.write_u8(0x40, 3)
+    let idx: I64 = buf.index_of(0x30, 0)
+    assert_eq(idx, 2 as I64, "index_of finds 0x30 at index 2")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_index_of_not_found() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u8(0x10, 0)
+    buf.write_u8(0x20, 1)
+    let idx: I64 = buf.index_of(0xFF, 0)
+    assert_eq(idx, -1 as I64, "index_of returns -1 when not found")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_last_index_of() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_u8(0xAA, 0)
+    buf.write_u8(0xBB, 1)
+    buf.write_u8(0xAA, 2)
+    buf.write_u8(0xCC, 3)
+    let idx: I64 = buf.last_index_of(0xAA, 3)
+    assert_eq(idx, 2 as I64, "last_index_of finds last 0xAA at index 2")
+    buf.destroy()
+    return 0
+}

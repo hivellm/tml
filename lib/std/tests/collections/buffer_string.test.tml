@@ -1,0 +1,36 @@
+// Tests for Buffer string conversion methods
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_to_hex() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u8(0xDE, 0)
+    buf.write_u8(0xAD, 1)
+    buf.write_u8(0xBE, 2)
+    buf.write_u8(0xEF, 3)
+    let hex: Str = buf.to_hex()
+    assert_eq(hex, "deadbeef", "to_hex should produce deadbeef")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_from_hex() -> I32 {
+    let buf: Buffer = Buffer.from_hex("cafebabe")
+    assert_eq(buf.read_u8(0), 0xCA, "from_hex byte 0")
+    assert_eq(buf.read_u8(1), 0xFE, "from_hex byte 1")
+    assert_eq(buf.read_u8(2), 0xBA, "from_hex byte 2")
+    assert_eq(buf.read_u8(3), 0xBE, "from_hex byte 3")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_from_string_to_string() -> I32 {
+    let buf: Buffer = Buffer.from_string("hello")
+    let s: Str = buf.to_string()
+    assert_eq(s, "hello", "from_string/to_string roundtrip")
+    buf.destroy()
+    return 0
+}

@@ -1,0 +1,73 @@
+// Extended tests for core::pool - PoolStats edge cases and GrowthPolicy
+use test::{assert, assert_eq}
+use core::pool::{GrowthPolicy, PoolStats}
+
+@test
+func test_pool_stats_hit_rate_90_percent() -> I32 {
+    var stats: PoolStats = PoolStats::new()
+    stats.hits = 9
+    stats.misses = 1
+    let rate: F64 = stats.hit_rate()
+    assert(rate == 90.0, "90% hit rate")
+    return 0
+}
+
+@test
+func test_pool_stats_hit_rate_one_hit() -> I32 {
+    var stats: PoolStats = PoolStats::new()
+    stats.hits = 1
+    stats.misses = 0
+    let rate: F64 = stats.hit_rate()
+    assert(rate == 100.0, "one hit zero misses = 100%")
+    return 0
+}
+
+@test
+func test_pool_stats_hit_rate_one_miss() -> I32 {
+    var stats: PoolStats = PoolStats::new()
+    stats.hits = 0
+    stats.misses = 1
+    let rate: F64 = stats.hit_rate()
+    assert(rate == 0.0, "zero hits one miss = 0%")
+    return 0
+}
+
+@test
+func test_growth_policy_linear_zero_step() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Linear(0)
+    assert_eq(p.next_capacity(10), 10, "Linear(0) should not change capacity")
+    assert(p.can_grow(), "Linear(0) can_grow still returns true")
+    return 0
+}
+
+@test
+func test_growth_policy_doubling_from_zero() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Doubling
+    assert_eq(p.next_capacity(0), 0, "Doubling from 0 gives 0")
+    return 0
+}
+
+@test
+func test_growth_policy_linear_large_step() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Linear(100)
+    assert_eq(p.next_capacity(50), 150, "Linear(100) + 50 = 150")
+    return 0
+}
+
+@test
+func test_pool_stats_fields_writable() -> I32 {
+    var stats: PoolStats = PoolStats::new()
+    stats.available = 5
+    stats.in_use = 3
+    stats.capacity = 8
+    stats.hits = 100
+    stats.misses = 50
+    stats.grows = 2
+    assert_eq(stats.available, 5, "available set correctly")
+    assert_eq(stats.in_use, 3, "in_use set correctly")
+    assert_eq(stats.capacity, 8, "capacity set correctly")
+    assert_eq(stats.hits, 100 as I64, "hits set correctly")
+    assert_eq(stats.misses, 50 as I64, "misses set correctly")
+    assert_eq(stats.grows, 2, "grows set correctly")
+    return 0
+}

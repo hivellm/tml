@@ -1,0 +1,145 @@
+// Tests for core::intrinsics — LLVM arithmetic, comparison, and bitwise
+use test::{assert, assert_eq}
+use core::intrinsics::{llvm_add, llvm_sub, llvm_mul, llvm_div, llvm_rem, llvm_neg}
+use core::intrinsics::{llvm_eq, llvm_ne, llvm_lt, llvm_le, llvm_gt, llvm_ge}
+use core::intrinsics::{llvm_and, llvm_or, llvm_xor, llvm_not, llvm_shl, llvm_shr}
+
+// ============================================================================
+// Arithmetic
+// ============================================================================
+
+@test
+func test_llvm_add_i32() -> I32 {
+    let r: I32 = llvm_add[I32](10, 20)
+    assert_eq(r, 30, "10 + 20 = 30")
+    return 0
+}
+
+@test
+func test_llvm_sub_i32() -> I32 {
+    let r: I32 = llvm_sub[I32](50, 20)
+    assert_eq(r, 30, "50 - 20 = 30")
+    return 0
+}
+
+@test
+func test_llvm_mul_i32() -> I32 {
+    let r: I32 = llvm_mul[I32](6, 7)
+    assert_eq(r, 42, "6 * 7 = 42")
+    return 0
+}
+
+@test
+func test_llvm_div_i32() -> I32 {
+    let r: I32 = llvm_div[I32](100, 4)
+    assert_eq(r, 25, "100 / 4 = 25")
+    return 0
+}
+
+@test
+func test_llvm_rem_i32() -> I32 {
+    let r: I32 = llvm_rem[I32](17, 5)
+    assert_eq(r, 2, "17 % 5 = 2")
+    return 0
+}
+
+@test
+func test_llvm_neg_i32() -> I32 {
+    let r: I32 = llvm_neg[I32](42)
+    assert_eq(r, -42, "neg(42) = -42")
+    return 0
+}
+
+// ============================================================================
+// Comparison
+// ============================================================================
+
+@test
+func test_llvm_eq() -> I32 {
+    assert(llvm_eq[I32](5, 5), "5 == 5")
+    assert(not llvm_eq[I32](5, 6), "5 != 6")
+    return 0
+}
+
+@test
+func test_llvm_ne() -> I32 {
+    assert(llvm_ne[I32](5, 6), "5 != 6")
+    assert(not llvm_ne[I32](5, 5), "5 == 5")
+    return 0
+}
+
+@test
+func test_llvm_lt() -> I32 {
+    assert(llvm_lt[I32](3, 5), "3 < 5")
+    assert(not llvm_lt[I32](5, 3), "!(5 < 3)")
+    return 0
+}
+
+@test
+func test_llvm_le() -> I32 {
+    assert(llvm_le[I32](3, 5), "3 <= 5")
+    assert(llvm_le[I32](5, 5), "5 <= 5")
+    assert(not llvm_le[I32](6, 5), "!(6 <= 5)")
+    return 0
+}
+
+@test
+func test_llvm_gt() -> I32 {
+    assert(llvm_gt[I32](5, 3), "5 > 3")
+    assert(not llvm_gt[I32](3, 5), "!(3 > 5)")
+    return 0
+}
+
+@test
+func test_llvm_ge() -> I32 {
+    assert(llvm_ge[I32](5, 3), "5 >= 3")
+    assert(llvm_ge[I32](5, 5), "5 >= 5")
+    assert(not llvm_ge[I32](3, 5), "!(3 >= 5)")
+    return 0
+}
+
+// ============================================================================
+// Bitwise
+// ============================================================================
+
+@test
+func test_llvm_and() -> I32 {
+    let r: I32 = llvm_and[I32](0xFF, 0x0F)
+    assert_eq(r, 0x0F, "0xFF & 0x0F = 0x0F")
+    return 0
+}
+
+@test
+func test_llvm_or() -> I32 {
+    let r: I32 = llvm_or[I32](0xF0, 0x0F)
+    assert_eq(r, 0xFF, "0xF0 | 0x0F = 0xFF")
+    return 0
+}
+
+@test
+func test_llvm_xor() -> I32 {
+    let r: I32 = llvm_xor[I32](0xFF, 0x0F)
+    assert_eq(r, 0xF0, "0xFF ^ 0x0F = 0xF0")
+    return 0
+}
+
+@test
+func test_llvm_not() -> I32 {
+    let r: I32 = llvm_not[I32](0)
+    assert_eq(r, -1, "not(0) = -1 (all bits set)")
+    return 0
+}
+
+@test
+func test_llvm_shl() -> I32 {
+    let r: I32 = llvm_shl[I32](1, 4)
+    assert_eq(r, 16, "1 << 4 = 16")
+    return 0
+}
+
+@test
+func test_llvm_shr() -> I32 {
+    let r: I32 = llvm_shr[I32](256, 4)
+    assert_eq(r, 16, "256 >> 4 = 16")
+    return 0
+}

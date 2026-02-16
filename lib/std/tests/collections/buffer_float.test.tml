@@ -1,0 +1,44 @@
+// Tests for Buffer float LE read/write methods
+use test::{assert, assert_eq}
+use std::collections::Buffer
+
+@test
+func test_buffer_write_read_f32_le() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_f32_le(3.14 as F32, 0)
+    let v: F32 = buf.read_f32_le(0)
+    var diff: F32 = v - 3.14 as F32
+    if diff < 0.0 as F32 {
+        diff = 0.0 as F32 - diff
+    }
+    assert(diff < 0.01 as F32, "f32 LE roundtrip")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_write_read_f64_le() -> I32 {
+    let buf: Buffer = Buffer.new(16)
+    buf.write_f64_le(3.141592653589793, 0)
+    let v: F64 = buf.read_f64_le(0)
+    var diff: F64 = v - 3.141592653589793
+    if diff < 0.0 {
+        diff = 0.0 - diff
+    }
+    assert(diff < 0.000001, "f64 LE roundtrip")
+    buf.destroy()
+    return 0
+}
+
+@test
+func test_buffer_get_set() -> I32 {
+    let buf: Buffer = Buffer.new(8)
+    buf.write_u8(0x00, 0)
+    buf.write_u8(0x00, 1)
+    buf.set(0, 0x42)
+    buf.set(1, 0x99)
+    assert_eq(buf.get(0), 0x42, "get after set index 0")
+    assert_eq(buf.get(1), 0x99, "get after set index 1")
+    buf.destroy()
+    return 0
+}

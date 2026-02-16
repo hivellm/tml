@@ -1,0 +1,187 @@
+// Extended tests for C#-style OOP interfaces
+// Tests IFormattable in more depth, and additional class patterns
+use test::{assert, assert_eq}
+use std::interfaces::*
+
+// ============================================================================
+// IFormattable Tests
+// ============================================================================
+
+class Temperature implements IFormattable {
+    celsius: I32
+
+    static func create(c: I32) -> Temperature {
+        return Temperature { celsius: c }
+    }
+
+    func to_string(this) -> Str {
+        return this.celsius.to_string() + "C"
+    }
+
+    func to_string_format(this, format: Str) -> Str {
+        if format == "F" {
+            let f: I32 = this.celsius * 9 / 5 + 32
+            return f.to_string() + "F"
+        }
+        return this.celsius.to_string() + "C"
+    }
+
+    func get_celsius(this) -> I32 { return this.celsius }
+}
+
+@test
+func test_iformattable_to_string() -> I32 {
+    let t: Temperature = Temperature::create(100)
+    let s: Str = t.to_string()
+    assert_eq(s, "100C", "temperature to_string")
+    return 0
+}
+
+@test
+func test_iformattable_to_string_format() -> I32 {
+    let t: Temperature = Temperature::create(100)
+    let f: Str = t.to_string_format("F")
+    assert_eq(f, "212F", "100C = 212F")
+    let c: Str = t.to_string_format("C")
+    assert_eq(c, "100C", "Celsius format")
+    return 0
+}
+
+@test
+func test_iformattable_zero() -> I32 {
+    let t: Temperature = Temperature::create(0)
+    assert_eq(t.to_string(), "0C", "0C to_string")
+    assert_eq(t.to_string_format("F"), "32F", "0C = 32F")
+    return 0
+}
+
+// ============================================================================
+// IDisposable with resource tracking
+// ============================================================================
+
+class FileHandle implements IDisposable {
+    fd: I32
+    closed: Bool
+
+    static func open(fd: I32) -> FileHandle {
+        return FileHandle { fd: fd, closed: false }
+    }
+
+    func dispose(mut this) {
+        this.closed = true
+    }
+
+    func check_open(this) -> Bool { return not this.closed }
+    func get_fd(this) -> I32 { return this.fd }
+}
+
+@test
+func test_filehandle_dispose() -> I32 {
+    let f: FileHandle = FileHandle::open(42)
+    assert(f.check_open(), "should be open initially")
+    assert_eq(f.get_fd(), 42, "fd should be 42")
+    f.dispose()
+    assert(not f.check_open(), "should be closed after dispose")
+    return 0
+}
+
+// ============================================================================
+// ICloneable with deep copy
+// ============================================================================
+
+class Rect implements ICloneable {
+    width: I32
+    height: I32
+
+    static func create(w: I32, h: I32) -> Rect {
+        return Rect { width: w, height: h }
+    }
+
+    func clone(this) -> Rect {
+        return Rect { width: this.width, height: this.height }
+    }
+
+    func area(this) -> I32 { return this.width * this.height }
+    func set_width(mut this, w: I32) { this.width = w }
+}
+
+@test
+func test_rect_clone_independence() -> I32 {
+    let r1: Rect = Rect::create(10, 20)
+    let r2: Rect = r1.clone()
+    assert_eq(r1.area(), 200, "original area 200")
+    assert_eq(r2.area(), 200, "clone area 200")
+    r2.set_width(5)
+    assert_eq(r1.area(), 200, "original unchanged")
+    assert_eq(r2.area(), 100, "clone changed to 100")
+    return 0
+}
+
+// ============================================================================
+// IHashable with more patterns
+// ============================================================================
+
+class ColorRGB implements IHashable {
+    r: I32
+    g: I32
+    b: I32
+
+    static func create(r: I32, g: I32, b: I32) -> ColorRGB {
+        return ColorRGB { r: r, g: g, b: b }
+    }
+
+    func get_hash_code(this) -> I64 {
+        // Simple hash combining RGB values
+        let hash: I64 = (this.r as I64) * 65536 as I64 + (this.g as I64) * 256 as I64 + (this.b as I64)
+        return hash
+    }
+}
+
+@test
+func test_color_hash_unique() -> I32 {
+    let red: ColorRGB = ColorRGB::create(255, 0, 0)
+    let green: ColorRGB = ColorRGB::create(0, 255, 0)
+    let blue: ColorRGB = ColorRGB::create(0, 0, 255)
+    assert(red.get_hash_code() != green.get_hash_code(), "red != green hash")
+    assert(green.get_hash_code() != blue.get_hash_code(), "green != blue hash")
+    assert(red.get_hash_code() != blue.get_hash_code(), "red != blue hash")
+    return 0
+}
+
+@test
+func test_color_hash_same_values() -> I32 {
+    let c1: ColorRGB = ColorRGB::create(128, 64, 32)
+    let c2: ColorRGB = ColorRGB::create(128, 64, 32)
+    assert_eq(c1.get_hash_code(), c2.get_hash_code(), "same RGB same hash")
+    return 0
+}
+
+// ============================================================================
+// IEquatable with multiple fields
+// ============================================================================
+
+class Vector2D implements IEquatable[Vector2D] {
+    x: I32
+    y: I32
+
+    static func create(x: I32, y: I32) -> Vector2D {
+        return Vector2D { x: x, y: y }
+    }
+
+    func equals(this, other: Vector2D) -> Bool {
+        return this.x == other.x and this.y == other.y
+    }
+
+    func magnitude_squared(this) -> I32 { return this.x * this.x + this.y * this.y }
+}
+
+@test
+func test_vector2d_equals() -> I32 {
+    let v1: Vector2D = Vector2D::create(3, 4)
+    let v2: Vector2D = Vector2D::create(3, 4)
+    let v3: Vector2D = Vector2D::create(4, 3)
+    assert(v1.equals(v2), "same vectors equal")
+    assert(not v1.equals(v3), "different vectors not equal")
+    assert_eq(v1.magnitude_squared(), 25, "3^2 + 4^2 = 25")
+    return 0
+}
