@@ -112,15 +112,19 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // These are matched by name rather than @intrinsic attribute for simplicity
     static const std::unordered_set<std::string> intrinsics = {
         "unreachable", "assume", "likely", "unlikely", "llvm_add", "llvm_sub", "llvm_mul",
-        "llvm_div", "llvm_and", "llvm_or", "llvm_xor", "llvm_shl", "llvm_shr", "transmute",
-        "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id", "ptr_offset",
-        "ptr_read", "ptr_write", "ptr_copy", "store_byte", "volatile_read", "volatile_write",
-        "atomic_load", "atomic_store", "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub",
-        "atomic_and", "atomic_or", "atomic_xor", "fence", "compiler_fence", "black_box",
+        "llvm_div", "llvm_rem", "llvm_neg", "llvm_and", "llvm_or", "llvm_xor", "llvm_not",
+        "llvm_shl", "llvm_shr", "llvm_eq", "llvm_ne", "llvm_lt", "llvm_le", "llvm_gt", "llvm_ge",
+        "transmute", "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id",
+        "ptr_offset", "ptr_read", "ptr_write", "ptr_copy", "store_byte", "volatile_read",
+        "volatile_write", "atomic_load", "atomic_store", "atomic_cas", "atomic_exchange",
+        "atomic_add", "atomic_sub", "atomic_and", "atomic_or", "atomic_xor", "fence",
+        "compiler_fence", "black_box",
         // Slice intrinsics
         "slice_get", "slice_get_mut", "slice_set", "slice_swap", "slice_offset",
         // Math intrinsics
-        "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc",
+        "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc", "fma", "fabs",
+        // Bit manipulation intrinsics
+        "ctlz", "cttz", "ctpop", "bswap", "bitreverse",
         // Drop intrinsic - for explicit destruction
         "drop",
         // Checked arithmetic intrinsics

@@ -1,0 +1,44 @@
+// Error module coverage tests (non-generic functions with real bodies)
+use test::{assert_eq, assert}
+use core::error::{ParseError, IoError, IoErrorKind}
+
+@test
+func test_parse_error_new() -> I32 {
+    let err = ParseError::new("bad input")
+    let s = err.to_string()
+    assert_eq(s, "parse error: bad input", "ParseError::new to_string")
+    return 0
+}
+
+@test
+func test_parse_error_with_position() -> I32 {
+    let err = ParseError::with_position("unexpected token", 42)
+    let s = err.to_string()
+    assert_eq(s, "parse error at position 42: unexpected token", "ParseError::with_position to_string")
+    return 0
+}
+
+@test
+func test_io_error_new() -> I32 {
+    let err = IoError::new(IoErrorKind::NotFound)
+    let s = err.to_string()
+    assert_eq(s, "entity not found", "IoError::new to_string")
+    return 0
+}
+
+@test
+func test_io_error_with_message() -> I32 {
+    let err = IoError::with_message(IoErrorKind::PermissionDenied, "cannot access /etc/passwd")
+    let s = err.to_string()
+    assert_eq(s, "permission denied: cannot access /etc/passwd", "IoError::with_message to_string")
+    return 0
+}
+
+@test
+func test_io_error_kind() -> I32 {
+    let err = IoError::new(IoErrorKind::TimedOut)
+    let k = err.kind()
+    let s = k.to_string()
+    assert_eq(s, "operation timed out", "IoError::kind")
+    return 0
+}

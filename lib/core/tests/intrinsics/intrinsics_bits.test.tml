@@ -1,0 +1,74 @@
+// Tests for core::intrinsics — bit manipulation (ctlz, cttz, ctpop, bswap, bitreverse)
+use test::{assert_eq}
+use core::intrinsics::{ctlz, cttz, ctpop, bswap, bitreverse}
+
+// ============================================================================
+// ctlz — count leading zeros
+// ============================================================================
+
+@test
+func test_ctlz_i32() -> I32 {
+    let r: I32 = ctlz[I32](1)
+    assert_eq(r, 31, "ctlz(1) = 31")
+    return 0
+}
+
+@test
+func test_ctlz_zero() -> I32 {
+    let r: I32 = ctlz[I32](0)
+    assert_eq(r, 32, "ctlz(0) = 32")
+    return 0
+}
+
+// ============================================================================
+// cttz — count trailing zeros
+// ============================================================================
+
+@test
+func test_cttz_i32() -> I32 {
+    let r: I32 = cttz[I32](8)
+    assert_eq(r, 3, "cttz(8) = 3")
+    return 0
+}
+
+@test
+func test_cttz_one() -> I32 {
+    let r: I32 = cttz[I32](1)
+    assert_eq(r, 0, "cttz(1) = 0")
+    return 0
+}
+
+// ============================================================================
+// ctpop — population count (count set bits)
+// ============================================================================
+
+@test
+func test_ctpop_i32() -> I32 {
+    let r: I32 = ctpop[I32](0xFF)
+    assert_eq(r, 8, "ctpop(0xFF) = 8")
+    return 0
+}
+
+// ============================================================================
+// bswap — byte swap
+// ============================================================================
+
+@test
+func test_bswap_i32() -> I32 {
+    let r: I32 = bswap[I32](0x01020304)
+    assert_eq(r, 0x04030201, "bswap(0x01020304) = 0x04030201")
+    return 0
+}
+
+// ============================================================================
+// bitreverse — reverse all bits
+// ============================================================================
+
+@test
+func test_bitreverse_i32() -> I32 {
+    // 0x80000000 reversed = 0x00000001
+    let r: I32 = bitreverse[I32](1)
+    // bit 0 becomes bit 31: 1 reversed = 0x80000000 = -2147483648 as signed
+    assert_eq(r, -2147483648, "bitreverse(1) = -2147483648")
+    return 0
+}

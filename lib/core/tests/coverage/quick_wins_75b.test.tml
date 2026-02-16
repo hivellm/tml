@@ -1,0 +1,53 @@
+// Additional tests to push coverage over 75%
+use test::{assert_eq, assert}
+use core::char::decode::{DecodeUtf16Error, is_high_surrogate, is_low_surrogate, is_surrogate}
+
+// ============================================================================
+// DecodeUtf16Error::to_string and ::debug_string (char/decode)
+// ============================================================================
+
+@test
+func test_decode_utf16_error_to_string() -> I32 {
+    let err = DecodeUtf16Error { code: 0xD800 }
+    let s: Str = err.to_string()
+    assert_eq(s, "unpaired surrogate in UTF-16 sequence", "DecodeUtf16Error::to_string")
+    return 0
+}
+
+@test
+func test_decode_utf16_error_debug_string() -> I32 {
+    let err = DecodeUtf16Error { code: 0xD800 }
+    let s: Str = err.debug_string()
+    assert_eq(s, "DecodeUtf16Error", "DecodeUtf16Error::debug_string")
+    return 0
+}
+
+// ============================================================================
+// Surrogate checking functions (char/decode)
+// ============================================================================
+
+@test
+func test_is_high_surrogate() -> I32 {
+    assert(is_high_surrogate(0xD800), "0xD800 is high surrogate")
+    assert(is_high_surrogate(0xDBFF), "0xDBFF is high surrogate")
+    assert(not is_high_surrogate(0xDC00), "0xDC00 is not high surrogate")
+    assert(not is_high_surrogate(0x0041), "0x0041 is not high surrogate")
+    return 0
+}
+
+@test
+func test_is_low_surrogate() -> I32 {
+    assert(is_low_surrogate(0xDC00), "0xDC00 is low surrogate")
+    assert(is_low_surrogate(0xDFFF), "0xDFFF is low surrogate")
+    assert(not is_low_surrogate(0xD800), "0xD800 is not low surrogate")
+    assert(not is_low_surrogate(0x0041), "0x0041 is not low surrogate")
+    return 0
+}
+
+@test
+func test_is_surrogate() -> I32 {
+    assert(is_surrogate(0xD800), "0xD800 is surrogate")
+    assert(is_surrogate(0xDFFF), "0xDFFF is surrogate")
+    assert(not is_surrogate(0x0041), "0x0041 is not surrogate")
+    return 0
+}

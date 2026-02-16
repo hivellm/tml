@@ -924,11 +924,11 @@ static LONG WINAPI tml_veh_handler(EXCEPTION_POINTERS* info) {
                  tml_get_exception_name(code), (unsigned long)code);
     }
 
-    // Pass through to the SEH __try/__except in call_run_with_catch_seh().
-    // Previous approach used longjmp here, but it can fail when stack or
-    // jmp_buf is corrupted (e.g., null-pointer dereference in OpenSSL during
-    // suite mode), killing the entire process. SEH __except blocks handle
-    // hardware exceptions safely without longjmp.
+    // Return EXCEPTION_CONTINUE_SEARCH to pass through to the SEH
+    // __try/__except in call_run_with_catch_seh() on the C++ side.
+    // We cannot use longjmp here because certain crashes (e.g., OpenSSL DH)
+    // corrupt RBP, making longjmp itself crash. SEH __except blocks handle
+    // hardware exceptions without relying on the corrupted stack frame.
     tml_catching_panic = 0;
     return EXCEPTION_CONTINUE_SEARCH;
 }
@@ -970,18 +970,31 @@ static void tml_remove_exception_filter(void) {
  * @param test_fn The test function to execute (returns i32).
  * @return The test result: 0 for success, -1 for panic, -2 for crash, or the test's return value.
  */
+/// Helper: run test_fn wrapped in SEH __try/__except.
+/// This is a separate function because MSVC forbids setjmp and __try in the same function.
+/// Returns -2 on crash, or the test's return value on success.
+static int32_t tml_run_test_seh(tml_test_entry_fn test_fn) {
+    __try {
+        return test_fn();
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -2;
+    }
+}
+
 TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
     tml_panic_msg[0] = '\0';
     tml_catching_panic = 1;
 
 #ifdef _WIN32
-    // Windows: Use SetUnhandledExceptionFilter for crash catching
+    // Windows: Use VEH for crash reporting + SEH for recovery
     tml_install_exception_filter();
 
     int jmp_result = setjmp(tml_panic_jmp_buf);
     if (jmp_result == 0) {
-        // First time through - run the test
-        int32_t result = test_fn();
+        // First time through - run the test with SEH crash protection.
+        // VEH handler prints crash info and returns EXCEPTION_CONTINUE_SEARCH.
+        // SEH __try/__except in tml_run_test_seh() catches the exception.
+        int32_t result = tml_run_test_seh(test_fn);
         tml_catching_panic = 0;
         tml_remove_exception_filter();
         return result;
@@ -993,10 +1006,9 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
         fflush(stderr);
         return -1;
     } else {
-        // Got here via longjmp from exception filter (jmp_result == 2)
+        // Got here via longjmp (jmp_result == 2) — shouldn't happen now
         tml_catching_panic = 0;
         tml_remove_exception_filter();
-        // Message already printed by the filter
         return -2;
     }
 

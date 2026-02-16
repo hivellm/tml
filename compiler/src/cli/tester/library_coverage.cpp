@@ -49,6 +49,7 @@ struct ModuleCoverage {
 static std::vector<std::string> extract_functions(const fs::path& file) {
     std::vector<std::string> functions;
     std::string current_impl;
+    bool in_behavior = false; // True when inside a behavior block (vs impl block)
     int impl_brace_depth = 0; // Track brace depth inside impl blocks
 
     std::ifstream ifs(file);
@@ -103,11 +104,13 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             } else {
                 current_impl = match[1].str(); // Direct impl (e.g., Arc from "impl Arc")
             }
+            in_behavior = false;
             impl_brace_depth = 0; // Reset depth, will count opening brace below
         }
         // Track behavior blocks - detect "behavior BehaviorName" or "pub behavior BehaviorName"
         else if (std::regex_search(line, match, behavior_regex)) {
             current_impl = match[2].str();
+            in_behavior = true;
             impl_brace_depth = 0; // Reset depth, will count opening brace below
         }
 
@@ -122,6 +125,7 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
             // When we exit the impl/behavior block (depth <= 0), clear current_impl
             if (impl_brace_depth <= 0) {
                 current_impl.clear();
+                in_behavior = false;
                 impl_brace_depth = 0;
             }
         }
@@ -145,6 +149,15 @@ static std::vector<std::string> extract_functions(const fs::path& file) {
 
             // Skip ffi_ prefixed functions (convention for FFI wrappers)
             if (func_name.rfind("ffi_", 0) == 0) {
+                prev_line = line;
+                continue;
+            }
+
+            // Skip bodyless declarations inside behavior blocks.
+            // Behavior blocks define interfaces; only methods with bodies (default impls)
+            // should be counted. A declaration without '{' on its line is bodyless.
+            // The actual implementations live in `impl Behavior for Type` blocks.
+            if (in_behavior && line.find('{') == std::string::npos) {
                 prev_line = line;
                 continue;
             }
