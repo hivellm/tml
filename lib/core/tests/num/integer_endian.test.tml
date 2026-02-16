@@ -1,0 +1,65 @@
+// Tests for core::num::integer — endian conversion functions
+use test::{assert, assert_eq}
+use core::num::integer::{
+    from_be_i32, from_le_i32, to_be_i32, to_le_i32,
+    from_be_i64, from_le_i64, to_be_i64, to_le_i64,
+    swap_bytes_i32
+}
+
+@test
+func test_from_le_i32_identity() -> I32 {
+    // On little-endian (x86), from_le should be identity
+    assert_eq(from_le_i32(42), 42, "from_le(42) = 42 on LE")
+    assert_eq(from_le_i32(0), 0, "from_le(0) = 0")
+    return 0
+}
+
+@test
+func test_to_le_i32_identity() -> I32 {
+    assert_eq(to_le_i32(42), 42, "to_le(42) = 42 on LE")
+    return 0
+}
+
+@test
+func test_from_be_i32_swaps() -> I32 {
+    // from_be on LE should swap bytes
+    let val: I32 = from_be_i32(1)
+    assert_eq(val, swap_bytes_i32(1), "from_be = swap_bytes on LE")
+    return 0
+}
+
+@test
+func test_to_be_i32_swaps() -> I32 {
+    let val: I32 = to_be_i32(1)
+    assert_eq(val, swap_bytes_i32(1), "to_be = swap_bytes on LE")
+    return 0
+}
+
+@test
+func test_be_le_roundtrip_i32() -> I32 {
+    // to_be then from_be should be identity
+    let original: I32 = 12345
+    let roundtrip: I32 = from_be_i32(to_be_i32(original))
+    assert_eq(roundtrip, original, "BE roundtrip should be identity")
+    return 0
+}
+
+@test
+func test_from_le_i64_identity() -> I32 {
+    assert_eq(from_le_i64(99 as I64), 99 as I64, "from_le(99) = 99 on LE")
+    return 0
+}
+
+@test
+func test_to_le_i64_identity() -> I32 {
+    assert_eq(to_le_i64(99 as I64), 99 as I64, "to_le(99) = 99 on LE")
+    return 0
+}
+
+@test
+func test_be_roundtrip_i64() -> I32 {
+    let original: I64 = 123456789 as I64
+    let roundtrip: I64 = from_be_i64(to_be_i64(original))
+    assert_eq(roundtrip, original, "I64 BE roundtrip should be identity")
+    return 0
+}

@@ -1,0 +1,197 @@
+// Tests for std::crypto::error — CryptoError and CryptoErrorKind
+use test::{assert, assert_eq}
+use std::crypto::error::{CryptoError, CryptoErrorKind}
+
+// === CryptoErrorKind description ===
+
+@test
+func test_crypto_error_kind_invalid_key() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::InvalidKey
+    assert_eq(k.description(), "invalid key format or encoding", "InvalidKey desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_invalid_iv() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::InvalidIv
+    assert_eq(k.description(), "invalid initialization vector", "InvalidIv desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_auth_failed() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::AuthenticationFailed
+    assert_eq(k.description(), "authentication failed", "AuthFailed desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_verification_failed() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::VerificationFailed
+    assert_eq(k.description(), "signature verification failed", "VerificationFailed desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_unsupported_algorithm() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::UnsupportedAlgorithm
+    assert_eq(k.description(), "unsupported algorithm", "UnsupportedAlgorithm desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_invalid_parameter() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::InvalidParameter
+    assert_eq(k.description(), "invalid parameter", "InvalidParameter desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_buffer_too_small() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::BufferTooSmall
+    assert_eq(k.description(), "buffer too small", "BufferTooSmall desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_operation_failed() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::OperationFailed
+    assert_eq(k.description(), "operation failed", "OperationFailed desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_internal_error() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::InternalError
+    assert_eq(k.description(), "internal cryptographic error", "InternalError desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_random_gen_failed() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::RandomGenerationFailed
+    assert_eq(k.description(), "random generation failed", "RandomGenFailed desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_invalid_auth_tag() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::InvalidAuthTag
+    assert_eq(k.description(), "invalid authentication tag", "InvalidAuthTag desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_invalid_signature() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::InvalidSignature
+    assert_eq(k.description(), "invalid signature format", "InvalidSignature desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_cert_parse() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::CertificateParseError
+    assert_eq(k.description(), "certificate parsing failed", "CertParseError desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_cert_expired() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::CertificateExpired
+    assert_eq(k.description(), "certificate has expired", "CertExpired desc")
+    return 0
+}
+
+@test
+func test_crypto_error_kind_key_exchange() -> I32 {
+    let k: CryptoErrorKind = CryptoErrorKind::KeyExchangeFailed
+    assert_eq(k.description(), "key exchange failed", "KeyExchangeFailed desc")
+    return 0
+}
+
+// === CryptoError constructors ===
+
+@test
+func test_crypto_error_new() -> I32 {
+    let e: CryptoError = CryptoError::new("test error")
+    assert_eq(e.get_message(), "test error", "new message")
+    assert_eq(e.get_details(), "", "new details empty")
+    return 0
+}
+
+@test
+func test_crypto_error_with_details() -> I32 {
+    let e: CryptoError = CryptoError::with_details("error", "detail info")
+    assert_eq(e.get_details(), "detail info", "with_details details")
+    return 0
+}
+
+@test
+func test_crypto_error_to_string() -> I32 {
+    let e: CryptoError = CryptoError::new("oops")
+    assert_eq(e.to_string(), "CryptoError: oops", "to_string format")
+    return 0
+}
+
+@test
+func test_crypto_error_invalid_parameter() -> I32 {
+    let e: CryptoError = CryptoError::invalid_parameter("key too short")
+    assert_eq(e.get_details(), "key too short", "invalid_parameter details")
+    return 0
+}
+
+@test
+func test_crypto_error_buffer_too_small() -> I32 {
+    let e: CryptoError = CryptoError::buffer_too_small("need 32 bytes")
+    assert_eq(e.get_details(), "need 32 bytes", "buffer_too_small details")
+    return 0
+}
+
+@test
+func test_crypto_error_random_failed() -> I32 {
+    let e: CryptoError = CryptoError::random_failed()
+    assert_eq(e.get_message(), "random generation failed", "random_failed msg")
+    return 0
+}
+
+@test
+func test_crypto_error_invalid_key() -> I32 {
+    let e: CryptoError = CryptoError::invalid_key("wrong format")
+    assert_eq(e.get_details(), "wrong format", "invalid_key details")
+    return 0
+}
+
+@test
+func test_crypto_error_invalid_iv() -> I32 {
+    let e: CryptoError = CryptoError::invalid_iv("too short")
+    assert_eq(e.get_details(), "too short", "invalid_iv details")
+    return 0
+}
+
+@test
+func test_crypto_error_auth_failed() -> I32 {
+    let e: CryptoError = CryptoError::auth_failed()
+    assert_eq(e.get_message(), "authentication failed", "auth_failed msg")
+    return 0
+}
+
+@test
+func test_crypto_error_verification_failed() -> I32 {
+    let e: CryptoError = CryptoError::verification_failed()
+    assert_eq(e.get_message(), "signature verification failed", "verification_failed msg")
+    return 0
+}
+
+@test
+func test_crypto_error_unsupported_algorithm() -> I32 {
+    let e: CryptoError = CryptoError::unsupported_algorithm("RC4")
+    assert_eq(e.get_details(), "RC4", "unsupported_algorithm details")
+    return 0
+}
+
+@test
+func test_crypto_error_operation_failed() -> I32 {
+    let e: CryptoError = CryptoError::operation_failed("encryption error")
+    assert_eq(e.get_details(), "encryption error", "operation_failed details")
+    return 0
+}

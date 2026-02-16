@@ -1,0 +1,166 @@
+// Tests for core::reflect — TypeKind, FieldInfo, VariantInfo, TypeInfo
+use test::{assert, assert_eq}
+use core::reflect::{TypeKind, FieldInfo, VariantInfo, TypeInfo}
+
+// === TypeKind ===
+
+@test
+func test_type_kind_struct_tag() -> I32 {
+    let k: TypeKind = TypeKind::Struct
+    assert_eq(k.tag(), 0, "Struct tag = 0")
+    return 0
+}
+
+@test
+func test_type_kind_enum_tag() -> I32 {
+    let k: TypeKind = TypeKind::Enum
+    assert_eq(k.tag(), 1, "Enum tag = 1")
+    return 0
+}
+
+@test
+func test_type_kind_primitive_tag() -> I32 {
+    let k: TypeKind = TypeKind::Primitive
+    assert_eq(k.tag(), 2, "Primitive tag = 2")
+    return 0
+}
+
+@test
+func test_type_kind_to_string() -> I32 {
+    assert_eq(TypeKind::Struct.to_string(), "struct", "Struct to_string")
+    assert_eq(TypeKind::Enum.to_string(), "enum", "Enum to_string")
+    assert_eq(TypeKind::Primitive.to_string(), "primitive", "Primitive to_string")
+    assert_eq(TypeKind::Pointer.to_string(), "pointer", "Pointer to_string")
+    assert_eq(TypeKind::Reference.to_string(), "reference", "Reference to_string")
+    assert_eq(TypeKind::Array.to_string(), "array", "Array to_string")
+    assert_eq(TypeKind::Unknown.to_string(), "unknown", "Unknown to_string")
+    return 0
+}
+
+@test
+func test_type_kind_equality() -> I32 {
+    let a: TypeKind = TypeKind::Struct
+    let b: TypeKind = TypeKind::Struct
+    assert(a == b, "same TypeKind should be equal")
+    let c: TypeKind = TypeKind::Enum
+    assert(a != c, "different TypeKind should not be equal")
+    return 0
+}
+
+@test
+func test_type_kind_all_tags() -> I32 {
+    assert_eq(TypeKind::Pointer.tag(), 3, "Pointer tag = 3")
+    assert_eq(TypeKind::Reference.tag(), 4, "Reference tag = 4")
+    assert_eq(TypeKind::Array.tag(), 5, "Array tag = 5")
+    assert_eq(TypeKind::Slice.tag(), 6, "Slice tag = 6")
+    assert_eq(TypeKind::Tuple.tag(), 7, "Tuple tag = 7")
+    assert_eq(TypeKind::Function.tag(), 8, "Function tag = 8")
+    assert_eq(TypeKind::Class.tag(), 9, "Class tag = 9")
+    assert_eq(TypeKind::Interface.tag(), 10, "Interface tag = 10")
+    assert_eq(TypeKind::Unknown.tag(), 11, "Unknown tag = 11")
+    return 0
+}
+
+// === FieldInfo ===
+
+@test
+func test_field_info_new() -> I32 {
+    let f: FieldInfo = FieldInfo::new("name", 42 as U64, "Str", 0 as I64, true)
+    assert_eq(f.name, "name", "FieldInfo name")
+    assert_eq(f.type_name, "Str", "FieldInfo type_name")
+    assert_eq(f.offset, 0 as I64, "FieldInfo offset")
+    assert(f.is_public, "FieldInfo is_public")
+    return 0
+}
+
+@test
+func test_field_info_private() -> I32 {
+    let f: FieldInfo = FieldInfo::new("secret", 99 as U64, "I32", 8 as I64, false)
+    assert(not f.is_public, "private field is not public")
+    assert_eq(f.offset, 8 as I64, "offset = 8")
+    return 0
+}
+
+@test
+func test_field_info_debug() -> I32 {
+    let f: FieldInfo = FieldInfo::new("age", 10 as U64, "I32", 4 as I64, true)
+    let d: Str = f.debug_string()
+    assert(d.contains("age"), "debug contains field name")
+    assert(d.contains("I32"), "debug contains type name")
+    return 0
+}
+
+// === VariantInfo ===
+
+@test
+func test_variant_info_new() -> I32 {
+    let v: VariantInfo = VariantInfo::new("Ok", 0 as I64, 1 as I64)
+    assert_eq(v.name, "Ok", "VariantInfo name")
+    assert_eq(v.tag, 0 as I64, "VariantInfo tag")
+    assert_eq(v.payload_count, 1 as I64, "VariantInfo payload_count")
+    return 0
+}
+
+@test
+func test_variant_info_is_unit() -> I32 {
+    let unit_v: VariantInfo = VariantInfo::new("Nothing", 0 as I64, 0 as I64)
+    assert(unit_v.is_unit(), "Nothing should be unit variant")
+    let payload_v: VariantInfo = VariantInfo::new("Just", 1 as I64, 1 as I64)
+    assert(not payload_v.is_unit(), "Just should not be unit variant")
+    return 0
+}
+
+@test
+func test_variant_info_debug() -> I32 {
+    let u: VariantInfo = VariantInfo::new("None", 0 as I64, 0 as I64)
+    let d1: Str = u.debug_string()
+    assert(d1.contains("None"), "unit debug contains name")
+    let p: VariantInfo = VariantInfo::new("Some", 1 as I64, 1 as I64)
+    let d2: Str = p.debug_string()
+    assert(d2.contains("Some"), "payload debug contains name")
+    assert(d2.contains("payloads"), "payload debug mentions payloads")
+    return 0
+}
+
+// === TypeInfo ===
+
+@test
+func test_type_info_for_struct() -> I32 {
+    let ti: TypeInfo = TypeInfo::for_struct(1 as U64, "Person", 16 as I64, 8 as I64, 2 as I64)
+    assert_eq(ti.name, "Person", "TypeInfo name")
+    assert(ti.is_struct(), "should be struct")
+    assert(not ti.is_enum(), "should not be enum")
+    assert(not ti.is_primitive(), "should not be primitive")
+    assert_eq(ti.size, 16 as I64, "size = 16")
+    assert_eq(ti.align, 8 as I64, "align = 8")
+    assert_eq(ti.field_count, 2 as I64, "field_count = 2")
+    return 0
+}
+
+@test
+func test_type_info_for_enum() -> I32 {
+    let ti: TypeInfo = TypeInfo::for_enum(2 as U64, "Color", 4 as I64, 4 as I64, 3 as I64)
+    assert(ti.is_enum(), "should be enum")
+    assert(not ti.is_struct(), "should not be struct")
+    assert_eq(ti.variant_count, 3 as I64, "variant_count = 3")
+    return 0
+}
+
+@test
+func test_type_info_for_primitive() -> I32 {
+    let ti: TypeInfo = TypeInfo::for_primitive(3 as U64, "I32", 4 as I64, 4 as I64)
+    assert(ti.is_primitive(), "should be primitive")
+    assert_eq(ti.name, "I32", "name = I32")
+    assert_eq(ti.size, 4 as I64, "size = 4")
+    return 0
+}
+
+@test
+func test_type_info_debug() -> I32 {
+    let ti: TypeInfo = TypeInfo::for_struct(1 as U64, "Point", 8 as I64, 4 as I64, 2 as I64)
+    let d: Str = ti.debug_string()
+    assert(d.contains("struct"), "debug contains kind")
+    assert(d.contains("Point"), "debug contains name")
+    assert(d.contains("fields=2"), "debug contains field count")
+    return 0
+}

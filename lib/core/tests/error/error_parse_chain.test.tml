@@ -1,0 +1,68 @@
+// Tests for core::error — ParseError::with_position extra coverage
+use test::{assert, assert_eq}
+use core::error::{ParseError, SimpleError, BoxedError}
+
+// =============================================================================
+// ParseError::with_position
+// =============================================================================
+
+@test
+func test_parse_error_with_position_display() -> I32 {
+    let err: ParseError = ParseError::with_position("unexpected token", 42 as I64)
+    let s: Str = err.to_string()
+    assert(s.contains("42"), "should contain position 42")
+    assert(s.contains("unexpected token"), "should contain message")
+    return 0
+}
+
+@test
+func test_parse_error_with_position_debug() -> I32 {
+    let err: ParseError = ParseError::with_position("bad char", 10 as I64)
+    let d: Str = err.debug_string()
+    assert(d.contains("ParseError"), "debug should contain ParseError")
+    assert(d.contains("bad char"), "debug should contain message")
+    return 0
+}
+
+@test
+func test_parse_error_with_position_field() -> I32 {
+    let err: ParseError = ParseError::with_position("eof", 100 as I64)
+    assert_eq(err.message, "eof", "message field")
+    return 0
+}
+
+// =============================================================================
+// ParseError (no position) — description coverage
+// =============================================================================
+
+@test
+func test_parse_error_no_position_display() -> I32 {
+    let err: ParseError = ParseError::new("invalid syntax")
+    let s: Str = err.to_string()
+    assert(s.contains("invalid syntax"), "display should contain message")
+    return 0
+}
+
+// =============================================================================
+// SimpleError — description method (Error::description default)
+// =============================================================================
+
+@test
+func test_simple_error_description() -> I32 {
+    let err: SimpleError = SimpleError::new("test error")
+    let desc: Str = err.description()
+    assert_eq(desc, "test error", "description should equal to_string")
+    return 0
+}
+
+// =============================================================================
+// BoxedError — source method
+// =============================================================================
+
+@test
+func test_boxed_error_source_nothing() -> I32 {
+    let err: BoxedError = BoxedError::from_message("test")
+    let src = err.source()
+    assert(src.is_nothing(), "BoxedError source should be Nothing")
+    return 0
+}

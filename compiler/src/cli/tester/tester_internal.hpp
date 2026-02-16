@@ -304,7 +304,10 @@ void write_library_coverage_html(const std::set<std::string>& covered_functions,
 void set_crash_context(const char* phase, const char* suite, const char* test_name,
                        const char* test_file);
 void clear_crash_context();
+void get_crash_context(const char** phase, const char** suite, const char** test_name,
+                       const char** test_file);
 #else
 inline void set_crash_context(const char*, const char*, const char*, const char*) {}
 inline void clear_crash_context() {}
+inline void get_crash_context(const char**, const char**, const char**, const char**) {}
 #endif

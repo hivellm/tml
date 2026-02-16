@@ -1,0 +1,176 @@
+// Tests for core::result — Outcome combinator methods
+use test::{assert, assert_eq}
+
+// === is_ok_and / is_err_and ===
+
+@test
+func test_outcome_is_ok_and_true() -> I32 {
+    let x: Outcome[I64, Str] = Ok(42 as I64)
+    let result: Bool = x.is_ok_and(do(n: I64) -> Bool { n > 0 })
+    assert(result, "is_ok_and with true predicate should return true")
+    return 0
+}
+
+@test
+func test_outcome_is_ok_and_false() -> I32 {
+    let x: Outcome[I64, Str] = Ok(42 as I64)
+    let result: Bool = x.is_ok_and(do(n: I64) -> Bool { n < 0 })
+    assert(not result, "is_ok_and with false predicate should return false")
+    return 0
+}
+
+@test
+func test_outcome_is_ok_and_on_err() -> I32 {
+    let x: Outcome[I64, Str] = Err("fail")
+    let result: Bool = x.is_ok_and(do(n: I64) -> Bool { n > 0 })
+    assert(not result, "is_ok_and on Err should return false")
+    return 0
+}
+
+@test
+func test_outcome_is_err_and_true() -> I32 {
+    let x: Outcome[I64, Str] = Err("not found")
+    let result: Bool = x.is_err_and(do(e: Str) -> Bool { e.len() > 0 })
+    assert(result, "is_err_and with true predicate should return true")
+    return 0
+}
+
+@test
+func test_outcome_is_err_and_on_ok() -> I32 {
+    let x: Outcome[I64, Str] = Ok(1 as I64)
+    let result: Bool = x.is_err_and(do(e: Str) -> Bool { e.len() > 0 })
+    assert(not result, "is_err_and on Ok should return false")
+    return 0
+}
+
+// === unwrap_or / unwrap_or_else ===
+
+@test
+func test_outcome_unwrap_or_ok() -> I32 {
+    let x: Outcome[I64, Str] = Ok(5 as I64)
+    assert_eq(x.unwrap_or(0 as I64), 5 as I64, "unwrap_or on Ok returns value")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_or_err() -> I32 {
+    let x: Outcome[I64, Str] = Err("e")
+    assert_eq(x.unwrap_or(99 as I64), 99 as I64, "unwrap_or on Err returns default")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_or_else_ok() -> I32 {
+    let x: Outcome[I64, Str] = Ok(10 as I64)
+    let result: I64 = x.unwrap_or_else(do(e: Str) -> I64 { e.len() })
+    assert_eq(result, 10 as I64, "unwrap_or_else on Ok returns value")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_or_else_err() -> I32 {
+    let x: Outcome[I64, Str] = Err("abc")
+    let result: I64 = x.unwrap_or_else(do(e: Str) -> I64 { e.len() })
+    assert_eq(result, 3 as I64, "unwrap_or_else on Err applies function")
+    return 0
+}
+
+// === expect / expect_err ===
+
+@test
+func test_outcome_expect_ok() -> I32 {
+    let x: Outcome[I64, Str] = Ok(7 as I64)
+    assert_eq(x.expect("should work"), 7 as I64, "expect on Ok returns value")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_err_on_err() -> I32 {
+    let x: Outcome[I64, Str] = Err("my error")
+    let e: Str = x.unwrap_err()
+    assert_eq(e, "my error", "unwrap_err returns error value")
+    return 0
+}
+
+@test
+func test_outcome_expect_err_on_err() -> I32 {
+    let x: Outcome[I64, Str] = Err("whoops")
+    let e: Str = x.expect_err("should be err")
+    assert_eq(e, "whoops", "expect_err returns error value")
+    return 0
+}
+
+// === map ===
+
+@test
+func test_outcome_map_ok() -> I32 {
+    let x: Outcome[I64, Str] = Ok(3 as I64)
+    let result: Outcome[I64, Str] = x.map(do(n: I64) -> I64 { n * 10 })
+    assert(result.is_ok(), "map on Ok should return Ok")
+    assert_eq(result.unwrap(), 30 as I64, "map should apply function")
+    return 0
+}
+
+@test
+func test_outcome_map_err_value() -> I32 {
+    let x: Outcome[I64, Str] = Err("fail")
+    let result: Outcome[I64, Str] = x.map(do(n: I64) -> I64 { n * 10 })
+    assert(result.is_err(), "map on Err should return Err")
+    return 0
+}
+
+// === and_then ===
+
+@test
+func test_outcome_and_then_ok() -> I32 {
+    let x: Outcome[I64, Str] = Ok(5 as I64)
+    let result: Outcome[I64, Str] = x.and_then(do(n: I64) -> Outcome[I64, Str] { Ok(n + 1) })
+    assert_eq(result.unwrap(), 6 as I64, "and_then on Ok applies function")
+    return 0
+}
+
+@test
+func test_outcome_and_then_err() -> I32 {
+    let x: Outcome[I64, Str] = Err("err")
+    let result: Outcome[I64, Str] = x.and_then(do(n: I64) -> Outcome[I64, Str] { Ok(n + 1) })
+    assert(result.is_err(), "and_then on Err returns Err")
+    return 0
+}
+
+// === alt ===
+
+@test
+func test_outcome_alt_ok() -> I32 {
+    let x: Outcome[I64, Str] = Ok(1 as I64)
+    let y: Outcome[I64, Str] = Ok(2 as I64)
+    let result: Outcome[I64, Str] = x.alt(y)
+    assert_eq(result.unwrap(), 1 as I64, "alt returns self when Ok")
+    return 0
+}
+
+@test
+func test_outcome_alt_err() -> I32 {
+    let x: Outcome[I64, Str] = Err("e")
+    let y: Outcome[I64, Str] = Ok(99 as I64)
+    let result: Outcome[I64, Str] = x.alt(y)
+    assert_eq(result.unwrap(), 99 as I64, "alt returns other when Err")
+    return 0
+}
+
+// === or_else ===
+
+@test
+func test_outcome_or_else_ok() -> I32 {
+    let x: Outcome[I64, Str] = Ok(10 as I64)
+    let result: Outcome[I64, Str] = x.or_else(do(e: Str) -> Outcome[I64, Str] { Ok(0 as I64) })
+    assert_eq(result.unwrap(), 10 as I64, "or_else returns self when Ok")
+    return 0
+}
+
+@test
+func test_outcome_or_else_err() -> I32 {
+    let x: Outcome[I64, Str] = Err("bad")
+    let result: Outcome[I64, Str] = x.or_else(do(e: Str) -> Outcome[I64, Str] { Ok(0 as I64) })
+    assert_eq(result.unwrap(), 0 as I64, "or_else applies function on Err")
+    return 0
+}

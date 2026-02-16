@@ -1,0 +1,138 @@
+// Tests for core::time — Duration constructors, arithmetic, accessors
+use test::{assert, assert_eq}
+use core::time::Duration
+
+// === Constructors ===
+
+@test
+func test_duration_from_secs() -> I32 {
+    let d: Duration = Duration::from_secs(5 as I64)
+    assert_eq(d.as_secs(), 5 as I64, "from_secs(5) should have 5 seconds")
+    assert_eq(d.subsec_nanos(), 0 as I32, "from_secs should have 0 nanos")
+    return 0
+}
+
+@test
+func test_duration_from_millis() -> I32 {
+    let d: Duration = Duration::from_millis(1500 as I64)
+    assert_eq(d.as_secs(), 1 as I64, "1500ms = 1 sec")
+    assert_eq(d.subsec_millis(), 500 as I32, "1500ms has 500ms subsec")
+    return 0
+}
+
+@test
+func test_duration_from_micros() -> I32 {
+    let d: Duration = Duration::from_micros(2500000 as I64)
+    assert_eq(d.as_secs(), 2 as I64, "2500000us = 2 sec")
+    assert_eq(d.subsec_micros(), 500000 as I32, "2500000us has 500000us subsec")
+    return 0
+}
+
+@test
+func test_duration_from_nanos() -> I32 {
+    let d: Duration = Duration::from_nanos(1000000000 as I64)
+    assert_eq(d.as_secs(), 1 as I64, "1e9 nanos = 1 sec")
+    return 0
+}
+
+@test
+func test_duration_new() -> I32 {
+    let d: Duration = Duration::new(3 as I64, 500000000 as I32)
+    assert_eq(d.as_secs(), 3 as I64, "new(3, 500000000) secs")
+    assert_eq(d.subsec_nanos(), 500000000 as I32, "new(3, 500000000) nanos")
+    return 0
+}
+
+// === Predicates ===
+
+@test
+func test_duration_is_zero_true() -> I32 {
+    let d: Duration = Duration::from_secs(0 as I64)
+    assert(d.is_zero(), "zero duration should be zero")
+    return 0
+}
+
+@test
+func test_duration_is_zero_false() -> I32 {
+    let d: Duration = Duration::from_secs(1 as I64)
+    assert(not d.is_zero(), "non-zero duration should not be zero")
+    return 0
+}
+
+// === Conversions ===
+
+@test
+func test_duration_as_millis() -> I32 {
+    let d: Duration = Duration::from_secs(2 as I64)
+    assert_eq(d.as_millis(), 2000 as I64, "2 secs = 2000 millis")
+    return 0
+}
+
+@test
+func test_duration_as_micros() -> I32 {
+    let d: Duration = Duration::from_secs(1 as I64)
+    assert_eq(d.as_micros(), 1000000 as I64, "1 sec = 1000000 micros")
+    return 0
+}
+
+@test
+func test_duration_as_nanos() -> I32 {
+    let d: Duration = Duration::from_millis(1 as I64)
+    assert_eq(d.as_nanos(), 1000000 as I64, "1 ms = 1000000 nanos")
+    return 0
+}
+
+// === Arithmetic ===
+
+@test
+func test_duration_saturating_add() -> I32 {
+    let a: Duration = Duration::from_secs(1 as I64)
+    let b: Duration = Duration::from_millis(500 as I64)
+    let c: Duration = a.saturating_add(b)
+    assert_eq(c.as_millis(), 1500 as I64, "1s + 500ms = 1500ms")
+    return 0
+}
+
+@test
+func test_duration_saturating_sub() -> I32 {
+    let a: Duration = Duration::from_secs(2 as I64)
+    let b: Duration = Duration::from_millis(500 as I64)
+    let c: Duration = a.saturating_sub(b)
+    assert_eq(c.as_millis(), 1500 as I64, "2s - 500ms = 1500ms")
+    return 0
+}
+
+@test
+func test_duration_saturating_sub_underflow() -> I32 {
+    let a: Duration = Duration::from_millis(100 as I64)
+    let b: Duration = Duration::from_secs(1 as I64)
+    let c: Duration = a.saturating_sub(b)
+    assert(c.is_zero(), "saturating sub underflow should return zero")
+    return 0
+}
+
+@test
+func test_duration_mul() -> I32 {
+    let d: Duration = Duration::from_millis(100 as I64)
+    let result: Duration = d.mul(3 as I32)
+    assert_eq(result.as_millis(), 300 as I64, "100ms * 3 = 300ms")
+    return 0
+}
+
+// === Display ===
+
+@test
+func test_duration_to_string() -> I32 {
+    let d: Duration = Duration::from_secs(1 as I64)
+    let s: Str = d.to_string()
+    assert(s.len() > 0, "Duration to_string should be non-empty")
+    return 0
+}
+
+@test
+func test_duration_debug_string() -> I32 {
+    let d: Duration = Duration::from_millis(250 as I64)
+    let dbg: Str = d.debug_string()
+    assert(dbg.len() > 0, "Duration debug_string should be non-empty")
+    return 0
+}

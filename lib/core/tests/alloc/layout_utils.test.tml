@@ -1,0 +1,63 @@
+// Tests for core::alloc::layout utility functions
+use test::{assert, assert_eq}
+use core::alloc::layout::{padding_needed, align_up, align_down, is_aligned, is_valid_align, next_power_of_two, is_power_of_two}
+
+@test
+func test_padding_needed_aligned() -> I32 {
+    assert_eq(padding_needed(8, 8), 0 as I64, "8 aligned to 8 needs 0")
+    return 0
+}
+
+@test
+func test_padding_needed_unaligned() -> I32 {
+    assert_eq(padding_needed(5, 8), 3 as I64, "5 to 8 needs 3")
+    return 0
+}
+
+@test
+func test_align_up_basic() -> I32 {
+    assert_eq(align_up(5, 4), 8 as I64, "5 aligned up to 4 = 8")
+    assert_eq(align_up(8, 4), 8 as I64, "8 aligned up to 4 = 8")
+    return 0
+}
+
+@test
+func test_align_down_basic() -> I32 {
+    assert_eq(align_down(7, 4), 4 as I64, "7 aligned down to 4 = 4")
+    assert_eq(align_down(8, 4), 8 as I64, "8 aligned down to 4 = 8")
+    return 0
+}
+
+@test
+func test_is_aligned() -> I32 {
+    assert(is_aligned(8, 4), "8 is aligned to 4")
+    assert(not is_aligned(5, 4), "5 not aligned to 4")
+    return 0
+}
+
+@test
+func test_is_valid_align() -> I32 {
+    assert(is_valid_align(1), "1 valid")
+    assert(is_valid_align(2), "2 valid")
+    assert(is_valid_align(4), "4 valid")
+    assert(not is_valid_align(0), "0 invalid")
+    assert(not is_valid_align(3), "3 invalid")
+    return 0
+}
+
+@test
+func test_next_power_of_two() -> I32 {
+    assert_eq(next_power_of_two(3), 4 as I64, "next pow2 of 3 = 4")
+    assert_eq(next_power_of_two(4), 4 as I64, "next pow2 of 4 = 4")
+    assert_eq(next_power_of_two(1), 1 as I64, "next pow2 of 1 = 1")
+    return 0
+}
+
+@test
+func test_is_power_of_two() -> I32 {
+    assert(is_power_of_two(1), "1 is pow2")
+    assert(is_power_of_two(16), "16 is pow2")
+    assert(not is_power_of_two(0), "0 not pow2")
+    assert(not is_power_of_two(6), "6 not pow2")
+    return 0
+}

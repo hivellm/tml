@@ -1,0 +1,98 @@
+// Tests for core::ptr::non_null — NonNull methods
+use test::{assert, assert_eq}
+use core::ptr::non_null::NonNull
+use core::ptr::mut_ptr::RawMutPtr
+use core::ptr::const_ptr::RawPtr
+
+@test
+func test_non_null_new_unchecked() -> I32 {
+    let raw: RawMutPtr[I64] = RawMutPtr::from_addr(4096 as I64)
+    let nn: NonNull[I64] = NonNull::new_unchecked(raw)
+    assert_eq(nn.addr(), 4096 as I64, "addr should be 4096")
+    return 0
+}
+
+@test
+func test_non_null_dangling() -> I32 {
+    let nn: NonNull[I64] = NonNull::dangling()
+    assert(nn.addr() > 0 as I64, "dangling should be non-zero")
+    return 0
+}
+
+@test
+func test_non_null_from_addr_unchecked() -> I32 {
+    let nn: NonNull[I64] = NonNull::from_addr_unchecked(8192 as I64)
+    assert_eq(nn.addr(), 8192 as I64, "from_addr_unchecked should preserve addr")
+    return 0
+}
+
+@test
+func test_non_null_as_ptr() -> I32 {
+    let nn: NonNull[I64] = NonNull::from_addr_unchecked(3000 as I64)
+    let raw: RawMutPtr[I64] = nn.as_ptr()
+    assert_eq(raw.addr(), 3000 as I64, "as_ptr should preserve address")
+    return 0
+}
+
+@test
+func test_non_null_as_const_ptr() -> I32 {
+    let nn: NonNull[I64] = NonNull::from_addr_unchecked(5000 as I64)
+    let cp = nn.as_const_ptr()
+    assert_eq(cp.addr(), 5000 as I64, "as_const_ptr should preserve address")
+    return 0
+}
+
+@test
+func test_non_null_cast() -> I32 {
+    let nn: NonNull[I64] = NonNull::from_addr_unchecked(2000 as I64)
+    let byte_nn: NonNull[U8] = nn.cast[U8]()
+    assert_eq(byte_nn.addr(), 2000 as I64, "cast should preserve address")
+    return 0
+}
+
+@test
+func test_non_null_offset() -> I32 {
+    let nn: NonNull[I64] = NonNull::from_addr_unchecked(1000 as I64)
+    let next: NonNull[I64] = nn.offset(1 as I64)
+    assert(next.addr() > nn.addr(), "offset(1) should increase address")
+    return 0
+}
+
+@test
+func test_non_null_add() -> I32 {
+    let nn: NonNull[I64] = NonNull::from_addr_unchecked(1000 as I64)
+    let next: NonNull[I64] = nn.add(2 as I64)
+    assert(next.addr() > nn.addr(), "add(2) should increase address")
+    return 0
+}
+
+@test
+func test_non_null_sub() -> I32 {
+    let nn: NonNull[I64] = NonNull::from_addr_unchecked(1000 as I64)
+    let prev: NonNull[I64] = nn.sub(1 as I64)
+    assert(prev.addr() < nn.addr(), "sub(1) should decrease address")
+    return 0
+}
+
+@test
+func test_non_null_is_aligned() -> I32 {
+    let nn: NonNull[I64] = NonNull::from_addr_unchecked(1024 as I64)
+    assert(nn.is_aligned(), "1024 should be aligned for I64")
+    return 0
+}
+
+@test
+func test_non_null_hash() -> I32 {
+    let nn: NonNull[I64] = NonNull::from_addr_unchecked(9999 as I64)
+    let h: I64 = nn.hash()
+    assert_eq(h, 9999 as I64, "hash should return address")
+    return 0
+}
+
+@test
+func test_non_null_from_const_unchecked() -> I32 {
+    let cp: RawPtr[I64] = RawPtr::from_addr(6000 as I64)
+    let nn: NonNull[I64] = NonNull::from_const_unchecked(cp)
+    assert_eq(nn.addr(), 6000 as I64, "from_const_unchecked should preserve addr")
+    return 0
+}

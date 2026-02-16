@@ -1,0 +1,81 @@
+// Tests for std::sync::mpsc — RecvError, TryRecvError, RecvTimeoutError error types
+use test::{assert, assert_eq}
+use std::sync::mpsc::{RecvError, TryRecvError, RecvTimeoutError}
+
+// === RecvError ===
+
+@test
+func test_recv_error_to_string() -> I32 {
+    let e: RecvError = RecvError {}
+    let s: Str = e.to_string()
+    assert(s.len() > 0, "RecvError to_string should be non-empty")
+    return 0
+}
+
+// === TryRecvError ===
+
+@test
+func test_try_recv_error_empty() -> I32 {
+    let e: TryRecvError = TryRecvError::Empty
+    assert(e.is_empty(), "Empty should be empty")
+    assert(not e.is_disconnected(), "Empty should not be disconnected")
+    return 0
+}
+
+@test
+func test_try_recv_error_disconnected() -> I32 {
+    let e: TryRecvError = TryRecvError::Disconnected
+    assert(e.is_disconnected(), "Disconnected should be disconnected")
+    assert(not e.is_empty(), "Disconnected should not be empty")
+    return 0
+}
+
+@test
+func test_try_recv_error_to_string_empty() -> I32 {
+    let e: TryRecvError = TryRecvError::Empty
+    let s: Str = e.to_string()
+    assert(s.len() > 0, "TryRecvError::Empty to_string should be non-empty")
+    return 0
+}
+
+@test
+func test_try_recv_error_to_string_disconnected() -> I32 {
+    let e: TryRecvError = TryRecvError::Disconnected
+    let s: Str = e.to_string()
+    assert(s.len() > 0, "TryRecvError::Disconnected to_string should be non-empty")
+    return 0
+}
+
+// === RecvTimeoutError ===
+
+@test
+func test_recv_timeout_error_timeout() -> I32 {
+    let e: RecvTimeoutError = RecvTimeoutError::Timeout
+    assert(e.is_timeout(), "Timeout should be timeout")
+    assert(not e.is_disconnected(), "Timeout should not be disconnected")
+    return 0
+}
+
+@test
+func test_recv_timeout_error_disconnected() -> I32 {
+    let e: RecvTimeoutError = RecvTimeoutError::Disconnected
+    assert(e.is_disconnected(), "Disconnected should be disconnected")
+    assert(not e.is_timeout(), "Disconnected should not be timeout")
+    return 0
+}
+
+@test
+func test_recv_timeout_error_to_string_timeout() -> I32 {
+    let e: RecvTimeoutError = RecvTimeoutError::Timeout
+    let s: Str = e.to_string()
+    assert(s.len() > 0, "RecvTimeoutError::Timeout to_string should be non-empty")
+    return 0
+}
+
+@test
+func test_recv_timeout_error_to_string_disconnected() -> I32 {
+    let e: RecvTimeoutError = RecvTimeoutError::Disconnected
+    let s: Str = e.to_string()
+    assert(s.len() > 0, "RecvTimeoutError::Disconnected to_string should be non-empty")
+    return 0
+}

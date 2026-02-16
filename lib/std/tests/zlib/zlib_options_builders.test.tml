@@ -1,0 +1,98 @@
+// Tests for BrotliOptions and ZstdOptions builder methods (expanded coverage)
+use test::{assert, assert_eq}
+use std::zlib::options::{BrotliOptions, ZstdOptions}
+use std::zlib::constants::*
+
+// ============================================================================
+// BrotliOptions builder methods
+// ============================================================================
+
+@test
+func test_brotli_with_mode() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default().with_mode(BROTLI_MODE_TEXT)
+    assert_eq(opts.mode, BROTLI_MODE_TEXT, "mode should be text")
+    assert_eq(opts.quality, BROTLI_DEFAULT_QUALITY, "quality preserved")
+    return 0
+}
+
+@test
+func test_brotli_with_lgwin() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default().with_lgwin(18)
+    assert_eq(opts.lgwin, 18, "lgwin should be 18")
+    assert_eq(opts.quality, BROTLI_DEFAULT_QUALITY, "quality preserved")
+    return 0
+}
+
+@test
+func test_brotli_with_chunk_size() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default().with_chunk_size(32768 as I64)
+    assert_eq(opts.chunk_size, 32768 as I64, "chunk_size should be 32768")
+    assert_eq(opts.quality, BROTLI_DEFAULT_QUALITY, "quality preserved")
+    return 0
+}
+
+@test
+func test_brotli_with_max_output() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default().with_max_output(1048576 as I64)
+    assert_eq(opts.max_output_length, 1048576 as I64, "max_output should be 1MB")
+    assert_eq(opts.quality, BROTLI_DEFAULT_QUALITY, "quality preserved")
+    return 0
+}
+
+@test
+func test_brotli_chained_builders() -> I32 {
+    let opts: BrotliOptions = BrotliOptions::default()
+        .with_quality(9)
+        .with_mode(BROTLI_MODE_TEXT)
+        .with_lgwin(20)
+    assert_eq(opts.quality, 9, "quality should be 9")
+    assert_eq(opts.mode, BROTLI_MODE_TEXT, "mode should be text")
+    assert_eq(opts.lgwin, 20, "lgwin should be 20")
+    return 0
+}
+
+// ============================================================================
+// ZstdOptions builder methods
+// ============================================================================
+
+@test
+func test_zstd_with_strategy() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default().with_strategy(5)
+    assert_eq(opts.strategy, 5, "strategy should be 5")
+    assert_eq(opts.level, ZSTD_DEFAULT_CLEVEL, "level preserved")
+    return 0
+}
+
+@test
+func test_zstd_with_workers() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default().with_workers(8)
+    assert_eq(opts.nb_workers, 8, "nb_workers should be 8")
+    assert_eq(opts.level, ZSTD_DEFAULT_CLEVEL, "level preserved")
+    return 0
+}
+
+@test
+func test_zstd_with_chunk_size() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default().with_chunk_size(65536 as I64)
+    assert_eq(opts.chunk_size, 65536 as I64, "chunk_size should be 65536")
+    return 0
+}
+
+@test
+func test_zstd_with_max_output() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default().with_max_output(2097152 as I64)
+    assert_eq(opts.max_output_length, 2097152 as I64, "max_output should be 2MB")
+    return 0
+}
+
+@test
+func test_zstd_chained_builders() -> I32 {
+    let opts: ZstdOptions = ZstdOptions::default()
+        .with_level(15)
+        .with_checksum()
+        .with_workers(4)
+    assert_eq(opts.level, 15, "level should be 15")
+    assert_eq(opts.checksum, true, "checksum should be true")
+    assert_eq(opts.nb_workers, 4, "workers should be 4")
+    return 0
+}

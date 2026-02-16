@@ -1,0 +1,24 @@
+// Tests for core::fmt::traits — DebugAsDisplay wrapper
+use test::{assert, assert_eq}
+use core::fmt::traits::{DebugAsDisplay}
+
+@test
+func test_debug_as_display_i32() -> I32 {
+    let w: DebugAsDisplay[I32] = DebugAsDisplay { value: 42 }
+    assert_eq(w.debug_string(), "42", "DebugAsDisplay[I32] debug should use Display")
+    return 0
+}
+
+@test
+func test_debug_as_display_str() -> I32 {
+    let w: DebugAsDisplay[Str] = DebugAsDisplay { value: "hello" }
+    assert_eq(w.debug_string(), "hello", "DebugAsDisplay[Str] debug should use Display")
+    return 0
+}
+
+@test
+func test_debug_as_display_bool() -> I32 {
+    let w: DebugAsDisplay[Bool] = DebugAsDisplay { value: true }
+    assert_eq(w.debug_string(), "true", "DebugAsDisplay[Bool] debug should use Display")
+    return 0
+}

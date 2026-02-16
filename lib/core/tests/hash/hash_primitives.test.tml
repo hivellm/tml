@@ -1,0 +1,97 @@
+// Tests for core::hash — combine_hashes and DefaultHasher
+use test::{assert, assert_eq}
+use core::hash::{combine_hashes, DefaultHasher}
+
+@test
+func test_combine_hashes_basic() -> I32 {
+    let h1: I64 = 10
+    let h2: I64 = 20
+    let combined: I64 = combine_hashes(h1, h2)
+    // combine_hashes(10, 20) = 10 * 31 + 20 = 330
+    assert_eq(combined, 330, "combine_hashes(10,20) should be 330")
+    return 0
+}
+
+@test
+func test_combine_hashes_order_matters() -> I32 {
+    let h1: I64 = combine_hashes(1, 2)
+    let h2: I64 = combine_hashes(2, 1)
+    assert(h1 != h2, "combine_hashes should be order-dependent")
+    return 0
+}
+
+@test
+func test_combine_hashes_zero() -> I32 {
+    let h: I64 = combine_hashes(0, 0)
+    assert_eq(h, 0, "combine_hashes(0,0) should be 0")
+    return 0
+}
+
+// ============================================================================
+// DefaultHasher tests
+// ============================================================================
+
+@test
+func test_default_hasher_new() -> I32 {
+    let hasher: DefaultHasher = DefaultHasher::new()
+    let h: I64 = hasher.finish()
+    // FNV_OFFSET_BASIS as I64
+    assert(h != 0, "new hasher finish should be non-zero (FNV offset basis)")
+    return 0
+}
+
+@test
+func test_default_hasher_with_seed() -> I32 {
+    let h1: DefaultHasher = DefaultHasher::with_seed(42 as U64)
+    let h2: DefaultHasher = DefaultHasher::with_seed(99 as U64)
+    assert(h1.finish() != h2.finish(), "different seeds should produce different hashes")
+    return 0
+}
+
+@test
+func test_default_hasher_write_u8() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    let before: I64 = hasher.finish()
+    hasher.write_u8(42 as U8)
+    let after: I64 = hasher.finish()
+    assert(before != after, "writing u8 should change hash state")
+    return 0
+}
+
+@test
+func test_default_hasher_write_i32() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    hasher.write_i32(12345)
+    let h: I64 = hasher.finish()
+    assert(h != 0, "writing i32 should produce non-zero hash")
+    return 0
+}
+
+@test
+func test_default_hasher_write_i64() -> I32 {
+    var hasher: DefaultHasher = DefaultHasher::new()
+    hasher.write_i64(987654321)
+    let h: I64 = hasher.finish()
+    assert(h != 0, "writing i64 should produce non-zero hash")
+    return 0
+}
+
+@test
+func test_default_hasher_deterministic() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i64(42)
+    h2.write_i64(42)
+    assert_eq(h1.finish(), h2.finish(), "same input should produce same hash")
+    return 0
+}
+
+@test
+func test_default_hasher_different_input() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    var h2: DefaultHasher = DefaultHasher::new()
+    h1.write_i64(1)
+    h2.write_i64(2)
+    assert(h1.finish() != h2.finish(), "different input should produce different hash")
+    return 0
+}

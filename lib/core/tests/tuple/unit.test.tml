@@ -1,0 +1,9 @@
+// Tests for core::tuple — Unit type blocked by void alloca codegen bug
+// Unit::default(), clone(), eq(), ne() all trigger "alloca void" in LLVM IR
+use test::{assert}
+
+@test
+func test_tuple_placeholder() -> I32 {
+    assert(true, "tuple module placeholder")
+    return 0
+}

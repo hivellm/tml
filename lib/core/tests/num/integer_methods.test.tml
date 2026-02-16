@@ -1,0 +1,19 @@
+// Tests for core::num::integer — I32 pow method
+use test::{assert, assert_eq}
+
+@test
+func test_i32_pow_method() -> I32 {
+    let x: I32 = 2
+    assert_eq(x.pow(10), 1024, "2.pow(10) = 1024")
+    assert_eq(x.pow(0), 1, "2.pow(0) = 1")
+    assert_eq(x.pow(1), 2, "2.pow(1) = 2")
+    return 0
+}
+
+@test
+func test_i32_pow_three() -> I32 {
+    let x: I32 = 3
+    assert_eq(x.pow(4), 81, "3.pow(4) = 81")
+    assert_eq(x.pow(3), 27, "3.pow(3) = 27")
+    return 0
+}

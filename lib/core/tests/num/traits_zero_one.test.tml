@@ -1,0 +1,86 @@
+// Tests for core::num::traits — Zero, One, Bounded for I32, I64
+use test::{assert, assert_eq}
+use core::num::traits::{Zero, One, Bounded}
+
+// === Zero ===
+
+@test
+func test_zero_i32() -> I32 {
+    let z: I32 = I32::zero()
+    assert_eq(z, 0, "I32::zero() should be 0")
+    assert(z.is_zero(), "0 should be zero")
+    assert(not (5 as I32).is_zero(), "5 should not be zero")
+    return 0
+}
+
+@test
+func test_zero_i64() -> I32 {
+    let z: I64 = I64::zero()
+    assert_eq(z, 0 as I64, "I64::zero() should be 0")
+    assert(z.is_zero(), "0 should be zero")
+    return 0
+}
+
+@test
+func test_zero_u8() -> I32 {
+    let z: U8 = U8::zero()
+    assert_eq(z as I32, 0, "U8::zero() should be 0")
+    assert(z.is_zero(), "0 should be zero")
+    return 0
+}
+
+// === One ===
+
+@test
+func test_one_i32() -> I32 {
+    let o: I32 = I32::one()
+    assert_eq(o, 1, "I32::one() should be 1")
+    assert(o.is_one(), "1 should be one")
+    assert(not (5 as I32).is_one(), "5 should not be one")
+    return 0
+}
+
+@test
+func test_one_i64() -> I32 {
+    let o: I64 = I64::one()
+    assert_eq(o, 1 as I64, "I64::one() should be 1")
+    assert(o.is_one(), "1 should be one")
+    return 0
+}
+
+@test
+func test_one_u8() -> I32 {
+    let o: U8 = U8::one()
+    assert_eq(o as I32, 1, "U8::one() should be 1")
+    assert(o.is_one(), "1 should be one")
+    return 0
+}
+
+// === Bounded ===
+
+@test
+func test_bounded_i8() -> I32 {
+    let mn: I8 = I8::min_value()
+    let mx: I8 = I8::max_value()
+    assert_eq(mn as I32, -128, "I8 min should be -128")
+    assert_eq(mx as I32, 127, "I8 max should be 127")
+    return 0
+}
+
+@test
+func test_bounded_i32() -> I32 {
+    let mn: I32 = I32::min_value()
+    let mx: I32 = I32::max_value()
+    assert_eq(mn, -2147483648, "I32 min should be -2147483648")
+    assert_eq(mx, 2147483647, "I32 max should be 2147483647")
+    return 0
+}
+
+@test
+func test_bounded_u8() -> I32 {
+    let mn: U8 = U8::min_value()
+    let mx: U8 = U8::max_value()
+    assert_eq(mn as I32, 0, "U8 min should be 0")
+    assert_eq(mx as I32, 255, "U8 max should be 255")
+    return 0
+}

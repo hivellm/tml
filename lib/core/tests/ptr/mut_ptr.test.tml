@@ -1,0 +1,68 @@
+// Tests for core::ptr::mut_ptr — RawMutPtr methods
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+use core::ptr::const_ptr::RawPtr
+
+@test
+func test_raw_mut_ptr_null() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::null_ptr()
+    assert(ptr.is_null(), "null_ptr should be null")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_from_addr() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(4096 as I64)
+    assert(not ptr.is_null(), "from_addr(4096) should not be null")
+    assert_eq(ptr.addr(), 4096 as I64, "addr should return 4096")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_as_const() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(8192 as I64)
+    let cp: RawPtr[I64] = ptr.as_const()
+    assert_eq(cp.addr(), 8192 as I64, "as_const should preserve address")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_offset() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(1000 as I64)
+    let next: RawMutPtr[I64] = ptr.offset(1 as I64)
+    assert(next.addr() > ptr.addr(), "offset(1) should increase address")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_add() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(1000 as I64)
+    let next: RawMutPtr[I64] = ptr.add(2 as I64)
+    assert(next.addr() > ptr.addr(), "add(2) should increase address")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_sub() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(1000 as I64)
+    let prev: RawMutPtr[I64] = ptr.sub(1 as I64)
+    assert(prev.addr() < ptr.addr(), "sub(1) should decrease address")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_offset_from() -> I32 {
+    let p1: RawMutPtr[I64] = RawMutPtr::from_addr(1000 as I64)
+    let p2: RawMutPtr[I64] = RawMutPtr::from_addr(1000 as I64)
+    let dist: I64 = p1.offset_from(p2)
+    assert_eq(dist, 0 as I64, "same address offset_from should be 0")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_cast() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(2000 as I64)
+    let byte_ptr: RawMutPtr[U8] = ptr.cast[U8]()
+    assert_eq(byte_ptr.addr(), 2000 as I64, "cast should preserve address")
+    return 0
+}

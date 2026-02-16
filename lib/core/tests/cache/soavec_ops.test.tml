@@ -1,0 +1,49 @@
+// Tests for core::cache — CacheAligned and Padded wrappers
+use test::{assert, assert_eq}
+use core::cache::{CacheAligned, Padded, CACHE_LINE_SIZE}
+
+@test
+func test_cache_aligned_new_into_inner() -> I32 {
+    let ca: CacheAligned[I32] = CacheAligned::new(42)
+    let val: I32 = ca.into_inner()
+    assert_eq(val, 42, "CacheAligned into_inner should return 42")
+    return 0
+}
+
+@test
+func test_cache_aligned_get() -> I32 {
+    let ca: CacheAligned[I64] = CacheAligned::new(99 as I64)
+    let r: ref I64 = ca.get()
+    assert_eq(*r, 99 as I64, "CacheAligned get should return ref to 99")
+    return 0
+}
+
+@test
+func test_padded_new_into_inner() -> I32 {
+    let p: Padded[I32] = Padded::new(77)
+    let val: I32 = p.into_inner()
+    assert_eq(val, 77, "Padded into_inner should return 77")
+    return 0
+}
+
+@test
+func test_padded_get() -> I32 {
+    let p: Padded[I64] = Padded::new(123 as I64)
+    let r: ref I64 = p.get()
+    assert_eq(*r, 123 as I64, "Padded get should return ref to 123")
+    return 0
+}
+
+@test
+func test_padded_set() -> I32 {
+    var p: Padded[I32] = Padded::new(10)
+    p.set(20)
+    assert_eq(p.into_inner(), 20, "Padded set should update value")
+    return 0
+}
+
+@test
+func test_cache_line_size_constant() -> I32 {
+    assert_eq(CACHE_LINE_SIZE, 64 as I64, "CACHE_LINE_SIZE should be 64")
+    return 0
+}

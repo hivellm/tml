@@ -1,0 +1,138 @@
+// Tests for core::cmp — Ordering methods, min, max, clamp
+use test::{assert, assert_eq}
+use core::cmp::{Ordering, min, max}
+
+// === Ordering predicates ===
+
+@test
+func test_ordering_is_less() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert(o.is_less(), "Less should be less")
+    assert(not o.is_equal(), "Less should not be equal")
+    assert(not o.is_greater(), "Less should not be greater")
+    return 0
+}
+
+@test
+func test_ordering_is_equal() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert(o.is_equal(), "Equal should be equal")
+    assert(not o.is_less(), "Equal should not be less")
+    assert(not o.is_greater(), "Equal should not be greater")
+    return 0
+}
+
+@test
+func test_ordering_is_greater() -> I32 {
+    let o: Ordering = Ordering::Greater
+    assert(o.is_greater(), "Greater should be greater")
+    assert(not o.is_less(), "Greater should not be less")
+    assert(not o.is_equal(), "Greater should not be equal")
+    return 0
+}
+
+// === Ordering::reverse ===
+
+@test
+func test_ordering_reverse_less() -> I32 {
+    let o: Ordering = Ordering::Less
+    assert(o.reverse().is_greater(), "reverse of Less should be Greater")
+    return 0
+}
+
+@test
+func test_ordering_reverse_equal() -> I32 {
+    let o: Ordering = Ordering::Equal
+    assert(o.reverse().is_equal(), "reverse of Equal should be Equal")
+    return 0
+}
+
+@test
+func test_ordering_reverse_greater() -> I32 {
+    let o: Ordering = Ordering::Greater
+    assert(o.reverse().is_less(), "reverse of Greater should be Less")
+    return 0
+}
+
+// === Ordering::then_cmp ===
+
+@test
+func test_ordering_then_cmp_equal_then_less() -> I32 {
+    let o: Ordering = Ordering::Equal
+    let result: Ordering = o.then_cmp(Ordering::Less)
+    assert(result.is_less(), "Equal then Less should be Less")
+    return 0
+}
+
+@test
+func test_ordering_then_cmp_less_then_greater() -> I32 {
+    let o: Ordering = Ordering::Less
+    let result: Ordering = o.then_cmp(Ordering::Greater)
+    assert(result.is_less(), "Less then Greater should be Less")
+    return 0
+}
+
+// === min / max ===
+
+@test
+func test_min_i64() -> I32 {
+    let result: I64 = min(3 as I64, 7 as I64)
+    assert_eq(result, 3 as I64, "min(3, 7) should be 3")
+    return 0
+}
+
+@test
+func test_max_i64() -> I32 {
+    let result: I64 = max(3 as I64, 7 as I64)
+    assert_eq(result, 7 as I64, "max(3, 7) should be 7")
+    return 0
+}
+
+@test
+func test_min_equal() -> I32 {
+    let result: I64 = min(5 as I64, 5 as I64)
+    assert_eq(result, 5 as I64, "min(5, 5) should be 5")
+    return 0
+}
+
+// === clamp ===
+
+@test
+func test_i64_clamp_in_range() -> I32 {
+    let val: I64 = 5 as I64
+    let result: I64 = val.clamp(1 as I64, 10 as I64)
+    assert_eq(result, 5 as I64, "5 clamped to [1,10] should be 5")
+    return 0
+}
+
+@test
+func test_i64_clamp_below() -> I32 {
+    let val: I64 = 0 as I64
+    let result: I64 = val.clamp(3 as I64, 10 as I64)
+    assert_eq(result, 3 as I64, "0 clamped to [3,10] should be 3")
+    return 0
+}
+
+@test
+func test_i64_clamp_above() -> I32 {
+    let val: I64 = 20 as I64
+    let result: I64 = val.clamp(1 as I64, 10 as I64)
+    assert_eq(result, 10 as I64, "20 clamped to [1,10] should be 10")
+    return 0
+}
+
+// === I64 min/max ===
+
+@test
+func test_i64_min_method() -> I32 {
+    let val: I64 = 10 as I64
+    assert_eq(val.min(5 as I64), 5 as I64, "10.min(5) should be 5")
+    return 0
+}
+
+@test
+func test_i64_max_method() -> I32 {
+    let val: I64 = 10 as I64
+    assert_eq(val.max(20 as I64), 20 as I64, "10.max(20) should be 20")
+    return 0
+}

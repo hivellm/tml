@@ -37,13 +37,16 @@ void rt_log_bridge_callback(int level, const char* module, const char* message) 
 
 #ifdef _WIN32
 
-thread_local char g_crash_msg[256] = {0};
+thread_local char g_crash_msg[1024] = {0};
 thread_local bool g_crash_occurred = false;
 
+// SEH fallback exception name lookup.
+// NOTE: The canonical version is tml_get_exception_name() in essential.c (exported from DLL).
+// This is kept as a fallback for when the DLL's VEH handler doesn't catch first (rare).
 const char* get_exception_name(DWORD code) {
     switch (code) {
     case EXCEPTION_ACCESS_VIOLATION:
-        return "ACCESS_VIOLATION (Segmentation fault)";
+        return "ACCESS_VIOLATION";
     case EXCEPTION_ILLEGAL_INSTRUCTION:
         return "ILLEGAL_INSTRUCTION";
     case EXCEPTION_INT_DIVIDE_BY_ZERO:
@@ -56,8 +59,12 @@ const char* get_exception_name(DWORD code) {
         return "FLOAT_DIVIDE_BY_ZERO";
     case EXCEPTION_FLT_INVALID_OPERATION:
         return "FLOAT_INVALID_OPERATION";
-    case 0xC0000028: // STATUS_BAD_STACK
-        return "BAD_STACK (Stack corruption)";
+    case 0xC0000028:
+        return "BAD_STACK";
+    case 0xC0000374:
+        return "HEAP_CORRUPTION";
+    case 0xC0000409:
+        return "STACK_BUFFER_OVERRUN";
     default:
         return "UNKNOWN_EXCEPTION";
     }
@@ -66,15 +73,44 @@ const char* get_exception_name(DWORD code) {
 LONG WINAPI crash_filter(EXCEPTION_POINTERS* info) {
     DWORD code = info->ExceptionRecord->ExceptionCode;
 
-    // Format crash message
-    snprintf(g_crash_msg, sizeof(g_crash_msg), "CRASH: %s (0x%08lX)", get_exception_name(code),
-             (unsigned long)code);
+    // Get crash context (test name, file, suite, phase) set before each test
+    const char* phase = nullptr;
+    const char* suite = nullptr;
+    const char* test_name = nullptr;
+    const char* test_file = nullptr;
+    get_crash_context(&phase, &suite, &test_name, &test_file);
+
+    // Format crash message with full test context + diagnostics
+    int len = 0;
+    len += snprintf(g_crash_msg + len, sizeof(g_crash_msg) - len, "CRASH: %s (0x%08lX)",
+                    get_exception_name(code), (unsigned long)code);
+
+    // ACCESS_VIOLATION: include fault address and read/write/execute
+    if (code == EXCEPTION_ACCESS_VIOLATION && info->ExceptionRecord->NumberParameters >= 2) {
+        ULONG_PTR op = info->ExceptionRecord->ExceptionInformation[0];
+        ULONG_PTR fault_addr = info->ExceptionRecord->ExceptionInformation[1];
+        const char* op_str = (op == 0) ? "READ" : (op == 1) ? "WRITE" : "EXECUTE";
+        len += snprintf(g_crash_msg + len, sizeof(g_crash_msg) - len, " [%s at 0x%016llX]", op_str,
+                        (unsigned long long)fault_addr);
+    }
+
+    // RIP (where the crash occurred)
+#ifdef _M_X64
+    len += snprintf(g_crash_msg + len, sizeof(g_crash_msg) - len, " RIP=0x%016llX",
+                    (unsigned long long)info->ContextRecord->Rip);
+#endif
+
+    // Test context
+    len += snprintf(g_crash_msg + len, sizeof(g_crash_msg) - len,
+                    " in test \"%s\" [%s] (suite: %s, phase: %s)",
+                    test_name ? test_name : "(unknown)", test_file ? test_file : "(unknown)",
+                    suite ? suite : "(unknown)", phase ? phase : "(unknown)");
     g_crash_occurred = true;
 
     // Print to stderr immediately using low-level API for reliability
     HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
     DWORD written;
-    WriteFile(hErr, g_crash_msg, (DWORD)strlen(g_crash_msg), &written, NULL);
+    WriteFile(hErr, g_crash_msg, (DWORD)(len > 0 ? len : (int)strlen(g_crash_msg)), &written, NULL);
     WriteFile(hErr, "\n", 1, &written, NULL);
     FlushFileBuffers(hErr);
 
@@ -684,24 +720,11 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     if (run_with_catch) {
         TML_LOG_INFO("test", "  Calling tml_run_test_with_catch wrapper...");
 #ifdef _WIN32
-        // Suppress the VEH handler in the C runtime so that hardware exceptions
-        // (ACCESS_VIOLATION, etc.) are NOT caught by the longjmp-based VEH handler.
-        // Instead, they propagate to our SEH __try/__except wrapper which can safely
-        // recover without risking STATUS_BAD_STACK from a corrupted longjmp.
-        // Panics still work normally (they go through panic() -> longjmp directly).
-        auto veh_suppressed_ptr = lib.get_function<volatile int32_t*>("tml_veh_suppressed");
-        if (veh_suppressed_ptr) {
-            *veh_suppressed_ptr = 1;
-        }
-
-        // Wrap in SEH to catch crashes that the VEH handler would otherwise
-        // try to longjmp from (risking STATUS_BAD_STACK)
+        // VEH handler in essential.c catches hardware exceptions (ACCESS_VIOLATION, etc.)
+        // via longjmp BEFORE SEH unwinding occurs (stack is still intact).
+        // Crash context is set by suite_execution.cpp before calling run_suite_test().
+        // SEH is kept as belt-and-suspenders fallback.
         result.exit_code = call_run_with_catch_seh(run_with_catch, test_func);
-
-        // Restore VEH handler for next test
-        if (veh_suppressed_ptr) {
-            *veh_suppressed_ptr = 0;
-        }
 
         if (g_crash_occurred) {
             result.success = false;
@@ -737,7 +760,14 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
             result.error = error_msg;
         } else if (result.exit_code == -2) {
             result.success = false;
-            result.error = "Test crashed (SIGSEGV/SIGFPE/etc)";
+            std::string crash_msg = "Test crashed (SIGSEGV/SIGFPE/etc)";
+            if (get_panic_msg) {
+                const char* msg = get_panic_msg();
+                if (msg && msg[0] != '\0') {
+                    crash_msg = msg;
+                }
+            }
+            result.error = crash_msg;
         } else {
             result.success = (result.exit_code == 0);
         }
@@ -846,16 +876,19 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
     phase_start = Clock::now();
     if (run_with_catch) {
 #ifdef _WIN32
-        // Suppress VEH handler so crashes go to our SEH wrapper instead
-        auto veh_suppressed_ptr = lib.get_function<volatile int32_t*>("tml_veh_suppressed");
-        if (veh_suppressed_ptr) {
-            *veh_suppressed_ptr = 1;
+        // Set crash context so VEH handler can report which test crashed
+        using TmlSetCrashCtx = void (*)(const char*, const char*, const char*);
+        auto set_crash_ctx = lib.get_function<TmlSetCrashCtx>("tml_set_test_crash_context");
+        if (set_crash_ctx) {
+            set_crash_ctx(func_name.c_str(), nullptr, nullptr);
         }
 
         result.exit_code = call_run_with_catch_seh(run_with_catch, test_func);
 
-        if (veh_suppressed_ptr) {
-            *veh_suppressed_ptr = 0;
+        using TmlClearCrashCtx = void (*)();
+        auto clear_crash_ctx = lib.get_function<TmlClearCrashCtx>("tml_clear_test_crash_context");
+        if (clear_crash_ctx) {
+            clear_crash_ctx();
         }
 
         if (g_crash_occurred) {
@@ -885,7 +918,14 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
             result.error = error_msg;
         } else if (result.exit_code == -2) {
             result.success = false;
-            result.error = "Test crashed";
+            std::string crash_msg = "Test crashed";
+            if (get_panic_msg) {
+                const char* msg = get_panic_msg();
+                if (msg && msg[0] != '\0') {
+                    crash_msg = msg;
+                }
+            }
+            result.error = crash_msg;
         } else {
             result.success = (result.exit_code == 0);
         }

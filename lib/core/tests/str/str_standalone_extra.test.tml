@@ -1,0 +1,48 @@
+// Tests for core::str standalone functions not yet covered
+use test::{assert, assert_eq}
+use core::str
+
+@test
+func test_str_concat() -> I32 {
+    assert_eq(str::concat("hello", " world"), "hello world", "concat")
+    assert_eq(str::concat("", "x"), "x", "concat empty left")
+    assert_eq(str::concat("x", ""), "x", "concat empty right")
+    return 0
+}
+
+@test
+func test_str_replace_first() -> I32 {
+    assert_eq(str::replace_first("aaa", "a", "b"), "baa", "replace_first aaa")
+    assert_eq(str::replace_first("hello hello", "hello", "hi"), "hi hello", "replace_first hello")
+    assert_eq(str::replace_first("abc", "x", "y"), "abc", "replace_first no match")
+    return 0
+}
+
+@test
+func test_str_substring_from() -> I32 {
+    assert_eq(str::substring_from("hello", 2), "llo", "substring_from 2")
+    assert_eq(str::substring_from("hello", 0), "hello", "substring_from 0")
+    return 0
+}
+
+@test
+func test_str_substring_to() -> I32 {
+    assert_eq(str::substring_to("hello", 3), "hel", "substring_to 3")
+    assert_eq(str::substring_to("hello", 5), "hello", "substring_to full")
+    return 0
+}
+
+@test
+func test_str_char_at() -> I32 {
+    assert_eq(str::char_at("hello", 0), 104, "char_at 0 = h")
+    assert_eq(str::char_at("hello", 4), 111, "char_at 4 = o")
+    return 0
+}
+
+@test
+func test_str_repeat() -> I32 {
+    assert_eq(str::repeat("ab", 3), "ababab", "repeat ab 3")
+    assert_eq(str::repeat("x", 0), "", "repeat 0")
+    assert_eq(str::repeat("y", 1), "y", "repeat 1")
+    return 0
+}

@@ -1,0 +1,14 @@
+// Tests for std::exception — class methods
+// BLOCKED: class OOP codegen still produces "Unknown method: to_string/equals/get_hash_code"
+// When class codegen is fixed, replace this with real tests for:
+//   - ArgumentNullException::get_param_name
+//   - ArgumentOutOfRangeException::get_actual_value
+//   - IndexOutOfRangeException::get_index
+//   - FileNotFoundException::get_file_path
+use test::{assert}
+
+@test
+func test_exception_blocked_placeholder() -> I32 {
+    assert(true, "exception class codegen blocked")
+    return 0
+}

@@ -1,0 +1,19 @@
+// Tests for core::result — Outcome extra methods: map_or, map_or_else, also
+use test::{assert, assert_eq}
+
+// map_or: returns default if Err, applies function if Ok
+@test
+func test_outcome_map_or_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(5)
+    let r: I32 = x.map_or(0, do(v: I32) -> I32 { return v * 10 })
+    assert_eq(r, 50, "map_or Ok applies function")
+    return 0
+}
+
+@test
+func test_outcome_map_or_err() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    let r: I32 = x.map_or(99, do(v: I32) -> I32 { return v * 10 })
+    assert_eq(r, 99, "map_or Err returns default")
+    return 0
+}

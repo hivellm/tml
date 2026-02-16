@@ -139,7 +139,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         message(STATUS "MemorySanitizer enabled")
     endif()
 elseif(MSVC)
-    add_compile_options(/W4 /WX /utf-8 /FS)
+    # /EHa enables asynchronous exception handling so __try/__except can catch
+    # hardware exceptions (ACCESS_VIOLATION, etc.) across DLL boundaries.
+    # Without /EHa, SEH only catches C++ exceptions (the default /EHsc mode).
+    add_compile_options(/W4 /WX /utf-8 /FS /EHa)
     # Sanitizer support (MSVC)
     if(TML_ENABLE_ASAN)
         add_compile_options(/fsanitize=address)

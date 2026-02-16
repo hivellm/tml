@@ -1,0 +1,66 @@
+// Tests for fmt::helpers — pad_center, escape_string, escape_char, u64_to_octal_str, u64_to_hex_str
+use test::{assert, assert_eq}
+use core::fmt::helpers::{pad_center, escape_string, escape_char, u64_to_octal_str, u64_to_hex_str}
+
+@test
+func test_pad_center_shorter() -> I32 {
+    let s: Str = pad_center("hi", 6 as I64, " ")
+    assert_eq(s, "  hi  ", "pad_center should center string")
+    return 0
+}
+
+@test
+func test_pad_center_already_long() -> I32 {
+    let s: Str = pad_center("hello", 3 as I64, " ")
+    assert_eq(s, "hello", "pad_center should not truncate")
+    return 0
+}
+
+@test
+func test_escape_string_passthrough() -> I32 {
+    let s: Str = escape_string("hello")
+    assert_eq(s, "hello", "escape_string passthrough")
+    return 0
+}
+
+@test
+func test_escape_char_basic() -> I32 {
+    let s: Str = escape_char('X')
+    assert_eq(s, "X", "escape_char X")
+    return 0
+}
+
+@test
+func test_u64_to_octal_str_zero() -> I32 {
+    let s: Str = u64_to_octal_str(0 as U64)
+    assert_eq(s, "0", "octal 0")
+    return 0
+}
+
+@test
+func test_u64_to_octal_str_8() -> I32 {
+    let s: Str = u64_to_octal_str(8 as U64)
+    assert_eq(s, "10", "octal 8 = 10")
+    return 0
+}
+
+@test
+func test_u64_to_hex_str_zero() -> I32 {
+    let s: Str = u64_to_hex_str(0 as U64, false)
+    assert_eq(s, "0", "hex 0")
+    return 0
+}
+
+@test
+func test_u64_to_hex_str_255_lower() -> I32 {
+    let s: Str = u64_to_hex_str(255 as U64, false)
+    assert_eq(s, "ff", "hex 255 lower")
+    return 0
+}
+
+@test
+func test_u64_to_hex_str_255_upper() -> I32 {
+    let s: Str = u64_to_hex_str(255 as U64, true)
+    assert_eq(s, "FF", "hex 255 upper")
+    return 0
+}

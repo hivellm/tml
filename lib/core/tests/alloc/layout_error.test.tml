@@ -1,0 +1,40 @@
+// Tests for core::alloc::layout — Layout, LayoutError, AllocError
+use test::{assert, assert_eq}
+use core::alloc::layout::{Layout, LayoutError}
+use core::alloc::AllocError
+
+// === LayoutError ===
+
+@test
+func test_layout_error_new() -> I32 {
+    let e: LayoutError = LayoutError::new()
+    let s: Str = e.to_string()
+    assert(s.len() > 0, "LayoutError to_string should be non-empty")
+    return 0
+}
+
+@test
+func test_layout_error_debug_string() -> I32 {
+    let e: LayoutError = LayoutError::new()
+    let dbg: Str = e.debug_string()
+    assert_eq(dbg, "LayoutError", "debug_string should be LayoutError")
+    return 0
+}
+
+// === AllocError ===
+
+@test
+func test_alloc_error_new() -> I32 {
+    let e: AllocError = AllocError::new()
+    let s: Str = e.to_string()
+    assert(s.len() > 0, "AllocError to_string should be non-empty")
+    return 0
+}
+
+@test
+func test_alloc_error_debug_string() -> I32 {
+    let e: AllocError = AllocError::new()
+    let dbg: Str = e.debug_string()
+    assert(dbg.len() > 0, "AllocError debug_string should be non-empty")
+    return 0
+}

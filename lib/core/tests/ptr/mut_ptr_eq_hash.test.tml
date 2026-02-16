@@ -1,0 +1,27 @@
+// Tests for core::ptr::mut_ptr — RawMutPtr hash, eq, cmp
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_raw_mut_ptr_hash() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(42 as I64)
+    let h: I64 = ptr.hash()
+    assert_eq(h, 42 as I64, "hash should return address")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_hash_zero() -> I32 {
+    let ptr: RawMutPtr[I32] = RawMutPtr::null_ptr()
+    let h: I64 = ptr.hash()
+    assert_eq(h, 0 as I64, "null ptr hash should be 0")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_sub() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(2000 as I64)
+    let prev: RawMutPtr[I64] = ptr.sub(1 as I64)
+    assert(prev.addr() < ptr.addr(), "sub(1) should decrease address")
+    return 0
+}

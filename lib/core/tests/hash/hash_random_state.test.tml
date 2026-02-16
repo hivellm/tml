@@ -1,0 +1,45 @@
+// Tests for core::hash — RandomState
+use test::{assert, assert_eq}
+use core::hash::{RandomState, DefaultHasher}
+
+@test
+func test_random_state_new() -> I32 {
+    let rs: RandomState = RandomState::new()
+    // Just verify it creates without crashing
+    assert(true, "RandomState::new should work")
+    return 0
+}
+
+@test
+func test_random_state_with_keys() -> I32 {
+    let rs: RandomState = RandomState::with_keys(100 as U64, 200 as U64)
+    assert_eq(rs.k0, 100 as U64, "k0 should be 100")
+    assert_eq(rs.k1, 200 as U64, "k1 should be 200")
+    return 0
+}
+
+@test
+func test_random_state_build_hasher() -> I32 {
+    let rs: RandomState = RandomState::with_keys(42 as U64, 99 as U64)
+    let hasher: DefaultHasher = rs.build_hasher()
+    let h: I64 = hasher.finish()
+    assert(h != 0, "build_hasher should produce non-zero initial hash")
+    return 0
+}
+
+@test
+func test_random_state_duplicate() -> I32 {
+    let rs1: RandomState = RandomState::with_keys(10 as U64, 20 as U64)
+    let rs2: RandomState = rs1.duplicate()
+    assert_eq(rs2.k0, 10 as U64, "duplicate k0 should match")
+    assert_eq(rs2.k1, 20 as U64, "duplicate k1 should match")
+    return 0
+}
+
+@test
+func test_random_state_default() -> I32 {
+    let rs: RandomState = RandomState::default()
+    // default() calls new() which uses random seeds
+    assert(true, "RandomState::default should work")
+    return 0
+}

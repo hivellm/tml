@@ -1,0 +1,47 @@
+// Tests for std::sync::mpsc — TryRecvError and RecvTimeoutError methods
+use test::{assert, assert_eq}
+use std::sync::mpsc::{TryRecvError, RecvTimeoutError}
+
+@test
+func test_try_recv_error_empty_to_string() -> I32 {
+    let e: TryRecvError = TryRecvError::Empty
+    assert_eq(e.to_string(), "channel is empty", "Empty to_string")
+    return 0
+}
+
+@test
+func test_try_recv_error_disconnected_to_string() -> I32 {
+    let e: TryRecvError = TryRecvError::Disconnected
+    assert_eq(e.to_string(), "channel is disconnected", "Disconnected to_string")
+    return 0
+}
+
+@test
+func test_recv_timeout_error_is_timeout() -> I32 {
+    let e: RecvTimeoutError = RecvTimeoutError::Timeout
+    assert(e.is_timeout(), "Timeout should be timeout")
+    assert(not e.is_disconnected(), "Timeout should not be disconnected")
+    return 0
+}
+
+@test
+func test_recv_timeout_error_is_disconnected() -> I32 {
+    let e: RecvTimeoutError = RecvTimeoutError::Disconnected
+    assert(e.is_disconnected(), "Disconnected should be disconnected")
+    assert(not e.is_timeout(), "Disconnected should not be timeout")
+    return 0
+}
+
+@test
+func test_recv_timeout_error_timeout_to_string() -> I32 {
+    let e: RecvTimeoutError = RecvTimeoutError::Timeout
+    assert_eq(e.to_string(), "receive operation timed out", "Timeout to_string")
+    return 0
+}
+
+@test
+func test_recv_timeout_error_disconnected_to_string() -> I32 {
+    let e: RecvTimeoutError = RecvTimeoutError::Disconnected
+    assert_eq(e.to_string(), "channel is disconnected", "Disconnected to_string")
+    return 0
+}

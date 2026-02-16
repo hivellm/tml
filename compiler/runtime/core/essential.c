@@ -38,6 +38,7 @@
 #define TML_EXPORT __declspec(dllexport)
 // Include Windows headers for SEH
 #define WIN32_LEAN_AND_MEAN
+#include <malloc.h> // _resetstkoflw()
 #include <windows.h>
 #else
 #define TML_EXPORT __attribute__((visibility("default")))
@@ -134,6 +135,123 @@ static char tml_panic_backtrace[8192] = {0};
 
 /** @brief Buffer to store JSON-formatted backtrace when panic is caught. */
 static char tml_panic_backtrace_json[16384] = {0};
+
+// ============================================================================
+// Test Crash Context (set by C++ test runner, read by VEH handler)
+// ============================================================================
+
+/** @brief Current test name for crash context reporting. */
+static char tml_crash_ctx_test[256] = {0};
+/** @brief Current test file for crash context reporting. */
+static char tml_crash_ctx_file[512] = {0};
+/** @brief Current suite name for crash context reporting. */
+static char tml_crash_ctx_suite[256] = {0};
+
+/**
+ * @brief Set crash context before running a test.
+ *
+ * Called by the C++ test runner before each test so that if the test crashes,
+ * the VEH handler can include the test name/file in the crash message.
+ */
+TML_EXPORT void tml_set_test_crash_context(const char* test_name, const char* test_file,
+                                           const char* suite_name) {
+    if (test_name) {
+        strncpy(tml_crash_ctx_test, test_name, sizeof(tml_crash_ctx_test) - 1);
+        tml_crash_ctx_test[sizeof(tml_crash_ctx_test) - 1] = '\0';
+    } else {
+        tml_crash_ctx_test[0] = '\0';
+    }
+    if (test_file) {
+        strncpy(tml_crash_ctx_file, test_file, sizeof(tml_crash_ctx_file) - 1);
+        tml_crash_ctx_file[sizeof(tml_crash_ctx_file) - 1] = '\0';
+    } else {
+        tml_crash_ctx_file[0] = '\0';
+    }
+    if (suite_name) {
+        strncpy(tml_crash_ctx_suite, suite_name, sizeof(tml_crash_ctx_suite) - 1);
+        tml_crash_ctx_suite[sizeof(tml_crash_ctx_suite) - 1] = '\0';
+    } else {
+        tml_crash_ctx_suite[0] = '\0';
+    }
+}
+
+/** @brief Clear crash context after test completes. */
+TML_EXPORT void tml_clear_test_crash_context(void) {
+    tml_crash_ctx_test[0] = '\0';
+    tml_crash_ctx_file[0] = '\0';
+    tml_crash_ctx_suite[0] = '\0';
+}
+
+// ============================================================================
+// Crash Severity (set by VEH handler, read by C++ test runner)
+// ============================================================================
+
+/**
+ * @brief Crash severity levels for recovery policy decisions.
+ *
+ * The VEH handler classifies each crash and the C++ test runner uses the
+ * severity to decide whether to continue the suite or abort.
+ */
+enum TmlCrashSeverity {
+    CRASH_NONE = 0,            /**< No crash occurred */
+    CRASH_NULL_DEREF = 1,      /**< AV read at low address (<0x10000) — safe to continue */
+    CRASH_ARITHMETIC = 2,      /**< Integer/float divide by zero — safe to continue */
+    CRASH_USE_AFTER_FREE = 3,  /**< AV read at high address — potential corruption */
+    CRASH_WRITE_VIOLATION = 4, /**< AV write — memory corruption likely */
+    CRASH_DEP_VIOLATION = 5,   /**< AV execute (DEP) — code corruption */
+    CRASH_STACK_OVERFLOW = 6,  /**< Stack overflow — guard page consumed */
+    CRASH_HEAP_CORRUPTION = 7, /**< Heap corruption (0xC0000374) */
+    CRASH_UNKNOWN = 8          /**< Everything else — assume worst */
+};
+
+/** @brief Crash severity from most recent crash (set by VEH handler). */
+static volatile int32_t tml_crash_severity = CRASH_NONE;
+
+/** @brief Whether the current suite should be aborted after a dangerous crash. */
+static volatile int32_t tml_crash_abort_suite = 0;
+
+#ifdef _WIN32
+/** @brief Static buffer for crash messages (avoids stack allocation in handler). */
+static char tml_crash_msg_buf[1024] = {0};
+
+/** @brief Raw backtrace frames captured by VEH handler (no symbol resolution). */
+static void* tml_crash_bt_frames[32] = {0};
+
+/** @brief Number of valid frames in tml_crash_bt_frames. */
+static int32_t tml_crash_bt_count = 0;
+#endif
+
+/** @brief Get the crash severity from the most recent crash. */
+TML_EXPORT int32_t tml_get_crash_severity(void) {
+    return tml_crash_severity;
+}
+
+/** @brief Check if the current suite should be aborted. */
+TML_EXPORT int32_t tml_get_crash_abort_suite(void) {
+    return tml_crash_abort_suite;
+}
+
+/** @brief Clear crash severity (called before each test). */
+TML_EXPORT void tml_clear_crash_severity(void) {
+    tml_crash_severity = CRASH_NONE;
+    tml_crash_abort_suite = 0;
+    tml_crash_bt_count = 0;
+}
+
+/** @brief Get raw backtrace frames from last crash. */
+TML_EXPORT int32_t tml_get_crash_backtrace(void** out_frames, int32_t max_frames) {
+#ifdef _WIN32
+    int32_t count = tml_crash_bt_count < max_frames ? tml_crash_bt_count : max_frames;
+    for (int32_t i = 0; i < count; i++) {
+        out_frames[i] = tml_crash_bt_frames[i];
+    }
+    return count;
+#else
+    (void)out_frames;
+    (void)max_frames;
+    return 0;
+#endif
+}
 
 // ============================================================================
 // I/O Functions
@@ -562,10 +680,16 @@ static void tml_restore_signal_handlers(void) {
 // ============================================================================
 
 #ifdef _WIN32
-static const char* tml_get_exception_name(DWORD code) {
+/**
+ * @brief Get human-readable name for a Windows exception code.
+ *
+ * Exported so the C++ test runner can use it instead of maintaining
+ * its own duplicate switch statement.
+ */
+TML_EXPORT const char* tml_get_exception_name(DWORD code) {
     switch (code) {
     case EXCEPTION_ACCESS_VIOLATION:
-        return "ACCESS_VIOLATION (Segmentation fault)";
+        return "ACCESS_VIOLATION";
     case EXCEPTION_ILLEGAL_INSTRUCTION:
         return "ILLEGAL_INSTRUCTION";
     case EXCEPTION_INT_DIVIDE_BY_ZERO:
@@ -590,6 +714,12 @@ static const char* tml_get_exception_name(DWORD code) {
         return "FLOAT_UNDERFLOW";
     case EXCEPTION_STACK_OVERFLOW:
         return "STACK_OVERFLOW";
+    case 0xC0000028:
+        return "BAD_STACK";
+    case 0xC0000374:
+        return "HEAP_CORRUPTION";
+    case 0xC0000409:
+        return "STACK_BUFFER_OVERRUN";
     default:
         return "UNKNOWN_EXCEPTION";
     }
@@ -602,6 +732,48 @@ static PVOID tml_veh_handle = NULL;
 static volatile LONG tml_filter_refcount = 0;
 
 /**
+ * @brief Classify crash severity and set abort-suite flag.
+ *
+ * Called by the VEH handler to determine recovery policy:
+ * - CRASH_NULL_DEREF / CRASH_ARITHMETIC: safe to continue suite
+ * - Everything else: abort suite (assume corrupted state)
+ */
+static void tml_classify_crash(DWORD code, EXCEPTION_RECORD* rec) {
+    if (code == EXCEPTION_ACCESS_VIOLATION && rec->NumberParameters >= 2) {
+        ULONG_PTR op = rec->ExceptionInformation[0];   // 0=read, 1=write, 8=execute
+        ULONG_PTR addr = rec->ExceptionInformation[1]; // faulting address
+
+        if (op == 1) {
+            tml_crash_severity = CRASH_WRITE_VIOLATION;
+            tml_crash_abort_suite = 1;
+        } else if (op == 8) {
+            tml_crash_severity = CRASH_DEP_VIOLATION;
+            tml_crash_abort_suite = 1;
+        } else if (addr < 0x10000) {
+            // Read at low address — null/near-null dereference, safe to continue
+            tml_crash_severity = CRASH_NULL_DEREF;
+            tml_crash_abort_suite = 0;
+        } else {
+            // Read at high address — use-after-free or wild pointer
+            tml_crash_severity = CRASH_USE_AFTER_FREE;
+            tml_crash_abort_suite = 1;
+        }
+    } else if (code == EXCEPTION_STACK_OVERFLOW) {
+        tml_crash_severity = CRASH_STACK_OVERFLOW;
+        tml_crash_abort_suite = 1;
+    } else if (code == 0xC0000374) { // HEAP_CORRUPTION
+        tml_crash_severity = CRASH_HEAP_CORRUPTION;
+        tml_crash_abort_suite = 1;
+    } else if (code == EXCEPTION_INT_DIVIDE_BY_ZERO || code == EXCEPTION_FLT_DIVIDE_BY_ZERO) {
+        tml_crash_severity = CRASH_ARITHMETIC;
+        tml_crash_abort_suite = 0;
+    } else {
+        tml_crash_severity = CRASH_UNKNOWN;
+        tml_crash_abort_suite = 1;
+    }
+}
+
+/**
  * @brief Vectored Exception Handler (VEH) for crash catching.
  *
  * Uses VEH instead of SetUnhandledExceptionFilter because:
@@ -612,6 +784,9 @@ static volatile LONG tml_filter_refcount = 0;
  *
  * Only handles fatal exceptions (ACCESS_VIOLATION, etc.) and only when
  * tml_catching_panic is set (i.e., we're inside tml_run_test_with_catch).
+ *
+ * Enhanced diagnostics: fault address, read/write/execute, RIP, RSP, RBP,
+ * raw backtrace frames (no symbol resolution — that's done post-recovery).
  */
 static LONG WINAPI tml_veh_handler(EXCEPTION_POINTERS* info) {
     DWORD code = info->ExceptionRecord->ExceptionCode;
@@ -634,24 +809,120 @@ static LONG WINAPI tml_veh_handler(EXCEPTION_POINTERS* info) {
     case EXCEPTION_FLT_OVERFLOW:
     case EXCEPTION_FLT_UNDERFLOW:
     case EXCEPTION_FLT_STACK_CHECK:
+    case 0xC0000374: // HEAP_CORRUPTION
+    case 0xC0000409: // STACK_BUFFER_OVERRUN
         break;
     default:
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    // Format and print the crash message immediately to stderr
-    char msg[256];
-    int len = snprintf(msg, sizeof(msg), "CRASH: %s (0x%08lX)\n", tml_get_exception_name(code),
-                       (unsigned long)code);
+    // Classify crash severity and set abort-suite flag
+    tml_classify_crash(code, info->ExceptionRecord);
 
+    // For STACK_OVERFLOW: restore guard page FIRST, before any stack usage.
+    // Without this, the next stack overflow kills the process without exception.
+    if (code == EXCEPTION_STACK_OVERFLOW) {
+        _resetstkoflw();
+    }
+
+    // Use static buffer for message formatting (not stack-allocated).
+    // Critical for STACK_OVERFLOW where stack space is exhausted.
+    char* msg = tml_crash_msg_buf;
+    const int msg_size = (int)sizeof(tml_crash_msg_buf);
+    int len = 0;
+
+    // Header line with exception name
+    len += snprintf(msg + len, msg_size - len, "\nCRASH: %s (0x%08lX)\n",
+                    tml_get_exception_name(code), (unsigned long)code);
+
+    // ACCESS_VIOLATION details: fault address + read/write/execute
+    if (code == EXCEPTION_ACCESS_VIOLATION && info->ExceptionRecord->NumberParameters >= 2) {
+        ULONG_PTR op = info->ExceptionRecord->ExceptionInformation[0];
+        ULONG_PTR fault_addr = info->ExceptionRecord->ExceptionInformation[1];
+        const char* op_str = (op == 0) ? "READ" : (op == 1) ? "WRITE" : "EXECUTE";
+
+        if (fault_addr < 0x10000) {
+            len += snprintf(msg + len, msg_size - len, "  Fault:   0x%016llX (null pointer %s)\n",
+                            (unsigned long long)fault_addr, op_str);
+        } else {
+            len += snprintf(msg + len, msg_size - len, "  Fault:   0x%016llX (%s)\n",
+                            (unsigned long long)fault_addr, op_str);
+        }
+    }
+
+    // Register dump: RIP (where it crashed), RSP, RBP
+#ifdef _M_X64
+    CONTEXT* ctx = info->ContextRecord;
+    len += snprintf(msg + len, msg_size - len,
+                    "  RIP:     0x%016llX\n"
+                    "  RSP:     0x%016llX\n"
+                    "  RBP:     0x%016llX\n",
+                    (unsigned long long)ctx->Rip, (unsigned long long)ctx->Rsp,
+                    (unsigned long long)ctx->Rbp);
+#endif
+
+    // Test context
+    if (tml_crash_ctx_test[0]) {
+        len +=
+            snprintf(msg + len, msg_size - len,
+                     "  Test:    %s\n"
+                     "  File:    %s\n"
+                     "  Suite:   %s\n",
+                     tml_crash_ctx_test, tml_crash_ctx_file[0] ? tml_crash_ctx_file : "(unknown)",
+                     tml_crash_ctx_suite[0] ? tml_crash_ctx_suite : "(unknown)");
+    }
+
+    // Capture raw backtrace frames (safe in VEH — no heap allocation).
+    // Skip for STACK_OVERFLOW where CaptureStackBackTrace may not be safe.
+    if (code != EXCEPTION_STACK_OVERFLOW) {
+        tml_crash_bt_count = (int32_t)CaptureStackBackTrace(0, 32, tml_crash_bt_frames, NULL);
+
+        if (tml_crash_bt_count > 0) {
+            len += snprintf(msg + len, msg_size - len, "  Backtrace (%d frames):\n",
+                            tml_crash_bt_count);
+            // Print first 8 frames inline (keep message compact)
+            int show = tml_crash_bt_count < 8 ? tml_crash_bt_count : 8;
+            for (int i = 0; i < show && len < msg_size - 40; i++) {
+                len += snprintf(msg + len, msg_size - len, "    [%d] 0x%016llX\n", i,
+                                (unsigned long long)(uintptr_t)tml_crash_bt_frames[i]);
+            }
+            if (tml_crash_bt_count > 8) {
+                len += snprintf(msg + len, msg_size - len, "    ... +%d more frames\n",
+                                tml_crash_bt_count - 8);
+            }
+        }
+    } else {
+        tml_crash_bt_count = 0;
+    }
+
+    // Write to stderr using low-level API for reliability during crash
     DWORD written;
     HANDLE hStderr = GetStdHandle(STD_ERROR_HANDLE);
-    WriteFile(hStderr, msg, (DWORD)len, &written, NULL);
-    FlushFileBuffers(hStderr);
+    if (len > 0) {
+        WriteFile(hStderr, msg, (DWORD)len, &written, NULL);
+        FlushFileBuffers(hStderr);
+    }
 
-    // Store in global for potential retrieval
-    snprintf(tml_panic_msg, sizeof(tml_panic_msg), "CRASH: %s (0x%08lX)",
-             tml_get_exception_name(code), (unsigned long)code);
+    // Store structured message in global for retrieval by C++ test runner
+    if (tml_crash_ctx_test[0]) {
+        if (code == EXCEPTION_ACCESS_VIOLATION && info->ExceptionRecord->NumberParameters >= 2) {
+            ULONG_PTR op = info->ExceptionRecord->ExceptionInformation[0];
+            ULONG_PTR fault_addr = info->ExceptionRecord->ExceptionInformation[1];
+            const char* op_str = (op == 0) ? "READ" : (op == 1) ? "WRITE" : "EXECUTE";
+            snprintf(tml_panic_msg, sizeof(tml_panic_msg),
+                     "CRASH: %s (%s at 0x%016llX) in test \"%s\" [%s]",
+                     tml_get_exception_name(code), op_str, (unsigned long long)fault_addr,
+                     tml_crash_ctx_test, tml_crash_ctx_file[0] ? tml_crash_ctx_file : "?");
+        } else {
+            snprintf(tml_panic_msg, sizeof(tml_panic_msg),
+                     "CRASH: %s (0x%08lX) in test \"%s\" [%s]", tml_get_exception_name(code),
+                     (unsigned long)code, tml_crash_ctx_test,
+                     tml_crash_ctx_file[0] ? tml_crash_ctx_file : "?");
+        }
+    } else {
+        snprintf(tml_panic_msg, sizeof(tml_panic_msg), "CRASH: %s (0x%08lX)",
+                 tml_get_exception_name(code), (unsigned long)code);
+    }
 
     // VEH runs before SEH frame unwinding, so longjmp is safe here.
     // The stack is still intact because no unwinding has occurred.
@@ -669,6 +940,10 @@ static void tml_install_exception_filter(void) {
         tml_veh_handle = AddVectoredExceptionHandler(1, tml_veh_handler);
         // Disable Windows Error Reporting popup
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+        // Reserve extra stack space for STACK_OVERFLOW handler.
+        // Without this, the handler may not have enough stack to even format a message.
+        ULONG stack_guarantee = 65536; // 64 KB
+        SetThreadStackGuarantee(&stack_guarantee);
     }
 }
 

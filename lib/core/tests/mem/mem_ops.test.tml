@@ -1,0 +1,72 @@
+// Tests for core::mem — size_of, align_of, swap, replace
+use test::{assert, assert_eq}
+use core::mem::{size_of, align_of, swap, replace}
+
+// === size_of ===
+
+@test
+func test_mem_size_of_i8() -> I32 {
+    assert_eq(size_of[I8](), 1 as I64, "size_of[I8] should be 1")
+    return 0
+}
+
+@test
+func test_mem_size_of_i32() -> I32 {
+    assert_eq(size_of[I32](), 4 as I64, "size_of[I32] should be 4")
+    return 0
+}
+
+@test
+func test_mem_size_of_i64() -> I32 {
+    assert_eq(size_of[I64](), 8 as I64, "size_of[I64] should be 8")
+    return 0
+}
+
+@test
+func test_mem_size_of_f64() -> I32 {
+    assert_eq(size_of[F64](), 8 as I64, "size_of[F64] should be 8")
+    return 0
+}
+
+@test
+func test_mem_size_of_bool() -> I32 {
+    assert_eq(size_of[Bool](), 1 as I64, "size_of[Bool] should be 1")
+    return 0
+}
+
+// === align_of ===
+
+@test
+func test_mem_align_of_i8() -> I32 {
+    assert_eq(align_of[I8](), 1 as I64, "align_of[I8] should be 1")
+    return 0
+}
+
+@test
+func test_mem_align_of_i64() -> I32 {
+    assert_eq(align_of[I64](), 8 as I64, "align_of[I64] should be 8")
+    return 0
+}
+
+// === swap ===
+
+@test
+func test_mem_swap() -> I32 {
+    var a: I64 = 10 as I64
+    var b: I64 = 20 as I64
+    swap(mut ref a, mut ref b)
+    assert_eq(a, 20 as I64, "after swap, a should be 20")
+    assert_eq(b, 10 as I64, "after swap, b should be 10")
+    return 0
+}
+
+// === replace ===
+
+@test
+func test_mem_replace() -> I32 {
+    var x: I64 = 5 as I64
+    let old: I64 = replace(mut ref x, 99 as I64)
+    assert_eq(old, 5 as I64, "replace should return old value")
+    assert_eq(x, 99 as I64, "replace should set new value")
+    return 0
+}

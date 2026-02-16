@@ -1,0 +1,62 @@
+// Tests for core::error — ParseError, SimpleError constructors and Display/Debug
+use test::{assert, assert_eq}
+use core::error::{ParseError, SimpleError}
+
+// === SimpleError ===
+
+@test
+func test_simple_error_new() -> I32 {
+    let err: SimpleError = SimpleError::new("something broke")
+    assert_eq(err.message, "something broke", "SimpleError message field")
+    return 0
+}
+
+@test
+func test_simple_error_to_string() -> I32 {
+    let err: SimpleError = SimpleError::new("test error")
+    let s: Str = err.to_string()
+    assert_eq(s, "test error", "SimpleError to_string returns message")
+    return 0
+}
+
+@test
+func test_simple_error_debug_string() -> I32 {
+    let err: SimpleError = SimpleError::new("oops")
+    let dbg: Str = err.debug_string()
+    assert(dbg.len() > 0, "SimpleError debug_string should be non-empty")
+    return 0
+}
+
+// === ParseError ===
+
+@test
+func test_parse_error_new_to_string() -> I32 {
+    let err: ParseError = ParseError::new("unexpected token")
+    let s: Str = err.to_string()
+    assert(s.len() > 0, "ParseError to_string should be non-empty")
+    return 0
+}
+
+@test
+func test_parse_error_with_position_to_string() -> I32 {
+    let err: ParseError = ParseError::with_position("bad char", 42 as I64)
+    let s: Str = err.to_string()
+    assert(s.len() > 0, "ParseError with_position to_string should be non-empty")
+    return 0
+}
+
+@test
+func test_parse_error_debug_string_no_position() -> I32 {
+    let err: ParseError = ParseError::new("eof")
+    let dbg: Str = err.debug_string()
+    assert(dbg.len() > 0, "ParseError debug_string should be non-empty")
+    return 0
+}
+
+@test
+func test_parse_error_debug_string_with_position() -> I32 {
+    let err: ParseError = ParseError::with_position("x", 10 as I64)
+    let dbg: Str = err.debug_string()
+    assert(dbg.len() > 0, "ParseError debug_string with pos should be non-empty")
+    return 0
+}

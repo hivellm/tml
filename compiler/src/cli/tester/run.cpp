@@ -68,50 +68,85 @@ void clear_crash_context() {
     safe_copy(g_current_phase, sizeof(g_current_phase), "idle");
 }
 
-// Global unhandled exception filter for crash logging
+void get_crash_context(const char** phase, const char** suite, const char** test_name,
+                       const char** test_file) {
+    if (phase)
+        *phase = g_current_phase[0] ? g_current_phase : nullptr;
+    if (suite)
+        *suite = g_current_suite_name[0] ? g_current_suite_name : nullptr;
+    if (test_name)
+        *test_name = g_current_test_name[0] ? g_current_test_name : nullptr;
+    if (test_file)
+        *test_file = g_current_test_file[0] ? g_current_test_file : nullptr;
+}
+
+// Exception name lookup for global crash filter.
+// NOTE: The canonical version is tml_get_exception_name() in essential.c.
+// This runs in the tml.exe process, not the DLL, so we can't call it directly.
+static const char* global_get_exception_name(DWORD code) {
+    switch (code) {
+    case EXCEPTION_ACCESS_VIOLATION:
+        return "ACCESS_VIOLATION";
+    case EXCEPTION_STACK_OVERFLOW:
+        return "STACK_OVERFLOW";
+    case EXCEPTION_INT_DIVIDE_BY_ZERO:
+        return "INTEGER_DIVIDE_BY_ZERO";
+    case EXCEPTION_ILLEGAL_INSTRUCTION:
+        return "ILLEGAL_INSTRUCTION";
+    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+        return "FLOAT_DIVIDE_BY_ZERO";
+    case 0xC0000028:
+        return "BAD_STACK";
+    case 0xC0000374:
+        return "HEAP_CORRUPTION";
+    case 0xC0000409:
+        return "STACK_BUFFER_OVERRUN";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+// Global unhandled exception filter for crash logging (last resort)
 static LONG WINAPI global_crash_filter(EXCEPTION_POINTERS* info) {
     DWORD code = info->ExceptionRecord->ExceptionCode;
     void* crash_addr = info->ExceptionRecord->ExceptionAddress;
+    const char* name = global_get_exception_name(code);
 
-    const char* name = "UNKNOWN";
-    switch (code) {
-    case EXCEPTION_ACCESS_VIOLATION:
-        name = "ACCESS_VIOLATION (segfault)";
-        break;
-    case EXCEPTION_STACK_OVERFLOW:
-        name = "STACK_OVERFLOW";
-        break;
-    case EXCEPTION_INT_DIVIDE_BY_ZERO:
-        name = "INTEGER_DIVIDE_BY_ZERO";
-        break;
-    case EXCEPTION_ILLEGAL_INSTRUCTION:
-        name = "ILLEGAL_INSTRUCTION";
-        break;
-    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
-        name = "FLOAT_DIVIDE_BY_ZERO";
-        break;
-    case 0xC0000028:
-        name = "BAD_STACK (stack corruption)";
-        break;
-    case 0xC0000374:
-        name = "HEAP_CORRUPTION";
-        break;
-    case 0xC0000409:
-        name = "STACK_BUFFER_OVERRUN";
-        break;
-    }
-
-    // Build detailed crash message with test context
+    // Build detailed crash message with test context + diagnostics
     char msg[2048];
-    int len = snprintf(
-        msg, sizeof(msg),
+    int len = 0;
+    len += snprintf(
+        msg + len, sizeof(msg) - len,
         "\n"
         "================================================================================\n"
         "                    FATAL CRASH IN TEST RUNNER\n"
         "================================================================================\n"
         "\n"
         "  Exception:  0x%08lX (%s)\n"
-        "  Address:    %p\n"
+        "  Address:    %p\n",
+        (unsigned long)code, name, crash_addr);
+
+    // ACCESS_VIOLATION: fault address + read/write/execute
+    if (code == EXCEPTION_ACCESS_VIOLATION && info->ExceptionRecord->NumberParameters >= 2) {
+        ULONG_PTR op = info->ExceptionRecord->ExceptionInformation[0];
+        ULONG_PTR fault_addr = info->ExceptionRecord->ExceptionInformation[1];
+        const char* op_str = (op == 0) ? "READ" : (op == 1) ? "WRITE" : "EXECUTE";
+        len += snprintf(msg + len, sizeof(msg) - len, "  Fault:      0x%016llX (%s%s)\n",
+                        (unsigned long long)fault_addr, op_str,
+                        fault_addr < 0x10000 ? ", null pointer" : "");
+    }
+
+    // RIP/RSP registers
+#ifdef _M_X64
+    len += snprintf(msg + len, sizeof(msg) - len,
+                    "  RIP:        0x%016llX\n"
+                    "  RSP:        0x%016llX\n",
+                    (unsigned long long)info->ContextRecord->Rip,
+                    (unsigned long long)info->ContextRecord->Rsp);
+#endif
+
+    len += snprintf(
+        msg + len, sizeof(msg) - len,
         "  Phase:      %s\n"
         "  Suite:      %s\n"
         "  Test:       %s\n"
@@ -127,7 +162,7 @@ static LONG WINAPI global_crash_filter(EXCEPTION_POINTERS* info) {
         "    tml test \"%s\"\n"
         "\n"
         "================================================================================\n",
-        (unsigned long)code, name, crash_addr, g_current_phase[0] ? g_current_phase : "(unknown)",
+        g_current_phase[0] ? g_current_phase : "(unknown)",
         g_current_suite_name[0] ? g_current_suite_name : "(unknown)",
         g_current_test_name[0] ? g_current_test_name : "(unknown)",
         g_current_test_file[0] ? g_current_test_file : "(unknown)",

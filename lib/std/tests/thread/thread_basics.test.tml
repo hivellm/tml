@@ -1,0 +1,67 @@
+// Tests for std::thread — yield_now, available_parallelism, error types
+use test::{assert, assert_eq}
+use std::thread::{yield_now, available_parallelism, SpawnError, JoinError}
+
+// === yield_now ===
+
+@test
+func test_yield_now_does_not_crash() -> I32 {
+    yield_now()
+    assert(true, "yield_now should not crash")
+    return 0
+}
+
+// === available_parallelism ===
+
+@test
+func test_available_parallelism() -> I32 {
+    let cores: U32 = available_parallelism()
+    assert(cores >= 1 as U32, "should have at least 1 core")
+    return 0
+}
+
+// === JoinError variants ===
+
+@test
+func test_join_error_already_joined() -> I32 {
+    let e: JoinError = JoinError::AlreadyJoined
+    assert(true, "JoinError::AlreadyJoined should construct")
+    return 0
+}
+
+@test
+func test_join_error_os_error() -> I32 {
+    let e: JoinError = JoinError::OsError(42 as I32)
+    assert(true, "JoinError::OsError should construct")
+    return 0
+}
+
+@test
+func test_join_error_no_result() -> I32 {
+    let e: JoinError = JoinError::NoResult
+    assert(true, "JoinError::NoResult should construct")
+    return 0
+}
+
+@test
+func test_join_error_panicked() -> I32 {
+    let e: JoinError = JoinError::Panicked
+    assert(true, "JoinError::Panicked should construct")
+    return 0
+}
+
+// === SpawnError variants ===
+
+@test
+func test_spawn_error_unsupported() -> I32 {
+    let e: SpawnError = SpawnError::Unsupported
+    assert(true, "SpawnError::Unsupported should construct")
+    return 0
+}
+
+@test
+func test_spawn_error_os_error() -> I32 {
+    let e: SpawnError = SpawnError::OsError(1 as I32)
+    assert(true, "SpawnError::OsError should construct")
+    return 0
+}

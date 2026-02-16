@@ -73,7 +73,7 @@ void rt_log_bridge_callback(int level, const char* module, const char* message);
 
 #ifdef _WIN32
 // Thread-local storage for crash info
-extern thread_local char g_crash_msg[256];
+extern thread_local char g_crash_msg[1024];
 extern thread_local bool g_crash_occurred;
 
 const char* get_exception_name(DWORD code);

@@ -1,0 +1,27 @@
+// Tests for core::ptr::mut_ptr — RawMutPtr extra: hash, alignment edge cases
+use test::{assert, assert_eq}
+use core::ptr::mut_ptr::RawMutPtr
+
+@test
+func test_raw_mut_ptr_not_aligned() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(7 as I64)
+    assert(not ptr.is_aligned(), "address 7 should not be aligned for I64")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_offset_negative() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(2000 as I64)
+    let prev: RawMutPtr[I64] = ptr.offset(-1 as I64)
+    assert(prev.addr() < ptr.addr(), "offset(-1) should decrease address")
+    return 0
+}
+
+@test
+func test_raw_mut_ptr_add_sub_roundtrip() -> I32 {
+    let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(1000 as I64)
+    let moved: RawMutPtr[I64] = ptr.add(5 as I64)
+    let back: RawMutPtr[I64] = moved.sub(5 as I64)
+    assert_eq(back.addr(), ptr.addr(), "add then sub should return to start")
+    return 0
+}

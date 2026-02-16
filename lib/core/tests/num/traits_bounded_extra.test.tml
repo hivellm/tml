@@ -1,0 +1,48 @@
+// Tests for core::num::traits — Bounded for I16, I64, U16, U32, U64
+use test::{assert, assert_eq}
+use core::num::traits::Bounded
+
+@test
+func test_bounded_i16() -> I32 {
+    let mn: I16 = I16::min_value()
+    let mx: I16 = I16::max_value()
+    assert_eq(mn as I32, -32768, "I16 min")
+    assert_eq(mx as I32, 32767, "I16 max")
+    return 0
+}
+
+@test
+func test_bounded_i64() -> I32 {
+    let mn: I64 = I64::min_value()
+    let mx: I64 = I64::max_value()
+    assert(mn < 0 as I64, "I64 min is negative")
+    assert(mx > 0 as I64, "I64 max is positive")
+    return 0
+}
+
+@test
+func test_bounded_u16() -> I32 {
+    let mn: U16 = U16::min_value()
+    let mx: U16 = U16::max_value()
+    assert_eq(mn as I32, 0, "U16 min")
+    assert_eq(mx as I64, 65535 as I64, "U16 max")
+    return 0
+}
+
+@test
+func test_bounded_u32() -> I32 {
+    let mn: U32 = U32::min_value()
+    let mx: U32 = U32::max_value()
+    assert_eq(mn as I64, 0 as I64, "U32 min")
+    assert(mx as I64 > 0 as I64, "U32 max > 0")
+    return 0
+}
+
+@test
+func test_bounded_u64() -> I32 {
+    let mn: U64 = U64::min_value()
+    let mx: U64 = U64::max_value()
+    assert_eq(mn as I64, 0 as I64, "U64 min")
+    assert(mx != mn, "U64 max != min")
+    return 0
+}

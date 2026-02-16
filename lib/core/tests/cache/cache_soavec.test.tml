@@ -1,0 +1,51 @@
+// Tests for cache module — CacheAligned/Padded extra methods, constants
+use test::{assert, assert_eq}
+use core::cache::{CacheAligned, Padded, CACHE_LINE_SIZE, HALF_CACHE_LINE, DOUBLE_CACHE_LINE}
+
+// === Constants ===
+
+@test
+func test_cache_line_size_constant() -> I32 {
+    assert_eq(CACHE_LINE_SIZE, 64 as I64, "CACHE_LINE_SIZE should be 64")
+    return 0
+}
+
+@test
+func test_half_cache_line_constant() -> I32 {
+    assert_eq(HALF_CACHE_LINE, 32 as I64, "HALF_CACHE_LINE should be 32")
+    return 0
+}
+
+@test
+func test_double_cache_line_constant() -> I32 {
+    assert_eq(DOUBLE_CACHE_LINE, 128 as I64, "DOUBLE_CACHE_LINE should be 128")
+    return 0
+}
+
+// === CacheAligned into_inner ===
+
+@test
+func test_cache_aligned_into_inner() -> I32 {
+    let aligned: CacheAligned[I64] = CacheAligned::new(99 as I64)
+    let val: I64 = aligned.into_inner()
+    assert_eq(val, 99 as I64, "into_inner should return original value")
+    return 0
+}
+
+// === Padded into_inner and set ===
+
+@test
+func test_padded_into_inner() -> I32 {
+    let p: Padded[I64] = Padded::new(77 as I64)
+    let val: I64 = p.into_inner()
+    assert_eq(val, 77 as I64, "Padded into_inner should return value")
+    return 0
+}
+
+@test
+func test_padded_set() -> I32 {
+    var p: Padded[I64] = Padded::new(10 as I64)
+    p.set(20 as I64)
+    assert_eq(*p.get(), 20 as I64, "Padded set should update value")
+    return 0
+}

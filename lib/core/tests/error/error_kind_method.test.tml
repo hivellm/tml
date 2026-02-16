@@ -1,0 +1,35 @@
+// Tests for core::error — IoError::kind() method coverage
+use test::{assert, assert_eq}
+use core::error::{IoError, IoErrorKind}
+
+@test
+func test_io_error_kind_not_found() -> I32 {
+    let err = IoError::new(IoErrorKind::NotFound)
+    let k: IoErrorKind = err.kind()
+    assert_eq(k.debug_string(), "NotFound", "kind() should return NotFound")
+    return 0
+}
+
+@test
+func test_io_error_kind_permission_denied() -> I32 {
+    let err = IoError::new(IoErrorKind::PermissionDenied)
+    let k: IoErrorKind = err.kind()
+    assert_eq(k.debug_string(), "PermissionDenied", "kind() should return PermissionDenied")
+    return 0
+}
+
+@test
+func test_io_error_kind_timed_out() -> I32 {
+    let err = IoError::with_message(IoErrorKind::TimedOut, "connect")
+    let k: IoErrorKind = err.kind()
+    assert_eq(k.debug_string(), "TimedOut", "kind() should return TimedOut")
+    return 0
+}
+
+@test
+func test_io_error_kind_other() -> I32 {
+    let err = IoError::new(IoErrorKind::Other)
+    let k: IoErrorKind = err.kind()
+    assert_eq(k.debug_string(), "Other", "kind() should return Other")
+    return 0
+}

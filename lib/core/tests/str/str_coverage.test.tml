@@ -47,3 +47,47 @@ func test_str_ends_with() -> I32 {
     assert(str::ends_with("hello", "xyz") == false, "not ends with xyz")
     return 0
 }
+
+// =============================================================================
+// str::join (free function — currently 0% coverage)
+// =============================================================================
+
+@test
+func test_str_join_basic() -> I32 {
+    let parts: List[Str] = str::split("hello world", " ")
+    let result: Str = str::join(parts, "-")
+    assert_eq(result, "hello-world", "join with dash")
+    return 0
+}
+
+@test
+func test_str_join_comma() -> I32 {
+    let parts: List[Str] = str::split("a,b,c", ",")
+    let result: Str = str::join(parts, " + ")
+    assert_eq(result, "a + b + c", "join with plus")
+    return 0
+}
+
+@test
+func test_str_join_empty_sep() -> I32 {
+    let parts: List[Str] = str::split("x-y-z", "-")
+    let result: Str = str::join(parts, "")
+    assert_eq(result, "xyz", "join with empty separator")
+    return 0
+}
+
+// =============================================================================
+// str::concat_all (free function — currently 0% coverage)
+// =============================================================================
+
+@test
+func test_str_concat_all() -> I32 {
+    let parts: List[Str] = str::split("a,b,c", ",")
+    let result: Str = str::concat_all(parts)
+    assert_eq(result, "abc", "concat_all")
+    return 0
+}
+
+// NOTE: Str::split method, Str::chars method, Str::parse_i64/u16 methods
+// are blocked by codegen issues (List[Str] return type, Maybe[I64] layout).
+// These need compiler fixes before tests can cover them.

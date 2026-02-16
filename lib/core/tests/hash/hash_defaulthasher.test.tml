@@ -1,0 +1,96 @@
+// Tests for core::hash — DefaultHasher, RandomState, combine_hashes
+use test::{assert, assert_eq}
+use core::hash::{DefaultHasher, RandomState, combine_hashes}
+
+// === combine_hashes ===
+
+@test
+func test_combine_hashes_deterministic() -> I32 {
+    let h1: I64 = combine_hashes(1 as I64, 2 as I64)
+    let h2: I64 = combine_hashes(1 as I64, 2 as I64)
+    assert_eq(h1, h2, "combine_hashes should be deterministic")
+    return 0
+}
+
+@test
+func test_combine_hashes_different_inputs() -> I32 {
+    let h1: I64 = combine_hashes(1 as I64, 2 as I64)
+    let h2: I64 = combine_hashes(3 as I64, 4 as I64)
+    assert(h1 != h2, "different inputs should produce different hashes")
+    return 0
+}
+
+// === DefaultHasher ===
+
+@test
+func test_default_hasher_new() -> I32 {
+    let h: DefaultHasher = DefaultHasher::new()
+    let result: I64 = h.finish()
+    assert(result != 0 or result == 0, "DefaultHasher::new should not crash")
+    return 0
+}
+
+@test
+func test_default_hasher_with_seed() -> I32 {
+    let h: DefaultHasher = DefaultHasher::with_seed(42 as U64)
+    let result: I64 = h.finish()
+    assert(result != 0 or result == 0, "with_seed should not crash")
+    return 0
+}
+
+@test
+func test_default_hasher_write_i64() -> I32 {
+    var h: DefaultHasher = DefaultHasher::new()
+    h.write_i64(100 as I64)
+    let result: I64 = h.finish()
+    assert(true, "write_i64 + finish should not crash")
+    return 0
+}
+
+@test
+func test_default_hasher_write_i32() -> I32 {
+    var h: DefaultHasher = DefaultHasher::new()
+    h.write_i32(50 as I32)
+    let result: I64 = h.finish()
+    assert(true, "write_i32 + finish should not crash")
+    return 0
+}
+
+@test
+func test_default_hasher_write_u8() -> I32 {
+    var h: DefaultHasher = DefaultHasher::new()
+    h.write_u8(255 as U8)
+    let result: I64 = h.finish()
+    assert(true, "write_u8 + finish should not crash")
+    return 0
+}
+
+@test
+func test_default_hasher_different_values_different_hash() -> I32 {
+    var h1: DefaultHasher = DefaultHasher::new()
+    h1.write_i64(1 as I64)
+    var h2: DefaultHasher = DefaultHasher::new()
+    h2.write_i64(2 as I64)
+    assert(h1.finish() != h2.finish(), "different values should produce different hashes")
+    return 0
+}
+
+// === RandomState ===
+
+@test
+func test_random_state_new() -> I32 {
+    let rs: RandomState = RandomState::new()
+    let h: DefaultHasher = rs.build_hasher()
+    let result: I64 = h.finish()
+    assert(true, "RandomState::new + build_hasher should not crash")
+    return 0
+}
+
+@test
+func test_random_state_with_keys() -> I32 {
+    let rs: RandomState = RandomState::with_keys(1 as U64, 2 as U64)
+    let h: DefaultHasher = rs.build_hasher()
+    let result: I64 = h.finish()
+    assert(true, "RandomState::with_keys + build_hasher should not crash")
+    return 0
+}

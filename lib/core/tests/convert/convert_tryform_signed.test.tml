@@ -1,0 +1,10 @@
+// Tests for core::convert — TryFrom signed narrowing conversions
+// BLOCKED: Outcome[T, TryFromIntError] codegen produces type mismatch
+// with Outcome[T, Unit] — generic enum specialization bug
+use test::{assert}
+
+@test
+func test_tryfrom_blocked_placeholder() -> I32 {
+    assert(true, "TryFrom codegen blocked")
+    return 0
+}

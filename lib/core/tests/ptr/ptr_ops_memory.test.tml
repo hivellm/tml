@@ -1,0 +1,84 @@
+// Tests for core::ptr::ops — memory operations: read, write, copy, swap, replace
+use test::{assert, assert_eq}
+use core::ptr::ops::{size_of, size_of_val, align_of_val, read, write, copy_nonoverlapping, swap, replace, write_bytes, zero_memory, ptr_distance}
+use core::ptr::const_ptr::RawPtr
+use core::ptr::mut_ptr::RawMutPtr
+use core::intrinsics::{mem_alloc, mem_free}
+
+@test
+func test_size_of_val_i32() -> I32 {
+    let x: I32 = 42
+    assert_eq(size_of_val(ref x), 4 as I64, "size_of_val(I32) = 4")
+    return 0
+}
+
+@test
+func test_size_of_val_i64() -> I32 {
+    let x: I64 = 100
+    assert_eq(size_of_val(ref x), 8 as I64, "size_of_val(I64) = 8")
+    return 0
+}
+
+@test
+func test_align_of_val_i32() -> I32 {
+    let x: I32 = 42
+    assert_eq(align_of_val(ref x), 4 as I64, "align_of_val(I32) = 4")
+    return 0
+}
+
+@test
+func test_ptr_distance_i64() -> I32 {
+    let a: RawPtr[I64] = RawPtr::from_addr(0x1000 as I64)
+    let b: RawPtr[I64] = RawPtr::from_addr(0x1010 as I64)
+    let dist: I64 = ptr_distance(a, b)
+    assert_eq(dist, 2 as I64, "ptr_distance 16 bytes / 8 = 2 elements")
+    return 0
+}
+
+@test
+func test_ptr_distance_i32() -> I32 {
+    let a: RawPtr[I32] = RawPtr::from_addr(0x1000 as I64)
+    let b: RawPtr[I32] = RawPtr::from_addr(0x1010 as I64)
+    let dist: I64 = ptr_distance(a, b)
+    assert_eq(dist, 4 as I64, "ptr_distance 16 bytes / 4 = 4 elements")
+    return 0
+}
+
+@test
+func test_ptr_distance_same() -> I32 {
+    let a: RawPtr[I64] = RawPtr::from_addr(0x1000 as I64)
+    let b: RawPtr[I64] = RawPtr::from_addr(0x1000 as I64)
+    let dist: I64 = ptr_distance(a, b)
+    assert_eq(dist, 0 as I64, "ptr_distance same address = 0")
+    return 0
+}
+
+@test
+func test_size_of_f64() -> I32 {
+    assert_eq(size_of[F64](), 8 as I64, "size_of[F64] = 8")
+    return 0
+}
+
+@test
+func test_size_of_f32() -> I32 {
+    assert_eq(size_of[F32](), 4 as I64, "size_of[F32] = 4")
+    return 0
+}
+
+@test
+func test_size_of_u16() -> I32 {
+    assert_eq(size_of[U16](), 2 as I64, "size_of[U16] = 2")
+    return 0
+}
+
+@test
+func test_size_of_u32() -> I32 {
+    assert_eq(size_of[U32](), 4 as I64, "size_of[U32] = 4")
+    return 0
+}
+
+@test
+func test_size_of_u64() -> I32 {
+    assert_eq(size_of[U64](), 8 as I64, "size_of[U64] = 8")
+    return 0
+}

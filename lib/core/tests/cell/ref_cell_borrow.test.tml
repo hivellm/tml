@@ -1,0 +1,33 @@
+// Tests for core::cell::ref_cell — take, default (borrow/try_borrow blocked by BorrowState enum codegen)
+use test::{assert, assert_eq}
+use core::cell::ref_cell::RefCell
+
+@test
+func test_ref_cell_replace_and_get_mut() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(10)
+    let old: I32 = cell.replace(20)
+    assert_eq(old, 10, "replace should return old value 10")
+    let r: mut ref I32 = cell.get_mut()
+    assert_eq(*r, 20, "get_mut should return new value 20")
+    return 0
+}
+
+@test
+func test_ref_cell_multiple_replace() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(1)
+    cell.replace(2)
+    cell.replace(3)
+    let old: I32 = cell.replace(4)
+    assert_eq(old, 3, "third replace should return 3")
+    assert_eq(*cell.get_mut(), 4, "value should be 4")
+    return 0
+}
+
+@test
+func test_ref_cell_get_mut_mutation() -> I32 {
+    var cell: RefCell[I32] = RefCell::new(100)
+    let r: mut ref I32 = cell.get_mut()
+    *r = 200
+    assert_eq(*cell.get_mut(), 200, "mutation through get_mut should persist")
+    return 0
+}

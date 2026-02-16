@@ -1,0 +1,98 @@
+// Tests for core::str — Str method impls not yet covered
+use test::{assert, assert_eq}
+
+@test
+func test_str_to_uppercase_method() -> I32 {
+    let s: Str = "hello"
+    let u: Str = s.to_uppercase()
+    assert_eq(u, "HELLO", "Str.to_uppercase")
+    return 0
+}
+
+@test
+func test_str_to_lowercase_method() -> I32 {
+    let s: Str = "HELLO"
+    let l: Str = s.to_lowercase()
+    assert_eq(l, "hello", "Str.to_lowercase")
+    return 0
+}
+
+@test
+func test_str_find_method() -> I32 {
+    let s: Str = "hello world"
+    let idx: I64 = s.find("world")
+    assert_eq(idx, 6 as I64, "Str.find found")
+    let not_found: I64 = s.find("xyz")
+    assert_eq(not_found, -1 as I64, "Str.find not found")
+    return 0
+}
+
+@test
+func test_str_rfind_method() -> I32 {
+    let s: Str = "hello hello"
+    let idx: I64 = s.rfind("hello")
+    assert_eq(idx, 6 as I64, "Str.rfind last")
+    let not_found: I64 = s.rfind("xyz")
+    assert_eq(not_found, -1 as I64, "Str.rfind not found")
+    return 0
+}
+
+@test
+func test_str_starts_with_method() -> I32 {
+    assert("hello".starts_with("hel"), "starts_with hel")
+    assert(not "hello".starts_with("xyz"), "not starts_with xyz")
+    return 0
+}
+
+@test
+func test_str_ends_with_method() -> I32 {
+    assert("hello".ends_with("llo"), "ends_with llo")
+    assert(not "hello".ends_with("xyz"), "not ends_with xyz")
+    return 0
+}
+
+@test
+func test_str_contains_method() -> I32 {
+    assert("hello world".contains("world"), "contains world")
+    assert(not "hello".contains("xyz"), "not contains xyz")
+    return 0
+}
+
+@test
+func test_str_trim_method() -> I32 {
+    let s: Str = "  hello  "
+    assert_eq(s.trim(), "hello", "Str.trim")
+    return 0
+}
+
+@test
+func test_str_trim_start_end_method() -> I32 {
+    let s: Str = "  hello  "
+    assert_eq(s.trim_start(), "hello  ", "Str.trim_start")
+    assert_eq(s.trim_end(), "  hello", "Str.trim_end")
+    return 0
+}
+
+@test
+func test_str_char_at_method() -> I32 {
+    let s: Str = "abc"
+    assert_eq(s.char_at(0), 97, "char_at 0 = a")
+    assert_eq(s.char_at(2), 99, "char_at 2 = c")
+    return 0
+}
+
+@test
+func test_str_replace_method() -> I32 {
+    let s: Str = "hello world"
+    let r: Str = s.replace("world", "tml")
+    assert_eq(r, "hello tml", "Str.replace")
+    return 0
+}
+
+@test
+func test_str_slice_method() -> I32 {
+    let s: Str = "abcdef"
+    let sub: Str = s.slice(1, 4)
+    assert_eq(sub, "bcd", "Str.slice")
+    return 0
+}

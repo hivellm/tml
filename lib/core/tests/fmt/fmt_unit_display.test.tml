@@ -1,0 +1,28 @@
+// Tests for fmt — Alignment enum Display and Debug
+// NOTE: Unit Display/Debug tests blocked by compiler bug with Unit return type.
+use test::{assert, assert_eq}
+use core::fmt::Alignment
+
+@test
+func test_alignment_left_to_string() -> I32 {
+    let a: Alignment = Alignment::Left
+    let s: Str = a.to_string()
+    assert_eq(s, "Left", "Alignment::Left to_string")
+    return 0
+}
+
+@test
+func test_alignment_right_to_string() -> I32 {
+    let a: Alignment = Alignment::Right
+    let s: Str = a.to_string()
+    assert_eq(s, "Right", "Alignment::Right to_string")
+    return 0
+}
+
+@test
+func test_alignment_center_to_string() -> I32 {
+    let a: Alignment = Alignment::Center
+    let s: Str = a.to_string()
+    assert_eq(s, "Center", "Alignment::Center to_string")
+    return 0
+}

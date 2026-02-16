@@ -1,0 +1,75 @@
+// Tests for core::pool — GrowthPolicy, PoolStats
+use test::{assert, assert_eq}
+use core::pool::{GrowthPolicy, PoolStats}
+
+// === GrowthPolicy ===
+
+@test
+func test_growth_policy_fixed_next_capacity() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Fixed
+    assert_eq(p.next_capacity(16), 16, "Fixed should not grow")
+    return 0
+}
+
+@test
+func test_growth_policy_fixed_can_grow() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Fixed
+    assert(not p.can_grow(), "Fixed should not be able to grow")
+    return 0
+}
+
+@test
+func test_growth_policy_doubling_next_capacity() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Doubling
+    assert_eq(p.next_capacity(16), 32, "Doubling should double capacity")
+    return 0
+}
+
+@test
+func test_growth_policy_doubling_can_grow() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Doubling
+    assert(p.can_grow(), "Doubling should be able to grow")
+    return 0
+}
+
+@test
+func test_growth_policy_linear_next_capacity() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Linear(8)
+    assert_eq(p.next_capacity(16), 24, "Linear(8) from 16 should be 24")
+    return 0
+}
+
+@test
+func test_growth_policy_linear_can_grow() -> I32 {
+    let p: GrowthPolicy = GrowthPolicy::Linear(4)
+    assert(p.can_grow(), "Linear should be able to grow")
+    return 0
+}
+
+// === PoolStats ===
+
+@test
+func test_pool_stats_new() -> I32 {
+    let stats: PoolStats = PoolStats::new()
+    assert_eq(stats.available, 0, "new stats available should be 0")
+    assert_eq(stats.in_use, 0, "new stats in_use should be 0")
+    assert_eq(stats.capacity, 0, "new stats capacity should be 0")
+    return 0
+}
+
+@test
+func test_pool_stats_hit_rate_no_ops() -> I32 {
+    let stats: PoolStats = PoolStats::new()
+    let rate: F64 = stats.hit_rate()
+    assert_eq(rate, 100.0, "hit_rate with no operations should be 100.0")
+    return 0
+}
+
+@test
+func test_pool_stats_fields_zero() -> I32 {
+    let stats: PoolStats = PoolStats::new()
+    assert_eq(stats.hits, 0 as I64, "new stats hits should be 0")
+    assert_eq(stats.misses, 0 as I64, "new stats misses should be 0")
+    assert_eq(stats.grows, 0, "new stats grows should be 0")
+    return 0
+}

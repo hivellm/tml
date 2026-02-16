@@ -1,4 +1,4 @@
-// Tests for assert_true and assert_false
+// Tests for assert_true, assert_false, assert_lt, assert_lte, assert_str_empty, assert_str_not_empty
 use test
 use test::assertions
 
@@ -11,5 +11,35 @@ func test_assert_true() -> I32 {
 @test
 func test_assert_false() -> I32 {
     assertions::assert_false(false, "should not fail")
+    return 0
+}
+
+@test
+func test_assert_lt_i32() -> I32 {
+    assertions::assert_lt(1, 2, "1 < 2")
+    return 0
+}
+
+@test
+func test_assert_lte_equal() -> I32 {
+    assertions::assert_lte(3, 3, "3 <= 3")
+    return 0
+}
+
+@test
+func test_assert_lte_less() -> I32 {
+    assertions::assert_lte(1, 5, "1 <= 5")
+    return 0
+}
+
+@test
+func test_assert_str_empty() -> I32 {
+    assertions::assert_str_empty("", "empty string is empty")
+    return 0
+}
+
+@test
+func test_assert_str_not_empty() -> I32 {
+    assertions::assert_str_not_empty("hello", "hello is not empty")
     return 0
 }

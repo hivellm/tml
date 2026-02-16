@@ -1,0 +1,104 @@
+// Tests for ops/range — uncovered Bound and Range display methods
+use test::{assert, assert_eq}
+use core::ops::range::{Bound, RangeFrom, RangeTo, RangeToInclusive}
+
+// =============================================================================
+// Bound constructors — Bound::included, Bound::excluded, Bound::unbounded
+// =============================================================================
+
+@test
+func test_bound_included() -> I32 {
+    let b: Bound[I32] = Bound::included(42)
+    assert(b.is_included(), "Bound::included should be included")
+    assert(not b.is_excluded(), "Bound::included should not be excluded")
+    assert(not b.is_unbounded(), "Bound::included should not be unbounded")
+    return 0
+}
+
+@test
+func test_bound_excluded() -> I32 {
+    let b: Bound[I32] = Bound::excluded(10)
+    assert(b.is_excluded(), "Bound::excluded should be excluded")
+    assert(not b.is_included(), "Bound::excluded should not be included")
+    return 0
+}
+
+@test
+func test_bound_unbounded() -> I32 {
+    let b: Bound[I32] = Bound::unbounded()
+    assert(b.is_unbounded(), "Bound::unbounded should be unbounded")
+    assert(not b.is_included(), "Bound::unbounded should not be included")
+    return 0
+}
+
+// =============================================================================
+// Bound::cloned
+// =============================================================================
+
+@test
+func test_bound_cloned_included() -> I32 {
+    let b: Bound[I32] = Bound::included(99)
+    let c: Bound[I32] = b.cloned()
+    assert(c.is_included(), "cloned included should be included")
+    return 0
+}
+
+@test
+func test_bound_cloned_excluded() -> I32 {
+    let b: Bound[I32] = Bound::excluded(50)
+    let c: Bound[I32] = b.cloned()
+    assert(c.is_excluded(), "cloned excluded should be excluded")
+    return 0
+}
+
+@test
+func test_bound_cloned_unbounded() -> I32 {
+    let b: Bound[I32] = Bound::unbounded()
+    let c: Bound[I32] = b.cloned()
+    assert(c.is_unbounded(), "cloned unbounded should be unbounded")
+    return 0
+}
+
+// =============================================================================
+// RangeFrom::to_string
+// =============================================================================
+
+@test
+func test_range_from_to_string() -> I32 {
+    let r: RangeFrom[I32] = RangeFrom::new(5)
+    let s: Str = r.to_string()
+    assert(s.len() > 0, "RangeFrom to_string should produce output")
+    return 0
+}
+
+// =============================================================================
+// RangeTo::to_string
+// =============================================================================
+
+@test
+func test_range_to_to_string() -> I32 {
+    let r: RangeTo[I32] = RangeTo::new(10)
+    let s: Str = r.to_string()
+    assert(s.len() > 0, "RangeTo to_string should produce output")
+    return 0
+}
+
+// =============================================================================
+// RangeToInclusive::to_string and debug_string
+// =============================================================================
+
+@test
+func test_range_to_inclusive_to_string() -> I32 {
+    let r: RangeToInclusive[I32] = RangeToInclusive::new(10)
+    let s: Str = r.to_string()
+    assert(s.len() > 0, "RangeToInclusive to_string should produce output")
+    return 0
+}
+
+@test
+func test_range_to_inclusive_debug_string() -> I32 {
+    let r: RangeToInclusive[I32] = RangeToInclusive::new(10)
+    let s: Str = r.debug_string()
+    assert(s.len() > 0, "RangeToInclusive debug_string should produce output")
+    return 0
+}

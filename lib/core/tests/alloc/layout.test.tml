@@ -1,0 +1,161 @@
+// Tests for core::alloc — Layout and LayoutError
+use test::{assert, assert_eq}
+use core::alloc::{Layout, LayoutError}
+
+// === LayoutError ===
+
+@test
+func test_layout_error_new() -> I32 {
+    let e: LayoutError = LayoutError::new()
+    assert_eq(e.to_string(), "invalid parameters to Layout::from_size_align", "LayoutError to_string")
+    return 0
+}
+
+@test
+func test_layout_error_debug() -> I32 {
+    let e: LayoutError = LayoutError::new()
+    assert_eq(e.debug_string(), "LayoutError", "LayoutError debug")
+    return 0
+}
+
+// === Layout::from_size_align ===
+
+@test
+func test_layout_from_size_align_valid() -> I32 {
+    let result = Layout::from_size_align(64, 8)
+    assert(result.is_ok(), "64,8 should be valid")
+    return 0
+}
+
+@test
+func test_layout_from_size_align_invalid_align() -> I32 {
+    let result = Layout::from_size_align(64, 3)
+    assert(result.is_err(), "align 3 not power of two")
+    return 0
+}
+
+@test
+func test_layout_from_size_align_zero_align() -> I32 {
+    let result = Layout::from_size_align(64, 0)
+    assert(result.is_err(), "align 0 invalid")
+    return 0
+}
+
+@test
+func test_layout_from_size_align_negative_size() -> I32 {
+    let result = Layout::from_size_align(-1, 8)
+    assert(result.is_err(), "negative size invalid")
+    return 0
+}
+
+// === Layout accessors ===
+
+@test
+func test_layout_size_align() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    assert_eq(layout.size(), 64 as I64, "size")
+    assert_eq(layout.align(), 8 as I64, "align")
+    return 0
+}
+
+@test
+func test_layout_is_zero_sized() -> I32 {
+    let zero: Layout = Layout::from_size_align_unchecked(0, 4)
+    assert(zero.is_zero_sized(), "0 size is zero sized")
+    let nonzero: Layout = Layout::from_size_align_unchecked(8, 4)
+    assert(not nonzero.is_zero_sized(), "8 size not zero sized")
+    return 0
+}
+
+@test
+func test_layout_dangling() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(0, 8)
+    assert_eq(layout.dangling(), 8 as I64, "dangling returns align")
+    return 0
+}
+
+// === Layout calculations ===
+
+@test
+func test_layout_padding_needed_for() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(8, 8)
+    assert_eq(layout.padding_needed_for(8), 0 as I64, "8 already aligned")
+    assert_eq(layout.padding_needed_for(5), 3 as I64, "5 needs 3 padding")
+    assert_eq(layout.padding_needed_for(0), 0 as I64, "0 needs 0 padding")
+    return 0
+}
+
+@test
+func test_layout_pad_to_align() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(5, 4)
+    let padded = layout.pad_to_align()
+    assert(padded.is_ok(), "pad_to_align should succeed")
+    let p: Layout = padded.unwrap()
+    assert_eq(p.size(), 8 as I64, "5 padded to align 4 = 8")
+    return 0
+}
+
+@test
+func test_layout_align_to() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(16, 4)
+    let result = layout.align_to(8)
+    assert(result.is_ok(), "align_to 8 should succeed")
+    let r: Layout = result.unwrap()
+    assert_eq(r.align(), 8 as I64, "alignment should be 8")
+    return 0
+}
+
+@test
+func test_layout_with_size() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(16, 4)
+    let result = layout.with_size(32)
+    assert(result.is_ok(), "with_size 32 should succeed")
+    let r: Layout = result.unwrap()
+    assert_eq(r.size(), 32 as I64, "size should be 32")
+    assert_eq(r.align(), 4 as I64, "align preserved")
+    return 0
+}
+
+@test
+func test_layout_with_align() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(16, 4)
+    let result = layout.with_align(16)
+    assert(result.is_ok(), "with_align 16 should succeed")
+    let r: Layout = result.unwrap()
+    assert_eq(r.align(), 16 as I64, "align should be 16")
+    assert_eq(r.size(), 16 as I64, "size preserved")
+    return 0
+}
+
+@test
+func test_layout_array_of() -> I32 {
+    let result = Layout::array_of(4, 4, 10)
+    assert(result.is_ok(), "array_of 4,4,10 should succeed")
+    return 0
+}
+
+@test
+func test_layout_to_string() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    let s: Str = layout.to_string()
+    assert(s.len() > 0, "to_string should be non-empty")
+    return 0
+}
+
+@test
+func test_layout_debug_string() -> I32 {
+    let layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    let s: Str = layout.debug_string()
+    assert(s.len() > 0, "debug_string should be non-empty")
+    return 0
+}
+
+@test
+func test_layout_equals() -> I32 {
+    let a: Layout = Layout::from_size_align_unchecked(64, 8)
+    let b: Layout = Layout::from_size_align_unchecked(64, 8)
+    let c: Layout = Layout::from_size_align_unchecked(32, 8)
+    assert(a.equals(b), "same layouts equal")
+    assert(not a.equals(c), "different layouts not equal")
+    return 0
+}

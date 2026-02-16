@@ -68,6 +68,8 @@ static struct {
     int32_t initialized;
     int32_t check_at_exit;
     uint64_t next_alloc_id;
+    char current_test_name[TML_MEM_TRACK_CTX_LEN]; /**< Active test name */
+    char current_test_file[TML_MEM_TRACK_CTX_LEN]; /**< Active test file */
 } g_track = {0};
 
 // ============================================================================
@@ -168,6 +170,21 @@ void tml_mem_track_alloc(void* ptr, size_t size, const char* tag) {
     bucket->record.alloc_id = g_track.next_alloc_id++;
     bucket->record.timestamp_ns = get_timestamp_ns();
     bucket->record.tag = tag;
+
+    // Snapshot current test context into the allocation record
+    if (g_track.current_test_name[0]) {
+        strncpy(bucket->record.test_name, g_track.current_test_name, TML_MEM_TRACK_CTX_LEN - 1);
+        bucket->record.test_name[TML_MEM_TRACK_CTX_LEN - 1] = '\0';
+    } else {
+        bucket->record.test_name[0] = '\0';
+    }
+    if (g_track.current_test_file[0]) {
+        strncpy(bucket->record.test_file, g_track.current_test_file, TML_MEM_TRACK_CTX_LEN - 1);
+        bucket->record.test_file[TML_MEM_TRACK_CTX_LEN - 1] = '\0';
+    } else {
+        bucket->record.test_file[0] = '\0';
+    }
+
     bucket->next = g_track.buckets[hash];
     g_track.buckets[hash] = bucket;
 
@@ -245,11 +262,16 @@ void tml_mem_track_realloc(void* old_ptr, void* new_ptr, size_t new_size) {
     AllocBucket* bucket = g_track.buckets[old_hash];
     size_t old_size = 0;
     const char* tag = "realloc";
+    char old_test_name[TML_MEM_TRACK_CTX_LEN] = {0};
+    char old_test_file[TML_MEM_TRACK_CTX_LEN] = {0};
 
     while (bucket) {
         if (bucket->record.ptr == old_ptr) {
             old_size = bucket->record.size;
             tag = bucket->record.tag;
+            // Preserve original test context
+            strncpy(old_test_name, bucket->record.test_name, TML_MEM_TRACK_CTX_LEN - 1);
+            strncpy(old_test_file, bucket->record.test_file, TML_MEM_TRACK_CTX_LEN - 1);
 
             // Remove from old location
             *prev = bucket->next;
@@ -269,6 +291,11 @@ void tml_mem_track_realloc(void* old_ptr, void* new_ptr, size_t new_size) {
         new_bucket->record.alloc_id = g_track.next_alloc_id++;
         new_bucket->record.timestamp_ns = get_timestamp_ns();
         new_bucket->record.tag = tag;
+        // Preserve test context from original allocation
+        strncpy(new_bucket->record.test_name, old_test_name, TML_MEM_TRACK_CTX_LEN - 1);
+        new_bucket->record.test_name[TML_MEM_TRACK_CTX_LEN - 1] = '\0';
+        strncpy(new_bucket->record.test_file, old_test_file, TML_MEM_TRACK_CTX_LEN - 1);
+        new_bucket->record.test_file[TML_MEM_TRACK_CTX_LEN - 1] = '\0';
         new_bucket->next = g_track.buckets[new_hash];
         g_track.buckets[new_hash] = new_bucket;
     }
@@ -330,6 +357,12 @@ int32_t tml_mem_check_leaks(void) {
                 if (bucket->record.tag) {
                     fprintf(out, "    Tag:      %s\n", bucket->record.tag);
                 }
+                if (bucket->record.test_name[0]) {
+                    fprintf(out, "    Test:     %s\n", bucket->record.test_name);
+                }
+                if (bucket->record.test_file[0]) {
+                    fprintf(out, "    File:     %s\n", bucket->record.test_file);
+                }
                 fprintf(out, "\n");
                 shown++;
                 bucket = bucket->next;
@@ -338,6 +371,65 @@ int32_t tml_mem_check_leaks(void) {
 
         if (leak_count > 50) {
             fprintf(out, "  ... and %d more leaks not shown\n\n", leak_count - 50);
+        }
+
+        // Print per-test summary (group leaks by test name)
+        // Use a simple O(n^2) scan — leak counts are small (max 50 shown)
+        {
+#define MAX_TEST_GROUPS 64
+            struct {
+                const char* name;
+                const char* file;
+                int count;
+                uint64_t bytes;
+            } groups[MAX_TEST_GROUPS];
+            int num_groups = 0;
+            int unknown_count = 0;
+            uint64_t unknown_bytes = 0;
+
+            for (int i = 0; i < HASH_BUCKETS; i++) {
+                AllocBucket* b = g_track.buckets[i];
+                while (b) {
+                    if (b->record.test_name[0]) {
+                        // Find existing group
+                        int found = 0;
+                        for (int g = 0; g < num_groups; g++) {
+                            if (strcmp(groups[g].name, b->record.test_name) == 0) {
+                                groups[g].count++;
+                                groups[g].bytes += b->record.size;
+                                found = 1;
+                                break;
+                            }
+                        }
+                        if (!found && num_groups < MAX_TEST_GROUPS) {
+                            groups[num_groups].name = b->record.test_name;
+                            groups[num_groups].file = b->record.test_file;
+                            groups[num_groups].count = 1;
+                            groups[num_groups].bytes = b->record.size;
+                            num_groups++;
+                        }
+                    } else {
+                        unknown_count++;
+                        unknown_bytes += b->record.size;
+                    }
+                    b = b->next;
+                }
+            }
+
+            if (num_groups > 0 || unknown_count > 0) {
+                fprintf(out, "\n  Leaks by test:\n");
+                for (int g = 0; g < num_groups; g++) {
+                    fprintf(out, "    %-30s %3d leak(s), %llu bytes  [%s]\n", groups[g].name,
+                            groups[g].count, (unsigned long long)groups[g].bytes,
+                            groups[g].file ? groups[g].file : "?");
+                }
+                if (unknown_count > 0) {
+                    fprintf(out, "    %-30s %3d leak(s), %llu bytes\n", "(no test context)",
+                            unknown_count, (unsigned long long)unknown_bytes);
+                }
+                fprintf(out, "\n");
+            }
+#undef MAX_TEST_GROUPS
         }
 
         fprintf(
@@ -419,6 +511,30 @@ void tml_mem_set_check_at_exit(int32_t enable) {
 
 void tml_mem_set_output(void* fp) {
     g_track.output = (FILE*)fp;
+}
+
+TML_MEM_EXPORT void tml_mem_track_set_test_context(const char* test_name, const char* test_file) {
+    if (!g_track.initialized) {
+        tml_mem_track_init();
+    }
+
+    TML_MUTEX_LOCK(g_track.mutex);
+
+    if (test_name) {
+        strncpy(g_track.current_test_name, test_name, TML_MEM_TRACK_CTX_LEN - 1);
+        g_track.current_test_name[TML_MEM_TRACK_CTX_LEN - 1] = '\0';
+    } else {
+        g_track.current_test_name[0] = '\0';
+    }
+
+    if (test_file) {
+        strncpy(g_track.current_test_file, test_file, TML_MEM_TRACK_CTX_LEN - 1);
+        g_track.current_test_file[TML_MEM_TRACK_CTX_LEN - 1] = '\0';
+    } else {
+        g_track.current_test_file[0] = '\0';
+    }
+
+    TML_MUTEX_UNLOCK(g_track.mutex);
 }
 
 // ============================================================================

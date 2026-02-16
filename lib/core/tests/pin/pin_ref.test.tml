@@ -1,0 +1,25 @@
+// Tests for core::pin — Deref for Pin (Pin[ref T] new/get_ref blocked by ref ref T type mismatch)
+use test::{assert, assert_eq}
+use core::pin::Pin
+
+@test
+func test_pin_new_unchecked_bool() -> I32 {
+    let p: Pin[Bool] = Pin::new_unchecked(true)
+    assert_eq(p.pointer, true, "Pin[Bool] should hold true")
+    return 0
+}
+
+@test
+func test_pin_new_unchecked_str() -> I32 {
+    let p: Pin[Str] = Pin::new_unchecked("hello")
+    assert_eq(p.pointer, "hello", "Pin[Str] should hold hello")
+    return 0
+}
+
+@test
+func test_pin_into_inner_str() -> I32 {
+    let p: Pin[Str] = Pin::new_unchecked("world")
+    let inner: Str = p.into_inner_unchecked()
+    assert_eq(inner, "world", "into_inner for Pin[Str]")
+    return 0
+}

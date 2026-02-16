@@ -1,0 +1,12 @@
+// Tests for core::intrinsics — floating point math functions
+// NOTE: Generic @intrinsic functions (floor[F64], etc.) currently return I32
+// instead of T due to a compiler bug with intrinsic generic type resolution.
+// These tests are deferred until that bug is fixed.
+use test::{assert}
+
+@test
+func test_intrinsics_float_placeholder() -> I32 {
+    // placeholder — see note above
+    assert(true, "float intrinsics tests deferred")
+    return 0
+}

@@ -1,6 +1,8 @@
-// Tests for core::error — ParseError with position, description
+// Tests for core::error — ChainedError, ParseError with position
 use test::{assert, assert_eq}
-use core::error::{SimpleError, ParseError}
+use core::error::{SimpleError, ParseError, ChainedError}
+
+// === ParseError with position ===
 
 @test
 func test_parse_error_with_position_fmt() -> I32 {
@@ -26,5 +28,34 @@ func test_simple_error_description() -> I32 {
     let err = SimpleError::new("desc test")
     let d = err.description()
     assert_eq(d, "desc test", "description should match to_string")
+    return 0
+}
+
+// === ChainedError ===
+
+@test
+func test_chained_error_to_string() -> I32 {
+    let cause: SimpleError = SimpleError::new("root cause")
+    let chained: ChainedError[SimpleError] = ChainedError::new("context", cause)
+    assert_eq(chained.to_string(), "context: root cause", "ChainedError to_string")
+    return 0
+}
+
+@test
+func test_chained_error_debug_string() -> I32 {
+    let cause: SimpleError = SimpleError::new("oops")
+    let chained: ChainedError[SimpleError] = ChainedError::new("failed", cause)
+    let dbg: Str = chained.debug_string()
+    assert(dbg.contains("ChainedError"), "debug contains type name")
+    assert(dbg.contains("failed"), "debug contains message")
+    return 0
+}
+
+@test
+func test_chained_error_cause() -> I32 {
+    let cause: SimpleError = SimpleError::new("inner")
+    let chained: ChainedError[SimpleError] = ChainedError::new("outer", cause)
+    let c: ref SimpleError = chained.cause()
+    assert_eq(c.to_string(), "inner", "cause returns inner error")
     return 0
 }

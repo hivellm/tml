@@ -1,0 +1,51 @@
+// Tests for core::ops::try_trait — Outcome and Maybe branch, ControlFlow extra
+use test::{assert, assert_eq}
+use core::ops::try_trait::{ControlFlow}
+
+@test
+func test_outcome_branch_ok() -> I32 {
+    let r: Outcome[I32, Str] = Ok(42)
+    let cf: ControlFlow[I32, Str] = r.branch()
+    assert(cf.is_continue(), "Ok branch should be Continue")
+    return 0
+}
+
+@test
+func test_outcome_branch_err() -> I32 {
+    let r: Outcome[I32, Str] = Err("fail")
+    let cf: ControlFlow[I32, Str] = r.branch()
+    assert(cf.is_break(), "Err branch should be Break")
+    return 0
+}
+
+@test
+func test_maybe_branch_just() -> I32 {
+    let m: Maybe[I32] = Just(10)
+    let cf: ControlFlow[I32, Unit] = m.branch()
+    assert(cf.is_continue(), "Just branch should be Continue")
+    return 0
+}
+
+@test
+func test_maybe_branch_nothing() -> I32 {
+    let m: Maybe[I32] = Nothing
+    let cf: ControlFlow[I32, Unit] = m.branch()
+    assert(cf.is_break(), "Nothing branch should be Break")
+    return 0
+}
+
+@test
+func test_control_flow_continue_i64() -> I32 {
+    let cf: ControlFlow[I64, I32] = ControlFlow::Continue(100 as I64)
+    assert(cf.is_continue(), "Continue should be Continue")
+    assert(not cf.is_break(), "Continue should not be Break")
+    return 0
+}
+
+@test
+func test_control_flow_break_i64() -> I32 {
+    let cf: ControlFlow[I64, I32] = ControlFlow::Break(-1)
+    assert(cf.is_break(), "Break should be Break")
+    assert(not cf.is_continue(), "Break should not be Continue")
+    return 0
+}

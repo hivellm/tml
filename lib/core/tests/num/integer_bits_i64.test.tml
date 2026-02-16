@@ -1,0 +1,72 @@
+// Tests for core::num::integer — I64 bit manipulation functions
+use test::{assert, assert_eq}
+use core::num::integer::{
+    count_ones_i64, count_zeros_i64, leading_zeros_i64, trailing_zeros_i64,
+    rotate_left_i64, rotate_right_i64, swap_bytes_i64, reverse_bits_i64
+}
+
+@test
+func test_count_ones_i64() -> I32 {
+    assert_eq(count_ones_i64(0), 0 as I64, "count_ones(0) = 0")
+    assert_eq(count_ones_i64(1), 1 as I64, "count_ones(1) = 1")
+    assert_eq(count_ones_i64(7), 3 as I64, "count_ones(7) = 3")
+    assert_eq(count_ones_i64(255), 8 as I64, "count_ones(255) = 8")
+    return 0
+}
+
+@test
+func test_count_zeros_i64() -> I32 {
+    assert_eq(count_zeros_i64(0), 64 as I64, "count_zeros(0) = 64")
+    assert_eq(count_zeros_i64(255), 56 as I64, "count_zeros(255) = 56")
+    return 0
+}
+
+@test
+func test_leading_zeros_i64() -> I32 {
+    assert_eq(leading_zeros_i64(0), 64 as I64, "lz(0) = 64")
+    assert_eq(leading_zeros_i64(1), 63 as I64, "lz(1) = 63")
+    assert_eq(leading_zeros_i64(256), 55 as I64, "lz(256) = 55")
+    return 0
+}
+
+@test
+func test_trailing_zeros_i64() -> I32 {
+    assert_eq(trailing_zeros_i64(0), 64 as I64, "tz(0) = 64")
+    assert_eq(trailing_zeros_i64(1), 0 as I64, "tz(1) = 0")
+    assert_eq(trailing_zeros_i64(16), 4 as I64, "tz(16) = 4")
+    return 0
+}
+
+@test
+func test_rotate_left_i64() -> I32 {
+    let val: I64 = 1 as I64
+    let rotated: I64 = rotate_left_i64(val, 8 as I64)
+    assert_eq(rotated, 256 as I64, "rotate_left(1, 8) = 256")
+    assert_eq(rotate_left_i64(42 as I64, 0 as I64), 42 as I64, "rotate_left(42, 0) = 42")
+    return 0
+}
+
+@test
+func test_rotate_right_i64() -> I32 {
+    let val: I64 = 256 as I64
+    let rotated: I64 = rotate_right_i64(val, 8 as I64)
+    assert_eq(rotated, 1 as I64, "rotate_right(256, 8) = 1")
+    return 0
+}
+
+@test
+func test_swap_bytes_i64() -> I32 {
+    // swapping bytes of 1 should put it in the highest byte
+    let swapped: I64 = swap_bytes_i64(1 as I64)
+    assert(swapped != 1 as I64, "swap_bytes(1) should differ from 1")
+    assert(swapped != 0 as I64, "swap_bytes(1) should be non-zero")
+    return 0
+}
+
+@test
+func test_reverse_bits_i64() -> I32 {
+    assert_eq(reverse_bits_i64(0 as I64), 0 as I64, "reverse_bits(0) = 0")
+    let r: I64 = reverse_bits_i64(1 as I64)
+    assert(r < 0 as I64, "reverse_bits(1) should be negative (MSB set)")
+    return 0
+}

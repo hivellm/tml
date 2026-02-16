@@ -1,0 +1,19 @@
+// Tests for core::any — TypeId debug_string and duplicate
+use test::{assert, assert_eq}
+use core::any::TypeId
+
+@test
+func test_typeid_debug_string_nonempty() -> I32 {
+    let a: TypeId = TypeId::of[I32]()
+    let dbg: Str = a.debug_string()
+    assert(dbg.len() > 0, "TypeId debug_string should be non-empty")
+    return 0
+}
+
+@test
+func test_typeid_duplicate_field() -> I32 {
+    let a: TypeId = TypeId::of[I64]()
+    let b: TypeId = a.duplicate()
+    assert_eq(a.id, b.id, "duplicate should have same id field")
+    return 0
+}

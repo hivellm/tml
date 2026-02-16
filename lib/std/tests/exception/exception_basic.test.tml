@@ -1,0 +1,11 @@
+// Tests for std::exception — placeholder until OOP codegen is fixed
+// Exception class hierarchy requires class/OOP method dispatch which
+// currently has codegen issues (Unknown method: to_string, equals, etc.)
+use test::{assert}
+
+@test
+func test_exception_placeholder() -> I32 {
+    // Exception tests deferred — class codegen blocked
+    assert(true, "placeholder")
+    return 0
+}

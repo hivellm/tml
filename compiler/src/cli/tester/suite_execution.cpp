@@ -527,9 +527,35 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                                                    << test_info.test_name);
                     tml::log::Logger::instance().flush();
 
-                    // Track which test is running for crash diagnostics
+                    // Track which test is running for crash diagnostics (C++ side)
                     set_crash_context("running", suite.name.c_str(), test_info.test_name.c_str(),
                                       test_info.file_path.c_str());
+
+                    // Also set crash context in the DLL's VEH handler (C side)
+                    // so hardware exceptions report which test crashed
+                    using TmlSetCrashCtx = void (*)(const char*, const char*, const char*);
+                    auto set_dll_crash_ctx =
+                        lib.get_function<TmlSetCrashCtx>("tml_set_test_crash_context");
+                    if (set_dll_crash_ctx) {
+                        set_dll_crash_ctx(test_info.test_name.c_str(), test_info.file_path.c_str(),
+                                          suite.name.c_str());
+                    }
+
+                    // Set memory tracking context so leaked allocations
+                    // report which test was active when they were created
+                    using TmlMemTrackSetCtx = void (*)(const char*, const char*);
+                    auto set_mem_ctx =
+                        lib.get_function<TmlMemTrackSetCtx>("tml_mem_track_set_test_context");
+                    if (set_mem_ctx) {
+                        set_mem_ctx(test_info.test_name.c_str(), test_info.file_path.c_str());
+                    }
+
+                    // Clear crash severity from any previous test
+                    using TmlClearCrashSev = void (*)();
+                    auto clear_sev = lib.get_function<TmlClearCrashSev>("tml_clear_crash_severity");
+                    if (clear_sev) {
+                        clear_sev();
+                    }
 
                     TestResult result;
                     result.file_path = test_info.file_path;
@@ -607,6 +633,52 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                         fail_fast_triggered.store(true);
                         TML_LOG_WARN("test", "Test failed, stopping due to --fail-fast");
                         return;
+                    }
+
+                    // Handle dangerous crash: abort remaining tests in this suite
+                    // to avoid running on potentially corrupted state.
+                    if (!run_success && run_exit_code == -2) {
+                        using TmlGetAbortSuite = int32_t (*)();
+                        auto get_abort =
+                            lib.get_function<TmlGetAbortSuite>("tml_get_crash_abort_suite");
+                        if (get_abort && get_abort()) {
+                            // Get severity for logging
+                            using TmlGetSeverity = int32_t (*)();
+                            auto get_sev =
+                                lib.get_function<TmlGetSeverity>("tml_get_crash_severity");
+                            int32_t severity = get_sev ? get_sev() : 0;
+                            const char* sev_names[] = {
+                                "NONE",           "NULL_DEREF",      "ARITHMETIC",
+                                "USE_AFTER_FREE", "WRITE_VIOLATION", "DEP_VIOLATION",
+                                "STACK_OVERFLOW", "HEAP_CORRUPTION", "UNKNOWN"};
+                            const char* sev_name =
+                                (severity >= 0 && severity <= 8) ? sev_names[severity] : "UNKNOWN";
+
+                            size_t remaining = suite.tests.size() - (i + 1);
+                            TML_LOG_WARN("test",
+                                         "Aborting suite \""
+                                             << suite.name << "\" after " << sev_name
+                                             << " crash — skipping " << remaining
+                                             << " remaining test(s) to avoid corrupted state");
+
+                            // Mark remaining tests as skipped
+                            for (size_t skip_idx = i + 1; skip_idx < suite.tests.size();
+                                 skip_idx++) {
+                                auto& skip_info = suite.tests[skip_idx];
+                                TestResult skip_result;
+                                skip_result.file_path = skip_info.file_path;
+                                skip_result.test_name = skip_info.test_name;
+                                skip_result.group = suite.group;
+                                skip_result.test_count = skip_info.test_count;
+                                skip_result.passed = false;
+                                skip_result.exit_code = -3; // special: skipped due to crash
+                                skip_result.error_message =
+                                    "\n  SKIPPED: " + skip_info.test_name + "\n  Reason: Prior " +
+                                    sev_name + " crash in suite — state may be corrupted\n";
+                                collector.add(std::move(skip_result));
+                            }
+                            return; // exit the suite loop
+                        }
                     }
                 }
 

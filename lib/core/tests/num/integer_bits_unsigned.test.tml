@@ -1,0 +1,95 @@
+// Tests for core::num::integer — U32 and U64 bit manipulation functions
+use test::{assert, assert_eq}
+use core::num::integer::{
+    count_ones_u32, count_zeros_u32, leading_zeros_u32, trailing_zeros_u32,
+    rotate_left_u32, rotate_right_u32, swap_bytes_u32, reverse_bits_u32,
+    count_ones_u64, count_zeros_u64, leading_zeros_u64, trailing_zeros_u64,
+    rotate_left_u64, rotate_right_u64, swap_bytes_u64, reverse_bits_u64
+}
+
+// === U32 ===
+
+@test
+func test_count_ones_u32() -> I32 {
+    assert_eq(count_ones_u32(0 as U32) as I32, 0, "popcount(0) = 0")
+    assert_eq(count_ones_u32(7 as U32) as I32, 3, "popcount(7) = 3")
+    assert_eq(count_ones_u32(255 as U32) as I32, 8, "popcount(255) = 8")
+    return 0
+}
+
+@test
+func test_count_zeros_u32() -> I32 {
+    assert_eq(count_zeros_u32(0 as U32) as I32, 32, "count_zeros(0) = 32")
+    return 0
+}
+
+@test
+func test_leading_zeros_u32() -> I32 {
+    assert_eq(leading_zeros_u32(0 as U32) as I32, 32, "lz(0) = 32")
+    assert_eq(leading_zeros_u32(1 as U32) as I32, 31, "lz(1) = 31")
+    return 0
+}
+
+@test
+func test_trailing_zeros_u32() -> I32 {
+    assert_eq(trailing_zeros_u32(0 as U32) as I32, 32, "tz(0) = 32")
+    assert_eq(trailing_zeros_u32(16 as U32) as I32, 4, "tz(16) = 4")
+    return 0
+}
+
+@test
+func test_rotate_u32() -> I32 {
+    let v: U32 = 1 as U32
+    let left: U32 = rotate_left_u32(v, 4 as U32)
+    assert_eq(left as I32, 16, "rotate_left(1, 4) = 16")
+    let right: U32 = rotate_right_u32(16 as U32, 4 as U32)
+    assert_eq(right as I32, 1, "rotate_right(16, 4) = 1")
+    return 0
+}
+
+@test
+func test_swap_bytes_u32() -> I32 {
+    let v: U32 = 1 as U32
+    let swapped: U32 = swap_bytes_u32(v)
+    assert(swapped != v, "swap_bytes(1) should differ")
+    assert_eq(swap_bytes_u32(0 as U32) as I32, 0, "swap_bytes(0) = 0")
+    return 0
+}
+
+@test
+func test_reverse_bits_u32() -> I32 {
+    assert_eq(reverse_bits_u32(0 as U32) as I32, 0, "reverse_bits(0) = 0")
+    return 0
+}
+
+// === U64 ===
+
+@test
+func test_count_ones_u64() -> I32 {
+    assert_eq(count_ones_u64(0 as U64) as I64, 0 as I64, "popcount(0) = 0")
+    assert_eq(count_ones_u64(15 as U64) as I64, 4 as I64, "popcount(15) = 4")
+    return 0
+}
+
+@test
+func test_leading_trailing_zeros_u64() -> I32 {
+    assert_eq(leading_zeros_u64(0 as U64) as I64, 64 as I64, "lz(0) = 64")
+    assert_eq(trailing_zeros_u64(0 as U64) as I64, 64 as I64, "tz(0) = 64")
+    assert_eq(trailing_zeros_u64(8 as U64) as I64, 3 as I64, "tz(8) = 3")
+    return 0
+}
+
+@test
+func test_rotate_u64() -> I32 {
+    let v: U64 = 1 as U64
+    let left: U64 = rotate_left_u64(v, 8 as U64)
+    assert_eq(left as I64, 256 as I64, "rotate_left(1, 8) = 256")
+    return 0
+}
+
+@test
+func test_swap_reverse_u64() -> I32 {
+    assert_eq(swap_bytes_u64(0 as U64) as I64, 0 as I64, "swap_bytes(0) = 0")
+    assert_eq(reverse_bits_u64(0 as U64) as I64, 0 as I64, "reverse_bits(0) = 0")
+    return 0
+}

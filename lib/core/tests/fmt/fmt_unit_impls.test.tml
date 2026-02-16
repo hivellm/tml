@@ -1,0 +1,78 @@
+// Tests for fmt — FmtError display/debug, Alignment debug, Sign display/debug
+use test::{assert, assert_eq}
+use core::fmt::traits::{FmtError, Alignment, Sign}
+
+@test
+func test_fmt_error_to_string() -> I32 {
+    let e: FmtError = FmtError::new()
+    let s: Str = e.to_string()
+    assert_eq(s, "formatting error", "FmtError to_string")
+    return 0
+}
+
+@test
+func test_fmt_error_debug_string() -> I32 {
+    let e: FmtError = FmtError::new()
+    let s: Str = e.debug_string()
+    assert_eq(s, "FmtError", "FmtError debug_string")
+    return 0
+}
+
+@test
+func test_alignment_left_debug() -> I32 {
+    let a: Alignment = Alignment::Left
+    let s: Str = a.debug_string()
+    assert_eq(s, "Alignment::Left", "Alignment::Left debug_string")
+    return 0
+}
+
+@test
+func test_alignment_right_debug() -> I32 {
+    let a: Alignment = Alignment::Right
+    let s: Str = a.debug_string()
+    assert_eq(s, "Alignment::Right", "Alignment::Right debug_string")
+    return 0
+}
+
+@test
+func test_alignment_center_debug() -> I32 {
+    let a: Alignment = Alignment::Center
+    let s: Str = a.debug_string()
+    assert_eq(s, "Alignment::Center", "Alignment::Center debug_string")
+    return 0
+}
+
+@test
+func test_sign_minus_to_string() -> I32 {
+    let s: Sign = Sign::Minus
+    assert_eq(s.to_string(), "Minus", "Sign::Minus to_string")
+    return 0
+}
+
+@test
+func test_sign_plus_to_string() -> I32 {
+    let s: Sign = Sign::Plus
+    assert_eq(s.to_string(), "Plus", "Sign::Plus to_string")
+    return 0
+}
+
+@test
+func test_sign_minus_debug() -> I32 {
+    let s: Sign = Sign::Minus
+    assert_eq(s.debug_string(), "Sign::Minus", "Sign::Minus debug_string")
+    return 0
+}
+
+@test
+func test_sign_plus_debug() -> I32 {
+    let s: Sign = Sign::Plus
+    assert_eq(s.debug_string(), "Sign::Plus", "Sign::Plus debug_string")
+    return 0
+}
+
+@test
+func test_sign_space_debug() -> I32 {
+    let s: Sign = Sign::Space
+    assert_eq(s.debug_string(), "Sign::Space", "Sign::Space debug_string")
+    return 0
+}

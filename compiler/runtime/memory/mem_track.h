@@ -22,6 +22,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// DLL export for functions called by the test runner via GetProcAddress
+#ifndef TML_MEM_EXPORT
+#ifdef _WIN32
+#define TML_MEM_EXPORT __declspec(dllexport)
+#else
+#define TML_MEM_EXPORT __attribute__((visibility("default")))
+#endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -44,15 +53,20 @@ extern "C" {
 // Allocation Record
 // ============================================================================
 
+/** Maximum length for test context strings stored per allocation */
+#define TML_MEM_TRACK_CTX_LEN 128
+
 /**
  * @brief Record of a single allocation.
  */
 typedef struct TmlAllocRecord {
-    void* ptr;             /**< Allocated pointer */
-    size_t size;           /**< Allocation size in bytes */
-    uint64_t alloc_id;     /**< Sequential allocation ID */
-    uint64_t timestamp_ns; /**< Allocation timestamp (nanoseconds) */
-    const char* tag;       /**< Optional allocation tag/label */
+    void* ptr;                             /**< Allocated pointer */
+    size_t size;                           /**< Allocation size in bytes */
+    uint64_t alloc_id;                     /**< Sequential allocation ID */
+    uint64_t timestamp_ns;                 /**< Allocation timestamp (nanoseconds) */
+    const char* tag;                       /**< Optional allocation tag/label */
+    char test_name[TML_MEM_TRACK_CTX_LEN]; /**< Test active when allocated */
+    char test_file[TML_MEM_TRACK_CTX_LEN]; /**< Test file active when allocated */
 } TmlAllocRecord;
 
 // ============================================================================
@@ -152,6 +166,18 @@ void tml_mem_set_check_at_exit(int32_t enable);
  * @param fp FILE pointer (defaults to stderr).
  */
 void tml_mem_set_output(void* fp);
+
+/**
+ * @brief Sets the current test context for allocation tracking.
+ *
+ * When set, all subsequent allocations are tagged with this test name/file
+ * so the leak report can show which test caused each leak.
+ * Exported so the test runner can call it via GetProcAddress on the test DLL.
+ *
+ * @param test_name Current test name (NULL to clear).
+ * @param test_file Current test file path (NULL to clear).
+ */
+TML_MEM_EXPORT void tml_mem_track_set_test_context(const char* test_name, const char* test_file);
 
 // ============================================================================
 // Tagged Allocation Macros

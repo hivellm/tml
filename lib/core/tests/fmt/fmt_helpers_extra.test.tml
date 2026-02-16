@@ -1,0 +1,24 @@
+// Tests for fmt::helpers — repeat_string, pad_center, format_with_sign
+use test::{assert, assert_eq}
+use core::fmt::helpers::{repeat_string, pad_center, format_with_sign}
+
+@test
+func test_repeat_string_basic() -> I32 {
+    let s: Str = repeat_string("ab", 3 as I64)
+    assert_eq(s, "ababab", "repeat_string 3 times")
+    return 0
+}
+
+@test
+func test_repeat_string_zero() -> I32 {
+    let s: Str = repeat_string("x", 0 as I64)
+    assert_eq(s, "", "repeat_string 0 times is empty")
+    return 0
+}
+
+@test
+func test_repeat_string_one() -> I32 {
+    let s: Str = repeat_string("hello", 1 as I64)
+    assert_eq(s, "hello", "repeat_string 1 time")
+    return 0
+}

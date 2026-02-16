@@ -1,0 +1,88 @@
+// Tests for core::time::Duration — checked arithmetic, div
+use test::{assert, assert_eq}
+use core::time::Duration
+
+@test
+func test_duration_checked_add_ok() -> I32 {
+    let a: Duration = Duration::from_secs(3 as I64)
+    let b: Duration = Duration::from_millis(500 as I64)
+    let r = a.checked_add(b)
+    assert(r.is_just(), "checked_add should succeed")
+    let d: Duration = r.unwrap()
+    assert_eq(d.as_millis(), 3500 as I64, "3s + 500ms = 3500ms")
+    return 0
+}
+
+@test
+func test_duration_checked_add_nanos_carry() -> I32 {
+    let a: Duration = Duration::new(1 as I64, 800000000 as I32)
+    let b: Duration = Duration::new(0 as I64, 400000000 as I32)
+    let r = a.checked_add(b)
+    assert(r.is_just(), "checked_add nanos carry should succeed")
+    let d: Duration = r.unwrap()
+    assert_eq(d.as_secs(), 2 as I64, "1.8s + 0.4s = 2.2s secs")
+    assert_eq(d.subsec_nanos(), 200000000 as I32, "1.8s + 0.4s nanos")
+    return 0
+}
+
+@test
+func test_duration_checked_sub_ok() -> I32 {
+    let a: Duration = Duration::from_secs(5 as I64)
+    let b: Duration = Duration::from_secs(2 as I64)
+    let r = a.checked_sub(b)
+    assert(r.is_just(), "checked_sub should succeed")
+    let d: Duration = r.unwrap()
+    assert_eq(d.as_secs(), 3 as I64, "5s - 2s = 3s")
+    return 0
+}
+
+@test
+func test_duration_checked_sub_underflow() -> I32 {
+    let a: Duration = Duration::from_secs(1 as I64)
+    let b: Duration = Duration::from_secs(5 as I64)
+    let r = a.checked_sub(b)
+    assert(r.is_nothing(), "1s - 5s should return Nothing")
+    return 0
+}
+
+@test
+func test_duration_div() -> I32 {
+    let d: Duration = Duration::from_secs(10 as I64)
+    let r: Duration = d.div(2)
+    assert_eq(r.as_secs(), 5 as I64, "10s / 2 = 5s")
+    return 0
+}
+
+@test
+func test_duration_div_with_nanos() -> I32 {
+    let d: Duration = Duration::from_millis(3000 as I64)
+    let r: Duration = d.div(3)
+    assert_eq(r.as_millis(), 1000 as I64, "3000ms / 3 = 1000ms")
+    return 0
+}
+
+@test
+func test_duration_subsec_micros() -> I32 {
+    let d: Duration = Duration::new(1 as I64, 500000000 as I32)
+    assert_eq(d.subsec_micros(), 500000 as I32, "0.5s = 500000us")
+    return 0
+}
+
+@test
+func test_duration_from_nanos_subsec() -> I32 {
+    let d: Duration = Duration::from_nanos(1500000000 as I64)
+    assert_eq(d.as_secs(), 1 as I64, "1.5e9 ns = 1s")
+    assert_eq(d.subsec_nanos(), 500000000 as I32, "1.5e9 ns subsec = 0.5s nanos")
+    return 0
+}
+
+@test
+func test_duration_checked_sub_nanos_borrow() -> I32 {
+    let a: Duration = Duration::new(2 as I64, 100000000 as I32)
+    let b: Duration = Duration::new(1 as I64, 500000000 as I32)
+    let r = a.checked_sub(b)
+    assert(r.is_just(), "checked_sub with nanos borrow should succeed")
+    let d: Duration = r.unwrap()
+    assert_eq(d.subsec_nanos(), 600000000 as I32, "2.1s - 1.5s = 0.6s nanos")
+    return 0
+}

@@ -1,0 +1,43 @@
+// Tests for core::error — BoxedError, SimpleError debug
+use test::{assert, assert_eq}
+use core::error::{SimpleError, BoxedError}
+
+@test
+func test_simple_error_new() -> I32 {
+    let e: SimpleError = SimpleError::new("something failed")
+    assert_eq(e.to_string(), "something failed", "to_string should return message")
+    return 0
+}
+
+@test
+func test_simple_error_debug_string() -> I32 {
+    let e: SimpleError = SimpleError::new("test error")
+    let dbg: Str = e.debug_string()
+    assert(dbg.len() > 0, "debug_string should be non-empty")
+    return 0
+}
+
+@test
+func test_simple_error_description() -> I32 {
+    let e: SimpleError = SimpleError::new("desc test")
+    let desc: Str = e.description()
+    assert_eq(desc, "desc test", "description should match to_string")
+    return 0
+}
+
+@test
+func test_boxed_error_from_message() -> I32 {
+    let e: BoxedError = BoxedError::from_message("boxed msg")
+    assert_eq(e.to_string(), "boxed msg", "to_string should return message")
+    return 0
+}
+
+@test
+func test_boxed_error_debug_string() -> I32 {
+    let e: BoxedError = BoxedError::from_message("test")
+    let dbg: Str = e.debug_string()
+    assert(dbg.len() > 0, "debug_string should be non-empty")
+    return 0
+}
+
+// NOTE: BoxedError::new[E: Error] blocked by codegen — can't resolve to_string through behavior constraint

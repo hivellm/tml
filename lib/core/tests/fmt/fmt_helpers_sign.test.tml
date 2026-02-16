@@ -1,0 +1,55 @@
+// Tests for fmt::helpers — format_with_sign, digit_to_char, hex_digit
+use test::{assert, assert_eq}
+use core::fmt::helpers::{format_with_sign, digit_to_char, hex_digit}
+
+@test
+func test_format_with_sign_minus_only_positive() -> I32 {
+    let s: Str = format_with_sign(42 as I64, 0)
+    assert_eq(s, "42", "positive with minus-only mode")
+    return 0
+}
+
+@test
+func test_format_with_sign_minus_only_negative() -> I32 {
+    let s: Str = format_with_sign(-7 as I64, 0)
+    assert_eq(s, "-7", "negative with minus-only mode")
+    return 0
+}
+
+@test
+func test_format_with_sign_always_positive() -> I32 {
+    let s: Str = format_with_sign(10 as I64, 1)
+    assert_eq(s, "+10", "positive with always-sign mode")
+    return 0
+}
+
+@test
+func test_format_with_sign_space_positive() -> I32 {
+    let s: Str = format_with_sign(5 as I64, 2)
+    assert_eq(s, " 5", "positive with space mode")
+    return 0
+}
+
+@test
+func test_digit_to_char_0() -> I32 {
+    assert_eq(digit_to_char(0), "0", "digit 0")
+    return 0
+}
+
+@test
+func test_digit_to_char_9() -> I32 {
+    assert_eq(digit_to_char(9), "9", "digit 9")
+    return 0
+}
+
+@test
+func test_hex_digit_10_lower() -> I32 {
+    assert_eq(hex_digit(10, false), "a", "hex 10 lower")
+    return 0
+}
+
+@test
+func test_hex_digit_15_upper() -> I32 {
+    assert_eq(hex_digit(15, true), "F", "hex 15 upper")
+    return 0
+}

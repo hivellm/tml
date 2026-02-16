@@ -1,0 +1,145 @@
+// Tests for core::option — Maybe combinator methods
+use test::{assert, assert_eq}
+
+// === map ===
+
+@test
+func test_maybe_map_just() -> I32 {
+    let x: Maybe[I64] = Just(5 as I64)
+    let result: Maybe[I64] = x.map(do(n: I64) -> I64 { n * 2 })
+    assert(result.is_just(), "map on Just should return Just")
+    assert_eq(result.unwrap(), 10 as I64, "map should apply function")
+    return 0
+}
+
+@test
+func test_maybe_map_nothing() -> I32 {
+    let x: Maybe[I64] = Nothing
+    let result: Maybe[I64] = x.map(do(n: I64) -> I64 { n * 2 })
+    assert(result.is_nothing(), "map on Nothing should return Nothing")
+    return 0
+}
+
+// === map_or ===
+
+@test
+func test_maybe_map_or_just() -> I32 {
+    let x: Maybe[I64] = Just(3 as I64)
+    let result: I64 = x.map_or(0 as I64, do(n: I64) -> I64 { n + 10 })
+    assert_eq(result, 13 as I64, "map_or on Just applies function")
+    return 0
+}
+
+@test
+func test_maybe_map_or_nothing() -> I32 {
+    let x: Maybe[I64] = Nothing
+    let result: I64 = x.map_or(99 as I64, do(n: I64) -> I64 { n + 10 })
+    assert_eq(result, 99 as I64, "map_or on Nothing returns default")
+    return 0
+}
+
+// === and_then ===
+
+@test
+func test_maybe_and_then_just() -> I32 {
+    let x: Maybe[I64] = Just(4 as I64)
+    let result: Maybe[I64] = x.and_then(do(n: I64) -> Maybe[I64] { Just(n * n) })
+    assert(result.is_just(), "and_then on Just should return Just")
+    assert_eq(result.unwrap(), 16 as I64, "and_then applies function")
+    return 0
+}
+
+@test
+func test_maybe_and_then_nothing() -> I32 {
+    let x: Maybe[I64] = Nothing
+    let result: Maybe[I64] = x.and_then(do(n: I64) -> Maybe[I64] { Just(n * n) })
+    assert(result.is_nothing(), "and_then on Nothing returns Nothing")
+    return 0
+}
+
+// === alt ===
+
+@test
+func test_maybe_alt_just() -> I32 {
+    let x: Maybe[I64] = Just(1 as I64)
+    let y: Maybe[I64] = Just(2 as I64)
+    let result: Maybe[I64] = x.alt(y)
+    assert_eq(result.unwrap(), 1 as I64, "alt returns self when Just")
+    return 0
+}
+
+@test
+func test_maybe_alt_nothing() -> I32 {
+    let x: Maybe[I64] = Nothing
+    let y: Maybe[I64] = Just(2 as I64)
+    let result: Maybe[I64] = x.alt(y)
+    assert_eq(result.unwrap(), 2 as I64, "alt returns other when Nothing")
+    return 0
+}
+
+// === or_else ===
+
+@test
+func test_maybe_or_else_just() -> I32 {
+    let x: Maybe[I64] = Just(1 as I64)
+    let result: Maybe[I64] = x.or_else(do() -> Maybe[I64] { Just(99 as I64) })
+    assert_eq(result.unwrap(), 1 as I64, "or_else returns self when Just")
+    return 0
+}
+
+@test
+func test_maybe_or_else_nothing() -> I32 {
+    let x: Maybe[I64] = Nothing
+    let result: Maybe[I64] = x.or_else(do() -> Maybe[I64] { Just(99 as I64) })
+    assert_eq(result.unwrap(), 99 as I64, "or_else calls function when Nothing")
+    return 0
+}
+
+// === one_of (xor) ===
+
+@test
+func test_maybe_one_of_just_nothing() -> I32 {
+    let x: Maybe[I64] = Just(1 as I64)
+    let y: Maybe[I64] = Nothing
+    let result: Maybe[I64] = x.one_of(y)
+    assert_eq(result.unwrap(), 1 as I64, "one_of(Just, Nothing) returns Just")
+    return 0
+}
+
+@test
+func test_maybe_one_of_both_just() -> I32 {
+    let x: Maybe[I64] = Just(1 as I64)
+    let y: Maybe[I64] = Just(2 as I64)
+    let result: Maybe[I64] = x.one_of(y)
+    assert(result.is_nothing(), "one_of(Just, Just) returns Nothing")
+    return 0
+}
+
+@test
+func test_maybe_one_of_both_nothing() -> I32 {
+    let x: Maybe[I64] = Nothing
+    let y: Maybe[I64] = Nothing
+    let result: Maybe[I64] = x.one_of(y)
+    assert(result.is_nothing(), "one_of(Nothing, Nothing) returns Nothing")
+    return 0
+}
+
+// === unwrap_or_else ===
+
+@test
+func test_maybe_unwrap_or_else_just() -> I32 {
+    let x: Maybe[I64] = Just(7 as I64)
+    let result: I64 = x.unwrap_or_else(do() -> I64 { 0 as I64 })
+    assert_eq(result, 7 as I64, "unwrap_or_else on Just returns value")
+    return 0
+}
+
+@test
+func test_maybe_unwrap_or_else_nothing() -> I32 {
+    let x: Maybe[I64] = Nothing
+    let result: I64 = x.unwrap_or_else(do() -> I64 { 42 as I64 })
+    assert_eq(result, 42 as I64, "unwrap_or_else on Nothing calls function")
+    return 0
+}
+
+// ok_or, ok_or_else, filter — BLOCKED by generic param codegen bugs
