@@ -1551,6 +1551,7 @@ private:
 
     // String literal handling
     std::vector<std::pair<std::string, std::string>> string_literals_;
+    std::unordered_map<std::string, std::string> string_literal_dedup_;
     auto add_string_literal(const std::string& value) -> std::string;
 
 public:

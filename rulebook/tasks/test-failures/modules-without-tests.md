@@ -1,48 +1,50 @@
 # Modules with 0% Coverage — Complete Analysis
 
-**Date**: 2026-02-15 (evening update)
-**Current Coverage**: 71.2% (2,953/4,147 functions)
-**Tests**: 7,883 tests in 616 files — **0 failures**
+**Date**: 2026-02-17
+**Current Coverage**: 75.7% (3,112/4,113 functions)
+**Tests**: 8,912 tests in 768 files — **0 failures**
 
 ## Executive Summary
 
-Of **37 modules with 0% coverage** (309 functions):
+Of **31 modules with 0% coverage** (228 functions):
 
-- ✅ **9 modules** (24 functions) — Behavior definitions only, **don't need tests**
+- ✅ **7 modules** (15 functions) — Behavior definitions only, **don't need tests**
 - ⏸️ **3 modules** (12 functions) — **Not testable** (test runner internals, coverage internals, precompiled_symbols)
 - 🐛 **10 modules** (47 functions) — **BLOCKED by compiler bugs** (generic monomorphization in test pipeline)
-- ❌ **15 modules** (226 functions) — **IMPLEMENTED but no tests** ← FOCUS HERE
+- ❌ **11 modules** (154 functions) — **IMPLEMENTED but no tests** ← FOCUS HERE
 
-### Changes since last update (2026-02-15 morning → evening)
+### Changes since last update (2026-02-15 → 2026-02-17)
 
-- Coverage rose from 67.8% → 71.2% (+143 functions covered, +173 tests, +14 files)
-- **New test files added this session:**
-  - `lib/core/tests/fmt/fmt_rt_coverage.test.tml` — 9 tests for Count, FormatSpec, Placeholder, Argument
-  - `lib/core/tests/any/any_coverage.test.tml` — 6 tests for TypeId::of, debug_string
-  - `lib/core/tests/error/error_coverage.test.tml` — 14 tests for Error, SimpleError, ErrorChain
-  - `lib/core/tests/hash/hash_bytes.test.tml` — tests for hash bytes functions
-  - `lib/core/tests/result/result_coverage.test.tml` — 8 tests for Outcome Debug/Display, unwrap_or_default, contains
-  - `lib/std/tests/types/types_coverage.test.tml` — 10 tests for free functions (unwrap, expect, ok_or, etc.)
-  - `lib/core/tests/alloc/shared_coverage.test.tml` — 2 tests for is_unique, shared() free fn
-  - `lib/core/tests/alloc/sync_coverage.test.tml` — 4 tests for new, get, strong_count, is_unique, sync() free fn
-  - `lib/core/tests/ops/range_coverage.test.tml` — 10 tests for Range, RangeInclusive, RangeFull, Bound free fns
-  - `lib/core/tests/ops/ops_bit_assign.test.tml` — 23 tests for bitwise assign operations
-  - `lib/core/tests/ops/ops_bit_trait_methods.test.tml` — 42 tests for bit trait methods
-  - `lib/core/tests/slice/slice_rotate_copy.test.tml` — 4 tests for rotate_left/right, split_at, copy_from_slice
-- **crash-debug-improvements task COMPLETED** — archived to `archive/2026-02-15-crash-debug-improvements`
-  - Deliberate STACK_OVERFLOW and write AV tests verified VEH handler, `_resetstkoflw()`, abort-suite logic
-  - Crash test files moved to `.sandbox/crash_verification_tests/` (not in coverage suite)
-- **Modules that improved:**
-  - `fmt/rt` — was ~33%, now **55.6%** (10/18)
-  - `any` — was ~35%, now **47.8%** (11/23)
-  - `error` — was ~31%, now **50.0%** (16/32)
-  - `result` — was ~67%, now **75.8%** (25/33)
-  - `types` — was ~65%, now **95.7%** (22/23)
-  - `alloc/shared` — was ~56%, now **68.8%** (11/16)
-  - `alloc/sync` — was ~56%, now **68.8%** (11/16)
-  - `ops/range` — was ~67%, now **80.5%** (33/41)
-  - `ops/bit` — was ~65%, now **76.1%** (70/92)
-  - `hash` — was ~58%, now **65.4%** (34/52)
+- Coverage rose from 71.2% → 75.7% (+159 functions covered, +1,029 tests, +152 files)
+- **75% target ACHIEVED** — 74 modules at 100%, 96 partial, 31 at 0%
+- **Phase 3 (stdlib essentials) effectively COMPLETE** — 47/48 items (98%), only Read/Write/Seek behaviors blocked
+- **New modules/features implemented:**
+  - `std::regex` — Thompson's NFA regex engine with captures (30 tests)
+  - `std::datetime` — date/time parsing and formatting (100%)
+  - `std::random::ThreadRng` — per-thread PRNG with high-entropy seeding (4 tests)
+  - `std::math` — trig, exp, rounding, utility functions (100%)
+  - `std::collections::btreemap` — ordered map (100%)
+  - `std::collections::btreeset` — ordered set (100%)
+  - `std::collections::deque` — double-ended queue (100%)
+  - `std::os` — env, cwd, process exec (97.1%)
+  - `std::time` — Instant, SystemTime
+  - `std::file::bufio` — BufReader, BufWriter, LineWriter
+  - `__FILE__`, `__DIRNAME__`, `__LINE__` compile-time constants
+  - `Shared[T]` memory leak fix (decrement_count codegen)
+- **Modules that reached 100% since 2026-02-15:**
+  - `random` — 7/7 (100%)
+  - `datetime` — 15/15 (100%)
+  - `math` — 28/28 (100%)
+  - `collections/btreemap` — 13/13 (100%)
+  - `collections/btreeset` — 9/9 (100%)
+  - `collections/deque` — 15/15 (100%)
+  - `ops/range` — 41/41 (100%)
+  - `unicode/unicode_data` — 12/12 (100%)
+  - `ptr/alignment` — 8/8 (100%)
+  - `num/traits` — 56/56 (100%)
+  - `num/integer` — 51/51 (100%)
+  - `alloc/global` — 20/20 (100%)
+  - `alloc/layout` — 30/30 (100%)
 
 ### Compiler bugs identified (blocking 10 modules)
 
@@ -50,27 +52,28 @@ Of **37 modules with 0% coverage** (309 functions):
 
 Blocked modules: `filter_map`, `scan`, `map_while`, `empty`, `repeat_with`, `successors`, `cloned`, `copied`, `peekable` (also has nested Maybe codegen bug), `intersperse` (Counter::Item not resolved).
 
-### Additional codegen bugs discovered this session
+### Additional codegen bugs discovered
 
+- **Default behavior method dispatch**: Returns `()` instead of expected type — blocks Read/Write/Seek behaviors (3.6.3), iterator accumulators (sum, product, fold, reduce)
 - **`ref T` parameter codegen**: `Range::contains(this, item: ref T)` generates `ptr 3` instead of passing address — blocks testing all `contains()` methods on Range types
-- **Generic method crashes**: `Shared::duplicate()` and `Shared::try_unwrap()` crash with ACCESS_VIOLATION (null pointer READ at 0x4) — generic codegen for reference-counted types
+- **Generic method crashes**: `Shared::duplicate()` and `Shared::try_unwrap()` crash with ACCESS_VIOLATION — generic codegen for reference-counted types
 - **Class method dispatch**: Exception classes using `class...extends` can't be tested — class vtable dispatch codegen issues
 
 ---
 
-## 1. Behavior Definitions Only (9 modules, 24 functions)
+## 1. Behavior Definitions Only (7 modules, 15 functions)
 
 **Don't need tests** — these are just interface definitions:
 
-1. `convert` — 6 functions (From, Into, TryFrom, TryInto, AsRef, AsMut)
-2. `iter/traits/double_ended` — 5 functions
-3. `ops/function` — 3 functions (Fn, FnMut, FnOnce)
-4. `ops/deref` — 2 functions (Deref, DerefMut)
-5. `ops/index` — 2 functions (Index, IndexMut)
-6. `iter/traits/exact_size` — 2 functions
-7. `iter/traits/extend` — 1 function
-8. `iter/traits/from_iterator` — 1 function
-9. `iter/traits/into_iterator` — 1 function
+1. `convert` — 2 functions (remaining behavior-only signatures)
+2. `iter/traits/double_ended` — 4 functions
+3. `iter/traits/exact_size` — 1 function
+4. `iter/traits/extend` — 1 function (Extend behavior)
+5. `iter/traits/from_iterator` — 1 function (FromIterator behavior)
+6. `iter/traits/into_iterator` — 1 function (IntoIterator behavior)
+7. `ops/function` — not in 0% list (partial coverage through closures)
+
+**Note**: `ops/deref` and `ops/index` now have partial coverage through implementations.
 
 **Action**: None. Behaviors are tested through their implementations.
 
@@ -108,7 +111,7 @@ These adapters/sources have working implementations but fail in the test pipelin
 
 ---
 
-## 4. IMPLEMENTED BUT NO TESTS (15 modules, 226 functions)
+## 4. IMPLEMENTED BUT NO TESTS (11 modules, 154 functions)
 
 **HIGH PRIORITY** — These modules have implemented code but 0% coverage.
 
@@ -124,9 +127,9 @@ These adapters/sources have working implementations but fail in the test pipelin
 
 ### 4.2 Iterators — Remaining (5 modules, 63 functions) — MEDIUM IMPACT
 
-**Traits** (2 modules, 41 functions):
-- `iter/traits/accumulators` — 22 functions (sum, product, etc.)
-- `iter/traits/iterator` — 19 functions (default trait methods)
+**Traits** (2 modules, 38 functions):
+- `iter/traits/accumulators` — 20 functions (sum, product, fold, reduce — **BLOCKED** by default behavior dispatch bug)
+- `iter/traits/iterator` — 18 functions (default trait methods: count, last, nth, etc. — **BLOCKED** by default behavior dispatch bug)
 
 **Remaining adapters** (1 module, 4 functions):
 - `iter/adapters/rev` — 4 functions (requires DoubleEndedIterator)
@@ -135,26 +138,13 @@ These adapters/sources have working implementations but fail in the test pipelin
 - `array/iter` — 19 functions
 - `slice/iter` — 19 functions
 
-**Note**: `rev` requires DoubleEndedIterator implementations; `array/iter` and `slice/iter` need array/slice to implement IntoIterator.
+**Note**: `rev` requires DoubleEndedIterator implementations; `array/iter` and `slice/iter` need array/slice to implement IntoIterator. `accumulators` and `iterator` traits blocked by same default behavior dispatch bug that blocks Read/Write/Seek (3.6.3).
 
 ---
 
-### 4.3 Remaining adapters with partial coverage
+### 4.3 JSON Serialization (1 module, 21 functions) — HIGH IMPACT
 
-These adapters have SOME coverage but the `size_hint` function remains untested:
-
-- `iter/adapters/chain` — 2/3 (66.7%) — missing `size_hint`
-- `iter/adapters/enumerate` — 2/3 (66.7%) — missing `size_hint`
-- `iter/adapters/zip` — 2/3 (66.7%) — missing `size_hint`
-- `iter/adapters/fuse` — 2/3 (66.7%) — missing `size_hint`
-- `iter/adapters/cycle` — 2/3 (66.7%) — missing `size_hint`
-- `iter/adapters/inspect` — 2/3 (66.7%) — missing `size_hint`
-
----
-
-### 4.4 JSON Serialization (1 module, 23 functions) — HIGH IMPACT
-
-- **`json/serialize`** — 23 functions
+- **`json/serialize`** — 21 functions
   - Automatic struct/enum serialization to JSON
   - JSON deserialization to TML types
 
@@ -162,7 +152,7 @@ These adapters have SOME coverage but the `size_hint` function remains untested:
 
 ---
 
-### 4.5 Other Modules (6 modules, 44 functions)
+### 4.4 Other Modules (4 modules, 24 functions)
 
 1. **`array/ascii`** — 9 functions (ASCII operations on arrays — **BLOCKED**: method resolution doesn't discover impl blocks from submodules)
 2. **`iter/adapters/flatten`** — 2 functions
@@ -173,21 +163,39 @@ These adapters have SOME coverage but the `size_hint` function remains untested:
 
 ---
 
+## Modules with Partial Coverage — Easy Wins
+
+These modules are partially covered and could reach 100% with targeted tests:
+
+| Module | Covered | Total | Pct | Missing |
+|--------|---------|-------|-----|---------|
+| `char/methods` | 42 | 43 | 97.7% | 1 function |
+| `sync/atomic` | 118 | 121 | 97.5% | 3 functions |
+| `json/types` | 74 | 76 | 97.4% | 2 functions |
+| `fmt/impls` | 70 | 72 | 97.2% | 2 functions |
+| `collections/class_collections` | 68 | 70 | 97.1% | 2 functions |
+| `os` | 33 | 34 | 97.1% | 1 function |
+| `time` | 29 | 31 | 93.5% | 2 functions |
+| `regex` | 20 | 22 | 90.9% | 2 functions |
+
+---
+
 ## Recommended Action Plan
 
-### Phase 1: Fix Compiler Bug — Generic Monomorphization (unblocks 10 modules, 47 functions)
+### Phase 1: Fix Compiler Bug — Default Behavior Method Dispatch
 
-Fix the test pipeline's generic monomorphization so `type Item = B` properly resolves to concrete types. This unblocks filter_map, scan, map_while, intersperse, cloned, copied, peekable, empty, repeat_with, successors.
+Fixes `()` return type when calling default behavior methods on concrete types. Unblocks:
+- `iter/traits/accumulators` — 20 functions (sum, product, fold, reduce)
+- `iter/traits/iterator` — 18 functions (count, last, nth, etc.)
+- Read/Write/Seek behaviors (3.6.3)
 
-### Phase 2: Iterator Traits (~63 functions)
+### Phase 2: Fix Compiler Bug — Generic Monomorphization (unblocks 10 modules, 47 functions)
 
-1. `iter/traits/accumulators` — 22 functions (sum, product, etc.)
-2. `iter/traits/iterator` — 19 functions (default trait methods: count, last, nth, etc.)
-3. `array/iter` + `slice/iter` — 38 functions (depends on IntoIterator impl)
+Fix the test pipeline's generic monomorphization so `type Item = B` properly resolves to concrete types. Unblocks filter_map, scan, map_while, intersperse, cloned, copied, peekable, empty, repeat_with, successors.
 
-### Phase 3: High Risk Modules (~23 functions)
+### Phase 3: High Risk Modules (~21 functions)
 
-1. `json/serialize` — 23 functions (CRITICAL)
+1. `json/serialize` — 21 functions (CRITICAL)
 
 ### Phase 4: Network Pending (~58 functions)
 
@@ -205,24 +213,14 @@ Fix the test pipeline's generic monomorphization so `type Item = B` properly res
 
 ## Estimated Impact
 
-**If all 15 testable modules get coverage:**
-- Current coverage: 71.2% (2,953/4,147)
-- Additional functions: +226
-- **Projected coverage: 76.6% (3,179/4,147)**
+**If all 11 testable modules get coverage:**
+- Current coverage: 75.7% (3,112/4,113)
+- Additional functions: +154
+- **Projected coverage: 79.4% (3,266/4,113)**
 
-**If compiler bug is also fixed (+10 modules):**
-- Additional functions: +47
-- **Projected coverage: 77.8% (3,226/4,147)** ← EXCEEDS 75% TARGET
-
-**To reach 75% target (3,110 functions needed):**
-- Need to cover +157 more functions
-- Best candidates (partially covered, easy wins):
-  - `intrinsics` — 32/86 (37.2%), +54 functions available
-  - `net/ip` — 42/58 (72.4%), +16 functions available
-  - `hash` — 34/52 (65.4%), +18 functions available
-  - `option` — 15/28 (53.6%), +13 functions available
-  - `slice` — 18/25 (72.0%), +7 functions available
-  - `ops/bit` — 70/92 (76.1%), +22 functions available
+**If compiler bugs are also fixed (+10 modules + 38 trait functions):**
+- Additional functions: +85
+- **Projected coverage: 81.5% (3,351/4,113)**
 
 ---
 
@@ -235,27 +233,42 @@ Fix the test pipeline's generic monomorphization so `type Item = B` properly res
 | 2026-02-14 | 62.4% | 2,596/4,161 | 7,616 | 603 | Crypto 100%, coverage FFI rewrite |
 | 2026-02-15 AM | 67.8% | 2,810/4,147 | 7,710 | 602 | Iterator adapters, Chain/Fuse fix |
 | 2026-02-15 PM | 71.2% | 2,953/4,147 | 7,883 | 616 | fmt/rt, any, error, result, types, alloc, ops/range, ops/bit |
+| 2026-02-16 | 75.1% | 3,005/4,000 | 8,500+ | 700+ | Math, time, os, collections, crypto tests |
+| **2026-02-17** | **75.7%** | **3,112/4,113** | **8,912** | **768** | **Phase 3 complete: regex captures, ThreadRng, datetime, BTreeMap/Set, Deque, BufIO, Process** |
 
 ---
 
 ## Important Notes
 
-1. **Compiler bugs blocking 10 iterator modules** — Generic monomorphization in the test (query) pipeline generates `Maybe__B` instead of `Maybe__I32`. Works in legacy `run` pipeline. Fixing this unblocks 47 functions.
+1. **75% coverage target ACHIEVED** — 74 modules at 100% coverage. Phase 2 gate met.
 
-2. **All crypto modules at 100% coverage** — 14 modules, 449 tests, complete.
+2. **Phase 3 (stdlib essentials) effectively COMPLETE** — 47/48 items done. Only Read/Write/Seek behaviors remain, blocked by default behavior method dispatch compiler bug.
 
-3. **Iterator Chain/Fuse mutation bug FIXED** — `Maybe[I]` wrapping caused pattern match to extract copies; mutations to inner iterator were lost. Fixed with boolean flag approach.
+3. **Compiler bugs blocking 10 iterator modules** — Generic monomorphization in the test (query) pipeline generates `Maybe__B` instead of `Maybe__I32`. Works in legacy `run` pipeline.
 
-4. **Coverage requires `--no-cache`** — Cached test DLLs lack coverage instrumentation. Always use `--no-cache --coverage` for accurate results.
+4. **Default behavior method dispatch bug** — Returns `()` instead of expected type. Blocks iterator accumulators, Read/Write/Seek behaviors, and many default trait methods. This is the single most impactful compiler bug remaining.
 
-5. **Deliberate crash tests moved to .sandbox/** — `crash_stackoverflow.test.tml` and `crash_write_av.test.tml` verify VEH crash handling infrastructure but would block coverage runs (coverage aborts on any failure). These tests are kept in `.sandbox/crash_verification_tests/` and are not part of the regular test suite.
+5. **All crypto modules at 100% coverage** — 14 modules, 449 tests, complete.
 
-6. **`ref T` parameter codegen bug** — Affects all `Range::contains()` family of methods. The codegen passes an integer literal where a pointer is expected. This blocks testing ~10 range `contains()` functions.
+6. **New 100% modules since 2026-02-15** — random, datetime, math, btreemap, btreeset, deque, ops/range, unicode/unicode_data, ptr/alignment, num/traits, num/integer, alloc/global, alloc/layout (13 new modules at 100%).
 
-7. **Modules that moved OUT of 0% since 2026-02-12:**
+7. **Coverage requires `--no-cache`** — Cached test DLLs lack coverage instrumentation. Always use `--no-cache --coverage` for accurate results.
+
+8. **`ref T` parameter codegen bug** — Affects all `Range::contains()` family of methods. The codegen passes an integer literal where a pointer is expected.
+
+9. **Modules that moved OUT of 0% since 2026-02-12:**
    - `num/overflow` — now 68.4%
    - `fmt/num` — now 85.7%
    - `crypto/*` — all 14 modules now 100%
+   - `random` — now 100% (was 0%)
+   - `datetime` — now 100% (new)
+   - `math` — now 100% (new)
+   - `collections/btreemap` — now 100% (new)
+   - `collections/btreeset` — now 100% (new)
+   - `collections/deque` — now 100% (new)
+   - `os` — now 97.1%
+   - `time` — now 93.5%
+   - `regex` — now 90.9% (new)
    - `iter/adapters/step_by` — now 100%
    - `iter/adapters/skip_while` — now 100%
    - `iter/adapters/take_while` — now 100%
@@ -268,6 +281,6 @@ Fix the test pipeline's generic monomorphization so `type Item = B` properly res
    - `iter/sources/from_fn` — now 100%
    - `iter/sources/once_with` — now 66.7%
    - `slice/sort` — now 33.3%
-   - `slice/cmp` — now 66.7%
+   - `slice/cmp` — now 100% (was 66.7%)
 
-8. **59 modules at 100% coverage** — up from ~45 at start of day.
+10. **74 modules at 100% coverage** — up from 59 on 2026-02-15.

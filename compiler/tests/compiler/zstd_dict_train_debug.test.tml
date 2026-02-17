@@ -7,7 +7,7 @@ use std::collections::{Buffer, List}
 @test
 func test_dict_train_debug() -> I32 {
     // Create sample data for training
-    var samples: List[Buffer] = List[Buffer]::new()
+    var samples: List[Buffer] = List[Buffer].default()
 
     // Add samples
     var sample1: Buffer = Buffer::from_string("Test data 1")

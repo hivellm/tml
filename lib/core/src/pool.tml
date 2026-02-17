@@ -194,7 +194,7 @@ impl[T] Pool[T] {
             stats: PoolStats::new(),
             object_size: total_size,
             alignment: align,
-            blocks: [],
+            blocks: List[I64].default(),
             blocks_lock: 0,
         }
 
@@ -502,8 +502,8 @@ impl[T] ThreadLocalPool[T] {
         let obj_size: I64 = 8 // Placeholder for size_of[T]()
 
         var pool: ThreadLocalPool[T] = ThreadLocalPool {
-            objects: [],
-            blocks: [],
+            objects: List[Ptr[T]].default(),
+            blocks: List[I64].default(),
             capacity: 0,
             available: 0,
             stats: PoolStats::new(),

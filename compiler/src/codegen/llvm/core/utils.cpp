@@ -91,8 +91,13 @@ auto LLVMIRGen::coerce_closure_to_fn_ptr(const std::string& val) -> std::string 
 }
 
 auto LLVMIRGen::add_string_literal(const std::string& value) -> std::string {
+    auto it = string_literal_dedup_.find(value);
+    if (it != string_literal_dedup_.end()) {
+        return it->second;
+    }
     std::string name = "@.str." + std::to_string(string_literals_.size());
     string_literals_.emplace_back(name, value);
+    string_literal_dedup_.emplace(value, name);
     return name;
 }
 

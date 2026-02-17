@@ -5,7 +5,7 @@ use std::collections::{Buffer, List}
 @test
 func test_list_buffer_create() -> I32 {
     // Just create an empty list
-    var samples: List[Buffer] = List[Buffer]::new()
+    var samples: List[Buffer] = List[Buffer].default()
     samples.clear()
     return 0
 }
@@ -13,7 +13,7 @@ func test_list_buffer_create() -> I32 {
 @test
 func test_list_buffer_push() -> I32 {
     // Create list and push one item
-    var samples: List[Buffer] = List[Buffer]::new()
+    var samples: List[Buffer] = List[Buffer].default()
     var sample1: Buffer = Buffer::from_string("Test")
     samples.push(sample1)
     samples.clear()

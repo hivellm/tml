@@ -97,8 +97,7 @@ static bool is_bool_expr_static(const parser::Expr& expr) {
                 return true;
             }
             // Collection functions that return bool
-            if (name == "hashmap_has" || name == "hashmap_remove" || name == "list_is_empty" ||
-                name == "str_eq") {
+            if (name == "hashmap_has" || name == "hashmap_remove" || name == "str_eq") {
                 return true;
             }
         }
@@ -157,7 +156,7 @@ static bool is_ref_expr(const parser::Expr& expr) {
                 return true;
             }
             // Collection creation (List, HashMap, Buffer)
-            if (name == "list_create" || name == "hashmap_create" || name == "buffer_create") {
+            if (name == "hashmap_create" || name == "buffer_create") {
                 return true;
             }
         }

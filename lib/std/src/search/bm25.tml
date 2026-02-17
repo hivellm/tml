@@ -201,7 +201,7 @@ impl Bm25Index {
         let count: I32 = lowlevel {
             ffi_bm25_search(this.handle, query, actual_limit, &doc_ids, &scores)
         }
-        var results: List[Bm25Result] = List[Bm25Result].new()
+        var results: List[Bm25Result] = List[Bm25Result].default()
         var i: I32 = 0
         loop (i < count) {
             results.push(Bm25Result { doc_id: doc_ids[i], score: scores[i] })

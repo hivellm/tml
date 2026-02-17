@@ -1,0 +1,113 @@
+// Phase 0 validation: pointer arithmetic, multi-element array access
+// Pattern: compute ALL pointers first, THEN write/read values
+use test::{assert, assert_eq}
+use core::intrinsics::{ptr_read, ptr_write}
+
+// --- 4-element I32 array via address arithmetic ---
+@test
+func test_four_i32_elements() -> I32 {
+    let ptr: *Unit = alloc(16)
+    let p0: *I32 = ptr as *I32
+    let addr: I64 = p0 as I64
+    let s: I64 = 4 as I64
+    let p1: *I32 = (addr + s) as *I32
+    let p2: *I32 = (addr + s + s) as *I32
+    let p3: *I32 = (addr + s + s + s) as *I32
+    ptr_write[I32](p0, 10)
+    ptr_write[I32](p1, 20)
+    ptr_write[I32](p2, 30)
+    ptr_write[I32](p3, 40)
+    assert_eq(ptr_read[I32](p0), 10, "elem 0")
+    assert_eq(ptr_read[I32](p1), 20, "elem 1")
+    assert_eq(ptr_read[I32](p2), 30, "elem 2")
+    assert_eq(ptr_read[I32](p3), 40, "elem 3")
+    dealloc(ptr)
+    return 0
+}
+
+// --- I64 array (2 elements) ---
+@test
+func test_two_i64_elements() -> I32 {
+    let ptr: *Unit = alloc(16)
+    let p0: *I64 = ptr as *I64
+    let addr: I64 = p0 as I64
+    let p1: *I64 = (addr + (8 as I64)) as *I64
+    ptr_write[I64](p0, 111 as I64)
+    ptr_write[I64](p1, 222 as I64)
+    assert_eq(ptr_read[I64](p0), 111 as I64, "i64 elem 0")
+    assert_eq(ptr_read[I64](p1), 222 as I64, "i64 elem 1")
+    dealloc(ptr)
+    return 0
+}
+
+// --- U8 byte array (4 bytes) ---
+@test
+func test_four_u8_bytes() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p0: *U8 = ptr as *U8
+    let addr: I64 = p0 as I64
+    let p1: *U8 = (addr + (1 as I64)) as *U8
+    let p2: *U8 = (addr + (2 as I64)) as *U8
+    let p3: *U8 = (addr + (3 as I64)) as *U8
+    ptr_write[U8](p0, 0x41 as U8)
+    ptr_write[U8](p1, 0x42 as U8)
+    ptr_write[U8](p2, 0x43 as U8)
+    ptr_write[U8](p3, 0x00 as U8)
+    assert_eq(ptr_read[U8](p0) as I32, 0x41, "byte 0 = A")
+    assert_eq(ptr_read[U8](p1) as I32, 0x42, "byte 1 = B")
+    assert_eq(ptr_read[U8](p2) as I32, 0x43, "byte 2 = C")
+    assert_eq(ptr_read[U8](p3) as I32, 0x00, "byte 3 = null")
+    dealloc(ptr)
+    return 0
+}
+
+// --- write then overwrite array elements ---
+@test
+func test_overwrite_array_elements() -> I32 {
+    let ptr: *Unit = alloc(8)
+    let p0: *I32 = ptr as *I32
+    let addr: I64 = p0 as I64
+    let p1: *I32 = (addr + (4 as I64)) as *I32
+    // First write
+    ptr_write[I32](p0, 100)
+    ptr_write[I32](p1, 200)
+    assert_eq(ptr_read[I32](p0), 100, "first p0")
+    assert_eq(ptr_read[I32](p1), 200, "first p1")
+    // Overwrite
+    ptr_write[I32](p0, 300)
+    ptr_write[I32](p1, 400)
+    assert_eq(ptr_read[I32](p0), 300, "overwrite p0")
+    assert_eq(ptr_read[I32](p1), 400, "overwrite p1")
+    dealloc(ptr)
+    return 0
+}
+
+// --- alloc returns non-null ---
+@test
+func test_alloc_nonnull() -> I32 {
+    let ptr: *Unit = alloc(64)
+    assert(ptr as I64 != 0 as I64, "alloc(64) non-null")
+    dealloc(ptr)
+    return 0
+}
+
+// --- multiple alloc/dealloc cycles ---
+@test
+func test_alloc_dealloc_cycles() -> I32 {
+    let p1: *Unit = alloc(4)
+    let a1: *I32 = p1 as *I32
+    *a1 = 111
+    assert_eq(*a1, 111, "cycle 1")
+    dealloc(p1)
+    let p2: *Unit = alloc(4)
+    let a2: *I32 = p2 as *I32
+    *a2 = 222
+    assert_eq(*a2, 222, "cycle 2")
+    dealloc(p2)
+    let p3: *Unit = alloc(4)
+    let a3: *I32 = p3 as *I32
+    *a3 = 333
+    assert_eq(*a3, 333, "cycle 3")
+    dealloc(p3)
+    return 0
+}

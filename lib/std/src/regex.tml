@@ -30,6 +30,8 @@ const STATE_ANCHOR_START: I64 = 4
 const STATE_ANCHOR_END: I64 = 5
 const STATE_CLASS: I64 = 6
 const STATE_CLASS_NEG: I64 = 7
+const STATE_GROUP_OPEN: I64 = 8
+const STATE_GROUP_CLOSE: I64 = 9
 
 // Postfix token types
 const TOK_CHAR: I64 = 1000
@@ -38,6 +40,8 @@ const TOK_CLASS: I64 = 1002
 const TOK_CLASS_NEG: I64 = 1003
 const TOK_ANCHOR_S: I64 = 1004
 const TOK_ANCHOR_E: I64 = 1005
+const TOK_GROUP_OPEN: I64 = 1006
+const TOK_GROUP_CLOSE: I64 = 1007
 const TOK_CONCAT: I64 = 2000
 const TOK_ALT: I64 = 2001
 const TOK_STAR: I64 = 3000
@@ -61,6 +65,48 @@ impl Match {
     }
 }
 
+/// Captured groups from a regex match.
+///
+/// Group 0 is the full match. Groups 1..n are the parenthesized subgroups.
+/// Each group is stored as a (start, end) pair. Use `get()` to extract
+/// the matched substring.
+pub type Captures {
+    _starts: List[I64],
+    _ends: List[I64],
+    _num_groups: I64,
+    _matched: Bool
+}
+
+impl Captures {
+    /// Returns true if the regex matched.
+    pub func matched(this) -> Bool { return this._matched }
+
+    /// Returns the number of capture groups (including group 0 = full match).
+    pub func num_groups(this) -> I64 { return this._num_groups }
+
+    /// Returns the start position of group `i`, or -1 if unmatched.
+    pub func start(this, i: I64) -> I64 {
+        if i < 0 or i >= this._num_groups { return -1 }
+        return this._starts.get(i)
+    }
+
+    /// Returns the end position of group `i`, or -1 if unmatched.
+    pub func end(this, i: I64) -> I64 {
+        if i < 0 or i >= this._num_groups { return -1 }
+        return this._ends.get(i)
+    }
+
+    /// Extracts the matched substring for group `i`.
+    pub func get(this, i: I64, s: Str) -> Str {
+        if not this._matched { return "" }
+        if i < 0 or i >= this._num_groups { return "" }
+        let gs: I64 = this._starts.get(i)
+        let ge: I64 = this._ends.get(i)
+        if gs < 0 or ge < 0 { return "" }
+        return s.slice(gs, ge)
+    }
+}
+
 /// A compiled regular expression.
 pub type Regex {
     _kinds: List[I64],
@@ -71,6 +117,7 @@ pub type Regex {
     _num_states: I64,
     _class_ranges: List[I64],
     _num_classes: I64,
+    _num_groups: I64,
     _valid: Bool
 }
 
@@ -102,6 +149,22 @@ impl Regex {
             sp = sp + 1
         }
         return Match { _start: -1, _end: -1, _matched: false }
+    }
+
+    /// Returns capture groups for the first match, or unmatched Captures.
+    pub func captures(this, s: Str) -> Captures {
+        let ng: I64 = this._num_groups + 1
+        if not this._valid {
+            return make_empty_captures(ng)
+        }
+        let slen: I64 = s.len()
+        var sp: I64 = 0
+        loop (sp <= slen) {
+            let cap: Captures = nfa_exec_captures(ref this, s, slen, sp, ng)
+            if cap._matched { return cap }
+            sp = sp + 1
+        }
+        return make_empty_captures(ng)
     }
 
     /// Finds all non-overlapping matches. Returns flat list [start, end, ...].
@@ -201,12 +264,14 @@ func compile_pattern(pattern: Str) -> Regex {
     var class_ranges: List[I64] = List::new(8)
     var nc_box: List[I64] = List::new(8)
     nc_box.push(0)
+    var ng_box: List[I64] = List::new(8)
+    ng_box.push(0)
 
-    let ok: Bool = to_postfix(pattern, plen, postfix, class_ranges, nc_box)
+    let ok: Bool = to_postfix(pattern, plen, postfix, class_ranges, nc_box, ng_box)
     if not ok {
         return make_invalid()
     }
-    return build_nfa(postfix, class_ranges, nc_box.get(0))
+    return build_nfa(postfix, class_ranges, nc_box.get(0), ng_box.get(0))
 }
 
 func make_invalid() -> Regex {
@@ -215,16 +280,27 @@ func make_invalid() -> Regex {
         _next1: List::new(8), _next2: List::new(8),
         _start: 0, _num_states: 0,
         _class_ranges: List::new(8), _num_classes: 0,
-        _valid: false
+        _num_groups: 0, _valid: false
     }
+}
+
+func make_empty_captures(ng: I64) -> Captures {
+    var starts: List[I64] = List::new(8)
+    var ends: List[I64] = List::new(8)
+    var i: I64 = 0
+    loop (i < ng) { starts.push(-1); ends.push(-1); i = i + 1 }
+    return Captures { _starts: starts, _ends: ends, _num_groups: ng, _matched: false }
 }
 
 /// Convert pattern to postfix notation with explicit concat operators.
 func to_postfix(pattern: Str, plen: I64, postfix: List[I64],
-                class_ranges: List[I64], nc_box: List[I64]) -> Bool {
+                class_ranges: List[I64], nc_box: List[I64],
+                ng_box: List[I64]) -> Bool {
     var tokens: List[I64] = List::new(8)
     var pos: I64 = 0
     var prev_operand: Bool = false
+    // Track group IDs: stack of open group IDs
+    var group_stack: List[I64] = List::new(8)
 
     loop (pos < plen) {
         let ch: Str = pattern.slice(pos, pos + 1)
@@ -233,12 +309,28 @@ func to_postfix(pattern: Str, plen: I64, postfix: List[I64],
         var tok_handled: Bool = false
         if ch == "(" and not tok_handled {
             if nc { tokens.push(TOK_CONCAT) }
+            // Assign group ID and push to stack
+            let gid: I64 = ng_box.get(0) + 1
+            ng_box.set(0, gid)
+            group_stack.push(gid)
             tokens.push(-1)
-            prev_operand = false
+            // GROUP_OPEN is the first operand inside the paren group
+            tokens.push(TOK_GROUP_OPEN)
+            tokens.push(gid)
+            prev_operand = true
             pos = pos + 1
             tok_handled = true
         }
         if ch == ")" and not tok_handled {
+            // Pop matching group and emit close with concat
+            var close_gid: I64 = 0
+            if group_stack.len() > 0 {
+                close_gid = group_stack.pop()
+            }
+            // GROUP_CLOSE concats with the inner expression
+            tokens.push(TOK_CONCAT)
+            tokens.push(TOK_GROUP_CLOSE)
+            tokens.push(close_gid)
             tokens.push(-2)
             prev_operand = true
             pos = pos + 1
@@ -377,6 +469,12 @@ func to_postfix(pattern: Str, plen: I64, postfix: List[I64],
             if tok == TOK_CHAR { postfix.push(tokens.get(ti)); ti = ti + 1 }
             sy_handled = true
         }
+        if (tok == TOK_GROUP_OPEN or tok == TOK_GROUP_CLOSE) and not sy_handled {
+            postfix.push(tok)
+            postfix.push(tokens.get(ti))
+            ti = ti + 1
+            sy_handled = true
+        }
         if (tok == TOK_CLASS or tok == TOK_CLASS_NEG) and not sy_handled {
             postfix.push(tok)
             postfix.push(tokens.get(ti))
@@ -451,7 +549,7 @@ func add_shorthand(esc: Str, ranges: List[I64], cid: I64) {
 /// Build NFA from postfix. Uses a flat fragment stack.
 /// Each fragment is: (start_state, out_offset, out_count) stored in 3 list entries.
 /// Output pointers are stored in a shared flat list.
-func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64) -> Regex {
+func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, num_groups: I64) -> Regex {
     var kinds: List[I64] = List::new(8)
     var chars: List[I64] = List::new(8)
     var next1: List[I64] = List::new(8)
@@ -516,6 +614,28 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64) ->
         if tok == TOK_ANCHOR_E and not nfa_h {
             let st: I64 = ns
             kinds.push(STATE_ANCHOR_END); chars.push(0); next1.push(-1); next2.push(-1)
+            ns = ns + 1
+            let oo: I64 = all_outs.len()
+            all_outs.push(st)
+            fstack.push(st); fstack.push(oo); fstack.push(1)
+            nfa_h = true
+        }
+        if tok == TOK_GROUP_OPEN and not nfa_h {
+            let gid: I64 = postfix.get(pi)
+            pi = pi + 1
+            let st: I64 = ns
+            kinds.push(STATE_GROUP_OPEN); chars.push(gid); next1.push(-1); next2.push(-1)
+            ns = ns + 1
+            let oo: I64 = all_outs.len()
+            all_outs.push(st)
+            fstack.push(st); fstack.push(oo); fstack.push(1)
+            nfa_h = true
+        }
+        if tok == TOK_GROUP_CLOSE and not nfa_h {
+            let gid: I64 = postfix.get(pi)
+            pi = pi + 1
+            let st: I64 = ns
+            kinds.push(STATE_GROUP_CLOSE); chars.push(gid); next1.push(-1); next2.push(-1)
             ns = ns + 1
             let oo: I64 = all_outs.len()
             all_outs.push(st)
@@ -613,7 +733,7 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64) ->
         _next1: next1, _next2: next2,
         _start: fs, _num_states: ns,
         _class_ranges: class_ranges, _num_classes: num_classes,
-        _valid: true
+        _num_groups: num_groups, _valid: true
     }
 }
 
@@ -735,5 +855,214 @@ func add_eps(re: ref Regex, list: List[I64], vis: List[I64],
         if pos == slen { add_eps(re, list, vis, gen, re._next1.get(state), s, slen, pos) }
         return
     }
+    if k == STATE_GROUP_OPEN or k == STATE_GROUP_CLOSE {
+        add_eps(re, list, vis, gen, re._next1.get(state), s, slen, pos)
+        return
+    }
     list.push(state)
+}
+
+// ============================================================================
+// NFA execution with capture tracking
+// ============================================================================
+
+/// Execute NFA tracking capture groups. Returns Captures for a single start position.
+/// Each "thread" in the parallel simulation carries its own capture state.
+/// Captures are stored in a flat list: thread i's group g has
+///   start at cap_data[i * ng2 + g * 2]
+///   end   at cap_data[i * ng2 + g * 2 + 1]
+func nfa_exec_captures(re: ref Regex, s: Str, slen: I64, start_pos: I64, ng: I64) -> Captures {
+    let ng2: I64 = ng * 2
+
+    // cur_states/nxt_states: list of state IDs in active set
+    var cur_states: List[I64] = List::new(8)
+    var nxt_states: List[I64] = List::new(8)
+    // cur_caps/nxt_caps: flat capture data parallel to cur_states/nxt_states
+    var cur_caps: List[I64] = List::new(64)
+    var nxt_caps: List[I64] = List::new(64)
+
+    // Visited array for epsilon closure (generation-based)
+    var vis: List[I64] = List::new(8)
+    var i: I64 = 0
+    loop (i < re._num_states) { vis.push(0); i = i + 1 }
+    var gen: I64 = 1
+
+    // Temporary capture buffer for epsilon closure propagation
+    var tmp_cap: List[I64] = List::new(8)
+    i = 0
+    loop (i < ng2) { tmp_cap.push(-1); i = i + 1 }
+
+    // Group 0 start = start_pos
+    tmp_cap.set(0, start_pos)
+
+    // Seed with start state
+    add_eps_cap(re, cur_states, cur_caps, vis, gen, re._start, s, slen, start_pos, tmp_cap, ng, ng2)
+
+    // Check if any initial state is MATCH
+    var best_caps: List[I64] = List::new(8)
+    var have_match: Bool = false
+    i = 0
+    loop (i < cur_states.len()) {
+        if re._kinds.get(cur_states.get(i)) == STATE_MATCH {
+            if not have_match {
+                have_match = true
+                best_caps.clear()
+                var ci: I64 = 0
+                loop (ci < ng2) {
+                    best_caps.push(cur_caps.get(i * ng2 + ci))
+                    ci = ci + 1
+                }
+                // Set group 0 end
+                best_caps.set(1, start_pos)
+            }
+        }
+        i = i + 1
+    }
+
+    var pos: I64 = start_pos
+    loop (pos < slen) {
+        if cur_states.len() == 0 { break }
+        let ch: I64 = regex_char_code(s, pos)
+        gen = gen + 1
+        i = 0
+        loop (i < cur_states.len()) {
+            let st: I64 = cur_states.get(i)
+            let k: I64 = re._kinds.get(st)
+            var advance: Bool = false
+            if k == STATE_CHAR and ch == re._chars.get(st) { advance = true }
+            if k == STATE_ANY and ch != 10 { advance = true }
+            if k == STATE_CLASS and char_in_class(re._class_ranges, re._chars.get(st), ch) { advance = true }
+            if k == STATE_CLASS_NEG and not char_in_class(re._class_ranges, re._chars.get(st), ch) { advance = true }
+            if advance {
+                // Copy this thread's captures to tmp_cap
+                var ci: I64 = 0
+                loop (ci < ng2) {
+                    tmp_cap.set(ci, cur_caps.get(i * ng2 + ci))
+                    ci = ci + 1
+                }
+                add_eps_cap(re, nxt_states, nxt_caps, vis, gen, re._next1.get(st), s, slen, pos + 1, tmp_cap, ng, ng2)
+            }
+            i = i + 1
+        }
+        // Swap cur/nxt
+        cur_states.clear()
+        var ci: I64 = 0
+        loop (ci < nxt_states.len()) {
+            cur_states.push(nxt_states.get(ci))
+            ci = ci + 1
+        }
+        nxt_states.clear()
+        cur_caps.clear()
+        ci = 0
+        loop (ci < nxt_caps.len()) {
+            cur_caps.push(nxt_caps.get(ci))
+            ci = ci + 1
+        }
+        nxt_caps.clear()
+        pos = pos + 1
+
+        // Check for match
+        i = 0
+        loop (i < cur_states.len()) {
+            if re._kinds.get(cur_states.get(i)) == STATE_MATCH {
+                if not have_match {
+                    have_match = true
+                    best_caps.clear()
+                    var bci: I64 = 0
+                    loop (bci < ng2) {
+                        best_caps.push(cur_caps.get(i * ng2 + bci))
+                        bci = bci + 1
+                    }
+                    best_caps.set(1, pos)
+                }
+                if have_match {
+                    // Prefer longer match (leftmost-longest)
+                    let new_end: I64 = pos
+                    let old_end: I64 = best_caps.get(1)
+                    if new_end > old_end {
+                        best_caps.clear()
+                        var bci: I64 = 0
+                        loop (bci < ng2) {
+                            best_caps.push(cur_caps.get(i * ng2 + bci))
+                            bci = bci + 1
+                        }
+                        best_caps.set(1, new_end)
+                    }
+                }
+            }
+            i = i + 1
+        }
+    }
+
+    if not have_match {
+        return make_empty_captures(ng)
+    }
+
+    // Build Captures from best_caps
+    var starts: List[I64] = List::new(8)
+    var ends: List[I64] = List::new(8)
+    i = 0
+    loop (i < ng) {
+        starts.push(best_caps.get(i * 2))
+        ends.push(best_caps.get(i * 2 + 1))
+        i = i + 1
+    }
+    return Captures { _starts: starts, _ends: ends, _num_groups: ng, _matched: true }
+}
+
+/// Iterative epsilon closure with capture propagation.
+/// Uses an explicit work stack to avoid stack overflow in DLL test harness.
+/// Work stack entries: state IDs to process.
+/// For GROUP_OPEN/CLOSE, we mutate thread_cap in place and DON'T restore
+/// since visited check prevents re-processing (each state visited once per gen).
+func add_eps_cap(re: ref Regex, list: List[I64], caps: List[I64],
+                 vis: List[I64], gen: I64, state: I64,
+                 s: Str, slen: I64, pos: I64,
+                 thread_cap: List[I64], ng: I64, ng2: I64) {
+    // Explicit work stack of state IDs to process
+    var work: List[I64] = List::new(16)
+    work.push(state)
+
+    loop (work.len() > 0) {
+        let st: I64 = work.pop()
+        if st < 0 or st >= re._num_states { continue }
+        if vis.get(st) == gen { continue }
+        vis.set(st, gen)
+        let k: I64 = re._kinds.get(st)
+        var eps_h: Bool = false
+        if k == STATE_SPLIT and not eps_h {
+            work.push(re._next2.get(st))
+            work.push(re._next1.get(st))
+            eps_h = true
+        }
+        if k == STATE_ANCHOR_START and not eps_h {
+            if pos == 0 { work.push(re._next1.get(st)) }
+            eps_h = true
+        }
+        if k == STATE_ANCHOR_END and not eps_h {
+            if pos == slen { work.push(re._next1.get(st)) }
+            eps_h = true
+        }
+        if k == STATE_GROUP_OPEN and not eps_h {
+            let gid: I64 = re._chars.get(st)
+            thread_cap.set(gid * 2, pos)
+            work.push(re._next1.get(st))
+            eps_h = true
+        }
+        if k == STATE_GROUP_CLOSE and not eps_h {
+            let gid: I64 = re._chars.get(st)
+            thread_cap.set(gid * 2 + 1, pos)
+            work.push(re._next1.get(st))
+            eps_h = true
+        }
+        if not eps_h {
+            // Non-epsilon state: add to list with captures
+            list.push(st)
+            var ci: I64 = 0
+            loop (ci < ng2) {
+                caps.push(thread_cap.get(ci))
+                ci = ci + 1
+            }
+        }
+    }
 }

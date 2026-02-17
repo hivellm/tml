@@ -92,6 +92,8 @@ void LLVMIRGen::emit_runtime_decls() {
     // LLVM intrinsics for optimized codegen
     emit_line("; LLVM intrinsics");
     emit_line("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
+    emit_line("declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)");
+    emit_line("declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)");
     emit_line("declare void @llvm.assume(i1) nounwind");
     emit_line("");
 
@@ -337,69 +339,8 @@ void LLVMIRGen::emit_runtime_decls() {
     declared_externals_.insert("atomic_fence_release");
     emit_line("");
 
-    // List runtime declarations
-    // Register in declared_externals_ to prevent duplicate declarations from @extern modules
-    emit_line("; List (dynamic array) runtime");
-    emit_line("declare ptr @list_create(i64)");
-    declared_externals_.insert("list_create");
-    emit_line("declare void @list_destroy(ptr)");
-    declared_externals_.insert("list_destroy");
-    emit_line("declare void @list_push(ptr, i64)");
-    declared_externals_.insert("list_push");
-    emit_line("declare i64 @list_pop(ptr)");
-    declared_externals_.insert("list_pop");
-    emit_line("declare i64 @list_get(ptr, i64)");
-    declared_externals_.insert("list_get");
-    emit_line("declare void @list_set(ptr, i64, i64)");
-    declared_externals_.insert("list_set");
-    emit_line("declare i64 @list_len(ptr)");
-    declared_externals_.insert("list_len");
-    emit_line("declare i64 @list_capacity(ptr)");
-    declared_externals_.insert("list_capacity");
-    emit_line("declare void @list_clear(ptr)");
-    declared_externals_.insert("list_clear");
-    emit_line("declare i32 @list_is_empty(ptr)");
-    declared_externals_.insert("list_is_empty");
-    emit_line("declare void @list_remove(ptr, i64)");
-    declared_externals_.insert("list_remove");
-    emit_line("declare i64 @list_first(ptr)");
-    declared_externals_.insert("list_first");
-    emit_line("declare i64 @list_last(ptr)");
-    declared_externals_.insert("list_last");
-    emit_line("");
-
-    // HashMap runtime declarations
-    // Register in declared_externals_ to prevent duplicate declarations from @extern modules
-    emit_line("; HashMap runtime");
-    emit_line("declare ptr @hashmap_create(i64)");
-    declared_externals_.insert("hashmap_create");
-    emit_line("declare void @hashmap_destroy(ptr)");
-    declared_externals_.insert("hashmap_destroy");
-    emit_line("declare void @hashmap_set(ptr, i64, i64)");
-    declared_externals_.insert("hashmap_set");
-    emit_line("declare i64 @hashmap_get(ptr, i64)");
-    declared_externals_.insert("hashmap_get");
-    emit_line("declare i32 @hashmap_has(ptr, i64)");
-    declared_externals_.insert("hashmap_has");
-    emit_line("declare i32 @hashmap_remove(ptr, i64)");
-    declared_externals_.insert("hashmap_remove");
-    emit_line("declare i64 @hashmap_len(ptr)");
-    declared_externals_.insert("hashmap_len");
-    emit_line("declare void @hashmap_clear(ptr)");
-    declared_externals_.insert("hashmap_clear");
-    emit_line("declare ptr @hashmap_iter_create(ptr)");
-    declared_externals_.insert("hashmap_iter_create");
-    emit_line("declare void @hashmap_iter_destroy(ptr)");
-    declared_externals_.insert("hashmap_iter_destroy");
-    emit_line("declare i32 @hashmap_iter_has_next(ptr)");
-    declared_externals_.insert("hashmap_iter_has_next");
-    emit_line("declare i64 @hashmap_iter_key(ptr)");
-    declared_externals_.insert("hashmap_iter_key");
-    emit_line("declare i64 @hashmap_iter_value(ptr)");
-    declared_externals_.insert("hashmap_iter_value");
-    emit_line("declare void @hashmap_iter_next(ptr)");
-    declared_externals_.insert("hashmap_iter_next");
-    emit_line("");
+    // Note: List and HashMap runtime declarations removed — now pure TML
+    // (see lib/std/src/collections/list.tml, hashmap.tml)
 
     // Buffer runtime declarations
     // Register in declared_externals_ to prevent duplicate declarations from @extern modules

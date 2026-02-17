@@ -300,7 +300,7 @@ impl SoaVec {
     /// Creates a new empty SoA container.
     pub func new() -> SoaVec {
         SoaVec {
-            columns: [],
+            columns: List[SoaColumn].default(),
             row_count: 0,
             capacity: 0,
         }
@@ -309,7 +309,7 @@ impl SoaVec {
     /// Creates a SoA container with specified initial row capacity.
     pub func with_capacity(capacity: I64) -> SoaVec {
         SoaVec {
-            columns: [],
+            columns: List[SoaColumn].default(),
             row_count: 0,
             capacity: capacity,
         }

@@ -10,8 +10,8 @@
 ```
 Phase 1  [DONE 97%]   Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 75.7% ✓
-Phase 3  [ACTIVE 79%] Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓)
-Phase 4  [THEN]       Migrate C runtime → pure TML
+Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List done)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -23,7 +23,7 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | 1. Codegen bugs | Blocks everything else. Without working closures, iterators never work. Without generic enums, `Maybe`/`Outcome` are unusable idiomatically. |
 | 2. Test coverage | Proves what works, catches regressions, builds confidence for bigger changes. |
 | 3. Stdlib essentials | Makes TML usable for real programs. Collections, math, datetime are table stakes. |
-| 4. Runtime migration | Architectural cleanup. C runtime works fine but blocks self-hosting long-term. |
+| 4. Runtime migration + codegen cleanup | **Dual scope**: (a) migrate ~5,210 lines of C algorithms to pure TML, (b) eliminate ~3,300 lines of hardcoded type dispatch in the compiler. Both block self-hosting — every hardcoded if/else chain must be rewritten when the compiler moves to TML. |
 | 5. Async + networking | Enables servers and networked applications. Depends on stable closures + iterators. |
 | 6. Self-hosting | Ultimate goal. Requires everything above to be solid. |
 
@@ -36,7 +36,8 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | Modules at 100% coverage | 74 |
 | Modules at 0% coverage | 31 |
 | C++ compiler size | ~238,000 lines |
-| C runtime to migrate | ~4,585 lines |
+| C runtime to migrate | ~5,210 lines (of ~20K total) |
+| Hardcoded codegen dispatch | ~3,300 lines to eliminate |
 | TML standard library | ~137,300 lines |
 
 ---
@@ -390,17 +391,17 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 ### 3.5 Random number generation
 
 - [x] 3.5.1 `Rng` type — `next_i64()`, `next_bool()` *(xoshiro256** PRNG, SplitMix64 seed expansion)*
-- [ ] 3.5.2 `ThreadRng` — per-thread CSPRNG
+- [x] 3.5.2 `ThreadRng` — per-thread PRNG with high-entropy seeding *(wraps xoshiro256** with SplitMix64-mixed nanosecond clock seed; 4 tests passing)*
 - [x] 3.5.3 `random[T]()` — convenience functions *(implemented: `random_i64()`, `random_f64()`, `random_bool()`, `random_range(min, max)`)*
 - [x] 3.5.4 `rng.range(min, max)` — random integer in range *(implemented)*
 - [x] 3.5.5 `rng.shuffle(list)` — Fisher-Yates shuffle *(implemented: `shuffle_i64(List[I64])`, `shuffle_i32(List[I32])`, `next_f64()`, `range_f64()`)*
-- [x] 3.5.6 Tests for random *(5 tests: new, with_seed reproducible, range, next_bool, different_seeds)*
+- [x] 3.5.6 Tests for random *(9 tests: Rng 5 + ThreadRng 4)*
 
 ### 3.6 Buffered I/O
 
 - [x] 3.6.1 `BufReader` — buffered reader wrapping `File` *(implemented: `open()`, `from_file()`, `read_line()`, `read_all()`, `is_eof()`, `lines_read()`)*
 - [x] 3.6.2 `BufWriter` — buffered writer wrapping `File` *(implemented: `open()`, `write()`, `write_line()`, `flush()`, auto-flush at 8KB capacity, `buffered()`, `total_written()`)*
-- [ ] 3.6.3 `Read` / `Write` / `Seek` behaviors — deferred (requires generic behavior dispatch)
+- [ ] 3.6.3 `Read` / `Write` / `Seek` behaviors — **COMPILER-BLOCKED** (default behavior method dispatch returns `()` instead of expected type; same bug as 1.3.2/2.1.2)
 - [x] 3.6.4 `LineWriter` — flush on newline *(implemented: `write()` flushes after last newline, `write_line()`, `flush()`, `close()`)*
 - [x] 3.6.5 Tests for buffered I/O *(9 tests: 3 BufReader, 3 BufWriter, 3 LineWriter — all passing)*
 
@@ -416,87 +417,146 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 
 - [x] 3.8.1 `Regex` type — compile pattern (Thompson's NFA via shunting-yard postfix)
 - [x] 3.8.2 `is_match()`, `find()`, `find_all()`
-- [ ] 3.8.3 `captures()` — named and positional groups (deferred)
+- [x] 3.8.3 `captures()` — positional capture groups *(Thompson's NFA with per-path capture tracking, iterative epsilon closure, 8 tests passing)*
 - [x] 3.8.4 `replace()`, `replace_all()`, `split()`
 - [x] 3.8.5 Character classes (`[a-z]`, `[^0-9]`), quantifiers (`*`, `+`, `?`), shorthand (`\d`, `\w`, `\s`)
 - [x] 3.8.6 NFA engine (Thompson's simulation — no exponential backtracking)
-- [x] 3.8.7 Tests for regex (22 tests: basic + advanced)
+- [x] 3.8.7 Tests for regex (30 tests: basic + advanced + captures)
 
-**Gate**: `HashSet`, `BTreeMap`, `Math`, `DateTime`, `Random`, `BufReader/BufWriter` all working with tests.
+**Progress**: 47/48 items complete (~98%). Only 3.6.3 (Read/Write/Seek behaviors) remains, blocked by compiler bug (default behavior method dispatch returns `()`).\
+**Gate**: `HashSet`, `BTreeMap`, `Math`, `DateTime`, `Random`, `ThreadRng`, `BufReader/BufWriter`, `Regex` (with captures), `Process` all working with tests.
 
 ---
 
-## Phase 4: Migrate C Runtime to Pure TML
+## Phase 4: Migrate C Runtime to Pure TML + Eliminate Hardcoded Codegen
 
-**Goal**: Eliminate ~4,585 lines of unnecessary C runtime code
+**Goal**: Eliminate ~5,210 lines of C runtime code AND ~3,300 lines of hardcoded dispatch in the compiler
 **Priority**: MEDIUM — architectural cleanup, prerequisite for self-hosting
 **Tracking**: [migrate-runtime-to-tml/tasks.md](../rulebook/tasks/migrate-runtime-to-tml/tasks.md)
+
+### The Problem (2026-02-17 Audit)
+
+The compiler has **two parallel problems** blocking self-hosting:
+
+1. **C Runtime**: ~5,210 lines of algorithms in C that TML can express (collections, strings, text, math, search)
+2. **Hardcoded Codegen Dispatch**: ~3,300 lines of if/else chains matching type names as strings (HashMap, Buffer, File, Path, etc.), bypassing normal impl method dispatch
+
+These are coupled: each C-backed type has both runtime C code AND hardcoded compiler dispatch. Migrating the C code without cleaning up the dispatch leaves dead code paths and prevents the type system from discovering methods normally.
 
 ### Architecture
 
 ```
-KEEP as C (@extern / @intrinsic):          MIGRATE to pure TML:
-  - mem_alloc / mem_free (OS interface)      - String algorithms (1,201 lines)
-  - ptr_read / ptr_write (LLVM intrinsics)   - Text utilities (1,057 lines)
-  - print / panic / exit (I/O)               - Collections logic (1,353 lines)
-  - File I/O (OS syscalls)                   - Math formatting (411 lines)
-  - Crypto (OpenSSL/BCrypt FFI)              - Search algorithms (98 lines)
-  - Compression (zlib FFI)                   - Logging internals
-  - Networking (OS sockets)                  - JSON helpers
+KEEP as C/FFI:                              MIGRATE to pure TML:
+  - mem_alloc / mem_free (OS interface)       - Collections logic (1,353 lines C)
+  - ptr_read / ptr_write (LLVM intrinsics)    - String algorithms (1,201 lines C)
+  - print / panic / exit (I/O)                - Text utilities (1,057 lines C)
+  - Crypto (OpenSSL/BCrypt @extern)           - Math formatting (411 lines C)
+  - Compression (zlib @extern)                - Search algorithms (98 lines C)
+  - Networking (OS sockets @extern)
+  - Thread/sync (pthreads/Win32 @extern)    ELIMINATE in compiler:
+  - File/Path (OS syscalls @extern)           - Collection method dispatch (1,330 lines)
+  - Backtrace (VEH/DWARF)                    - Builtin function dispatch (430 lines)
+                                              - Static method hardcoding (500 lines)
+                                              - Unconditional runtime declares (393 → ~30)
+                                              - Type system hardcoded registrations (54 funcs)
+                                              - 5 types bypassing impl dispatch → 0
 ```
 
-### 4.1 Collections (List, HashMap, Buffer)
+### 4.1 Collections — List[T] (DONE)
 
-- [ ] 4.1.1 Rewrite `List[T]` — replace C `list_create`/`list_push`/`list_get` with TML using `ptr_read`/`ptr_write`/`mem_alloc`
-- [ ] 4.1.2 Rewrite `HashMap[K, V]` — replace C `hashmap_create`/`hashmap_set`/`hashmap_get` with TML
-- [ ] 4.1.3 Rewrite `Buffer` — replace C `buffer_create`/`buffer_push`/`buffer_data` with TML
-- [ ] 4.1.4 Remove `compiler/runtime/collections/collections.c` (1,353 lines)
-- [ ] 4.1.5 Remove `lib/std/runtime/collections.c` (duplicate)
-- [ ] 4.1.6 All existing collection tests pass
+- [x] 4.1.1 Rewrite `List[T]` as pure TML using `ptr_read`/`ptr_write`/`mem_alloc` — 214 lines in `lib/std/src/collections/list.tml`
+- [ ] 4.1.2 Cleanup: remove dead `list_*` references from compiler (`llvm_ir_gen_stmt.cpp`, `runtime.cpp`, `builtins/collections.cpp`)
+- [ ] 4.1.3 Cleanup: remove `List` type-erasure from `decl/struct.cpp:317-335`
 
-### 4.2 Strings (core::str)
+### 4.2 Collections — HashMap[K, V] (next target)
 
-- [ ] 4.2.1 Rewrite read-only operations: `str_len`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_index_of`
-- [ ] 4.2.2 Rewrite transformations: `str_to_upper`, `str_to_lower`, `str_trim`, `str_trim_start`, `str_trim_end`
-- [ ] 4.2.3 Rewrite splitting: `str_split`, `str_split_at`, `str_lines`
-- [ ] 4.2.4 Rewrite allocating: `str_concat`, `str_repeat`, `str_replace`, `str_join`
-- [ ] 4.2.5 Rewrite parsing: `str_parse_i32`, `str_parse_i64`, `str_parse_f64`, `str_parse_bool`
-- [ ] 4.2.6 Remove `compiler/runtime/text/string.c` (1,201 lines)
-- [ ] 4.2.7 All existing string tests pass
+- [ ] 4.2.1 Rewrite `HashMap[K, V]` as pure TML (open-addressing, linear probing, FNV-1a hashing)
+- [ ] 4.2.2 Rewrite `HashMapIter` as TML struct (no opaque handle)
+- [ ] 4.2.3 Remove 14 hashmap_* function registrations from `types/builtins/collections.cpp`
+- [ ] 4.2.4 Remove HashMap dispatch from `method_collection.cpp` (~200 lines)
+- [ ] 4.2.5 Remove HashMap from bypass lists (`method_impl.cpp`, `decl/impl.cpp`, `generate.cpp`)
+- [ ] 4.2.6 Remove HashMap static methods from `method_static.cpp` (~60 lines)
+- [ ] 4.2.7 Remove HashMap type-erasure from `decl/struct.cpp:337-354`
+- [ ] 4.2.8 All existing HashMap tests pass through normal dispatch
 
-### 4.3 Text utilities (std::text)
+### 4.3 Collections — Buffer
 
-- [ ] 4.3.1 Rewrite `Text` builder: `text_new`, `text_push`, `text_push_str`, `text_to_str`
-- [ ] 4.3.2 Rewrite text operations: `text_trim`, `text_contains`, `text_replace`
-- [ ] 4.3.3 Remove `compiler/runtime/text/text.c` (1,057 lines)
-- [ ] 4.3.4 All existing text tests pass
+- [ ] 4.3.1 Rewrite `Buffer` as pure TML (`data: *U8, len: I64, capacity: I64, read_pos: I64`)
+- [ ] 4.3.2 Remove 11 buffer_* function registrations from `types/builtins/collections.cpp`
+- [ ] 4.3.3 Remove Buffer dispatch from `method_collection.cpp` (~973 lines — largest single elimination)
+- [ ] 4.3.4 Remove Buffer from bypass lists (`method_impl.cpp`, `decl/impl.cpp`, `generate.cpp`)
+- [ ] 4.3.5 Remove Buffer static methods from `method_static.cpp` (~76 lines)
+- [ ] 4.3.6 All existing Buffer tests pass
 
-### 4.4 Formatting (core::fmt)
+### 4.4 File/Path — Refactor to TML + @extern("c") FFI
 
-- [ ] 4.4.1 Rewrite integer formatting: `i32_to_string`, `i64_to_string`, `u32_to_string`, etc.
-- [ ] 4.4.2 Rewrite float formatting: `f32_to_string`, `f64_to_string` (Ryu or similar algorithm)
-- [ ] 4.4.3 Rewrite `char_to_string`, UTF-8 encoding
-- [ ] 4.4.4 Rewrite hex/octal/binary formatting
-- [ ] 4.4.5 Remove `compiler/runtime/math/math.c` (411 lines)
-- [ ] 4.4.6 All existing formatting tests pass
+- [ ] 4.4.1 Create `lib/std/src/file.tml` with TML struct + `@extern("c")` FFI to OS file ops
+- [ ] 4.4.2 Create `lib/std/src/path.tml` with TML struct + `@extern("c")` FFI to OS path ops
+- [ ] 4.4.3 Remove File/Path from bypass lists (3 files)
+- [ ] 4.4.4 Remove 23 hardcoded static methods from `method_static.cpp:186-385`
+- [ ] 4.4.5 All existing File/Path tests pass
 
-### 4.5 Search algorithms
+### 4.5 Strings (core::str)
 
-- [ ] 4.5.1 Rewrite BM25 scoring in pure TML
-- [ ] 4.5.2 Rewrite HNSW vector search in pure TML
-- [ ] 4.5.3 Rewrite distance metrics (cosine, euclidean, dot product)
-- [ ] 4.5.4 Remove `compiler/runtime/search/search.c` (98 lines)
-- [ ] 4.5.5 All existing search tests pass
+- [ ] 4.5.1 Rewrite read-only ops: `str_len`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
+- [ ] 4.5.2 Rewrite transforms: `str_to_upper`, `str_to_lower`, `str_trim`
+- [ ] 4.5.3 Rewrite splitting: `str_split`, `str_lines`
+- [ ] 4.5.4 Rewrite allocating: `str_concat`, `str_replace`, `str_join`
+- [ ] 4.5.5 Rewrite parsing: `str_parse_i32`, `str_parse_i64`, `str_parse_f64`
+- [ ] 4.5.6 Remove `compiler/runtime/text/string.c` (1,201 lines)
+- [ ] 4.5.7 Remove 29 string function registrations from `types/builtins/string.cpp`
 
-### 4.6 Cleanup
+### 4.6 Text utilities (std::text)
 
-- [ ] 4.6.1 Remove all migrated C files from `compiler/runtime/`
-- [ ] 4.6.2 Remove duplicate C files from `lib/std/runtime/`
-- [ ] 4.6.3 Update build scripts to exclude removed files
-- [ ] 4.6.4 Verify: zero `lowlevel` blocks call migrated C functions
-- [ ] 4.6.5 Verify: `compiler/runtime/core/essential.c` is the ONLY remaining C runtime (I/O, panic, test harness)
+- [ ] 4.6.1 Rewrite `Text` builder as TML struct with `ptr_read`/`ptr_write`
+- [ ] 4.6.2 Remove `compiler/runtime/text/text.c` (1,057 lines)
 
-**Gate**: ~229 `lowlevel` blocks eliminated. C runtime reduced from ~19K lines to ~14K lines (only essential I/O remains).
+### 4.7 Formatting (core::fmt)
+
+- [ ] 4.7.1 Rewrite integer formatting: `i32_to_string`, `i64_to_string`, etc. (digit extraction loop in TML)
+- [ ] 4.7.2 Rewrite float formatting: `f64_to_string` (integer part + decimal part in TML)
+- [ ] 4.7.3 Rewrite char/UTF-8 encoding: `char_to_string`, `utf8_*byte_to_string`
+- [ ] 4.7.4 Rewrite hex/octal/binary formatting
+- [ ] 4.7.5 Remove `compiler/runtime/math/math.c` (411 lines)
+
+### 4.8 Search algorithms
+
+- [ ] 4.8.1 Rewrite BM25/HNSW/distance metrics in pure TML
+- [ ] 4.8.2 Remove `compiler/runtime/search/search.c` (98 lines)
+
+### 4.9 Runtime declaration optimization
+
+- [ ] 4.9.1 Implement on-demand `ensure_runtime_decl()` in `runtime.cpp` (emit declare only on first use)
+- [ ] 4.9.2 Reduce 393 unconditional declares to ~30 essential ones
+- [ ] 4.9.3 Verify: `--emit-ir` output only contains used declarations
+
+### 4.10 Type system + metadata cleanup
+
+- [ ] 4.10.1 Fix metadata loader to preserve behavior method return types (eliminate workaround in `method_prim_behavior.cpp:378-390`)
+- [ ] 4.10.2 Fix unresolved generic type placeholders in `decl/struct.cpp:160-167`
+- [ ] 4.10.3 Remove hardcoded `Ordering` enum from `types/builtins/types.cpp` (define in TML)
+- [ ] 4.10.4 Remove legacy Point/Rectangle fallback from `struct_field.cpp:53-97`
+
+### 4.11 Final cleanup + validation
+
+- [ ] 4.11.1 Remove all migrated C files from `compiler/runtime/`
+- [ ] 4.11.2 Remove duplicate C files from `lib/std/runtime/`
+- [ ] 4.11.3 Benchmark: TML implementations within 10% of C performance
+- [ ] 4.11.4 Full test suite passes with `--coverage`
+- [ ] 4.11.5 Verify: `compiler/runtime/core/essential.c` + `memory/mem.c` are the ONLY remaining non-FFI C runtime
+
+### Expected impact
+
+| Metric | Before | After Phase 4 |
+|--------|--------|--------------|
+| C runtime (migratable) | 5,210 lines | 0 |
+| C runtime (total) | ~20,000 lines | ~12,500 (FFI + essential) |
+| Hardcoded dispatch | 3,300 lines | ~300 (intrinsics only) |
+| Types bypassing impl dispatch | 5 | 0 |
+| Unconditional runtime declares | 393 | ~30 |
+| Hardcoded type registrations | 54 | 0 |
+
+**Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
 
 ---
 
@@ -596,7 +656,7 @@ Stage 3: tml_stage2.exe compiles itself            → tml_stage3.exe
 
 ### Prerequisites
 
-- [ ] 6.0.1 `migrate-runtime-to-tml` complete (Phase 4)
+- [ ] 6.0.1 `migrate-runtime-to-tml` complete (Phase 4) — includes codegen dispatch cleanup (0 types with hardcoded bypass)
 - [ ] 6.0.2 Closures with variable capture working
 - [ ] 6.0.3 Recursive enums working (AST nodes)
 - [ ] 6.0.4 `HashMap[Str, T]` with 10K+ entries
@@ -700,13 +760,13 @@ These can be worked on alongside the main phases without blocking or being block
 |-------|-------|------|----------|--------|
 | 1. Codegen bugs | 39 | 38 | 97% | NEARLY COMPLETE |
 | 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (75.7%) |
-| 3. Stdlib essentials | 42 | 20 | 48% | **IN PROGRESS** |
-| 4. Runtime migration | 28 | 0 | 0% | NOT STARTED |
+| 3. Stdlib essentials | 48 | 47 | 98% | **EFFECTIVELY COMPLETE** |
+| 4. Runtime migration + codegen cleanup | 45 | 10 | 22% | IN PROGRESS (List migrated) |
 | 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
 | Parallel: Tooling | 8 | 5 | 63% | IN PROGRESS |
 | Parallel: Reflection | 5 | 3 | 60% | IN PROGRESS |
-| **TOTAL** | **266** | **141** | **53.0%** | |
+| **TOTAL** | **289** | **178** | **61.6%** | |
 
 ---
 

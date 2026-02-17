@@ -6,17 +6,13 @@
 //!
 //! | Type    | Static Methods            |
 //! |---------|---------------------------|
-//! | List    | `new()`, `with_capacity()`|
-//! | HashMap | `new()`, `with_capacity()`|
 //! | Buffer  | `new()`, `with_capacity()`|
 //! | File    | `open()`, `create()`      |
 //! | Path    | `new()`                   |
 //! | I32, etc| `default()`, `max()`, `min()`|
 //!
-//! ## Generic Handling
-//!
-//! Generic static methods like `List[I32]::new()` extract the type
-//! argument and call the appropriate runtime function.
+//! Note: List and HashMap static methods removed — now pure TML
+//! (see lib/std/src/collections/list.tml, hashmap.tml)
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 
@@ -37,134 +33,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         return name;
     };
 
-    // List static methods
-    if (type_name == "List") {
-        std::string struct_name = "List";
-        // First, try to get type from expected context (set by struct field initialization)
-        if (!expected_enum_type_.empty() && expected_enum_type_.find("%struct.List__") == 0) {
-            struct_name = expected_enum_type_.substr(8); // Remove "%struct." prefix
-        }
-        // Otherwise, try to get from explicit path generics like List[I32].new() or List[T]::new()
-        else if (call.receiver->is<parser::PathExpr>()) {
-            const auto& pe = call.receiver->as<parser::PathExpr>();
-            if (pe.generics.has_value() && !pe.generics->args.empty()) {
-                for (const auto& arg : pe.generics->args) {
-                    if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
-                        const auto& named = arg.as_type()->as<parser::NamedType>();
-                        if (!named.path.segments.empty()) {
-                            std::string type_name_arg = named.path.segments.back();
-                            // Resolve type parameters (T -> concrete type)
-                            std::string resolved = resolve_type_arg_name(type_name_arg);
-                            struct_name += "__" + resolved;
-                        }
-                    }
-                }
-            }
-        }
-        std::string struct_type = "%struct." + struct_name;
-
-        if (method == "new") {
-            emit_coverage("List::new");
-            std::string cap = call.args.empty() ? "8" : gen_expr(*call.args[0]);
-            std::string cap_type = last_expr_type_;
-            std::string cap_i64;
-            if (cap_type == "i64") {
-                cap_i64 = cap;
-            } else {
-                cap_i64 = fresh_reg();
-                emit_line("  " + cap_i64 + " = sext i32 " + cap + " to i64");
-            }
-            std::string handle = fresh_reg();
-            emit_line("  " + handle + " = call ptr @list_create(i64 " + cap_i64 + ")");
-            std::string list_ptr = fresh_reg();
-            emit_line("  " + list_ptr + " = alloca " + struct_type);
-            std::string handle_field = fresh_reg();
-            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " +
-                      list_ptr + ", i32 0, i32 0");
-            emit_line("  store ptr " + handle + ", ptr " + handle_field);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load " + struct_type + ", ptr " + list_ptr);
-            last_expr_type_ = struct_type;
-            return result;
-        }
-        if (method == "default") {
-            emit_coverage("List::default");
-            std::string handle = fresh_reg();
-            emit_line("  " + handle + " = call ptr @list_create(i64 8)");
-            std::string list_ptr = fresh_reg();
-            emit_line("  " + list_ptr + " = alloca " + struct_type);
-            std::string handle_field = fresh_reg();
-            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " +
-                      list_ptr + ", i32 0, i32 0");
-            emit_line("  store ptr " + handle + ", ptr " + handle_field);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load " + struct_type + ", ptr " + list_ptr);
-            last_expr_type_ = struct_type;
-            return result;
-        }
-    }
-
-    // HashMap static methods
-    if (type_name == "HashMap") {
-        std::string struct_name = "HashMap";
-        // First, try to get type from expected context (set by struct field initialization)
-        if (!expected_enum_type_.empty() && expected_enum_type_.find("%struct.HashMap__") == 0) {
-            struct_name = expected_enum_type_.substr(8); // Remove "%struct." prefix
-        }
-        // Otherwise, try to get from explicit path generics like HashMap[K, V].new() or HashMap[K,
-        // V]::new()
-        else if (call.receiver->is<parser::PathExpr>()) {
-            const auto& pe = call.receiver->as<parser::PathExpr>();
-            if (pe.generics.has_value() && !pe.generics->args.empty()) {
-                for (const auto& arg : pe.generics->args) {
-                    if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
-                        const auto& named = arg.as_type()->as<parser::NamedType>();
-                        if (!named.path.segments.empty()) {
-                            std::string type_name_arg = named.path.segments.back();
-                            // Resolve type parameters (T -> concrete type)
-                            std::string resolved = resolve_type_arg_name(type_name_arg);
-                            struct_name += "__" + resolved;
-                        }
-                    }
-                }
-            }
-        }
-        std::string struct_type = "%struct." + struct_name;
-
-        if (method == "new") {
-            emit_coverage("HashMap::new");
-            std::string cap = call.args.empty() ? "16" : gen_expr(*call.args[0]);
-            std::string cap_i64 = fresh_reg();
-            emit_line("  " + cap_i64 + " = sext i32 " + cap + " to i64");
-            std::string handle = fresh_reg();
-            emit_line("  " + handle + " = call ptr @hashmap_create(i64 " + cap_i64 + ")");
-            std::string map_ptr = fresh_reg();
-            emit_line("  " + map_ptr + " = alloca " + struct_type);
-            std::string handle_field = fresh_reg();
-            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " + map_ptr +
-                      ", i32 0, i32 0");
-            emit_line("  store ptr " + handle + ", ptr " + handle_field);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load " + struct_type + ", ptr " + map_ptr);
-            last_expr_type_ = struct_type;
-            return result;
-        }
-        if (method == "default") {
-            emit_coverage("HashMap::default");
-            std::string handle = fresh_reg();
-            emit_line("  " + handle + " = call ptr @hashmap_create(i64 16)");
-            std::string map_ptr = fresh_reg();
-            emit_line("  " + map_ptr + " = alloca " + struct_type);
-            std::string handle_field = fresh_reg();
-            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " + map_ptr +
-                      ", i32 0, i32 0");
-            emit_line("  store ptr " + handle + ", ptr " + handle_field);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load " + struct_type + ", ptr " + map_ptr);
-            last_expr_type_ = struct_type;
-            return result;
-        }
-    }
+    // Note: List and HashMap static methods removed — now pure TML
 
     // Buffer static methods
     if (type_name == "Buffer") {

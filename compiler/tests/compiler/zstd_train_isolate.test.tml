@@ -7,7 +7,7 @@ use std::collections::{Buffer, List}
 @test
 func test_train_call() -> I32 {
     // Create list with samples
-    var samples: List[Buffer] = List[Buffer]::new()
+    var samples: List[Buffer] = List[Buffer].default()
 
     var sample1: Buffer = Buffer::from_string("Test data sample one")
     samples.push(sample1)

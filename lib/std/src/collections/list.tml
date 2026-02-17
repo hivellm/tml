@@ -1,11 +1,11 @@
-//! Dynamic array collection type.
+//! Dynamic array collection type — pure TML implementation.
 //!
 //! `List[T]` is a generic collection that stores elements of type `T`
 //! contiguously in memory and grows as needed.
 //!
-//! **Migration note**: This type is backed by the C runtime (`collections.c`).
-//! It will be replaced by a pure-TML implementation (see `ArrayList[T]` in
-//! `class_collections`) as part of the runtime migration roadmap.
+//! Elements are stored at their natural size using `size_of[T]()`.
+//! This correctly handles scalar types (I32, I64, Str) as well as
+//! multi-field struct types (LinkedListNode, Bm25Result, etc.).
 //!
 //! # Example
 //!
@@ -17,181 +17,219 @@
 //! nums.destroy()
 //! ```
 
+use core::intrinsics::{ptr_read, ptr_write}
+
 /// A dynamic array that grows automatically.
 ///
-/// `List[T]` is a generic collection that stores elements of type `T`
-/// contiguously in memory and grows as needed.
+/// `List[T]` stores elements contiguously in a heap-allocated buffer.
+/// Each element occupies `size_of[T]()` bytes.
 ///
 /// # Type Parameters
 ///
 /// * `T` - The type of elements stored in the list
-///
-/// # Example
-///
-/// ```tml
-/// let nums = List[I32]::new(8)
-/// nums.push(10)
-/// nums.push(20)
-/// let first = nums.get(0)  // 10
-/// nums.destroy()
-/// ```
 pub type List[T] {
     handle: *Unit
 }
 
+// Internal layout of the list header (stored at handle):
+//   offset 0:  data pointer (*Unit) — 8 bytes
+//   offset 8:  len (I64) — 8 bytes
+//   offset 16: capacity (I64) — 8 bytes
+//   offset 24: stride (I64) — 8 bytes  (cached size_of[T])
+// Total header: 32 bytes
+
 impl[T] List[T] {
     /// Creates a new list with the specified initial capacity.
-    ///
-    /// # Arguments
-    ///
-    /// * `initial_capacity` - The initial capacity of the list
-    ///
-    /// # Returns
-    ///
-    /// A new `List[T]` instance
-    ///
-    /// # Example
-    ///
-    /// ```tml
-    /// let list = List[I32]::new(16)
-    /// ```
     pub func new(initial_capacity: I64) -> List[T] {
-        let h: *Unit = lowlevel { list_create(initial_capacity) }
-        List[T] { handle: h }
+        // Ensure minimum capacity of 4
+        var cap: I64 = initial_capacity
+        if cap < 4 {
+            cap = 4
+        }
+
+        // Get element size
+        let stride: I64 = lowlevel { sizeof_type[T]() }
+        // Minimum stride of 8 for scalar types stored as I64
+        var elem_size: I64 = stride
+        if elem_size < 8 {
+            elem_size = 8
+        }
+
+        // Allocate header (32 bytes: ptr + len + capacity + stride)
+        let header: *Unit = lowlevel { mem_alloc(32) }
+        let hdr: I64 = header as I64
+
+        // Allocate data buffer (cap * elem_size bytes)
+        let data_size: I64 = cap * elem_size
+        let data: *Unit = lowlevel { mem_alloc(data_size) }
+
+        // Store data pointer at offset 0
+        let p_data: *I64 = hdr as *I64
+        lowlevel { ptr_write[I64](p_data, data as I64) }
+
+        // Store len (0) at offset 8
+        let p_len: *I64 = (hdr + 8) as *I64
+        lowlevel { ptr_write[I64](p_len, 0 as I64) }
+
+        // Store capacity at offset 16
+        let p_cap: *I64 = (hdr + 16) as *I64
+        lowlevel { ptr_write[I64](p_cap, cap) }
+
+        // Store stride at offset 24
+        let p_stride: *I64 = (hdr + 24) as *I64
+        lowlevel { ptr_write[I64](p_stride, elem_size) }
+
+        List[T] { handle: header }
     }
 
     /// Creates a new list with default capacity (8).
-    ///
-    /// # Returns
-    ///
-    /// A new `List[T]` instance with default capacity
     pub func default() -> List[T] {
         List[T].new(8)
     }
 
     /// Appends an element to the back of the list.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to append
-    ///
-    /// # Example
-    ///
-    /// ```tml
-    /// list.push(42)
-    /// ```
     pub func push(this, value: T) {
-        lowlevel { list_push(this.handle, value) }
+        let hdr: I64 = this.handle as I64
+
+        // Read current len, capacity and stride
+        let p_len: *I64 = (hdr + 8) as *I64
+        let p_cap: *I64 = (hdr + 16) as *I64
+        let p_stride: *I64 = (hdr + 24) as *I64
+        let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
+        let cur_cap: I64 = lowlevel { ptr_read[I64](p_cap) }
+        let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
+
+        // Grow if needed
+        if cur_len >= cur_cap {
+            let new_cap: I64 = cur_cap * 2
+            let new_size: I64 = new_cap * stride
+
+            // Read current data pointer
+            let p_data: *I64 = hdr as *I64
+            let old_data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+            let old_data: *Unit = old_data_addr as *Unit
+
+            // Reallocate
+            let new_data: *Unit = lowlevel { mem_realloc(old_data, new_size) }
+
+            // Update header
+            lowlevel { ptr_write[I64](p_data, new_data as I64) }
+            lowlevel { ptr_write[I64](p_cap, new_cap) }
+        }
+
+        // Read (possibly updated) data pointer
+        let p_data2: *I64 = hdr as *I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](p_data2) }
+
+        // Write value at data[len] using T-sized stride
+        let elem_ptr: *T = (data_addr + cur_len * stride) as *T
+        lowlevel { ptr_write[T](elem_ptr, value) }
+
+        // Increment len
+        lowlevel { ptr_write[I64](p_len, cur_len + 1) }
     }
 
     /// Removes the last element from the list and returns it.
-    ///
-    /// # Returns
-    ///
-    /// The last element of the list
-    ///
-    /// # Panics
-    ///
-    /// Panics if the list is empty
     pub func pop(this) -> T {
-        lowlevel { list_pop(this.handle) }
+        let hdr: I64 = this.handle as I64
+        let p_len: *I64 = (hdr + 8) as *I64
+        let p_stride: *I64 = (hdr + 24) as *I64
+        let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
+        let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
+
+        // Read data pointer
+        let p_data: *I64 = hdr as *I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+
+        // Read element at data[len-1]
+        let new_len: I64 = cur_len - 1
+        let elem_ptr: *T = (data_addr + new_len * stride) as *T
+        let val: T = lowlevel { ptr_read[T](elem_ptr) }
+
+        // Decrement len
+        lowlevel { ptr_write[I64](p_len, new_len) }
+
+        val
     }
 
-    /// Returns a reference to the element at the given index.
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - The index of the element
-    ///
-    /// # Returns
-    ///
-    /// The element at the given index
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is out of bounds
+    /// Returns the element at the given index.
     pub func get(this, index: I64) -> T {
-        lowlevel { list_get(this.handle, index) }
+        let hdr: I64 = this.handle as I64
+        let p_stride: *I64 = (hdr + 24) as *I64
+        let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
+
+        // Read data pointer
+        let p_data: *I64 = hdr as *I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+
+        // Read element at data[index]
+        let elem_ptr: *T = (data_addr + index * stride) as *T
+        let val: T = lowlevel { ptr_read[T](elem_ptr) }
+        val
     }
 
     /// Sets the element at the given index.
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - The index of the element
-    /// * `value` - The new value
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is out of bounds
     pub func set(this, index: I64, value: T) {
-        lowlevel { list_set(this.handle, index, value) }
+        let hdr: I64 = this.handle as I64
+        let p_stride: *I64 = (hdr + 24) as *I64
+        let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
+
+        // Read data pointer
+        let p_data: *I64 = hdr as *I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+
+        // Write value at data[index]
+        let elem_ptr: *T = (data_addr + index * stride) as *T
+        lowlevel { ptr_write[T](elem_ptr, value) }
     }
 
     /// Returns the number of elements in the list.
-    ///
-    /// # Returns
-    ///
-    /// The number of elements
     pub func len(this) -> I64 {
-        lowlevel { list_len(this.handle) }
+        let hdr: I64 = this.handle as I64
+        let p_len: *I64 = (hdr + 8) as *I64
+        lowlevel { ptr_read[I64](p_len) }
     }
 
     /// Returns the current capacity of the list.
-    ///
-    /// # Returns
-    ///
-    /// The current capacity
     pub func capacity(this) -> I64 {
-        lowlevel { list_capacity(this.handle) }
+        let hdr: I64 = this.handle as I64
+        let p_cap: *I64 = (hdr + 16) as *I64
+        lowlevel { ptr_read[I64](p_cap) }
     }
 
     /// Returns `true` if the list contains no elements.
-    ///
-    /// # Returns
-    ///
-    /// `true` if empty, `false` otherwise
     pub func is_empty(this) -> Bool {
-        lowlevel { list_is_empty(this.handle) }
+        this.len() == 0
     }
 
     /// Returns the first element of the list.
-    ///
-    /// # Returns
-    ///
-    /// The first element
-    ///
-    /// # Panics
-    ///
-    /// Panics if the list is empty
     pub func first(this) -> T {
         this.get(0)
     }
 
     /// Returns the last element of the list.
-    ///
-    /// # Returns
-    ///
-    /// The last element
-    ///
-    /// # Panics
-    ///
-    /// Panics if the list is empty
     pub func last(this) -> T {
         this.get(this.len() - 1)
     }
 
     /// Removes all elements from the list.
     pub func clear(this) {
-        lowlevel { list_clear(this.handle) }
+        let hdr: I64 = this.handle as I64
+        let p_len: *I64 = (hdr + 8) as *I64
+        lowlevel { ptr_write[I64](p_len, 0 as I64) }
     }
 
     /// Destroys the list and frees all associated memory.
-    ///
-    /// # Safety
-    ///
-    /// The list must not be used after calling this method.
     pub func destroy(this) {
-        lowlevel { list_destroy(this.handle) }
+        let hdr: I64 = this.handle as I64
+
+        // Free data buffer
+        let p_data: *I64 = hdr as *I64
+        let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+        let data: *Unit = data_addr as *Unit
+        lowlevel { mem_free(data) }
+
+        // Free header
+        lowlevel { mem_free(this.handle) }
     }
 }

@@ -1,0 +1,123 @@
+// Phase 0 validation: ptr_read, ptr_write, pointer dereference
+// Validates memory intrinsics work before migrating C runtime to TML.
+use test::{assert, assert_eq}
+use core::intrinsics::{ptr_read, ptr_write}
+
+// --- ptr_write + ptr_read for I32 ---
+@test
+func test_ptr_write_read_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    ptr_write[I32](p, 42)
+    let v: I32 = ptr_read[I32](p)
+    assert_eq(v, 42, "ptr_write/ptr_read I32")
+    dealloc(ptr)
+    return 0
+}
+
+// --- ptr_write + ptr_read for I64 ---
+@test
+func test_ptr_write_read_i64() -> I32 {
+    let ptr: *Unit = alloc(8)
+    let p: *I64 = ptr as *I64
+    ptr_write[I64](p, 1234567890 as I64)
+    let v: I64 = ptr_read[I64](p)
+    assert_eq(v, 1234567890 as I64, "ptr_write/ptr_read I64")
+    dealloc(ptr)
+    return 0
+}
+
+// --- ptr_write + ptr_read for U8 ---
+@test
+func test_ptr_write_read_u8() -> I32 {
+    let ptr: *Unit = alloc(1)
+    let p: *U8 = ptr as *U8
+    ptr_write[U8](p, 255 as U8)
+    let v: U8 = ptr_read[U8](p)
+    assert_eq(v as I32, 255, "ptr_write/ptr_read U8")
+    dealloc(ptr)
+    return 0
+}
+
+// --- direct pointer dereference write/read I32 ---
+@test
+func test_deref_write_read_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    *p = 99
+    let v: I32 = *p
+    assert_eq(v, 99, "deref write/read I32")
+    dealloc(ptr)
+    return 0
+}
+
+// --- direct pointer dereference write/read U8 ---
+@test
+func test_deref_write_read_u8() -> I32 {
+    let ptr: *Unit = alloc(1)
+    let p: *U8 = ptr as *U8
+    *p = 0xAB as U8
+    let v: U8 = *p
+    assert_eq(v as I32, 0xAB, "deref write/read U8")
+    dealloc(ptr)
+    return 0
+}
+
+// --- overwrite same location ---
+@test
+func test_overwrite_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    *p = 100
+    assert_eq(*p, 100, "first write")
+    *p = 200
+    assert_eq(*p, 200, "overwrite")
+    *p = 0
+    assert_eq(*p, 0, "zero out")
+    dealloc(ptr)
+    return 0
+}
+
+// --- negative values ---
+@test
+func test_negative_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    ptr_write[I32](p, -42)
+    assert_eq(ptr_read[I32](p), -42, "negative I32")
+    dealloc(ptr)
+    return 0
+}
+
+// --- zero value ---
+@test
+func test_zero_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    ptr_write[I32](p, 0)
+    assert_eq(ptr_read[I32](p), 0, "zero I32")
+    dealloc(ptr)
+    return 0
+}
+
+// --- max I32 ---
+@test
+func test_max_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    ptr_write[I32](p, 2147483647)
+    assert_eq(ptr_read[I32](p), 2147483647, "max I32")
+    dealloc(ptr)
+    return 0
+}
+
+// --- min I32 ---
+@test
+func test_min_i32() -> I32 {
+    let ptr: *Unit = alloc(4)
+    let p: *I32 = ptr as *I32
+    ptr_write[I32](p, -2147483648)
+    assert_eq(ptr_read[I32](p), -2147483648, "min I32")
+    dealloc(ptr)
+    return 0
+}

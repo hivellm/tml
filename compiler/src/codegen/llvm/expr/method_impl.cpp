@@ -93,8 +93,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     }
 
     const auto& named = receiver_type->as<types::NamedType>();
-    bool is_builtin_type = (named.name == "List" || named.name == "HashMap" ||
-                            named.name == "Buffer" || named.name == "File" || named.name == "Path");
+    bool is_builtin_type = (named.name == "Buffer" || named.name == "File" || named.name == "Path");
     bool is_slice_inlined = (named.name == "Slice" || named.name == "MutSlice") &&
                             (method == "len" || method == "is_empty");
 
@@ -239,6 +238,26 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                     }
                 }
             }
+            // Check if this type is from an imported module (even though impl is in
+            // pending_generic_impls_, it may have been registered from an imported module)
+            if (env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    if (mod.structs.find(named.name) != mod.structs.end() ||
+                        mod.enums.find(named.name) != mod.enums.end()) {
+                        is_imported = true;
+                        break;
+                    }
+                }
+            }
+            // Also check builtin enums (Outcome, Maybe, ControlFlow, etc.)
+            // These are registered in the type environment, not in module registry
+            if (!is_imported) {
+                auto builtin_enum = env_.lookup_enum(named.name);
+                if (builtin_enum) {
+                    is_imported = true;
+                }
+            }
         }
 
         // Check imported structs and enums for type params
@@ -308,7 +327,11 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             }
         }
 
-        is_imported = !imported_type_params.empty();
+        // Only update is_imported from imported_type_params if it wasn't already
+        // set to true from the pending_generic_impls_ module registry check above.
+        if (!is_imported) {
+            is_imported = !imported_type_params.empty();
+        }
 
         // Resolve where clause type equalities to derive additional type substitutions.
         // For example: `impl[F, T] Iterator for OnceWith[F] where F = func() -> T`
@@ -616,8 +639,7 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
 
     const auto& named2 = receiver_type->as<types::NamedType>();
     bool is_builtin_type2 =
-        (named2.name == "List" || named2.name == "HashMap" || named2.name == "Buffer" ||
-         named2.name == "File" || named2.name == "Path");
+        (named2.name == "Buffer" || named2.name == "File" || named2.name == "Path");
     if (is_builtin_type2) {
         return std::nullopt;
     }

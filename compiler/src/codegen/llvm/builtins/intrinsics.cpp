@@ -132,7 +132,9 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         // Saturating arithmetic intrinsics
         "saturating_add", "saturating_sub", "saturating_mul",
         // Reflection intrinsics
-        "field_count", "variant_count", "field_name", "field_type_id", "field_offset"};
+        "field_count", "variant_count", "field_name", "field_type_id", "field_offset",
+        // Memory copy/set intrinsics
+        "copy_nonoverlapping", "copy", "write_bytes"};
 
     // Extract base name for intrinsic matching - handles qualified paths like
     // "core::intrinsics::sqrt" by extracting just "sqrt"
@@ -493,14 +495,12 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         if (!call.args.empty()) {
             std::string ptr = gen_expr(*call.args[0]);
 
-            // Infer element type from function signature
+            // Infer element type from the argument's semantic pointer type
+            // This works even when func_sig is null (e.g., imported module functions)
             std::string elem_type = "i32"; // Default
-            if (!func_sig->type_params.empty() && !func_sig->params.empty()) {
-                // Try to infer from argument type
-                types::TypePtr arg_type = infer_expr_type(*call.args[0]);
-                if (arg_type->is<types::PtrType>()) {
-                    elem_type = llvm_type_from_semantic(arg_type->as<types::PtrType>().inner);
-                }
+            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+            if (arg_type && arg_type->is<types::PtrType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::PtrType>().inner);
             }
 
             std::string result = fresh_reg();
@@ -539,6 +539,189 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             emit_line("  " + trunc_reg + " = trunc i32 " + byte_val + " to i8");
             // Store the byte
             emit_line("  store i8 " + trunc_reg + ", ptr " + gep_reg);
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // copy_nonoverlapping[T](src: Ptr[T], dst: Ptr[T], count: I64)
+    // ptr_copy[T](src: Ptr[T], dst: Ptr[T], count: I64) - alias
+    // Copies count*sizeof(T) bytes from src to dst. Regions must NOT overlap.
+    if (intrinsic_name == "copy_nonoverlapping" || intrinsic_name == "ptr_copy") {
+        if (call.args.size() >= 3) {
+            std::string src = gen_expr(*call.args[0]);
+            std::string dst = gen_expr(*call.args[1]);
+            std::string count = gen_expr(*call.args[2]);
+            std::string count_type = last_expr_type_;
+
+            // Resolve element size from type parameter [T]
+            int elem_size = 1; // Default to byte
+            if (call.callee->is<parser::PathExpr>()) {
+                const auto& path_expr = call.callee->as<parser::PathExpr>();
+                if (path_expr.generics && !path_expr.generics->args.empty()) {
+                    const auto& first_arg = path_expr.generics->args[0];
+                    if (first_arg.is_type()) {
+                        auto resolved =
+                            resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                        std::string type_llvm = llvm_type_from_semantic(resolved);
+                        if (type_llvm == "i8")
+                            elem_size = 1;
+                        else if (type_llvm == "i16")
+                            elem_size = 2;
+                        else if (type_llvm == "i32" || type_llvm == "float")
+                            elem_size = 4;
+                        else if (type_llvm == "i64" || type_llvm == "double" || type_llvm == "ptr")
+                            elem_size = 8;
+                        else if (type_llvm == "i128")
+                            elem_size = 16;
+                    }
+                }
+            }
+
+            // Convert count to i64 if needed
+            std::string count64 = count;
+            if (count_type == "i32") {
+                count64 = fresh_reg();
+                emit_line("  " + count64 + " = sext i32 " + count + " to i64");
+            }
+
+            // Compute byte_count = count * elem_size
+            std::string byte_count;
+            if (elem_size == 1) {
+                byte_count = count64;
+            } else {
+                byte_count = fresh_reg();
+                emit_line("  " + byte_count + " = mul i64 " + count64 + ", " +
+                          std::to_string(elem_size));
+            }
+
+            emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
+                      byte_count + ", i1 false)");
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // copy[T](src: Ptr[T], dst: Ptr[T], count: I64)
+    // Copies count*sizeof(T) bytes from src to dst. Safe for overlapping regions.
+    if (intrinsic_name == "copy") {
+        if (call.args.size() >= 3) {
+            std::string src = gen_expr(*call.args[0]);
+            std::string dst = gen_expr(*call.args[1]);
+            std::string count = gen_expr(*call.args[2]);
+            std::string count_type = last_expr_type_;
+
+            // Resolve element size from type parameter [T]
+            int elem_size = 1;
+            if (call.callee->is<parser::PathExpr>()) {
+                const auto& path_expr = call.callee->as<parser::PathExpr>();
+                if (path_expr.generics && !path_expr.generics->args.empty()) {
+                    const auto& first_arg = path_expr.generics->args[0];
+                    if (first_arg.is_type()) {
+                        auto resolved =
+                            resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                        std::string type_llvm = llvm_type_from_semantic(resolved);
+                        if (type_llvm == "i8")
+                            elem_size = 1;
+                        else if (type_llvm == "i16")
+                            elem_size = 2;
+                        else if (type_llvm == "i32" || type_llvm == "float")
+                            elem_size = 4;
+                        else if (type_llvm == "i64" || type_llvm == "double" || type_llvm == "ptr")
+                            elem_size = 8;
+                        else if (type_llvm == "i128")
+                            elem_size = 16;
+                    }
+                }
+            }
+
+            // Convert count to i64 if needed
+            std::string count64 = count;
+            if (count_type == "i32") {
+                count64 = fresh_reg();
+                emit_line("  " + count64 + " = sext i32 " + count + " to i64");
+            }
+
+            // Compute byte_count = count * elem_size
+            std::string byte_count;
+            if (elem_size == 1) {
+                byte_count = count64;
+            } else {
+                byte_count = fresh_reg();
+                emit_line("  " + byte_count + " = mul i64 " + count64 + ", " +
+                          std::to_string(elem_size));
+            }
+
+            emit_line("  call void @llvm.memmove.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
+                      byte_count + ", i1 false)");
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // write_bytes[T](dst: Ptr[T], val: U8, count: I64)
+    // Sets count*sizeof(T) bytes at dst to val.
+    if (intrinsic_name == "write_bytes") {
+        if (call.args.size() >= 3) {
+            std::string dst = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            std::string val_type = last_expr_type_;
+            std::string count = gen_expr(*call.args[2]);
+            std::string count_type = last_expr_type_;
+
+            // Resolve element size from type parameter [T]
+            int elem_size = 1;
+            if (call.callee->is<parser::PathExpr>()) {
+                const auto& path_expr = call.callee->as<parser::PathExpr>();
+                if (path_expr.generics && !path_expr.generics->args.empty()) {
+                    const auto& first_arg = path_expr.generics->args[0];
+                    if (first_arg.is_type()) {
+                        auto resolved =
+                            resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                        std::string type_llvm = llvm_type_from_semantic(resolved);
+                        if (type_llvm == "i8")
+                            elem_size = 1;
+                        else if (type_llvm == "i16")
+                            elem_size = 2;
+                        else if (type_llvm == "i32" || type_llvm == "float")
+                            elem_size = 4;
+                        else if (type_llvm == "i64" || type_llvm == "double" || type_llvm == "ptr")
+                            elem_size = 8;
+                        else if (type_llvm == "i128")
+                            elem_size = 16;
+                    }
+                }
+            }
+
+            // Convert count to i64 if needed
+            std::string count64 = count;
+            if (count_type == "i32") {
+                count64 = fresh_reg();
+                emit_line("  " + count64 + " = sext i32 " + count + " to i64");
+            }
+
+            // Compute byte_count = count * elem_size
+            std::string byte_count;
+            if (elem_size == 1) {
+                byte_count = count64;
+            } else {
+                byte_count = fresh_reg();
+                emit_line("  " + byte_count + " = mul i64 " + count64 + ", " +
+                          std::to_string(elem_size));
+            }
+
+            // Truncate val to i8 if needed
+            std::string val8 = val;
+            if (val_type != "i8") {
+                val8 = fresh_reg();
+                emit_line("  " + val8 + " = trunc " + val_type + " " + val + " to i8");
+            }
+
+            emit_line("  call void @llvm.memset.p0.i64(ptr " + dst + ", i8 " + val8 + ", i64 " +
+                      byte_count + ", i1 false)");
             last_expr_type_ = "void";
             return "0";
         }

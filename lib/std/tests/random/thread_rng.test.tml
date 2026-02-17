@@ -1,0 +1,58 @@
+// Tests for std::random::ThreadRng
+use test::{assert, assert_eq}
+use std::random::ThreadRng
+
+@test
+func test_thread_rng_produces_values() -> I32 {
+    var rng: ThreadRng = ThreadRng::new()
+    let a: I64 = rng.next_i64()
+    let b: I64 = rng.next_i64()
+    assert(a != b, "consecutive values should differ")
+    return 0
+}
+
+@test
+func test_thread_rng_range() -> I32 {
+    var rng: ThreadRng = ThreadRng::new()
+    var i: I64 = 0
+    loop (i < 50) {
+        let val: I64 = rng.range(10, 20)
+        assert(val >= 10, "range value should be >= min")
+        assert(val < 20, "range value should be < max")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_thread_rng_bool() -> I32 {
+    var rng: ThreadRng = ThreadRng::new()
+    var trues: I64 = 0
+    var falses: I64 = 0
+    var i: I64 = 0
+    loop (i < 100) {
+        if rng.next_bool() {
+            trues = trues + 1
+        }
+        if not rng.next_bool() {
+            falses = falses + 1
+        }
+        i = i + 1
+    }
+    assert(trues > 0, "should get some true values")
+    assert(falses > 0, "should get some false values")
+    return 0
+}
+
+@test
+func test_thread_rng_f64() -> I32 {
+    var rng: ThreadRng = ThreadRng::new()
+    var i: I64 = 0
+    loop (i < 50) {
+        let val: F64 = rng.next_f64()
+        assert(val >= 0.0, "f64 should be >= 0.0")
+        assert(val < 1.0, "f64 should be < 1.0")
+        i = i + 1
+    }
+    return 0
+}

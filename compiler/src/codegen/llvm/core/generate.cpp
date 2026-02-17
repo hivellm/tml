@@ -238,6 +238,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
     output_.str("");
     type_defs_buffer_.str(""); // Clear type definitions buffer
     string_literals_.clear();
+    string_literal_dedup_.clear();
     temp_counter_ = 0;
     label_counter_ = 0;
 
@@ -712,8 +713,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
             }
             if (!type_name.empty()) {
                 // Skip builtin types that have hard-coded implementations in method.cpp
-                if (type_name == "File" || type_name == "Path" || type_name == "List" ||
-                    type_name == "HashMap" || type_name == "Buffer") {
+                if (type_name == "File" || type_name == "Path" || type_name == "Buffer") {
                     continue;
                 }
                 // Skip generic impl blocks - they will be instantiated when methods are called

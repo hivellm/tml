@@ -205,7 +205,30 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         return;
     }
 
-    const auto& registry = env_.module_registry();
+    auto registry = env_.module_registry();
+
+    // Ensure essential library modules are in the ModuleRegistry even if not
+    // explicitly imported.  The type checker handles List[T] as a builtin type,
+    // so modules like core::str return List[Str] without importing
+    // std::collections::List.  When List was C-backed this was fine (runtime
+    // provided @list_len etc.), but now that List is pure TML the codegen needs
+    // the module's source code and function signatures.
+    {
+        static const std::vector<std::string> essential_library_modules = {
+            "std::collections::List",
+        };
+        for (const auto& mod_path : essential_library_modules) {
+            if (registry->has_module(mod_path))
+                continue;
+            auto cached = types::GlobalModuleCache::instance().get(mod_path);
+            if (cached) {
+                registry->register_module(mod_path, std::move(*cached));
+                TML_DEBUG_LN("[MODULE] Auto-registered essential module from GlobalModuleCache: "
+                             << mod_path);
+            }
+        }
+    }
+
     const auto& all_modules = registry->get_all_modules();
 
     // Collect imported module paths AND type names for filtering
@@ -325,10 +348,8 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         }
         if (!will_process) {
             static const std::unordered_set<std::string> core_essential = {
-                "core::ordering",
-                "core::alloc",
-                "core::option",
-                "core::types",
+                "core::ordering",         "core::alloc", "core::option", "core::types",
+                "std::collections::List",
             };
             will_process = core_essential.count(module_name) > 0;
             // Conditionally add sync essential modules
@@ -471,8 +492,8 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             // Essential modules: core always needed, sync conditionally
             if (!should_process) {
                 static const std::unordered_set<std::string> core_essential_modules = {
-                    "core::ordering", "core::alloc", "core::option",
-                    "core::types",    "core::ops",   "core::ops::arith",
+                    "core::ordering", "core::alloc",      "core::option",           "core::types",
+                    "core::ops",      "core::ops::arith", "std::collections::List",
                 };
                 should_process = core_essential_modules.count(module_name) > 0;
                 if (!should_process) {
@@ -767,21 +788,33 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 // Register impl block for vtable generation (enables dyn dispatch)
                 register_impl(&impl);
 
-                // Skip generic impls - they need to be instantiated on demand
-                // Generic impls have type parameters like impl[T] or impl[I: Iterator]
-                if (!impl.generics.empty()) {
-                    TML_DEBUG_LN("[MODULE] Skipping generic impl with " << impl.generics.size()
-                                                                        << " type params");
-                    continue;
-                }
-
-                // Get the type name for the impl
+                // Get the type name for the impl (needed before generic check)
                 std::string type_name;
                 if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
                     const auto& named = impl.self_type->as<parser::NamedType>();
                     if (!named.path.segments.empty()) {
                         type_name = named.path.segments.back();
                     }
+                }
+
+                // Skip generic impls - they need to be instantiated on demand
+                // Generic impls have type parameters like impl[T] or impl[I: Iterator]
+                // But store them in pending_generic_impls_ so they can be instantiated later
+                bool has_impl_generics = !impl.generics.empty();
+                bool has_type_generics = false;
+                if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
+                    const auto& named = impl.self_type->as<parser::NamedType>();
+                    if (named.generics.has_value() && !named.generics->args.empty()) {
+                        has_type_generics = true;
+                    }
+                }
+                if (has_impl_generics || has_type_generics) {
+                    if (!type_name.empty()) {
+                        pending_generic_impls_[type_name] = &impl;
+                    }
+                    TML_DEBUG_LN("[MODULE] Registered imported generic impl for: "
+                                 << type_name << " (generics=" << impl.generics.size() << ")");
+                    continue;
                 }
 
                 // Skip impl blocks for types that aren't actually imported

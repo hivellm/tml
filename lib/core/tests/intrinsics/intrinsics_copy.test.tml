@@ -1,0 +1,97 @@
+// Phase 0 validation: copy_nonoverlapping
+use test::{assert, assert_eq}
+use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
+
+// --- copy single I32 element ---
+@test
+func test_copy_single_i32() -> I32 {
+    let src_ptr: *Unit = alloc(4)
+    let dst_ptr: *Unit = alloc(4)
+    let src: *I32 = src_ptr as *I32
+    let dst: *I32 = dst_ptr as *I32
+    ptr_write[I32](src, 42)
+    copy_nonoverlapping[I32](src, dst, 1 as I64)
+    assert_eq(ptr_read[I32](dst), 42, "copy single I32")
+    dealloc(src_ptr)
+    dealloc(dst_ptr)
+    return 0
+}
+
+// --- copy multiple I32 elements ---
+@test
+func test_copy_multiple_i32() -> I32 {
+    let src_ptr: *Unit = alloc(16)
+    let dst_ptr: *Unit = alloc(16)
+    let src: *I32 = src_ptr as *I32
+    let dst: *I32 = dst_ptr as *I32
+    // Fill source array
+    let sa: I64 = src as I64
+    let s: I64 = 4 as I64
+    let s1: *I32 = (sa + s) as *I32
+    let s2: *I32 = (sa + s + s) as *I32
+    let s3: *I32 = (sa + s + s + s) as *I32
+    ptr_write[I32](src, 10)
+    ptr_write[I32](s1, 20)
+    ptr_write[I32](s2, 30)
+    ptr_write[I32](s3, 40)
+    // Copy 4 elements
+    copy_nonoverlapping[I32](src, dst, 4 as I64)
+    // Verify destination
+    let da: I64 = dst as I64
+    let d1: *I32 = (da + s) as *I32
+    let d2: *I32 = (da + s + s) as *I32
+    let d3: *I32 = (da + s + s + s) as *I32
+    assert_eq(ptr_read[I32](dst), 10, "copy elem 0")
+    assert_eq(ptr_read[I32](d1), 20, "copy elem 1")
+    assert_eq(ptr_read[I32](d2), 30, "copy elem 2")
+    assert_eq(ptr_read[I32](d3), 40, "copy elem 3")
+    dealloc(src_ptr)
+    dealloc(dst_ptr)
+    return 0
+}
+
+// --- copy U8 bytes (values <= 127 to avoid U8->I32 sign extension issue) ---
+@test
+func test_copy_u8_bytes() -> I32 {
+    let src_ptr: *Unit = alloc(4)
+    let dst_ptr: *Unit = alloc(4)
+    let src: *U8 = src_ptr as *U8
+    let dst: *U8 = dst_ptr as *U8
+    let sa: I64 = src as I64
+    let s1: *U8 = (sa + (1 as I64)) as *U8
+    let s2: *U8 = (sa + (2 as I64)) as *U8
+    let s3: *U8 = (sa + (3 as I64)) as *U8
+    ptr_write[U8](src, 0x41 as U8)
+    ptr_write[U8](s1, 0x42 as U8)
+    ptr_write[U8](s2, 0x43 as U8)
+    ptr_write[U8](s3, 0x00 as U8)
+    copy_nonoverlapping[U8](src, dst, 4 as I64)
+    let da: I64 = dst as I64
+    let d1: *U8 = (da + (1 as I64)) as *U8
+    let d2: *U8 = (da + (2 as I64)) as *U8
+    let d3: *U8 = (da + (3 as I64)) as *U8
+    assert_eq(ptr_read[U8](dst) as I32, 0x41, "byte 0")
+    assert_eq(ptr_read[U8](d1) as I32, 0x42, "byte 1")
+    assert_eq(ptr_read[U8](d2) as I32, 0x43, "byte 2")
+    assert_eq(ptr_read[U8](d3) as I32, 0x00, "byte 3")
+    dealloc(src_ptr)
+    dealloc(dst_ptr)
+    return 0
+}
+
+// --- copy zero elements (no-op) ---
+@test
+func test_copy_zero_count() -> I32 {
+    let src_ptr: *Unit = alloc(4)
+    let dst_ptr: *Unit = alloc(4)
+    let src: *I32 = src_ptr as *I32
+    let dst: *I32 = dst_ptr as *I32
+    ptr_write[I32](src, 42)
+    ptr_write[I32](dst, 99)
+    // Copy 0 elements - dst should remain unchanged
+    copy_nonoverlapping[I32](src, dst, 0 as I64)
+    assert_eq(ptr_read[I32](dst), 99, "dst unchanged after 0-copy")
+    dealloc(src_ptr)
+    dealloc(dst_ptr)
+    return 0
+}

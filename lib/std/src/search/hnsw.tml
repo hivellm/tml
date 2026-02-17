@@ -174,7 +174,7 @@ impl HnswIndex {
         let count: I32 = lowlevel {
             ffi_hnsw_search(this.handle, query, actual_k, &doc_ids, &distances)
         }
-        var results: List[HnswResult] = List[HnswResult].new()
+        var results: List[HnswResult] = List[HnswResult].default()
         var i: I32 = 0
         loop (i < count) {
             results.push(HnswResult { doc_id: doc_ids[i], distance: distances[i] })

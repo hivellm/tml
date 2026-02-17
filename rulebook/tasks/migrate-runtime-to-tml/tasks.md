@@ -1,94 +1,78 @@
 # Tasks: Migrate C Runtime Pure Algorithms to TML
 
-**Status**: Proposed (0%)
+**Status**: In Progress (Phase 0 complete, Phase 1 complete — List migrated, Phase 2 complete — HashMap migrated to pure TML)
 
-**Scope**: ~4,585 lines of C removed, ~240 lowlevel blocks eliminated across ~25 TML files
+**Scope**: ~4,585 lines of C runtime to migrate + ~3,300 lines of hardcoded codegen dispatch to eliminate
+
+**Architecture goal**: Thin C layer (I/O, panic, malloc) + `@extern("c")` FFI bindings. Everything else in pure TML.
 
 ---
 
 ## Phase 0: Validation — Verify Compiler Primitives Work
 
-- [ ] 0.1.1 Write test: `ptr_read`, `ptr_write`, `ptr_offset` with I32, I64, Str
-- [ ] 0.1.2 Write test: `mem_alloc` + `ptr_write` + `ptr_read` round-trip
-- [ ] 0.1.3 Write test: `copy_nonoverlapping` for array-like buffers
-- [ ] 0.1.4 Write test: `size_of[T]()` for primitives and structs
-- [ ] 0.1.5 Write test: `@lowlevel` block with pointer arithmetic in generic context
-- [ ] 0.1.6 Write test: generic struct with `*T` field (monomorphization)
-- [ ] 0.1.7 Confirm all Phase 0 tests pass — if any fail, fix compiler before proceeding
+- [x] 0.1.1 Write test: `ptr_read`, `ptr_write`, `ptr_offset` with I32, I64, U8 → `intrinsics_memory.test.tml` (10 tests)
+- [x] 0.1.2 Write test: `mem_alloc` + `ptr_write` + `ptr_read` round-trip → `intrinsics_ptr_arith.test.tml` (6 tests)
+- [x] 0.1.3 Write test: `copy_nonoverlapping` for array-like buffers → `intrinsics_copy.test.tml` (4 tests)
+- [x] 0.1.4 Write test: `size_of[T]()` for primitives and structs → `intrinsics_size_align.test.tml` (14 tests, pre-existing)
+- [x] 0.1.5 Write test: `@lowlevel` block with pointer arithmetic in generic context → `lowlevel.test.tml` (15 tests, pre-existing)
+- [x] 0.1.6 Write test: generic struct with `*T` field (monomorphization) → `lowlevel.test.tml` `Node[T] { value: T, next: Ptr[Node[T]] }`
+- [x] 0.1.7 Confirm all Phase 0 tests pass — 20 new tests + 14 existing = 34 tests all passing
+- [x] 0.1.8 **Compiler fix**: Added codegen for `copy_nonoverlapping`, `copy`, `write_bytes` intrinsics (→ `@llvm.memcpy`, `@llvm.memmove`, `@llvm.memset`)
 
 ---
 
 ## Phase 1: Collections — List[T] Pure TML
 
 > **Source**: `lib/std/src/collections/list.tml`
-> **C backing**: `compiler/runtime/collections/collections.c` + `lib/std/runtime/collections.c`
-> **10 lowlevel blocks to eliminate**
+> **Status**: MIGRATED — pure TML using `ptr_read`/`ptr_write`/`mem_alloc`/`mem_realloc`/`mem_free`
 
-Calls to remove:
-- `list_create(initial_capacity)` → line 55
-- `list_push(this.handle, value)` → line 80
-- `list_pop(this.handle)` → line 93
-- `list_get(this.handle, index)` → line 110
-- `list_set(this.handle, index, value)` → line 124
-- `list_len(this.handle)` → line 133
-- `list_capacity(this.handle)` → line 142
-- `list_is_empty(this.handle)` → line 151
-- `list_clear(this.handle)` → line 182
-- `list_destroy(this.handle)` → line 191
+- [x] 1.1.1 Rewrite `List[T]` — pure TML with `handle: *Unit` layout (header: data_ptr + len + capacity)
+- [x] 1.1.2 Implement `new()`, `default()` using `mem_alloc` (24-byte header + data buffer)
+- [x] 1.1.3 Implement `push()` with grow via `mem_realloc` + `ptr_write`
+- [x] 1.1.4 Implement `pop()` via `ptr_read` + len decrement
+- [x] 1.1.5 Implement `get()` / `set()` via pointer arithmetic + `ptr_read`/`ptr_write`
+- [x] 1.1.6 Implement `len()`, `capacity()`, `is_empty()` via header field reads
+- [x] 1.1.7 Implement `clear()` (set len=0), `first()`, `last()`
+- [x] 1.1.8 Implement `destroy()` — free data buffer + free header
+- [x] 1.1.9 All List tests pass with pure TML implementation
+- [x] 1.1.10 Fix `[]` empty-array initializer creating null List handles (`cache.tml`, `pool.tml`)
+- [x] 1.1.11 Fix zero-arg `List[T]::new()` calls → `List[T].default()` (5 files: list_buffer_debug, zstd_dict_train_debug, zstd_train_isolate, bm25.tml, hnsw.tml)
+- [x] 1.1.12 Fix suite-prefix on builtin enums (Outcome, Maybe) — added `env_.lookup_enum()` fallback in `method_impl.cpp`
+- [x] 1.1.13 All 17 original test failures resolved; full suite passes (only pre-existing x509 FFI incompatibility remains)
 
-Tasks:
-- [ ] 1.1.1 Rewrite `List[T]` struct: `data: *T, len: I64, capacity: I64` (replace opaque `handle: *Unit`)
-- [ ] 1.1.2 Implement `new()` / `with_capacity()` using `mem_alloc`
-- [ ] 1.1.3 Implement `push()` with grow via `mem_realloc` + `ptr_write`
-- [ ] 1.1.4 Implement `pop()` returning `Maybe[T]` via `ptr_read`
-- [ ] 1.1.5 Implement `get()` / `set()` via `ptr_offset` + `ptr_read`/`ptr_write`
-- [ ] 1.1.6 Implement `len()`, `capacity()`, `is_empty()` as field reads
-- [ ] 1.1.7 Implement `clear()` (set len=0) and `remove()` (shift via `copy`)
-- [ ] 1.1.8 Implement `first()` / `last()` returning `Maybe[T]`
-- [ ] 1.1.9 Implement `drop()` calling `mem_free`
-- [ ] 1.1.10 Remove `list_*` emitters from `compiler/src/codegen/llvm/builtins/collections.cpp`
-- [ ] 1.1.11 Remove `list_*` declarations from `compiler/src/codegen/llvm/core/runtime.cpp`
-- [ ] 1.1.12 Run all existing List tests — must pass
-- [ ] 1.1.13 Also fix `lib/core/src/collections.tml:267` (`list_get_mut` → use new List)
+Remaining cleanup (compiler-side):
+- [x] 1.2.1 Remove dead `list_is_empty` from `llvm_ir_gen_stmt.cpp:100` and `list_create` from `:160`
+- [x] 1.2.2 Verified `runtime.cpp` already clean — no list_* declare statements remain
+- [x] 1.2.3 Verified `types/builtins/collections.cpp` clean — only migration comment remains
+- [x] 1.2.4 Verified `method_collection.cpp` clean — no list_* references remain
+- [ ] 1.2.9 Legacy `@list_len`/`@list_get` calls remain in `loop.cpp:355,420` and `collections.cpp:329` (for-in / index fallback paths for C-backed collections; will be removed when HashMap/Buffer migrate)
+- [x] 1.2.5 Migrate x509.tml X509Chain from C list_* FFI to pure TML List[I64]
+- [x] 1.2.6 Migrate crypto/constants.tml get_hashes/get_ciphers/get_curves to pure TML List[Str]
+- [x] 1.2.7 Migrate crypto/ecdh.tml get_curves to pure TML List[Str]
+- [x] 1.2.8 Fix x509.tml subject_alt_names to return empty List[Str] instead of wrapping NULL handle
 
 ---
 
 ## Phase 2: Collections — HashMap[K, V] Pure TML
 
 > **Source**: `lib/std/src/collections/hashmap.tml`
-> **C backing**: `compiler/runtime/collections/collections.c` + `lib/std/runtime/collections.c`
-> **14 lowlevel blocks to eliminate** (+ 10 iterator blocks)
+> **Status**: MIGRATED — pure TML using `ptr_read`/`ptr_write`/`mem_alloc`/`mem_free`/`write_bytes`
+> **Design**: Type-erased I64 storage, FNV-1a hashing, linear probing, 0.7 load factor, tombstone deletion
 
-Calls to remove:
-- `hashmap_create(initial_capacity)` → line 56
-- `hashmap_set(this.handle, key, value)` → line 84
-- `hashmap_get(this.handle, key)` → line 103
-- `hashmap_has(this.handle, key)` → line 116
-- `hashmap_remove(this.handle, key)` → line 129
-- `hashmap_len(this.handle)` → line 138
-- `hashmap_clear(this.handle)` → line 143
-- `hashmap_destroy(this.handle)` → line 152
-- `hashmap_iter_create(this.handle)` → line 173
-- `hashmap_iter_has_next(this.handle)` → line 206
-- `hashmap_iter_next(this.handle)` → line 211
-- `hashmap_iter_key(this.handle)` → line 220
-- `hashmap_iter_value(this.handle)` → line 229
-- `hashmap_iter_destroy(this.handle)` → line 238
-
-Tasks:
-- [ ] 2.1.1 Design `HashMap[K, V]` struct with open-addressing: `entries: *Entry[K,V], count: I64, capacity: I64`
-- [ ] 2.1.2 Implement `Entry[K,V]` struct: `key: K, value: V, hash: U64, occupied: Bool`
-- [ ] 2.1.3 Implement `new()` / `with_capacity()` using `mem_alloc_zeroed`
-- [ ] 2.1.4 Implement `insert()` with linear probing or robin-hood, grow on load factor
-- [ ] 2.1.5 Implement `get()` returning `Maybe[ref V]`
-- [ ] 2.1.6 Implement `contains()` / `remove()`
-- [ ] 2.1.7 Implement `len()`, `clear()`, `is_empty()`
-- [ ] 2.1.8 Implement iterator as TML struct (no opaque handle)
-- [ ] 2.1.9 Implement `drop()` calling `mem_free`
-- [ ] 2.1.10 Require `K: Hash + Eq` behavior bounds
-- [ ] 2.1.11 Remove `hashmap_*` emitters from `builtins/collections.cpp`
-- [ ] 2.1.12 Remove `hashmap_*` declarations from `core/runtime.cpp`
-- [ ] 2.1.13 Run all existing HashMap tests — must pass
+- [x] 2.1.1 Design `HashMap[K, V]` with type-erased I64 storage: header 24 bytes (entries_ptr + len + capacity), entry 24 bytes (key I64 + value I64 + occupied I32 + deleted I32)
+- [x] 2.1.2 Implement FNV-1a hash function: offset basis `-3750763034362895579`, prime `1099511628211`, result masked positive
+- [x] 2.1.3 Implement `new(capacity)` / `default()` using `mem_alloc` + `write_bytes` zero-init
+- [x] 2.1.4 Implement `set()` with linear probing, 0.7 load factor grow trigger, tombstone reuse
+- [x] 2.1.5 Implement `get()` returning type-erased I64 value (zero if not found)
+- [x] 2.1.6 Implement `has()` / `remove()` with tombstone marking (deleted=1)
+- [x] 2.1.7 Implement `len()`, `clear()` (write_bytes zero-init + len=0)
+- [x] 2.1.8 Implement `HashMapIter[K,V]` as 16-byte struct (map_handle + index), with `has_next()`/`next()`/`key()`/`value()`/`destroy()`
+- [x] 2.1.9 Implement `destroy()` — `mem_free` entries array + `mem_free` header
+- [x] 2.1.10 Keys use `key as I64` (ptrtoint for Str, sext for integers) — content-based Hashable behavior deferred
+- [x] 2.1.11 Remove HashMap codegen dispatch from 10 compiler files: method_collection.cpp, method_static.cpp, method_static_dispatch.cpp, method_impl.cpp, impl.cpp, generate.cpp, struct.cpp, builtins/collections.cpp, runtime.cpp, types/builtins/collections.cpp
+- [x] 2.1.12 Remove HashMap C functions from `compiler/runtime/collections/collections.c` and `lib/std/runtime/collections.{c,h}`
+- [x] 2.1.13 All HashMap tests pass: hashmap_basic (6), hashmap_iter (3), test_hashmap_iter (2) — 11 total
+- [x] 2.1.14 **Bonus**: Fixed string literal deduplication in compiler — `add_string_literal()` now deduplicates identical strings via `string_literal_dedup_` map
 
 ---
 
@@ -496,7 +480,7 @@ Tasks:
 
 ---
 
-## Phase 16: Codegen Cleanup
+## Phase 16: Codegen Cleanup — Remove Dead Emitters
 
 - [ ] 16.1.1 Remove dead string emitters from `compiler/src/codegen/llvm/builtins/string.cpp`
 - [ ] 16.1.2 Remove dead collection emitters from `compiler/src/codegen/llvm/builtins/collections.cpp`
@@ -510,14 +494,142 @@ Tasks:
 
 ---
 
-## Phase 17: Benchmarks and Validation
+## Phase 17: Runtime Declaration Optimization (On-Demand Emit)
 
-- [ ] 17.1.1 Benchmark List push/pop/get: 1M operations (before vs after)
-- [ ] 17.1.2 Benchmark HashMap insert/get/remove: 100K operations (before vs after)
-- [ ] 17.1.3 Benchmark string concat/split/contains: 100K operations (before vs after)
-- [ ] 17.1.4 Benchmark i64_to_string / f64_to_string: 1M operations (before vs after)
-- [ ] 17.1.5 Benchmark Text builder: build 10K string (before vs after)
-- [ ] 17.1.6 Benchmark search: BM25 index + query (before vs after)
-- [ ] 17.1.7 Verify performance within 10% of C implementations
-- [ ] 17.1.8 Run full test suite with --coverage
-- [ ] 17.1.9 Document final metrics: C files removed, lowlevel blocks eliminated, total line count reduction
+> **Source**: `compiler/src/codegen/llvm/core/runtime.cpp`
+> **Problem**: 393 `declare` statements emitted unconditionally in EVERY IR file
+> **Impact**: -2KB per IR file, faster LLVM optimization and linking
+
+- [ ] 17.1.1 Add `declared_runtime_functions_` set to `LLVMIRGen` to track what's been declared
+- [ ] 17.1.2 Create `ensure_runtime_decl(name, signature)` helper that emits declare only on first use
+- [ ] 17.1.3 Replace unconditional block in `emit_runtime_declarations()` with on-demand calls
+- [ ] 17.1.4 Update all call sites in builtins/*.cpp to call `ensure_runtime_decl()` before emitting calls
+- [ ] 17.1.5 Keep LLVM intrinsics (`llvm.memcpy`, `llvm.memset`, etc.) as unconditional (LLVM requires them)
+- [ ] 17.1.6 Keep essential declarations unconditional: `print`, `panic`, `mem_alloc`, `mem_free` (always needed)
+- [ ] 17.1.7 Verify: `--emit-ir` output only contains declarations for functions actually called
+- [ ] 17.1.8 Run full test suite — all tests pass
+
+---
+
+## Phase 18: Codegen Dispatch Cleanup — Eliminate Hardcoded Collection Dispatch
+
+> **Problem**: 1,330 lines of if/else in `method_collection.cpp` + 430 lines in `builtins/collections.cpp`
+> **Goal**: As each collection type migrates to TML, remove its hardcoded dispatch path
+
+### 18.1 HashMap dispatch removal (COMPLETED — done as part of Phase 2)
+
+- [x] 18.1.1 Remove HashMap branch from `method_collection.cpp` (~200 lines of `get/set/has/remove/len/clear/iter`)
+- [x] 18.1.2 Remove HashMapIter branch from `method_collection.cpp` (~107 lines of `has_next/key/value/next`)
+- [x] 18.1.3 Remove HashMap from bypass list in `method_impl.cpp:96` (allow normal impl dispatch)
+- [x] 18.1.4 Remove HashMap from skip list in `decl/impl.cpp:155` (generate impl methods normally)
+- [x] 18.1.5 Remove HashMap from skip list in `generate.cpp:715`
+- [x] 18.1.6 Remove HashMap static methods from `method_static.cpp:45-104` (HashMap::new, ::default)
+- [x] 18.1.7 Remove HashMap from type name validation in `method_static_dispatch.cpp:898`
+- [x] 18.1.8 Remove 14 hashmap_* function registrations from `types/builtins/collections.cpp`
+- [x] 18.1.9 Remove hashmap_* if/else chain from `builtins/collections.cpp`
+- [x] 18.1.10 Remove hardcoded `{ ptr }` type-erasure for HashMap in `decl/struct.cpp:337-354`
+- [x] 18.1.11 All HashMap tests pass through normal dispatch (11 tests)
+
+### 18.2 Buffer dispatch removal (after Phase 3 completes)
+
+- [ ] 18.2.1 Remove Buffer branch from `method_collection.cpp` (~973 lines of 20+ methods)
+- [ ] 18.2.2 Remove Buffer from bypass list in `method_impl.cpp:96`
+- [ ] 18.2.3 Remove Buffer from skip list in `decl/impl.cpp:155`
+- [ ] 18.2.4 Remove Buffer from skip list in `generate.cpp:715`
+- [ ] 18.2.5 Remove Buffer static methods from `method_static.cpp:107-183` (Buffer::new, from_hex, etc.)
+- [ ] 18.2.6 Remove Buffer from type name validation in `method_static_dispatch.cpp:898`
+- [ ] 18.2.7 Remove 11 buffer_* function registrations from `types/builtins/collections.cpp`
+- [ ] 18.2.8 Remove buffer_* if/else chain from `builtins/collections.cpp`
+- [ ] 18.2.9 Run all Buffer tests — must pass through normal dispatch
+
+### 18.3 List cleanup (Phase 1 already done, just cleanup)
+
+- [ ] 18.3.1 Remove `List` from type-erasure in `decl/struct.cpp:317-335` (allow TML-defined layout)
+- [ ] 18.3.2 Remove `List` from type name validation in `method_static_dispatch.cpp:898`
+- [ ] 18.3.3 Verify List dispatch goes through normal `gen_impl_method()` path
+
+---
+
+## Phase 19: File/Path Refactor — Move to TML Structs with @extern("c") FFI
+
+> **Problem**: File and Path have 23 hardcoded static methods in `method_static.cpp` (lines 186-385)
+> **Problem**: Skip impl dispatch in `method_impl.cpp`, `decl/impl.cpp`, `generate.cpp`
+> **Goal**: TML structs with `@extern("c")` bindings to OS functions
+
+### 19.1 File refactor
+
+- [ ] 19.1.1 Create `lib/std/src/file.tml` with `pub type File { handle: *Unit }`
+- [ ] 19.1.2 Add `@extern("c")` declarations for OS file operations (open, read, write, close, etc.)
+- [ ] 19.1.3 Implement File static methods as TML impl calling @extern functions
+- [ ] 19.1.4 Remove File from bypass list in `method_impl.cpp:96`
+- [ ] 19.1.5 Remove File from skip list in `decl/impl.cpp:155`
+- [ ] 19.1.6 Remove File from skip list in `generate.cpp:715`
+- [ ] 19.1.7 Remove 12 hardcoded File methods from `method_static.cpp:186-263`
+- [ ] 19.1.8 Run all File tests — must pass
+
+### 19.2 Path refactor
+
+- [ ] 19.2.1 Create `lib/std/src/path.tml` with `pub type Path { inner: Str }`
+- [ ] 19.2.2 Add `@extern("c")` declarations for OS path operations
+- [ ] 19.2.3 Implement Path static methods as TML impl calling @extern functions
+- [ ] 19.2.4 Remove Path from bypass list in `method_impl.cpp:96`
+- [ ] 19.2.5 Remove Path from skip list in `decl/impl.cpp:155`
+- [ ] 19.2.6 Remove Path from skip list in `generate.cpp:715`
+- [ ] 19.2.7 Remove 11 hardcoded Path methods from `method_static.cpp:266-385`
+- [ ] 19.2.8 Run all Path tests — must pass
+
+---
+
+## Phase 20: Type System Cleanup — Remove Hardcoded Builtin Registrations
+
+> **Problem**: `types/builtins/collections.cpp` registers 25 function signatures manually
+> **Problem**: `types/builtins/string.cpp` registers 29 function signatures manually
+> **Goal**: Type system discovers methods from TML source files, not hardcoded registrations
+
+- [x] 20.1.1 After Phase 2: Remove 14 hashmap_* registrations from `types/builtins/collections.cpp` (done in Phase 2)
+- [ ] 20.1.2 After Phase 3: Remove 11 buffer_* registrations from `types/builtins/collections.cpp`
+- [ ] 20.1.3 After Phases 4-6: Remove 29 string registrations from `types/builtins/string.cpp`
+- [ ] 20.1.4 After Phase 11: Remove 9 strbuilder_* registrations (if Text migrates)
+- [ ] 20.1.5 Verify: type checker finds method signatures from TML impl blocks, not builtin registry
+- [ ] 20.1.6 Run full test suite
+
+---
+
+## Phase 21: Fix Metadata Loss and Workarounds
+
+> **Problem**: Behavior method return types lost in metadata loader → hardcoded workaround
+> **Source**: `method_prim_behavior.cpp:378-390`
+
+- [ ] 21.1.1 Fix metadata loader to preserve return types for behavior impls on primitives
+- [ ] 21.1.2 Remove hardcoded return type workaround (eq→i1, cmp→Ordering, hash→i64)
+- [ ] 21.1.3 Fix unresolved generic type placeholders in `decl/struct.cpp:160-167`
+- [ ] 21.1.4 Run full test suite
+
+---
+
+## Phase 22: Benchmarks and Validation
+
+- [ ] 22.1.1 Benchmark List push/pop/get: 1M operations (before vs after)
+- [ ] 22.1.2 Benchmark HashMap insert/get/remove: 100K operations (before vs after)
+- [ ] 22.1.3 Benchmark string concat/split/contains: 100K operations (before vs after)
+- [ ] 22.1.4 Benchmark i64_to_string / f64_to_string: 1M operations (before vs after)
+- [ ] 22.1.5 Benchmark Text builder: build 10K string (before vs after)
+- [ ] 22.1.6 Benchmark search: BM25 index + query (before vs after)
+- [ ] 22.1.7 Verify performance within 10% of C implementations
+- [ ] 22.1.8 Run full test suite with --coverage
+- [ ] 22.1.9 Document final metrics: C files removed, lowlevel blocks eliminated, codegen dispatch lines removed
+
+---
+
+## Summary: Expected Impact
+
+| Metric | Before | After All Phases |
+|--------|--------|-----------------|
+| C runtime lines (migratable) | ~5,210 | 0 |
+| C runtime lines (total) | ~20,000 | ~12,500 (FFI + essential only) |
+| Hardcoded dispatch lines | ~3,300 | ~300 (intrinsics only) |
+| Types bypassing impl dispatch | 5 (HashMap, Buffer, File, Path, Ordering) | 0 |
+| Unconditional runtime declares | 393 | ~30 (on-demand) |
+| Hardcoded type registrations | 54 | 0 |
+| Hardcoded collection methods | 1,330 lines | 0 |
+| Hardcoded static methods | 500 lines | ~150 (primitives only) |

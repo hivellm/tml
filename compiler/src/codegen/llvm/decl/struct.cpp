@@ -334,25 +334,9 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
                         }
                     }
                 }
-            } else if (base_name == "HashMap" || base_name == "Map" || base_name == "Dict") {
-                // HashMap[K, V] = type { handle: *Unit } - all instantiations are { ptr }
-                std::string type_name = "%struct." + mangled;
-                std::string def = type_name + " = type { ptr }";
-                type_defs_buffer_ << def << "\n";
-                struct_types_[mangled] = type_name;
-                struct_fields_[mangled] = {
-                    {"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
-
-                // Recursively instantiate type arguments
-                for (const auto& arg : final_type_args) {
-                    if (arg && arg->is<types::NamedType>()) {
-                        const auto& named = arg->as<types::NamedType>();
-                        if (!named.type_args.empty()) {
-                            require_struct_instantiation(named.name, named.type_args);
-                        }
-                    }
-                }
             }
+            // Note: HashMap removed — now uses normal generic struct instantiation path
+            // (HashMap[K,V] { handle: *Unit } naturally produces { ptr })
         }
     }
     // Fallback for when module registry isn't available
