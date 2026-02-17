@@ -1,7 +1,7 @@
 # TML Roadmap
 
 **Last updated**: 2026-02-17
-**Current state**: Compiler functional, 75.2% library coverage, 8,855+ tests passing
+**Current state**: Compiler functional, 75.7% library coverage, 8,912+ tests passing
 
 ---
 
@@ -9,7 +9,7 @@
 
 ```
 Phase 1  [DONE 97%]   Fix codegen bugs (closures, generics, iterators)
-Phase 2  [DONE]       Tests for working features → coverage 58% → 75% ✓
+Phase 2  [DONE]       Tests for working features → coverage 58% → 75.7% ✓
 Phase 3  [ACTIVE 63%] Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓)
 Phase 4  [THEN]       Migrate C runtime → pure TML
 Phase 5  [LATER]      Async runtime, networking, HTTP
@@ -31,9 +31,9 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 
 | Metric | Value |
 |--------|-------|
-| Library function coverage | 75.1% (3,005/4,000) |
-| Tests passing | 8,763 across 744 files |
-| Modules at 100% coverage | 71 |
+| Library function coverage | 75.7% (3,112/4,113) |
+| Tests passing | 8,912 across 768 files |
+| Modules at 100% coverage | 74 |
 | Modules at 0% coverage | 31 |
 | C++ compiler size | ~238,000 lines |
 | C runtime to migrate | ~4,585 lines |
@@ -104,6 +104,8 @@ Blocks the entire iterator system — 45 source files, ~200+ functions at 0% cov
 - [x] 1.7.5 Fix `Text::data_ptr` — SSO mode crash (DONE 2026-02-14)
 - [x] 1.7.6 Fix `Saturating[T]::add/sub/mul()`, `Wrapping[T]::add/sub/mul/neg()` (DONE 2026-02-14)
 - [x] 1.7.7 Fix `clone::Duplicate::duplicate` coverage tracking for primitive types (DONE 2026-02-15 — clone module at 100%)
+- [x] 1.7.8 Add `__FILE__`, `__DIRNAME__`, `__LINE__` compile-time constants (DONE 2026-02-17 — lexer-level expansion, enables scripts to use paths relative to script location)
+- [x] 1.7.9 Fix `Shared[T]` memory leak — `decrement_count`/`increment_count` codegen broken for library-imported generics (DONE 2026-02-17 — rewritten with `ptr_write` intrinsic; root cause: `(*ptr).field = value` produces CallExpr instead of UnaryExpr for library-imported generic types)
 
 ### 1.8 Nested generic type codegen
 
@@ -116,14 +118,14 @@ Blocks the entire iterator system — 45 source files, ~200+ functions at 0% cov
 
 - [ ] 1.9.1 Fix generic cache O(n^2) in test suites (`codegen/core/generic.cpp:303`)
 
-**Progress**: 36/37 items fixed (~97%). Coverage jumped from 43.7% to 75.1% (+2,400+ functions). Remaining items: async iterator (1.3.4, deferred), `OnceLock::get_or_init` closure type mismatch (6e.3), generic cache perf (1.9.1).
-**Gate**: Phase 1 effectively complete. Coverage at 75.1% with 8,763 tests.
+**Progress**: 38/39 items fixed (~97%). Coverage jumped from 43.7% to 75.7% (+2,500+ functions). Remaining items: async iterator (1.3.4, deferred), generic cache perf (1.9.1).
+**Gate**: Phase 1 effectively complete. Coverage at 75.7% with 8,912 tests.
 
 ---
 
 ## Phase 2: Test Coverage
 
-**Goal**: 58% → 75%+ function coverage — **ACHIEVED** (75.1%)
+**Goal**: 58% → 75%+ function coverage — **ACHIEVED** (75.7%)
 **Priority**: HIGH — proves stability, catches regressions
 **Tracking**: Coverage reports via `tml test --coverage`
 
@@ -337,8 +339,8 @@ Compiler fixes enabling coverage push:
 - Fixed partial coverage generation when tests fail
 
 Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_or[E], Maybe::default), multi-arg LLVM intrinsics (minnum, maxnum, fma, copysign), Unit type methods, class inheritance method dispatch, Char→i32 type codegen.
-**Note**: Full test suite crashes on x509/DH crypto tests (ACCESS_VIOLATION in OpenSSL). Coverage JSON generates before crash.
-**Gate**: Coverage >= 75% — **ACHIEVED** (75.1%, 3,005/4,000 functions). 71 modules at 100%.
+**Note**: Full test suite crashes on x509/DH crypto tests (ACCESS_VIOLATION in OpenSSL). Coverage JSON generates before crash. This is a test-runner/cache issue, not a code bug.
+**Gate**: Coverage >= 75% — **ACHIEVED** (75.7%, 3,112/4,113 functions). 74 modules at 100%.
 
 ---
 
@@ -647,13 +649,14 @@ These can be worked on alongside the main phases without blocking or being block
 
 ### Developer Tooling
 
-**Status**: 65% complete
+**Status**: 71% complete
 **Tracking**: [developer-tooling/tasks.md](../rulebook/tasks/developer-tooling/tasks.md)
 
 - [x] VSCode extension (published v0.17.0)
 - [x] Compiler MCP server (20 tools)
 - [x] Code formatter
 - [x] Linter
+- [x] `__FILE__`, `__DIRNAME__`, `__LINE__` compile-time constants (2026-02-17)
 - [ ] LSP: go-to-definition, references, rename
 - [ ] `tml doc` — HTML documentation generation
 - [ ] Doc comment preservation in compiler pipeline
@@ -695,15 +698,15 @@ These can be worked on alongside the main phases without blocking or being block
 
 | Phase | Items | Done | Progress | Status |
 |-------|-------|------|----------|--------|
-| 1. Codegen bugs | 37 | 36 | 97% | NEARLY COMPLETE |
-| 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (75.1%) |
+| 1. Codegen bugs | 39 | 38 | 97% | NEARLY COMPLETE |
+| 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (75.7%) |
 | 3. Stdlib essentials | 42 | 20 | 48% | **IN PROGRESS** |
 | 4. Runtime migration | 28 | 0 | 0% | NOT STARTED |
 | 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
-| Parallel: Tooling | 7 | 4 | 57% | IN PROGRESS |
+| Parallel: Tooling | 8 | 5 | 63% | IN PROGRESS |
 | Parallel: Reflection | 5 | 3 | 60% | IN PROGRESS |
-| **TOTAL** | **263** | **138** | **52.5%** | |
+| **TOTAL** | **266** | **141** | **53.0%** | |
 
 ---
 

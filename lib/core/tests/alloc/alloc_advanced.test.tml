@@ -11,6 +11,7 @@ use core::alloc::layout::{Layout, LayoutError}
 use core::alloc::heap::{Heap}
 use core::alloc::shared::{Shared}
 use core::alloc::sync::{Sync}
+use core::mem::mem_free
 
 // ============================================================================
 // From layout.test.tml - Duplicate tests (renamed with _v2 suffix)
@@ -485,7 +486,9 @@ func test_heap_into_raw_from_raw() -> I32 {
 func test_heap_leak() -> I32 {
     var h: Heap[I32] = Heap::new(99)
     let ptr: *I32 = h.leak()
-    // ptr is now leaked, we don't clean it up (intentional)
+    // Verify leak() returns a valid pointer, then clean up
+    assert(ptr != null, "leak() should return non-null pointer")
+    mem_free(ptr as *Unit)
     return 0
 }
 
@@ -505,7 +508,6 @@ func test_shared_new_default_i32() -> I32 {
 func test_shared_as_ptr() -> I32 {
     let s: Shared[I32] = Shared::new(42)
     let p: *I32 = s.as_ptr()
-    // Just verify it doesn't crash
     return 0
 }
 

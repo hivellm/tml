@@ -417,17 +417,39 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     types::TypePtr operand_type = infer_expr_type(*unary.operand);
 
                     if (operand_type) {
+                        // Extract the inner (pointee) type from pointer/ref types
+                        types::TypePtr inner_type;
                         if (operand_type->is<types::PtrType>()) {
-                            const auto& ptr = operand_type->as<types::PtrType>();
-                            if (ptr.inner) {
-                                struct_type = llvm_type_from_semantic(ptr.inner);
-                            }
+                            inner_type = operand_type->as<types::PtrType>().inner;
                         } else if (operand_type->is<types::RefType>()) {
-                            const auto& ref = operand_type->as<types::RefType>();
-                            if (ref.inner) {
-                                struct_type = llvm_type_from_semantic(ref.inner);
+                            inner_type = operand_type->as<types::RefType>().inner;
+                        }
+
+                        // Apply type substitutions for generic contexts (e.g., T -> I32)
+                        // This is critical for imported generic types like Shared[T]
+                        if (inner_type && !current_type_subs_.empty()) {
+                            inner_type = apply_type_substitutions(inner_type, current_type_subs_);
+                        }
+
+                        if (inner_type) {
+                            if (inner_type->is<types::NamedType>()) {
+                                const auto& named_inner = inner_type->as<types::NamedType>();
+                                if (!named_inner.type_args.empty()) {
+                                    // Generic struct: ensure instantiation and field registration
+                                    std::string mangled = require_struct_instantiation(
+                                        named_inner.name, named_inner.type_args);
+                                    struct_type = "%struct." + mangled;
+                                } else {
+                                    struct_type = "%struct." + named_inner.name;
+                                }
+                            } else if (inner_type->is<types::ClassType>()) {
+                                struct_type = "%class." + inner_type->as<types::ClassType>().name;
+                            } else {
+                                struct_type = llvm_type_from_semantic(inner_type);
                             }
-                        } else if (operand_type->is<types::NamedType>()) {
+                        }
+
+                        if (struct_type.empty() && operand_type->is<types::NamedType>()) {
                             // Handle Ptr[T] as NamedType with name "Ptr" and type_args
                             const auto& named = operand_type->as<types::NamedType>();
                             if (named.name == "Ptr" && !named.type_args.empty()) {
@@ -451,12 +473,12 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                             };
                             if (deref_mut_types.count(named.name) > 0 && !named.type_args.empty()) {
                                 // Get the inner type (first type arg)
-                                types::TypePtr inner_type = named.type_args[0];
+                                types::TypePtr deref_inner_type = named.type_args[0];
                                 if (!current_type_subs_.empty()) {
-                                    inner_type =
-                                        apply_type_substitutions(inner_type, current_type_subs_);
+                                    deref_inner_type = apply_type_substitutions(deref_inner_type,
+                                                                                current_type_subs_);
                                 }
-                                struct_type = llvm_type_from_semantic(inner_type);
+                                struct_type = llvm_type_from_semantic(deref_inner_type);
                                 TML_DEBUG_LN("[FIELD_ASSIGN] Smart pointer "
                                              << named.name << " deref to " << struct_type);
 
@@ -468,9 +490,10 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                                     // Get mangled type names
                                     // Use require_struct_instantiation to handle UNRESOLVED cases
                                     std::string guard_mangled = require_struct_instantiation(
-                                        "MutexGuard", std::vector<types::TypePtr>{inner_type});
+                                        "MutexGuard",
+                                        std::vector<types::TypePtr>{deref_inner_type});
                                     std::string mutex_mangled = require_struct_instantiation(
-                                        "Mutex", std::vector<types::TypePtr>{inner_type});
+                                        "Mutex", std::vector<types::TypePtr>{deref_inner_type});
                                     std::string guard_llvm_type = "%struct." + guard_mangled;
                                     std::string mutex_llvm_type = "%struct." + mutex_mangled;
 
@@ -498,11 +521,11 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                                               ", i32 0, i32 0");
 
                                     // For field access, we need the pointer to the data
-                                    // If inner_type is Ptr[T], load the pointer value
+                                    // If deref_inner_type is Ptr[T], load the pointer value
                                     // Otherwise, data_ptr points directly to the struct
-                                    if (inner_type->is<types::NamedType>()) {
+                                    if (deref_inner_type->is<types::NamedType>()) {
                                         const auto& inner_named =
-                                            inner_type->as<types::NamedType>();
+                                            deref_inner_type->as<types::NamedType>();
                                         if (inner_named.name == "Ptr" &&
                                             !inner_named.type_args.empty()) {
                                             // Load the Ptr value
@@ -530,9 +553,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                                     // Get mangled type names
                                     // Use require_struct_instantiation to handle UNRESOLVED cases
                                     std::string arc_mangled = require_struct_instantiation(
-                                        "Arc", std::vector<types::TypePtr>{inner_type});
+                                        "Arc", std::vector<types::TypePtr>{deref_inner_type});
                                     std::string inner_mangled = require_struct_instantiation(
-                                        "ArcInner", std::vector<types::TypePtr>{inner_type});
+                                        "ArcInner", std::vector<types::TypePtr>{deref_inner_type});
                                     std::string arc_llvm_type = "%struct." + arc_mangled;
                                     std::string inner_llvm_type = "%struct." + inner_mangled;
 
@@ -560,9 +583,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                                               ", i32 0, i32 2");
 
                                     // For field access, we need the pointer to the data
-                                    if (inner_type->is<types::NamedType>()) {
+                                    if (deref_inner_type->is<types::NamedType>()) {
                                         const auto& inner_named =
-                                            inner_type->as<types::NamedType>();
+                                            deref_inner_type->as<types::NamedType>();
                                         if (inner_named.name == "Ptr" &&
                                             !inner_named.type_args.empty()) {
                                             // Load the Ptr value

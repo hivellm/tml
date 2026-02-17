@@ -1,6 +1,7 @@
 // Tests for alloc/heap - Heap extra methods
 use test
 use core::alloc::heap::Heap
+use core::mem::mem_free
 
 @test
 func test_heap_new_default_i32() -> I32 {
@@ -23,6 +24,8 @@ func test_heap_into_raw_from_raw() -> I32 {
 func test_heap_leak() -> I32 {
     var h: Heap[I32] = Heap::new(99)
     let ptr: *I32 = h.leak()
-    // ptr is now leaked, we don't clean it up (intentional)
+    // Verify leak() returns a valid pointer, then clean up
+    assert(ptr != null, "leak() should return non-null pointer")
+    mem_free(ptr as *Unit)
     return 0
 }

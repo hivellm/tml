@@ -13,6 +13,7 @@
 // ```
 
 use core::mem::{mem_alloc, mem_free, size_of}
+use core::intrinsics::ptr_write
 use core::ops::Deref
 use core::clone::Duplicate
 use core::fmt::{Display, Debug}
@@ -214,7 +215,9 @@ impl[T] Shared[T] {
     /// Increments the reference count (used internally by duplicate).
     pub func increment_count(this) {
         if this.ptr != null {
-            (*this.ptr).strong_count = (*this.ptr).strong_count + 1
+            let count_ptr: *I32 = &(*this.ptr).strong_count as *I32
+            let old: I32 = *count_ptr
+            ptr_write[I32](count_ptr, old + 1)
         }
     }
 
@@ -224,9 +227,12 @@ impl[T] Shared[T] {
             return
         }
 
-        (*this.ptr).strong_count = (*this.ptr).strong_count - 1
+        let count_ptr: *I32 = &(*this.ptr).strong_count as *I32
+        let old: I32 = *count_ptr
+        let new_count: I32 = old - 1
+        ptr_write[I32](count_ptr, new_count)
 
-        if (*this.ptr).strong_count == 0 {
+        if new_count == 0 {
             mem_free(this.ptr as *Unit)
         }
     }
