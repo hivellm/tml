@@ -1,0 +1,51 @@
+// Math module: full constants coverage (SQRT_2, LN_2, LN_10, LOG2_E, LOG10_E, FRAC_*)
+use test::{assert_eq, assert}
+use std::math::{PI, SQRT_2, LN_2, LN_10, LOG2_E, LOG10_E, FRAC_1_PI, FRAC_2_PI, FRAC_1_SQRT_2}
+
+@test
+func test_sqrt_2() -> I32 {
+    assert(SQRT_2 > 1.41421 and SQRT_2 < 1.41422, "SQRT_2 should be ~1.41421")
+    return 0
+}
+
+@test
+func test_ln_2() -> I32 {
+    assert(LN_2 > 0.69314 and LN_2 < 0.69315, "LN_2 should be ~0.69314")
+    return 0
+}
+
+@test
+func test_ln_10() -> I32 {
+    assert(LN_10 > 2.30258 and LN_10 < 2.30259, "LN_10 should be ~2.30258")
+    return 0
+}
+
+@test
+func test_log2_e() -> I32 {
+    assert(LOG2_E > 1.44269 and LOG2_E < 1.44270, "LOG2_E should be ~1.44269")
+    return 0
+}
+
+@test
+func test_log10_e() -> I32 {
+    assert(LOG10_E > 0.43429 and LOG10_E < 0.43430, "LOG10_E should be ~0.43429")
+    return 0
+}
+
+@test
+func test_frac_1_pi() -> I32 {
+    assert(FRAC_1_PI > 0.31830 and FRAC_1_PI < 0.31831, "FRAC_1_PI should be ~0.31830")
+    return 0
+}
+
+@test
+func test_frac_2_pi() -> I32 {
+    assert(FRAC_2_PI > 0.63661 and FRAC_2_PI < 0.63662, "FRAC_2_PI should be ~0.63661")
+    return 0
+}
+
+@test
+func test_frac_1_sqrt_2() -> I32 {
+    assert(FRAC_1_SQRT_2 > 0.70710 and FRAC_1_SQRT_2 < 0.70711, "FRAC_1_SQRT_2 should be ~0.70710")
+    return 0
+}

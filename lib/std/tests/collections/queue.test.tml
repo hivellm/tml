@@ -1,0 +1,98 @@
+// Queue full coverage
+use test::{assert, assert_eq}
+use std::collections::class_collections::Queue
+
+@test
+func test_queue_create() -> I32 {
+    let q: Queue[I64] = Queue::create[I64]()
+    assert_eq(q.count(), 0 as I64, "new queue should be empty")
+    assert(q.is_empty(), "new queue should report is_empty")
+    return 0
+}
+
+@test
+func test_queue_enqueue_dequeue() -> I32 {
+    var q: Queue[I64] = Queue::create[I64]()
+    q.enqueue(10)
+    q.enqueue(20)
+    q.enqueue(30)
+    assert_eq(q.count(), 3 as I64, "count should be 3")
+
+    let v1: Maybe[I64] = q.dequeue()
+    assert(v1 == Just(10 as I64), "first dequeue should be 10")
+    let v2: Maybe[I64] = q.dequeue()
+    assert(v2 == Just(20 as I64), "second dequeue should be 20")
+    let v3: Maybe[I64] = q.dequeue()
+    assert(v3 == Just(30 as I64), "third dequeue should be 30")
+
+    let v4: Maybe[I64] = q.dequeue()
+    assert(v4 == Nothing, "dequeue on empty should be Nothing")
+    return 0
+}
+
+@test
+func test_queue_peek() -> I32 {
+    var q: Queue[I64] = Queue::create[I64]()
+    let empty_peek: Maybe[I64] = q.peek()
+    assert(empty_peek == Nothing, "peek on empty should be Nothing")
+
+    q.enqueue(42)
+    let p: Maybe[I64] = q.peek()
+    assert(p == Just(42 as I64), "peek should return 42")
+    assert_eq(q.count(), 1 as I64, "peek should not remove element")
+    return 0
+}
+
+@test
+func test_queue_add() -> I32 {
+    var q: Queue[I64] = Queue::create[I64]()
+    q.add(10)
+    q.add(20)
+    assert_eq(q.count(), 2 as I64, "add should enqueue")
+    return 0
+}
+
+@test
+func test_queue_clear() -> I32 {
+    var q: Queue[I64] = Queue::create[I64]()
+    q.enqueue(1)
+    q.enqueue(2)
+    q.clear()
+    assert_eq(q.count(), 0 as I64, "count after clear should be 0")
+    assert(q.is_empty(), "should be empty after clear")
+    return 0
+}
+
+@test
+func test_queue_with_capacity() -> I32 {
+    var q: Queue[I64] = Queue::with_capacity[I64](32)
+    assert(q.is_empty(), "new queue with capacity should be empty")
+    q.enqueue(1)
+    assert_eq(q.count(), 1 as I64, "count should be 1")
+    return 0
+}
+
+@test
+func test_queue_contains() -> I32 {
+    var q: Queue[I64] = Queue::create[I64]()
+    q.enqueue(10)
+    q.enqueue(20)
+    assert(q.contains(10), "should contain 10")
+    assert(q.contains(20), "should contain 20")
+    assert(not q.contains(30), "should not contain 30")
+    return 0
+}
+
+@test
+func test_queue_remove() -> I32 {
+    var q: Queue[I64] = Queue::create[I64]()
+    q.enqueue(10)
+    q.enqueue(20)
+    q.enqueue(30)
+    let removed = q.remove(20)
+    assert(removed, "remove(20) should return true")
+    assert_eq(q.count(), 2 as I64, "count after remove")
+    let not_removed = q.remove(99)
+    assert(not not_removed, "remove(99) should return false")
+    return 0
+}

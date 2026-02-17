@@ -896,6 +896,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @elapsed_ms(i32)");
     emit_line("declare i64 @elapsed_us(i64)");
     emit_line("declare i64 @elapsed_ns(i64)");
+    emit_line("declare i64 @instant_now()");
+    emit_line("declare i64 @instant_elapsed(i64)");
     emit_line("");
 
     // Memory functions (matches runtime/mem.c)

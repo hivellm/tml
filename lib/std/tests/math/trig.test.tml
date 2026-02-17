@@ -1,0 +1,24 @@
+// Math module: trigonometric function tests
+use test::{assert_eq, assert}
+use std::math
+
+@test
+func test_sin_zero() -> I32 {
+    let result = math::sin(0.0)
+    assert_eq(result, 0.0, "sin(0) should be 0")
+    return 0
+}
+
+@test
+func test_cos_zero() -> I32 {
+    let result = math::cos(0.0)
+    assert_eq(result, 1.0, "cos(0) should be 1")
+    return 0
+}
+
+@test
+func test_tan_zero() -> I32 {
+    let result = math::tan(0.0)
+    assert_eq(result, 0.0, "tan(0) should be 0")
+    return 0
+}

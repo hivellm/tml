@@ -1,0 +1,80 @@
+// Math module: advanced function tests (inverse trig, hyperbolic, logarithms)
+use test::{assert_eq, assert}
+use std::math
+
+@test
+func test_asin() -> I32 {
+    let result = math::asin(0.0)
+    assert_eq(result, 0.0, "asin(0) should be 0")
+    return 0
+}
+
+@test
+func test_acos() -> I32 {
+    let result = math::acos(1.0)
+    assert_eq(result, 0.0, "acos(1) should be 0")
+    return 0
+}
+
+@test
+func test_atan() -> I32 {
+    let result = math::atan(0.0)
+    assert_eq(result, 0.0, "atan(0) should be 0")
+    return 0
+}
+
+@test
+func test_atan2() -> I32 {
+    let result = math::atan2(0.0, 1.0)
+    assert_eq(result, 0.0, "atan2(0,1) should be 0")
+    return 0
+}
+
+@test
+func test_sinh() -> I32 {
+    let result = math::sinh(0.0)
+    assert_eq(result, 0.0, "sinh(0) should be 0")
+    return 0
+}
+
+@test
+func test_cosh() -> I32 {
+    let result = math::cosh(0.0)
+    assert_eq(result, 1.0, "cosh(0) should be 1")
+    return 0
+}
+
+@test
+func test_tanh() -> I32 {
+    let result = math::tanh(0.0)
+    assert_eq(result, 0.0, "tanh(0) should be 0")
+    return 0
+}
+
+@test
+func test_log2() -> I32 {
+    let result = math::log2(8.0)
+    assert_eq(result, 3.0, "log2(8) should be 3")
+    return 0
+}
+
+@test
+func test_log10() -> I32 {
+    let result = math::log10(1000.0)
+    assert_eq(result, 3.0, "log10(1000) should be 3")
+    return 0
+}
+
+@test
+func test_cbrt() -> I32 {
+    let result = math::cbrt(27.0)
+    assert_eq(result, 3.0, "cbrt(27) should be 3")
+    return 0
+}
+
+@test
+func test_hypot() -> I32 {
+    let result = math::hypot(3.0, 4.0)
+    assert_eq(result, 5.0, "hypot(3,4) should be 5")
+    return 0
+}

@@ -1,0 +1,21 @@
+// Math module: constants tests
+use test::{assert_eq, assert}
+use std::math::{PI, E, TAU}
+
+@test
+func test_pi() -> I32 {
+    assert(PI > 3.14159 and PI < 3.14160, "PI should be ~3.14159")
+    return 0
+}
+
+@test
+func test_e() -> I32 {
+    assert(E > 2.71828 and E < 2.71829, "E should be ~2.71828")
+    return 0
+}
+
+@test
+func test_tau() -> I32 {
+    assert(TAU > 6.28318 and TAU < 6.28319, "TAU should be 2*PI")
+    return 0
+}

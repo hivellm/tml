@@ -1,0 +1,277 @@
+//! Mathematical functions and constants.
+//!
+//! This module provides common mathematical operations for floating-point
+//! numbers. It wraps LLVM intrinsics for basic operations and uses libc
+//! FFI for transcendental functions.
+//!
+//! # Constants
+//!
+//! | Constant | Value | Description |
+//! |----------|-------|-------------|
+//! | [`PI`] | 3.14159... | Ratio of circumference to diameter |
+//! | [`E`] | 2.71828... | Euler's number |
+//! | [`TAU`] | 6.28318... | 2 * PI |
+//! | [`SQRT_2`] | 1.41421... | Square root of 2 |
+//! | [`LN_2`] | 0.69314... | Natural log of 2 |
+//! | [`LN_10`] | 2.30258... | Natural log of 10 |
+//!
+//! # Functions
+//!
+//! ## Trigonometric
+//! `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
+//!
+//! ## Hyperbolic
+//! `sinh`, `cosh`, `tanh`
+//!
+//! ## Exponential & Logarithmic
+//! `exp`, `log`, `log2`, `log10`, `pow`
+//!
+//! ## Rounding
+//! `floor`, `ceil`, `round`, `trunc`
+//!
+//! ## Utility
+//! `abs`, `sqrt`, `cbrt`, `hypot`, `min`, `max`, `clamp`
+//! `to_radians`, `to_degrees`
+
+use core::intrinsics
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/// Pi (ratio of circumference to diameter).
+pub const PI: F64 = 3.14159265358979323846
+
+/// Euler's number (base of natural logarithm).
+pub const E: F64 = 2.71828182845904523536
+
+/// Tau (2 * PI, full circle in radians).
+pub const TAU: F64 = 6.28318530717958647692
+
+/// Square root of 2.
+pub const SQRT_2: F64 = 1.41421356237309504880
+
+/// Natural logarithm of 2.
+pub const LN_2: F64 = 0.69314718055994530942
+
+/// Natural logarithm of 10.
+pub const LN_10: F64 = 2.30258509299404568402
+
+/// log2(e).
+pub const LOG2_E: F64 = 1.44269504088896340736
+
+/// log10(e).
+pub const LOG10_E: F64 = 0.43429448190325182765
+
+/// 1/PI.
+pub const FRAC_1_PI: F64 = 0.31830988618379067154
+
+/// 2/PI.
+pub const FRAC_2_PI: F64 = 0.63661977236758134308
+
+/// 1/sqrt(2).
+pub const FRAC_1_SQRT_2: F64 = 0.70710678118654752440
+
+// ============================================================================
+// FFI declarations for libc math functions
+// ============================================================================
+
+@extern("tan")
+func ffi_tan(x: F64) -> F64
+
+@extern("asin")
+func ffi_asin(x: F64) -> F64
+
+@extern("acos")
+func ffi_acos(x: F64) -> F64
+
+@extern("atan")
+func ffi_atan(x: F64) -> F64
+
+@extern("atan2")
+func ffi_atan2(y: F64, x: F64) -> F64
+
+@extern("sinh")
+func ffi_sinh(x: F64) -> F64
+
+@extern("cosh")
+func ffi_cosh(x: F64) -> F64
+
+@extern("tanh")
+func ffi_tanh(x: F64) -> F64
+
+@extern("log2")
+func ffi_log2(x: F64) -> F64
+
+@extern("log10")
+func ffi_log10(x: F64) -> F64
+
+@extern("cbrt")
+func ffi_cbrt(x: F64) -> F64
+
+@extern("hypot")
+func ffi_hypot(x: F64, y: F64) -> F64
+
+// ============================================================================
+// Trigonometric Functions
+// ============================================================================
+
+/// Sine of `x` (in radians).
+pub func sin(x: F64) -> F64 {
+    return intrinsics::sin[F64](x)
+}
+
+/// Cosine of `x` (in radians).
+pub func cos(x: F64) -> F64 {
+    return intrinsics::cos[F64](x)
+}
+
+/// Tangent of `x` (in radians).
+pub func tan(x: F64) -> F64 {
+    return ffi_tan(x)
+}
+
+/// Arc sine. Returns value in [-PI/2, PI/2].
+pub func asin(x: F64) -> F64 {
+    return ffi_asin(x)
+}
+
+/// Arc cosine. Returns value in [0, PI].
+pub func acos(x: F64) -> F64 {
+    return ffi_acos(x)
+}
+
+/// Arc tangent. Returns value in [-PI/2, PI/2].
+pub func atan(x: F64) -> F64 {
+    return ffi_atan(x)
+}
+
+/// Two-argument arc tangent of `y/x`. Returns value in [-PI, PI].
+pub func atan2(y: F64, x: F64) -> F64 {
+    return ffi_atan2(y, x)
+}
+
+// ============================================================================
+// Hyperbolic Functions
+// ============================================================================
+
+/// Hyperbolic sine.
+pub func sinh(x: F64) -> F64 {
+    return ffi_sinh(x)
+}
+
+/// Hyperbolic cosine.
+pub func cosh(x: F64) -> F64 {
+    return ffi_cosh(x)
+}
+
+/// Hyperbolic tangent.
+pub func tanh(x: F64) -> F64 {
+    return ffi_tanh(x)
+}
+
+// ============================================================================
+// Exponential & Logarithmic Functions
+// ============================================================================
+
+/// Exponential function (e^x).
+pub func exp(x: F64) -> F64 {
+    return intrinsics::exp[F64](x)
+}
+
+/// Natural logarithm (ln).
+pub func ln(x: F64) -> F64 {
+    return intrinsics::log[F64](x)
+}
+
+/// Base-2 logarithm.
+pub func log2(x: F64) -> F64 {
+    return ffi_log2(x)
+}
+
+/// Base-10 logarithm.
+pub func log10(x: F64) -> F64 {
+    return ffi_log10(x)
+}
+
+/// Power function (x^y).
+pub func pow(x: F64, y: F64) -> F64 {
+    return intrinsics::pow[F64](x, y)
+}
+
+// ============================================================================
+// Rounding Functions
+// ============================================================================
+
+/// Round down to nearest integer.
+pub func floor(x: F64) -> F64 {
+    return intrinsics::floor[F64](x)
+}
+
+/// Round up to nearest integer.
+pub func ceil(x: F64) -> F64 {
+    return intrinsics::ceil[F64](x)
+}
+
+/// Round to nearest integer (ties to even).
+pub func round(x: F64) -> F64 {
+    return intrinsics::round[F64](x)
+}
+
+/// Truncate toward zero.
+pub func trunc(x: F64) -> F64 {
+    return intrinsics::trunc[F64](x)
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/// Absolute value.
+pub func abs(x: F64) -> F64 {
+    return intrinsics::fabs[F64](x)
+}
+
+/// Square root.
+pub func sqrt(x: F64) -> F64 {
+    return intrinsics::sqrt[F64](x)
+}
+
+/// Cube root.
+pub func cbrt(x: F64) -> F64 {
+    return ffi_cbrt(x)
+}
+
+/// Euclidean distance: sqrt(x^2 + y^2).
+pub func hypot(x: F64, y: F64) -> F64 {
+    return ffi_hypot(x, y)
+}
+
+/// Minimum of two values.
+pub func min(a: F64, b: F64) -> F64 {
+    if a < b { return a }
+    return b
+}
+
+/// Maximum of two values.
+pub func max(a: F64, b: F64) -> F64 {
+    if a > b { return a }
+    return b
+}
+
+/// Clamp a value to the range [lo, hi].
+pub func clamp(val: F64, lo: F64, hi: F64) -> F64 {
+    if val < lo { return lo }
+    if val > hi { return hi }
+    return val
+}
+
+/// Convert degrees to radians.
+pub func to_radians(degrees: F64) -> F64 {
+    return degrees * PI / 180.0
+}
+
+/// Convert radians to degrees.
+pub func to_degrees(radians: F64) -> F64 {
+    return radians * 180.0 / PI
+}

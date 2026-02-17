@@ -771,3 +771,83 @@ TML_EXPORT int32_t tml_os_set_priority(int32_t pid, int32_t priority) {
     return setpriority(PRIO_PROCESS, (id_t)pid, priority);
 #endif
 }
+
+/* ========================================================================== */
+/* Process Control                                                             */
+/* ========================================================================== */
+
+TML_EXPORT void tml_os_exit(int32_t code) {
+    exit(code);
+}
+
+/* ========================================================================== */
+/* Command-Line Arguments                                                      */
+/* ========================================================================== */
+
+#ifndef _WIN32
+static int s_args_argc = -1;
+static char** s_args_argv = NULL;
+#ifdef __linux__
+static char s_args_cmdline[65536];
+#endif
+
+static void s_args_init(void) {
+    if (s_args_argc >= 0)
+        return;
+#ifdef __linux__
+    FILE* f = fopen("/proc/self/cmdline", "r");
+    if (f) {
+        size_t len = fread(s_args_cmdline, 1, sizeof(s_args_cmdline) - 1, f);
+        fclose(f);
+        s_args_cmdline[len] = '\0';
+        /* Count null-separated args */
+        int count = 0;
+        for (size_t i = 0; i < len; i++) {
+            if (s_args_cmdline[i] == '\0')
+                count++;
+        }
+        s_args_argc = count;
+        s_args_argv = (char**)malloc(count * sizeof(char*));
+        int idx = 0;
+        s_args_argv[0] = s_args_cmdline;
+        for (size_t i = 0; i < len && idx < count - 1; i++) {
+            if (s_args_cmdline[i] == '\0') {
+                idx++;
+                s_args_argv[idx] = s_args_cmdline + i + 1;
+            }
+        }
+    } else {
+        s_args_argc = 0;
+    }
+#elif defined(__APPLE__)
+    extern int* _NSGetArgc(void);
+    extern char*** _NSGetArgv(void);
+    s_args_argc = *_NSGetArgc();
+    s_args_argv = *_NSGetArgv();
+#else
+    s_args_argc = 0;
+#endif
+}
+#endif /* !_WIN32 */
+
+TML_EXPORT int32_t tml_os_args_count(void) {
+#ifdef _WIN32
+    return (int32_t)__argc;
+#else
+    s_args_init();
+    return (int32_t)s_args_argc;
+#endif
+}
+
+TML_EXPORT const char* tml_os_args_get(int32_t index) {
+#ifdef _WIN32
+    if (index < 0 || index >= __argc)
+        return "";
+    return __argv[index];
+#else
+    s_args_init();
+    if (index < 0 || index >= s_args_argc || !s_args_argv)
+        return "";
+    return s_args_argv[index];
+#endif
+}

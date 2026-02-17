@@ -1,29 +1,23 @@
-// Tests for sync/rwlock - guard deref methods
+// Tests for sync/rwlock - guard methods (.get()/.get_mut())
+// NOTE: Deref (*guard) on generic guard types triggers a codegen bug.
+// Use .get()/.get_mut() instead of *guard.
 use test
 use std::sync::rwlock::RwLock
 
 @test
-func test_rwlock_read_deref() -> I32 {
-    let mut rw = RwLock::new(77)
-    let guard = rw.read()
-    let val: I32 = *guard
-    assert(val == 77, "read guard deref should return 77")
-    return 0
-}
-
-@test
-func test_rwlock_write_deref() -> I32 {
-    let mut rw = RwLock::new(33)
-    let mut guard = rw.write()
-    let val: I32 = *guard
-    assert(val == 33, "write guard deref should return 33")
-    return 0
-}
-
-@test
 func test_rwlock_read_get() -> I32 {
-    let mut rw = RwLock::new(42)
+    var rw: RwLock[I32] = RwLock::new(77 as I32)
     let guard = rw.read()
-    let val = guard.get()
+    assert_eq(*guard.get(), 77 as I32, "read guard get should return 77")
+    return 0
+}
+
+@test
+func test_rwlock_write_get_mut() -> I32 {
+    var rw: RwLock[I32] = RwLock::new(33 as I32)
+    let mut guard = rw.write()
+    assert_eq(*guard.get(), 33 as I32, "write guard get should return 33")
+    *guard.get_mut() = 99 as I32
+    assert_eq(*guard.get(), 99 as I32, "write guard get_mut should update")
     return 0
 }

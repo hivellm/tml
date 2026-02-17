@@ -117,6 +117,15 @@ func ffi_env_set(name: Str, value: Str) -> I32
 @extern("tml_os_env_unset")
 func ffi_env_unset(name: Str) -> I32
 
+@extern("tml_os_exit")
+func ffi_exit(code: I32)
+
+@extern("tml_os_args_count")
+func ffi_args_count() -> I32
+
+@extern("tml_os_args_get")
+func ffi_args_get(index: I32) -> Str
+
 @extern("tml_os_get_priority")
 func ffi_get_priority(pid: I32) -> I32
 
@@ -284,4 +293,39 @@ pub func get_priority(pid: I32) -> I32 {
 /// Returns `true` on success.
 pub func set_priority(pid: I32, priority: I32) -> Bool {
     return ffi_set_priority(pid, priority) == 0
+}
+
+// ============================================================================
+// Command-Line Arguments
+// ============================================================================
+
+/// Returns the number of command-line arguments.
+pub func args_count() -> I32 {
+    return ffi_args_count()
+}
+
+/// Returns the command-line argument at the given index.
+/// Returns an empty string if the index is out of bounds.
+pub func args_get(index: I32) -> Str {
+    return ffi_args_get(index)
+}
+
+// ============================================================================
+// Process Control
+// ============================================================================
+
+/// Terminates the current process with the given exit code.
+///
+/// An exit code of `0` indicates success, any other value indicates an error.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::os
+///
+/// os::process_exit(0)  // Exit successfully
+/// os::process_exit(1)  // Exit with error
+/// ```
+pub func process_exit(code: I32) {
+    ffi_exit(code)
 }

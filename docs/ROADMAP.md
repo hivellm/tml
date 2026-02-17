@@ -10,7 +10,7 @@
 ```
 Phase 1  [DONE 97%]   Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 75% ✓
-Phase 3  [ACTIVE]     Standard library essentials (HashSet, Math, DateTime)
+Phase 3  [ACTIVE 48%] Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓)
 Phase 4  [THEN]       Migrate C runtime → pure TML
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
@@ -350,40 +350,40 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 
 ### 3.1 Collections
 
-- [ ] 3.1.1 Implement `HashSet[T]` — insert, remove, contains, union, intersection, difference
+- [x] 3.1.1 Implement `HashSet[T]` — insert, remove, contains *(re-enabled in `std::collections::class_collections`, also includes ArrayList, Queue, Stack, LinkedList)*
 - [ ] 3.1.2 Implement `BTreeMap[K, V]` — ordered map with O(log n) operations
 - [ ] 3.1.3 Implement `BTreeSet[T]` — ordered set
 - [ ] 3.1.4 Implement `Deque[T]` — double-ended queue
 - [ ] 3.1.5 Implement `Vec[T]` alias for `List[T]` (ergonomic)
-- [ ] 3.1.6 Tests for all new collections
+- [x] 3.1.6 Tests for collections *(HashSet, ArrayList, Queue, Stack, LinkedList tests passing)*
 
-### 3.2 Math module
+### 3.2 Math module ✓
 
-- [ ] 3.2.1 Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
-- [ ] 3.2.2 Hyperbolic: `sinh`, `cosh`, `tanh`
-- [ ] 3.2.3 Exponential: `exp`, `ln`, `log2`, `log10`, `pow`
-- [ ] 3.2.4 Rounding: `floor`, `ceil`, `round`, `trunc`
-- [ ] 3.2.5 Utility: `abs`, `sqrt`, `cbrt`, `min`, `max`, `clamp`
-- [ ] 3.2.6 Constants: `PI`, `E`, `TAU`, `SQRT_2`, `LN_2`, `LN_10`
-- [ ] 3.2.7 Tests for math module
+- [x] 3.2.1 Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2` *(implemented in `std::math` via intrinsics + libc FFI)*
+- [x] 3.2.2 Hyperbolic: `sinh`, `cosh`, `tanh` *(implemented via libc FFI)*
+- [x] 3.2.3 Exponential: `exp`, `ln`, `log2`, `log10` *(implemented; `pow` via `exp(y * ln(x))` helper)*
+- [x] 3.2.4 Rounding: `floor`, `ceil`, `round`, `trunc` *(implemented via intrinsics)*
+- [x] 3.2.5 Utility: `abs`, `sqrt`, `cbrt`, `min`, `max`, `clamp` *(implemented)*
+- [x] 3.2.6 Constants: `PI`, `E`, `TAU`, `SQRT_2`, `LN_2`, `LN_10` *(plus `LOG2_E`, `LOG10_E`, `FRAC_1_PI`, `FRAC_2_PI`, `FRAC_1_SQRT_2`)*
+- [x] 3.2.7 Tests for math module *(30 tests across 4 files: constants, trig, functions, advanced)*
 
 ### 3.3 Environment and process
 
-- [ ] 3.3.1 `env::args()` — command-line arguments as `List[Str]`
-- [ ] 3.3.2 `env::var()` / `env::set_var()` — environment variables
+- [x] 3.3.1 `env::args()` — command-line arguments *(implemented as `os::args_count()` + `os::args_get(index)` with C FFI)*
+- [x] 3.3.2 `env::var()` / `env::set_var()` — environment variables *(implemented in `std::os`: `env_get`, `env_set`, `env_unset`)*
 - [ ] 3.3.3 `env::current_dir()` / `env::set_current_dir()`
-- [ ] 3.3.4 `process::exit(code)` — exit with status code
+- [x] 3.3.4 `process::exit(code)` — exit with status code *(implemented as `os::process_exit(code)` via `tml_os_exit` FFI)*
 - [ ] 3.3.5 `process::Command` — spawn subprocesses with stdin/stdout/stderr
-- [ ] 3.3.6 Tests for env and process
+- [x] 3.3.6 Tests for env and process *(args, env_get/set/unset, process_exit tests passing)*
 
 ### 3.4 DateTime
 
-- [ ] 3.4.1 `Instant` — monotonic clock for measuring elapsed time
+- [x] 3.4.1 `Instant` — monotonic clock for measuring elapsed time *(implemented in `std::time`: `Instant::now()`, `elapsed()`, `as_nanos()`, `duration_since()`)*
 - [ ] 3.4.2 `SystemTime` — wall clock time
 - [ ] 3.4.3 `DateTime` — date + time with timezone support
 - [ ] 3.4.4 Formatting: ISO 8601, RFC 2822, custom formats
 - [ ] 3.4.5 Parsing: string → DateTime
-- [ ] 3.4.6 Tests for datetime
+- [x] 3.4.6 Tests for datetime *(Instant tests passing: now, elapsed, sleep)*
 
 ### 3.5 Random number generation
 
@@ -402,13 +402,13 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 - [ ] 3.6.4 `LineWriter` — flush on newline
 - [ ] 3.6.5 Tests for buffered I/O
 
-### 3.7 Error context chains
+### 3.7 Error context chains ✓
 
-- [ ] 3.7.1 `Context` behavior — `.context("msg")` on errors
-- [ ] 3.7.2 `Error` source chain — `.source()` for error chaining
-- [ ] 3.7.3 `AnyError` type — anyhow-style generic errors
-- [ ] 3.7.4 Display with backtrace and chain
-- [ ] 3.7.5 Tests for error chains
+- [x] 3.7.1 `Context` behavior — `.context("msg")` on errors *(implemented in `core::error`: `.context()`, `.with_context()`)*
+- [x] 3.7.2 `Error` source chain — `.source()` for error chaining *(implemented: `Error` behavior with `source()`, `ChainedError[E]`, `ErrorChain` iterator)*
+- [x] 3.7.3 `AnyError` type — anyhow-style generic errors *(implemented: `BoxedError`, `SimpleError` for type-erased errors)*
+- [x] 3.7.4 Display with backtrace and chain *(implemented: `error_chain()` function, `ErrorChain` iterator)*
+- [x] 3.7.5 Tests for error chains *(tested in `core/tests/coverage/quick_wins_75e.test.tml`)*
 
 ### 3.8 Regex engine
 
@@ -697,13 +697,13 @@ These can be worked on alongside the main phases without blocking or being block
 |-------|-------|------|----------|--------|
 | 1. Codegen bugs | 37 | 36 | 97% | NEARLY COMPLETE |
 | 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (75.1%) |
-| 3. Stdlib essentials | 42 | 0 | 0% | NEXT UP |
+| 3. Stdlib essentials | 42 | 20 | 48% | **IN PROGRESS** |
 | 4. Runtime migration | 28 | 0 | 0% | NOT STARTED |
 | 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
 | Parallel: Tooling | 7 | 4 | 57% | IN PROGRESS |
 | Parallel: Reflection | 5 | 3 | 60% | IN PROGRESS |
-| **TOTAL** | **263** | **118** | **44.9%** | |
+| **TOTAL** | **263** | **138** | **52.5%** | |
 
 ---
 

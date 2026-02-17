@@ -27,6 +27,8 @@
 //! | [`os`] | Operating system information and utilities |
 //! | [`search`] | Vector search and text retrieval (BM25, HNSW, SIMD) |
 //! | [`glob`] | High-performance glob pattern matching |
+//! | [`math`] | Mathematical functions and constants |
+//! | [`time`] | Time measurement (Instant, sleep) |
 
 pub mod traits
 pub mod interfaces
@@ -48,3 +50,5 @@ pub mod log
 pub mod os
 pub mod search
 pub mod glob
+pub mod math
+pub mod time

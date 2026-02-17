@@ -1,0 +1,9 @@
+// Minimal time test - static method only
+use test::assert
+use std::time::Instant
+
+@test
+func test_instant_static() -> I32 {
+    let start = Instant::now()
+    return 0
+}

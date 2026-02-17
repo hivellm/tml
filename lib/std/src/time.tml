@@ -1,0 +1,84 @@
+//! Time measurement types.
+//!
+//! This module provides [`Instant`] for measuring elapsed time using a
+//! monotonic clock, built on top of [`core::time::Duration`].
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::time::Instant
+//!
+//! let start = Instant::now()
+//! // ... do work ...
+//! let elapsed = start.elapsed()
+//! ```
+
+use core::time::Duration
+
+/// A measurement of a monotonically nondecreasing clock.
+///
+/// Instants are opaque and useful only with [`Duration`]. An instant
+/// can be subtracted from another to get a duration, or you can call
+/// [`elapsed`] to get the time since the instant was created.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::time::Instant
+/// use core::time::Duration
+///
+/// let start = Instant::now()
+/// // ... do some work ...
+/// let duration = start.elapsed()
+/// ```
+pub type Instant {
+    nanos: I64,
+    _padding: I64
+}
+
+impl Instant {
+    /// Returns an instant corresponding to "now".
+    pub func now() -> Instant {
+        return Instant { nanos: time_ns(), _padding: 0 }
+    }
+
+    /// Returns the amount of time elapsed since this instant was created.
+    pub func elapsed(this) -> Duration {
+        let now_nanos = time_ns()
+        let diff = now_nanos - this.nanos
+        return Duration::from_nanos(diff)
+    }
+
+    /// Returns the amount of time elapsed from another instant to this one.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `earlier` is later than `this`.
+    pub func duration_since(this, earlier: Instant) -> Duration {
+        let diff = this.nanos - earlier.nanos
+        if diff < 0 {
+            panic("earlier instant is later than self")
+        }
+        return Duration::from_nanos(diff)
+    }
+
+    /// Returns the raw nanosecond timestamp (for internal use).
+    pub func as_nanos(this) -> I64 {
+        return this.nanos
+    }
+}
+
+/// Puts the current thread to sleep for the specified duration.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::time
+/// use core::time::Duration
+///
+/// time::sleep(Duration::from_millis(100))
+/// ```
+pub func sleep(duration: Duration) -> Unit {
+    let millis = duration.as_millis()
+    sleep_ms(millis as I32)
+}

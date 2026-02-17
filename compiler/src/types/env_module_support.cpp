@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -70,6 +71,20 @@ static std::string get_tml_type_name(const parser::TypePtr& type) {
 }
 
 /// Try to extract a compile-time constant scalar value from an expression.
+/// Format a double with full precision for LLVM IR inline constants.
+static std::string format_float_const(double val) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%.20g", val);
+    // Ensure the string contains a decimal point so LLVM parses it as float
+    std::string s(buf);
+    if (s.find('.') == std::string::npos && s.find('e') == std::string::npos &&
+        s.find('E') == std::string::npos && s.find("inf") == std::string::npos &&
+        s.find("nan") == std::string::npos) {
+        s += ".0";
+    }
+    return s;
+}
+
 static std::string try_extract_scalar_const_value(const parser::Expr* expr) {
     if (!expr)
         return "";
@@ -83,6 +98,8 @@ static std::string try_extract_scalar_const_value(const parser::Expr* expr) {
                 const auto& lit = unary.operand->as<parser::LiteralExpr>();
                 if (lit.token.kind == lexer::TokenKind::IntLiteral)
                     return std::to_string(-static_cast<int64_t>(lit.token.int_value().value));
+                if (lit.token.kind == lexer::TokenKind::FloatLiteral)
+                    return format_float_const(-lit.token.float_value().value);
             }
             return "";
         } else {
@@ -95,6 +112,8 @@ static std::string try_extract_scalar_const_value(const parser::Expr* expr) {
             const auto& lit = unary.operand->as<parser::LiteralExpr>();
             if (lit.token.kind == lexer::TokenKind::IntLiteral)
                 return std::to_string(-static_cast<int64_t>(lit.token.int_value().value));
+            if (lit.token.kind == lexer::TokenKind::FloatLiteral)
+                return format_float_const(-lit.token.float_value().value);
         }
         if (unary.operand && unary.operand->is<parser::CastExpr>()) {
             const auto& cast = unary.operand->as<parser::CastExpr>();
@@ -102,6 +121,8 @@ static std::string try_extract_scalar_const_value(const parser::Expr* expr) {
                 const auto& lit = cast.expr->as<parser::LiteralExpr>();
                 if (lit.token.kind == lexer::TokenKind::IntLiteral)
                     return std::to_string(-static_cast<int64_t>(lit.token.int_value().value));
+                if (lit.token.kind == lexer::TokenKind::FloatLiteral)
+                    return format_float_const(-lit.token.float_value().value);
             }
         }
         return "";
@@ -110,6 +131,8 @@ static std::string try_extract_scalar_const_value(const parser::Expr* expr) {
         const auto& lit = expr->as<parser::LiteralExpr>();
         if (lit.token.kind == lexer::TokenKind::IntLiteral)
             return std::to_string(lit.token.int_value().value);
+        if (lit.token.kind == lexer::TokenKind::FloatLiteral)
+            return format_float_const(lit.token.float_value().value);
         if (lit.token.kind == lexer::TokenKind::BoolLiteral)
             return lit.token.bool_value() ? "1" : "0";
         if (lit.token.kind == lexer::TokenKind::NullLiteral)

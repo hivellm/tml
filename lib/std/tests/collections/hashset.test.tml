@@ -1,0 +1,32 @@
+// Tests for std::collections::HashSet
+use test::{assert, assert_eq}
+use std::collections::class_collections::HashSet
+
+@test
+func test_hashset_create() -> I32 {
+    let set: HashSet[I64] = HashSet::create[I64]()
+    assert_eq(set.count(), 0 as I64, "new set should be empty")
+    assert(set.is_empty(), "new set should report is_empty")
+    return 0
+}
+
+@test
+func test_hashset_add_unique() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    let added1 = set.add(10)
+    let added2 = set.add(20)
+    assert(added1, "adding 10 should return true")
+    assert(added2, "adding 20 should return true")
+    assert_eq(set.count(), 2 as I64, "count should be 2")
+    return 0
+}
+
+@test
+func test_hashset_add_duplicate() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(10)
+    let added_dup = set.add(10)
+    assert(not added_dup, "adding duplicate should return false")
+    assert_eq(set.count(), 1 as I64, "count should still be 1")
+    return 0
+}

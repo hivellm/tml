@@ -24,10 +24,9 @@
 pub mod list
 pub mod hashmap
 pub mod buffer
-// NOTE: class_collections is disabled because it uses [T] syntax but expects List[T] methods
-// To fix: change the `data: [T]` fields to `data: List[T]` and add proper imports
-// pub mod class_collections
+pub mod class_collections
 
 pub use std::collections::list::List
 pub use std::collections::hashmap::{HashMap, HashMapIter}
 pub use std::collections::buffer::Buffer
+pub use std::collections::class_collections::{ArrayList, HashSet, Queue, Stack, LinkedList}

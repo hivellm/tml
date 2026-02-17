@@ -1,0 +1,28 @@
+// Tests for std::os — command-line arguments
+use test::{assert, assert_eq}
+use std::os
+
+@test
+func test_args_count() -> I32 {
+    let count = os::args_count()
+    // When run via test runner, there should be at least 1 arg (the executable)
+    assert(count >= 0, "args_count should be non-negative")
+    return 0
+}
+
+@test
+func test_args_get_first() -> I32 {
+    let count = os::args_count()
+    if count > 0 {
+        let first = os::args_get(0)
+        assert(first.len() > 0, "first arg should not be empty")
+    }
+    return 0
+}
+
+@test
+func test_args_get_out_of_bounds() -> I32 {
+    let arg = os::args_get(99999)
+    assert_eq(arg, "", "out of bounds arg should be empty string")
+    return 0
+}

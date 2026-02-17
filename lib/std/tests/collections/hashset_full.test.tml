@@ -1,0 +1,55 @@
+// HashSet full coverage: contains, remove, clear, with_capacity
+use test::{assert, assert_eq}
+use std::collections::class_collections::HashSet
+
+@test
+func test_hashset_contains() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(10)
+    set.add(20)
+    assert(set.contains(10), "should contain 10")
+    assert(set.contains(20), "should contain 20")
+    assert(not set.contains(30), "should not contain 30")
+    return 0
+}
+
+@test
+func test_hashset_remove() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(10)
+    set.add(20)
+    set.add(30)
+    assert_eq(set.count(), 3 as I64, "count should be 3")
+
+    let removed = set.remove(20)
+    assert(removed, "remove(20) should return true")
+    assert_eq(set.count(), 2 as I64, "count should be 2 after remove")
+    assert(not set.contains(20), "should not contain 20 after remove")
+
+    let not_removed = set.remove(99)
+    assert(not not_removed, "remove(99) should return false")
+    return 0
+}
+
+@test
+func test_hashset_clear() -> I32 {
+    var set: HashSet[I64] = HashSet::create[I64]()
+    set.add(1)
+    set.add(2)
+    set.add(3)
+    assert_eq(set.count(), 3 as I64, "count should be 3")
+
+    set.clear()
+    assert_eq(set.count(), 0 as I64, "count should be 0 after clear")
+    assert(set.is_empty(), "should be empty after clear")
+    return 0
+}
+
+@test
+func test_hashset_with_capacity() -> I32 {
+    var set: HashSet[I64] = HashSet::with_capacity[I64](64)
+    assert(set.is_empty(), "new set with capacity should be empty")
+    set.add(42)
+    assert_eq(set.count(), 1 as I64, "count should be 1")
+    return 0
+}
