@@ -1,8 +1,21 @@
-// TML Core Library - Sync Module
-// Low-level synchronization primitives
-//
-// Atomic operations are LLVM intrinsics (implemented in codegen)
-// Spinlocks are implemented using atomic operations
+//! Low-level synchronization primitives.
+//!
+//! This module provides the raw atomic operations and memory fences that are
+//! implemented as LLVM intrinsics in the compiler's codegen layer.
+//!
+//! # Relationship with `std::sync`
+//!
+//! - **`core::sync`** (this module): Raw `lowlevel` atomic functions operating
+//!   on `I32` references. These are the building blocks.
+//! - **`std::sync::atomic`**: Ergonomic wrapper types (`AtomicBool`, `AtomicI32`,
+//!   `AtomicI64`, etc.) with memory ordering parameters. Prefer these in
+//!   application code.
+//! - **`std::sync`**: Higher-level primitives (`Mutex`, `RwLock`, `Arc`,
+//!   `Barrier`, `Condvar`, MPSC channels, lock-free queues/stacks) built on
+//!   top of core atomics.
+//!
+//! Use `core::sync` directly only when implementing new synchronization
+//! primitives or when `std::sync` types are too high-level.
 
 // ============ ATOMIC OPERATIONS ============
 

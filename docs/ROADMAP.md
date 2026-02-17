@@ -414,13 +414,13 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 
 ### 3.8 Regex engine
 
-- [ ] 3.8.1 `Regex` type — compile pattern
-- [ ] 3.8.2 `is_match()`, `find()`, `find_all()`
-- [ ] 3.8.3 `captures()` — named and positional groups
-- [ ] 3.8.4 `replace()`, `replace_all()`, `split()`
-- [ ] 3.8.5 Character classes, quantifiers, Unicode support
-- [ ] 3.8.6 NFA/DFA hybrid engine (no exponential backtracking)
-- [ ] 3.8.7 Tests for regex
+- [x] 3.8.1 `Regex` type — compile pattern (Thompson's NFA via shunting-yard postfix)
+- [x] 3.8.2 `is_match()`, `find()`, `find_all()`
+- [ ] 3.8.3 `captures()` — named and positional groups (deferred)
+- [x] 3.8.4 `replace()`, `replace_all()`, `split()`
+- [x] 3.8.5 Character classes (`[a-z]`, `[^0-9]`), quantifiers (`*`, `+`, `?`), shorthand (`\d`, `\w`, `\s`)
+- [x] 3.8.6 NFA engine (Thompson's simulation — no exponential backtracking)
+- [x] 3.8.7 Tests for regex (22 tests: basic + advanced)
 
 **Gate**: `HashSet`, `BTreeMap`, `Math`, `DateTime`, `Random`, `BufReader/BufWriter` all working with tests.
 

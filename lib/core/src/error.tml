@@ -3,7 +3,8 @@
 //! This module provides the foundation for error handling in TML, including:
 //!
 //! - The [`Error`] behavior for representing errors
-//! - Common error types like [`SimpleError`], [`IoError`], and [`ParseError`]
+//! - Common error types like [`SimpleError`] and [`ParseError`]
+//! - I/O error types ([`IoError`], [`IoErrorKind`]) — also re-exported via [`std::io`]
 //! - Error chaining with [`ChainedError`]
 //! - Type-erased errors with [`BoxedError`]
 //! - Error chain iteration with [`ErrorChain`]

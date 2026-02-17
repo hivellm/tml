@@ -23,7 +23,7 @@ tml --help
 #     fmt         Format source code (IMPLEMENTED)
 #     cache       Manage build cache (IMPLEMENTED)
 #     rlib        Inspect RLIB libraries (IMPLEMENTED)
-#     lint        Run linter (FUTURE)
+#     lint        Run linter (IMPLEMENTED)
 #     doc         Generate documentation (FUTURE)
 #     repl        Interactive REPL (FUTURE)
 #     clean       Remove build artifacts (FUTURE)

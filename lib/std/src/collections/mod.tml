@@ -3,15 +3,18 @@
 //! This module provides generic collection types for storing and
 //! manipulating groups of elements.
 //!
-//! # Runtime-backed Types
+//! # Runtime-backed Types (C — migration targets)
 //!
-//! | Type | Description |
-//! |------|-------------|
-//! | [`List[T]`] | Dynamic array that grows automatically |
-//! | [`HashMap[K, V]`] | Hash-based key-value storage |
-//! | [`Buffer`] | Byte buffer for binary data |
+//! These types are backed by the C runtime and will be migrated to pure TML.
+//! They work today but carry C-runtime debt. See ROADMAP.md Phase 4.
 //!
-//! # Pure TML Types
+//! | Type | Description | Pure TML replacement |
+//! |------|-------------|---------------------|
+//! | [`List[T]`] | Dynamic array | `ArrayList[T]` |
+//! | [`HashMap[K, V]`] | Hash table (I64 keys) | (planned) |
+//! | [`Buffer`] | Byte buffer | (planned) |
+//!
+//! # Pure TML Types (preferred for new code)
 //!
 //! | Type | Description |
 //! |------|-------------|
@@ -31,6 +34,7 @@ pub mod class_collections
 pub mod deque
 pub mod btreemap
 pub mod btreeset
+pub mod behaviors
 
 pub use std::collections::list::List
 pub use std::collections::hashmap::{HashMap, HashMapIter}

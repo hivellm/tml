@@ -1,6 +1,7 @@
 //! Synchronization primitives for concurrent programming.
 //!
-//! This module provides thread-safe synchronization primitives including:
+//! Built on top of the raw atomic intrinsics in [`core::sync`], this module
+//! provides ergonomic, type-safe synchronization primitives including:
 //!
 //! - **Atomic types**: Lock-free primitives for simple concurrent data
 //! - **Memory ordering**: Control over how operations are observed across threads

@@ -1,0 +1,26 @@
+//! Specialized memory allocators and layout utilities.
+//!
+//! This module re-exports allocator types from `core` under a unified
+//! namespace. The canonical definitions live in `core::arena`, `core::pool`,
+//! `core::cache`, and `core::soo`.
+//!
+//! # Modules
+//!
+//! | Module | Description | Canonical |
+//! |--------|-------------|-----------|
+//! | [`arena`] | Bump-pointer arena allocator | `core::arena` |
+//! | [`pool`] | Lock-free object pool | `core::pool` |
+//! | [`cache`] | Cache-line aligned storage | `core::cache` |
+//! | [`soo`] | Small object optimization | `core::soo` |
+//!
+//! # When to Use
+//!
+//! - **Arena**: Many small, short-lived allocations freed together (parsers, ASTs)
+//! - **Pool**: Reuse objects to avoid allocation overhead (connection pools, buffers)
+//! - **Cache**: Performance-critical data that must avoid false sharing
+//! - **SOO**: Small collections that usually fit inline (< 8 elements)
+
+pub mod arena
+pub mod pool
+pub mod cache
+pub mod soo

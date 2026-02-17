@@ -1,0 +1,25 @@
+//! Object-oriented programming support for TML.
+//!
+//! This module provides C#-style OOP primitives that complement TML's native
+//! behavior system. Use these when building class hierarchies with inheritance,
+//! virtual dispatch, and interface contracts.
+//!
+//! # Modules
+//!
+//! | Module | Description |
+//! |--------|-------------|
+//! | [`interfaces`] | C#-style interfaces (IEquatable, IComparable, IDisposable, etc.) |
+//! | [`object`] | Base `Object` class for class hierarchies |
+//!
+//! # When to Use
+//!
+//! - Use **behaviors** (`PartialEq`, `Ord`, `Hash` from `core`) for generic,
+//!   composable abstractions following TML idioms.
+//! - Use **interfaces** and **Object** from this module when modeling class
+//!   hierarchies with inheritance and virtual dispatch.
+
+pub mod interfaces
+pub mod object
+
+pub use std::oop::interfaces::*
+pub use std::oop::object::*

@@ -28,12 +28,16 @@
 // - slice: Slice operations (sort, binary_search, etc.)
 // - array: Fixed-size array utilities (map, zip, from_fn, etc.)
 // - ptr: Raw pointer operations, NonNull
-// - error: Error behavior and common error types
+// - error: Error behavior and common error types (IoError, ParseError)
 // - alloc: Memory allocation (Layout, Allocator, GlobalAlloc)
-// - collections: Behavior implementations for List, HashMap
+// - pool: Object pooling (also available via std::alloc::pool)
+// - arena: Arena allocator (also available via std::alloc::arena)
+// - soo: Small object optimization (also available via std::alloc::soo)
+// - cache: Cache-friendly layout utilities (also available via std::alloc::cache)
+// - collections: Behavior impls for List, HashMap (re-exports std::collections::behaviors)
 // - any: TypeId, Any for runtime type identification
 // - reflect: TypeInfo, FieldInfo, Reflect behavior for runtime reflection
-// - net: (moved to std::net) Network types including TCP, UDP, HTTP
+// - sync: Raw atomic operations, fences (see std::sync for ergonomic wrappers)
 
 pub mod clone    // Duplicate, Copy
 pub mod cmp      // Ordering, PartialEq, Eq, PartialOrd, Ord
@@ -57,13 +61,13 @@ pub mod borrow   // Borrow, BorrowMut, ToOwned, Cow
 pub mod slice    // Slice, MutSlice, sort, binary_search
 pub mod array    // Array, ArrayIter, from_fn, repeat, TryFromSliceError
 pub mod ptr      // RawPtr, RawMutPtr, NonNull
-pub mod error    // Error behavior, SimpleError, IoError
+pub mod error    // Error behavior, SimpleError, IoError, ParseError
 pub mod alloc    // Layout, Allocator, GlobalAlloc, AllocError
 pub mod pool     // Pool[T] for object pooling with lock-free free list
 pub mod arena    // Arena allocator for bump-pointer allocation
 pub mod soo      // Small Object Optimization (SmallVec, SmallString, SmallBox)
 pub mod cache    // Cache-friendly layout utilities (CacheAligned, Padded, SoaVec)
-pub mod collections  // List, HashMap behavior implementations
+pub mod collections  // re-export: std::collections::behaviors
 pub mod range    // Range, RangeInclusive, RangeFrom, RangeTo, RangeFull
 pub mod num      // Zero, One, Bounded, Saturating, Wrapping, NonZero
 pub mod pin      // Pin, Unpin - pinned memory locations
@@ -74,4 +78,5 @@ pub mod time       // Duration
 pub mod tuple      // Tuple implementations (Default, Clone, PartialEq, Ord, etc.)
 pub mod any        // TypeId, Any for runtime type identification
 pub mod reflect    // TypeInfo, FieldInfo, Reflect behavior for runtime reflection
-pub mod sync       // Atomic operations, fences, spinlocks
+pub mod sync       // Raw atomic operations, fences, spinlocks
+pub mod intrinsics // Compiler intrinsics for runtime reflection

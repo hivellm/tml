@@ -1,0 +1,375 @@
+//! C#-style OOP interfaces for class-based programming.
+//!
+//! This module provides common interfaces for object-oriented programming,
+//! following C# and .NET conventions.
+//!
+//! # Core Interfaces
+//!
+//! | Interface | Description |
+//! |-----------|-------------|
+//! | [`IEquatable[T]`] | Type-specific equality comparison |
+//! | [`IComparable[T]`] | Type-specific ordering comparison |
+//! | [`IHashable`] | Hash code generation |
+//! | [`IFormattable`] | String formatting support |
+//! | [`ICloneable`] | Object cloning |
+//! | [`IDisposable`] | Resource cleanup |
+//!
+//! # Collection Interfaces
+//!
+//! | Interface | Description |
+//! |-----------|-------------|
+//! | [`IEnumerable[T]`] | Iteration support |
+//! | [`IEnumerator[T]`] | Iterator state |
+//! | [`ICollection[T]`] | Mutable collection |
+//! | [`IList[T]`] | Indexed collection |
+//! | [`IDictionary[K, V]`] | Key-value collection |
+//! | [`IReadOnlyCollection[T]`] | Immutable collection view |
+//!
+//! # Observer Pattern
+//!
+//! | Interface | Description |
+//! |-----------|-------------|
+//! | [`IObserver[T]`] | Receives notifications |
+//! | [`IObservable[T]`] | Publishes notifications |
+
+// ============================================================================
+// IEquatable[T]
+// ============================================================================
+
+/// Interface for type-specific equality comparison.
+///
+/// Classes implementing this provide a strongly-typed `equals` method,
+/// avoiding the need for runtime type checks.
+///
+/// # Example
+///
+/// ```tml
+/// class Point implements IEquatable[Point] {
+///     x: I32
+///     y: I32
+///
+///     func equals(this, other: Point) -> Bool {
+///         return this.x == other.x and this.y == other.y
+///     }
+/// }
+/// ```
+pub interface IEquatable[T] {
+    /// Returns true if this object is equal to the other object.
+    func equals(this, other: T) -> Bool
+}
+
+// ============================================================================
+// IComparable[T]
+// ============================================================================
+
+/// Interface for type-specific ordering comparison.
+///
+/// Classes implementing this can be sorted and compared.
+///
+/// # Returns
+///
+/// - Negative value if `this < other`
+/// - Zero if `this == other`
+/// - Positive value if `this > other`
+///
+/// # Example
+///
+/// ```tml
+/// class Age implements IComparable[Age] {
+///     years: I32
+///
+///     func compare_to(this, other: Age) -> I32 {
+///         return this.years - other.years
+///     }
+/// }
+/// ```
+pub interface IComparable[T] {
+    /// Compares this object with another object of the same type.
+    func compare_to(this, other: T) -> I32
+}
+
+// ============================================================================
+// IDisposable
+// ============================================================================
+
+/// Interface for objects that hold resources requiring explicit cleanup.
+///
+/// Call `dispose()` when the object is no longer needed to release resources.
+///
+/// # Example
+///
+/// ```tml
+/// class FileHandle implements IDisposable {
+///     handle: I64
+///
+///     func dispose(mut this) {
+///         if this.handle != 0 {
+///             file_close(this.handle)
+///             this.handle = 0
+///         }
+///     }
+/// }
+/// ```
+pub interface IDisposable {
+    /// Releases resources held by this object.
+    func dispose(mut this)
+}
+
+// ============================================================================
+// ICloneable
+// ============================================================================
+
+/// Interface for objects that can create a copy of themselves.
+///
+/// Provides a `clone()` method that returns a new independent instance.
+///
+/// # Example
+///
+/// ```tml
+/// class Config implements ICloneable {
+///     name: Str
+///     value: I32
+///
+///     func clone(this) -> Config {
+///         return Config { name: this.name, value: this.value }
+///     }
+/// }
+/// ```
+pub interface ICloneable {
+    /// Creates and returns a copy of this object.
+    func clone(this) -> Self
+}
+
+// ============================================================================
+// IEnumerable[T]
+// ============================================================================
+
+/// Interface for collections that can be enumerated.
+///
+/// Provides access to an enumerator for iterating over elements.
+/// Works with [`IEnumerator[T]`] for stateful iteration.
+pub interface IEnumerable[T] {
+    /// Returns an enumerator for iterating over the collection.
+    func get_enumerator(this) -> dyn IEnumerator[T]
+}
+
+// ============================================================================
+// IEnumerator[T]
+// ============================================================================
+
+/// Interface for stateful iteration over a collection.
+///
+/// Used by [`IEnumerable[T]`] to provide iteration.
+///
+/// # Example
+///
+/// ```tml
+/// let items = my_collection.get_enumerator()
+/// loop (true) {
+///     if not items.move_next() { break }
+///     let item = items.current()
+///     // process item
+/// }
+/// ```
+pub interface IEnumerator[T] {
+    /// Advances to the next element. Returns false if no more elements.
+    func move_next(mut this) -> Bool
+
+    /// Returns the current element.
+    func current(this) -> T
+
+    /// Resets the enumerator to the beginning.
+    func reset(mut this)
+}
+
+// ============================================================================
+// IFormattable
+// ============================================================================
+
+/// Interface for objects that support custom string formatting.
+///
+/// # Example
+///
+/// ```tml
+/// class Money implements IFormattable {
+///     amount: I64
+///     currency: Str
+///
+///     func to_string(this) -> Str {
+///         return "$" + (this.amount / 100).to_string()
+///     }
+///
+///     func to_string_format(this, format: Str) -> Str {
+///         if format == "short" {
+///             return "$" + (this.amount / 100).to_string()
+///         }
+///         return this.to_string()
+///     }
+/// }
+/// ```
+pub interface IFormattable {
+    /// Returns a string representation of this object.
+    func to_string(this) -> Str
+
+    /// Returns a formatted string representation using the specified format.
+    func to_string_format(this, format: Str) -> Str
+}
+
+// ============================================================================
+// IHashable
+// ============================================================================
+
+/// Interface for objects that can generate a hash code.
+///
+/// Hash codes are used by hash-based collections like `HashMap` and `HashSet`.
+///
+/// # Contract
+///
+/// - If `a.equals(b)`, then `a.get_hash_code() == b.get_hash_code()`
+/// - Hash codes should remain consistent during object lifetime
+///
+/// # Example
+///
+/// ```tml
+/// class UserId implements IHashable, IEquatable[UserId] {
+///     id: I64
+///
+///     func get_hash_code(this) -> I64 {
+///         return this.id
+///     }
+///
+///     func equals(this, other: UserId) -> Bool {
+///         return this.id == other.id
+///     }
+/// }
+/// ```
+pub interface IHashable {
+    /// Returns a hash code for this object.
+    func get_hash_code(this) -> I64
+}
+
+// ============================================================================
+// ICollection[T]
+// ============================================================================
+
+/// Interface for mutable collections.
+///
+/// Provides common collection operations: add, remove, clear, count.
+pub interface ICollection[T] {
+    /// Returns the number of elements in the collection.
+    func count(this) -> I64
+
+    /// Returns true if the collection is empty.
+    func is_empty(this) -> Bool
+
+    /// Adds an item to the collection.
+    func add(mut this, item: T)
+
+    /// Removes an item from the collection. Returns true if removed.
+    func remove(mut this, item: T) -> Bool
+
+    /// Removes all items from the collection.
+    func clear(mut this)
+
+    /// Returns true if the collection contains the item.
+    func contains(this, item: T) -> Bool
+}
+
+// ============================================================================
+// IList[T]
+// ============================================================================
+
+/// Interface for collections that support indexed access.
+///
+/// Provides index-based operations: get, set, insert, remove_at.
+pub interface IList[T] {
+    /// Gets the element at the specified index.
+    func get(this, index: I64) -> T
+
+    /// Sets the element at the specified index.
+    func set(mut this, index: I64, value: T)
+
+    /// Returns the index of the item, or -1 if not found.
+    func index_of(this, item: T) -> I64
+
+    /// Inserts an item at the specified index.
+    func insert(mut this, index: I64, item: T)
+
+    /// Removes the element at the specified index.
+    func remove_at(mut this, index: I64)
+}
+
+// ============================================================================
+// IDictionary[K, V]
+// ============================================================================
+
+/// Interface for key-value collections.
+///
+/// Provides dictionary-style operations: get, set, contains_key, remove.
+pub interface IDictionary[K, V] {
+    /// Gets the value associated with the key.
+    func get(this, key: K) -> Maybe[V]
+
+    /// Sets the value for the key.
+    func set(mut this, key: K, value: V)
+
+    /// Returns true if the dictionary contains the key.
+    func contains_key(this, key: K) -> Bool
+
+    /// Removes the key and its value. Returns true if removed.
+    func remove(mut this, key: K) -> Bool
+
+    /// Returns the number of key-value pairs.
+    func count(this) -> I64
+
+    /// Removes all key-value pairs.
+    func clear(mut this)
+}
+
+// ============================================================================
+// IReadOnlyCollection[T]
+// ============================================================================
+
+/// Interface for read-only collection views.
+///
+/// Provides count and contains without modification capabilities.
+pub interface IReadOnlyCollection[T] {
+    /// Returns the number of elements.
+    func count(this) -> I64
+
+    /// Returns true if the collection is empty.
+    func is_empty(this) -> Bool
+
+    /// Returns true if the collection contains the item.
+    func contains(this, item: T) -> Bool
+}
+
+// ============================================================================
+// IObserver[T]
+// ============================================================================
+
+/// Interface for observers in the Observer pattern.
+///
+/// Receives notifications when observed values change.
+pub interface IObserver[T] {
+    /// Called when the observed value changes.
+    func on_next(mut this, value: T)
+
+    /// Called when an error occurs.
+    func on_error(mut this, error: Str)
+
+    /// Called when the observable completes.
+    func on_completed(mut this)
+}
+
+// ============================================================================
+// IObservable[T]
+// ============================================================================
+
+/// Interface for observables in the Observer pattern.
+///
+/// Allows observers to subscribe for notifications.
+pub interface IObservable[T] {
+    /// Subscribes an observer to receive notifications.
+    func subscribe(mut this, observer: dyn IObserver[T])
+}

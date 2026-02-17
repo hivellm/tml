@@ -36,8 +36,8 @@
 //! }
 //! ```
 
-use std::object::*
-use std::interfaces::*
+use std::oop::object::*
+use std::oop::interfaces::*
 
 // ============================================================================
 // Exception

@@ -3,6 +3,10 @@
 //! `HashMap[K, V]` stores key-value pairs with O(1) average lookup time.
 //! Keys must be hashable and comparable.
 //!
+//! **Migration note**: This type is backed by the C runtime (`collections.c`)
+//! and uses `I64`-based keys internally. It will be replaced by a pure-TML
+//! generic hash map as part of the runtime migration roadmap.
+//!
 //! # Example
 //!
 //! ```tml

@@ -1,0 +1,81 @@
+// Tests for DateTime parsing methods
+use test::{assert, assert_eq}
+use std::datetime::DateTime
+
+@test
+func test_parse_iso8601_basic() -> I32 {
+    let dt: DateTime = DateTime::parse_iso8601("2024-01-15T12:30:45Z")
+    assert_eq(dt.year(), 2024, "year")
+    assert_eq(dt.month(), 1, "month")
+    assert_eq(dt.day(), 15, "day")
+    assert_eq(dt.hour(), 12, "hour")
+    assert_eq(dt.minute(), 30, "minute")
+    assert_eq(dt.second(), 45, "second")
+    return 0
+}
+
+@test
+func test_parse_iso8601_no_z() -> I32 {
+    let dt: DateTime = DateTime::parse_iso8601("1999-12-31T23:59:59")
+    assert_eq(dt.year(), 1999, "year")
+    assert_eq(dt.month(), 12, "month")
+    assert_eq(dt.day(), 31, "day")
+    assert_eq(dt.hour(), 23, "hour")
+    assert_eq(dt.minute(), 59, "minute")
+    assert_eq(dt.second(), 59, "second")
+    return 0
+}
+
+@test
+func test_parse_iso8601_epoch() -> I32 {
+    let dt: DateTime = DateTime::parse_iso8601("1970-01-01T00:00:00Z")
+    assert_eq(dt.timestamp(), 0, "epoch timestamp should be 0")
+    return 0
+}
+
+@test
+func test_parse_date_only() -> I32 {
+    let dt: DateTime = DateTime::parse_date("2026-02-17")
+    assert_eq(dt.year(), 2026, "year")
+    assert_eq(dt.month(), 2, "month")
+    assert_eq(dt.day(), 17, "day")
+    assert_eq(dt.hour(), 0, "hour defaults to 0")
+    assert_eq(dt.minute(), 0, "minute defaults to 0")
+    assert_eq(dt.second(), 0, "second defaults to 0")
+    return 0
+}
+
+@test
+func test_parse_display_string() -> I32 {
+    let dt: DateTime = DateTime::parse("2023-12-25 18:00:00 UTC")
+    assert_eq(dt.year(), 2023, "year")
+    assert_eq(dt.month(), 12, "month")
+    assert_eq(dt.day(), 25, "day")
+    assert_eq(dt.hour(), 18, "hour")
+    assert_eq(dt.minute(), 0, "minute")
+    assert_eq(dt.second(), 0, "second")
+    return 0
+}
+
+@test
+func test_parse_roundtrip_iso8601() -> I32 {
+    // Create → format → parse → compare
+    let original: DateTime = DateTime::from_parts(2024, 6, 15, 9, 30, 0)
+    let iso: Str = original.to_iso8601()
+    let parsed: DateTime = DateTime::parse_iso8601(iso)
+    assert_eq(parsed.year(), 2024, "roundtrip year")
+    assert_eq(parsed.month(), 6, "roundtrip month")
+    assert_eq(parsed.day(), 15, "roundtrip day")
+    assert_eq(parsed.hour(), 9, "roundtrip hour")
+    assert_eq(parsed.minute(), 30, "roundtrip minute")
+    assert_eq(parsed.second(), 0, "roundtrip second")
+    return 0
+}
+
+@test
+func test_parse_malformed_returns_epoch() -> I32 {
+    // Too short
+    let dt: DateTime = DateTime::parse_iso8601("bad")
+    assert_eq(dt.timestamp(), 0, "malformed should return epoch")
+    return 0
+}

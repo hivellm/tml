@@ -8,11 +8,12 @@
 //! | Module | Description |
 //! |--------|-------------|
 //! | [`traits`] | Core behaviors (Copy, Eq, Ord, Hash) |
-//! | [`interfaces`] | C#-style OOP interfaces |
-//! | [`object`] | Object base class |
+//! | [`oop`] | OOP support (interfaces, Object base class) |
+//! | [`interfaces`] | Re-export of `oop::interfaces` (backward compat) |
+//! | [`object`] | Re-export of `oop::object` (backward compat) |
 //! | [`exception`] | Exception class hierarchy |
-//! | [`types`] | Maybe[T], Outcome[T, E] |
-//! | [`collections`] | List, HashMap, Buffer |
+//! | [`types`] | Free-standing helpers for Maybe[T], Outcome[T, E] |
+//! | [`collections`] | List, HashMap, Buffer, ArrayList, BTreeMap, etc. |
 //! | [`text`] | Dynamic string type |
 //! | [`file`] | File I/O operations |
 //! | [`iter`] | Iterator and Range |
@@ -31,10 +32,13 @@
 //! | [`time`] | Time measurement (Instant, sleep) |
 //! | [`random`] | Pseudo-random number generation |
 //! | [`datetime`] | UTC date and time from Unix timestamps |
+//! | [`alloc`] | Specialized allocators (Arena, Pool, Cache, SOO) |
+//! | [`io`] | I/O error types (IoError, IoErrorKind) |
 
 pub mod traits
-pub mod interfaces
-pub mod object
+pub mod oop
+pub mod interfaces    // backward compat re-export
+pub mod object        // backward compat re-export
 pub mod exception
 pub mod types
 pub mod collections
@@ -56,3 +60,6 @@ pub mod math
 pub mod time
 pub mod random
 pub mod datetime
+pub mod regex
+pub mod alloc
+pub mod io

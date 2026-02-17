@@ -1063,6 +1063,364 @@ extend Map[K, V] with custom_lib::Serialize where K: Serialize, V: Serialize {
 }
 ```
 
+## 10. Collections Module
+
+### 10.1 List[T]
+
+Growable array. Available for any element type.
+
+```tml
+use std::collections::List
+
+var items: List[I64] = List[I64].new(16)  // initial capacity
+items.push(10)
+items.push(20)
+let first: I64 = items.get(0)             // 10
+let length: I64 = items.len()             // 2
+let last: I64 = items.pop()               // 20
+items.set(0, 42)
+items.clear()
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `new` | `new(capacity: I64) -> List[T]` | Create with initial capacity |
+| `push` | `push(mut this, item: T)` | Append element |
+| `pop` | `pop(mut this) -> T` | Remove and return last |
+| `get` | `get(this, index: I64) -> T` | Get element at index |
+| `set` | `set(mut this, index: I64, value: T)` | Set element at index |
+| `len` | `len(this) -> I64` | Number of elements |
+| `is_empty` | `is_empty(this) -> Bool` | True if empty |
+| `clear` | `clear(mut this)` | Remove all elements |
+| `contains` | `contains(this, item: T) -> Bool` | Linear search (T: PartialEq) |
+
+### 10.2 HashMap[K, V]
+
+Hash-based key-value map with O(1) average lookup.
+
+```tml
+use std::collections::HashMap
+
+var scores = HashMap[Str, I32]::new(16)
+scores.set("Alice", 100)
+scores.set("Bob", 85)
+let s: I32 = scores.get("Alice")     // 100
+let has: Bool = scores.has("Charlie") // false
+scores.remove("Bob")
+scores.destroy()
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `new` | `new(capacity: I64) -> HashMap[K, V]` | Create with capacity |
+| `set` | `set(mut this, key: K, value: V)` | Insert or update |
+| `get` | `get(this, key: K) -> V` | Get value (panics if missing) |
+| `has` | `has(this, key: K) -> Bool` | Check if key exists |
+| `remove` | `remove(mut this, key: K) -> Bool` | Remove by key |
+| `len` | `len(this) -> I64` | Number of entries |
+| `is_empty` | `is_empty(this) -> Bool` | True if empty |
+| `clear` | `clear(mut this)` | Remove all entries |
+| `destroy` | `destroy(mut this)` | Free memory |
+
+### 10.3 Buffer
+
+Byte buffer for binary data.
+
+```tml
+use std::collections::Buffer
+
+var buf = Buffer::new(1024)
+buf.write_u8(0xFF)
+buf.write_i32(42)
+let b: U8 = buf.read_u8()
+```
+
+### 10.4 BTreeMap / BTreeSet
+
+Sorted collections using binary search. Currently specialized for `I64` keys.
+
+```tml
+use std::collections::BTreeMap
+
+var m: BTreeMap = BTreeMap::create()
+m.insert(3, 30)
+m.insert(1, 10)
+let v: I64 = m.get(1)          // 10
+let min: I64 = m.min_key()     // 1
+let max: I64 = m.max_key()     // 3
+```
+
+```tml
+use std::collections::BTreeSet
+
+var s: BTreeSet = BTreeSet::create()
+s.insert(5)
+s.insert(2)
+s.insert(8)
+let has: Bool = s.contains(5)  // true
+let min: I64 = s.min()         // 2
+```
+
+### 10.5 Deque[T]
+
+Double-ended queue backed by a ring buffer. O(1) push/pop at both ends.
+
+```tml
+use std::collections::Deque
+
+var dq: Deque[I64] = Deque::create[I64]()
+dq.push_back(1)
+dq.push_front(0)
+let front: Maybe[I64] = dq.pop_front()  // Just(0)
+let back: Maybe[I64] = dq.pop_back()    // Just(1)
+```
+
+## 11. Math Module
+
+Mathematical functions and constants. Wraps LLVM intrinsics and libc FFI.
+
+```tml
+use std::math
+
+let area: F64 = math::PI * r * r
+let s: F64 = math::sin(math::to_radians(45.0))
+let root: F64 = math::sqrt(2.0)
+let clamped: F64 = math::clamp(value, 0.0, 1.0)
+```
+
+### 11.1 Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `PI` | 3.14159... | Ratio of circumference to diameter |
+| `E` | 2.71828... | Euler's number |
+| `TAU` | 6.28318... | 2 * PI |
+| `SQRT_2` | 1.41421... | Square root of 2 |
+| `LN_2` | 0.69314... | Natural log of 2 |
+| `LN_10` | 2.30258... | Natural log of 10 |
+| `LOG2_E` | 1.44269... | log2(e) |
+| `LOG10_E` | 0.43429... | log10(e) |
+| `FRAC_1_PI` | 0.31830... | 1/PI |
+| `FRAC_2_PI` | 0.63661... | 2/PI |
+| `FRAC_1_SQRT_2` | 0.70710... | 1/sqrt(2) |
+
+### 11.2 Functions
+
+**Trigonometric:** `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
+**Hyperbolic:** `sinh`, `cosh`, `tanh`
+**Exponential:** `exp`, `ln`, `log2`, `log10`, `pow`
+**Rounding:** `floor`, `ceil`, `round`, `trunc`
+**Utility:** `abs`, `sqrt`, `cbrt`, `hypot`, `min`, `max`, `clamp`, `to_radians`, `to_degrees`
+
+## 12. DateTime Module
+
+UTC date and time from Unix timestamps.
+
+```tml
+use std::datetime::DateTime
+
+let dt: DateTime = DateTime::now()
+let year: I64 = dt.year()
+let iso: Str = dt.to_iso8601()          // "2026-02-17T12:30:45Z"
+let rfc: Str = dt.to_rfc2822()          // "Mon, 17 Feb 2026 12:30:45 +0000"
+
+// From components
+let custom = DateTime::from_parts(2026, 1, 15, 8, 30, 0)
+
+// From Unix timestamp
+let epoch = DateTime::from_timestamp(0) // 1970-01-01T00:00:00Z
+```
+
+**Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `now` | `now() -> DateTime` | Current UTC time |
+| `from_timestamp` | `from_timestamp(ts: I64) -> DateTime` | From Unix epoch seconds |
+| `from_parts` | `from_parts(y, m, d, h, min, s) -> DateTime` | From components |
+| `year` | `year(this) -> I64` | Year component |
+| `month` | `month(this) -> I64` | Month (1-12) |
+| `day` | `day(this) -> I64` | Day of month (1-31) |
+| `hour` | `hour(this) -> I64` | Hour (0-23) |
+| `minute` | `minute(this) -> I64` | Minute (0-59) |
+| `second` | `second(this) -> I64` | Second (0-59) |
+| `timestamp` | `timestamp(this) -> I64` | Unix timestamp |
+| `weekday` | `weekday(this) -> I64` | Day of week (0=Mon, 6=Sun) |
+| `day_of_year` | `day_of_year(this) -> I64` | Day of year (1-366) |
+| `is_leap_year` | `is_leap_year(this) -> Bool` | Leap year check |
+| `to_iso8601` | `to_iso8601(this) -> Str` | `YYYY-MM-DDThh:mm:ssZ` |
+| `to_date_string` | `to_date_string(this) -> Str` | `YYYY-MM-DD` |
+| `to_time_string` | `to_time_string(this) -> Str` | `hh:mm:ss` |
+| `to_rfc2822` | `to_rfc2822(this) -> Str` | RFC 2822 format |
+
+## 13. Time Module
+
+Monotonic clock and wall clock types.
+
+```tml
+use std::time::{Instant, SystemTime}
+use core::time::Duration
+
+// Measure elapsed time
+let start = Instant::now()
+// ... do work ...
+let elapsed: Duration = start.elapsed()
+
+// Wall clock
+let now: SystemTime = SystemTime::now()
+let secs: I64 = now.as_secs()
+
+// Sleep
+std::time::sleep(Duration::from_millis(100))
+```
+
+### 13.1 Instant
+
+Monotonic clock for measuring elapsed time. Cannot go backwards.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `now` | `now() -> Instant` | Current monotonic time |
+| `elapsed` | `elapsed(this) -> Duration` | Time since creation |
+| `duration_since` | `duration_since(this, earlier: Instant) -> Duration` | Time between instants |
+
+### 13.2 SystemTime
+
+Wall clock time, convertible to Unix epoch seconds.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `unix_epoch` | `unix_epoch() -> SystemTime` | The Unix epoch (1970-01-01) |
+| `now` | `now() -> SystemTime` | Current system time |
+| `as_secs` | `as_secs(this) -> I64` | Seconds since epoch |
+| `subsec_nanos` | `subsec_nanos(this) -> I64` | Sub-second nanoseconds |
+| `elapsed` | `elapsed(this) -> Duration` | Time since creation |
+| `duration_since_epoch` | `duration_since_epoch(this) -> Duration` | Duration since epoch |
+
+## 14. Random Module
+
+Pseudo-random number generation using xoshiro256** algorithm.
+
+```tml
+use std::random::Rng
+use std::random
+
+// Stateful RNG
+var rng: Rng = Rng::new()               // Seeded from clock
+let n: I64 = rng.next_i64()             // Random I64
+let r: I64 = rng.range(1, 100)          // [1, 100)
+let f: F64 = rng.next_f64()             // [0.0, 1.0)
+let b: Bool = rng.next_bool()           // Random Bool
+
+// Reproducible sequence
+var rng2 = Rng::with_seed(42)
+
+// Convenience functions (fresh RNG each call)
+let x: I64 = random::random_i64()
+let y: F64 = random::random_f64()
+let z: I64 = random::random_range(0, 10)
+```
+
+**Rng Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `new` | `new() -> Rng` | Seed from monotonic clock |
+| `with_seed` | `with_seed(seed: I64) -> Rng` | Deterministic seed |
+| `next_i64` | `next_i64(mut this) -> I64` | Next random I64 |
+| `next_bool` | `next_bool(mut this) -> Bool` | Random Bool |
+| `next_f64` | `next_f64(mut this) -> F64` | Random F64 in [0.0, 1.0) |
+| `range` | `range(mut this, min: I64, max: I64) -> I64` | Random in [min, max) |
+| `range_f64` | `range_f64(mut this, min: F64, max: F64) -> F64` | Random in [min, max) |
+| `shuffle_i64` | `shuffle_i64(mut this, list: List[I64])` | Fisher-Yates shuffle |
+| `shuffle_i32` | `shuffle_i32(mut this, list: List[I32])` | Fisher-Yates shuffle |
+
+> **Note:** `Rng` is NOT cryptographically secure. Use `std::crypto::random` for security.
+
+## 15. OS Module
+
+Platform-independent operating system utilities.
+
+```tml
+use std::os
+
+let arch: Str = os::arch()           // "x64"
+let plat: Str = os::platform()       // "win32"
+let home: Str = os::homedir()        // "C:\Users\..."
+let cpus: I32 = os::cpu_count()      // 8
+let mem: U64 = os::totalmem()        // bytes
+let user: Str = os::username()       // "alice"
+
+// Environment variables
+let val: Maybe[Str] = os::env_get("PATH")
+os::env_set("MY_VAR", "hello")
+
+// Command execution
+let output: Str = os::exec("echo hello")
+let code: I32 = os::exec_status("make build")
+
+// Process
+os::process_exit(0)
+```
+
+### 15.1 System Information
+
+| Function | Return | Description |
+|----------|--------|-------------|
+| `arch()` | `Str` | CPU architecture (`"x64"`, `"arm64"`) |
+| `platform()` | `Str` | OS platform (`"win32"`, `"linux"`, `"darwin"`) |
+| `os_type()` | `Str` | OS name (`"Windows_NT"`, `"Linux"`, `"Darwin"`) |
+| `machine()` | `Str` | Machine type (`"x86_64"`, `"aarch64"`) |
+| `release()` | `Str` | OS release version |
+| `version()` | `Str` | Kernel version |
+| `hostname()` | `Str` | System hostname |
+| `homedir()` | `Str` | User home directory |
+| `tmpdir()` | `Str` | System temp directory |
+| `uptime()` | `I64` | System uptime in seconds |
+| `totalmem()` | `U64` | Total memory in bytes |
+| `freemem()` | `U64` | Free memory in bytes |
+| `endianness()` | `Str` | `"LE"` or `"BE"` |
+| `cpu_count()` | `I32` | Number of logical CPUs |
+| `username()` | `Str` | Current username |
+| `pid()` | `I32` | Current process ID |
+
+### 15.2 Constants
+
+| Constant | Description |
+|----------|-------------|
+| `EOL` | OS line ending (`"\r\n"` on Windows, `"\n"` elsewhere) |
+| `DEV_NULL` | Null device path (`"\\\\.\\nul"` or `"/dev/null"`) |
+
+### 15.3 Environment, Process, Working Directory
+
+```tml
+// Environment
+os::env_get(name: Str) -> Maybe[Str]
+os::env_set(name: Str, value: Str) -> Bool
+os::env_unset(name: Str) -> Bool
+
+// Arguments
+os::args_count() -> I32
+os::args_get(index: I32) -> Str
+
+// Process
+os::process_exit(code: I32)
+os::exec(command: Str) -> Str
+os::exec_status(command: Str) -> I32
+
+// Working directory
+os::current_dir() -> Str
+os::set_current_dir(path: Str) -> Bool
+
+// Priority
+os::get_priority(pid: I32) -> I32
+os::set_priority(pid: I32, priority: I32) -> Bool
+```
+
 ---
 
 *Previous: [19-RUNTIME.md](./19-RUNTIME.md)*

@@ -1,0 +1,6 @@
+//! Re-exports from [`core::cache`].
+//!
+//! Cache-friendly layout utilities are defined in `core::cache` and re-exported
+//! here for convenience under the `std::alloc` namespace.
+
+pub use core::cache::*

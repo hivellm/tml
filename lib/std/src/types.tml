@@ -1,60 +1,29 @@
-//! Core algebraic types for error handling and optional values.
+//! Free-standing helper functions for `Maybe[T]` and `Outcome[T, E]`.
 //!
-//! This module provides `Maybe[T]` and `Outcome[T, E]`, TML's equivalents
-//! to Rust's `Option` and `Result` types.
+//! The types `Maybe[T]` and `Outcome[T, E]` are compiler builtins. This module
+//! provides free-standing convenience functions that complement the method-based
+//! API in [`core::option`] and [`core::result`].
 //!
-//! # Main Types
+//! # Note
 //!
-//! | Type | Description |
-//! |------|-------------|
-//! | [`Maybe[T]`] | Optional value (Rust's `Option`) |
-//! | [`Outcome[T, E]`] | Result with error (Rust's `Result`) |
+//! Prefer the method syntax (e.g., `val.unwrap()`) from `core::option` /
+//! `core::result` for idiomatic TML. The free functions here are provided for
+//! cases where a function-call style is more convenient (e.g., passing to
+//! higher-order functions).
 //!
 //! # Example
 //!
 //! ```tml
-//! use std::types::*
+//! use std::types::{is_just, unwrap}
 //!
-//! func divide(a: I32, b: I32) -> Maybe[I32] {
-//!     if b == 0 {
-//!         return Nothing
-//!     }
-//!     return Just(a / b)
-//! }
-//!
-//! func safe_parse(s: Str) -> Outcome[I32, Str] {
-//!     // ... parsing logic
-//!     return Ok(42)
-//! }
+//! let x: Maybe[I32] = Just(5)
+//! assert(is_just(x))
+//! assert(unwrap(x) == 5)
 //! ```
 
-/// An optional value that may or may not be present.
-///
-/// `Maybe[T]` is TML's equivalent to Rust's `Option<T>`.
-/// Use it when a value might not exist.
-///
-/// # Variants
-///
-/// - `Just(T)` - Contains a value
-/// - `Nothing` - Contains no value
-///
-/// # Example
-///
-/// ```tml
-/// let x: Maybe[I32] = Just(5)
-/// let y: Maybe[I32] = Nothing
-///
-/// when x {
-///     Just(n) => print(n),
-///     Nothing => print("no value")
-/// }
-/// ```
-pub type Maybe[T] {
-    /// Contains a value of type T.
-    Just(T),
-    /// Contains no value.
-    Nothing,
-}
+// ============================================================================
+// Maybe[T] free functions
+// ============================================================================
 
 /// Returns `true` if the maybe contains a value.
 pub func is_just[T](m: Maybe[T]) -> Bool {
@@ -75,10 +44,6 @@ pub func is_nothing[T](m: Maybe[T]) -> Bool {
 }
 
 /// Extracts the contained value, panicking if `Nothing`.
-///
-/// # Panics
-///
-/// Panics with "called unwrap() on Nothing" if the value is `Nothing`.
 pub func unwrap[T](m: Maybe[T]) -> T {
     when m {
         Just(val) => return val,
@@ -88,10 +53,6 @@ pub func unwrap[T](m: Maybe[T]) -> T {
 }
 
 /// Extracts the contained value, panicking with a custom message if `Nothing`.
-///
-/// # Panics
-///
-/// Panics with the provided message if the value is `Nothing`.
 pub func expect[T](m: Maybe[T], msg: Str) -> T {
     when m {
         Just(val) => return val,
@@ -168,37 +129,9 @@ pub func ok_or_else[T, E](m: Maybe[T], f: func() -> E) -> Outcome[T, E] {
     return Err(f())
 }
 
-/// A result type that represents either success or failure.
-///
-/// `Outcome[T, E]` is TML's equivalent to Rust's `Result<T, E>`.
-/// Use it for operations that can fail.
-///
-/// # Variants
-///
-/// - `Ok(T)` - Operation succeeded with value
-/// - `Err(E)` - Operation failed with error
-///
-/// # Example
-///
-/// ```tml
-/// func divide(a: I32, b: I32) -> Outcome[I32, Str] {
-///     if b == 0 {
-///         return Err("division by zero")
-///     }
-///     return Ok(a / b)
-/// }
-///
-/// when divide(10, 2) {
-///     Ok(n) => print(n),
-///     Err(e) => print(e)
-/// }
-/// ```
-pub type Outcome[T, E] {
-    /// Contains the success value.
-    Ok(T),
-    /// Contains the error value.
-    Err(E),
-}
+// ============================================================================
+// Outcome[T, E] free functions
+// ============================================================================
 
 /// Returns `true` if the outcome is `Ok`.
 pub func is_ok[T, E](o: Outcome[T, E]) -> Bool {
@@ -219,10 +152,6 @@ pub func is_err[T, E](o: Outcome[T, E]) -> Bool {
 }
 
 /// Extracts the contained `Ok` value, panicking if `Err`.
-///
-/// # Panics
-///
-/// Panics with "called unwrap_ok() on Err" if the value is `Err`.
 pub func unwrap_ok[T, E](o: Outcome[T, E]) -> T {
     when o {
         Ok(val) => return val,
@@ -232,10 +161,6 @@ pub func unwrap_ok[T, E](o: Outcome[T, E]) -> T {
 }
 
 /// Extracts the contained `Ok` value, panicking with a custom message if `Err`.
-///
-/// # Panics
-///
-/// Panics with the provided message if the value is `Err`.
 pub func expect_ok[T, E](o: Outcome[T, E], msg: Str) -> T {
     when o {
         Ok(val) => return val,
@@ -245,10 +170,6 @@ pub func expect_ok[T, E](o: Outcome[T, E], msg: Str) -> T {
 }
 
 /// Extracts the contained `Err` value, panicking if `Ok`.
-///
-/// # Panics
-///
-/// Panics with "called unwrap_err() on Ok" if the value is `Ok`.
 pub func unwrap_err[T, E](o: Outcome[T, E]) -> E {
     when o {
         Ok(_) => panic("called unwrap_err() on Ok"),
@@ -258,10 +179,6 @@ pub func unwrap_err[T, E](o: Outcome[T, E]) -> E {
 }
 
 /// Extracts the contained `Err` value, panicking with a custom message if `Ok`.
-///
-/// # Panics
-///
-/// Panics with the provided message if the value is `Ok`.
 pub func expect_err[T, E](o: Outcome[T, E], msg: Str) -> E {
     when o {
         Ok(_) => panic(msg),

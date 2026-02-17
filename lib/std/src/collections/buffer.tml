@@ -4,6 +4,10 @@
 //! serialization, network protocols, and binary file handling.
 //! Compatible with Node.js Buffer API.
 //!
+//! **Migration note**: This type is backed by the C runtime (`collections.c`).
+//! It will be replaced by a pure-TML implementation as part of the runtime
+//! migration roadmap.
+//!
 //! # Example
 //!
 //! ```tml

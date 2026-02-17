@@ -3,6 +3,10 @@
 //! `List[T]` is a generic collection that stores elements of type `T`
 //! contiguously in memory and grows as needed.
 //!
+//! **Migration note**: This type is backed by the C runtime (`collections.c`).
+//! It will be replaced by a pure-TML implementation (see `ArrayList[T]` in
+//! `class_collections`) as part of the runtime migration roadmap.
+//!
 //! # Example
 //!
 //! ```tml

@@ -1,0 +1,35 @@
+//! I/O error types.
+//!
+//! This module provides the error types used by I/O operations across the
+//! standard library (`std::file`, `std::net`, etc.).
+//!
+//! # Main Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`IoError`] | An I/O error with a kind and optional message |
+//! | [`IoErrorKind`] | Categorization of I/O error types |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::io::{IoError, IoErrorKind}
+//!
+//! func read_config() -> Outcome[Str, IoError] {
+//!     return Err(IoError::with_message(IoErrorKind::NotFound, "config.json"))
+//! }
+//!
+//! when read_config() {
+//!     Ok(data) => print(data),
+//!     Err(e) => {
+//!         when e.kind() {
+//!             NotFound => print("File not found"),
+//!             _ => print("I/O error: " + e.to_string())
+//!         }
+//!     }
+//! }
+//! ```
+
+// Re-export from core::error for now — these types were originally defined there.
+// As the project matures, the canonical definitions will move here.
+pub use core::error::{IoError, IoErrorKind}

@@ -1,0 +1,739 @@
+//! Simple regex engine using Thompson's NFA construction.
+//!
+//! Supports:
+//! - Literal characters
+//! - `.` (any character)
+//! - `*` (zero or more), `+` (one or more), `?` (zero or one)
+//! - `|` (alternation)
+//! - `()` (grouping)
+//! - `[abc]`, `[a-z]`, `[^abc]` (character classes)
+//! - `\d`, `\w`, `\s`, `\D`, `\W`, `\S` (shorthand classes)
+//! - `^` (start anchor), `$` (end anchor)
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::regex::Regex
+//!
+//! let re: Regex = Regex::new("[0-9]+")
+//! let matched: Bool = re.is_match("hello 42 world")
+//! ```
+
+use std::collections::List
+
+// NFA state kinds
+const STATE_MATCH: I64 = 0
+const STATE_CHAR: I64 = 1
+const STATE_ANY: I64 = 2
+const STATE_SPLIT: I64 = 3
+const STATE_ANCHOR_START: I64 = 4
+const STATE_ANCHOR_END: I64 = 5
+const STATE_CLASS: I64 = 6
+const STATE_CLASS_NEG: I64 = 7
+
+// Postfix token types
+const TOK_CHAR: I64 = 1000
+const TOK_ANY: I64 = 1001
+const TOK_CLASS: I64 = 1002
+const TOK_CLASS_NEG: I64 = 1003
+const TOK_ANCHOR_S: I64 = 1004
+const TOK_ANCHOR_E: I64 = 1005
+const TOK_CONCAT: I64 = 2000
+const TOK_ALT: I64 = 2001
+const TOK_STAR: I64 = 3000
+const TOK_PLUS: I64 = 3001
+const TOK_QUEST: I64 = 3002
+
+/// A match result.
+pub type Match {
+    _start: I64,
+    _end: I64,
+    _matched: Bool
+}
+
+impl Match {
+    pub func start(this) -> I64 { return this._start }
+    pub func end(this) -> I64 { return this._end }
+    pub func matched(this) -> Bool { return this._matched }
+    pub func group(this, s: Str) -> Str {
+        if not this._matched { return "" }
+        return s.slice(this._start, this._end)
+    }
+}
+
+/// A compiled regular expression.
+pub type Regex {
+    _kinds: List[I64],
+    _chars: List[I64],
+    _next1: List[I64],
+    _next2: List[I64],
+    _start: I64,
+    _num_states: I64,
+    _class_ranges: List[I64],
+    _num_classes: I64,
+    _valid: Bool
+}
+
+impl Regex {
+    /// Compiles a regular expression pattern.
+    pub func new(pattern: Str) -> Regex {
+        return compile_pattern(pattern)
+    }
+
+    /// Returns true if the pattern matches anywhere in the string.
+    pub func is_match(this, s: Str) -> Bool {
+        if not this._valid { return false }
+        let m: Match = this.find(s)
+        return m._matched
+    }
+
+    /// Finds the first match in the string.
+    pub func find(this, s: Str) -> Match {
+        if not this._valid {
+            return Match { _start: -1, _end: -1, _matched: false }
+        }
+        let slen: I64 = s.len()
+        var sp: I64 = 0
+        loop (sp <= slen) {
+            let ep: I64 = nfa_exec(this, s, slen, sp)
+            if ep >= 0 {
+                return Match { _start: sp, _end: ep, _matched: true }
+            }
+            sp = sp + 1
+        }
+        return Match { _start: -1, _end: -1, _matched: false }
+    }
+
+    /// Finds all non-overlapping matches. Returns flat list [start, end, ...].
+    pub func find_all(this, s: Str) -> List[I64] {
+        var results: List[I64] = List::new(8)
+        if not this._valid { return results }
+        let slen: I64 = s.len()
+        var pos: I64 = 0
+        loop (pos <= slen) {
+            let ep: I64 = nfa_exec(this, s, slen, pos)
+            if ep >= 0 {
+                results.push(pos)
+                results.push(ep)
+                var next_pos: I64 = ep
+                if ep <= pos { next_pos = pos + 1 }
+                pos = next_pos
+            }
+            if ep < 0 {
+                pos = pos + 1
+            }
+        }
+        return results
+    }
+
+    /// Replaces the first match.
+    pub func replace(this, s: Str, rep: Str) -> Str {
+        let m: Match = this.find(s)
+        if not m._matched { return s }
+        // Force copy slices before concat (slice returns view into original)
+        let prefix: Str = "" + s.slice(0, m._start)
+        let suffix: Str = "" + s.slice(m._end, s.len())
+        return prefix + rep + suffix
+    }
+
+    /// Replaces all matches.
+    pub func replace_all(this, s: Str, rep: Str) -> Str {
+        if not this._valid { return s }
+        let slen: I64 = s.len()
+        var result: Str = ""
+        var pos: I64 = 0
+        loop (pos <= slen) {
+            let ep: I64 = nfa_exec(this, s, slen, pos)
+            if ep >= 0 {
+                result = result + rep
+                var next_pos: I64 = ep
+                if ep <= pos { next_pos = pos + 1 }
+                pos = next_pos
+            }
+            if ep < 0 {
+                if pos < slen {
+                    let ch: Str = "" + s.slice(pos, pos + 1)
+                    result = result + ch
+                }
+                pos = pos + 1
+            }
+        }
+        return result
+    }
+
+    /// Splits the string by the pattern. Returns flat list [start, end, ...] of segments.
+    pub func split(this, s: Str) -> List[I64] {
+        var results: List[I64] = List::new(8)
+        if not this._valid {
+            results.push(0)
+            results.push(s.len())
+            return results
+        }
+        let slen: I64 = s.len()
+        var pos: I64 = 0
+        var seg_start: I64 = 0
+        loop (pos <= slen) {
+            let ep: I64 = nfa_exec(this, s, slen, pos)
+            if ep >= 0 and ep > pos {
+                results.push(seg_start)
+                results.push(pos)
+                seg_start = ep
+                pos = ep
+            }
+            if ep < 0 or ep <= pos {
+                pos = pos + 1
+            }
+        }
+        results.push(seg_start)
+        results.push(slen)
+        return results
+    }
+}
+
+// ============================================================================
+// Pattern compilation
+// ============================================================================
+
+/// Compile a pattern string into an NFA-based Regex.
+func compile_pattern(pattern: Str) -> Regex {
+    let plen: I64 = pattern.len()
+    var postfix: List[I64] = List::new(8)
+    var class_ranges: List[I64] = List::new(8)
+    var nc_box: List[I64] = List::new(8)
+    nc_box.push(0)
+
+    let ok: Bool = to_postfix(pattern, plen, postfix, class_ranges, nc_box)
+    if not ok {
+        return make_invalid()
+    }
+    return build_nfa(postfix, class_ranges, nc_box.get(0))
+}
+
+func make_invalid() -> Regex {
+    return Regex {
+        _kinds: List::new(8), _chars: List::new(8),
+        _next1: List::new(8), _next2: List::new(8),
+        _start: 0, _num_states: 0,
+        _class_ranges: List::new(8), _num_classes: 0,
+        _valid: false
+    }
+}
+
+/// Convert pattern to postfix notation with explicit concat operators.
+func to_postfix(pattern: Str, plen: I64, postfix: List[I64],
+                class_ranges: List[I64], nc_box: List[I64]) -> Bool {
+    var tokens: List[I64] = List::new(8)
+    var pos: I64 = 0
+    var prev_operand: Bool = false
+
+    loop (pos < plen) {
+        let ch: Str = pattern.slice(pos, pos + 1)
+        let nc: Bool = prev_operand and ch != "*" and ch != "+" and ch != "?" and ch != "|" and ch != ")"
+
+        var tok_handled: Bool = false
+        if ch == "(" and not tok_handled {
+            if nc { tokens.push(TOK_CONCAT) }
+            tokens.push(-1)
+            prev_operand = false
+            pos = pos + 1
+            tok_handled = true
+        }
+        if ch == ")" and not tok_handled {
+            tokens.push(-2)
+            prev_operand = true
+            pos = pos + 1
+            tok_handled = true
+        }
+        if ch == "|" and not tok_handled {
+            tokens.push(TOK_ALT)
+            prev_operand = false
+            pos = pos + 1
+            tok_handled = true
+        }
+        if ch == "*" and not tok_handled {
+            tokens.push(TOK_STAR)
+            prev_operand = true
+            pos = pos + 1
+            tok_handled = true
+        }
+        if ch == "+" and not tok_handled {
+            tokens.push(TOK_PLUS)
+            prev_operand = true
+            pos = pos + 1
+            tok_handled = true
+        }
+        if ch == "?" and not tok_handled {
+            tokens.push(TOK_QUEST)
+            prev_operand = true
+            pos = pos + 1
+            tok_handled = true
+        }
+        if ch == "." and not tok_handled {
+            if nc { tokens.push(TOK_CONCAT) }
+            tokens.push(TOK_ANY)
+            prev_operand = true
+            pos = pos + 1
+            tok_handled = true
+        }
+        if ch == "^" and not tok_handled {
+            if nc { tokens.push(TOK_CONCAT) }
+            tokens.push(TOK_ANCHOR_S)
+            prev_operand = true
+            pos = pos + 1
+            tok_handled = true
+        }
+        if ch == "$" and not tok_handled {
+            if nc { tokens.push(TOK_CONCAT) }
+            tokens.push(TOK_ANCHOR_E)
+            prev_operand = true
+            pos = pos + 1
+            tok_handled = true
+        }
+        if ch == "[" and not tok_handled {
+            if nc { tokens.push(TOK_CONCAT) }
+            pos = pos + 1
+            var negated: Bool = false
+            if pos < plen and pattern.slice(pos, pos + 1) == "^" {
+                negated = true
+                pos = pos + 1
+            }
+            let cid: I64 = nc_box.get(0)
+            nc_box.set(0, cid + 1)
+            loop (pos < plen) {
+                let cc: Str = pattern.slice(pos, pos + 1)
+                if cc == "]" { pos = pos + 1; break }
+                let lo: I64 = regex_char_code(pattern, pos)
+                pos = pos + 1
+                var hi: I64 = lo
+                if pos + 1 < plen and pattern.slice(pos, pos + 1) == "-" and pattern.slice(pos + 1, pos + 2) != "]" {
+                    pos = pos + 1
+                    hi = regex_char_code(pattern, pos)
+                    pos = pos + 1
+                }
+                class_ranges.push(cid)
+                class_ranges.push(lo)
+                class_ranges.push(hi)
+            }
+            var cls_tok: I64 = TOK_CLASS
+            if negated { cls_tok = TOK_CLASS_NEG }
+            tokens.push(cls_tok)
+            tokens.push(cid)
+            prev_operand = true
+            tok_handled = true
+        }
+        if ch == "\\" and not tok_handled {
+            if nc { tokens.push(TOK_CONCAT) }
+            pos = pos + 1
+            if pos >= plen { return false }
+            let esc: Str = pattern.slice(pos, pos + 1)
+            pos = pos + 1
+            var esc_handled: Bool = false
+            if esc == "d" or esc == "w" or esc == "s" {
+                let cid: I64 = nc_box.get(0)
+                nc_box.set(0, cid + 1)
+                add_shorthand(esc, class_ranges, cid)
+                tokens.push(TOK_CLASS)
+                tokens.push(cid)
+                esc_handled = true
+            }
+            if (esc == "D" or esc == "W" or esc == "S") and not esc_handled {
+                var lo_esc: Str = "s"
+                if esc == "D" { lo_esc = "d" }
+                if esc == "W" { lo_esc = "w" }
+                let cid: I64 = nc_box.get(0)
+                nc_box.set(0, cid + 1)
+                add_shorthand(lo_esc, class_ranges, cid)
+                tokens.push(TOK_CLASS_NEG)
+                tokens.push(cid)
+                esc_handled = true
+            }
+            if not esc_handled {
+                tokens.push(TOK_CHAR)
+                tokens.push(regex_char_code(pattern, pos - 1))
+            }
+            prev_operand = true
+            tok_handled = true
+        }
+        if not tok_handled {
+            if nc { tokens.push(TOK_CONCAT) }
+            tokens.push(TOK_CHAR)
+            tokens.push(regex_char_code(pattern, pos))
+            prev_operand = true
+            pos = pos + 1
+        }
+        let _sink: I64 = 0
+    }
+
+    // Shunting-yard
+    var ops: List[I64] = List::new(8)
+    var ti: I64 = 0
+    let tlen: I64 = tokens.len()
+    loop (ti < tlen) {
+        let tok: I64 = tokens.get(ti)
+        ti = ti + 1
+        var sy_handled: Bool = false
+        if (tok == TOK_CHAR or tok == TOK_ANY or tok == TOK_ANCHOR_S or tok == TOK_ANCHOR_E) and not sy_handled {
+            postfix.push(tok)
+            if tok == TOK_CHAR { postfix.push(tokens.get(ti)); ti = ti + 1 }
+            sy_handled = true
+        }
+        if (tok == TOK_CLASS or tok == TOK_CLASS_NEG) and not sy_handled {
+            postfix.push(tok)
+            postfix.push(tokens.get(ti))
+            ti = ti + 1
+            sy_handled = true
+        }
+        if (tok == TOK_STAR or tok == TOK_PLUS or tok == TOK_QUEST) and not sy_handled {
+            postfix.push(tok)
+            sy_handled = true
+        }
+        if tok == TOK_CONCAT and not sy_handled {
+            loop (ops.len() > 0) {
+                let top: I64 = ops.get(ops.len() - 1)
+                if top == -1 or top == TOK_ALT { break }
+                ops.pop()
+                postfix.push(top)
+            }
+            ops.push(TOK_CONCAT)
+            sy_handled = true
+        }
+        if tok == TOK_ALT and not sy_handled {
+            loop (ops.len() > 0) {
+                let top: I64 = ops.get(ops.len() - 1)
+                if top == -1 { break }
+                ops.pop()
+                postfix.push(top)
+            }
+            ops.push(TOK_ALT)
+            sy_handled = true
+        }
+        if tok == -1 and not sy_handled {
+            ops.push(-1)
+            sy_handled = true
+        }
+        if tok == -2 and not sy_handled {
+            loop (ops.len() > 0) {
+                let top: I64 = ops.get(ops.len() - 1)
+                ops.pop()
+                if top == -1 { break }
+                postfix.push(top)
+            }
+        }
+    }
+    loop (ops.len() > 0) {
+        let top: I64 = ops.get(ops.len() - 1)
+        ops.pop()
+        if top != -1 { postfix.push(top) }
+    }
+    return true
+}
+
+func add_shorthand(esc: Str, ranges: List[I64], cid: I64) {
+    if esc == "d" {
+        ranges.push(cid); ranges.push(48); ranges.push(57)
+    }
+    if esc == "w" {
+        ranges.push(cid); ranges.push(48); ranges.push(57)
+        ranges.push(cid); ranges.push(65); ranges.push(90)
+        ranges.push(cid); ranges.push(97); ranges.push(122)
+        ranges.push(cid); ranges.push(95); ranges.push(95)
+    }
+    if esc == "s" {
+        ranges.push(cid); ranges.push(9); ranges.push(13)
+        ranges.push(cid); ranges.push(32); ranges.push(32)
+    }
+}
+
+// ============================================================================
+// NFA construction from postfix
+// ============================================================================
+
+/// Build NFA from postfix. Uses a flat fragment stack.
+/// Each fragment is: (start_state, out_offset, out_count) stored in 3 list entries.
+/// Output pointers are stored in a shared flat list.
+func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64) -> Regex {
+    var kinds: List[I64] = List::new(8)
+    var chars: List[I64] = List::new(8)
+    var next1: List[I64] = List::new(8)
+    var next2: List[I64] = List::new(8)
+    var ns: I64 = 0
+
+    // Fragment stack: flat triples (start, out_offset, out_count)
+    var fstack: List[I64] = List::new(8)
+    // Shared output pointer array
+    var all_outs: List[I64] = List::new(8)
+
+    var pi: I64 = 0
+    let plen: I64 = postfix.len()
+
+    loop (pi < plen) {
+        let tok: I64 = postfix.get(pi)
+        pi = pi + 1
+
+        var nfa_h: Bool = false
+        if tok == TOK_CHAR and not nfa_h {
+            let cv: I64 = postfix.get(pi)
+            pi = pi + 1
+            let st: I64 = ns
+            kinds.push(STATE_CHAR); chars.push(cv); next1.push(-1); next2.push(-1)
+            ns = ns + 1
+            let oo: I64 = all_outs.len()
+            all_outs.push(st)
+            fstack.push(st); fstack.push(oo); fstack.push(1)
+            nfa_h = true
+        }
+        if tok == TOK_ANY and not nfa_h {
+            let st: I64 = ns
+            kinds.push(STATE_ANY); chars.push(0); next1.push(-1); next2.push(-1)
+            ns = ns + 1
+            let oo: I64 = all_outs.len()
+            all_outs.push(st)
+            fstack.push(st); fstack.push(oo); fstack.push(1)
+            nfa_h = true
+        }
+        if (tok == TOK_CLASS or tok == TOK_CLASS_NEG) and not nfa_h {
+            let cid: I64 = postfix.get(pi)
+            pi = pi + 1
+            let st: I64 = ns
+            var k: I64 = STATE_CLASS
+            if tok == TOK_CLASS_NEG { k = STATE_CLASS_NEG }
+            kinds.push(k); chars.push(cid); next1.push(-1); next2.push(-1)
+            ns = ns + 1
+            let oo: I64 = all_outs.len()
+            all_outs.push(st)
+            fstack.push(st); fstack.push(oo); fstack.push(1)
+            nfa_h = true
+        }
+        if tok == TOK_ANCHOR_S and not nfa_h {
+            let st: I64 = ns
+            kinds.push(STATE_ANCHOR_START); chars.push(0); next1.push(-1); next2.push(-1)
+            ns = ns + 1
+            let oo: I64 = all_outs.len()
+            all_outs.push(st)
+            fstack.push(st); fstack.push(oo); fstack.push(1)
+            nfa_h = true
+        }
+        if tok == TOK_ANCHOR_E and not nfa_h {
+            let st: I64 = ns
+            kinds.push(STATE_ANCHOR_END); chars.push(0); next1.push(-1); next2.push(-1)
+            ns = ns + 1
+            let oo: I64 = all_outs.len()
+            all_outs.push(st)
+            fstack.push(st); fstack.push(oo); fstack.push(1)
+            nfa_h = true
+        }
+        if tok == TOK_CONCAT and not nfa_h {
+            if fstack.len() < 6 { return make_invalid() }
+            let bc: I64 = fstack.pop()
+            let bo: I64 = fstack.pop()
+            let bs: I64 = fstack.pop()
+            let ac: I64 = fstack.pop()
+            let ao: I64 = fstack.pop()
+            let as_: I64 = fstack.pop()
+            patch(next1, next2, all_outs, ao, ac, bs)
+            fstack.push(as_); fstack.push(bo); fstack.push(bc)
+            nfa_h = true
+        }
+        if tok == TOK_ALT and not nfa_h {
+            if fstack.len() < 6 { return make_invalid() }
+            let bc: I64 = fstack.pop()
+            let bo: I64 = fstack.pop()
+            let bs: I64 = fstack.pop()
+            let ac: I64 = fstack.pop()
+            let ao: I64 = fstack.pop()
+            let as_: I64 = fstack.pop()
+            let split: I64 = ns
+            kinds.push(STATE_SPLIT); chars.push(0); next1.push(as_); next2.push(bs)
+            ns = ns + 1
+            let mo: I64 = all_outs.len()
+            var mi: I64 = 0
+            loop (mi < ac) { all_outs.push(all_outs.get(ao + mi)); mi = mi + 1 }
+            mi = 0
+            loop (mi < bc) { all_outs.push(all_outs.get(bo + mi)); mi = mi + 1 }
+            fstack.push(split); fstack.push(mo); fstack.push(ac + bc)
+            nfa_h = true
+        }
+        if tok == TOK_STAR and not nfa_h {
+            if fstack.len() < 3 { return make_invalid() }
+            let ac: I64 = fstack.pop()
+            let ao: I64 = fstack.pop()
+            let as_: I64 = fstack.pop()
+            let split: I64 = ns
+            kinds.push(STATE_SPLIT); chars.push(0); next1.push(as_); next2.push(-1)
+            ns = ns + 1
+            patch(next1, next2, all_outs, ao, ac, split)
+            let oo: I64 = all_outs.len()
+            all_outs.push(-(split + 1))
+            fstack.push(split); fstack.push(oo); fstack.push(1)
+            nfa_h = true
+        }
+        if tok == TOK_PLUS and not nfa_h {
+            if fstack.len() < 3 { return make_invalid() }
+            let ac: I64 = fstack.pop()
+            let ao: I64 = fstack.pop()
+            let as_: I64 = fstack.pop()
+            let split: I64 = ns
+            kinds.push(STATE_SPLIT); chars.push(0); next1.push(as_); next2.push(-1)
+            ns = ns + 1
+            patch(next1, next2, all_outs, ao, ac, split)
+            let oo: I64 = all_outs.len()
+            all_outs.push(-(split + 1))
+            fstack.push(as_); fstack.push(oo); fstack.push(1)
+            nfa_h = true
+        }
+        if tok == TOK_QUEST and not nfa_h {
+            if fstack.len() < 3 { return make_invalid() }
+            let ac: I64 = fstack.pop()
+            let ao: I64 = fstack.pop()
+            let as_: I64 = fstack.pop()
+            let split: I64 = ns
+            kinds.push(STATE_SPLIT); chars.push(0); next1.push(as_); next2.push(-1)
+            ns = ns + 1
+            let mo: I64 = all_outs.len()
+            var mi: I64 = 0
+            loop (mi < ac) { all_outs.push(all_outs.get(ao + mi)); mi = mi + 1 }
+            all_outs.push(-(split + 1))
+            fstack.push(split); fstack.push(mo); fstack.push(ac + 1)
+        }
+    }
+
+    if fstack.len() != 3 { return make_invalid() }
+    let fc: I64 = fstack.pop()
+    let fo: I64 = fstack.pop()
+    let fs: I64 = fstack.pop()
+
+    // Add accept state
+    let accept: I64 = ns
+    kinds.push(STATE_MATCH); chars.push(0); next1.push(-1); next2.push(-1)
+    ns = ns + 1
+    patch(next1, next2, all_outs, fo, fc, accept)
+
+    return Regex {
+        _kinds: kinds, _chars: chars,
+        _next1: next1, _next2: next2,
+        _start: fs, _num_states: ns,
+        _class_ranges: class_ranges, _num_classes: num_classes,
+        _valid: true
+    }
+}
+
+/// Patch outputs at [offset, offset+count) in all_outs to point to target.
+func patch(next1: List[I64], next2: List[I64], all_outs: List[I64],
+           offset: I64, count: I64, target: I64) {
+    var i: I64 = 0
+    loop (i < count) {
+        let loc: I64 = all_outs.get(offset + i)
+        if loc >= 0 {
+            next1.set(loc, target)
+        }
+        if loc < 0 {
+            next2.set(-(loc + 1), target)
+        }
+        i = i + 1
+    }
+}
+
+// ============================================================================
+// Character code lookup (uses core::str::char_at via lowlevel FFI)
+// ============================================================================
+
+func regex_char_code(s: Str, pos: I64) -> I64 {
+    let c: I32 = s.char_at(pos)
+    return c as I64
+}
+
+func char_in_class(class_ranges: List[I64], cid: I64, ch: I64) -> Bool {
+    var i: I64 = 0
+    let n: I64 = class_ranges.len()
+    loop (i < n) {
+        if class_ranges.get(i) == cid and ch >= class_ranges.get(i + 1) and ch <= class_ranges.get(i + 2) {
+            return true
+        }
+        i = i + 3
+    }
+    return false
+}
+
+// ============================================================================
+// NFA execution (Thompson's simulation)
+// ============================================================================
+
+func nfa_exec(re: ref Regex, s: Str, slen: I64, start_pos: I64) -> I64 {
+    var cur: List[I64] = List::new(8)
+    var nxt: List[I64] = List::new(8)
+    var vis: List[I64] = List::new(8)
+    var i: I64 = 0
+    loop (i < re._num_states) { vis.push(0); i = i + 1 }
+    var gen: I64 = 1
+
+    add_eps(re, cur, vis, gen, re._start, s, slen, start_pos)
+
+    var last_match: I64 = -1
+    i = 0
+    loop (i < cur.len()) {
+        if re._kinds.get(cur.get(i)) == STATE_MATCH { last_match = start_pos }
+        i = i + 1
+    }
+
+    var pos: I64 = start_pos
+    loop (pos < slen) {
+        if cur.len() == 0 { return last_match }
+        let ch: I64 = regex_char_code(s, pos)
+        gen = gen + 1
+        i = 0
+        loop (i < cur.len()) {
+            let st: I64 = cur.get(i)
+            let k: I64 = re._kinds.get(st)
+            if k == STATE_CHAR and ch == re._chars.get(st) {
+                add_eps(re, nxt, vis, gen, re._next1.get(st), s, slen, pos + 1)
+            }
+            if k == STATE_ANY and ch != 10 {
+                add_eps(re, nxt, vis, gen, re._next1.get(st), s, slen, pos + 1)
+            }
+            if k == STATE_CLASS and char_in_class(re._class_ranges, re._chars.get(st), ch) {
+                add_eps(re, nxt, vis, gen, re._next1.get(st), s, slen, pos + 1)
+            }
+            if k == STATE_CLASS_NEG and not char_in_class(re._class_ranges, re._chars.get(st), ch) {
+                add_eps(re, nxt, vis, gen, re._next1.get(st), s, slen, pos + 1)
+            }
+            i = i + 1
+        }
+        // Copy nxt→cur and clear nxt (avoids List::new(8) remonomorphization bug)
+        cur.clear()
+        var ci: I64 = 0
+        loop (ci < nxt.len()) {
+            cur.push(nxt.get(ci))
+            ci = ci + 1
+        }
+        nxt.clear()
+        pos = pos + 1
+        i = 0
+        loop (i < cur.len()) {
+            if re._kinds.get(cur.get(i)) == STATE_MATCH { last_match = pos }
+            i = i + 1
+        }
+    }
+    return last_match
+}
+
+func add_eps(re: ref Regex, list: List[I64], vis: List[I64],
+             gen: I64, state: I64, s: Str, slen: I64, pos: I64) {
+    if state < 0 or state >= re._num_states { return }
+    if vis.get(state) == gen { return }
+    vis.set(state, gen)
+    let k: I64 = re._kinds.get(state)
+    if k == STATE_SPLIT {
+        add_eps(re, list, vis, gen, re._next1.get(state), s, slen, pos)
+        add_eps(re, list, vis, gen, re._next2.get(state), s, slen, pos)
+        return
+    }
+    if k == STATE_ANCHOR_START {
+        if pos == 0 { add_eps(re, list, vis, gen, re._next1.get(state), s, slen, pos) }
+        return
+    }
+    if k == STATE_ANCHOR_END {
+        if pos == slen { add_eps(re, list, vis, gen, re._next1.get(state), s, slen, pos) }
+        return
+    }
+    list.push(state)
+}
