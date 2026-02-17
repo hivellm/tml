@@ -1,0 +1,169 @@
+//! Sorted key-value map backed by sorted arrays with binary search.
+//!
+//! `BTreeMap[K, V]` maintains keys in sorted order, providing O(log n) lookup,
+//! O(n) insertion (due to shifting), and ordered iteration.
+//!
+//! Currently specialized for `I64` keys and `I64` values due to compiler
+//! limitations with nested generics in multi-param types.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::collections::BTreeMap
+//!
+//! var m: BTreeMap = BTreeMap::create()
+//! m.insert(3, 30)
+//! m.insert(1, 10)
+//! m.insert(2, 20)
+//! let v: I64 = m.get(2)  // 20
+//! ```
+
+use std::collections::List
+
+/// A sorted key-value map using parallel sorted arrays.
+///
+/// Keys and values are `I64`. Keys are maintained in sorted order.
+/// Lookups use binary search (O(log n)).
+/// Insertions and removals are O(n) due to element shifting.
+pub type BTreeMap {
+    keys: List[I64],
+    values: List[I64],
+    length: I64
+}
+
+impl BTreeMap {
+    /// Creates a new empty BTreeMap.
+    pub func create() -> BTreeMap {
+        let k: List[I64] = List[I64].new(16)
+        let v: List[I64] = List[I64].new(16)
+        return BTreeMap {
+            keys: k,
+            values: v,
+            length: 0
+        }
+    }
+
+    /// Returns the number of key-value pairs.
+    pub func len(this) -> I64 {
+        return this.length
+    }
+
+    /// Returns true if the map is empty.
+    pub func is_empty(this) -> Bool {
+        return this.length == 0
+    }
+
+    /// Inserts a key-value pair. If the key exists, its value is updated.
+    pub func insert(mut this, key: I64, value: I64) {
+        let idx: I64 = this.binary_search(key)
+        if idx >= 0 {
+            this.values.set(idx, value)
+            return
+        }
+        let pos: I64 = 0 - idx - 1
+        this.insert_at(pos, key, value)
+        this.length = this.length + 1
+    }
+
+    /// Returns the value for the given key, or panics if not found.
+    pub func get(this, key: I64) -> I64 {
+        let idx: I64 = this.binary_search(key)
+        if idx < 0 {
+            panic("BTreeMap::get: key not found")
+        }
+        return this.values.get(idx)
+    }
+
+    /// Returns true if the map contains the given key.
+    pub func contains_key(this, key: I64) -> Bool {
+        return this.binary_search(key) >= 0
+    }
+
+    /// Removes a key-value pair. Returns true if the key was found.
+    pub func remove(mut this, key: I64) -> Bool {
+        let idx: I64 = this.binary_search(key)
+        if idx < 0 {
+            return false
+        }
+        this.remove_at(idx)
+        this.length = this.length - 1
+        return true
+    }
+
+
+    /// Removes all entries.
+    pub func clear(mut this) {
+        let k: List[I64] = List[I64].new(16)
+        let v: List[I64] = List[I64].new(16)
+        this.keys = k
+        this.values = v
+        this.length = 0
+    }
+
+    /// Returns the smallest key, or panics if empty.
+    pub func min_key(this) -> I64 {
+        if this.length == 0 {
+            panic("BTreeMap::min_key: empty map")
+        }
+        return this.keys.get(0)
+    }
+
+    /// Returns the largest key, or panics if empty.
+    pub func max_key(this) -> I64 {
+        if this.length == 0 {
+            panic("BTreeMap::max_key: empty map")
+        }
+        return this.keys.get(this.length - 1)
+    }
+
+    // ========================================================================
+    // Internal helpers
+    // ========================================================================
+
+    /// Binary search returning index if found, or -(insertion_point + 1) if not.
+    pub func binary_search(this, key: I64) -> I64 {
+        var lo: I64 = 0
+        var hi: I64 = this.length - 1
+        loop (lo <= hi) {
+            let mid: I64 = lo + (hi - lo) / 2
+            let mid_key: I64 = this.keys.get(mid)
+            if mid_key == key {
+                return mid
+            } else if mid_key < key {
+                lo = mid + 1
+            } else {
+                hi = mid - 1
+            }
+        }
+        return 0 - lo - 1
+    }
+
+    /// Insert key and value at position, shifting elements right.
+    pub func insert_at(mut this, pos: I64, key: I64, value: I64) {
+        // Append at end to grow the lists
+        this.keys.push(key)
+        this.values.push(value)
+        // Shift elements right from end to pos
+        var i: I64 = this.length
+        loop (i > pos) {
+            this.keys.set(i, this.keys.get(i - 1))
+            this.values.set(i, this.values.get(i - 1))
+            i = i - 1
+        }
+        // Place at position
+        this.keys.set(pos, key)
+        this.values.set(pos, value)
+    }
+
+    /// Remove key and value at index, shifting elements left.
+    pub func remove_at(mut this, idx: I64) {
+        var i: I64 = idx
+        loop (i < this.length - 1) {
+            this.keys.set(i, this.keys.get(i + 1))
+            this.values.set(i, this.values.get(i + 1))
+            i = i + 1
+        }
+        let _k: I64 = this.keys.pop()
+        let _v: I64 = this.values.pop()
+    }
+}

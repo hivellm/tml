@@ -1,0 +1,70 @@
+// Tests for std::random::Rng
+use test::{assert, assert_eq}
+use std::random::Rng
+
+@test
+func test_rng_new_produces_values() -> I32 {
+    var rng: Rng = Rng::new()
+    let a: I64 = rng.next_i64()
+    let b: I64 = rng.next_i64()
+    // Two consecutive values should (almost certainly) differ
+    assert(a != b, "consecutive next_i64 should differ")
+    return 0
+}
+
+@test
+func test_rng_with_seed_reproducible() -> I32 {
+    var rng1: Rng = Rng::with_seed(42)
+    var rng2: Rng = Rng::with_seed(42)
+    let a: I64 = rng1.next_i64()
+    let b: I64 = rng2.next_i64()
+    assert_eq(a, b, "same seed should produce same first value")
+
+    let c: I64 = rng1.next_i64()
+    let d: I64 = rng2.next_i64()
+    assert_eq(c, d, "same seed should produce same second value")
+    return 0
+}
+
+@test
+func test_rng_range() -> I32 {
+    var rng: Rng = Rng::with_seed(123)
+    var i: I64 = 0
+    loop (i < 100) {
+        let val: I64 = rng.range(10, 20)
+        assert(val >= 10, "range value should be >= min")
+        assert(val < 20, "range value should be < max")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_rng_next_bool() -> I32 {
+    var rng: Rng = Rng::with_seed(999)
+    var trues: I64 = 0
+    var falses: I64 = 0
+    var i: I64 = 0
+    loop (i < 200) {
+        if rng.next_bool() {
+            trues = trues + 1
+        } else {
+            falses = falses + 1
+        }
+        i = i + 1
+    }
+    // Both should get some hits (very unlikely to get 0 in 200 trials)
+    assert(trues > 0, "should get some true values")
+    assert(falses > 0, "should get some false values")
+    return 0
+}
+
+@test
+func test_rng_different_seeds_differ() -> I32 {
+    var rng1: Rng = Rng::with_seed(1)
+    var rng2: Rng = Rng::with_seed(2)
+    let a: I64 = rng1.next_i64()
+    let b: I64 = rng2.next_i64()
+    assert(a != b, "different seeds should produce different values")
+    return 0
+}

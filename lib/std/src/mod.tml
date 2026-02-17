@@ -29,6 +29,8 @@
 //! | [`glob`] | High-performance glob pattern matching |
 //! | [`math`] | Mathematical functions and constants |
 //! | [`time`] | Time measurement (Instant, sleep) |
+//! | [`random`] | Pseudo-random number generation |
+//! | [`datetime`] | UTC date and time from Unix timestamps |
 
 pub mod traits
 pub mod interfaces
@@ -52,3 +54,5 @@ pub mod search
 pub mod glob
 pub mod math
 pub mod time
+pub mod random
+pub mod datetime

@@ -68,6 +68,80 @@ impl Instant {
     }
 }
 
+// ============================================================================
+// SystemTime - Wall clock
+// ============================================================================
+
+@extern("tml_os_system_time_secs")
+func ffi_system_time_secs() -> I64
+
+@extern("tml_os_system_time_nanos")
+func ffi_system_time_nanos() -> I64
+
+/// A measurement of the system clock (wall clock time).
+///
+/// Unlike [`Instant`], `SystemTime` corresponds to "real world" time
+/// and can be converted to seconds since the Unix epoch.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::time::SystemTime
+///
+/// let now: SystemTime = SystemTime::now()
+/// let secs: I64 = now.as_secs()
+/// ```
+pub type SystemTime {
+    secs: I64,
+    nanos: I64
+}
+
+impl SystemTime {
+    /// The Unix epoch (January 1, 1970 00:00:00 UTC).
+    pub func unix_epoch() -> SystemTime {
+        return SystemTime { secs: 0, nanos: 0 }
+    }
+
+    /// Returns the current system time.
+    pub func now() -> SystemTime {
+        let total_nanos: I64 = ffi_system_time_nanos()
+        let s: I64 = total_nanos / 1000000000
+        let n: I64 = total_nanos % 1000000000
+        return SystemTime { secs: s, nanos: n }
+    }
+
+    /// Returns the number of seconds since the Unix epoch.
+    pub func as_secs(this) -> I64 {
+        return this.secs
+    }
+
+    /// Returns the sub-second nanosecond component.
+    pub func subsec_nanos(this) -> I64 {
+        return this.nanos
+    }
+
+    /// Returns the elapsed time since this SystemTime was created.
+    pub func elapsed(this) -> Duration {
+        let now_nanos: I64 = ffi_system_time_nanos()
+        let self_nanos: I64 = this.secs * 1000000000 + this.nanos
+        let diff: I64 = now_nanos - self_nanos
+        if diff < 0 {
+            return Duration::from_nanos(0)
+        }
+        return Duration::from_nanos(diff)
+    }
+
+    /// Returns the duration since the Unix epoch.
+    pub func duration_since_epoch(this) -> Duration {
+        let total: I64 = this.secs * 1000000000 + this.nanos
+        return Duration::from_nanos(total)
+    }
+}
+
+// ============================================================================
+// Sleep
+// ============================================================================
+
 /// Puts the current thread to sleep for the specified duration.
 ///
 /// # Examples

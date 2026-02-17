@@ -1,0 +1,23 @@
+// std::time module: Instant tests
+use test::{assert_eq, assert}
+use std::time::Instant
+use core::time::Duration
+
+@test
+func test_instant_now() -> I32 {
+    let start: Instant = Instant::now()
+    let nanos: I64 = start.as_nanos()
+    // Verify Instant was created successfully
+    return 0
+}
+
+@test
+func test_instant_elapsed() -> I32 {
+    let start: Instant = Instant::now()
+    // Sleep briefly to ensure nonzero elapsed
+    sleep_ms(1)
+    let elapsed: Duration = start.elapsed()
+    let millis: I64 = elapsed.as_millis()
+    assert(millis >= 0, "elapsed millis should be non-negative")
+    return 0
+}

@@ -1,0 +1,98 @@
+// Tests for std::datetime::DateTime
+use test::{assert, assert_eq}
+use std::datetime::DateTime
+
+@test
+func test_unix_epoch() -> I32 {
+    let dt: DateTime = DateTime::from_timestamp(0)
+    assert_eq(dt.year(), 1970, "epoch year should be 1970")
+    assert_eq(dt.month(), 1, "epoch month should be 1")
+    assert_eq(dt.day(), 1, "epoch day should be 1")
+    assert_eq(dt.hour(), 0, "epoch hour should be 0")
+    assert_eq(dt.minute(), 0, "epoch minute should be 0")
+    assert_eq(dt.second(), 0, "epoch second should be 0")
+    return 0
+}
+
+@test
+func test_known_date() -> I32 {
+    // 2000-01-01 00:00:00 UTC = 946684800
+    let dt: DateTime = DateTime::from_timestamp(946684800)
+    assert_eq(dt.year(), 2000, "year should be 2000")
+    assert_eq(dt.month(), 1, "month should be 1")
+    assert_eq(dt.day(), 1, "day should be 1")
+    return 0
+}
+
+@test
+func test_known_date_with_time() -> I32 {
+    // 2024-07-15 14:30:45 UTC = 1721054145 + 600 = let me calculate properly
+    // Using a well-known timestamp: 1000000000 = 2001-09-09 01:46:40 UTC
+    let dt: DateTime = DateTime::from_timestamp(1000000000)
+    assert_eq(dt.year(), 2001, "year should be 2001")
+    assert_eq(dt.month(), 9, "month should be 9")
+    assert_eq(dt.day(), 9, "day should be 9")
+    assert_eq(dt.hour(), 1, "hour should be 1")
+    assert_eq(dt.minute(), 46, "minute should be 46")
+    assert_eq(dt.second(), 40, "second should be 40")
+    return 0
+}
+
+@test
+func test_weekday() -> I32 {
+    // 1970-01-01 was a Thursday (weekday = 3, Monday = 0)
+    let dt: DateTime = DateTime::from_timestamp(0)
+    assert_eq(dt.weekday(), 3, "1970-01-01 should be Thursday (3)")
+
+    // 2000-01-01 was a Saturday (weekday = 5)
+    let dt2: DateTime = DateTime::from_timestamp(946684800)
+    assert_eq(dt2.weekday(), 5, "2000-01-01 should be Saturday (5)")
+    return 0
+}
+
+@test
+func test_leap_year() -> I32 {
+    let dt2000: DateTime = DateTime::from_timestamp(946684800) // 2000
+    assert(dt2000.is_leap_year(), "2000 should be leap")
+
+    let dt2001: DateTime = DateTime::from_timestamp(978307200) // 2001-01-01
+    assert(not dt2001.is_leap_year(), "2001 should not be leap")
+
+    let dt2024: DateTime = DateTime::from_timestamp(1704067200) // 2024-01-01
+    assert(dt2024.is_leap_year(), "2024 should be leap")
+    return 0
+}
+
+@test
+func test_from_parts() -> I32 {
+    let dt: DateTime = DateTime::from_parts(2000, 1, 1, 0, 0, 0)
+    assert_eq(dt.timestamp(), 946684800, "2000-01-01 timestamp")
+    assert_eq(dt.year(), 2000, "from_parts year")
+    assert_eq(dt.month(), 1, "from_parts month")
+    assert_eq(dt.day(), 1, "from_parts day")
+    return 0
+}
+
+@test
+func test_day_of_year() -> I32 {
+    // 2000-01-01 -> day 1
+    let dt: DateTime = DateTime::from_parts(2000, 1, 1, 0, 0, 0)
+    assert_eq(dt.day_of_year(), 1, "Jan 1 should be day 1")
+
+    // 2000-12-31 -> day 366 (leap year)
+    let dt2: DateTime = DateTime::from_parts(2000, 12, 31, 0, 0, 0)
+    assert_eq(dt2.day_of_year(), 366, "Dec 31 in leap year should be day 366")
+    return 0
+}
+
+@test
+func test_now_reasonable() -> I32 {
+    let dt: DateTime = DateTime::now()
+    // Should be at least year 2024
+    assert(dt.year() >= 2024, "current year should be >= 2024")
+    assert(dt.month() >= 1, "month should be >= 1")
+    assert(dt.month() <= 12, "month should be <= 12")
+    assert(dt.day() >= 1, "day should be >= 1")
+    assert(dt.day() <= 31, "day should be <= 31")
+    return 0
+}

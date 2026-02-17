@@ -585,21 +585,48 @@ TML_EXPORT int32_t crypto_x509_store_verify(void* store, void* cert) {
     return result;
 }
 
-TML_EXPORT int32_t crypto_x509_store_verify_chain(void* store, void* cert, void* chain_handles) {
+/* list_len/list_get from collections runtime */
+extern int64_t list_len(void* list);
+extern int64_t list_get(void* list, int64_t index);
+
+TML_EXPORT int32_t crypto_x509_store_verify_chain(void* store, void* cert, void* chain_list) {
     X509_STORE* s = (X509_STORE*)store;
     X509* c = (X509*)cert;
-    STACK_OF(X509)* chain = (STACK_OF(X509)*)chain_handles;
     if (!s || !c)
         return 0;
+
+    /* Build an OpenSSL STACK_OF(X509) from the TML list of X509* handles */
+    STACK_OF(X509)* chain = NULL;
+    if (chain_list) {
+        int64_t count = list_len(chain_list);
+        if (count > 0) {
+            chain = sk_X509_new_null();
+            if (chain) {
+                for (int64_t i = 0; i < count; i++) {
+                    X509* chain_cert = (X509*)(uintptr_t)list_get(chain_list, i);
+                    if (chain_cert)
+                        sk_X509_push(chain, chain_cert);
+                }
+            }
+        }
+    }
+
     X509_STORE_CTX* ctx = X509_STORE_CTX_new();
-    if (!ctx)
+    if (!ctx) {
+        if (chain)
+            sk_X509_free(chain);
         return 0;
+    }
     if (X509_STORE_CTX_init(ctx, s, c, chain) != 1) {
         X509_STORE_CTX_free(ctx);
+        if (chain)
+            sk_X509_free(chain);
         return 0;
     }
     int32_t result = X509_verify_cert(ctx) == 1 ? 1 : 0;
     X509_STORE_CTX_free(ctx);
+    if (chain)
+        sk_X509_free(chain); /* Only frees the stack, not the certs themselves */
     return result;
 }
 

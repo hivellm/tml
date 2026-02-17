@@ -1,0 +1,57 @@
+// Tests for std::time::SystemTime
+use test::{assert, assert_eq}
+use std::time::SystemTime
+use core::time::Duration
+
+@test
+func test_systemtime_now_reasonable() -> I32 {
+    let now: SystemTime = SystemTime::now()
+    let secs: I64 = now.as_secs()
+    // Should be after 2024-01-01 (1704067200) and before 2030
+    assert(secs > 1704067200, "system time should be after 2024")
+    assert(secs < 1900000000, "system time should be before ~2030")
+    return 0
+}
+
+@test
+func test_systemtime_subsec_nanos() -> I32 {
+    let now: SystemTime = SystemTime::now()
+    let n: I64 = now.subsec_nanos()
+    assert(n >= 0, "subsec_nanos should be >= 0")
+    assert(n < 1000000000, "subsec_nanos should be < 1 billion")
+    return 0
+}
+
+@test
+func test_systemtime_unix_epoch() -> I32 {
+    let epoch: SystemTime = SystemTime::unix_epoch()
+    assert_eq(epoch.as_secs(), 0, "epoch secs should be 0")
+    assert_eq(epoch.subsec_nanos(), 0, "epoch nanos should be 0")
+    return 0
+}
+
+@test
+func test_systemtime_duration_since_epoch() -> I32 {
+    let now: SystemTime = SystemTime::now()
+    let dur: Duration = now.duration_since_epoch()
+    let secs: I64 = dur.as_secs()
+    assert(secs > 1704067200, "duration since epoch should be > 2024")
+    return 0
+}
+
+@test
+func test_systemtime_elapsed() -> I32 {
+    let start: SystemTime = SystemTime::now()
+    // Do some trivial work
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop (i < 1000) {
+        sum = sum + i
+        i = i + 1
+    }
+    let dur: Duration = start.elapsed()
+    // Elapsed should be non-negative (>= 0 nanos)
+    let nanos: I64 = dur.as_nanos()
+    assert(nanos >= 0, "elapsed should be non-negative")
+    return 0
+}

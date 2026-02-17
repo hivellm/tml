@@ -1,7 +1,7 @@
 # TML Roadmap
 
-**Last updated**: 2026-02-16
-**Current state**: Compiler functional, 75.1% library coverage, 8,763 tests passing
+**Last updated**: 2026-02-17
+**Current state**: Compiler functional, 75.2% library coverage, 8,855+ tests passing
 
 ---
 
@@ -10,7 +10,7 @@
 ```
 Phase 1  [DONE 97%]   Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 75% ✓
-Phase 3  [ACTIVE 48%] Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓)
+Phase 3  [ACTIVE 63%] Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓)
 Phase 4  [THEN]       Migrate C runtime → pure TML
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
@@ -351,10 +351,10 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 ### 3.1 Collections
 
 - [x] 3.1.1 Implement `HashSet[T]` — insert, remove, contains *(re-enabled in `std::collections::class_collections`, also includes ArrayList, Queue, Stack, LinkedList)*
-- [ ] 3.1.2 Implement `BTreeMap[K, V]` — ordered map with O(log n) operations
-- [ ] 3.1.3 Implement `BTreeSet[T]` — ordered set
-- [ ] 3.1.4 Implement `Deque[T]` — double-ended queue
-- [ ] 3.1.5 Implement `Vec[T]` alias for `List[T]` (ergonomic)
+- [x] 3.1.2 Implement `BTreeMap[K, V]` — ordered map with O(log n) operations *(sorted-array backed, I64 specialized, binary search)*
+- [x] 3.1.3 Implement `BTreeSet[T]` — ordered set *(wrapper around BTreeMap)*
+- [x] 3.1.4 Implement `Deque[T]` — double-ended queue *(ring buffer backed by List[T])*
+- [x] 3.1.5 Implement `Vec[T]` alias for `List[T]` (ergonomic) *(push/pop/len/get/set/contains/clear)*
 - [x] 3.1.6 Tests for collections *(HashSet, ArrayList, Queue, Stack, LinkedList tests passing)*
 
 ### 3.2 Math module ✓
@@ -371,7 +371,7 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 
 - [x] 3.3.1 `env::args()` — command-line arguments *(implemented as `os::args_count()` + `os::args_get(index)` with C FFI)*
 - [x] 3.3.2 `env::var()` / `env::set_var()` — environment variables *(implemented in `std::os`: `env_get`, `env_set`, `env_unset`)*
-- [ ] 3.3.3 `env::current_dir()` / `env::set_current_dir()`
+- [x] 3.3.3 `env::current_dir()` / `env::set_current_dir()` *(implemented in `std::os` via getcwd/chdir FFI)*
 - [x] 3.3.4 `process::exit(code)` — exit with status code *(implemented as `os::process_exit(code)` via `tml_os_exit` FFI)*
 - [ ] 3.3.5 `process::Command` — spawn subprocesses with stdin/stdout/stderr
 - [x] 3.3.6 Tests for env and process *(args, env_get/set/unset, process_exit tests passing)*
@@ -379,20 +379,20 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 ### 3.4 DateTime
 
 - [x] 3.4.1 `Instant` — monotonic clock for measuring elapsed time *(implemented in `std::time`: `Instant::now()`, `elapsed()`, `as_nanos()`, `duration_since()`)*
-- [ ] 3.4.2 `SystemTime` — wall clock time
-- [ ] 3.4.3 `DateTime` — date + time with timezone support
+- [x] 3.4.2 `SystemTime` — wall clock time *(implemented in `std::time`: `now()`, `as_secs()`, `subsec_nanos()`, `elapsed()`, `duration_since_epoch()`)*
+- [x] 3.4.3 `DateTime` — date + time (UTC only) *(implemented in `std::datetime`: `now()`, `from_timestamp()`, `from_parts()`, component accessors, `weekday()`, `day_of_year()`, `is_leap_year()`)*
 - [ ] 3.4.4 Formatting: ISO 8601, RFC 2822, custom formats
 - [ ] 3.4.5 Parsing: string → DateTime
 - [x] 3.4.6 Tests for datetime *(Instant tests passing: now, elapsed, sleep)*
 
 ### 3.5 Random number generation
 
-- [ ] 3.5.1 `Rng` behavior — `next_u32`, `next_u64`, `next_f64`
+- [x] 3.5.1 `Rng` type — `next_i64()`, `next_bool()` *(xoshiro256** PRNG, SplitMix64 seed expansion)*
 - [ ] 3.5.2 `ThreadRng` — per-thread CSPRNG
 - [ ] 3.5.3 `random[T]()` — convenience function for random value
-- [ ] 3.5.4 `rng.range(min, max)` — random integer in range
+- [x] 3.5.4 `rng.range(min, max)` — random integer in range *(implemented)*
 - [ ] 3.5.5 `rng.shuffle(list)` — Fisher-Yates shuffle
-- [ ] 3.5.6 Tests for random
+- [x] 3.5.6 Tests for random *(5 tests: new, with_seed reproducible, range, next_bool, different_seeds)*
 
 ### 3.6 Buffered I/O
 

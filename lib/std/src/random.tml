@@ -1,0 +1,110 @@
+//! Pseudo-random number generation.
+//!
+//! This module provides a fast PRNG ([`Rng`]) using the xoshiro256**
+//! algorithm. `Rng::new()` seeds from the monotonic clock via SplitMix64
+//! expansion for good entropy without requiring the crypto runtime.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::random::Rng
+//!
+//! var rng: Rng = Rng::new()
+//! let n: I64 = rng.next_i64()
+//! let r: I64 = rng.range(1, 100)
+//! ```
+
+/// A pseudo-random number generator using xoshiro256**.
+///
+/// Fast and suitable for simulations, games, and general-purpose
+/// randomness. NOT cryptographically secure — use [`std::crypto::random`]
+/// for security-sensitive applications.
+pub type Rng {
+    s0: I64,
+    s1: I64,
+    s2: I64,
+    s3: I64
+}
+
+impl Rng {
+    /// Creates a new Rng seeded from the monotonic clock.
+    pub func new() -> Rng {
+        return Rng::with_seed(time_ns())
+    }
+
+    /// Creates an Rng with a specific seed for reproducible sequences.
+    pub func with_seed(seed: I64) -> Rng {
+        // SplitMix64 to expand single seed into 4 state words
+        var z: I64 = seed
+        z = z + (-7046029254386353131)  // 0x9E3779B97F4A7C15
+        var s0: I64 = splitmix_next(z)
+        z = z + (-7046029254386353131)
+        var s1: I64 = splitmix_next(z)
+        z = z + (-7046029254386353131)
+        var s2: I64 = splitmix_next(z)
+        z = z + (-7046029254386353131)
+        var s3: I64 = splitmix_next(z)
+        if s0 == 0 and s1 == 0 and s2 == 0 and s3 == 0 {
+            s0 = 1
+        }
+        return Rng { s0: s0, s1: s1, s2: s2, s3: s3 }
+    }
+
+    /// Returns the next pseudo-random I64 value.
+    pub func next_i64(mut this) -> I64 {
+        // xoshiro256** algorithm
+        let result: I64 = rotl(this.s1 * 5, 7) * 9
+        let t: I64 = this.s1 << 17
+
+        this.s2 = this.s2 ^ this.s0
+        this.s3 = this.s3 ^ this.s1
+        this.s1 = this.s1 ^ this.s2
+        this.s0 = this.s0 ^ this.s3
+
+        this.s2 = this.s2 ^ t
+        this.s3 = rotl(this.s3, 45)
+
+        return result
+    }
+
+    /// Returns a pseudo-random I64 in [min, max) (exclusive upper bound).
+    pub func range(mut this, min: I64, max: I64) -> I64 {
+        if min >= max {
+            return min
+        }
+        let span: I64 = max - min
+        let raw: I64 = this.next_i64()
+        // Make positive
+        var positive: I64 = raw
+        if positive < 0 {
+            positive = 0 - positive
+            if positive < 0 {
+                positive = 1  // Handle I64::MIN edge case
+            }
+        }
+        return min + (positive % span)
+    }
+
+    /// Returns a pseudo-random Bool.
+    pub func next_bool(mut this) -> Bool {
+        return (this.next_i64() & 1) == 1
+    }
+}
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/// Rotate left for xoshiro.
+func rotl(x: I64, k: I64) -> I64 {
+    return (x << k) | (x >> (64 - k))
+}
+
+/// SplitMix64 finalizer for seed expansion.
+func splitmix_next(z: I64) -> I64 {
+    var x: I64 = z
+    x = (x ^ (x >> 30)) * (-4658895280553007687)  // 0xBF58476D1CE4E5B9
+    x = (x ^ (x >> 27)) * (-7723592293110705685)  // 0x94D049BB133111EB
+    x = x ^ (x >> 31)
+    return x
+}

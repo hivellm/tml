@@ -1,0 +1,158 @@
+//! UTC date and time from Unix timestamps.
+//!
+//! This module provides [`DateTime`] for converting between Unix epoch
+//! seconds and human-readable date/time components (year, month, day,
+//! hour, minute, second). UTC only — no timezone support.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::datetime::DateTime
+//!
+//! let dt: DateTime = DateTime::now()
+//! let year: I64 = dt.year()
+//! ```
+
+use std::time::SystemTime
+
+/// A UTC date and time, decomposed into components.
+///
+/// Created from Unix epoch seconds via [`from_timestamp`] or from the
+/// current wall clock via [`now`].
+pub type DateTime {
+    _year: I64,
+    _month: I64,
+    _day: I64,
+    _hour: I64,
+    _minute: I64,
+    _second: I64,
+    _timestamp: I64
+}
+
+impl DateTime {
+    /// Returns the current UTC date and time.
+    pub func now() -> DateTime {
+        let st: SystemTime = SystemTime::now()
+        return DateTime::from_timestamp(st.as_secs())
+    }
+
+    /// Creates a DateTime from a Unix timestamp (seconds since epoch).
+    pub func from_timestamp(ts: I64) -> DateTime {
+        // Civil date from epoch seconds using the algorithm from
+        // Howard Hinnant's chrono-compatible date library.
+        var secs: I64 = ts
+        let second: I64 = secs % 60
+        secs = secs / 60
+        let minute: I64 = secs % 60
+        secs = secs / 60
+        let hour: I64 = secs % 24
+        let days: I64 = secs / 24
+
+        // Convert day count to civil date (days since 1970-01-01).
+        // Shift epoch from 1970-01-01 to 0000-03-01 for easier math.
+        let z: I64 = days + 719468
+        let era: I64 = (if z >= 0 { z } else { z - 146096 }) / 146097
+        let doe: I64 = z - era * 146097  // day of era [0, 146096]
+        let yoe: I64 = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+        let y: I64 = yoe + era * 400
+        let doy: I64 = doe - (365 * yoe + yoe / 4 - yoe / 100)  // day of year [0, 365]
+        let mp: I64 = (5 * doy + 2) / 153  // [0, 11]
+        let d: I64 = doy - (153 * mp + 2) / 5 + 1  // day [1, 31]
+        let m_raw: I64 = if mp < 10 { mp + 3 } else { mp - 9 }
+        let y_final: I64 = if m_raw <= 2 { y + 1 } else { y }
+
+        return DateTime {
+            _year: y_final,
+            _month: m_raw,
+            _day: d,
+            _hour: hour,
+            _minute: minute,
+            _second: second,
+            _timestamp: ts
+        }
+    }
+
+    /// Creates a DateTime from components (UTC).
+    ///
+    /// No validation is performed — the caller must provide valid values.
+    pub func from_parts(year: I64, month: I64, day: I64,
+                        hour: I64, minute: I64, second: I64) -> DateTime {
+        // Convert civil date back to epoch seconds.
+        let ts: I64 = civil_to_epoch(year, month, day, hour, minute, second)
+        return DateTime {
+            _year: year,
+            _month: month,
+            _day: day,
+            _hour: hour,
+            _minute: minute,
+            _second: second,
+            _timestamp: ts
+        }
+    }
+
+    /// Returns the year component.
+    pub func year(this) -> I64 { return this._year }
+
+    /// Returns the month component (1–12).
+    pub func month(this) -> I64 { return this._month }
+
+    /// Returns the day of the month (1–31).
+    pub func day(this) -> I64 { return this._day }
+
+    /// Returns the hour component (0–23).
+    pub func hour(this) -> I64 { return this._hour }
+
+    /// Returns the minute component (0–59).
+    pub func minute(this) -> I64 { return this._minute }
+
+    /// Returns the second component (0–59).
+    pub func second(this) -> I64 { return this._second }
+
+    /// Returns the Unix timestamp (seconds since epoch).
+    pub func timestamp(this) -> I64 { return this._timestamp }
+
+    /// Returns the day of the week (0 = Monday, 6 = Sunday).
+    pub func weekday(this) -> I64 {
+        // 1970-01-01 was Thursday (3).
+        var d: I64 = this._timestamp / 86400
+        d = (d + 3) % 7
+        if d < 0 {
+            d = d + 7
+        }
+        return d
+    }
+
+    /// Returns the day of the year (1–366).
+    pub func day_of_year(this) -> I64 {
+        let jan1_ts: I64 = civil_to_epoch(this._year, 1, 1, 0, 0, 0)
+        return (this._timestamp - jan1_ts) / 86400 + 1
+    }
+
+    /// Returns true if the year is a leap year.
+    pub func is_leap_year(this) -> Bool {
+        return is_leap(this._year)
+    }
+}
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/// Convert civil date to epoch seconds.
+func civil_to_epoch(year: I64, month: I64, day: I64,
+                    hour: I64, minute: I64, second: I64) -> I64 {
+    // Inverse of the Hinnant algorithm.
+    let y: I64 = if month <= 2 { year - 1 } else { year }
+    let era: I64 = (if y >= 0 { y } else { y - 399 }) / 400
+    let yoe: I64 = y - era * 400
+    let m: I64 = if month > 2 { month - 3 } else { month + 9 }
+    let doy: I64 = (153 * m + 2) / 5 + day - 1
+    let doe: I64 = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    let days: I64 = era * 146097 + doe - 719468
+    return days * 86400 + hour * 3600 + minute * 60 + second
+}
+
+/// Check if a year is a leap year.
+func is_leap(year: I64) -> Bool {
+    return (year % 4 == 0) and ((year % 100 != 0) or (year % 400 == 0))
+}

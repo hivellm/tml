@@ -1,0 +1,75 @@
+// Tests for std::collections::Vec
+use test::{assert, assert_eq}
+use std::collections::Vec
+
+@test
+func test_vec_new_empty() -> I32 {
+    let v: Vec[I64] = Vec::new[I64]()
+    assert(v.is_empty(), "new vec should be empty")
+    assert_eq(v.len(), 0, "len should be 0")
+    return 0
+}
+
+@test
+func test_vec_push_pop() -> I32 {
+    var v: Vec[I64] = Vec::new[I64]()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    assert_eq(v.len(), 3, "len should be 3")
+
+    let c: I64 = v.pop().unwrap()
+    assert_eq(c, 30, "pop should return last element")
+    let b: I64 = v.pop().unwrap()
+    assert_eq(b, 20, "pop should return 20")
+    let a: I64 = v.pop().unwrap()
+    assert_eq(a, 10, "pop should return 10")
+    assert(v.is_empty(), "should be empty after popping all")
+    return 0
+}
+
+@test
+func test_vec_get_set() -> I32 {
+    var v: Vec[I64] = Vec::new[I64]()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+
+    assert_eq(v.get(0), 1, "get(0) should be 1")
+    assert_eq(v.get(2), 3, "get(2) should be 3")
+
+    v.set(1, 99)
+    assert_eq(v.get(1), 99, "get(1) after set should be 99")
+    return 0
+}
+
+@test
+func test_vec_contains() -> I32 {
+    var v: Vec[I64] = Vec::new[I64]()
+    v.push(5)
+    v.push(10)
+    v.push(15)
+
+    assert(v.contains(10), "should contain 10")
+    assert(not v.contains(99), "should not contain 99")
+    return 0
+}
+
+@test
+func test_vec_clear() -> I32 {
+    var v: Vec[I64] = Vec::new[I64]()
+    v.push(1)
+    v.push(2)
+    v.clear()
+    assert(v.is_empty(), "should be empty after clear")
+    assert_eq(v.len(), 0, "len should be 0 after clear")
+    return 0
+}
+
+@test
+func test_vec_pop_empty() -> I32 {
+    var v: Vec[I64] = Vec::new[I64]()
+    let result: Maybe[I64] = v.pop()
+    assert(result.is_nothing(), "pop on empty should be Nothing")
+    return 0
+}

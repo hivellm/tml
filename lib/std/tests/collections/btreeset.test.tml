@@ -1,0 +1,75 @@
+// Tests for std::collections::BTreeSet
+use test::{assert, assert_eq}
+use std::collections::BTreeSet
+
+@test
+func test_btreeset_create_empty() -> I32 {
+    let s: BTreeSet = BTreeSet::create()
+    assert(s.is_empty(), "new set should be empty")
+    assert_eq(s.len(), 0, "len should be 0")
+    return 0
+}
+
+@test
+func test_btreeset_insert_contains() -> I32 {
+    var s: BTreeSet = BTreeSet::create()
+    let added1: Bool = s.insert(10)
+    let added2: Bool = s.insert(20)
+    let added3: Bool = s.insert(30)
+    assert(added1, "first insert should return true")
+    assert(added2, "second insert should return true")
+    assert(added3, "third insert should return true")
+    assert_eq(s.len(), 3, "len should be 3")
+    assert(s.contains(10), "should contain 10")
+    assert(s.contains(20), "should contain 20")
+    assert(not s.contains(99), "should not contain 99")
+    return 0
+}
+
+@test
+func test_btreeset_no_duplicates() -> I32 {
+    var s: BTreeSet = BTreeSet::create()
+    let first: Bool = s.insert(5)
+    let second: Bool = s.insert(5)
+    assert(first, "first insert should return true")
+    assert(not second, "duplicate insert should return false")
+    assert_eq(s.len(), 1, "len should still be 1")
+    return 0
+}
+
+@test
+func test_btreeset_remove() -> I32 {
+    var s: BTreeSet = BTreeSet::create()
+    s.insert(1)
+    s.insert(2)
+    s.insert(3)
+    let removed: Bool = s.remove(2)
+    assert(removed, "remove(2) should return true")
+    assert_eq(s.len(), 2, "len should be 2")
+    assert(not s.contains(2), "should not contain 2")
+    let not_removed: Bool = s.remove(99)
+    assert(not not_removed, "remove(99) should return false")
+    return 0
+}
+
+@test
+func test_btreeset_min_max() -> I32 {
+    var s: BTreeSet = BTreeSet::create()
+    s.insert(50)
+    s.insert(10)
+    s.insert(30)
+    assert_eq(s.min(), 10, "min should be 10")
+    assert_eq(s.max(), 50, "max should be 50")
+    return 0
+}
+
+@test
+func test_btreeset_clear() -> I32 {
+    var s: BTreeSet = BTreeSet::create()
+    s.insert(1)
+    s.insert(2)
+    s.clear()
+    assert(s.is_empty(), "should be empty after clear")
+    assert_eq(s.len(), 0, "len should be 0 after clear")
+    return 0
+}

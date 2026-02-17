@@ -1,0 +1,147 @@
+// Tests for std::collections::Deque
+use test::{assert, assert_eq}
+use std::collections::Deque
+
+@test
+func test_deque_create_empty() -> I32 {
+    let dq: Deque[I64] = Deque::create[I64]()
+    assert(dq.is_empty(), "new deque should be empty")
+    assert_eq(dq.count(), 0, "count should be 0")
+    return 0
+}
+
+@test
+func test_deque_push_back_pop_front() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(10)
+    dq.push_back(20)
+    dq.push_back(30)
+    assert_eq(dq.count(), 3, "count should be 3")
+
+    let a: I64 = dq.pop_front().unwrap()
+    assert_eq(a, 10, "first pop_front should be 10")
+    let b: I64 = dq.pop_front().unwrap()
+    assert_eq(b, 20, "second pop_front should be 20")
+    let c: I64 = dq.pop_front().unwrap()
+    assert_eq(c, 30, "third pop_front should be 30")
+    assert(dq.is_empty(), "deque should be empty after popping all")
+    return 0
+}
+
+@test
+func test_deque_push_front_pop_back() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_front(10)
+    dq.push_front(20)
+    dq.push_front(30)
+    assert_eq(dq.count(), 3, "count should be 3")
+
+    let a: I64 = dq.pop_back().unwrap()
+    assert_eq(a, 10, "first pop_back should be 10")
+    let b: I64 = dq.pop_back().unwrap()
+    assert_eq(b, 20, "second pop_back should be 20")
+    let c: I64 = dq.pop_back().unwrap()
+    assert_eq(c, 30, "third pop_back should be 30")
+    assert(dq.is_empty(), "deque should be empty")
+    return 0
+}
+
+@test
+func test_deque_front_back() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.push_back(3)
+
+    let f: I64 = dq.front().unwrap()
+    assert_eq(f, 1, "front should be 1")
+    let b: I64 = dq.back().unwrap()
+    assert_eq(b, 3, "back should be 3")
+    assert_eq(dq.count(), 3, "peek should not remove")
+    return 0
+}
+
+@test
+func test_deque_get() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(100)
+    dq.push_back(200)
+    dq.push_back(300)
+
+    assert_eq(dq.get(0), 100, "get(0) should be 100")
+    assert_eq(dq.get(1), 200, "get(1) should be 200")
+    assert_eq(dq.get(2), 300, "get(2) should be 300")
+    return 0
+}
+
+@test
+func test_deque_contains() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(5)
+    dq.push_back(10)
+    dq.push_back(15)
+
+    assert(dq.contains(10), "should contain 10")
+    assert(not dq.contains(99), "should not contain 99")
+    return 0
+}
+
+@test
+func test_deque_clear() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(1)
+    dq.push_back(2)
+    dq.clear()
+    assert(dq.is_empty(), "should be empty after clear")
+    assert_eq(dq.count(), 0, "count should be 0 after clear")
+    return 0
+}
+
+@test
+func test_deque_mixed_ops() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    dq.push_back(2)
+    dq.push_front(1)
+    dq.push_back(3)
+    // Order: [1, 2, 3]
+    assert_eq(dq.get(0), 1, "index 0 should be 1")
+    assert_eq(dq.get(1), 2, "index 1 should be 2")
+    assert_eq(dq.get(2), 3, "index 2 should be 3")
+
+    let f: I64 = dq.pop_front().unwrap()
+    assert_eq(f, 1, "pop_front should be 1")
+    let b: I64 = dq.pop_back().unwrap()
+    assert_eq(b, 3, "pop_back should be 3")
+    assert_eq(dq.count(), 1, "one element left")
+    assert_eq(dq.get(0), 2, "remaining should be 2")
+    return 0
+}
+
+@test
+func test_deque_empty_pop() -> I32 {
+    var dq: Deque[I64] = Deque::create[I64]()
+    let a: Maybe[I64] = dq.pop_front()
+    assert(a.is_nothing(), "pop_front on empty should be Nothing")
+    let b: Maybe[I64] = dq.pop_back()
+    assert(b.is_nothing(), "pop_back on empty should be Nothing")
+    let c: Maybe[I64] = dq.front()
+    assert(c.is_nothing(), "front on empty should be Nothing")
+    let d: Maybe[I64] = dq.back()
+    assert(d.is_nothing(), "back on empty should be Nothing")
+    return 0
+}
+
+@test
+func test_deque_grow() -> I32 {
+    var dq: Deque[I64] = Deque::with_capacity[I64](4)
+    // Fill beyond capacity to trigger grow
+    var i: I64 = 0
+    loop (i < 10) {
+        dq.push_back(i)
+        i = i + 1
+    }
+    assert_eq(dq.count(), 10, "should have 10 elements")
+    assert_eq(dq.get(0), 0, "first should be 0")
+    assert_eq(dq.get(9), 9, "last should be 9")
+    return 0
+}

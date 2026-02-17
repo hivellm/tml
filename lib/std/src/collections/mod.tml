@@ -20,13 +20,22 @@
 //! | [`Queue[T]`] | FIFO queue |
 //! | [`Stack[T]`] | LIFO stack |
 //! | [`LinkedList[T]`] | Doubly-linked list |
+//! | [`Deque[T]`] | Double-ended queue |
+//! | [`BTreeMap[K, V]`] | Sorted key-value map |
+//! | [`BTreeSet`] | Sorted set |
 
 pub mod list
 pub mod hashmap
 pub mod buffer
 pub mod class_collections
+pub mod deque
+pub mod btreemap
+pub mod btreeset
 
 pub use std::collections::list::List
 pub use std::collections::hashmap::{HashMap, HashMapIter}
 pub use std::collections::buffer::Buffer
-pub use std::collections::class_collections::{ArrayList, HashSet, Queue, Stack, LinkedList}
+pub use std::collections::class_collections::{ArrayList, HashSet, Queue, Stack, LinkedList, Vec}
+pub use std::collections::deque::Deque
+pub use std::collections::btreemap::BTreeMap
+pub use std::collections::btreeset::BTreeSet

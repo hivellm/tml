@@ -1,0 +1,76 @@
+//! Sorted set backed by a BTreeMap.
+//!
+//! `BTreeSet` maintains elements in sorted order, providing O(log n)
+//! lookup and O(n) insertion. Currently specialized for `I64` elements.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::collections::BTreeSet
+//!
+//! var s: BTreeSet = BTreeSet::create()
+//! s.insert(3)
+//! s.insert(1)
+//! s.insert(2)
+//! assert(s.contains(2))
+//! ```
+
+use std::collections::BTreeMap
+
+/// A sorted set of `I64` values, backed by a `BTreeMap`.
+///
+/// Elements are maintained in sorted order. Lookups use binary search (O(log n)).
+pub type BTreeSet {
+    map: BTreeMap
+}
+
+impl BTreeSet {
+    /// Creates a new empty BTreeSet.
+    pub func create() -> BTreeSet {
+        return BTreeSet { map: BTreeMap::create() }
+    }
+
+    /// Returns the number of elements.
+    pub func len(this) -> I64 {
+        return this.map.len()
+    }
+
+    /// Returns true if the set is empty.
+    pub func is_empty(this) -> Bool {
+        return this.map.is_empty()
+    }
+
+    /// Inserts an element. Returns true if the element was not already present.
+    pub func insert(mut this, value: I64) -> Bool {
+        if this.map.contains_key(value) {
+            return false
+        }
+        this.map.insert(value, 0)
+        return true
+    }
+
+    /// Returns true if the set contains the given element.
+    pub func contains(this, value: I64) -> Bool {
+        return this.map.contains_key(value)
+    }
+
+    /// Removes an element. Returns true if the element was found.
+    pub func remove(mut this, value: I64) -> Bool {
+        return this.map.remove(value)
+    }
+
+    /// Removes all elements.
+    pub func clear(mut this) {
+        this.map.clear()
+    }
+
+    /// Returns the smallest element, or panics if empty.
+    pub func min(this) -> I64 {
+        return this.map.min_key()
+    }
+
+    /// Returns the largest element, or panics if empty.
+    pub func max(this) -> I64 {
+        return this.map.max_key()
+    }
+}

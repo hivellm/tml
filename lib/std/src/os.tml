@@ -132,6 +132,12 @@ func ffi_get_priority(pid: I32) -> I32
 @extern("tml_os_set_priority")
 func ffi_set_priority(pid: I32, priority: I32) -> I32
 
+@extern("tml_os_current_dir")
+func ffi_current_dir() -> Str
+
+@extern("tml_os_set_current_dir")
+func ffi_set_current_dir(path: Str) -> I32
+
 // ============================================================================
 // Public API - System Information
 // ============================================================================
@@ -328,4 +334,21 @@ pub func args_get(index: I32) -> Str {
 /// ```
 pub func process_exit(code: I32) {
     ffi_exit(code)
+}
+
+// ============================================================================
+// Working Directory
+// ============================================================================
+
+/// Returns the current working directory.
+///
+/// Returns an empty string if the directory cannot be determined.
+pub func current_dir() -> Str {
+    return ffi_current_dir()
+}
+
+/// Changes the current working directory.
+/// Returns `true` on success, `false` on failure.
+pub func set_current_dir(path: Str) -> Bool {
+    return ffi_set_current_dir(path) == 0
 }

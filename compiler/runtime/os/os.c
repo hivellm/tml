@@ -851,3 +851,70 @@ TML_EXPORT const char* tml_os_args_get(int32_t index) {
     return s_args_argv[index];
 #endif
 }
+
+/* ========================================================================== */
+/* Current Working Directory                                                   */
+/* ========================================================================== */
+
+TML_EXPORT const char* tml_os_current_dir(void) {
+    char buf[4096];
+#ifdef _WIN32
+    DWORD len = GetCurrentDirectoryA((DWORD)sizeof(buf), buf);
+    if (len == 0 || len >= sizeof(buf)) {
+        buf[0] = '\0';
+    }
+#else
+    if (!getcwd(buf, sizeof(buf))) {
+        buf[0] = '\0';
+    }
+#endif
+    return _strdup(buf);
+}
+
+TML_EXPORT int32_t tml_os_set_current_dir(const char* path) {
+    if (!path)
+        return -1;
+#ifdef _WIN32
+    return SetCurrentDirectoryA(path) ? 0 : -1;
+#else
+    return chdir(path);
+#endif
+}
+
+/* ========================================================================== */
+/* System Time (wall clock)                                                    */
+/* ========================================================================== */
+
+TML_EXPORT int64_t tml_os_system_time_secs(void) {
+#ifdef _WIN32
+    /* Windows FILETIME: 100ns intervals since 1601-01-01 */
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULARGE_INTEGER uli;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+    /* Convert to Unix epoch: subtract 116444736000000000 (Jan 1 1601 -> Jan 1 1970) */
+    return (int64_t)((uli.QuadPart - 116444736000000000ULL) / 10000000ULL);
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (int64_t)ts.tv_sec;
+#endif
+}
+
+TML_EXPORT int64_t tml_os_system_time_nanos(void) {
+#ifdef _WIN32
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULARGE_INTEGER uli;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+    /* Convert to Unix epoch nanos */
+    uint64_t unix_100ns = uli.QuadPart - 116444736000000000ULL;
+    return (int64_t)(unix_100ns * 100ULL);
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
+#endif
+}

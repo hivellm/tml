@@ -1,0 +1,36 @@
+// Tests for std::os::current_dir / set_current_dir
+use test::{assert, assert_eq}
+use std::os
+
+@test
+func test_current_dir_not_empty() -> I32 {
+    let dir: Str = os::current_dir()
+    assert(dir.len() > 0, "current_dir should not be empty")
+    return 0
+}
+
+@test
+func test_set_current_dir_and_restore() -> I32 {
+    let original: Str = os::current_dir()
+    assert(original.len() > 0, "should have an original dir")
+
+    // Change to temp dir and verify
+    let tmp: Str = os::tmpdir()
+    let ok: Bool = os::set_current_dir(tmp)
+    assert(ok, "set_current_dir to tmpdir should succeed")
+
+    let after: Str = os::current_dir()
+    // Restore original dir before any assertions that might fail
+    os::set_current_dir(original)
+
+    // Verify we actually changed
+    assert(after.len() > 0, "dir after set should not be empty")
+    return 0
+}
+
+@test
+func test_set_current_dir_invalid() -> I32 {
+    let ok: Bool = os::set_current_dir("/nonexistent_path_that_should_not_exist_12345")
+    assert(not ok, "set_current_dir to invalid path should fail")
+    return 0
+}

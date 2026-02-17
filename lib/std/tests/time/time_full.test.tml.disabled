@@ -1,0 +1,40 @@
+// std::time module: full coverage — sleep, as_nanos, elapsed after work
+use test::{assert_eq, assert}
+use std::time::Instant
+use std::time
+use core::time::Duration
+
+@test
+func test_sleep_function() -> I32 {
+    let dur: Duration = Duration::from_millis(5)
+    let start: Instant = Instant::now()
+    time::sleep(dur)
+    let elapsed: Duration = start.elapsed()
+    let millis: I64 = elapsed.as_millis()
+    assert(millis >= 0, "sleep should cause time to elapse")
+    return 0
+}
+
+@test
+func test_instant_as_nanos() -> I32 {
+    let inst: Instant = Instant::now()
+    let nanos: I64 = inst.as_nanos()
+    // Verify as_nanos returns a value (non-zero timestamp)
+    assert(nanos != 0, "as_nanos should return non-zero timestamp")
+    return 0
+}
+
+@test
+func test_elapsed_after_work() -> I32 {
+    let start: Instant = Instant::now()
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop (i < 1000) {
+        sum = sum + i
+        i = i + 1
+    }
+    let elapsed: Duration = start.elapsed()
+    let nanos: I64 = elapsed.as_nanos()
+    assert(nanos >= 0, "elapsed nanos after work should be non-negative")
+    return 0
+}

@@ -1,0 +1,206 @@
+//! Double-ended queue.
+//!
+//! A ring buffer backed [`Deque[T]`] supporting efficient insertion and
+//! removal at both ends.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::collections::Deque
+//!
+//! var dq: Deque[I64] = Deque::create[I64]()
+//! dq.push_back(1)
+//! dq.push_front(0)
+//! print(dq.pop_front().unwrap().to_string())  // 0
+//! ```
+
+use std::collections::List
+
+/// A double-ended queue backed by a ring buffer.
+///
+/// `Deque[T]` provides O(1) amortised insertion and removal at both
+/// the front and the back. Random access via [`get`] is O(1).
+pub type Deque[T] {
+    data: List[T],
+    head: I64,
+    length: I64,
+    capacity: I64,
+    initialized: Bool
+}
+
+impl[T] Deque[T] {
+    /// Creates a new empty Deque with the default capacity (16).
+    pub func create() -> Deque[T] {
+        let initial_capacity: I64 = 16
+        let list: List[T] = List[T].new(initial_capacity)
+        return Deque {
+            data: list,
+            head: 0,
+            length: 0,
+            capacity: initial_capacity,
+            initialized: false,
+        }
+    }
+
+    /// Creates a Deque with the specified initial capacity.
+    pub func with_capacity(cap: I64) -> Deque[T] {
+        let list: List[T] = List[T].new(cap)
+        return Deque {
+            data: list,
+            head: 0,
+            length: 0,
+            capacity: cap,
+            initialized: false,
+        }
+    }
+
+    /// Returns the number of elements.
+    pub func count(this) -> I64 {
+        return this.length
+    }
+
+    /// Returns true if the deque has no elements.
+    pub func is_empty(this) -> Bool {
+        return this.length == 0
+    }
+
+    /// Removes all elements.
+    pub func clear(mut this) {
+        this.data.clear()
+        this.head = 0
+        this.length = 0
+        this.initialized = false
+    }
+
+    /// Pre-fills the backing list so set() works at any index.
+    func fill_backing(mut this, value: T) {
+        var i: I64 = 0
+        loop (i < this.capacity) {
+            this.data.push(value)
+            i = i + 1
+        }
+        this.initialized = true
+    }
+
+    /// Adds an element to the back of the deque.
+    pub func push_back(mut this, item: T) {
+        if not this.initialized {
+            this.fill_backing(item)
+        }
+        if this.length >= this.capacity {
+            this.grow()
+        }
+        let idx: I64 = (this.head + this.length) % this.capacity
+        this.data.set(idx, item)
+        this.length = this.length + 1
+    }
+
+    /// Adds an element to the front of the deque.
+    pub func push_front(mut this, item: T) {
+        if not this.initialized {
+            this.fill_backing(item)
+        }
+        if this.length >= this.capacity {
+            this.grow()
+        }
+        this.head = (this.head - 1 + this.capacity) % this.capacity
+        this.data.set(this.head, item)
+        this.length = this.length + 1
+    }
+
+    /// Removes and returns the element at the front.
+    pub func pop_front(mut this) -> Maybe[T] {
+        if this.length == 0 {
+            return Nothing
+        }
+        let item: T = this.data.get(this.head)
+        this.head = (this.head + 1) % this.capacity
+        this.length = this.length - 1
+        if this.length == 0 {
+            this.head = 0
+        }
+        return Just(item)
+    }
+
+    /// Removes and returns the element at the back.
+    pub func pop_back(mut this) -> Maybe[T] {
+        if this.length == 0 {
+            return Nothing
+        }
+        let tail_idx: I64 = (this.head + this.length - 1) % this.capacity
+        let item: T = this.data.get(tail_idx)
+        this.length = this.length - 1
+        if this.length == 0 {
+            this.head = 0
+        }
+        return Just(item)
+    }
+
+    /// Returns the front element without removing it.
+    pub func front(this) -> Maybe[T] {
+        if this.length == 0 {
+            return Nothing
+        }
+        return Just(this.data.get(this.head))
+    }
+
+    /// Returns the back element without removing it.
+    pub func back(this) -> Maybe[T] {
+        if this.length == 0 {
+            return Nothing
+        }
+        let tail_idx: I64 = (this.head + this.length - 1) % this.capacity
+        return Just(this.data.get(tail_idx))
+    }
+
+    /// Returns the element at the given index (0 = front).
+    pub func get(this, index: I64) -> T {
+        if index < 0 or index >= this.length {
+            panic("Deque::get index out of bounds")
+        }
+        let actual: I64 = (this.head + index) % this.capacity
+        return this.data.get(actual)
+    }
+
+    /// Grows the capacity by copying elements into a fresh buffer.
+    pub func grow(mut this) {
+        let new_capacity: I64 = this.capacity * 2
+        var new_data: List[T] = List[T].new(new_capacity)
+
+        // Pre-fill new backing list
+        let first: T = this.data.get(this.head)
+        var fill_i: I64 = 0
+        loop (fill_i < new_capacity) {
+            new_data.push(first)
+            fill_i = fill_i + 1
+        }
+
+        // Copy elements in order to positions 0..length
+        var i: I64 = 0
+        loop (i < this.length) {
+            let idx: I64 = (this.head + i) % this.capacity
+            new_data.set(i, this.data.get(idx))
+            i = i + 1
+        }
+
+        this.data = new_data
+        this.head = 0
+        this.capacity = new_capacity
+    }
+}
+
+/// Methods that require element equality comparison.
+impl[T: PartialEq] Deque[T] {
+    /// Returns true if the deque contains the element.
+    pub func contains(this, item: T) -> Bool {
+        var i: I64 = 0
+        loop (i < this.length) {
+            let idx: I64 = (this.head + i) % this.capacity
+            if this.data.get(idx) == item {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+}
