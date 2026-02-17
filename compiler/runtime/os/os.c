@@ -918,3 +918,81 @@ TML_EXPORT int64_t tml_os_system_time_nanos(void) {
     return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
 #endif
 }
+
+/* ========================================================================== */
+/* Process Execution                                                           */
+/* ========================================================================== */
+
+/**
+ * Execute a shell command and return its stdout output.
+ * Returns a heap-allocated string (caller must not free — GC or TML manages it).
+ * On error, returns empty string.
+ */
+TML_EXPORT const char* tml_os_exec(const char* command) {
+    if (!command)
+        return "";
+
+#ifdef _WIN32
+    FILE* fp = _popen(command, "r");
+#else
+    FILE* fp = popen(command, "r");
+#endif
+    if (!fp)
+        return "";
+
+    size_t cap = 4096;
+    size_t len = 0;
+    char* buf = (char*)malloc(cap);
+    if (!buf) {
+#ifdef _WIN32
+        _pclose(fp);
+#else
+        pclose(fp);
+#endif
+        return "";
+    }
+
+    char tmp[1024];
+    while (fgets(tmp, sizeof(tmp), fp)) {
+        size_t n = strlen(tmp);
+        if (len + n + 1 > cap) {
+            cap = (len + n + 1) * 2;
+            char* newbuf = (char*)realloc(buf, cap);
+            if (!newbuf) {
+                free(buf);
+                break;
+            }
+            buf = newbuf;
+        }
+        memcpy(buf + len, tmp, n);
+        len += n;
+    }
+    buf[len] = '\0';
+
+#ifdef _WIN32
+    _pclose(fp);
+#else
+    pclose(fp);
+#endif
+
+    /* Return as a TML-compatible string via _strdup */
+    const char* result = _strdup(buf);
+    free(buf);
+    return result ? result : "";
+}
+
+/**
+ * Execute a shell command and return the exit code.
+ */
+TML_EXPORT int32_t tml_os_exec_status(const char* command) {
+    if (!command)
+        return -1;
+#ifdef _WIN32
+    return system(command);
+#else
+    int status = system(command);
+    if (status == -1)
+        return -1;
+    return WEXITSTATUS(status);
+#endif
+}

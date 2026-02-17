@@ -47,6 +47,9 @@ bool file_write_str(TmlFile* file, const char* str);
 bool file_write_all(const char* path, const char* content);
 bool file_append_all(const char* path, const char* content);
 
+// Flush
+bool file_flush(TmlFile* file);
+
 // Position/Size
 int64_t file_size(TmlFile* file);
 int64_t file_position(TmlFile* file);

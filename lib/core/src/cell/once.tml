@@ -1,4 +1,22 @@
 //! A cell which can be written to only once.
+//!
+//! [`OnceCell[T]`] stores a value that can be set at most once. Subsequent
+//! calls to [`set`] return the rejected value as an error. Useful for
+//! lazy initialization of globals or one-time configuration.
+//!
+//! This module also provides [`BorrowError`] and [`BorrowMutError`] types
+//! used by `RefCell` borrow tracking.
+//!
+//! # Example
+//!
+//! ```tml
+//! use core::cell::once::OnceCell
+//!
+//! var cell: OnceCell[I32] = OnceCell::new()
+//! cell.set(42)              // Ok(())
+//! cell.set(99)              // Err(99) — already initialized
+//! let v: I32 = cell.get()   // Just(42)
+//! ```
 
 use core::option::*
 use core::result::*
@@ -72,6 +90,7 @@ impl[T] OnceCell[T] {
     }
 }
 
+/// Default for `OnceCell[T]`: returns an empty cell.
 impl[T: Default] Default for OnceCell[T] {
     pub func default() -> OnceCell[T] {
         return OnceCell::new()
@@ -86,10 +105,12 @@ impl[T: Default] Default for OnceCell[T] {
 pub type BorrowError {}
 
 impl BorrowError {
+    /// Creates a new `BorrowError`.
     pub func new() -> BorrowError {
         return BorrowError {}
     }
 
+    /// Returns a human-readable description of the error.
     pub func to_string(this) -> Str {
         return "already mutably borrowed"
     }
@@ -99,10 +120,12 @@ impl BorrowError {
 pub type BorrowMutError {}
 
 impl BorrowMutError {
+    /// Creates a new `BorrowMutError`.
     pub func new() -> BorrowMutError {
         return BorrowMutError {}
     }
 
+    /// Returns a human-readable description of the error.
     pub func to_string(this) -> Str {
         return "already borrowed"
     }

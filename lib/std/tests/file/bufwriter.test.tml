@@ -1,0 +1,44 @@
+// Tests for std::file::bufio::BufWriter
+use test::{assert, assert_eq}
+use std::file::file::File
+use std::file::path::Path
+use std::file::bufio::BufWriter
+
+@test
+func test_bufwriter_open_close() -> I32 {
+    let path: Str = "build/debug/_test_bufwriter_oc.txt"
+    var bw: BufWriter = BufWriter::open(path)
+    assert(bw.is_open(), "BufWriter should be open")
+    bw.close()
+    Path::remove(path)
+    return 0
+}
+
+@test
+func test_bufwriter_write_and_flush() -> I32 {
+    let path: Str = "build/debug/_test_bufwriter_wf.txt"
+    var bw: BufWriter = BufWriter::open(path)
+    bw.write("hello ")
+    bw.write("world")
+    assert(bw.buffered() > 0, "should have buffered data")
+    bw.close()
+
+    let content: Str = File::read_all(path)
+    assert_eq(content, "hello world", "flushed content should match")
+    Path::remove(path)
+    return 0
+}
+
+@test
+func test_bufwriter_write_line() -> I32 {
+    let path: Str = "build/debug/_test_bufwriter_wl.txt"
+    var bw: BufWriter = BufWriter::open(path)
+    bw.write_line("line one")
+    bw.write_line("line two")
+    bw.close()
+
+    let content: Str = File::read_all(path)
+    assert_eq(content, "line one\nline two\n", "write_line should append newlines")
+    Path::remove(path)
+    return 0
+}

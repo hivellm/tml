@@ -2,6 +2,32 @@
 //!
 //! This module provides implementations of `Display`, `Debug`, and other
 //! formatting behaviors for all primitive types and common generic types.
+//!
+//! # Behaviors Implemented
+//!
+//! | Behavior | Description | Types |
+//! |----------|-------------|-------|
+//! | [`Display`] | Human-readable string output | All primitives, `Maybe`, `Outcome`, `Ordering`, tuples |
+//! | [`Debug`] | Debug/inspection output | All primitives, `Maybe`, `Outcome`, `Ordering`, tuples |
+//! | [`Binary`] | Binary format (`0b...`) | All integer types |
+//! | [`Octal`] | Octal format (`0o...`) | All integer types |
+//! | [`LowerHex`] | Lower hex format (`0x...`) | All integer types |
+//! | [`UpperHex`] | Upper hex format (`0x...`) | All integer types |
+//! | [`LowerExp`] | Lower exponent (`1.5e2`) | F32, F64 |
+//! | [`UpperExp`] | Upper exponent (`1.5E2`) | F32, F64 |
+//!
+//! # Examples
+//!
+//! ```tml
+//! let x: I32 = 42
+//! x.to_string()       // "42" (Display)
+//! x.debug_string()    // "42" (Debug)
+//! x.fmt_binary()      // "0b101010" (Binary)
+//! x.fmt_lower_hex()   // "0x2a" (LowerHex)
+//!
+//! let m: Maybe[I32] = Just(10)
+//! m.to_string()       // "Just(10)"
+//! ```
 
 // Display, Debug, Ordering are builtins - no import needed
 use core::fmt::num::{Binary, Octal, LowerHex, UpperHex, LowerExp, UpperExp}
@@ -15,66 +41,77 @@ use core::fmt::helpers::{
 // Display implementations for primitives
 // ============================================================================
 
+/// Converts an `I8` to its decimal string representation.
 impl Display for I8 {
     pub func to_string(this) -> Str {
         return lowlevel { i8_to_string(this) }
     }
 }
 
+/// Converts an `I16` to its decimal string representation.
 impl Display for I16 {
     pub func to_string(this) -> Str {
         return lowlevel { i16_to_string(this) }
     }
 }
 
+/// Converts an `I32` to its decimal string representation.
 impl Display for I32 {
     pub func to_string(this) -> Str {
         return lowlevel { i32_to_string(this) }
     }
 }
 
+/// Converts an `I64` to its decimal string representation.
 impl Display for I64 {
     pub func to_string(this) -> Str {
         return lowlevel { i64_to_string(this) }
     }
 }
 
+/// Converts a `U8` to its decimal string representation.
 impl Display for U8 {
     pub func to_string(this) -> Str {
         return lowlevel { u8_to_string(this) }
     }
 }
 
+/// Converts a `U16` to its decimal string representation.
 impl Display for U16 {
     pub func to_string(this) -> Str {
         return lowlevel { u16_to_string(this) }
     }
 }
 
+/// Converts a `U32` to its decimal string representation.
 impl Display for U32 {
     pub func to_string(this) -> Str {
         return lowlevel { u32_to_string(this) }
     }
 }
 
+/// Converts a `U64` to its decimal string representation.
 impl Display for U64 {
     pub func to_string(this) -> Str {
         return lowlevel { u64_to_string(this) }
     }
 }
 
+/// Converts an `F32` to its string representation.
 impl Display for F32 {
     pub func to_string(this) -> Str {
         return lowlevel { f32_to_string(this) }
     }
 }
 
+/// Converts an `F64` to its string representation.
 impl Display for F64 {
     pub func to_string(this) -> Str {
         return lowlevel { f64_to_string(this) }
     }
 }
 
+/// Converts a `Bool` to `"true"` or `"false"`.
 impl Display for Bool {
     pub func to_string(this) -> Str {
         if this {
@@ -84,18 +121,21 @@ impl Display for Bool {
     }
 }
 
+/// Returns the string itself (identity conversion).
 impl Display for Str {
     pub func to_string(this) -> Str {
         return this
     }
 }
 
+/// Converts a `Char` to a one-character string.
 impl Display for Char {
     pub func to_string(this) -> Str {
         return lowlevel { char_to_string(this) }
     }
 }
 
+/// Displays `Unit` as `"()"`.
 impl Display for Unit {
     pub func to_string(this) -> Str {
         return "()"
@@ -106,66 +146,77 @@ impl Display for Unit {
 // Debug implementations for primitives
 // ============================================================================
 
+/// Debug output for `I8` (same as Display for numbers).
 impl Debug for I8 {
     pub func debug_string(this) -> Str {
         return lowlevel { i8_to_string(this) }
     }
 }
 
+/// Debug output for `I16`.
 impl Debug for I16 {
     pub func debug_string(this) -> Str {
         return lowlevel { i16_to_string(this) }
     }
 }
 
+/// Debug output for `I32`.
 impl Debug for I32 {
     pub func debug_string(this) -> Str {
         return lowlevel { i32_to_string(this) }
     }
 }
 
+/// Debug output for `I64`.
 impl Debug for I64 {
     pub func debug_string(this) -> Str {
         return lowlevel { i64_to_string(this) }
     }
 }
 
+/// Debug output for `U8`.
 impl Debug for U8 {
     pub func debug_string(this) -> Str {
         return lowlevel { u8_to_string(this) }
     }
 }
 
+/// Debug output for `U16`.
 impl Debug for U16 {
     pub func debug_string(this) -> Str {
         return lowlevel { u16_to_string(this) }
     }
 }
 
+/// Debug output for `U32`.
 impl Debug for U32 {
     pub func debug_string(this) -> Str {
         return lowlevel { u32_to_string(this) }
     }
 }
 
+/// Debug output for `U64`.
 impl Debug for U64 {
     pub func debug_string(this) -> Str {
         return lowlevel { u64_to_string(this) }
     }
 }
 
+/// Debug output for `F32`.
 impl Debug for F32 {
     pub func debug_string(this) -> Str {
         return lowlevel { f32_to_string(this) }
     }
 }
 
+/// Debug output for `F64`.
 impl Debug for F64 {
     pub func debug_string(this) -> Str {
         return lowlevel { f64_to_string(this) }
     }
 }
 
+/// Debug output for `Bool` (`"true"` or `"false"`).
 impl Debug for Bool {
     pub func debug_string(this) -> Str {
         if this {
@@ -175,6 +226,7 @@ impl Debug for Bool {
     }
 }
 
+/// Debug output for `Str` (wraps in double quotes).
 impl Debug for Str {
     pub func debug_string(this) -> Str {
         // Debug output includes quotes
@@ -182,6 +234,7 @@ impl Debug for Str {
     }
 }
 
+/// Debug output for `Char` (wraps in single quotes).
 impl Debug for Char {
     pub func debug_string(this) -> Str {
         // Debug output includes single quotes
@@ -189,6 +242,7 @@ impl Debug for Char {
     }
 }
 
+/// Debug output for `Unit` (`"()"`).
 impl Debug for Unit {
     pub func debug_string(this) -> Str {
         return "()"
@@ -199,6 +253,7 @@ impl Debug for Unit {
 // Display and Debug for Maybe[T]
 // ============================================================================
 
+/// Display for `Maybe[T]`: `"Just(value)"` or `"Nothing"`.
 impl[T: Display] Display for Maybe[T] {
     pub func to_string(this) -> Str {
         when this {
@@ -208,6 +263,7 @@ impl[T: Display] Display for Maybe[T] {
     }
 }
 
+/// Debug for `Maybe[T]`: `"Just(debug)"` or `"Nothing"`.
 impl[T: Debug] Debug for Maybe[T] {
     pub func debug_string(this) -> Str {
         when this {
@@ -221,6 +277,7 @@ impl[T: Debug] Debug for Maybe[T] {
 // Display and Debug for Outcome[T, E]
 // ============================================================================
 
+/// Display for `Outcome[T, E]`: `"Ok(value)"` or `"Err(error)"`.
 impl[T: Display, E: Display] Display for Outcome[T, E] {
     pub func to_string(this) -> Str {
         when this {
@@ -230,6 +287,7 @@ impl[T: Display, E: Display] Display for Outcome[T, E] {
     }
 }
 
+/// Debug for `Outcome[T, E]`: `"Ok(debug)"` or `"Err(debug)"`.
 impl[T: Debug, E: Debug] Debug for Outcome[T, E] {
     pub func debug_string(this) -> Str {
         when this {
@@ -243,6 +301,7 @@ impl[T: Debug, E: Debug] Debug for Outcome[T, E] {
 // Display and Debug for Ordering
 // ============================================================================
 
+/// Display for `Ordering`: `"Less"`, `"Equal"`, or `"Greater"`.
 impl Display for Ordering {
     pub func to_string(this) -> Str {
         when this {
@@ -253,6 +312,7 @@ impl Display for Ordering {
     }
 }
 
+/// Debug for `Ordering`: `"Ordering::Less"`, etc.
 impl Debug for Ordering {
     pub func debug_string(this) -> Str {
         when this {
@@ -267,48 +327,56 @@ impl Debug for Ordering {
 // Binary implementations
 // ============================================================================
 
+/// Binary format for `U8` (e.g. `"0b10101010"`).
 impl Binary for U8 {
     pub func fmt_binary(this) -> Str {
         return "0b" + u8_to_binary_str(this)
     }
 }
 
+/// Binary format for `U16`.
 impl Binary for U16 {
     pub func fmt_binary(this) -> Str {
         return "0b" + u16_to_binary_str(this)
     }
 }
 
+/// Binary format for `U32`.
 impl Binary for U32 {
     pub func fmt_binary(this) -> Str {
         return "0b" + u32_to_binary_str(this)
     }
 }
 
+/// Binary format for `U64`.
 impl Binary for U64 {
     pub func fmt_binary(this) -> Str {
         return "0b" + u64_to_binary_str(this)
     }
 }
 
+/// Binary format for `I8`.
 impl Binary for I8 {
     pub func fmt_binary(this) -> Str {
         return "0b" + i8_to_binary_str(this)
     }
 }
 
+/// Binary format for `I16`.
 impl Binary for I16 {
     pub func fmt_binary(this) -> Str {
         return "0b" + i16_to_binary_str(this)
     }
 }
 
+/// Binary format for `I32`.
 impl Binary for I32 {
     pub func fmt_binary(this) -> Str {
         return "0b" + i32_to_binary_str(this)
     }
 }
 
+/// Binary format for `I64`.
 impl Binary for I64 {
     pub func fmt_binary(this) -> Str {
         return "0b" + i64_to_binary_str(this)
@@ -319,48 +387,56 @@ impl Binary for I64 {
 // Octal implementations
 // ============================================================================
 
+/// Octal format for `U8` (e.g. `"0o377"`).
 impl Octal for U8 {
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this as U64)
     }
 }
 
+/// Octal format for `U16`.
 impl Octal for U16 {
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this as U64)
     }
 }
 
+/// Octal format for `U32`.
 impl Octal for U32 {
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this as U64)
     }
 }
 
+/// Octal format for `U64`.
 impl Octal for U64 {
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this)
     }
 }
 
+/// Octal format for `I8`.
 impl Octal for I8 {
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str((this as U8) as U64)
     }
 }
 
+/// Octal format for `I16`.
 impl Octal for I16 {
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str((this as U16) as U64)
     }
 }
 
+/// Octal format for `I32`.
 impl Octal for I32 {
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str((this as U32) as U64)
     }
 }
 
+/// Octal format for `I64`.
 impl Octal for I64 {
     pub func fmt_octal(this) -> Str {
         return "0o" + u64_to_octal_str(this as U64)
@@ -371,48 +447,56 @@ impl Octal for I64 {
 // LowerHex implementations
 // ============================================================================
 
+/// Lower hex format for `U8` (e.g. `"0xff"`).
 impl LowerHex for U8 {
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, false)
     }
 }
 
+/// Lower hex format for `U16`.
 impl LowerHex for U16 {
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, false)
     }
 }
 
+/// Lower hex format for `U32`.
 impl LowerHex for U32 {
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, false)
     }
 }
 
+/// Lower hex format for `U64`.
 impl LowerHex for U64 {
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this, false)
     }
 }
 
+/// Lower hex format for `I8`.
 impl LowerHex for I8 {
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U8) as U64, false)
     }
 }
 
+/// Lower hex format for `I16`.
 impl LowerHex for I16 {
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U16) as U64, false)
     }
 }
 
+/// Lower hex format for `I32`.
 impl LowerHex for I32 {
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U32) as U64, false)
     }
 }
 
+/// Lower hex format for `I64`.
 impl LowerHex for I64 {
     pub func fmt_lower_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, false)
@@ -423,48 +507,56 @@ impl LowerHex for I64 {
 // UpperHex implementations
 // ============================================================================
 
+/// Upper hex format for `U8` (e.g. `"0xFF"`).
 impl UpperHex for U8 {
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, true)
     }
 }
 
+/// Upper hex format for `U16`.
 impl UpperHex for U16 {
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, true)
     }
 }
 
+/// Upper hex format for `U32`.
 impl UpperHex for U32 {
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, true)
     }
 }
 
+/// Upper hex format for `U64`.
 impl UpperHex for U64 {
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this, true)
     }
 }
 
+/// Upper hex format for `I8`.
 impl UpperHex for I8 {
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U8) as U64, true)
     }
 }
 
+/// Upper hex format for `I16`.
 impl UpperHex for I16 {
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U16) as U64, true)
     }
 }
 
+/// Upper hex format for `I32`.
 impl UpperHex for I32 {
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str((this as U32) as U64, true)
     }
 }
 
+/// Upper hex format for `I64`.
 impl UpperHex for I64 {
     pub func fmt_upper_hex(this) -> Str {
         return "0x" + u64_to_hex_str(this as U64, true)
@@ -475,24 +567,28 @@ impl UpperHex for I64 {
 // LowerExp and UpperExp implementations for floats
 // ============================================================================
 
+/// Lower exponent format for `F32` (e.g. `"1.5e2"`).
 impl LowerExp for F32 {
     pub func fmt_lower_exp(this) -> Str {
         return lowlevel { f32_to_exp_string(this, false) }
     }
 }
 
+/// Lower exponent format for `F64` (e.g. `"1.5e2"`).
 impl LowerExp for F64 {
     pub func fmt_lower_exp(this) -> Str {
         return lowlevel { f64_to_exp_string(this, false) }
     }
 }
 
+/// Upper exponent format for `F32` (e.g. `"1.5E2"`).
 impl UpperExp for F32 {
     pub func fmt_upper_exp(this) -> Str {
         return lowlevel { f32_to_exp_string(this, true) }
     }
 }
 
+/// Upper exponent format for `F64` (e.g. `"1.5E2"`).
 impl UpperExp for F64 {
     pub func fmt_upper_exp(this) -> Str {
         return lowlevel { f64_to_exp_string(this, true) }
@@ -503,12 +599,14 @@ impl UpperExp for F64 {
 // Display and Debug for tuples (2-tuples)
 // ============================================================================
 
+/// Display for 2-tuples: `"(a, b)"`.
 impl[A: Display, B: Display] Display for (A, B) {
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ")"
     }
 }
 
+/// Debug for 2-tuples: `"(a, b)"`.
 impl[A: Debug, B: Debug] Debug for (A, B) {
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ")"
@@ -519,12 +617,14 @@ impl[A: Debug, B: Debug] Debug for (A, B) {
 // Display and Debug for 3-tuples
 // ============================================================================
 
+/// Display for 3-tuples: `"(a, b, c)"`.
 impl[A: Display, B: Display, C: Display] Display for (A, B, C) {
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " + this.2.to_string() + ")"
     }
 }
 
+/// Debug for 3-tuples: `"(a, b, c)"`.
 impl[A: Debug, B: Debug, C: Debug] Debug for (A, B, C) {
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " + this.2.debug_string() + ")"
@@ -535,6 +635,7 @@ impl[A: Debug, B: Debug, C: Debug] Debug for (A, B, C) {
 // Display and Debug for 4-tuples
 // ============================================================================
 
+/// Display for 4-tuples: `"(a, b, c, d)"`.
 impl[A: Display, B: Display, C: Display, D: Display] Display for (A, B, C, D) {
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " +
@@ -542,6 +643,7 @@ impl[A: Display, B: Display, C: Display, D: Display] Display for (A, B, C, D) {
     }
 }
 
+/// Debug for 4-tuples: `"(a, b, c, d)"`.
 impl[A: Debug, B: Debug, C: Debug, D: Debug] Debug for (A, B, C, D) {
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " +
@@ -553,6 +655,7 @@ impl[A: Debug, B: Debug, C: Debug, D: Debug] Debug for (A, B, C, D) {
 // Display and Debug for 5-tuples
 // ============================================================================
 
+/// Display for 5-tuples: `"(a, b, c, d, e)"`.
 impl[A: Display, B: Display, C: Display, D: Display, E: Display] Display for (A, B, C, D, E) {
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " +
@@ -561,6 +664,7 @@ impl[A: Display, B: Display, C: Display, D: Display, E: Display] Display for (A,
     }
 }
 
+/// Debug for 5-tuples: `"(a, b, c, d, e)"`.
 impl[A: Debug, B: Debug, C: Debug, D: Debug, E: Debug] Debug for (A, B, C, D, E) {
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " +
@@ -573,6 +677,7 @@ impl[A: Debug, B: Debug, C: Debug, D: Debug, E: Debug] Debug for (A, B, C, D, E)
 // Display and Debug for 6-tuples
 // ============================================================================
 
+/// Display for 6-tuples: `"(a, b, c, d, e, f)"`.
 impl[A: Display, B: Display, C: Display, D: Display, E: Display, F: Display] Display for (A, B, C, D, E, F) {
     pub func to_string(this) -> Str {
         return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " +
@@ -581,6 +686,7 @@ impl[A: Display, B: Display, C: Display, D: Display, E: Display, F: Display] Dis
     }
 }
 
+/// Debug for 6-tuples: `"(a, b, c, d, e, f)"`.
 impl[A: Debug, B: Debug, C: Debug, D: Debug, E: Debug, F: Debug] Debug for (A, B, C, D, E, F) {
     pub func debug_string(this) -> Str {
         return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " +

@@ -1,4 +1,11 @@
 //! The core primitive for interior mutability.
+//!
+//! [`UnsafeCell[T]`] is the lowest-level building block for interior
+//! mutability in TML. It opts out of the normal borrow-checking rules,
+//! allowing mutation through a shared reference. Higher-level types like
+//! `Cell`, `RefCell`, and `Mutex` are built on top of it.
+//!
+//! This module also provides [`SyncUnsafeCell[T]`], a thread-safe variant.
 
 use core::option::*
 
@@ -23,6 +30,7 @@ impl[T] UnsafeCell[T] {
     }
 }
 
+/// Default for `UnsafeCell[T]`: wraps `T::default()`.
 impl[T: Default] Default for UnsafeCell[T] {
     pub func default() -> UnsafeCell[T] {
         return UnsafeCell::new(T::default())
@@ -50,6 +58,7 @@ impl[T] SyncUnsafeCell[T] {
     }
 }
 
+/// Default for `SyncUnsafeCell[T]`: wraps `T::default()`.
 impl[T: Default] Default for SyncUnsafeCell[T] {
     pub func default() -> SyncUnsafeCell[T] {
         return SyncUnsafeCell::new(T::default())

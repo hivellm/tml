@@ -1,0 +1,63 @@
+// Tests for DateTime formatting methods
+use test::{assert, assert_eq}
+use std::datetime::DateTime
+
+@test
+func test_iso8601_epoch() -> I32 {
+    let dt: DateTime = DateTime::from_timestamp(0)
+    assert_eq(dt.to_iso8601(), "1970-01-01T00:00:00Z", "epoch iso8601")
+    return 0
+}
+
+@test
+func test_iso8601_known_date() -> I32 {
+    // 2024-01-15 12:30:45 UTC = 1705322245
+    let dt: DateTime = DateTime::from_parts(2024, 1, 15, 12, 30, 45)
+    assert_eq(dt.to_iso8601(), "2024-01-15T12:30:45Z", "known date iso8601")
+    return 0
+}
+
+@test
+func test_to_date_string() -> I32 {
+    let dt: DateTime = DateTime::from_parts(2026, 2, 17, 0, 0, 0)
+    assert_eq(dt.to_date_string(), "2026-02-17", "date string")
+    return 0
+}
+
+@test
+func test_to_time_string() -> I32 {
+    let dt: DateTime = DateTime::from_parts(2000, 6, 15, 9, 5, 3)
+    assert_eq(dt.to_time_string(), "09:05:03", "time string with padding")
+    return 0
+}
+
+@test
+func test_to_string_display() -> I32 {
+    let dt: DateTime = DateTime::from_parts(2023, 12, 25, 18, 0, 0)
+    assert_eq(dt.to_string(), "2023-12-25 18:00:00 UTC", "display string")
+    return 0
+}
+
+@test
+func test_debug_string() -> I32 {
+    let dt: DateTime = DateTime::from_parts(1999, 12, 31, 23, 59, 59)
+    assert_eq(dt.debug_string(), "DateTime(1999-12-31T23:59:59Z)", "debug string")
+    return 0
+}
+
+@test
+func test_rfc2822_epoch() -> I32 {
+    let dt: DateTime = DateTime::from_timestamp(0)
+    // 1970-01-01 was a Thursday
+    assert_eq(dt.to_rfc2822(), "Thu, 01 Jan 1970 00:00:00 +0000", "epoch rfc2822")
+    return 0
+}
+
+@test
+func test_rfc2822_known_date() -> I32 {
+    // 2024-02-29 (leap day) - Thursday
+    let dt: DateTime = DateTime::from_parts(2024, 2, 29, 14, 30, 0)
+    let result: Str = dt.to_rfc2822()
+    assert_eq(result, "Thu, 29 Feb 2024 14:30:00 +0000", "leap day rfc2822")
+    return 0
+}

@@ -46,19 +46,25 @@ void LLVMIRGen::emit_runtime_decls() {
 
     // File I/O types (from std::file)
     emit_line("%struct.File = type { ptr }"); // handle field
+    struct_types_["File"] = "%struct.File";
+    struct_fields_["File"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
     emit_line("%struct.Path = type { ptr }"); // path string field
+    struct_types_["Path"] = "%struct.Path";
+    struct_fields_["Path"] = {{"path", 0, "ptr", types::make_ptr(types::make_unit())}};
 
     // Core comparison type (core::cmp)
     // Ordering is a simple enum: Less=0, Equal=1, Greater=2
     emit_line("%struct.Ordering = type { i32 }");
+    struct_types_["Ordering"] = "%struct.Ordering";
+    struct_fields_["Ordering"] = {{"value", 0, "i32", types::make_i32()}};
 
     // HashMapIter type for iterating over HashMap entries
     emit_line("%struct.HashMapIter = type { ptr }");
+    struct_types_["HashMapIter"] = "%struct.HashMapIter";
+    struct_fields_["HashMapIter"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
 
     // Buffer type (from std::collections)
     emit_line("%struct.Buffer = type { ptr }"); // handle field
-
-    // Register Buffer fields for field access codegen
     struct_types_["Buffer"] = "%struct.Buffer";
     struct_fields_["Buffer"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
 
@@ -453,6 +459,8 @@ void LLVMIRGen::emit_runtime_decls() {
     declared_externals_.insert("file_write_all");
     emit_line("declare i1 @file_append_all(ptr, ptr)");
     declared_externals_.insert("file_append_all");
+    emit_line("declare i1 @file_flush(ptr)");
+    declared_externals_.insert("file_flush");
     emit_line("");
 
     // Register file I/O functions in functions_ map for lowlevel calls from module functions
@@ -470,6 +478,7 @@ void LLVMIRGen::emit_runtime_decls() {
         FuncInfo{"@file_write_all", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
     functions_["file_append_all"] =
         FuncInfo{"@file_append_all", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
+    functions_["file_flush"] = FuncInfo{"@file_flush", "i1 (ptr)", "i1", {"ptr"}};
 
     // Log runtime declarations (matches runtime/log.c)
     emit_line("; Log runtime");

@@ -1,13 +1,28 @@
 //! Accumulator behaviors for iterators.
+//!
+//! Provides [`Sum`] and [`Product`] behaviors for folding iterators into
+//! a single value via addition or multiplication. Implemented for all
+//! numeric primitive types (I8-I64, U8-U64, F32, F64).
+//!
+//! # Examples
+//!
+//! ```tml
+//! let total: I32 = [1, 2, 3, 4].iter().sum()  // 10
+//! let product: I32 = [1, 2, 3, 4].iter().product()  // 24
+//! ```
 
-/// Trait for types that can be created by summing an iterator.
+/// A type that can be created by summing an iterator.
+///
+/// Consumes an iterator and accumulates elements using `+`, starting from zero.
 pub behavior Sum[A = This] {
     /// Method which takes an iterator and generates Self from the elements
     /// by "summing up" the items.
     pub func sum[I: Iterator](iter: I) -> This where I::Item = A
 }
 
-/// Trait for types that can be created by multiplying elements of an iterator.
+/// A type that can be created by multiplying elements of an iterator.
+///
+/// Consumes an iterator and accumulates elements using `*`, starting from one.
 pub behavior Product[A = This] {
     /// Method which takes an iterator and generates Self from the elements
     /// by taking the "product" of the items.
@@ -15,6 +30,8 @@ pub behavior Product[A = This] {
 }
 
 // Implementations for primitive integer types
+
+/// Sum of an `I8` iterator.
 impl Sum for I8 {
     pub func sum[I: Iterator](mut iter: I) -> I8 where I::Item = I8 {
         let mut acc: I8 = 0
@@ -27,6 +44,7 @@ impl Sum for I8 {
     }
 }
 
+/// Product of an `I8` iterator.
 impl Product for I8 {
     pub func product[I: Iterator](mut iter: I) -> I8 where I::Item = I8 {
         let mut acc: I8 = 1
@@ -39,6 +57,7 @@ impl Product for I8 {
     }
 }
 
+/// Sum of an `I16` iterator.
 impl Sum for I16 {
     pub func sum[I: Iterator](mut iter: I) -> I16 where I::Item = I16 {
         let mut acc: I16 = 0
@@ -51,6 +70,7 @@ impl Sum for I16 {
     }
 }
 
+/// Product of an `I16` iterator.
 impl Product for I16 {
     pub func product[I: Iterator](mut iter: I) -> I16 where I::Item = I16 {
         let mut acc: I16 = 1
@@ -63,6 +83,7 @@ impl Product for I16 {
     }
 }
 
+/// Sum of an `I32` iterator.
 impl Sum for I32 {
     pub func sum[I: Iterator](mut iter: I) -> I32 where I::Item = I32 {
         let mut acc: I32 = 0
@@ -75,6 +96,7 @@ impl Sum for I32 {
     }
 }
 
+/// Product of an `I32` iterator.
 impl Product for I32 {
     pub func product[I: Iterator](mut iter: I) -> I32 where I::Item = I32 {
         let mut acc: I32 = 1
@@ -87,6 +109,7 @@ impl Product for I32 {
     }
 }
 
+/// Sum of an `I64` iterator.
 impl Sum for I64 {
     pub func sum[I: Iterator](mut iter: I) -> I64 where I::Item = I64 {
         let mut acc: I64 = 0
@@ -99,6 +122,7 @@ impl Sum for I64 {
     }
 }
 
+/// Product of an `I64` iterator.
 impl Product for I64 {
     pub func product[I: Iterator](mut iter: I) -> I64 where I::Item = I64 {
         let mut acc: I64 = 1
@@ -111,6 +135,7 @@ impl Product for I64 {
     }
 }
 
+/// Sum of a `U8` iterator.
 impl Sum for U8 {
     pub func sum[I: Iterator](mut iter: I) -> U8 where I::Item = U8 {
         let mut acc: U8 = 0
@@ -123,6 +148,7 @@ impl Sum for U8 {
     }
 }
 
+/// Product of a `U8` iterator.
 impl Product for U8 {
     pub func product[I: Iterator](mut iter: I) -> U8 where I::Item = U8 {
         let mut acc: U8 = 1
@@ -135,6 +161,7 @@ impl Product for U8 {
     }
 }
 
+/// Sum of a `U16` iterator.
 impl Sum for U16 {
     pub func sum[I: Iterator](mut iter: I) -> U16 where I::Item = U16 {
         let mut acc: U16 = 0
@@ -147,6 +174,7 @@ impl Sum for U16 {
     }
 }
 
+/// Product of a `U16` iterator.
 impl Product for U16 {
     pub func product[I: Iterator](mut iter: I) -> U16 where I::Item = U16 {
         let mut acc: U16 = 1
@@ -159,6 +187,7 @@ impl Product for U16 {
     }
 }
 
+/// Sum of a `U32` iterator.
 impl Sum for U32 {
     pub func sum[I: Iterator](mut iter: I) -> U32 where I::Item = U32 {
         let mut acc: U32 = 0
@@ -171,6 +200,7 @@ impl Sum for U32 {
     }
 }
 
+/// Product of a `U32` iterator.
 impl Product for U32 {
     pub func product[I: Iterator](mut iter: I) -> U32 where I::Item = U32 {
         let mut acc: U32 = 1
@@ -183,6 +213,7 @@ impl Product for U32 {
     }
 }
 
+/// Sum of a `U64` iterator.
 impl Sum for U64 {
     pub func sum[I: Iterator](mut iter: I) -> U64 where I::Item = U64 {
         let mut acc: U64 = 0
@@ -195,6 +226,7 @@ impl Sum for U64 {
     }
 }
 
+/// Product of a `U64` iterator.
 impl Product for U64 {
     pub func product[I: Iterator](mut iter: I) -> U64 where I::Item = U64 {
         let mut acc: U64 = 1
@@ -207,6 +239,7 @@ impl Product for U64 {
     }
 }
 
+/// Sum of an `F32` iterator.
 impl Sum for F32 {
     pub func sum[I: Iterator](mut iter: I) -> F32 where I::Item = F32 {
         let mut acc: F32 = 0.0
@@ -219,6 +252,7 @@ impl Sum for F32 {
     }
 }
 
+/// Product of an `F32` iterator.
 impl Product for F32 {
     pub func product[I: Iterator](mut iter: I) -> F32 where I::Item = F32 {
         let mut acc: F32 = 1.0
@@ -231,6 +265,7 @@ impl Product for F32 {
     }
 }
 
+/// Sum of an `F64` iterator.
 impl Sum for F64 {
     pub func sum[I: Iterator](mut iter: I) -> F64 where I::Item = F64 {
         let mut acc: F64 = 0.0
@@ -243,6 +278,7 @@ impl Sum for F64 {
     }
 }
 
+/// Product of an `F64` iterator.
 impl Product for F64 {
     pub func product[I: Iterator](mut iter: I) -> F64 where I::Item = F64 {
         let mut acc: F64 = 1.0

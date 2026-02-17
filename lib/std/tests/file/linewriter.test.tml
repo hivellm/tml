@@ -1,0 +1,41 @@
+// Tests for std::file::bufio::LineWriter
+use test::{assert, assert_eq}
+use std::file::file::File
+use std::file::path::Path
+use std::file::bufio::LineWriter
+
+@test
+func test_linewriter_open_close() -> I32 {
+    let path: Str = "build/debug/_test_linewriter_oc.txt"
+    var lw: LineWriter = LineWriter::open(path)
+    assert(lw.is_open(), "LineWriter should be open")
+    lw.close()
+    Path::remove(path)
+    return 0
+}
+
+@test
+func test_linewriter_write_line() -> I32 {
+    let path: Str = "build/debug/_test_linewriter_wl.txt"
+    var lw: LineWriter = LineWriter::open(path)
+    lw.write_line("first line")
+    lw.write_line("second line")
+    lw.close()
+
+    let content: Str = File::read_all(path)
+    assert_eq(content, "first line\nsecond line\n", "should have two lines with newlines")
+    Path::remove(path)
+    return 0
+}
+
+@test
+func test_linewriter_total_written() -> I32 {
+    let path: Str = "build/debug/_test_linewriter_tw.txt"
+    var lw: LineWriter = LineWriter::open(path)
+    lw.write("hello")    // 5 chars, no newline — stays buffered
+    lw.write(" world\n") // 7 chars, has newline — flushes
+    assert_eq(lw.total_written(), 12, "total written should be 12")
+    lw.close()
+    Path::remove(path)
+    return 0
+}

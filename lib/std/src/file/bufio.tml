@@ -1,0 +1,322 @@
+//! Buffered I/O wrappers for `File`.
+//!
+//! Provides [`BufReader`] and [`BufWriter`] to reduce the number of
+//! underlying system calls by batching reads and writes in memory.
+//! [`LineWriter`] is a convenience wrapper that flushes on every newline.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::file::{File, BufReader, BufWriter}
+//!
+//! let br: BufReader = BufReader::open("data.txt")
+//! let line: Str = br.read_line()
+//! br.close()
+//!
+//! let bw: BufWriter = BufWriter::open("out.txt")
+//! bw.write("hello\n")
+//! bw.close()   // flushes automatically
+//! ```
+
+use std::file::file::File
+
+// ============================================================================
+// BufReader
+// ============================================================================
+
+/// A buffered reader that wraps a `File`.
+///
+/// Reads lines from the underlying file, tracking position and EOF
+/// state. Provides convenience methods like `read_all` and `lines_read`.
+pub type BufReader {
+    _file: File,
+    _eof: Bool,
+    _line_count: I64
+}
+
+impl BufReader {
+    /// Opens a file for buffered reading.
+    pub func open(path: Str) -> BufReader {
+        let f: File = File::open_read(path)
+        return BufReader {
+            _file: f,
+            _eof: false,
+            _line_count: 0
+        }
+    }
+
+    /// Wraps an already-opened `File` for buffered reading.
+    pub func from_file(file: File) -> BufReader {
+        return BufReader {
+            _file: file,
+            _eof: false,
+            _line_count: 0
+        }
+    }
+
+    /// Returns true if the underlying file is open.
+    pub func is_open(this) -> Bool {
+        return this._file.is_open()
+    }
+
+    /// Reads the next line from the file.
+    ///
+    /// Returns the line content (without the trailing newline), or an
+    /// empty string when no more lines are available (check `is_eof()`).
+    pub func read_line(mut this) -> Str {
+        if this._eof {
+            return ""
+        }
+        let raw: Str = this._file.read_line()
+        if raw.len() == 0 {
+            this._eof = true
+            return ""
+        }
+        this._line_count = this._line_count + 1
+        return raw
+    }
+
+    /// Returns true if the end of file has been reached.
+    pub func is_eof(this) -> Bool {
+        return this._eof
+    }
+
+    /// Returns the total number of lines read so far.
+    pub func lines_read(this) -> I64 {
+        return this._line_count
+    }
+
+    /// Reads all remaining lines and returns them joined with newlines.
+    pub func read_all(mut this) -> Str {
+        var result: Str = ""
+        var first: Bool = true
+        loop (not this._eof) {
+            let line: Str = this.read_line()
+            if this._eof and line.len() == 0 {
+                break
+            }
+            if first {
+                result = line
+                first = false
+            } else {
+                result = result + "\n" + line
+            }
+        }
+        return result
+    }
+
+    /// Closes the underlying file.
+    pub func close(this) {
+        this._file.close()
+    }
+}
+
+// ============================================================================
+// BufWriter
+// ============================================================================
+
+/// Default buffer capacity (number of characters before auto-flush).
+const DEFAULT_BUF_CAPACITY: I64 = 8192
+
+/// A buffered writer that wraps a `File`.
+///
+/// Accumulates writes in an in-memory buffer and flushes to the
+/// underlying file when the buffer exceeds capacity or on close.
+pub type BufWriter {
+    _file: File,
+    _buffer: Str,
+    _capacity: I64,
+    _total_written: I64
+}
+
+impl BufWriter {
+    /// Opens a file for buffered writing (creates or truncates).
+    pub func open(path: Str) -> BufWriter {
+        let f: File = File::open_write(path)
+        return BufWriter {
+            _file: f,
+            _buffer: "",
+            _capacity: DEFAULT_BUF_CAPACITY,
+            _total_written: 0
+        }
+    }
+
+    /// Opens a file for buffered appending.
+    pub func open_append(path: Str) -> BufWriter {
+        let f: File = File::open_append(path)
+        return BufWriter {
+            _file: f,
+            _buffer: "",
+            _capacity: DEFAULT_BUF_CAPACITY,
+            _total_written: 0
+        }
+    }
+
+    /// Wraps an already-opened `File` for buffered writing.
+    pub func from_file(file: File) -> BufWriter {
+        return BufWriter {
+            _file: file,
+            _buffer: "",
+            _capacity: DEFAULT_BUF_CAPACITY,
+            _total_written: 0
+        }
+    }
+
+    /// Creates a BufWriter with a custom buffer capacity.
+    pub func with_capacity(path: Str, capacity: I64) -> BufWriter {
+        let f: File = File::open_write(path)
+        return BufWriter {
+            _file: f,
+            _buffer: "",
+            _capacity: capacity,
+            _total_written: 0
+        }
+    }
+
+    /// Returns true if the underlying file is open.
+    pub func is_open(this) -> Bool {
+        return this._file.is_open()
+    }
+
+    /// Writes a string to the buffer.
+    ///
+    /// The data is buffered and only written to disk when the buffer
+    /// exceeds capacity, or when [`flush`] / [`close`] is called.
+    pub func write(mut this, data: Str) {
+        this._buffer = this._buffer + data
+        this._total_written = this._total_written + data.len()
+        if this._buffer.len() >= this._capacity {
+            this.flush()
+        }
+    }
+
+    /// Writes a string followed by a newline.
+    pub func write_line(mut this, data: Str) {
+        this.write(data + "\n")
+    }
+
+    /// Flushes the in-memory buffer to the underlying file.
+    pub func flush(mut this) {
+        if this._buffer.len() > 0 {
+            this._file.write_str(this._buffer)
+            this._buffer = ""
+            this._file.flush()
+        }
+    }
+
+    /// Returns the number of bytes currently buffered (not yet flushed).
+    pub func buffered(this) -> I64 {
+        return this._buffer.len()
+    }
+
+    /// Returns the total number of bytes written (including flushed).
+    pub func total_written(this) -> I64 {
+        return this._total_written
+    }
+
+    /// Returns the buffer capacity.
+    pub func capacity(this) -> I64 {
+        return this._capacity
+    }
+
+    /// Flushes remaining data and closes the underlying file.
+    pub func close(mut this) {
+        this.flush()
+        this._file.close()
+    }
+}
+
+// ============================================================================
+// LineWriter
+// ============================================================================
+
+/// A writer that flushes to disk after every newline character.
+///
+/// Useful for log files or interactive output where each line
+/// should be written immediately.
+pub type LineWriter {
+    _file: File,
+    _buffer: Str,
+    _total_written: I64
+}
+
+impl LineWriter {
+    /// Opens a file for line-buffered writing.
+    pub func open(path: Str) -> LineWriter {
+        let f: File = File::open_write(path)
+        return LineWriter {
+            _file: f,
+            _buffer: "",
+            _total_written: 0
+        }
+    }
+
+    /// Opens a file for line-buffered appending.
+    pub func open_append(path: Str) -> LineWriter {
+        let f: File = File::open_append(path)
+        return LineWriter {
+            _file: f,
+            _buffer: "",
+            _total_written: 0
+        }
+    }
+
+    /// Wraps an already-opened `File` for line-buffered writing.
+    pub func from_file(file: File) -> LineWriter {
+        return LineWriter {
+            _file: file,
+            _buffer: "",
+            _total_written: 0
+        }
+    }
+
+    /// Returns true if the underlying file is open.
+    pub func is_open(this) -> Bool {
+        return this._file.is_open()
+    }
+
+    /// Writes data, flushing after every newline.
+    pub func write(mut this, data: Str) {
+        this._total_written = this._total_written + data.len()
+        let nl: I64 = data.rfind("\n")
+        if nl >= 0 {
+            // Flush everything up to and including the last newline
+            let to_flush: Str = this._buffer + data.slice(0, nl + 1)
+            this._file.write_str(to_flush)
+            this._file.flush()
+            // Keep remainder after last newline
+            if nl + 1 < data.len() {
+                this._buffer = data.slice(nl + 1, data.len())
+            } else {
+                this._buffer = ""
+            }
+        } else {
+            this._buffer = this._buffer + data
+        }
+    }
+
+    /// Writes a string followed by a newline (flushes immediately).
+    pub func write_line(mut this, data: Str) {
+        this.write(data + "\n")
+    }
+
+    /// Flushes any remaining buffered data.
+    pub func flush(mut this) {
+        if this._buffer.len() > 0 {
+            this._file.write_str(this._buffer)
+            this._buffer = ""
+            this._file.flush()
+        }
+    }
+
+    /// Returns the total number of bytes written.
+    pub func total_written(this) -> I64 {
+        return this._total_written
+    }
+
+    /// Flushes and closes the underlying file.
+    pub func close(mut this) {
+        this.flush()
+        this._file.close()
+    }
+}

@@ -1,0 +1,35 @@
+// Tests for std::random convenience functions
+use test::{assert, assert_eq}
+use std::random::{random_i64, random_f64, random_bool, random_range}
+
+@test
+func test_random_i64() -> I32 {
+    let a: I64 = random_i64()
+    let b: I64 = random_i64()
+    // Two calls should produce different values (extremely unlikely to match)
+    assert(a != b, "two random_i64 calls should differ")
+    return 0
+}
+
+@test
+func test_random_f64() -> I32 {
+    let v: F64 = random_f64()
+    assert(v >= 0.0, "random_f64 should be >= 0.0")
+    assert(v < 1.0, "random_f64 should be < 1.0")
+    return 0
+}
+
+@test
+func test_random_bool() -> I32 {
+    // Just verify it doesn't crash — both outcomes are valid
+    let _b: Bool = random_bool()
+    return 0
+}
+
+@test
+func test_random_range() -> I32 {
+    let v: I64 = random_range(100, 200)
+    assert(v >= 100, "random_range should be >= min")
+    assert(v < 200, "random_range should be < max")
+    return 0
+}

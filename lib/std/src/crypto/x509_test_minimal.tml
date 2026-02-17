@@ -1,3 +1,9 @@
+//! Minimal X.509 certificate types for testing.
+//!
+//! This module provides lightweight X.509 certificate and chain types
+//! used by the test suite. For the full X.509 implementation, see
+//! [`std::crypto::x509`].
+
 use std::crypto::error::{CryptoError}
 use std::crypto::key::{PublicKey, KeyType}
 use std::collections::{Buffer, List}
@@ -11,6 +17,7 @@ func ffi_crypto_x509_destroy(handle: *Unit)
 @extern("crypto_x509_get_subject_cn")
 func ffi_crypto_x509_get_subject_cn(handle: *Unit) -> Str
 
+/// A minimal X.509 certificate wrapper for testing.
 pub type X509CertMin {
     handle: *Unit
 }
@@ -28,6 +35,7 @@ func ffi_crypto_x509_get_public_key(handle: *Unit) -> *Unit
 func ffi_crypto_key_get_type(handle: *Unit) -> Str
 
 impl X509CertMin {
+    /// Parses a certificate from PEM-encoded data.
     pub func from_pem(pem: Str) -> Outcome[X509CertMin, CryptoError] {
         let handle: *Unit = ffi_crypto_x509_from_pem(pem)
         if handle == null {
@@ -36,6 +44,7 @@ impl X509CertMin {
         return Ok(X509CertMin { handle: handle })
     }
 
+    /// Releases the underlying certificate handle.
     pub func destroy(mut this) {
         if this.handle != null {
             ffi_crypto_x509_destroy(this.handle)
@@ -43,16 +52,19 @@ impl X509CertMin {
         }
     }
 
+    /// Checks whether this certificate was issued by the given issuer.
     pub func check_issued(this, issuer_cert: ref X509CertMin) -> Bool {
         let result: Bool = ffi_crypto_x509_check_issued(this.handle, issuer_cert.handle)
         return result
     }
 
+    /// Verifies the certificate's signature against a public key.
     pub func verify(this, key: ref PublicKey) -> Outcome[Bool, CryptoError] {
         let result: Bool = ffi_crypto_x509_verify(this.handle, key.handle)
         return Ok(result)
     }
 
+    /// Extracts the public key from this certificate.
     pub func public_key(this) -> PublicKey {
         let pk_handle: *Unit = ffi_crypto_x509_get_public_key(this.handle)
         let key_type_str: Str = ffi_crypto_key_get_type(pk_handle)
@@ -61,17 +73,26 @@ impl X509CertMin {
     }
 }
 
+/// A minimal X.509 certificate chain for testing.
+///
+/// Holds a list of trusted CA certificates and provides verification
+/// of end-entity certificates against the chain.
 pub type X509ChainMin {
     certificates: List[X509CertMin]
 }
 
 impl X509ChainMin {
+    /// Creates an empty certificate chain.
     pub func new() -> X509ChainMin {
         return X509ChainMin {
             certificates: List[X509CertMin]::new(4),
         }
     }
 
+    /// Verifies a certificate against any trusted CA in this chain.
+    ///
+    /// Returns `Ok(true)` if the certificate was issued and signed by
+    /// any CA in the chain, `Ok(false)` otherwise.
     pub func verify(this, cert: ref X509CertMin) -> Outcome[Bool, CryptoError] {
         let mut i: I64 = 0
         loop (true) {
@@ -96,6 +117,10 @@ impl X509ChainMin {
         return Ok(false)
     }
 
+    /// Verifies a certificate by walking the full chain to a self-signed root.
+    ///
+    /// Unlike [`verify`], this recursively checks that each intermediate
+    /// CA is itself verified, up to a self-issued (root) certificate.
     pub func verify_chain(this, cert: ref X509CertMin) -> Outcome[Bool, CryptoError] {
         let mut i: I64 = 0
         loop (true) {

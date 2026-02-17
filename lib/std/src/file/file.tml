@@ -70,6 +70,12 @@ impl File {
         return r
     }
 
+    /// Flush buffered data to disk.
+    pub func flush(this) -> Bool {
+        let r: Bool = lowlevel { file_flush(this.handle) }
+        return r
+    }
+
     /// Close the file
     pub func close(this) {
         lowlevel { file_close(this.handle) }

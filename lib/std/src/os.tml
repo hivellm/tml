@@ -138,6 +138,12 @@ func ffi_current_dir() -> Str
 @extern("tml_os_set_current_dir")
 func ffi_set_current_dir(path: Str) -> I32
 
+@extern("tml_os_exec")
+func ffi_exec(command: Str) -> Str
+
+@extern("tml_os_exec_status")
+func ffi_exec_status(command: Str) -> I32
+
 // ============================================================================
 // Public API - System Information
 // ============================================================================
@@ -351,4 +357,38 @@ pub func current_dir() -> Str {
 /// Returns `true` on success, `false` on failure.
 pub func set_current_dir(path: Str) -> Bool {
     return ffi_set_current_dir(path) == 0
+}
+
+// ============================================================================
+// Process Execution
+// ============================================================================
+
+/// Executes a shell command and returns its stdout output.
+///
+/// Returns the command's stdout as a string. On error, returns an empty string.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::os
+///
+/// let output: Str = os::exec("echo hello")
+/// ```
+pub func exec(command: Str) -> Str {
+    return ffi_exec(command)
+}
+
+/// Executes a shell command and returns its exit code.
+///
+/// Returns the process exit code (0 = success). Returns -1 on error.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::os
+///
+/// let status: I32 = os::exec_status("echo hello")
+/// ```
+pub func exec_status(command: Str) -> I32 {
+    return ffi_exec_status(command)
 }

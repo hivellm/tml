@@ -28,30 +28,35 @@ use core::clone::Clone
 // Default implementations for tuples
 // ============================================================================
 
+/// Default for 2-tuples: each element defaults independently.
 impl[A: Default, B: Default] Default for (A, B) {
     pub func default() -> (A, B) {
         return (A::default(), B::default())
     }
 }
 
+/// Default for 3-tuples.
 impl[A: Default, B: Default, C: Default] Default for (A, B, C) {
     pub func default() -> (A, B, C) {
         return (A::default(), B::default(), C::default())
     }
 }
 
+/// Default for 4-tuples.
 impl[A: Default, B: Default, C: Default, D: Default] Default for (A, B, C, D) {
     pub func default() -> (A, B, C, D) {
         return (A::default(), B::default(), C::default(), D::default())
     }
 }
 
+/// Default for 5-tuples.
 impl[A: Default, B: Default, C: Default, D: Default, E: Default] Default for (A, B, C, D, E) {
     pub func default() -> (A, B, C, D, E) {
         return (A::default(), B::default(), C::default(), D::default(), E::default())
     }
 }
 
+/// Default for 6-tuples.
 impl[A: Default, B: Default, C: Default, D: Default, E: Default, F: Default] Default for (A, B, C, D, E, F) {
     pub func default() -> (A, B, C, D, E, F) {
         return (A::default(), B::default(), C::default(), D::default(), E::default(), F::default())
@@ -62,30 +67,35 @@ impl[A: Default, B: Default, C: Default, D: Default, E: Default, F: Default] Def
 // Clone implementations for tuples
 // ============================================================================
 
+/// Clone for 2-tuples: clones each element.
 impl[A: Clone, B: Clone] Clone for (A, B) {
     pub func clone(this) -> (A, B) {
         return (this.0.clone(), this.1.clone())
     }
 }
 
+/// Clone for 3-tuples.
 impl[A: Clone, B: Clone, C: Clone] Clone for (A, B, C) {
     pub func clone(this) -> (A, B, C) {
         return (this.0.clone(), this.1.clone(), this.2.clone())
     }
 }
 
+/// Clone for 4-tuples.
 impl[A: Clone, B: Clone, C: Clone, D: Clone] Clone for (A, B, C, D) {
     pub func clone(this) -> (A, B, C, D) {
         return (this.0.clone(), this.1.clone(), this.2.clone(), this.3.clone())
     }
 }
 
+/// Clone for 5-tuples.
 impl[A: Clone, B: Clone, C: Clone, D: Clone, E: Clone] Clone for (A, B, C, D, E) {
     pub func clone(this) -> (A, B, C, D, E) {
         return (this.0.clone(), this.1.clone(), this.2.clone(), this.3.clone(), this.4.clone())
     }
 }
 
+/// Clone for 6-tuples.
 impl[A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone] Clone for (A, B, C, D, E, F) {
     pub func clone(this) -> (A, B, C, D, E, F) {
         return (this.0.clone(), this.1.clone(), this.2.clone(), this.3.clone(), this.4.clone(), this.5.clone())
@@ -96,6 +106,7 @@ impl[A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone] Clone for (A, B
 // PartialEq implementations for tuples
 // ============================================================================
 
+/// Element-wise equality comparison for 2-tuples.
 impl[A: PartialEq, B: PartialEq] PartialEq for (A, B) {
     pub func eq(this, other: ref (A, B)) -> Bool {
         return this.0.eq(ref other.0) and this.1.eq(ref other.1)
@@ -106,6 +117,7 @@ impl[A: PartialEq, B: PartialEq] PartialEq for (A, B) {
     }
 }
 
+/// Element-wise equality comparison for 3-tuples.
 impl[A: PartialEq, B: PartialEq, C: PartialEq] PartialEq for (A, B, C) {
     pub func eq(this, other: ref (A, B, C)) -> Bool {
         return this.0.eq(ref other.0) and this.1.eq(ref other.1) and this.2.eq(ref other.2)
@@ -116,6 +128,7 @@ impl[A: PartialEq, B: PartialEq, C: PartialEq] PartialEq for (A, B, C) {
     }
 }
 
+/// Element-wise equality comparison for 4-tuples.
 impl[A: PartialEq, B: PartialEq, C: PartialEq, D: PartialEq] PartialEq for (A, B, C, D) {
     pub func eq(this, other: ref (A, B, C, D)) -> Bool {
         return this.0.eq(ref other.0) and this.1.eq(ref other.1) and
@@ -128,6 +141,7 @@ impl[A: PartialEq, B: PartialEq, C: PartialEq, D: PartialEq] PartialEq for (A, B
     }
 }
 
+/// Element-wise equality comparison for 5-tuples.
 impl[A: PartialEq, B: PartialEq, C: PartialEq, D: PartialEq, E: PartialEq] PartialEq for (A, B, C, D, E) {
     pub func eq(this, other: ref (A, B, C, D, E)) -> Bool {
         return this.0.eq(ref other.0) and this.1.eq(ref other.1) and
@@ -142,6 +156,7 @@ impl[A: PartialEq, B: PartialEq, C: PartialEq, D: PartialEq, E: PartialEq] Parti
     }
 }
 
+/// Element-wise equality comparison for 6-tuples.
 impl[A: PartialEq, B: PartialEq, C: PartialEq, D: PartialEq, E: PartialEq, F: PartialEq] PartialEq for (A, B, C, D, E, F) {
     pub func eq(this, other: ref (A, B, C, D, E, F)) -> Bool {
         return this.0.eq(ref other.0) and this.1.eq(ref other.1) and
@@ -174,6 +189,7 @@ impl[A: Eq, B: Eq, C: Eq, D: Eq, E: Eq, F: Eq] Eq for (A, B, C, D, E, F) {}
 // PartialOrd implementations for tuples
 // ============================================================================
 
+/// Lexicographic ordering for 2-tuples.
 impl[A: PartialOrd, B: PartialOrd] PartialOrd for (A, B) {
     pub func partial_cmp(this, other: ref (A, B)) -> Maybe[Ordering] {
         when this.0.partial_cmp(ref other.0) {
@@ -184,6 +200,7 @@ impl[A: PartialOrd, B: PartialOrd] PartialOrd for (A, B) {
     }
 }
 
+/// Lexicographic ordering for 3-tuples.
 impl[A: PartialOrd, B: PartialOrd, C: PartialOrd] PartialOrd for (A, B, C) {
     pub func partial_cmp(this, other: ref (A, B, C)) -> Maybe[Ordering] {
         when this.0.partial_cmp(ref other.0) {
@@ -200,6 +217,7 @@ impl[A: PartialOrd, B: PartialOrd, C: PartialOrd] PartialOrd for (A, B, C) {
     }
 }
 
+/// Lexicographic ordering for 4-tuples.
 impl[A: PartialOrd, B: PartialOrd, C: PartialOrd, D: PartialOrd] PartialOrd for (A, B, C, D) {
     pub func partial_cmp(this, other: ref (A, B, C, D)) -> Maybe[Ordering] {
         when this.0.partial_cmp(ref other.0) {
@@ -226,6 +244,7 @@ impl[A: PartialOrd, B: PartialOrd, C: PartialOrd, D: PartialOrd] PartialOrd for 
 // Ord implementations for tuples
 // ============================================================================
 
+/// Total lexicographic ordering for 2-tuples.
 impl[A: Ord, B: Ord] Ord for (A, B) {
     pub func cmp(this, other: ref (A, B)) -> Ordering {
         when this.0.cmp(ref other.0) {
@@ -235,6 +254,7 @@ impl[A: Ord, B: Ord] Ord for (A, B) {
     }
 }
 
+/// Total lexicographic ordering for 3-tuples.
 impl[A: Ord, B: Ord, C: Ord] Ord for (A, B, C) {
     pub func cmp(this, other: ref (A, B, C)) -> Ordering {
         when this.0.cmp(ref other.0) {
@@ -249,6 +269,7 @@ impl[A: Ord, B: Ord, C: Ord] Ord for (A, B, C) {
     }
 }
 
+/// Total lexicographic ordering for 4-tuples.
 impl[A: Ord, B: Ord, C: Ord, D: Ord] Ord for (A, B, C, D) {
     pub func cmp(this, other: ref (A, B, C, D)) -> Ordering {
         when this.0.cmp(ref other.0) {
@@ -275,18 +296,21 @@ impl[A: Ord, B: Ord, C: Ord, D: Ord] Ord for (A, B, C, D) {
 /// Unit type `()` is the empty tuple, with no elements.
 /// It is often used to represent "no value" or as a placeholder type.
 
+/// Default for `Unit` returns `()`.
 impl Default for Unit {
     pub func default() -> Unit {
         return ()
     }
 }
 
+/// Clone for `Unit` returns `()`.
 impl Clone for Unit {
     pub func clone(this) -> Unit {
         return ()
     }
 }
 
+/// All `Unit` values are equal.
 impl PartialEq for Unit {
     pub func eq(this, other: ref Unit) -> Bool {
         return true
@@ -299,12 +323,14 @@ impl PartialEq for Unit {
 
 impl Eq for Unit {}
 
+/// All `Unit` values compare as `Equal`.
 impl PartialOrd for Unit {
     pub func partial_cmp(this, other: ref Unit) -> Maybe[Ordering] {
         return Just(Ordering::Equal)
     }
 }
 
+/// Total ordering for `Unit` (always `Equal`).
 impl Ord for Unit {
     pub func cmp(this, other: ref Unit) -> Ordering {
         return Ordering::Equal

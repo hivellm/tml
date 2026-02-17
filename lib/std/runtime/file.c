@@ -222,6 +222,12 @@ bool file_append_all(const char* path, const char* content) {
     return written == len;
 }
 
+bool file_flush(TmlFile* file) {
+    if (!file || !file->is_open || !file->handle)
+        return false;
+    return fflush((FILE*)file->handle) == 0;
+}
+
 int64_t file_size(TmlFile* file) {
     return file ? file->size : 0;
 }

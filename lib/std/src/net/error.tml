@@ -13,23 +13,39 @@ pub type NetErrorKind {
 }
 
 impl NetErrorKind {
-    // Error kind constants
+    /// The remote server refused the connection.
     pub func ConnectionRefused() -> NetErrorKind { NetErrorKind { value: 1 } }
+    /// The connection was reset by the remote host.
     pub func ConnectionReset() -> NetErrorKind { NetErrorKind { value: 2 } }
+    /// The connection was aborted (reset) by the local system.
     pub func ConnectionAborted() -> NetErrorKind { NetErrorKind { value: 3 } }
+    /// The remote host is unreachable.
     pub func HostUnreachable() -> NetErrorKind { NetErrorKind { value: 4 } }
+    /// The network is unreachable.
     pub func NetworkUnreachable() -> NetErrorKind { NetErrorKind { value: 5 } }
+    /// The operation timed out.
     pub func TimedOut() -> NetErrorKind { NetErrorKind { value: 6 } }
+    /// The address is already in use.
     pub func AddrInUse() -> NetErrorKind { NetErrorKind { value: 7 } }
+    /// The requested address is not available.
     pub func AddrNotAvailable() -> NetErrorKind { NetErrorKind { value: 8 } }
+    /// The operation would block on a non-blocking socket.
     pub func WouldBlock() -> NetErrorKind { NetErrorKind { value: 9 } }
+    /// The socket is already connected.
     pub func AlreadyConnected() -> NetErrorKind { NetErrorKind { value: 10 } }
+    /// The socket is not connected.
     pub func NotConnected() -> NetErrorKind { NetErrorKind { value: 11 } }
+    /// The operation lacks the required permissions.
     pub func PermissionDenied() -> NetErrorKind { NetErrorKind { value: 12 } }
+    /// An invalid input parameter was provided.
     pub func InvalidInput() -> NetErrorKind { NetErrorKind { value: 13 } }
+    /// Data received was not valid for the operation.
     pub func InvalidData() -> NetErrorKind { NetErrorKind { value: 14 } }
+    /// The operation was interrupted by a signal.
     pub func Interrupted() -> NetErrorKind { NetErrorKind { value: 15 } }
+    /// An unexpected end-of-file was reached.
     pub func UnexpectedEof() -> NetErrorKind { NetErrorKind { value: 16 } }
+    /// An unclassified error occurred.
     pub func Other() -> NetErrorKind { NetErrorKind { value: 17 } }
 
     /// Checks if this is a connection refused error.

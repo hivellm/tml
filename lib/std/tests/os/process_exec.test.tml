@@ -1,0 +1,26 @@
+// Tests for std::os process execution
+use test::{assert, assert_eq}
+use std::os
+
+@test
+func test_exec_echo() -> I32 {
+    let output: Str = os::exec("echo hello")
+    // On Windows, echo includes trailing \r\n
+    assert(output.starts_with("hello"), "exec echo should return hello")
+    return 0
+}
+
+@test
+func test_exec_status_success() -> I32 {
+    let status: I32 = os::exec_status("echo ok")
+    assert_eq(status, 0, "echo should exit with 0")
+    return 0
+}
+
+@test
+func test_exec_status_failure() -> I32 {
+    // Running a command that doesn't exist should return non-zero
+    let status: I32 = os::exec_status("tml_nonexistent_command_xyz 2>nul")
+    assert(status != 0, "nonexistent command should fail")
+    return 0
+}

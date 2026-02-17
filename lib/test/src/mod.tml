@@ -1,11 +1,29 @@
-// TML Test Framework
-// Standard testing library for TML programs
-//
-// This module provides a complete testing framework including:
-// - Assertion functions (@test decorator support)
-// - Test discovery and execution
-// - Benchmarking (@bench decorator)
-// - Result reporting
+//! TML Test Framework.
+//!
+//! Standard testing library for TML programs. Provides assertion functions,
+//! test discovery and execution, benchmarking, coverage tracking,
+//! and result reporting.
+//!
+//! # Modules
+//!
+//! - [`assertions`] - Assertion functions (`assert_eq`, `assert_true`, etc.)
+//! - [`runner`] - Test runner and discovery
+//! - [`bench`] - Benchmarking utilities (`@bench` decorator support)
+//! - [`report`] - Test result formatting and output
+//! - [`coverage`] - Code coverage tracking
+//! - [`types`] - Shared types (`TestResult`, `TestConfig`, etc.)
+//!
+//! # Example
+//!
+//! ```tml
+//! use test::assertions::*
+//!
+//! @test
+//! func test_addition() -> Outcome[(), Str] {
+//!     assert_eq(1 + 1, 2, "basic addition")
+//!     Ok(())
+//! }
+//! ```
 
 // Re-export core modules
 pub use types

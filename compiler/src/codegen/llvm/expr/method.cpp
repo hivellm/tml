@@ -991,7 +991,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // 14. Handle File instance methods
     // =========================================================================
     if (method == "is_open" || method == "read_line" || method == "write_str" || method == "size" ||
-        method == "close") {
+        method == "close" || method == "flush") {
         std::string file_ptr = receiver_ptr;
         if (file_ptr.empty()) {
             file_ptr = fresh_reg();
@@ -1038,6 +1038,12 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         if (method == "close") {
             emit_line("  call void @file_close(ptr " + handle + ")");
             return "void";
+        }
+        if (method == "flush") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i1 @file_flush(ptr " + handle + ")");
+            last_expr_type_ = "i1";
+            return result;
         }
     }
 

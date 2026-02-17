@@ -1,0 +1,52 @@
+// Tests for std::file::bufio::BufReader
+use test::{assert, assert_eq}
+use std::file::file::File
+use std::file::path::Path
+use std::file::bufio::BufReader
+
+@test
+func test_bufreader_open_close() -> I32 {
+    let path: Str = "build/debug/_test_bufreader_oc.txt"
+    File::write_all(path, "hello\n")
+
+    let br: BufReader = BufReader::open(path)
+    assert(br.is_open(), "BufReader should be open")
+    br.close()
+    Path::remove(path)
+    return 0
+}
+
+@test
+func test_bufreader_read_line() -> I32 {
+    let path: Str = "build/debug/_test_bufreader_rl.txt"
+    File::write_all(path, "line one\nline two\nline three\n")
+
+    var br: BufReader = BufReader::open(path)
+    let l1: Str = br.read_line()
+    assert_eq(l1, "line one", "first line should be 'line one'")
+    let l2: Str = br.read_line()
+    assert_eq(l2, "line two", "second line should be 'line two'")
+    let l3: Str = br.read_line()
+    assert_eq(l3, "line three", "third line should be 'line three'")
+    assert_eq(br.lines_read(), 3, "should have read 3 lines")
+    br.close()
+    Path::remove(path)
+    return 0
+}
+
+@test
+func test_bufreader_eof() -> I32 {
+    let path: Str = "build/debug/_test_bufreader_eof.txt"
+    File::write_all(path, "only line\n")
+
+    var br: BufReader = BufReader::open(path)
+    let l1: Str = br.read_line()
+    assert_eq(l1, "only line", "should read the only line")
+    assert(not br.is_eof(), "should not be eof yet")
+
+    let l2: Str = br.read_line()
+    assert(br.is_eof(), "should be eof after all lines read")
+    br.close()
+    Path::remove(path)
+    return 0
+}

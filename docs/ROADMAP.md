@@ -10,7 +10,7 @@
 ```
 Phase 1  [DONE 97%]   Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 75.7% ✓
-Phase 3  [ACTIVE 63%] Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓)
+Phase 3  [ACTIVE 79%] Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓)
 Phase 4  [THEN]       Migrate C runtime → pure TML
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
@@ -375,7 +375,7 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 - [x] 3.3.2 `env::var()` / `env::set_var()` — environment variables *(implemented in `std::os`: `env_get`, `env_set`, `env_unset`)*
 - [x] 3.3.3 `env::current_dir()` / `env::set_current_dir()` *(implemented in `std::os` via getcwd/chdir FFI)*
 - [x] 3.3.4 `process::exit(code)` — exit with status code *(implemented as `os::process_exit(code)` via `tml_os_exit` FFI)*
-- [ ] 3.3.5 `process::Command` — spawn subprocesses with stdin/stdout/stderr
+- [x] 3.3.5 `process::Command` — spawn subprocesses *(implemented as `os::exec(cmd)` returning stdout, `os::exec_status(cmd)` returning exit code, via `_popen`/`system` FFI)*
 - [x] 3.3.6 Tests for env and process *(args, env_get/set/unset, process_exit tests passing)*
 
 ### 3.4 DateTime
@@ -383,7 +383,7 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 - [x] 3.4.1 `Instant` — monotonic clock for measuring elapsed time *(implemented in `std::time`: `Instant::now()`, `elapsed()`, `as_nanos()`, `duration_since()`)*
 - [x] 3.4.2 `SystemTime` — wall clock time *(implemented in `std::time`: `now()`, `as_secs()`, `subsec_nanos()`, `elapsed()`, `duration_since_epoch()`)*
 - [x] 3.4.3 `DateTime` — date + time (UTC only) *(implemented in `std::datetime`: `now()`, `from_timestamp()`, `from_parts()`, component accessors, `weekday()`, `day_of_year()`, `is_leap_year()`)*
-- [ ] 3.4.4 Formatting: ISO 8601, RFC 2822, custom formats
+- [x] 3.4.4 Formatting: ISO 8601, RFC 2822, custom formats *(implemented: `to_iso8601()`, `to_rfc2822()`, `to_date_string()`, `to_time_string()`, `to_string()`, `debug_string()` + helper functions)*
 - [ ] 3.4.5 Parsing: string → DateTime
 - [x] 3.4.6 Tests for datetime *(Instant tests passing: now, elapsed, sleep)*
 
@@ -391,18 +391,18 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 
 - [x] 3.5.1 `Rng` type — `next_i64()`, `next_bool()` *(xoshiro256** PRNG, SplitMix64 seed expansion)*
 - [ ] 3.5.2 `ThreadRng` — per-thread CSPRNG
-- [ ] 3.5.3 `random[T]()` — convenience function for random value
+- [x] 3.5.3 `random[T]()` — convenience functions *(implemented: `random_i64()`, `random_f64()`, `random_bool()`, `random_range(min, max)`)*
 - [x] 3.5.4 `rng.range(min, max)` — random integer in range *(implemented)*
-- [ ] 3.5.5 `rng.shuffle(list)` — Fisher-Yates shuffle
+- [x] 3.5.5 `rng.shuffle(list)` — Fisher-Yates shuffle *(implemented: `shuffle_i64(List[I64])`, `shuffle_i32(List[I32])`, `next_f64()`, `range_f64()`)*
 - [x] 3.5.6 Tests for random *(5 tests: new, with_seed reproducible, range, next_bool, different_seeds)*
 
 ### 3.6 Buffered I/O
 
-- [ ] 3.6.1 `BufReader[R]` — buffered wrapper for Read types
-- [ ] 3.6.2 `BufWriter[W]` — buffered wrapper for Write types
-- [ ] 3.6.3 `Read` / `Write` / `Seek` behaviors
-- [ ] 3.6.4 `LineWriter` — flush on newline
-- [ ] 3.6.5 Tests for buffered I/O
+- [x] 3.6.1 `BufReader` — buffered reader wrapping `File` *(implemented: `open()`, `from_file()`, `read_line()`, `read_all()`, `is_eof()`, `lines_read()`)*
+- [x] 3.6.2 `BufWriter` — buffered writer wrapping `File` *(implemented: `open()`, `write()`, `write_line()`, `flush()`, auto-flush at 8KB capacity, `buffered()`, `total_written()`)*
+- [ ] 3.6.3 `Read` / `Write` / `Seek` behaviors — deferred (requires generic behavior dispatch)
+- [x] 3.6.4 `LineWriter` — flush on newline *(implemented: `write()` flushes after last newline, `write_line()`, `flush()`, `close()`)*
+- [x] 3.6.5 Tests for buffered I/O *(9 tests: 3 BufReader, 3 BufWriter, 3 LineWriter — all passing)*
 
 ### 3.7 Error context chains ✓
 

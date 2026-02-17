@@ -132,6 +132,43 @@ impl DateTime {
     pub func is_leap_year(this) -> Bool {
         return is_leap(this._year)
     }
+
+    /// Returns ISO 8601 formatted string: `YYYY-MM-DDThh:mm:ssZ`.
+    pub func to_iso8601(this) -> Str {
+        return pad4(this._year) + "-" + pad2(this._month) + "-" + pad2(this._day)
+             + "T" + pad2(this._hour) + ":" + pad2(this._minute) + ":" + pad2(this._second) + "Z"
+    }
+
+    /// Returns date-only string: `YYYY-MM-DD`.
+    pub func to_date_string(this) -> Str {
+        return pad4(this._year) + "-" + pad2(this._month) + "-" + pad2(this._day)
+    }
+
+    /// Returns time-only string: `hh:mm:ss`.
+    pub func to_time_string(this) -> Str {
+        return pad2(this._hour) + ":" + pad2(this._minute) + ":" + pad2(this._second)
+    }
+
+    /// Returns RFC 2822 formatted string: `Thu, 01 Jan 1970 00:00:00 +0000`.
+    pub func to_rfc2822(this) -> Str {
+        let wd: I64 = this.weekday()
+        let day_name: Str = weekday_short(wd)
+        let mon_name: Str = month_short(this._month)
+        return day_name + ", " + pad2(this._day) + " " + mon_name + " "
+             + pad4(this._year) + " " + pad2(this._hour) + ":"
+             + pad2(this._minute) + ":" + pad2(this._second) + " +0000"
+    }
+
+    /// Returns `Display`-friendly string: `YYYY-MM-DD hh:mm:ss UTC`.
+    pub func to_string(this) -> Str {
+        return pad4(this._year) + "-" + pad2(this._month) + "-" + pad2(this._day)
+             + " " + pad2(this._hour) + ":" + pad2(this._minute) + ":" + pad2(this._second) + " UTC"
+    }
+
+    /// Returns debug representation.
+    pub func debug_string(this) -> Str {
+        return "DateTime(" + this.to_iso8601() + ")"
+    }
 }
 
 // ============================================================================
@@ -155,4 +192,53 @@ func civil_to_epoch(year: I64, month: I64, day: I64,
 /// Check if a year is a leap year.
 func is_leap(year: I64) -> Bool {
     return (year % 4 == 0) and ((year % 100 != 0) or (year % 400 == 0))
+}
+
+/// Zero-pad an integer to 2 digits.
+func pad2(n: I64) -> Str {
+    if n < 10 {
+        return "0" + n.to_string()
+    }
+    return n.to_string()
+}
+
+/// Zero-pad an integer to 4 digits (for year).
+func pad4(n: I64) -> Str {
+    if n < 10 {
+        return "000" + n.to_string()
+    }
+    if n < 100 {
+        return "00" + n.to_string()
+    }
+    if n < 1000 {
+        return "0" + n.to_string()
+    }
+    return n.to_string()
+}
+
+/// Short weekday name (Mon–Sun). Input: 0=Monday, 6=Sunday.
+func weekday_short(wd: I64) -> Str {
+    if wd == 0 { return "Mon" }
+    if wd == 1 { return "Tue" }
+    if wd == 2 { return "Wed" }
+    if wd == 3 { return "Thu" }
+    if wd == 4 { return "Fri" }
+    if wd == 5 { return "Sat" }
+    return "Sun"
+}
+
+/// Short month name (Jan–Dec). Input: 1–12.
+func month_short(m: I64) -> Str {
+    if m == 1 { return "Jan" }
+    if m == 2 { return "Feb" }
+    if m == 3 { return "Mar" }
+    if m == 4 { return "Apr" }
+    if m == 5 { return "May" }
+    if m == 6 { return "Jun" }
+    if m == 7 { return "Jul" }
+    if m == 8 { return "Aug" }
+    if m == 9 { return "Sep" }
+    if m == 10 { return "Oct" }
+    if m == 11 { return "Nov" }
+    return "Dec"
 }
