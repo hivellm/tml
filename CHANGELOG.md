@@ -8,6 +8,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`std::regex` — Thompson's NFA Regex Engine** (2026-02-17) - Pure TML regex engine with no backtracking
+  - `Regex` type with `new()`, `is_match()`, `find()`, `find_all()`, `replace()`, `replace_all()`, `split()`
+  - `Match` type with `matched()`, `start()`, `end()`, `group()` for match position tracking
+  - Thompson's NFA construction via shunting-yard postfix conversion — O(n*m) worst case, no exponential backtracking
+  - Supported syntax: literals, `.`, `*`, `+`, `?`, `|`, `()`, `[a-z]`, `[^0-9]`, `\d`, `\w`, `\s`, `\D`, `\W`, `\S`, `^`, `$`
+  - Struct-of-arrays NFA storage using parallel `List[I64]` arrays for kinds, chars, next1, next2
+  - 22 tests across 2 files: basic matching (10 tests), advanced features (12 tests — shorthand classes, anchors, find, replace, split)
+  - New files: `lib/std/src/regex.tml`, `lib/std/tests/regex/regex_basic.test.tml`, `lib/std/tests/regex/regex_advanced.test.tml`
+
+- **DateTime Parsing** (2026-02-17) - Parse date/time strings back into DateTime
+  - `DateTime.parse_iso8601(s)` — parse ISO 8601 format (`2024-03-15T10:30:00`)
+  - `DateTime.parse_date(s)` — parse date-only strings (`2024-03-15`)
+  - `DateTime.parse(s, fmt)` — parse with format strings (e.g., `"%Y-%m-%d %H:%M:%S"`)
+  - File: `lib/std/src/datetime.tml`
+
+- **Buffered I/O Module** (2026-02-17) - `std::file::bufio` for buffered file operations
+  - `BufReader` — buffered reader wrapping `File` with `open()`, `read_line()`, `read_all()`, `is_eof()`, `lines_read()`
+  - `BufWriter` — buffered writer with auto-flush at 8KB capacity, `write()`, `write_line()`, `flush()`
+  - `LineWriter` — flush-on-newline writer for log-style output
+  - 9 tests: 3 BufReader, 3 BufWriter, 3 LineWriter
+  - New file: `lib/std/src/file/bufio.tml`
+
+- **Process Execution** (2026-02-17) - Subprocess execution via `std::os`
+  - `os::exec(cmd)` — execute command and capture stdout (via `_popen` FFI)
+  - `os::exec_status(cmd)` — execute command and return exit code (via `system` FFI)
+  - New file: `lib/std/src/os.tml` (exec functions), `compiler/runtime/os/os.c` (C runtime)
+
+- **Random Module Enhancements** (2026-02-17) - Extended `std::random` with convenience functions
+  - `random_i64()`, `random_f64()`, `random_bool()`, `random_range(min, max)` — module-level convenience functions
+  - `shuffle_i64(list)`, `shuffle_i32(list)` — Fisher-Yates shuffle
+  - `Rng.next_f64()`, `Rng.range_f64(min, max)` — float generation
+  - 5 tests: new, with_seed reproducible, range, next_bool, different_seeds
+  - File: `lib/std/src/random.tml`
+
+- **`__FILE__`, `__DIRNAME__`, `__LINE__` Compile-Time Constants** (2026-02-17) - Lexer-level expansion for script-relative paths
+  - `__FILE__` expands to the source file path as a `Str` literal (forward-slash normalized)
+  - `__DIRNAME__` expands to the directory portion of the source file path
+  - `__LINE__` expands to the current line number as an `I64` literal
+  - Enables scripts to use paths relative to their own location, independent of CWD
+  - File: `compiler/src/lexer/lexer_ident.cpp`
+
+- **Collections: BTreeMap, BTreeSet, Deque, Vec** (2026-02-17) - New collection types in `std::collections`
+  - `BTreeMap[K,V]` — ordered map with sorted-array backing, binary search, O(log n) operations
+  - `BTreeSet[T]` — ordered set (wrapper around BTreeMap)
+  - `Deque[T]` — double-ended queue with ring buffer backed by `List[T]`
+  - `Vec[T]` — ergonomic alias for `List[T]` with `push`, `pop`, `len`, `get`, `set`, `contains`, `clear`
+  - Tests across 4 files: btreemap, btreeset, deque, vec
+  - New files: `lib/std/src/collections/btreemap.tml`, `lib/std/src/collections/btreeset.tml`, `lib/std/src/collections/deque.tml`
+
+- **`std::math` Module** (2026-02-16) - Comprehensive math functions via intrinsics and libc FFI
+  - Trigonometric: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
+  - Hyperbolic: `sinh`, `cosh`, `tanh`
+  - Exponential: `exp`, `ln`, `log2`, `log10`, `pow`
+  - Rounding: `floor`, `ceil`, `round`, `trunc`
+  - Utility: `abs`, `sqrt`, `cbrt`, `min`, `max`, `clamp`
+  - Constants: `PI`, `E`, `TAU`, `SQRT_2`, `LN_2`, `LN_10`, `LOG2_E`, `LOG10_E`, `FRAC_1_PI`, `FRAC_2_PI`, `FRAC_1_SQRT_2`
+  - 30 tests across 4 files: constants, trig, functions, advanced
+  - File: `lib/std/src/math.tml`
+
+- **`std::time` Instant and SystemTime** (2026-02-16) - Monotonic and wall-clock time
+  - `Instant::now()`, `elapsed()`, `as_nanos()`, `duration_since()` — monotonic clock via `QueryPerformanceCounter` FFI
+  - `SystemTime::now()`, `as_secs()`, `subsec_nanos()`, `elapsed()`, `duration_since_epoch()` — wall clock
+  - `sleep(millis)` — thread sleep via `tml_sleep_ms` FFI
+  - File: `lib/std/src/time.tml`, `compiler/runtime/os/os.c`
+
+- **`std::datetime` Module** (2026-02-16) - Date and time manipulation
+  - `DateTime::now()`, `from_timestamp()`, `from_parts()` — construction
+  - Component accessors: `year()`, `month()`, `day()`, `hour()`, `minute()`, `second()`
+  - Calendar functions: `weekday()`, `day_of_year()`, `is_leap_year()`
+  - Formatting: `to_iso8601()`, `to_rfc2822()`, `to_date_string()`, `to_time_string()`
+  - File: `lib/std/src/datetime.tml`
+
+- **`std::os` Environment and Process** (2026-02-16) - OS interaction module
+  - `env_get(name)`, `env_set(name, value)`, `env_unset(name)` — environment variables
+  - `get_cwd()`, `set_cwd(path)` — current directory management
+  - `args_count()`, `args_get(index)` — command-line arguments
+  - `process_exit(code)` — exit with status code
+  - `cpu_count()`, `total_memory()`, `process_id()`, `system_name()` — system info
+  - File: `lib/std/src/os.tml`, `compiler/runtime/os/os.c`
+
+- **Test Coverage Push** (2026-02-16) - Coverage from 68.7% to 75.7%
+  - 8,912 tests passing across 768 files, 74 modules at 100%
+  - New tests: LLVM math intrinsics, bit manipulation intrinsics, hash trait impls, string methods, error module, alloc, array, pool, range, buffer, interfaces
+  - Coverage scanner fix: skip bodyless behavior declarations (reduced false function count by ~147)
+  - Intrinsic recognition for 16 missing names
+
 - **Coverage History Deduplication** (2026-02-16) - Fixed `coverage_history.jsonl` bloat from incremental saves
   - Incremental per-suite coverage save no longer calls `write_library_coverage_html` (which appended to history)
   - Only `covered_functions.txt` is written incrementally; full report (HTML/JSON/history) written once at end
@@ -133,6 +219,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New files: `traits/solver.hpp/cpp`, `traits/solver_builtins.cpp`, `thir/thir_expr.hpp`, `thir/thir_module.hpp`, `thir/thir_lower.cpp`, `thir/exhaustiveness.hpp/cpp`, `mir/thir_mir_builder.hpp/cpp`
 
 ### Fixed
+- **`Shared[T]` Memory Leak** (2026-02-17) - Fixed broken `increment_count`/`decrement_count` codegen for library-imported generics
+  - `(*ptr).field = value` produces `CallExpr` instead of `UnaryExpr` for library-imported generic types
+  - Rewritten with `ptr_write` intrinsic to work around parser bug
+  - File: `compiler/src/codegen/llvm/core/smart_pointers.cpp`
+
+- **`os::get_cwd` Static Buffer Corruption** (2026-02-17) - Fixed CWD corruption in test suites
+  - `tml_os_current_dir` used a static buffer that was overwritten between calls
+  - Fixed by returning dynamically allocated string
+  - File: `compiler/runtime/os/os.c`
+
+- **x509 `verify_chain` List Access** (2026-02-17) - Fixed certificate chain verification crash
+  - Changed from direct array access to `list_len`/`list_get` for TML list handles
+  - File: `compiler/runtime/crypto/crypto.c`
+
 - **Pointer-to-I32 truncation warning** (2026-02-16) - Compiler now warns when casting pointer to I32 on 64-bit systems
   - `ptr as I32` generates `trunc i64 %ptr to i32`, which silently discards high bits
   - On systems with >4GB RAM, heap addresses exceed `0xFFFFFFFF`, causing ACCESS_VIOLATION
