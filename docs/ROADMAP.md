@@ -384,7 +384,7 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 - [x] 3.4.2 `SystemTime` — wall clock time *(implemented in `std::time`: `now()`, `as_secs()`, `subsec_nanos()`, `elapsed()`, `duration_since_epoch()`)*
 - [x] 3.4.3 `DateTime` — date + time (UTC only) *(implemented in `std::datetime`: `now()`, `from_timestamp()`, `from_parts()`, component accessors, `weekday()`, `day_of_year()`, `is_leap_year()`)*
 - [x] 3.4.4 Formatting: ISO 8601, RFC 2822, custom formats *(implemented: `to_iso8601()`, `to_rfc2822()`, `to_date_string()`, `to_time_string()`, `to_string()`, `debug_string()` + helper functions)*
-- [ ] 3.4.5 Parsing: string → DateTime
+- [x] 3.4.5 Parsing: string → DateTime *(implemented: `parse_iso8601()`, `parse_date()`, `parse()` with format strings)*
 - [x] 3.4.6 Tests for datetime *(Instant tests passing: now, elapsed, sleep)*
 
 ### 3.5 Random number generation
