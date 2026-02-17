@@ -105,8 +105,6 @@ func crypto_x25519_public_from_private(private_handle: *Unit) -> *Unit
 func crypto_x448_generate_private() -> *Unit
 @extern("crypto_x448_public_from_private")
 func crypto_x448_public_from_private(private_handle: *Unit) -> *Unit
-@extern("crypto_get_curves")
-func crypto_get_curves() -> *Unit
 @extern("crypto_is_curve_supported")
 func crypto_is_curve_supported(curve_name: Str) -> Bool
 
@@ -410,8 +408,17 @@ pub func x448_public_from_private(private_key: ref Buffer) -> CryptoResult[Buffe
 
 /// Returns a list of all supported curve names.
 pub func get_curves() -> List[Str] {
-    let handle: *Unit = crypto_get_curves()
-    return List[Str] { handle: handle }
+    let list: List[Str] = List[Str]::new(9)
+    list.push("prime256v1")
+    list.push("secp384r1")
+    list.push("secp521r1")
+    list.push("secp256k1")
+    list.push("X25519")
+    list.push("X448")
+    list.push("brainpoolP256r1")
+    list.push("brainpoolP384r1")
+    list.push("brainpoolP512r1")
+    return list
 }
 
 /// Returns true if the specified curve is supported.

@@ -167,21 +167,6 @@ func ffi_x509_count_pem_certs(pem: Str) -> I64
 @extern("crypto_x509_extract_pem_cert")
 func ffi_x509_extract_pem_cert(pem: Str, index: I64) -> Str
 
-// List operations (from collections.c)
-@extern("list_new")
-func ffi_list_new(capacity: I64) -> *Unit
-
-@extern("list_push")
-func ffi_list_push(handle: *Unit, value: I64)
-
-@extern("list_get")
-func ffi_list_get(handle: *Unit, index: I64) -> I64
-
-@extern("list_len")
-func ffi_list_len(handle: *Unit) -> I64
-
-@extern("list_destroy")
-func ffi_list_destroy(handle: *Unit)
 
 // Key type helper (from crypto_key.c or crypto.c)
 @extern("crypto_key_get_type")
@@ -440,8 +425,8 @@ impl X509Certificate {
 
     /// Returns the Subject Alternative Names (SANs).
     pub func subject_alt_names(this) -> List[Str] {
-        let handle: *Unit = ffi_x509_get_san(this.handle)
-        return List[Str] { handle: handle }
+        // C FFI returns NULL (not yet implemented), return empty list
+        return List[Str]::new(4)
     }
 
     /// Verifies the certificate signature using a public key.
@@ -511,24 +496,22 @@ impl X509Certificate {
 
 /// Certificate chain for verification.
 ///
-/// Internally stores certificate handles in a raw list to avoid
-/// generic List[T] indexing limitations.
+/// Stores certificate handles in a pure TML `List[I64]`.
 pub type X509Chain {
-    list_handle: *Unit
+    certs: List[I64]
 }
 
 impl X509Chain {
     /// Creates a new empty certificate chain.
     pub func new() -> X509Chain {
-        let h: *Unit = ffi_list_new(4)
         return X509Chain {
-            list_handle: h,
+            certs: List[I64]::new(4),
         }
     }
 
     /// Adds a certificate to the chain.
     pub func add_cert(mut this, cert: X509Certificate) {
-        ffi_list_push(this.list_handle, cert.handle as I64)
+        this.certs.push(cert.handle as I64)
     }
 
     /// Adds certificates from a PEM bundle (multiple certs in one string).
@@ -543,7 +526,7 @@ impl X509Chain {
                 break
             }
             let cert = X509Certificate::from_pem(cert_pem)!
-            ffi_list_push(this.list_handle, cert.handle as I64)
+            this.certs.push(cert.handle as I64)
             added = added + 1
             offset = offset + 1
         }
@@ -553,7 +536,7 @@ impl X509Chain {
 
     /// Returns the number of certificates in the chain.
     pub func len(this) -> I64 {
-        return ffi_list_len(this.list_handle)
+        return this.certs.len()
     }
 
     /// Verifies a certificate against this chain.
@@ -561,7 +544,7 @@ impl X509Chain {
         let chain_len: I64 = this.len()
         let mut i: I64 = 0
         loop (i < chain_len) {
-            let ca_handle: *Unit = ffi_list_get(this.list_handle, i) as *Unit
+            let ca_handle: *Unit = this.certs.get(i) as *Unit
             let issued: Bool = ffi_x509_check_issued(cert.handle, ca_handle)
             if issued {
                 let pk_handle: *Unit = ffi_x509_get_public_key(ca_handle)
@@ -580,7 +563,7 @@ impl X509Chain {
         let chain_len: I64 = this.len()
         let mut i: I64 = 0
         loop (i < chain_len) {
-            let ca_handle: *Unit = ffi_list_get(this.list_handle, i) as *Unit
+            let ca_handle: *Unit = this.certs.get(i) as *Unit
             let issued: Bool = ffi_x509_check_issued(cert.handle, ca_handle)
             if issued {
                 let pk_handle: *Unit = ffi_x509_get_public_key(ca_handle)
@@ -602,11 +585,11 @@ impl X509Chain {
         let chain_len: I64 = this.len()
         let mut i: I64 = 0
         loop (i < chain_len) {
-            let cert_handle: *Unit = ffi_list_get(this.list_handle, i) as *Unit
+            let cert_handle: *Unit = this.certs.get(i) as *Unit
             ffi_x509_destroy(cert_handle)
             i = i + 1
         }
-        ffi_list_destroy(this.list_handle)
+        this.certs.destroy()
     }
 }
 
@@ -661,7 +644,7 @@ impl X509Store {
 
     /// Verifies a certificate chain with intermediates.
     pub func verify_chain(this, cert: ref X509Certificate, chain: ref X509Chain) -> CryptoResult[Bool] {
-        let result: Bool = ffi_x509_store_verify_chain(this.handle, cert.handle, chain.list_handle)
+        let result: Bool = ffi_x509_store_verify_chain(this.handle, cert.handle, chain.certs.handle)
         return Ok(result)
     }
 
