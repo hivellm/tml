@@ -87,7 +87,20 @@
 /// assert(len("") == 0)
 /// ```
 pub func len(s: Str) -> I64 {
-    return lowlevel { str_len(s) }
+    let addr: I64 = s as I64
+    if addr == 0 {
+        return 0
+    }
+    var i: I64 = 0
+    loop (true) {
+        let p: *U8 = (addr + i) as *U8
+        let byte: U8 = lowlevel { ptr_read[U8](p) }
+        if byte == (0 as U8) {
+            return i
+        }
+        i = i + 1
+    }
+    return 0
 }
 
 /// Returns `true` if the string is empty.
@@ -119,8 +132,13 @@ pub func is_empty(s: Str) -> Bool {
 /// assert(char_at("hello", 4) == 'o')
 /// ```
 pub func char_at(s: Str, index: I64) -> I32 {
-    let idx32: I32 = index as I32
-    return lowlevel { str_char_at(s, idx32) }
+    let ptr_addr: I64 = s as I64
+    if ptr_addr == 0 or index < 0 {
+        return 0
+    }
+    let p: *U8 = (ptr_addr + index) as *U8
+    let byte: U8 = lowlevel { ptr_read[U8](p) }
+    return byte as I32
 }
 
 /// Returns the first character of the string, or `Nothing` if empty.
@@ -173,9 +191,29 @@ pub func last_char(s: Str) -> Maybe[I32] {
 /// assert(substring("hello", 0, 5) == "hello")
 /// ```
 pub func substring(s: Str, start: I64, end: I64) -> Str {
-    let start32: I32 = start as I32
-    let len32: I32 = (end - start) as I32
-    return lowlevel { str_substring(s, start32, len32) }
+    let s_len: I64 = len(s)
+    let st: I64 = start
+    var en: I64 = end
+    if st < 0 or st >= s_len or en <= st {
+        return ""
+    }
+    if en > s_len {
+        en = s_len
+    }
+    let sub_len: I64 = en - st
+    let buf: *Unit = lowlevel { mem_alloc(sub_len + 1) }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    loop (i < sub_len) {
+        let sp: *U8 = (src + st + i) as *U8
+        let dp: *U8 = (buf as I64 + i) as *U8
+        let byte: U8 = lowlevel { ptr_read[U8](sp) }
+        lowlevel { ptr_write[U8](dp, byte) }
+        i = i + 1
+    }
+    let null_p: *U8 = (buf as I64 + sub_len) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
 }
 
 /// Returns a substring from `start` to the end of the string.
@@ -204,6 +242,11 @@ pub func substring_to(s: Str, end: I64) -> Str {
 // Trimming
 // ============================================================================
 
+/// Returns true if a byte value is ASCII whitespace (space, tab, newline, carriage return).
+func is_whitespace(b: I32) -> Bool {
+    return b == 32 or b == 9 or b == 10 or b == 13
+}
+
 /// Removes leading and trailing whitespace from a string.
 ///
 /// # Examples
@@ -213,7 +256,33 @@ pub func substring_to(s: Str, end: I64) -> Str {
 /// assert(trim("\n\thello\t\n") == "hello")
 /// ```
 pub func trim(s: Str) -> Str {
-    return lowlevel { str_trim(s) }
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let src: I64 = s as I64
+    var st: I64 = 0
+    loop (st < s_len) {
+        let p: *U8 = (src + st) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if not is_whitespace(b as I32) {
+            break
+        }
+        st = st + 1
+    }
+    var en: I64 = s_len
+    loop (en > st) {
+        let p: *U8 = (src + en - 1) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if not is_whitespace(b as I32) {
+            break
+        }
+        en = en - 1
+    }
+    if st >= en {
+        return ""
+    }
+    return substring(s, st, en)
 }
 
 /// Removes leading whitespace from a string.
@@ -224,7 +293,24 @@ pub func trim(s: Str) -> Str {
 /// assert(trim_start("  hello  ") == "hello  ")
 /// ```
 pub func trim_start(s: Str) -> Str {
-    return lowlevel { str_trim_start(s) }
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let src: I64 = s as I64
+    var st: I64 = 0
+    loop (st < s_len) {
+        let p: *U8 = (src + st) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if not is_whitespace(b as I32) {
+            break
+        }
+        st = st + 1
+    }
+    if st == 0 {
+        return s
+    }
+    return substring(s, st, s_len)
 }
 
 /// Removes trailing whitespace from a string.
@@ -235,7 +321,27 @@ pub func trim_start(s: Str) -> Str {
 /// assert(trim_end("  hello  ") == "  hello")
 /// ```
 pub func trim_end(s: Str) -> Str {
-    return lowlevel { str_trim_end(s) }
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let src: I64 = s as I64
+    var en: I64 = s_len
+    loop (en > 0) {
+        let p: *U8 = (src + en - 1) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if not is_whitespace(b as I32) {
+            break
+        }
+        en = en - 1
+    }
+    if en == s_len {
+        return s
+    }
+    if en == 0 {
+        return ""
+    }
+    return substring(s, 0, en)
 }
 
 // ============================================================================
@@ -251,7 +357,29 @@ pub func trim_end(s: Str) -> Str {
 /// assert(to_uppercase("Hello World") == "HELLO WORLD")
 /// ```
 pub func to_uppercase(s: Str) -> Str {
-    return lowlevel { str_to_uppercase(s) }
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    let src: I64 = s as I64
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        var ch: I32 = b as I32
+        // ASCII lowercase a-z: 97-122 -> 65-90
+        if ch >= 97 and ch <= 122 {
+            ch = ch - 32
+        }
+        let dp: *U8 = (dst + i) as *U8
+        lowlevel { ptr_write[U8](dp, ch as U8) }
+        i = i + 1
+    }
+    let null_p: *U8 = (dst + s_len) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
 }
 
 /// Converts all characters to lowercase.
@@ -263,7 +391,29 @@ pub func to_uppercase(s: Str) -> Str {
 /// assert(to_lowercase("Hello World") == "hello world")
 /// ```
 pub func to_lowercase(s: Str) -> Str {
-    return lowlevel { str_to_lowercase(s) }
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    let src: I64 = s as I64
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        var ch: I32 = b as I32
+        // ASCII uppercase A-Z: 65-90 -> 97-122
+        if ch >= 65 and ch <= 90 {
+            ch = ch + 32
+        }
+        let dp: *U8 = (dst + i) as *U8
+        lowlevel { ptr_write[U8](dp, ch as U8) }
+        i = i + 1
+    }
+    let null_p: *U8 = (dst + s_len) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
 }
 
 // ============================================================================
@@ -279,7 +429,38 @@ pub func to_lowercase(s: Str) -> Str {
 /// assert(contains("hello", "xyz") == false)
 /// ```
 pub func contains(s: Str, pattern: Str) -> Bool {
-    return lowlevel { str_contains(s, pattern) }
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 {
+        return true
+    }
+    if p_len > s_len {
+        return false
+    }
+    let s_base: I64 = s as I64
+    let p_base: I64 = pattern as I64
+    let limit: I64 = s_len - p_len
+    var i: I64 = 0
+    loop (i <= limit) {
+        var matched: Bool = true
+        var j: I64 = 0
+        loop (j < p_len) {
+            let sp: *U8 = (s_base + i + j) as *U8
+            let pp: *U8 = (p_base + j) as *U8
+            let sb: U8 = lowlevel { ptr_read[U8](sp) }
+            let pb: U8 = lowlevel { ptr_read[U8](pp) }
+            if (sb as I32) != (pb as I32) {
+                matched = false
+                break
+            }
+            j = j + 1
+        }
+        if matched {
+            return true
+        }
+        i = i + 1
+    }
+    return false
 }
 
 /// Returns `true` if the string starts with the given prefix.
@@ -291,7 +472,25 @@ pub func contains(s: Str, pattern: Str) -> Bool {
 /// assert(starts_with("hello", "lo") == false)
 /// ```
 pub func starts_with(s: Str, prefix: Str) -> Bool {
-    return lowlevel { str_starts_with(s, prefix) }
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(prefix)
+    if p_len > s_len {
+        return false
+    }
+    let s_base: I64 = s as I64
+    let p_base: I64 = prefix as I64
+    var i: I64 = 0
+    loop (i < p_len) {
+        let sp: *U8 = (s_base + i) as *U8
+        let pp: *U8 = (p_base + i) as *U8
+        let sb: U8 = lowlevel { ptr_read[U8](sp) }
+        let pb: U8 = lowlevel { ptr_read[U8](pp) }
+        if (sb as I32) != (pb as I32) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
 }
 
 /// Returns `true` if the string ends with the given suffix.
@@ -303,7 +502,26 @@ pub func starts_with(s: Str, prefix: Str) -> Bool {
 /// assert(ends_with("hello", "hel") == false)
 /// ```
 pub func ends_with(s: Str, suffix: Str) -> Bool {
-    return lowlevel { str_ends_with(s, suffix) }
+    let s_len: I64 = len(s)
+    let x_len: I64 = len(suffix)
+    if x_len > s_len {
+        return false
+    }
+    let s_base: I64 = s as I64
+    let x_base: I64 = suffix as I64
+    let offset: I64 = s_len - x_len
+    var i: I64 = 0
+    loop (i < x_len) {
+        let sp: *U8 = (s_base + offset + i) as *U8
+        let xp: *U8 = (x_base + i) as *U8
+        let sb: U8 = lowlevel { ptr_read[U8](sp) }
+        let xb: U8 = lowlevel { ptr_read[U8](xp) }
+        if (sb as I32) != (xb as I32) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
 }
 
 /// Returns the byte index of the first occurrence of the pattern.
@@ -317,11 +535,38 @@ pub func ends_with(s: Str, suffix: Str) -> Bool {
 /// assert(find("hello", "xyz") == Nothing)
 /// ```
 pub func find(s: Str, pattern: Str) -> Maybe[I64] {
-    let idx: I64 = lowlevel { str_find(s, pattern) }
-    if idx < 0 {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 {
+        return Just(0)
+    }
+    if p_len > s_len {
         return Nothing
     }
-    return Just(idx)
+    let s_base: I64 = s as I64
+    let p_base: I64 = pattern as I64
+    let limit: I64 = s_len - p_len
+    var i: I64 = 0
+    loop (i <= limit) {
+        var matched: Bool = true
+        var j: I64 = 0
+        loop (j < p_len) {
+            let sp: *U8 = (s_base + i + j) as *U8
+            let pp: *U8 = (p_base + j) as *U8
+            let sb: U8 = lowlevel { ptr_read[U8](sp) }
+            let pb: U8 = lowlevel { ptr_read[U8](pp) }
+            if (sb as I32) != (pb as I32) {
+                matched = false
+                break
+            }
+            j = j + 1
+        }
+        if matched {
+            return Just(i)
+        }
+        i = i + 1
+    }
+    return Nothing
 }
 
 /// Returns the byte index of the last occurrence of the pattern.
@@ -335,11 +580,37 @@ pub func find(s: Str, pattern: Str) -> Maybe[I64] {
 /// assert(rfind("hello", "xyz") == Nothing)
 /// ```
 pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
-    let idx: I64 = lowlevel { str_rfind(s, pattern) }
-    if idx < 0 {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 {
+        return Just(s_len)
+    }
+    if p_len > s_len {
         return Nothing
     }
-    return Just(idx)
+    let s_base: I64 = s as I64
+    let p_base: I64 = pattern as I64
+    var i: I64 = s_len - p_len
+    loop (i >= 0) {
+        var matched: Bool = true
+        var j: I64 = 0
+        loop (j < p_len) {
+            let sp: *U8 = (s_base + i + j) as *U8
+            let pp: *U8 = (p_base + j) as *U8
+            let sb: U8 = lowlevel { ptr_read[U8](sp) }
+            let pb: U8 = lowlevel { ptr_read[U8](pp) }
+            if (sb as I32) != (pb as I32) {
+                matched = false
+                break
+            }
+            j = j + 1
+        }
+        if matched {
+            return Just(i)
+        }
+        i = i - 1
+    }
+    return Nothing
 }
 
 // ============================================================================
@@ -362,7 +633,46 @@ pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
 /// assert(parts2.len() == 2)
 /// ```
 pub func split(s: Str, delimiter: Str) -> List[Str] {
-    return lowlevel { str_split(s, delimiter) }
+    let result: List[Str] = List[Str]::new(8)
+    let s_len: I64 = len(s)
+    let d_len: I64 = len(delimiter)
+    if s_len == 0 {
+        result.push("")
+        return result
+    }
+    if d_len == 0 {
+        result.push(s)
+        return result
+    }
+    let s_base: I64 = s as I64
+    let d_base: I64 = delimiter as I64
+    var start: I64 = 0
+    var pos: I64 = 0
+    loop (pos <= s_len - d_len) {
+        var matched: Bool = true
+        var k: I64 = 0
+        loop (k < d_len) {
+            let sp: *U8 = (s_base + pos + k) as *U8
+            let dp: *U8 = (d_base + k) as *U8
+            let sb: U8 = lowlevel { ptr_read[U8](sp) }
+            let db: U8 = lowlevel { ptr_read[U8](dp) }
+            if (sb as I32) != (db as I32) {
+                matched = false
+                break
+            }
+            k = k + 1
+        }
+        if matched {
+            result.push(substring(s, start, pos))
+            start = pos + d_len
+            pos = start
+        } else {
+            pos = pos + 1
+        }
+    }
+    // Push remainder
+    result.push(substring(s, start, s_len))
+    return result
 }
 
 /// Splits a string by whitespace.
@@ -379,7 +689,34 @@ pub func split(s: Str, delimiter: Str) -> List[Str] {
 /// assert(words[1] == "world")
 /// ```
 pub func split_whitespace(s: Str) -> List[Str] {
-    return lowlevel { str_split_whitespace(s) }
+    let result: List[Str] = List[Str]::new(8)
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return result
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        // Skip whitespace
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if is_whitespace(b as I32) {
+            i = i + 1
+        } else {
+            // Find end of word
+            let word_start: I64 = i
+            loop (i < s_len) {
+                let wp: *U8 = (src + i) as *U8
+                let wb: U8 = lowlevel { ptr_read[U8](wp) }
+                if is_whitespace(wb as I32) {
+                    break
+                }
+                i = i + 1
+            }
+            result.push(substring(s, word_start, i))
+        }
+    }
+    return result
 }
 
 /// Splits a string into lines.
@@ -393,7 +730,47 @@ pub func split_whitespace(s: Str) -> List[Str] {
 /// assert(lns.len() == 3)
 /// ```
 pub func lines(s: Str) -> List[Str] {
-    return lowlevel { str_lines(s) }
+    let result: List[Str] = List[Str]::new(8)
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return result
+    }
+    let src: I64 = s as I64
+    var start: I64 = 0
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        let ch: I32 = b as I32
+        if ch == 10 {
+            // Check for \r\n
+            var line_end: I64 = i
+            if line_end > start {
+                let prev_p: *U8 = (src + line_end - 1) as *U8
+                let prev_b: U8 = lowlevel { ptr_read[U8](prev_p) }
+                if (prev_b as I32) == 13 {
+                    line_end = line_end - 1
+                }
+            }
+            result.push(substring(s, start, line_end))
+            start = i + 1
+        }
+        i = i + 1
+    }
+    // Push last line if there is remaining content
+    if start < s_len {
+        // Strip trailing \r
+        var end: I64 = s_len
+        if end > start {
+            let last_p: *U8 = (src + end - 1) as *U8
+            let last_b: U8 = lowlevel { ptr_read[U8](last_p) }
+            if (last_b as I32) == 13 {
+                end = end - 1
+            }
+        }
+        result.push(substring(s, start, end))
+    }
+    return result
 }
 
 // ============================================================================
@@ -416,7 +793,95 @@ pub func lines(s: Str) -> List[Str] {
 /// assert(replace("hello", "x", "y") == "hello")  // No match
 /// ```
 pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
-    return lowlevel { str_replace(s, pattern, replacement) }
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    let r_len: I64 = len(replacement)
+    if p_len == 0 or s_len == 0 {
+        return s
+    }
+    // First pass: count occurrences
+    var count: I64 = 0
+    var pos: I64 = 0
+    let s_base: I64 = s as I64
+    let p_base: I64 = pattern as I64
+    loop (pos <= s_len - p_len) {
+        var matched: Bool = true
+        var k: I64 = 0
+        loop (k < p_len) {
+            let sp: *U8 = (s_base + pos + k) as *U8
+            let pp: *U8 = (p_base + k) as *U8
+            let sb: U8 = lowlevel { ptr_read[U8](sp) }
+            let pb: U8 = lowlevel { ptr_read[U8](pp) }
+            if (sb as I32) != (pb as I32) {
+                matched = false
+                break
+            }
+            k = k + 1
+        }
+        if matched {
+            count = count + 1
+            pos = pos + p_len
+        } else {
+            pos = pos + 1
+        }
+    }
+    if count == 0 {
+        return s
+    }
+    // Allocate result
+    let new_len: I64 = s_len + count * (r_len - p_len)
+    let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
+    let dst: I64 = buf as I64
+    let r_base: I64 = replacement as I64
+    var si: I64 = 0
+    var di: I64 = 0
+    loop (si <= s_len - p_len) {
+        var matched: Bool = true
+        var k: I64 = 0
+        loop (k < p_len) {
+            let sp: *U8 = (s_base + si + k) as *U8
+            let pp: *U8 = (p_base + k) as *U8
+            let sb: U8 = lowlevel { ptr_read[U8](sp) }
+            let pb: U8 = lowlevel { ptr_read[U8](pp) }
+            if (sb as I32) != (pb as I32) {
+                matched = false
+                break
+            }
+            k = k + 1
+        }
+        if matched {
+            // Copy replacement
+            var ri: I64 = 0
+            loop (ri < r_len) {
+                let rp: *U8 = (r_base + ri) as *U8
+                let dp: *U8 = (dst + di) as *U8
+                let b: U8 = lowlevel { ptr_read[U8](rp) }
+                lowlevel { ptr_write[U8](dp, b) }
+                ri = ri + 1
+                di = di + 1
+            }
+            si = si + p_len
+        } else {
+            let sp: *U8 = (s_base + si) as *U8
+            let dp: *U8 = (dst + di) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](sp) }
+            lowlevel { ptr_write[U8](dp, b) }
+            si = si + 1
+            di = di + 1
+        }
+    }
+    // Copy remaining bytes after the last possible match position
+    loop (si < s_len) {
+        let sp: *U8 = (s_base + si) as *U8
+        let dp: *U8 = (dst + di) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](sp) }
+        lowlevel { ptr_write[U8](dp, b) }
+        si = si + 1
+        di = di + 1
+    }
+    let null_p: *U8 = (dst + di) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
 }
 
 /// Replaces only the first occurrence of a substring.
@@ -434,7 +899,51 @@ pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
 /// assert(replace_first("hello hello", "hello", "hi") == "hi hello")
 /// ```
 pub func replace_first(s: Str, pattern: Str, replacement: Str) -> Str {
-    return lowlevel { str_replace_first(s, pattern, replacement) }
+    let result: Maybe[I64] = find(s, pattern)
+    if result.is_just() {
+        let pos: I64 = result.unwrap()
+        let s_len: I64 = len(s)
+        let p_len: I64 = len(pattern)
+        let r_len: I64 = len(replacement)
+        let new_len: I64 = s_len - p_len + r_len
+        let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
+        let src: I64 = s as I64
+        let dst: I64 = buf as I64
+        let r_base: I64 = replacement as I64
+        // Copy before match
+        var i: I64 = 0
+        loop (i < pos) {
+            let sp: *U8 = (src + i) as *U8
+            let dp: *U8 = (dst + i) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](sp) }
+            lowlevel { ptr_write[U8](dp, b) }
+            i = i + 1
+        }
+        // Copy replacement
+        var ri: I64 = 0
+        loop (ri < r_len) {
+            let rp: *U8 = (r_base + ri) as *U8
+            let dp: *U8 = (dst + pos + ri) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](rp) }
+            lowlevel { ptr_write[U8](dp, b) }
+            ri = ri + 1
+        }
+        // Copy after match
+        var si: I64 = pos + p_len
+        var di: I64 = pos + r_len
+        loop (si < s_len) {
+            let sp: *U8 = (src + si) as *U8
+            let dp: *U8 = (dst + di) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](sp) }
+            lowlevel { ptr_write[U8](dp, b) }
+            si = si + 1
+            di = di + 1
+        }
+        let null_p: *U8 = (dst + new_len) as *U8
+        lowlevel { ptr_write[U8](null_p, 0 as U8) }
+        return buf as Str
+    }
+    return s
 }
 
 // ============================================================================
@@ -456,8 +965,32 @@ pub func replace_first(s: Str, pattern: Str, replacement: Str) -> Str {
 /// assert(repeat("hello", 0) == "")
 /// ```
 pub func repeat(s: Str, n: I64) -> Str {
-    let n32: I32 = n as I32
-    return lowlevel { str_repeat(s, n32) }
+    if n <= 0 {
+        return ""
+    }
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let total: I64 = s_len * n
+    let buf: *Unit = lowlevel { mem_alloc(total + 1) }
+    let src: I64 = s as I64
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < n) {
+        var j: I64 = 0
+        loop (j < s_len) {
+            let sp: *U8 = (src + j) as *U8
+            let dp: *U8 = (dst + i * s_len + j) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](sp) }
+            lowlevel { ptr_write[U8](dp, b) }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    let null_p: *U8 = (dst + total) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
 }
 
 /// Pads the string on the left to reach the given width.
@@ -536,9 +1069,43 @@ pub func pad_right(s: Str, width: I64, pad_char: Str) -> Str {
 /// Currently always returns `Just(result)`. Proper error detection is
 /// pending implementation.
 pub func parse_i32(s: Str) -> Maybe[I32] {
-    let result: I32 = lowlevel { str_parse_i32(s) }
-    // Check for parse error (returns 0 on error, need sentinel)
-    return Just(result)
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return Nothing
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    var negative: Bool = false
+    // Check sign
+    let first_p: *U8 = src as *U8
+    let first_b: U8 = lowlevel { ptr_read[U8](first_p) }
+    let first_ch: I32 = first_b as I32
+    if first_ch == 45 {
+        // '-'
+        negative = true
+        i = 1
+    } else if first_ch == 43 {
+        // '+'
+        i = 1
+    }
+    if i >= s_len {
+        return Nothing
+    }
+    var result: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        let ch: I32 = b as I32
+        if ch < 48 or ch > 57 {
+            return Nothing
+        }
+        result = result * 10 + (ch - 48) as I64
+        i = i + 1
+    }
+    if negative {
+        result = 0 - result
+    }
+    return Just(result as I32)
 }
 
 /// Parses a string as a 64-bit signed integer.
@@ -558,7 +1125,39 @@ pub func parse_i32(s: Str) -> Maybe[I32] {
 /// Currently always returns `Just(result)`. Proper error detection is
 /// pending implementation.
 pub func parse_i64(s: Str) -> Maybe[I64] {
-    let result: I64 = lowlevel { str_parse_i64(s) }
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return Nothing
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    var negative: Bool = false
+    let first_p: *U8 = src as *U8
+    let first_b: U8 = lowlevel { ptr_read[U8](first_p) }
+    let first_ch: I32 = first_b as I32
+    if first_ch == 45 {
+        negative = true
+        i = 1
+    } else if first_ch == 43 {
+        i = 1
+    }
+    if i >= s_len {
+        return Nothing
+    }
+    var result: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        let ch: I32 = b as I32
+        if ch < 48 or ch > 57 {
+            return Nothing
+        }
+        result = result * 10 + (ch - 48) as I64
+        i = i + 1
+    }
+    if negative {
+        result = 0 - result
+    }
     return Just(result)
 }
 
@@ -579,7 +1178,116 @@ pub func parse_i64(s: Str) -> Maybe[I64] {
 /// Currently always returns `Just(result)`. Proper error detection is
 /// pending implementation.
 pub func parse_f64(s: Str) -> Maybe[F64] {
-    let result: F64 = lowlevel { str_parse_f64(s) }
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return Nothing
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    var negative: Bool = false
+    let first_p: *U8 = src as *U8
+    let first_b: U8 = lowlevel { ptr_read[U8](first_p) }
+    let first_ch: I32 = first_b as I32
+    if first_ch == 45 {
+        negative = true
+        i = 1
+    } else if first_ch == 43 {
+        i = 1
+    }
+    if i >= s_len {
+        return Nothing
+    }
+    // Integer part
+    var int_part: F64 = 0.0
+    var has_digits: Bool = false
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        let ch: I32 = b as I32
+        if ch >= 48 and ch <= 57 {
+            int_part = int_part * 10.0 + (ch - 48) as F64
+            has_digits = true
+            i = i + 1
+        } else {
+            break
+        }
+    }
+    var frac_part: F64 = 0.0
+    // Decimal part
+    if i < s_len {
+        let dp: *U8 = (src + i) as *U8
+        let db: U8 = lowlevel { ptr_read[U8](dp) }
+        if (db as I32) == 46 {
+            // '.'
+            i = i + 1
+            var divisor: F64 = 10.0
+            loop (i < s_len) {
+                let p: *U8 = (src + i) as *U8
+                let b: U8 = lowlevel { ptr_read[U8](p) }
+                let ch: I32 = b as I32
+                if ch >= 48 and ch <= 57 {
+                    frac_part = frac_part + (ch - 48) as F64 / divisor
+                    divisor = divisor * 10.0
+                    has_digits = true
+                    i = i + 1
+                } else {
+                    break
+                }
+            }
+        }
+    }
+    if not has_digits {
+        return Nothing
+    }
+    var result: F64 = int_part + frac_part
+    // Exponent part (e/E)
+    if i < s_len {
+        let ep: *U8 = (src + i) as *U8
+        let eb: U8 = lowlevel { ptr_read[U8](ep) }
+        let ech: I32 = eb as I32
+        if ech == 101 or ech == 69 {
+            // 'e' or 'E'
+            i = i + 1
+            var exp_negative: Bool = false
+            if i < s_len {
+                let esp: *U8 = (src + i) as *U8
+                let esb: U8 = lowlevel { ptr_read[U8](esp) }
+                let esch: I32 = esb as I32
+                if esch == 45 {
+                    exp_negative = true
+                    i = i + 1
+                } else if esch == 43 {
+                    i = i + 1
+                }
+            }
+            var exp_val: I64 = 0
+            loop (i < s_len) {
+                let p: *U8 = (src + i) as *U8
+                let b: U8 = lowlevel { ptr_read[U8](p) }
+                let ch: I32 = b as I32
+                if ch >= 48 and ch <= 57 {
+                    exp_val = exp_val * 10 + (ch - 48) as I64
+                    i = i + 1
+                } else {
+                    break
+                }
+            }
+            var multiplier: F64 = 1.0
+            var ei: I64 = 0
+            loop (ei < exp_val) {
+                multiplier = multiplier * 10.0
+                ei = ei + 1
+            }
+            if exp_negative {
+                result = result / multiplier
+            } else {
+                result = result * multiplier
+            }
+        }
+    }
+    if negative {
+        result = 0.0 - result
+    }
     return Just(result)
 }
 
@@ -636,7 +1344,60 @@ pub func parse_bool(s: Str) -> Maybe[Bool] {
 /// assert(join(empty, ",") == "")
 /// ```
 pub func join(parts: List[Str], separator: Str) -> Str {
-    return lowlevel { str_join(parts, separator) }
+    let count: I64 = parts.len()
+    if count == 0 {
+        return ""
+    }
+    let sep_len: I64 = len(separator)
+    // Calculate total length
+    var total: I64 = 0
+    var idx: I64 = 0
+    loop (idx < count) {
+        total = total + len(parts.get(idx))
+        if idx < count - 1 {
+            total = total + sep_len
+        }
+        idx = idx + 1
+    }
+    if total == 0 {
+        return ""
+    }
+    let buf: *Unit = lowlevel { mem_alloc(total + 1) }
+    let dst: I64 = buf as I64
+    let sep_base: I64 = separator as I64
+    var di: I64 = 0
+    idx = 0
+    loop (idx < count) {
+        let part: Str = parts.get(idx)
+        let p_len: I64 = len(part)
+        let p_base: I64 = part as I64
+        // Copy part bytes
+        var pi: I64 = 0
+        loop (pi < p_len) {
+            let sp: *U8 = (p_base + pi) as *U8
+            let dp: *U8 = (dst + di) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](sp) }
+            lowlevel { ptr_write[U8](dp, b) }
+            pi = pi + 1
+            di = di + 1
+        }
+        // Copy separator between parts
+        if idx < count - 1 {
+            var si: I64 = 0
+            loop (si < sep_len) {
+                let sp: *U8 = (sep_base + si) as *U8
+                let dp: *U8 = (dst + di) as *U8
+                let b: U8 = lowlevel { ptr_read[U8](sp) }
+                lowlevel { ptr_write[U8](dp, b) }
+                si = si + 1
+                di = di + 1
+            }
+        }
+        idx = idx + 1
+    }
+    let null_p: *U8 = (dst + di) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
 }
 
 // ============================================================================
@@ -675,147 +1436,156 @@ pub func concat_all(parts: List[Str]) -> Str {
 }
 
 // ============================================================================
+// Character Iteration
+// ============================================================================
+
+/// Returns a list of character (byte) values from the string.
+///
+/// # Examples
+///
+/// ```tml
+/// let cs = chars("abc")
+/// assert(cs.len() == 3)
+/// assert(cs.get(0) == 97)  // 'a'
+/// ```
+pub func chars(s: Str) -> List[I32] {
+    let result: List[I32] = List[I32]::new(8)
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return result
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        result.push(b as I32)
+        i = i + 1
+    }
+    return result
+}
+
+// ============================================================================
 // Str Methods
 // ============================================================================
 
 impl Str {
     /// Returns the length of this string in bytes.
-    ///
-    /// Note: This returns the byte length, not the character count. For UTF-8
-    /// strings with multi-byte characters, this may differ from the visible
-    /// character count.
-    ///
-    /// # Examples
-    ///
-    /// ```tml
-    /// let s = "hello"
-    /// assert(s.len() == 5)
-    /// ```
     pub func len(this) -> I64 {
-        return lowlevel { str_len(this) }
+        return str::len(this)
     }
 
     /// Returns `true` if this string is empty.
-    ///
-    /// # Examples
-    ///
-    /// ```tml
-    /// assert("".is_empty())
-    /// assert(not "hello".is_empty())
-    /// ```
     pub func is_empty(this) -> Bool {
-        return this.len() == 0
+        return str::is_empty(this)
     }
 
     /// Returns the underlying bytes of this string as a byte slice.
-    ///
-    /// # Examples
-    ///
-    /// ```tml
-    /// let s = "abc"
-    /// let bytes: ref [U8] = s.as_bytes()
-    /// assert(bytes[0] == 97)  // 'a'
-    /// ```
     pub func as_bytes(this) -> ref [U8] {
         return lowlevel { str_as_bytes(this) }
     }
 
     /// Returns the character at the given byte index.
     pub func char_at(this, index: I64) -> I32 {
-        let idx32: I32 = index as I32
-        return lowlevel { str_char_at(this, idx32) }
+        return str::char_at(this, index)
     }
 
     /// Returns a substring from `start` to `end` (exclusive).
     pub func slice_str(this, start: I64, end: I64) -> Str {
-        let start32: I32 = start as I32
-        let end32: I32 = end as I32
-        return lowlevel { str_substring(this, start32, end32) }
+        return str::substring(this, start, end)
     }
 
     /// Alias for slice_str
     pub func slice(this, start: I64, end: I64) -> Str {
-        let start32: I32 = start as I32
-        let end32: I32 = end as I32
-        return lowlevel { str_substring(this, start32, end32) }
+        return str::substring(this, start, end)
     }
 
     /// Converts all characters to uppercase.
     pub func to_uppercase(this) -> Str {
-        return lowlevel { str_to_uppercase(this) }
+        return str::to_uppercase(this)
     }
 
     /// Converts all characters to lowercase.
     pub func to_lowercase(this) -> Str {
-        return lowlevel { str_to_lowercase(this) }
+        return str::to_lowercase(this)
     }
 
     /// Returns `true` if this string starts with the given prefix.
     pub func starts_with(this, prefix: Str) -> Bool {
-        return lowlevel { str_starts_with(this, prefix) }
+        return str::starts_with(this, prefix)
     }
 
     /// Returns `true` if this string ends with the given suffix.
     pub func ends_with(this, suffix: Str) -> Bool {
-        return lowlevel { str_ends_with(this, suffix) }
+        return str::ends_with(this, suffix)
     }
 
     /// Returns `true` if this string contains the given substring.
     pub func contains(this, pattern: Str) -> Bool {
-        return lowlevel { str_contains(this, pattern) }
+        return str::contains(this, pattern)
     }
 
     /// Returns the byte index of the first occurrence of the pattern.
     /// Returns -1 if not found.
     pub func find(this, pattern: Str) -> I64 {
-        return lowlevel { str_find(this, pattern) }
+        let result: Maybe[I64] = str::find(this, pattern)
+        if result.is_just() {
+            return result.unwrap()
+        }
+        return -1
     }
 
     /// Returns the byte index of the last occurrence of the pattern.
     /// Returns -1 if not found.
     pub func rfind(this, pattern: Str) -> I64 {
-        return lowlevel { str_rfind(this, pattern) }
+        let result: Maybe[I64] = str::rfind(this, pattern)
+        if result.is_just() {
+            return result.unwrap()
+        }
+        return -1
     }
 
     /// Splits this string by the given delimiter.
     pub func split(this, delimiter: Str) -> List[Str] {
-        return lowlevel { str_split(this, delimiter) }
+        return str::split(this, delimiter)
     }
 
-    /// Returns an iterator over the characters of this string.
+    /// Returns a list of character (byte) values.
     pub func chars(this) -> List[I32] {
-        return lowlevel { str_chars(this) }
+        return str::chars(this)
     }
 
     /// Removes leading and trailing whitespace.
     pub func trim(this) -> Str {
-        return lowlevel { str_trim(this) }
+        return str::trim(this)
     }
 
     /// Removes leading whitespace.
     pub func trim_start(this) -> Str {
-        return lowlevel { str_trim_start(this) }
+        return str::trim_start(this)
     }
 
     /// Removes trailing whitespace.
     pub func trim_end(this) -> Str {
-        return lowlevel { str_trim_end(this) }
+        return str::trim_end(this)
     }
 
     /// Parses this string as an I64.
     pub func parse_i64(this) -> Maybe[I64] {
-        let result: I64 = lowlevel { str_parse_i64(this) }
-        return Just(result)
+        return str::parse_i64(this)
     }
 
     /// Parses this string as a U16.
     pub func parse_u16(this) -> Maybe[U16] {
-        let result: I64 = lowlevel { str_parse_i64(this) }
-        return Just(result as U16)
+        let result: Maybe[I64] = str::parse_i64(this)
+        if result.is_just() {
+            return Just(result.unwrap() as U16)
+        }
+        return Nothing
     }
 
     /// Replaces all occurrences of a substring.
     pub func replace(this, pattern: Str, replacement: Str) -> Str {
-        return lowlevel { str_replace(this, pattern, replacement) }
+        return str::replace(this, pattern, replacement)
     }
 }
