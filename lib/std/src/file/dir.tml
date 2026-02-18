@@ -13,6 +13,16 @@
 //! Dir::remove("output")
 //! ```
 
+// FFI declarations for C runtime directory operations
+@extern("path_create_dir")
+func ffi_path_create_dir(path: Str) -> Bool
+
+@extern("path_create_dir_all")
+func ffi_path_create_dir_all(path: Str) -> Bool
+
+@extern("path_remove_dir")
+func ffi_path_remove_dir(path: Str) -> Bool
+
 /// Directory manipulation utilities.
 ///
 /// `Dir` provides static methods for creating and removing directories.
@@ -31,19 +41,16 @@ pub type Dir {
 impl Dir {
     /// Create a directory
     pub func create(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_create_dir(path) }
-        return r
+        return ffi_path_create_dir(path)
     }
 
     /// Create a directory and all parent directories
     pub func create_all(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_create_dir_all(path) }
-        return r
+        return ffi_path_create_dir_all(path)
     }
 
     /// Remove an empty directory
     pub func remove(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_remove_dir(path) }
-        return r
+        return ffi_path_remove_dir(path)
     }
 }

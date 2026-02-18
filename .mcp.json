@@ -3,6 +3,14 @@
     "tml": {
       "command": "./build/debug/tml_mcp.exe",
       "args": []
+    },
+    "rulebook": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@hivehub/rulebook@latest",
+        "mcp-server"
+      ]
     }
   }
 }

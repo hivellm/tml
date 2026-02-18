@@ -14,6 +14,49 @@
 //! }
 //! ```
 
+// FFI declarations for C runtime path operations
+@extern("path_exists")
+func ffi_path_exists(path: Str) -> Bool
+
+@extern("path_is_file")
+func ffi_path_is_file(path: Str) -> Bool
+
+@extern("path_is_dir")
+func ffi_path_is_dir(path: Str) -> Bool
+
+@extern("path_create_dir")
+func ffi_path_create_dir(path: Str) -> Bool
+
+@extern("path_create_dir_all")
+func ffi_path_create_dir_all(path: Str) -> Bool
+
+@extern("path_remove")
+func ffi_path_remove(path: Str) -> Bool
+
+@extern("path_remove_dir")
+func ffi_path_remove_dir(path: Str) -> Bool
+
+@extern("path_rename")
+func ffi_path_rename(src_path: Str, dst_path: Str) -> Bool
+
+@extern("path_copy")
+func ffi_path_copy(src_path: Str, dst_path: Str) -> Bool
+
+@extern("path_join")
+func ffi_path_join(base_path: Str, child_path: Str) -> Str
+
+@extern("path_parent")
+func ffi_path_parent(path: Str) -> Str
+
+@extern("path_filename")
+func ffi_path_filename(path: Str) -> Str
+
+@extern("path_extension")
+func ffi_path_extension(path: Str) -> Str
+
+@extern("path_absolute")
+func ffi_path_absolute(path: Str) -> Str
+
 /// Path manipulation utilities.
 ///
 /// `Path` provides static methods for working with file system paths:
@@ -32,85 +75,71 @@ pub type Path {
 impl Path {
     /// Check if a path exists
     pub func exists(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_exists(path) }
-        return r
+        return ffi_path_exists(path)
     }
 
     /// Check if path is a file
     pub func is_file(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_is_file(path) }
-        return r
+        return ffi_path_is_file(path)
     }
 
     /// Check if path is a directory
     pub func is_dir(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_is_dir(path) }
-        return r
+        return ffi_path_is_dir(path)
     }
 
     /// Remove a file
     pub func remove(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_remove(path) }
-        return r
+        return ffi_path_remove(path)
     }
 
     /// Rename/move a file or directory
     pub func rename(src_path: Str, dst_path: Str) -> Bool {
-        let r: Bool = lowlevel { path_rename(src_path, dst_path) }
-        return r
+        return ffi_path_rename(src_path, dst_path)
     }
 
     /// Copy a file
     pub func copy(src_path: Str, dst_path: Str) -> Bool {
-        let r: Bool = lowlevel { path_copy(src_path, dst_path) }
-        return r
+        return ffi_path_copy(src_path, dst_path)
     }
 
     /// Join two path components
     pub func join(base_path: Str, child_path: Str) -> Str {
-        let r: Str = lowlevel { path_join(base_path, child_path) }
-        return r
+        return ffi_path_join(base_path, child_path)
     }
 
     /// Get the parent directory of a path
     pub func parent(path: Str) -> Str {
-        let r: Str = lowlevel { path_parent(path) }
-        return r
+        return ffi_path_parent(path)
     }
 
     /// Get the filename from a path
     pub func filename(path: Str) -> Str {
-        let r: Str = lowlevel { path_filename(path) }
-        return r
+        return ffi_path_filename(path)
     }
 
     /// Get the file extension (including dot)
     pub func extension(path: Str) -> Str {
-        let r: Str = lowlevel { path_extension(path) }
-        return r
+        return ffi_path_extension(path)
     }
 
     /// Get the absolute path
     pub func absolute(path: Str) -> Str {
-        let r: Str = lowlevel { path_absolute(path) }
-        return r
+        return ffi_path_absolute(path)
     }
 
     /// Create a directory
     pub func create_dir(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_create_dir(path) }
-        return r
+        return ffi_path_create_dir(path)
     }
 
     /// Create a directory and all parent directories
     pub func create_dir_all(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_create_dir_all(path) }
-        return r
+        return ffi_path_create_dir_all(path)
     }
 
     /// Remove a directory
     pub func remove_dir(path: Str) -> Bool {
-        let r: Bool = lowlevel { path_remove_dir(path) }
-        return r
+        return ffi_path_remove_dir(path)
     }
 }

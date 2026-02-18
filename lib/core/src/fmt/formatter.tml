@@ -396,7 +396,7 @@ func string_len(s: Str) -> I64 {
     return lowlevel { str_len(s) }
 }
 
-/// Converts a character to a string.
+/// Converts a character (byte value) to a single-character string.
 func char_to_str(c: Char) -> Str {
     return lowlevel { char_to_string(c) }
 }

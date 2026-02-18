@@ -759,9 +759,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
             }
             if (!type_name.empty()) {
                 // Skip builtin types that have hard-coded implementations in method.cpp
-                if (type_name == "File" || type_name == "Path") {
-                    continue;
-                }
+                // File/Path now use normal dispatch via @extern FFI
                 // Skip generic impl blocks - they will be instantiated when methods are called
                 // (e.g., impl[T] Container[T] { ... } or impl Wrapper[T] { ... } is not generated
                 // directly) Check both impl-level generics AND self_type generics

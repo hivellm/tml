@@ -366,12 +366,67 @@ Since this is a specification project:
 
 ## Rulebook Integration
 
-This project uses @hivellm/rulebook for task management. Key rules:
+This project uses @hivellm/rulebook for task management and persistent memory. Key rules:
 
 1. **ALWAYS read AGENTS.md first** for project standards
 2. **Use Rulebook tasks** for new features: `rulebook task create <id>`
 3. **Validate before commit**: `rulebook task validate <id>`
 4. **Update /docs/** when modifying specifications
+
+### Persistent Memory (MANDATORY)
+
+This project uses a **persistent memory system** via the Rulebook MCP server (`mcp__rulebook__rulebook_memory_*`).
+Memory persists across sessions — use it to maintain context between conversations.
+
+**You MUST actively use memory to preserve context.**
+
+**When to Save** — Use `mcp__rulebook__rulebook_memory_save` whenever you:
+- Make an architectural decision (why one approach over another)
+- Fix a bug (root cause and solution)
+- Discover something important (codebase patterns, gotchas, constraints)
+- Implement a feature (what was built, key design choices)
+- Encounter an error (root cause and solution for future reference)
+- Complete a task or session (summarize what was accomplished)
+
+```
+type: decision | bugfix | feature | discovery | change | refactor | observation
+title: Short descriptive title
+content: Detailed context (what, why, how)
+tags: [relevant, tags]
+```
+
+**When to Search** — Use `mcp__rulebook__rulebook_memory_search` to find past context:
+- **At the START of every new session** — search for context relevant to the current task
+- When working on code you've touched before
+- When the user references a past discussion or decision
+- When you need context about why something was done a certain way
+
+**Session Summary** — Before ending a session or when context is getting long, save a summary:
+```
+type: observation
+title: "Session summary: <date or topic>"
+content: "Accomplished: ... | Pending: ... | Key decisions: ..."
+```
+
+### Rulebook MCP Tools
+
+The Rulebook MCP server provides tools beyond memory:
+
+| Tool | Purpose |
+|------|---------|
+| `mcp__rulebook__rulebook_memory_save` | Save a new persistent memory |
+| `mcp__rulebook__rulebook_memory_search` | Search memories (hybrid BM25+vector) |
+| `mcp__rulebook__rulebook_memory_get` | Get full details for specific memory IDs |
+| `mcp__rulebook__rulebook_memory_stats` | Get memory database statistics |
+| `mcp__rulebook__rulebook_memory_timeline` | Get chronological context around a memory |
+| `mcp__rulebook__rulebook_task_create` | Create a new Rulebook task |
+| `mcp__rulebook__rulebook_task_list` | List all tasks |
+| `mcp__rulebook__rulebook_task_show` | Show task details |
+| `mcp__rulebook__rulebook_task_update` | Update task status |
+| `mcp__rulebook__rulebook_task_validate` | Validate task format |
+| `mcp__rulebook__rulebook_task_archive` | Archive a completed task |
+| `mcp__rulebook__rulebook_skill_list` | List available skills |
+| `mcp__rulebook__rulebook_skill_search` | Search for skills |
 
 ### tasks.md Format
 

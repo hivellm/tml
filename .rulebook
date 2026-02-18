@@ -1,24 +1,24 @@
 {
-  "version": "1.0.0",
-  "installedAt": "2025-12-21T02:59:51.628Z",
-  "updatedAt": "2026-01-08T17:12:40.428Z",
-  "projectId": "d37d20ac-62f0-460d-a06f-cb9557d6d660",
+  "version": "3.0.0",
+  "installedAt": "2026-01-08T17:12:42.344Z",
+  "updatedAt": "2026-02-18T23:06:29.970Z",
+  "projectId": "tml",
   "mode": "full",
   "features": {
-    "watcher": true,
-    "agent": true,
+    "watcher": false,
+    "agent": false,
     "logging": true,
-    "telemetry": true,
+    "telemetry": false,
     "notifications": false,
     "dryRun": false,
-    "gitHooks": false,
+    "gitHooks": true,
     "repl": false,
-    "templates": false,
-    "context": false,
-    "health": false,
+    "templates": true,
+    "context": true,
+    "health": true,
     "plugins": false,
-    "parallel": false,
-    "smartContinue": false
+    "parallel": true,
+    "smartContinue": true
   },
   "coverageThreshold": 95,
   "language": "en",
@@ -30,14 +30,13 @@
     "cliResponse": 60000,
     "testRun": 120000
   },
-  "languages": [
-    "cpp"
-  ],
-  "frameworks": [],
-  "modules": [],
-  "services": [],
-  "modular": true,
-  "rulebookDir": "rulebook",
+  "memory": {
+    "enabled": true,
+    "autoCapture": true,
+    "dbPath": ".rulebook-memory/memory.db",
+    "maxSizeBytes": 524288000,
+    "vectorDimensions": 256
+  },
   "skills": {
     "enabled": [
       "languages/cpp",
@@ -48,10 +47,5 @@
       "core/quality-enforcement",
       "core/rulebook"
     ]
-  },
-  "mcp": {
-    "enabled": true,
-    "tasksDir": "rulebook/tasks",
-    "archiveDir": "rulebook/archive"
   }
 }

@@ -93,11 +93,11 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     }
 
     const auto& named = receiver_type->as<types::NamedType>();
-    bool is_builtin_type = (named.name == "File" || named.name == "Path");
+    // File/Path now use normal dispatch via @extern FFI
     bool is_slice_inlined = (named.name == "Slice" || named.name == "MutSlice") &&
                             (method == "len" || method == "is_empty");
 
-    if (is_builtin_type || is_slice_inlined) {
+    if (is_slice_inlined) {
         return std::nullopt;
     }
 

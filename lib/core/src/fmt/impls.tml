@@ -32,6 +32,8 @@
 // Display, Debug, Ordering are builtins - no import needed
 use core::fmt::num::{Binary, Octal, LowerHex, UpperHex, LowerExp, UpperExp}
 use core::fmt::helpers::{
+    i8_to_str, i16_to_str, i32_to_str, i64_to_str,
+    u8_to_str, u16_to_str, u32_to_str, u64_to_str,
     u8_to_binary_str, u16_to_binary_str, u32_to_binary_str, u64_to_binary_str,
     i8_to_binary_str, i16_to_binary_str, i32_to_binary_str, i64_to_binary_str,
     u64_to_octal_str, u64_to_hex_str
@@ -44,56 +46,56 @@ use core::fmt::helpers::{
 /// Converts an `I8` to its decimal string representation.
 impl Display for I8 {
     pub func to_string(this) -> Str {
-        return lowlevel { i8_to_string(this) }
+        return i8_to_str(this)
     }
 }
 
 /// Converts an `I16` to its decimal string representation.
 impl Display for I16 {
     pub func to_string(this) -> Str {
-        return lowlevel { i16_to_string(this) }
+        return i16_to_str(this)
     }
 }
 
 /// Converts an `I32` to its decimal string representation.
 impl Display for I32 {
     pub func to_string(this) -> Str {
-        return lowlevel { i32_to_string(this) }
+        return i32_to_str(this)
     }
 }
 
 /// Converts an `I64` to its decimal string representation.
 impl Display for I64 {
     pub func to_string(this) -> Str {
-        return lowlevel { i64_to_string(this) }
+        return i64_to_str(this)
     }
 }
 
 /// Converts a `U8` to its decimal string representation.
 impl Display for U8 {
     pub func to_string(this) -> Str {
-        return lowlevel { u8_to_string(this) }
+        return u8_to_str(this)
     }
 }
 
 /// Converts a `U16` to its decimal string representation.
 impl Display for U16 {
     pub func to_string(this) -> Str {
-        return lowlevel { u16_to_string(this) }
+        return u16_to_str(this)
     }
 }
 
 /// Converts a `U32` to its decimal string representation.
 impl Display for U32 {
     pub func to_string(this) -> Str {
-        return lowlevel { u32_to_string(this) }
+        return u32_to_str(this)
     }
 }
 
 /// Converts a `U64` to its decimal string representation.
 impl Display for U64 {
     pub func to_string(this) -> Str {
-        return lowlevel { u64_to_string(this) }
+        return u64_to_str(this)
     }
 }
 
@@ -149,56 +151,56 @@ impl Display for Unit {
 /// Debug output for `I8` (same as Display for numbers).
 impl Debug for I8 {
     pub func debug_string(this) -> Str {
-        return lowlevel { i8_to_string(this) }
+        return i8_to_str(this)
     }
 }
 
 /// Debug output for `I16`.
 impl Debug for I16 {
     pub func debug_string(this) -> Str {
-        return lowlevel { i16_to_string(this) }
+        return i16_to_str(this)
     }
 }
 
 /// Debug output for `I32`.
 impl Debug for I32 {
     pub func debug_string(this) -> Str {
-        return lowlevel { i32_to_string(this) }
+        return i32_to_str(this)
     }
 }
 
 /// Debug output for `I64`.
 impl Debug for I64 {
     pub func debug_string(this) -> Str {
-        return lowlevel { i64_to_string(this) }
+        return i64_to_str(this)
     }
 }
 
 /// Debug output for `U8`.
 impl Debug for U8 {
     pub func debug_string(this) -> Str {
-        return lowlevel { u8_to_string(this) }
+        return u8_to_str(this)
     }
 }
 
 /// Debug output for `U16`.
 impl Debug for U16 {
     pub func debug_string(this) -> Str {
-        return lowlevel { u16_to_string(this) }
+        return u16_to_str(this)
     }
 }
 
 /// Debug output for `U32`.
 impl Debug for U32 {
     pub func debug_string(this) -> Str {
-        return lowlevel { u32_to_string(this) }
+        return u32_to_str(this)
     }
 }
 
 /// Debug output for `U64`.
 impl Debug for U64 {
     pub func debug_string(this) -> Str {
-        return lowlevel { u64_to_string(this) }
+        return u64_to_str(this)
     }
 }
 

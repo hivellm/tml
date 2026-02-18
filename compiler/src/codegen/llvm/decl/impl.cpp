@@ -152,7 +152,7 @@ static std::string get_param_name(const parser::FuncParam& param, size_t param_i
 void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::FuncDecl& method) {
     // Skip builtin types that have hard-coded implementations in method.cpp
     // These use lowlevel blocks in TML source but are handled directly by codegen
-    if (type_name == "File" || type_name == "Path" || type_name == "Ordering") {
+    if (type_name == "Ordering") {
         return;
     }
 

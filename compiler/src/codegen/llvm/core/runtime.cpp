@@ -15,8 +15,6 @@
 //! | Type            | Layout              | Purpose             |
 //! |-----------------|---------------------|---------------------|
 //! | `%struct.tml_str` | `{ ptr, i64 }`    | String slice        |
-//! | `%struct.File`  | `{ ptr }`           | File handle         |
-//! | `%struct.Path`  | `{ ptr }`           | Path string         |
 //! | `%struct.Ordering` | `{ i32 }`        | Comparison result   |
 //!
 //! ## External Functions
@@ -44,14 +42,6 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("; Runtime type declarations");
     emit_line("%struct.tml_str = type { ptr, i64 }");
 
-    // File I/O types (from std::file)
-    emit_line("%struct.File = type { ptr }"); // handle field
-    struct_types_["File"] = "%struct.File";
-    struct_fields_["File"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
-    emit_line("%struct.Path = type { ptr }"); // path string field
-    struct_types_["Path"] = "%struct.Path";
-    struct_fields_["Path"] = {{"path", 0, "ptr", types::make_ptr(types::make_unit())}};
-
     // Core comparison type (core::cmp)
     // Ordering is a simple enum: Less=0, Equal=1, Greater=2
     emit_line("%struct.Ordering = type { i32 }");
@@ -62,8 +52,6 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("%struct.HashMapIter = type { ptr }");
     struct_types_["HashMapIter"] = "%struct.HashMapIter";
     struct_fields_["HashMapIter"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
-
-    // Note: Buffer type removed — now pure TML (see lib/std/src/collections/buffer.tml)
 
     // Thread types (from std::thread) - needed for @extern function declarations
     emit_line("%struct.RawThread = type { i64 }"); // _handle: U64
@@ -336,57 +324,6 @@ void LLVMIRGen::emit_runtime_decls() {
     declared_externals_.insert("atomic_fence_release");
     emit_line("");
 
-    // Note: List and HashMap runtime declarations removed — now pure TML
-    // (see lib/std/src/collections/list.tml, hashmap.tml)
-
-    // Note: Buffer runtime declarations removed — now pure TML
-
-    // File I/O runtime declarations
-    // Register in declared_externals_ to prevent duplicate declarations from @extern modules
-    emit_line("; File I/O runtime");
-    emit_line("declare ptr @file_open_read(ptr)");
-    declared_externals_.insert("file_open_read");
-    emit_line("declare ptr @file_open_write(ptr)");
-    declared_externals_.insert("file_open_write");
-    emit_line("declare ptr @file_open_append(ptr)");
-    declared_externals_.insert("file_open_append");
-    emit_line("declare void @file_close(ptr)");
-    declared_externals_.insert("file_close");
-    emit_line("declare i1 @file_is_open(ptr)");
-    declared_externals_.insert("file_is_open");
-    emit_line("declare ptr @file_read_line(ptr)");
-    declared_externals_.insert("file_read_line");
-    emit_line("declare i1 @file_write_str(ptr, ptr)");
-    declared_externals_.insert("file_write_str");
-    emit_line("declare i64 @file_size(ptr)");
-    declared_externals_.insert("file_size");
-    emit_line("declare ptr @file_read_all(ptr)");
-    declared_externals_.insert("file_read_all");
-    emit_line("declare i1 @file_write_all(ptr, ptr)");
-    declared_externals_.insert("file_write_all");
-    emit_line("declare i1 @file_append_all(ptr, ptr)");
-    declared_externals_.insert("file_append_all");
-    emit_line("declare i1 @file_flush(ptr)");
-    declared_externals_.insert("file_flush");
-    emit_line("");
-
-    // Register file I/O functions in functions_ map for lowlevel calls from module functions
-    functions_["file_open_read"] = FuncInfo{"@file_open_read", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["file_open_write"] = FuncInfo{"@file_open_write", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["file_open_append"] = FuncInfo{"@file_open_append", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["file_close"] = FuncInfo{"@file_close", "void (ptr)", "void", {"ptr"}};
-    functions_["file_is_open"] = FuncInfo{"@file_is_open", "i1 (ptr)", "i1", {"ptr"}};
-    functions_["file_read_line"] = FuncInfo{"@file_read_line", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["file_write_str"] =
-        FuncInfo{"@file_write_str", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
-    functions_["file_size"] = FuncInfo{"@file_size", "i64 (ptr)", "i64", {"ptr"}};
-    functions_["file_read_all"] = FuncInfo{"@file_read_all", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["file_write_all"] =
-        FuncInfo{"@file_write_all", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
-    functions_["file_append_all"] =
-        FuncInfo{"@file_append_all", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
-    functions_["file_flush"] = FuncInfo{"@file_flush", "i1 (ptr)", "i1", {"ptr"}};
-
     // Log runtime declarations (matches runtime/log.c)
     emit_line("; Log runtime");
     emit_line("declare void @rt_log_msg(i32, ptr, ptr)");
@@ -435,56 +372,6 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["rt_log_open_file"] = FuncInfo{"@rt_log_open_file", "i32 (ptr)", "i32", {"ptr"}};
     functions_["rt_log_close_file"] = FuncInfo{"@rt_log_close_file", "void ()", "void", {}};
     functions_["rt_log_init_from_env"] = FuncInfo{"@rt_log_init_from_env", "i32 ()", "i32", {}};
-
-    // Path utilities runtime declarations
-    // Register in declared_externals_ to prevent duplicate declarations from @extern modules
-    emit_line("; Path utilities runtime");
-    emit_line("declare i1 @path_exists(ptr)");
-    declared_externals_.insert("path_exists");
-    emit_line("declare i1 @path_is_file(ptr)");
-    declared_externals_.insert("path_is_file");
-    emit_line("declare i1 @path_is_dir(ptr)");
-    declared_externals_.insert("path_is_dir");
-    emit_line("declare i1 @path_create_dir(ptr)");
-    declared_externals_.insert("path_create_dir");
-    emit_line("declare i1 @path_create_dir_all(ptr)");
-    declared_externals_.insert("path_create_dir_all");
-    emit_line("declare i1 @path_remove(ptr)");
-    declared_externals_.insert("path_remove");
-    emit_line("declare i1 @path_remove_dir(ptr)");
-    declared_externals_.insert("path_remove_dir");
-    emit_line("declare i1 @path_rename(ptr, ptr)");
-    declared_externals_.insert("path_rename");
-    emit_line("declare i1 @path_copy(ptr, ptr)");
-    declared_externals_.insert("path_copy");
-    emit_line("declare ptr @path_join(ptr, ptr)");
-    declared_externals_.insert("path_join");
-    emit_line("declare ptr @path_parent(ptr)");
-    declared_externals_.insert("path_parent");
-    emit_line("declare ptr @path_filename(ptr)");
-    declared_externals_.insert("path_filename");
-    emit_line("declare ptr @path_extension(ptr)");
-    declared_externals_.insert("path_extension");
-    emit_line("declare ptr @path_absolute(ptr)");
-    declared_externals_.insert("path_absolute");
-
-    // Register path functions in functions_ map for lowlevel calls from module functions
-    // (e.g., Dir::create calls lowlevel { path_create_dir(path) })
-    functions_["path_exists"] = FuncInfo{"@path_exists", "i1 (ptr)", "i1", {"ptr"}};
-    functions_["path_is_file"] = FuncInfo{"@path_is_file", "i1 (ptr)", "i1", {"ptr"}};
-    functions_["path_is_dir"] = FuncInfo{"@path_is_dir", "i1 (ptr)", "i1", {"ptr"}};
-    functions_["path_create_dir"] = FuncInfo{"@path_create_dir", "i1 (ptr)", "i1", {"ptr"}};
-    functions_["path_create_dir_all"] = FuncInfo{"@path_create_dir_all", "i1 (ptr)", "i1", {"ptr"}};
-    functions_["path_remove"] = FuncInfo{"@path_remove", "i1 (ptr)", "i1", {"ptr"}};
-    functions_["path_remove_dir"] = FuncInfo{"@path_remove_dir", "i1 (ptr)", "i1", {"ptr"}};
-    functions_["path_rename"] = FuncInfo{"@path_rename", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
-    functions_["path_copy"] = FuncInfo{"@path_copy", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
-    functions_["path_join"] = FuncInfo{"@path_join", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
-    functions_["path_parent"] = FuncInfo{"@path_parent", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["path_filename"] = FuncInfo{"@path_filename", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["path_extension"] = FuncInfo{"@path_extension", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["path_absolute"] = FuncInfo{"@path_absolute", "ptr (ptr)", "ptr", {"ptr"}};
-    emit_line("");
 
     // Glob runtime declarations
     emit_line("; Glob runtime");
@@ -848,119 +735,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @tls_pool_stats(ptr, ptr, ptr)");
     emit_line("");
 
-    // Network socket functions (matches runtime/net.c)
-    // Track in declared_externals_ to prevent duplicate declarations from lowlevel funcs
-    emit_line("; Network socket functions");
-    emit_line("declare i64 @sys_socket_raw(i32, i32, i32)");
-    declared_externals_.insert("sys_socket_raw");
-    emit_line("declare i32 @sys_bind_v4(i64, i32, i16)");
-    declared_externals_.insert("sys_bind_v4");
-    emit_line("declare i32 @sys_bind_v6(i64, ptr, i16, i32, i32)");
-    declared_externals_.insert("sys_bind_v6");
-    emit_line("declare i32 @sys_listen_raw(i64, i32)");
-    declared_externals_.insert("sys_listen_raw");
-    emit_line("declare i64 @sys_accept_v4(i64, ptr, ptr)");
-    declared_externals_.insert("sys_accept_v4");
-    emit_line("declare i32 @sys_connect_v4(i64, i32, i16)");
-    declared_externals_.insert("sys_connect_v4");
-    emit_line("declare i32 @sys_connect_v6(i64, ptr, i16, i32, i32)");
-    declared_externals_.insert("sys_connect_v6");
-    emit_line("declare i64 @sys_send_raw(i64, ptr, i64, i32)");
-    declared_externals_.insert("sys_send_raw");
-    emit_line("declare i64 @sys_recv_raw(i64, ptr, i64, i32)");
-    declared_externals_.insert("sys_recv_raw");
-    emit_line("declare i64 @sys_sendto_v4(i64, ptr, i64, i32, i32, i16)");
-    declared_externals_.insert("sys_sendto_v4");
-    emit_line("declare i64 @sys_recvfrom_v4(i64, ptr, i64, i32, ptr, ptr)");
-    declared_externals_.insert("sys_recvfrom_v4");
-    emit_line("declare i32 @sys_shutdown_raw(i64, i32)");
-    declared_externals_.insert("sys_shutdown_raw");
-    emit_line("declare i32 @sys_close_raw(i64)");
-    declared_externals_.insert("sys_close_raw");
-    emit_line("declare i32 @sys_set_nonblocking_raw(i64, i32)");
-    declared_externals_.insert("sys_set_nonblocking_raw");
-    emit_line("declare i32 @sys_setsockopt_raw(i64, i32, i32, i32)");
-    declared_externals_.insert("sys_setsockopt_raw");
-    emit_line("declare i32 @sys_getsockname_v4(i64, ptr, ptr)");
-    declared_externals_.insert("sys_getsockname_v4");
-    emit_line("declare i32 @sys_getpeername_v4(i64, ptr, ptr)");
-    declared_externals_.insert("sys_getpeername_v4");
-    emit_line("declare i32 @sys_get_last_error()");
-    declared_externals_.insert("sys_get_last_error");
-    emit_line("declare i32 @sys_wsa_startup()");
-    declared_externals_.insert("sys_wsa_startup");
-    emit_line("declare void @sys_wsa_cleanup()");
-    declared_externals_.insert("sys_wsa_cleanup");
-    emit_line("");
-
-    // TLS/SSL functions (matches runtime/net/tls.c)
-    emit_line("; TLS/SSL functions");
-    emit_line("declare void @tls_init()");
-    declared_externals_.insert("tls_init");
-    emit_line("declare ptr @tls_context_client_new()");
-    declared_externals_.insert("tls_context_client_new");
-    emit_line("declare ptr @tls_context_server_new()");
-    declared_externals_.insert("tls_context_server_new");
-    emit_line("declare void @tls_context_free(ptr)");
-    declared_externals_.insert("tls_context_free");
-    emit_line("declare i32 @tls_context_set_certificate(ptr, ptr)");
-    declared_externals_.insert("tls_context_set_certificate");
-    emit_line("declare i32 @tls_context_set_private_key(ptr, ptr)");
-    declared_externals_.insert("tls_context_set_private_key");
-    emit_line("declare i32 @tls_context_set_ca(ptr, ptr, ptr)");
-    declared_externals_.insert("tls_context_set_ca");
-    emit_line("declare void @tls_context_set_verify_mode(ptr, i32)");
-    declared_externals_.insert("tls_context_set_verify_mode");
-    emit_line("declare i32 @tls_context_set_min_version(ptr, i32)");
-    declared_externals_.insert("tls_context_set_min_version");
-    emit_line("declare i32 @tls_context_set_max_version(ptr, i32)");
-    declared_externals_.insert("tls_context_set_max_version");
-    emit_line("declare i32 @tls_context_set_alpn(ptr, ptr, i32)");
-    declared_externals_.insert("tls_context_set_alpn");
-    emit_line("declare i32 @tls_context_set_ciphers(ptr, ptr)");
-    declared_externals_.insert("tls_context_set_ciphers");
-    emit_line("declare i32 @tls_context_set_ciphersuites(ptr, ptr)");
-    declared_externals_.insert("tls_context_set_ciphersuites");
-    emit_line("declare ptr @tls_stream_new(ptr, i64)");
-    declared_externals_.insert("tls_stream_new");
-    emit_line("declare i32 @tls_stream_set_hostname(ptr, ptr)");
-    declared_externals_.insert("tls_stream_set_hostname");
-    emit_line("declare i32 @tls_stream_connect(ptr)");
-    declared_externals_.insert("tls_stream_connect");
-    emit_line("declare i32 @tls_stream_accept(ptr)");
-    declared_externals_.insert("tls_stream_accept");
-    emit_line("declare i64 @tls_stream_read(ptr, ptr, i64)");
-    declared_externals_.insert("tls_stream_read");
-    emit_line("declare i64 @tls_stream_write(ptr, ptr, i64)");
-    declared_externals_.insert("tls_stream_write");
-    emit_line("declare i32 @tls_stream_shutdown(ptr)");
-    declared_externals_.insert("tls_stream_shutdown");
-    emit_line("declare void @tls_stream_free(ptr)");
-    declared_externals_.insert("tls_stream_free");
-    emit_line("declare ptr @tls_stream_get_version(ptr)");
-    declared_externals_.insert("tls_stream_get_version");
-    emit_line("declare ptr @tls_stream_get_cipher(ptr)");
-    declared_externals_.insert("tls_stream_get_cipher");
-    emit_line("declare ptr @tls_stream_get_alpn(ptr)");
-    declared_externals_.insert("tls_stream_get_alpn");
-    emit_line("declare ptr @tls_stream_get_peer_cn(ptr)");
-    declared_externals_.insert("tls_stream_get_peer_cn");
-    emit_line("declare ptr @tls_stream_get_peer_cert_pem(ptr)");
-    declared_externals_.insert("tls_stream_get_peer_cert_pem");
-    emit_line("declare i32 @tls_stream_get_verify_result(ptr)");
-    declared_externals_.insert("tls_stream_get_verify_result");
-    emit_line("declare i32 @tls_stream_peer_verified(ptr)");
-    declared_externals_.insert("tls_stream_peer_verified");
-    emit_line("declare ptr @tls_get_error()");
-    declared_externals_.insert("tls_get_error");
-    // Lowlevel wrappers (tml_ prefix for buffer-passing functions)
-    emit_line("declare i64 @tml_tls_stream_read(ptr, ptr, i64)");
-    declared_externals_.insert("tml_tls_stream_read");
-    emit_line("declare i64 @tml_tls_stream_write(ptr, ptr, i64)");
-    declared_externals_.insert("tml_tls_stream_write");
-    emit_line("declare i64 @tml_tls_stream_write_str(ptr, ptr, i64)");
-    declared_externals_.insert("tml_tls_stream_write_str");
-    emit_line("");
+    // Network socket and TLS declarations removed — now handled by @extern in
+    // std::net::sys, std::net::tls, and emit_module_lowlevel_decls()
 
     // Format strings for print/println
     // Size calculation: count actual bytes (each escape like \0A = 1 byte, not 3)

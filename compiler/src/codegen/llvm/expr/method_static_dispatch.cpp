@@ -901,12 +901,12 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
             }
         }
 
-        bool is_type_name =
-            struct_types_.count(type_name) > 0 || type_name == "List" || type_name == "File" ||
-            type_name == "Path" || type_name == "I8" || type_name == "I16" || type_name == "I32" ||
-            type_name == "I64" || type_name == "I128" || type_name == "U8" || type_name == "U16" ||
-            type_name == "U32" || type_name == "U64" || type_name == "U128" || type_name == "F32" ||
-            type_name == "F64" || type_name == "Bool" || type_name == "Str";
+        bool is_type_name = struct_types_.count(type_name) > 0 || type_name == "List" ||
+                            type_name == "I8" || type_name == "I16" || type_name == "I32" ||
+                            type_name == "I64" || type_name == "I128" || type_name == "U8" ||
+                            type_name == "U16" || type_name == "U32" || type_name == "U64" ||
+                            type_name == "U128" || type_name == "F32" || type_name == "F64" ||
+                            type_name == "Bool" || type_name == "Str";
 
         // Also check for imported structs from module registry
         if (!is_type_name && env_.module_registry()) {

@@ -4,6 +4,125 @@
 //! These are internal utilities and should not be used directly.
 
 // ============================================================================
+// Integer to string conversion (pure TML)
+// ============================================================================
+
+/// Converts an I64 to its decimal string representation.
+/// Pure TML: extracts digits via % 10 and builds string with concatenation.
+pub func i64_to_str(value: I64) -> Str {
+    if value == 0 {
+        return "0"
+    }
+
+    let is_negative: Bool = value < 0
+    var v: I64 = value
+    let min_i64: I64 = -9223372036854775807 - 1
+
+    // Handle MIN_VALUE specially: can't negate it
+    if is_negative and v == min_i64 {
+        // -9223372036854775808 = "-9223372036854775808"
+        return "-9223372036854775808"
+    }
+
+    if is_negative {
+        v = 0 - v
+    }
+
+    // Extract digits and build string (digits come out reversed)
+    var result: Str = ""
+    loop (v > 0) {
+        let digit: I64 = v % 10
+        v = v / 10
+        result = i64_digit_char(digit) + result
+    }
+
+    if is_negative {
+        result = "-" + result
+    }
+    return result
+}
+
+/// Converts a U64 to its decimal string representation.
+pub func u64_to_str(value: U64) -> Str {
+    if value == 0 {
+        return "0"
+    }
+
+    var result: Str = ""
+    var v: U64 = value
+    loop (v > 0) {
+        let digit: U64 = v % 10
+        v = v / 10
+        result = u64_digit_char(digit) + result
+    }
+    return result
+}
+
+// Internal: convert a digit 0-9 (as I64) to its string character
+func i64_digit_char(d: I64) -> Str {
+    when d {
+        0 => return "0",
+        1 => return "1",
+        2 => return "2",
+        3 => return "3",
+        4 => return "4",
+        5 => return "5",
+        6 => return "6",
+        7 => return "7",
+        8 => return "8",
+        9 => return "9",
+        _ => return "?"
+    }
+}
+
+// Internal: convert a digit 0-9 (as U64) to its string character
+func u64_digit_char(d: U64) -> Str {
+    when d {
+        0 => return "0",
+        1 => return "1",
+        2 => return "2",
+        3 => return "3",
+        4 => return "4",
+        5 => return "5",
+        6 => return "6",
+        7 => return "7",
+        8 => return "8",
+        9 => return "9",
+        _ => return "?"
+    }
+}
+
+/// Converts an I8 to string (widen to I64, then convert).
+pub func i8_to_str(value: I8) -> Str {
+    return i64_to_str(value as I64)
+}
+
+/// Converts an I16 to string.
+pub func i16_to_str(value: I16) -> Str {
+    return i64_to_str(value as I64)
+}
+
+/// Converts an I32 to string.
+pub func i32_to_str(value: I32) -> Str {
+    return i64_to_str(value as I64)
+}
+
+/// Converts a U8 to string.
+pub func u8_to_str(value: U8) -> Str {
+    return u64_to_str(value as U64)
+}
+
+/// Converts a U16 to string.
+pub func u16_to_str(value: U16) -> Str {
+    return u64_to_str(value as U64)
+}
+
+/// Converts a U32 to string.
+pub func u32_to_str(value: U32) -> Str {
+    return u64_to_str(value as U64)
+}
+
+// ============================================================================
 // Binary conversion helpers
 // ============================================================================
 
@@ -180,7 +299,7 @@ pub func string_len(s: Str) -> I64 {
     return lowlevel { str_len(s) }
 }
 
-/// Converts a character to a string.
+/// Converts a character (byte value) to a single-character string.
 pub func char_to_str(c: Char) -> Str {
     return lowlevel { char_to_string(c) }
 }
@@ -245,7 +364,7 @@ pub func pad_center(s: Str, width: I64, fill: Str) -> Str {
 pub func format_with_sign(value: I64, sign_mode: I32) -> Str {
     let is_negative: Bool = value < 0
     let abs_value: I64 = if is_negative { 0 - value } else { value }
-    let num_str: Str = lowlevel { i64_to_string(abs_value) }
+    let num_str: Str = i64_to_str(abs_value)
 
     when sign_mode {
         0 => {
@@ -287,5 +406,5 @@ pub func escape_string(s: Str) -> Str {
 pub func escape_char(c: Char) -> Str {
     // For now, just convert to string
     // A full implementation would escape special characters
-    return lowlevel { char_to_string(c) }
+    return char_to_str(c)
 }

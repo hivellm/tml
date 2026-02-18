@@ -17,7 +17,7 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     }
 
     // Skip builtin types that are already declared in the runtime
-    if (s.name == "File" || s.name == "Path" || s.name == "Ordering") {
+    if (s.name == "Ordering") {
         // Register field info for builtin structs but don't emit type definition
         std::string type_name = "%struct." + s.name;
         std::vector<FieldInfo> fields;
