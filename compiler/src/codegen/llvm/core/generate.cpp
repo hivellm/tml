@@ -713,7 +713,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
             }
             if (!type_name.empty()) {
                 // Skip builtin types that have hard-coded implementations in method.cpp
-                if (type_name == "File" || type_name == "Path" || type_name == "Buffer") {
+                if (type_name == "File" || type_name == "Path") {
                     continue;
                 }
                 // Skip generic impl blocks - they will be instantiated when methods are called

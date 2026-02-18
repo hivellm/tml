@@ -6,7 +6,7 @@
 //!
 //! | Type    | Static Methods            |
 //! |---------|---------------------------|
-//! | Buffer  | `new()`, `with_capacity()`|
+//! | ~~Buffer~~  | Now pure TML            |
 //! | File    | `open()`, `create()`      |
 //! | Path    | `new()`                   |
 //! | I32, etc| `default()`, `max()`, `min()`|
@@ -33,86 +33,7 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         return name;
     };
 
-    // Note: List and HashMap static methods removed — now pure TML
-
-    // Buffer static methods
-    if (type_name == "Buffer") {
-        std::string struct_type = "%struct.Buffer";
-
-        if (method == "new") {
-            emit_coverage("Buffer::new");
-            std::string cap = call.args.empty() ? "64" : gen_expr(*call.args[0]);
-            std::string cap_i64 = fresh_reg();
-            emit_line("  " + cap_i64 + " = sext i32 " + cap + " to i64");
-            std::string handle = fresh_reg();
-            emit_line("  " + handle + " = call ptr @buffer_create(i64 " + cap_i64 + ")");
-            std::string buf_ptr = fresh_reg();
-            emit_line("  " + buf_ptr + " = alloca " + struct_type);
-            std::string handle_field = fresh_reg();
-            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " + buf_ptr +
-                      ", i32 0, i32 0");
-            emit_line("  store ptr " + handle + ", ptr " + handle_field);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load " + struct_type + ", ptr " + buf_ptr);
-            last_expr_type_ = struct_type;
-            return result;
-        }
-        if (method == "default") {
-            emit_coverage("Buffer::default");
-            std::string handle = fresh_reg();
-            emit_line("  " + handle + " = call ptr @buffer_create(i64 64)");
-            std::string buf_ptr = fresh_reg();
-            emit_line("  " + buf_ptr + " = alloca " + struct_type);
-            std::string handle_field = fresh_reg();
-            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " + buf_ptr +
-                      ", i32 0, i32 0");
-            emit_line("  store ptr " + handle + ", ptr " + handle_field);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load " + struct_type + ", ptr " + buf_ptr);
-            last_expr_type_ = struct_type;
-            return result;
-        }
-        if (method == "from_hex") {
-            emit_coverage("Buffer::from_hex");
-            if (call.args.empty()) {
-                report_error("from_hex requires a hex string argument", call.span, "C008");
-                return "0";
-            }
-            std::string hex_arg = gen_expr(*call.args[0]);
-            std::string handle = fresh_reg();
-            emit_line("  " + handle + " = call ptr @buffer_from_hex(ptr " + hex_arg + ")");
-            std::string buf_ptr = fresh_reg();
-            emit_line("  " + buf_ptr + " = alloca " + struct_type);
-            std::string handle_field = fresh_reg();
-            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " + buf_ptr +
-                      ", i32 0, i32 0");
-            emit_line("  store ptr " + handle + ", ptr " + handle_field);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load " + struct_type + ", ptr " + buf_ptr);
-            last_expr_type_ = struct_type;
-            return result;
-        }
-        if (method == "from_string") {
-            emit_coverage("Buffer::from_string");
-            if (call.args.empty()) {
-                report_error("from_string requires a string argument", call.span, "C008");
-                return "0";
-            }
-            std::string str_arg = gen_expr(*call.args[0]);
-            std::string handle = fresh_reg();
-            emit_line("  " + handle + " = call ptr @buffer_from_string(ptr " + str_arg + ")");
-            std::string buf_ptr = fresh_reg();
-            emit_line("  " + buf_ptr + " = alloca " + struct_type);
-            std::string handle_field = fresh_reg();
-            emit_line("  " + handle_field + " = getelementptr " + struct_type + ", ptr " + buf_ptr +
-                      ", i32 0, i32 0");
-            emit_line("  store ptr " + handle + ", ptr " + handle_field);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load " + struct_type + ", ptr " + buf_ptr);
-            last_expr_type_ = struct_type;
-            return result;
-        }
-    }
+    // Note: List, HashMap, and Buffer static methods removed — now pure TML
 
     // File static methods
     if (type_name == "File") {

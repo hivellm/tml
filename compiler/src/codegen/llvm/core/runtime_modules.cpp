@@ -216,6 +216,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
     {
         static const std::vector<std::string> essential_library_modules = {
             "std::collections::List",
+            "std::collections::buffer",
         };
         for (const auto& mod_path : essential_library_modules) {
             if (registry->has_module(mod_path))
@@ -492,8 +493,14 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             // Essential modules: core always needed, sync conditionally
             if (!should_process) {
                 static const std::unordered_set<std::string> core_essential_modules = {
-                    "core::ordering", "core::alloc",      "core::option",           "core::types",
-                    "core::ops",      "core::ops::arith", "std::collections::List",
+                    "core::ordering",
+                    "core::alloc",
+                    "core::option",
+                    "core::types",
+                    "core::ops",
+                    "core::ops::arith",
+                    "std::collections::List",
+                    "std::collections::buffer",
                 };
                 should_process = core_essential_modules.count(module_name) > 0;
                 if (!should_process) {

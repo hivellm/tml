@@ -1,6 +1,6 @@
 # Tasks: Migrate C Runtime Pure Algorithms to TML
 
-**Status**: In Progress (Phase 0 complete, Phase 1 complete — List migrated, Phase 2 complete — HashMap migrated to pure TML)
+**Status**: In Progress (Phases 0-3 complete — List, HashMap, Buffer all migrated to pure TML)
 
 **Scope**: ~4,585 lines of C runtime to migrate + ~3,300 lines of hardcoded codegen dispatch to eliminate
 
@@ -79,31 +79,26 @@ Remaining cleanup (compiler-side):
 ## Phase 3: Collections — Buffer Pure TML
 
 > **Source**: `lib/std/src/collections/buffer.tml`
-> **C backing**: `compiler/runtime/collections/collections.c`
-> **11 lowlevel blocks to eliminate**
+> **Status**: MIGRATED — pure TML using `ptr_read`/`ptr_write`/`mem_alloc`/`mem_free`/`mem_realloc`
+> **Design**: 32-byte header (data_ptr + len + capacity + read_pos), direct memory access for LE I32/I64 read/write, byte-level endian decomposition for BE, type-punning for float<->int conversion
 
-Calls to remove:
-- `buffer_create(initial_capacity)` → line 193
-- `buffer_write_byte(this.handle, byte)` → line 212
-- `buffer_write_i32(this.handle, value)` → line 221
-- `buffer_read_byte(this.handle)` → line 239
-- `buffer_read_i32(this.handle)` → line 248
-- `buffer_len(this.handle)` → line 266
-- `buffer_capacity(this.handle)` → line 275
-- `buffer_remaining(this.handle)` → line 284
-- `buffer_clear(this.handle)` → line 289
-- `buffer_reset_read(this.handle)` → line 294
-- `buffer_destroy(this.handle)` → line 303
-
-Tasks:
-- [ ] 3.1.1 Rewrite `Buffer` struct: `data: *U8, len: I64, capacity: I64, read_pos: I64`
-- [ ] 3.1.2 Implement `new()` / `with_capacity()` using `mem_alloc`
-- [ ] 3.1.3 Implement `write_byte()`, `write_i32()`, `write_i64()` via `ptr_write`
-- [ ] 3.1.4 Implement `read_byte()`, `read_i32()` via `ptr_read` + read_pos advance
-- [ ] 3.1.5 Implement `len()`, `capacity()`, `remaining()` as field arithmetic
-- [ ] 3.1.6 Implement `clear()`, `reset_read()`, `drop()`
-- [ ] 3.1.7 Remove `buffer_*` emitters from codegen
-- [ ] 3.1.8 Run all existing Buffer tests — must pass
+- [x] 3.1.1 Rewrite `Buffer` struct: `handle: *Unit` with 32-byte header (data ptr + len + cap + read_pos)
+- [x] 3.1.2 Implement `new()` / `default()` using `mem_alloc` for header + data buffer
+- [x] 3.1.3 Implement sequential write: `write_byte()`, `write_i32()`, `write_i64()` via `ptr_write[T]` direct memory
+- [x] 3.1.4 Implement sequential read: `read_byte()`, `read_i32()`, `read_i64()` via `ptr_read[T]` direct memory
+- [x] 3.1.5 Implement state accessors: `len()`, `capacity()`, `remaining()`, `get()`, `set()`
+- [x] 3.1.6 Implement `clear()`, `reset_read()`, `destroy()` (mem_free data + header)
+- [x] 3.1.7 Implement offset-based endian read/write: u8/i8, u16/i16 LE/BE, u32/i32 LE/BE, u64/i64 LE/BE
+- [x] 3.1.8 Implement float read/write via type-punning: `ptr_write[F32]` then `ptr_read[I32]` on same address
+- [x] 3.1.9 Implement manipulation: `fill()`, `fill_all()`, `copy_to()`, `slice()`, `duplicate()`, `swap16/32/64()`
+- [x] 3.1.10 Implement search: `compare()`, `equals()`, `index_of()`, `last_index_of()`, `includes()`
+- [x] 3.1.11 Implement string conversion: `to_hex()`, `to_string()`, `from_hex()`, `from_string()`
+- [x] 3.1.12 Remove Buffer codegen dispatch from 10 compiler files (method_collection, method_static, method_static_dispatch, method_impl, impl, generate, struct, builtins/collections, runtime, types/builtins/collections)
+- [x] 3.1.13 Remove Buffer C functions from `compiler/runtime/collections/collections.c` and `lib/std/runtime/collections.{c,h}`
+- [x] 3.1.14 All 8 Buffer test files pass (31+ tests): buffer_le, buffer_be, buffer_float, buffer_string, buffer_search, buffer_compare, buffer_duplicate, buffer_swap
+- [x] 3.1.15 Fixed signed division bug in I64 byte decomposition — use `ptr_write[I64]`/`ptr_read[I64]` direct memory access for LE
+- [x] 3.1.16 Fixed I8→I32 sign-extension in `buf_read_byte_at` — mask to unsigned 0-255 range
+- [x] 3.1.17 Full test suite passes (8465/8468 — 3 pre-existing crypto failures unrelated to Buffer)
 
 ---
 
@@ -530,17 +525,18 @@ Tasks:
 - [x] 18.1.10 Remove hardcoded `{ ptr }` type-erasure for HashMap in `decl/struct.cpp:337-354`
 - [x] 18.1.11 All HashMap tests pass through normal dispatch (11 tests)
 
-### 18.2 Buffer dispatch removal (after Phase 3 completes)
+### 18.2 Buffer dispatch removal (COMPLETED — done as part of Phase 3)
 
-- [ ] 18.2.1 Remove Buffer branch from `method_collection.cpp` (~973 lines of 20+ methods)
-- [ ] 18.2.2 Remove Buffer from bypass list in `method_impl.cpp:96`
-- [ ] 18.2.3 Remove Buffer from skip list in `decl/impl.cpp:155`
-- [ ] 18.2.4 Remove Buffer from skip list in `generate.cpp:715`
-- [ ] 18.2.5 Remove Buffer static methods from `method_static.cpp:107-183` (Buffer::new, from_hex, etc.)
-- [ ] 18.2.6 Remove Buffer from type name validation in `method_static_dispatch.cpp:898`
-- [ ] 18.2.7 Remove 11 buffer_* function registrations from `types/builtins/collections.cpp`
-- [ ] 18.2.8 Remove buffer_* if/else chain from `builtins/collections.cpp`
-- [ ] 18.2.9 Run all Buffer tests — must pass through normal dispatch
+- [x] 18.2.1 Remove Buffer branch from `method_collection.cpp` (~973 lines → nullopt stub)
+- [x] 18.2.2 Remove Buffer from bypass list in `method_impl.cpp:96`
+- [x] 18.2.3 Remove Buffer from skip list in `decl/impl.cpp:155`
+- [x] 18.2.4 Remove Buffer from skip list in `generate.cpp:715`
+- [x] 18.2.5 Remove Buffer static methods from `method_static.cpp` (new, default, from_hex, from_string)
+- [x] 18.2.6 Remove Buffer from type name validation in `method_static_dispatch.cpp`
+- [x] 18.2.7 Remove 12 buffer_* function registrations from `types/builtins/collections.cpp`
+- [x] 18.2.8 Remove buffer_* if/else chain from `builtins/collections.cpp` (→ nullopt stub)
+- [x] 18.2.9 Remove Buffer struct type + 15 buffer_* runtime declarations from `runtime.cpp`
+- [x] 18.2.10 All 8 Buffer test files pass through normal dispatch (31+ tests)
 
 ### 18.3 List cleanup (Phase 1 already done, just cleanup)
 

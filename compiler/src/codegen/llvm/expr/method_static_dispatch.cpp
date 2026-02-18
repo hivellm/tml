@@ -248,11 +248,8 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
         // 1. Local pending_generic_structs_, pending_generic_enums_, or pending_generic_impls_
         // 2. Imported structs/enums from module registry with type_params
         // 3. Method call has explicit type arguments (e.g., StackNode::new[T])
-        // NOTE: Exclude runtime-managed collection types (Buffer)
-        // as they have special handling in gen_static_method_call
-        bool is_runtime_collection = type_name == "Buffer";
+        // NOTE: All collection types (List, HashMap, Buffer) are now pure TML
         bool is_generic_struct =
-            !is_runtime_collection &&
             (pending_generic_structs_.count(type_name) > 0 ||
              pending_generic_enums_.count(type_name) > 0 ||
              pending_generic_impls_.count(type_name) > 0 ||
@@ -270,10 +267,9 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
             TML_LOG_TRACE("codegen",
                           "[DEBUG] type_name="
                               << type_name << " is_local_generic=" << is_local_generic
-                              << " is_runtime_collection=" << is_runtime_collection
                               << " has_registry=" << (env_.module_registry() ? "yes" : "no"));
         }
-        if (!is_local_generic && !is_runtime_collection && env_.module_registry()) {
+        if (!is_local_generic && env_.module_registry()) {
             TML_DEBUG_LN("[STATIC_METHOD] Looking for " << type_name << " in module registry");
 
             // First, try to resolve via imported symbols to get the correct module path
@@ -895,11 +891,11 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
         }
 
         bool is_type_name =
-            struct_types_.count(type_name) > 0 || type_name == "List" || type_name == "Buffer" ||
-            type_name == "File" || type_name == "Path" || type_name == "I8" || type_name == "I16" ||
-            type_name == "I32" || type_name == "I64" || type_name == "I128" || type_name == "U8" ||
-            type_name == "U16" || type_name == "U32" || type_name == "U64" || type_name == "U128" ||
-            type_name == "F32" || type_name == "F64" || type_name == "Bool" || type_name == "Str";
+            struct_types_.count(type_name) > 0 || type_name == "List" || type_name == "File" ||
+            type_name == "Path" || type_name == "I8" || type_name == "I16" || type_name == "I32" ||
+            type_name == "I64" || type_name == "I128" || type_name == "U8" || type_name == "U16" ||
+            type_name == "U32" || type_name == "U64" || type_name == "U128" || type_name == "F32" ||
+            type_name == "F64" || type_name == "Bool" || type_name == "Str";
 
         // Also check for imported structs from module registry
         if (!is_type_name && env_.module_registry()) {

@@ -63,10 +63,7 @@ void LLVMIRGen::emit_runtime_decls() {
     struct_types_["HashMapIter"] = "%struct.HashMapIter";
     struct_fields_["HashMapIter"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
 
-    // Buffer type (from std::collections)
-    emit_line("%struct.Buffer = type { ptr }"); // handle field
-    struct_types_["Buffer"] = "%struct.Buffer";
-    struct_fields_["Buffer"] = {{"handle", 0, "ptr", types::make_ptr(types::make_unit())}};
+    // Note: Buffer type removed — now pure TML (see lib/std/src/collections/buffer.tml)
 
     // Thread types (from std::thread) - needed for @extern function declarations
     emit_line("%struct.RawThread = type { i64 }"); // _handle: U64
@@ -342,38 +339,7 @@ void LLVMIRGen::emit_runtime_decls() {
     // Note: List and HashMap runtime declarations removed — now pure TML
     // (see lib/std/src/collections/list.tml, hashmap.tml)
 
-    // Buffer runtime declarations
-    // Register in declared_externals_ to prevent duplicate declarations from @extern modules
-    emit_line("; Buffer runtime");
-    emit_line("declare ptr @buffer_create(i64)");
-    declared_externals_.insert("buffer_create");
-    emit_line("declare void @buffer_destroy(ptr)");
-    declared_externals_.insert("buffer_destroy");
-    emit_line("declare void @buffer_write_byte(ptr, i32)");
-    declared_externals_.insert("buffer_write_byte");
-    emit_line("declare void @buffer_write_i32(ptr, i32)");
-    declared_externals_.insert("buffer_write_i32");
-    emit_line("declare void @buffer_write_i64(ptr, i64)");
-    declared_externals_.insert("buffer_write_i64");
-    emit_line("declare i32 @buffer_read_byte(ptr)");
-    declared_externals_.insert("buffer_read_byte");
-    emit_line("declare i32 @buffer_read_i32(ptr)");
-    declared_externals_.insert("buffer_read_i32");
-    emit_line("declare i64 @buffer_read_i64(ptr)");
-    declared_externals_.insert("buffer_read_i64");
-    emit_line("declare i64 @buffer_len(ptr)");
-    declared_externals_.insert("buffer_len");
-    emit_line("declare i64 @buffer_capacity(ptr)");
-    declared_externals_.insert("buffer_capacity");
-    emit_line("declare i64 @buffer_remaining(ptr)");
-    declared_externals_.insert("buffer_remaining");
-    emit_line("declare void @buffer_clear(ptr)");
-    declared_externals_.insert("buffer_clear");
-    emit_line("declare void @buffer_reset_read(ptr)");
-    declared_externals_.insert("buffer_reset_read");
-    emit_line("declare ptr @buffer_slice(ptr, i64, i64)");
-    declared_externals_.insert("buffer_slice");
-    emit_line("");
+    // Note: Buffer runtime declarations removed — now pure TML
 
     // File I/O runtime declarations
     // Register in declared_externals_ to prevent duplicate declarations from @extern modules

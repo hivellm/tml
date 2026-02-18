@@ -1,12 +1,18 @@
-//! Byte buffer for binary data manipulation.
+//! Byte buffer for binary data manipulation — pure TML implementation.
 //!
 //! `Buffer` provides efficient byte-level I/O operations for
 //! serialization, network protocols, and binary file handling.
 //! Compatible with Node.js Buffer API.
 //!
-//! **Migration note**: This type is backed by the C runtime (`collections.c`).
-//! It will be replaced by a pure-TML implementation as part of the runtime
-//! migration roadmap.
+//! # Memory Layout
+//!
+//! ```
+//! Header (32 bytes at handle):
+//!   offset 0:  data (*Unit) — pointer to byte array
+//!   offset 8:  len (I64)   — number of bytes written
+//!   offset 16: capacity (I64) — allocated size
+//!   offset 24: read_pos (I64) — current read position
+//! ```
 //!
 //! # Example
 //!
@@ -19,292 +25,313 @@
 //! buf.destroy()
 //! ```
 
-// FFI declarations for extended Buffer functions
-@extern("buffer_get")
-func ffi_buffer_get(handle: *Unit, index: I64) -> I32
+use core::intrinsics::{ptr_read, ptr_write}
 
-@extern("buffer_set")
-func ffi_buffer_set(handle: *Unit, index: I64, value: I32)
+// ============================================================================
+// Memory helpers (using lowlevel intrinsics, same pattern as list.tml)
+// ============================================================================
 
-@extern("buffer_write_u8")
-func ffi_buffer_write_u8(handle: *Unit, offset: I64, value: I32)
+pub func buf_mem_alloc(size: I64) -> *Unit {
+    lowlevel { mem_alloc(size) }
+}
 
-@extern("buffer_read_u8")
-func ffi_buffer_read_u8(handle: *Unit, offset: I64) -> I32
+pub func buf_mem_free(ptr: *Unit) {
+    lowlevel { mem_free(ptr) }
+}
 
-@extern("buffer_read_i8")
-func ffi_buffer_read_i8(handle: *Unit, offset: I64) -> I32
+pub func buf_mem_realloc(ptr: *Unit, new_size: I64) -> *Unit {
+    lowlevel { mem_realloc(ptr, new_size) }
+}
 
-@extern("buffer_write_u16_le")
-func ffi_buffer_write_u16_le(handle: *Unit, offset: I64, value: I32)
-
-@extern("buffer_write_u16_be")
-func ffi_buffer_write_u16_be(handle: *Unit, offset: I64, value: I32)
-
-@extern("buffer_read_u16_le")
-func ffi_buffer_read_u16_le(handle: *Unit, offset: I64) -> I32
-
-@extern("buffer_read_u16_be")
-func ffi_buffer_read_u16_be(handle: *Unit, offset: I64) -> I32
-
-@extern("buffer_read_i16_le")
-func ffi_buffer_read_i16_le(handle: *Unit, offset: I64) -> I32
-
-@extern("buffer_read_i16_be")
-func ffi_buffer_read_i16_be(handle: *Unit, offset: I64) -> I32
-
-@extern("buffer_write_u32_le")
-func ffi_buffer_write_u32_le(handle: *Unit, offset: I64, value: I64)
-
-@extern("buffer_write_u32_be")
-func ffi_buffer_write_u32_be(handle: *Unit, offset: I64, value: I64)
-
-@extern("buffer_read_u32_le")
-func ffi_buffer_read_u32_le(handle: *Unit, offset: I64) -> I64
-
-@extern("buffer_read_u32_be")
-func ffi_buffer_read_u32_be(handle: *Unit, offset: I64) -> I64
-
-@extern("buffer_read_i32_le")
-func ffi_buffer_read_i32_le(handle: *Unit, offset: I64) -> I32
-
-@extern("buffer_read_i32_be")
-func ffi_buffer_read_i32_be(handle: *Unit, offset: I64) -> I32
-
-@extern("buffer_write_u64_le")
-func ffi_buffer_write_u64_le(handle: *Unit, offset: I64, value: I64)
-
-@extern("buffer_write_u64_be")
-func ffi_buffer_write_u64_be(handle: *Unit, offset: I64, value: I64)
-
-@extern("buffer_read_u64_le")
-func ffi_buffer_read_u64_le(handle: *Unit, offset: I64) -> I64
-
-@extern("buffer_read_u64_be")
-func ffi_buffer_read_u64_be(handle: *Unit, offset: I64) -> I64
-
-@extern("buffer_read_i64_le")
-func ffi_buffer_read_i64_le(handle: *Unit, offset: I64) -> I64
-
-@extern("buffer_read_i64_be")
-func ffi_buffer_read_i64_be(handle: *Unit, offset: I64) -> I64
-
-@extern("buffer_write_f32_le")
-func ffi_buffer_write_f32_le(handle: *Unit, offset: I64, value: F32)
-
-@extern("buffer_write_f32_be")
-func ffi_buffer_write_f32_be(handle: *Unit, offset: I64, value: F32)
-
-@extern("buffer_read_f32_le")
-func ffi_buffer_read_f32_le(handle: *Unit, offset: I64) -> F32
-
-@extern("buffer_read_f32_be")
-func ffi_buffer_read_f32_be(handle: *Unit, offset: I64) -> F32
-
-@extern("buffer_write_f64_le")
-func ffi_buffer_write_f64_le(handle: *Unit, offset: I64, value: F64)
-
-@extern("buffer_write_f64_be")
-func ffi_buffer_write_f64_be(handle: *Unit, offset: I64, value: F64)
-
-@extern("buffer_read_f64_le")
-func ffi_buffer_read_f64_le(handle: *Unit, offset: I64) -> F64
-
-@extern("buffer_read_f64_be")
-func ffi_buffer_read_f64_be(handle: *Unit, offset: I64) -> F64
-
-@extern("buffer_fill")
-func ffi_buffer_fill(handle: *Unit, value: I32, start: I64, end: I64)
-
-@extern("buffer_copy")
-func ffi_buffer_copy(src: *Unit, dst: *Unit, target_start: I64, source_start: I64, source_end: I64) -> I64
-
-@extern("buffer_slice")
-func ffi_buffer_slice(handle: *Unit, start: I64, end: I64) -> *Unit
-
-@extern("buffer_swap16")
-func ffi_buffer_swap16(handle: *Unit)
-
-@extern("buffer_swap32")
-func ffi_buffer_swap32(handle: *Unit)
-
-@extern("buffer_swap64")
-func ffi_buffer_swap64(handle: *Unit)
-
-@extern("buffer_compare")
-func ffi_buffer_compare(a: *Unit, b: *Unit) -> I32
-
-@extern("buffer_equals")
-func ffi_buffer_equals(a: *Unit, b: *Unit) -> I32
-
-@extern("buffer_index_of")
-func ffi_buffer_index_of(handle: *Unit, value: I32, start: I64) -> I64
-
-@extern("buffer_last_index_of")
-func ffi_buffer_last_index_of(handle: *Unit, value: I32, start: I64) -> I64
-
-@extern("buffer_includes")
-func ffi_buffer_includes(handle: *Unit, value: I32, start: I64) -> I32
-
-@extern("buffer_to_hex")
-func ffi_buffer_to_hex(handle: *Unit) -> Str
-
-@extern("buffer_to_string")
-func ffi_buffer_to_string(handle: *Unit) -> Str
-
-@extern("buffer_from_hex")
-func ffi_buffer_from_hex(hex: Str) -> *Unit
-
-@extern("buffer_from_string")
-func ffi_buffer_from_string(str: Str) -> *Unit
-
-@extern("buffer_write_i64")
-func ffi_buffer_write_i64(handle: *Unit, value: I64)
-
-@extern("buffer_read_i64")
-func ffi_buffer_read_i64(handle: *Unit) -> I64
+pub func buf_str_len(s: Str) -> I64 {
+    lowlevel { str_len(s) }
+}
 
 /// A byte buffer for reading and writing binary data.
 ///
 /// `Buffer` provides efficient byte-level I/O operations for
 /// serialization and network protocols. Compatible with Node.js Buffer API.
-///
-/// # Example
-///
-/// ```tml
-/// let buf = Buffer::new(64)
-/// buf.write_i32(42)
-/// buf.write_i64(123456789)
-/// buf.reset_read()
-/// let num = buf.read_i32()  // 42
-/// buf.destroy()
-/// ```
 pub type Buffer {
     handle: *Unit
 }
 
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/// Read the data pointer from offset 0
+pub func buf_get_data(h: I64) -> *Unit {
+    let p: *I64 = h as *I64
+    let val: I64 = lowlevel { ptr_read[I64](p) }
+    val as *Unit
+}
+
+/// Read len from offset 8
+pub func buf_get_len(h: I64) -> I64 {
+    let p: *I64 = (h + 8) as *I64
+    lowlevel { ptr_read[I64](p) }
+}
+
+/// Write len to offset 8
+pub func buf_set_len(h: I64, val: I64) {
+    let p: *I64 = (h + 8) as *I64
+    lowlevel { ptr_write[I64](p, val) }
+}
+
+/// Read capacity from offset 16
+pub func buf_get_cap(h: I64) -> I64 {
+    let p: *I64 = (h + 16) as *I64
+    lowlevel { ptr_read[I64](p) }
+}
+
+/// Write capacity to offset 16
+pub func buf_set_cap(h: I64, val: I64) {
+    let p: *I64 = (h + 16) as *I64
+    lowlevel { ptr_write[I64](p, val) }
+}
+
+/// Read read_pos from offset 24
+pub func buf_get_read_pos(h: I64) -> I64 {
+    let p: *I64 = (h + 24) as *I64
+    lowlevel { ptr_read[I64](p) }
+}
+
+/// Write read_pos to offset 24
+pub func buf_set_read_pos(h: I64, val: I64) {
+    let p: *I64 = (h + 24) as *I64
+    lowlevel { ptr_write[I64](p, val) }
+}
+
+/// Write data pointer to offset 0
+pub func buf_set_data(h: I64, data: *Unit) {
+    let p: *I64 = h as *I64
+    lowlevel { ptr_write[I64](p, data as I64) }
+}
+
+/// Read a single byte from data array at index (returns 0-255 unsigned)
+pub func buf_read_byte_at(data: *Unit, index: I64) -> I32 {
+    let p: *I8 = (data as I64 + index) as *I8
+    let val: I8 = lowlevel { ptr_read[I8](p) }
+    // I8 as I32 sign-extends; mask to unsigned 0-255 range
+    let signed: I32 = val as I32
+    if signed < 0 {
+        return signed + 256
+    }
+    signed
+}
+
+/// Write a single byte to data array at index
+pub func buf_write_byte_at(data: *Unit, index: I64, val: I32) {
+    let p: *I8 = (data as I64 + index) as *I8
+    lowlevel { ptr_write[I8](p, val as I8) }
+}
+
+/// Ensure buffer has enough capacity, growing if needed
+pub func buf_ensure_capacity(h: I64, needed: I64) {
+    let len: I64 = buf_get_len(h)
+    let cap: I64 = buf_get_cap(h)
+    if len + needed <= cap {
+        return
+    }
+    var new_cap: I64 = cap * 2
+    loop (new_cap < len + needed) {
+        new_cap = new_cap * 2
+    }
+    let old_data: *Unit = buf_get_data(h)
+    let new_data: *Unit = buf_mem_realloc(old_data, new_cap)
+    buf_set_data(h, new_data)
+    buf_set_cap(h, new_cap)
+}
+
+/// Ensure buffer len reaches at least `needed` bytes, zero-filling gaps
+pub func buf_ensure_len(h: I64, needed: I64) {
+    let len: I64 = buf_get_len(h)
+    if needed <= len {
+        return
+    }
+    // Ensure capacity first
+    let cap: I64 = buf_get_cap(h)
+    if needed > cap {
+        buf_ensure_capacity(h, needed - len)
+    }
+    // Zero-fill gap
+    let data: *Unit = buf_get_data(h)
+    var i: I64 = len
+    loop (i < needed) {
+        buf_write_byte_at(data, i, 0)
+        i = i + 1
+    }
+    buf_set_len(h, needed)
+}
+
+// ============================================================================
+// Hex conversion helpers
+// ============================================================================
+
+pub func hex_digit_to_char(d: I32) -> I32 {
+    if d < 10 {
+        return d + 48  // '0'
+    }
+    return d - 10 + 97  // 'a'
+}
+
+pub func hex_char_to_val(c: I32) -> I32 {
+    if c >= 48 and c <= 57 {       // '0'-'9'
+        return c - 48
+    }
+    if c >= 97 and c <= 102 {      // 'a'-'f'
+        return c - 97 + 10
+    }
+    if c >= 65 and c <= 70 {       // 'A'-'F'
+        return c - 65 + 10
+    }
+    return 0
+}
+
 impl Buffer {
     /// Creates a new buffer with the specified initial capacity.
-    ///
-    /// # Arguments
-    ///
-    /// * `initial_capacity` - The initial capacity in bytes
-    ///
-    /// # Returns
-    ///
-    /// A new `Buffer` instance
     pub func new(initial_capacity: I64) -> Buffer {
-        let h: *Unit = lowlevel { buffer_create(initial_capacity) }
-        Buffer { handle: h }
+        var cap: I64 = initial_capacity
+        if cap <= 0 {
+            cap = 64
+        }
+        let header: *Unit = buf_mem_alloc(32)
+        let h: I64 = header as I64
+        let data: *Unit = buf_mem_alloc(cap)
+        buf_set_data(h, data)
+        buf_set_len(h, 0)
+        buf_set_cap(h, cap)
+        buf_set_read_pos(h, 0)
+        Buffer { handle: header }
     }
 
     /// Creates a new buffer with default capacity (64 bytes).
-    ///
-    /// # Returns
-    ///
-    /// A new `Buffer` instance with default capacity
     pub func default() -> Buffer {
         Buffer.new(64)
     }
 
+    // ========================================================================
+    // Sequential write/read (advancing write pos / read pos)
+    // ========================================================================
+
     /// Writes a single byte to the buffer at the current write position.
-    ///
-    /// # Arguments
-    ///
-    /// * `byte` - The byte value (0-255)
     pub func write_byte(this, byte: I32) {
-        lowlevel { buffer_write_byte(this.handle, byte) }
+        let h: I64 = this.handle as I64
+        buf_ensure_capacity(h, 1)
+        let len: I64 = buf_get_len(h)
+        let data: *Unit = buf_get_data(h)
+        buf_write_byte_at(data, len, byte)
+        buf_set_len(h, len + 1)
     }
 
     /// Writes a 32-bit signed integer to the buffer (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The 32-bit integer value
     pub func write_i32(this, value: I32) {
-        lowlevel { buffer_write_i32(this.handle, value) }
+        let h: I64 = this.handle as I64
+        buf_ensure_capacity(h, 4)
+        let len: I64 = buf_get_len(h)
+        let data: *Unit = buf_get_data(h)
+        // Write I32 directly to memory (native LE on x86)
+        let dst: *I32 = (data as I64 + len) as *I32
+        lowlevel { ptr_write[I32](dst, value) }
+        buf_set_len(h, len + 4)
     }
 
     /// Writes a 64-bit signed integer to the buffer (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The 64-bit integer value
     pub func write_i64(this, value: I64) {
-        ffi_buffer_write_i64(this.handle, value)
+        let h: I64 = this.handle as I64
+        buf_ensure_capacity(h, 8)
+        let len: I64 = buf_get_len(h)
+        let data: *Unit = buf_get_data(h)
+        // Write I64 directly to memory (native LE on x86)
+        let dst: *I64 = (data as I64 + len) as *I64
+        lowlevel { ptr_write[I64](dst, value) }
+        buf_set_len(h, len + 8)
     }
 
     /// Reads a single byte from the buffer at the current read position.
-    ///
-    /// # Returns
-    ///
-    /// The byte value, or -1 if at end of buffer
     pub func read_byte(this) -> I32 {
-        lowlevel { buffer_read_byte(this.handle) }
+        let h: I64 = this.handle as I64
+        let rp: I64 = buf_get_read_pos(h)
+        let len: I64 = buf_get_len(h)
+        if rp >= len {
+            return 0
+        }
+        let data: *Unit = buf_get_data(h)
+        let val: I32 = buf_read_byte_at(data, rp)
+        buf_set_read_pos(h, rp + 1)
+        val
     }
 
     /// Reads a 32-bit signed integer from the buffer (little-endian).
-    ///
-    /// # Returns
-    ///
-    /// The 32-bit integer value
     pub func read_i32(this) -> I32 {
-        lowlevel { buffer_read_i32(this.handle) }
+        let h: I64 = this.handle as I64
+        let rp: I64 = buf_get_read_pos(h)
+        let len: I64 = buf_get_len(h)
+        if rp + 4 > len {
+            return 0
+        }
+        let data: *Unit = buf_get_data(h)
+        // Read I32 directly from memory (native LE on x86)
+        let src: *I32 = (data as I64 + rp) as *I32
+        let result: I32 = lowlevel { ptr_read[I32](src) }
+        buf_set_read_pos(h, rp + 4)
+        result
     }
 
     /// Reads a 64-bit signed integer from the buffer (little-endian).
-    ///
-    /// # Returns
-    ///
-    /// The 64-bit integer value
     pub func read_i64(this) -> I64 {
-        ffi_buffer_read_i64(this.handle)
+        let h: I64 = this.handle as I64
+        let rp: I64 = buf_get_read_pos(h)
+        let len: I64 = buf_get_len(h)
+        if rp + 8 > len {
+            return 0
+        }
+        let data: *Unit = buf_get_data(h)
+        // Read I64 directly from memory (native LE on x86)
+        let src: *I64 = (data as I64 + rp) as *I64
+        let result: I64 = lowlevel { ptr_read[I64](src) }
+        buf_set_read_pos(h, rp + 8)
+        result
     }
 
+    // ========================================================================
+    // State accessors
+    // ========================================================================
+
     /// Returns the number of bytes written to the buffer.
-    ///
-    /// # Returns
-    ///
-    /// The buffer length in bytes
     pub func len(this) -> I64 {
-        lowlevel { buffer_len(this.handle) }
+        buf_get_len(this.handle as I64)
     }
 
     /// Returns the current capacity of the buffer.
-    ///
-    /// # Returns
-    ///
-    /// The capacity in bytes
     pub func capacity(this) -> I64 {
-        lowlevel { buffer_capacity(this.handle) }
+        buf_get_cap(this.handle as I64)
     }
 
     /// Returns the number of bytes remaining to read.
-    ///
-    /// # Returns
-    ///
-    /// The number of unread bytes
     pub func remaining(this) -> I64 {
-        lowlevel { buffer_remaining(this.handle) }
+        let h: I64 = this.handle as I64
+        buf_get_len(h) - buf_get_read_pos(h)
     }
 
     /// Clears the buffer, resetting both length and read position.
     pub func clear(this) {
-        lowlevel { buffer_clear(this.handle) }
+        let h: I64 = this.handle as I64
+        buf_set_len(h, 0)
+        buf_set_read_pos(h, 0)
     }
 
     /// Resets the read position to the beginning of the buffer.
     pub func reset_read(this) {
-        lowlevel { buffer_reset_read(this.handle) }
+        buf_set_read_pos(this.handle as I64, 0)
     }
 
     /// Destroys the buffer and frees all associated memory.
-    ///
-    /// # Safety
-    ///
-    /// The buffer must not be used after calling this method.
     pub func destroy(this) {
-        lowlevel { buffer_destroy(this.handle) }
+        let h: I64 = this.handle as I64
+        let data: *Unit = buf_get_data(h)
+        buf_mem_free(data)
+        buf_mem_free(this.handle)
     }
 
     // ========================================================================
@@ -312,66 +339,55 @@ impl Buffer {
     // ========================================================================
 
     /// Gets the byte at the specified index.
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - The byte index
-    ///
-    /// # Returns
-    ///
-    /// The byte value at the index, or 0 if out of bounds
     pub func get(this, index: I64) -> I32 {
-        ffi_buffer_get(this.handle, index)
+        let h: I64 = this.handle as I64
+        if index < 0 or index >= buf_get_len(h) {
+            return 0
+        }
+        buf_read_byte_at(buf_get_data(h), index)
     }
 
     /// Sets the byte at the specified index.
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - The byte index
-    /// * `value` - The byte value (0-255)
     pub func set(this, index: I64, value: I32) {
-        ffi_buffer_set(this.handle, index, value)
+        let h: I64 = this.handle as I64
+        if index < 0 or index >= buf_get_len(h) {
+            return
+        }
+        buf_write_byte_at(buf_get_data(h), index, value % 256)
     }
 
     // ========================================================================
-    // 8-bit Integer Read/Write
+    // 8-bit Integer Read/Write at offset
     // ========================================================================
 
     /// Writes an unsigned 8-bit integer at the specified offset.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value (0-255)
-    /// * `offset` - The byte offset
     pub func write_u8(this, value: I32, offset: I64) {
-        ffi_buffer_write_u8(this.handle, offset, value)
+        let h: I64 = this.handle as I64
+        buf_ensure_len(h, offset + 1)
+        buf_write_byte_at(buf_get_data(h), offset, value % 256)
     }
 
     /// Reads an unsigned 8-bit integer at the specified offset.
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The unsigned 8-bit value (0-255)
     pub func read_u8(this, offset: I64) -> I32 {
-        ffi_buffer_read_u8(this.handle, offset)
+        let h: I64 = this.handle as I64
+        if offset < 0 or offset >= buf_get_len(h) {
+            return 0
+        }
+        buf_read_byte_at(buf_get_data(h), offset)
     }
 
     /// Reads a signed 8-bit integer at the specified offset.
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The signed 8-bit value (-128 to 127)
     pub func read_i8(this, offset: I64) -> I32 {
-        ffi_buffer_read_i8(this.handle, offset)
+        let h: I64 = this.handle as I64
+        if offset < 0 or offset >= buf_get_len(h) {
+            return 0
+        }
+        let val: I32 = buf_read_byte_at(buf_get_data(h), offset)
+        // Sign extend: if bit 7 is set, value is negative
+        if val >= 128 {
+            return val - 256
+        }
+        val
     }
 
     // ========================================================================
@@ -379,75 +395,59 @@ impl Buffer {
     // ========================================================================
 
     /// Writes an unsigned 16-bit integer at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value (0-65535)
-    /// * `offset` - The byte offset
     pub func write_u16_le(this, value: I32, offset: I64) {
-        ffi_buffer_write_u16_le(this.handle, offset, value)
+        let h: I64 = this.handle as I64
+        buf_ensure_len(h, offset + 2)
+        let data: *Unit = buf_get_data(h)
+        buf_write_byte_at(data, offset, value % 256)
+        buf_write_byte_at(data, offset + 1, (value / 256) % 256)
     }
 
     /// Writes an unsigned 16-bit integer at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value (0-65535)
-    /// * `offset` - The byte offset
     pub func write_u16_be(this, value: I32, offset: I64) {
-        ffi_buffer_write_u16_be(this.handle, offset, value)
+        let h: I64 = this.handle as I64
+        buf_ensure_len(h, offset + 2)
+        let data: *Unit = buf_get_data(h)
+        buf_write_byte_at(data, offset, (value / 256) % 256)
+        buf_write_byte_at(data, offset + 1, value % 256)
     }
 
     /// Reads an unsigned 16-bit integer at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The unsigned 16-bit value
     pub func read_u16_le(this, offset: I64) -> I32 {
-        ffi_buffer_read_u16_le(this.handle, offset)
+        let h: I64 = this.handle as I64
+        if offset < 0 or offset + 2 > buf_get_len(h) {
+            return 0
+        }
+        let data: *Unit = buf_get_data(h)
+        buf_read_byte_at(data, offset) + buf_read_byte_at(data, offset + 1) * 256
     }
 
     /// Reads an unsigned 16-bit integer at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The unsigned 16-bit value
     pub func read_u16_be(this, offset: I64) -> I32 {
-        ffi_buffer_read_u16_be(this.handle, offset)
+        let h: I64 = this.handle as I64
+        if offset < 0 or offset + 2 > buf_get_len(h) {
+            return 0
+        }
+        let data: *Unit = buf_get_data(h)
+        buf_read_byte_at(data, offset) * 256 + buf_read_byte_at(data, offset + 1)
     }
 
     /// Reads a signed 16-bit integer at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The signed 16-bit value
     pub func read_i16_le(this, offset: I64) -> I32 {
-        ffi_buffer_read_i16_le(this.handle, offset)
+        let val: I32 = this.read_u16_le(offset)
+        if val >= 32768 {
+            return val - 65536
+        }
+        val
     }
 
     /// Reads a signed 16-bit integer at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The signed 16-bit value
     pub func read_i16_be(this, offset: I64) -> I32 {
-        ffi_buffer_read_i16_be(this.handle, offset)
+        let val: I32 = this.read_u16_be(offset)
+        if val >= 32768 {
+            return val - 65536
+        }
+        val
     }
 
     // ========================================================================
@@ -455,75 +455,66 @@ impl Buffer {
     // ========================================================================
 
     /// Writes an unsigned 32-bit integer at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value
-    /// * `offset` - The byte offset
     pub func write_u32_le(this, value: I64, offset: I64) {
-        ffi_buffer_write_u32_le(this.handle, offset, value)
+        let h: I64 = this.handle as I64
+        buf_ensure_len(h, offset + 4)
+        let data: *Unit = buf_get_data(h)
+        // Write I32 directly to memory (native LE on x86)
+        let dst: *I32 = (data as I64 + offset) as *I32
+        lowlevel { ptr_write[I32](dst, value as I32) }
     }
 
     /// Writes an unsigned 32-bit integer at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value
-    /// * `offset` - The byte offset
     pub func write_u32_be(this, value: I64, offset: I64) {
-        ffi_buffer_write_u32_be(this.handle, offset, value)
+        let h: I64 = this.handle as I64
+        buf_ensure_len(h, offset + 4)
+        let data: *Unit = buf_get_data(h)
+        buf_write_byte_at(data, offset, ((value / 16777216) % 256) as I32)
+        buf_write_byte_at(data, offset + 1, ((value / 65536) % 256) as I32)
+        buf_write_byte_at(data, offset + 2, ((value / 256) % 256) as I32)
+        buf_write_byte_at(data, offset + 3, (value % 256) as I32)
     }
 
     /// Reads an unsigned 32-bit integer at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The unsigned 32-bit value
     pub func read_u32_le(this, offset: I64) -> I64 {
-        ffi_buffer_read_u32_le(this.handle, offset)
+        let h: I64 = this.handle as I64
+        if offset < 0 or offset + 4 > buf_get_len(h) {
+            return 0
+        }
+        let data: *Unit = buf_get_data(h)
+        // Read I32 directly from memory (native LE on x86), zero-extend to I64
+        let src: *I32 = (data as I64 + offset) as *I32
+        let val: I32 = lowlevel { ptr_read[I32](src) }
+        // Zero-extend: mask to unsigned 32-bit range
+        let result: I64 = val as I64
+        if result < 0 {
+            return result + 4294967296
+        }
+        result
     }
 
     /// Reads an unsigned 32-bit integer at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The unsigned 32-bit value
     pub func read_u32_be(this, offset: I64) -> I64 {
-        ffi_buffer_read_u32_be(this.handle, offset)
+        let h: I64 = this.handle as I64
+        if offset < 0 or offset + 4 > buf_get_len(h) {
+            return 0
+        }
+        let data: *Unit = buf_get_data(h)
+        let b0: I64 = buf_read_byte_at(data, offset) as I64
+        let b1: I64 = buf_read_byte_at(data, offset + 1) as I64
+        let b2: I64 = buf_read_byte_at(data, offset + 2) as I64
+        let b3: I64 = buf_read_byte_at(data, offset + 3) as I64
+        b0 * 16777216 + b1 * 65536 + b2 * 256 + b3
     }
 
     /// Reads a signed 32-bit integer at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The signed 32-bit value
     pub func read_i32_at(this, offset: I64) -> I32 {
-        ffi_buffer_read_i32_le(this.handle, offset)
+        this.read_u32_le(offset) as I32
     }
 
     /// Reads a signed 32-bit integer at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The signed 32-bit value
     pub func read_i32_be(this, offset: I64) -> I32 {
-        ffi_buffer_read_i32_be(this.handle, offset)
+        this.read_u32_be(offset) as I32
     }
 
     // ========================================================================
@@ -531,171 +522,168 @@ impl Buffer {
     // ========================================================================
 
     /// Writes an unsigned 64-bit integer at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value
-    /// * `offset` - The byte offset
     pub func write_u64_le(this, value: I64, offset: I64) {
-        ffi_buffer_write_u64_le(this.handle, offset, value)
+        let h: I64 = this.handle as I64
+        buf_ensure_len(h, offset + 8)
+        let data: *Unit = buf_get_data(h)
+        // Write I64 directly to memory (native LE on x86)
+        let dst: *I64 = (data as I64 + offset) as *I64
+        lowlevel { ptr_write[I64](dst, value) }
     }
 
     /// Writes an unsigned 64-bit integer at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value
-    /// * `offset` - The byte offset
     pub func write_u64_be(this, value: I64, offset: I64) {
-        ffi_buffer_write_u64_be(this.handle, offset, value)
+        // Write as LE, then reverse the 8 bytes
+        this.write_u64_le(value, offset)
+        let h: I64 = this.handle as I64
+        let data: *Unit = buf_get_data(h)
+        // Swap bytes: 0<->7, 1<->6, 2<->5, 3<->4
+        var j: I64 = 0
+        loop (j < 4) {
+            let a: I32 = buf_read_byte_at(data, offset + j)
+            let b: I32 = buf_read_byte_at(data, offset + 7 - j)
+            buf_write_byte_at(data, offset + j, b)
+            buf_write_byte_at(data, offset + 7 - j, a)
+            j = j + 1
+        }
     }
 
     /// Reads an unsigned 64-bit integer at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The unsigned 64-bit value
     pub func read_u64_le(this, offset: I64) -> I64 {
-        ffi_buffer_read_u64_le(this.handle, offset)
+        let h: I64 = this.handle as I64
+        if offset < 0 or offset + 8 > buf_get_len(h) {
+            return 0
+        }
+        let data: *Unit = buf_get_data(h)
+        // Read I64 directly from memory (native LE on x86)
+        let src: *I64 = (data as I64 + offset) as *I64
+        lowlevel { ptr_read[I64](src) }
     }
 
     /// Reads an unsigned 64-bit integer at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The unsigned 64-bit value
     pub func read_u64_be(this, offset: I64) -> I64 {
-        ffi_buffer_read_u64_be(this.handle, offset)
+        let h: I64 = this.handle as I64
+        if offset < 0 or offset + 8 > buf_get_len(h) {
+            return 0
+        }
+        let data: *Unit = buf_get_data(h)
+        // Read bytes in big-endian order: MSB first
+        var result: I64 = 0
+        var i: I64 = 0
+        loop (i < 8) {
+            result = result * 256 + (buf_read_byte_at(data, offset + i) as I64)
+            i = i + 1
+        }
+        result
     }
 
     /// Reads a signed 64-bit integer at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The signed 64-bit value
     pub func read_i64_at(this, offset: I64) -> I64 {
-        ffi_buffer_read_i64_le(this.handle, offset)
+        this.read_u64_le(offset)
     }
 
     /// Reads a signed 64-bit integer at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The signed 64-bit value
     pub func read_i64_be(this, offset: I64) -> I64 {
-        ffi_buffer_read_i64_be(this.handle, offset)
+        this.read_u64_be(offset)
     }
 
     // ========================================================================
-    // Float Read/Write
+    // Float Read/Write (using bit reinterpretation via I32/I64)
     // ========================================================================
 
     /// Writes a 32-bit float at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The float value
-    /// * `offset` - The byte offset
+    /// Uses type-punning through memory: write F32, read back as I32 bits.
     pub func write_f32_le(this, value: F32, offset: I64) {
-        ffi_buffer_write_f32_le(this.handle, offset, value)
+        // Type-pun F32 -> I32 via memory
+        let tmp: *Unit = buf_mem_alloc(4)
+        let fp: *F32 = tmp as *F32
+        lowlevel { ptr_write[F32](fp, value) }
+        let ip: *I32 = tmp as *I32
+        let bits: I32 = lowlevel { ptr_read[I32](ip) }
+        buf_mem_free(tmp)
+        this.write_u32_le(bits as I64, offset)
     }
 
     /// Writes a 32-bit float at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The float value
-    /// * `offset` - The byte offset
     pub func write_f32_be(this, value: F32, offset: I64) {
-        ffi_buffer_write_f32_be(this.handle, offset, value)
+        let tmp: *Unit = buf_mem_alloc(4)
+        let fp: *F32 = tmp as *F32
+        lowlevel { ptr_write[F32](fp, value) }
+        let ip: *I32 = tmp as *I32
+        let bits: I32 = lowlevel { ptr_read[I32](ip) }
+        buf_mem_free(tmp)
+        this.write_u32_be(bits as I64, offset)
     }
 
     /// Reads a 32-bit float at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The 32-bit float value
     pub func read_f32_le(this, offset: I64) -> F32 {
-        ffi_buffer_read_f32_le(this.handle, offset)
+        let bits: I32 = this.read_u32_le(offset) as I32
+        // Type-pun I32 -> F32 via memory
+        let tmp: *Unit = buf_mem_alloc(4)
+        let ip: *I32 = tmp as *I32
+        lowlevel { ptr_write[I32](ip, bits) }
+        let fp: *F32 = tmp as *F32
+        let result: F32 = lowlevel { ptr_read[F32](fp) }
+        buf_mem_free(tmp)
+        result
     }
 
     /// Reads a 32-bit float at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The 32-bit float value
     pub func read_f32_be(this, offset: I64) -> F32 {
-        ffi_buffer_read_f32_be(this.handle, offset)
+        let bits: I32 = this.read_u32_be(offset) as I32
+        let tmp: *Unit = buf_mem_alloc(4)
+        let ip: *I32 = tmp as *I32
+        lowlevel { ptr_write[I32](ip, bits) }
+        let fp: *F32 = tmp as *F32
+        let result: F32 = lowlevel { ptr_read[F32](fp) }
+        buf_mem_free(tmp)
+        result
     }
 
     /// Writes a 64-bit double at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The double value
-    /// * `offset` - The byte offset
     pub func write_f64_le(this, value: F64, offset: I64) {
-        ffi_buffer_write_f64_le(this.handle, offset, value)
+        let tmp: *Unit = buf_mem_alloc(8)
+        let fp: *F64 = tmp as *F64
+        lowlevel { ptr_write[F64](fp, value) }
+        let ip: *I64 = tmp as *I64
+        let bits: I64 = lowlevel { ptr_read[I64](ip) }
+        buf_mem_free(tmp)
+        this.write_u64_le(bits, offset)
     }
 
     /// Writes a 64-bit double at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The double value
-    /// * `offset` - The byte offset
     pub func write_f64_be(this, value: F64, offset: I64) {
-        ffi_buffer_write_f64_be(this.handle, offset, value)
+        let tmp: *Unit = buf_mem_alloc(8)
+        let fp: *F64 = tmp as *F64
+        lowlevel { ptr_write[F64](fp, value) }
+        let ip: *I64 = tmp as *I64
+        let bits: I64 = lowlevel { ptr_read[I64](ip) }
+        buf_mem_free(tmp)
+        this.write_u64_be(bits, offset)
     }
 
     /// Reads a 64-bit double at the specified offset (little-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The 64-bit double value
     pub func read_f64_le(this, offset: I64) -> F64 {
-        ffi_buffer_read_f64_le(this.handle, offset)
+        let bits: I64 = this.read_u64_le(offset)
+        let tmp: *Unit = buf_mem_alloc(8)
+        let ip: *I64 = tmp as *I64
+        lowlevel { ptr_write[I64](ip, bits) }
+        let fp: *F64 = tmp as *F64
+        let result: F64 = lowlevel { ptr_read[F64](fp) }
+        buf_mem_free(tmp)
+        result
     }
 
     /// Reads a 64-bit double at the specified offset (big-endian).
-    ///
-    /// # Arguments
-    ///
-    /// * `offset` - The byte offset
-    ///
-    /// # Returns
-    ///
-    /// The 64-bit double value
     pub func read_f64_be(this, offset: I64) -> F64 {
-        ffi_buffer_read_f64_be(this.handle, offset)
+        let bits: I64 = this.read_u64_be(offset)
+        let tmp: *Unit = buf_mem_alloc(8)
+        let ip: *I64 = tmp as *I64
+        lowlevel { ptr_write[I64](ip, bits) }
+        let fp: *F64 = tmp as *F64
+        let result: F64 = lowlevel { ptr_read[F64](fp) }
+        buf_mem_free(tmp)
+        result
     }
 
     // ========================================================================
@@ -703,81 +691,139 @@ impl Buffer {
     // ========================================================================
 
     /// Fills a portion of the buffer with the specified value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The byte value to fill with
-    /// * `start` - The start index (inclusive)
-    /// * `end` - The end index (exclusive)
     pub func fill(this, value: I32, start: I64, end: I64) {
-        ffi_buffer_fill(this.handle, value, start, end)
+        let h: I64 = this.handle as I64
+        let len: I64 = buf_get_len(h)
+        var s: I64 = start
+        var e: I64 = end
+        if s < 0 { s = 0 }
+        if e < 0 or e > len { e = len }
+        let data: *Unit = buf_get_data(h)
+        let byte_val: I32 = value % 256
+        var i: I64 = s
+        loop (i < e) {
+            buf_write_byte_at(data, i, byte_val)
+            i = i + 1
+        }
     }
 
     /// Fills the entire buffer with the specified value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The byte value to fill with
     pub func fill_all(this, value: I32) {
-        ffi_buffer_fill(this.handle, value, 0, this.len())
+        this.fill(value, 0, this.len())
     }
 
     /// Copies bytes from this buffer to a target buffer.
-    ///
-    /// # Arguments
-    ///
-    /// * `target` - The target buffer
-    /// * `target_start` - The start position in the target
-    /// * `source_start` - The start position in the source (inclusive)
-    /// * `source_end` - The end position in the source (exclusive)
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes copied
     pub func copy_to(this, target: ref Buffer, target_start: I64, source_start: I64, source_end: I64) -> I64 {
-        ffi_buffer_copy(this.handle, target.handle, target_start, source_start, source_end)
+        let sh: I64 = this.handle as I64
+        let th: I64 = target.handle as I64
+        let slen: I64 = buf_get_len(sh)
+        var ss: I64 = source_start
+        var se: I64 = source_end
+        var ts: I64 = target_start
+        if ss < 0 { ss = 0 }
+        if se < 0 or se > slen { se = slen }
+        if ts < 0 { ts = 0 }
+        let bytes_to_copy: I64 = se - ss
+        if bytes_to_copy <= 0 {
+            return 0
+        }
+        // Ensure target has enough space
+        buf_ensure_len(th, ts + bytes_to_copy)
+        let src_data: *Unit = buf_get_data(sh)
+        let dst_data: *Unit = buf_get_data(th)
+        var i: I64 = 0
+        loop (i < bytes_to_copy) {
+            let byte_val: I32 = buf_read_byte_at(src_data, ss + i)
+            buf_write_byte_at(dst_data, ts + i, byte_val)
+            i = i + 1
+        }
+        bytes_to_copy
     }
 
     /// Creates a new buffer containing a copy of a portion of this buffer.
-    ///
-    /// # Arguments
-    ///
-    /// * `start` - The start index (inclusive)
-    /// * `end` - The end index (exclusive)
-    ///
-    /// # Returns
-    ///
-    /// A new `Buffer` containing the slice
     pub func slice(this, start: I64, end: I64) -> Buffer {
-        let h: *Unit = ffi_buffer_slice(this.handle, start, end)
-        Buffer { handle: h }
+        let h: I64 = this.handle as I64
+        let len: I64 = buf_get_len(h)
+        var s: I64 = start
+        var e: I64 = end
+        if s < 0 { s = 0 }
+        if e < 0 or e > len { e = len }
+        if s >= e {
+            return Buffer.new(1)
+        }
+        let slice_len: I64 = e - s
+        let result: Buffer = Buffer.new(slice_len)
+        let rh: I64 = result.handle as I64
+        let src_data: *Unit = buf_get_data(h)
+        let dst_data: *Unit = buf_get_data(rh)
+        var i: I64 = 0
+        loop (i < slice_len) {
+            buf_write_byte_at(dst_data, i, buf_read_byte_at(src_data, s + i))
+            i = i + 1
+        }
+        buf_set_len(rh, slice_len)
+        result
     }
 
     /// Creates a copy of this buffer.
     pub func duplicate(this) -> Buffer {
-        let h: *Unit = ffi_buffer_slice(this.handle, 0, this.len())
-        Buffer { handle: h }
+        this.slice(0, this.len())
     }
 
     /// Swaps byte order for 16-bit values in place.
-    ///
-    /// Useful for converting between little-endian and big-endian.
     pub func swap16(this) {
-        ffi_buffer_swap16(this.handle)
+        let h: I64 = this.handle as I64
+        let len: I64 = buf_get_len(h)
+        if len < 2 { return }
+        let data: *Unit = buf_get_data(h)
+        var i: I64 = 0
+        loop (i + 1 < len) {
+            let a: I32 = buf_read_byte_at(data, i)
+            let b: I32 = buf_read_byte_at(data, i + 1)
+            buf_write_byte_at(data, i, b)
+            buf_write_byte_at(data, i + 1, a)
+            i = i + 2
+        }
     }
 
     /// Swaps byte order for 32-bit values in place.
-    ///
-    /// Useful for converting between little-endian and big-endian.
     pub func swap32(this) {
-        ffi_buffer_swap32(this.handle)
+        let h: I64 = this.handle as I64
+        let len: I64 = buf_get_len(h)
+        if len < 4 { return }
+        let data: *Unit = buf_get_data(h)
+        var i: I64 = 0
+        loop (i + 3 < len) {
+            let a: I32 = buf_read_byte_at(data, i)
+            let b: I32 = buf_read_byte_at(data, i + 1)
+            let c: I32 = buf_read_byte_at(data, i + 2)
+            let d: I32 = buf_read_byte_at(data, i + 3)
+            buf_write_byte_at(data, i, d)
+            buf_write_byte_at(data, i + 1, c)
+            buf_write_byte_at(data, i + 2, b)
+            buf_write_byte_at(data, i + 3, a)
+            i = i + 4
+        }
     }
 
     /// Swaps byte order for 64-bit values in place.
-    ///
-    /// Useful for converting between little-endian and big-endian.
     pub func swap64(this) {
-        ffi_buffer_swap64(this.handle)
+        let h: I64 = this.handle as I64
+        let len: I64 = buf_get_len(h)
+        if len < 8 { return }
+        let data: *Unit = buf_get_data(h)
+        var i: I64 = 0
+        loop (i + 7 < len) {
+            var j: I64 = 0
+            loop (j < 4) {
+                let a: I32 = buf_read_byte_at(data, i + j)
+                let b: I32 = buf_read_byte_at(data, i + 7 - j)
+                buf_write_byte_at(data, i + j, b)
+                buf_write_byte_at(data, i + 7 - j, a)
+                j = j + 1
+            }
+            i = i + 8
+        }
     }
 
     // ========================================================================
@@ -785,73 +831,73 @@ impl Buffer {
     // ========================================================================
 
     /// Compares this buffer with another buffer.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - The buffer to compare with
-    ///
-    /// # Returns
-    ///
-    /// -1 if this < other, 0 if equal, 1 if this > other
     pub func compare(this, other: ref Buffer) -> I32 {
-        ffi_buffer_compare(this.handle, other.handle)
+        let h1: I64 = this.handle as I64
+        let h2: I64 = other.handle as I64
+        let len1: I64 = buf_get_len(h1)
+        let len2: I64 = buf_get_len(h2)
+        let d1: *Unit = buf_get_data(h1)
+        let d2: *Unit = buf_get_data(h2)
+        var min_len: I64 = len1
+        if len2 < min_len { min_len = len2 }
+        var i: I64 = 0
+        loop (i < min_len) {
+            let a: I32 = buf_read_byte_at(d1, i)
+            let b: I32 = buf_read_byte_at(d2, i)
+            if a < b { return -1 }
+            if a > b { return 1 }
+            i = i + 1
+        }
+        if len1 < len2 { return -1 }
+        if len1 > len2 { return 1 }
+        0
     }
 
     /// Checks if this buffer equals another buffer.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - The buffer to compare with
-    ///
-    /// # Returns
-    ///
-    /// `true` if buffers are equal, `false` otherwise
     pub func equals(this, other: ref Buffer) -> Bool {
-        let result: I32 = ffi_buffer_equals(this.handle, other.handle)
-        return result != 0
+        this.compare(other) == 0
     }
 
     /// Finds the first occurrence of a byte value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The byte value to search for
-    /// * `start` - The index to start searching from
-    ///
-    /// # Returns
-    ///
-    /// The index of the first occurrence, or -1 if not found
     pub func index_of(this, value: I32, start: I64) -> I64 {
-        ffi_buffer_index_of(this.handle, value, start)
+        let h: I64 = this.handle as I64
+        let len: I64 = buf_get_len(h)
+        let data: *Unit = buf_get_data(h)
+        var s: I64 = start
+        if s < 0 { s = 0 }
+        let target: I32 = value % 256
+        var i: I64 = s
+        loop (i < len) {
+            if buf_read_byte_at(data, i) == target {
+                return i
+            }
+            i = i + 1
+        }
+        -1
     }
 
     /// Finds the last occurrence of a byte value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The byte value to search for
-    /// * `start` - The index to start searching backwards from
-    ///
-    /// # Returns
-    ///
-    /// The index of the last occurrence, or -1 if not found
     pub func last_index_of(this, value: I32, start: I64) -> I64 {
-        ffi_buffer_last_index_of(this.handle, value, start)
+        let h: I64 = this.handle as I64
+        let len: I64 = buf_get_len(h)
+        if len == 0 { return -1 }
+        let data: *Unit = buf_get_data(h)
+        var s: I64 = start
+        if s < 0 or s >= len { s = len - 1 }
+        let target: I32 = value % 256
+        var i: I64 = s
+        loop (i >= 0) {
+            if buf_read_byte_at(data, i) == target {
+                return i
+            }
+            i = i - 1
+        }
+        -1
     }
 
     /// Checks if the buffer contains a byte value.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The byte value to search for
-    /// * `start` - The index to start searching from
-    ///
-    /// # Returns
-    ///
-    /// `true` if the value is found, `false` otherwise
     pub func includes(this, value: I32, start: I64) -> Bool {
-        let result: I32 = ffi_buffer_includes(this.handle, value, start)
-        return result != 0
+        this.index_of(value, start) >= 0
     }
 
     // ========================================================================
@@ -859,62 +905,87 @@ impl Buffer {
     // ========================================================================
 
     /// Converts the buffer to a hexadecimal string.
-    ///
-    /// # Returns
-    ///
-    /// A string containing the hexadecimal representation
-    ///
-    /// # Example
-    ///
-    /// ```tml
-    /// buf.write_byte(0xDE)
-    /// buf.write_byte(0xAD)
-    /// let hex = buf.to_hex()  // "dead"
-    /// ```
     pub func to_hex(this) -> Str {
-        ffi_buffer_to_hex(this.handle)
+        let h: I64 = this.handle as I64
+        let len: I64 = buf_get_len(h)
+        if len == 0 {
+            let empty: *Unit = buf_mem_alloc(1)
+            buf_write_byte_at(empty, 0, 0)
+            return empty as Str
+        }
+        let data: *Unit = buf_get_data(h)
+        let hex_len: I64 = len * 2
+        let hex: *Unit = buf_mem_alloc(hex_len + 1)
+        var i: I64 = 0
+        loop (i < len) {
+            let byte_val: I32 = buf_read_byte_at(data, i)
+            buf_write_byte_at(hex, i * 2, hex_digit_to_char((byte_val / 16) % 16))
+            buf_write_byte_at(hex, i * 2 + 1, hex_digit_to_char(byte_val % 16))
+            i = i + 1
+        }
+        buf_write_byte_at(hex, hex_len, 0)  // null terminator
+        hex as Str
     }
 
     /// Converts the buffer to a UTF-8 string.
-    ///
-    /// # Returns
-    ///
-    /// A string containing the UTF-8 representation
     pub func to_string(this) -> Str {
-        ffi_buffer_to_string(this.handle)
+        let h: I64 = this.handle as I64
+        let len: I64 = buf_get_len(h)
+        if len == 0 {
+            let empty: *Unit = buf_mem_alloc(1)
+            buf_write_byte_at(empty, 0, 0)
+            return empty as Str
+        }
+        let data: *Unit = buf_get_data(h)
+        let str_buf: *Unit = buf_mem_alloc(len + 1)
+        var i: I64 = 0
+        loop (i < len) {
+            buf_write_byte_at(str_buf, i, buf_read_byte_at(data, i))
+            i = i + 1
+        }
+        buf_write_byte_at(str_buf, len, 0)  // null terminator
+        str_buf as Str
     }
 
     /// Creates a buffer from a hexadecimal string.
-    ///
-    /// # Arguments
-    ///
-    /// * `hex` - The hexadecimal string
-    ///
-    /// # Returns
-    ///
-    /// A new `Buffer` containing the decoded bytes
-    ///
-    /// # Example
-    ///
-    /// ```tml
-    /// let buf = Buffer::from_hex("deadbeef")
-    /// ```
     pub func from_hex(hex: Str) -> Buffer {
-        let h: *Unit = ffi_buffer_from_hex(hex)
-        Buffer { handle: h }
+        let hex_len: I64 = buf_str_len(hex)
+        if hex_len == 0 or hex_len % 2 != 0 {
+            return Buffer.new(1)
+        }
+        let hex_ptr: *Unit = hex as *Unit
+        let buf_len: I64 = hex_len / 2
+        let result: Buffer = Buffer.new(buf_len)
+        let rh: I64 = result.handle as I64
+        let data: *Unit = buf_get_data(rh)
+        var i: I64 = 0
+        loop (i < buf_len) {
+            let c1: I32 = buf_read_byte_at(hex_ptr, i * 2)
+            let c2: I32 = buf_read_byte_at(hex_ptr, i * 2 + 1)
+            let val: I32 = hex_char_to_val(c1) * 16 + hex_char_to_val(c2)
+            buf_write_byte_at(data, i, val)
+            i = i + 1
+        }
+        buf_set_len(rh, buf_len)
+        result
     }
 
     /// Creates a buffer from a UTF-8 string.
-    ///
-    /// # Arguments
-    ///
-    /// * `str` - The UTF-8 string
-    ///
-    /// # Returns
-    ///
-    /// A new `Buffer` containing the string bytes
     pub func from_string(str: Str) -> Buffer {
-        let h: *Unit = ffi_buffer_from_string(str)
-        Buffer { handle: h }
+        let str_len: I64 = buf_str_len(str)
+        if str_len == 0 {
+            return Buffer.new(1)
+        }
+        let str_ptr: *Unit = str as *Unit
+        let result: Buffer = Buffer.new(str_len)
+        let rh: I64 = result.handle as I64
+        let data: *Unit = buf_get_data(rh)
+        var i: I64 = 0
+        loop (i < str_len) {
+            buf_write_byte_at(data, i, buf_read_byte_at(str_ptr, i))
+            i = i + 1
+        }
+        buf_set_len(rh, str_len)
+        result
     }
 }

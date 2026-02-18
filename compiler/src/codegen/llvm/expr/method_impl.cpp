@@ -93,7 +93,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     }
 
     const auto& named = receiver_type->as<types::NamedType>();
-    bool is_builtin_type = (named.name == "Buffer" || named.name == "File" || named.name == "Path");
+    bool is_builtin_type = (named.name == "File" || named.name == "Path");
     bool is_slice_inlined = (named.name == "Slice" || named.name == "MutSlice") &&
                             (method == "len" || method == "is_empty");
 
@@ -638,8 +638,7 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     }
 
     const auto& named2 = receiver_type->as<types::NamedType>();
-    bool is_builtin_type2 =
-        (named2.name == "Buffer" || named2.name == "File" || named2.name == "Path");
+    bool is_builtin_type2 = (named2.name == "File" || named2.name == "Path");
     if (is_builtin_type2) {
         return std::nullopt;
     }
