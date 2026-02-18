@@ -214,6 +214,15 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     // Handle generic type arguments
     if (!named.type_args.empty()) {
         mangled_type_name = mangle_struct_name(named.name, named.type_args);
+
+        // If the library already emitted methods using the unmangled base name
+        // (e.g., tml_BTreeMap_insert from gen_impl_method), use the base name
+        // so user code calls the existing function instead of a non-existent mangled one.
+        std::string base_fn_check = "@tml_" + named.name + "_" + method;
+        if (mangled_type_name != named.name && generated_functions_.count(base_fn_check) > 0) {
+            mangled_type_name = named.name;
+        }
+
         std::string method_for_key = method;
         if (!method_type_suffix.empty()) {
             method_for_key += "__" + method_type_suffix;

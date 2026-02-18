@@ -695,6 +695,17 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                 }
             }
 
+            // If the library already emitted methods using the unmangled base name
+            // (e.g., tml_BTreeMap_create from gen_impl_method), use the base name
+            // so user code calls the existing function instead of a non-existent mangled one.
+            {
+                std::string base_fn_check = "@tml_" + type_name + "_" + method;
+                if (mangled_type_name != type_name &&
+                    generated_functions_.count(base_fn_check) > 0) {
+                    mangled_type_name = type_name;
+                }
+            }
+
             // Request impl method instantiation if needed
             // This must be done regardless of func_sig to handle local generic structs
             std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method;
