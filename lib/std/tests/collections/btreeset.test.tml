@@ -7,6 +7,7 @@ func test_btreeset_create_empty() -> I32 {
     let s: BTreeSet = BTreeSet::create()
     assert(s.is_empty(), "new set should be empty")
     assert_eq(s.len(), 0, "len should be 0")
+    s.destroy()
     return 0
 }
 
@@ -23,6 +24,7 @@ func test_btreeset_insert_contains() -> I32 {
     assert(s.contains(10), "should contain 10")
     assert(s.contains(20), "should contain 20")
     assert(not s.contains(99), "should not contain 99")
+    s.destroy()
     return 0
 }
 
@@ -34,6 +36,7 @@ func test_btreeset_no_duplicates() -> I32 {
     assert(first, "first insert should return true")
     assert(not second, "duplicate insert should return false")
     assert_eq(s.len(), 1, "len should still be 1")
+    s.destroy()
     return 0
 }
 
@@ -49,6 +52,7 @@ func test_btreeset_remove() -> I32 {
     assert(not s.contains(2), "should not contain 2")
     let not_removed: Bool = s.remove(99)
     assert(not not_removed, "remove(99) should return false")
+    s.destroy()
     return 0
 }
 
@@ -60,6 +64,7 @@ func test_btreeset_min_max() -> I32 {
     s.insert(30)
     assert_eq(s.min(), 10, "min should be 10")
     assert_eq(s.max(), 50, "max should be 50")
+    s.destroy()
     return 0
 }
 
@@ -71,5 +76,6 @@ func test_btreeset_clear() -> I32 {
     s.clear()
     assert(s.is_empty(), "should be empty after clear")
     assert_eq(s.len(), 0, "len should be 0 after clear")
+    s.destroy()
     return 0
 }

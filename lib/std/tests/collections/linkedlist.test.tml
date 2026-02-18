@@ -7,6 +7,7 @@ func test_linkedlist_create() -> I32 {
     let list: LinkedList[I64] = LinkedList::create[I64]()
     assert_eq(list.count(), 0 as I64, "new list should be empty")
     assert(list.is_empty(), "new list should report is_empty")
+    list.destroy()
     return 0
 }
 
@@ -22,6 +23,7 @@ func test_linkedlist_add_last() -> I32 {
     assert(f == Just(10 as I64), "first should be 10")
     let l: Maybe[I64] = list.last()
     assert(l == Just(30 as I64), "last should be 30")
+    list.destroy()
     return 0
 }
 
@@ -37,6 +39,7 @@ func test_linkedlist_add_first() -> I32 {
     assert(f == Just(10 as I64), "first should be 10")
     let l: Maybe[I64] = list.last()
     assert(l == Just(30 as I64), "last should be 30")
+    list.destroy()
     return 0
 }
 
@@ -46,6 +49,7 @@ func test_linkedlist_add() -> I32 {
     list.add(10)
     list.add(20)
     assert_eq(list.count(), 2 as I64, "add should add_last")
+    list.destroy()
     return 0
 }
 
@@ -59,6 +63,7 @@ func test_linkedlist_remove_first() -> I32 {
     let r1: Maybe[I64] = list.remove_first()
     assert(r1 == Just(10 as I64), "remove_first should return 10")
     assert_eq(list.count(), 2 as I64, "count after remove_first")
+    list.destroy()
     return 0
 }
 
@@ -72,6 +77,7 @@ func test_linkedlist_remove_last() -> I32 {
     let r1: Maybe[I64] = list.remove_last()
     assert(r1 == Just(30 as I64), "remove_last should return 30")
     assert_eq(list.count(), 2 as I64, "count after remove_last")
+    list.destroy()
     return 0
 }
 
@@ -82,6 +88,7 @@ func test_linkedlist_first_last_empty() -> I32 {
     assert(f == Nothing, "first on empty should be Nothing")
     let l: Maybe[I64] = list.last()
     assert(l == Nothing, "last on empty should be Nothing")
+    list.destroy()
     return 0
 }
 
@@ -94,6 +101,7 @@ func test_linkedlist_clear() -> I32 {
     list.clear()
     assert_eq(list.count(), 0 as I64, "count after clear")
     assert(list.is_empty(), "should be empty after clear")
+    list.destroy()
     return 0
 }
 
@@ -105,6 +113,7 @@ func test_linkedlist_contains() -> I32 {
     list.add_last(30)
     assert(list.contains(20), "should contain 20")
     assert(not list.contains(99), "should not contain 99")
+    list.destroy()
     return 0
 }
 
@@ -121,5 +130,6 @@ func test_linkedlist_remove() -> I32 {
 
     let not_removed = list.remove(99)
     assert(not not_removed, "remove(99) should return false")
+    list.destroy()
     return 0
 }

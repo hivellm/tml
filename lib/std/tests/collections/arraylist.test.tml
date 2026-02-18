@@ -7,6 +7,7 @@ func test_arraylist_create_empty() -> I32 {
     let list: ArrayList[I64] = ArrayList::create[I64]()
     assert_eq(list.count(), 0 as I64, "new list should be empty")
     assert(list.is_empty(), "new list should report is_empty")
+    list.destroy()
     return 0
 }
 
@@ -20,6 +21,7 @@ func test_arraylist_add_get() -> I32 {
     assert_eq(list.get(0), 10 as I64, "get(0) should be 10")
     assert_eq(list.get(1), 20 as I64, "get(1) should be 20")
     assert_eq(list.get(2), 30 as I64, "get(2) should be 30")
+    list.destroy()
     return 0
 }
 
@@ -30,6 +32,7 @@ func test_arraylist_set() -> I32 {
     list.add(20)
     list.set(0, 99)
     assert_eq(list.get(0), 99 as I64, "set should update element")
+    list.destroy()
     return 0
 }
 
@@ -41,6 +44,7 @@ func test_arraylist_clear() -> I32 {
     list.clear()
     assert_eq(list.count(), 0 as I64, "count should be 0 after clear")
     assert(list.is_empty(), "should be empty after clear")
+    list.destroy()
     return 0
 }
 
@@ -50,6 +54,7 @@ func test_arraylist_with_capacity() -> I32 {
     assert(list.is_empty(), "new list with capacity should be empty")
     list.add(42)
     assert_eq(list.count(), 1 as I64, "count should be 1")
+    list.destroy()
     return 0
 }
 
@@ -63,6 +68,7 @@ func test_arraylist_insert() -> I32 {
     assert_eq(list.get(0), 1 as I64, "element 0")
     assert_eq(list.get(1), 2 as I64, "inserted element")
     assert_eq(list.get(2), 3 as I64, "element 2")
+    list.destroy()
     return 0
 }
 
@@ -76,6 +82,7 @@ func test_arraylist_remove_at() -> I32 {
     assert_eq(list.count(), 2 as I64, "count after remove_at")
     assert_eq(list.get(0), 10 as I64, "first element")
     assert_eq(list.get(1), 30 as I64, "second element")
+    list.destroy()
     return 0
 }
 
@@ -86,6 +93,7 @@ func test_arraylist_contains() -> I32 {
     list.add(20)
     assert(list.contains(10), "should contain 10")
     assert(not list.contains(30), "should not contain 30")
+    list.destroy()
     return 0
 }
 
@@ -97,6 +105,7 @@ func test_arraylist_index_of() -> I32 {
     list.add(30)
     assert_eq(list.index_of(20), 1 as I64, "index_of(20) should be 1")
     assert_eq(list.index_of(99), -1 as I64, "index_of(99) should be -1")
+    list.destroy()
     return 0
 }
 
@@ -111,6 +120,7 @@ func test_arraylist_remove() -> I32 {
     assert_eq(list.count(), 2 as I64, "count after remove")
     let not_removed = list.remove(99)
     assert(not not_removed, "remove(99) should return false")
+    list.destroy()
     return 0
 }
 
@@ -124,5 +134,6 @@ func test_arraylist_reverse() -> I32 {
     assert_eq(list.get(0), 3 as I64, "first after reverse")
     assert_eq(list.get(1), 2 as I64, "second after reverse")
     assert_eq(list.get(2), 1 as I64, "third after reverse")
+    list.destroy()
     return 0
 }

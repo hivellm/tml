@@ -14,6 +14,8 @@ func test_arraylist_add_range() -> I32 {
 
     list1.add_range(ref list2)
     assert_eq(list1.count(), 4 as I64, "list1 should have 4 items after add_range")
+    list1.destroy()
+    list2.destroy()
     return 0
 }
 
@@ -26,5 +28,6 @@ func test_queue_grow() -> I32 {
         i = i + 1
     }
     assert_eq(q.count(), 20 as I64, "queue should have 20 items after grow")
+    q.destroy()
     return 0
 }

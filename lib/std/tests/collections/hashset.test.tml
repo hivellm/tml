@@ -7,6 +7,7 @@ func test_hashset_create() -> I32 {
     let set: HashSet[I64] = HashSet::create[I64]()
     assert_eq(set.count(), 0 as I64, "new set should be empty")
     assert(set.is_empty(), "new set should report is_empty")
+    set.destroy()
     return 0
 }
 
@@ -18,6 +19,7 @@ func test_hashset_add_unique() -> I32 {
     assert(added1, "adding 10 should return true")
     assert(added2, "adding 20 should return true")
     assert_eq(set.count(), 2 as I64, "count should be 2")
+    set.destroy()
     return 0
 }
 
@@ -28,5 +30,6 @@ func test_hashset_add_duplicate() -> I32 {
     let added_dup = set.add(10)
     assert(not added_dup, "adding duplicate should return false")
     assert_eq(set.count(), 1 as I64, "count should still be 1")
+    set.destroy()
     return 0
 }

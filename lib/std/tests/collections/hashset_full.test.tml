@@ -10,6 +10,7 @@ func test_hashset_contains() -> I32 {
     assert(set.contains(10), "should contain 10")
     assert(set.contains(20), "should contain 20")
     assert(not set.contains(30), "should not contain 30")
+    set.destroy()
     return 0
 }
 
@@ -28,6 +29,7 @@ func test_hashset_remove() -> I32 {
 
     let not_removed = set.remove(99)
     assert(not not_removed, "remove(99) should return false")
+    set.destroy()
     return 0
 }
 
@@ -42,6 +44,7 @@ func test_hashset_clear() -> I32 {
     set.clear()
     assert_eq(set.count(), 0 as I64, "count should be 0 after clear")
     assert(set.is_empty(), "should be empty after clear")
+    set.destroy()
     return 0
 }
 
@@ -51,5 +54,6 @@ func test_hashset_with_capacity() -> I32 {
     assert(set.is_empty(), "new set with capacity should be empty")
     set.add(42)
     assert_eq(set.count(), 1 as I64, "count should be 1")
+    set.destroy()
     return 0
 }

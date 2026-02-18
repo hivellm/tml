@@ -7,6 +7,7 @@ func test_deque_create_empty() -> I32 {
     let dq: Deque[I64] = Deque::create[I64]()
     assert(dq.is_empty(), "new deque should be empty")
     assert_eq(dq.count(), 0, "count should be 0")
+    dq.destroy()
     return 0
 }
 
@@ -25,6 +26,7 @@ func test_deque_push_back_pop_front() -> I32 {
     let c: I64 = dq.pop_front().unwrap()
     assert_eq(c, 30, "third pop_front should be 30")
     assert(dq.is_empty(), "deque should be empty after popping all")
+    dq.destroy()
     return 0
 }
 
@@ -43,6 +45,7 @@ func test_deque_push_front_pop_back() -> I32 {
     let c: I64 = dq.pop_back().unwrap()
     assert_eq(c, 30, "third pop_back should be 30")
     assert(dq.is_empty(), "deque should be empty")
+    dq.destroy()
     return 0
 }
 
@@ -58,6 +61,7 @@ func test_deque_front_back() -> I32 {
     let b: I64 = dq.back().unwrap()
     assert_eq(b, 3, "back should be 3")
     assert_eq(dq.count(), 3, "peek should not remove")
+    dq.destroy()
     return 0
 }
 
@@ -71,6 +75,7 @@ func test_deque_get() -> I32 {
     assert_eq(dq.get(0), 100, "get(0) should be 100")
     assert_eq(dq.get(1), 200, "get(1) should be 200")
     assert_eq(dq.get(2), 300, "get(2) should be 300")
+    dq.destroy()
     return 0
 }
 
@@ -83,6 +88,7 @@ func test_deque_contains() -> I32 {
 
     assert(dq.contains(10), "should contain 10")
     assert(not dq.contains(99), "should not contain 99")
+    dq.destroy()
     return 0
 }
 
@@ -94,6 +100,7 @@ func test_deque_clear() -> I32 {
     dq.clear()
     assert(dq.is_empty(), "should be empty after clear")
     assert_eq(dq.count(), 0, "count should be 0 after clear")
+    dq.destroy()
     return 0
 }
 
@@ -114,6 +121,7 @@ func test_deque_mixed_ops() -> I32 {
     assert_eq(b, 3, "pop_back should be 3")
     assert_eq(dq.count(), 1, "one element left")
     assert_eq(dq.get(0), 2, "remaining should be 2")
+    dq.destroy()
     return 0
 }
 
@@ -128,6 +136,7 @@ func test_deque_empty_pop() -> I32 {
     assert(c.is_nothing(), "front on empty should be Nothing")
     let d: Maybe[I64] = dq.back()
     assert(d.is_nothing(), "back on empty should be Nothing")
+    dq.destroy()
     return 0
 }
 
@@ -143,5 +152,6 @@ func test_deque_grow() -> I32 {
     assert_eq(dq.count(), 10, "should have 10 elements")
     assert_eq(dq.get(0), 0, "first should be 0")
     assert_eq(dq.get(9), 9, "last should be 9")
+    dq.destroy()
     return 0
 }
