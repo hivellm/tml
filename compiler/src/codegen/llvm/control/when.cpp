@@ -331,7 +331,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
 
     // Allocate temporary for result - will track actual type during arm processing
     std::string result_ptr = fresh_reg();
-    std::string result_type = "i32"; // Default, will be updated
+    std::string result_type = "void"; // Default void, updated when an arm produces a value
     bool result_type_set = false;
     bool all_arms_terminate = true;
     emit_line("  " + result_ptr + " = alloca i64"); // Use i64 to hold most types

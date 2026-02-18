@@ -86,6 +86,16 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
                 return 8;
             if (ty == "i128")
                 return 16;
+            // Check if it's an array type like "[16 x %struct.Ipv4Addr]" or "[4 x i32]"
+            if (ty.size() > 2 && ty.front() == '[') {
+                // Parse "[N x ElementType]"
+                auto x_pos = ty.find(" x ");
+                if (x_pos != std::string::npos) {
+                    size_t count = std::stoull(ty.substr(1, x_pos - 1));
+                    std::string elem_type = ty.substr(x_pos + 3, ty.size() - x_pos - 4);
+                    return count * calc_type_size(elem_type);
+                }
+            }
             // Check if it's an anonymous struct/tuple type like "{ %struct.Layout, i64 }"
             if (ty.starts_with("{ ") && ty.ends_with(" }")) {
                 std::string inner = ty.substr(2, ty.size() - 4); // Remove "{ " and " }"
@@ -231,6 +241,16 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
                 return 8;
             if (ty == "i128")
                 return 16;
+            // Check if it's an array type like "[16 x %struct.Ipv4Addr]" or "[4 x i32]"
+            if (ty.size() > 2 && ty.front() == '[') {
+                // Parse "[N x ElementType]"
+                auto x_pos = ty.find(" x ");
+                if (x_pos != std::string::npos) {
+                    size_t count = std::stoull(ty.substr(1, x_pos - 1));
+                    std::string elem_type = ty.substr(x_pos + 3, ty.size() - x_pos - 4);
+                    return count * calc_type_size(elem_type);
+                }
+            }
             // Check if it's an anonymous struct/tuple type like "{ %struct.Layout, i64 }"
             if (ty.starts_with("{ ") && ty.ends_with(" }")) {
                 std::string inner = ty.substr(2, ty.size() - 4); // Remove "{ " and " }"

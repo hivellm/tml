@@ -70,8 +70,13 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
     // Get the target type
     std::string target_type = llvm_type_ptr(cast.target);
 
+    // Determine if the TARGET type is unsigned - this is critical for propagating
+    // unsigned-ness through cast chains (e.g., `255 as U8` used as arg to `U16::from()`)
+    bool target_is_unsigned = cast.target ? is_unsigned_parser_type(*cast.target) : false;
+
     // If types are the same, just return the source
     if (src_type == target_type) {
+        last_expr_is_unsigned_ = target_is_unsigned;
         return src;
     }
 
@@ -110,11 +115,13 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
                 emit_line("  " + result + " = sext " + src_type + " " + src + " to " + target_type);
             }
             last_expr_type_ = target_type;
+            last_expr_is_unsigned_ = target_is_unsigned;
             return result;
         } else if (src_bits > target_bits) {
             // Narrowing: use trunc
             emit_line("  " + result + " = trunc " + src_type + " " + src + " to " + target_type);
             last_expr_type_ = target_type;
+            last_expr_is_unsigned_ = target_is_unsigned;
             return result;
         }
         // Same width: fall through (shouldn't happen, checked earlier)
@@ -124,8 +131,13 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
     if ((src_type == "double" || src_type == "float") &&
         (target_type == "i64" || target_type == "i32" || target_type == "i16" ||
          target_type == "i8")) {
-        emit_line("  " + result + " = fptosi " + src_type + " " + src + " to " + target_type);
+        if (target_is_unsigned) {
+            emit_line("  " + result + " = fptoui " + src_type + " " + src + " to " + target_type);
+        } else {
+            emit_line("  " + result + " = fptosi " + src_type + " " + src + " to " + target_type);
+        }
         last_expr_type_ = target_type;
+        last_expr_is_unsigned_ = target_is_unsigned;
         return result;
     }
 
@@ -139,6 +151,7 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
             emit_line("  " + result + " = sitofp " + src_type + " " + src + " to " + target_type);
         }
         last_expr_type_ = target_type;
+        last_expr_is_unsigned_ = target_is_unsigned;
         return result;
     }
 
@@ -146,6 +159,7 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
     if (src_type == "float" && target_type == "double") {
         emit_line("  " + result + " = fpext float " + src + " to double");
         last_expr_type_ = "double";
+        last_expr_is_unsigned_ = false;
         return result;
     }
 
@@ -153,6 +167,7 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
     if (src_type == "double" && target_type == "float") {
         emit_line("  " + result + " = fptrunc double " + src + " to float");
         last_expr_type_ = "float";
+        last_expr_is_unsigned_ = false;
         return result;
     }
 
@@ -161,6 +176,7 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
                              target_type == "i64")) {
         emit_line("  " + result + " = zext i1 " + src + " to " + target_type);
         last_expr_type_ = target_type;
+        last_expr_is_unsigned_ = target_is_unsigned;
         return result;
     }
 
@@ -169,6 +185,7 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
         target_type == "i1") {
         emit_line("  " + result + " = icmp ne " + src_type + " " + src + ", 0");
         last_expr_type_ = "i1";
+        last_expr_is_unsigned_ = true; // Bool is unsigned
         return result;
     }
 
