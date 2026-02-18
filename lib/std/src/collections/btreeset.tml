@@ -64,6 +64,11 @@ impl BTreeSet {
         this.map.clear()
     }
 
+    /// Destroys the set and frees all associated memory.
+    pub func destroy(this) {
+        this.map.destroy()
+    }
+
     /// Returns the smallest element, or panics if empty.
     pub func min(this) -> I64 {
         return this.map.min_key()

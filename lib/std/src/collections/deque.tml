@@ -72,6 +72,11 @@ impl[T] Deque[T] {
         this.initialized = false
     }
 
+    /// Destroys the deque and frees all associated memory.
+    pub func destroy(this) {
+        this.data.destroy()
+    }
+
     /// Pre-fills the backing list so set() works at any index.
     func fill_backing(mut this, value: T) {
         var i: I64 = 0
@@ -183,6 +188,7 @@ impl[T] Deque[T] {
             i = i + 1
         }
 
+        this.data.destroy()
         this.data = new_data
         this.head = 0
         this.capacity = new_capacity

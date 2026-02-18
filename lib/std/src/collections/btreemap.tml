@@ -93,11 +93,19 @@ impl BTreeMap {
 
     /// Removes all entries.
     pub func clear(mut this) {
+        this.keys.destroy()
+        this.values.destroy()
         let k: List[I64] = List[I64].new(16)
         let v: List[I64] = List[I64].new(16)
         this.keys = k
         this.values = v
         this.length = 0
+    }
+
+    /// Destroys the map and frees all associated memory.
+    pub func destroy(this) {
+        this.keys.destroy()
+        this.values.destroy()
     }
 
     /// Returns the smallest key, or panics if empty.
