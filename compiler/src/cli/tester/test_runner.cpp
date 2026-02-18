@@ -1351,29 +1351,29 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 // Print aggregate sub-phase breakdown (single line)
                 int64_t total_us = total_task_time_us.load();
                 if (total_us > 0) {
-                    TML_LOG_DEBUG("test",
-                                  "Phase 1 sub-phases:"
-                                      << " lex=" << (total_lex_us.load() / 1000) << "ms"
-                                      << " parse=" << (total_parse_us.load() / 1000) << "ms"
-                                      << " typecheck=" << (total_typecheck_us.load() / 1000) << "ms"
-                                      << " borrow=" << (total_borrow_us.load() / 1000) << "ms"
-                                      << " codegen=" << (total_codegen_us.load() / 1000) << "ms"
-                                      << " total=" << (total_us / 1000) << "ms");
+                    TML_LOG_INFO("test",
+                                 "Phase 1 sub-phases:"
+                                     << " lex=" << (total_lex_us.load() / 1000) << "ms"
+                                     << " parse=" << (total_parse_us.load() / 1000) << "ms"
+                                     << " typecheck=" << (total_typecheck_us.load() / 1000) << "ms"
+                                     << " borrow=" << (total_borrow_us.load() / 1000) << "ms"
+                                     << " codegen=" << (total_codegen_us.load() / 1000) << "ms"
+                                     << " total=" << (total_us / 1000) << "ms");
                 }
 
                 {
-                    // Log each slow file as a separate single-line entry
-                    for (size_t i = 0; i < std::min(size_t(5), task_timings.size()); ++i) {
+                    // Log each file as a separate single-line entry (all files, sorted slowest
+                    // first)
+                    for (size_t i = 0; i < task_timings.size(); ++i) {
                         const auto& t = task_timings[i];
-                        TML_LOG_DEBUG("test", "Phase 1 slow #"
-                                                  << i << ": "
-                                                  << fs::path(t.file_path).filename().string()
-                                                  << " " << (t.duration_us / 1000) << "ms"
-                                                  << " [lex=" << (t.lex_us / 1000)
-                                                  << " parse=" << (t.parse_us / 1000)
-                                                  << " tc=" << (t.typecheck_us / 1000)
-                                                  << " borrow=" << (t.borrow_us / 1000)
-                                                  << " cg=" << (t.codegen_us / 1000) << "]");
+                        TML_LOG_INFO("test",
+                                     "Phase 1 slow #"
+                                         << i << ": " << fs::path(t.file_path).filename().string()
+                                         << " " << (t.duration_us / 1000) << "ms"
+                                         << " [lex=" << (t.lex_us / 1000) << " parse="
+                                         << (t.parse_us / 1000) << " tc=" << (t.typecheck_us / 1000)
+                                         << " borrow=" << (t.borrow_us / 1000)
+                                         << " cg=" << (t.codegen_us / 1000) << "]");
                     }
                 }
             }

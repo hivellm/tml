@@ -490,4 +490,26 @@ auto make_project_artifacts_tool() -> Tool;
 /// Result with artifact listing including sizes and ages.
 auto handle_project_artifacts(const json::JsonValue& params) -> ToolResult;
 
+/// Returns the `project/slow-tests` tool definition.
+///
+/// Analyzes test_log.json to find the slowest individual test files by
+/// compilation time. Parses per-suite and per-file timing data.
+///
+/// Parameters:
+/// - `limit` (number, optional): Max slow tests to show (default: 20)
+/// - `threshold` (number, optional): Only show tests above this ms threshold
+/// - `sort` (string, optional): Sort by "phase1" (default), "phase2", or "total"
+auto make_project_slow_tests_tool() -> Tool;
+
+/// Handles the `project/slow-tests` tool invocation.
+///
+/// # Arguments
+///
+/// * `params` - Tool parameters (limit, threshold, sort)
+///
+/// # Returns
+///
+/// Result with slowest test files, suite breakdowns, and timing analysis.
+auto handle_project_slow_tests(const json::JsonValue& params) -> ToolResult;
+
 } // namespace tml::mcp

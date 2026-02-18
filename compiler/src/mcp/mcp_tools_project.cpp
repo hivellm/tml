@@ -1396,4 +1396,325 @@ auto handle_project_artifacts(const json::JsonValue& params) -> ToolResult {
     return ToolResult::text(result.str());
 }
 
+// ============================================================================
+// project/slow-tests Tool
+// ============================================================================
+
+auto make_project_slow_tests_tool() -> Tool {
+    return Tool{
+        .name = "project/slow-tests",
+        .description =
+            "Analyze test_log.json to find the slowest individual test files by compilation time. "
+            "Parses per-suite and per-file timing data from the last test run.",
+        .parameters = {
+            {"limit", "number", "Maximum number of slow tests to show (default: 20)", false},
+            {"threshold", "number",
+             "Only show tests with time above this threshold in ms (default: 0)", false},
+            {"sort", "string",
+             "Sort by: \"phase1\" (IR gen time, default), \"phase2\" (object compile), \"total\" "
+             "(suite total)",
+             false},
+        }};
+}
+
+auto handle_project_slow_tests(const json::JsonValue& params) -> ToolResult {
+    auto root = find_tml_root();
+    if (root.empty()) {
+        return ToolResult::error("Could not find TML project root.");
+    }
+
+    auto log_path = root / "build" / "debug" / "test_log.json";
+    if (!fs::exists(log_path)) {
+        return ToolResult::error(
+            "test_log.json not found at: " + log_path.string() +
+            "\nRun tests with --verbose --no-cache first to generate the log file.");
+    }
+
+    // Parse parameters
+    int limit = 20;
+    auto* limit_param = params.get("limit");
+    if (limit_param != nullptr && limit_param->is_number()) {
+        limit = static_cast<int>(limit_param->as_i64());
+        if (limit < 1)
+            limit = 1;
+        if (limit > 500)
+            limit = 500;
+    }
+
+    int64_t threshold_ms = 0;
+    auto* threshold_param = params.get("threshold");
+    if (threshold_param != nullptr && threshold_param->is_number()) {
+        threshold_ms = threshold_param->as_i64();
+    }
+
+    std::string sort_by = "phase1";
+    auto* sort_param = params.get("sort");
+    if (sort_param != nullptr && sort_param->is_string()) {
+        sort_by = sort_param->as_string();
+        if (sort_by != "phase1" && sort_by != "phase2" && sort_by != "total") {
+            return ToolResult::error("Invalid sort: \"" + sort_by +
+                                     "\". Use \"phase1\", \"phase2\", or \"total\".");
+        }
+    }
+
+    // Read the log file line by line and extract messages
+    std::ifstream file(log_path);
+    if (!file.is_open()) {
+        return ToolResult::error("Could not open: " + log_path.string());
+    }
+
+    // ========================================================================
+    // Per-file individual timing from "Phase 1 slow" entries (real data)
+    // Format: "Phase 1 slow #N: filename.test.tml Xms [lex=A parse=B tc=C borrow=D cg=E]"
+    //
+    // Suite timing from "Suite <name> timing: ..."
+    // Phase 2 per-file from "Phase 2 slow #N: filename.test.tml Xms"
+    // ========================================================================
+
+    struct TestFileInfo {
+        std::string file_name;
+        int64_t total_ms = 0; // total phase1 time for this file
+        int64_t lex_ms = 0;
+        int64_t parse_ms = 0;
+        int64_t tc_ms = 0; // typecheck
+        int64_t borrow_ms = 0;
+        int64_t cg_ms = 0;      // codegen
+        int64_t phase2_ms = 0;  // object compilation time
+        std::string suite_name; // which suite this belongs to
+    };
+
+    struct SuiteInfo {
+        std::string name;
+        int64_t phase1_ms = 0;
+        int64_t phase2_ms = 0;
+        int64_t total_ms = 0;
+        int file_count = 0;
+    };
+
+    // Map from filename to test info (Phase 1 slow entries)
+    std::unordered_map<std::string, TestFileInfo> file_timings;
+    // Current suite context: track which suite's Phase 1 slow entries belong to
+    std::string current_suite_name;
+    // Suite results
+    std::vector<SuiteInfo> suites;
+
+    auto extract_time = [](const std::string& msg, const std::string& key) -> int64_t {
+        auto pos = msg.find(key + "=");
+        if (pos == std::string::npos)
+            return 0;
+        auto start = pos + key.size() + 1;
+        auto end = msg.find_first_not_of("0123456789", start);
+        if (end == std::string::npos)
+            end = msg.size();
+        try {
+            return std::stoll(msg.substr(start, end - start));
+        } catch (...) {
+            return 0;
+        }
+    };
+
+    // Phase 2 slow entries: temporarily store until we know the suite
+    std::vector<std::pair<std::string, int64_t>> pending_phase2;
+
+    std::string line;
+    while (std::getline(file, line)) {
+        auto msg_pos = line.find("\"msg\":\"");
+        if (msg_pos == std::string::npos)
+            continue;
+        auto start = msg_pos + 7;
+        auto end = line.rfind('"');
+        if (end <= start)
+            continue;
+        std::string msg = line.substr(start, end - start);
+
+        // "Phase 1 slow #N: filename.test.tml Xms [lex=A parse=B tc=C borrow=D cg=E]"
+        if (msg.find("Phase 1 slow #") == 0) {
+            auto colon = msg.find(": ", 14);
+            if (colon == std::string::npos)
+                continue;
+            auto rest = msg.substr(colon + 2);
+
+            // Find the total time: "filename.test.tml 1234ms [..."
+            auto ms_pos = rest.find("ms");
+            if (ms_pos == std::string::npos)
+                continue;
+
+            // Walk back from ms_pos to find the space before the number
+            auto space_before_time = rest.rfind(' ', ms_pos);
+            if (space_before_time == std::string::npos)
+                continue;
+
+            std::string fname = rest.substr(0, space_before_time);
+            int64_t total = 0;
+            try {
+                total =
+                    std::stoll(rest.substr(space_before_time + 1, ms_pos - space_before_time - 1));
+            } catch (...) {
+                continue;
+            }
+
+            TestFileInfo tfi;
+            tfi.file_name = fname;
+            tfi.total_ms = total;
+
+            // Parse sub-phases from brackets: [lex=A parse=B tc=C borrow=D cg=E]
+            auto bracket = rest.find('[');
+            if (bracket != std::string::npos) {
+                auto sub = rest.substr(bracket);
+                tfi.lex_ms = extract_time(sub, "lex");
+                tfi.parse_ms = extract_time(sub, "parse");
+                tfi.tc_ms = extract_time(sub, "tc");
+                tfi.borrow_ms = extract_time(sub, "borrow");
+                tfi.cg_ms = extract_time(sub, "cg");
+            }
+
+            // The suite for this file will be set when we see the Suite timing line
+            file_timings[fname] = tfi;
+            continue;
+        }
+
+        // "Phase 2 slow #N: filename.test.tml Xms"
+        if (msg.find("Phase 2 slow #") == 0) {
+            auto colon = msg.find(": ", 14);
+            if (colon == std::string::npos)
+                continue;
+            auto rest = msg.substr(colon + 2);
+            auto space = rest.rfind(' ');
+            if (space == std::string::npos)
+                continue;
+            std::string fname = rest.substr(0, space);
+            std::string time_str = rest.substr(space + 1);
+            auto ms_end = time_str.find("ms");
+            if (ms_end != std::string::npos)
+                time_str = time_str.substr(0, ms_end);
+            int64_t ms = 0;
+            try {
+                ms = std::stoll(time_str);
+            } catch (...) {}
+            pending_phase2.push_back({fname, ms});
+            continue;
+        }
+
+        // "Suite <name> timing: preprocess=Nms phase1=Nms phase2=Nms ..."
+        if (msg.find("Suite ") == 0 && msg.find(" timing:") != std::string::npos) {
+            auto name_end = msg.find(" timing:");
+            std::string suite_name = msg.substr(6, name_end - 6);
+
+            SuiteInfo si;
+            si.name = suite_name;
+            si.phase1_ms = extract_time(msg, "phase1");
+            si.phase2_ms = extract_time(msg, "phase2");
+            si.total_ms = extract_time(msg, "total");
+
+            // Assign pending phase2 times to file_timings and set suite name
+            for (const auto& [fname, ms] : pending_phase2) {
+                auto it = file_timings.find(fname);
+                if (it != file_timings.end()) {
+                    it->second.phase2_ms = ms;
+                    it->second.suite_name = suite_name;
+                }
+            }
+            pending_phase2.clear();
+
+            // Also assign suite name to any Phase 1 slow entries that don't have one yet
+            // (they were logged just before this Suite timing line)
+            // We can't perfectly associate them since logs interleave, but Phase 1 slow
+            // entries immediately preceding a Suite timing line belong to that suite.
+            // This is handled by Phase 2 slow matching above.
+
+            suites.push_back(std::move(si));
+            continue;
+        }
+    }
+    file.close();
+
+    // Build sorted list
+    std::vector<TestFileInfo> all_tests;
+    all_tests.reserve(file_timings.size());
+    for (auto& [_, tfi] : file_timings) {
+        all_tests.push_back(std::move(tfi));
+    }
+
+    // Apply threshold
+    if (threshold_ms > 0) {
+        std::vector<TestFileInfo> filtered;
+        for (auto& t : all_tests) {
+            bool keep = false;
+            if (sort_by == "phase1")
+                keep = t.total_ms >= threshold_ms;
+            else if (sort_by == "phase2")
+                keep = t.phase2_ms >= threshold_ms;
+            else
+                keep = (t.total_ms + t.phase2_ms) >= threshold_ms;
+            if (keep)
+                filtered.push_back(std::move(t));
+        }
+        all_tests = std::move(filtered);
+    }
+
+    // Sort
+    if (sort_by == "phase2") {
+        std::sort(all_tests.begin(), all_tests.end(),
+                  [](const auto& a, const auto& b) { return a.phase2_ms > b.phase2_ms; });
+    } else if (sort_by == "total") {
+        std::sort(all_tests.begin(), all_tests.end(), [](const auto& a, const auto& b) {
+            return (a.total_ms + a.phase2_ms) > (b.total_ms + b.phase2_ms);
+        });
+    } else {
+        std::sort(all_tests.begin(), all_tests.end(),
+                  [](const auto& a, const auto& b) { return a.total_ms > b.total_ms; });
+    }
+
+    // Format output
+    std::stringstream result;
+    result << "=== Slow Tests Analysis (individual per-file timing) ===\n\n";
+
+    // Aggregate stats
+    int64_t sum_phase1 = 0, sum_phase2 = 0, sum_total_suite = 0;
+    for (const auto& si : suites) {
+        sum_phase1 += si.phase1_ms;
+        sum_phase2 += si.phase2_ms;
+        sum_total_suite += si.total_ms;
+    }
+    result << "Suites: " << suites.size() << "  |  Test files with timing: " << all_tests.size()
+           << "\n";
+    result << "Aggregate suite time: " << (sum_total_suite / 1000) << "s"
+           << " (phase1=" << (sum_phase1 / 1000) << "s, phase2=" << (sum_phase2 / 1000) << "s)\n\n";
+
+    // Per-test table
+    int show_count = std::min(limit, static_cast<int>(all_tests.size()));
+    result << "--- Top " << show_count << " Slowest Test Files (sorted by " << sort_by << ") ---\n";
+    result << std::left << std::setw(36) << "Test File" << std::right << std::setw(10) << "Total"
+           << std::setw(8) << "Lex" << std::setw(8) << "Parse" << std::setw(8) << "TC"
+           << std::setw(8) << "Borrow" << std::setw(8) << "Codegen" << std::setw(8) << "Obj"
+           << "\n";
+    result << std::string(94, '-') << "\n";
+
+    int shown = 0;
+    for (const auto& t : all_tests) {
+        if (shown >= limit)
+            break;
+
+        std::string display_name = t.file_name;
+        if (display_name.size() > 34) {
+            display_name = "..." + display_name.substr(display_name.size() - 31);
+        }
+
+        result << std::left << std::setw(36) << display_name << std::right << std::setw(7)
+               << t.total_ms << "ms" << std::setw(6) << t.lex_ms << "ms" << std::setw(6)
+               << t.parse_ms << "ms" << std::setw(6) << t.tc_ms << "ms" << std::setw(6)
+               << t.borrow_ms << "ms" << std::setw(6) << t.cg_ms << "ms" << std::setw(6)
+               << t.phase2_ms << "ms" << "\n";
+        ++shown;
+    }
+
+    if (all_tests.empty()) {
+        result << "\nNo 'Phase 1 slow' entries found in test_log.json.\n";
+        result << "Run: tml test --verbose --no-cache\n";
+        result << "The log must contain per-file timing data (Phase 1 slow entries).\n";
+    }
+
+    return ToolResult::text(result.str());
+}
+
 } // namespace tml::mcp

@@ -50,6 +50,7 @@ void register_compiler_tools(McpServer& server) {
     server.register_tool(make_project_structure_tool(), handle_project_structure);
     server.register_tool(make_project_affected_tests_tool(), handle_project_affected_tests);
     server.register_tool(make_project_artifacts_tool(), handle_project_artifacts);
+    server.register_tool(make_project_slow_tests_tool(), handle_project_slow_tests);
 }
 
 // ============================================================================
