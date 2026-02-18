@@ -56,6 +56,43 @@ This includes but is not limited to:
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
+## ⛔ ABSOLUTE PROHIBITION: Never Run Tests Multiple Times to Filter Output ⛔
+
+**YOU ARE EXPRESSLY FORBIDDEN FROM RUNNING THE TEST SUITE MULTIPLE TIMES TO GREP/FILTER DIFFERENT PARTS OF THE OUTPUT.**
+
+The test suite takes significant time and CPU. Running it once to get results and then running it AGAIN just to grep for a different pattern is **unacceptable waste of processing and time**.
+
+**Rules:**
+1. **Run the test suite ONCE** — save or read the full output
+2. **NEVER pipe test output through grep** and then re-run to pipe through a different grep
+3. **NEVER run tests just to get a summary** if you already ran them and have the output
+4. If you need specific data from test output, read the log file or scroll through the existing output
+5. Use `mcp__tml__test` with `structured: true` to get parsed results in a single call
+6. If the MCP structured output doesn't have what you need, run ONCE via Bash and redirect to a file in `.sandbox/`, then read that file as many times as needed
+
+**WRONG (wastes 2x-5x processing time):**
+```bash
+# ❌ Run tests, grep for failures
+tml test --no-cache 2>&1 | grep FAIL
+# ❌ Run tests AGAIN, grep for timing
+tml test --no-cache 2>&1 | grep -E "Slowest|Profile"
+# ❌ Run tests AGAIN, grep for summary
+tml test --no-cache 2>&1 | grep -E "passed|failed"
+```
+
+**CORRECT (run once, read many):**
+```bash
+# ✅ Run once, save output
+tml test --no-cache 2>&1 > .sandbox/test_output.log
+# ✅ Read the file for whatever you need
+grep FAIL .sandbox/test_output.log
+grep Profile .sandbox/test_output.log
+```
+
+**WHY:** Each test run recompiles ALL test suites and executes ALL tests. This takes minutes of CPU time. Running it 3 times to grep 3 different patterns wastes 2/3 of the total processing time for zero benefit.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ MANDATORY: Analyze Before Executing ⛔
 
 **YOU MUST ANALYZE PROJECT PATTERNS AND CONVENTIONS BEFORE EXECUTING ANY TASK.**

@@ -27,6 +27,21 @@ This includes but is not limited to:
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
+## ⛔ ABSOLUTE PROHIBITION: Never Run Tests Multiple Times to Filter Output ⛔
+
+**YOU ARE EXPRESSLY FORBIDDEN FROM RUNNING THE TEST SUITE MULTIPLE TIMES TO GREP/FILTER DIFFERENT PARTS OF THE OUTPUT.**
+
+The test suite takes significant time and CPU. Running it once and then running it AGAIN to grep for a different pattern is **unacceptable waste**.
+
+**Rules:**
+1. **Run the test suite ONCE** — save the full output to `.sandbox/` if needed
+2. **NEVER pipe test output through grep** and then re-run to pipe through a different grep
+3. **NEVER run tests just to get a summary** if you already ran them
+4. Use `mcp__tml__test` with `structured: true` for parsed results in a single call
+5. If you need raw output, run ONCE via Bash redirecting to `.sandbox/test_output.log`, then read that file
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⚠️ CRITICAL: Task Management Rules (HIGHEST PRECEDENCE)
 
 **MANDATORY**: All task creation MUST follow Rulebook task management system.
