@@ -369,8 +369,43 @@ auto LLVMIRGen::generate(const parser::Module& module)
             // 2. FFI declare lines (brotli_*, zlib_*, etc.) NOT in preamble
             imported_func_code = func_code.str();
         } else {
-            // Use full definitions (for library_ir_only mode)
+            // Use full definitions (for coverage mode or library_ir_only)
             imported_func_code = state.imported_func_code;
+
+            // When force_internal_linkage is set (suite mode workers), convert
+            // library function definitions to internal linkage. The cached library
+            // state was generated without force_internal_linkage (needed for shared
+            // .obj in non-coverage mode), but suite workers need internal linkage
+            // to avoid duplicate symbol errors when multiple .obj files in the same
+            // suite each contain the same library function definitions.
+            if (options_.force_internal_linkage && !imported_func_code.empty()) {
+                std::string result;
+                result.reserve(imported_func_code.size() + 4096);
+                std::istringstream stream(imported_func_code);
+                std::string line;
+                while (std::getline(stream, line)) {
+                    // Convert "define <type>" to "define internal <type>" for @tml_ functions
+                    // but skip lines already marked internal/linkonce_odr
+                    if (line.find("define ") != std::string::npos &&
+                        line.find("@tml_") != std::string::npos &&
+                        line.find("define internal ") == std::string::npos &&
+                        line.find("define linkonce_odr ") == std::string::npos) {
+                        auto pos = line.find("define ");
+                        if (pos != std::string::npos) {
+                            // Check if it's "define dllexport"
+                            auto dpos = line.find("define dllexport ");
+                            if (dpos != std::string::npos) {
+                                line.replace(dpos, 17, "define internal ");
+                            } else {
+                                line.replace(pos, 7, "define internal ");
+                            }
+                        }
+                    }
+                    result += line + "\n";
+                }
+                imported_func_code = std::move(result);
+            }
+
             // Restore string literals referenced by function definitions
             for (const auto& sl : state.string_literals) {
                 string_literals_.push_back(sl);
@@ -459,6 +494,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
             value_classes_.insert(name);
         }
 
+        // Restore emitted dyn types (prevents duplicate %dyn.X type definitions)
+        for (const auto& name : state.emitted_dyn_types) {
+            emitted_dyn_types_.insert(name);
+        }
+
         // Re-parse library module ASTs for pending generic registration.
         // We need the AST pointers to be valid for pending_generic_structs_ etc.
         // The GlobalASTCache already has these cached, so this is just pointer lookups.
@@ -520,6 +560,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     }
                 }
             }
+        }
+
+        // Restore loop metadata from library functions (needed for !N references in cached IR)
+        if (!state.loop_metadata.empty()) {
+            loop_metadata_ = state.loop_metadata;
+            loop_metadata_counter_ = state.loop_metadata_counter;
         }
 
         TML_DEBUG_LN("[CODEGEN] Restored library state: "
@@ -1168,6 +1214,19 @@ auto LLVMIRGen::generate(const parser::Module& module)
             }
             type_defs_buffer_.str("");
         }
+    }
+
+    // Emit definitions for library functions that were actually referenced
+    // by user code, generic instantiations, or other library functions.
+    // This replaces the `declare` stubs emitted during module scanning.
+    if (options_.lazy_library_defs && !options_.library_ir_only && !options_.library_decls_only) {
+        emit_referenced_library_definitions();
+    }
+
+    // In library_decls_only + lazy mode: emit `declare` for referenced functions.
+    // Without this, lazy mode stores functions as pending but never emits them.
+    if (options_.lazy_library_defs && options_.library_decls_only) {
+        emit_referenced_library_declarations();
     }
 
     // Collect test, benchmark, and fuzz functions BEFORE emitting string constants

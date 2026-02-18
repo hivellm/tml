@@ -908,9 +908,18 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
 
                     // Second pass: generate the methods
                     for (const auto& method : impl.methods) {
-                        // Generate code for public, non-lowlevel methods with bodies
-                        if (method.vis == parser::Visibility::Public && !method.is_unsafe &&
-                            method.body.has_value()) {
+                        // In lazy mode, also process private methods so they can be
+                        // generated on demand when public methods reference them.
+                        // Without lazy mode, only public methods are needed (private
+                        // methods are generated inline within their callers).
+                        bool should_generate = method.vis == parser::Visibility::Public &&
+                                               !method.is_unsafe && method.body.has_value();
+                        if (!should_generate && options_.lazy_library_defs &&
+                            !options_.library_ir_only && method.body.has_value() &&
+                            !method.is_unsafe) {
+                            should_generate = true;
+                        }
+                        if (should_generate) {
                             gen_impl_method(type_name, method);
                         }
                     }
@@ -977,6 +986,305 @@ void LLVMIRGen::emit_string_constants() {
                   escaped + "\"");
     }
     emit_line("");
+}
+
+void LLVMIRGen::emit_referenced_library_definitions() {
+    if (pending_library_methods_.empty() && pending_library_funcs_.empty()) {
+        return;
+    }
+
+    // Helper: scan IR text for @tml_ function name references
+    auto collect_refs = [](const std::string& ir) -> std::unordered_set<std::string> {
+        std::unordered_set<std::string> refs;
+        size_t pos = 0;
+        while ((pos = ir.find("@tml_", pos)) != std::string::npos) {
+            size_t start = pos;
+            pos += 5;
+            while (pos < ir.size() && (std::isalnum(ir[pos]) || ir[pos] == '_')) {
+                ++pos;
+            }
+            refs.insert(ir.substr(start, pos - start));
+        }
+        return refs;
+    };
+
+    // Scan the current IR output to find all referenced library functions.
+    std::string original_ir = output_.str();
+    auto referenced = collect_refs(original_ir);
+
+    // Seed worklist with referenced functions that have pending definitions
+    std::unordered_set<std::string> worklist;
+    for (const auto& name : referenced) {
+        if (pending_library_methods_.count(name) || pending_library_funcs_.count(name)) {
+            worklist.insert(name);
+        }
+    }
+
+    if (worklist.empty()) {
+        return;
+    }
+
+    // Save codegen state
+    auto saved_module_prefix = current_module_prefix_;
+    auto saved_submodule = current_submodule_name_;
+
+    // We generate definitions by temporarily using output_ (since gen_impl_method
+    // and gen_func_decl write to it via emit_line). We save the original IR,
+    // generate into a clean output_, then restore original + append new defs.
+    std::string all_lazy_defs;
+    std::unordered_set<std::string> generated;
+
+    while (!worklist.empty()) {
+        std::unordered_set<std::string> next_worklist;
+
+        // Clear output_ and generate this round's definitions into it
+        output_.str("");
+        output_.clear();
+
+        for (const auto& fn : worklist) {
+            if (generated.count(fn))
+                continue;
+            generated.insert(fn);
+
+            // If the function was already fully defined by another codegen path
+            // (e.g., pending impl method instantiation flush for generics), skip it
+            // to avoid emitting a duplicate `define` (LLVM redefinition error).
+            // Check generated_impl_methods_output_ which tracks actually-generated
+            // method instantiations, and generated_functions_ for non-lazy paths.
+            {
+                // fn has "@" prefix, e.g. "@tml_BTreeMap_insert"
+                std::string fn_no_at = fn.substr(1); // "tml_BTreeMap_insert"
+                if (generated_impl_methods_output_.count(fn_no_at) > 0) {
+                    continue;
+                }
+            }
+
+            auto method_it = pending_library_methods_.find(fn);
+            if (method_it != pending_library_methods_.end()) {
+                const auto& info = method_it->second;
+                current_module_prefix_ = info.module_prefix;
+                current_submodule_name_ = info.submodule_name;
+                options_.lazy_library_defs = false;
+                generated_functions_.erase(fn);
+                gen_impl_method(info.type_name, *info.method);
+                options_.lazy_library_defs = true;
+                continue;
+            }
+
+            auto func_it = pending_library_funcs_.find(fn);
+            if (func_it != pending_library_funcs_.end()) {
+                const auto& finfo = func_it->second;
+                current_module_prefix_ = finfo.module_prefix;
+                current_submodule_name_ = finfo.submodule_name;
+                options_.lazy_library_defs = false;
+                generated_functions_.erase(fn);
+                gen_func_decl(*finfo.func);
+                options_.lazy_library_defs = true;
+                continue;
+            }
+        }
+
+        // Capture this round's output
+        std::string round_ir = output_.str();
+        all_lazy_defs += round_ir;
+
+        // Check for new transitive references in the generated code
+        auto new_refs = collect_refs(round_ir);
+        for (const auto& name : new_refs) {
+            if (!generated.count(name) &&
+                (pending_library_methods_.count(name) || pending_library_funcs_.count(name))) {
+                next_worklist.insert(name);
+            }
+        }
+
+        worklist = next_worklist;
+    }
+
+    // After the main worklist, flush pending generic instantiations and resolve
+    // any new transitive references they introduce. This loop handles chains like:
+    //   user code -> Barrier::wait -> Mutex[BarrierState]::lock (instantiation)
+    //             -> AtomicU32::store (pending method) -> ...
+    // Each iteration flushes instantiations and resolves their transitive deps.
+    for (int flush_round = 0; flush_round < 10; ++flush_round) {
+        // Flush pending impl method instantiations queued during lazy generation.
+        if (!pending_impl_method_instantiations_.empty()) {
+            output_.str("");
+            output_.clear();
+            generate_pending_instantiations();
+            std::string pending_inst_ir = output_.str();
+            if (!pending_inst_ir.empty()) {
+                all_lazy_defs += "\n; Lazy transitive instantiations (round " +
+                                 std::to_string(flush_round) + ")\n";
+                all_lazy_defs += pending_inst_ir;
+
+                // Scan flushed instantiations for new transitive references
+                auto inst_refs = collect_refs(pending_inst_ir);
+                for (const auto& name : inst_refs) {
+                    if (!generated.count(name) && (pending_library_methods_.count(name) ||
+                                                   pending_library_funcs_.count(name))) {
+                        worklist.insert(name);
+                    }
+                }
+            }
+        }
+
+        // If we found new pending references, generate them
+        if (worklist.empty())
+            break;
+
+        while (!worklist.empty()) {
+            std::unordered_set<std::string> next_worklist;
+            output_.str("");
+            output_.clear();
+
+            for (const auto& fn : worklist) {
+                if (generated.count(fn))
+                    continue;
+                generated.insert(fn);
+
+                {
+                    std::string fn_no_at = fn.substr(1);
+                    if (generated_impl_methods_output_.count(fn_no_at) > 0)
+                        continue;
+                }
+
+                auto method_it = pending_library_methods_.find(fn);
+                if (method_it != pending_library_methods_.end()) {
+                    const auto& info = method_it->second;
+                    current_module_prefix_ = info.module_prefix;
+                    current_submodule_name_ = info.submodule_name;
+                    options_.lazy_library_defs = false;
+                    generated_functions_.erase(fn);
+                    gen_impl_method(info.type_name, *info.method);
+                    options_.lazy_library_defs = true;
+                    continue;
+                }
+
+                auto func_it = pending_library_funcs_.find(fn);
+                if (func_it != pending_library_funcs_.end()) {
+                    const auto& finfo = func_it->second;
+                    current_module_prefix_ = finfo.module_prefix;
+                    current_submodule_name_ = finfo.submodule_name;
+                    options_.lazy_library_defs = false;
+                    generated_functions_.erase(fn);
+                    gen_func_decl(*finfo.func);
+                    options_.lazy_library_defs = true;
+                    continue;
+                }
+            }
+
+            std::string round_ir = output_.str();
+            all_lazy_defs += round_ir;
+
+            auto new_refs = collect_refs(round_ir);
+            for (const auto& name : new_refs) {
+                if (!generated.count(name) &&
+                    (pending_library_methods_.count(name) || pending_library_funcs_.count(name))) {
+                    next_worklist.insert(name);
+                }
+            }
+            worklist = next_worklist;
+        }
+        // Loop back to check if the new definitions queued more instantiations
+    }
+
+    // Restore codegen state
+    current_module_prefix_ = saved_module_prefix;
+    current_submodule_name_ = saved_submodule;
+
+    // Collect any new type definitions generated during lazy pass
+    // (e.g., MutexGuard__BarrierState from generic struct instantiation).
+    // Type defs MUST appear before functions that use them.
+    std::string lazy_type_defs = type_defs_buffer_.str();
+    type_defs_buffer_.str("");
+    type_defs_buffer_.clear();
+
+    // Restore output_: original IR + lazy type defs + lazy function definitions.
+    output_.str("");
+    output_.clear();
+    output_ << original_ir;
+    if (!lazy_type_defs.empty()) {
+        output_ << "\n; Lazy library type instantiations\n";
+        output_ << lazy_type_defs;
+    }
+    output_ << "\n; Lazy library definitions (only functions actually used)\n";
+    output_ << all_lazy_defs;
+
+    TML_DEBUG_LN("[LAZY_LIB] Generated "
+                 << generated.size() << " of "
+                 << (pending_library_methods_.size() + pending_library_funcs_.size())
+                 << " library functions");
+}
+
+void LLVMIRGen::emit_referenced_library_declarations() {
+    if (pending_library_methods_.empty() && pending_library_funcs_.empty()) {
+        return;
+    }
+
+    // Scan current IR for referenced @tml_ function names
+    std::string current_ir = output_.str();
+    size_t pos = 0;
+    std::unordered_set<std::string> referenced;
+    while ((pos = current_ir.find("@tml_", pos)) != std::string::npos) {
+        size_t start = pos;
+        pos += 5;
+        while (pos < current_ir.size() &&
+               (std::isalnum(current_ir[pos]) || current_ir[pos] == '_')) {
+            ++pos;
+        }
+        referenced.insert(current_ir.substr(start, pos - start));
+    }
+
+    // Helper to emit a declare from FuncInfo
+    auto emit_declare = [&](const FuncInfo& fi, std::ostringstream& out) -> bool {
+        auto paren_pos = fi.llvm_func_type.find('(');
+        if (paren_pos == std::string::npos)
+            return false;
+        // llvm_func_type is "ret_type (param1, param2)" — extract "(param1, param2)"
+        std::string params = fi.llvm_func_type.substr(paren_pos + 1);
+        // params includes closing ")", e.g. "ptr, i32)"
+        out << "declare " << fi.ret_type << " " << fi.llvm_name << "(" << params << "\n";
+        return true;
+    };
+
+    // Emit declare for each referenced pending function
+    std::ostringstream decls;
+    int count = 0;
+    for (const auto& name : referenced) {
+        auto method_it = pending_library_methods_.find(name);
+        if (method_it != pending_library_methods_.end()) {
+            // Look up the function info registered during module scan
+            const auto& info = method_it->second;
+            std::string method_key = info.type_name + "_" + info.method->name;
+            auto fn_it = functions_.find(method_key);
+            if (fn_it != functions_.end() && emit_declare(fn_it->second, decls)) {
+                count++;
+            }
+            continue;
+        }
+
+        auto func_it = pending_library_funcs_.find(name);
+        if (func_it != pending_library_funcs_.end()) {
+            // Search functions_ by llvm_name
+            for (const auto& [key, fi] : functions_) {
+                if (fi.llvm_name == name) {
+                    if (emit_declare(fi, decls)) {
+                        count++;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    if (count > 0) {
+        output_ << "\n; Lazy library declarations (only functions actually used)\n";
+        output_ << decls.str();
+        TML_DEBUG_LN("[LAZY_LIB_DECL] Declared "
+                     << count << " of "
+                     << (pending_library_methods_.size() + pending_library_funcs_.size())
+                     << " library functions");
+    }
 }
 
 } // namespace tml::codegen

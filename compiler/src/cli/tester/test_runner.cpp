@@ -507,23 +507,24 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         }
 
         // ======================================================================
-        // SHARED LIBRARY OBJECT: Generate library IR once, compile to .obj
+        // SHARED LIBRARY: Generate library IR once, capture codegen state
         // ======================================================================
         // When there are multiple test files to compile, generate the library IR
-        // once from the first test file, compile it to a shared .obj, and have
-        // all other test files use library_decls_only mode (emit only declarations).
-        // This avoids re-generating and re-compiling identical library IR for each test.
+        // once from the first test file. Two optimizations:
+        //
+        // 1. Shared .obj: Compile library IR to a shared object, workers emit
+        //    only declarations (library_decls_only). Disabled in coverage mode
+        //    because workers need full definitions with coverage instrumentation.
+        //
+        // 2. Cached codegen state: Capture type defs, declarations, registries
+        //    from the library codegen and pass to workers via cached_library_state.
+        //    This skips emit_module_pure_tml_functions() entirely (~9s for heavy
+        //    modules like net/sync/zlib). Works in ALL modes including coverage.
         fs::path shared_lib_obj;
         bool use_shared_lib = false;
+        std::shared_ptr<const codegen::CodegenLibraryState> shared_codegen_state;
 
-        // When coverage is enabled, disable shared library optimization.
-        // The shared library is generated from ONE test file's imports, so it only
-        // contains a subset of library functions. With library_decls_only=true,
-        // worker threads only get declarations for library functions, meaning
-        // coverage instrumentation calls (tml_cover_func) are NOT present in the
-        // library function bodies. By disabling this optimization in coverage mode,
-        // each test file gets full library function definitions with coverage calls.
-        if (tasks.size() >= 2 && all_imports_match && !CompilerOptions::coverage) {
+        if (tasks.size() >= 2 && all_imports_match) {
             // Use a hash of all imported module paths to identify the shared library
             std::string import_hash;
             for (const auto& path : imported_module_paths) {
@@ -532,12 +533,17 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
             std::string lib_hash = build::generate_content_hash(import_hash);
             shared_lib_obj = cache_dir / (lib_hash + "_sharedlib" + get_object_extension());
 
-            if (!no_cache && fs::exists(shared_lib_obj)) {
+            // In non-coverage mode, check for cached shared library object
+            if (!CompilerOptions::coverage && !no_cache && fs::exists(shared_lib_obj)) {
                 // Cache hit - reuse previously compiled shared library
                 use_shared_lib = true;
                 TML_LOG_INFO("test", "  Shared library cache hit: " << shared_lib_obj.filename());
-            } else {
-                // Generate shared library from the first task
+            }
+
+            // Always generate library IR to capture codegen state for workers.
+            // Even on shared lib cache hit, we need the state (type defs, registries).
+            // This is done ONCE per suite; workers skip emit_module_pure_tml_functions().
+            {
                 TML_LOG_INFO("test", "  Generating shared library IR...");
                 auto& first_task = tasks[0];
 
@@ -580,8 +586,12 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                 if (std::holds_alternative<std::string>(gen_result)) {
                                     const auto& lib_ir = std::get<std::string>(gen_result);
 
-                                    // Compile IR string directly to object (no .ll on disk)
-                                    {
+                                    // Capture codegen state for worker threads
+                                    shared_codegen_state = lib_gen.capture_library_state(lib_ir);
+
+                                    // Compile shared .obj only in non-coverage mode and
+                                    // only if not already cached
+                                    if (!CompilerOptions::coverage && !use_shared_lib) {
                                         ObjectCompileOptions obj_options;
                                         obj_options.optimization_level =
                                             CompilerOptions::optimization_level;
@@ -937,6 +947,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                             lib_options.emit_debug_info = false;
                             lib_options.coverage_enabled = CompilerOptions::coverage;
                             lib_options.coverage_quiet = CompilerOptions::coverage;
+                            lib_options.cached_library_state = shared_codegen_state;
+                            lib_options.lazy_library_defs = true;
 
                             codegen::LLVMIRGen lib_gen(env, lib_options);
                             auto lib_gen_result = lib_gen.generate(module);
@@ -1058,23 +1070,41 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                                         continue;
                                     }
 
-                                    // For library functions: promote internal → external, collect
-                                    // names
-                                    if (line.find("define internal ") != std::string::npos &&
+                                    // For library functions: promote to linkonce_odr, collect
+                                    // names. Library functions may have 'internal', 'dllexport', or
+                                    // default linkage depending on whether they come from
+                                    // cached_library_state (which was generated without
+                                    // force_internal_linkage) or from direct codegen. All non-user
+                                    // @tml_ defines need linkonce_odr to prevent duplicate symbol
+                                    // errors when multiple test files in the same suite import the
+                                    // same library functions.
+                                    if (line.find("define ") != std::string::npos &&
                                         line.find("@tml_") != std::string::npos &&
-                                        find_at_name(line, search_prefix) == std::string::npos) {
+                                        find_at_name(line, search_prefix, true) ==
+                                            std::string::npos) {
                                         // Collect function name for alias matching
                                         std::string fn_name = extract_func_name(line);
                                         if (!fn_name.empty()) {
                                             llvm_func_names.push_back(fn_name);
                                         }
                                         // Promote to linkonce_odr linkage (deduplicated by linker)
-                                        // This prevents duplicate symbol errors when multiple
-                                        // test files in the same suite import the same library
                                         std::string modified = line;
+                                        // Replace various linkage specifiers with linkonce_odr
                                         auto ipos = modified.find("define internal ");
                                         if (ipos != std::string::npos) {
                                             modified.replace(ipos, 16, "define linkonce_odr ");
+                                        } else {
+                                            auto dpos = modified.find("define dllexport ");
+                                            if (dpos != std::string::npos) {
+                                                modified.replace(dpos, 17, "define linkonce_odr ");
+                                            } else {
+                                                // Plain 'define' without linkage qualifier
+                                                auto ppos = modified.find("define ");
+                                                if (ppos != std::string::npos) {
+                                                    modified.replace(ppos, 7,
+                                                                     "define linkonce_odr ");
+                                                }
+                                            }
                                         }
                                         result_ir += modified + "\n";
                                     } else {
@@ -1200,6 +1230,11 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                             options.coverage_quiet = CompilerOptions::coverage;
                             options.coverage_output_file = CompilerOptions::coverage_output;
                             options.llvm_source_coverage = CompilerOptions::coverage_source;
+                            options.cached_library_state = shared_codegen_state;
+                            // Enable lazy library defs: only emit declarations/definitions
+                            // for library functions actually referenced by this test file.
+                            // Dramatically reduces codegen time for heavy modules (net/sync/zlib).
+                            options.lazy_library_defs = true;
                             codegen::LLVMIRGen llvm_gen(env, options);
 
                             auto gen_result = llvm_gen.generate(module);

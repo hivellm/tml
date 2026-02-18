@@ -260,7 +260,20 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     std::string func_type = ret_type + " (" + param_types + ")";
     functions_[method_name] = FuncInfo{"@" + func_llvm_name, func_type, ret_type, param_types_vec};
 
-    // In library_decls_only mode, emit a declare statement for library methods
+    // In lazy_library_defs mode, skip emitting the function entirely and store
+    // it for deferred generation. The define/declare will be emitted later only if
+    // the function is actually referenced by user code or other library functions.
+    // This applies to BOTH library_decls_only and full-definition modes.
+    if (options_.lazy_library_defs && !options_.library_ir_only &&
+        !current_module_prefix_.empty()) {
+        pending_library_methods_["@" + func_llvm_name] = {
+            type_name, &method, current_module_prefix_, current_submodule_name_};
+        current_func_.clear();
+        current_impl_type_.clear();
+        return;
+    }
+
+    // In library_decls_only mode (without lazy), emit a declare statement for library methods
     // instead of the full definition. The implementations come from the shared library object.
     if (options_.library_decls_only) {
         emit_line("");

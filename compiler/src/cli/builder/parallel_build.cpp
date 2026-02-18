@@ -641,6 +641,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
             // AST pipeline: AST → LLVM IR (traditional path)
             codegen::LLVMGenOptions gen_options;
             gen_options.emit_comments = verbose;
+            gen_options.lazy_library_defs = true; // Only emit library defs actually used
             codegen::LLVMIRGen llvm_gen(env, gen_options);
 
             auto gen_result = llvm_gen.generate(module);

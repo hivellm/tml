@@ -265,99 +265,71 @@ void LLVMIRGen::generate_pending_instantiations() {
     const int MAX_ITERATIONS = 100; // Prevent infinite loops
     int iterations = 0;
 
-    // First pass: generate ALL type definitions (structs and enums)
-    // This must complete before any functions that use these types
-    bool types_changed = true;
-    while (types_changed && iterations < MAX_ITERATIONS) {
-        types_changed = false;
+    // First pass: generate ALL type definitions (classes only — structs and enums
+    // are generated immediately in require_*_instantiation, so no scanning needed)
+    while (!pending_class_keys_.empty() && iterations < MAX_ITERATIONS) {
         ++iterations;
 
-        // Generate pending struct instantiations
-        for (auto& [key, inst] : struct_instantiations_) {
-            if (!inst.generated) {
-                inst.generated = true;
+        auto keys = std::move(pending_class_keys_);
+        pending_class_keys_.clear();
 
-                // Find the generic struct declaration
-                auto it = pending_generic_structs_.find(inst.base_name);
-                if (it != pending_generic_structs_.end()) {
-                    gen_struct_instantiation(*it->second, inst.type_args);
-                    types_changed = true;
-                }
-            }
-        }
+        for (const auto& key : keys) {
+            auto inst_it = class_instantiations_.find(key);
+            if (inst_it == class_instantiations_.end() || inst_it->second.generated)
+                continue;
+            inst_it->second.generated = true;
 
-        // Generate pending enum instantiations
-        for (auto& [key, inst] : enum_instantiations_) {
-            if (!inst.generated) {
-                inst.generated = true;
-
-                auto it = pending_generic_enums_.find(inst.base_name);
-                if (it != pending_generic_enums_.end()) {
-                    gen_enum_instantiation(*it->second, inst.type_args);
-                    types_changed = true;
-                }
-            }
-        }
-
-        // Generate pending class instantiations
-        for (auto& [key, inst] : class_instantiations_) {
-            if (!inst.generated) {
-                inst.generated = true;
-
-                auto it = pending_generic_classes_.find(inst.base_name);
-                if (it != pending_generic_classes_.end()) {
-                    gen_class_instantiation(*it->second, inst.type_args);
-                    types_changed = true;
-                }
+            auto it = pending_generic_classes_.find(inst_it->second.base_name);
+            if (it != pending_generic_classes_.end()) {
+                gen_class_instantiation(*it->second, inst_it->second.type_args);
             }
         }
     }
 
-    // Second pass: generate functions (may discover new types, so we loop)
+    // Second pass: generate functions (may discover new types/classes, so we loop)
     iterations = 0;
     bool changed = true;
     while (changed && iterations < MAX_ITERATIONS) {
         changed = false;
         ++iterations;
 
-        // Generate pending function instantiations
-        for (auto& [key, inst] : func_instantiations_) {
-            if (!inst.generated) {
-                inst.generated = true;
+        // Generate pending function instantiations from queue
+        if (!pending_func_keys_.empty()) {
+            auto keys = std::move(pending_func_keys_);
+            pending_func_keys_.clear();
 
-                auto it = pending_generic_funcs_.find(inst.base_name);
+            for (const auto& key : keys) {
+                auto inst_it = func_instantiations_.find(key);
+                if (inst_it == func_instantiations_.end() || inst_it->second.generated)
+                    continue;
+                inst_it->second.generated = true;
+
+                auto it = pending_generic_funcs_.find(inst_it->second.base_name);
                 if (it != pending_generic_funcs_.end()) {
-                    gen_func_instantiation(*it->second, inst.type_args);
+                    gen_func_instantiation(*it->second, inst_it->second.type_args);
                     changed = true;
                 }
             }
         }
 
-        // If new types were discovered during function generation, emit them now
-        // before continuing with more functions
-        bool new_types = false;
-        for (auto& [key, inst] : struct_instantiations_) {
-            if (!inst.generated) {
-                inst.generated = true;
-                auto it = pending_generic_structs_.find(inst.base_name);
-                if (it != pending_generic_structs_.end()) {
-                    gen_struct_instantiation(*it->second, inst.type_args);
-                    new_types = true;
+        // Generate any new class instantiations discovered during function generation
+        if (!pending_class_keys_.empty()) {
+            auto keys = std::move(pending_class_keys_);
+            pending_class_keys_.clear();
+
+            for (const auto& key : keys) {
+                auto inst_it = class_instantiations_.find(key);
+                if (inst_it == class_instantiations_.end() || inst_it->second.generated)
+                    continue;
+                inst_it->second.generated = true;
+
+                auto it = pending_generic_classes_.find(inst_it->second.base_name);
+                if (it != pending_generic_classes_.end()) {
+                    gen_class_instantiation(*it->second, inst_it->second.type_args);
+                    changed = true;
                 }
             }
         }
-        for (auto& [key, inst] : enum_instantiations_) {
-            if (!inst.generated) {
-                inst.generated = true;
-                auto it = pending_generic_enums_.find(inst.base_name);
-                if (it != pending_generic_enums_.end()) {
-                    gen_enum_instantiation(*it->second, inst.type_args);
-                    new_types = true;
-                }
-            }
-        }
-        if (new_types)
-            changed = true;
 
         // Generate pending impl method instantiations
         // Track processed methods to avoid duplicate lookups (expensive module searches)
@@ -877,6 +849,7 @@ auto LLVMIRGen::require_func_instantiation(const std::string& base_name,
             base_name, type_args, mangled,
             false // not generated yet
         };
+        pending_func_keys_.push_back(mangled);
     }
 
     return mangled;
@@ -901,6 +874,7 @@ auto LLVMIRGen::require_class_instantiation(const std::string& base_name,
         base_name, type_args, mangled,
         false // Mark as NOT generated - will be generated in generate_pending_instantiations
     };
+    pending_class_keys_.push_back(mangled);
 
     return mangled;
 }

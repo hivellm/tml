@@ -611,6 +611,13 @@ auto LLVMIRGen::capture_library_state(const std::string& full_ir,
     // Capture value classes
     state->value_classes = value_classes_;
 
+    // Capture emitted dyn types (prevents duplicate %dyn.X type definitions)
+    state->emitted_dyn_types = emitted_dyn_types_;
+
+    // Capture loop metadata (library functions with loops emit !N metadata)
+    state->loop_metadata = loop_metadata_;
+    state->loop_metadata_counter = loop_metadata_counter_;
+
     state->valid = true;
 
     TML_DEBUG_LN("[CODEGEN] Captured library state: "

@@ -441,6 +441,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         llvm_gen_options.coverage_enabled = CompilerOptions::coverage;
         llvm_gen_options.coverage_output_file = CompilerOptions::coverage_output;
         llvm_gen_options.source_file = path;
+        llvm_gen_options.lazy_library_defs = true; // Only emit library defs actually used
         if (!CompilerOptions::target_triple.empty()) {
             llvm_gen_options.target_triple = CompilerOptions::target_triple;
         }

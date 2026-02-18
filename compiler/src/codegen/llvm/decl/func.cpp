@@ -532,7 +532,18 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     std::string attrs = " #0";
     emit_line("");
 
-    // In library_decls_only mode, emit a declare statement for library functions
+    // In lazy_library_defs mode, skip emitting the function entirely and store
+    // for deferred generation. The define/declare will be emitted later only if
+    // actually referenced. This applies to BOTH library_decls_only and full modes.
+    if (options_.lazy_library_defs && !options_.library_ir_only &&
+        !current_module_prefix_.empty()) {
+        pending_library_funcs_["@" + func_llvm_name] = {&func, current_module_prefix_,
+                                                        current_submodule_name_};
+        current_func_.clear();
+        return;
+    }
+
+    // In library_decls_only mode (without lazy), emit a declare statement for library functions
     // instead of the full definition. The function info is already registered above.
     // Library functions have a non-empty current_module_prefix_.
     if (options_.library_decls_only && !current_module_prefix_.empty()) {

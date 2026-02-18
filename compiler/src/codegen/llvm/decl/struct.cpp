@@ -195,21 +195,34 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
     // type is never defined while the unmangled version is.
     if (mangled != base_name && struct_types_.find(base_name) != struct_types_.end() &&
         struct_types_.find(mangled) == struct_types_.end()) {
-        // The base type already has a definition (e.g., library code emitted %struct.BTreeMap).
-        // Reuse the same struct type name instead of creating a new mangled variant.
-        // Register the mangled name as pointing to the existing base type so that
-        // llvm_type_from_semantic returns the already-defined type.
-        struct_types_[mangled] = struct_types_[base_name];
-        // Copy field info from the base type if available
-        auto fields_it = struct_fields_.find(base_name);
-        if (fields_it != struct_fields_.end()) {
-            struct_fields_[mangled] = fields_it->second;
+        // The base type already has a definition (e.g., library code emitted %struct.HashMapIter).
+        // Emit the mangled type with the same field layout so both names are valid in IR.
+        // Without this, code paths that use the mangled name directly (e.g., struct literal
+        // construction via current_ret_type_) would reference an undefined type.
+        std::string mangled_type = "%struct." + mangled;
+        // Build field list from the base type's registered fields
+        auto base_fields_it = struct_fields_.find(base_name);
+        if (base_fields_it != struct_fields_.end()) {
+            std::string def = mangled_type + " = type { ";
+            for (size_t i = 0; i < base_fields_it->second.size(); ++i) {
+                if (i > 0)
+                    def += ", ";
+                def += base_fields_it->second[i].llvm_type;
+            }
+            def += " }";
+            type_defs_buffer_ << def << "\n";
+        } else {
+            // Fallback: single ptr field (common for handle-based types)
+            type_defs_buffer_ << mangled_type << " = type { ptr }\n";
+        }
+        struct_types_[mangled] = mangled_type;
+        // Copy field info from the base type
+        if (base_fields_it != struct_fields_.end()) {
+            struct_fields_[mangled] = base_fields_it->second;
         }
         struct_instantiations_[mangled] =
             GenericInstantiation{base_name, final_type_args, mangled, true};
-        // Return base_name so that the LLVM type used is %struct.BTreeMap (the defined one)
-        // instead of %struct.BTreeMap__I64 (which would be undefined).
-        return base_name;
+        return mangled;
     }
 
     // RawPtr[T] and RawMutPtr[T] are type-erased pointer wrappers — always { i64 }

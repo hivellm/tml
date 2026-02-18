@@ -178,6 +178,7 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
     options.emit_debug_info = CompilerOptions::debug_info;
     options.debug_level = CompilerOptions::debug_level;
     options.source_file = path;
+    options.lazy_library_defs = true; // Only emit library defs actually used
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);

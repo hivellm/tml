@@ -284,6 +284,21 @@ auto strip_ansi(const std::string& input) -> std::string {
 // ============================================================================
 
 auto execute_command(const std::string& cmd, int timeout_seconds) -> std::pair<std::string, int> {
+    // Reject shell injection: pipe, grep, redirect, command chaining.
+    // The MCP tools must NEVER pipe test output through grep/filter.
+    // Use structured output mode instead.
+    static const char* forbidden[] = {"|", "grep", ">>", "&&", ";", "`", "$("};
+    for (const auto& token : forbidden) {
+        if (cmd.find(token) != std::string::npos) {
+            return {"[BLOCKED] Shell operators are forbidden in MCP commands. "
+                    "Found '" +
+                        std::string(token) +
+                        "' in command. "
+                        "Use structured output or MCP tool parameters instead of shell piping.",
+                    1};
+        }
+    }
+
     std::string output;
     int exit_code = -1;
 
