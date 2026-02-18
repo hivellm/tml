@@ -27,7 +27,7 @@
 //! ```
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
-use core::hash::{Hash, Hasher}
+use core::hash::Hash
 // Note: Formatter and FormatResult would need real imports if used
 use core::default::Default
 use core::option::Maybe::{Just, Nothing}
@@ -278,8 +278,8 @@ impl Ord for Ipv4Addr {
 }
 
 impl Hash for Ipv4Addr {
-    func hash(this, hasher: mut ref Hasher) {
-        hasher.write_u32(this.to_bits())
+    pub func hash(this) -> I64 {
+        return this.to_bits() as I64
     }
 }
 
@@ -500,9 +500,10 @@ impl Ord for Ipv6Addr {
 }
 
 impl Hash for Ipv6Addr {
-    func hash(this, hasher: mut ref Hasher) {
-        hasher.write_u64(this.to_bits_high())
-        hasher.write_u64(this.to_bits_low())
+    pub func hash(this) -> I64 {
+        let high: I64 = this.to_bits_high() as I64
+        let low: I64 = this.to_bits_low() as I64
+        return high * 31 + low
     }
 }
 
@@ -649,15 +650,13 @@ impl PartialEq for IpAddr {
 impl Eq for IpAddr {}
 
 impl Hash for IpAddr {
-    func hash(this, hasher: mut ref Hasher) {
+    pub func hash(this) -> I64 {
         when this {
             V4(addr) => {
-                hasher.write_u8(4)
-                addr.hash(hasher)
+                return 4 * 31 + addr.hash()
             },
             V6(addr) => {
-                hasher.write_u8(6)
-                addr.hash(hasher)
+                return 6 * 31 + addr.hash()
             },
         }
     }

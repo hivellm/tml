@@ -27,7 +27,7 @@
 //! ```
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
-use core::hash::{Hash, Hasher}
+use core::hash::Hash
 // Note: Formatter and FormatResult would need real imports if used
 use core::option::Maybe::{Just, Nothing}
 
@@ -116,9 +116,8 @@ impl Ord for SocketAddrV4 {
 }
 
 impl Hash for SocketAddrV4 {
-    func hash(this, hasher: mut ref Hasher) {
-        this.ip.hash(hasher)
-        hasher.write_u16(this.port)
+    pub func hash(this) -> I64 {
+        return this.ip.hash() * 31 + (this.port as I64)
     }
 }
 
@@ -201,9 +200,8 @@ impl PartialEq for SocketAddr {
 impl Eq for SocketAddr {}
 
 impl Hash for SocketAddr {
-    func hash(this, hasher: mut ref Hasher) {
-        hasher.write_u8(4)
-        this.inner.hash(hasher)
+    pub func hash(this) -> I64 {
+        return 4 * 31 + this.inner.hash()
     }
 }
 
