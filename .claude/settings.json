@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./build/debug/16-oop-benchmark.exe)"
+    ]
+  },
+  "enabledMcpjsonServers": ["tml", "claude-mem"]
+}

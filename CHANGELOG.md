@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Claude Code Skills — 19 Slash Commands** (2026-02-18) - Project-level skills in `.claude/skills/`
+  - Workflow skills: `/commit`, `/test`, `/build`, `/coverage`, `/slow-tests`, `/review-pr`
+  - MCP tool wrappers: `/compile`, `/run`, `/check`, `/emit-ir`, `/emit-mir`, `/format`, `/lint`, `/docs`, `/explain`, `/structure`, `/affected-tests`, `/artifacts`, `/cache-invalidate`
+  - Each skill maps to the correct MCP tool with argument parsing and structured output
+
+- **MCP `project/slow-tests` Tool** (2026-02-18) - Per-file individual test compilation timing
+  - Parses `test_log.json` for "Phase 1 slow" entries with real per-file timing
+  - Shows breakdown: lex, parse, typecheck, borrow, codegen, object compilation
+  - Parameters: `limit`, `threshold` (ms), `sort` (phase1/phase2/total)
+  - Test runner now logs all per-file Phase 1 timing at INFO level (was DEBUG, top-5 only)
+
+- **Buffer Migration to Pure TML** (2026-02-18) - Completes Phase 3 of runtime migration
+  - `Buffer` fully implemented in TML using `ptr_read`/`ptr_write`/`mem_alloc`/`mem_free` intrinsics
+  - Removed ~3000 lines of C/C++ collection builtin code from compiler and runtime
+  - All collection types (List, HashMap, Buffer) now pure TML — no C runtime dependency
+  - 9,025 tests passing (269 collection tests)
+
 - **`std::regex` — Thompson's NFA Regex Engine** (2026-02-17) - Pure TML regex engine with no backtracking
   - `Regex` type with `new()`, `is_match()`, `find()`, `find_all()`, `replace()`, `replace_all()`, `split()`
   - `Match` type with `matched()`, `start()`, `end()`, `group()` for match position tracking

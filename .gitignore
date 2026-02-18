@@ -20,7 +20,6 @@ src/vcpkg/
 .sandbox
 
 # Common
-.claude/
 .claude/settings.local.json
 *.log
 *.cpuprofile
