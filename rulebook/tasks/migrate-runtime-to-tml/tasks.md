@@ -589,13 +589,13 @@ Tasks:
 
 ## Summary: Expected Impact
 
-| Metric | Before | After All Phases |
-|--------|--------|-----------------|
-| C runtime lines (migratable) | ~5,210 | 0 |
-| C runtime lines (total) | ~20,000 | ~12,500 (FFI + essential only) |
-| Hardcoded dispatch lines | ~3,300 | ~300 (intrinsics only) |
-| Types bypassing impl dispatch | 5 (HashMap, Buffer, File, Path, Ordering) | 0 |
-| Unconditional runtime declares | 393 | ~30 (on-demand) |
-| Hardcoded type registrations | 54 | 0 |
-| Hardcoded collection methods | 1,330 lines | 0 |
-| Hardcoded static methods | 500 lines | ~150 (primitives only) |
+| Metric | Before | Current | After All Phases |
+|--------|--------|---------|-----------------|
+| C runtime lines (migratable) | ~5,210 | ~700 (fmt, text, search remain) | 0 |
+| C runtime lines (total) | ~20,000 | ~15,500 | ~12,500 (FFI + essential only) |
+| Hardcoded dispatch lines | ~3,300 | ~500 | ~300 (intrinsics only) |
+| Types bypassing impl dispatch | 5 (HashMap, Buffer, File, Path, Ordering) | 2 (File, Path) | 0 |
+| Unconditional runtime declares | 393 | ~300 | ~30 (on-demand) |
+| Hardcoded type registrations | 54 | ~29 (string) | 0 |
+| Hardcoded collection methods | 1,330 lines | 0 ✓ | 0 |
+| Hardcoded static methods | 500 lines | ~350 (File, Path) | ~150 (primitives only) |

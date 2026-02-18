@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -36,7 +36,7 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | Modules at 100% coverage | 73 |
 | Modules at 0% coverage | 31 |
 | C++ compiler size | ~238,000 lines |
-| C runtime to migrate | ~1,900 lines remaining (of ~5,210 original; 3,300+ migrated) |
+| C runtime to migrate | ~700 lines remaining (of ~5,210 original; 4,500+ migrated — str.tml done) |
 | Hardcoded codegen dispatch | ~500 lines remaining (of ~3,300 original; collections done) |
 | TML standard library | ~137,300 lines |
 
@@ -443,7 +443,9 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 
 **Collections migration COMPLETE**: List, HashMap, and Buffer all migrated to pure TML using memory intrinsics (`ptr_read`, `ptr_write`, `mem_alloc`, `mem_realloc`, `mem_free`, `write_bytes`, `copy_nonoverlapping`). This eliminated ~3,300 lines of C runtime code AND ~2,800 lines of hardcoded compiler dispatch (collection methods, static methods, type-erasure, bypass lists).
 
-**Remaining work**: Strings (~1,200 lines C), Text utilities (~1,050 lines C), Math formatting (~410 lines C), Search algorithms (~100 lines C), File/Path refactor, codegen cleanup, runtime declaration optimization.
+**String migration COMPLETE (99.3%)**: All C runtime string calls in `lib/core/src/str.tml` replaced with pure TML — read-only ops (len, char_at, contains, starts_with, ends_with, find, rfind), allocating ops (substring, trim, to_uppercase/to_lowercase, split, split_whitespace, lines, replace, repeat, join, chars), and parsing (parse_i32, parse_i64, parse_f64). Only `as_bytes` remains (blocked on `ref [U8]` slice type codegen). 241 tests pass across 20 str test files.
+
+**Remaining work**: Text utilities (~1,050 lines C), Math formatting (~410 lines C), Search algorithms (~100 lines C), File/Path refactor, codegen cleanup, runtime declaration optimization.
 
 ### The Problem
 
@@ -507,15 +509,17 @@ KEEP as C/FFI:                              MIGRATE to pure TML:
 - [ ] 4.4.4 Remove 23 hardcoded static methods from `method_static.cpp:186-385`
 - [ ] 4.4.5 All existing File/Path tests pass
 
-### 4.5 Strings (core::str)
+### 4.5 Strings (core::str) — DONE (99.3%)
 
-- [ ] 4.5.1 Rewrite read-only ops: `str_len`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
-- [ ] 4.5.2 Rewrite transforms: `str_to_upper`, `str_to_lower`, `str_trim`
-- [ ] 4.5.3 Rewrite splitting: `str_split`, `str_lines`
-- [ ] 4.5.4 Rewrite allocating: `str_concat`, `str_replace`, `str_join`
-- [ ] 4.5.5 Rewrite parsing: `str_parse_i32`, `str_parse_i64`, `str_parse_f64`
-- [ ] 4.5.6 Remove `compiler/runtime/text/string.c` (1,201 lines)
-- [ ] 4.5.7 Remove 29 string function registrations from `types/builtins/string.cpp`
+- [x] 4.5.1 Rewrite read-only ops: `str_len`, `str_char_at`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`, `str_rfind`
+- [x] 4.5.2 Rewrite transforms: `str_to_uppercase`, `str_to_lowercase`, `str_trim`, `str_trim_start`, `str_trim_end`
+- [x] 4.5.3 Rewrite splitting: `str_split`, `str_split_whitespace`, `str_lines`
+- [x] 4.5.4 Rewrite allocating: `str_substring`, `str_replace`, `str_replace_first`, `str_repeat`, `str_join`, `str_chars`
+- [x] 4.5.5 Rewrite parsing: `str_parse_i32`, `str_parse_i64`, `str_parse_f64`
+- [x] 4.5.6 Update all `impl Str` methods to delegate to standalone pure TML functions
+- [ ] 4.5.7 `str_as_bytes` — blocked on `ref [U8]` slice type codegen
+- [ ] 4.5.8 Remove `compiler/runtime/text/string.c` (1,201 lines) — deferred to Phase 16
+- [ ] 4.5.9 Remove 29 string function registrations from `types/builtins/string.cpp` — deferred to Phase 20
 
 ### 4.6 Text utilities (std::text)
 
@@ -558,16 +562,16 @@ KEEP as C/FFI:                              MIGRATE to pure TML:
 
 ### Expected impact
 
-| Metric | Before | Current (collections done) | After Phase 4 |
-|--------|--------|---------------------------|--------------|
-| C runtime (migratable) | 5,210 lines | ~1,900 lines | 0 |
-| C runtime (total) | ~20,000 lines | ~16,700 lines | ~12,500 (FFI + essential) |
+| Metric | Before | Current (collections + strings done) | After Phase 4 |
+|--------|--------|--------------------------------------|--------------|
+| C runtime (migratable) | 5,210 lines | ~700 lines | 0 |
+| C runtime (total) | ~20,000 lines | ~15,500 lines | ~12,500 (FFI + essential) |
 | Hardcoded dispatch | 3,300 lines | ~500 lines | ~300 (intrinsics only) |
 | Types bypassing impl dispatch | 5 | 2 (File, Path) | 0 |
 | Unconditional runtime declares | 393 | ~300 | ~30 |
 | Hardcoded type registrations | 54 | ~29 (string remaining) | 0 |
 
-**Progress**: Phases 0-3 complete (collections). ~3,300 lines C + ~2,800 lines dispatch eliminated. Next: Strings (Phases 4-6), Formatting (7-9), Text (11).
+**Progress**: Phases 0-6 complete (collections + strings). ~4,500 lines C migrated to pure TML + ~2,800 lines dispatch eliminated. Next: Formatting (7-10), Text (11), Search (12).
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
 
 ---
@@ -774,12 +778,12 @@ These can be worked on alongside the main phases without blocking or being block
 | 1. Codegen bugs | 43 | 43 | 100% | **COMPLETE** |
 | 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (76.2%) |
 | 3. Stdlib essentials | 48 | 47 | 98% | **EFFECTIVELY COMPLETE** |
-| 4. Runtime migration + codegen cleanup | 45 | 30 | 67% | IN PROGRESS (List✓, HashMap✓, Buffer✓) |
+| 4. Runtime migration + codegen cleanup | 45 | 36 | 80% | IN PROGRESS (List✓, HashMap✓, Buffer✓, Str✓) |
 | 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
 | Parallel: Tooling | 9 | 7 | 78% | IN PROGRESS |
 | Parallel: Reflection | 5 | 3 | 60% | IN PROGRESS |
-| **TOTAL** | **294** | **209** | **71.1%** | |
+| **TOTAL** | **294** | **215** | **73.1%** | |
 
 ---
 
