@@ -366,7 +366,7 @@ pub func lookup_all(hostname: Str, max_results: I32) -> Outcome[LookupResult, Dn
 
 /// Resolves a hostname to all IPv4 addresses.
 pub func lookup_all4(hostname: Str, max_results: I32) -> Outcome[LookupResult, DnsError] {
-    let count: I32 = sys_dns_lookup_all(hostname, 2, max_results)
+    let count: I32 = sys_dns_lookup_all(hostname, 4, max_results)
     if count < 0 {
         let eai: I32 = sys_dns_get_last_error()
         return Err(DnsError::from_eai(eai))
@@ -387,7 +387,7 @@ pub func lookup_all4(hostname: Str, max_results: I32) -> Outcome[LookupResult, D
 
 /// Resolves a hostname to all IPv6 addresses.
 pub func lookup_all6(hostname: Str, max_results: I32) -> Outcome[LookupResult, DnsError] {
-    let count: I32 = sys_dns_lookup_all(hostname, 23, max_results)
+    let count: I32 = sys_dns_lookup_all(hostname, 6, max_results)
     if count < 0 {
         let eai: I32 = sys_dns_get_last_error()
         return Err(DnsError::from_eai(eai))

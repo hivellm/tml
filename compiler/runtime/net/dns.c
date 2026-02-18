@@ -60,14 +60,13 @@ static inline void dns_ensure_wsa(void) { /* no-op on POSIX */ }
 // ============================================================================
 // Thread-Local Storage
 // ============================================================================
+//
+// Uses dynamic TLS (TlsAlloc/TlsGetValue/TlsSetValue on Windows) instead of
+// implicit __declspec(thread) because implicit TLS can crash in DLLs loaded
+// via LoadLibrary at runtime (e.g., test suite DLLs). Dynamic TLS works
+// correctly in all contexts.
 
 #define DNS_MAX_RESULTS 32
-
-#ifdef _WIN32
-#define TLS_VAR __declspec(thread)
-#else
-#define TLS_VAR __thread
-#endif
 
 typedef struct {
     int family; // AF_INET or AF_INET6
@@ -80,11 +79,41 @@ typedef struct {
     } addr;
 } DnsResult;
 
-static TLS_VAR DnsResult tls_dns_results[DNS_MAX_RESULTS];
-static TLS_VAR int32_t tls_dns_result_count = 0;
-static TLS_VAR int64_t tls_dns_last_v6_lo = 0;
-static TLS_VAR int32_t tls_dns_last_error = 0;
-static TLS_VAR char tls_dns_hostname_buf[1025]; // NI_MAXHOST
+typedef struct {
+    DnsResult results[DNS_MAX_RESULTS];
+    int32_t result_count;
+    int64_t last_v6_lo;
+    int32_t last_error;
+    char hostname_buf[1025]; // NI_MAXHOST
+} DnsTls;
+
+#ifdef _WIN32
+
+#include <windows.h>
+
+static DWORD dns_tls_index = TLS_OUT_OF_INDEXES;
+
+static DnsTls* dns_get_tls(void) {
+    if (dns_tls_index == TLS_OUT_OF_INDEXES) {
+        dns_tls_index = TlsAlloc();
+    }
+    DnsTls* tls = (DnsTls*)TlsGetValue(dns_tls_index);
+    if (!tls) {
+        tls = (DnsTls*)calloc(1, sizeof(DnsTls));
+        TlsSetValue(dns_tls_index, tls);
+    }
+    return tls;
+}
+
+#else
+
+static __thread DnsTls dns_tls_storage;
+
+static DnsTls* dns_get_tls(void) {
+    return &dns_tls_storage;
+}
+
+#endif
 
 // ============================================================================
 // IPv6 Helpers
@@ -113,6 +142,7 @@ static int64_t ipv6_to_lo(const struct in6_addr* addr) {
 // Lookup hostname -> first IPv4 address (host byte order), or -1 on error
 int64_t tml_sys_dns_lookup4(const char* hostname) {
     dns_ensure_wsa();
+    DnsTls* tls = dns_get_tls();
     struct addrinfo hints, *res = NULL;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
@@ -120,7 +150,7 @@ int64_t tml_sys_dns_lookup4(const char* hostname) {
 
     int rc = getaddrinfo(hostname, NULL, &hints, &res);
     if (rc != 0 || !res) {
-        tls_dns_last_error = rc;
+        tls->last_error = rc;
         if (res)
             freeaddrinfo(res);
         return -1;
@@ -135,6 +165,7 @@ int64_t tml_sys_dns_lookup4(const char* hostname) {
 // Lookup hostname -> first IPv6 high 8 bytes, or -1 on error
 int64_t tml_sys_dns_lookup6_hi(const char* hostname) {
     dns_ensure_wsa();
+    DnsTls* tls = dns_get_tls();
     struct addrinfo hints, *res = NULL;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET6;
@@ -142,7 +173,7 @@ int64_t tml_sys_dns_lookup6_hi(const char* hostname) {
 
     int rc = getaddrinfo(hostname, NULL, &hints, &res);
     if (rc != 0 || !res) {
-        tls_dns_last_error = rc;
+        tls->last_error = rc;
         if (res)
             freeaddrinfo(res);
         return -1;
@@ -150,14 +181,15 @@ int64_t tml_sys_dns_lookup6_hi(const char* hostname) {
 
     struct sockaddr_in6* sin6 = (struct sockaddr_in6*)res->ai_addr;
     int64_t hi = ipv6_to_hi(&sin6->sin6_addr);
-    tls_dns_last_v6_lo = ipv6_to_lo(&sin6->sin6_addr);
+    tls->last_v6_lo = ipv6_to_lo(&sin6->sin6_addr);
     freeaddrinfo(res);
     return hi;
 }
 
 // Get low 8 bytes of last IPv6 lookup result
 int64_t tml_sys_dns_lookup6_lo(void) {
-    return tls_dns_last_v6_lo;
+    DnsTls* tls = dns_get_tls();
+    return tls->last_v6_lo;
 }
 
 // ============================================================================
@@ -167,6 +199,7 @@ int64_t tml_sys_dns_lookup6_lo(void) {
 // Lookup hostname -> all addresses; returns count or -1
 int32_t tml_sys_dns_lookup_all(const char* hostname, int32_t family_hint, int32_t max_results) {
     dns_ensure_wsa();
+    DnsTls* tls = dns_get_tls();
     struct addrinfo hints, *res = NULL, *rp;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = (family_hint == 0)   ? AF_UNSPEC
@@ -177,8 +210,8 @@ int32_t tml_sys_dns_lookup_all(const char* hostname, int32_t family_hint, int32_
 
     int rc = getaddrinfo(hostname, NULL, &hints, &res);
     if (rc != 0 || !res) {
-        tls_dns_last_error = rc;
-        tls_dns_result_count = 0;
+        tls->last_error = rc;
+        tls->result_count = 0;
         if (res)
             freeaddrinfo(res);
         return -1;
@@ -191,20 +224,20 @@ int32_t tml_sys_dns_lookup_all(const char* hostname, int32_t family_hint, int32_
     for (rp = res; rp != NULL && count < limit; rp = rp->ai_next) {
         if (rp->ai_family == AF_INET) {
             struct sockaddr_in* sin = (struct sockaddr_in*)rp->ai_addr;
-            tls_dns_results[count].family = AF_INET;
-            tls_dns_results[count].addr.v4 = ntohl(sin->sin_addr.s_addr);
+            tls->results[count].family = AF_INET;
+            tls->results[count].addr.v4 = ntohl(sin->sin_addr.s_addr);
             count++;
         } else if (rp->ai_family == AF_INET6) {
             struct sockaddr_in6* sin6 = (struct sockaddr_in6*)rp->ai_addr;
-            tls_dns_results[count].family = AF_INET6;
-            tls_dns_results[count].addr.v6.hi = ipv6_to_hi(&sin6->sin6_addr);
-            tls_dns_results[count].addr.v6.lo = ipv6_to_lo(&sin6->sin6_addr);
+            tls->results[count].family = AF_INET6;
+            tls->results[count].addr.v6.hi = ipv6_to_hi(&sin6->sin6_addr);
+            tls->results[count].addr.v6.lo = ipv6_to_lo(&sin6->sin6_addr);
             count++;
         }
     }
 
     freeaddrinfo(res);
-    tls_dns_result_count = count;
+    tls->result_count = count;
     return count;
 }
 
@@ -214,40 +247,44 @@ int32_t tml_sys_dns_lookup_all(const char* hostname, int32_t family_hint, int32_
 
 // Get address family of result at index. Returns 2 (IPv4) or 23 (IPv6), or -1
 int32_t tml_sys_dns_result_family(int32_t index) {
-    if (index < 0 || index >= tls_dns_result_count)
+    DnsTls* tls = dns_get_tls();
+    if (index < 0 || index >= tls->result_count)
         return -1;
 #ifdef _WIN32
-    return (tls_dns_results[index].family == AF_INET) ? AF_INET : AF_INET6;
+    return (tls->results[index].family == AF_INET) ? AF_INET : AF_INET6;
 #else
-    return (tls_dns_results[index].family == AF_INET) ? 2 : 23;
+    return (tls->results[index].family == AF_INET) ? 2 : 23;
 #endif
 }
 
 // Get IPv4 address of result at index
 int64_t tml_sys_dns_result_v4(int32_t index) {
-    if (index < 0 || index >= tls_dns_result_count)
+    DnsTls* tls = dns_get_tls();
+    if (index < 0 || index >= tls->result_count)
         return -1;
-    if (tls_dns_results[index].family != AF_INET)
+    if (tls->results[index].family != AF_INET)
         return -1;
-    return (int64_t)tls_dns_results[index].addr.v4;
+    return (int64_t)tls->results[index].addr.v4;
 }
 
 // Get IPv6 high 8 bytes of result at index
 int64_t tml_sys_dns_result_v6_hi(int32_t index) {
-    if (index < 0 || index >= tls_dns_result_count)
+    DnsTls* tls = dns_get_tls();
+    if (index < 0 || index >= tls->result_count)
         return -1;
-    if (tls_dns_results[index].family != AF_INET6)
+    if (tls->results[index].family != AF_INET6)
         return -1;
-    return tls_dns_results[index].addr.v6.hi;
+    return tls->results[index].addr.v6.hi;
 }
 
 // Get IPv6 low 8 bytes of result at index
 int64_t tml_sys_dns_result_v6_lo(int32_t index) {
-    if (index < 0 || index >= tls_dns_result_count)
+    DnsTls* tls = dns_get_tls();
+    if (index < 0 || index >= tls->result_count)
         return -1;
-    if (tls_dns_results[index].family != AF_INET6)
+    if (tls->results[index].family != AF_INET6)
         return -1;
-    return tls_dns_results[index].addr.v6.lo;
+    return tls->results[index].addr.v6.lo;
 }
 
 // ============================================================================
@@ -257,24 +294,26 @@ int64_t tml_sys_dns_result_v6_lo(int32_t index) {
 // Reverse DNS for IPv4 address (4 octets) -> hostname
 const char* tml_sys_dns_reverse4(int32_t a, int32_t b, int32_t c, int32_t d) {
     dns_ensure_wsa();
+    DnsTls* tls = dns_get_tls();
     struct sockaddr_in sa;
     memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;
     uint32_t ip = ((uint32_t)a << 24) | ((uint32_t)b << 16) | ((uint32_t)c << 8) | (uint32_t)d;
     sa.sin_addr.s_addr = htonl(ip);
 
-    int rc = getnameinfo((struct sockaddr*)&sa, sizeof(sa), tls_dns_hostname_buf, 1025, NULL, 0, 0);
+    int rc = getnameinfo((struct sockaddr*)&sa, sizeof(sa), tls->hostname_buf, 1025, NULL, 0, 0);
     if (rc != 0) {
-        tls_dns_last_error = rc;
-        tls_dns_hostname_buf[0] = '\0';
-        return tls_dns_hostname_buf;
+        tls->last_error = rc;
+        tls->hostname_buf[0] = '\0';
+        return tls->hostname_buf;
     }
-    return tls_dns_hostname_buf;
+    return tls->hostname_buf;
 }
 
 // Reverse DNS for IPv6 address (hi/lo 64-bit halves) -> hostname
 const char* tml_sys_dns_reverse6(int64_t hi, int64_t lo) {
     dns_ensure_wsa();
+    DnsTls* tls = dns_get_tls();
     struct sockaddr_in6 sa;
     memset(&sa, 0, sizeof(sa));
     sa.sin6_family = AF_INET6;
@@ -297,13 +336,13 @@ const char* tml_sys_dns_reverse6(int64_t hi, int64_t lo) {
     b[14] = (uint8_t)(lo >> 8);
     b[15] = (uint8_t)lo;
 
-    int rc = getnameinfo((struct sockaddr*)&sa, sizeof(sa), tls_dns_hostname_buf, 1025, NULL, 0, 0);
+    int rc = getnameinfo((struct sockaddr*)&sa, sizeof(sa), tls->hostname_buf, 1025, NULL, 0, 0);
     if (rc != 0) {
-        tls_dns_last_error = rc;
-        tls_dns_hostname_buf[0] = '\0';
-        return tls_dns_hostname_buf;
+        tls->last_error = rc;
+        tls->hostname_buf[0] = '\0';
+        return tls->hostname_buf;
     }
-    return tls_dns_hostname_buf;
+    return tls->hostname_buf;
 }
 
 // ============================================================================
@@ -312,5 +351,6 @@ const char* tml_sys_dns_reverse6(int64_t hi, int64_t lo) {
 
 // Get last DNS error code
 int32_t tml_sys_dns_get_last_error(void) {
-    return tls_dns_last_error;
+    DnsTls* tls = dns_get_tls();
+    return tls->last_error;
 }
