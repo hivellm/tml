@@ -196,7 +196,7 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/pool.c
     # text/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/text/string.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/text/text.c
+    # text.c removed — Text type migrated to pure TML (Phase 22)
     # collections/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections/collections.c
     # math/
@@ -204,9 +204,9 @@ set(TML_RUNTIME_SOURCES
     # time/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/time/time.c
     # concurrency/
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/thread.c
+    # thread.c removed — old thread/channel/mutex; replaced by tml_thread_* in sync.c (Phase 24)
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/sync.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/async.c
+    # async.c removed — async executor never connected (Phase 5 future work)
     # net/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/dns.c
@@ -231,7 +231,7 @@ add_library(tml_runtime STATIC ${TML_RUNTIME_SOURCES})
 if(MSVC)
     # Debug: no optimization (avoid /O2 vs /RTC1 conflict)
     # Release: full optimization
-    # /std:c11 and /experimental:c11atomics required for C11 atomics in thread.c
+    # /std:c11 and /experimental:c11atomics kept for compatibility
     target_compile_options(tml_runtime PRIVATE
         /W3
         /std:c11
