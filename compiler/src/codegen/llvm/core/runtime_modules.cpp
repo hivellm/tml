@@ -223,6 +223,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             "std::collections::buffer",
             "core::str",
             "core::hash",
+            "std::text",
         };
         for (const auto& mod_path : essential_library_modules) {
             if (registry->has_module(mod_path))
@@ -508,6 +509,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     "core::str",
                     "std::collections::List",
                     "std::collections::buffer",
+                    "std::text",
                 };
                 should_process = core_essential_modules.count(module_name) > 0;
                 if (!should_process) {
