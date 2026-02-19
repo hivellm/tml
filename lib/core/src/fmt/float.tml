@@ -109,13 +109,16 @@ pub func format_f32_exp(value: F32, uppercase: Bool) -> Str {
 }
 
 /// Returns true if the F32 is NaN.
+/// NaN is the only float value that is not equal to itself.
 pub func is_nan_f32(value: F32) -> Bool {
-    return lowlevel { f32_is_nan(value) }
+    return value != value
 }
 
 /// Returns true if the F32 is infinite.
+/// Infinite values satisfy: not NaN, but (value - value) is NaN.
 pub func is_infinite_f32(value: F32) -> Bool {
-    return lowlevel { f32_is_infinite(value) }
+    let diff = value - value
+    return value == value and diff != diff
 }
 
 /// Returns true if the F32 is finite (not NaN or infinite).
@@ -143,13 +146,16 @@ pub func format_f64_exp(value: F64, uppercase: Bool) -> Str {
 }
 
 /// Returns true if the F64 is NaN.
+/// NaN is the only float value that is not equal to itself.
 pub func is_nan_f64(value: F64) -> Bool {
-    return lowlevel { f64_is_nan(value) }
+    return value != value
 }
 
 /// Returns true if the F64 is infinite.
+/// Infinite values satisfy: not NaN, but (value - value) is NaN.
 pub func is_infinite_f64(value: F64) -> Bool {
-    return lowlevel { f64_is_infinite(value) }
+    let diff = value - value
+    return value == value and diff != diff
 }
 
 /// Returns true if the F64 is finite (not NaN or infinite).

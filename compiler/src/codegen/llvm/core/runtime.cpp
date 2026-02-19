@@ -190,10 +190,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @f32_to_string_precision(float, i64)");
     emit_line("declare ptr @f64_to_exp_string(double, i32)");
     emit_line("declare ptr @f32_to_exp_string(float, i32)");
-    emit_line("declare i32 @f64_is_nan(double)");
-    emit_line("declare i32 @f64_is_infinite(double)");
-    emit_line("declare i32 @f32_is_nan(float)");
-    emit_line("declare i32 @f32_is_infinite(float)");
+    // f32/f64_is_nan, f32/f64_is_infinite — REMOVED (Phase 27)
+    // Replaced by pure LLVM IR (fcmp uno / fabs+fcmp) in string.cpp
     // float_abs, float_sqrt, float_pow, float_round, float_floor, float_ceil,
     // int_to_float, float_to_int — replaced with LLVM intrinsics/instructions in math.cpp
     emit_line("");
@@ -404,10 +402,8 @@ void LLVMIRGen::emit_runtime_decls() {
         FuncInfo{"@f64_to_exp_string", "ptr (double, i32)", "ptr", {"double", "i32"}};
     functions_["f32_to_exp_string"] =
         FuncInfo{"@f32_to_exp_string", "ptr (float, i32)", "ptr", {"float", "i32"}};
-    functions_["f64_is_nan"] = FuncInfo{"@f64_is_nan", "i32 (double)", "i32", {"double"}};
-    functions_["f64_is_infinite"] = FuncInfo{"@f64_is_infinite", "i32 (double)", "i32", {"double"}};
-    functions_["f32_is_nan"] = FuncInfo{"@f32_is_nan", "i32 (float)", "i32", {"float"}};
-    functions_["f32_is_infinite"] = FuncInfo{"@f32_is_infinite", "i32 (float)", "i32", {"float"}};
+    // f32/f64_is_nan, f32/f64_is_infinite — REMOVED (Phase 27)
+    // Now pure LLVM IR in string.cpp + pure TML in fmt/float.tml
 
     // Text type: now pure TML — all tml_text_* C runtime functions removed
 

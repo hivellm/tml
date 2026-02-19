@@ -1,31 +1,27 @@
 /**
  * @file math.c
- * @brief TML Runtime - Math Functions
+ * @brief TML Runtime - Math Functions (Active Only)
  *
  * Implements mathematical functions and utilities for the TML language.
- * Provides float operations, SIMD-friendly array operations, and special
- * float value handling.
  *
- * ## Components
+ * ## Active Components
  *
- * - **Black box**: `black_box_i32`, `black_box_i64` (prevent optimization)
+ * - **Black box**: `black_box_i32`, `black_box_i64`, `black_box_f64` (prevent optimization)
  * - **SIMD operations**: `simd_sum_i32`, `simd_sum_f64`, `simd_dot_f64`
- * - **Float conversion**: `float_to_fixed`, `float_to_precision`, `int_to_float`
- * - **Rounding**: `float_round`, `float_floor`, `float_ceil`
- * - **Math functions**: `float_abs`, `float_sqrt`, `float_pow`
- * - **Bit manipulation**: `float32_bits`, `float64_bits`, `float*_from_bits`
- * - **Special values**: `infinity`, `nan_val`, `is_inf`, `is_nan`
- * - **Nextafter**: `nextafter`, `nextafter32`
+ * - **Float formatting**: `float_to_fixed`, `float_to_precision`, `float_to_string`
+ * - **Float to string**: `f64_to_string`, `f32_to_string`, `f*_to_string_precision`,
+ *   `f*_to_exp_string`
+ * - **Integer formatting**: `i64_to_binary_str`, `i64_to_octal_str`, `i64_to_*_hex_str`
+ * - **Nextafter**: `nextafter32` (nextafter is already in libm)
  *
- * ## Black Box Functions
+ * ## Removed (replaced by LLVM intrinsics/instructions in math.cpp)
  *
- * The `black_box` functions prevent the compiler from optimizing away
- * computations. Useful for benchmarking to ensure code is actually executed.
- *
- * ## SIMD Operations
- *
- * SIMD array operations are written as simple loops that the compiler can
- * auto-vectorize. This provides portable SIMD without explicit intrinsics.
+ * - float_round, float_floor, float_ceil → @llvm.round/floor/ceil
+ * - float_abs, float_sqrt, float_pow → @llvm.fabs/sqrt/pow
+ * - float32_bits, float32_from_bits, float64_bits, float64_from_bits → bitcast
+ * - infinity, nan_val, is_inf, is_nan → LLVM constants + fcmp
+ * - int_to_float, float_to_int → sitofp/fptosi
+ * - f32_is_nan, f32_is_infinite → fcmp uno / fabs+fcmp in string.cpp
  *
  * @see codegen/builtins/math.cpp for compiler builtin registration
  */
@@ -272,138 +268,10 @@ const char* i64_to_upper_hex_str(int64_t value) {
     return fmt_alloc_copy(temp, pos, 19);
 }
 
-// f32_is_nan(value: F32) -> Bool
-int32_t f32_is_nan(float value) {
-    return value != value ? 1 : 0;
-}
-
-// f32_is_infinite(value: F32) -> Bool
-int32_t f32_is_infinite(float value) {
-    return (!f32_is_nan(value) && f32_is_nan(value - value)) ? 1 : 0;
-}
-
-// Note: f64_is_nan, f64_is_infinite are defined in essential.c
-
-// int_to_float(value: I32) -> F64
-double int_to_float(int32_t value) {
-    return (double)value;
-}
-
-// float_to_int(value: F64) -> I32
-int32_t float_to_int(double value) {
-    return (int32_t)value;
-}
-
-// ============ ROUNDING FUNCTIONS ============
-
-// float_round(value: F64) -> I32
-int32_t float_round(double value) {
-    return (int32_t)round(value);
-}
-
-// float_floor(value: F64) -> I32
-int32_t float_floor(double value) {
-    return (int32_t)floor(value);
-}
-
-// float_ceil(value: F64) -> I32
-int32_t float_ceil(double value) {
-    return (int32_t)ceil(value);
-}
-
-// float_abs(value: F64) -> F64
-double float_abs(double value) {
-    return fabs(value);
-}
-
-// float_sqrt(value: F64) -> F64
-double float_sqrt(double value) {
-    return sqrt(value);
-}
-
-// float_pow(base: F64, exp: I32) -> F64
-double float_pow(double base, int32_t exp) {
-    return pow(base, (double)exp);
-}
-
-// ============ BIT MANIPULATION ============
-
-// float32_bits(f: F32) -> U32
-uint32_t float32_bits(float f) {
-    union {
-        float f;
-        uint32_t u;
-    } conv;
-    conv.f = f;
-    return conv.u;
-}
-
-// float32_from_bits(b: U32) -> F32
-float float32_from_bits(uint32_t b) {
-    union {
-        uint32_t u;
-        float f;
-    } conv;
-    conv.u = b;
-    return conv.f;
-}
-
-// float64_bits(f: F64) -> U64
-uint64_t float64_bits(double f) {
-    union {
-        double d;
-        uint64_t u;
-    } conv;
-    conv.d = f;
-    return conv.u;
-}
-
-// float64_from_bits(b: U64) -> F64
-double float64_from_bits(uint64_t b) {
-    union {
-        uint64_t u;
-        double d;
-    } conv;
-    conv.u = b;
-    return conv.d;
-}
-
-// ============ SPECIAL FLOAT VALUES ============
-
-// infinity(sign: I32) -> F64
-double infinity(int32_t sign) {
-    if (sign >= 0) {
-        return INFINITY;
-    } else {
-        return -INFINITY;
-    }
-}
-
-// nan() -> F64
-double nan_val(void) {
-    return NAN;
-}
-
-// is_inf(f: F64, sign: I32) -> Bool
-int32_t is_inf(double f, int32_t sign) {
-    if (sign > 0) {
-        return isinf(f) && f > 0 ? 1 : 0;
-    } else if (sign < 0) {
-        return isinf(f) && f < 0 ? 1 : 0;
-    } else {
-        return isinf(f) ? 1 : 0;
-    }
-}
-
-// is_nan(f: F64) -> Bool
-int32_t is_nan(double f) {
-    return isnan(f) ? 1 : 0;
-}
-
 // ============ NEXTAFTER FUNCTIONS ============
 
 // nextafter(x: F64, y: F64) -> F64
-// Returns already available as math.h function
+// Already available as math.h function (linked from libm)
 
 // nextafter32(x: F32, y: F32) -> F32
 float nextafter32(float x, float y) {

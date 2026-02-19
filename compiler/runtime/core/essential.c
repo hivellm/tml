@@ -1097,25 +1097,9 @@ const char* float_to_exp(double value, int32_t uppercase) {
     return float_format_buffer;
 }
 
-/**
- * @brief Checks if a float is NaN.
- *
- * @param value The floating point value to check.
- * @return 1 if NaN, 0 otherwise.
- */
-int32_t f64_is_nan(double value) {
-    return isnan(value) ? 1 : 0;
-}
-
-/**
- * @brief Checks if a float is infinite.
- *
- * @param value The floating point value to check.
- * @return 1 if infinite, 0 otherwise.
- */
-int32_t f64_is_infinite(double value) {
-    return isinf(value) ? 1 : 0;
-}
+// f64_is_nan, f64_is_infinite — REMOVED (Phase 27)
+// Replaced by pure LLVM IR: fcmp uno / fabs+fcmp oeq in string.cpp
+// TML lowlevel calls replaced by pure TML (value != value) in fmt/float.tml
 
 // ============================================================================
 // UTF-8 String Encoding Functions

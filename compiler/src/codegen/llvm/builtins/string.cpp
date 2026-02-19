@@ -538,73 +538,58 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
         return "null";
     }
 
-    // f32_is_nan(n) -> Bool
+    // f32_is_nan(n) -> Bool — pure LLVM IR: fcmp uno (NaN != NaN)
     if (fn_name == "f32_is_nan") {
         if (!call.args.empty()) {
             std::string n = gen_expr(*call.args[0]);
-            std::string n_type = last_expr_type_;
-            std::string n_f64 = n;
-            if (n_type == "float") {
-                n_f64 = fresh_reg();
-                emit_line("  " + n_f64 + " = fpext float " + n + " to double");
-            }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @f64_is_nan(double " + n_f64 + ")");
-            std::string result_bool = fresh_reg();
-            emit_line("  " + result_bool + " = icmp ne i32 " + result + ", 0");
+            emit_line("  " + result + " = fcmp uno float " + n + ", 0.0");
             last_expr_type_ = "i1";
-            return result_bool;
+            return result;
         }
         last_expr_type_ = "i1";
         return "0";
     }
 
-    // f64_is_nan(n) -> Bool
+    // f64_is_nan(n) -> Bool — pure LLVM IR: fcmp uno (NaN != NaN)
     if (fn_name == "f64_is_nan") {
         if (!call.args.empty()) {
             std::string n = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @f64_is_nan(double " + n + ")");
-            std::string result_bool = fresh_reg();
-            emit_line("  " + result_bool + " = icmp ne i32 " + result + ", 0");
+            emit_line("  " + result + " = fcmp uno double " + n + ", 0.0");
             last_expr_type_ = "i1";
-            return result_bool;
+            return result;
         }
         last_expr_type_ = "i1";
         return "0";
     }
 
-    // f32_is_infinite(n) -> Bool
+    // f32_is_infinite(n) -> Bool — pure LLVM IR: fabs + fcmp oeq +inf
     if (fn_name == "f32_is_infinite") {
         if (!call.args.empty()) {
             std::string n = gen_expr(*call.args[0]);
-            std::string n_type = last_expr_type_;
-            std::string n_f64 = n;
-            if (n_type == "float") {
-                n_f64 = fresh_reg();
-                emit_line("  " + n_f64 + " = fpext float " + n + " to double");
-            }
+            std::string abs_val = fresh_reg();
+            emit_line("  " + abs_val + " = call float @llvm.fabs.f32(float " + n + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @f64_is_infinite(double " + n_f64 + ")");
-            std::string result_bool = fresh_reg();
-            emit_line("  " + result_bool + " = icmp ne i32 " + result + ", 0");
+            // Float +inf = 0x7F800000, LLVM float hex = upper 32 bits of 64-bit
+            emit_line("  " + result + " = fcmp oeq float " + abs_val + ", 0x7F80000000000000");
             last_expr_type_ = "i1";
-            return result_bool;
+            return result;
         }
         last_expr_type_ = "i1";
         return "0";
     }
 
-    // f64_is_infinite(n) -> Bool
+    // f64_is_infinite(n) -> Bool — pure LLVM IR: fabs + fcmp oeq +inf
     if (fn_name == "f64_is_infinite") {
         if (!call.args.empty()) {
             std::string n = gen_expr(*call.args[0]);
+            std::string abs_val = fresh_reg();
+            emit_line("  " + abs_val + " = call double @llvm.fabs.f64(double " + n + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @f64_is_infinite(double " + n + ")");
-            std::string result_bool = fresh_reg();
-            emit_line("  " + result_bool + " = icmp ne i32 " + result + ", 0");
+            emit_line("  " + result + " = fcmp oeq double " + abs_val + ", 0x7FF0000000000000");
             last_expr_type_ = "i1";
-            return result_bool;
+            return result;
         }
         last_expr_type_ = "i1";
         return "0";

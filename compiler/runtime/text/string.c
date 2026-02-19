@@ -506,17 +506,7 @@ const char* bool_to_string(int b) {
     return b ? "true" : "false";
 }
 
-// char_to_string(c: U8) -> Str
-// Converts a single ASCII character (byte) to a 1-character string
-// Returns a newly allocated string to avoid static buffer issues
-const char* char_to_string(uint8_t c) {
-    char* buffer = (char*)malloc(2);
-    if (!buffer)
-        return "";
-    buffer[0] = (char)c;
-    buffer[1] = '\0';
-    return buffer;
-}
+// char_to_string — REMOVED (Phase 18.2, migrated to pure TML in char/methods.tml)
 
 // str_as_bytes(s: Str) -> ptr (returns pointer to the string's byte data)
 // Used by Str::as_bytes() in str.tml via lowlevel block
