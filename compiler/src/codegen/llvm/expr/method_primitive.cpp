@@ -450,17 +450,13 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
                 emit_line("  " + double_base + " = uitofp " + llvm_ty + " " + receiver +
                           " to double");
             }
-            std::string i32_exp = exp;
-            if (last_expr_type_ == "i64") {
-                i32_exp = fresh_reg();
-                emit_line("  " + i32_exp + " = trunc i64 " + exp + " to i32");
-            } else if (last_expr_type_ != "i32") {
-                i32_exp = fresh_reg();
-                emit_line("  " + i32_exp + " = sext " + last_expr_type_ + " " + exp + " to i32");
-            }
+            // Convert exponent to double for @llvm.pow.f64
+            std::string double_exp = fresh_reg();
+            emit_line("  " + double_exp + " = sitofp " + last_expr_type_ + " " + exp +
+                      " to double");
             std::string double_result = fresh_reg();
-            emit_line("  " + double_result + " = call double @float_pow(double " + double_base +
-                      ", i32 " + i32_exp + ")");
+            emit_line("  " + double_result + " = call double @llvm.pow.f64(double " + double_base +
+                      ", double " + double_exp + ")");
             std::string result = fresh_reg();
             if (is_signed) {
                 emit_line("  " + result + " = fptosi double " + double_result + " to " + llvm_ty);

@@ -183,94 +183,93 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
         return "0";
     }
 
-    // int_to_float(value: I32/I64) -> F64
+    // int_to_float(value: I32/I64) -> F64 — inline LLVM sitofp
     if (fn_name == "int_to_float" || fn_name == "toFloat") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string value_type = last_expr_type_;
-            // Convert to i32 if i64 (runtime function expects i32)
-            std::string i32_value = value;
-            if (value_type == "i64") {
-                i32_value = fresh_reg();
-                emit_line("  " + i32_value + " = trunc i64 " + value + " to i32");
-            }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @int_to_float(i32 " + i32_value + ")");
+            emit_line("  " + result + " = sitofp " + value_type + " " + value + " to double");
+            last_expr_type_ = "double";
             return result;
         }
         return "0.0";
     }
 
-    // float_to_int(value: F64) -> I32
+    // float_to_int(value: F64) -> I32 — inline LLVM fptosi
     if (fn_name == "float_to_int" || fn_name == "toInt") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val;
-            // Convert to double if needed
             if (last_expr_type_ == "i32" || last_expr_type_ == "i64") {
                 double_val = fresh_reg();
                 emit_line("  " + double_val + " = sitofp " + last_expr_type_ + " " + value +
                           " to double");
             } else {
-                double_val = value; // Already a double
+                double_val = value;
             }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @float_to_int(double " + double_val + ")");
+            emit_line("  " + result + " = fptosi double " + double_val + " to i32");
             last_expr_type_ = "i32";
             return result;
         }
         return "0";
     }
 
-    // float_round(value: F64) -> I32
+    // float_round(value: F64) -> I32 — LLVM @llvm.round.f64 + fptosi
     if (fn_name == "float_round" || (fn_name == "round" && !is_module_func("round"))) {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
+            std::string rounded = fresh_reg();
+            emit_line("  " + rounded + " = call double @llvm.round.f64(double " + double_val + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @float_round(double " + double_val + ")");
+            emit_line("  " + result + " = fptosi double " + rounded + " to i32");
             return result;
         }
         return "0";
     }
 
-    // float_floor(value: F64) -> I32
+    // float_floor(value: F64) -> I32 — LLVM @llvm.floor.f64 + fptosi
     if (fn_name == "float_floor" || (fn_name == "floor" && !is_module_func("floor"))) {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
+            std::string floored = fresh_reg();
+            emit_line("  " + floored + " = call double @llvm.floor.f64(double " + double_val + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @float_floor(double " + double_val + ")");
+            emit_line("  " + result + " = fptosi double " + floored + " to i32");
             return result;
         }
         return "0";
     }
 
-    // float_ceil(value: F64) -> I32
+    // float_ceil(value: F64) -> I32 — LLVM @llvm.ceil.f64 + fptosi
     if (fn_name == "float_ceil" || (fn_name == "ceil" && !is_module_func("ceil"))) {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
+            std::string ceiled = fresh_reg();
+            emit_line("  " + ceiled + " = call double @llvm.ceil.f64(double " + double_val + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @float_ceil(double " + double_val + ")");
+            emit_line("  " + result + " = fptosi double " + ceiled + " to i32");
             return result;
         }
         return "0";
     }
 
-    // abs(value: I32) -> I32 (returns absolute value as int)
+    // abs(value: I32) -> I32 — LLVM @llvm.fabs.f64 (convert to double, abs, convert back)
     if (fn_name == "float_abs" || (fn_name == "abs" && !is_module_func("abs"))) {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string double_result = fresh_reg();
-            emit_line("  " + double_result + " = call double @float_abs(double " + double_val +
+            emit_line("  " + double_result + " = call double @llvm.fabs.f64(double " + double_val +
                       ")");
-            // Convert back to i32
             std::string result = fresh_reg();
             emit_line("  " + result + " = fptosi double " + double_result + " to i32");
             return result;
@@ -278,28 +277,27 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
         return "0";
     }
 
-    // sqrt(value: F64) -> F64 (returns double)
+    // sqrt(value: F64) -> F64 — LLVM @llvm.sqrt.f64
     if (fn_name == "float_sqrt" || fn_name == "sqrt") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val;
-            // Convert to double if needed
             if (last_expr_type_ == "i32" || last_expr_type_ == "i64") {
                 double_val = fresh_reg();
                 emit_line("  " + double_val + " = sitofp " + last_expr_type_ + " " + value +
                           " to double");
             } else {
-                double_val = value; // Already a double
+                double_val = value;
             }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @float_sqrt(double " + double_val + ")");
+            emit_line("  " + result + " = call double @llvm.sqrt.f64(double " + double_val + ")");
             last_expr_type_ = "double";
             return result;
         }
         return "0.0";
     }
 
-    // pow(base: F64, exp: I32/I64) -> F64 (returns double)
+    // pow(base: F64, exp: I32/I64) -> F64 — LLVM @llvm.pow.f64 (exp converted to double)
     if (fn_name == "float_pow" || fn_name == "pow") {
         if (call.args.size() >= 2) {
             std::string base = gen_expr(*call.args[0]);
@@ -307,129 +305,142 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string exp = gen_expr(*call.args[1]);
             std::string exp_type = last_expr_type_;
             std::string double_base;
-            // Convert base to double if needed
             if (base_type == "i32" || base_type == "i64") {
                 double_base = fresh_reg();
                 emit_line("  " + double_base + " = sitofp " + base_type + " " + base +
                           " to double");
             } else {
-                double_base = base; // Already a double
+                double_base = base;
             }
-            // Convert exponent to i32 if it's i64
-            std::string i32_exp = exp;
-            if (exp_type == "i64") {
-                i32_exp = fresh_reg();
-                emit_line("  " + i32_exp + " = trunc i64 " + exp + " to i32");
+            // Convert exponent to double for @llvm.pow.f64
+            std::string double_exp;
+            if (exp_type == "double" || exp_type == "float") {
+                double_exp = exp;
+            } else {
+                double_exp = fresh_reg();
+                emit_line("  " + double_exp + " = sitofp " + exp_type + " " + exp + " to double");
             }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @float_pow(double " + double_base + ", i32 " +
-                      i32_exp + ")");
+            emit_line("  " + result + " = call double @llvm.pow.f64(double " + double_base +
+                      ", double " + double_exp + ")");
             last_expr_type_ = "double";
             return result;
         }
         return "1.0";
     }
 
-    // ============ BIT MANIPULATION FUNCTIONS ============
+    // ============ BIT MANIPULATION — inline LLVM bitcast ============
 
-    // float32_bits(f: F32) -> U32
+    // float32_bits(f: F32) -> U32 — LLVM bitcast
     if (fn_name == "float32_bits") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @float32_bits(float " + value + ")");
+            emit_line("  " + result + " = bitcast float " + value + " to i32");
             last_expr_type_ = "i32";
             return result;
         }
         return "0";
     }
 
-    // float32_from_bits(b: U32) -> F32
+    // float32_from_bits(b: U32) -> F32 — LLVM bitcast
     if (fn_name == "float32_from_bits") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call float @float32_from_bits(i32 " + value + ")");
+            emit_line("  " + result + " = bitcast i32 " + value + " to float");
             last_expr_type_ = "float";
             return result;
         }
         return "0.0";
     }
 
-    // float64_bits(f: F64) -> U64
+    // float64_bits(f: F64) -> U64 — LLVM bitcast
     if (fn_name == "float64_bits") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i64 @float64_bits(double " + value + ")");
+            emit_line("  " + result + " = bitcast double " + value + " to i64");
             last_expr_type_ = "i64";
             return result;
         }
         return "0";
     }
 
-    // float64_from_bits(b: U64) -> F64
+    // float64_from_bits(b: U64) -> F64 — LLVM bitcast
     if (fn_name == "float64_from_bits") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @float64_from_bits(i64 " + value + ")");
+            emit_line("  " + result + " = bitcast i64 " + value + " to double");
             last_expr_type_ = "double";
             return result;
         }
         return "0.0";
     }
 
-    // ============ SPECIAL FLOAT VALUES ============
+    // ============ SPECIAL FLOAT VALUES — inline LLVM constants + fcmp ============
 
-    // infinity(sign: I32) -> F64
+    // infinity(sign: I32) -> F64 — LLVM constant
     if (fn_name == "infinity") {
         if (!call.args.empty()) {
             std::string sign = gen_expr(*call.args[0]);
+            // Check if sign is negative (sign < 0)
+            std::string is_neg = fresh_reg();
+            emit_line("  " + is_neg + " = icmp slt i32 " + sign + ", 0");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @infinity(i32 " + sign + ")");
+            // 0x7FF0000000000000 = +inf, 0xFFF0000000000000 = -inf
+            emit_line("  " + result + " = select i1 " + is_neg +
+                      ", double 0xFFF0000000000000, double 0x7FF0000000000000");
             last_expr_type_ = "double";
             return result;
         }
         // Default to positive infinity
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call double @infinity(i32 1)");
         last_expr_type_ = "double";
-        return result;
+        return "0x7FF0000000000000";
     }
 
-    // nan() -> F64
+    // nan() -> F64 — LLVM constant (quiet NaN)
     if (fn_name == "nan") {
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call double @nan()");
         last_expr_type_ = "double";
-        return result;
+        return "0x7FF8000000000000";
     }
 
-    // is_inf(f: F64, sign: I32) -> Bool
+    // is_inf(f: F64, sign: I32) -> Bool — LLVM fcmp
     if (fn_name == "is_inf") {
         if (call.args.size() >= 2) {
             std::string f = gen_expr(*call.args[0]);
             std::string sign = gen_expr(*call.args[1]);
-            std::string int_result = fresh_reg();
-            emit_line("  " + int_result + " = call i32 @is_inf(double " + f + ", i32 " + sign +
-                      ")");
+            // Check sign: positive (1), negative (-1), or either (0)
+            std::string is_pos_inf = fresh_reg();
+            emit_line("  " + is_pos_inf + " = fcmp oeq double " + f + ", 0x7FF0000000000000");
+            std::string is_neg_inf = fresh_reg();
+            emit_line("  " + is_neg_inf + " = fcmp oeq double " + f + ", 0xFFF0000000000000");
+            std::string is_any_inf = fresh_reg();
+            emit_line("  " + is_any_inf + " = or i1 " + is_pos_inf + ", " + is_neg_inf);
+            // sign == 0 -> either, sign > 0 -> positive, sign < 0 -> negative
+            std::string sign_zero = fresh_reg();
+            emit_line("  " + sign_zero + " = icmp eq i32 " + sign + ", 0");
+            std::string sign_pos = fresh_reg();
+            emit_line("  " + sign_pos + " = icmp sgt i32 " + sign + ", 0");
+            std::string pos_check = fresh_reg();
+            emit_line("  " + pos_check + " = select i1 " + sign_pos + ", i1 " + is_pos_inf +
+                      ", i1 " + is_neg_inf);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = icmp ne i32 " + int_result + ", 0");
+            emit_line("  " + result + " = select i1 " + sign_zero + ", i1 " + is_any_inf + ", i1 " +
+                      pos_check);
             last_expr_type_ = "i1";
             return result;
         }
         return "0";
     }
 
-    // is_nan(f: F64) -> Bool
+    // is_nan(f: F64) -> Bool — LLVM fcmp uno
     if (fn_name == "is_nan") {
         if (!call.args.empty()) {
             std::string f = gen_expr(*call.args[0]);
-            std::string int_result = fresh_reg();
-            emit_line("  " + int_result + " = call i32 @is_nan(double " + f + ")");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = icmp ne i32 " + int_result + ", 0");
+            emit_line("  " + result + " = fcmp uno double " + f + ", 0.0");
             last_expr_type_ = "i1";
             return result;
         }

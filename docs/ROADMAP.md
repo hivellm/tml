@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓; runtime.cpp audit: 287→68 declares target, Phases 23-30 remaining)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓; runtime.cpp audit: 287→68 declares target, Phases 18.2+24-30 remaining)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -588,13 +588,13 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 - [x] 4.12.7 Remove emit_inline_int_to_string + digit_pairs from MIR codegen
 - [x] 4.12.8 Register f64_to_str/print_str/println_str in functions_[] map for text.tml lowlevel blocks
 
-### 4.13 Float math → LLVM intrinsics (Phase 23) — TODO
+### 4.13 Float math → LLVM intrinsics (Phase 23) — DONE
 
-- [ ] 4.13.1 Replace `@float_abs` → `@llvm.fabs.f64`, `@float_sqrt` → `@llvm.sqrt.f64`, etc.
-- [ ] 4.13.2 Replace bit casts with LLVM `bitcast` instructions
-- [ ] 4.13.3 Replace NaN/infinity with LLVM `fcmp`/constants
-- [ ] 4.13.4 Keep: float-to-string (snprintf), nextafter (no intrinsic)
-- [ ] 4.13.5 Remove ~16 float declares from runtime.cpp
+- [x] 4.13.1 Replace `@float_abs` → `@llvm.fabs.f64`, `@float_sqrt` → `@llvm.sqrt.f64`, `@float_pow` → `@llvm.pow.f64`, `@float_round/floor/ceil` → `@llvm.round/floor/ceil.f64` + fptosi, `@int_to_float` → `sitofp`, `@float_to_int` → `fptosi`
+- [x] 4.13.2 Replace bit casts with LLVM `bitcast` instructions (float32_bits, float32_from_bits, float64_bits, float64_from_bits)
+- [x] 4.13.3 Replace NaN/infinity with LLVM `fcmp uno`/`fcmp oeq` + hex constants (`0x7FF8000000000000`, `0x7FF0000000000000`, `0xFFF0000000000000`)
+- [x] 4.13.4 Keep: float-to-string (snprintf), nextafter (no intrinsic), f64/f32_is_nan/is_infinite (fmt lowlevel)
+- [x] 4.13.5 Remove 16 float declares from runtime.cpp + update method_primitive.cpp `.pow()` to use `@llvm.pow.f64`
 
 ### 4.14 Sync/threading → @extern FFI (Phase 24) — TODO
 
@@ -635,8 +635,8 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 | Types bypassing impl dispatch | 5 | 0 ✓ | 0 | |
 | Hardcoded type registrations | 54 | 29 (string) | 0 | Phase 28 |
 
-**Progress**: Phases 0-7, 16-22 complete (except 18.2). Full runtime.cpp audit done (287 declares categorized). ~51 Text declares removed (Phase 22). Phases 23-30 remaining.
-**Next actionable items**: Phase 23 (float math → LLVM intrinsics), Phase 18.2 (char_to_string → pure TML), Phase 24 (sync/threading → @extern FFI).
+**Progress**: Phases 0-7, 16-23 complete (except 18.2). Full runtime.cpp audit done (287 declares categorized). ~67 declares removed in Phases 22-23. Phases 18.2, 24-30 remaining.
+**Next actionable items**: Phase 18.2 (char_to_string → pure TML), Phase 24 (sync/threading → @extern FFI), Phase 25 (time/pool → @extern FFI).
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
 
 ---
@@ -843,7 +843,7 @@ These can be worked on alongside the main phases without blocking or being block
 | 1. Codegen bugs | 43 | 43 | 100% | **COMPLETE** |
 | 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (76.2%) |
 | 3. Stdlib essentials | 48 | 47 | 98% | **EFFECTIVELY COMPLETE** |
-| 4. Runtime migration + codegen cleanup | 49 | 47 | 96% | IN PROGRESS (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, Text✓; Phases 23-30 remaining) |
+| 4. Runtime migration + codegen cleanup | 49 | 48 | 98% | IN PROGRESS (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, Text✓, Float math✓; Phases 18.2+24-30 remaining) |
 | 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
 | Parallel: Tooling | 9 | 7 | 78% | IN PROGRESS |

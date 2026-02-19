@@ -1,6 +1,6 @@
 # Tasks: Migrate C Runtime Pure Algorithms to TML
 
-**Status**: In Progress (Phases 0-7, 16, 17, 18.1, 19, 20, 21, 22 complete; Phases 18.2, 23-30 planned — full runtime.cpp audit done: 287→221→68 declares target)
+**Status**: In Progress (Phases 0-7, 16, 17, 18.1, 19, 20, 21, 22, 23 complete; Phases 18.2, 24-30 planned — full runtime.cpp audit done: 287→205→68 declares target)
 
 **Scope**: ~287 runtime.cpp declares to minimize → ~68 essential; 15 dead declares to remove (Phase 17) + ~204 to migrate (Phases 18-26)
 
@@ -518,52 +518,53 @@ The search module is already following the three-tier rule correctly:
 
 ---
 
-## Phase 23: Migrate Float Math to LLVM Intrinsics
+## Phase 23: Migrate Float Math to LLVM Intrinsics — DONE
 
 > **Source**: `builtins/math.cpp` emits calls to C runtime for float operations
-> **Key finding**: Many float operations can use LLVM intrinsics directly instead of C calls
-> **Goal**: Replace C runtime float functions with LLVM intrinsics where possible
+> **Status**: COMPLETE — 16 C runtime calls replaced with LLVM intrinsics/instructions, 16 declares removed
+> **Impact**: All math (43 tests), intrinsics (86 tests), float (6 tests), fmt (404 tests) pass
 
 ### 23.1 LLVM intrinsic replacements
 
-- [ ] 23.1.1 Replace `@float_abs` → `@llvm.fabs.f64`
-- [ ] 23.1.2 Replace `@float_sqrt` → `@llvm.sqrt.f64`
-- [ ] 23.1.3 Replace `@float_pow` → `@llvm.pow.f64`
-- [ ] 23.1.4 Replace `@float_round` → `@llvm.round.f64` + fptosi
-- [ ] 23.1.5 Replace `@float_floor` → `@llvm.floor.f64` + fptosi
-- [ ] 23.1.6 Replace `@float_ceil` → `@llvm.ceil.f64` + fptosi
-- [ ] 23.1.7 Replace `@int_to_float` → `sitofp i32 to double`
-- [ ] 23.1.8 Replace `@float_to_int` → `fptosi double to i32`
+- [x] 23.1.1 Replace `@float_abs` → `@llvm.fabs.f64`
+- [x] 23.1.2 Replace `@float_sqrt` → `@llvm.sqrt.f64`
+- [x] 23.1.3 Replace `@float_pow` → `@llvm.pow.f64` (also updated method_primitive.cpp integer `.pow()`)
+- [x] 23.1.4 Replace `@float_round` → `@llvm.round.f64` + fptosi
+- [x] 23.1.5 Replace `@float_floor` → `@llvm.floor.f64` + fptosi
+- [x] 23.1.6 Replace `@float_ceil` → `@llvm.ceil.f64` + fptosi
+- [x] 23.1.7 Replace `@int_to_float` → `sitofp <type> to double` (handles all int types)
+- [x] 23.1.8 Replace `@float_to_int` → `fptosi double to i32`
 
 ### 23.2 Bit manipulation (LLVM cast instructions)
 
-- [ ] 23.2.1 Replace `@float32_bits` → `bitcast float to i32`
-- [ ] 23.2.2 Replace `@float32_from_bits` → `bitcast i32 to float`
-- [ ] 23.2.3 Replace `@float64_bits` → `bitcast double to i64`
-- [ ] 23.2.4 Replace `@float64_from_bits` → `bitcast i64 to double`
+- [x] 23.2.1 Replace `@float32_bits` → `bitcast float to i32`
+- [x] 23.2.2 Replace `@float32_from_bits` → `bitcast i32 to float`
+- [x] 23.2.3 Replace `@float64_bits` → `bitcast double to i64`
+- [x] 23.2.4 Replace `@float64_from_bits` → `bitcast i64 to double`
 
 ### 23.3 NaN/Infinity (LLVM constants + fcmp)
 
-- [ ] 23.3.1 Replace `@is_nan` → `fcmp uno double %val, 0.0`
-- [ ] 23.3.2 Replace `@is_inf` → `fcmp oeq double %val, inf` or `fcmp oeq double %val, -inf`
-- [ ] 23.3.3 Replace `@nan()` → `0x7FF8000000000000` constant
-- [ ] 23.3.4 Replace `@infinity` → `0x7FF0000000000000` / `0xFFF0000000000000`
-- [ ] 23.3.5 Replace `@f64_is_nan`/`@f64_is_infinite`/`@f32_is_nan`/`@f32_is_infinite` similarly
+- [x] 23.3.1 Replace `@is_nan` → `fcmp uno double %val, 0.0`
+- [x] 23.3.2 Replace `@is_inf` → `fcmp oeq` against `0x7FF0000000000000`/`0xFFF0000000000000` constants
+- [x] 23.3.3 Replace `@nan()` → `0x7FF8000000000000` constant
+- [x] 23.3.4 Replace `@infinity` → `select` between `0x7FF0000000000000`/`0xFFF0000000000000`
 
 ### 23.4 Nextafter (keep as C — no LLVM intrinsic)
 
-- [ ] 23.4.1 Keep `@nextafter` and `@nextafter32` as C runtime (no LLVM equivalent)
+- [x] 23.4.1 Keep `@nextafter` and `@nextafter32` as C runtime (no LLVM equivalent)
 
 ### 23.5 Float to string (keep as C — hardware-dependent snprintf)
 
-- [ ] 23.5.1 Keep all float_to_string/precision/exp functions as C runtime
-- [ ] 23.5.2 Keep f32/f64_to_string, f32/f64_to_string_precision, f32/f64_to_exp_string
+- [x] 23.5.1 Keep all float_to_string/precision/exp functions as C runtime
+- [x] 23.5.2 Keep f32/f64_to_string, f32/f64_to_string_precision, f32/f64_to_exp_string
+- [x] 23.5.3 Keep f64/f32_is_nan, f64/f32_is_infinite (used by fmt/float.tml lowlevel blocks)
 
 ### 23.6 Cleanup
 
-- [ ] 23.6.1 Remove ~16 dead float declare statements from runtime.cpp
-- [ ] 23.6.2 Remove corresponding emitters from builtins/math.cpp (replace with inline IR)
-- [ ] 23.6.3 Rebuild and run full test suite
+- [x] 23.6.1 Remove 16 float declare statements from runtime.cpp (8 math + 4 bitcast + 4 NaN/inf)
+- [x] 23.6.2 Replace emitters in builtins/math.cpp with inline LLVM IR
+- [x] 23.6.3 Update method_primitive.cpp `.pow()` to use `@llvm.pow.f64`
+- [x] 23.6.4 Rebuild and run full test suite — all pass
 
 ---
 
@@ -785,7 +786,7 @@ TOTAL: ~68 declarations (down from ~287)
 | 20 | Str codegen dispatch | -34 declares | TODO |
 | 21 | StringBuilder | -9 declares | TODO |
 | 22 | Text type | -51 declares | **DONE** |
-| 23 | Float math → LLVM intrinsics | -16 declares | TODO |
+| 23 | Float math → LLVM intrinsics | -16 declares | **DONE** |
 | 24 | Sync/threading → @extern | -32 declares | TODO |
 | 25 | Time/pool/print → @extern | -20 declares | TODO |
 | 26 | On-demand emit | remaining | TODO |

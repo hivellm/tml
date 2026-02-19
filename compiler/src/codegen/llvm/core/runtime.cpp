@@ -198,14 +198,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @f64_is_infinite(double)");
     emit_line("declare i32 @f32_is_nan(float)");
     emit_line("declare i32 @f32_is_infinite(float)");
-    emit_line("declare double @int_to_float(i32)");
-    emit_line("declare i32 @float_to_int(double)");
-    emit_line("declare i32 @float_round(double)");
-    emit_line("declare i32 @float_floor(double)");
-    emit_line("declare i32 @float_ceil(double)");
-    emit_line("declare double @float_abs(double)");
-    emit_line("declare double @float_sqrt(double)");
-    emit_line("declare double @float_pow(double, i32)");
+    // float_abs, float_sqrt, float_pow, float_round, float_floor, float_ceil,
+    // int_to_float, float_to_int — replaced with LLVM intrinsics/instructions in math.cpp
     emit_line("");
 
     // Integer to string conversion
@@ -226,20 +220,11 @@ void LLVMIRGen::emit_runtime_decls() {
     // abs functions removed — abs_i32 is pure TML in core::num::integer, abs_f64 never called
     emit_line("");
 
-    // Bit manipulation runtime declarations
-    emit_line("; Bit manipulation runtime");
-    emit_line("declare i32 @float32_bits(float)");
-    emit_line("declare float @float32_from_bits(i32)");
-    emit_line("declare i64 @float64_bits(double)");
-    emit_line("declare double @float64_from_bits(i64)");
+    // float32_bits, float32_from_bits, float64_bits, float64_from_bits
+    // — replaced with inline LLVM bitcast in math.cpp
     emit_line("");
 
-    // Special float value runtime declarations
-    emit_line("; Special float values runtime");
-    emit_line("declare double @infinity(i32)");
-    emit_line("declare double @nan()");
-    emit_line("declare i32 @is_inf(double, i32)");
-    emit_line("declare i32 @is_nan(double)");
+    // infinity, nan, is_inf, is_nan — replaced with inline LLVM constants + fcmp in math.cpp
     emit_line("");
 
     // Nextafter runtime declarations
