@@ -126,6 +126,10 @@ auto make_test_tool() -> Tool {
                 .parameters = {
                     {"path", "string", "Path to test file or directory", false},
                     {"filter", "string", "Test name filter", false},
+                    {"suite", "string",
+                     "Run only tests in a specific suite group. Examples: \"core/str\", "
+                     "\"std/json\", \"core/fmt\", \"std/collections\", \"compiler/compiler\"",
+                     false},
                     {"release", "boolean", "Run in release mode", false},
                     {"coverage", "boolean", "Generate coverage report", false},
                     {"profile", "boolean", "Show per-test timing profile", false},
@@ -795,10 +799,17 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         cmd << " " << path_param->as_string();
     }
 
-    // Add filter if specified
+    // Add filter if specified (maps to --filter=X for file path substring matching)
     auto* filter_param = params.get("filter");
     if (filter_param != nullptr && filter_param->is_string()) {
-        cmd << " --filter " << filter_param->as_string();
+        cmd << " --filter=" << filter_param->as_string();
+    }
+
+    // Add suite filter (maps to --suite=X for suite group filtering)
+    // e.g., suite="core/str" runs only str tests from lib/core
+    auto* suite_param = params.get("suite");
+    if (suite_param != nullptr && suite_param->is_string()) {
+        cmd << " --suite=" << suite_param->as_string();
     }
 
     // Add release flag

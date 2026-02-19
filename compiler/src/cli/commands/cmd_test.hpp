@@ -145,6 +145,8 @@ struct TestOptions {
     std::string backend = "llvm";      // Codegen backend ("llvm" or "cranelift")
     std::vector<std::string>
         features; // Feature flags (--feature network → defines FEATURE_NETWORK)
+    std::vector<std::string> suite_filters; // Suite group filters (e.g., "core/str", "std/json")
+    bool list_suites = false;               // Print discovered suite groups and exit
 };
 
 // Parse test command arguments

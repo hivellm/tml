@@ -272,9 +272,15 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
         } else if (arg.starts_with("--timeout=")) {
             opts.timeout_seconds = std::stoi(arg.substr(10));
         } else if (arg.starts_with("--group=")) {
-            opts.patterns.push_back(arg.substr(8));
+            opts.suite_filters.push_back(arg.substr(8));
         } else if (arg.starts_with("--suite=")) {
-            opts.patterns.push_back(arg.substr(8));
+            opts.suite_filters.push_back(arg.substr(8));
+        } else if (arg.starts_with("--filter=")) {
+            opts.patterns.push_back(arg.substr(9));
+        } else if (arg == "--filter" && i + 1 < argc) {
+            opts.patterns.push_back(argv[++i]);
+        } else if (arg == "--list-suites") {
+            opts.list_suites = true;
         } else if (arg.starts_with("--backend=")) {
             opts.backend = arg.substr(10);
             if (opts.backend != "llvm" && opts.backend != "cranelift") {
@@ -396,6 +402,108 @@ int run_test(int argc, char* argv[], bool verbose) {
                                             << " (looking for *.test.tml, *.error.tml)");
         }
         return 0;
+    }
+
+    // --list-suites: print discovered test directories and exit
+    if (opts.list_suites) {
+        // Extract test directory structure from file paths
+        // e.g., "lib/core/tests/str/foo.test.tml" -> lib="core", subdir="str"
+        struct SubdirInfo {
+            int file_count = 0;
+            int test_count = 0;
+        };
+        struct LibInfo {
+            int total_files = 0;
+            int total_tests = 0;
+            std::map<std::string, SubdirInfo> subdirs;
+        };
+        std::map<std::string, LibInfo> libs; // "core", "std", "compiler", etc.
+
+        for (const auto& file : test_files) {
+            fs::path p(file);
+            std::vector<std::string> parts;
+            for (auto it = p.begin(); it != p.end(); ++it) {
+                parts.push_back(it->string());
+            }
+
+            int test_count = tester::count_tests_in_file(file);
+
+            // Find "tests" in path and extract lib name + subdir
+            for (size_t i = 0; i + 1 < parts.size(); ++i) {
+                if (parts[i] == "tests") {
+                    // lib name is one or two components before "tests"
+                    std::string lib_name;
+                    // Check for lib/<name>/tests pattern
+                    if (i >= 2 && parts[i - 2] == "lib") {
+                        lib_name = parts[i - 1];
+                    } else if (i >= 1) {
+                        lib_name = parts[i - 1];
+                    }
+                    // subdir is the component after "tests"
+                    std::string subdir = (i + 1 < parts.size() - 1) ? parts[i + 1] : "";
+
+                    if (!lib_name.empty() && !subdir.empty()) {
+                        auto& li = libs[lib_name];
+                        li.total_files++;
+                        li.total_tests += test_count;
+                        auto& si = li.subdirs[subdir];
+                        si.file_count++;
+                        si.test_count += test_count;
+                    }
+                    break;
+                }
+            }
+        }
+
+        TML_LOG_INFO("test", "Available test suites (" << test_files.size() << " files):\n");
+
+        for (const auto& [lib, info] : libs) {
+            std::ostringstream oss;
+            oss << c.bold() << lib << c.reset() << "  (" << info.subdirs.size() << " modules, "
+                << info.total_files << " files, " << info.total_tests << " tests)";
+            TML_LOG_INFO("test", oss.str());
+
+            for (const auto& [sub, si] : info.subdirs) {
+                std::ostringstream sub_oss;
+                sub_oss << "  " << c.dim() << "--suite=" << lib << "/" << sub << c.reset() << "  ("
+                        << si.file_count << " files, " << si.test_count << " tests)";
+                TML_LOG_INFO("test", sub_oss.str());
+            }
+        }
+
+        TML_LOG_INFO("test", "\nUsage: tml test --suite=core/str --no-cache");
+        return 0;
+    }
+
+    // Map suite filters to file path patterns
+    // e.g., "core/str" -> "lib/core/tests/str"
+    //        "std/json" -> "lib/std/tests/json"
+    //        "compiler/compiler" -> "compiler/tests/compiler"
+    if (!opts.suite_filters.empty()) {
+        for (const auto& filter : opts.suite_filters) {
+            auto slash_pos = filter.find('/');
+            if (slash_pos != std::string::npos) {
+                std::string lib_name = filter.substr(0, slash_pos);
+                std::string module_name = filter.substr(slash_pos + 1);
+
+                if (lib_name == "compiler") {
+                    // compiler/X -> compiler/tests/X
+                    opts.patterns.push_back(
+                        "compiler" + std::string(1, fs::path::preferred_separator) + "tests" +
+                        std::string(1, fs::path::preferred_separator) + module_name);
+                } else {
+                    // core/str -> lib/core/tests/str
+                    opts.patterns.push_back(
+                        "lib" + std::string(1, fs::path::preferred_separator) + lib_name +
+                        std::string(1, fs::path::preferred_separator) + "tests" +
+                        std::string(1, fs::path::preferred_separator) + module_name);
+                }
+            } else {
+                // No slash: could be a lib name like "core" -> "lib/core/tests"
+                // or a direct pattern — pass through as-is
+                opts.patterns.push_back(filter);
+            }
+        }
     }
 
     // Filter test files by pattern
