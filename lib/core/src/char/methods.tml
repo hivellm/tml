@@ -628,21 +628,32 @@ func to_hex_string(c: Char) -> Str {
     return result
 }
 
-/// Converts a single character to a string.
+/// Converts a single character to a string (pure TML — allocates UTF-8 encoded string).
 func char_to_string(c: Char) -> Str {
     let code: U32 = c as U32
-    // For ASCII characters, use the runtime's byte-to-string conversion
+    // ASCII: 1 byte
     if code < 128 {
         let byte: U8 = code as U8
-        return lowlevel { char_to_string(byte) }
+        let buf: *Unit = lowlevel { mem_alloc(2) }
+        let p0: *U8 = buf as *U8
+        lowlevel { ptr_write[U8](p0, byte) }
+        let p1: *U8 = (buf as I64 + 1) as *U8
+        lowlevel { ptr_write[U8](p1, 0 as U8) }
+        return buf as Str
     }
 
-    // UTF-8 encoding for non-ASCII characters
     // 2 bytes: 110xxxxx 10xxxxxx (U+0080 to U+07FF)
     if code < 0x800 {
         let b1: U8 = (0xC0 | ((code >> 6) & 0x1F)) as U8
         let b2: U8 = (0x80 | (code & 0x3F)) as U8
-        return lowlevel { utf8_2byte_to_string(b1, b2) }
+        let buf: *Unit = lowlevel { mem_alloc(3) }
+        let p0: *U8 = buf as *U8
+        lowlevel { ptr_write[U8](p0, b1) }
+        let p1: *U8 = (buf as I64 + 1) as *U8
+        lowlevel { ptr_write[U8](p1, b2) }
+        let p2: *U8 = (buf as I64 + 2) as *U8
+        lowlevel { ptr_write[U8](p2, 0 as U8) }
+        return buf as Str
     }
 
     // 3 bytes: 1110xxxx 10xxxxxx 10xxxxxx (U+0800 to U+FFFF)
@@ -650,7 +661,16 @@ func char_to_string(c: Char) -> Str {
         let b1: U8 = (0xE0 | ((code >> 12) & 0x0F)) as U8
         let b2: U8 = (0x80 | ((code >> 6) & 0x3F)) as U8
         let b3: U8 = (0x80 | (code & 0x3F)) as U8
-        return lowlevel { utf8_3byte_to_string(b1, b2, b3) }
+        let buf: *Unit = lowlevel { mem_alloc(4) }
+        let p0: *U8 = buf as *U8
+        lowlevel { ptr_write[U8](p0, b1) }
+        let p1: *U8 = (buf as I64 + 1) as *U8
+        lowlevel { ptr_write[U8](p1, b2) }
+        let p2: *U8 = (buf as I64 + 2) as *U8
+        lowlevel { ptr_write[U8](p2, b3) }
+        let p3: *U8 = (buf as I64 + 3) as *U8
+        lowlevel { ptr_write[U8](p3, 0 as U8) }
+        return buf as Str
     }
 
     // 4 bytes: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx (U+10000 to U+10FFFF)
@@ -658,7 +678,18 @@ func char_to_string(c: Char) -> Str {
     let b2: U8 = (0x80 | ((code >> 12) & 0x3F)) as U8
     let b3: U8 = (0x80 | ((code >> 6) & 0x3F)) as U8
     let b4: U8 = (0x80 | (code & 0x3F)) as U8
-    return lowlevel { utf8_4byte_to_string(b1, b2, b3, b4) }
+    let buf: *Unit = lowlevel { mem_alloc(5) }
+    let p0: *U8 = buf as *U8
+    lowlevel { ptr_write[U8](p0, b1) }
+    let p1: *U8 = (buf as I64 + 1) as *U8
+    lowlevel { ptr_write[U8](p1, b2) }
+    let p2: *U8 = (buf as I64 + 2) as *U8
+    lowlevel { ptr_write[U8](p2, b3) }
+    let p3: *U8 = (buf as I64 + 3) as *U8
+    lowlevel { ptr_write[U8](p3, b4) }
+    let p4: *U8 = (buf as I64 + 4) as *U8
+    lowlevel { ptr_write[U8](p4, 0 as U8) }
+    return buf as Str
 }
 
 // ============================================================================

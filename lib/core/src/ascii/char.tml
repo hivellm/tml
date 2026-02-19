@@ -428,7 +428,12 @@ impl AsciiChar {
     /// ```
     pub func as_str(this) -> Str {
         let byte: U8 = this.value as U8
-        return lowlevel { char_to_string(byte) }
+        let buf: *Unit = lowlevel { mem_alloc(2) }
+        let p0: *U8 = buf as *U8
+        lowlevel { ptr_write[U8](p0, byte) }
+        let p1: *U8 = (buf as I64 + 1) as *U8
+        lowlevel { ptr_write[U8](p1, 0 as U8) }
+        return buf as Str
     }
 }
 
@@ -656,5 +661,10 @@ impl AsciiChar {
 /// Converts an AsciiChar to a string
 pub func to_string(ch: AsciiChar) -> Str {
     let byte: U8 = ch.value as U8
-    return lowlevel { char_to_string(byte) }
+    let buf: *Unit = lowlevel { mem_alloc(2) }
+    let p0: *U8 = buf as *U8
+    lowlevel { ptr_write[U8](p0, byte) }
+    let p1: *U8 = (buf as I64 + 1) as *U8
+    lowlevel { ptr_write[U8](p1, 0 as U8) }
+    return buf as Str
 }

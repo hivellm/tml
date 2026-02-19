@@ -906,8 +906,17 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             last_expr_type_ = "ptr";
             return receiver;
         } else if (kind == types::PrimitiveKind::Char) {
-            // Convert Char (U32) to string
-            emit_line("  " + result + " = call ptr @char_to_string(i32 " + receiver + ")");
+            // Inline char-to-string: alloc 2 bytes, write char byte + null terminator
+            // (Handles ASCII; full UTF-8 encoding in TML char/methods.tml char_to_string)
+            std::string byte = fresh_reg();
+            emit_line("  " + byte + " = trunc i32 " + receiver + " to i8");
+            std::string buf = fresh_reg();
+            emit_line("  " + buf + " = call ptr @mem_alloc(i64 2)");
+            emit_line("  store i8 " + byte + ", ptr " + buf);
+            std::string p1 = fresh_reg();
+            emit_line("  " + p1 + " = getelementptr i8, ptr " + buf + ", i64 1");
+            emit_line("  store i8 0, ptr " + p1);
+            emit_line("  " + result + " = bitcast ptr " + buf + " to ptr");
         } else {
             // For other integer types, extend to i64
             std::string ext = fresh_reg();

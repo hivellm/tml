@@ -248,46 +248,8 @@ void TypeEnv::init_builtin_string() {
                                                    false,
                                                    builtin_span});
 
-    // char_to_string(c: U8) -> Str
-    // Converts a single byte (ASCII character) to a 1-character string
-    functions_["char_to_string"].push_back(FuncSig{"char_to_string",
-                                                   {make_primitive(PrimitiveKind::U8)},
-                                                   make_primitive(PrimitiveKind::Str),
-                                                   {},
-                                                   false,
-                                                   builtin_span});
-
-    // utf8_2byte_to_string(b1: U8, b2: U8) -> Str
-    // Converts a 2-byte UTF-8 sequence to a string
-    functions_["utf8_2byte_to_string"].push_back(
-        FuncSig{"utf8_2byte_to_string",
-                {make_primitive(PrimitiveKind::U8), make_primitive(PrimitiveKind::U8)},
-                make_primitive(PrimitiveKind::Str),
-                {},
-                false,
-                builtin_span});
-
-    // utf8_3byte_to_string(b1: U8, b2: U8, b3: U8) -> Str
-    // Converts a 3-byte UTF-8 sequence to a string
-    functions_["utf8_3byte_to_string"].push_back(
-        FuncSig{"utf8_3byte_to_string",
-                {make_primitive(PrimitiveKind::U8), make_primitive(PrimitiveKind::U8),
-                 make_primitive(PrimitiveKind::U8)},
-                make_primitive(PrimitiveKind::Str),
-                {},
-                false,
-                builtin_span});
-
-    // utf8_4byte_to_string(b1: U8, b2: U8, b3: U8, b4: U8) -> Str
-    // Converts a 4-byte UTF-8 sequence to a string
-    functions_["utf8_4byte_to_string"].push_back(
-        FuncSig{"utf8_4byte_to_string",
-                {make_primitive(PrimitiveKind::U8), make_primitive(PrimitiveKind::U8),
-                 make_primitive(PrimitiveKind::U8), make_primitive(PrimitiveKind::U8)},
-                make_primitive(PrimitiveKind::Str),
-                {},
-                false,
-                builtin_span});
+    // char_to_string, utf8_*byte_to_string — REMOVED (Phase 18.2)
+    // Migrated to pure TML using mem_alloc + ptr_write in char/methods.tml
 }
 
 } // namespace tml::types

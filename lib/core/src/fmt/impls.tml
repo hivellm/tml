@@ -36,7 +36,8 @@ use core::fmt::helpers::{
     u8_to_str, u16_to_str, u32_to_str, u64_to_str,
     u8_to_binary_str, u16_to_binary_str, u32_to_binary_str, u64_to_binary_str,
     i8_to_binary_str, i16_to_binary_str, i32_to_binary_str, i64_to_binary_str,
-    u64_to_octal_str, u64_to_hex_str
+    u64_to_octal_str, u64_to_hex_str,
+    char_to_str
 }
 
 // ============================================================================
@@ -133,7 +134,7 @@ impl Display for Str {
 /// Converts a `Char` to a one-character string.
 impl Display for Char {
     pub func to_string(this) -> Str {
-        return lowlevel { char_to_string(this) }
+        return char_to_str(this)
     }
 }
 
@@ -239,8 +240,7 @@ impl Debug for Str {
 /// Debug output for `Char` (wraps in single quotes).
 impl Debug for Char {
     pub func debug_string(this) -> Str {
-        // Debug output includes single quotes
-        return "'" + lowlevel { char_to_string(this) } + "'"
+        return "'" + char_to_str(this) + "'"
     }
 }
 

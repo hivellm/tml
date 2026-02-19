@@ -399,13 +399,9 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @f64_to_str(double)");
     emit_line("");
 
-    // Char utilities — classification functions removed (pure TML in char/methods.tml)
-    // Only char_to_string and utf8_*_to_string kept (used from lowlevel blocks)
-    emit_line("; Char/UTF-8 to string");
-    emit_line("declare ptr @char_to_string(i8)");
-    emit_line("declare ptr @utf8_2byte_to_string(i8, i8)");
-    emit_line("declare ptr @utf8_3byte_to_string(i8, i8, i8)");
-    emit_line("declare ptr @utf8_4byte_to_string(i8, i8, i8, i8)");
+    // Char/UTF-8 to string — REMOVED (Phase 18.2)
+    // char_to_string, utf8_2byte/3byte/4byte_to_string migrated to pure TML
+    // using mem_alloc + ptr_write in char/methods.tml and char/decode.tml
     emit_line("declare i64 @tml_random_seed()");
     emit_line("");
 
@@ -413,15 +409,6 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
     // Also register with tml_ prefix for when called as tml_random_seed()
     functions_["tml_random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
-
-    // Register UTF-8 encoding functions for lowlevel calls
-    functions_["char_to_string"] = FuncInfo{"@char_to_string", "ptr (i8)", "ptr", {"i8"}};
-    functions_["utf8_2byte_to_string"] =
-        FuncInfo{"@utf8_2byte_to_string", "ptr (i8, i8)", "ptr", {"i8", "i8"}};
-    functions_["utf8_3byte_to_string"] =
-        FuncInfo{"@utf8_3byte_to_string", "ptr (i8, i8, i8)", "ptr", {"i8", "i8", "i8"}};
-    functions_["utf8_4byte_to_string"] =
-        FuncInfo{"@utf8_4byte_to_string", "ptr (i8, i8, i8, i8)", "ptr", {"i8", "i8", "i8", "i8"}};
 
     // Register string runtime functions in functions_ map for lowlevel calls
     // Only functions actively called from lowlevel blocks need entries here.

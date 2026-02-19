@@ -398,9 +398,16 @@ func string_len(s: Str) -> I64 {
     return str::len(s)
 }
 
-/// Converts a character (byte value) to a single-character string.
+/// Converts a character (byte value) to a single-character string (pure TML).
 func char_to_str(c: Char) -> Str {
-    return lowlevel { char_to_string(c) }
+    let code: U32 = c as U32
+    let byte: U8 = code as U8
+    let buf: *Unit = lowlevel { mem_alloc(2) }
+    let p0: *U8 = buf as *U8
+    lowlevel { ptr_write[U8](p0, byte) }
+    let p1: *U8 = (buf as I64 + 1) as *U8
+    lowlevel { ptr_write[U8](p1, 0 as U8) }
+    return buf as Str
 }
 
 /// Repeats a string n times.

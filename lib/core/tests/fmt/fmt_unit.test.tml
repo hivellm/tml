@@ -1,24 +1,23 @@
-// Tests for fmt/traits — char_to_string function
+// Tests for Char Display — Char.to_string()
 use test::{assert, assert_eq}
-use core::fmt::traits::{char_to_string}
 
 @test
 func test_char_to_string_a() -> I32 {
-    let s: Str = char_to_string('A')
-    assert_eq(s, "A", "char_to_string('A') should be 'A'")
+    let s: Str = 'A'.to_string()
+    assert_eq(s, "A", "'A'.to_string() should be 'A'")
     return 0
 }
 
 @test
 func test_char_to_string_digit() -> I32 {
-    let s: Str = char_to_string('7')
-    assert_eq(s, "7", "char_to_string('7') should be '7'")
+    let s: Str = '7'.to_string()
+    assert_eq(s, "7", "'7'.to_string() should be '7'")
     return 0
 }
 
 @test
 func test_char_to_string_space() -> I32 {
-    let s: Str = char_to_string(' ')
-    assert_eq(s, " ", "char_to_string(' ') should be space")
+    let s: Str = ' '.to_string()
+    assert_eq(s, " ", "' '.to_string() should be space")
     return 0
 }

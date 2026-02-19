@@ -559,7 +559,7 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 
 - [x] 4.9.1 Remove 14 char_* builtin emitters from `builtins/string.cpp` and 14 char_* declares from `runtime.cpp` — TML char/methods.tml handles all classification/conversion via module-qualified dispatch
 - [x] 4.9.2 Rewrote `compiler/tests/runtime/char.test.tml` to use module-qualified calls — 23 tests pass
-- [ ] 4.9.3 Implement `char_to_string`, `utf8_*byte_to_string` in pure TML (Phase 18.2 — deferred)
+- [x] 4.9.3 Implement `char_to_string`, `utf8_*byte_to_string` in pure TML using mem_alloc + ptr_write (Phase 18.2 — done, 4 declares + 4 FuncSigs removed)
 
 ### 4.10 Str codegen dispatch → TML dispatch (Phase 20) — DONE
 
@@ -635,8 +635,8 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 | Types bypassing impl dispatch | 5 | 0 ✓ | 0 | |
 | Hardcoded type registrations | 54 | 29 (string) | 0 | Phase 28 |
 
-**Progress**: Phases 0-7, 16-23 complete (except 18.2). Full runtime.cpp audit done (287 declares categorized). ~67 declares removed in Phases 22-23. Phases 18.2, 24-30 remaining.
-**Next actionable items**: Phase 18.2 (char_to_string → pure TML), Phase 24 (sync/threading → @extern FFI), Phase 25 (time/pool → @extern FFI).
+**Progress**: Phases 0-7, 16-23 complete (including 18.2). Full runtime.cpp audit done (287 declares categorized). ~71 declares removed in Phases 17-23. Phases 24-30 remaining.
+**Next actionable items**: Phase 24 (sync/threading → @extern FFI), Phase 25 (time/pool → @extern FFI), Phase 26 (on-demand emit).
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
 
 ---

@@ -1,6 +1,6 @@
 # Tasks: Migrate C Runtime Pure Algorithms to TML
 
-**Status**: In Progress (Phases 0-7, 16, 17, 18.1, 19, 20, 21, 22, 23 complete; Phases 18.2, 24-30 planned — full runtime.cpp audit done: 287→205→68 declares target)
+**Status**: In Progress (Phases 0-7, 16, 17, 18, 19, 20, 21, 22, 23 complete; Phases 24-30 planned — full runtime.cpp audit done: 287→201→68 declares target)
 
 **Scope**: ~287 runtime.cpp declares to minimize → ~68 essential; 15 dead declares to remove (Phase 17) + ~204 to migrate (Phases 18-26)
 
@@ -376,17 +376,20 @@ The search module is already following the three-tier rule correctly:
 - [x] 18.1.7 Remove 14 char_* emitters from `builtins/string.cpp`
 - [x] 18.1.8 Rewrote `compiler/tests/runtime/char.test.tml` to use module-qualified calls (23 tests pass)
 
-### 18.2 Char-to-string (needs TML implementation)
+### 18.2 Char-to-string — DONE (migrated to pure TML)
 
-- [ ] 18.2.1 Implement `char_to_string` in pure TML using mem_alloc + ptr_write
-- [ ] 18.2.2 Implement `utf8_2byte_to_string`, `utf8_3byte_to_string`, `utf8_4byte_to_string` in pure TML
-- [ ] 18.2.3 Remove 4 char/utf8 declare statements from `runtime.cpp`
-- [ ] 18.2.4 Remove functions_[] entries for char_to_string, utf8_*_to_string
-- [ ] 18.2.5 Remove char_to_string emitter from `builtins/string.cpp`
+- [x] 18.2.1 Implement `char_to_string` in pure TML using mem_alloc + ptr_write (char/methods.tml, char/decode.tml)
+- [x] 18.2.2 Implement `utf8_2byte_to_string`, `utf8_3byte_to_string`, `utf8_4byte_to_string` in pure TML (replaced lowlevel blocks with mem_alloc + ptr_write in char/methods.tml, char/decode.tml)
+- [x] 18.2.3 Remove 4 char/utf8 declare statements from `runtime.cpp`
+- [x] 18.2.4 Remove 4 functions_[] entries + 4 FuncSig registrations from types/builtins/string.cpp
+- [x] 18.2.5 Remove char_to_string emitter from `builtins/string.cpp`
+- [x] 18.2.6 Update Char.to_string() in method_primitive.cpp to inline mem_alloc (no C runtime)
+- [x] 18.2.7 Update 10 lowlevel blocks in 7 TML files (char/methods, char/decode, ascii/char, fmt/traits, fmt/helpers, fmt/formatter, fmt/impls) to pure TML
+- [x] 18.2.8 Update fmt_unit.test.tml to use Char.to_string() method instead of internal function
 
 ### 18.3 Verify
 
-- [x] 18.3.1 Rebuild compiler and run full test suite — 23 char tests pass, 0 failed
+- [x] 18.3.1 Rebuild compiler and run full test suite — 105 char, 404 fmt, 67 ascii, 28 unicode tests pass
 - [x] 18.3.2 Verify char tests pass through TML dispatch — all use module-qualified calls
 
 ---
@@ -781,7 +784,7 @@ TOTAL: ~68 declarations (down from ~287)
 | 16 | Dead functions_[] entries | -28 entries | **DONE** |
 | 17 | Dead declares | -15 declares | **DONE** |
 | 18.1 | Char classification dispatch | -14 declares | **DONE** |
-| 18.2 | Char-to-string/UTF-8 | -4 declares | TODO |
+| 18.2 | Char-to-string/UTF-8 | -4 declares | **DONE** |
 | 19 | File/Path/Dir | — | **DONE** |
 | 20 | Str codegen dispatch | -34 declares | TODO |
 | 21 | StringBuilder | -9 declares | TODO |

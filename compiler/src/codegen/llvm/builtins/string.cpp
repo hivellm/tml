@@ -248,25 +248,8 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
     // lib/core/src/char/methods.tml. Module-qualified calls like char::is_alphabetic()
     // bypass builtin dispatch entirely (fn_name includes "::" prefix).
 
-    // char_to_string(c) -> Str
-    // Converts a single byte (U8) to a 1-character string
-    if (fn_name == "char_to_string") {
-        if (!call.args.empty()) {
-            std::string c = gen_expr(*call.args[0]);
-            std::string c_type = last_expr_type_;
-            // Truncate i32 (TML Char) to i8 for the runtime function
-            std::string c_i8 = c;
-            if (c_type == "i32") {
-                c_i8 = fresh_reg();
-                emit_line("  " + c_i8 + " = trunc i32 " + c + " to i8");
-            }
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @char_to_string(i8 " + c_i8 + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-        return "null";
-    }
+    // char_to_string — REMOVED (Phase 18.2)
+    // Now dispatches through pure TML impl in char/methods.tml via mem_alloc + ptr_write
 
     // ========================================================================
     // Integer to String Conversions
