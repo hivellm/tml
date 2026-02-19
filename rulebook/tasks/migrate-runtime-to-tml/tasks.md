@@ -653,148 +653,113 @@ The search module is already following the three-tier rule correctly:
 
 ---
 
-## Phase 25: Migrate Time/Pool/Print Codegen to @extern FFI
+## Phase 25: Migrate Time Builtins to @extern FFI (DONE — 2026-02-18)
 
-> **Source**: `builtins/time.cpp` emits 10 hardcoded time_* calls
-> **Source**: `class_codegen.cpp`/`drop.cpp` emit pool_* calls
-> **Source**: `print.cpp` emits print/println calls
-> **Goal**: Let TML @extern declarations handle these instead of codegen
+> Commit: `1003f7f`
 
-### 25.1 Time functions
-
-- [ ] 25.1.1 Verify std::time uses @extern or TML builtins for time_*/instant_*
-- [ ] 25.1.2 Remove hardcoded time_* emitters from builtins/time.cpp
-- [ ] 25.1.3 Remove 10 time_* declare statements from runtime.cpp
-
-### 25.2 Pool functions
-
-- [ ] 25.2.1 Rewrite @pool class support to use @extern FFI
-- [ ] 25.2.2 Remove 10 pool_*/tls_pool_* declare statements from runtime.cpp
-
-### 25.3 Black box / SIMD (keep used, remove dead)
-
-- [ ] 25.3.1 Keep black_box_i32, black_box_i64, black_box_f64 (used in benchmarks)
-- [ ] 25.3.2 Keep simd_sum_i32, simd_sum_f64, simd_dot_f64 (used in builtins/math.cpp)
-- [ ] 25.3.3 Migrate to @extern or LLVM intrinsics where possible
-
-### 25.4 Verify
-
-- [ ] 25.4.1 Rebuild and run full test suite
+- [x] 25.1.1 Remove hardcoded time_ms, time_us, time_ns, elapsed_ms, elapsed_us, sleep_us emitters from builtins/time.cpp
+- [x] 25.1.2 Remove 10 time_* declare statements from runtime.cpp
+- [x] 25.1.3 Verify std::time::Instant and std::time::sleep use @extern("c") FFI
+- [x] 25.1.4 Tests: 8334 passed
 
 ---
 
-## Phase 26: Runtime Declaration Optimization (On-Demand Emit)
+## Phase 26: Remove Dead C Files from Build (DONE — 2026-02-18)
 
-> **Source**: `compiler/src/codegen/llvm/core/runtime.cpp`
-> **Problem**: After Phases 17-25, remaining declares still emitted unconditionally
-> **Goal**: Only emit declares that are actually used in each compilation unit
+> Commit: `b75a394`
 
-- [ ] 26.1.1 Add `declared_runtime_functions_` set to `LLVMIRGen`
-- [ ] 26.1.2 Create `ensure_runtime_decl(name, signature)` helper
-- [ ] 26.1.3 Convert remaining unconditional declares to on-demand
-- [ ] 26.1.4 Keep LLVM intrinsics unconditional (llvm.memcpy, llvm.memset, etc.)
-- [ ] 26.1.5 Keep essential declares unconditional: print, panic, mem_alloc, mem_free, malloc, free
-- [ ] 26.1.6 Verify `--emit-ir` only has used declarations
-- [ ] 26.1.7 Run full test suite
+- [x] 26.1.1 Remove text.c from CMakeLists.txt (dead since Phase 22)
+- [x] 26.1.2 Remove thread.c from CMakeLists.txt (dead since Phase 24)
+- [x] 26.1.3 Remove async.c from CMakeLists.txt (dead since Phase 24)
+- [x] 26.1.4 Rebuild compiler — success
+- [x] 26.1.5 Tests: 8334 passed
 
 ---
 
-## Phase 27: Codegen Dispatch Cleanup — Remaining Collection/List
+## Phase 27: Float NaN/Inf → LLVM IR + Dead Math.c Removal (DONE — 2026-02-18)
 
-> Previously Phase 18.3
+> Commit: `45db68a`
 
-### 27.1 List cleanup
-
-- [ ] 27.1.1 Remove `List` from type-erasure in `decl/struct.cpp:317-335`
-- [ ] 27.1.2 Remove `List` from type name validation in `method_static_dispatch.cpp:898`
-- [ ] 27.1.3 Verify List dispatch goes through normal `gen_impl_method()` path
-
----
-
-## Phase 28: Type System Cleanup — Remove Hardcoded Builtin Registrations
-
-> Previously Phase 20
-
-- [x] 28.1.1 Remove 14 hashmap_* registrations from `types/builtins/collections.cpp` (done in Phase 2)
-- [x] 28.1.2 Remove 11 buffer_* registrations from `types/builtins/collections.cpp` (done in Phase 3)
-- [ ] 28.1.3 Remove 29 string registrations from `types/builtins/string.cpp` (after Phase 20)
-- [ ] 28.1.4 Remove 9 strbuilder_* registrations (after Phase 21)
-- [ ] 28.1.5 Verify type checker finds method signatures from TML impl blocks
-- [ ] 28.1.6 Run full test suite
+- [x] 27.1.1 Replace is_nan codegen with LLVM `fcmp uno` instruction
+- [x] 27.1.2 Replace is_infinite codegen with LLVM `fabs` + `fcmp oeq` with infinity
+- [x] 27.1.3 Remove 16 dead math.c functions (is_nan, is_inf, float_abs, float_sqrt, etc.)
+- [x] 27.1.4 Remove corresponding declares from runtime.cpp
+- [x] 27.1.5 math.c: 412 → 236 lines
+- [x] 27.1.6 Tests: 8334 passed
 
 ---
 
-## Phase 29: Fix Metadata Loss and Workarounds
+## Phase 28: On-Demand Declaration Emit
 
-> Previously Phase 21
+> **Goal**: Only emit runtime declares that are actually used in each compilation unit
 
-- [ ] 29.1.1 Fix metadata loader to preserve return types for behavior impls on primitives
-- [ ] 29.1.2 Remove hardcoded return type workaround (eq→i1, cmp→Ordering, hash→i64)
-- [ ] 29.1.3 Fix unresolved generic type placeholders in `decl/struct.cpp:160-167`
-- [ ] 29.1.4 Run full test suite
+- [ ] 28.1.1 Add `declared_runtime_functions_` set to `LLVMIRGen`
+- [ ] 28.1.2 Create `ensure_runtime_decl(name, signature)` helper
+- [ ] 28.1.3 Convert remaining unconditional declares to on-demand
+- [ ] 28.1.4 Keep LLVM intrinsics unconditional (llvm.memcpy, llvm.memset, etc.)
+- [ ] 28.1.5 Keep essential declares unconditional: print, panic, mem_alloc, mem_free, malloc, free
+- [ ] 28.1.6 Verify `--emit-ir` only has used declarations
+- [ ] 28.1.7 Run full test suite
 
 ---
 
-## Phase 30: Benchmarks and Validation
+## Phase 29: Type System Cleanup — Remove Hardcoded Builtin Registrations
 
-- [ ] 30.1.1 Benchmark all migrated types: List, HashMap, Buffer, Str, Text
-- [ ] 30.1.2 Benchmark float ops: LLVM intrinsics vs C runtime
-- [ ] 30.1.3 Verify performance within 10% of C implementations
-- [ ] 30.1.4 Run full test suite with --coverage
-- [ ] 30.1.5 Document final metrics
+- [x] 29.1.1 Remove 14 hashmap_* registrations from `types/builtins/collections.cpp` (done in Phase 2)
+- [x] 29.1.2 Remove 11 buffer_* registrations from `types/builtins/collections.cpp` (done in Phase 3)
+- [ ] 29.1.3 Remove 29 string registrations from `types/builtins/string.cpp`
+- [ ] 29.1.4 Remove 9 strbuilder_* registrations
+- [ ] 29.1.5 Verify type checker finds method signatures from TML impl blocks
+- [ ] 29.1.6 Run full test suite
+
+---
+
+## Phase 30: Final Cleanup and Validation
+
+- [ ] 30.1.1 Delete dead text.c from disk (already removed from build in Phase 26)
+- [ ] 30.1.2 Fix metadata loader to preserve return types for behavior impls on primitives
+- [ ] 30.1.3 Remove hardcoded return type workaround (eq→i1, cmp→Ordering, hash→i64)
+- [ ] 30.1.4 Benchmark all migrated types: List, HashMap, Buffer, Str, Text
+- [ ] 30.1.5 Run full test suite with --coverage
+- [ ] 30.1.6 Document final metrics
 
 ---
 
 ## Summary: Impact and Status
 
-### runtime.cpp Declaration Audit (2026-02-18)
+### runtime.cpp Declaration Audit (2026-02-19)
 
-| Category | Declares | Status | Target |
-|----------|----------|--------|--------|
-| **LLVM intrinsics** | 7 | KEEP — fundamental | KEEP |
-| **C stdlib** (printf, malloc, free, exit, strlen) | 5 | KEEP — fundamental | KEEP |
-| **Essential** (panic, assert_tml_loc, print, println) | 4 | KEEP — fundamental | KEEP |
-| **Memory** (mem_alloc, mem_free, mem_realloc, etc.) | 10 | KEEP — fundamental | KEEP |
-| **Coverage** (tml_cover_func, etc.) | 4 | KEEP — conditional on flag | KEEP |
-| **Debug intrinsics** | 2 | KEEP — conditional on flag | KEEP |
-| **Stack save/restore** | 2 | KEEP — LLVM intrinsics | KEEP |
-| **Lifetime intrinsics** | 2 | KEEP — LLVM intrinsics | KEEP |
-| **Panic catching** (should_panic tests) | 3 | KEEP — test infra | KEEP |
-| **Backtrace** | 1 | KEEP — runtime | KEEP |
-| **Format strings** | 12 constants | KEEP — used by print | KEEP |
-| --- | --- | --- | --- |
-| **Dead SIMD** (sum_i64, fill/add/mul_i32) | 4 | REMOVE (Phase 17) | Phase 17 |
-| **Dead atomic counter** | 6 | REMOVE (Phase 17) | Phase 17 |
-| **Dead print** (print_f32, print_char) | 2 | REMOVE (Phase 17) | Phase 17 |
-| **Dead float/math** (i64_to_float, float_to_i64, abs_i32, abs_f64) | 3 | REMOVE (Phase 17) | Phase 17 |
-| **Active int-to-string** (i32/i64/bool_to_string, hex/octal/binary) | 9 | KEEP — used by method_primitive.cpp | KEEP (until Phase 20) |
-| **Active print_*** (i32, i64, f64, bool) | 4 | KEEP — used by print.cpp/io.cpp | KEEP (until Phase 25) |
-| **Active i64_to_str, f64_to_str** | 2 | KEEP — used by core.cpp/string.cpp | KEEP (until Phase 20) |
-| **Char classification** | 14 | MIGRATE (Phase 18) | Remove declares |
-| **Char-to-string/UTF-8** | 4 | MIGRATE (Phase 18) | Remove declares |
-| **String ops** (str_*) | 34 | MIGRATE (Phase 20) | Remove declares |
-| **StringBuilder** | 9 | MIGRATE (Phase 21) | Remove declares |
-| **Text type** (tml_text_*) | 51 | MIGRATE (Phase 22) | Remove declares |
-| **Float math** | 24 | MIGRATE to intrinsics (Phase 23) | ~8 keep, ~16 remove |
-| **Threading** | 5 | MIGRATE to @extern (Phase 24) | Remove declares |
-| **Channel** | 8 | MIGRATE to @extern (Phase 24) | Remove declares |
-| **Mutex** | 5 | MIGRATE to @extern (Phase 24) | Remove declares |
-| **WaitGroup** | 5 | MIGRATE to @extern (Phase 24) | Remove declares |
-| **Typed atomics** | 9 | MIGRATE to @extern (Phase 24) | Remove declares |
-| **Time** | 10 | MIGRATE to @extern (Phase 25) | Remove declares |
-| **Pool** | 10 | MIGRATE to @extern (Phase 25) | Remove declares |
-| **Black box/SIMD (active)** | 6 | MIGRATE to @extern (Phase 25) | Remove declares |
-| **Log runtime** | 12 | KEEP — I/O + already @extern | KEEP |
-| **Glob runtime** | 5 | KEEP — FFI + lowlevel | KEEP |
-| --- | --- | --- | --- |
-| **TOTAL declares** | ~287 | | |
-| **KEEP (essential)** | ~68 | Fundamental runtime | KEEP forever |
-| **REMOVE (dead)** | 15 | Never called | Phase 17 |
-| **MIGRATE** | ~204 | Move to TML/@extern/intrinsics | Phases 18-25 |
+**Current state**: 122 declares remain (down from ~287 at Phase 16)
+
+| Category | Declares | Status |
+|----------|----------|--------|
+| **LLVM intrinsics** | 7 | KEEP |
+| **C stdlib** (printf, malloc, free, exit, strlen) | 5 | KEEP |
+| **Essential** (panic, assert_tml_loc, print, println) | 4 | KEEP |
+| **Memory** (mem_alloc, mem_free, mem_realloc, etc.) | 10 | KEEP |
+| **Coverage** (tml_cover_func, etc.) | 4 | KEEP |
+| **Debug intrinsics** | 2 | KEEP |
+| **Stack save/restore** | 2 | KEEP |
+| **Lifetime intrinsics** | 2 | KEEP |
+| **Panic catching** (should_panic tests) | 3 | KEEP |
+| **Backtrace** | 1 | KEEP |
+| **Format strings** | 12 constants | KEEP |
+| **Active string ops** (str_len, str_eq, str_hash, etc.) | ~25 | MIGRATE (Phase 28+) |
+| **Active int-to-string** (i32/i64/bool_to_string, hex/octal/binary) | 9 | MIGRATE (Phase 28+) |
+| **Active print_*** (i32, i64, f64, bool) | 4 | KEEP |
+| **Active float-to-string** (f64_to_str, f32_to_string, etc.) | 6 | KEEP |
+| **Black box/SIMD** | 6 | KEEP |
+| **Log runtime** | 12 | KEEP |
+| **Glob runtime** | 5 | KEEP |
+| **Pool** | ~8 | KEEP (used by @pool) |
+| --- | --- | --- |
+| **TOTAL declares** | 122 | |
+| **KEEP (essential)** | ~68 | Target |
+| **MIGRATE** | ~54 | Phases 28-30 |
 
 ### Minimal Backend Target
 
-After all phases complete, `runtime.cpp` should only contain:
+After all phases complete, `runtime.cpp` should only contain ~68 declarations:
 
 ```
 KEEP:
@@ -832,6 +797,9 @@ TOTAL: ~68 declarations (down from ~287)
 | 23 | Float math → LLVM intrinsics | -16 declares | **DONE** |
 | 24 | Sync/threading → @extern | -23 declares | **DONE** |
 | 24b | String.c dead code removal | -18 declares, -720 lines C | **DONE** |
-| 25 | Time/pool/print → @extern | -20 declares | TODO |
-| 26 | On-demand emit | remaining | TODO |
-| 27-30 | Cleanup, type system, benchmarks | — | TODO |
+| 25 | Time builtins → @extern FFI | -10 declares | **DONE** |
+| 26 | Dead C files removed from build | 0 declares | **DONE** |
+| 27 | Float NaN/Inf → LLVM IR | -16 declares, -176 lines C | **DONE** |
+| 28 | On-demand emit | remaining | TODO |
+| 29 | Type system cleanup | — | TODO |
+| 30 | Benchmarks and validation | — | TODO |

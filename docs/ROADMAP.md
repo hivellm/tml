@@ -1,7 +1,7 @@
 # TML Roadmap
 
 **Last updated**: 2026-02-19
-**Current state**: Compiler functional, 76.2% library coverage, 9,025+ tests passing
+**Current state**: Compiler functional, 76.2% library coverage, 8,334+ tests passing
 
 ---
 
@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓; runtime.cpp audit: 287→68 declares target, Phases 25-30 remaining)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files removed✓, Float NaN/Inf→LLVM IR✓; runtime.cpp: 287→122 declares, target 68)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -32,11 +32,11 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | Metric | Value |
 |--------|-------|
 | Library function coverage | 76.2% (3,228/4,235) |
-| Tests passing | 9,025 across 787 files |
+| Tests passing | 8,334 across 751 files |
 | Modules at 100% coverage | 73 |
 | Modules at 0% coverage | 31 |
 | C++ compiler size | ~238,000 lines |
-| C runtime to migrate | ~490 lines remaining in string.c (of ~5,210 original; string.c cleaned from 1,202→490 lines) |
+| C runtime to migrate | ~490 lines in string.c + ~236 lines in math.c (string.c cleaned 1,202→490; math.c cleaned 412→236) |
 | Hardcoded codegen dispatch | ~350 lines remaining (of ~3,300 original; collections + File/Path done) |
 | TML standard library | ~137,300 lines |
 
@@ -613,41 +613,57 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 - [x] 4.14b.4 Broke string.c→collections.c dependency (no more list_* calls from string.c)
 - [x] 4.14b.5 All tests pass: str (241), fmt (404), crypto (476), sync (699), thread (38)
 
-### 4.15 Time/pool → @extern FFI (Phase 25) — TODO
+### 4.15 Time builtins → @extern FFI (Phase 25) — DONE
 
-- [ ] 4.15.1 Remove hardcoded time_* codegen from builtins/time.cpp
-- [ ] 4.15.2 Migrate @pool class support to @extern FFI
-- [ ] 4.15.3 Remove ~20 time/pool declares from runtime.cpp
+- [x] 4.15.1 Remove 8 hardcoded time builtins from codegen (time_ms, time_us, elapsed_ms, elapsed_us, sleep_us, time_ns kept as @extern)
+- [x] 4.15.2 Remove 8 time declares from runtime.cpp
+- [x] 4.15.3 Keep sleep_ms + time_ns as @extern("c") in std::time
+- [x] 4.15.4 Migrate test files from dead time_ms/time_us builtins to std::time::Instant
 
-### 4.16 On-demand declaration emit (Phase 26) — TODO
+### 4.16 Dead C file removal (Phase 26) — DONE
 
-- [ ] 4.16.1 Implement `ensure_runtime_decl()` for remaining declares
-- [ ] 4.16.2 Only emit declares actually used per compilation unit
+- [x] 4.16.1 Remove text.c from CMake build (already pure TML since Phase 22)
+- [x] 4.16.2 Remove thread.c from CMake build (already @extern since Phase 24)
+- [x] 4.16.3 Remove async.c from CMake build (already @extern since Phase 24)
+- [x] 4.16.4 Remove dead strbuilder.test.tml (strbuilder completely removed)
 
-### 4.17 Type system + metadata cleanup (Phase 28-29) — TODO
+### 4.17 Float NaN/Infinity → LLVM IR (Phase 27) — DONE
 
-- [ ] 4.17.1 Remove 29 string registrations from `types/builtins/string.cpp`
-- [ ] 4.17.2 Fix metadata loader to preserve behavior method return types
-- [ ] 4.17.3 Remove hardcoded `Ordering` enum from `types/builtins/types.cpp`
+- [x] 4.17.1 Replace f32/f64_is_nan C runtime calls with `fcmp uno` LLVM IR in string.cpp
+- [x] 4.17.2 Replace f32/f64_is_infinite C runtime calls with `fabs + fcmp oeq` LLVM IR in string.cpp
+- [x] 4.17.3 Rewrite fmt/float.tml is_nan/is_infinite as pure TML (NaN: `value != value`, Inf: `value == value and diff != diff`)
+- [x] 4.17.4 Remove 16 dead math functions from math.c (412→236 lines, -43%)
+- [x] 4.17.5 Remove f64_is_nan/f64_is_infinite from essential.c and runtime.cpp
 
-### 4.18 Final cleanup + validation (Phase 30) — TODO
+### 4.18 On-demand declaration emit (Phase 28) — TODO
 
-- [ ] 4.18.1 Remove migrated C files from `compiler/runtime/`
-- [ ] 4.18.2 Benchmark: TML implementations within 10% of C performance
-- [ ] 4.18.3 Verify `compiler/runtime/core/essential.c` + `memory/mem.c` are the ONLY remaining non-FFI C runtime
+- [ ] 4.18.1 Implement `ensure_runtime_decl()` for remaining declares
+- [ ] 4.18.2 Only emit declares actually used per compilation unit
+
+### 4.19 Type system + metadata cleanup (Phase 29) — TODO
+
+- [ ] 4.19.1 Remove 29 string registrations from `types/builtins/string.cpp`
+- [ ] 4.19.2 Fix metadata loader to preserve behavior method return types
+- [ ] 4.19.3 Remove hardcoded `Ordering` enum from `types/builtins/types.cpp`
+
+### 4.20 Final cleanup + validation (Phase 30) — TODO
+
+- [ ] 4.20.1 Delete dead text.c from disk (already removed from CMake in Phase 22)
+- [ ] 4.20.2 Benchmark: TML implementations within 10% of C performance
+- [ ] 4.20.3 Verify `compiler/runtime/core/essential.c` + `memory/mem.c` are the ONLY remaining non-FFI C runtime
 
 ### Expected impact
 
 | Metric | Before | Current | Target | Notes |
 |--------|--------|---------|--------|-------|
-| runtime.cpp declares | 393 | ~287 | ~68 | -219 declares via Phases 17-25 |
-| C runtime (total) | ~20,000 lines | ~15,500 lines | ~12,000 | Remove text.c, string.c, math.c, sync.c, time.c |
-| Hardcoded codegen dispatch | 3,300 lines | ~350 lines | ~50 | Remove str/char/text/sync/time dispatch |
+| runtime.cpp declares | 393 | 122 | ~68 | -271 declares via Phases 17-27 |
+| C runtime (total) | ~20,000 lines | ~14,000 lines | ~12,000 | text.c/thread.c/async.c removed from build; string.c 1,202→490; math.c 412→236 |
+| Hardcoded codegen dispatch | 3,300 lines | ~350 lines | ~50 | Remove str/char dispatch |
 | Types bypassing impl dispatch | 5 | 0 ✓ | 0 | |
-| Hardcoded type registrations | 54 | 29 (string) | 0 | Phase 28 |
+| Hardcoded type registrations | 54 | 29 (string) | 0 | Phase 29 |
 
-**Progress**: Phases 0-7, 16-24 complete (including 18.2). Full runtime.cpp audit done (287 declares categorized). ~94 declares removed in Phases 17-24. Phases 25-30 remaining.
-**Next actionable items**: Phase 25 (time/pool/print → @extern FFI), Phase 26 (on-demand emit).
+**Progress**: Phases 0-7, 16-27 complete. runtime.cpp declares: 393→122 (-271). Phases 25-27 done: time builtins→@extern, 3 dead C files removed from build, float NaN/Inf→LLVM IR, math.c -43%, test fixes.
+**Next actionable items**: Phase 28 (on-demand declaration emit), Phase 29 (type system cleanup).
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
 
 ---
