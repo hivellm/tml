@@ -15,6 +15,7 @@
 //! ```
 
 use std::collections::List
+use std::time::time_ns
 
 /// A pseudo-random number generator using xoshiro256**.
 ///

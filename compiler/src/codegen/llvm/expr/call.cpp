@@ -603,9 +603,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return *result;
     }
 
-    if (auto result = try_gen_builtin_time(fn_name, call)) {
-        return *result;
-    }
+    // Phase 25: time builtins removed — time_ns/sleep_ms now @extern in std::time
 
     if (auto result = try_gen_builtin_math(fn_name, call)) {
         return *result;

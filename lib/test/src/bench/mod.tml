@@ -1,6 +1,8 @@
 // Benchmark Module
 // Performance benchmarking utilities
 
+use std::time::time_ns
+
 /// Benchmark result containing timing statistics
 pub type BenchResult {
     pub name: Str,

@@ -411,19 +411,9 @@ void LLVMIRGen::emit_runtime_decls() {
 
     // Text type: now pure TML — all tml_text_* C runtime functions removed
 
-    // Time functions (matches runtime/time.c)
-    emit_line("; Time functions");
-    emit_line("declare i32 @time_ms()");
-    emit_line("declare i64 @time_us()");
-    emit_line("declare i64 @time_ns()");
-    emit_line("declare void @sleep_ms(i32)");
-    emit_line("declare void @sleep_us(i64)");
-    emit_line("declare i32 @elapsed_ms(i32)");
-    emit_line("declare i64 @elapsed_us(i64)");
-    emit_line("declare i64 @elapsed_ns(i64)");
-    emit_line("declare i64 @instant_now()");
-    emit_line("declare i64 @instant_elapsed(i64)");
-    emit_line("");
+    // Time functions: Phase 25 — migrated to @extern FFI in std::time.tml
+    // Removed 10 declares: time_ms, time_us, time_ns, sleep_ms, sleep_us,
+    // elapsed_ms, elapsed_us, elapsed_ns, instant_now, instant_elapsed
 
     // Memory functions (matches runtime/mem.c)
     emit_line("; Memory functions");

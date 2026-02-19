@@ -15,6 +15,13 @@
 
 use core::time::Duration
 
+// FFI declarations for time primitives (C runtime)
+@extern("c")
+func time_ns() -> I64
+
+@extern("c")
+func sleep_ms(ms: I32)
+
 /// A measurement of a monotonically nondecreasing clock.
 ///
 /// Instants are opaque and useful only with [`Duration`]. An instant
