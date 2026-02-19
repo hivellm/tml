@@ -104,9 +104,9 @@ auto make_project_build_tool() -> Tool {
                     {"clean", "boolean", "Clean build directory first", false},
                     {"tests", "boolean", "Build test executable (default: true)", false},
                     {"target", "string",
-                     "Build target: \"all\" (default), \"compiler\" (tml.exe only), "
-                     "\"mcp\" (tml_mcp.exe only). Use \"compiler\" to update tml.exe "
-                     "without rebuilding the running MCP server.",
+                     "Build target: \"compiler\" (default, tml.exe only), \"all\", "
+                     "\"mcp\" (tml_mcp.exe only). Defaults to \"compiler\" to avoid "
+                     "rebuilding the running MCP server.",
                      false},
                 }};
 }
@@ -142,15 +142,17 @@ auto handle_project_build(const json::JsonValue& params) -> ToolResult {
         build_tests = tests_param->as_bool();
     }
 
-    // Parse target: "all" (default), "compiler" (tml.exe only), "mcp" (tml_mcp.exe only)
-    std::string target = "all";
+    // Parse target: "compiler" (default, tml.exe only), "all", "mcp" (tml_mcp.exe only)
+    // Default to "compiler" to avoid rebuilding the running MCP server (tml_mcp.exe),
+    // which would kill the active connection.
+    std::string target = "compiler";
     auto* target_param = params.get("target");
     if (target_param != nullptr && target_param->is_string()) {
         target = target_param->as_string();
         if (target != "all" && target != "compiler" && target != "mcp") {
             return ToolResult::error(
                 "Invalid target: \"" + target +
-                "\". Use \"all\", \"compiler\" (tml.exe), or \"mcp\" (tml_mcp.exe).");
+                "\". Use \"compiler\" (tml.exe, default), \"all\", or \"mcp\" (tml_mcp.exe).");
         }
     }
 

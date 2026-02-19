@@ -819,11 +819,10 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         cmd << " --profile";
     }
 
-    // Add verbose flag
-    auto* verbose_param = params.get("verbose");
-    if (verbose_param != nullptr && verbose_param->is_bool() && verbose_param->as_bool()) {
-        cmd << " --verbose";
-    }
+    // Always add --verbose: without it, tml test produces no stdout/stderr output
+    // (all output is INFO-level log messages that only appear with --verbose).
+    // The MCP test tool needs parseable output for both structured and text modes.
+    cmd << " --verbose";
 
     // Add no-cache flag
     auto* no_cache_param = params.get("no_cache");
