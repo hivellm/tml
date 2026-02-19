@@ -61,7 +61,7 @@ pub func assert_true(value: Bool, message: Str) {
 
 /// Assert string length equals expected
 pub func assert_str_len(s: Str, expected_len: I32, message: Str) {
-    let actual: I32 = str_len(s)
+    let actual: I32 = s.len()
     if actual != expected_len {
         panic(message)
     }
@@ -69,14 +69,14 @@ pub func assert_str_len(s: Str, expected_len: I32, message: Str) {
 
 /// Assert string is empty
 pub func assert_str_empty(s: Str, message: Str) {
-    if str_len(s) != 0 {
+    if s.len() != 0 {
         panic(message)
     }
 }
 
 /// Assert string is not empty
 pub func assert_str_not_empty(s: Str, message: Str) {
-    if str_len(s) == 0 {
+    if s.len() == 0 {
         panic(message)
     }
 }

@@ -195,7 +195,7 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/mem.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/pool.c
     # text/
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/text/string.c
+    # string.c deleted (Phase 31) — all functions migrated to inline LLVM IR or pure TML
     # text.c deleted (Phase 30) — Text migrated to pure TML (Phase 22)
     # collections/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections/collections.c

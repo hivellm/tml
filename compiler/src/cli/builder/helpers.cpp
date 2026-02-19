@@ -620,14 +620,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including log runtime: " << log_obj);
             }
 
-            // text/ - string.c
-            fs::path string_c = runtime_dir / "text" / "string.c";
-            if (fs::exists(string_c)) {
-                std::string string_obj = ensure_c_compiled(to_forward_slashes(string_c.string()),
-                                                           deps_cache, clang, verbose);
-                objects.push_back(fs::path(string_obj));
-                TML_LOG_DEBUG("build", "Including string runtime: " << string_obj);
-            }
+            // string.c removed — all functions migrated to inline LLVM IR (Phase 31)
 
             // Determine if memory tracking is enabled
             std::string mem_flags = "";
@@ -697,7 +690,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including dns runtime: " << dns_obj);
             }
 
-            // collections/ - collections.c (needed by string.c for list_* functions)
+            // collections/ - collections.c (buffer FFI for crypto/zlib)
             fs::path collections_c = runtime_dir / "collections" / "collections.c";
             if (fs::exists(collections_c)) {
                 std::string collections_obj = ensure_c_compiled(

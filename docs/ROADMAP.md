@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓; runtime: 18 compiled .c files, 4 migration candidates)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, collections.c cleaned✓; runtime: 17 compiled .c files, 3 migration candidates)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -36,9 +36,9 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | Modules at 100% coverage | 73 |
 | Modules at 0% coverage | 31 |
 | C++ compiler size | ~238,000 lines |
-| C runtime compiled | 18 files (14 essential FFI + 4 migration candidates: string.c, collections.c, math.c, search.c) |
-| C runtime to migrate | ~1,826 lines in 4 files (string.c ~490, collections.c ~600, math.c ~236, search.c ~500) |
-| Dead C files on disk | 0 (6 deleted in Phase 30: text.c, thread.c, async.c, io.c, profile_runtime.c, collections.c) |
+| C runtime compiled | 17 files (14 essential FFI + 3 migration candidates: collections.c, math.c, search.c) |
+| C runtime to migrate | ~836 lines in 3 files (collections.c ~70, math.c ~236, search.c ~500) |
+| Dead C files on disk | 0 (7 deleted in Phases 30-31: text.c, thread.c, async.c, io.c, profile_runtime.c, collections.c dup, string.c) |
 | Hardcoded codegen dispatch | ~350 lines remaining (of ~3,300 original; collections + File/Path done) |
 | TML standard library | ~137,300 lines |
 
@@ -676,25 +676,45 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
   - Updated CMakeLists.txt comments (removed → deleted)
 - [x] 4.20.2 C runtime inventory audit (18 compiled .c files in tml_runtime.lib)
   - **Essential FFI (14 files, must stay as C)**: essential.c, mem.c, pool.c, sync.c, net.c, dns.c, tls.c, os.c, crypto.c, crypto_key.c, crypto_x509.c, backtrace.c, log.c, time.c
-  - **Migration candidates (4 files)**: string.c (~490 lines), collections.c (~600 lines), math.c (~236 lines), search.c (~500 lines)
+  - **Migration candidates (3 files)**: collections.c (~70 lines, list_get/list_len legacy), math.c (~236 lines), search.c (~500 lines)
+  - **Migrated (Phase 31)**: string.c deleted (516 lines → inline LLVM IR in runtime.cpp), collections.c cleaned (160→70 lines)
   - **Module-conditional (2 files in lib/std/runtime/)**: file.c (FFI, keep), glob.c (algorithmic, could migrate)
   - **Uncompiled crypto extensions (5 files, future work)**: crypto_dh.c, crypto_ecdh.c, crypto_kdf.c, crypto_rsa.c, crypto_sign.c
 - [ ] 4.20.3 Benchmark: TML implementations within 10% of C performance (DEFERRED — needs benchmark infrastructure)
+
+### 4.21 Migrate string.c to inline LLVM IR (Phase 31) — DONE
+
+Replaced all C runtime string functions with inline LLVM IR `define` blocks in `runtime.cpp`, using `internal` linkage to avoid COFF duplicate symbol issues. Deleted `string.c` (516 lines) and cleaned `collections.c` (160→70 lines).
+
+**Strategy used:** Instead of rewriting callsites to use TML method dispatch (which would require ~50 changes across 15 files), we replaced the C `declare` statements with `define internal` functions that use libc primitives (`strcmp`, `strlen`, `malloc`, `memcpy`, `snprintf`). Same function signatures = zero callsite changes needed.
+
+- [x] 4.21.1-4 Replace `@str_eq` with inline LLVM IR using `@strcmp` (null-safe, internal linkage)
+- [x] 4.21.5-8 Replace `@str_concat_opt` with inline LLVM IR using `strlen+malloc+memcpy`
+- [x] 4.21.9 Replace `@f64_to_str` with inline LLVM IR using `@snprintf` with `%g`
+- [x] 4.21.9b Replace `@i64_to_str`, `@i32_to_string`, `@i64_to_string`, `@bool_to_string` with inline IR
+- [x] 4.21.9c Replace `@str_hash` with inline FNV-1a LLVM IR
+- [x] 4.21.9d Replace `@str_as_bytes` with inline null-safe identity IR
+- [x] 4.21.10 Remove 13 dead `try_gen_builtin_string()` entries (str_len, str_hash, str_eq, str_concat, str_substring, str_slice, str_contains, str_starts_with, str_ends_with, str_to_upper, str_to_lower, str_trim, str_char_at)
+- [x] 4.21.11 Remove `@str_*` declares from `runtime.cpp` (replaced by `define internal`)
+- [x] 4.21.12 Delete `compiler/runtime/text/string.c` via `git rm` (516 lines)
+- [x] 4.21.13 Remove 12 unused list_* functions from `collections.c` (keep buffer_destroy, buffer_len, list_get, list_len)
+- [x] 4.21.14 Fix bare `str_len()` calls in `test/assertions/mod.tml` → `s.len()` (pre-existing bug)
+- [x] 4.21.15 Fix bare `str_eq()` calls in `core/cache.tml` → `==` operator (pre-existing bug)
 
 ### Expected impact
 
 | Metric | Before | Current | Target | Notes |
 |--------|--------|---------|--------|-------|
-| runtime.cpp declares | 393 | 122 (97 effective) | ~68 | -271 declares via Phases 17-27; 25 on-demand via Phase 28 |
-| C runtime (compiled) | 20 files | 18 files | 14 | 6 dead files deleted (Phase 30); 4 migration candidates remain |
-| C runtime (on disk) | 29 files | 21 files | 14 | 8 dead files deleted; 5 uncompiled crypto extensions kept |
+| runtime.cpp declares | 393 | 106 (81 effective) | ~68 | -271 declares via Phases 17-27; 25 on-demand (Phase 28); 16 declares→defines (Phase 31) |
+| C runtime (compiled) | 20 files | 17 files | 14 | 6 dead files deleted (Phase 30); string.c deleted (Phase 31); 3 migration candidates remain |
+| C runtime (on disk) | 29 files | 20 files | 14 | 9 dead/migrated files deleted; 5 uncompiled crypto extensions kept |
 | Dead C on disk | ~4,450 lines | 0 lines | 0 | All dead code deleted ✓ |
 | Hardcoded codegen dispatch | 3,300 lines | ~350 lines | ~50 | Remove str/char dispatch |
 | Types bypassing impl dispatch | 5 | 0 ✓ | 0 | |
 | Hardcoded type registrations | 54 | 0 (string done) | 0 | Phase 29: 29 string FuncSig removed |
 
-**Progress**: Phases 0-7, 16-30 complete (29-30 partial). Phase 30: deleted 6 dead C files (2,661 lines), cleaned helpers.cpp, audited 18 compiled C runtime files. runtime.cpp declares: 393→122 (-271), 25 conditional (97 effective). Phase 29.2-29.3, 30.3 deferred.
-**Next actionable items**: Migrate string.c/collections.c/math.c/search.c to pure TML, or Phase 29.2 (metadata loader) if cross-module behavior issues arise.
+**Progress**: Phases 0-7, 16-31 complete (29-30 partial). Phase 31: replaced 9 C string functions with inline LLVM IR defines in runtime.cpp, deleted string.c (516 lines), cleaned collections.c (160→70 lines, removed 12 unused list_* functions), removed 13 dead try_gen_builtin_string() entries, fixed pre-existing bare str_len()/str_eq() calls in TML library code.
+**Next actionable items**: Phase 29.2-29.3 (deferred cleanup), Phase 30.3 (benchmark). Remaining C migration candidates: math.c (~236 lines, float_to_precision/float_to_exp), search.c (~500 lines), collections.c (~70 lines, list_get/list_len legacy fallback).
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
 
 ---

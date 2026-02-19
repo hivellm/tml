@@ -357,7 +357,7 @@ impl SoaVec {
         var i: I64 = 0
         loop (i < this.columns.len()) {
             let col: SoaColumn = this.columns.get(i)
-            if str_eq(col.name, col_name) {
+            if col.name == col_name {
                 let ptr = col.data + (row * col.elem_size)
                 return Just(lowlevel { *(ptr as Ptr[T]) })
             }
@@ -376,7 +376,7 @@ impl SoaVec {
         var i: I64 = 0
         loop (i < this.columns.len()) {
             let col: SoaColumn = this.columns.get(i)
-            if str_eq(col.name, col_name) {
+            if col.name == col_name {
                 let ptr = col.data + (row * col.elem_size)
                 lowlevel { *(ptr as Ptr[T]) = value }
                 return
@@ -390,7 +390,7 @@ impl SoaVec {
         var i: I64 = 0
         loop (i < this.columns.len()) {
             let col: SoaColumn = this.columns.get(i)
-            if str_eq(col.name, col_name) {
+            if col.name == col_name {
                 return col.data
             }
             i = i + 1

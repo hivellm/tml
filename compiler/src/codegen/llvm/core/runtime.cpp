@@ -72,6 +72,9 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @free(ptr)");
     emit_line("declare void @exit(i32) noreturn");
     emit_line("declare i64 @strlen(ptr)");
+    emit_line("declare i32 @strcmp(ptr, ptr)");
+    emit_line("declare i32 @memcmp(ptr, ptr, i64)");
+    emit_line("declare i32 @snprintf(ptr, i64, ptr, ...)");
     emit_line("");
 
     // LLVM intrinsics for optimized codegen
@@ -178,12 +181,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @f32_to_exp_string(float, i32)");
     emit_line("");
 
-    // Integer to string conversion
-    emit_line("; Integer to string");
-    emit_line("declare ptr @i32_to_string(i32)");
-    emit_line("declare ptr @i64_to_string(i64)");
-    emit_line("declare ptr @bool_to_string(i1)");
-    emit_line("");
+    // Integer/bool to_string — now defined as inline IR below (Phase 31)
+    // (see define @i32_to_string, @i64_to_string, @bool_to_string in string utilities section)
 
     // Integer formatting (binary, octal, hex)
     emit_line("; Integer formatting");
@@ -327,24 +326,138 @@ void LLVMIRGen::emit_runtime_decls() {
         emit_line("");
     }
 
-    // String utilities (matches runtime/string.c)
-    emit_line("; String utilities");
-    emit_line("declare i32 @str_len(ptr)");
-    emit_line("declare i32 @str_eq(ptr, ptr)");
-    emit_line("declare i32 @str_hash(ptr)");
-    emit_line("declare ptr @str_concat_opt(ptr, ptr)"); // O(1) amortized
-    emit_line("declare ptr @str_substring(ptr, i32, i32)");
-    emit_line("declare ptr @str_slice(ptr, i64, i64)");
-    emit_line("declare i32 @str_contains(ptr, ptr)");
-    emit_line("declare i32 @str_starts_with(ptr, ptr)");
-    emit_line("declare i32 @str_ends_with(ptr, ptr)");
-    emit_line("declare ptr @str_to_upper(ptr)");
-    emit_line("declare ptr @str_to_lower(ptr)");
-    emit_line("declare ptr @str_trim(ptr)");
-    emit_line("declare i32 @str_char_at(ptr, i32)");
-    emit_line("declare ptr @str_as_bytes(ptr)"); // used by Str::as_bytes() lowlevel
-    emit_line("declare ptr @i64_to_str(i64)");
-    emit_line("declare ptr @f64_to_str(double)");
+    // String utilities — inline LLVM IR implementations (Phase 31)
+    // These replace the previous C runtime declarations from string.c.
+    // By using 'define' instead of 'declare', the functions are compiled
+    // directly into each module without needing the C runtime library.
+
+    // str_eq: null-safe string equality using libc strcmp
+    emit_line("; String utilities (inline IR — no C runtime dependency)");
+    emit_line("define internal i32 @str_eq(ptr %a, ptr %b) {");
+    emit_line("entry:");
+    emit_line("  %a_null = icmp eq ptr %a, null");
+    emit_line("  %b_null = icmp eq ptr %b, null");
+    emit_line("  %both_null = and i1 %a_null, %b_null");
+    emit_line("  br i1 %both_null, label %ret_true, label %check_either");
+    emit_line("ret_true:");
+    emit_line("  ret i32 1");
+    emit_line("check_either:");
+    emit_line("  %either_null = or i1 %a_null, %b_null");
+    emit_line("  br i1 %either_null, label %ret_false, label %compare");
+    emit_line("ret_false:");
+    emit_line("  ret i32 0");
+    emit_line("compare:");
+    emit_line("  %cmp = call i32 @strcmp(ptr %a, ptr %b)");
+    emit_line("  %eq = icmp eq i32 %cmp, 0");
+    emit_line("  %result = zext i1 %eq to i32");
+    emit_line("  ret i32 %result");
+    emit_line("}");
+    emit_line("");
+
+    // str_concat_opt: null-safe string concatenation using strlen+malloc+memcpy
+    emit_line("@.str.empty = private constant [1 x i8] c\"\\00\"");
+    emit_line("define internal ptr @str_concat_opt(ptr %a, ptr %b) {");
+    emit_line("entry:");
+    emit_line("  %a_null = icmp eq ptr %a, null");
+    emit_line("  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a");
+    emit_line("  %b_null = icmp eq ptr %b, null");
+    emit_line("  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b");
+    emit_line("  %len_a = call i64 @strlen(ptr %a_safe)");
+    emit_line("  %len_b = call i64 @strlen(ptr %b_safe)");
+    emit_line("  %total = add i64 %len_a, %len_b");
+    emit_line("  %alloc = add i64 %total, 1");
+    emit_line("  %buf = call ptr @malloc(i64 %alloc)");
+    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr %buf, ptr %a_safe, i64 %len_a, i1 false)");
+    emit_line("  %dst = getelementptr i8, ptr %buf, i64 %len_a");
+    emit_line("  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %b_safe, i64 %len_b, i1 false)");
+    emit_line("  %end = getelementptr i8, ptr %buf, i64 %total");
+    emit_line("  store i8 0, ptr %end");
+    emit_line("  ret ptr %buf");
+    emit_line("}");
+    emit_line("");
+
+    // str_hash: FNV-1a hash for strings (used by HashMap)
+    emit_line("define internal i32 @str_hash(ptr %s) {");
+    emit_line("entry:");
+    emit_line("  %is_null = icmp eq ptr %s, null");
+    emit_line("  br i1 %is_null, label %ret_zero, label %loop_start");
+    emit_line("ret_zero:");
+    emit_line("  ret i32 0");
+    emit_line("loop_start:");
+    emit_line("  br label %loop");
+    emit_line("loop:");
+    emit_line("  %hash = phi i32 [ 2166136261, %loop_start ], [ %new_hash, %loop_body ]");
+    emit_line("  %idx = phi i64 [ 0, %loop_start ], [ %next_idx, %loop_body ]");
+    emit_line("  %ptr = getelementptr i8, ptr %s, i64 %idx");
+    emit_line("  %byte = load i8, ptr %ptr");
+    emit_line("  %is_zero = icmp eq i8 %byte, 0");
+    emit_line("  br i1 %is_zero, label %done, label %loop_body");
+    emit_line("loop_body:");
+    emit_line("  %byte_i32 = zext i8 %byte to i32");
+    emit_line("  %xored = xor i32 %hash, %byte_i32");
+    emit_line("  %new_hash = mul i32 %xored, 16777619");
+    emit_line("  %next_idx = add i64 %idx, 1");
+    emit_line("  br label %loop");
+    emit_line("done:");
+    emit_line("  ret i32 %hash");
+    emit_line("}");
+    emit_line("");
+
+    // i64_to_str: integer to string using libc snprintf with %lld format
+    emit_line("@.fmt.lld = private constant [5 x i8] c\"%lld\\00\"");
+    emit_line("define internal ptr @i64_to_str(i64 %val) {");
+    emit_line("entry:");
+    emit_line("  %buf = call ptr @malloc(i64 21)");
+    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 21, ptr @.fmt.lld, i64 "
+              "%val)");
+    emit_line("  ret ptr %buf");
+    emit_line("}");
+    emit_line("");
+
+    // i32_to_string: sign-extend to i64 and delegate
+    emit_line("define internal ptr @i32_to_string(i32 %val) {");
+    emit_line("entry:");
+    emit_line("  %ext = sext i32 %val to i64");
+    emit_line("  %result = call ptr @i64_to_str(i64 %ext)");
+    emit_line("  ret ptr %result");
+    emit_line("}");
+    emit_line("");
+
+    // i64_to_string: alias to i64_to_str
+    emit_line("define internal ptr @i64_to_string(i64 %val) {");
+    emit_line("entry:");
+    emit_line("  %result = call ptr @i64_to_str(i64 %val)");
+    emit_line("  ret ptr %result");
+    emit_line("}");
+    emit_line("");
+
+    // bool_to_string: select between "true" and "false" string constants
+    emit_line("define internal ptr @bool_to_string(i1 %val) {");
+    emit_line("entry:");
+    emit_line("  %result = select i1 %val, ptr @.str.true, ptr @.str.false");
+    emit_line("  ret ptr %result");
+    emit_line("}");
+    emit_line("");
+
+    // f64_to_str: float to string using libc snprintf with %g format
+    emit_line("@.fmt.g = private constant [3 x i8] c\"%g\\00\"");
+    emit_line("define internal ptr @f64_to_str(double %val) {");
+    emit_line("entry:");
+    emit_line("  %buf = call ptr @malloc(i64 32)");
+    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 32, ptr @.fmt.g, double "
+              "%val)");
+    emit_line("  ret ptr %buf");
+    emit_line("}");
+    emit_line("");
+
+    // str_as_bytes: returns string pointer as-is (null-safe)
+    // Used by Str::as_bytes() lowlevel block in str.tml
+    emit_line("define internal ptr @str_as_bytes(ptr %s) {");
+    emit_line("entry:");
+    emit_line("  %is_null = icmp eq ptr %s, null");
+    emit_line("  %result = select i1 %is_null, ptr @.str.empty, ptr %s");
+    emit_line("  ret ptr %result");
+    emit_line("}");
     emit_line("");
 
     emit_line("declare i64 @tml_random_seed()");
@@ -355,19 +468,9 @@ void LLVMIRGen::emit_runtime_decls() {
     // Also register with tml_ prefix for when called as tml_random_seed()
     functions_["tml_random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
 
-    // Register string runtime functions in functions_ map for lowlevel calls
-    // Only functions actively called from lowlevel blocks need entries here.
-    // Functions called via compiler codegen (method_primitive_ext.cpp) or tests
-    // go through try_gen_builtin_string() in call.cpp and don't need functions_[] entries.
-    functions_["str_len"] = FuncInfo{"@str_len", "i32 (ptr)", "i32", {"ptr"}};
-    functions_["str_hash"] = FuncInfo{"@str_hash", "i32 (ptr)", "i32", {"ptr"}};
-    functions_["str_concat_opt"] =
-        FuncInfo{"@str_concat_opt", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
-    functions_["str_substring"] =
-        FuncInfo{"@str_substring", "ptr (ptr, i32, i32)", "ptr", {"ptr", "i32", "i32"}};
-    functions_["str_slice"] =
-        FuncInfo{"@str_slice", "ptr (ptr, i64, i64)", "ptr", {"ptr", "i64", "i64"}};
-    functions_["str_char_at"] = FuncInfo{"@str_char_at", "i32 (ptr, i32)", "i32", {"ptr", "i32"}};
+    // Register string runtime functions in functions_ map for lowlevel calls.
+    // Most str_* functions were migrated to inline LLVM IR (Phase 31).
+    // Only str_as_bytes is still needed for lowlevel blocks in str.tml.
     functions_["str_as_bytes"] = FuncInfo{"@str_as_bytes", "ptr (ptr)", "ptr", {"ptr"}};
 
     // Register I/O functions for lowlevel calls (used by text.tml print/println methods)

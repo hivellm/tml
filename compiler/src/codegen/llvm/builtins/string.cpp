@@ -1,27 +1,26 @@
-//! # LLVM IR Generator - String/Char Builtins
+//! # LLVM IR Generator - Numeric/Float Builtins
 //!
-//! This file implements string and character intrinsics.
+//! This file implements numeric and float intrinsics via try_gen_builtin_string().
 //!
-//! ## String Functions
+//! ## History
 //!
-//! | Function          | Runtime Call            |
-//! |-------------------|-------------------------|
-//! | `str_len`         | `@strlen`               |
-//! | `str_hash`        | `@tml_str_hash`         |
-//! | `str_eq`          | `@strcmp`               |
-//! | `str_concat`      | `@tml_str_concat`       |
-//! | `str_substring`   | `@tml_str_substring`    |
-//! | `str_contains`    | `@strstr` != null       |
-//! | `str_char_at`     | Index into string       |
+//! Originally contained 13 `str_*` builtins (str_len, str_eq, str_concat, etc.)
+//! and char builtins. All string builtins were removed in Phase 31:
+//! - String operations migrated to inline LLVM IR defines in runtime.cpp
+//! - Bare `str_*()` calls in TML replaced with method calls (`.len()`, `==`, etc.)
+//! - Char operations migrated to pure TML in Phase 18.2
 //!
-//! ## Char Functions
+//! ## Remaining Functions
 //!
-//! | Function             | Implementation          |
-//! |----------------------|-------------------------|
-//! | `char_is_alphabetic` | Range check A-Za-z      |
-//! | `char_is_numeric`    | Range check 0-9         |
-//! | `char_to_uppercase`  | Subtract 32 if lower    |
-//! | `char_to_lowercase`  | Add 32 if upper         |
+//! | Function                | Runtime Call                     |
+//! |-------------------------|----------------------------------|
+//! | `i*_to_string`          | `@i64_to_string` (inline IR)     |
+//! | `u*_to_string`          | `@i64_to_string` (inline IR)     |
+//! | `f32/f64_to_string`     | `@f64_to_str` (inline IR)        |
+//! | `f*_to_string_precision` | `@float_to_precision` (math.c)  |
+//! | `f*_to_exp_string`      | `@float_to_exp` (math.c)         |
+//! | `f*_is_nan/is_infinite` | Pure LLVM IR (`fcmp`)            |
+//! | `f64_round`             | `@llvm.round.f64` intrinsic     |
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 
@@ -29,227 +28,6 @@ namespace tml::codegen {
 
 auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser::CallExpr& call)
     -> std::optional<std::string> {
-
-    // str_len(s) -> I32
-    if (fn_name == "str_len") {
-        if (!call.args.empty()) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @str_len(ptr " + s + ")");
-            last_expr_type_ = "i32";
-            return result;
-        }
-        last_expr_type_ = "i32";
-        return "0";
-    }
-
-    // str_hash(s) -> I32
-    if (fn_name == "str_hash") {
-        if (!call.args.empty()) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @str_hash(ptr " + s + ")");
-            last_expr_type_ = "i32";
-            return result;
-        }
-        last_expr_type_ = "i32";
-        return "0";
-    }
-
-    // str_eq(a, b) -> Bool
-    if (fn_name == "str_eq") {
-        if (call.args.size() >= 2) {
-            std::string a = gen_expr(*call.args[0]);
-            std::string b = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @str_eq(ptr " + a + ", ptr " + b + ")");
-            std::string bool_result = fresh_reg();
-            emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
-            last_expr_type_ = "i1";
-            return bool_result;
-        }
-        return "0";
-    }
-
-    // str_concat(a, b) -> Str (uses str_concat_opt for O(1) amortized)
-    if (fn_name == "str_concat") {
-        if (call.args.size() >= 2) {
-            std::string a = gen_expr(*call.args[0]);
-            std::string b = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_concat_opt(ptr " + a + ", ptr " + b + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-        last_expr_type_ = "ptr";
-        return "null";
-    }
-
-    // str_substring(s, start, len) -> Str
-    if (fn_name == "str_substring") {
-        if (call.args.size() >= 3) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string start = gen_expr(*call.args[1]);
-            std::string start_type = last_expr_type_;
-            std::string len = gen_expr(*call.args[2]);
-            std::string len_type = last_expr_type_;
-            // Ensure arguments are i32 to match str_substring(ptr, i32, i32)
-            if (start_type == "i64") {
-                std::string trunc = fresh_reg();
-                emit_line("  " + trunc + " = trunc i64 " + start + " to i32");
-                start = trunc;
-            }
-            if (len_type == "i64") {
-                std::string trunc = fresh_reg();
-                emit_line("  " + trunc + " = trunc i64 " + len + " to i32");
-                len = trunc;
-            }
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_substring(ptr " + s + ", i32 " + start +
-                      ", i32 " + len + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-        last_expr_type_ = "ptr";
-        return "null";
-    }
-
-    // str_slice(s, start, end) -> Str
-    if (fn_name == "str_slice") {
-        if (call.args.size() >= 3) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string start = gen_expr(*call.args[1]);
-            std::string start_type = last_expr_type_;
-            std::string end = gen_expr(*call.args[2]);
-            std::string end_type = last_expr_type_;
-            // Ensure start and end are i64 (runtime expects i64)
-            std::string start_i64 = start;
-            std::string end_i64 = end;
-            if (start_type != "i64") {
-                start_i64 = fresh_reg();
-                emit_line("  " + start_i64 + " = sext " + start_type + " " + start + " to i64");
-            }
-            if (end_type != "i64") {
-                end_i64 = fresh_reg();
-                emit_line("  " + end_i64 + " = sext " + end_type + " " + end + " to i64");
-            }
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_slice(ptr " + s + ", i64 " + start_i64 +
-                      ", i64 " + end_i64 + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-        last_expr_type_ = "ptr";
-        return "null";
-    }
-
-    // str_contains(haystack, needle) -> Bool
-    if (fn_name == "str_contains") {
-        if (call.args.size() >= 2) {
-            std::string h = gen_expr(*call.args[0]);
-            std::string n = gen_expr(*call.args[1]);
-            std::string i32_result = fresh_reg();
-            emit_line("  " + i32_result + " = call i32 @str_contains(ptr " + h + ", ptr " + n +
-                      ")");
-            // Convert i32 to i1 (Bool)
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
-            last_expr_type_ = "i1";
-            return result;
-        }
-        return "0";
-    }
-
-    // str_starts_with(s, prefix) -> Bool
-    if (fn_name == "str_starts_with") {
-        if (call.args.size() >= 2) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string p = gen_expr(*call.args[1]);
-            std::string i32_result = fresh_reg();
-            emit_line("  " + i32_result + " = call i32 @str_starts_with(ptr " + s + ", ptr " + p +
-                      ")");
-            // Convert i32 to i1 (Bool)
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
-            last_expr_type_ = "i1";
-            return result;
-        }
-        return "0";
-    }
-
-    // str_ends_with(s, suffix) -> Bool
-    if (fn_name == "str_ends_with") {
-        if (call.args.size() >= 2) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string suffix = gen_expr(*call.args[1]);
-            std::string i32_result = fresh_reg();
-            emit_line("  " + i32_result + " = call i32 @str_ends_with(ptr " + s + ", ptr " +
-                      suffix + ")");
-            // Convert i32 to i1 (Bool)
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
-            last_expr_type_ = "i1";
-            return result;
-        }
-        return "0";
-    }
-
-    // str_to_upper(s) -> Str
-    if (fn_name == "str_to_upper") {
-        if (!call.args.empty()) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_to_upper(ptr " + s + ")");
-            return result;
-        }
-        return "null";
-    }
-
-    // str_to_lower(s) -> Str
-    if (fn_name == "str_to_lower") {
-        if (!call.args.empty()) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_to_lower(ptr " + s + ")");
-            return result;
-        }
-        return "null";
-    }
-
-    // str_trim(s) -> Str
-    if (fn_name == "str_trim") {
-        if (!call.args.empty()) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_trim(ptr " + s + ")");
-            return result;
-        }
-        return "null";
-    }
-
-    // str_char_at(s, index) -> Char (I32)
-    if (fn_name == "str_char_at") {
-        if (call.args.size() >= 2) {
-            std::string s = gen_expr(*call.args[0]);
-            std::string idx = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @str_char_at(ptr " + s + ", i32 " + idx + ")");
-            return result;
-        }
-        return "0";
-    }
-
-    // ========================================================================
-    // Char Operations
-    // ========================================================================
-
-    // Char classification (char_is_*, char_to_uppercase, char_to_lowercase, etc.)
-    // REMOVED — all char methods dispatch through pure TML impl blocks in
-    // lib/core/src/char/methods.tml. Module-qualified calls like char::is_alphabetic()
-    // bypass builtin dispatch entirely (fn_name includes "::" prefix).
-
-    // char_to_string — REMOVED (Phase 18.2)
-    // Now dispatches through pure TML impl in char/methods.tml via mem_alloc + ptr_write
 
     // ========================================================================
     // Integer to String Conversions
@@ -403,6 +181,10 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
         return "null";
     }
 
+    // ========================================================================
+    // Float to String Conversions
+    // ========================================================================
+
     // f32_to_string(n) -> Str
     if (fn_name == "f32_to_string") {
         if (!call.args.empty()) {
@@ -537,6 +319,10 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
         last_expr_type_ = "ptr";
         return "null";
     }
+
+    // ========================================================================
+    // Float Intrinsics (pure LLVM IR, no C runtime)
+    // ========================================================================
 
     // f32_is_nan(n) -> Bool — pure LLVM IR: fcmp uno (NaN != NaN)
     if (fn_name == "f32_is_nan") {
