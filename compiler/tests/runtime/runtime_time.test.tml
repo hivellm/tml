@@ -1,38 +1,31 @@
 use test
+use std::time::Instant
+use std::time::sleep
+
+use core::time::Duration
 
 // Time Runtime Tests
-// Tests all functions from runtime/time.c
-// NOTE: Using explicit return codes instead of assert() to avoid
-// potential issues with the test library shadowing the builtin assert
+// Migrated from time_ms/time_us/elapsed_ms/elapsed_us/sleep_us builtins
+// to std::time::Instant and sleep()
 
 @test
-func test_time_ms() -> I32 {
-    let t: I32 = time_ms()
-    // Time should be a positive value (system uptime in ms)
-    if t > 0 {
+func test_time_ns() -> I32 {
+    let t = Instant::now()
+    let ns = t.as_nanos()
+    // Time should be a positive value
+    if ns > 0 {
         return 0  // Success
     }
     return 1  // Failure
 }
 
 @test
-func test_time_us() -> I32 {
-    let t: I64 = time_us()
-    // Time in microseconds should be positive
-    if t > 0 {
-        return 0
-    }
-    return 1
-}
-
-// time_ns test skipped - may overflow on some systems
-
-@test
 func test_time_monotonic() -> I32 {
-    let t1: I64 = time_us()
-    let t2: I64 = time_us()
+    let t1 = Instant::now()
+    let t2 = Instant::now()
     // Time should be monotonically increasing or equal
-    if t2 >= t1 {
+    let diff = t2.as_nanos() - t1.as_nanos()
+    if diff >= 0 {
         return 0
     }
     return 1
@@ -40,51 +33,26 @@ func test_time_monotonic() -> I32 {
 
 @test
 func test_sleep_ms() -> I32 {
-    let start: I32 = time_ms()
-    sleep_ms(50)  // Sleep for 50ms
-    let elapsed: I32 = time_ms() - start
+    let start = Instant::now()
+    sleep(Duration::from_millis(50))  // Sleep for 50ms
+    let elapsed = start.elapsed()
+    let ms = elapsed.as_millis()
     // Should have slept at least some time
-    if elapsed >= 0 {
+    if ms >= 0 {
         return 0
     }
     return 1
 }
 
 @test
-func test_elapsed_ms() -> I32 {
-    let start: I32 = time_ms()
-    sleep_ms(50)
-    let elapsed: I32 = elapsed_ms(start)
+func test_elapsed() -> I32 {
+    let start = Instant::now()
+    sleep(Duration::from_millis(50))
+    let elapsed = start.elapsed()
+    let nanos = elapsed.as_nanos()
     // Just verify it doesn't return negative
-    if elapsed >= 0 {
+    if nanos >= 0 {
         return 0
     }
     return 1
 }
-
-@test
-func test_elapsed_us() -> I32 {
-    let start: I64 = time_us()
-    sleep_ms(50)
-    let elapsed: I64 = elapsed_us(start)
-    // Just verify it returns a non-negative value
-    if elapsed >= 0 {
-        return 0
-    }
-    return 1
-}
-
-@test
-func test_sleep_us() -> I32 {
-    let start: I64 = time_us()
-    let sleep_time: I64 = 50000  // 50000 microseconds = 50ms
-    sleep_us(sleep_time)
-    let elapsed: I64 = elapsed_us(start)
-    // Just verify it doesn't return negative
-    if elapsed >= 0 {
-        return 0
-    }
-    return 1
-}
-
-// elapsed_ns test skipped - uses time_ns which may overflow

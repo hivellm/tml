@@ -1,4 +1,5 @@
 use test
+use std::time::Instant
 
 // ============================================================================
 // Comprehensive Builtin Function Tests
@@ -147,53 +148,17 @@ func test_str_hash_single_char_different() -> I32 {
 }
 
 // ============================================================================
-// Time Functions (time_ms, time_us, time_ns)
-// Note: time_ms() returns I32 which can wrap on long-running systems.
-// Use subtraction for relative comparisons to handle wrap-around.
+// Time Functions (via std::time::Instant)
+// time_ms/time_us builtins were removed — use Instant::now() instead.
 // ============================================================================
 
 @test
-func test_time_ms_runs() -> I32 {
-    let t: I32 = time_ms()
-    // Just verify the function runs and returns a value
-    // (value can be any I32 due to potential wrap-around)
-    let check: Bool = t == t
-    assert_eq(check, true, "time_ms should return a value")
-    return 0
-}
-
-@test
-func test_time_ms_monotonic() -> I32 {
-    let t1: I32 = time_ms()
-    // Do some work to ensure time passes
-    let mut sum: I32 = 0
-    let mut i: I32 = 0
-    loop (i < 1000) {
-        sum = sum + i
-        i = i + 1
-    }
-    let t2: I32 = time_ms()
-    // Use subtraction to handle wrap-around correctly
-    let diff: I32 = t2 - t1
-    let is_monotonic: Bool = diff >= 0
-    assert_eq(is_monotonic, true, "time_ms should be monotonic")
-    return 0
-}
-
-@test
-func test_time_us_runs() -> I32 {
-    // Just verify time_us() runs without crashing and returns a value
-    let t: I64 = time_us()
-    // Can't reliably compare I64 values in tests due to potential codegen issues
-    // The fact that this compiles and runs is the test
-    return 0
-}
-
-@test
 func test_time_ns_runs() -> I32 {
-    // Just verify time_ns() runs without crashing and returns a value
-    let t: I64 = time_ns()
-    // The fact that this compiles and runs is the test
+    // Verify time_ns() runs via Instant::now()
+    let start = Instant::now()
+    let ns = start.as_nanos()
+    let check: Bool = ns == ns
+    assert_eq(check, true, "time_ns should return a value")
     return 0
 }
 
@@ -283,18 +248,13 @@ func test_string_operations_combined() -> I32 {
 }
 
 @test
-func test_time_precision_ordering() -> I32 {
-    // time_ns should give more precision than time_us
-    // time_us should give more precision than time_ms
-    // We can't directly compare values but we can check they all work
-    let ms: I32 = time_ms()
-    let us: I64 = time_us()
-    let ns: I64 = time_ns()
-
-    // Just verify all time functions execute without crashing
-    // (values can vary due to wrap-around on long-running systems)
-    let check: Bool = ms == ms
-    assert_eq(check, true, "time_ms should return a value")
+func test_time_instant_works() -> I32 {
+    // Verify Instant::now() works and returns consistent values
+    let t1 = Instant::now()
+    let t2 = Instant::now()
+    let diff = t2.as_nanos() - t1.as_nanos()
+    let check: Bool = diff >= 0
+    assert_eq(check, true, "Instant should be monotonic")
     return 0
 }
 

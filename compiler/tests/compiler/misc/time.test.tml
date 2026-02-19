@@ -1,38 +1,37 @@
 use test
-use core::time
+use std::time::Instant
 
 // Time Function Tests
-// Note: time_ms() returns I32 which can wrap around on long-running systems.
-// These tests verify the function works, not specific value ranges.
+// Migrated from time_ms()/elapsed_ms() builtins to std::time::Instant
 
 @test
-func test_time_ms_runs() -> I32 {
-    // Verify time_ms() executes without crashing
-    let t: I32 = time_ms()
-    // Just verify we got a value (any I32 is valid due to wrapping)
-    let check: Bool = t == t  // Always true, verifies function ran
-    assert(check, "time_ms should return a value")
+func test_time_ns_runs() -> I32 {
+    // Verify Instant::now() executes without crashing
+    let t = Instant::now()
+    let ns = t.as_nanos()
+    let check: Bool = ns == ns  // Always true, verifies function ran
+    assert(check, "time_ns should return a value")
     return 0
 }
 
 @test
-func test_time_ms_increases() -> I32 {
-    let t1: I32 = time_ms()
+func test_time_ns_increases() -> I32 {
+    let t1 = Instant::now()
     let mut i: I32 = 0
     loop (i < 1000) {
         i = i + 1
     }
-    let t2: I32 = time_ms()
-    // Note: Using subtraction handles wrap-around correctly
-    let diff: I32 = t2 - t1
+    let t2 = Instant::now()
+    let diff = t2.as_nanos() - t1.as_nanos()
     assert(diff >= 0, "time should not go backwards")
     return 0
 }
 
 @test
-func test_elapsed_ms_basic() -> I32 {
-    let start: I32 = time_ms()
-    let elapsed: I32 = elapsed_ms(start)
-    assert(elapsed >= 0, "elapsed_ms should be non-negative")
+func test_elapsed_basic() -> I32 {
+    let start = Instant::now()
+    let elapsed = start.elapsed()
+    let nanos = elapsed.as_nanos()
+    assert(nanos >= 0, "elapsed should be non-negative")
     return 0
 }

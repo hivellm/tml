@@ -1,45 +1,23 @@
-// Polymorphic assertions
-func assert_eq[T](left: T, right: T, message: Str) {
-    if left != right {
-        panic(message)
-    }
-}
-
-func assert(condition: Bool, message: Str) {
-    if not condition {
-        panic(message)
-    }
-}
+use test
+use std::time::Instant
 
 // ============ Basic Time Functions ============
-// Note: time_ms() returns I32 which can wrap on long-running systems.
-// Use subtraction for relative comparisons to handle wrap-around.
 
 @test
-func test_time_ms() {
-    let t: I32 = time_ms()
+func test_time_ns() -> I32 {
+    let start = Instant::now()
     // Just verify the function runs and returns a value
-    let check: Bool = t == t
-    assert(check, "time_ms should return a value")
-}
-
-@test
-func test_time_us() {
-    let t: I64 = time_us()
-    // Can't easily compare I64 > 0, but we verify it runs
-}
-
-@test
-func test_time_ns() {
-    let t: I64 = time_ns()
-    // Can't easily compare I64 > 0, but we verify it runs
+    let ns = start.as_nanos()
+    let check: Bool = ns == ns
+    assert(check, "time_ns should return a value")
+    return 0
 }
 
 // ============ Time Monotonicity ============
 
 @test
-func test_time_ms_monotonic() {
-    let t1: I32 = time_ms()
+func test_time_monotonic() -> I32 {
+    let t1 = Instant::now()
 
     // Do some work
     let mut sum: I32 = 0
@@ -49,17 +27,17 @@ func test_time_ms_monotonic() {
         i = i + 1
     }
 
-    let t2: I32 = time_ms()
-    // Use subtraction to handle wrap-around
-    let diff: I32 = t2 - t1
+    let t2 = Instant::now()
+    let diff = t2.as_nanos() - t1.as_nanos()
     assert(diff >= 0, "time should be monotonic")
+    return 0
 }
 
 // ============ Duration Calculation ============
 
 @test
-func test_elapsed_time() {
-    let start: I32 = time_ms()
+func test_elapsed_time() -> I32 {
+    let start = Instant::now()
 
     // Do some work
     let mut product: I32 = 1
@@ -69,31 +47,20 @@ func test_elapsed_time() {
         i = i + 1
     }
 
-    let end: I32 = time_ms()
-    let elapsed: I32 = end - start
-
-    assert(elapsed >= 0, "elapsed time should be non-negative")
+    let elapsed = start.elapsed()
+    let nanos = elapsed.as_nanos()
+    assert(nanos >= 0, "elapsed time should be non-negative")
+    return 0
 }
 
 // ============ Time Comparison ============
 
 @test
-func test_time_comparison() {
-    let t1: I32 = time_ms()
-    let t2: I32 = time_ms()
+func test_time_comparison() -> I32 {
+    let t1 = Instant::now()
+    let t2 = Instant::now()
 
-    // Use subtraction to handle wrap-around
-    let diff: I32 = t2 - t1
+    let diff = t2.as_nanos() - t1.as_nanos()
     assert(diff >= 0, "later time should be >= earlier time")
-}
-
-func main() -> I32 {
-    test_time_ms()
-    test_time_us()
-    test_time_ns()
-    test_time_ms_monotonic()
-    test_elapsed_time()
-    test_time_comparison()
-    print("PASS: All tests passed!")
     return 0
 }
