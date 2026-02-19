@@ -235,6 +235,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 58 THIR-specific tests across 7 test files (closures, coercions, enums, methods, patterns, structs, control flow)
   - New files: `traits/solver.hpp/cpp`, `traits/solver_builtins.cpp`, `thir/thir_expr.hpp`, `thir/thir_module.hpp`, `thir/thir_lower.cpp`, `thir/exhaustiveness.hpp/cpp`, `mir/thir_mir_builder.hpp/cpp`
 
+### Changed
+- **Phase 24: Sync/Threading Codegen → @extern FFI** (2026-02-19) - Remove hardcoded sync codegen dispatch
+  - Removed 23 declares from `runtime.cpp` (5 thread, 8 channel, 5 mutex, 5 waitgroup)
+  - Removed thread/channel/mutex/waitgroup emitters from `builtins/sync.cpp` (spinlock kept)
+  - Removed typed atomic emitters from `builtins/atomic.cpp` (generic atomics kept)
+  - Removed FuncSig entries from `types/builtins/sync.cpp` and `types/builtins/atomic.cpp`
+  - Added 9 typed atomic `@extern` declarations to `core::sync.tml` module
+  - TML sync/thread modules now use `@extern` FFI exclusively — no compiler codegen mediation
+  - Net: -575 lines of C++ code removed
+
+- **Phase 23: Float Math → LLVM Intrinsics** (2026-02-19) - Migrate 16 float math C calls to LLVM intrinsics
+  - `sqrt`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `pow`, `ceil`, `floor`, `round`, `trunc`, `fabs`, `copysign`, `fma` → direct `@llvm.*` intrinsics
+  - Removed 16 float declares from `runtime.cpp`
+
+- **Phase 18.2: Char-to-String/UTF-8 Migration** (2026-02-19) - Migrate 4 char C calls to pure TML
+  - `char_to_string`, `utf8_char_len`, `string_from_char`, `char_to_utf8_bytes` → pure TML implementations
+  - Removed 4 declares from `runtime.cpp`
+
 ### Fixed
 - **`Shared[T]` Memory Leak** (2026-02-17) - Fixed broken `increment_count`/`decrement_count` codegen for library-imported generics
   - `(*ptr).field = value` produces `CallExpr` instead of `UnaryExpr` for library-imported generic types

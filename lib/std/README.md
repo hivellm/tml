@@ -327,15 +327,14 @@ Object-oriented utilities:
 
 ## Runtime
 
-The std library includes C runtime implementations in `runtime/`:
+The std library uses C runtime via `@extern` FFI declarations for OS-level operations:
 
-- `collections.c` - Collection data structures
+- `sync.c` - Synchronization primitives (`tml_mutex_*`, `tml_rwlock_*`, `tml_condvar_*`)
+- `thread.c` - Threading support (`tml_thread_*`)
 - `file.c` - File I/O operations
-- `sync.c` - Synchronization primitives
-- `thread.c` - Threading support
 - `net.c` - Networking
 
-These are linked automatically when importing std modules.
+Collections (`List`, `HashMap`, `Buffer`) are implemented in pure TML with no C runtime dependency. Sync and thread modules use `@extern` FFI to call typed C runtime functions directly — no hardcoded compiler codegen dispatch.
 
 ## Module Status
 

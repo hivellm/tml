@@ -117,14 +117,16 @@ when I32::try_from(9999999999 as I64) {
 #### `alloc` - Memory Allocation
 - **`Heap[T]`** - Heap-allocated box (Rust's `Box`)
 - **`Shared[T]`** - Reference-counted pointer (Rust's `Rc`)
+- **`Sync[T]`** - Atomic reference-counted pointer (Rust's `Arc`) — uses typed atomic FFI from `core::sync`
 - **`Weak[T]`** - Weak reference to `Shared[T]`
 - `alloc(size)` / `dealloc(ptr)` - Raw allocation functions
 
 ```tml
-use core::alloc::{Heap, Shared}
+use core::alloc::{Heap, Shared, Sync}
 
 let boxed: Heap[I32] = Heap::new(42)
 let shared: Shared[I32] = Shared::new(100)
+let synced: Sync[I32] = Sync::new(42)  // Thread-safe ref counting
 let weak: Weak[I32] = shared.downgrade()
 ```
 
@@ -340,8 +342,10 @@ func do_something() -> Outcome[I32, SimpleError] {
 - Atomic operations
 
 #### `sync` - Synchronization Primitives (core)
-- **`AtomicBool`**, **`AtomicI32`**, **`AtomicI64`**, etc.
-- Atomic operations and memory ordering
+- **Generic atomics**: `atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_exchange`, `atomic_cas` (inline LLVM instructions)
+- **Typed atomic FFI**: `atomic_fetch_add_i32`, `atomic_fetch_sub_i32`, `atomic_load_i32`, `atomic_store_i32`, `atomic_compare_exchange_i32`, `atomic_swap_i32` (via `@extern` FFI)
+- **Memory fences**: `atomic_fence`, `atomic_fence_acquire`, `atomic_fence_release`
+- **Spinlock**: `spin_lock`, `spin_unlock`, `spin_trylock` (inline LLVM atomicrmw)
 
 #### `any` - Type Erasure
 - **`Any`** - Type-erased value with runtime type checking
