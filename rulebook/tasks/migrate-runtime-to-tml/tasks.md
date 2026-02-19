@@ -579,37 +579,43 @@ The search module is already following the three-tier rule correctly:
 
 ### 24.1 Threading (already @extern in std::thread)
 
-- [ ] 24.1.1 Remove 5 thread_* declare statements from runtime.cpp
-- [ ] 24.1.2 Remove thread_* emitters from builtins/sync.cpp
-- [ ] 24.1.3 Verify std::thread uses @extern("tml_thread_*") for everything
+- [x] 24.1.1 Remove 5 thread_* declare statements from runtime.cpp
+- [x] 24.1.2 Remove thread_* emitters from builtins/sync.cpp
+- [x] 24.1.3 Verify std::thread uses @extern("tml_thread_*") for everything
 
 ### 24.2 Channel
 
-- [ ] 24.2.1 Rewrite Channel as TML struct with @extern FFI
-- [ ] 24.2.2 Remove 8 channel_* declare statements from runtime.cpp
-- [ ] 24.2.3 Remove channel_* emitters from builtins/sync.cpp
+- [x] 24.2.1 Remove 8 channel_* declare statements from runtime.cpp (dead code — TML uses MPSC pattern)
+- [x] 24.2.2 Remove channel_* emitters from builtins/sync.cpp
 
 ### 24.3 Mutex (already @extern in std::sync::mutex)
 
-- [ ] 24.3.1 Remove 5 mutex_* declare statements from runtime.cpp
-- [ ] 24.3.2 Remove mutex_* emitters from builtins/sync.cpp
-- [ ] 24.3.3 Verify std::sync::mutex uses @extern("tml_mutex_*") for everything
+- [x] 24.3.1 Remove 5 mutex_* declare statements from runtime.cpp
+- [x] 24.3.2 Remove mutex_* emitters from builtins/sync.cpp
+- [x] 24.3.3 Verify std::sync::mutex uses @extern("tml_mutex_*") for everything
 
 ### 24.4 WaitGroup
 
-- [ ] 24.4.1 Rewrite WaitGroup as TML struct with @extern FFI
-- [ ] 24.4.2 Remove 5 waitgroup_* declare statements from runtime.cpp
-- [ ] 24.4.3 Remove waitgroup_* emitters from builtins/sync.cpp
+- [x] 24.4.1 Remove 5 waitgroup_* declare statements from runtime.cpp (dead code — no WaitGroup in TML)
+- [x] 24.4.2 Remove waitgroup_* emitters from builtins/sync.cpp
 
-### 24.5 Typed atomics (already @extern in core::alloc::sync)
+### 24.5 Typed atomics
 
-- [ ] 24.5.1 Remove 9 atomic_* declare statements from runtime.cpp
-- [ ] 24.5.2 Remove atomic_* emitters from builtins/atomic.cpp
-- [ ] 24.5.3 Verify core::alloc::sync uses @extern for everything
+- [x] 24.5.1 Remove typed atomic emitters from builtins/atomic.cpp
+- [x] 24.5.2 Remove typed atomic FuncSig from types/builtins/atomic.cpp
+- [x] 24.5.3 Remove thread/channel/mutex/waitgroup FuncSig from types/builtins/sync.cpp (keep spinlock)
+- [x] 24.5.4 Add 9 @extern typed atomic declarations to core::sync.tml module
+- [x] 24.5.5 Update ops_arith_mul_div.test.tml to import from core::sync (no @extern in tests)
+- [x] 24.5.6 Keep 9 typed atomic declares in runtime.cpp (required for module-level IR placement)
 
 ### 24.6 Verify
 
-- [ ] 24.6.1 Rebuild and run full test suite
+- [x] 24.6.1 Rebuild compiler — success
+- [x] 24.6.2 sync tests: 699 passed, 0 failed
+- [x] 24.6.3 thread tests: 38 passed, 0 failed
+- [x] 24.6.4 core alloc tests: all passed
+- [x] 24.6.5 ops_arith_mul_div tests: 48 passed, 0 failed
+- [x] 24.6.6 Net reduction: -23 declares (5 thread + 8 channel + 5 mutex + 5 waitgroup), codegen emitters and FuncSig entries removed
 
 ---
 
@@ -790,7 +796,7 @@ TOTAL: ~68 declarations (down from ~287)
 | 21 | StringBuilder | -9 declares | TODO |
 | 22 | Text type | -51 declares | **DONE** |
 | 23 | Float math → LLVM intrinsics | -16 declares | **DONE** |
-| 24 | Sync/threading → @extern | -32 declares | TODO |
+| 24 | Sync/threading → @extern | -23 declares | **DONE** |
 | 25 | Time/pool/print → @extern | -20 declares | TODO |
 | 26 | On-demand emit | remaining | TODO |
 | 27-30 | Cleanup, type system, benchmarks | — | TODO |

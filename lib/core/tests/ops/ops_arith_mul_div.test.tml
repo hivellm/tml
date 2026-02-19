@@ -3,6 +3,7 @@
 // Total: 48 @test functions
 use test
 use core::ops::arith::{Mul, Div, Rem, Neg}
+use core::sync::{atomic_fetch_add_i32, atomic_fetch_sub_i32, atomic_load_i32, atomic_store_i32, atomic_compare_exchange_i32, atomic_swap_i32, atomic_fence, atomic_fence_acquire, atomic_fence_release}
 
 // =============================================================================
 // Mul trait method across all types

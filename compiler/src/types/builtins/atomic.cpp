@@ -118,111 +118,11 @@ void TypeEnv::init_builtin_atomic() {
     functions_["fence_release"].push_back(
         FuncSig{"fence_release", {}, make_unit(), {}, false, builtin_span});
 
-    // ============ Typed Atomic Operations (I32) ============
-
-    // atomic_fetch_add_i32(ptr: *I32, val: I32) -> I32
-    functions_["atomic_fetch_add_i32"].push_back(FuncSig{"atomic_fetch_add_i32",
-                                                         {make_ptr(make_i32()), make_i32()},
-                                                         make_i32(),
-                                                         {},
-                                                         false,
-                                                         builtin_span});
-
-    // atomic_fetch_sub_i32(ptr: *I32, val: I32) -> I32
-    functions_["atomic_fetch_sub_i32"].push_back(FuncSig{"atomic_fetch_sub_i32",
-                                                         {make_ptr(make_i32()), make_i32()},
-                                                         make_i32(),
-                                                         {},
-                                                         false,
-                                                         builtin_span});
-
-    // atomic_load_i32(ptr: *I32) -> I32
-    functions_["atomic_load_i32"].push_back(
-        FuncSig{"atomic_load_i32", {make_ptr(make_i32())}, make_i32(), {}, false, builtin_span});
-
-    // atomic_store_i32(ptr: *I32, val: I32) -> Unit
-    functions_["atomic_store_i32"].push_back(FuncSig{"atomic_store_i32",
-                                                     {make_ptr(make_i32()), make_i32()},
-                                                     make_unit(),
-                                                     {},
-                                                     false,
-                                                     builtin_span});
-
-    // atomic_compare_exchange_i32(ptr: *I32, expected: I32, desired: I32) -> I32
-    functions_["atomic_compare_exchange_i32"].push_back(
-        FuncSig{"atomic_compare_exchange_i32",
-                {make_ptr(make_i32()), make_i32(), make_i32()},
-                make_i32(),
-                {},
-                false,
-                builtin_span});
-
-    // atomic_swap_i32(ptr: *I32, val: I32) -> I32
-    functions_["atomic_swap_i32"].push_back(FuncSig{"atomic_swap_i32",
-                                                    {make_ptr(make_i32()), make_i32()},
-                                                    make_i32(),
-                                                    {},
-                                                    false,
-                                                    builtin_span});
-
-    // ============ Typed Atomic Operations (I64) ============
-
-    // atomic_fetch_add_i64(ptr: *I64, val: I64) -> I64
-    functions_["atomic_fetch_add_i64"].push_back(FuncSig{"atomic_fetch_add_i64",
-                                                         {make_ptr(make_i64()), make_i64()},
-                                                         make_i64(),
-                                                         {},
-                                                         false,
-                                                         builtin_span});
-
-    // atomic_fetch_sub_i64(ptr: *I64, val: I64) -> I64
-    functions_["atomic_fetch_sub_i64"].push_back(FuncSig{"atomic_fetch_sub_i64",
-                                                         {make_ptr(make_i64()), make_i64()},
-                                                         make_i64(),
-                                                         {},
-                                                         false,
-                                                         builtin_span});
-
-    // atomic_load_i64(ptr: *I64) -> I64
-    functions_["atomic_load_i64"].push_back(
-        FuncSig{"atomic_load_i64", {make_ptr(make_i64())}, make_i64(), {}, false, builtin_span});
-
-    // atomic_store_i64(ptr: *I64, val: I64) -> Unit
-    functions_["atomic_store_i64"].push_back(FuncSig{"atomic_store_i64",
-                                                     {make_ptr(make_i64()), make_i64()},
-                                                     make_unit(),
-                                                     {},
-                                                     false,
-                                                     builtin_span});
-
-    // atomic_compare_exchange_i64(ptr: *I64, expected: I64, desired: I64) -> I64
-    functions_["atomic_compare_exchange_i64"].push_back(
-        FuncSig{"atomic_compare_exchange_i64",
-                {make_ptr(make_i64()), make_i64(), make_i64()},
-                make_i64(),
-                {},
-                false,
-                builtin_span});
-
-    // atomic_swap_i64(ptr: *I64, val: I64) -> I64
-    functions_["atomic_swap_i64"].push_back(FuncSig{"atomic_swap_i64",
-                                                    {make_ptr(make_i64()), make_i64()},
-                                                    make_i64(),
-                                                    {},
-                                                    false,
-                                                    builtin_span});
-
-    // atomic_fence() -> Unit - Full memory barrier
-    functions_["atomic_fence"].push_back(
-        FuncSig{"atomic_fence", {}, make_unit(), {}, false, builtin_span});
-
-    // atomic_fence_acquire() -> Unit - Acquire barrier
-    functions_["atomic_fence_acquire"].push_back(
-        FuncSig{"atomic_fence_acquire", {}, make_unit(), {}, false, builtin_span});
-
-    // atomic_fence_release() -> Unit - Release barrier
-    functions_["atomic_fence_release"].push_back(
-        FuncSig{"atomic_fence_release", {}, make_unit(), {}, false, builtin_span});
+    // Typed atomic operations (I32/I64) — REMOVED (Phase 24)
+    // atomic_fetch_add_i32, atomic_fetch_sub_i32, atomic_load_i32, atomic_store_i32,
+    // atomic_compare_exchange_i32, atomic_swap_i32 + I64 variants + atomic_fence*
+    // Now handled via @extern FFI declarations in core::alloc::sync.tml
+    // Generic atomics (atomic_load, atomic_store, etc.) kept above for core::sync lowlevel funcs
 }
 
 } // namespace tml::types

@@ -148,13 +148,9 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture) nounwind");
     emit_line("");
 
-    // Threading runtime declarations
-    emit_line("; Threading runtime (tml_runtime.c)");
-    emit_line("declare ptr @thread_spawn(ptr, ptr)");
-    emit_line("declare void @thread_join(ptr)");
-    emit_line("declare void @thread_yield()");
-    emit_line("declare void @thread_sleep(i32)");
-    emit_line("declare i32 @thread_id()");
+    // Threading runtime — REMOVED (Phase 24)
+    // thread_spawn, thread_join, thread_yield, thread_sleep, thread_id
+    // migrated to @extern("tml_thread_*") FFI in std::thread::mod.tml
     emit_line("");
 
     // I/O functions - all check output suppression flag
@@ -233,43 +229,23 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare float @nextafter32(float, float)");
     emit_line("");
 
-    // Channel runtime declarations
-    emit_line("; Channel runtime (Go-style)");
-    emit_line("declare ptr @channel_create()");
-    emit_line("declare i32 @channel_send(ptr, i32)");
-    emit_line("declare i32 @channel_recv(ptr, ptr)");
-    emit_line("declare i32 @channel_try_send(ptr, i32)");
-    emit_line("declare i32 @channel_try_recv(ptr, ptr)");
-    emit_line("declare void @channel_close(ptr)");
-    emit_line("declare void @channel_destroy(ptr)");
-    emit_line("declare i32 @channel_len(ptr)");
+    // Channel runtime — REMOVED (Phase 24)
+    // channel_create/send/recv/try_send/try_recv/close/destroy/len
+    // Library uses Mutex+Condvar MPSC pattern, not Go-style channels
+
+    // Mutex runtime — REMOVED (Phase 24)
+    // mutex_create/lock/unlock/try_lock/destroy
+    // migrated to @extern("tml_mutex_*") FFI in std::sync::mutex.tml
+
+    // WaitGroup runtime — REMOVED (Phase 24)
+    // waitgroup_create/add/done/wait/destroy
+    // No WaitGroup primitive in TML library; use other sync patterns
     emit_line("");
 
-    // Mutex runtime declarations
-    emit_line("; Mutex runtime");
-    emit_line("declare ptr @mutex_create()");
-    emit_line("declare void @mutex_lock(ptr)");
-    emit_line("declare void @mutex_unlock(ptr)");
-    emit_line("declare i32 @mutex_try_lock(ptr)");
-    emit_line("declare void @mutex_destroy(ptr)");
-    emit_line("");
-
-    // WaitGroup runtime declarations
-    emit_line("; WaitGroup runtime (Go-style)");
-    emit_line("declare ptr @waitgroup_create()");
-    emit_line("declare void @waitgroup_add(ptr, i32)");
-    emit_line("declare void @waitgroup_done(ptr)");
-    emit_line("declare void @waitgroup_wait(ptr)");
-    emit_line("declare void @waitgroup_destroy(ptr)");
-    emit_line("");
-
-    // Atomic counter runtime removed — never called from codegen or TML
-    emit_line("");
-
-    // Typed atomic operations runtime (also declared in sync.tml with @extern)
-    // We declare them here AND register in declared_externals_ so that:
-    // 1. Tests using atomics directly work without importing sync.tml
-    // 2. When sync.tml is imported, its @extern won't cause redefinition errors
+    // Typed atomic operations — declared at module level for correct IR placement.
+    // Codegen emitters and FuncSig registrations removed (Phase 24).
+    // TML code uses @extern in core::sync.tml; these ensure declarations appear at module scope
+    // and declared_externals_ prevents duplicate declarations from @extern.
     emit_line("; Typed atomic operations runtime");
     emit_line("declare i32 @atomic_fetch_add_i32(ptr, i32)");
     declared_externals_.insert("atomic_fetch_add_i32");

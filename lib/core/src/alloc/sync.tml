@@ -19,7 +19,7 @@ use core::clone::Duplicate
 use core::fmt::{Display, Debug}
 use core::default::Default
 
-/// FFI declarations for atomic operations
+/// FFI declarations for atomic operations (declared at module-level in runtime.cpp)
 @extern("atomic_fetch_add_i32")
 func atomic_fetch_add_i32(ptr: *I32, val: I32) -> I32
 

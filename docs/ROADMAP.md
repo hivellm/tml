@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓; runtime.cpp audit: 287→68 declares target, Phases 18.2+24-30 remaining)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓; runtime.cpp audit: 287→68 declares target, Phases 25-30 remaining)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -596,11 +596,14 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 - [x] 4.13.4 Keep: float-to-string (snprintf), nextafter (no intrinsic), f64/f32_is_nan/is_infinite (fmt lowlevel)
 - [x] 4.13.5 Remove 16 float declares from runtime.cpp + update method_primitive.cpp `.pow()` to use `@llvm.pow.f64`
 
-### 4.14 Sync/threading → @extern FFI (Phase 24) — TODO
+### 4.14 Sync/threading → @extern FFI (Phase 24) — DONE
 
-- [ ] 4.14.1 Remove hardcoded thread/channel/mutex/waitgroup/atomic codegen from builtins/sync.cpp
-- [ ] 4.14.2 Verify TML modules use @extern for everything
-- [ ] 4.14.3 Remove ~32 sync declares from runtime.cpp
+- [x] 4.14.1 Remove thread/channel/mutex/waitgroup codegen from builtins/sync.cpp (keep spinlock)
+- [x] 4.14.2 Remove typed atomic codegen from builtins/atomic.cpp (keep generic atomics)
+- [x] 4.14.3 Remove FuncSig entries from types/builtins/sync.cpp and atomic.cpp
+- [x] 4.14.4 Remove 23 declares from runtime.cpp (5 thread + 8 channel + 5 mutex + 5 waitgroup)
+- [x] 4.14.5 Add typed atomic @extern declarations to core::sync.tml module
+- [x] 4.14.6 Verify all sync/thread/alloc tests pass
 
 ### 4.15 Time/pool → @extern FFI (Phase 25) — TODO
 
@@ -635,8 +638,8 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 | Types bypassing impl dispatch | 5 | 0 ✓ | 0 | |
 | Hardcoded type registrations | 54 | 29 (string) | 0 | Phase 28 |
 
-**Progress**: Phases 0-7, 16-23 complete (including 18.2). Full runtime.cpp audit done (287 declares categorized). ~71 declares removed in Phases 17-23. Phases 24-30 remaining.
-**Next actionable items**: Phase 24 (sync/threading → @extern FFI), Phase 25 (time/pool → @extern FFI), Phase 26 (on-demand emit).
+**Progress**: Phases 0-7, 16-24 complete (including 18.2). Full runtime.cpp audit done (287 declares categorized). ~94 declares removed in Phases 17-24. Phases 25-30 remaining.
+**Next actionable items**: Phase 25 (time/pool/print → @extern FFI), Phase 26 (on-demand emit).
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
 
 ---

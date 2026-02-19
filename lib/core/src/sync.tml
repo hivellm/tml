@@ -82,3 +82,43 @@ pub lowlevel func spin_unlock(lock: mut ref I32) -> Unit
 // Try to acquire spinlock without blocking
 // Returns true if acquired, false if already locked
 pub lowlevel func spin_trylock(lock: mut ref I32) -> Bool
+
+// ============ TYPED ATOMIC OPERATIONS (I32) via FFI ============
+// These call C runtime functions for typed atomic operations.
+// Use these when you need pointer-based atomic access with specific types.
+
+/// Atomic fetch-and-add for I32. Returns old value.
+@extern("atomic_fetch_add_i32")
+pub func atomic_fetch_add_i32(ptr: *I32, val: I32) -> I32
+
+/// Atomic fetch-and-subtract for I32. Returns old value.
+@extern("atomic_fetch_sub_i32")
+pub func atomic_fetch_sub_i32(ptr: *I32, val: I32) -> I32
+
+/// Atomic load for I32. Returns current value.
+@extern("atomic_load_i32")
+pub func atomic_load_i32(ptr: *I32) -> I32
+
+/// Atomic store for I32.
+@extern("atomic_store_i32")
+pub func atomic_store_i32(ptr: *I32, val: I32) -> Unit
+
+/// Atomic compare-exchange for I32. Returns old value.
+@extern("atomic_compare_exchange_i32")
+pub func atomic_compare_exchange_i32(ptr: *I32, expected: I32, desired: I32) -> I32
+
+/// Atomic swap for I32. Returns old value.
+@extern("atomic_swap_i32")
+pub func atomic_swap_i32(ptr: *I32, val: I32) -> I32
+
+/// Full memory fence (seq_cst) via C runtime.
+@extern("atomic_fence")
+pub func atomic_fence() -> Unit
+
+/// Acquire memory fence via C runtime.
+@extern("atomic_fence_acquire")
+pub func atomic_fence_acquire() -> Unit
+
+/// Release memory fence via C runtime.
+@extern("atomic_fence_release")
+pub func atomic_fence_release() -> Unit
