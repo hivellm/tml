@@ -337,9 +337,8 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
         if (kind == types::PrimitiveKind::Bool) {
             emit_line("  " + result + " = zext i1 " + receiver + " to i64");
         } else if (kind == types::PrimitiveKind::Str) {
-            std::string hash32 = fresh_reg();
-            emit_line("  " + hash32 + " = call i32 @str_hash(ptr " + receiver + ")");
-            emit_line("  " + result + " = sext i32 " + hash32 + " to i64");
+            // Str::hash() dispatched through impl Hash for Str in core::hash
+            return std::nullopt;
         } else if (is_integer) {
             std::string val64 = receiver;
             if (llvm_ty != "i64") {
@@ -372,337 +371,18 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
         return result;
     }
 
-    // Str-specific methods
+    // Str-specific methods — dispatched through impl Str in lib/core/src/str.tml
+    // All str methods (len, trim, contains, split, parse_*, replace, etc.)
+    // are handled by the primitive method fallback below which looks up
+    // Str::<method> in the module registry and calls the TML implementation.
     if (kind == types::PrimitiveKind::Str) {
-        // len() -> I64 (byte length of string)
-        if (method == "len") {
-            emit_coverage("Str::len");
-            std::string len32 = fresh_reg();
-            emit_line("  " + len32 + " = call i32 @str_len(ptr " + receiver + ")");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = sext i32 " + len32 + " to i64");
-            last_expr_type_ = "i64";
-            return result;
-        }
-
-        // is_empty() -> Bool
-        if (method == "is_empty") {
-            emit_coverage("Str::is_empty");
-            std::string len32 = fresh_reg();
-            emit_line("  " + len32 + " = call i32 @str_len(ptr " + receiver + ")");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = icmp eq i32 " + len32 + ", 0");
-            last_expr_type_ = "i1";
-            return result;
-        }
-
-        // as_bytes() -> ref [U8] (returns pointer to string data)
+        // as_bytes() needs special handling — returns the pointer directly
         if (method == "as_bytes") {
             emit_coverage("Str::as_bytes");
-            // For now, return the string pointer itself as a slice
-            // In TML, strings are already represented as pointers to their data
             last_expr_type_ = "ptr";
             return receiver;
         }
-
-        // char_at(index: I64) -> I32
-        if (method == "char_at") {
-            emit_coverage("Str::char_at");
-            if (call.args.empty()) {
-                report_error("char_at() requires an index argument", call.span, "C008");
-                return "0";
-            }
-            std::string idx = gen_expr(*call.args[0]);
-            std::string idx_type = last_expr_type_;
-            std::string idx_i32 = idx;
-            if (idx_type == "i64") {
-                idx_i32 = fresh_reg();
-                emit_line("  " + idx_i32 + " = trunc i64 " + idx + " to i32");
-            }
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @str_char_at(ptr " + receiver + ", i32 " +
-                      idx_i32 + ")");
-            last_expr_type_ = "i32";
-            return result;
-        }
-
-        // slice_str(start: I64, end: I64) -> Str, also slice()
-        if (method == "slice_str" || method == "slice") {
-            emit_coverage("Str::slice");
-            if (call.args.size() < 2) {
-                report_error("slice_str() requires start and end arguments", call.span, "C008");
-                return "0";
-            }
-            std::string start = gen_expr(*call.args[0]);
-            std::string start_type = last_expr_type_;
-            std::string end = gen_expr(*call.args[1]);
-            std::string end_type = last_expr_type_;
-            // Ensure arguments are i64 to match str_slice(ptr, i64, i64) declaration
-            if (start_type == "i32") {
-                std::string ext = fresh_reg();
-                emit_line("  " + ext + " = sext i32 " + start + " to i64");
-                start = ext;
-            }
-            if (end_type == "i32") {
-                std::string ext = fresh_reg();
-                emit_line("  " + ext + " = sext i32 " + end + " to i64");
-                end = ext;
-            }
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_slice(ptr " + receiver + ", i64 " + start +
-                      ", i64 " + end + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-
-        // to_uppercase() -> Str
-        if (method == "to_uppercase") {
-            emit_coverage("Str::to_uppercase");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_to_upper(ptr " + receiver + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-
-        // to_lowercase() -> Str
-        if (method == "to_lowercase") {
-            emit_coverage("Str::to_lowercase");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_to_lower(ptr " + receiver + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-
-        // starts_with(prefix: Str) -> Bool
-        if (method == "starts_with") {
-            emit_coverage("Str::starts_with");
-            if (call.args.empty()) {
-                report_error("starts_with() requires a prefix argument", call.span, "C008");
-                return "0";
-            }
-            std::string prefix = gen_expr(*call.args[0]);
-            std::string result32 = fresh_reg();
-            emit_line("  " + result32 + " = call i32 @str_starts_with(ptr " + receiver + ", ptr " +
-                      prefix + ")");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = icmp ne i32 " + result32 + ", 0");
-            last_expr_type_ = "i1";
-            return result;
-        }
-
-        // ends_with(suffix: Str) -> Bool
-        if (method == "ends_with") {
-            emit_coverage("Str::ends_with");
-            if (call.args.empty()) {
-                report_error("ends_with() requires a suffix argument", call.span, "C008");
-                return "0";
-            }
-            std::string suffix = gen_expr(*call.args[0]);
-            std::string result32 = fresh_reg();
-            emit_line("  " + result32 + " = call i32 @str_ends_with(ptr " + receiver + ", ptr " +
-                      suffix + ")");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = icmp ne i32 " + result32 + ", 0");
-            last_expr_type_ = "i1";
-            return result;
-        }
-
-        // contains(pattern: Str) -> Bool
-        if (method == "contains") {
-            emit_coverage("Str::contains");
-            if (call.args.empty()) {
-                report_error("contains() requires a pattern argument", call.span, "C008");
-                return "0";
-            }
-            std::string pattern = gen_expr(*call.args[0]);
-            std::string result32 = fresh_reg();
-            emit_line("  " + result32 + " = call i32 @str_contains(ptr " + receiver + ", ptr " +
-                      pattern + ")");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = icmp ne i32 " + result32 + ", 0");
-            last_expr_type_ = "i1";
-            return result;
-        }
-
-        // find(pattern: Str) -> I64 (returns -1 if not found)
-        if (method == "find") {
-            emit_coverage("Str::find");
-            if (call.args.empty()) {
-                report_error("find() requires a pattern argument", call.span, "C008");
-                return "0";
-            }
-            std::string pattern = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i64 @str_find(ptr " + receiver + ", ptr " + pattern +
-                      ")");
-            last_expr_type_ = "i64";
-            return result;
-        }
-
-        // rfind(pattern: Str) -> I64 (returns -1 if not found)
-        if (method == "rfind") {
-            emit_coverage("Str::rfind");
-            if (call.args.empty()) {
-                report_error("rfind() requires a pattern argument", call.span, "C008");
-                return "0";
-            }
-            std::string pattern = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i64 @str_rfind(ptr " + receiver + ", ptr " +
-                      pattern + ")");
-            last_expr_type_ = "i64";
-            return result;
-        }
-
-        // split(delimiter: Str) -> List[Str]
-        if (method == "split") {
-            emit_coverage("Str::split");
-            if (call.args.empty()) {
-                report_error("split() requires a delimiter argument", call.span, "C008");
-                return "0";
-            }
-            std::string delim = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_split(ptr " + receiver + ", ptr " + delim +
-                      ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-
-        // chars() -> List[I32]
-        if (method == "chars") {
-            emit_coverage("Str::chars");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_chars(ptr " + receiver + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-
-        // trim() -> Str
-        if (method == "trim") {
-            emit_coverage("Str::trim");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_trim(ptr " + receiver + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-
-        // trim_start() -> Str
-        if (method == "trim_start") {
-            emit_coverage("Str::trim_start");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_trim_start(ptr " + receiver + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-
-        // trim_end() -> Str
-        if (method == "trim_end") {
-            emit_coverage("Str::trim_end");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_trim_end(ptr " + receiver + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
-
-        // parse_i64() -> Maybe[I64]
-        if (method == "parse_i64") {
-            emit_coverage("Str::parse_i64");
-            std::string value = fresh_reg();
-            emit_line("  " + value + " = call i64 @str_parse_i64(ptr " + receiver + ")");
-            // Return Just(value) - create Maybe struct with tag=0 and value
-            std::string result = fresh_reg();
-            emit_line("  " + result +
-                      " = insertvalue %struct.Maybe__I64 { i32 0, i64 undef }, i64 " + value +
-                      ", 1");
-            last_expr_type_ = "%struct.Maybe__I64";
-            return result;
-        }
-
-        // parse_i32() -> Maybe[I32]
-        if (method == "parse_i32") {
-            emit_coverage("Str::parse_i32");
-            std::string value = fresh_reg();
-            emit_line("  " + value + " = call i32 @str_parse_i32(ptr " + receiver + ")");
-            std::string result = fresh_reg();
-            emit_line("  " + result +
-                      " = insertvalue %struct.Maybe__I32 { i32 0, i32 undef }, i32 " + value +
-                      ", 1");
-            last_expr_type_ = "%struct.Maybe__I32";
-            return result;
-        }
-
-        // parse_f64() -> F64
-        if (method == "parse_f64") {
-            emit_coverage("Str::parse_f64");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @str_parse_f64(ptr " + receiver + ")");
-            last_expr_type_ = "double";
-            return result;
-        }
-
-        // parse_bool() -> Maybe[Bool]
-        if (method == "parse_bool") {
-            emit_coverage("Str::parse_bool");
-            // Compare against "true" and "false" using str_eq (returns i32: 0 or 1)
-            std::string true_lit = add_string_literal("true");
-            std::string false_lit = add_string_literal("false");
-            std::string is_true = fresh_reg();
-            emit_line("  " + is_true + " = call i32 @str_eq(ptr " + receiver + ", ptr " + true_lit +
-                      ")");
-            std::string is_false = fresh_reg();
-            emit_line("  " + is_false + " = call i32 @str_eq(ptr " + receiver + ", ptr " +
-                      false_lit + ")");
-            std::string is_valid = fresh_reg();
-            emit_line("  " + is_valid + " = or i32 " + is_true + ", " + is_false);
-            std::string is_valid_bool = fresh_reg();
-            emit_line("  " + is_valid_bool + " = icmp ne i32 " + is_valid + ", 0");
-            // tag: 0=Just, 1=Nothing
-            std::string tag = fresh_reg();
-            emit_line("  " + tag + " = select i1 " + is_valid_bool + ", i32 0, i32 1");
-            // value: is_true as i1
-            std::string val_bool = fresh_reg();
-            emit_line("  " + val_bool + " = icmp ne i32 " + is_true + ", 0");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = insertvalue { i32, i1 } undef, i32 " + tag + ", 0");
-            std::string result2 = fresh_reg();
-            emit_line("  " + result2 + " = insertvalue { i32, i1 } " + result + ", i1 " + val_bool +
-                      ", 1");
-            last_expr_type_ = "%struct.Maybe__Bool";
-            return result2;
-        }
-
-        // parse_u16() -> Maybe[U16]
-        if (method == "parse_u16") {
-            emit_coverage("Str::parse_u16");
-            std::string value64 = fresh_reg();
-            emit_line("  " + value64 + " = call i64 @str_parse_i64(ptr " + receiver + ")");
-            std::string value = fresh_reg();
-            emit_line("  " + value + " = trunc i64 " + value64 + " to i16");
-            // Return Just(value) - create Maybe struct with tag=0 and value
-            std::string result = fresh_reg();
-            emit_line("  " + result +
-                      " = insertvalue %struct.Maybe__U16 { i32 0, i16 undef }, i16 " + value +
-                      ", 1");
-            last_expr_type_ = "%struct.Maybe__U16";
-            return result;
-        }
-
-        // replace(from: Str, to: Str) -> Str
-        if (method == "replace") {
-            emit_coverage("Str::replace");
-            if (call.args.size() < 2) {
-                report_error("replace() requires 'from' and 'to' arguments", call.span, "C008");
-                return "0";
-            }
-            std::string from = gen_expr(*call.args[0]);
-            std::string to = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @str_replace(ptr " + receiver + ", ptr " + from +
-                      ", ptr " + to + ")");
-            last_expr_type_ = "ptr";
-            return result;
-        }
+        // All other Str methods fall through to the module lookup below
     }
 
     // Try to look up user-defined impl methods for primitive types (e.g., I32::abs)
@@ -902,6 +582,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
 
     std::string qualified_name = type_name + "::" + method;
     auto func_sig = env_.lookup_func(qualified_name);
+    bool is_imported = false;
 
     // If not found in local env, search all imported modules
     if (!func_sig && env_.module_registry()) {
@@ -910,6 +591,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
             auto func_it = mod.functions.find(qualified_name);
             if (func_it != mod.functions.end()) {
                 func_sig = func_it->second;
+                is_imported = true;
                 break;
             }
         }
@@ -923,7 +605,13 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
         if (method_it != functions_.end()) {
             fn_name = method_it->second.llvm_name;
         } else {
-            fn_name = "@tml_" + get_suite_prefix() + type_name + "_" + method;
+            // Library functions have no suite prefix; local functions use suite prefix.
+            // Primitive type impl methods (Str, Char, etc.) are always from the library,
+            // so we skip the suite prefix for them regardless of how they were found.
+            bool is_library_primitive = is_imported || kind == types::PrimitiveKind::Str ||
+                                        kind == types::PrimitiveKind::Char;
+            std::string prefix = is_library_primitive ? "" : get_suite_prefix();
+            fn_name = "@tml_" + prefix + type_name + "_" + method;
         }
 
         // Check if method has 'mut this' - indicated by first param being a mut ref
@@ -965,6 +653,13 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
         }
 
         std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
+
+        // Register function so other codegen paths know it exists.
+        // The actual `declare` is provided by the library declarations
+        // (imported_func_decls from capture_library_state), so we don't need
+        // to emit one here. We just track it in generated_functions_.
+        generated_functions_.insert(fn_name);
+
         std::string args_str;
         for (size_t i = 0; i < typed_args.size(); ++i) {
             if (i > 0)

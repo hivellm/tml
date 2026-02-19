@@ -1588,4 +1588,19 @@ impl Str {
     pub func replace(this, pattern: Str, replacement: Str) -> Str {
         return str::replace(this, pattern, replacement)
     }
+
+    /// Parses this string as an I32.
+    pub func parse_i32(this) -> Maybe[I32] {
+        return str::parse_i32(this)
+    }
+
+    /// Parses this string as an F64.
+    pub func parse_f64(this) -> Maybe[F64] {
+        return str::parse_f64(this)
+    }
+
+    /// Parses this string as a Bool.
+    pub func parse_bool(this) -> Maybe[Bool] {
+        return str::parse_bool(this)
+    }
 }

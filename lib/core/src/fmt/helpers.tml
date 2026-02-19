@@ -290,13 +290,15 @@ pub func hex_digit(d: I32, upper: Bool) -> Str {
     }
 }
 
+use core::str
+
 // ============================================================================
 // String utilities
 // ============================================================================
 
 /// Returns the length of a string.
 pub func string_len(s: Str) -> I64 {
-    return lowlevel { str_len(s) }
+    return str::len(s)
 }
 
 /// Converts a character (byte value) to a single-character string.
@@ -320,7 +322,7 @@ pub func repeat_string(s: Str, n: I64) -> Str {
 
 /// Returns a slice of a string from start to end (exclusive).
 pub func string_slice(s: Str, start: I64, end: I64) -> Str {
-    return lowlevel { str_slice(s, start, end) }
+    return str::substring(s, start, end)
 }
 
 /// Pads a string on the left to reach the specified width.

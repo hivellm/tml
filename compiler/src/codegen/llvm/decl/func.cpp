@@ -68,15 +68,24 @@ void LLVMIRGen::pre_register_func(const parser::FuncDecl& func) {
         param_types_vec.push_back(param_type);
     }
 
-    // Build function name with module prefix
+    // Build function name with module prefix and suite prefix
     std::string full_func_name = func.name;
     if (!current_module_prefix_.empty()) {
         full_func_name = current_module_prefix_ + "_" + func.name;
     }
 
+    // In suite mode, local functions (no module prefix) get a suite prefix
+    // to avoid collisions between test files compiled into the same DLL.
+    std::string suite_prefix = "";
+    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+        current_module_prefix_.empty()) {
+        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+    }
+
     // Register function in functions_ map
     std::string func_type = ret_type + " (" + param_types + ")";
-    FuncInfo func_info{"@tml_" + full_func_name, func_type, ret_type, param_types_vec};
+    FuncInfo func_info{"@tml_" + suite_prefix + full_func_name, func_type, ret_type,
+                       param_types_vec};
     functions_[func.name] = func_info;
 
     // Also register semantic return type in func_return_types_ for infer_expr_type
@@ -455,6 +464,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     std::string func_type = ret_type + " (" + param_types + ")";
     FuncInfo func_info{"@tml_" + suite_prefix + full_func_name, func_type, ret_type,
                        param_types_vec};
+
+    // Only register the bare short name for local (non-module) functions.
+    // For library modules, the short name would shadow local functions with
+    // the same name (e.g., core::str::to_uppercase shadowing a local to_uppercase).
     functions_[func.name] = func_info;
 
     // Also register with module-qualified name for cross-module calls

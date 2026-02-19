@@ -606,6 +606,41 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // so that workers using library_decls_only=false get the complete library IR.
         std::string pre_instantiation_output = output_.str();
 
+        // Flush ALL pending lazy library methods/functions so their `define` blocks
+        // appear in the library IR. Without this, capture_library_state() cannot
+        // extract `declare` stubs for worker threads (library_decls_only mode).
+        // In library_ir_only mode there is no user code to scan for references,
+        // so we emit everything unconditionally.
+        if (options_.lazy_library_defs) {
+            auto saved_module_prefix = current_module_prefix_;
+            auto saved_submodule = current_submodule_name_;
+
+            for (auto& [fn, info] : pending_library_methods_) {
+                if (generated_functions_.count(fn))
+                    continue;
+                current_module_prefix_ = info.module_prefix;
+                current_submodule_name_ = info.submodule_name;
+                options_.lazy_library_defs = false;
+                generated_functions_.erase(fn);
+                gen_impl_method(info.type_name, *info.method);
+                options_.lazy_library_defs = true;
+            }
+
+            for (auto& [fn, finfo] : pending_library_funcs_) {
+                if (generated_functions_.count(fn))
+                    continue;
+                current_module_prefix_ = finfo.module_prefix;
+                current_submodule_name_ = finfo.submodule_name;
+                options_.lazy_library_defs = false;
+                generated_functions_.erase(fn);
+                gen_func_decl(*finfo.func);
+                options_.lazy_library_defs = true;
+            }
+
+            current_module_prefix_ = saved_module_prefix;
+            current_submodule_name_ = saved_submodule;
+        }
+
         // Generate pending generic instantiations triggered by library functions
         generate_pending_instantiations();
 
@@ -725,14 +760,25 @@ auto LLVMIRGen::generate(const parser::Module& module)
     saved_output.str(output_.str()); // Save current output (headers, type defs, dyn types)
     output_.str("");                 // Clear for function code
 
-    // Pre-pass: register all function return types for type inference
-    // This allows later functions to be used in earlier functions correctly
+    // Pre-pass: register all local function signatures and return types.
+    // This serves two purposes:
+    // 1. Type inference: later functions can be used in earlier functions correctly
+    // 2. Name priority: local functions overwrite library module functions with
+    //    the same short name (e.g., a local `to_uppercase` takes priority over
+    //    `core::str::to_uppercase` that was pre-registered during library Phase 1).
+    //    This prevents library essential modules from shadowing local definitions.
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {
             const auto& func = decl->as<parser::FuncDecl>();
             // Skip generic functions - their return types depend on instantiation
             if (!func.generics.empty()) {
                 continue;
+            }
+            // Pre-register function signature (name, params, return type)
+            // so forward references resolve to the local function, not a
+            // library function with the same name.
+            if (!func.is_unsafe && func.body.has_value()) {
+                pre_register_func(func);
             }
             if (func.return_type.has_value()) {
                 types::TypePtr semantic_ret = resolve_parser_type_with_subs(**func.return_type, {});

@@ -163,10 +163,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @println(ptr)");
     emit_line("declare void @print_i32(i32)");
     emit_line("declare void @print_i64(i64)");
-    emit_line("declare void @print_f32(float)");
     emit_line("declare void @print_f64(double)");
     emit_line("declare void @print_bool(i32)");
-    emit_line("declare void @print_char(i32)");
     emit_line("");
 
     // NOTE: Math functions moved to core::math module
@@ -180,12 +178,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare double @black_box_f64(double)");
     emit_line("; SIMD operations (auto-vectorized)");
     emit_line("declare i64 @simd_sum_i32(ptr, i64)");
-    emit_line("declare i64 @simd_sum_i64(ptr, i64)");
     emit_line("declare double @simd_sum_f64(ptr, i64)");
     emit_line("declare double @simd_dot_f64(ptr, ptr, i64)");
-    emit_line("declare void @simd_fill_i32(ptr, i32, i64)");
-    emit_line("declare void @simd_add_i32(ptr, ptr, ptr, i64)");
-    emit_line("declare void @simd_mul_i32(ptr, ptr, ptr, i64)");
     emit_line("");
 
     // Float functions
@@ -205,9 +199,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @f32_is_nan(float)");
     emit_line("declare i32 @f32_is_infinite(float)");
     emit_line("declare double @int_to_float(i32)");
-    emit_line("declare double @i64_to_float(i64)");
     emit_line("declare i32 @float_to_int(double)");
-    emit_line("declare i64 @float_to_i64(double)");
     emit_line("declare i32 @float_round(double)");
     emit_line("declare i32 @float_floor(double)");
     emit_line("declare i32 @float_ceil(double)");
@@ -231,10 +223,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @i64_to_upper_hex_str(i64)");
     emit_line("");
 
-    // Overloaded abs functions
-    emit_line("; Overloaded abs");
-    emit_line("declare i32 @abs_i32(i32)");
-    emit_line("declare double @abs_f64(double)");
+    // abs functions removed — abs_i32 is pure TML in core::num::integer, abs_f64 never called
     emit_line("");
 
     // Bit manipulation runtime declarations
@@ -289,14 +278,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @waitgroup_destroy(ptr)");
     emit_line("");
 
-    // Atomic counter runtime declarations
-    emit_line("; Atomic counter runtime");
-    emit_line("declare ptr @atomic_counter_create(i32)");
-    emit_line("declare i32 @atomic_counter_inc(ptr)");
-    emit_line("declare i32 @atomic_counter_dec(ptr)");
-    emit_line("declare i32 @atomic_counter_get(ptr)");
-    emit_line("declare void @atomic_counter_set(ptr, i32)");
-    emit_line("declare void @atomic_counter_destroy(ptr)");
+    // Atomic counter runtime removed — never called from codegen or TML
     emit_line("");
 
     // Typed atomic operations runtime (also declared in sync.tml with @extern)
@@ -432,22 +414,9 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @f64_to_str(double)");
     emit_line("");
 
-    // Char utilities (matches runtime/string.c)
-    emit_line("; Char utilities");
-    emit_line("declare i32 @char_is_alphabetic(i32)");
-    emit_line("declare i32 @char_is_numeric(i32)");
-    emit_line("declare i32 @char_is_alphanumeric(i32)");
-    emit_line("declare i32 @char_is_whitespace(i32)");
-    emit_line("declare i32 @char_is_uppercase(i32)");
-    emit_line("declare i32 @char_is_lowercase(i32)");
-    emit_line("declare i32 @char_is_ascii(i32)");
-    emit_line("declare i32 @char_is_control(i32)");
-    emit_line("declare i32 @char_to_uppercase(i32)");
-    emit_line("declare i32 @char_to_lowercase(i32)");
-    emit_line("declare i32 @char_to_digit(i32, i32)");
-    emit_line("declare i32 @char_from_digit(i32, i32)");
-    emit_line("declare i32 @char_code(i32)");
-    emit_line("declare i32 @char_from_code(i32)");
+    // Char utilities — classification functions removed (pure TML in char/methods.tml)
+    // Only char_to_string and utf8_*_to_string kept (used from lowlevel blocks)
+    emit_line("; Char/UTF-8 to string");
     emit_line("declare ptr @char_to_string(i8)");
     emit_line("declare ptr @utf8_2byte_to_string(i8, i8)");
     emit_line("declare ptr @utf8_3byte_to_string(i8, i8, i8)");
@@ -469,52 +438,20 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["utf8_4byte_to_string"] =
         FuncInfo{"@utf8_4byte_to_string", "ptr (i8, i8, i8, i8)", "ptr", {"i8", "i8", "i8", "i8"}};
 
-    // Register string runtime functions in functions_ map for lowlevel calls from core::str
+    // Register string runtime functions in functions_ map for lowlevel calls
+    // Only functions actively called from lowlevel blocks need entries here.
+    // Functions called via compiler codegen (method_primitive_ext.cpp) or tests
+    // go through try_gen_builtin_string() in call.cpp and don't need functions_[] entries.
     functions_["str_len"] = FuncInfo{"@str_len", "i32 (ptr)", "i32", {"ptr"}};
-    functions_["str_eq"] = FuncInfo{"@str_eq", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
     functions_["str_hash"] = FuncInfo{"@str_hash", "i32 (ptr)", "i32", {"ptr"}};
-    functions_["str_concat"] = FuncInfo{"@str_concat", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
     functions_["str_concat_opt"] =
         FuncInfo{"@str_concat_opt", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
-    functions_["str_concat_3"] =
-        FuncInfo{"@str_concat_3", "ptr (ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr"}};
-    functions_["str_concat_4"] =
-        FuncInfo{"@str_concat_4", "ptr (ptr, ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr", "ptr"}};
     functions_["str_substring"] =
         FuncInfo{"@str_substring", "ptr (ptr, i32, i32)", "ptr", {"ptr", "i32", "i32"}};
     functions_["str_slice"] =
         FuncInfo{"@str_slice", "ptr (ptr, i64, i64)", "ptr", {"ptr", "i64", "i64"}};
-    functions_["str_contains"] = FuncInfo{"@str_contains", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
-    functions_["str_starts_with"] =
-        FuncInfo{"@str_starts_with", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
-    functions_["str_ends_with"] =
-        FuncInfo{"@str_ends_with", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
-    functions_["str_to_upper"] = FuncInfo{"@str_to_upper", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["str_to_lower"] = FuncInfo{"@str_to_lower", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["str_trim"] = FuncInfo{"@str_trim", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["str_trim_start"] = FuncInfo{"@str_trim_start", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["str_trim_end"] = FuncInfo{"@str_trim_end", "ptr (ptr)", "ptr", {"ptr"}};
     functions_["str_char_at"] = FuncInfo{"@str_char_at", "i32 (ptr, i32)", "i32", {"ptr", "i32"}};
-    functions_["str_find"] = FuncInfo{"@str_find", "i64 (ptr, ptr)", "i64", {"ptr", "ptr"}};
-    functions_["str_rfind"] = FuncInfo{"@str_rfind", "i64 (ptr, ptr)", "i64", {"ptr", "ptr"}};
-    functions_["str_parse_i64"] = FuncInfo{"@str_parse_i64", "i64 (ptr)", "i64", {"ptr"}};
-    functions_["str_replace"] =
-        FuncInfo{"@str_replace", "ptr (ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr"}};
-    functions_["str_split"] = FuncInfo{"@str_split", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
-    functions_["str_split_whitespace"] =
-        FuncInfo{"@str_split_whitespace", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["str_lines"] = FuncInfo{"@str_lines", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["str_chars"] = FuncInfo{"@str_chars", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["str_replace_first"] =
-        FuncInfo{"@str_replace_first", "ptr (ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr"}};
-    functions_["str_repeat"] = FuncInfo{"@str_repeat", "ptr (ptr, i32)", "ptr", {"ptr", "i32"}};
-    functions_["str_parse_i32"] = FuncInfo{"@str_parse_i32", "i32 (ptr)", "i32", {"ptr"}};
-    functions_["str_parse_f64"] = FuncInfo{"@str_parse_f64", "double (ptr)", "double", {"ptr"}};
-    functions_["str_join"] = FuncInfo{"@str_join", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
     functions_["str_as_bytes"] = FuncInfo{"@str_as_bytes", "ptr (ptr)", "ptr", {"ptr"}};
-    // Also register names used in lowlevel blocks that differ from runtime names
-    functions_["str_to_uppercase"] = FuncInfo{"@str_to_upper", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["str_to_lowercase"] = FuncInfo{"@str_to_lower", "ptr (ptr)", "ptr", {"ptr"}};
 
     // Register float formatting runtime functions for lowlevel calls from core::fmt::float
     functions_["f64_to_string"] = FuncInfo{"@f64_to_string", "ptr (double)", "ptr", {"double"}};

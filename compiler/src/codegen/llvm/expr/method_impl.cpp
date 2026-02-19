@@ -459,8 +459,18 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     }
     // Handle non-generic imported types with non-generic methods (e.g., Text::as_str)
     else {
-        // Check if this is an imported type (struct or enum)
-        if (env_.module_registry()) {
+        // Primitive types always have impl methods from library modules
+        bool is_primitive_type =
+            (named.name == "Str" || named.name == "I8" || named.name == "I16" ||
+             named.name == "I32" || named.name == "I64" || named.name == "U8" ||
+             named.name == "U16" || named.name == "U32" || named.name == "U64" ||
+             named.name == "F32" || named.name == "F64" || named.name == "Bool" ||
+             named.name == "Char");
+        if (is_primitive_type) {
+            is_imported = true;
+        }
+        // Check if this is an imported type (struct, enum, or primitive with impl methods)
+        if (!is_imported && env_.module_registry()) {
             const auto& all_modules = env_.module_registry()->get_all_modules();
             for (const auto& [mod_name, mod] : all_modules) {
                 auto struct_it = mod.structs.find(named.name);
@@ -470,6 +480,13 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 }
                 auto enum_it = mod.enums.find(named.name);
                 if (enum_it != mod.enums.end()) {
+                    is_imported = true;
+                    break;
+                }
+                // Also check if the method is registered as a function (handles
+                // other types with impl blocks in library modules)
+                auto func_it = mod.functions.find(named.name + "::" + method);
+                if (func_it != mod.functions.end()) {
                     is_imported = true;
                     break;
                 }
@@ -507,7 +524,15 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             }
         }
         if (fn_name.empty()) {
-            std::string prefix = is_imported ? "" : get_suite_prefix();
+            // Primitive types (Str, I32, etc.) always have impl methods from library
+            // modules, never from local test code, so never add suite prefix.
+            bool is_primitive_type =
+                (named.name == "Str" || named.name == "I8" || named.name == "I16" ||
+                 named.name == "I32" || named.name == "I64" || named.name == "U8" ||
+                 named.name == "U16" || named.name == "U32" || named.name == "U64" ||
+                 named.name == "F32" || named.name == "F64" || named.name == "Bool" ||
+                 named.name == "Char");
+            std::string prefix = (is_imported || is_primitive_type) ? "" : get_suite_prefix();
             fn_name = "@tml_" + prefix + mangled_type_name + "_" + full_method_name;
         }
     }

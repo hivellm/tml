@@ -168,7 +168,11 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     if (generated_functions_.count(llvm_name)) {
         return;
     }
-    generated_functions_.insert(llvm_name);
+    // NOTE: Do NOT insert into generated_functions_ here. In lazy_library_defs mode,
+    // this function may be deferred to pending_library_methods_ without emitting any IR.
+    // If we mark it as "generated" now, gen_impl_method_instantiation() will skip it
+    // later when PendingImplMethod tries to emit the actual definition.
+    // The insert happens AFTER the lazy check below.
     current_func_ = method_name;
     current_impl_type_ = type_name; // Set impl type for 'this' field access
     locals_.clear();
@@ -272,6 +276,10 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         current_impl_type_.clear();
         return;
     }
+
+    // Now that we've passed the lazy check, mark the function as generated.
+    // This prevents duplicate generation from re-exports across modules.
+    generated_functions_.insert(llvm_name);
 
     // In library_decls_only mode (without lazy), emit a declare statement for library methods
     // instead of the full definition. The implementations come from the shared library object.

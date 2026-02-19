@@ -166,12 +166,29 @@ impl Hash for Bool {
     }
 }
 
-/// `Hash` for `Str` - computes a hash of the string contents.
+/// `Hash` for `Str` - computes a hash of the string contents using FNV-1a.
 ///
 /// Equal strings always produce equal hashes.
 impl Hash for Str {
     pub func hash(this) -> I64 {
-        return lowlevel { str_hash(this) }
+        // FNV-1a hash over string bytes (pure TML, no C runtime)
+        let addr: I64 = this as I64
+        if addr == 0 {
+            return 0
+        }
+        var state: U64 = FNV_OFFSET_BASIS
+        var i: I64 = 0
+        loop (true) {
+            let p: *U8 = (addr + i) as *U8
+            let byte: U8 = lowlevel { ptr_read[U8](p) }
+            if byte == (0 as U8) {
+                return state as I64
+            }
+            state = state ^ (byte as U64)
+            state = state * FNV_PRIME
+            i = i + 1
+        }
+        return state as I64
     }
 }
 

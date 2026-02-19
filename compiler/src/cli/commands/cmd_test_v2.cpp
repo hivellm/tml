@@ -54,9 +54,15 @@ int run_test_v2(int argc, char* argv[], bool verbose) {
 
     // When --verbose is active, add a filtered JSON file sink to the logger
     if (opts.verbose) {
-        fs::path log_dir = fs::path("build") / "debug";
-        fs::create_directories(log_dir);
-        fs::path log_path = log_dir / "test_log.json";
+        fs::path log_path;
+        if (!opts.log_path.empty()) {
+            log_path = fs::path(opts.log_path);
+            fs::create_directories(log_path.parent_path());
+        } else {
+            fs::path log_dir = fs::path("build") / "debug";
+            fs::create_directories(log_dir);
+            log_path = log_dir / "test_log.json";
+        }
 
         class TestLogSink : public tml::log::LogSink {
         public:
@@ -194,7 +200,8 @@ int run_test_v2(int argc, char* argv[], bool verbose) {
     // Flush log
     if (opts.verbose) {
         tml::log::Logger::instance().flush();
-        fs::path log_path = fs::path("build") / "debug" / "test_log.json";
+        fs::path log_path = !opts.log_path.empty() ? fs::path(opts.log_path)
+                                                   : fs::path("build") / "debug" / "test_log.json";
         TML_LOG_INFO("test", c.dim() << "Test log: " << c.reset() << log_path.string());
     }
 

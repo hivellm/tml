@@ -26,6 +26,7 @@
 //! ```
 
 use core::intrinsics::{ptr_read, ptr_write}
+use core::str
 
 // ============================================================================
 // Memory helpers (using lowlevel intrinsics, same pattern as list.tml)
@@ -44,7 +45,7 @@ pub func buf_mem_realloc(ptr: *Unit, new_size: I64) -> *Unit {
 }
 
 pub func buf_str_len(s: Str) -> I64 {
-    lowlevel { str_len(s) }
+    str::len(s)
 }
 
 /// A byte buffer for reading and writing binary data.

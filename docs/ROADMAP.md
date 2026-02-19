@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, File/Path/Dir✓)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓; runtime.cpp audit: 287→68 declares target, Phases 17-30 planned)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -441,54 +441,59 @@ Remaining uncovered areas blocked by: generic codegen (map[U], and_then[U], ok_o
 
 ### Progress (2026-02-18)
 
-**Collections migration COMPLETE**: List, HashMap, and Buffer all migrated to pure TML using memory intrinsics (`ptr_read`, `ptr_write`, `mem_alloc`, `mem_realloc`, `mem_free`, `write_bytes`, `copy_nonoverlapping`). This eliminated ~3,300 lines of C runtime code AND ~2,800 lines of hardcoded compiler dispatch (collection methods, static methods, type-erasure, bypass lists).
+**Collections migration COMPLETE**: List, HashMap, Buffer all migrated to pure TML. Eliminated ~3,300 lines of C runtime AND ~2,800 lines of hardcoded compiler dispatch.
 
-**String migration COMPLETE (99.3%)**: All C runtime string calls in `lib/core/src/str.tml` replaced with pure TML — read-only ops (len, char_at, contains, starts_with, ends_with, find, rfind), allocating ops (substring, trim, to_uppercase/to_lowercase, split, split_whitespace, lines, replace, repeat, join, chars), and parsing (parse_i32, parse_i64, parse_f64). Only `as_bytes` remains (blocked on `ref [U8]` slice type codegen). 241 tests pass across 20 str test files.
+**String migration COMPLETE (99.3%)**: All C runtime string calls in `str.tml` replaced with pure TML. Only `as_bytes` remains (blocked on slice type codegen).
 
-**File/Path/Dir migration COMPLETE**: File and Path rewritten as TML structs with `@extern("c")` FFI bindings to OS functions. Dir migrated from lowlevel blocks to @extern FFI. All 23 hardcoded static methods removed from `method_static.cpp`. File/Path removed from all bypass/skip lists (5 compiler files). Dead network socket and TLS declarations cleaned from `runtime.cpp` (~110 lines removed). 36 file/path/dir tests pass.
+**File/Path/Dir migration COMPLETE**: Rewritten as TML structs with `@extern("c")` FFI.
 
-**Integer formatting migration COMPLETE**: Phase 7 rewrote 16 integer Display/Debug lowlevel blocks in `fmt/impls.tml` to call pure TML functions in `fmt/helpers.tml`. Uses digit extraction (`% 10` / `/ 10`) + string concatenation with `when`-based digit lookup tables. All 404 fmt tests pass.
+**Integer formatting migration COMPLETE**: Phase 7 rewrote 16 integer Display/Debug lowlevel blocks to pure TML.
 
-**Phases 8-15 AUDITED** (2026-02-18): Comprehensive audit of all remaining 818 lowlevel blocks across lib/core and lib/std. Key findings:
-- Float formatting (Phase 8): KEEP — hardware-dependent (snprintf, FPU NaN/inf checks)
-- Char/UTF-8 (Phase 9): KEEP — registered functions_[] map entries with correct types
-- Hex/octal/binary (Phase 10): Already pure TML — no lowlevel blocks
-- Text builder (Phase 11): BLOCKED — type checker doesn't support memory intrinsics for new code
-- Search (Phase 12): KEEP — correct Tier 2 FFI pattern (@extern declarations)
-- JSON helpers (Phase 13): KEEP — registered functions_[] entries
-- Logging (Phase 14): KEEP — all I/O / global state operations
-- Remaining collections, sync, arrays (Phase 15): KEEP — memory intrinsics, hardware atomics, compiler intrinsics
+**Phase 16 dead code cleanup COMPLETE**: Removed 28 dead `functions_[]` map entries from `runtime.cpp`.
 
-**Key blocker**: The type checker does NOT infer correct return types for memory intrinsics (`mem_alloc` → should be `ptr`, `ptr_read[T]` → should be `T`) in new lowlevel blocks. This blocks Text migration and any growable buffer reimplementations.
+### Comprehensive runtime.cpp Audit (2026-02-18)
 
-**Remaining work**: Text utilities (~1,050 lines C, BLOCKED on type checker), codegen cleanup (Phase 16-17), type system cleanup (Phase 20-21).
+Full audit of all ~287 `declare` statements in `runtime.cpp` cross-referenced against compiler codegen C++ files and TML lowlevel blocks. Key findings:
 
-### The Problem
+| Category | Declares | Decision |
+|----------|----------|----------|
+| LLVM intrinsics + C stdlib + essential I/O + memory | ~68 | **KEEP** — fundamental, can never be removed |
+| Dead declarations (never called anywhere) | 15 | **REMOVE** — Phase 17 (4 SIMD + 6 atomic + 2 print + 3 float/math) |
+| Char classification (14 functions) | 14 | **MIGRATE** — already pure TML in char/methods.tml, codegen still emits C calls |
+| Char-to-string / UTF-8 (4 functions) | 4 | **MIGRATE** — implement in pure TML |
+| String ops (34 str_* functions) | 34 | **MIGRATE** — str.tml has pure TML impls, codegen still emits C calls in method_primitive_ext.cpp |
+| StringBuilder (9 functions) | 9 | **MIGRATE** — codegen-only, no TML usage |
+| Text type (51 tml_text_* functions) | 51 | **MIGRATE** — only called from TML lowlevel blocks, rewrite as TML struct |
+| Float math (24 functions) | 24 | **MIGRATE** — ~16 replaceable with LLVM intrinsics, ~8 keep (snprintf, nextafter) |
+| Threading/sync/channel (32 functions) | 32 | **MIGRATE** — TML already has @extern, codegen still hardcodes |
+| Time/pool (20 functions) | 20 | **MIGRATE** — move to @extern FFI |
+| Log/glob (17 functions) | 17 | **KEEP** — I/O + already working @extern/lowlevel pattern |
 
-The compiler had **two parallel problems** blocking self-hosting:
+**Target**: Reduce `runtime.cpp` from ~287 declares to ~68 essential declares.
 
-1. **C Runtime**: ~5,210 lines of algorithms in C that TML can express (collections, strings, text, math, search)
-2. **Hardcoded Codegen Dispatch**: ~3,300 lines of if/else chains matching type names as strings (HashMap, Buffer, File, Path, etc.), bypassing normal impl method dispatch
-
-These are coupled: each C-backed type has both runtime C code AND hardcoded compiler dispatch. Migrating the C code without cleaning up the dispatch leaves dead code paths and prevents the type system from discovering methods normally.
-
-### Architecture
+### Architecture Target
 
 ```
-KEEP as C/FFI:                              MIGRATE to pure TML:
-  - mem_alloc / mem_free (OS interface)       - Collections logic (1,353 lines C) ✓ DONE
-  - ptr_read / ptr_write (LLVM intrinsics)    - String algorithms (1,201 lines C)
-  - print / panic / exit (I/O)                - Text utilities (1,057 lines C)
-  - Crypto (OpenSSL/BCrypt @extern)           - Math formatting (411 lines C)
-  - Compression (zlib @extern)                - Search algorithms (98 lines C)
-  - Networking (OS sockets @extern)
-  - Thread/sync (pthreads/Win32 @extern)    ELIMINATE in compiler:
-  - File/Path (OS syscalls @extern)           - Collection method dispatch (1,330 lines) ✓ DONE
-  - Backtrace (VEH/DWARF)                    - Builtin function dispatch (430 lines) ✓ DONE
-                                              - Static method hardcoding (500 lines) partially done
-                                              - Unconditional runtime declares (393 → ~300 → ~190)
-                                              - Type system hardcoded registrations (54 → ~29 → 0)
-                                              - 5 types bypassing impl dispatch → 0 ✓ DONE
+KEEP FOREVER (essential):                   MIGRATE to pure TML / @extern / LLVM intrinsics:
+  - LLVM intrinsics (7)                      - Char classification (14) → pure TML dispatch
+  - C stdlib (printf, malloc, free) (5)      - Char-to-string + UTF-8 (4) → pure TML
+  - Essential runtime (panic, print) (4)     - String ops (34 str_*) → TML impl dispatch
+  - Memory (mem_alloc, mem_free, etc.) (10)  - StringBuilder (9) → pure TML or remove
+  - Coverage/debug (conditional)             - Text type (51 tml_text_*) → TML struct
+  - Panic catching + backtrace (4)           - Float math (16) → LLVM intrinsics
+  - Format string constants                  - Threading/sync/channel (32) → @extern FFI
+  - Log runtime (12, I/O)                    - Time/pool (20) → @extern FFI
+  - Glob runtime (5, FFI)                    - Dead declarations (29) → DELETE
+  - Float-to-string (8, snprintf)
+  - nextafter (2, no intrinsic)
+  - tml_random_seed (1, OS random)
+
+                                            ALREADY DONE:
+                                              - Collections (List/HashMap/Buffer) ✓
+TOTAL KEEP: ~68 declares                      - String algorithms (str.tml) ✓
+TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
+                                              - File/Path/Dir ✓
+                                              - Dead functions_[] entries ✓
 ```
 
 ### 4.1 Collections — List[T] (DONE)
@@ -531,67 +536,101 @@ KEEP as C/FFI:                              MIGRATE to pure TML:
 
 ### 4.5 Strings (core::str) — DONE (99.3%)
 
-- [x] 4.5.1 Rewrite read-only ops: `str_len`, `str_char_at`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`, `str_rfind`
-- [x] 4.5.2 Rewrite transforms: `str_to_uppercase`, `str_to_lowercase`, `str_trim`, `str_trim_start`, `str_trim_end`
-- [x] 4.5.3 Rewrite splitting: `str_split`, `str_split_whitespace`, `str_lines`
-- [x] 4.5.4 Rewrite allocating: `str_substring`, `str_replace`, `str_replace_first`, `str_repeat`, `str_join`, `str_chars`
-- [x] 4.5.5 Rewrite parsing: `str_parse_i32`, `str_parse_i64`, `str_parse_f64`
-- [x] 4.5.6 Update all `impl Str` methods to delegate to standalone pure TML functions
-- [ ] 4.5.7 `str_as_bytes` — blocked on `ref [U8]` slice type codegen
-- [ ] 4.5.8 Remove `compiler/runtime/text/string.c` (1,201 lines) — deferred to Phase 16
-- [ ] 4.5.9 Remove 29 string function registrations from `types/builtins/string.cpp` — deferred to Phase 20
+- [x] 4.5.1 Rewrite read-only ops in pure TML (len, char_at, contains, starts_with, ends_with, find, rfind)
+- [x] 4.5.2 Rewrite transforms in pure TML (to_uppercase, to_lowercase, trim, trim_start, trim_end)
+- [x] 4.5.3 Rewrite splitting (split, split_whitespace, lines) and allocating (substring, replace, repeat, join, chars)
+- [x] 4.5.4 Rewrite parsing (parse_i32, parse_i64, parse_f64)
+- [ ] 4.5.5 `str_as_bytes` — blocked on `ref [U8]` slice type codegen
 
-### 4.6 Text utilities (std::text) — BLOCKED
+### 4.6 Formatting (core::fmt) — PARTIALLY DONE
 
-- [ ] 4.6.1 Rewrite `Text` builder as TML struct with `ptr_read`/`ptr_write` — **BLOCKED** on type checker memory intrinsic support
-- [ ] 4.6.2 Remove `compiler/runtime/text/text.c` (1,057 lines) — depends on 4.6.1
+- [x] 4.6.1 Integer formatting — pure TML digit extraction + string concat (Phase 7)
+- [x] 4.6.2 Hex/octal/binary — already pure TML, no lowlevel blocks (Phase 10)
 
-### 4.7 Formatting (core::fmt) — PARTIALLY DONE
+### 4.7 Dead code cleanup — DONE
 
-- [x] 4.7.1 Rewrite integer formatting: `i64_to_str`, `u64_to_str`, etc. — pure TML digit extraction + string concat (Phase 7 DONE)
-- [x] 4.7.4 Hex/octal/binary formatting — already pure TML, no lowlevel blocks (Phase 10 verified)
-- **KEEP**: Float formatting (`f64_to_string`, etc.) — hardware-dependent snprintf (Phase 8 evaluated)
-- **KEEP**: Char/UTF-8 encoding (`char_to_string`, `utf8_*byte_to_string`) — registered functions_[] entries (Phase 9 evaluated)
-- [ ] 4.7.5 Remove `compiler/runtime/math/math.c` (411 lines) — deferred until float migration possible
+- [x] 4.7.1 Removed 28 dead `functions_[]` entries from `runtime.cpp` (Phase 16)
 
-### 4.8 Search algorithms — KEEP AS FFI
+### 4.8 Remove dead declares (Phase 17) — DONE
 
-- **KEEP**: BM25/HNSW/distance metrics use correct Tier 2 FFI pattern (`@extern` declarations + registered functions_[])
-- **No migration needed** — complex algorithms appropriate for C backing with FFI bindings
+- [x] 4.8.1 Remove 15 dead `declare` statements (4 unused SIMD, 6 dead atomic_counter, 2 dead print (f32/char), 3 dead float/math) — 9,025 tests pass
 
-### 4.9 Runtime declaration optimization
+### 4.9 Char classification → pure TML dispatch (Phase 18.1) — DONE
 
-- [ ] 4.9.1 Implement on-demand `ensure_runtime_decl()` in `runtime.cpp` (emit declare only on first use)
-- [ ] 4.9.2 Reduce 393 unconditional declares to ~30 essential ones
-- [ ] 4.9.3 Verify: `--emit-ir` output only contains used declarations
+- [x] 4.9.1 Remove 14 char_* builtin emitters from `builtins/string.cpp` and 14 char_* declares from `runtime.cpp` — TML char/methods.tml handles all classification/conversion via module-qualified dispatch
+- [x] 4.9.2 Rewrote `compiler/tests/runtime/char.test.tml` to use module-qualified calls — 23 tests pass
+- [ ] 4.9.3 Implement `char_to_string`, `utf8_*byte_to_string` in pure TML (Phase 18.2 — deferred)
 
-### 4.10 Type system + metadata cleanup
+### 4.10 Str codegen dispatch → TML dispatch (Phase 20) — DONE
 
-- [ ] 4.10.1 Fix metadata loader to preserve behavior method return types (eliminate workaround in `method_prim_behavior.cpp:378-390`)
-- [ ] 4.10.2 Fix unresolved generic type placeholders in `decl/struct.cpp:160-167`
-- [ ] 4.10.3 Remove hardcoded `Ordering` enum from `types/builtins/types.cpp` (define in TML)
-- [ ] 4.10.4 Remove legacy Point/Rectangle fallback from `struct_field.cpp:53-97`
+- [x] 4.10.1 Remove ~21 hardcoded `@str_*` calls from `method_primitive_ext.cpp` — dispatch through TML impl
+- [x] 4.10.2 Remove `@str_concat_opt` / `@str_eq` from `binary_ops.cpp`
+- [x] 4.10.3 Remove `@i32_to_string` / `@i64_to_string` / `@bool_to_string` from `method_primitive.cpp`
+- [x] 4.10.4 Update derive/*.cpp to dispatch through TML impls
+- [x] 4.10.5 Migrate lowlevel `str_len`/`str_slice`/`str_hash`/`str_char_at`/`str_substring` in TML lib files to pure TML method calls
+- [x] 4.10.6 Fix suite mode lazy library defs regression — `generated_functions_` marking deferred functions as generated in `impl.cpp`
+- [x] 4.10.7 Fix primitive type `is_imported` detection in `method_impl.cpp` for suite mode
 
-### 4.11 Final cleanup + validation
+### 4.11 StringBuilder migration (Phase 21) — TODO
 
-- [ ] 4.11.1 Remove all migrated C files from `compiler/runtime/`
-- [ ] 4.11.2 Remove duplicate C files from `lib/std/runtime/`
-- [ ] 4.11.3 Benchmark: TML implementations within 10% of C performance
-- [ ] 4.11.4 Full test suite passes with `--coverage`
-- [ ] 4.11.5 Verify: `compiler/runtime/core/essential.c` + `memory/mem.c` are the ONLY remaining non-FFI C runtime
+- [ ] 4.11.1 Migrate or remove 9 strbuilder_* functions (codegen-only, no TML usage)
+
+### 4.12 Text type → TML struct (Phase 22) — TODO
+
+- [ ] 4.12.1 Rewrite Text as TML struct (like List/HashMap/Buffer migration pattern)
+- [ ] 4.12.2 Implement all 48 text operations in pure TML
+- [ ] 4.12.3 Update call_user.cpp template literal codegen
+- [ ] 4.12.4 Remove 51 tml_text_* declares from runtime.cpp
+
+### 4.13 Float math → LLVM intrinsics (Phase 23) — TODO
+
+- [ ] 4.13.1 Replace `@float_abs` → `@llvm.fabs.f64`, `@float_sqrt` → `@llvm.sqrt.f64`, etc.
+- [ ] 4.13.2 Replace bit casts with LLVM `bitcast` instructions
+- [ ] 4.13.3 Replace NaN/infinity with LLVM `fcmp`/constants
+- [ ] 4.13.4 Keep: float-to-string (snprintf), nextafter (no intrinsic)
+- [ ] 4.13.5 Remove ~16 float declares from runtime.cpp
+
+### 4.14 Sync/threading → @extern FFI (Phase 24) — TODO
+
+- [ ] 4.14.1 Remove hardcoded thread/channel/mutex/waitgroup/atomic codegen from builtins/sync.cpp
+- [ ] 4.14.2 Verify TML modules use @extern for everything
+- [ ] 4.14.3 Remove ~32 sync declares from runtime.cpp
+
+### 4.15 Time/pool → @extern FFI (Phase 25) — TODO
+
+- [ ] 4.15.1 Remove hardcoded time_* codegen from builtins/time.cpp
+- [ ] 4.15.2 Migrate @pool class support to @extern FFI
+- [ ] 4.15.3 Remove ~20 time/pool declares from runtime.cpp
+
+### 4.16 On-demand declaration emit (Phase 26) — TODO
+
+- [ ] 4.16.1 Implement `ensure_runtime_decl()` for remaining declares
+- [ ] 4.16.2 Only emit declares actually used per compilation unit
+
+### 4.17 Type system + metadata cleanup (Phase 28-29) — TODO
+
+- [ ] 4.17.1 Remove 29 string registrations from `types/builtins/string.cpp`
+- [ ] 4.17.2 Fix metadata loader to preserve behavior method return types
+- [ ] 4.17.3 Remove hardcoded `Ordering` enum from `types/builtins/types.cpp`
+
+### 4.18 Final cleanup + validation (Phase 30) — TODO
+
+- [ ] 4.18.1 Remove migrated C files from `compiler/runtime/`
+- [ ] 4.18.2 Benchmark: TML implementations within 10% of C performance
+- [ ] 4.18.3 Verify `compiler/runtime/core/essential.c` + `memory/mem.c` are the ONLY remaining non-FFI C runtime
 
 ### Expected impact
 
-| Metric | Before | Current (collections + strings + File/Path done) | After Phase 4 |
-|--------|--------|--------------------------------------|--------------|
-| C runtime (migratable) | 5,210 lines | ~700 lines | 0 |
-| C runtime (total) | ~20,000 lines | ~15,500 lines | ~12,500 (FFI + essential) |
-| Hardcoded dispatch | 3,300 lines | ~350 lines | ~300 (intrinsics only) |
-| Types bypassing impl dispatch | 5 | 0 ✓ | 0 |
-| Unconditional runtime declares | 393 | ~190 | ~30 |
-| Hardcoded type registrations | 54 | ~29 (string remaining) | 0 |
+| Metric | Before | Current | Target | Notes |
+|--------|--------|---------|--------|-------|
+| runtime.cpp declares | 393 | ~287 | ~68 | -219 declares via Phases 17-25 |
+| C runtime (total) | ~20,000 lines | ~15,500 lines | ~12,000 | Remove text.c, string.c, math.c, sync.c, time.c |
+| Hardcoded codegen dispatch | 3,300 lines | ~350 lines | ~50 | Remove str/char/text/sync/time dispatch |
+| Types bypassing impl dispatch | 5 | 0 ✓ | 0 | |
+| Hardcoded type registrations | 54 | 29 (string) | 0 | Phase 28 |
 
-**Progress**: Phases 0-6 + File/Path/Dir complete (collections + strings + file/path). ~4,500 lines C migrated to pure TML + ~2,950 lines dispatch eliminated + ~110 lines dead runtime declarations removed. Next: Formatting (7-10), Text (11), Search (12).
+**Progress**: Phases 0-7, 16, 19 complete. Full runtime.cpp audit done (287 declares categorized). Phases 17-30 planned for comprehensive minimization.
+**Next actionable items**: Phase 18.2 (char_to_string → pure TML), Phase 21 (StringBuilder), Phase 22 (Text → TML struct), Phase 23 (float math → LLVM intrinsics).
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
 
 ---
@@ -798,12 +837,12 @@ These can be worked on alongside the main phases without blocking or being block
 | 1. Codegen bugs | 43 | 43 | 100% | **COMPLETE** |
 | 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (76.2%) |
 | 3. Stdlib essentials | 48 | 47 | 98% | **EFFECTIVELY COMPLETE** |
-| 4. Runtime migration + codegen cleanup | 49 | 45 | 92% | IN PROGRESS (List✓, HashMap✓, Buffer✓, Str✓, File/Path/Dir✓) |
+| 4. Runtime migration + codegen cleanup | 49 | 46 | 94% | IN PROGRESS (List✓, HashMap✓, Buffer✓, Str✓, fmt integers✓, File/Path/Dir✓; Phases 8-15 audited) |
 | 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
 | Parallel: Tooling | 9 | 7 | 78% | IN PROGRESS |
 | Parallel: Reflection | 5 | 3 | 60% | IN PROGRESS |
-| **TOTAL** | **298** | **224** | **75.2%** | |
+| **TOTAL** | **298** | **225** | **75.5%** | |
 
 ---
 

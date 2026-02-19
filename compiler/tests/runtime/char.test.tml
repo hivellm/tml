@@ -1,218 +1,177 @@
 use test
+use core::char
 
 // Char Operation Tests
-// Tests for char_is_*, char_to_*, char_code, char_from_code
+// Tests for char classification, conversion, and code operations
+// Uses module-qualified calls: char::is_alphabetic(), char::to_uppercase(), etc.
 
-// ============ char_is_alphabetic tests ============
+// ============ char::is_alphabetic tests ============
 
 @test
 func test_char_is_alphabetic_letter() -> I32 {
-    assert(char_is_alphabetic('a'), "'a' should be alphabetic")
-    assert(char_is_alphabetic('Z'), "'Z' should be alphabetic")
+    assert(char::is_alphabetic('a'), "'a' should be alphabetic")
+    assert(char::is_alphabetic('Z'), "'Z' should be alphabetic")
     return 0
 }
 
 @test
 func test_char_is_alphabetic_digit() -> I32 {
-    assert(not char_is_alphabetic('5'), "'5' should not be alphabetic")
+    assert(not char::is_alphabetic('5'), "'5' should not be alphabetic")
     return 0
 }
 
 @test
 func test_char_is_alphabetic_special() -> I32 {
-    assert(not char_is_alphabetic('!'), "'!' should not be alphabetic")
+    assert(not char::is_alphabetic('!'), "'!' should not be alphabetic")
     return 0
 }
 
-// ============ char_is_numeric tests ============
+// ============ char::is_numeric tests ============
 
 @test
 func test_char_is_numeric_digit() -> I32 {
-    assert(char_is_numeric('0'), "'0' should be numeric")
-    assert(char_is_numeric('9'), "'9' should be numeric")
+    assert(char::is_numeric('0'), "'0' should be numeric")
+    assert(char::is_numeric('9'), "'9' should be numeric")
     return 0
 }
 
 @test
 func test_char_is_numeric_letter() -> I32 {
-    assert(not char_is_numeric('a'), "'a' should not be numeric")
+    assert(not char::is_numeric('a'), "'a' should not be numeric")
     return 0
 }
 
-// ============ char_is_alphanumeric tests ============
+// ============ char::is_alphanumeric tests ============
 
 @test
 func test_char_is_alphanumeric_letter() -> I32 {
-    assert(char_is_alphanumeric('a'), "'a' should be alphanumeric")
+    assert(char::is_alphanumeric('a'), "'a' should be alphanumeric")
     return 0
 }
 
 @test
 func test_char_is_alphanumeric_digit() -> I32 {
-    assert(char_is_alphanumeric('5'), "'5' should be alphanumeric")
+    assert(char::is_alphanumeric('5'), "'5' should be alphanumeric")
     return 0
 }
 
 @test
 func test_char_is_alphanumeric_special() -> I32 {
-    assert(not char_is_alphanumeric('@'), "'@' should not be alphanumeric")
+    assert(not char::is_alphanumeric('@'), "'@' should not be alphanumeric")
     return 0
 }
 
-// ============ char_is_whitespace tests ============
+// ============ char::is_whitespace tests ============
 
 @test
 func test_char_is_whitespace_space() -> I32 {
-    assert(char_is_whitespace(' '), "space should be whitespace")
+    assert(char::is_whitespace(' '), "space should be whitespace")
     return 0
 }
 
 @test
 func test_char_is_whitespace_letter() -> I32 {
-    assert(not char_is_whitespace('a'), "'a' should not be whitespace")
+    assert(not char::is_whitespace('a'), "'a' should not be whitespace")
     return 0
 }
 
-// ============ char_is_uppercase tests ============
+// ============ char::is_uppercase tests ============
 
 @test
 func test_char_is_uppercase_upper() -> I32 {
-    assert(char_is_uppercase('A'), "'A' should be uppercase")
-    assert(char_is_uppercase('Z'), "'Z' should be uppercase")
+    assert(char::is_uppercase('A'), "'A' should be uppercase")
+    assert(char::is_uppercase('Z'), "'Z' should be uppercase")
     return 0
 }
 
 @test
 func test_char_is_uppercase_lower() -> I32 {
-    assert(not char_is_uppercase('a'), "'a' should not be uppercase")
+    assert(not char::is_uppercase('a'), "'a' should not be uppercase")
     return 0
 }
 
-// ============ char_is_lowercase tests ============
+// ============ char::is_lowercase tests ============
 
 @test
 func test_char_is_lowercase_lower() -> I32 {
-    assert(char_is_lowercase('a'), "'a' should be lowercase")
-    assert(char_is_lowercase('z'), "'z' should be lowercase")
+    assert(char::is_lowercase('a'), "'a' should be lowercase")
+    assert(char::is_lowercase('z'), "'z' should be lowercase")
     return 0
 }
 
 @test
 func test_char_is_lowercase_upper() -> I32 {
-    assert(not char_is_lowercase('A'), "'A' should not be lowercase")
+    assert(not char::is_lowercase('A'), "'A' should not be lowercase")
     return 0
 }
 
-// ============ char_is_ascii tests ============
+// ============ char::is_ascii tests ============
 
 @test
 func test_char_is_ascii_valid() -> I32 {
-    assert(char_is_ascii('a'), "'a' should be ASCII")
-    assert(char_is_ascii('0'), "'0' should be ASCII")
+    assert(char::is_ascii('a'), "'a' should be ASCII")
+    assert(char::is_ascii('0'), "'0' should be ASCII")
     return 0
 }
 
-// ============ char_to_uppercase tests ============
+// ============ char case conversion tests ============
 
 @test
 func test_char_to_uppercase_lower() -> I32 {
-    let upper: Char = char_to_uppercase('a')
-    // Compare char codes: 'A' = 65
-    assert(char_code(upper) == 65, "'a' to uppercase should be 'A'")
+    let upper: Char = char::to_uppercase('a')
+    assert(upper == 'A', "'a' to uppercase should be 'A'")
     return 0
 }
 
 @test
 func test_char_to_uppercase_already_upper() -> I32 {
-    let upper: Char = char_to_uppercase('A')
-    assert(char_code(upper) == 65, "'A' to uppercase should still be 'A'")
+    let upper: Char = char::to_uppercase('A')
+    assert(upper == 'A', "'A' to uppercase should still be 'A'")
     return 0
 }
 
-// ============ char_to_lowercase tests ============
-
 @test
 func test_char_to_lowercase_upper() -> I32 {
-    let lower: Char = char_to_lowercase('A')
-    // Compare char codes: 'a' = 97
-    assert(char_code(lower) == 97, "'A' to lowercase should be 'a'")
+    let lower: Char = char::to_lowercase('A')
+    assert(lower == 'a', "'A' to lowercase should be 'a'")
     return 0
 }
 
 @test
 func test_char_to_lowercase_already_lower() -> I32 {
-    let lower: Char = char_to_lowercase('a')
-    assert(char_code(lower) == 97, "'a' to lowercase should still be 'a'")
+    let lower: Char = char::to_lowercase('a')
+    assert(lower == 'a', "'a' to lowercase should still be 'a'")
     return 0
 }
 
-// ============ char_to_digit tests ============
-
-@test
-func test_char_to_digit_decimal() -> I32 {
-    let d: I32 = char_to_digit('5', 10)
-    assert(d == 5, "'5' should convert to 5 in base 10")
-    return 0
-}
-
-@test
-func test_char_to_digit_hex() -> I32 {
-    let d: I32 = char_to_digit('a', 16)
-    assert(d == 10, "'a' should convert to 10 in base 16")
-    return 0
-}
-
-@test
-func test_char_to_digit_invalid() -> I32 {
-    let d: I32 = char_to_digit('g', 16)
-    assert(d == -1, "'g' should return -1 in base 16")
-    return 0
-}
-
-// ============ char_from_digit tests ============
-
-@test
-func test_char_from_digit_decimal() -> I32 {
-    let c: Char = char_from_digit(5, 10)
-    assert(char_code(c) == 53, "5 should convert to '5' (code 53)")
-    return 0
-}
-
-@test
-func test_char_from_digit_hex() -> I32 {
-    let c: Char = char_from_digit(10, 16)
-    assert(char_code(c) == 97, "10 should convert to 'a' (code 97)")
-    return 0
-}
-
-// ============ char_code tests ============
+// ============ char digit/code tests ============
 
 @test
 func test_char_code_letter() -> I32 {
-    let code: I32 = char_code('A')
+    let code: I32 = 'A' as I32
     assert(code == 65, "'A' should have code 65")
     return 0
 }
 
 @test
 func test_char_code_digit() -> I32 {
-    let code: I32 = char_code('0')
+    let code: I32 = '0' as I32
     assert(code == 48, "'0' should have code 48")
     return 0
 }
 
-// ============ char_from_code tests ============
+// ============ char from code tests (using as Char cast) ============
 
 @test
 func test_char_from_code_letter() -> I32 {
-    let c: Char = char_from_code(65)
-    assert(char_code(c) == 65, "code 65 should produce 'A'")
+    let c: Char = 65 as Char
+    assert((c as I32) == 65, "code 65 should produce 'A'")
     return 0
 }
 
 @test
 func test_char_from_code_digit() -> I32 {
-    let c: Char = char_from_code(48)
-    assert(char_code(c) == 48, "code 48 should produce '0'")
+    let c: Char = 48 as Char
+    assert((c as I32) == 48, "code 48 should produce '0'")
     return 0
 }

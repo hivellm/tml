@@ -213,10 +213,16 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
     // std::collections::List.  When List was C-backed this was fine (runtime
     // provided @list_len etc.), but now that List is pure TML the codegen needs
     // the module's source code and function signatures.
+    // Similarly, core::str and core::char contain `impl Str` and `impl Char`
+    // blocks whose methods are called via method dispatch on primitive types
+    // (e.g., "hello".contains("h")).  These must always be available even when
+    // the user code doesn't explicitly import them.
     {
         static const std::vector<std::string> essential_library_modules = {
             "std::collections::List",
             "std::collections::buffer",
+            "core::str",
+            "core::hash",
         };
         for (const auto& mod_path : essential_library_modules) {
             if (registry->has_module(mod_path))
@@ -499,6 +505,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     "core::types",
                     "core::ops",
                     "core::ops::arith",
+                    "core::str",
                     "std::collections::List",
                     "std::collections::buffer",
                 };

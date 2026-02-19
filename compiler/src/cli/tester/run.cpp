@@ -254,6 +254,9 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.check_leaks = false;
         } else if (arg == "--profile") {
             opts.profile = true;
+        } else if (arg.starts_with("--log=")) {
+            opts.log_path = arg.substr(6);
+            opts.verbose = true; // Implicitly enable verbose when log path is set
         } else if (arg == "--suite") {
             opts.suite_mode = true; // Use suite-based DLL compilation (default)
         } else if (arg == "--no-suite") {
@@ -333,13 +336,19 @@ int run_test(int argc, char* argv[], bool verbose) {
     tml::CompilerOptions::check_leaks = opts.check_leaks;
 
     // When --verbose is active, add a filtered JSON file sink to the logger
-    // so test log output goes to build/debug/test_log.json.
+    // so test log output goes to build/debug/test_log.json (or --log=<path>).
     // Only "test" and "build" modules at INFO+ are written to avoid bloating
     // the file with compiler DEBUG spam (234k+ entries, 26MB+).
     if (opts.verbose) {
-        fs::path log_dir = fs::path("build") / "debug";
-        fs::create_directories(log_dir);
-        fs::path log_path = log_dir / "test_log.json";
+        fs::path log_path;
+        if (!opts.log_path.empty()) {
+            log_path = fs::path(opts.log_path);
+            fs::create_directories(log_path.parent_path());
+        } else {
+            fs::path log_dir = fs::path("build") / "debug";
+            fs::create_directories(log_dir);
+            log_path = log_dir / "test_log.json";
+        }
 
         // Filtered sink: wraps a FileSink and only writes test/build module messages
         class TestLogSink : public tml::log::LogSink {
@@ -556,7 +565,8 @@ int run_test(int argc, char* argv[], bool verbose) {
     // Flush log file and notify user
     if (opts.verbose) {
         tml::log::Logger::instance().flush();
-        fs::path log_path = fs::path("build") / "debug" / "test_log.json";
+        fs::path log_path = !opts.log_path.empty() ? fs::path(opts.log_path)
+                                                   : fs::path("build") / "debug" / "test_log.json";
         TML_LOG_INFO("test", c.dim() << "Test log: " << c.reset() << log_path.string());
     }
 
