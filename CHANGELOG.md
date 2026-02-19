@@ -245,6 +245,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - TML sync/thread modules now use `@extern` FFI exclusively — no compiler codegen mediation
   - Net: -575 lines of C++ code removed
 
+- **Phase 24b: String.c Dead Code Removal** (2026-02-19) - Remove ~720 lines of dead C functions from string.c
+  - Removed 18 dead declares from `runtime.cpp` (str_find, str_rfind, str_replace, str_split, str_chars, str_lines, str_join, str_repeat, str_parse_i64/i32/f64, str_trim_start/end, str_replace_first, str_concat/3/4)
+  - Removed ~720 lines of dead C functions: char_is_* (8), char_to_X/char_from_X (6), strbuilder_* (9), str_split, str_chars, str_lines, str_join, str_find, str_rfind, str_replace, str_replace_first, str_repeat, str_parse_i64/i32/f64, str_trim_start/end, str_concat (legacy)/3/4, str_as_bytes kept (used by lowlevel)
+  - String.c reduced from 1,202 lines to ~490 lines (59% reduction)
+  - Broke string.c → collections.c dependency (string.c no longer uses list_* functions)
+  - All 1,858 tests pass: str (241), fmt (404), crypto (476), sync (699), thread (38)
+
 - **Phase 23: Float Math → LLVM Intrinsics** (2026-02-19) - Migrate 16 float math C calls to LLVM intrinsics
   - `sqrt`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `pow`, `ceil`, `floor`, `round`, `trunc`, `fabs`, `copysign`, `fma` → direct `@llvm.*` intrinsics
   - Removed 16 float declares from `runtime.cpp`

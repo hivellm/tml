@@ -1,6 +1,6 @@
 # Tasks: Migrate C Runtime Pure Algorithms to TML
 
-**Status**: In Progress (Phases 0-7, 16, 17, 18, 19, 20, 21, 22, 23 complete; Phases 24-30 planned — full runtime.cpp audit done: 287→201→68 declares target)
+**Status**: In Progress (Phases 0-7, 16-24, 24b complete; Phases 25-30 planned — full runtime.cpp audit done: 287→201→68 declares target)
 
 **Scope**: ~287 runtime.cpp declares to minimize → ~68 essential; 15 dead declares to remove (Phase 17) + ~204 to migrate (Phases 18-26)
 
@@ -619,6 +619,40 @@ The search module is already following the three-tier rule correctly:
 
 ---
 
+## Phase 24b: String.c Dead Code Removal — DONE
+
+> **Source**: `compiler/runtime/text/string.c` — 1,202 lines → ~490 lines
+> **Goal**: Remove dead C functions whose TML equivalents exist in str.tml, break string.c→collections.c dependency
+> **Impact**: -18 declares from runtime.cpp, -720 lines from string.c
+
+### 24b.1 Remove dead declares from runtime.cpp
+
+- [x] 24b.1.1 Remove 18 dead string declares (str_concat/3/4, str_trim_start/end, str_find/rfind, str_parse_i64/i32/f64, str_replace/first, str_split/whitespace, str_lines/chars, str_repeat, str_join)
+
+### 24b.2 Remove dead functions from string.c
+
+- [x] 24b.2.1 Remove str_split, str_chars, str_split_whitespace, str_lines, str_join (list_*-dependent)
+- [x] 24b.2.2 Remove str_find, str_rfind, str_replace, str_replace_first, str_repeat
+- [x] 24b.2.3 Remove str_parse_i32, str_parse_i64, str_parse_f64
+- [x] 24b.2.4 Remove str_trim_start, str_trim_end
+- [x] 24b.2.5 Remove str_concat (legacy), str_concat_3, str_concat_4
+- [x] 24b.2.6 Remove char_is_* (8 functions), char_to_*/char_from_* (6 functions), char_code, char_from_code
+- [x] 24b.2.7 Remove strbuilder_* (9 functions) + StringBuilder typedef
+- [x] 24b.2.8 Remove static buffers: str_buffer2, str_repeat_buffer, str_join_buffer
+- [x] 24b.2.9 Remove extern TmlList* forward declarations
+- [x] 24b.2.10 Keep str_as_bytes (used by Str::as_bytes() lowlevel block in str.tml)
+
+### 24b.3 Verify
+
+- [x] 24b.3.1 Rebuild compiler — success
+- [x] 24b.3.2 str tests: 241 passed, 0 failed (20 files)
+- [x] 24b.3.3 fmt tests: 404 passed, 0 failed (32 files)
+- [x] 24b.3.4 crypto tests: 476 passed, 0 failed (20 files)
+- [x] 24b.3.5 sync tests: 699 passed, 0 failed (54 files)
+- [x] 24b.3.6 thread tests: 38 passed, 0 failed (2 files)
+
+---
+
 ## Phase 25: Migrate Time/Pool/Print Codegen to @extern FFI
 
 > **Source**: `builtins/time.cpp` emits 10 hardcoded time_* calls
@@ -797,6 +831,7 @@ TOTAL: ~68 declarations (down from ~287)
 | 22 | Text type | -51 declares | **DONE** |
 | 23 | Float math → LLVM intrinsics | -16 declares | **DONE** |
 | 24 | Sync/threading → @extern | -23 declares | **DONE** |
+| 24b | String.c dead code removal | -18 declares, -720 lines C | **DONE** |
 | 25 | Time/pool/print → @extern | -20 declares | TODO |
 | 26 | On-demand emit | remaining | TODO |
 | 27-30 | Cleanup, type system, benchmarks | — | TODO |

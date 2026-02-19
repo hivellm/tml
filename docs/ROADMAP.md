@@ -36,7 +36,7 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | Modules at 100% coverage | 73 |
 | Modules at 0% coverage | 31 |
 | C++ compiler size | ~238,000 lines |
-| C runtime to migrate | ~700 lines remaining (of ~5,210 original; 4,500+ migrated — str.tml done) |
+| C runtime to migrate | ~490 lines remaining in string.c (of ~5,210 original; string.c cleaned from 1,202→490 lines) |
 | Hardcoded codegen dispatch | ~350 lines remaining (of ~3,300 original; collections + File/Path done) |
 | TML standard library | ~137,300 lines |
 
@@ -604,6 +604,14 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 - [x] 4.14.4 Remove 23 declares from runtime.cpp (5 thread + 8 channel + 5 mutex + 5 waitgroup)
 - [x] 4.14.5 Add typed atomic @extern declarations to core::sync.tml module
 - [x] 4.14.6 Verify all sync/thread/alloc tests pass
+
+### 4.14b String.c dead code removal — DONE
+
+- [x] 4.14b.1 Remove 18 dead declares from runtime.cpp (str_concat/3/4, str_trim_start/end, str_find/rfind, str_parse_*, str_replace/first, str_split/whitespace, str_lines/chars, str_repeat, str_join)
+- [x] 4.14b.2 Remove ~720 lines of dead C functions from string.c (str_split, str_chars, str_lines, str_join, str_find, str_rfind, str_replace, str_replace_first, str_repeat, str_parse_*, str_trim_start/end, str_concat legacy/3/4, char_is_* x8, char_to_* x6, strbuilder_* x9, static buffers)
+- [x] 4.14b.3 String.c reduced from 1,202 lines to ~490 lines (only active functions remain)
+- [x] 4.14b.4 Broke string.c→collections.c dependency (no more list_* calls from string.c)
+- [x] 4.14b.5 All tests pass: str (241), fmt (404), crypto (476), sync (699), thread (38)
 
 ### 4.15 Time/pool → @extern FFI (Phase 25) — TODO
 

@@ -338,14 +338,15 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("");
 
     // String utilities (matches runtime/string.c)
+    // Dead declares removed: str_concat, str_concat_3, str_concat_4, str_trim_start,
+    // str_trim_end, str_find, str_rfind, str_parse_i64, str_replace, str_replace_first,
+    // str_split, str_split_whitespace, str_lines, str_chars, str_repeat, str_parse_i32,
+    // str_parse_f64, str_join — all migrated to pure TML in str.tml
     emit_line("; String utilities");
     emit_line("declare i32 @str_len(ptr)");
     emit_line("declare i32 @str_eq(ptr, ptr)");
     emit_line("declare i32 @str_hash(ptr)");
-    emit_line("declare ptr @str_concat(ptr, ptr)");
-    emit_line("declare ptr @str_concat_opt(ptr, ptr)");         // O(1) amortized
-    emit_line("declare ptr @str_concat_3(ptr, ptr, ptr)");      // Fused 3-string concat
-    emit_line("declare ptr @str_concat_4(ptr, ptr, ptr, ptr)"); // Fused 4-string concat
+    emit_line("declare ptr @str_concat_opt(ptr, ptr)"); // O(1) amortized
     emit_line("declare ptr @str_substring(ptr, i32, i32)");
     emit_line("declare ptr @str_slice(ptr, i64, i64)");
     emit_line("declare i32 @str_contains(ptr, ptr)");
@@ -354,23 +355,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @str_to_upper(ptr)");
     emit_line("declare ptr @str_to_lower(ptr)");
     emit_line("declare ptr @str_trim(ptr)");
-    emit_line("declare ptr @str_trim_start(ptr)");
-    emit_line("declare ptr @str_trim_end(ptr)");
     emit_line("declare i32 @str_char_at(ptr, i32)");
-    emit_line("declare i64 @str_find(ptr, ptr)");
-    emit_line("declare i64 @str_rfind(ptr, ptr)");
-    emit_line("declare i64 @str_parse_i64(ptr)");
-    emit_line("declare ptr @str_replace(ptr, ptr, ptr)");
-    emit_line("declare ptr @str_replace_first(ptr, ptr, ptr)");
-    emit_line("declare ptr @str_split(ptr, ptr)");
-    emit_line("declare ptr @str_split_whitespace(ptr)");
-    emit_line("declare ptr @str_lines(ptr)");
-    emit_line("declare ptr @str_chars(ptr)");
-    emit_line("declare ptr @str_repeat(ptr, i32)");
-    emit_line("declare i32 @str_parse_i32(ptr)");
-    emit_line("declare double @str_parse_f64(ptr)");
-    emit_line("declare ptr @str_join(ptr, ptr)");
-    emit_line("declare ptr @str_as_bytes(ptr)");
+    emit_line("declare ptr @str_as_bytes(ptr)"); // used by Str::as_bytes() lowlevel
     emit_line("declare ptr @i64_to_str(i64)");
     emit_line("declare ptr @f64_to_str(double)");
     emit_line("");
