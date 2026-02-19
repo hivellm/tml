@@ -89,10 +89,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("");
 
     // Panic catching for @should_panic tests
-    // Uses a callback approach: pass function pointer to tml_run_should_panic()
     emit_line("; Panic catching (for @should_panic tests)");
     emit_line("declare i32 @tml_run_should_panic(ptr)");
-    emit_line("declare ptr @tml_get_panic_message()");
     emit_line("declare i32 @tml_panic_message_contains(ptr)");
     emit_line("");
 
@@ -101,9 +99,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @tml_enable_backtrace_on_panic()");
     emit_line("");
 
-    // Note: TML test assertions are now provided by the test module's TML code
-    // They call panic() internally and don't need external declarations
-    emit_line("");
+    // Note: TML test assertions are in the test module's TML code (call panic() internally)
 
     // TML code coverage functions (only when coverage is enabled)
     if (options_.coverage_enabled) {
@@ -148,12 +144,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture) nounwind");
     emit_line("");
 
-    // Threading runtime — REMOVED (Phase 24)
-    // thread_spawn, thread_join, thread_yield, thread_sleep, thread_id
-    // migrated to @extern("tml_thread_*") FFI in std::thread::mod.tml
-    emit_line("");
-
-    // I/O functions - all check output suppression flag
+    // I/O functions
     emit_line("; I/O functions (check output suppression)");
     emit_line("declare void @print(ptr)");
     emit_line("declare void @println(ptr)");
@@ -163,11 +154,6 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @print_bool(i32)");
     emit_line("");
 
-    // NOTE: Math functions moved to core::math module
-    // Import with: use core::math
-
-    // NOTE: Assertion functions moved to test module
-    // Import with: use test
     emit_line("; Black box (prevent optimization)");
     emit_line("declare i32 @black_box_i32(i32)");
     emit_line("declare i64 @black_box_i64(i64)");
@@ -190,10 +176,6 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @f32_to_string_precision(float, i64)");
     emit_line("declare ptr @f64_to_exp_string(double, i32)");
     emit_line("declare ptr @f32_to_exp_string(float, i32)");
-    // f32/f64_is_nan, f32/f64_is_infinite — REMOVED (Phase 27)
-    // Replaced by pure LLVM IR (fcmp uno / fabs+fcmp) in string.cpp
-    // float_abs, float_sqrt, float_pow, float_round, float_floor, float_ceil,
-    // int_to_float, float_to_int — replaced with LLVM intrinsics/instructions in math.cpp
     emit_line("");
 
     // Integer to string conversion
@@ -211,39 +193,13 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @i64_to_upper_hex_str(i64)");
     emit_line("");
 
-    // abs functions removed — abs_i32 is pure TML in core::num::integer, abs_f64 never called
-    emit_line("");
-
-    // float32_bits, float32_from_bits, float64_bits, float64_from_bits
-    // — replaced with inline LLVM bitcast in math.cpp
-    emit_line("");
-
-    // infinity, nan, is_inf, is_nan — replaced with inline LLVM constants + fcmp in math.cpp
-    emit_line("");
-
-    // Nextafter runtime declarations
+    // Nextafter runtime
     emit_line("; Nextafter runtime");
     emit_line("declare double @nextafter(double, double)");
     emit_line("declare float @nextafter32(float, float)");
     emit_line("");
 
-    // Channel runtime — REMOVED (Phase 24)
-    // channel_create/send/recv/try_send/try_recv/close/destroy/len
-    // Library uses Mutex+Condvar MPSC pattern, not Go-style channels
-
-    // Mutex runtime — REMOVED (Phase 24)
-    // mutex_create/lock/unlock/try_lock/destroy
-    // migrated to @extern("tml_mutex_*") FFI in std::sync::mutex.tml
-
-    // WaitGroup runtime — REMOVED (Phase 24)
-    // waitgroup_create/add/done/wait/destroy
-    // No WaitGroup primitive in TML library; use other sync patterns
-    emit_line("");
-
-    // Typed atomic operations — declared at module level for correct IR placement.
-    // Codegen emitters and FuncSig registrations removed (Phase 24).
-    // TML code uses @extern in core::sync.tml; these ensure declarations appear at module scope
-    // and declared_externals_ prevents duplicate declarations from @extern.
+    // Typed atomic operations — declared for core::sync.tml @extern compatibility
     emit_line("; Typed atomic operations runtime");
     emit_line("declare i32 @atomic_fetch_add_i32(ptr, i32)");
     declared_externals_.insert("atomic_fetch_add_i32");
@@ -336,10 +292,6 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("");
 
     // String utilities (matches runtime/string.c)
-    // Dead declares removed: str_concat, str_concat_3, str_concat_4, str_trim_start,
-    // str_trim_end, str_find, str_rfind, str_parse_i64, str_replace, str_replace_first,
-    // str_split, str_split_whitespace, str_lines, str_chars, str_repeat, str_parse_i32,
-    // str_parse_f64, str_join — all migrated to pure TML in str.tml
     emit_line("; String utilities");
     emit_line("declare i32 @str_len(ptr)");
     emit_line("declare i32 @str_eq(ptr, ptr)");
@@ -359,9 +311,6 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @f64_to_str(double)");
     emit_line("");
 
-    // Char/UTF-8 to string — REMOVED (Phase 18.2)
-    // char_to_string, utf8_2byte/3byte/4byte_to_string migrated to pure TML
-    // using mem_alloc + ptr_write in char/methods.tml and char/decode.tml
     emit_line("declare i64 @tml_random_seed()");
     emit_line("");
 
@@ -402,14 +351,6 @@ void LLVMIRGen::emit_runtime_decls() {
         FuncInfo{"@f64_to_exp_string", "ptr (double, i32)", "ptr", {"double", "i32"}};
     functions_["f32_to_exp_string"] =
         FuncInfo{"@f32_to_exp_string", "ptr (float, i32)", "ptr", {"float", "i32"}};
-    // f32/f64_is_nan, f32/f64_is_infinite — REMOVED (Phase 27)
-    // Now pure LLVM IR in string.cpp + pure TML in fmt/float.tml
-
-    // Text type: now pure TML — all tml_text_* C runtime functions removed
-
-    // Time functions: Phase 25 — migrated to @extern FFI in std::time.tml
-    // Removed 10 declares: time_ms, time_us, time_ns, sleep_ms, sleep_us,
-    // elapsed_ms, elapsed_us, elapsed_ns, instant_now, instant_elapsed
 
     // Memory functions (matches runtime/mem.c)
     emit_line("; Memory functions");
@@ -429,22 +370,13 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("; Object pool functions");
     emit_line("declare ptr @pool_acquire(ptr, i64)");
     emit_line("declare void @pool_release(ptr, ptr)");
-    emit_line("declare void @pool_init(ptr, i64, i64)");
-    emit_line("declare void @pool_destroy(ptr)");
-    emit_line("declare i64 @pool_count(ptr)");
-    emit_line("declare i64 @pool_capacity(ptr)");
     emit_line("");
 
     // Thread-local pool functions (for @pool(thread_local: true) classes)
     emit_line("; Thread-local pool functions");
     emit_line("declare ptr @tls_pool_acquire(ptr, i64)");
     emit_line("declare void @tls_pool_release(ptr, ptr, i64)");
-    emit_line("declare void @tls_pools_cleanup()");
-    emit_line("declare i32 @tls_pool_stats(ptr, ptr, ptr)");
     emit_line("");
-
-    // Network socket and TLS declarations removed — now handled by @extern in
-    // std::net::sys, std::net::tls, and emit_module_lowlevel_decls()
 
     // Format strings for print/println
     // Size calculation: count actual bytes (each escape like \0A = 1 byte, not 3)
