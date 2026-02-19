@@ -666,14 +666,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including time runtime: " << time_obj);
             }
 
-            // concurrency/ - async.c
-            fs::path async_c = runtime_dir / "concurrency" / "async.c";
-            if (fs::exists(async_c)) {
-                std::string async_obj = ensure_c_compiled(to_forward_slashes(async_c.string()),
-                                                          deps_cache, clang, verbose);
-                objects.push_back(fs::path(async_obj));
-                TML_LOG_DEBUG("build", "Including async runtime: " << async_obj);
-            }
+            // async.c removed — async executor dead code (Phase 30)
 
             // math/ - math.c
             fs::path math_c = runtime_dir / "math" / "math.c";
@@ -684,14 +677,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including math runtime: " << math_obj);
             }
 
-            // text/ - text.c
-            fs::path text_c = runtime_dir / "text" / "text.c";
-            if (fs::exists(text_c)) {
-                std::string text_obj = ensure_c_compiled(to_forward_slashes(text_c.string()),
-                                                         deps_cache, clang, verbose);
-                objects.push_back(fs::path(text_obj));
-                TML_LOG_DEBUG("build", "Including text runtime: " << text_obj);
-            }
+            // text.c removed — Text migrated to pure TML (Phase 30)
 
             // net/ - net.c (included by default for std::net)
             fs::path net_c = runtime_dir / "net" / "net.c";
@@ -729,14 +715,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including sync runtime: " << sync_obj);
             }
 
-            // concurrency/ - thread.c
-            fs::path thread_c = runtime_dir / "concurrency" / "thread.c";
-            if (fs::exists(thread_c)) {
-                std::string thread_obj = ensure_c_compiled(to_forward_slashes(thread_c.string()),
-                                                           deps_cache, clang, verbose);
-                objects.push_back(fs::path(thread_obj));
-                TML_LOG_DEBUG("build", "Including thread runtime: " << thread_obj);
-            }
+            // thread.c removed — replaced by sync.c (Phase 30)
 
             // crypto/ - crypto.c, crypto_key.c, crypto_x509.c, etc.
             // Only include crypto runtime objects when the program actually uses
@@ -911,18 +890,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             "std::glob");
     }
 
-    // Link std::text runtime if imported (Text type with SSO)
-    // Skip if using precompiled tml_runtime.lib which already includes text.c
-    if (registry->has_module("std::text") && !use_precompiled) {
-        add_runtime(
-            {
-                "compiler/runtime/text/text.c",
-                "runtime/text/text.c",
-                "../runtime/text/text.c",
-                "F:/Node/hivellm/tml/compiler/runtime/text/text.c",
-            },
-            "std::text");
-    }
+    // text.c removed — Text migrated to pure TML (Phase 22/30)
 
     // Note: net.c is now included by default (see above), so no conditional linking needed
 

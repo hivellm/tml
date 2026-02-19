@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Suite-Level Test Filtering** (2026-02-19) - `--suite=` CLI flag and MCP `suite` parameter for targeted test execution
+  - `tml test --suite=core/str` runs only `core::str` test suites (maps to `lib/core/tests/str/`)
+  - `tml test --list-suites` shows all available suite groups with file/test counts
+  - MCP `test` tool gains `suite` parameter (e.g., `suite="std/json"`)
+  - Suite name mapping: `core/str` → `lib/core/tests/str/`, `std/json` → `lib/std/tests/json/`
+  - New skills: `/test-suite`, `/list-suites`, `/verify`
+
+### Fixed
+- **`@tml_Str_len` undefined in suite mode** (2026-02-19) - Root cause: `method_primitive_ext.cpp` was adding method names to `generated_functions_` during call dispatch, causing `gen_impl_method()` to skip the actual definition in `library_ir_only` mode (shared library compilation). The fix removes the premature `generated_functions_.insert()` from the dispatch path — definitions are only registered by `gen_impl_method()` after the actual `define` is emitted.
+
+### Changed
+- **Phase 30: Dead C file cleanup + runtime audit** (2026-02-19) — Deleted 6 dead C runtime files (2,661 lines) from disk
+  - `text.c` (1,059 lines), `thread.c` (519), `async.c` (952), `io.c` (67), `profile_runtime.c` (54), `lib/std/runtime/collections.c` (10)
+  - Cleaned 3 dead compile blocks from `helpers.cpp` fallback build path
+  - Audited 18 compiled C runtime files: 14 essential FFI (keep), 4 migration candidates (string.c, collections.c, math.c, search.c)
+- **Phase 29.1: Remove dead string FuncSig registrations** (2026-02-19) — Removed 29 dead `FuncSig` entries from `types/builtins/string.cpp`
+  - 12 string + 14 char + 3 char_to_string registrations were never queried by any compiler code path
+  - String ops use `try_gen_builtin_string()` inline codegen, not `functions_` map lookup
+  - Char ops already migrated to pure TML in `lib/core/src/char/methods.tml` (Phase 18.2)
+  - Removed `init_builtin_string()` call from `init_builtins()` in `register.cpp`
+  - Migrated 7 test files from bare `str_len()`/`str_eq()`/`str_hash()` calls to method syntax (`.len()`, `==`, `.hash()`)
+  - Hardcoded string type registrations: 29 → 0
+- **Phase 28: On-demand runtime declaration emission** (2026-02-19) — Runtime declares now emitted conditionally based on imports
+  - Atomic operations (9 declares) only emitted when `std::sync`/`std::thread` imported
+  - Logging runtime (11 declares + 12 function registrations) only emitted when `std::log` imported
+  - Glob utilities (5 declares + 5 function registrations) only emitted when `std::fs::glob` imported
+  - ~25 fewer declares for typical non-sync/non-log/non-glob programs
+  - Library mode (`library_ir_only`) conservatively emits all declares for suite compatibility
+  - Also removed 7 dead declares from previous phase (287→122→97 effective declares for simple programs)
+- **Phase 27: Float math → LLVM IR** (2026-02-19) — Replaced `isnan`/`isinf`/`isfinite` C runtime checks with native LLVM `fcmp` IR instructions
+- **Phase 26: Dead C file removal** (2026-02-19) — Removed `text.c`, `thread.c`, `async.c` from build (already migrated to TML/@extern)
+- **Phase 25: Time builtins → @extern FFI** (2026-02-19) — Migrated `sleep`, `monotonic_now`, `system_time` from hardcoded codegen to `@extern("c")` FFI
+
+### Added
 - **Claude Code Skills — 19 Slash Commands** (2026-02-18) - Project-level skills in `.claude/skills/`
   - Workflow skills: `/commit`, `/test`, `/build`, `/coverage`, `/slow-tests`, `/review-pr`
   - MCP tool wrappers: `/compile`, `/run`, `/check`, `/emit-ir`, `/emit-mir`, `/format`, `/lint`, `/docs`, `/explain`, `/structure`, `/affected-tests`, `/artifacts`, `/cache-invalidate`

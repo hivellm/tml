@@ -102,7 +102,7 @@ auto make_project_build_tool() -> Tool {
                 .parameters = {
                     {"mode", "string", "Build mode: \"debug\" (default) or \"release\"", false},
                     {"clean", "boolean", "Clean build directory first", false},
-                    {"tests", "boolean", "Build test executable (default: true)", false},
+                    {"tests", "boolean", "Build C++ test executable (default: false)", false},
                     {"target", "string",
                      "Build target: \"compiler\" (default, tml.exe only), \"all\", "
                      "\"mcp\" (tml_mcp.exe only). Defaults to \"compiler\" to avoid "
@@ -136,7 +136,7 @@ auto handle_project_build(const json::JsonValue& params) -> ToolResult {
         clean = clean_param->as_bool();
     }
 
-    bool build_tests = true;
+    bool build_tests = false;
     auto* tests_param = params.get("tests");
     if (tests_param != nullptr && tests_param->is_bool()) {
         build_tests = tests_param->as_bool();
@@ -183,8 +183,8 @@ auto handle_project_build(const json::JsonValue& params) -> ToolResult {
     if (clean) {
         cmd << " --clean";
     }
-    if (!build_tests) {
-        cmd << " --no-tests";
+    if (build_tests) {
+        cmd << " --tests";
     }
     if (!cmake_target.empty()) {
         cmd << " --target " << cmake_target;
@@ -208,8 +208,8 @@ auto handle_project_build(const json::JsonValue& params) -> ToolResult {
     if (clean) {
         cmd << " --clean";
     }
-    if (!build_tests) {
-        cmd << " --no-tests";
+    if (build_tests) {
+        cmd << " --tests";
     }
     if (!cmake_target.empty()) {
         cmd << " --target " << cmake_target;

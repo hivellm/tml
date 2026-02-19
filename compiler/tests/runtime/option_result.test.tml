@@ -112,10 +112,10 @@ func test_outcome_unwrap_or() {
 }
 
 func parse_positive(s: Str) -> Outcome[I32, Str] {
-    if str_eq(s, "42") then {
+    if s == "42" then {
         return Ok(42)
     }
-    if str_eq(s, "100") then {
+    if s == "100" then {
         return Ok(100)
     }
     return Err("invalid input")

@@ -31,6 +31,8 @@ tml test                    # Run all tests
 tml test file.tml          # Run tests in specific file
 tml test --verbose         # Show detailed output
 tml test --filter add      # Run tests matching "add"
+tml test --suite=core/str  # Run all tests in a module
+tml test --list-suites     # Show available suite groups
 ```
 
 ## Assertions

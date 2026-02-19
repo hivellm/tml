@@ -157,10 +157,14 @@ tml run --watch
 # All tests
 tml test
 
-# Filter
+# Filter by file path
 tml test add              # tests containing "add"
 tml test --filter "test_*"
-tml test --module math
+
+# Filter by suite/module
+tml test --suite=core/str         # all core::str tests
+tml test --suite=std/json         # all std::json tests
+tml test --list-suites            # show available suites
 
 # Parallel
 tml test --test-threads=4

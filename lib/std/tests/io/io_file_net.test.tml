@@ -24,7 +24,7 @@ func test_file_write_read_all() -> I32 {
 
     // Read
     let read_content: Str = File.read_all(path)
-    assert(str_eq(read_content, content), "read content should match written content")
+    assert(read_content == content, "read content should match written content")
 
     // Cleanup
     Path.remove(path)
@@ -39,7 +39,7 @@ func test_file_append() -> I32 {
     File.append_all(path, "Line 2\n")
 
     let content: Str = File.read_all(path)
-    assert(str_len(content) == 14, "appended content should have correct length")
+    assert(content.len() == 14, "appended content should have correct length")
 
     Path.remove(path)
     return 0

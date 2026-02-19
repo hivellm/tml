@@ -199,97 +199,133 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare float @nextafter32(float, float)");
     emit_line("");
 
-    // Typed atomic operations — declared for core::sync.tml @extern compatibility
-    emit_line("; Typed atomic operations runtime");
-    emit_line("declare i32 @atomic_fetch_add_i32(ptr, i32)");
-    declared_externals_.insert("atomic_fetch_add_i32");
-    emit_line("declare i32 @atomic_fetch_sub_i32(ptr, i32)");
-    declared_externals_.insert("atomic_fetch_sub_i32");
-    emit_line("declare i32 @atomic_load_i32(ptr)");
-    declared_externals_.insert("atomic_load_i32");
-    emit_line("declare void @atomic_store_i32(ptr, i32)");
-    declared_externals_.insert("atomic_store_i32");
-    emit_line("declare i32 @atomic_compare_exchange_i32(ptr, i32, i32)");
-    declared_externals_.insert("atomic_compare_exchange_i32");
-    emit_line("declare i32 @atomic_swap_i32(ptr, i32)");
-    declared_externals_.insert("atomic_swap_i32");
-    emit_line("declare void @atomic_fence()");
-    declared_externals_.insert("atomic_fence");
-    emit_line("declare void @atomic_fence_acquire()");
-    declared_externals_.insert("atomic_fence_acquire");
-    emit_line("declare void @atomic_fence_release()");
-    declared_externals_.insert("atomic_fence_release");
-    emit_line("");
+    // --- On-demand runtime declares ---
+    // Compute which optional categories are needed based on imports.
+    // In library_ir_only mode (shared library for test suites), emit everything
+    // because the shared lib is linked against multiple workers with varying imports.
+    bool needs_sync_atomics = options_.library_ir_only;
+    bool needs_logging = options_.library_ir_only;
+    bool needs_glob = options_.library_ir_only;
 
-    // Log runtime declarations (matches runtime/log.c)
-    emit_line("; Log runtime");
-    emit_line("declare void @rt_log_msg(i32, ptr, ptr)");
-    declared_externals_.insert("rt_log_msg");
-    emit_line("declare void @rt_log_set_level(i32)");
-    declared_externals_.insert("rt_log_set_level");
-    emit_line("declare i32 @rt_log_get_level()");
-    declared_externals_.insert("rt_log_get_level");
-    emit_line("declare i32 @rt_log_enabled(i32)");
-    declared_externals_.insert("rt_log_enabled");
-    emit_line("");
+    if (!options_.library_ir_only) {
+        const auto& imports = env_.all_imports();
+        for (const auto& [name, sym] : imports) {
+            const auto& path = sym.module_path;
+            if (!needs_sync_atomics &&
+                (path.find("std::sync") == 0 || path.find("std::thread") == 0 ||
+                 path.find("core::sync") == 0))
+                needs_sync_atomics = true;
+            if (!needs_logging && path.find("std::log") == 0)
+                needs_logging = true;
+            if (!needs_glob && (path.find("std::fs::glob") == 0 || path.find("std::glob") == 0))
+                needs_glob = true;
+            if (needs_sync_atomics && needs_logging && needs_glob)
+                break;
+        }
+    }
 
-    // Phase 4.4: Advanced log runtime declarations
-    emit_line("declare void @rt_log_set_filter(ptr)");
-    declared_externals_.insert("rt_log_set_filter");
-    emit_line("declare i32 @rt_log_module_enabled(i32, ptr)");
-    declared_externals_.insert("rt_log_module_enabled");
-    emit_line("declare void @rt_log_structured(i32, ptr, ptr, ptr)");
-    declared_externals_.insert("rt_log_structured");
-    emit_line("declare void @rt_log_set_format(i32)");
-    declared_externals_.insert("rt_log_set_format");
-    emit_line("declare i32 @rt_log_get_format()");
-    declared_externals_.insert("rt_log_get_format");
-    emit_line("declare i32 @rt_log_open_file(ptr)");
-    declared_externals_.insert("rt_log_open_file");
-    emit_line("declare void @rt_log_close_file()");
-    declared_externals_.insert("rt_log_close_file");
-    emit_line("declare i32 @rt_log_init_from_env()");
-    declared_externals_.insert("rt_log_init_from_env");
-    emit_line("");
+    // Typed atomic operations — only when sync/thread modules are imported
+    if (needs_sync_atomics) {
+        emit_line("; Typed atomic operations runtime");
+        emit_line("declare i32 @atomic_fetch_add_i32(ptr, i32)");
+        declared_externals_.insert("atomic_fetch_add_i32");
+        emit_line("declare i32 @atomic_fetch_sub_i32(ptr, i32)");
+        declared_externals_.insert("atomic_fetch_sub_i32");
+        emit_line("declare i32 @atomic_load_i32(ptr)");
+        declared_externals_.insert("atomic_load_i32");
+        emit_line("declare void @atomic_store_i32(ptr, i32)");
+        declared_externals_.insert("atomic_store_i32");
+        emit_line("declare i32 @atomic_compare_exchange_i32(ptr, i32, i32)");
+        declared_externals_.insert("atomic_compare_exchange_i32");
+        emit_line("declare i32 @atomic_swap_i32(ptr, i32)");
+        declared_externals_.insert("atomic_swap_i32");
+        emit_line("declare void @atomic_fence()");
+        declared_externals_.insert("atomic_fence");
+        emit_line("declare void @atomic_fence_acquire()");
+        declared_externals_.insert("atomic_fence_acquire");
+        emit_line("declare void @atomic_fence_release()");
+        declared_externals_.insert("atomic_fence_release");
+        emit_line("");
+    }
 
-    // Register log functions in functions_ map for lowlevel calls
-    functions_["rt_log_msg"] =
-        FuncInfo{"@rt_log_msg", "void (i32, ptr, ptr)", "void", {"i32", "ptr", "ptr"}};
-    functions_["rt_log_set_level"] = FuncInfo{"@rt_log_set_level", "void (i32)", "void", {"i32"}};
-    functions_["rt_log_get_level"] = FuncInfo{"@rt_log_get_level", "i32 ()", "i32", {}};
-    functions_["rt_log_enabled"] = FuncInfo{"@rt_log_enabled", "i32 (i32)", "i32", {"i32"}};
-    // Phase 4.4 function registrations
-    functions_["rt_log_set_filter"] = FuncInfo{"@rt_log_set_filter", "void (ptr)", "void", {"ptr"}};
-    functions_["rt_log_module_enabled"] =
-        FuncInfo{"@rt_log_module_enabled", "i32 (i32, ptr)", "i32", {"i32", "ptr"}};
-    functions_["rt_log_structured"] = FuncInfo{
-        "@rt_log_structured", "void (i32, ptr, ptr, ptr)", "void", {"i32", "ptr", "ptr", "ptr"}};
-    functions_["rt_log_set_format"] = FuncInfo{"@rt_log_set_format", "void (i32)", "void", {"i32"}};
-    functions_["rt_log_get_format"] = FuncInfo{"@rt_log_get_format", "i32 ()", "i32", {}};
-    functions_["rt_log_open_file"] = FuncInfo{"@rt_log_open_file", "i32 (ptr)", "i32", {"ptr"}};
-    functions_["rt_log_close_file"] = FuncInfo{"@rt_log_close_file", "void ()", "void", {}};
-    functions_["rt_log_init_from_env"] = FuncInfo{"@rt_log_init_from_env", "i32 ()", "i32", {}};
+    // Log runtime declarations — only when std::log is imported
+    if (needs_logging) {
+        emit_line("; Log runtime");
+        emit_line("declare void @rt_log_msg(i32, ptr, ptr)");
+        declared_externals_.insert("rt_log_msg");
+        emit_line("declare void @rt_log_set_level(i32)");
+        declared_externals_.insert("rt_log_set_level");
+        emit_line("declare i32 @rt_log_get_level()");
+        declared_externals_.insert("rt_log_get_level");
+        emit_line("declare i32 @rt_log_enabled(i32)");
+        declared_externals_.insert("rt_log_enabled");
+        emit_line("");
 
-    // Glob runtime declarations
-    emit_line("; Glob runtime");
-    emit_line("declare ptr @glob_match(ptr, ptr)");
-    declared_externals_.insert("glob_match");
-    emit_line("declare ptr @glob_result_next(ptr)");
-    declared_externals_.insert("glob_result_next");
-    emit_line("declare i64 @glob_result_count(ptr)");
-    declared_externals_.insert("glob_result_count");
-    emit_line("declare void @glob_result_free(ptr)");
-    declared_externals_.insert("glob_result_free");
-    emit_line("declare i1 @glob_pattern_matches(ptr, ptr)");
-    declared_externals_.insert("glob_pattern_matches");
+        emit_line("declare void @rt_log_set_filter(ptr)");
+        declared_externals_.insert("rt_log_set_filter");
+        emit_line("declare i32 @rt_log_module_enabled(i32, ptr)");
+        declared_externals_.insert("rt_log_module_enabled");
+        emit_line("declare void @rt_log_structured(i32, ptr, ptr, ptr)");
+        declared_externals_.insert("rt_log_structured");
+        emit_line("declare void @rt_log_set_format(i32)");
+        declared_externals_.insert("rt_log_set_format");
+        emit_line("declare i32 @rt_log_get_format()");
+        declared_externals_.insert("rt_log_get_format");
+        emit_line("declare i32 @rt_log_open_file(ptr)");
+        declared_externals_.insert("rt_log_open_file");
+        emit_line("declare void @rt_log_close_file()");
+        declared_externals_.insert("rt_log_close_file");
+        emit_line("declare i32 @rt_log_init_from_env()");
+        declared_externals_.insert("rt_log_init_from_env");
+        emit_line("");
 
-    functions_["glob_match"] = FuncInfo{"@glob_match", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
-    functions_["glob_result_next"] = FuncInfo{"@glob_result_next", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["glob_result_count"] = FuncInfo{"@glob_result_count", "i64 (ptr)", "i64", {"ptr"}};
-    functions_["glob_result_free"] = FuncInfo{"@glob_result_free", "void (ptr)", "void", {"ptr"}};
-    functions_["glob_pattern_matches"] =
-        FuncInfo{"@glob_pattern_matches", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
-    emit_line("");
+        // Register log functions in functions_ map for lowlevel calls
+        functions_["rt_log_msg"] =
+            FuncInfo{"@rt_log_msg", "void (i32, ptr, ptr)", "void", {"i32", "ptr", "ptr"}};
+        functions_["rt_log_set_level"] =
+            FuncInfo{"@rt_log_set_level", "void (i32)", "void", {"i32"}};
+        functions_["rt_log_get_level"] = FuncInfo{"@rt_log_get_level", "i32 ()", "i32", {}};
+        functions_["rt_log_enabled"] = FuncInfo{"@rt_log_enabled", "i32 (i32)", "i32", {"i32"}};
+        functions_["rt_log_set_filter"] =
+            FuncInfo{"@rt_log_set_filter", "void (ptr)", "void", {"ptr"}};
+        functions_["rt_log_module_enabled"] =
+            FuncInfo{"@rt_log_module_enabled", "i32 (i32, ptr)", "i32", {"i32", "ptr"}};
+        functions_["rt_log_structured"] = FuncInfo{"@rt_log_structured",
+                                                   "void (i32, ptr, ptr, ptr)",
+                                                   "void",
+                                                   {"i32", "ptr", "ptr", "ptr"}};
+        functions_["rt_log_set_format"] =
+            FuncInfo{"@rt_log_set_format", "void (i32)", "void", {"i32"}};
+        functions_["rt_log_get_format"] = FuncInfo{"@rt_log_get_format", "i32 ()", "i32", {}};
+        functions_["rt_log_open_file"] = FuncInfo{"@rt_log_open_file", "i32 (ptr)", "i32", {"ptr"}};
+        functions_["rt_log_close_file"] = FuncInfo{"@rt_log_close_file", "void ()", "void", {}};
+        functions_["rt_log_init_from_env"] = FuncInfo{"@rt_log_init_from_env", "i32 ()", "i32", {}};
+    }
+
+    // Glob runtime declarations — only when std::fs::glob is imported
+    if (needs_glob) {
+        emit_line("; Glob runtime");
+        emit_line("declare ptr @glob_match(ptr, ptr)");
+        declared_externals_.insert("glob_match");
+        emit_line("declare ptr @glob_result_next(ptr)");
+        declared_externals_.insert("glob_result_next");
+        emit_line("declare i64 @glob_result_count(ptr)");
+        declared_externals_.insert("glob_result_count");
+        emit_line("declare void @glob_result_free(ptr)");
+        declared_externals_.insert("glob_result_free");
+        emit_line("declare i1 @glob_pattern_matches(ptr, ptr)");
+        declared_externals_.insert("glob_pattern_matches");
+
+        functions_["glob_match"] = FuncInfo{"@glob_match", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
+        functions_["glob_result_next"] = FuncInfo{"@glob_result_next", "ptr (ptr)", "ptr", {"ptr"}};
+        functions_["glob_result_count"] =
+            FuncInfo{"@glob_result_count", "i64 (ptr)", "i64", {"ptr"}};
+        functions_["glob_result_free"] =
+            FuncInfo{"@glob_result_free", "void (ptr)", "void", {"ptr"}};
+        functions_["glob_pattern_matches"] =
+            FuncInfo{"@glob_pattern_matches", "i1 (ptr, ptr)", "i1", {"ptr", "ptr"}};
+        emit_line("");
+    }
 
     // String utilities (matches runtime/string.c)
     emit_line("; String utilities");

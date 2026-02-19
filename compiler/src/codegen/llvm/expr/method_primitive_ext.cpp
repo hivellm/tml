@@ -654,11 +654,14 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
 
         std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
 
-        // Register function so other codegen paths know it exists.
-        // The actual `declare` is provided by the library declarations
-        // (imported_func_decls from capture_library_state), so we don't need
-        // to emit one here. We just track it in generated_functions_.
-        generated_functions_.insert(fn_name);
+        // DO NOT add to generated_functions_ here. This dispatch path only
+        // emits a `call` — the actual `define` is emitted by gen_impl_method()
+        // during module scanning (eager mode) or emit_referenced_library_definitions()
+        // (lazy mode). Adding the name here would cause gen_impl_method() to skip
+        // the definition via its generated_functions_ check, resulting in an
+        // undefined symbol (e.g., @tml_Str_len in library_ir_only suite mode).
+        // The function signature is already registered in functions_ map by
+        // gen_impl_method()'s pre-registration at impl.cpp:265.
 
         std::string args_str;
         for (size_t i = 0; i < typed_args.size(); ++i) {

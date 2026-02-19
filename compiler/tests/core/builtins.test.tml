@@ -1,149 +1,133 @@
 use test
 use std::time::Instant
+use core::hash
 
 // ============================================================================
 // Comprehensive Builtin Function Tests
-// Tests print, str_len, str_eq, str_hash, time functions
+// Tests print, string methods, hash, time functions
+// Phase 29: Migrated from bare str_len/str_eq/str_hash builtins to methods
 // ============================================================================
 
 // ============================================================================
-// String Length (str_len)
+// String Length (.len() method)
 // ============================================================================
 
 @test
 func test_str_len_empty() -> I32 {
-    let len: I32 = str_len("")
-    assert_eq(len, 0, "empty string should have length 0")
+    assert_eq("".len(), 0, "empty string should have length 0")
     return 0
 }
 
 @test
 func test_str_len_single_char() -> I32 {
-    let len: I32 = str_len("x")
-    assert_eq(len, 1, "single char should have length 1")
+    assert_eq("x".len(), 1, "single char should have length 1")
     return 0
 }
 
 @test
 func test_str_len_word() -> I32 {
-    let len: I32 = str_len("hello")
-    assert_eq(len, 5, "hello should have length 5")
+    assert_eq("hello".len(), 5, "hello should have length 5")
     return 0
 }
 
 @test
 func test_str_len_sentence() -> I32 {
-    let len: I32 = str_len("Hello, World!")
-    assert_eq(len, 13, "Hello, World! should have length 13")
+    assert_eq("Hello, World!".len(), 13, "Hello, World! should have length 13")
     return 0
 }
 
 @test
 func test_str_len_with_spaces() -> I32 {
-    let len: I32 = str_len("   ")
-    assert_eq(len, 3, "three spaces should have length 3")
+    assert_eq("   ".len(), 3, "three spaces should have length 3")
     return 0
 }
 
 @test
 func test_str_len_numbers() -> I32 {
-    let len: I32 = str_len("12345")
-    assert_eq(len, 5, "12345 should have length 5")
+    assert_eq("12345".len(), 5, "12345 should have length 5")
     return 0
 }
 
 // ============================================================================
-// String Equality (str_eq)
+// String Equality (== operator)
 // ============================================================================
 
 @test
 func test_str_eq_identical() -> I32 {
-    let result: Bool = str_eq("hello", "hello")
-    assert_eq(result, true, "identical strings should be equal")
+    assert("hello" == "hello", "identical strings should be equal")
     return 0
 }
 
 @test
 func test_str_eq_different() -> I32 {
-    let result: Bool = str_eq("hello", "world")
-    assert_eq(result, false, "different strings should not be equal")
+    assert("hello" != "world", "different strings should not be equal")
     return 0
 }
 
 @test
 func test_str_eq_empty() -> I32 {
-    let result: Bool = str_eq("", "")
-    assert_eq(result, true, "two empty strings should be equal")
+    assert("" == "", "two empty strings should be equal")
     return 0
 }
 
 @test
 func test_str_eq_empty_vs_nonempty() -> I32 {
-    let result: Bool = str_eq("", "a")
-    assert_eq(result, false, "empty vs non-empty should not be equal")
+    assert("" != "a", "empty vs non-empty should not be equal")
     return 0
 }
 
 @test
 func test_str_eq_case_sensitive() -> I32 {
-    let result: Bool = str_eq("Hello", "hello")
-    assert_eq(result, false, "case should matter in comparison")
+    assert("Hello" != "hello", "case should matter in comparison")
     return 0
 }
 
 @test
 func test_str_eq_same_prefix() -> I32 {
-    let result: Bool = str_eq("hello", "helloworld")
-    assert_eq(result, false, "prefix should not equal longer string")
+    assert("hello" != "helloworld", "prefix should not equal longer string")
     return 0
 }
 
 @test
 func test_str_eq_whitespace() -> I32 {
-    let result1: Bool = str_eq(" ", " ")
-    let result2: Bool = str_eq("a ", "a")
-    assert_eq(result1, true, "same whitespace should be equal")
-    assert_eq(result2, false, "trailing space should matter")
+    assert(" " == " ", "same whitespace should be equal")
+    assert("a " != "a", "trailing space should matter")
     return 0
 }
 
 // ============================================================================
-// String Hash (str_hash)
+// String Hash (.hash() method)
 // ============================================================================
 
 @test
 func test_str_hash_consistent() -> I32 {
-    let hash1: I32 = str_hash("test")
-    let hash2: I32 = str_hash("test")
+    let hash1: I64 = "test".hash()
+    let hash2: I64 = "test".hash()
     assert_eq(hash1, hash2, "same string should produce same hash")
     return 0
 }
 
 @test
 func test_str_hash_different() -> I32 {
-    let hash1: I32 = str_hash("hello")
-    let hash2: I32 = str_hash("world")
-    // Different strings should (very likely) produce different hashes
-    let different: Bool = hash1 != hash2
-    assert_eq(different, true, "different strings should have different hashes")
+    let hash1: I64 = "hello".hash()
+    let hash2: I64 = "world".hash()
+    assert(hash1 != hash2, "different strings should have different hashes")
     return 0
 }
 
 @test
 func test_str_hash_empty() -> I32 {
-    let hash: I32 = str_hash("")
-    // Empty string hash should be consistent
-    let hash2: I32 = str_hash("")
-    assert_eq(hash, hash2, "empty string hash should be consistent")
+    let hash1: I64 = "".hash()
+    let hash2: I64 = "".hash()
+    assert_eq(hash1, hash2, "empty string hash should be consistent")
     return 0
 }
 
 @test
 func test_str_hash_single_char_different() -> I32 {
-    let hash_a: I32 = str_hash("a")
-    let hash_b: I32 = str_hash("b")
-    let different: Bool = hash_a != hash_b
-    assert_eq(different, true, "a and b should have different hashes")
+    let hash_a: I64 = "a".hash()
+    let hash_b: I64 = "b".hash()
+    assert(hash_a != hash_b, "a and b should have different hashes")
     return 0
 }
 
@@ -230,18 +214,15 @@ func test_string_operations_combined() -> I32 {
     let s3: Str = "world"
 
     // Check length
-    let len: I32 = str_len(s1)
-    assert_eq(len, 5, "hello length should be 5")
+    assert_eq(s1.len(), 5, "hello length should be 5")
 
     // Check equality
-    let eq1: Bool = str_eq(s1, s2)
-    let eq2: Bool = str_eq(s1, s3)
-    assert_eq(eq1, true, "hello == hello")
-    assert_eq(eq2, false, "hello != world")
+    assert(s1 == s2, "hello == hello")
+    assert(s1 != s3, "hello != world")
 
     // Check hash consistency
-    let h1: I32 = str_hash(s1)
-    let h2: I32 = str_hash(s2)
+    let h1: I64 = s1.hash()
+    let h2: I64 = s2.hash()
     assert_eq(h1, h2, "equal strings should have equal hashes")
 
     return 0
@@ -264,24 +245,21 @@ func test_time_instant_works() -> I32 {
 
 @test
 func test_str_len_special_chars() -> I32 {
-    // Test with special characters
-    let len: I32 = str_len("a\tb\nc")
     // a, tab, b, newline, c = 5 characters
-    assert_eq(len, 5, "string with escapes should have correct length")
+    assert_eq("a\tb\nc".len(), 5, "string with escapes should have correct length")
     return 0
 }
 
 @test
 func test_str_eq_special_chars() -> I32 {
-    let result: Bool = str_eq("a\n", "a\n")
-    assert_eq(result, true, "strings with newlines should be equal")
+    assert("a\n" == "a\n", "strings with newlines should be equal")
     return 0
 }
 
 @test
 func test_str_hash_special_chars() -> I32 {
-    let h1: I32 = str_hash("a\n")
-    let h2: I32 = str_hash("a\n")
+    let h1: I64 = "a\n".hash()
+    let h2: I64 = "a\n".hash()
     assert_eq(h1, h2, "special char strings should have consistent hash")
     return 0
 }

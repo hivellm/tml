@@ -671,6 +671,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
         emit_loop_metadata();
 
         std::string result = output_.str();
+
         if (!errors_.empty()) {
             return errors_;
         }

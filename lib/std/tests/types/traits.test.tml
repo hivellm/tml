@@ -1,4 +1,5 @@
 use test
+use core::hash
 
 // Tests for Core Traits
 // Tests behavior definitions and implementations
@@ -115,15 +116,15 @@ func test_outcome_extract_err_value() {
 }
 
 // ============================================================================
-// Hash-like Tests (using str_hash)
+// Hash-like Tests (using .hash() method)
 // ============================================================================
 
 @test
 func test_hash_consistency() {
     let s1: Str = "hello"
     let s2: Str = "hello"
-    let h1: I32 = str_hash(s1)
-    let h2: I32 = str_hash(s2)
+    let h1: I64 = s1.hash()
+    let h2: I64 = s2.hash()
     assert(h1 == h2, "Same strings should have same hash")
     println("Hash consistency test passed!")
 }
@@ -132,8 +133,8 @@ func test_hash_consistency() {
 func test_hash_difference() {
     let s1: Str = "hello"
     let s2: Str = "world"
-    let h1: I32 = str_hash(s1)
-    let h2: I32 = str_hash(s2)
+    let h1: I64 = s1.hash()
+    let h2: I64 = s2.hash()
     assert(h1 != h2, "Different strings should have different hashes")
     println("Hash difference test passed!")
 }

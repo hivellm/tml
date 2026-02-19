@@ -10,7 +10,6 @@
 //! |---------------------------|------------------------------------|
 //! | `init_builtin_types`      | Primitive types, behavior impls    |
 //! | `init_builtin_io`         | print, println, panic, assert      |
-//! | `init_builtin_string`     | str_len, str_eq, str_hash, etc.    |
 //! | `init_builtin_time`       | time_ms, sleep, elapsed, etc.      |
 //! | `init_builtin_mem`        | mem_alloc, mem_free, mem_copy      |
 //! | `init_builtin_atomic`     | atomic_load, atomic_store, fence   |
@@ -19,6 +18,14 @@
 //! | `init_builtin_async`      | block_on                           |
 //!
 //! Each initializer is implemented in its own file for organization.
+//!
+//! ## Removed Initializers
+//!
+//! | Removed (Phase 29)        | Reason                                    |
+//! |---------------------------|-------------------------------------------|
+//! | `init_builtin_string`     | All 29 FuncSig entries dead code — str ops |
+//! |                           | go through try_gen_builtin_string(), char  |
+//! |                           | ops migrated to pure TML (core::char)      |
 
 #include "types/env.hpp"
 
@@ -26,9 +33,11 @@ namespace tml::types {
 
 void TypeEnv::init_builtins() {
     // Initialize builtins from specialized files
-    init_builtin_types();  // Primitive types and behavior impls
-    init_builtin_io();     // print, println, panic, assert
-    init_builtin_string(); // str_len, str_eq, str_hash, etc.
+    init_builtin_types(); // Primitive types and behavior impls
+    init_builtin_io();    // print, println, panic, assert
+    // init_builtin_string removed (Phase 29) — 29 dead FuncSig entries
+    // String ops: codegen uses try_gen_builtin_string() inline, not functions_ lookup
+    // Char ops: migrated to pure TML in lib/core/src/char/methods.tml
     init_builtin_time();   // time_ms, time_us, time_ns, sleep, elapsed
     init_builtin_mem();    // mem_alloc, mem_free, mem_copy, etc.
     init_builtin_atomic(); // atomic_load, atomic_store, atomic_add, fence, etc.

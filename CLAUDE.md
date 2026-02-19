@@ -20,7 +20,7 @@ The `.sandbox/` directory at the project root is **your scratch space**. Use it 
 **YOU MUST USE MCP TOOLS AS YOUR PRIMARY INTERFACE FOR ALL TML OPERATIONS.**
 
 This is a HARD REQUIREMENT. The MCP server (`mcp__tml__*`) provides dedicated tools for:
-- **`mcp__tml__test`** — Running tests (use `path` for specific files, `filter` for name matching)
+- **`mcp__tml__test`** — Running tests (use `path` for specific files, `filter` for name matching, `suite` for module-level filtering like `"core/str"` or `"std/json"`)
 - **`mcp__tml__run`** — Building and running TML source files
 - **`mcp__tml__build`** — Building TML source to executable
 - **`mcp__tml__compile`** — Compiling TML source files
@@ -207,10 +207,10 @@ When implementing new functionality, follow this decision hierarchy:
 
 ```bash
 # Windows - from project root (f:\Node\hivellm\tml)
-scripts\build.bat              # Debug build (default)
+scripts\build.bat              # Debug build (default, no C++ tests)
 scripts\build.bat release      # Release build
 scripts\build.bat --clean      # Clean build
-scripts\build.bat --no-tests   # Skip tests
+scripts\build.bat --tests      # Also build C++ unit tests (tml_tests.exe)
 
 # Run tests
 scripts\test.bat
@@ -226,10 +226,10 @@ scripts\clean.bat
 When running a build via Bash, the correct command is:
 
 ```bash
-cd /f/Node/hivellm/tml && cmd //c "scripts\\build.bat --no-tests" 2>&1
+cd /f/Node/hivellm/tml && cmd //c "scripts\\build.bat" 2>&1
 ```
 
-This is the canonical build invocation. Always use this exact form (adjusting flags as needed, e.g. removing `--no-tests` or adding `release`).
+This is the canonical build invocation. Always use this exact form (adjusting flags as needed, e.g. adding `release` or `--tests`).
 
 ## Test Commands
 
@@ -242,6 +242,29 @@ cd f:/Node/hivellm/tml && build/debug/tml.exe test --profile --verbose --no-cach
 ```
 
 This is the canonical test invocation for generating coverage reports. Always use this exact form.
+
+### Suite-Level Test Filtering
+
+To run tests for a specific module without running the full suite:
+
+```bash
+# Via MCP (PREFERRED):
+mcp__tml__test with suite="core/str"        # Run all core::str tests
+mcp__tml__test with suite="std/json"        # Run all std::json tests
+mcp__tml__test with suite="core/error"      # Run all core::error tests
+
+# Via CLI:
+tml test --suite=core/str --no-cache        # Suite filter + fresh build
+tml test --suite=std/collections            # Suite filter with cache
+tml test --list-suites                      # Show all available suites
+```
+
+**Suite name mapping:** `core/str` → `lib/core/tests/str/`, `std/json` → `lib/std/tests/json/`, etc.
+
+**When to use:**
+- Verifying changes to a specific module (much faster than full suite)
+- Investigating suite-level failures (some bugs only manifest in suite mode, not individual file mode)
+- Running `--no-cache` on a targeted subset after compiler changes
 
 **CRITICAL: NEVER DELETE TEST CACHES!**
 

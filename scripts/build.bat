@@ -17,7 +17,7 @@ if "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "TARGET=aarch64-pc-windows-msvc"
 :: Default values
 set "BUILD_TYPE=debug"
 set "CLEAN_BUILD=0"
-set "BUILD_TESTS=ON"
+set "BUILD_TESTS=OFF"
 set "ENABLE_ASAN=OFF"
 set "ENABLE_UBSAN=OFF"
 set "ENABLE_LLVM_BACKEND=ON"
@@ -58,8 +58,8 @@ echo   release   Build with optimizations
 echo.
 echo Options:
 echo   --clean        Clean build directory before building
-echo   --tests        Build tests (default)
-echo   --no-tests     Don't build tests
+echo   --tests        Build C++ unit tests (tml_tests.exe)
+echo   --no-tests     Don't build C++ tests (default)
 echo   --bump-major   Increment major version (resets minor to 0)
 echo   --bump-minor   Increment minor version
 echo   --asan         Enable AddressSanitizer (memory error detection)

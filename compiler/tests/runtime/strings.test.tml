@@ -1,262 +1,247 @@
 use test
+use core::str
+use core::hash
 
 // String Operation Tests
-// str_len, str_eq, str_hash are global builtins
+// Phase 29: Migrated from bare str_* builtins to method calls and operators
 
 @test
 func test_str_len_empty() -> I32 {
-    let len: I32 = str_len("")
-    assert(len == 0, "Empty string should have length 0")
+    assert("".len() == 0, "Empty string should have length 0")
     return 0
 }
 
 @test
 func test_str_len_short() -> I32 {
-    let len: I32 = str_len("hello")
-    assert(len == 5, "hello should have length 5")
+    assert("hello".len() == 5, "hello should have length 5")
     return 0
 }
 
 @test
 func test_str_len_long() -> I32 {
-    let len: I32 = str_len("This is a longer string with spaces")
-    assert(len > 10, "Long string should have length > 10")
+    assert("This is a longer string with spaces".len() > 10, "Long string should have length > 10")
     return 0
 }
 
 @test
 func test_str_eq_same() -> I32 {
-    assert(str_eq("hello", "hello"), "Same strings should be equal")
+    assert("hello" == "hello", "Same strings should be equal")
     return 0
 }
 
 @test
 func test_str_eq_different() -> I32 {
-    assert(not str_eq("hello", "world"), "Different strings should not be equal")
+    assert("hello" != "world", "Different strings should not be equal")
     return 0
 }
 
 @test
 func test_str_eq_empty() -> I32 {
-    assert(str_eq("", ""), "Empty strings should be equal")
+    assert("" == "", "Empty strings should be equal")
     return 0
 }
 
 @test
 func test_str_eq_case_sensitive() -> I32 {
-    assert(not str_eq("Hello", "hello"), "String comparison should be case sensitive")
+    assert("Hello" != "hello", "String comparison should be case sensitive")
     return 0
 }
 
 @test
 func test_str_hash_consistent() -> I32 {
-    let hash1: I32 = str_hash("test")
-    let hash2: I32 = str_hash("test")
-    // Same string should produce same hash
+    let hash1: I64 = "test".hash()
+    let hash2: I64 = "test".hash()
     assert(hash1 == hash2, "Same string should produce same hash")
     return 0
 }
 
 @test
 func test_str_hash_different() -> I32 {
-    let hash1: I32 = str_hash("hello")
-    let hash2: I32 = str_hash("world")
-    // Different strings should (likely) produce different hashes
-    // This is probabilistic but should work for simple cases
+    let hash1: I64 = "hello".hash()
+    let hash2: I64 = "world".hash()
     assert(hash1 != hash2, "Different strings should produce different hashes")
     return 0
 }
 
-// ============ str_concat tests ============
+// ============ concat tests (+ operator) ============
 
 @test
 func test_str_concat_basic() -> I32 {
-    let result: Str = str_concat("hello", " world")
-    assert(str_eq(result, "hello world"), "concat should produce 'hello world'")
+    let result: Str = "hello" + " world"
+    assert(result == "hello world", "concat should produce 'hello world'")
     return 0
 }
 
 @test
 func test_str_concat_empty_left() -> I32 {
-    let result: Str = str_concat("", "test")
-    assert(str_eq(result, "test"), "concat with empty left should work")
+    let result: Str = "" + "test"
+    assert(result == "test", "concat with empty left should work")
     return 0
 }
 
 @test
 func test_str_concat_empty_right() -> I32 {
-    let result: Str = str_concat("test", "")
-    assert(str_eq(result, "test"), "concat with empty right should work")
+    let result: Str = "test" + ""
+    assert(result == "test", "concat with empty right should work")
     return 0
 }
 
-// ============ str_substring tests ============
+// ============ slice tests (.slice(start, end) method) ============
 
 @test
-func test_str_substring_start() -> I32 {
-    let sub: Str = str_substring("hello world", 0, 5)
-    assert(str_eq(sub, "hello"), "substring 0-5 should be 'hello'")
-    return 0
-}
-
-@test
-func test_str_substring_middle() -> I32 {
-    let sub: Str = str_substring("hello world", 6, 5)
-    assert(str_eq(sub, "world"), "substring 6-5 should be 'world'")
+func test_str_slice_start() -> I32 {
+    let sub: Str = "hello world".slice(0, 5)
+    assert(sub == "hello", "slice 0-5 should be 'hello'")
     return 0
 }
 
 @test
-func test_str_substring_single_char() -> I32 {
-    let sub: Str = str_substring("hello", 1, 1)
-    assert(str_eq(sub, "e"), "substring 1-1 should be 'e'")
+func test_str_slice_middle() -> I32 {
+    let sub: Str = "hello world".slice(6, 11)
+    assert(sub == "world", "slice 6-11 should be 'world'")
     return 0
 }
 
-// ============ str_contains tests ============
+@test
+func test_str_slice_single_char() -> I32 {
+    let sub: Str = "hello".slice(1, 2)
+    assert(sub == "e", "slice 1-2 should be 'e'")
+    return 0
+}
+
+// ============ contains tests (.contains() method) ============
 
 @test
 func test_str_contains_found() -> I32 {
-    let result: Bool = str_contains("hello world", "world")
-    assert(result, "should contain 'world'")
+    assert("hello world".contains("world"), "should contain 'world'")
     return 0
 }
 
 @test
 func test_str_contains_not_found() -> I32 {
-    assert(not str_contains("hello world", "foo"), "should not contain 'foo'")
+    assert(not "hello world".contains("foo"), "should not contain 'foo'")
     return 0
 }
 
 @test
 func test_str_contains_empty() -> I32 {
-    assert(str_contains("hello", ""), "should contain empty string")
+    assert("hello".contains(""), "should contain empty string")
     return 0
 }
 
-// ============ str_starts_with tests ============
+// ============ starts_with tests (.starts_with() method) ============
 
 @test
 func test_str_starts_with_true() -> I32 {
-    assert(str_starts_with("hello world", "hello"), "should start with 'hello'")
+    assert("hello world".starts_with("hello"), "should start with 'hello'")
     return 0
 }
 
 @test
 func test_str_starts_with_false() -> I32 {
-    assert(not str_starts_with("hello world", "world"), "should not start with 'world'")
+    assert(not "hello world".starts_with("world"), "should not start with 'world'")
     return 0
 }
 
 @test
 func test_str_starts_with_full() -> I32 {
-    assert(str_starts_with("hello", "hello"), "should start with itself")
+    assert("hello".starts_with("hello"), "should start with itself")
     return 0
 }
 
-// ============ str_ends_with tests ============
+// ============ ends_with tests (.ends_with() method) ============
 
 @test
 func test_str_ends_with_true() -> I32 {
-    assert(str_ends_with("hello world", "world"), "should end with 'world'")
+    assert("hello world".ends_with("world"), "should end with 'world'")
     return 0
 }
 
 @test
 func test_str_ends_with_false() -> I32 {
-    assert(not str_ends_with("hello world", "hello"), "should not end with 'hello'")
+    assert(not "hello world".ends_with("hello"), "should not end with 'hello'")
     return 0
 }
 
 @test
 func test_str_ends_with_full() -> I32 {
-    assert(str_ends_with("hello", "hello"), "should end with itself")
+    assert("hello".ends_with("hello"), "should end with itself")
     return 0
 }
 
-// ============ str_to_upper tests ============
+// ============ to_uppercase tests (.to_uppercase() method) ============
 
 @test
 func test_str_to_upper_lower() -> I32 {
-    let upper: Str = str_to_upper("hello")
-    assert(str_eq(upper, "HELLO"), "should be 'HELLO'")
+    assert("hello".to_uppercase() == "HELLO", "should be 'HELLO'")
     return 0
 }
 
 @test
 func test_str_to_upper_mixed() -> I32 {
-    let upper: Str = str_to_upper("HeLLo")
-    assert(str_eq(upper, "HELLO"), "mixed should become 'HELLO'")
+    assert("HeLLo".to_uppercase() == "HELLO", "mixed should become 'HELLO'")
     return 0
 }
 
-// ============ str_to_lower tests ============
+// ============ to_lowercase tests (.to_lowercase() method) ============
 
 @test
 func test_str_to_lower_upper() -> I32 {
-    let lower: Str = str_to_lower("HELLO")
-    assert(str_eq(lower, "hello"), "should be 'hello'")
+    assert("HELLO".to_lowercase() == "hello", "should be 'hello'")
     return 0
 }
 
 @test
 func test_str_to_lower_mixed() -> I32 {
-    let lower: Str = str_to_lower("HeLLo")
-    assert(str_eq(lower, "hello"), "mixed should become 'hello'")
+    assert("HeLLo".to_lowercase() == "hello", "mixed should become 'hello'")
     return 0
 }
 
-// ============ str_trim tests ============
+// ============ trim tests (.trim() method) ============
 
 @test
 func test_str_trim_both() -> I32 {
-    let trimmed: Str = str_trim("  hello  ")
-    assert(str_eq(trimmed, "hello"), "should trim both sides")
+    assert("  hello  ".trim() == "hello", "should trim both sides")
     return 0
 }
 
 @test
 func test_str_trim_left() -> I32 {
-    let trimmed: Str = str_trim("  hello")
-    assert(str_eq(trimmed, "hello"), "should trim left")
+    assert("  hello".trim() == "hello", "should trim left")
     return 0
 }
 
 @test
 func test_str_trim_right() -> I32 {
-    let trimmed: Str = str_trim("hello  ")
-    assert(str_eq(trimmed, "hello"), "should trim right")
+    assert("hello  ".trim() == "hello", "should trim right")
     return 0
 }
 
 @test
 func test_str_trim_none() -> I32 {
-    let trimmed: Str = str_trim("hello")
-    assert(str_eq(trimmed, "hello"), "no trim needed")
+    assert("hello".trim() == "hello", "no trim needed")
     return 0
 }
 
-// ============ str_char_at tests ============
-// Note: str_char_at returns Char which is internally I32
-// Testing by comparing character codes directly
+// ============ char_at tests (.char_at() method) ============
 
 @test
 func test_str_char_at_first() -> I32 {
-    // Just verify it doesn't crash and returns something
-    // 'h' = 104, comparing as character
-    let c: Char = str_char_at("hello", 0)
-    // Can't easily compare Char, just verify it works
+    let c: I32 = "hello".char_at(0)
+    assert(c == 104, "char_at(0) should be 'h' (104)")
     return 0
 }
 
 @test
 func test_str_char_at_middle() -> I32 {
-    let c: Char = str_char_at("hello", 2)
+    let c: I32 = "hello".char_at(2)
+    assert(c == 108, "char_at(2) should be 'l' (108)")
     return 0
 }
 
 @test
 func test_str_char_at_last() -> I32 {
-    let c: Char = str_char_at("hello", 4)
+    let c: I32 = "hello".char_at(4)
+    assert(c == 111, "char_at(4) should be 'o' (111)")
     return 0
 }

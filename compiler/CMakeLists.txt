@@ -196,7 +196,7 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/pool.c
     # text/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/text/string.c
-    # text.c removed — Text type migrated to pure TML (Phase 22)
+    # text.c deleted (Phase 30) — Text migrated to pure TML (Phase 22)
     # collections/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections/collections.c
     # math/
@@ -204,9 +204,9 @@ set(TML_RUNTIME_SOURCES
     # time/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/time/time.c
     # concurrency/
-    # thread.c removed — old thread/channel/mutex; replaced by tml_thread_* in sync.c (Phase 24)
+    # thread.c deleted (Phase 30) — replaced by sync.c (Phase 24)
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/concurrency/sync.c
-    # async.c removed — async executor never connected (Phase 5 future work)
+    # async.c deleted (Phase 30) — async executor never connected
     # net/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/net.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/dns.c

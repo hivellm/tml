@@ -1059,13 +1059,12 @@ void LLVMIRGen::emit_referenced_library_definitions() {
             // (e.g., pending impl method instantiation flush for generics), skip it
             // to avoid emitting a duplicate `define` (LLVM redefinition error).
             // Check generated_impl_methods_output_ which tracks actually-generated
-            // method instantiations, and generated_functions_ for non-lazy paths.
+            // method instantiations.
             {
                 // fn has "@" prefix, e.g. "@tml_BTreeMap_insert"
-                std::string fn_no_at = fn.substr(1); // "tml_BTreeMap_insert"
-                if (generated_impl_methods_output_.count(fn_no_at) > 0) {
+                std::string fn_no_at = fn.substr(1);
+                if (generated_impl_methods_output_.count(fn_no_at) > 0)
                     continue;
-                }
             }
 
             auto method_it = pending_library_methods_.find(fn);
@@ -1223,6 +1222,43 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                  << generated.size() << " of "
                  << (pending_library_methods_.size() + pending_library_funcs_.size())
                  << " library functions");
+
+    // Verify: scan final IR for any @tml_ calls that lack a define or declare.
+    // This catches transitive resolution bugs before LLVM tries to parse the IR.
+    {
+        std::string final_ir = output_.str();
+        auto all_refs = collect_refs(final_ir);
+
+        // Collect all defined/declared functions
+        std::unordered_set<std::string> defined_or_declared;
+        std::istringstream stream(final_ir);
+        std::string line;
+        while (std::getline(stream, line)) {
+            if (line.find("define ") != std::string::npos ||
+                line.find("declare ") != std::string::npos) {
+                auto at_pos = line.find("@tml_");
+                if (at_pos != std::string::npos) {
+                    size_t start = at_pos;
+                    size_t pos = at_pos + 5;
+                    while (pos < line.size() && (std::isalnum(line[pos]) || line[pos] == '_'))
+                        ++pos;
+                    defined_or_declared.insert(line.substr(start, pos - start));
+                }
+            }
+        }
+
+        for (const auto& ref : all_refs) {
+            if (defined_or_declared.count(ref) == 0) {
+                // Check if it's in pending but wasn't resolved
+                bool in_pending = pending_library_methods_.count(ref) > 0 ||
+                                  pending_library_funcs_.count(ref) > 0;
+                TML_LOG_WARN("codegen", "[LAZY_LIB] UNRESOLVED reference: "
+                                            << ref
+                                            << (in_pending ? " (IN PENDING BUT NOT GENERATED)" : "")
+                                            << " — this will cause LLVM IR parse failure");
+            }
+        }
+    }
 }
 
 void LLVMIRGen::emit_referenced_library_declarations() {
@@ -1293,6 +1329,46 @@ void LLVMIRGen::emit_referenced_library_declarations() {
                      << count << " of "
                      << (pending_library_methods_.size() + pending_library_funcs_.size())
                      << " library functions");
+    }
+
+    // Diagnostic: check for unresolved @tml_ references in final IR
+    {
+        std::string final_ir = output_.str();
+        // Collect all defined/declared function names
+        std::unordered_set<std::string> defined_or_declared;
+        std::istringstream stream(final_ir);
+        std::string line;
+        while (std::getline(stream, line)) {
+            if (line.find("define ") != std::string::npos ||
+                line.find("declare ") != std::string::npos) {
+                auto at_pos = line.find("@tml_");
+                if (at_pos != std::string::npos) {
+                    size_t s = at_pos;
+                    size_t p = at_pos + 5;
+                    while (p < line.size() && (std::isalnum(line[p]) || line[p] == '_'))
+                        ++p;
+                    defined_or_declared.insert(line.substr(s, p - s));
+                }
+            }
+        }
+        // Now scan ALL @tml_ references
+        size_t scan_pos = 0;
+        while ((scan_pos = final_ir.find("@tml_", scan_pos)) != std::string::npos) {
+            size_t s = scan_pos;
+            scan_pos += 5;
+            while (scan_pos < final_ir.size() &&
+                   (std::isalnum(final_ir[scan_pos]) || final_ir[scan_pos] == '_'))
+                ++scan_pos;
+            std::string ref = final_ir.substr(s, scan_pos - s);
+            if (defined_or_declared.count(ref) == 0) {
+                bool in_pending = pending_library_methods_.count(ref) > 0 ||
+                                  pending_library_funcs_.count(ref) > 0;
+                TML_LOG_WARN("codegen", "[LAZY_LIB_DECL] UNRESOLVED: "
+                                            << ref
+                                            << (in_pending ? " (IN PENDING)" : " (NOT IN PENDING)")
+                                            << " — will cause LLVM parse failure");
+            }
+        }
     }
 }
 

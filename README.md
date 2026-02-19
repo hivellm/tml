@@ -45,7 +45,7 @@ The server exposes 14 tools that map 1:1 to compiler capabilities:
 | `check` | Type-check without compiling (fast feedback) |
 | `emit-ir` | Emit LLVM IR with optional function filtering and chunked output |
 | `emit-mir` | Emit Mid-level IR for debugging |
-| `test` | Run tests with filtering, coverage, and profiling |
+| `test` | Run tests with filtering, coverage, profiling, and suite-level targeting |
 | `format` | Format source files (check or write mode) |
 | `lint` | Lint for style and semantic issues (with auto-fix) |
 | `docs/search` | Hybrid BM25 + HNSW semantic search over all documentation |
@@ -242,7 +242,7 @@ TML's test runner compiles tests to DLLs and loads them in-process — no proces
 
 | Metric | Value |
 |--------|-------|
-| **Total tests** | 5,000+ across 560+ files |
+| **Total tests** | 9,000+ across 780+ files |
 | **Full suite (no cache)** | ~43 seconds |
 | **Full suite (cached)** | ~8 seconds |
 | **Single file (filtered)** | Milliseconds |
@@ -253,6 +253,9 @@ tml test
 
 # Filter to one file — millisecond feedback
 tml test --filter json_parse
+
+# Run a specific module's tests only
+tml test --suite=core/str --no-cache
 
 # Full rebuild + coverage + profiling
 tml test --no-cache --coverage --profile
@@ -288,7 +291,7 @@ func fuzz_parser(input: Slice[U8]) -> I32 {
 
 Under the hood:
 - **Hash-based caching**: Source file fingerprints determine what needs recompilation — unchanged tests are loaded from cached DLLs instantly
-- **Suite batching**: Tests in the same directory are grouped into a single DLL, reducing link overhead
+- **Suite batching**: Tests in the same directory are grouped into a single DLL, reducing link overhead. `--suite=core/str` targets a specific module
 - **LLVM coverage**: Line, function, and branch coverage with HTML reports
 - **Benchmark baselines**: Save and compare performance across runs
 - **Crash capture**: Backtraces on test failures
@@ -554,6 +557,7 @@ tml build app.tml              # Compile to executable
 tml run app.tml                # Compile and run
 tml check app.tml              # Type-check only (fast)
 tml test                       # Run test suite
+tml test --suite=core/str      # Run one module's tests
 tml test --coverage            # Tests + coverage report
 tml fmt src/                   # Format code
 tml lint src/                  # Lint code
