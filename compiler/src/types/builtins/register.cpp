@@ -16,7 +16,6 @@
 //! | `init_builtin_atomic`     | atomic_load, atomic_store, fence   |
 //! | `init_builtin_sync`       | spin_lock, thread_*, mutex_*, etc. |
 //! | `init_builtin_math`       | sqrt, pow, abs, floor, ceil, round |
-//! | `init_builtin_collections`| list_*, hashmap_*, buffer_*        |
 //! | `init_builtin_async`      | block_on                           |
 //!
 //! Each initializer is implemented in its own file for organization.
@@ -36,8 +35,7 @@ void TypeEnv::init_builtins() {
     init_builtin_sync();   // spin_lock, spin_unlock, spin_trylock, thread_*, channel_*, mutex_*,
                            // waitgroup_*
     init_builtin_math();   // sqrt, pow, abs, floor, ceil, round, black_box
-    init_builtin_collections(); // list_*, hashmap_*, buffer_*
-    init_builtin_async();       // block_on
+    init_builtin_async();  // block_on
 }
 
 } // namespace tml::types

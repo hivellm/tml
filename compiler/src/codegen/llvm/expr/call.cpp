@@ -611,10 +611,6 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return *result;
     }
 
-    if (auto result = try_gen_builtin_collections(fn_name, call)) {
-        return *result;
-    }
-
     if (auto result = try_gen_builtin_string(fn_name, call)) {
         return *result;
     }

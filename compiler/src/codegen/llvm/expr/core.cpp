@@ -640,19 +640,27 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
 
 auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> std::string {
     // Generate code for template literal: `Hello {name}!`
-    // Strategy: Create a Text object and build it by pushing string segments
+    // Strategy: Create a Text object via TML methods and build it by pushing string segments
     // This produces Text type instead of Str
+    //
+    // Uses TML-dispatched methods:
+    //   @tml_Text_new() -> %struct.Text
+    //   @tml_Text_from(ptr) -> %struct.Text
+    //   @tml_Text_push_str(ptr %text_alloca, ptr %str) -> void
+
+    // Allocate stack space for the Text struct (needed for push_str calls)
+    std::string text_alloca = fresh_reg();
+    emit_line("  " + text_alloca + " = alloca %struct.Text");
 
     if (tpl.segments.empty()) {
         // Empty template literal - create empty Text
-        std::string text_ptr = fresh_reg();
-        emit_line("  " + text_ptr + " = call ptr @tml_text_new()");
-        // Wrap the ptr in a %struct.Text structure
-        std::string struct_result = fresh_reg();
-        emit_line("  " + struct_result + " = insertvalue %struct.Text undef, ptr " + text_ptr +
-                  ", 0");
+        std::string text_val = fresh_reg();
+        emit_line("  " + text_val + " = call %struct.Text @tml_Text_new()");
+        emit_line("  store %struct.Text " + text_val + ", ptr " + text_alloca);
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load %struct.Text, ptr " + text_alloca);
         last_expr_type_ = "%struct.Text";
-        return struct_result;
+        return result;
     }
 
     // Helper lambda to convert expression to string pointer
@@ -718,8 +726,7 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
         }
     };
 
-    // Create Text from first segment
-    std::string text_ptr;
+    // Create Text from first segment via TML Text::from()
     size_t start_idx = 0;
 
     const auto& first_segment = tpl.segments[0];
@@ -727,39 +734,41 @@ auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> 
         // First segment is literal text - create Text from it
         const std::string& text = std::get<std::string>(first_segment.content);
         std::string const_name = add_string_literal(text);
-        text_ptr = fresh_reg();
-        emit_line("  " + text_ptr + " = call ptr @tml_text_from_str(ptr " + const_name + ")");
+        std::string text_val = fresh_reg();
+        emit_line("  " + text_val + " = call %struct.Text @tml_Text_from(ptr " + const_name + ")");
+        emit_line("  store %struct.Text " + text_val + ", ptr " + text_alloca);
         start_idx = 1;
     } else {
         // First segment is expression - convert to string and create Text from it
         const auto& expr_ptr = std::get<parser::ExprPtr>(first_segment.content);
         std::string str_val = convert_expr_to_str(expr_ptr);
-        text_ptr = fresh_reg();
-        emit_line("  " + text_ptr + " = call ptr @tml_text_from_str(ptr " + str_val + ")");
+        std::string text_val = fresh_reg();
+        emit_line("  " + text_val + " = call %struct.Text @tml_Text_from(ptr " + str_val + ")");
+        emit_line("  store %struct.Text " + text_val + ", ptr " + text_alloca);
         start_idx = 1;
     }
 
-    // Append remaining segments using text_push_str
+    // Append remaining segments using TML Text::push_str()
     for (size_t i = start_idx; i < tpl.segments.size(); ++i) {
         const auto& segment = tpl.segments[i];
         if (std::holds_alternative<std::string>(segment.content)) {
             // Literal text segment
             const std::string& text = std::get<std::string>(segment.content);
             std::string const_name = add_string_literal(text);
-            emit_line("  call void @tml_text_push_str(ptr " + text_ptr + ", ptr " + const_name +
+            emit_line("  call void @tml_Text_push_str(ptr " + text_alloca + ", ptr " + const_name +
                       ")");
         } else {
             // Expression segment
             const auto& expr_ptr = std::get<parser::ExprPtr>(segment.content);
             std::string str_val = convert_expr_to_str(expr_ptr);
-            emit_line("  call void @tml_text_push_str(ptr " + text_ptr + ", ptr " + str_val + ")");
+            emit_line("  call void @tml_Text_push_str(ptr " + text_alloca + ", ptr " + str_val +
+                      ")");
         }
     }
 
-    // Wrap the ptr in a %struct.Text structure
-    // Text is struct { ptr } where ptr is the handle to the runtime Text object
+    // Load the final Text struct from the alloca
     std::string struct_result = fresh_reg();
-    emit_line("  " + struct_result + " = insertvalue %struct.Text undef, ptr " + text_ptr + ", 0");
+    emit_line("  " + struct_result + " = load %struct.Text, ptr " + text_alloca);
 
     last_expr_type_ = "%struct.Text";
     return struct_result;

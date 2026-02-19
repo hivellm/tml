@@ -1547,8 +1547,6 @@ private:
         -> std::optional<std::string>;
     auto try_gen_builtin_math(const std::string& fn_name, const parser::CallExpr& call)
         -> std::optional<std::string>;
-    auto try_gen_builtin_collections(const std::string& fn_name, const parser::CallExpr& call)
-        -> std::optional<std::string>;
     auto try_gen_builtin_string(const std::string& fn_name, const parser::CallExpr& call)
         -> std::optional<std::string>;
     auto try_gen_builtin_assert(const std::string& fn_name, const parser::CallExpr& call)

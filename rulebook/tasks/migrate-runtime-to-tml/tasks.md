@@ -1,6 +1,6 @@
 # Tasks: Migrate C Runtime Pure Algorithms to TML
 
-**Status**: In Progress (Phases 0-7, 16, 17, 18.1, 19, 20 complete; Phases 18.2, 21-30 planned — full runtime.cpp audit done: 287→272→68 declares target)
+**Status**: In Progress (Phases 0-7, 16, 17, 18.1, 19, 20, 21, 22 complete; Phases 18.2, 23-30 planned — full runtime.cpp audit done: 287→221→68 declares target)
 
 **Scope**: ~287 runtime.cpp declares to minimize → ~68 essential; 15 dead declares to remove (Phase 17) + ~204 to migrate (Phases 18-26)
 
@@ -463,51 +463,58 @@ The search module is already following the three-tier rule correctly:
 > **Source**: `builtins/string.cpp` emits 9 strbuilder_* calls (codegen-only, no TML usage)
 > **Goal**: Either migrate StringBuilder to a TML struct or remove it entirely if unused
 
-- [ ] 21.1.1 Audit all strbuilder_* usage — codegen-only in builtins/string.cpp
-- [ ] 21.1.2 If used by user code: rewrite as TML struct using mem_alloc/ptr_write
-- [ ] 21.1.3 If not used by user code: remove 9 strbuilder_* emitters from builtins/string.cpp
-- [ ] 21.1.4 Remove 9 strbuilder_* declare statements from runtime.cpp
-- [ ] 21.1.5 Rebuild and test
+- [x] 21.1.1 Audit all strbuilder_* usage — ZERO usage in TML code, codegen-only dead code
+- [x] 21.1.2 Remove 9 strbuilder_* emitters from builtins/string.cpp
+- [x] 21.1.3 Remove 9 strbuilder_* declare statements from runtime.cpp
+- [x] 21.1.4 Remove 9 strbuilder_* FuncSig registrations from types/builtins/string.cpp
+- [x] 21.1.5 Remove dead `builtins/collections.cpp` (codegen) — stub file always returning nullopt
+- [x] 21.1.6 Remove dead `types/builtins/collections.cpp` — empty init_builtin_collections()
+- [x] 21.1.7 Remove `init_builtin_collections()` call from register.cpp and declaration from env.hpp
+- [x] 21.1.8 Remove both files from CMakeLists.txt
+- [x] 21.1.9 Rebuild and test — all str/collections tests pass
 
 ---
 
-## Phase 22: Migrate Text Type to Pure TML Struct
+## Phase 22: Migrate Text Type to Pure TML Struct — DONE
 
-> **Source**: `lib/std/src/text.tml` — 48 lowlevel blocks calling tml_text_* C functions
-> **C backing**: `compiler/runtime/text/text.c` (~1,057 lines)
-> **Key finding**: ALL tml_text_* functions are ONLY called from TML lowlevel blocks — NOT from compiler codegen (except text_push/push_str/push_formatted/push_log in call_user.cpp for template literals)
-> **Goal**: Rewrite Text as TML struct (like List, HashMap, Buffer were migrated)
+> **Source**: `lib/std/src/text.tml` — 48 lowlevel blocks rewritten to pure TML
+> **C backing**: `compiler/runtime/text/text.c` (~1,057 lines) — NO LONGER USED by Text type
+> **Status**: COMPLETE — Text rewritten as pure TML struct, all compiler codegen updated, 48 text tests pass
+> **Impact**: Removed ~1,250 lines of dead code (51 declares + 48 functions_[] entries + ~800 lines MIR optimizations + ~290 lines AST-path optimizations + digit_pairs constant)
 
 ### 22.1 Rewrite Text as TML struct
 
-- [ ] 22.1.1 Define `Text { data: *U8, len: I64, capacity: I64 }` as TML struct
-- [ ] 22.1.2 Implement `new()`, `from_str()`, `with_capacity()` using mem_alloc
-- [ ] 22.1.3 Implement `push()`, `push_str()` with grow via mem_realloc + ptr_write
-- [ ] 22.1.4 Implement `len()`, `capacity()`, `is_empty()`, `data()`, `byte_at()`
-- [ ] 22.1.5 Implement `clear()`, `reserve()`, `destroy()`
+- [x] 22.1.1 Define `Text { handle: *Unit }` with 24-byte header (data_ptr + len + capacity) — pure TML using mem_alloc/ptr_read/ptr_write
+- [x] 22.1.2 Implement `new()`, `from()`, `from_str()`, `with_capacity()` using mem_alloc
+- [x] 22.1.3 Implement `push()`, `push_str()` with grow via mem_realloc + ptr_write
+- [x] 22.1.4 Implement `len()`, `capacity()`, `is_empty()`, `data()`, `byte_at()`
+- [x] 22.1.5 Implement `clear()`, `reserve()`, `destroy()`
 
 ### 22.2 Implement string operations in pure TML
 
-- [ ] 22.2.1 Implement `index_of()`, `last_index_of()`, `contains()`
-- [ ] 22.2.2 Implement `starts_with()`, `ends_with()`
-- [ ] 22.2.3 Implement `to_upper()`, `to_lower()`, `trim()`, `trim_start()`, `trim_end()`
-- [ ] 22.2.4 Implement `substring()`, `repeat()`, `reverse()`
-- [ ] 22.2.5 Implement `replace()`, `replace_all()`
-- [ ] 22.2.6 Implement `pad_start()`, `pad_end()`
-- [ ] 22.2.7 Implement `compare()`, `equals()`, `concat()`, `concat_str()`
-- [ ] 22.2.8 Implement `as_cstr()`, `from_i64()`, `from_u64()`, `from_f64()`, `from_bool()`
+- [x] 22.2.1 Implement `index_of()`, `last_index_of()`, `contains()`
+- [x] 22.2.2 Implement `starts_with()`, `ends_with()`
+- [x] 22.2.3 Implement `to_upper()`, `to_lower()`, `trim()`, `trim_start()`, `trim_end()`
+- [x] 22.2.4 Implement `substring()`, `repeat()`, `reverse()`
+- [x] 22.2.5 Implement `replace()`, `replace_all()`
+- [x] 22.2.6 Implement `pad_start()`, `pad_end()`
+- [x] 22.2.7 Implement `compare()`, `equals()`, `concat()`, `concat_str()`
+- [x] 22.2.8 Implement `as_cstr()`, `from_i64()`, `from_u64()`, `from_f64()`, `from_bool()`
 
 ### 22.3 Update compiler codegen for template literals
 
-- [ ] 22.3.1 Update `call_user.cpp` to use TML Text methods instead of @tml_text_push*
-- [ ] 22.3.2 Update `instructions_method.cpp` tml_text_push_formatted/push_log/push_path
-- [ ] 22.3.3 Update core.cpp TemplateLiteralExpr to use TML Text methods
+- [x] 22.3.1 Update `call_user.cpp` — removed V8-style Text optimizations (~290 lines), now dispatches through normal TML method calls
+- [x] 22.3.2 Update `instructions_method.cpp` — removed ~800 lines of MIR V8-style Text inline codegen
+- [x] 22.3.3 Update `core.cpp` TemplateLiteralExpr — calls `@tml_Text_from`/`@tml_Text_push_str` instead of old C FFI names
+- [x] 22.3.4 Remove `emit_inline_int_to_string` from `instructions_misc.cpp` (~150 lines) + declaration from `mir_codegen.hpp`
+- [x] 22.3.5 Remove `@.digit_pairs` constant from `mir_codegen.cpp`
 
 ### 22.4 Cleanup
 
-- [ ] 22.4.1 Remove all 51 tml_text_* declare statements from runtime.cpp
-- [ ] 22.4.2 Remove all 48 text_* functions_[] entries from runtime.cpp
-- [ ] 22.4.3 Rebuild and run full test suite
+- [x] 22.4.1 Remove all 51 tml_text_* declare statements from runtime.cpp
+- [x] 22.4.2 Remove all 48 text_* functions_[] entries from runtime.cpp
+- [x] 22.4.3 Register `f64_to_str`, `print_str`, `println_str` in functions_[] map (used by text.tml lowlevel blocks)
+- [x] 22.4.4 Rebuild and run full test suite — 48 text tests pass, 269 collections tests pass, all str tests pass
 
 ---
 
@@ -777,7 +784,7 @@ TOTAL: ~68 declarations (down from ~287)
 | 19 | File/Path/Dir | — | **DONE** |
 | 20 | Str codegen dispatch | -34 declares | TODO |
 | 21 | StringBuilder | -9 declares | TODO |
-| 22 | Text type | -51 declares | TODO |
+| 22 | Text type | -51 declares | **DONE** |
 | 23 | Float math → LLVM intrinsics | -16 declares | TODO |
 | 24 | Sync/threading → @extern | -32 declares | TODO |
 | 25 | Time/pool/print → @extern | -20 declares | TODO |

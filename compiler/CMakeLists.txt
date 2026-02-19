@@ -424,7 +424,6 @@ add_library(tml_types STATIC
     src/types/builtins/atomic.cpp
     src/types/builtins/sync.cpp
     src/types/builtins/math.cpp
-    src/types/builtins/collections.cpp
     src/types/builtins/async.cpp
     # Caching
     src/types/builtins_cache.cpp
@@ -689,7 +688,6 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/builtins/sync.cpp
     src/codegen/llvm/builtins/time.cpp
     src/codegen/llvm/builtins/math.cpp
-    src/codegen/llvm/builtins/collections.cpp
     src/codegen/llvm/builtins/string.cpp
     src/codegen/llvm/builtins/assert.cpp
     src/codegen/llvm/builtins/async.cpp

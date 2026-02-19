@@ -1,6 +1,6 @@
 # TML Roadmap
 
-**Last updated**: 2026-02-18
+**Last updated**: 2026-02-19
 **Current state**: Compiler functional, 76.2% library coverage, 9,025+ tests passing
 
 ---
@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓; runtime.cpp audit: 287→68 declares target, Phases 17-30 planned)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓; runtime.cpp audit: 287→68 declares target, Phases 23-30 remaining)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -571,16 +571,22 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 - [x] 4.10.6 Fix suite mode lazy library defs regression — `generated_functions_` marking deferred functions as generated in `impl.cpp`
 - [x] 4.10.7 Fix primitive type `is_imported` detection in `method_impl.cpp` for suite mode
 
-### 4.11 StringBuilder migration (Phase 21) — TODO
+### 4.11 StringBuilder + dead collections cleanup (Phase 21) — DONE
 
-- [ ] 4.11.1 Migrate or remove 9 strbuilder_* functions (codegen-only, no TML usage)
+- [x] 4.11.1 Remove 9 strbuilder_* emitters/declares/FuncSigs (zero TML usage — codegen-only dead code)
+- [x] 4.11.2 Delete dead `builtins/collections.cpp` (nullopt stub) and `types/builtins/collections.cpp` (empty init)
+- [x] 4.11.3 Remove `init_builtin_collections()` from register.cpp and env.hpp
 
-### 4.12 Text type → TML struct (Phase 22) — TODO
+### 4.12 Text type → TML struct (Phase 22) — DONE
 
-- [ ] 4.12.1 Rewrite Text as TML struct (like List/HashMap/Buffer migration pattern)
-- [ ] 4.12.2 Implement all 48 text operations in pure TML
-- [ ] 4.12.3 Update call_user.cpp template literal codegen
-- [ ] 4.12.4 Remove 51 tml_text_* declares from runtime.cpp
+- [x] 4.12.1 Rewrite Text as TML struct (pure TML using mem_alloc/ptr_read/ptr_write, 24-byte header)
+- [x] 4.12.2 Implement all 48 text operations in pure TML (index_of, contains, replace, trim, pad, etc.)
+- [x] 4.12.3 Update call_user.cpp + core.cpp template literal codegen to use TML dispatch
+- [x] 4.12.4 Remove 51 tml_text_* declares + 48 functions_[] entries from runtime.cpp
+- [x] 4.12.5 Remove ~800 lines of V8-style MIR Text optimizations from instructions_method.cpp
+- [x] 4.12.6 Remove ~290 lines of V8-style AST Text optimizations from call_user.cpp
+- [x] 4.12.7 Remove emit_inline_int_to_string + digit_pairs from MIR codegen
+- [x] 4.12.8 Register f64_to_str/print_str/println_str in functions_[] map for text.tml lowlevel blocks
 
 ### 4.13 Float math → LLVM intrinsics (Phase 23) — TODO
 
@@ -629,8 +635,8 @@ TOTAL MIGRATE/REMOVE: ~219 declares           - Integer formatting ✓
 | Types bypassing impl dispatch | 5 | 0 ✓ | 0 | |
 | Hardcoded type registrations | 54 | 29 (string) | 0 | Phase 28 |
 
-**Progress**: Phases 0-7, 16, 19 complete. Full runtime.cpp audit done (287 declares categorized). Phases 17-30 planned for comprehensive minimization.
-**Next actionable items**: Phase 18.2 (char_to_string → pure TML), Phase 21 (StringBuilder), Phase 22 (Text → TML struct), Phase 23 (float math → LLVM intrinsics).
+**Progress**: Phases 0-7, 16-22 complete (except 18.2). Full runtime.cpp audit done (287 declares categorized). ~51 Text declares removed (Phase 22). Phases 23-30 remaining.
+**Next actionable items**: Phase 23 (float math → LLVM intrinsics), Phase 18.2 (char_to_string → pure TML), Phase 24 (sync/threading → @extern FFI).
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only.
 
 ---
@@ -837,7 +843,7 @@ These can be worked on alongside the main phases without blocking or being block
 | 1. Codegen bugs | 43 | 43 | 100% | **COMPLETE** |
 | 2. Test coverage | 95 | 75 | 79% | **COMPLETE** (76.2%) |
 | 3. Stdlib essentials | 48 | 47 | 98% | **EFFECTIVELY COMPLETE** |
-| 4. Runtime migration + codegen cleanup | 49 | 46 | 94% | IN PROGRESS (List✓, HashMap✓, Buffer✓, Str✓, fmt integers✓, File/Path/Dir✓; Phases 8-15 audited) |
+| 4. Runtime migration + codegen cleanup | 49 | 47 | 96% | IN PROGRESS (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, Text✓; Phases 23-30 remaining) |
 | 5. Async + networking | 27 | 0 | 0% | NOT STARTED |
 | 6. Self-hosting | 22 | 0 | 0% | NOT STARTED |
 | Parallel: Tooling | 9 | 7 | 78% | IN PROGRESS |

@@ -768,17 +768,16 @@ private:
         loading_modules_; ///< Modules currently being loaded (cycle detection).
 
     // Builtin initialization
-    void init_builtins();            ///< Initialize all builtins.
-    void init_builtin_types();       ///< Initialize primitive types.
-    void init_builtin_io();          ///< Initialize I/O functions.
-    void init_builtin_string();      ///< Initialize string functions.
-    void init_builtin_time();        ///< Initialize time functions.
-    void init_builtin_mem();         ///< Initialize memory functions.
-    void init_builtin_atomic();      ///< Initialize atomic operations.
-    void init_builtin_sync();        ///< Initialize synchronization primitives.
-    void init_builtin_math();        ///< Initialize math functions.
-    void init_builtin_collections(); ///< Initialize collection types.
-    void init_builtin_async();       ///< Initialize async runtime.
+    void init_builtins();       ///< Initialize all builtins.
+    void init_builtin_types();  ///< Initialize primitive types.
+    void init_builtin_io();     ///< Initialize I/O functions.
+    void init_builtin_string(); ///< Initialize string functions.
+    void init_builtin_time();   ///< Initialize time functions.
+    void init_builtin_mem();    ///< Initialize memory functions.
+    void init_builtin_atomic(); ///< Initialize atomic operations.
+    void init_builtin_sync();   ///< Initialize synchronization primitives.
+    void init_builtin_math();   ///< Initialize math functions.
+    void init_builtin_async();  ///< Initialize async runtime.
 };
 
 } // namespace tml::types

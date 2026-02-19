@@ -284,18 +284,7 @@ void MirCodegen::emit_preamble() {
     emitln("@.str.assert = private constant [18 x i8] c\"assertion failed\\0A\\00\"");
     emitln();
 
-    // Digit pairs lookup table for fast int-to-string conversion (00-99)
-    emitln("@.digit_pairs = private constant [200 x i8] c\"00010203040506070809"
-           "10111213141516171819"
-           "20212223242526272829"
-           "30313233343536373839"
-           "40414243444546474849"
-           "50515253545556575859"
-           "60616263646566676869"
-           "70717273747576777879"
-           "80818283848586878889"
-           "90919293949596979899\"");
-    emitln();
+    // digit_pairs lookup table removed — was only used by Text V8-style optimizations
 
     // Assert implementation
     emitln("define internal void @assert(i1 %cond) {");

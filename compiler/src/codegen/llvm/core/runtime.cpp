@@ -453,7 +453,13 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["str_char_at"] = FuncInfo{"@str_char_at", "i32 (ptr, i32)", "i32", {"ptr", "i32"}};
     functions_["str_as_bytes"] = FuncInfo{"@str_as_bytes", "ptr (ptr)", "ptr", {"ptr"}};
 
+    // Register I/O functions for lowlevel calls (used by text.tml print/println methods)
+    functions_["print_str"] = FuncInfo{"@print", "void (ptr)", "void", {"ptr"}};
+    functions_["println_str"] = FuncInfo{"@println", "void (ptr)", "void", {"ptr"}};
+
     // Register float formatting runtime functions for lowlevel calls from core::fmt::float
+    // Also register f64_to_str (used by text.tml lowlevel blocks for from_f64)
+    functions_["f64_to_str"] = FuncInfo{"@f64_to_str", "ptr (double)", "ptr", {"double"}};
     functions_["f64_to_string"] = FuncInfo{"@f64_to_string", "ptr (double)", "ptr", {"double"}};
     functions_["f32_to_string"] = FuncInfo{"@f32_to_string", "ptr (float)", "ptr", {"float"}};
     functions_["f64_to_string_precision"] =
@@ -469,162 +475,7 @@ void LLVMIRGen::emit_runtime_decls() {
     functions_["f32_is_nan"] = FuncInfo{"@f32_is_nan", "i32 (float)", "i32", {"float"}};
     functions_["f32_is_infinite"] = FuncInfo{"@f32_is_infinite", "i32 (float)", "i32", {"float"}};
 
-    // StringBuilder utilities (matches runtime/string.c)
-    emit_line("; StringBuilder utilities");
-    emit_line("declare ptr @strbuilder_create(i64)");
-    emit_line("declare void @strbuilder_destroy(ptr)");
-    emit_line("declare void @strbuilder_push(ptr, i32)");
-    emit_line("declare void @strbuilder_push_str(ptr, ptr)");
-    emit_line("declare i64 @strbuilder_len(ptr)");
-    emit_line("declare i64 @strbuilder_capacity(ptr)");
-    emit_line("declare void @strbuilder_clear(ptr)");
-    emit_line("declare ptr @strbuilder_to_str(ptr)");
-    emit_line("declare ptr @strbuilder_as_str(ptr)");
-    emit_line("");
-
-    // Text type runtime (matches runtime/text.c)
-    emit_line("; Text type runtime (dynamic strings with SSO)");
-    emit_line("declare ptr @tml_text_new()");
-    emit_line("declare ptr @tml_text_from_str(ptr)");
-    emit_line("declare ptr @tml_text_with_capacity(i64)");
-    emit_line("declare ptr @tml_text_clone(ptr)");
-    emit_line("declare void @tml_text_drop(ptr)");
-    emit_line("declare i64 @tml_text_len(ptr)");
-    emit_line("declare i64 @tml_text_capacity(ptr)");
-    emit_line("declare i32 @tml_text_is_empty(ptr)");
-    emit_line("declare ptr @tml_text_data(ptr)");
-    emit_line("declare i32 @tml_text_byte_at(ptr, i64)");
-    emit_line("declare void @tml_text_clear(ptr)");
-    emit_line("declare ptr @tml_text_data_ptr(ptr)");
-    emit_line("declare void @tml_text_set_len(ptr, i64)");
-    emit_line("declare void @tml_text_push(ptr, i32)");
-    emit_line("declare void @tml_text_push_str(ptr, ptr)");
-    emit_line("declare void @tml_text_push_str_len(ptr, ptr, i64)");
-    emit_line("declare void @tml_text_push_i64(ptr, i64)");
-    emit_line("declare i64 @tml_text_push_i64_unsafe(ptr, i64)");
-    emit_line("declare void @tml_text_push_formatted(ptr, ptr, i64, i64, ptr, i64)");
-    emit_line("declare void @tml_text_push_log(ptr, ptr, i64, i64, ptr, i64, i64, ptr, i64, i64, "
-              "ptr, i64)");
-    emit_line("declare void @tml_text_reserve(ptr, i64)");
-    emit_line("declare void @tml_text_fill_char(ptr, i32, i64)");
-    emit_line("declare void @tml_text_push_path(ptr, ptr, i64, i64, ptr, i64, i64, ptr, i64)");
-    emit_line("declare i64 @tml_text_index_of(ptr, ptr)");
-    emit_line("declare i64 @tml_text_last_index_of(ptr, ptr)");
-    emit_line("declare i32 @tml_text_starts_with(ptr, ptr)");
-    emit_line("declare i32 @tml_text_ends_with(ptr, ptr)");
-    emit_line("declare i32 @tml_text_contains(ptr, ptr)");
-    emit_line("declare ptr @tml_text_to_upper(ptr)");
-    emit_line("declare ptr @tml_text_to_lower(ptr)");
-    emit_line("declare ptr @tml_text_trim(ptr)");
-    emit_line("declare ptr @tml_text_trim_start(ptr)");
-    emit_line("declare ptr @tml_text_trim_end(ptr)");
-    emit_line("declare ptr @tml_text_substring(ptr, i64, i64)");
-    emit_line("declare ptr @tml_text_repeat(ptr, i64)");
-    emit_line("declare ptr @tml_text_replace(ptr, ptr, ptr)");
-    emit_line("declare ptr @tml_text_replace_all(ptr, ptr, ptr)");
-    emit_line("declare ptr @tml_text_reverse(ptr)");
-    emit_line("declare ptr @tml_text_pad_start(ptr, i64, i32)");
-    emit_line("declare ptr @tml_text_pad_end(ptr, i64, i32)");
-    emit_line("declare i32 @tml_text_compare(ptr, ptr)");
-    emit_line("declare i32 @tml_text_equals(ptr, ptr)");
-    emit_line("declare ptr @tml_text_concat(ptr, ptr)");
-    emit_line("declare ptr @tml_text_concat_str(ptr, ptr)");
-    emit_line("declare ptr @tml_text_as_cstr(ptr)");
-    emit_line("declare ptr @tml_text_from_i64(i64)");
-    emit_line("declare ptr @tml_text_from_u64(i64)");
-    emit_line("declare ptr @tml_text_from_f64(double, i32)");
-    emit_line("declare ptr @tml_text_from_bool(i32)");
-    emit_line("declare void @tml_text_print(ptr)");
-    emit_line("declare void @tml_text_println(ptr)");
-    emit_line("");
-
-    // Register text runtime functions in functions_ map for lowlevel calls
-    // Key is function name without tml_ prefix (used in lowlevel blocks)
-    functions_["text_new"] = FuncInfo{"@tml_text_new", "ptr ()", "ptr", {}};
-    functions_["text_from_str"] = FuncInfo{"@tml_text_from_str", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_with_capacity"] =
-        FuncInfo{"@tml_text_with_capacity", "ptr (i64)", "ptr", {"i64"}};
-    functions_["text_clone"] = FuncInfo{"@tml_text_clone", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_drop"] = FuncInfo{"@tml_text_drop", "void (ptr)", "void", {"ptr"}};
-    functions_["text_len"] = FuncInfo{"@tml_text_len", "i64 (ptr)", "i64", {"ptr"}};
-    functions_["text_capacity"] = FuncInfo{"@tml_text_capacity", "i64 (ptr)", "i64", {"ptr"}};
-    functions_["text_is_empty"] = FuncInfo{"@tml_text_is_empty", "i32 (ptr)", "i32", {"ptr"}};
-    functions_["text_data"] = FuncInfo{"@tml_text_data", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_byte_at"] =
-        FuncInfo{"@tml_text_byte_at", "i32 (ptr, i64)", "i32", {"ptr", "i64"}};
-    functions_["text_clear"] = FuncInfo{"@tml_text_clear", "void (ptr)", "void", {"ptr"}};
-    functions_["text_data_ptr"] = FuncInfo{"@tml_text_data_ptr", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_set_len"] =
-        FuncInfo{"@tml_text_set_len", "void (ptr, i64)", "void", {"ptr", "i64"}};
-    functions_["text_push"] = FuncInfo{"@tml_text_push", "void (ptr, i32)", "void", {"ptr", "i32"}};
-    functions_["text_push_str"] =
-        FuncInfo{"@tml_text_push_str", "void (ptr, ptr)", "void", {"ptr", "ptr"}};
-    functions_["text_push_str_len"] =
-        FuncInfo{"@tml_text_push_str_len", "void (ptr, ptr, i64)", "void", {"ptr", "ptr", "i64"}};
-    functions_["text_push_i64"] =
-        FuncInfo{"@tml_text_push_i64", "void (ptr, i64)", "void", {"ptr", "i64"}};
-    functions_["text_push_formatted"] = FuncInfo{"@tml_text_push_formatted",
-                                                 "void (ptr, ptr, i64, i64, ptr, i64)",
-                                                 "void",
-                                                 {"ptr", "ptr", "i64", "i64", "ptr", "i64"}};
-    functions_["text_push_log"] = FuncInfo{
-        "@tml_text_push_log",
-        "void (ptr, ptr, i64, i64, ptr, i64, i64, ptr, i64, i64, ptr, i64)",
-        "void",
-        {"ptr", "ptr", "i64", "i64", "ptr", "i64", "i64", "ptr", "i64", "i64", "ptr", "i64"}};
-    functions_["text_reserve"] =
-        FuncInfo{"@tml_text_reserve", "void (ptr, i64)", "void", {"ptr", "i64"}};
-    functions_["text_fill_char"] =
-        FuncInfo{"@tml_text_fill_char", "void (ptr, i32, i64)", "void", {"ptr", "i32", "i64"}};
-    functions_["text_push_path"] =
-        FuncInfo{"@tml_text_push_path",
-                 "void (ptr, ptr, i64, i64, ptr, i64, i64, ptr, i64)",
-                 "void",
-                 {"ptr", "ptr", "i64", "i64", "ptr", "i64", "i64", "ptr", "i64"}};
-    functions_["text_index_of"] =
-        FuncInfo{"@tml_text_index_of", "i64 (ptr, ptr)", "i64", {"ptr", "ptr"}};
-    functions_["text_last_index_of"] =
-        FuncInfo{"@tml_text_last_index_of", "i64 (ptr, ptr)", "i64", {"ptr", "ptr"}};
-    functions_["text_starts_with"] =
-        FuncInfo{"@tml_text_starts_with", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
-    functions_["text_ends_with"] =
-        FuncInfo{"@tml_text_ends_with", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
-    functions_["text_contains"] =
-        FuncInfo{"@tml_text_contains", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
-    functions_["text_to_upper"] = FuncInfo{"@tml_text_to_upper", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_to_lower"] = FuncInfo{"@tml_text_to_lower", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_trim"] = FuncInfo{"@tml_text_trim", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_trim_start"] = FuncInfo{"@tml_text_trim_start", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_trim_end"] = FuncInfo{"@tml_text_trim_end", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_substring"] =
-        FuncInfo{"@tml_text_substring", "ptr (ptr, i64, i64)", "ptr", {"ptr", "i64", "i64"}};
-    functions_["text_repeat"] =
-        FuncInfo{"@tml_text_repeat", "ptr (ptr, i64)", "ptr", {"ptr", "i64"}};
-    functions_["text_replace"] =
-        FuncInfo{"@tml_text_replace", "ptr (ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr"}};
-    functions_["text_replace_all"] =
-        FuncInfo{"@tml_text_replace_all", "ptr (ptr, ptr, ptr)", "ptr", {"ptr", "ptr", "ptr"}};
-    functions_["text_reverse"] = FuncInfo{"@tml_text_reverse", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_pad_start"] =
-        FuncInfo{"@tml_text_pad_start", "ptr (ptr, i64, i32)", "ptr", {"ptr", "i64", "i32"}};
-    functions_["text_pad_end"] =
-        FuncInfo{"@tml_text_pad_end", "ptr (ptr, i64, i32)", "ptr", {"ptr", "i64", "i32"}};
-    functions_["text_compare"] =
-        FuncInfo{"@tml_text_compare", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
-    functions_["text_equals"] =
-        FuncInfo{"@tml_text_equals", "i32 (ptr, ptr)", "i32", {"ptr", "ptr"}};
-    functions_["text_concat"] =
-        FuncInfo{"@tml_text_concat", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
-    functions_["text_concat_str"] =
-        FuncInfo{"@tml_text_concat_str", "ptr (ptr, ptr)", "ptr", {"ptr", "ptr"}};
-    functions_["text_as_cstr"] = FuncInfo{"@tml_text_as_cstr", "ptr (ptr)", "ptr", {"ptr"}};
-    functions_["text_from_i64"] = FuncInfo{"@tml_text_from_i64", "ptr (i64)", "ptr", {"i64"}};
-    functions_["text_from_u64"] = FuncInfo{"@tml_text_from_u64", "ptr (i64)", "ptr", {"i64"}};
-    functions_["text_from_f64"] =
-        FuncInfo{"@tml_text_from_f64", "ptr (double, i32)", "ptr", {"double", "i32"}};
-    functions_["text_from_bool"] = FuncInfo{"@tml_text_from_bool", "ptr (i32)", "ptr", {"i32"}};
-    functions_["text_print"] = FuncInfo{"@tml_text_print", "void (ptr)", "void", {"ptr"}};
-    functions_["text_println"] = FuncInfo{"@tml_text_println", "void (ptr)", "void", {"ptr"}};
+    // Text type: now pure TML — all tml_text_* C runtime functions removed
 
     // Time functions (matches runtime/time.c)
     emit_line("; Time functions");

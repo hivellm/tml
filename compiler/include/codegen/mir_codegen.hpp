@@ -195,17 +195,6 @@ private:
     void emit_normal_call(const mir::CallInst& i, const std::string& func_name,
                           const std::vector<std::string>& processed_args,
                           const std::string& result_reg, const mir::InstructionData& inst);
-
-    // Inline int-to-string conversion helper (implemented in mir/instructions.cpp)
-    // Generates LLVM IR to convert an integer to string directly at dst pointer
-    // Returns the LLVM register containing the new length after conversion
-    // Only handles non-negative values < 10000, falls back to FFI for others
-    // skip_store: if true, don't store the new length to len_ptr (caller will do it)
-    auto emit_inline_int_to_string(const std::string& id, const std::string& int_val,
-                                   const std::string& dst_ptr, const std::string& len_ptr,
-                                   const std::string& current_len, const std::string& receiver,
-                                   const std::string& done_label, bool skip_store = false)
-        -> std::string;
 };
 
 } // namespace tml::codegen
