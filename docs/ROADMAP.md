@@ -11,7 +11,7 @@
 Phase 1  [DONE]       Fix codegen bugs (closures, generics, iterators)
 Phase 2  [DONE]       Tests for working features → coverage 58% → 76.2% ✓
 Phase 3  [DONE 98%]  Standard library essentials (Math✓, Instant✓, HashSet✓, Args✓, Deque✓, Vec✓, SystemTime✓, DateTime✓, Random✓, BTreeMap✓, BTreeSet✓, BufIO✓, Process✓, Regex captures✓, ThreadRng✓)
-Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, math.c→inline IR✓, collections.c cleaned✓, 9 inline IR→TML dispatch✓, search.c→pure TML✓, dead stubs/atomics/pool cleaned✓, glob→@extern FFI✓; runtime: 15 compiled .c files, 1 migration candidate; inline IR: 18 functions remaining)
+Phase 4  [IN PROGRESS] Migrate C runtime → pure TML + eliminate hardcoded codegen (List✓, HashMap✓, Buffer✓, Str✓, fmt✓, File/Path/Dir✓, dead code✓, StringBuilder✓, Text✓, Float math→intrinsics✓, Sync/threading→@extern✓, Time→@extern✓, Dead C files deleted✓, Float NaN/Inf→LLVM IR✓, On-demand declares✓, FuncSig cleanup✓, Dead file audit✓, string.c→inline IR✓, math.c→inline IR✓, collections.c cleaned✓, 9 inline IR→TML dispatch✓, search.c→pure TML✓, dead stubs/atomics/pool cleaned✓, glob→@extern FFI✓, dead crypto list builders removed✓, dead codegen paths removed✓; runtime: 15 compiled .c files, 0 migration candidates; inline IR: 18 functions remaining)
 Phase 5  [LATER]      Async runtime, networking, HTTP
 Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 ```
@@ -36,8 +36,8 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | Modules at 100% coverage | 73 |
 | Modules at 0% coverage | 31 |
 | C++ compiler size | ~238,000 lines |
-| C runtime compiled | 15 files (14 essential FFI + 1 migration candidate: collections.c) |
-| C runtime to migrate | ~70 lines in 1 file (collections.c ~70; search.c deleted Phase 35) |
+| C runtime compiled | 15 files (15 essential FFI, 0 migration candidates) |
+| C runtime to migrate | 0 lines (collections.c cleaned Phase 43; search.c deleted Phase 35) |
 | Dead C files on disk | 0 (9 deleted in Phases 30-35: text.c, thread.c, async.c, io.c, profile_runtime.c, collections.c dup, string.c, math.c, search.c) |
 | Inline IR in runtime.cpp | 18 functions (~380 lines) — Phase 33: -7, Phase 34: -2, Phase 36: -1 (float_to_fixed); 3 black_box must stay |
 | Dead builtin handlers removed | Phase 36: 18 string handlers, Phase 38: 13 math handlers, Phase 39: 8 time registrations, Phase 41: 3 dead stubs + declarations |
@@ -511,8 +511,8 @@ KEEP FOREVER (essential C runtime):             REMAINING INLINE IR (18 function
   - Log runtime (12, I/O)                        KEEP AS INLINE IR (no TML equivalent):
   - tml_random_seed (1, OS random)                 black_box_i32/i64/f64 (asm sideeffect)
 
-REMAINING LIVE BUILTIN HANDLERS (7):            REMAINING C FILE CANDIDATES:
-  - sqrt, pow (LLVM intrinsics)                    collections.c (~70 lines) — blocked on crypto rewrite
+REMAINING LIVE BUILTIN HANDLERS (7):            REMAINING C FILE CANDIDATES: none
+  - sqrt, pow (LLVM intrinsics)                    (collections.c cleaned Phase 43, no dead code left)
   - black_box, black_box_i64, black_box_f64
   - infinity, nan, is_inf, is_nan (LLVM const)
                                                  ESSENTIAL FFI (must stay C):
@@ -790,7 +790,7 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 
 ### 4.25 Migrate remaining C files (Phase 36+) — PLANNED
 
-- [ ] 4.25.1 Migrate `collections.c` (~70 lines) → remove entirely when crypto C runtime rewritten as `@extern("c")` FFI
+- [x] 4.25.1 Clean `collections.c` (Phase 43) — removed dead list_create/list_push, dead crypto list builders (crypto_get_hashes/ciphers/curves), dead codegen @list_get/@list_len paths, 26 dead C++ unit tests; kept buffer_destroy/buffer_len (zlib @extern) + list_get/list_len (crypto x509)
 - [x] 4.25.2 Migrate `glob.tml` from lowlevel to @extern FFI (Phase 42) — 5 declares removed from runtime.cpp, glob.c stays as essential FFI
 
 ### Expected impact
@@ -799,7 +799,7 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 |--------|--------|---------|--------|-------|
 | runtime.cpp declares | 393 | 87 (62 effective) | ~55 | -271 via Phases 17-27; 25 on-demand (Phase 28); 16 declares→defines (Phase 31); 19 declares→defines (Phase 32) |
 | runtime.cpp inline IR | 0 | 18 functions (~380 lines) | 3 | Phase 31: +9 string, Phase 32: +19 math; Phase 33: -7, Phase 34: -2, Phase 36: -1; keep 3 black_box |
-| C runtime (compiled) | 20 files | 15 files | 14 | 9 files deleted (Phases 30-35); 1 migration candidate remains (collections.c) |
+| C runtime (compiled) | 20 files | 15 files | 14 | 9 files deleted (Phases 30-35); collections.c cleaned (Phase 43), no migration candidates |
 | C runtime (on disk) | 29 files | 18 files | 14 | 11 dead/migrated files deleted; 5 uncompiled crypto extensions kept |
 | Dead C on disk | ~4,450 lines | 0 lines | 0 | All dead code deleted ✓ |
 | Hardcoded codegen dispatch | 3,300 lines | ~200 lines | ~50 | Phases 36-38 removed 31 dead builtin handlers |
@@ -807,7 +807,7 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 | Hardcoded type registrations | 54 | 0 ✓ | 0 | Phase 29: -29 string, Phase 38: -2 math, Phase 39: -8 time |
 | Dead C functions in essential.c | ~20 | 0 ✓ | 0 | Phase 37: -4 (print_f32, print_char, float_to_precision, float_to_exp) |
 
-**Progress**: Phases 0-7, 16-42 complete (29-30 partial).
+**Progress**: Phases 0-7, 16-43 complete (29-30 partial).
 - Phase 31: replaced 9 C string functions with inline IR, deleted string.c (516 lines)
 - Phase 32: replaced 20 C math functions with inline IR, deleted math.c (279 lines)
 - Phase 33: removed 7 inline IR functions (SIMD+fmt), switched to TML behavior dispatch
@@ -821,11 +821,12 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 - Phase 41: removed 3 dead stub files from build, 6 dead i64 atomic functions from sync.c, 4 dead pool exports from pool.c, header declarations cleaned
 - Phase 42: migrated glob.tml from lowlevel blocks to @extern FFI, removed 5 glob declares + needs_glob detection from runtime.cpp
 - Fix: increased test execution thread stack from 1 MB (default) to 8 MB via NativeThread wrapper, fixing intermittent OpenSSL DH stack overflow crashes
-- Current: 18 inline IR functions remain (15 active + 3 black_box); 7 live math builtin handlers
+- Phase 43: removed dead list_create/list_push from collections.c, crypto_get_hashes/ciphers/curves from crypto C files, dead @list_get/@list_len codegen paths from loop.cpp/collections.cpp, 26 dead C++ unit tests (-471 lines net)
+- Current: 18 inline IR functions remain (15 active + 3 black_box); 7 live math builtin handlers; 0 C migration candidates
 
 **Next actionable items**:
-- **Phase 43**: Migrate `collections.c` (~70 lines) → remove when crypto rewritten as `@extern("c")` FFI
 - Phase 29.2-29.3 (deferred cleanup), Phase 30.3 (benchmark)
+- Remaining Phase 4 work: reduce 18 inline IR functions to 3 (black_box only), remove remaining ~200 lines of hardcoded codegen dispatch
 
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only. Inline IR reduced to 3 black_box functions only.
 
