@@ -39,7 +39,8 @@ Phase 6  [DISTANT]    Self-hosting compiler (rewrite C++ → TML)
 | C runtime compiled | 15 files (14 essential FFI + 1 migration candidate: collections.c) |
 | C runtime to migrate | ~70 lines in 1 file (collections.c ~70; search.c deleted Phase 35) |
 | Dead C files on disk | 0 (9 deleted in Phases 30-35: text.c, thread.c, async.c, io.c, profile_runtime.c, collections.c dup, string.c, math.c, search.c) |
-| Inline IR in runtime.cpp | 19 functions (~400 lines) — Phase 33 removed 7 (SIMD+hex/binary dispatch), Phase 34 removed 2 (str_hash, nextafter32); 3 black_box must stay |
+| Inline IR in runtime.cpp | 18 functions (~380 lines) — Phase 33: -7, Phase 34: -2, Phase 36: -1 (float_to_fixed); 3 black_box must stay |
+| Dead builtin handlers removed | Phase 36: 18 string handlers, Phase 38: 13 math handlers, Phase 39: 8 time registrations |
 | Hardcoded codegen dispatch | ~350 lines remaining (of ~3,300 original; collections + File/Path done) |
 | TML standard library | ~137,300 lines |
 
@@ -498,25 +499,30 @@ Tier 3 — Inline IR in runtime.cpp              Last resort: asm sideeffect, bo
 ```
 
 ```
-KEEP FOREVER (essential C runtime):             REMAINING INLINE IR (19 functions):
+KEEP FOREVER (essential C runtime):             REMAINING INLINE IR (18 functions):
   - LLVM intrinsics (7)                            str_eq, str_concat_opt (deeply embedded, 30+ callsites)
   - C stdlib (printf, malloc, free) (5)            i64_to_str, i32/i64_to_string, bool_to_string (string interp)
   - Essential runtime (panic, print) (4)           f64_to_str (essential print formatting)
-  - Memory (mem_alloc, mem_free, etc.) (10)        float_to_fixed, float_to_string, f64/f32_to_string (snprintf)
+  - Memory (mem_alloc, mem_free, etc.) (10)        float_to_string, f64/f32_to_string (snprintf)
   - Coverage/debug (conditional)                   f64/f32_to_string_precision, f64/f32_to_exp_string (snprintf)
   - Panic catching + backtrace (4)                 str_as_bytes (TML lowlevel in str.tml)
   - Format string constants
   - Log runtime (12, I/O)                        KEEP AS INLINE IR (no TML equivalent):
   - tml_random_seed (1, OS random)                 black_box_i32/i64/f64 (asm sideeffect)
 
-ALREADY DONE:                                    REMAINING C FILE CANDIDATES:
-  - Collections (List/HashMap/Buffer) ✓            collections.c (~70 lines) → remove when crypto rewritten
-  - String algorithms (str.tml) ✓                  glob.c (~700 lines) → pure TML + @extern FFI
+REMAINING LIVE BUILTIN HANDLERS (7):            REMAINING C FILE CANDIDATES:
+  - sqrt, pow (LLVM intrinsics)                    collections.c (~70 lines) → remove when crypto rewritten
+  - black_box, black_box_i64, black_box_f64        glob.c (~700 lines) → pure TML + @extern FFI
+  - infinity, nan, is_inf, is_nan (LLVM const)
+                                                 ESSENTIAL FFI (must stay C):
+ALREADY DONE:                                      essential.c, mem.c, pool.c, time.c, sync.c, os.c,
+  - Collections (List/HashMap/Buffer) ✓             net.c, dns.c, tls.c, backtrace.c, log.c,
+  - String algorithms (str.tml) ✓                  crypto*.c (7 files), file.c
   - Integer formatting ✓
-  - File/Path/Dir ✓                              ESSENTIAL FFI (must stay C):
-  - Dead functions_[] entries ✓                    essential.c, mem.c, pool.c, time.c, sync.c, os.c,
-  - Char classification → pure TML ✓               net.c, dns.c, tls.c, backtrace.c, log.c,
-  - StringBuilder → removed ✓                     crypto*.c (7 files), file.c
+  - File/Path/Dir ✓
+  - Dead functions_[] entries ✓
+  - Char classification → pure TML ✓
+  - StringBuilder → removed ✓
   - Text type → pure TML struct ✓
   - Float math → LLVM intrinsics ✓
   - Threading/sync → @extern FFI ✓
@@ -525,6 +531,9 @@ ALREADY DONE:                                    REMAINING C FILE CANDIDATES:
   - math.c → inline IR (Phase 32) ✓
   - 9 inline IR → TML dispatch (Phase 33-34) ✓
   - search.c → pure TML (Phase 35) ✓
+  - 31 dead builtin handlers removed (Phase 36-38) ✓
+  - 4 dead C functions from essential.c (Phase 37) ✓
+  - 10 dead type registrations removed (Phase 38-39) ✓
 ```
 
 ### 4.1 Collections — List[T] (DONE)
@@ -785,25 +794,30 @@ Rewrote all 11 vector distance/similarity functions in `lib/std/src/search/dista
 | Metric | Before | Current | Target | Notes |
 |--------|--------|---------|--------|-------|
 | runtime.cpp declares | 393 | 87 (62 effective) | ~55 | -271 via Phases 17-27; 25 on-demand (Phase 28); 16 declares→defines (Phase 31); 19 declares→defines (Phase 32) |
-| runtime.cpp inline IR | 0 | 19 functions (~400 lines) | 3 | Phase 31: 9 string, Phase 32: 19 math; Phase 33: -7 (SIMD+fmt dispatch), Phase 34: -2 (dead code); keep 3 black_box |
+| runtime.cpp inline IR | 0 | 18 functions (~380 lines) | 3 | Phase 31: +9 string, Phase 32: +19 math; Phase 33: -7, Phase 34: -2, Phase 36: -1; keep 3 black_box |
 | C runtime (compiled) | 20 files | 15 files | 14 | 9 files deleted (Phases 30-35); 1 migration candidate remains (collections.c) |
 | C runtime (on disk) | 29 files | 18 files | 14 | 11 dead/migrated files deleted; 5 uncompiled crypto extensions kept |
 | Dead C on disk | ~4,450 lines | 0 lines | 0 | All dead code deleted ✓ |
-| Hardcoded codegen dispatch | 3,300 lines | ~350 lines | ~50 | Remove str/char dispatch |
+| Hardcoded codegen dispatch | 3,300 lines | ~200 lines | ~50 | Phases 36-38 removed 31 dead builtin handlers |
 | Types bypassing impl dispatch | 5 | 0 ✓ | 0 | |
-| Hardcoded type registrations | 54 | 0 (string done) | 0 | Phase 29: 29 string FuncSig removed |
+| Hardcoded type registrations | 54 | 0 ✓ | 0 | Phase 29: -29 string, Phase 38: -2 math, Phase 39: -8 time |
+| Dead C functions in essential.c | ~20 | 0 ✓ | 0 | Phase 37: -4 (print_f32, print_char, float_to_precision, float_to_exp) |
 
-**Progress**: Phases 0-7, 16-35 complete (29-30 partial).
+**Progress**: Phases 0-7, 16-39 complete (29-30 partial).
 - Phase 31: replaced 9 C string functions with inline IR, deleted string.c (516 lines)
 - Phase 32: replaced 20 C math functions with inline IR, deleted math.c (279 lines)
 - Phase 33: removed 7 inline IR functions (SIMD+fmt), switched to TML behavior dispatch
 - Phase 34: removed 2 dead inline IR functions (str_hash, nextafter32)
 - Phase 35: migrated search.c (98 lines) to pure TML, deleted search.c
-- Current: 19 inline IR functions remain (16 active + 3 black_box)
+- Phase 36: removed 18 dead string builtin handlers + 3 dead declares + 1 dead inline IR (float_to_fixed)
+- Phase 37: removed 4 dead C functions from essential.c (print_f32, print_char, float_to_precision, float_to_exp)
+- Phase 38: removed 13 dead math builtin handlers + nextafter declare + 2 type registrations
+- Phase 39: removed 8 dead time type registrations
+- Current: 18 inline IR functions remain (15 active + 3 black_box); 7 live math builtin handlers
 
 **Next actionable items**:
-- **Phase 36**: Migrate `collections.c` (~70 lines) → remove when crypto rewritten as `@extern("c")` FFI
-- **Phase 37**: Migrate `glob.c` (~700 lines) → pure TML pattern matching + `@extern("c")` directory API
+- **Phase 40**: Migrate `collections.c` (~70 lines) → remove when crypto rewritten as `@extern("c")` FFI
+- **Phase 41**: Migrate `glob.c` (~700 lines) → pure TML pattern matching + `@extern("c")` directory API
 - Phase 29.2-29.3 (deferred cleanup), Phase 30.3 (benchmark)
 
 **Gate**: Zero types with hardcoded dispatch. C runtime reduced to essential I/O + FFI wrappers only. Inline IR reduced to 3 black_box functions only.
