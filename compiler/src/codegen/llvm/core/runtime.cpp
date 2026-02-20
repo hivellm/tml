@@ -162,8 +162,8 @@ void LLVMIRGen::emit_runtime_decls() {
 
     // nextafter — removed in Phase 38 (dead declare: handler removed, 0 TML callers)
 
-    // Integer/bool to_string — defined as inline IR below (Phase 31)
-    // (see define @i32_to_string, @i64_to_string, @bool_to_string in string utilities section)
+    // Integer/bool to_string — removed in Phase 44 (now TML Display behavior impls)
+    // i64_to_str kept for string interpolation use
 
     // --- On-demand runtime declares ---
     // Compute which optional categories are needed based on imports.
@@ -331,30 +331,9 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("}");
     emit_line("");
 
-    // i32_to_string: sign-extend to i64 and delegate
-    emit_line("define internal ptr @i32_to_string(i32 %val) {");
-    emit_line("entry:");
-    emit_line("  %ext = sext i32 %val to i64");
-    emit_line("  %result = call ptr @i64_to_str(i64 %ext)");
-    emit_line("  ret ptr %result");
-    emit_line("}");
-    emit_line("");
-
-    // i64_to_string: alias to i64_to_str
-    emit_line("define internal ptr @i64_to_string(i64 %val) {");
-    emit_line("entry:");
-    emit_line("  %result = call ptr @i64_to_str(i64 %val)");
-    emit_line("  ret ptr %result");
-    emit_line("}");
-    emit_line("");
-
-    // bool_to_string: select between "true" and "false" string constants
-    emit_line("define internal ptr @bool_to_string(i1 %val) {");
-    emit_line("entry:");
-    emit_line("  %result = select i1 %val, ptr @.str.true, ptr @.str.false");
-    emit_line("  ret ptr %result");
-    emit_line("}");
-    emit_line("");
+    // Phase 44: i32_to_string, i64_to_string, bool_to_string removed.
+    // Now handled by TML Display behavior impls in lib/core/src/fmt/impls.tml.
+    // i64_to_str kept above for string interpolation use in core.cpp.
 
     // f64_to_str: float to string using libc snprintf with %g format
     emit_line("@.fmt.g = private constant [3 x i8] c\"%g\\00\"");

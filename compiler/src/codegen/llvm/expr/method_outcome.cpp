@@ -1248,37 +1248,34 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         emit_line("  " + is_ok + " = icmp eq i32 " + tag_val + ", 0");
         emit_line("  br i1 " + is_ok + ", label %" + is_ok_label + ", label %" + is_err_label);
 
-        // Helper lambda to convert a value to string based on its LLVM type
-        auto val_to_string = [&](const std::string& val,
-                                 const std::string& llvm_type) -> std::string {
+        // Helper lambda to convert a value to string via TML behavior dispatch
+        // (Phase 44: replaced hardcoded IR function calls with TML Display/Debug impls)
+        auto val_to_string = [&](const std::string& val, const std::string& llvm_type,
+                                 const types::TypePtr& val_type) -> std::string {
             std::string str_val;
-            if (llvm_type == "i32") {
-                str_val = fresh_reg();
-                emit_line("  " + str_val + " = call ptr @i32_to_string(i32 " + val + ")");
-            } else if (llvm_type == "i64") {
-                str_val = fresh_reg();
-                emit_line("  " + str_val + " = call ptr @i64_to_string(i64 " + val + ")");
-            } else if (llvm_type == "i8") {
-                std::string ext = fresh_reg();
-                emit_line("  " + ext + " = sext i8 " + val + " to i32");
-                str_val = fresh_reg();
-                emit_line("  " + str_val + " = call ptr @i32_to_string(i32 " + ext + ")");
-            } else if (llvm_type == "i16") {
-                std::string ext = fresh_reg();
-                emit_line("  " + ext + " = sext i16 " + val + " to i32");
-                str_val = fresh_reg();
-                emit_line("  " + str_val + " = call ptr @i32_to_string(i32 " + ext + ")");
-            } else if (llvm_type == "float") {
-                str_val = fresh_reg();
-                emit_line("  " + str_val + " = call ptr @f32_to_string(float " + val + ")");
-            } else if (llvm_type == "double") {
-                str_val = fresh_reg();
-                emit_line("  " + str_val + " = call ptr @f64_to_string(double " + val + ")");
-            } else if (llvm_type == "i1") {
-                str_val = fresh_reg();
-                emit_line("  " + str_val + " = call ptr @bool_to_string(i1 " + val + ")");
-            } else if (llvm_type == "ptr") {
-                str_val = val; // Already a string
+            if (val_type && val_type->is<types::PrimitiveType>()) {
+                auto& prim = val_type->as<types::PrimitiveType>();
+                if (prim.kind == types::PrimitiveKind::Str) {
+                    if (method == "to_string") {
+                        str_val = val; // Str::to_string is identity
+                    } else {
+                        // Str::debug_string wraps in quotes
+                        std::string quote = add_string_literal("\"");
+                        std::string tmp = fresh_reg();
+                        emit_line("  " + tmp + " = call ptr @str_concat_opt(ptr " + quote +
+                                  ", ptr " + val + ")");
+                        str_val = fresh_reg();
+                        emit_line("  " + str_val + " = call ptr @str_concat_opt(ptr " + tmp +
+                                  ", ptr " + quote + ")");
+                    }
+                } else {
+                    // All other primitives: call @tml_<Type>_<method>(<llvm_type> %val)
+                    std::string type_name = types::primitive_kind_to_string(prim.kind);
+                    std::string fn_name = "@tml_" + type_name + "_" + method;
+                    str_val = fresh_reg();
+                    emit_line("  " + str_val + " = call ptr " + fn_name + "(" + llvm_type + " " +
+                              val + ")");
+                }
             } else {
                 str_val = add_string_literal("...");
             }
@@ -1297,7 +1294,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string ok_val = fresh_reg();
         emit_line("  " + ok_val + " = load " + ok_llvm_type + ", ptr " + ok_data_ptr);
 
-        std::string ok_str = val_to_string(ok_val, ok_llvm_type);
+        std::string ok_str = val_to_string(ok_val, ok_llvm_type, ok_type);
         std::string ok_prefix = add_string_literal("Ok(");
         std::string ok_suffix = add_string_literal(")");
         std::string ok_with_prefix = fresh_reg();
@@ -1320,7 +1317,7 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         std::string err_val = fresh_reg();
         emit_line("  " + err_val + " = load " + err_llvm_type + ", ptr " + err_data_ptr);
 
-        std::string err_str = val_to_string(err_val, err_llvm_type);
+        std::string err_str = val_to_string(err_val, err_llvm_type, err_type);
         std::string err_prefix = add_string_literal("Err(");
         std::string err_with_prefix = fresh_reg();
         emit_line("  " + err_with_prefix + " = call ptr @str_concat_opt(ptr " + err_prefix +

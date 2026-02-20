@@ -108,7 +108,7 @@ func test_outcome_debug_ok() -> I32 {
 @test
 func test_outcome_debug_err() -> I32 {
     let r: Outcome[I32, Str] = Err("fail")
-    assert_eq(r.debug_string(), "Err(fail)", "Outcome Err debug")
+    assert_eq(r.debug_string(), "Err(\"fail\")", "Outcome Err debug")
     return 0
 }
 

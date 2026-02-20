@@ -262,8 +262,6 @@ void MirCodegen::emit_preamble() {
     emitln("declare ptr @str_concat_opt(ptr, ptr)");         // O(1) amortized concatenation
     emitln("declare ptr @str_concat_3(ptr, ptr, ptr)");      // Fused 3-string concat
     emitln("declare ptr @str_concat_4(ptr, ptr, ptr, ptr)"); // Fused 4-string concat
-    emitln("declare ptr @i32_to_string(i32)");
-    emitln("declare ptr @i64_to_string(i64)");
     emitln("declare i64 @time_ns()");
     emitln();
 

@@ -930,39 +930,35 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         std::string just_val = fresh_reg();
         emit_line("  " + just_val + " = load " + inner_llvm_type + ", ptr " + data_ptr);
 
-        // Call to_string on inner value
+        // Call to_string/debug_string on inner value via TML behavior dispatch
+        // (Phase 44: replaced hardcoded IR function calls with TML Display/Debug impls)
         std::string inner_str;
-        if (inner_llvm_type == "i32") {
-            inner_str = fresh_reg();
-            emit_line("  " + inner_str + " = call ptr @i32_to_string(i32 " + just_val + ")");
-        } else if (inner_llvm_type == "i64") {
-            inner_str = fresh_reg();
-            emit_line("  " + inner_str + " = call ptr @i64_to_string(i64 " + just_val + ")");
-        } else if (inner_llvm_type == "i8") {
-            // Extend to i32, then call i32 to_string
-            std::string ext = fresh_reg();
-            emit_line("  " + ext + " = sext i8 " + just_val + " to i32");
-            inner_str = fresh_reg();
-            emit_line("  " + inner_str + " = call ptr @i32_to_string(i32 " + ext + ")");
-        } else if (inner_llvm_type == "i16") {
-            std::string ext = fresh_reg();
-            emit_line("  " + ext + " = sext i16 " + just_val + " to i32");
-            inner_str = fresh_reg();
-            emit_line("  " + inner_str + " = call ptr @i32_to_string(i32 " + ext + ")");
-        } else if (inner_llvm_type == "float") {
-            inner_str = fresh_reg();
-            emit_line("  " + inner_str + " = call ptr @f32_to_string(float " + just_val + ")");
-        } else if (inner_llvm_type == "double") {
-            inner_str = fresh_reg();
-            emit_line("  " + inner_str + " = call ptr @f64_to_string(double " + just_val + ")");
-        } else if (inner_llvm_type == "i1") {
-            inner_str = fresh_reg();
-            emit_line("  " + inner_str + " = call ptr @bool_to_string(i1 " + just_val + ")");
-        } else if (inner_llvm_type == "ptr") {
-            // Str type — already a string, just use it
-            inner_str = just_val;
+        if (inner_type && inner_type->is<types::PrimitiveType>()) {
+            auto& prim = inner_type->as<types::PrimitiveType>();
+            if (prim.kind == types::PrimitiveKind::Str) {
+                if (method == "to_string") {
+                    // Str::to_string is identity
+                    inner_str = just_val;
+                } else {
+                    // Str::debug_string wraps in quotes
+                    std::string quote = add_string_literal("\"");
+                    std::string tmp = fresh_reg();
+                    emit_line("  " + tmp + " = call ptr @str_concat_opt(ptr " + quote + ", ptr " +
+                              just_val + ")");
+                    inner_str = fresh_reg();
+                    emit_line("  " + inner_str + " = call ptr @str_concat_opt(ptr " + tmp +
+                              ", ptr " + quote + ")");
+                }
+            } else {
+                // All other primitives: call @tml_<Type>_<method>(<llvm_type> %val)
+                std::string type_name = types::primitive_kind_to_string(prim.kind);
+                std::string fn_name = "@tml_" + type_name + "_" + method;
+                inner_str = fresh_reg();
+                emit_line("  " + inner_str + " = call ptr " + fn_name + "(" + inner_llvm_type +
+                          " " + just_val + ")");
+            }
         } else {
-            // Fallback: use a generic representation
+            // Non-primitive inner type: use generic representation as fallback
             std::string fallback = add_string_literal("...");
             inner_str = fallback;
         }

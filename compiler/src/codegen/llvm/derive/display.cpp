@@ -51,11 +51,16 @@ static bool has_derive_display(const parser::EnumDecl& e) {
 }
 
 /// Get the appropriate to_string function for a primitive type
+/// Phase 44: Use TML Display behavior impls for Bool, I8, I16, I32
 static std::string get_display_func(const std::string& llvm_type) {
     if (llvm_type == "i1") {
-        return "bool_to_string";
-    } else if (llvm_type == "i8" || llvm_type == "i16" || llvm_type == "i32") {
-        return "i32_to_string";
+        return "tml_Bool_to_string";
+    } else if (llvm_type == "i8") {
+        return "tml_I8_to_string";
+    } else if (llvm_type == "i16") {
+        return "tml_I16_to_string";
+    } else if (llvm_type == "i32") {
+        return "tml_I32_to_string";
     } else if (llvm_type == "i64" || llvm_type == "i128") {
         return "i64_to_str";
     } else if (llvm_type == "float" || llvm_type == "double") {
@@ -164,16 +169,13 @@ void LLVMIRGen::gen_derive_display_struct(const parser::StructDecl& s) {
             value_str = fresh_temp();
 
             if (field.llvm_type == "i1") {
-                std::string ext = fresh_temp();
-                type_defs_buffer_ << "  " << ext << " = zext i1 " << val << " to i32\n";
+                // Phase 44: tml_Bool_to_string takes i1 directly
                 type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
-                                  << "(i32 " << ext << ")\n";
+                                  << "(i1 " << val << ")\n";
             } else if (field.llvm_type == "i8" || field.llvm_type == "i16") {
-                std::string ext = fresh_temp();
-                type_defs_buffer_ << "  " << ext << " = sext " << field.llvm_type << " " << val
-                                  << " to i32\n";
-                type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
-                                  << "(i32 " << ext << ")\n";
+                // Phase 44: tml_I8/I16_to_string take native types directly
+                type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func << "("
+                                  << field.llvm_type << " " << val << ")\n";
             } else if (field.llvm_type == "i32") {
                 type_defs_buffer_ << "  " << value_str << " = call ptr @" << to_string_func
                                   << "(i32 " << val << ")\n";
