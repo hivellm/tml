@@ -507,6 +507,54 @@ void print_bool(int32_t b) {
 // print_char — REMOVED (Phase 37, dead code: no declare in runtime.cpp)
 
 // ============================================================================
+// Float Formatting Functions (Phase 46: moved from inline IR in runtime.cpp)
+// ============================================================================
+// These wrap variadic snprintf, which TML cannot call directly via @extern.
+// Called from TML lowlevel blocks in core::fmt::impls and core::fmt::float.
+
+/** @brief Formats a double using %g format. Returns malloc'd string. */
+TML_EXPORT char* f64_to_string(double val) {
+    char* buf = (char*)malloc(32);
+    snprintf(buf, 32, "%g", val);
+    return buf;
+}
+
+/** @brief Formats a float using %g format. Returns malloc'd string. */
+TML_EXPORT char* f32_to_string(float val) {
+    char* buf = (char*)malloc(32);
+    snprintf(buf, 32, "%g", (double)val);
+    return buf;
+}
+
+/** @brief Formats a double with fixed precision. Clamps precision to 0-20. */
+TML_EXPORT char* f64_to_string_precision(double val, int64_t prec) {
+    if (prec < 0)
+        prec = 0;
+    if (prec > 20)
+        prec = 20;
+    char* buf = (char*)malloc(64);
+    snprintf(buf, 64, "%.*f", (int)prec, val);
+    return buf;
+}
+
+/** @brief Formats a float with fixed precision. Clamps precision to 0-20. */
+TML_EXPORT char* f32_to_string_precision(float val, int64_t prec) {
+    return f64_to_string_precision((double)val, prec);
+}
+
+/** @brief Formats a double in scientific notation (%e or %E). */
+TML_EXPORT char* f64_to_exp_string(double val, int32_t uppercase) {
+    char* buf = (char*)malloc(32);
+    snprintf(buf, 32, uppercase ? "%E" : "%e", val);
+    return buf;
+}
+
+/** @brief Formats a float in scientific notation (%e or %E). */
+TML_EXPORT char* f32_to_exp_string(float val, int32_t uppercase) {
+    return f64_to_exp_string((double)val, uppercase);
+}
+
+// ============================================================================
 // Panic Catching Functions (for @should_panic tests)
 // ============================================================================
 

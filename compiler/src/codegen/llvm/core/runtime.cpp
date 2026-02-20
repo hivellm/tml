@@ -74,7 +74,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i64 @strlen(ptr)");
     emit_line("declare i32 @strcmp(ptr, ptr)");
     emit_line("declare i32 @memcmp(ptr, ptr, i64)");
-    emit_line("declare i32 @snprintf(ptr, i64, ptr, ...)");
+    // snprintf — removed in Phase 46 (no longer needed: float formatting moved to C runtime)
     emit_line("");
 
     // LLVM intrinsics for optimized codegen
@@ -322,17 +322,8 @@ void LLVMIRGen::emit_runtime_decls() {
 
     // Phase 44: i32_to_string, i64_to_string, bool_to_string removed.
     // Phase 45: i64_to_str, f64_to_str removed — string interpolation now uses TML Display.
+    // Phase 46: str_as_bytes removed — Str::as_bytes() now returns `this` directly (identity).
     // All integer/bool formatting now handled by TML Display behavior impls.
-
-    // str_as_bytes: returns string pointer as-is (null-safe)
-    // Used by Str::as_bytes() lowlevel block in str.tml
-    emit_line("define internal ptr @str_as_bytes(ptr %s) {");
-    emit_line("entry:");
-    emit_line("  %is_null = icmp eq ptr %s, null");
-    emit_line("  %result = select i1 %is_null, ptr @.str.empty, ptr %s");
-    emit_line("  ret ptr %result");
-    emit_line("}");
-    emit_line("");
 
     // ========================================================================
     // Math utilities — inline LLVM IR implementations (Phase 32)
@@ -361,82 +352,16 @@ void LLVMIRGen::emit_runtime_decls() {
     // SIMD operations (simd_sum_i32/f64, simd_dot_f64) — removed in Phase 33
     // No TML callers existed; C++ codegen handlers removed from builtins/math.cpp
 
-    // --- Float formatting (snprintf-based) ---
-    emit_line("; Float formatting (inline IR — Phase 32)");
-
-    // Format string constants for float formatting
-    emit_line("@.fmt.g = private constant [3 x i8] c\"%g\\00\"");
-    emit_line("@.fmt.star_f = private constant [5 x i8] c\"%.*f\\00\"");
-    emit_line("@.fmt.lower_e = private constant [3 x i8] c\"%e\\00\"");
-    emit_line("@.fmt.upper_E = private constant [3 x i8] c\"%E\\00\"");
-
-    // float_to_fixed — removed in Phase 36 (dead code)
-    // float_to_string — removed in Phase 45 (inlined into f64/f32_to_string)
-
-    // f64_to_string(double): format with %g using snprintf
-    emit_line("define internal ptr @f64_to_string(double %val) {");
-    emit_line("entry:");
-    emit_line("  %buf = call ptr @malloc(i64 32)");
-    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 32, ptr @.fmt.g, "
-              "double %val)");
-    emit_line("  ret ptr %buf");
-    emit_line("}");
-    emit_line("");
-
-    // f32_to_string(float): fpext to double, format with %g
-    emit_line("define internal ptr @f32_to_string(float %val) {");
-    emit_line("entry:");
-    emit_line("  %ext = fpext float %val to double");
-    emit_line("  %buf = call ptr @malloc(i64 32)");
-    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 32, ptr @.fmt.g, "
-              "double %ext)");
-    emit_line("  ret ptr %buf");
-    emit_line("}");
-    emit_line("");
-
-    // f64_to_string_precision(double, i64): format with %.*f, clamp precision 0..20
-    emit_line("define internal ptr @f64_to_string_precision(double %val, i64 %prec) {");
-    emit_line("entry:");
-    emit_line("  %neg = icmp slt i64 %prec, 0");
-    emit_line("  %p1 = select i1 %neg, i64 0, i64 %prec");
-    emit_line("  %over = icmp sgt i64 %p1, 20");
-    emit_line("  %p2 = select i1 %over, i64 20, i64 %p1");
-    emit_line("  %p2_i32 = trunc i64 %p2 to i32");
-    emit_line("  %buf = call ptr @malloc(i64 64)");
-    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 64, ptr "
-              "@.fmt.star_f, i32 %p2_i32, double %val)");
-    emit_line("  ret ptr %buf");
-    emit_line("}");
-    emit_line("");
-
-    // f32_to_string_precision(float, i64): fpext, delegate
-    emit_line("define internal ptr @f32_to_string_precision(float %val, i64 %prec) {");
-    emit_line("entry:");
-    emit_line("  %ext = fpext float %val to double");
-    emit_line("  %result = call ptr @f64_to_string_precision(double %ext, i64 %prec)");
-    emit_line("  ret ptr %result");
-    emit_line("}");
-    emit_line("");
-
-    // f64_to_exp_string(double, i32): format with %e or %E
-    emit_line("define internal ptr @f64_to_exp_string(double %val, i32 %uppercase) {");
-    emit_line("entry:");
-    emit_line("  %is_upper = icmp ne i32 %uppercase, 0");
-    emit_line("  %fmt = select i1 %is_upper, ptr @.fmt.upper_E, ptr @.fmt.lower_e");
-    emit_line("  %buf = call ptr @malloc(i64 32)");
-    emit_line("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 32, ptr %fmt, "
-              "double %val)");
-    emit_line("  ret ptr %buf");
-    emit_line("}");
-    emit_line("");
-
-    // f32_to_exp_string(float, i32): fpext, delegate
-    emit_line("define internal ptr @f32_to_exp_string(float %val, i32 %uppercase) {");
-    emit_line("entry:");
-    emit_line("  %ext = fpext float %val to double");
-    emit_line("  %result = call ptr @f64_to_exp_string(double %ext, i32 %uppercase)");
-    emit_line("  ret ptr %result");
-    emit_line("}");
+    // --- Float formatting (Phase 46: moved from inline IR to C runtime in essential.c) ---
+    // These wrap variadic snprintf, which TML cannot call directly.
+    // Phase 32: originally inline IR; Phase 45: float_to_string inlined; Phase 46: moved to C.
+    emit_line("; Float formatting (C runtime — Phase 46)");
+    emit_line("declare ptr @f64_to_string(double)");
+    emit_line("declare ptr @f32_to_string(float)");
+    emit_line("declare ptr @f64_to_string_precision(double, i64)");
+    emit_line("declare ptr @f32_to_string_precision(float, i64)");
+    emit_line("declare ptr @f64_to_exp_string(double, i32)");
+    emit_line("declare ptr @f32_to_exp_string(float, i32)");
     emit_line("");
 
     // Integer formatting (binary, octal, hex) — removed in Phase 33
@@ -454,17 +379,14 @@ void LLVMIRGen::emit_runtime_decls() {
     // Also register with tml_ prefix for when called as tml_random_seed()
     functions_["tml_random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
 
-    // Register string runtime functions in functions_ map for lowlevel calls.
-    // Most str_* functions were migrated to inline LLVM IR (Phase 31).
-    // Only str_as_bytes is still needed for lowlevel blocks in str.tml.
-    functions_["str_as_bytes"] = FuncInfo{"@str_as_bytes", "ptr (ptr)", "ptr", {"ptr"}};
+    // Phase 46: str_as_bytes removed — Str::as_bytes() now uses pure identity (lowlevel { this }).
 
     // Register I/O functions for lowlevel calls (used by text.tml print/println methods)
     functions_["print_str"] = FuncInfo{"@print", "void (ptr)", "void", {"ptr"}};
     functions_["println_str"] = FuncInfo{"@println", "void (ptr)", "void", {"ptr"}};
 
-    // Register float formatting runtime functions for lowlevel calls from core::fmt
-    // Phase 45: f64_to_str and float_to_string removed (inlined/consolidated)
+    // Register float formatting C runtime functions for lowlevel calls from core::fmt
+    // Phase 46: moved from inline IR to C functions in essential.c (snprintf wrappers)
     functions_["f64_to_string"] = FuncInfo{"@f64_to_string", "ptr (double)", "ptr", {"double"}};
     functions_["f32_to_string"] = FuncInfo{"@f32_to_string", "ptr (float)", "ptr", {"float"}};
     functions_["f64_to_string_precision"] =

@@ -1481,8 +1481,9 @@ impl Str {
     }
 
     /// Returns the underlying bytes of this string as a byte slice.
+    /// Phase 46: Pure identity — Str and ref [U8] are both ptr in LLVM IR.
     pub func as_bytes(this) -> ref [U8] {
-        return lowlevel { str_as_bytes(this) }
+        return lowlevel { this }
     }
 
     /// Returns the character at the given byte index.
