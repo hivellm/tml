@@ -114,9 +114,9 @@ func test_float_pow() -> I32 {
 
 @test
 func test_int_to_float() -> I32 {
-    // Test int_to_float conversion
+    // Test I32 -> F64 conversion via `as`
     let i: I32 = 42
-    let f: F64 = int_to_float(i)
+    let f: F64 = i as F64
 
     if f < 41.9 or f > 42.1 then {
         return 1
@@ -127,9 +127,9 @@ func test_int_to_float() -> I32 {
 
 @test
 func test_float_to_int() -> I32 {
-    // Test float_to_int conversion (truncates)
+    // Test F64 -> I32 conversion via `as` (truncates)
     let f: F64 = 42.7
-    let i: I32 = float_to_int(f)
+    let i: I32 = f as I32
 
     if i != 42 then {
         return 1
@@ -137,7 +137,7 @@ func test_float_to_int() -> I32 {
 
     // Test negative
     let neg: F64 = -3.9
-    let neg_i: I32 = float_to_int(neg)
+    let neg_i: I32 = neg as I32
     if neg_i != -3 then {
         return 2
     }

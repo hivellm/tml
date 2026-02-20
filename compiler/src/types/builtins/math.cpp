@@ -19,8 +19,6 @@
 //! |----------------|----------------------|--------------------------|
 //! | `sqrt`         | `(F64) -> F64`       | Square root (float)      |
 //! | `pow`          | `(F64, I32) -> F64`  | Exponentiation (float)   |
-//! | `int_to_float` | `(I32) -> F64`       | Integer to float         |
-//! | `float_to_int` | `(F64) -> I32`       | Float to integer         |
 //!
 //! ## Optimization Barriers
 //!
@@ -78,17 +76,8 @@ void TypeEnv::init_builtin_math() {
     functions_["pow"].push_back(
         FuncSig{"pow", {make_f64(), make_i64()}, make_f64(), {}, false, builtin_span});
 
-    // int_to_float(x: I32) -> F64 - Convert integer to float
-    functions_["int_to_float"].push_back(
-        FuncSig{"int_to_float", {make_i32()}, make_f64(), {}, false, builtin_span});
-
-    // int_to_float(x: I64) -> F64 - Convert I64 to float
-    functions_["int_to_float"].push_back(
-        FuncSig{"int_to_float", {make_i64()}, make_f64(), {}, false, builtin_span});
-
-    // float_to_int(x: F64) -> I32 - Convert float to integer (truncates)
-    functions_["float_to_int"].push_back(
-        FuncSig{"float_to_int", {make_f64()}, make_i32(), {}, false, builtin_span});
+    // int_to_float, float_to_int — removed in Phase 38 (dead code: 0 TML callers, codegen handler
+    // removed)
 
     // ============ Black Box (prevent optimization) ============
 

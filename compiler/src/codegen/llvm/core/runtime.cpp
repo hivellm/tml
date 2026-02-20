@@ -160,10 +160,7 @@ void LLVMIRGen::emit_runtime_decls() {
     // float_to_precision, float_to_exp — removed in Phase 36 (dead declares)
     // Builtins/string.cpp handlers that called these were also dead code.
 
-    // Nextafter from libm (keep as declare)
-    emit_line("; Nextafter (libm)");
-    emit_line("declare double @nextafter(double, double)");
-    emit_line("");
+    // nextafter — removed in Phase 38 (dead declare: handler removed, 0 TML callers)
 
     // Integer/bool to_string — defined as inline IR below (Phase 31)
     // (see define @i32_to_string, @i64_to_string, @bool_to_string in string utilities section)
