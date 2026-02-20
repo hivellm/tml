@@ -58,7 +58,8 @@ impl[I: Iterator + Duplicate] Iterator for Cycle[I] where I::Item: Duplicate {
                 return (zero, Just(zero))
             }
         }
-        return (I64::MAX, Nothing)
+        let max_val: I64 = 9223372036854775807
+        return (max_val, Nothing)
     }
 }
 

@@ -40,7 +40,8 @@ impl[T: Duplicate] Iterator for Repeat[T] {
     }
 
     pub func size_hint(this) -> (I64, Maybe[I64]) {
-        return (I64::MAX, Nothing)
+        let max_val: I64 = 9223372036854775807
+        return (max_val, Nothing)
     }
 }
 
